@@ -28,6 +28,14 @@ Bu paket, HasarBotu V2 üzerinde Codex, Claude Code, Gemini CLI, GitHub Copilot,
 
 Bu köprü dosyaları ana kuralları tekrar tanımlamaz; `AGENTS.md` ve `docs/` altındaki belgeleri kaynak kabul eder.
 
+## Geçici repository düzeni
+
+- Kabul edilmiş React/Vite UI uygulaması geçiş süresince repository kökünde kalır.
+- UI, ileride ayrı ve kontrollü bir paketle `apps/web` altına taşınacaktır.
+- `apps`, `services` ve diğer `packages` alanları yalnız gerçek ihtiyaç doğduğunda oluşturulur.
+- Boş veya sahte workspace paketleri oluşturulmaz.
+- İlk gerçek workspace paketi ortak yapılandırma sınırı olan `packages/config` paketidir.
+
 ## İlk kullanım
 
 1. Bu paketin içeriğini boş `HasarBotuV2` repository köküne kopyalayın.

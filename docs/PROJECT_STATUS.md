@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Altyapı mimarisi ve uygulama planlama temeli
-- Durum: **UI baseline korunuyor; altyapı belgeleri hazırlanıyor**
-- Git: Yerel repository, `architecture/infrastructure-foundation` dalı, remote yok
+- Aşama: Paket 01 — npm workspace temeli
+- Durum: **Tamamlandı ve doğrulandı**
+- Git: Yerel repository, `foundation/package-01-workspaces` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -61,7 +61,7 @@ Son güncelleme: 2026-07-11
 
 ## Sonraki önerilen görev
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` içindeki Paket 01'i uygulamak: UI davranışını değiştirmeden repository/workspace temelini kurmak ve bütün mevcut kalite kapılarını korumak.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` içindeki Paket 02'yi ayrı görev olarak uygulamak: saf domain tiplerini UI gösterim modellerinden ayırmak; mevcut UI davranışını ve mock çalışma yolunu korumak.
 
 ## Altyapı mimarisi planlama durumu
 
@@ -125,3 +125,43 @@ Son güncelleme: 2026-07-11
 - Git doğrulaması: Dal `architecture/infrastructure-foundation`; HEAD, `main` ve annotated `v0.1.0-ui-baseline` aynı `ca29f2149643dfad7b115971753b8fb2ac4f9339` commit'inde; commit sayısı 1; remote 0; commit/push yok.
 - Fark doğrulaması: `src` altında fark yok; yalnız 8 yeni altyapı belgesi ile `IMPLEMENTATION_PLAN.md` ve `PROJECT_STATUS.md` değişti.
 - `git diff --check`: Exit code 0; whitespace hatası yok. Windows çalışma kopyası için beklenen LF -> CRLF uyarıları raporlandı.
+
+## Paket 01 — npm workspace temeli
+
+### Uygulanan yapı
+
+- Root uygulama repository kökünde bırakıldı; `src`, routing, mock veri ve UI yapılandırmaları taşınmadı veya değiştirilmedi.
+- Root `package.json` dosyasına yalnız `apps/*`, `services/*`, `packages/*` workspace desenleri eklendi; `private: true` korundu.
+- İlk gerçek workspace paketi `packages/config` altında `@hasarbotu/config@0.0.0` olarak oluşturuldu.
+- Config paketi private, ESM uyumlu ve runtime dependency içermiyor.
+- `packages/config/tsconfig/base.json`, gelecekteki Node/browser paketlerinin ortam özel ayarlarla genişletebileceği ortak tabanı sağlıyor.
+- Mevcut root tsconfig dosyaları ortak tabana bağlanmadı; boş `apps` veya `services` paketleri oluşturulmadı.
+- `.gitignore` içindeki köklenmemiş `node_modules/`, `dist/`, `build/`, `coverage/`, log, cache, `.env` ve secret kuralları workspace altlarını da kapsadığı için tekrar kural eklenmedi.
+
+### Lockfile ve dependency sonucu
+
+- `npm install`: Başarılı; npm bir workspace linki ekledi ve 230 paketi denetledi.
+- `package-lock.json`, root workspaces alanını, `packages/config` kaydını ve `node_modules/@hasarbotu/config` bağlantısını içeriyor.
+- Root runtime dependency ve devDependency listeleri değişmedi.
+- Önceden mevcut lockfile paket sürümlerinde değişiklik/yükseltme: 0.
+- Yeni harici dependency: Yok.
+
+### Doğrulama sonucu
+
+- `npm ls --workspaces --depth=0`: Başarılı — `@hasarbotu/config@0.0.0 -> .\packages\config`.
+- `npm run typecheck`: Başarılı.
+- `npm run lint`: Başarılı.
+- `npm run test`: Başarılı — 2 test dosyası, 26/26 test.
+- `npm run build`: Başarılı — Vite 8.1.4, 1.594 modül; JS 354,56 kB, CSS 49,16 kB.
+- `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı.
+- `git diff --check`: Başarılı; yalnız Windows çalışma kopyası LF -> CRLF uyarıları var.
+- `npm run dev -- --host 127.0.0.1 --port 4173 --strictPort` ve UI smoke: Başarılı — HTTP 200; başlık `HasarBotu V2`, ana başlık `Operasyon Durumu`, 8 navigasyon bağlantısı, prototip etiketi görünür, belge yatay taşması ve konsol warning/error yok.
+- Smoke testi sonrasında tarayıcı sekmesi kapatıldı ve 4173 portundaki Vite süreci durduruldu.
+
+### Etki ve sınırlar
+
+- `src` dosyası değişikliği: Yok.
+- UI runtime/iş mantığı değişikliği: Yok.
+- IPC, backend, API, PostgreSQL, Electron, File Agent, domain modeli veya gerçek veri yazma yolu değişikliği: Yok.
+- Paket 01 planlama commit'i: `564b267794e49ab92e2c257198d58846bd1a010c`.
+- Paket 01 uygulama değişiklikleri `chore: establish npm workspace foundation` mesajlı ayrı commit'te tutulmaktadır.

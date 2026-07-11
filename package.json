@@ -1,6 +1,11 @@
 {
   "name": "hasarbotu-v2-ui",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
   "version": "0.1.0-ui-baseline",
   "type": "module",
   "scripts": {

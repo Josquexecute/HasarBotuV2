@@ -70,7 +70,7 @@ Feature UI → application query/command hook → DataPort
 
 ## 3. Önerilen hedef yapı
 
-Native npm workspaces başlangıç önerisidir; Nx/Turbo/pnpm kararı açık bırakılır.
+npm workspaces, Paket 01 için kilitlenmiş workspace yöneticisidir. Nx, Turborepo, pnpm, Yarn veya başka bir monorepo aracı kullanılmaz.
 
 ```text
 apps/
@@ -112,11 +112,12 @@ Her aşama ayrı commit/PR ve yeşil kalite kapısı ister. Bu belge yalnız pla
 
 ### Aşama R1 — Workspace kabuğu
 
+- **Durum:** Tamamlandı — 2026-07-11; root UI taşınmadan npm workspace desenleri ve `packages/config` eklendi.
 - **Taşınacak dosyalar:** Yok. Root `src/` ve Vite uygulaması yerinde kalır.
 - **Değişecek import yolları:** Yok.
 - **Değişiklik:** Root `package.json` için `workspaces` iskeleti; boş/hello-package olmadan script delegasyonu planı; workspace tsconfig tabanı.
 - **Risk:** npm script isimlerinin değişmesi; lockfile churn.
-- **Doğrulama:** `npm install --package-lock-only`, mevcut `npm run typecheck`, `lint`, `test`, `build`, `audit`.
+- **Doğrulama:** `npm install`, `npm ls --workspaces --depth=0`, mevcut `npm run typecheck`, `lint`, `test`, `build`, `audit`, `git diff --check` ve kısa UI smoke testi.
 - **Geri dönüş:** Workspace alanlarını ve ek config dosyalarını kaldır; lockfile'ı aşama öncesi commit'e döndür.
 - **Kabul:** Root UI komutları ve build byte/route davranışı korunur.
 

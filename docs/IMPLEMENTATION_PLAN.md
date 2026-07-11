@@ -234,3 +234,47 @@ Kabul ölçütü: Sekiz altyapı belgesi bağlayıcı proje kararlarıyla tutarl
 - [x] Git dalı, baseline tag/commit, kaynak kod farkı, commit ve remote/push durumunu doğrula.
 
 Kabul ölçütü: Bütün kalite kapıları gerçek sonuçlarıyla kayıtlıdır; yalnız belge farkları vardır ve sonraki tek görev Paket 01'dir.
+
+## Aktif geliştirme paketi — Paket 01 npm workspace temeli
+
+### Aşama 21 — Planlama commit'i ve güvenli dal
+
+- [x] Bütün bağlayıcı belgeleri, package/lock ve yapılandırma dosyalarını tamamen oku.
+- [x] Planlama farkında yalnız beklenen on belge olduğunu ve `src` farkı bulunmadığını doğrula.
+- [x] Typecheck, lint, 26 test, build, moderate audit ve diff kontrolünü çalıştır.
+- [x] Plan belgelerini `docs: define infrastructure foundation plans` mesajıyla ayrı commit'e kaydet.
+- [x] Temiz planlama commit'inden `foundation/package-01-workspaces` dalını oluştur.
+
+Kabul ölçütü: Planlama belgeleri UI baseline'dan ayrı, tek commit'te korunur; Paket 01 bu commit üzerinden başlar.
+
+### Aşama 22 — Minimum workspace ve config paketi
+
+- [x] Root `private: true`, paket adı, sürüm, dependency ve scriptlerini koru.
+- [x] Yalnız `apps/*`, `services/*`, `packages/*` npm workspace desenlerini ekle.
+- [x] Runtime dependency içermeyen özel ESM `@hasarbotu/config` paketini oluştur.
+- [x] Ortak fakat aşırı kısıtlayıcı olmayan `tsconfig/base.json` tabanını ekle.
+- [x] Root tsconfig dosyalarını config paketine bağlama ve boş workspace paketleri oluşturma.
+- [x] Geçici root UI yerleşimini repository README içinde açıkla.
+- [x] `.gitignore` workspace çıktıları, cache, log, environment ve secret dosyalarını kapsadığından tekrar kural ekleme.
+
+Kabul ölçütü: İlk gerçek workspace yalnız `packages/config` olur; kabul edilmiş root UI ve yapılandırmaları yerinde kalır.
+
+### Aşama 23 — Install, regresyon ve smoke doğrulaması
+
+- [x] `npm install` ile lockfile workspace kaydını üret.
+- [x] `npm ls --workspaces --depth=0` ile `@hasarbotu/config@0.0.0` kaydını doğrula.
+- [x] Root runtime ve dev dependency listelerinin değişmediğini, mevcut lock sürümlerinde yükseltme olmadığını doğrula.
+- [x] Typecheck, lint, 26 test, build, moderate audit ve diff kontrolünü çalıştır.
+- [x] Root UI'yi 127.0.0.1:4173 üzerinde aç; ana başlık, sekiz navigasyon bağlantısı, prototip etiketi, overflow ve konsolu doğrula.
+- [x] Smoke test sekmesini ve Vite sürecini kapat.
+
+Kabul ölçütü: Workspace kayıtlıdır; root komutlar ve ana UI davranışı baseline ile çalışmayı sürdürür.
+
+### Aşama 24 — Durum kaydı ve Paket 01 commit'i
+
+- [x] `DECISION_LOG.md`, `PROJECT_STATUS.md`, `INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` ve repository planını gerçek sonuçlarla güncelle.
+- [x] Son kalite kapılarını belge değişikliklerinden sonra yeniden çalıştır.
+- [x] Yalnız Paket 01 farklarını `chore: establish npm workspace foundation` mesajıyla commit et.
+- [x] Temiz çalışma ağacı, commit sırası, aktif dal, main/tag bütünlüğü ve remote yokluğunu doğrula.
+
+Kabul ölçütü: Paket 01 bütün kanıtlarıyla ayrı commit'tedir ve sonraki tek mantıklı görev Paket 02'dir.

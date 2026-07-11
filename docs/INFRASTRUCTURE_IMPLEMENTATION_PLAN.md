@@ -2,7 +2,7 @@
 
 ## 1. Amaç ve yürütme kuralları
 
-Bu plan, kabul edilmiş `v0.1.0-ui-baseline` sürümünden gerçek altyapıya geçişi küçük, test edilebilir ve geri alınabilir paketlere böler. Bu belge planlama çıktısıdır; bu görevde hiçbir paket uygulanmaz.
+Bu plan, kabul edilmiş `v0.1.0-ui-baseline` sürümünden gerçek altyapıya geçişi küçük, test edilebilir ve geri alınabilir paketlere böler. Paket 01, 2026-07-11 tarihinde kabul ölçütleriyle uygulanmıştır; sonraki paketler ayrı görev ve karar kapılarıyla yürütülür.
 
 Her paket için bağlayıcı çalışma düzeni:
 
@@ -27,12 +27,13 @@ Her paket için bağlayıcı çalışma düzeni:
 08+20 -> 21 Electron -> 22 Office LAN -> 23 Migration/Production Acceptance
 ```
 
-Sonraki tek mantıklı görev Paket 01'dir. Sonraki paketler, önceki paketin kabul kanıtı olmadan başlatılmaz.
+Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin kabul kanıtı olmadan başlatılmaz.
 
 ## 3. Uygulama paketleri
 
 ### Paket 01 — Repository/workspace temeli
 
+- **Durum:** Tamamlandı ve doğrulandı — 2026-07-11. npm workspaces etkin, root UI yerinde, `@hasarbotu/config` kayıtlı, 26/26 test ve UI smoke testi başarılı.
 - **Amaç:** Mevcut tek Vite uygulamasını davranışını değiştirmeden kademeli workspace yapısına hazırlamak.
 - **Kapsam:** Yerel npm workspaces kararı; kök script uyumluluğu; `apps`, `services`, `packages` dizin kabuğu; ortak TS/ESLint yapılandırma stratejisi. İlk adımda UI taşınmayabilir.
 - **Kapsam dışı:** API, veritabanı, Electron, domain modeli ve UI refactor.
