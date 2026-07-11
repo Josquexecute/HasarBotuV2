@@ -10,11 +10,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prepare": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts",
-    "build": "tsc -b && vite build && npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts",
-    "typecheck": "tsc -b --pretty false && npm run typecheck --workspace @hasarbotu/domain && npm run typecheck --workspace @hasarbotu/contracts",
+    "build:packages": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts",
+    "prepare": "npm run build:packages",
+    "build": "tsc -b && vite build && npm run build:packages",
+    "typecheck": "npm run build --workspace @hasarbotu/domain && tsc -b --pretty false && npm run typecheck --workspace @hasarbotu/domain && npm run typecheck --workspace @hasarbotu/contracts",
     "lint": "eslint .",
-    "test": "vitest run src && npm run test --workspace @hasarbotu/domain && npm run test --workspace @hasarbotu/contracts",
+    "test": "npm run build --workspace @hasarbotu/domain && vitest run src && npm run test --workspace @hasarbotu/domain && npm run test --workspace @hasarbotu/contracts",
     "test:watch": "vitest"
   },
   "dependencies": {
