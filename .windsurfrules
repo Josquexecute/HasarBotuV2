@@ -1,0 +1,13 @@
+Follow `AGENTS.md` as the canonical project instruction.
+
+Before coding, read the relevant files under `docs/`.
+
+Key constraints:
+- UI-first
+- TypeScript strict
+- No real customer data
+- No direct AI writes
+- No production use of Stitch HTML
+- No pCloud-hosted shared SQLite/JSON database
+- No critical one-click actions
+- Always report commands and actual results

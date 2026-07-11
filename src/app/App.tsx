@@ -1,0 +1,69 @@
+import { Suspense } from 'react'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { AppShell } from '../components/AppShell'
+import { ErrorBoundary } from '../components/ErrorBoundary'
+import { LoadingState } from '../components/StateViews'
+import { CaseDetailPage } from '../features/cases/CaseDetailPage'
+import { CasesPage } from '../features/cases/CasesPage'
+import { ClosedCasesPage } from '../features/closed/ClosedCasesPage'
+import { DashboardPage } from '../features/dashboard/DashboardPage'
+import { LegislationPage } from '../features/legislation/LegislationPage'
+import { ManagementPage } from '../features/management/ManagementPage'
+import { NotificationsPage } from '../features/notifications/NotificationsPage'
+import { PlaceholderPage } from '../features/placeholder/PlaceholderPage'
+import { ReportsPage } from '../features/reports/ReportsPage'
+import { SettingsPage } from '../features/settings/SettingsPage'
+import { usePersistentState } from './usePersistentState'
+
+interface AppRoutesProps {
+  theme: 'light' | 'dark'
+  density: 'compact' | 'comfortable'
+  collapsed: boolean
+  onThemeChange: (theme: 'light' | 'dark') => void
+  onDensityChange: (density: 'compact' | 'comfortable') => void
+  onSidebarChange: (collapsed: boolean) => void
+}
+
+function AppRoutes(props: AppRoutesProps) {
+  return (
+    <Routes>
+      <Route path="/" element={<DashboardPage />} />
+      <Route path="/dosyalar" element={<CasesPage />} />
+      <Route path="/dosyalar/:caseId" element={<CaseDetailPage />} />
+      <Route path="/kapanan-dosyalar" element={<ClosedCasesPage />} />
+      <Route path="/raporlar-ve-ucretler" element={<ReportsPage />} />
+      <Route path="/mevzuat-ve-ai" element={<LegislationPage />} />
+      <Route path="/bildirimler" element={<NotificationsPage />} />
+      <Route path="/yonetim" element={<ManagementPage />} />
+      <Route path="/ayarlar" element={<SettingsPage theme={props.theme} density={props.density} collapsed={props.collapsed} onThemeChange={props.onThemeChange} onDensityChange={props.onDensityChange} onSidebarChange={props.onSidebarChange} />} />
+      <Route path="*" element={<PlaceholderPage title="Sayfa Bulunamadı" description="İstenen görünüm bu prototipte bulunmuyor." bullets={['Ana navigasyonu kullanın', 'Dosyalar ekranına dönebilirsiniz']} />} />
+    </Routes>
+  )
+}
+
+export function App() {
+  const [theme, setTheme] = usePersistentState<'light' | 'dark'>('hasarbotu-theme', 'light')
+  const [density, setDensity] = usePersistentState<'compact' | 'comfortable'>('hasarbotu-density', 'compact')
+  const [collapsed, setCollapsed] = usePersistentState('hasarbotu-sidebar-collapsed', false)
+
+  return (
+    <ErrorBoundary>
+      <div data-theme={theme} data-density={density} className="theme-root">
+        <BrowserRouter>
+          <AppShell
+            collapsed={collapsed}
+            theme={theme}
+            density={density}
+            onMenuToggle={() => setCollapsed((value) => !value)}
+            onThemeToggle={() => setTheme((value) => value === 'light' ? 'dark' : 'light')}
+            onDensityToggle={() => setDensity((value) => value === 'compact' ? 'comfortable' : 'compact')}
+          >
+            <Suspense fallback={<LoadingState label="Görünüm hazırlanıyor" />}>
+              <AppRoutes theme={theme} density={density} collapsed={collapsed} onThemeChange={setTheme} onDensityChange={setDensity} onSidebarChange={setCollapsed} />
+            </Suspense>
+          </AppShell>
+        </BrowserRouter>
+      </div>
+    </ErrorBoundary>
+  )
+}

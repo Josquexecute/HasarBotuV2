@@ -1,0 +1,58 @@
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+out/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Logs and diagnostics
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+*.local
+.local/
+secrets/
+credentials/
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Temporary and cache files
+tmp/
+temp/
+.tmp/
+.temp/
+.cache/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# IDE and local tool state
+.vscode/
+.idea/
+.vs/
+*.suo
+*.user
+*.userosscache
+.codex/local/
+.agents/local/
+.cursor/workspace*/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

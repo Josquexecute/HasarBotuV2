@@ -1,0 +1,24 @@
+{
+  "package": "HasarBotuV2 AI Governance Pack",
+  "version": "1.0.0",
+  "files": [
+    ".cursor/rules/hasarbotu-v2.mdc",
+    ".github/copilot-instructions.md",
+    ".windsurfrules",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CODEX.md",
+    "GEMINI.md",
+    "README.md",
+    "docs/ARCHITECTURE.md",
+    "docs/DECISIONS.md",
+    "docs/DOMAIN_RULES.md",
+    "docs/PRODUCT_REQUIREMENTS.md",
+    "docs/ROADMAP.md",
+    "docs/SECURITY_AND_AI_POLICY.md",
+    "docs/TESTING_AND_ACCEPTANCE.md",
+    "docs/UI_SPEC.md",
+    "prompts/TASK_TEMPLATE.md",
+    "prompts/UI_PACKAGE_01.md"
+  ]
+}
