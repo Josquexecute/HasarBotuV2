@@ -1,14 +1,23 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildJsonSchemas } from './json-schema.js'
 
 /**
- * Deterministik JSON Schema ciktisini `dist/json-schema/` altina yazar.
- * Yalnizca `npm run schema --workspace @hasarbotu/contracts` ile calisir.
- * Cikti `dist` altinda oldugu icin Git tarafindan ignore edilir.
+ * Deterministik JSON Schema ciktisini yazar.
+ *
+ * Varsayilan hedef `dist/json-schema/` (Git tarafindan ignore edilir).
+ * `--out <dizin>` ile hedef degistirilebilir; golden fixture guncellemesi
+ * bu yolla `npm run schema:fixtures` uzerinden ACIK olarak yapilir.
+ * Normal test kosusu fixture'lari asla sessizce guncellemez.
  */
-const outputDir = join(dirname(fileURLToPath(import.meta.url)), 'json-schema')
+const args = process.argv.slice(2)
+const outFlagIndex = args.indexOf('--out')
+const outputDir =
+  outFlagIndex !== -1 && args[outFlagIndex + 1] !== undefined
+    ? resolve(process.cwd(), args[outFlagIndex + 1] as string)
+    : join(dirname(fileURLToPath(import.meta.url)), 'json-schema')
+
 mkdirSync(outputDir, { recursive: true })
 
 const schemas = buildJsonSchemas()
@@ -19,4 +28,4 @@ for (const [name, schema] of Object.entries(schemas)) {
   written.push(`${name}.json`)
 }
 
-process.stdout.write(`JSON Schema uretildi (${written.length}): ${written.join(', ')}\n`)
+process.stdout.write(`JSON Schema uretildi (${written.length}) -> ${outputDir}: ${written.join(', ')}\n`)

@@ -42,6 +42,24 @@ export function formatOfficeCaseNumber(value: OfficeCaseNumber): string {
   return `${value.year}/${value.sequence}`
 }
 
+export const MAX_REFERENCE_NUMBER_LENGTH = 128
+
+const BACKSLASH = String.fromCharCode(92)
+const HAS_ALPHANUMERIC = /[A-Za-z0-9]/
+
+// Kontrol karakterleri (C0 0-31, DEL 127, C1 128-159) ve backslash referans
+// numarasinda reddedilir. `/` gecerlidir: gercek ihbar/hasar numaralari
+// `11/18882475` gibi bicimler tasir. Karakter kodu karsilastirmasi, kaynak
+// dosyada gorunmez kontrol karakteri bulundurmamak icin bilincli tercihtir.
+function hasForbiddenReferenceChar(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code < 32 || (code >= 127 && code <= 159)) return true
+    if (value[index] === BACKSLASH) return true
+  }
+  return false
+}
+
 function parseReferenceNumber<Name extends string>(
   value: unknown,
   field: string,
@@ -50,6 +68,11 @@ function parseReferenceNumber<Name extends string>(
 
   const normalized = value.trim()
   if (normalized.length === 0) return parseFailure('required', field)
+  if (normalized.length > MAX_REFERENCE_NUMBER_LENGTH) return parseFailure('out_of_range', field)
+  // Yalniz ayractan olusan deger anlamli referans degildir; kontrol/backslash reddedilir.
+  if (hasForbiddenReferenceChar(normalized) || !HAS_ALPHANUMERIC.test(normalized)) {
+    return parseFailure('invalid_format', field)
+  }
 
   return parseSuccess(brandValue<string, Name>(normalized))
 }

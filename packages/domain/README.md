@@ -36,12 +36,13 @@ Türkçe etiket eşlemesi ileride UI/adaptör katmanında yapılacaktır.
 
 ## Kimlik ve tarih politikası
 
+- Kimlikler (bütün `parse*Id` doğrulayıcıları) kırpma sonrası **1..128 karakter** ve güvenli ASCII kümesiyle (`A-Z a-z 0-9 . _ -`) sınırlıdır. Yol ayracı (`/` ve ters bölü), boşluk, kontrol karakteri ve `..` dizisi reddedilir: **kimlik hiçbir zaman dosya yolu olamaz.** UUID/ULID biçimi hâlâ bu paketin kararı değildir.
 - `OfficeCaseNumber`, `YYYY/N` biçimindedir; yıl `2000..9999`, sıra pozitif güvenli tam sayıdır. Alt sınır V2'nin modern kayıt ufkunu, üst sınır ise saat bağımlılığı oluşturmadan dört haneli biçimi korur.
-- `NotificationFormNumber` ve `InsurerClaimNumber` boş olmayan nominal string değerleridir.
-- `PlateNumber` girdiyi kırpar, büyük harfe ve tek aralıklı kanonik gösterime dönüştürür. Standart Türk plaka dizilimi tanınırsa `34 MPA 764` biçimi üretilir; farklı ama alfasayısal plakalar gereksiz katı bir regex ile reddedilmez. Arama anahtarı ayraçsızdır: `34MPA764`.
+- `NotificationFormNumber` ve `InsurerClaimNumber`, en çok **128 karakterlik** nominal referanslardır; en az bir alfasayısal karakter zorunludur, kontrol karakterleri ve ters bölü reddedilir. `11/18882475` gibi slash içeren gerçek biçimler geçerlidir; bu değerler **hiçbir zaman dosya yolu veya path parçası olarak kullanılmamalıdır** — fiziksel yol üretimi File Agent sınırının işidir.
+- `PlateNumber` girdiyi kırpar (en çok **32 karakter**), büyük harfe ve tek aralıklı kanonik gösterime dönüştürür. Standart Türk plaka dizilimi tanınırsa `34 MPA 764` biçimi üretilir; farklı ama alfasayısal plakalar gereksiz katı bir regex ile reddedilmez. Arama anahtarı ayraçsızdır: `34MPA764`.
 - `UtcDateTime`, yalnız `YYYY-MM-DDTHH:mm:ssZ` veya üç basamak milisaniyeli `YYYY-MM-DDTHH:mm:ss.sssZ` biçimini kabul eder. Offset ve timezone'suz değerler reddedilir.
-- `LocalDate`, gerçek takvim doğrulamasıyla `YYYY-MM-DD` biçimini kabul eder.
-- UI ve veri planında takip bilgisinin saat içerdiği doğrulandığı için `CaseCore.followUpAt`, `LocalDate` yerine `UtcDateTime` kullanır.
+- `LocalDate`, gerçek takvim doğrulamasıyla `YYYY-MM-DD` biçimini kabul eder; timezone taşımaz ve dönüştürülmez.
+- Takip tarihi ürün kararıyla **saat içermez**: `CaseCore.followUpDate`, `LocalDate` taşır (2026-07-11 proje sertleştirme kararı, `DECISION_LOG.md` HB-2026-005). `followUpAt` alanı kaldırılmıştır. `lastInterventionAt`, `createdAt` ve `updatedAt` `UtcDateTime` olarak kalır.
 - `EntityVersion`, optimistic locking için 1'den başlayan pozitif güvenli tam sayıdır; güvenli sınırda artırım `overflow` hatası verir.
 
 Paket 03, API DTO'larını ve bağımsız runtime validation/sözleşme katmanını ayrıca kuracaktır; bu paket DTO veya genel amaçlı şema doğrulayıcısı içermez.

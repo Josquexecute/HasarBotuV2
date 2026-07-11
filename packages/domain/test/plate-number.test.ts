@@ -46,6 +46,14 @@ describe('PlateNumber', () => {
     })
   })
 
+  it('32 karakteri aşan girdiyi reddeder', () => {
+    expect(parsePlateNumber('A'.repeat(33))).toEqual({
+      ok: false,
+      error: { code: 'out_of_range', field: 'plateNumber' },
+    })
+    expect(parsePlateNumber('A'.repeat(32))).toEqual({ ok: true, value: 'A'.repeat(32) })
+  })
+
   it('string olmayan girdiyi reddeder', () => {
     expect(parsePlateNumber(34)).toEqual({
       ok: false,

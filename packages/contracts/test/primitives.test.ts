@@ -8,6 +8,7 @@ import {
   idSchema,
   insurerIdSchema,
   localDateSchema,
+  notificationFormNumberSchema,
   officeCaseNumberSchema,
   plateNumberSchema,
   serviceIdSchema,
@@ -29,6 +30,30 @@ describe('primitive semalari', () => {
       expect(schema.safeParse('').success).toBe(false)
       expect(schema.safeParse('  ').success).toBe(false)
     }
+  })
+
+  it('kimlikler yol/kontrol karakterlerini ve 128 ustunu reddeder', () => {
+    expect(idSchema.safeParse('case_2026.184-a').success).toBe(true)
+    expect(idSchema.safeParse('a'.repeat(128)).success).toBe(true)
+    expect(idSchema.safeParse('a'.repeat(129)).success).toBe(false)
+    for (const bad of ['a/b', 'a..b', '..', ' a', 'a ', 'a b', '../../etc/passwd', `a${String.fromCharCode(92)}b`, `a${String.fromCharCode(0)}b`]) {
+      expect(idSchema.safeParse(bad).success).toBe(false)
+    }
+  })
+
+  it('referans numaralari gercek bicimleri kabul eder, guvensizleri reddeder', () => {
+    expect(notificationFormNumberSchema.safeParse('11/18882475').success).toBe(true)
+    expect(notificationFormNumberSchema.safeParse('F-2026-0977').success).toBe(true)
+    expect(notificationFormNumberSchema.safeParse('9'.repeat(128)).success).toBe(true)
+    expect(notificationFormNumberSchema.safeParse('9'.repeat(129)).success).toBe(false)
+    expect(notificationFormNumberSchema.safeParse('---').success).toBe(false)
+    expect(notificationFormNumberSchema.safeParse(`A${String.fromCharCode(92)}B`).success).toBe(false)
+    expect(notificationFormNumberSchema.safeParse(`A${String.fromCharCode(9)}B`).success).toBe(false)
+  })
+
+  it('plaka 32 karakteri asan degeri reddeder', () => {
+    expect(plateNumberSchema.safeParse('A'.repeat(32)).success).toBe(true)
+    expect(plateNumberSchema.safeParse('A'.repeat(33)).success).toBe(false)
   })
 
   it('CaseType yalniz traffic/casco kabul eder', () => {

@@ -7,6 +7,7 @@ import {
   parseEntityVersion,
   parseInsurerClaimNumber,
   parseInsurerId,
+  parseLocalDate,
   parseNotificationFormNumber,
   parseOfficeCaseNumber,
   parsePlateNumber,
@@ -26,7 +27,8 @@ import type { CaseDetail, CaseListItem } from './dto.js'
  *
  * Domain sinirinda opsiyonel alanlar `undefined` / alanin bulunmamasi ile;
  * wire DTO'da tutarli `null` ile temsil edilir. Donusum burada aciktir.
- * Domain `followUpAt` (UtcDateTime) alani wire tarafinda `followUpDate` olur.
+ * Takip tarihi her iki tarafta da `followUpDate` (LocalDate, `YYYY-MM-DD`) tasir;
+ * timezone donusumu veya gizli saat varsayimi yapilmaz.
  */
 
 function nullable<Value extends string>(value: Value | undefined): Value | null {
@@ -47,7 +49,7 @@ export function caseCoreToListItem(core: CaseCore): CaseListItem {
     responsibleUserId: nullable(core.responsibleUserId),
     serviceId: nullable(core.serviceId),
     insurerId: nullable(core.insurerId),
-    followUpDate: nullable(core.followUpAt),
+    followUpDate: nullable(core.followUpDate),
     lastInterventionAt: nullable(core.lastInterventionAt),
     createdAt: core.createdAt,
     updatedAt: core.updatedAt,
@@ -102,8 +104,8 @@ export function caseDetailToCaseCore(dto: CaseDetail): ParseResult<CaseCore> {
   if (serviceId !== undefined && !serviceId.ok) return fail(serviceId.error)
   const insurerId = dto.insurerId === null ? undefined : parseInsurerId(dto.insurerId)
   if (insurerId !== undefined && !insurerId.ok) return fail(insurerId.error)
-  const followUpAt = dto.followUpDate === null ? undefined : parseUtcDateTime(dto.followUpDate)
-  if (followUpAt !== undefined && !followUpAt.ok) return fail(followUpAt.error)
+  const followUpDate = dto.followUpDate === null ? undefined : parseLocalDate(dto.followUpDate)
+  if (followUpDate !== undefined && !followUpDate.ok) return fail(followUpDate.error)
   const lastInterventionAt = dto.lastInterventionAt === null ? undefined : parseUtcDateTime(dto.lastInterventionAt)
   if (lastInterventionAt !== undefined && !lastInterventionAt.ok) return fail(lastInterventionAt.error)
 
@@ -128,7 +130,7 @@ export function caseDetailToCaseCore(dto: CaseDetail): ParseResult<CaseCore> {
       : {}),
     ...(serviceId !== undefined && serviceId.ok ? { serviceId: serviceId.value } : {}),
     ...(insurerId !== undefined && insurerId.ok ? { insurerId: insurerId.value } : {}),
-    ...(followUpAt !== undefined && followUpAt.ok ? { followUpAt: followUpAt.value } : {}),
+    ...(followUpDate !== undefined && followUpDate.ok ? { followUpDate: followUpDate.value } : {}),
     ...(lastInterventionAt !== undefined && lastInterventionAt.ok
       ? { lastInterventionAt: lastInterventionAt.value }
       : {}),

@@ -8,6 +8,7 @@ export {
   type ParseResult,
 } from './parse-result.js'
 export {
+  MAX_ID_LENGTH,
   parseAuditEventId,
   parseCaseId,
   parseDocumentId,
@@ -52,6 +53,7 @@ export {
 } from './case-status.js'
 export {
   MAX_OFFICE_CASE_YEAR,
+  MAX_REFERENCE_NUMBER_LENGTH,
   MIN_OFFICE_CASE_YEAR,
   createOfficeCaseNumber,
   formatOfficeCaseNumber,
@@ -63,6 +65,7 @@ export {
   type OfficeCaseNumber,
 } from './case-identifiers.js'
 export {
+  MAX_PLATE_LENGTH,
   parsePlateNumber,
   plateSearchKey,
   type PlateNumber,

@@ -5,6 +5,7 @@ import {
   parseEntityVersion,
   parseInsurerClaimNumber,
   parseInsurerId,
+  parseLocalDate,
   parseNotificationFormNumber,
   parsePlateNumber,
   parseServiceId,
@@ -49,11 +50,11 @@ describe('CaseCore', () => {
       responsibleUserId: unwrap(parseUserId('usr-2')),
       insurerId: unwrap(parseInsurerId('insurer-1')),
       serviceId: unwrap(parseServiceId('service-1')),
-      followUpAt: unwrap(parseUtcDateTime('2026-07-11T11:30:00Z')),
+      followUpDate: unwrap(parseLocalDate('2026-07-14')),
       lastInterventionAt: unwrap(parseUtcDateTime('2026-07-11T09:15:00Z')),
     }
 
-    expect(completeCase.followUpAt).toBe('2026-07-11T11:30:00Z')
+    expect(completeCase.followUpDate).toBe('2026-07-14')
     expect(completeCase.responsibleUserId).toBe('usr-2')
   })
 
@@ -73,9 +74,15 @@ function assertCaseCoreBoundary(): void {
   const presentationTone = requiredCase.followUpTone
   // @ts-expect-error CaseCore değişmezdir.
   requiredCase.status = 'closed'
+  // @ts-expect-error followUpAt alanı kaldırıldı; takip yalnız followUpDate (LocalDate) taşır.
+  const legacyFollowUpAt = requiredCase.followUpAt
+  // @ts-expect-error followUpDate LocalDate ister; UtcDateTime brand'i atanamaz.
+  const wrongFollowUp: CaseCore = { ...requiredCase, followUpDate: unwrap(parseUtcDateTime('2026-07-11T11:30:00Z')) }
   void explicitUndefined
   void nullableService
   void presentationTone
+  void legacyFollowUpAt
+  void wrongFollowUp
 }
 
 void assertCaseCoreBoundary

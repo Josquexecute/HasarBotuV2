@@ -5,6 +5,7 @@ import {
   parseEntityVersion,
   parseInsurerClaimNumber,
   parseInsurerId,
+  parseLocalDate,
   parseNotificationFormNumber,
   parsePlateNumber,
   parseServiceId,
@@ -44,7 +45,7 @@ const fullCase: CaseCore = {
   responsibleUserId: unwrap(parseUserId('usr-2')),
   insurerId: unwrap(parseInsurerId('insurer-1')),
   serviceId: unwrap(parseServiceId('service-1')),
-  followUpAt: unwrap(parseUtcDateTime('2026-07-11T11:30:00Z')),
+  followUpDate: unwrap(parseLocalDate('2026-07-14')),
   lastInterventionAt: unwrap(parseUtcDateTime('2026-07-11T09:15:00Z')),
 }
 
@@ -59,9 +60,9 @@ describe('Cases domain <-> DTO mapper', () => {
     expect(caseListItemSchema.safeParse(dto).success).toBe(true)
   })
 
-  it('domain followUpAt alanini wire followUpDate olarak tasir', () => {
+  it('takip tarihini her iki tarafta followUpDate (LocalDate) olarak tasir', () => {
     const dto = caseCoreToDetail(fullCase)
-    expect(dto.followUpDate).toBe('2026-07-11T11:30:00Z')
+    expect(dto.followUpDate).toBe('2026-07-14')
     expect('followUpAt' in dto).toBe(false)
   })
 
@@ -79,7 +80,7 @@ describe('Cases domain <-> DTO mapper', () => {
     expect(back.ok).toBe(true)
     if (!back.ok) return
     expect(back.value).toEqual(minimalCase)
-    expect('followUpAt' in back.value).toBe(false)
+    expect('followUpDate' in back.value).toBe(false)
     expect('serviceId' in back.value).toBe(false)
   })
 

@@ -21,8 +21,8 @@ describe('Cases sorgu sozlesmesi', () => {
       stage: 'inspection_pending',
       responsibleUserId: 'usr-2',
       serviceId: 'service-1',
-      followUpFrom: '2026-07-01T00:00:00Z',
-      followUpTo: '2026-07-31T00:00:00Z',
+      followUpFrom: '2026-07-01',
+      followUpTo: '2026-07-31',
       sortBy: 'followUpDate',
       sortDirection: 'asc',
       page: 2,
@@ -40,18 +40,23 @@ describe('Cases sorgu sozlesmesi', () => {
 
   it('followUpFrom > followUpTo reddedilir', () => {
     const result = casesQuerySchema.safeParse({
-      followUpFrom: '2026-07-31T00:00:00Z',
-      followUpTo: '2026-07-01T00:00:00Z',
+      followUpFrom: '2026-07-31',
+      followUpTo: '2026-07-01',
     })
     expect(result.success).toBe(false)
   })
 
   it('esit from/to araligini kabul eder', () => {
     const result = casesQuerySchema.safeParse({
-      followUpFrom: '2026-07-10T00:00:00Z',
-      followUpTo: '2026-07-10T00:00:00Z',
+      followUpFrom: '2026-07-10',
+      followUpTo: '2026-07-10',
     })
     expect(result.success).toBe(true)
+  })
+
+  it('takip araligi yalniz LocalDate kabul eder; tarih-saat reddedilir', () => {
+    expect(casesQuerySchema.safeParse({ followUpFrom: '2026-07-01T00:00:00Z' }).success).toBe(false)
+    expect(casesQuerySchema.safeParse({ followUpTo: '2026-02-30' }).success).toBe(false)
   })
 
   it('bilinmeyen sorgu alani reddedilir (strict)', () => {
@@ -66,5 +71,14 @@ describe('Cases sorgu sozlesmesi', () => {
   it('pageSize ust siniri uygular', () => {
     expect(casesQuerySchema.safeParse({ pageSize: 100 }).success).toBe(true)
     expect(casesQuerySchema.safeParse({ pageSize: 101 }).success).toBe(false)
+  })
+
+  it('page ust siniri 10000 uygular; NaN/Infinity/ondalik reddedilir', () => {
+    expect(casesQuerySchema.safeParse({ page: 10_000 }).success).toBe(true)
+    expect(casesQuerySchema.safeParse({ page: 10_001 }).success).toBe(false)
+    expect(casesQuerySchema.safeParse({ page: Number.NaN }).success).toBe(false)
+    expect(casesQuerySchema.safeParse({ page: Number.POSITIVE_INFINITY }).success).toBe(false)
+    expect(casesQuerySchema.safeParse({ page: 1.5 }).success).toBe(false)
+    expect(casesQuerySchema.safeParse({ pageSize: true }).success).toBe(false)
   })
 })

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
+  MAX_PAGE,
   MAX_PAGE_SIZE,
   pageInfoSchema,
   pageSchema,
@@ -14,14 +15,20 @@ describe('pagination ve sorting', () => {
   it('varsayilan sabitleri sozlesme geneliyle uyumludur', () => {
     expect(DEFAULT_PAGE).toBe(1)
     expect(DEFAULT_PAGE_SIZE).toBe(25)
+    expect(MAX_PAGE).toBe(10_000)
     expect(MAX_PAGE_SIZE).toBe(100)
   })
 
-  it('page 1+ tam sayidir', () => {
+  it('page 1..10000 tam sayidir; coercion ve ozel sayilar reddedilir', () => {
     expect(pageSchema.safeParse(1).success).toBe(true)
+    expect(pageSchema.safeParse(10_000).success).toBe(true)
+    expect(pageSchema.safeParse(10_001).success).toBe(false)
     expect(pageSchema.safeParse(0).success).toBe(false)
     expect(pageSchema.safeParse(2.5).success).toBe(false)
     expect(pageSchema.safeParse('1').success).toBe(false)
+    expect(pageSchema.safeParse(true).success).toBe(false)
+    expect(pageSchema.safeParse(Number.NaN).success).toBe(false)
+    expect(pageSchema.safeParse(Number.POSITIVE_INFINITY).success).toBe(false)
   })
 
   it('pageSize 1..100 araligini uygular', () => {

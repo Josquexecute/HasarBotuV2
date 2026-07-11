@@ -1,5 +1,8 @@
 export {
   // primitives
+  MAX_ID_LENGTH,
+  MAX_PLATE_LENGTH,
+  MAX_REFERENCE_NUMBER_LENGTH,
   caseIdSchema,
   caseStageSchema,
   caseStatusSchema,
@@ -26,6 +29,7 @@ export {
   type UtcDateTimeDto,
   // errors
   API_ERROR_CODES,
+  MAX_REPORTED_UNKNOWN_KEYS,
   apiErrorCodeSchema,
   apiErrorSchema,
   fieldErrorSchema,
@@ -43,6 +47,7 @@ export {
   // pagination
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
+  MAX_PAGE,
   MAX_PAGE_SIZE,
   SORT_DIRECTIONS,
   SORT_FIELDS,

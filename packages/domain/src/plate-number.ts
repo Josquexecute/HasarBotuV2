@@ -4,6 +4,8 @@ import { parseFailure, parseSuccess, type ParseResult } from './parse-result.js'
 export type PlateNumber = Brand<string, 'PlateNumber'>
 export type PlateSearchKey = Brand<string, 'PlateSearchKey'>
 
+export const MAX_PLATE_LENGTH = 32
+
 const NON_ALPHANUMERIC = /[^\p{L}\p{N}]+/gu
 const TURKISH_PLATE_SEGMENTS = /^(\d{2})([A-Z]{1,3})(\d{2,4})$/
 
@@ -16,6 +18,7 @@ export function parsePlateNumber(value: unknown): ParseResult<PlateNumber> {
 
   const trimmed = value.trim()
   if (trimmed.length === 0) return parseFailure('required', 'plateNumber')
+  if (trimmed.length > MAX_PLATE_LENGTH) return parseFailure('out_of_range', 'plateNumber')
 
   const searchKey = toSearchKey(trimmed)
   if (searchKey.length === 0) return parseFailure('invalid_format', 'plateNumber')

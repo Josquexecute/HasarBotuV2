@@ -18,7 +18,7 @@ const validItem = {
   responsibleUserId: 'usr-2',
   serviceId: null,
   insurerId: null,
-  followUpDate: '2026-07-11T11:30:00Z',
+  followUpDate: '2026-07-14',
   lastInterventionAt: null,
   createdAt: '2026-07-11T08:00:00Z',
   updatedAt: '2026-07-11T09:00:00Z',
@@ -47,6 +47,25 @@ describe('Cases DTO sozlesmeleri', () => {
   it('gecersiz cekirdek alan reddedilir', () => {
     expect(caseListItemSchema.safeParse({ ...validItem, caseType: 'Trafik' }).success).toBe(false)
     expect(caseListItemSchema.safeParse({ ...validItem, officeCaseNumber: '2026-184' }).success).toBe(false)
+  })
+
+  it('followUpDate yalniz LocalDate kabul eder; tarih-saat reddedilir', () => {
+    expect(caseListItemSchema.safeParse({ ...validItem, followUpDate: '2026-07-11T11:30:00Z' }).success).toBe(false)
+    expect(caseListItemSchema.safeParse({ ...validItem, followUpDate: '2026-02-30' }).success).toBe(false)
+  })
+
+  it('id guvenli olmayan yol karakterlerini reddeder', () => {
+    expect(caseListItemSchema.safeParse({ ...validItem, id: '../../etc/passwd' }).success).toBe(false)
+    expect(caseListItemSchema.safeParse({ ...validItem, id: 'a'.repeat(129) }).success).toBe(false)
+    expect(caseDetailParamsSchema.safeParse({ caseId: 'case..1' }).success).toBe(false)
+    expect(caseDetailParamsSchema.safeParse({ caseId: 'case/1' }).success).toBe(false)
+  })
+
+  it('referans numaralari slash destekler ama backslash/kontrol reddeder', () => {
+    expect(caseListItemSchema.safeParse({ ...validItem, notificationFormNumber: '11/18882475' }).success).toBe(true)
+    const withBackslash = `A${String.fromCharCode(92)}B`
+    expect(caseListItemSchema.safeParse({ ...validItem, insurerClaimNumber: withBackslash }).success).toBe(false)
+    expect(caseListItemSchema.safeParse({ ...validItem, insurerClaimNumber: '---' }).success).toBe(false)
   })
 
   it('liste yaniti ogeler + pageInfo tasir', () => {

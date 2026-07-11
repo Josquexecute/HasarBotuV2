@@ -79,21 +79,55 @@ function safeFieldMessage(fieldCode: string): string {
   return SAFE_FIELD_MESSAGES[fieldCode] ?? SAFE_FIELD_MESSAGES.invalid ?? 'Field is invalid.'
 }
 
+/** Tek unrecognized_keys hatasinda raporlanacak en fazla anahtar adi. */
+export const MAX_REPORTED_UNKNOWN_KEYS = 10
+const MAX_REPORTED_KEY_LENGTH = 64
+
+/**
+ * Reddedilen anahtar ADINI guvenli raporlanabilir bicime getirir: kontrol
+ * karakterleri cikarilir, uzunluk sinirlanir. Deger hicbir zaman tasinmaz.
+ * `__proto__` gibi anahtarlar yalnizca dizi elemani string DEGERI olarak
+ * raporlandigi icin prototype pollution olusturamaz.
+ */
+function sanitizeKeyName(key: string): string {
+  let safe = ''
+  for (let index = 0; index < key.length && safe.length < MAX_REPORTED_KEY_LENGTH; index += 1) {
+    const code = key.charCodeAt(index)
+    if (code < 32 || (code >= 127 && code <= 159)) continue
+    safe += key[index]
+  }
+  return safe.length > 0 ? safe : '(unnamed)'
+}
+
 /**
  * Zod dogrulama hatasini guvenli API hata nesnesine cevirir.
  *
  * Ham request, stack trace, SQL mesaji, mutlak dosya yolu, parola, token veya
  * kisisel veri hata nesnesine eklenmez. Yalnizca alan yolu ve kararli kod tasinir;
  * Zod'un urettigi serbest mesaj veya `received` degeri disari sizmaz.
+ * `unrecognized_keys` icin reddedilen alan ADLARI (degerler degil) sinirli
+ * sayida ve temizlenmis olarak `path` icinde raporlanir.
  */
 export function zodErrorToApiError(error: z.ZodError, requestId?: string): ApiError {
-  const fieldErrors: FieldError[] = error.issues.map((issue) => {
-    const code = safeFieldCode(issue.code)
-    return {
-      path: issue.path.map((segment) => String(segment)).join('.'),
-      code,
-      message: safeFieldMessage(code),
+  const fieldErrors: FieldError[] = error.issues.flatMap((issue) => {
+    const basePath = issue.path.map((segment) => String(segment))
+
+    if (issue.code === 'unrecognized_keys') {
+      return issue.keys.slice(0, MAX_REPORTED_UNKNOWN_KEYS).map((key) => ({
+        path: [...basePath, sanitizeKeyName(key)].join('.'),
+        code: 'unrecognized_keys',
+        message: safeFieldMessage('unrecognized_keys'),
+      }))
     }
+
+    const code = safeFieldCode(issue.code)
+    return [
+      {
+        path: basePath.join('.'),
+        code,
+        message: safeFieldMessage(code),
+      },
+    ]
   })
 
   return {

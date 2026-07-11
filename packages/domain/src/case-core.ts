@@ -4,7 +4,7 @@ import type { CaseType } from './case-type.js'
 import type { EntityVersion } from './entity-version.js'
 import type { CaseId, InsurerId, ServiceId, UserId } from './ids.js'
 import type { PlateNumber } from './plate-number.js'
-import type { UtcDateTime } from './temporal.js'
+import type { LocalDate, UtcDateTime } from './temporal.js'
 
 export interface CaseCore {
   readonly id: CaseId
@@ -18,7 +18,7 @@ export interface CaseCore {
   readonly responsibleUserId?: UserId
   readonly insurerId?: InsurerId
   readonly serviceId?: ServiceId
-  readonly followUpAt?: UtcDateTime
+  readonly followUpDate?: LocalDate
   readonly lastInterventionAt?: UtcDateTime
   readonly createdAt: UtcDateTime
   readonly updatedAt: UtcDateTime

@@ -14,11 +14,22 @@ export type AuditEventId = Brand<string, 'AuditEventId'>
 export type LegislationSourceId = Brand<string, 'LegislationSourceId'>
 export type FeeRecordId = Brand<string, 'FeeRecordId'>
 
+export const MAX_ID_LENGTH = 128
+
+// Guvenli ASCII kimlik kumesi: harf, rakam, nokta, alt cizgi, tire.
+// Yol ayraci (`/`, `\`), kontrol karakteri ve bosluk bu kumede yoktur.
+const SAFE_ID_PATTERN = /^[A-Za-z0-9._-]+$/
+
 function parseId<Name extends string>(value: unknown, field: string): ParseResult<Brand<string, Name>> {
   if (typeof value !== 'string') return parseFailure('invalid_type', field)
 
   const normalized = value.trim()
   if (normalized.length === 0) return parseFailure('required', field)
+  if (normalized.length > MAX_ID_LENGTH) return parseFailure('out_of_range', field)
+  // Kimlik dosya yolu olamaz: guvenli kume disi karakter veya `..` dizisi reddedilir.
+  if (!SAFE_ID_PATTERN.test(normalized) || normalized.includes('..')) {
+    return parseFailure('invalid_format', field)
+  }
 
   return parseSuccess(brandValue<string, Name>(normalized))
 }

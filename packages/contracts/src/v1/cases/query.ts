@@ -3,9 +3,9 @@ import {
   caseStageSchema,
   caseStatusSchema,
   caseTypeSchema,
+  localDateSchema,
   serviceIdSchema,
   userIdSchema,
-  utcDateTimeSchema,
 } from '../../common/primitives.js'
 import {
   pageSizeWithDefaultSchema,
@@ -35,8 +35,8 @@ const casesQueryObject = z.strictObject({
   stage: caseStageSchema.optional(),
   responsibleUserId: userIdSchema.optional(),
   serviceId: serviceIdSchema.optional(),
-  followUpFrom: utcDateTimeSchema.optional(),
-  followUpTo: utcDateTimeSchema.optional(),
+  followUpFrom: localDateSchema.optional(),
+  followUpTo: localDateSchema.optional(),
   sortBy: sortFieldSchema.default('updatedAt'),
   sortDirection: sortDirectionSchema.default('desc'),
   page: pageWithDefaultSchema,
@@ -46,12 +46,13 @@ const casesQueryObject = z.strictObject({
 /**
  * `GET /api/v1/cases` sorgu sozlesmesi.
  * Strict: bilinmeyen sorgu alani reddedilir. Coercion kullanilmaz.
- * `followUpFrom > followUpTo` gecersizdir.
+ * `followUpFrom > followUpTo` gecersizdir. Karsilastirma `YYYY-MM-DD` icin
+ * leksikografiktir; Date/timezone donusumu bilincli olarak yapilmaz.
  */
 export const casesQuerySchema = casesQueryObject.refine(
   (value) => {
     if (value.followUpFrom === undefined || value.followUpTo === undefined) return true
-    return Date.parse(value.followUpFrom) <= Date.parse(value.followUpTo)
+    return value.followUpFrom <= value.followUpTo
   },
   { error: 'follow_up_range_invalid', path: ['followUpTo'] },
 )
