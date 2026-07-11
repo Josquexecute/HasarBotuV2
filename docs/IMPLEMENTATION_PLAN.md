@@ -197,3 +197,40 @@ UI-first prototip 11.07.2026 tarihinde kabul edilmiş ve `0.1.0-ui-baseline` ola
 - pCloud ve Dosya Agent
 - Gmail veya AI API entegrasyonu
 - Excel'e veya gerçek dosya sistemine yazma
+
+## Aktif geliştirme paketi — Altyapı mimarisi temeli
+
+Bu paket kabul edilmiş UI kodunu değiştirmeden gerçek altyapıya geçiş belgelerini hazırlar. Uygulama sırası ve paket ayrıntıları `INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` içinde tutulur.
+
+### Aşama 18 — Baseline, dal ve repository denetimi
+
+- [x] Repository kökü ve `docs` altındaki bütün bağlayıcı belgeleri tamamen oku.
+- [x] `v0.1.0-ui-baseline` annotated tag ve baseline commit bütünlüğünü doğrula.
+- [x] `architecture/infrastructure-foundation` dalını baseline etiketinden oluştur.
+- [x] Kaynak, test, route, state, mock veri ve dependency sınırlarını envanterle.
+- [x] UI kaynak kodunu ve kullanıcı değişikliklerini değiştirmediğini doğrula.
+
+Kabul ölçütü: Mimari çalışma kabul edilmiş baseline'dan ayrılmış dalda ve kaynak koduna dokunmadan yürür.
+
+### Aşama 19 — Altyapı planlama belgeleri
+
+- [x] Merkezi mimari bileşenleri, güven sınırları ve uçtan uca akışları tanımla.
+- [x] Kademeli repository/workspace yapısı ve geri alınabilir taşıma adımlarını tanımla.
+- [x] API kaynak/sözleşme, hata, yetki, audit, idempotency ve concurrency planını tanımla.
+- [x] PostgreSQL kavramsal veri modelini, anahtarları, indeksleri ve transaction sınırlarını tanımla.
+- [x] Göreceli dosya yolu ve tek yazıcı File Agent modelini tanımla.
+- [x] Geçici Windows 11 ofis merkezi ve kalıcı sunucu geçiş planını tanımla.
+- [x] Kimlik, RBAC, audit, sır, yedek ve felaket kurtarma sınırlarını tanımla.
+- [x] Gerçek altyapıyı 23 küçük ve sıralı uygulama paketine ayır.
+- [x] Yeni kalıcı karar almadan açık kararları seçenek, artı/eksi, öneri ve etkiyle kaydet.
+
+Kabul ölçütü: Sekiz altyapı belgesi bağlayıcı proje kararlarıyla tutarlı, uygulanabilir ve karar kapıları görünürdür.
+
+### Aşama 20 — Durum, kalite ve teslim denetimi
+
+- [x] `PROJECT_STATUS.md` ve bu planı gerçek mimari planlama durumuyla güncelle.
+- [x] Typecheck, lint, test, build ve moderate audit kapılarını çalıştır.
+- [x] Sekiz belgenin zorunlu bölüm/tablo/paket kapsamını yapısal olarak denetle.
+- [x] Git dalı, baseline tag/commit, kaynak kod farkı, commit ve remote/push durumunu doğrula.
+
+Kabul ölçütü: Bütün kalite kapıları gerçek sonuçlarıyla kayıtlıdır; yalnız belge farkları vardır ve sonraki tek görev Paket 01'dir.

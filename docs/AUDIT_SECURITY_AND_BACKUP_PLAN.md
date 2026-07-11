@@ -1,0 +1,240 @@
+# HasarBotu V2 Audit, Güvenlik ve Yedekleme Planı
+
+## 1. Amaç ve güvenlik sınırı
+
+Bu belge kimlik doğrulama, yetkilendirme, audit, sır yönetimi, yedekleme ve felaket kurtarma gereksinimlerini planlar. Kod, gerçek hesap, parola, sertifika veya yedekleme betiği oluşturmaz.
+
+Temel ilkeler:
+
+- UI güven sınırı değildir; her yetki Merkezi API'de uygulanır.
+- PostgreSQL ana iş verisi kaynağıdır.
+- Fiziksel dosya içeriği depolama kökünde, meta veri ve göreceli yol PostgreSQL'dedir.
+- File Agent kritik dosya yazma/taşıma işlemlerinin tek sahibidir.
+- AI, Gmail ve mevzuat kaynakları güvenilmeyen dış girdidir.
+- Parola, token, gizli anahtar, tam mutlak yol ve hassas belge içeriği log/audit alanına gelişigüzel yazılmaz.
+- Uygulama pCloud fiziksel dosya yedeğini kendiliğinden yöneten bir yedekleme ürünü değildir.
+
+## 2. Kimlik doğrulama ve oturum
+
+### 2.1 Hesap yaşam döngüsü
+
+- Kullanıcı hesabını yalnız yetkili yönetici açar, pasifleştirir ve rol atar.
+- Paylaşılan kullanıcı hesabı kullanılmaz; işlem yapan kişi ayırt edilebilir olmalıdır.
+- Pasifleştirilen kullanıcının aktif oturumları iptal edilir.
+- İlk parola ve parola sıfırlama akışı tek kullanımlı, kısa ömürlü ve auditli olmalıdır.
+- Başarısız girişlerde oran sınırı ve kademeli bekleme uygulanır; hesap kilitleme politikası ofis destek riskiyle birlikte kararlaştırılır.
+
+### 2.2 Parola saklama
+
+- Parola hiçbir zaman düz metin veya geri çevrilebilir şifreleme ile saklanmaz.
+- Argon2id güncel güçlü parametrelerle geçici öneridir; gerçek parametreler hedef donanımda ölçülerek sürümlü yapılandırılır.
+- Her parola benzersiz salt kullanır; uygulama seviyesinde pepper seçilirse sır deposunda tutulur.
+- Loglar, audit, hata yanıtları ve destek ekranları parola/hash içermez.
+
+### 2.3 Oturum modeli
+
+- Merkezi API'nin sunucu taraflı, iptal edilebilir oturum kaydı ve HttpOnly, Secure, SameSite cookie yaklaşımı geçici öneridir.
+- Oturum kimliği tarayıcı localStorage'ında tutulmaz.
+- CSRF koruması cookie tabanlı oturumla birlikte tasarlanır.
+- Mutlak ve hareketsizlik zaman aşımı, eşzamanlı oturum ve cihaz hatırlama kararları açık kapıdır.
+- Electron kabuğu geldiğinde aynı API oturum sözleşmesi korunur; token'ı renderer'a veya Node entegrasyonuna açmak varsayılan değildir.
+
+## 3. Yetkilendirme ve RBAC
+
+Yetki kontrolü kaynak ve eylem bazlıdır. Başlangıç rol adları ürün kararıyla kilitlenir; olası yetki kümeleri:
+
+- dosya görüntüleme ve listeleme,
+- dosya oluşturma/güncelleme,
+- not/görev yönetimi,
+- belge/fotoğraf işlemi talep etme,
+- değer kaybı/ağır hasar değerlendirmesi,
+- kapanış ve ücret önizleme/onay,
+- rapor görüntüleme,
+- mevzuat kaynağı yönetme/etkinleştirme,
+- kullanıcı/rol/ayar yönetimi,
+- audit ve operasyon sağlığı görüntüleme.
+
+Kurallar:
+
+- Varsayılan reddet ve en az yetki uygulanır.
+- Firma/organizasyon kapsamı her sorguda sunucu tarafında uygulanır.
+- Kritik işlemlerde rol kontrolüne ek olarak planla -> önizle -> kullanıcı onayı -> uygula -> doğrula -> kesinleştir -> audit akışı gerekir.
+- UI'da butonun gizlenmesi yetki kontrolü sayılmaz.
+- Kullanıcı kendi rolünü veya kapsamını yükseltemez.
+- Servis hesapları insan rolü alamaz; yalnız gereken makine yetkilerine sahiptir.
+
+## 4. İletişim ve ağ güvenliği
+
+- Üretim ve ofis LAN'ında API erişimi HTTPS olmalıdır; ağın yerel olması düz metni güvenli yapmaz.
+- TLS sertifika anahtarı repository'ye, paket içine veya istemciye konmaz.
+- PostgreSQL genel istemci ağına açılmaz; firewall yalnız API, File Agent ve yetkili bakım kaynağını kabul eder.
+- API, CORS ve izin verilen origin listesini açık biçimde sınırlar.
+- Güvenlik başlıkları, istek boyutu sınırları, rate limit ve dosya türü/boyutu denetimi uygulanır.
+- Gmail ve AI çağrıları yalnız sunucu taraflı entegrasyon katmanından çıkar; kullanıcı girdisi doğrudan sırlarla birleştirilmez.
+
+## 5. Sırlar ve yapılandırma
+
+- Veritabanı parolası, session secret, OAuth client secret, AI anahtarı, TLS anahtarı ve yedek şifreleme anahtarı kaynak kodda değildir.
+- Yerel geliştirme .env dosyası commit edilmez; yalnız güvenli örnek anahtar adları belgelenebilir.
+- Geçici Windows kurulumunda sırlar hizmet hesabı erişimiyle sınırlı şifreli/korumalı yapılandırmada tutulur; kalıcı sunucuda işletim sistemi veya yönetilen sır deposu tercih edilir.
+- Sır rotasyonu mevcut oturum/servis kesintisini hesaba katan runbook ile yapılır.
+- Loglarda ortam değişkenlerinin tamamı, bağlantı dizesi veya header dökümü yazılmaz.
+- Test ve geliştirme sırları üretimden tamamen ayrıdır.
+
+## 6. Audit olay standardı
+
+### 6.1 Audit ile operasyon logunun farkı
+
+- Operasyon logu tanılama içindir ve döndürülebilir.
+- Audit olayı kim, neyi, ne zaman ve hangi sonuçla yaptı sorusunun kalıcı iş kanıtıdır.
+- Windows Olay Günlüğü veya metin logu, veritabanındaki audit olayının yerine geçmez.
+
+### 6.2 Asgari audit alanları
+
+- auditEventId,
+- occurredAtUtc ve serverReceivedAtUtc,
+- actorType (user/service/system) ve actorId,
+- sessionId'nin güvenli referansı,
+- organization/firmId,
+- action ve resourceType/resourceId,
+- requestId/correlationId,
+- sourceChannel ve güvenli istemci bilgisi,
+- outcome (success/rejected/failed), reasonCode,
+- approval/preview/idempotency/job referansları,
+- önce/sonra değişen alanların güvenli özeti,
+- şema sürümü.
+
+### 6.3 Önce/sonra verisi ve maskeleme
+
+Audit sözleşmesindeki güvenli önceki/sonraki özet, API alan adlandırmasında `before/after` olarak temsil edilebilir; ham nesne kopyası değildir.
+
+- Tüm nesnenin ham kopyası yerine izin verilen değişen alanlar kaydedilir.
+- Parola, hash, token, cookie, OAuth kodu, secret, e-posta gövdesi, belge içeriği ve mutlak yol hiçbir zaman audit'e girmez.
+- TC kimlik, telefon, e-posta, plaka gibi kişisel/operasyonel alanlar iş gereksinimine göre maskelenir veya yalnız referans kimliğiyle tutulur.
+- Dosya işlemlerinde göreceli yol, hash, iş kimliği ve sonuç tutulabilir; yerel kök veya kullanıcı profili yolu tutulmaz.
+- AI olayında model/sağlayıcı, istem sürümü, kaynak referansları, güven seviyesi ve kullanıcı onayı tutulur; gereksiz ham belge/içerik çoğaltılmaz.
+
+### 6.4 Audit bütünlüğü ve erişimi
+
+- Uygulama rolleri audit olayını güncelleyemez veya silemez; yalnız ekleme servisi yazar.
+- Audit sorgusu özel yetki ister ve sorgunun kendisi de auditlenir.
+- Zaman sırası, benzersiz kimlik ve sunucu saati kullanılır.
+- İhtiyaca göre zincir hash/imzalı dış arşiv sonradan değerlendirilebilir; hukuki saklama kararı olmadan zorunlu teknoloji seçilmez.
+- Saklama süresi ve yasal silme/anonimleştirme politikası hukuk/ürün kararıdır.
+
+## 7. Güvenlik olayları ve hata davranışı
+
+- Yetkisiz erişim ayrıntılı iç hata sızdırmadan 401/403 döner.
+- Şüpheli tekrar giriş, rol değişikliği, toplu dışa aktarma, kritik işlem reddi ve sır rotasyonu güvenlik olayı olarak işaretlenir.
+- Güvenlik hatası sessizce yutulmaz; correlationId ile operasyon kanalına düşer.
+- AI/Gmail/pCloud kesintisi temel dosya verisini bozmaz ve kullanıcıya güvenli gecikme durumu gösterir.
+- Dosya hash uyuşmazlığı, path traversal veya root dışına çıkma isteği karantinaya alınır ve kritik alarm üretir.
+
+## 8. Yedekleme sınırları
+
+### 8.1 Uygulamanın sorumluluğu
+
+Uygulama otomatik olarak pCloud fiziksel dosya ağacının kopyasını almaz, harici diski yönetmez veya kullanıcı onayı olmadan geri yükleme yapmaz. Uygulama en fazla:
+
+- son başarılı veritabanı yedeği zamanını,
+- doğrulama/geri yükleme tatbikatı tarihini,
+- depolama eşitleme/erişim sağlık sinyalini,
+- yapılandırılmış operasyon uyarılarını
+
+gösterebilir. Asıl yedekleme, yetkili operasyon aracı veya zamanlanmış görevle, runbook ve audit kanıtıyla yürütülür.
+
+### 8.2 PostgreSQL yedeği
+
+Planlanan katmanlar:
+
+- günlük mantıksal/tam yedek,
+- gereksinim belirlenirse daha sık WAL/PITR veya artımlı koruma,
+- haftalık ve aylık ayrı saklama kuşağı,
+- merkezi bilgisayardan fiziksel olarak ayrı, erişimi sınırlı hedef,
+- şifreleme, hash/doğrulama ve başarısızlık alarmı,
+- düzenli temiz ortam geri yükleme tatbikatı.
+
+Kesin sıklık, saklama süresi, hedef sayısı ve RPO/RTO henüz kilitlenmez. Mevcut belgelerdeki günlük/haftalık/aylık yaklaşım başlangıç çerçevesidir; iş etkisi analiziyle sayısallaştırılır.
+
+### 8.3 Dosya depolama yedeği ve pCloud
+
+- pCloud eşitleme tek başına yedek değildir; silme, şifreleme zararlısı veya bozukluk eşitlenebilir.
+- Fiziksel dosyalar için sürümlü/geri alınabilir, ayrı kimlik bilgili ve mümkünse çevrimdışı/immutable bir ikinci koruma politikası operasyon kararıdır.
+- Veritabanı yedeği ile dosya anlık görüntüsü arasında tutarlılık noktası tanımlanmalıdır.
+- Dosya yedeği mutlak yerel kökü değil, mantıksal depolama ağacını ve doğrulama manifestini esas alır.
+- Geri yüklemede göreceli yollar, hash örneklemi, erişim ACL'leri ve File Agent indeks/metadata uyumu kontrol edilir.
+
+### 8.4 Yapılandırma ve sır yedeği
+
+- Sürüm kontrollü ama sır içermeyen yapılandırma şemaları repository'de tutulabilir.
+- Gerçek sırlar ayrı, şifreli ve erişim denetimli kurtarma prosedürüne sahiptir.
+- Sertifika ve anahtar kurtarma materyali üretim bilgisayarıyla aynı tek arıza noktasında tutulmaz.
+- Yedek geri yükleme, eski/iptal edilmiş sırları farkında olmadan tekrar etkinleştirmemelidir.
+
+## 9. Geri yükleme ve doğrulama
+
+Her yedek başarılı mesajı gerçek kurtarma kanıtı değildir. Tatbikat:
+
+1. Yetkili kişi ve hedef izole ortamı belirler.
+2. Yedek dosyasının hash, şifreleme ve katalog bilgisi doğrulanır.
+3. Yeni PostgreSQL örneğine geri yüklenir.
+4. Migration sürümü, temel tablo/satır sayıları, FK/unique kontrolleri ve örnek iş akışları doğrulanır.
+5. Dosya ağacı için seçili göreceli yollar ve hash'ler doğrulanır.
+6. API salt okunur kabul testi ve gerekiyorsa kontrollü yazma testi çalıştırılır.
+7. Gerçekleşen kurtarma süresi ölçülür; hedef RTO ile karşılaştırılır.
+8. Sonuç, eksik ve düzeltici görev audit/operasyon raporuna kaydedilir.
+
+Tatbikat üretim verisini değiştirmez; üretim sırları test ortamına kontrolsüz taşınmaz.
+
+## 10. Merkezi bilgisayar kaybı / felaket kurtarma
+
+### 10.1 Senaryolar
+
+- Windows açılmıyor fakat disk erişilebilir,
+- bilgisayar ve yerel disk tamamen kayıp,
+- PostgreSQL bozuk fakat depolama erişilebilir,
+- pCloud/depolama erişilemiyor fakat PostgreSQL sağlam,
+- fidye yazılımı veya yetkisiz erişim şüphesi,
+- ofis lokasyonu geçici olarak kullanılamıyor.
+
+### 10.2 Öncelik sırası
+
+1. Olayı sınırla; şüpheli cihazı ağdan ayır ve kanıtı koru.
+2. Son güvenilir veritabanı ve dosya yedeğini belirle; bozuk/silinmiş durumun yedeğe taşınmadığını doğrula.
+3. Temiz, güncel ve sertleştirilmiş yedek cihaz/sunucu hazırla.
+4. Sırları rotasyona al; hizmet hesaplarını ve sertifikaları yeniden oluştur.
+5. PostgreSQL'i geri yükle ve bütünlük kontrollerini yap.
+6. Depolama kökünü geri yükle/eşle, göreceli yol ve hash örneklemini doğrula.
+7. API ve File Agent'ı aynı uyumlu sürümle başlat.
+8. Kabul testleri sonrası kontrollü olarak kullanıcı erişimini aç.
+9. Veri kaybı penceresi, kurtarma süresi ve etkilenen işlemleri raporla.
+
+RPO (kabul edilebilir veri kaybı penceresi) ve RTO (kabul edilebilir hizmet dönüş süresi) iş sahibi tarafından sayılaştırılmadan kesin vaat verilmez. İlk gerçek altyapı paketinde bu karar bir giriş kapısıdır.
+
+## 11. Yedek ve güvenlik kabul kontrolleri
+
+- Yetkisiz kullanıcı API, yönetim ve audit kaynaklarına erişemez.
+- Parola/token/secret hiçbir log veya audit örneğinde görünmez.
+- Kritik işlemin kullanıcı, onay, önce/sonra özeti ve sonuç audit zinciri bulunur.
+- Günlük yedek başarısızlığı görünür uyarı üretir.
+- Ayrı hedefe PostgreSQL geri yükleme tatbikatı geçer.
+- Örnek dosya ağacı göreceli yol ve hash ile geri doğrulanır.
+- pCloud kesintisi temel veritabanı verisini bozmaz; dosya işlemi güvenli bekler.
+- Merkezi bilgisayar kaybı runbook'u masa başı tatbikatta ve sonra kontrollü teknik tatbikatta doğrulanır.
+
+## 12. Açık karar kapıları
+
+| Kimlik | Karar | Seçenekler | Geçici öneri | Kilit zamanı |
+|---|---|---|---|---|
+| SEC-Q01 | Parola hash | Argon2id / scrypt / bcrypt | Donanım ölçümlü Argon2id | Kimlik paketi |
+| SEC-Q02 | Oturum | Sunucu taraflı cookie / kısa ömürlü token | İptal edilebilir sunucu oturumu | Kimlik paketi |
+| SEC-Q03 | MFA | Yok / yönetici / tüm kullanıcılar | Risk analiziyle yönetici öncelikli | Üretim kabulü |
+| SEC-Q04 | Rol matrisi | Sabit roller / izin bileşimi | Kaynak-eylem izinleri | Kimlik paketi |
+| SEC-Q05 | Audit bütünlüğü | Salt ekleme / hash zinciri / dış arşiv | Önce salt ekleme ve sıkı yetki | Audit paketi |
+| SEC-Q06 | Audit saklama | Süre seçenekleri | Hukuk kararı beklenir | Üretim öncesi |
+| BCK-Q01 | RPO/RTO | İş etkisi seçenekleri | Ölçüm ve iş onayı | DB paketi öncesi |
+| BCK-Q02 | PostgreSQL koruma | Günlük dump / PITR / karma | Günlük+kuşak; RPO'ya göre PITR | Dağıtım paketi |
+| BCK-Q03 | Dosya ikinci kopya | Harici disk / NAS / immutable bulut | pCloud'dan bağımsız kopya | Üretim öncesi |
+| BCK-Q04 | Tatbikat sıklığı | Aylık / üç aylık / sürüm bazlı | Risk ve kapasiteyle belirle | Operasyon kabulü |
+
+Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin karar kapısında onaylanmalıdır.
