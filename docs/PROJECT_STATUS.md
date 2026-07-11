@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 03 — sözleşmeler ve doğrulama
+- Aşama: Proje çapında sertleştirme turu (Paket 03 sonrası)
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `foundation/package-03-contracts` dalı, remote yok
+- Git: Yerel repository, `hardening/project-wide-audit` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -37,12 +37,13 @@ Son güncelleme: 2026-07-11
 
 ## Test ve build sonuçları
 
-- `npm run typecheck`: Başarılı — UI + domain + contracts
+- `npm run typecheck`: Başarılı — UI + domain + contracts (dist silinmiş halde de exit 0)
 - `npm run lint`: Başarılı
-- `npm run test`: Başarılı — UI 2 dosya 26/26; domain 8 dosya 132/132; contracts 8 dosya 48/48; toplam 206/206 test (mevcut 158 korundu)
+- `npm run test`: Başarılı — UI 2 dosya 26/26; domain 8 dosya 257/257; contracts 9 dosya 67/67; **toplam 350/350 test**
 - `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain ve contracts: ESM JavaScript ve declaration çıktısı üretildi.
-- `npm run schema --workspace @hasarbotu/contracts`: Başarılı — 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez).
+- `npm run schema --workspace @hasarbotu/contracts`: Başarılı — self-contained; 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez). Golden fixture'lar `test/fixtures/json-schema` altında commit'lidir.
 - `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı
+- Temiz checkout (`npm ci`, worktree, node_modules+dist yok): typecheck/lint/test/build/schema/import-smoke tamamı exit 0
 
 ## Git baseline güvenliği
 
@@ -175,7 +176,7 @@ Son güncelleme: 2026-07-11
 - Paket runtime dependency içermez; React, Vite, Electron, browser API, Node dosya sistemi, ağ, API veya veritabanı import etmez.
 - On iki branded kimlik, kararlı makine hata kodlu `ParseResult`, `traffic/casco`, `open/closed`, on operasyon aşaması ve Trafik değer kaybı zorunluluğu eklendi.
 - `OfficeCaseNumber`, ayrı ihbar/hasar numaraları, kanonik plaka/arama anahtarı, `UtcDateTime`, `LocalDate`, `EntityVersion` ve presentation alanı içermeyen `CaseCore` eklendi.
-- `CaseCore.followUpAt`, UI mocklarında saat bulunması ve `DATABASE_MODEL_PLAN.md` içindeki `follow_up_at timestamptz` nedeniyle `UtcDateTime` olarak modellendi.
+- `CaseCore.followUpAt`, UI mocklarında saat bulunması ve `DATABASE_MODEL_PLAN.md` içindeki `follow_up_at timestamptz` nedeniyle `UtcDateTime` olarak modellendi. *(Tarihsel kayıt: HB-2026-005 sertleştirme kararı bu alanı `followUpDate?: LocalDate` olarak değiştirdi.)*
 - Optional alanlar bulunmayan alan/`undefined` politikasıyla tanımlandı; `exactOptionalPropertyTypes` ile açık `undefined` ve `null` atamaları engellendi.
 - UI henüz domain paketini tüketmiyor; `src` dosyalarında fark yok.
 
@@ -218,8 +219,8 @@ Son güncelleme: 2026-07-11
 
 ### followUp alanı kararı
 
-- `CaseCore.followUpAt`, UI mocklarında saat bulunması ve veri planında `timestamptz` olması nedeniyle `UtcDateTime`'dır (HB-2026-003). Bu yüzden koşullu `LocalDate → followUpDate` yeniden adlandırması **uygulanmadı** ve `packages/domain` değiştirilmedi.
-- Wire sözleşmesi bu değeri `followUpDate` (UtcDateTime) alanında taşır; mapper `followUpAt` ↔ `followUpDate` dönüşümünü açık yapar.
+- **Güncel durum (HB-2026-005 ile değişti):** Takip günlük tarihtir. Domain `CaseCore.followUpDate?: LocalDate` taşır; `followUpAt` kaldırılmıştır. Wire `followUpDate: string | null` (LocalDate) ve query `followUpFrom`/`followUpTo` LocalDate'tir; timezone dönüşümü yapılmaz.
+- Tarihçe: Paket 02/03 turlarında bu alan `UtcDateTime` olarak modellenmişti (HB-2026-003/004); sertleştirme turundaki ürün kararı bunu geçersiz kıldı.
 
 ### Test, build ve dependency sonucu
 
@@ -237,3 +238,27 @@ Son güncelleme: 2026-07-11
 - Çalışan HTTP sunucusu, veritabanı, auth, Electron, File Agent, UI adaptörü ve yazma endpoint'i: Oluşturulmadı.
 - `version` taşıma yöntemi (`If-Match`/body), idempotency uygulaması, authentication ve tam OpenAPI üretimi Paket 04+'a bırakıldı.
 - Remote eklenmedi; push/merge/tag yapılmadı.
+
+## Proje çapında sertleştirme turu (2026-07-11)
+
+### Uygulanan düzeltmeler
+
+- Takip tarihi semantiği: domain `followUpDate?: LocalDate`; `followUpAt` kaldırıldı; wire ve query LocalDate; timezone dönüşümü yok (HB-2026-005).
+- Kimlik güvenliği: domain + wire kimlikleri 1..128 güvenli ASCII; `/`, ters bölü, `..`, boşluk, kontrol karakteri reddi — kimlik dosya yolu olamaz.
+- Referans numaraları: max 128, kontrol/backslash reddi, en az bir alfasayısal; `11/18882475` desteklenir; path olarak kullanılamayacağı belgelendi.
+- Plaka max 32; `page` 1..10.000; NaN/Infinity/ondalık/string/boolean sayı alanlarında testli reddedilir.
+- `unrecognized_keys` hataları reddedilen alan ADLARINI güvenli biçimde raporlar (max 10 anahtar, 64 karakter kırpma, kontrol temizliği; değer asla taşınmaz).
+- `zod` tam `4.4.3` pinlendi; lockfile doğrulandı; başka dependency yükseltilmedi.
+- JSON Schema/runtime paritesi: ifade edilebilir kurallar pattern/min/max ile şemada; runtime-only kurallar `x-hasarbotu-runtime-validation` metadata'lı; JSON Schema tek başına güvenlik sınırı değildir (README'de belgeli).
+- Golden JSON Schema fixture'ları commit'lendi; regresyon testi eklendi; güncelleme yalnız açık `schema:fixtures` script'iyle.
+- Root `typecheck`/`test`/`build` dist artıklarından bağımsızlaştırıldı; `build:packages` domain→contracts sırasını tekilleştirir; `npm run dev` değişmedi.
+
+### Doğrulama
+
+- 350/350 test (26 UI + 257 domain + 67 contracts); bütün kapılar exit 0; temiz worktree'de `npm ci` + tüm kapılar + paket-adı import smoke geçti.
+- UI davranış denetimi (değişiklik yapılmadan): 1366×768 taşmasız (açık/koyu), üst arama `34mpa764` → `/dosyalar?q=...` tek doğru satır, Hızlı Bakış + Escape, tema persist, konsol temiz.
+- Ayrıntılı bulgu/kanıt: `PROJECT_WIDE_AUDIT.md`.
+
+## Sonraki önerilen görev (güncel)
+
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 04: sertleştirilmiş `@hasarbotu/contracts` sözleşmelerini tüketen merkezi API iskeleti ve sağlık uçları.

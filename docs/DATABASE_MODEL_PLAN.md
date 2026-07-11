@@ -47,7 +47,7 @@ Her satır amaç, temel kolonlar, PK/FK, unique/index, soft delete, audit, hassa
 | `users` | Kullanıcı kimliği; `firm_id`, `username`, `display_name`, `password_hash`, `status`, `last_login_at`, `version` | PK `id`; FK `firm_id` | Unique `(firm_id, normalized_username)`; status/login indeksleri | Disable + `deleted_at`; standart audit, password değişimi A2 | Yüksek; hash asla audit/log'a girmez; hesap geçmişi politika süresince korunur |
 | `roles` | Rol tanımı; `firm_id`, `name`, `description`, `version` | PK `id`; FK firm | Unique `(firm_id,name)`; aktif indeks | Kullanımdaysa fiziksel silme yok; standart audit | Orta; rol/permission tarihi uzun süre korunur |
 | `user_roles` | Çoktan çoğa rol ataması; `user_id`, `role_id`, `assigned_at/by` | Bileşik PK veya `id`; iki FK | Unique `(user_id,role_id)`; role/user indeks | Atama kaldırma tarihçeli/append audit | Orta; erişim kanıtı olarak purge yok, politika belirler |
-| `cases` | Vaka aggregate; `firm_id`, `office_year`, `office_sequence`, `office_number`, `type`, `status`, `stage`, `notice_number`, `claim_number`, `plate_normalized`, `assignee_id`, `expert_id`, `service_center_id`, `follow_up_at`, `last_intervention_at`, `closed_at`, `version` | PK `id`; FK firm/users/service | Unique `(firm_id,office_year,office_sequence)` ve `(firm_id,office_number)`; plate, notice, claim, status/stage, assignee, follow-up indeks | `deleted_at` yalnız yanlış oluşturma/karantina; close delete değildir; tüm değişiklik audit | Yüksek; hukuki/operasyonel saklama kararı olmadan purge yok |
+| `cases` | Vaka aggregate; `firm_id`, `office_year`, `office_sequence`, `office_number`, `type`, `status`, `stage`, `notice_number`, `claim_number`, `plate_normalized`, `assignee_id`, `expert_id`, `service_center_id`, `follow_up_date`, `last_intervention_at`, `closed_at`, `version` | PK `id`; FK firm/users/service | Unique `(firm_id,office_year,office_sequence)` ve `(firm_id,office_number)`; plate, notice, claim, status/stage, assignee, follow-up indeks | `deleted_at` yalnız yanlış oluşturma/karantina; close delete değildir; tüm değişiklik audit | Yüksek; hukuki/operasyonel saklama kararı olmadan purge yok |
 | `case_parties` | Sigortalı, mağdur, karşı taraf, şirket rolü; `case_id`, `party_type`, ad/iletişim alanları | PK `id`; FK case | `(case_id,party_type)` indeks; gereğine göre role sıra unique | Soft delete + audit | Çok yüksek kişisel veri; maskeli erişim, retention case ile bağlı |
 | `case_vehicles` | Vaka aracı/karşı araç; `case_id`, `role`, `plate`, `plate_normalized`, marka/model/yıl/VIN opsiyonel | PK `id`; FK case | `(case_id,role)`; plate index, plate **unique değil** | Soft delete + audit | Yüksek; case retention'ına bağlı |
 | `case_status_history` | Durum/aşama değişim kanıtı; `case_id`, `from/to_status`, `from/to_stage`, `reason`, `changed_at/by`, `source_event_id` | PK `id`; FK case/user/audit | `(case_id,changed_at desc)`; source event unique opsiyonel | Append-only; fiziksel silme yok | Orta; case ile en az aynı süre |
@@ -106,7 +106,7 @@ Zorunlu listedeki ilişkileri güvenli kurmak için aşağıdakiler adaydır; ke
 
 ### 5.4 Takip ve son müdahale
 
-- `follow_up_at timestamptz`; iş günü önerisi ayrı calendar service/kuralıdır.
+- `follow_up_date date`; takip günlük tarihtir, saat/timezone taşımaz (HB-2026-005). İş günü önerisi ayrı calendar service/kuralıdır.
 - `last_intervention_at` not/görev/durum gibi anlamlı iş transaction'ında sunucuda güncellenir; UI metni kaynak değildir.
 - Geciken sorgular için partial/compound index planlanır.
 

@@ -89,7 +89,7 @@ Audit seviyeleri:
 ### 3.4 Cases
 
 - **Amaç ve endpoint:** `GET /cases`, `POST /cases`, `GET/PATCH /cases/{caseId}`, `POST /cases/{caseId}/close-preview`, `/close`, `/reopen-preview`, `/reopen`.
-- **Örnek istek:** `{ "type": "Trafik", "noticeNumber": "F-2026-0987", "plate": "06ABC123", "assigneeId": "usr_..." }`; update `{ "expectedVersion": 4, "followUpAt": "..." }`.
+- **Örnek istek:** `{ "type": "Trafik", "noticeNumber": "F-2026-0987", "plate": "06ABC123", "assigneeId": "usr_..." }`; update `{ "expectedVersion": 4, "followUpDate": "2026-07-14" }`.
 - **Örnek cevap:** `{ "id": "case_...", "officeNumber": "2026/183", "type": "Trafik", "status": "Açık", "stage": "Hasar Tespiti", "version": 5 }`.
 - **Hatalar:** `CASE_TYPE_INVALID`, `OFFICE_NUMBER_CONFLICT`, `POSSIBLE_DUPLICATE`, `CLOSE_PREVIEW_REQUIRED`, `CLOSE_REASON_REQUIRED`, concurrency/storage.
 - **Yetki:** Read `cases.read`; write `cases.write`; close/reopen `cases.close`.
@@ -287,3 +287,11 @@ Paket 03, bu planın bir alt kümesini `@hasarbotu/contracts` (Zod 4) paketinde 
 - **Sürüm ve route:** `/api/v1` tabanı; `/health` sürümlü tabanın dışındadır ve `status` (`ok`/`degraded`), `service`, `version`, `checkedAt` alanlarını taşır. Bu turda yalnız read-only `GET /api/v1/cases` ve `GET /api/v1/cases/:caseId` sözleşmeleri kuruldu; §3.4'teki yazma/kapatma uçları Paket 05+ kapsamındadır.
 - **Paket düzeni ve zarf:** Sözleşmeler `src/common` + `src/health` + sürümlü `src/v1/cases` altında toplandı. Başarı zarfı `ok: true`, `data` ve opsiyonel `meta`; hata zarfı `ok: false`, `error`. §1'deki `requestId` opsiyonel `meta`/`error` alanında taşınır.
 - **Kapsam dışı:** Çalışan HTTP sunucusu, authentication, `version` taşıma yönteminin seçimi (`If-Match` veya body), idempotency uygulaması ve tam OpenAPI üretimi bu pakette yapılmadı; açık kararlar korunur.
+
+## 7. Proje çapında sertleştirme güncellemesi (2026-07-11, HB-2026-005)
+
+- **Takip tarihi:** `followUpDate` yalnız `LocalDate` (`YYYY-MM-DD`) taşır; `followUpAt` kaldırıldı. Query `followUpFrom`/`followUpTo` LocalDate'tir; karşılaştırma leksikografiktir, timezone dönüşümü yoktur.
+- **Değer sınırları:** kimlikler 1..128 güvenli ASCII (yol karakterleri ve `..` reddi); referans numaraları max 128 (kontrol/backslash reddi, slash geçerli); plaka max 32; `page` 1..10.000; `pageSize` 1..100; `search` max 120.
+- **Hata raporu:** `unrecognized_keys` reddedilen alan ADLARINI (değer değil) en çok 10 adet, temizlenmiş olarak taşır.
+- **JSON Schema:** ifade edilebilir kurallar şemaya taşındı; runtime-only kurallar `x-hasarbotu-runtime-validation` ile işaretli; golden fixture regresyonu `packages/contracts/test/fixtures/json-schema` altındadır. JSON Schema tek başına güvenlik sınırı değildir.
+- **Sürüm:** `zod` tam `4.4.3` pinlidir.

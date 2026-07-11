@@ -347,3 +347,28 @@ Kabul ölçütü: Public şemalar strict ve coercion'suzdur; domain/DTO ayrımı
 - [x] `DECISION_LOG.md`, `PROJECT_STATUS.md`, bu plan, `INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` ve `API_CONTRACT_PLAN.md` belgelerini gerçek sonuçlarla güncelle.
 
 Kabul ölçütü: Bütün kalite kapıları yeşildir; yalnız Paket 03 farkları commit'e hazırdır; sonraki tek mantıklı görev Paket 04'tür.
+
+## Aktif geliştirme paketi — Proje çapında sertleştirme turu
+
+### Aşama 32 — Güvenlik kapısı ve denetim okuması
+
+- [x] CLAUDE.md, AGENTS.md, bütün docs, package/lock, config/domain/contracts/src ve yapılandırmaları incele.
+- [x] Dal/HEAD/temiz ağaç/main/Paket02/tag/remote beklentilerini doğrula; `hardening/project-wide-audit` dalını `36a140c` üzerinden oluştur.
+
+### Aşama 33 — Domain ve sözleşme semantiği sertleştirmesi
+
+- [x] `followUpAt` → `followUpDate?: LocalDate`; wire/query LocalDate; timezone dönüşümü yok.
+- [x] Kimlikler 1..128 güvenli ASCII, yol/`..`/kontrol reddi (domain + wire).
+- [x] Referans numaraları max 128, kontrol/backslash reddi, `11/18882475` desteği; plaka max 32.
+- [x] `page` 1..10.000; NaN/Infinity/ondalık reddi testli.
+- [x] `unrecognized_keys` güvenli anahtar-adı raporu; zod tam `4.4.3` pin.
+- [x] JSON Schema paritesi + `x-hasarbotu-runtime-validation`; golden fixture'lar + regresyon testi + açık `schema:fixtures` script'i.
+
+### Aşama 34 — Yeniden üretilebilirlik, UI denetimi ve teslim
+
+- [x] Root typecheck/test/build dist bağımsızlığı; `build:packages`; `npm run dev` korundu.
+- [x] Temiz worktree'de `npm ci` + typecheck/lint/test/build/schema/import-smoke (tamamı exit 0).
+- [x] UI davranış denetimi (değişiklik yok): 1366×768, arama, hızlı detay/Escape, tema, konsol.
+- [x] `PROJECT_WIDE_AUDIT.md` + ilgili belgeler; atomik commit'ler; korunan dal/tag'lere dokunulmadı.
+
+Kabul ölçütü: 350/350 test; bütün kapılar temiz ortamda yeşil; bilinen Paket 03 engelleri kapalı; sonraki tek mantıklı görev Paket 04'tür.
