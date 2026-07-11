@@ -276,3 +276,14 @@ Audit seviyeleri:
 ## 5. Kesinleşmeden önce karar gerekenler
 
 Framework, validation şema kütüphanesi, ID biçimi, version taşıma yöntemi (`If-Match` veya body), pagination standardı ve authentication yöntemi `INFRASTRUCTURE_BLUEPRINT.md` açık karar kataloğunda çözülmeden tam OpenAPI üretilmez.
+
+## 6. Paket 03 somutlaştırması (2026-07-11)
+
+Paket 03, bu planın bir alt kümesini `@hasarbotu/contracts` (Zod 4) paketinde çalışan, runtime doğrulanan sözleşmelere dönüştürdü. Bu turda alınan somut kararlar (bkz. `DECISION_LOG.md` HB-2026-004):
+
+- **Validation kütüphanesi:** Zod 4 (`zod@4.4.3`). Wire DTO kaynağı Zod şemalarıdır; tipler `z.infer` ile türetilir. JSON Schema, Zod 4 yerleşik `z.toJSONSchema` ile üretilir; ek OpenAPI bağımlılığı yoktur.
+- **Hata modeli:** Bu paketteki kararlı hata kodları küçük-harf `snake_case` olarak somutlaştı: `validation_error`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `version_conflict`, `idempotency_conflict`, `service_unavailable`, `internal_error`. §1'deki UPPER_SNAKE taslak adları bu kararlı kodlarla eşlenir. Hata nesnesi ham girdi taşımaz.
+- **Pagination:** Sayfa tabanlı somutlaştırma: `page` (varsayılan 1), `pageSize` (varsayılan 25, maksimum 100) ve liste yanıtında `{ items, pageInfo }`. §1'deki cursor/offset seçimi yüksek hacimli history/audit uçlarında ayrıca değerlendirilecektir.
+- **Sürüm ve route:** `/api/v1` tabanı; `/health` sürümlü tabanın dışındadır ve `status` (`ok`/`degraded`), `service`, `version`, `checkedAt` alanlarını taşır. Bu turda yalnız read-only `GET /api/v1/cases` ve `GET /api/v1/cases/:caseId` sözleşmeleri kuruldu; §3.4'teki yazma/kapatma uçları Paket 05+ kapsamındadır.
+- **Paket düzeni ve zarf:** Sözleşmeler `src/common` + `src/health` + sürümlü `src/v1/cases` altında toplandı. Başarı zarfı `ok: true`, `data` ve opsiyonel `meta`; hata zarfı `ok: false`, `error`. §1'deki `requestId` opsiyonel `meta`/`error` alanında taşınır.
+- **Kapsam dışı:** Çalışan HTTP sunucusu, authentication, `version` taşıma yönteminin seçimi (`If-Match` veya body), idempotency uygulaması ve tam OpenAPI üretimi bu pakette yapılmadı; açık kararlar korunur.

@@ -1,0 +1,104 @@
+export {
+  // primitives
+  caseIdSchema,
+  caseStageSchema,
+  caseStatusSchema,
+  caseTypeSchema,
+  entityVersionSchema,
+  idSchema,
+  insurerClaimNumberSchema,
+  insurerIdSchema,
+  localDateSchema,
+  nonEmptyStringSchema,
+  notificationFormNumberSchema,
+  officeCaseNumberSchema,
+  plateNumberSchema,
+  serviceIdSchema,
+  userIdSchema,
+  utcDateTimeSchema,
+  type CaseStageDto,
+  type CaseStatusDto,
+  type CaseTypeDto,
+  type EntityVersionDto,
+  type LocalDateDto,
+  type OfficeCaseNumberDto,
+  type PlateNumberDto,
+  type UtcDateTimeDto,
+  // errors
+  API_ERROR_CODES,
+  apiErrorCodeSchema,
+  apiErrorSchema,
+  fieldErrorSchema,
+  zodErrorToApiError,
+  type ApiError,
+  type ApiErrorCode,
+  type FieldError,
+  // envelope
+  failureEnvelopeSchema,
+  responseMetaSchema,
+  successEnvelopeSchema,
+  type FailureEnvelope,
+  type ResponseMeta,
+  type SuccessEnvelope,
+  // pagination
+  DEFAULT_PAGE,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  SORT_DIRECTIONS,
+  SORT_FIELDS,
+  pageInfoSchema,
+  pageSchema,
+  pageSizeSchema,
+  pageSizeWithDefaultSchema,
+  pageWithDefaultSchema,
+  sortDirectionSchema,
+  sortFieldSchema,
+  type PageInfo,
+  type SortDirection,
+  type SortField,
+  // routes (base)
+  API_V1_BASE,
+  API_VERSION,
+  HEALTH_ROUTE,
+} from './common/index.js'
+
+export {
+  HEALTH_STATUSES,
+  healthResponseSchema,
+  healthStatusSchema,
+  type HealthResponse,
+  type HealthStatus,
+} from './health/index.js'
+
+export {
+  // cases routes
+  CASES_ROUTE,
+  CASE_DETAIL_ROUTE,
+  // cases query
+  MAX_SEARCH_LENGTH,
+  casesQuerySchema,
+  searchSchema,
+  type CasesQuery,
+  type CasesQueryInput,
+  // cases dto
+  caseDetailParamsSchema,
+  caseDetailResponseSchema,
+  caseDetailSchema,
+  caseListItemSchema,
+  caseListResponseSchema,
+  type CaseDetail,
+  type CaseDetailParams,
+  type CaseDetailResponse,
+  type CaseListItem,
+  type CaseListResponse,
+  // cases mappers
+  caseCoreToDetail,
+  caseCoreToListItem,
+  caseDetailToCaseCore,
+} from './v1/cases/index.js'
+
+export {
+  JSON_SCHEMA_TARGETS,
+  buildJsonSchemas,
+  type JsonSchemaName,
+} from './json-schema.js'

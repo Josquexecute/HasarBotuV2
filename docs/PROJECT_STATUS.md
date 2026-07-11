@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 02 — ortak domain çekirdeği
+- Aşama: Paket 03 — sözleşmeler ve doğrulama
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `foundation/package-02-domain-core` dalı, remote yok
+- Git: Yerel repository, `foundation/package-03-contracts` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -37,10 +37,11 @@ Son güncelleme: 2026-07-11
 
 ## Test ve build sonuçları
 
-- `npm run typecheck`: Başarılı
+- `npm run typecheck`: Başarılı — UI + domain + contracts
 - `npm run lint`: Başarılı
-- `npm run test`: Başarılı — UI 2 dosya 26/26; domain 8 dosya 132/132; toplam 158/158 test
-- `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain: ESM JavaScript ve declaration çıktısı üretildi.
+- `npm run test`: Başarılı — UI 2 dosya 26/26; domain 8 dosya 132/132; contracts 8 dosya 48/48; toplam 206/206 test (mevcut 158 korundu)
+- `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain ve contracts: ESM JavaScript ve declaration çıktısı üretildi.
+- `npm run schema --workspace @hasarbotu/contracts`: Başarılı — 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez).
 - `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı
 
 ## Git baseline güvenliği
@@ -61,7 +62,7 @@ Son güncelleme: 2026-07-11
 
 ## Sonraki önerilen görev
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` içindeki Paket 03'ü ayrı görev olarak uygulamak: sürümlü API DTO'ları, hata zarfı ve runtime validation yaklaşımını domain/UI sınırlarını bozmadan oluşturmak.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` içindeki Paket 04'ü ayrı görev olarak uygulamak: iş özelliği eklemeden merkezi API iskeletini ve sağlık uçlarını `@hasarbotu/contracts` sözleşmelerini tüketerek kurmak.
 
 ## Altyapı mimarisi planlama durumu
 
@@ -202,3 +203,37 @@ Son güncelleme: 2026-07-11
 - `CaseStatus` için `open/closed` dışındaki olası yaşam döngüsü değerleri belge kararı olmadan eklenmedi.
 - API DTO biçimleri, unknown alan politikası, genel runtime validation kütüphanesi ve OpenAPI üretimi Paket 03'e bırakıldı.
 - Backend, IPC, PostgreSQL, Electron, File Agent ve gerçek veri yazma yolu değişmedi veya eklenmedi.
+
+## Paket 03 — sözleşmeler ve doğrulama
+
+### Uygulanan yapı
+
+- `packages/contracts`, `@hasarbotu/contracts@0.0.0` adlı private, ESM ve `sideEffects: false` workspace paketi olarak oluşturuldu. Kaynak düzeni `src/common`, `src/health` ve sürümlü `src/v1/cases`'tir.
+- Runtime doğrulama yalnız Zod 4 (`zod@4.4.3`) ile yapılır; yeni runtime dependency yalnız `zod` ve workspace `@hasarbotu/domain`'dir.
+- Ortak primitive şemaları (ayrı `caseId`/`userId`/`serviceId`/`insurerId` kimlikleri, `CaseType`, `CaseStatus`, `CaseStage`, `OfficeCaseNumber`, ihbar/hasar no, plaka, `UtcDateTime`, `LocalDate`, `EntityVersion`), `ok`/`data`/opsiyonel `meta` başarı zarfı ve `ok`/`error` hata zarfı, kararlı hata modeli ve güvenli `zodErrorToApiError` dönüştürücüsü eklendi.
+- Sayfa tabanlı pagination (`page`=1, `pageSize`=25, maksimum 100), sıralama, `/health` yanıtı (`status: ok|degraded`, `service`, `version`, `checkedAt`), sürümlü `/api/v1` read-only Cases sorgu/liste/detay sözleşmeleri ve route sabitleri eklendi.
+- Domain↔DTO dönüşümü saf mapper'larla açık yapılır: opsiyonel ilişkiler domainde `undefined`, wire'da tutarlı `null`; domain `followUpAt` alanı wire'da `followUpDate` olarak taşınır.
+- Public object şemaları `strict`'tir; kontrolsüz coercion (`z.coerce`) kullanılmaz; hata nesnesi ham girdi taşımaz.
+- Zod 4 yerleşik `z.toJSONSchema` ile 6 deterministik JSON Schema `dist/json-schema` altına üretilir; `dist` Git tarafından ignore edilir.
+
+### followUp alanı kararı
+
+- `CaseCore.followUpAt`, UI mocklarında saat bulunması ve veri planında `timestamptz` olması nedeniyle `UtcDateTime`'dır (HB-2026-003). Bu yüzden koşullu `LocalDate → followUpDate` yeniden adlandırması **uygulanmadı** ve `packages/domain` değiştirilmedi.
+- Wire sözleşmesi bu değeri `followUpDate` (UtcDateTime) alanında taşır; mapper `followUpAt` ↔ `followUpDate` dönüşümünü açık yapar.
+
+### Test, build ve dependency sonucu
+
+- Contracts workspace typecheck/test/build/schema: Başarılı.
+- Contracts test: 8 dosya, 48/48 test. Root test: 26 UI + 132 domain + 48 contracts = 206/206; mevcut 158 korundu.
+- Contracts build: `dist` altında ESM JavaScript, `.d.ts` ve `.d.ts.map` üretildi; JSON Schema `dist/json-schema` altına 6 dosya olarak üretildi; ikisi de Git tarafından ignore edilir.
+- `npm install`: 2 paket eklendi (`zod` ve bağımlılığı); mevcut lockfile sürümlerinde yükseltme yok. Root `prepare` scripti install sonrası domain→contracts build sırasını garanti eder.
+- `npm audit --audit-level=moderate`: 0 güvenlik açığı.
+- Root UI build boyutları baseline ile aynı kaldı; `npm run dev` davranışı değişmedi.
+- UI smoke: HTTP 200; `HasarBotu V2`, 8 navigasyon bağlantısı ve pano içeriği doğrulandı; konsolda yalnız Vite/React bilgi mesajları, warning/error yok; sekme kapatıldı ve 4173 portu boş bırakıldı.
+
+### Etki ve sınırlar
+
+- `src` (UI) ve `packages/domain` kaynak değişikliği: Yok.
+- Çalışan HTTP sunucusu, veritabanı, auth, Electron, File Agent, UI adaptörü ve yazma endpoint'i: Oluşturulmadı.
+- `version` taşıma yöntemi (`If-Match`/body), idempotency uygulaması, authentication ve tam OpenAPI üretimi Paket 04+'a bırakıldı.
+- Remote eklenmedi; push/merge/tag yapılmadı.

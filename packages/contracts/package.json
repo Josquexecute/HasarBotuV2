@@ -1,0 +1,29 @@
+{
+  "name": "@hasarbotu/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "HasarBotu V2 surumlu API sozlesmeleri ve Zod 4 runtime dogrulama siniri",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test": "vitest run --config vitest.config.ts",
+    "schema": "node dist/generate-json-schema.js"
+  },
+  "dependencies": {
+    "@hasarbotu/domain": "*",
+    "zod": "^4.0.0"
+  }
+}

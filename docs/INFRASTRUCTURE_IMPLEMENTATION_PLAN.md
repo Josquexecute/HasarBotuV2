@@ -68,6 +68,7 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Kalite kapıları:** Sözleşmeler strict; domain/DTO ayrımı açık; typecheck/lint/test/build/audit yeşil.
 - **Geri alma:** Contracts paketi ve tüketilmeyen referansları kaldır; UI mockları etkilenmez.
 - **Kabul:** İstemci ve sunucu aynı runtime doğrulanan sözleşmeyi kullanabilir.
+- **Gerçekleşen sonuç (2026-07-11):** Tamamlandı. `@hasarbotu/contracts@0.0.0` private ESM paketi Zod 4 (`zod@4.4.3`) ile `src/common` + `src/health` + sürümlü `src/v1/cases` düzeninde kuruldu; yeni runtime dependency yalnız `zod` ve workspace `@hasarbotu/domain`'dir. Sürümlü `/api/v1` read-only Cases sözleşmeleri (sorgu, liste yanıtı, detay param/yanıtı), `/health` yanıtı (`status: ok|degraded`, `service`, `version`, `checkedAt`), `ok`/`data`/opsiyonel `meta` başarı zarfı ve `ok`/`error` hata zarfı, kararlı hata modeli ve güvenli `zodErrorToApiError` dönüştürücüsü eklendi. Public şemalar strict; coercion yok; hata nesnesi ham girdi/hassas veri taşımaz. Domain↔DTO dönüşümü saf mapper'larla açık; `undefined`↔`null` ve `followUpAt`↔`followUpDate` köprülendi. Zod 4 yerleşik `z.toJSONSchema` ile 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez). UI `src` ve domain kaynağı değişmedi; 48 sözleşme testi eklendi ve mevcut 158 test korundu (toplam 206). Sonraki paket Paket 04'tür.
 
 ### Paket 04 — API iskeleti ve sağlık uçları
 

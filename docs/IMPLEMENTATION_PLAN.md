@@ -318,3 +318,32 @@ Kabul ölçütü: 26 UI ve 132 domain testi geçer; root ve workspace kalite kap
 - [x] Son kalite kapıları ve `git diff --check` için teslim öncesi kontrol listesini hazırla.
 
 Kabul ölçütü: Yalnız Paket 02 farkları commit'e hazırdır; sonraki tek mantıklı görev Paket 03'tür.
+
+## Aktif geliştirme paketi — Paket 03 sözleşmeler ve doğrulama
+
+### Aşama 29 — Belge, sınır ve Git denetimi
+
+- [x] `CLAUDE.md`, `AGENTS.md`, ilgili `docs`, root/package yapılandırmaları, `packages/config` ve `packages/domain` kaynaklarını incele.
+- [x] `foundation/package-03-contracts` dalını ve `cf238ee` HEAD'ini, temiz çalışma ağacını doğrula.
+- [x] `CaseCore.followUpAt` tipinin `UtcDateTime` olduğunu doğrula; koşullu `LocalDate` yeniden adlandırması uygulanmadığından domain değiştirilmedi.
+
+Kabul ölçütü: Paket 03 temiz Paket 02 tabanından başlar; belge çelişkisi yoktur ve domain/UI dokunulmadan bırakılır.
+
+### Aşama 30 — Zod 4 sözleşme paketi
+
+- [x] Private ESM `@hasarbotu/contracts@0.0.0` paketini yalnız `zod@4` ve workspace `@hasarbotu/domain` runtime dependency'siyle oluştur.
+- [x] Ortak primitive, strict success/failure zarfı, kararlı hata modeli ve güvenli Zod→API hata dönüştürücüsü ekle.
+- [x] Sayfa tabanlı pagination, sıralama, `/health` yanıtı ve read-only `/api/v1` Cases sorgu/liste/detay sözleşmelerini ekle.
+- [x] Domain↔DTO saf mapper'larını (`undefined`↔`null`, `followUpAt`↔`followUpDate`) ve route sabitlerini ekle.
+- [x] Zod 4 yerleşik `z.toJSONSchema` ile deterministik JSON Schema üretimini `dist/json-schema` altına ekle; `dist` ignore edilir.
+
+Kabul ölçütü: Public şemalar strict ve coercion'suzdur; domain/DTO ayrımı açıktır; ham girdi hata nesnesine sızmaz.
+
+### Aşama 31 — Kalite kapıları, kök bütünleşme ve teslim
+
+- [x] Root `typecheck`/`test`/`build` komutlarını contracts paketini testleri iki kez çalıştırmadan kapsayacak şekilde güncelle; `prepare` ile domain→contracts build sırasını garanti et; `npm run dev` davranışını koru.
+- [x] `npm install`, `npm ls`, typecheck, lint, test, build, moderate audit, `git diff --check`, contracts workspace typecheck/test/build/schema ve UI HTTP 200/konsol smoke kontrollerini çalıştır.
+- [x] Declaration ve JSON Schema çıktısını doğrula; `dist` ignore'unu doğrula; 158 mevcut testin korunduğunu doğrula.
+- [x] `DECISION_LOG.md`, `PROJECT_STATUS.md`, bu plan, `INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` ve `API_CONTRACT_PLAN.md` belgelerini gerçek sonuçlarla güncelle.
+
+Kabul ölçütü: Bütün kalite kapıları yeşildir; yalnız Paket 03 farkları commit'e hazırdır; sonraki tek mantıklı görev Paket 04'tür.
