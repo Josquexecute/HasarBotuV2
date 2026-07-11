@@ -6,5 +6,8 @@
   "description": "HasarBotu paketleri için paylaşılan, yayınlanmayan yapılandırma sınırı",
   "files": [
     "tsconfig"
-  ]
+  ],
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json"
+  }
 }

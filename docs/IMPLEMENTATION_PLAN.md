@@ -278,3 +278,43 @@ Kabul ölçütü: Workspace kayıtlıdır; root komutlar ve ana UI davranışı 
 - [x] Temiz çalışma ağacı, commit sırası, aktif dal, main/tag bütünlüğü ve remote yokluğunu doğrula.
 
 Kabul ölçütü: Paket 01 bütün kanıtlarıyla ayrı commit'tedir ve sonraki tek mantıklı görev Paket 02'dir.
+
+## Aktif geliştirme paketi — Paket 02 ortak domain çekirdeği
+
+### Aşama 25 — Belge, model ve Git sınırı denetimi
+
+- [x] `AGENTS.md`, bütün `docs` belgeleri, root/package yapılandırmaları ve mevcut UI model/moklarını tamamen incele.
+- [x] Paket 01 commit'ini ve temiz çalışma ağacını doğrula.
+- [x] `foundation/package-02-domain-core` dalını `17043624ca6bba1b6f025fb565a00a537ada83f1` commit'inden oluştur.
+- [x] UI yaşam döngüsü etiketi ile operasyon aşaması farkını kaydet; `src` altında değişiklik yapma.
+
+Kabul ölçütü: Paket 02 temiz Paket 01 tabanından başlar; belge çelişkisi veya kullanıcı değişikliği yoktur.
+
+### Aşama 26 — Saf TypeScript domain paketi
+
+- [x] Private ESM ve runtime dependency içermeyen `@hasarbotu/domain@0.0.0` paketini oluştur.
+- [x] Branded kimlikler, güvenli `ParseResult`, dosya türü, yaşam döngüsü, on operasyon aşaması ve değer kaybı kuralını ekle.
+- [x] Ofis/ihbar/hasar numarası, plaka, UTC tarih-saat, yerel tarih ve entity version değerlerini ekle.
+- [x] Presentation alanı içermeyen minimum `CaseCore` modelini ve kontrollü root exportlarını oluştur.
+- [x] Config paketine yalnız ortak tsconfig exportunu ekle; root UI tsconfiglerini değiştirme.
+
+Kabul ölçütü: Domain kaynakları React, browser, Node dosya sistemi, API, veritabanı veya başka altyapı import etmez.
+
+### Aşama 27 — Deterministik testler ve root kalite bütünleşmesi
+
+- [x] Sekiz domain test dosyasında runtime ve `@ts-expect-error` tür sınırı testlerini ekle.
+- [x] Root typecheck, lint, test ve build komutlarına domain paketini testleri iki kez çalıştırmadan dahil et.
+- [x] Workspace typecheck, test ve build komutlarını ayrı ayrı doğrula.
+- [x] ESM JavaScript ve declaration çıktısını, lockfile workspace linkini ve yeni harici dependency olmadığını doğrula.
+- [x] Root UI smoke testinde HTTP 200, 8 navigasyon bağlantısı, mock etiketi, overflow ve konsolu doğrula; test portunu kapat.
+
+Kabul ölçütü: 26 UI ve 132 domain testi geçer; root ve workspace kalite kapıları yeşildir.
+
+### Aşama 28 — Durum ve teslim hazırlığı
+
+- [x] `DECISION_LOG.md`, `PROJECT_STATUS.md`, bu plan ve altyapı uygulama planını gerçek sonuçlarla güncelle.
+- [x] UI mock `status` değerleri ile domain `CaseStatus` ayrımını açıkça belgeye kaydet.
+- [x] Paket 02 farkını, `src` değişmezliğini, remote yokluğunu ve commit kapsamını denetle.
+- [x] Son kalite kapıları ve `git diff --check` için teslim öncesi kontrol listesini hazırla.
+
+Kabul ölçütü: Yalnız Paket 02 farkları commit'e hazırdır; sonraki tek mantıklı görev Paket 03'tür.

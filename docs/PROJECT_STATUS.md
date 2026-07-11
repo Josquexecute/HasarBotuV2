@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 01 — npm workspace temeli
+- Aşama: Paket 02 — ortak domain çekirdeği
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `foundation/package-01-workspaces` dalı, remote yok
+- Git: Yerel repository, `foundation/package-02-domain-core` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -39,8 +39,8 @@ Son güncelleme: 2026-07-11
 
 - `npm run typecheck`: Başarılı
 - `npm run lint`: Başarılı
-- `npm run test`: Başarılı — 2 test dosyası, 26/26 test
-- `npm run build`: Başarılı — Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB)
+- `npm run test`: Başarılı — UI 2 dosya 26/26; domain 8 dosya 132/132; toplam 158/158 test
+- `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain: ESM JavaScript ve declaration çıktısı üretildi.
 - `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı
 
 ## Git baseline güvenliği
@@ -61,7 +61,7 @@ Son güncelleme: 2026-07-11
 
 ## Sonraki önerilen görev
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` içindeki Paket 02'yi ayrı görev olarak uygulamak: saf domain tiplerini UI gösterim modellerinden ayırmak; mevcut UI davranışını ve mock çalışma yolunu korumak.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` içindeki Paket 03'ü ayrı görev olarak uygulamak: sürümlü API DTO'ları, hata zarfı ve runtime validation yaklaşımını domain/UI sınırlarını bozmadan oluşturmak.
 
 ## Altyapı mimarisi planlama durumu
 
@@ -165,3 +165,40 @@ Son güncelleme: 2026-07-11
 - IPC, backend, API, PostgreSQL, Electron, File Agent, domain modeli veya gerçek veri yazma yolu değişikliği: Yok.
 - Paket 01 planlama commit'i: `564b267794e49ab92e2c257198d58846bd1a010c`.
 - Paket 01 uygulama değişiklikleri `chore: establish npm workspace foundation` mesajlı ayrı commit'te tutulmaktadır.
+
+## Paket 02 — ortak domain çekirdeği
+
+### Uygulanan yapı
+
+- `packages/domain`, `@hasarbotu/domain@0.0.0` adlı private, ESM ve `sideEffects: false` workspace paketi olarak oluşturuldu.
+- Paket runtime dependency içermez; React, Vite, Electron, browser API, Node dosya sistemi, ağ, API veya veritabanı import etmez.
+- On iki branded kimlik, kararlı makine hata kodlu `ParseResult`, `traffic/casco`, `open/closed`, on operasyon aşaması ve Trafik değer kaybı zorunluluğu eklendi.
+- `OfficeCaseNumber`, ayrı ihbar/hasar numaraları, kanonik plaka/arama anahtarı, `UtcDateTime`, `LocalDate`, `EntityVersion` ve presentation alanı içermeyen `CaseCore` eklendi.
+- `CaseCore.followUpAt`, UI mocklarında saat bulunması ve `DATABASE_MODEL_PLAN.md` içindeki `follow_up_at timestamptz` nedeniyle `UtcDateTime` olarak modellendi.
+- Optional alanlar bulunmayan alan/`undefined` politikasıyla tanımlandı; `exactOptionalPropertyTypes` ile açık `undefined` ve `null` atamaları engellendi.
+- UI henüz domain paketini tüketmiyor; `src` dosyalarında fark yok.
+
+### Belge ve mevcut UI model farkı
+
+- Mevcut UI `CaseRecord.status`, `Açık`, `Beklemede`, `Gecikmiş` ve `Kontrol Bekliyor` değerlerini aynı alanda tutuyor. Son üç değer yaşam döngüsü değil, operasyon/takip sunumudur.
+- Ortak domain `CaseStatus` yalnız belgelerce doğrulanmış minimum yaşam döngüsü kodlarını `open` ve `closed` olarak tutar. Kapatılan UI kayıtları hâlen ayrı mock modeldedir; bu görevde UI değiştirilmedi.
+- Mevcut UI'nin on Türkçe `CaseStage` değeri ürün belgelerindeki on aşamayla eşleşir. Domain aynı anlamları dil bağımsız İngilizce kodlarla taşır; Türkçe etiket eşlemesi ileride presentation/adaptör katmanında yapılacaktır.
+
+### Test, build ve dependency sonucu
+
+- Domain workspace typecheck: Başarılı.
+- Domain workspace test: Başarılı — 8 dosya, 132/132 deterministik test.
+- Domain workspace build: Başarılı — `dist` altında ESM JavaScript, `.d.ts` ve `.d.ts.map` üretildi; `dist` Git tarafından ignore ediliyor.
+- Root kalite komutları UI ve domain'i kapsıyor; UI testleri bir kez, domain testleri bir kez çalışıyor.
+- Root test sonucu: 26 UI + 132 domain = 158/158.
+- Root UI build boyutları baseline ile aynı kaldı.
+- `npm install`: Bir yerel workspace linki eklendi; harici paket eklenmedi veya mevcut dependency sürümü yükseltilmedi.
+- `npm audit --audit-level=moderate`: 0 güvenlik açığı.
+- UI smoke: HTTP 200; `HasarBotu V2`, `Operasyon Durumu`, 8 navigasyon bağlantısı ve `UI Prototip · Mock Veri` doğrulandı; belge yatay taşması ve konsol warning/error yok; sekme kapatıldı ve 4173 portu boş bırakıldı.
+
+### Açık kararlar ve sonraki sınır
+
+- Dış kimliklerin gelecekte UUID veya ULID olması Paket 02'de kararlaştırılmadı.
+- `CaseStatus` için `open/closed` dışındaki olası yaşam döngüsü değerleri belge kararı olmadan eklenmedi.
+- API DTO biçimleri, unknown alan politikası, genel runtime validation kütüphanesi ve OpenAPI üretimi Paket 03'e bırakıldı.
+- Backend, IPC, PostgreSQL, Electron, File Agent ve gerçek veri yazma yolu değişmedi veya eklenmedi.

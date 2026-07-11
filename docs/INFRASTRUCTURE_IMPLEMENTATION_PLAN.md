@@ -55,6 +55,7 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Kalite kapıları:** Strict TypeScript; dış bağımlılığı olmayan domain; mevcut UI test/build yeşil.
 - **Geri alma:** Web'in mevcut yerel tiplerine dön; paket bağımsız olduğundan veri etkisi yoktur.
 - **Kabul:** Domain paketi React, API ve veritabanı bilmeden kuralları temsil eder.
+- **Gerçekleşen sonuç (2026-07-11):** Tamamlandı. `@hasarbotu/domain@0.0.0` dış runtime dependency olmadan oluşturuldu; UI `src` koduna bağlanmadı. UI'daki `Beklemede/Gecikmiş/Kontrol Bekliyor` sunum durumları yaşam döngüsüne alınmadı; domain yalnız doğrulanmış `open/closed` durumlarını ve belgelerdeki on aşamayı taşır. 132 domain testi ile mevcut 26 UI testi geçti; sonraki paket Paket 03'tür.
 
 ### Paket 03 — Sözleşmeler ve doğrulama
 
