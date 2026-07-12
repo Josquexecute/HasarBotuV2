@@ -1,3 +1,5 @@
+import { parseDatabaseUrl } from '@hasarbotu/database'
+
 /**
  * API runtime yapilandirma siniri.
  *
@@ -27,6 +29,13 @@ export interface ApiConfig {
   readonly port: number
   readonly logLevel: LogLevel
   readonly nodeEnv: NodeEnv
+  /**
+   * Opsiyonel PostgreSQL baglantisi. Verilmezse API veritabanisiz calisir ve
+   * health her zaman `ok` doner (Paket 04 davranisi). Verilirse bicimi
+   * @hasarbotu/database parseDatabaseUrl ile dogrulanir; gecersizse sunucu
+   * BASLATILMAZ. Deger hicbir hata mesajina yazilmaz.
+   */
+  readonly databaseUrl?: string
 }
 
 /** Yapilandirma hatasi: alan adi + kural tasir, deger tasimaz. */
@@ -78,15 +87,28 @@ function parseNodeEnv(raw: string | undefined): NodeEnv {
   return raw as NodeEnv
 }
 
+function parseOptionalDatabaseUrl(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw.length === 0) return undefined
+  try {
+    parseDatabaseUrl(raw)
+  } catch {
+    // Deger (sifre icerebilir) hata mesajina asla yazilmaz.
+    throw new ConfigError('DATABASE_URL', 'expected a valid postgres:// connection URL.')
+  }
+  return raw
+}
+
 /**
  * Ortam nesnesinden API yapilandirmasini uretir. Saf fonksiyondur: testler
  * gercek process ortamina bagimli olmadan acik nesnelerle calisir.
  */
 export function parseConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
+  const databaseUrl = parseOptionalDatabaseUrl(env.DATABASE_URL)
   return {
     host: parseHost(env.HOST),
     port: parsePort(env.PORT),
     logLevel: parseLogLevel(env.LOG_LEVEL),
     nodeEnv: parseNodeEnv(env.NODE_ENV),
+    ...(databaseUrl !== undefined ? { databaseUrl } : {}),
   }
 }

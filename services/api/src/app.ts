@@ -32,6 +32,11 @@ export interface BuildAppOptions {
   readonly loggerStream?: { write: (message: string) => void }
   /** `false` ile log tamamen kapatilir (sessiz testler). Varsayilan: acik. */
   readonly loggerEnabled?: boolean
+  /**
+   * Health icin gercek bagimlilik kontrolu (Paket 05: DB ping). Verilmezse
+   * health her zaman `ok` doner. Sonuc `true` degilse `degraded` yansir.
+   */
+  readonly healthDependencyCheck?: () => Promise<boolean>
 }
 
 /**
@@ -65,6 +70,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     clock: options.clock ?? systemClock,
     service: API_SERVICE_NAME,
     version: API_VERSION,
+    ...(options.healthDependencyCheck !== undefined
+      ? { dependencyCheck: options.healthDependencyCheck }
+      : {}),
   })
 
   return app

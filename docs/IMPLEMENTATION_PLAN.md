@@ -423,3 +423,28 @@ Kabul ölçütü: Runtime davranışı değişmeden kasko poliçe kuralları tek
 - [x] Doğrulama: yalnız docs değişti; typecheck/lint/test/build + diff-check; tutarlılık taraması.
 
 Kabul ölçütü: Yol haritası ile repo belgeleri tek tutarlı kaynak; açık ürün kararları görünür; sonraki tek mantıklı görev Paket 05'tir (K1/K2 kararıyla birlikte).
+
+## Aktif geliştirme paketi — Paket 05 PostgreSQL ve migration temeli
+
+### Aşama 40 — Kapı, kararlar ve kurulum
+
+- [x] Güvenlik kapısı; `foundation/package-05-postgres-migrations` dalı `aab6d1e` üzerinden oluşturuldu.
+- [x] Kullanıcı onayları alındı: PostgreSQL 17 kurulumu, pg+node-pg-migrate, UUIDv7 (HB-2026-009).
+- [x] PostgreSQL 17.10 Windows servisi kuruldu; Türkçe locale initdb hatası UTF8+ICU tr-TR manuel cluster ile çözüldü; roller/veritabanları ve `%USERPROFILE%\.hasarbotu\` sır düzeni kuruldu.
+
+### Aşama 41 — @hasarbotu/database ve API bütünleşmesi
+
+- [x] Paket: açık URL parser (sızıntısız hatalar + redaksiyon), pool fabrikası, sınırlı süreli sağlık kontrolü, programatik/CLI migration, UUIDv7.
+- [x] `organizations` ilk migration'ı (uuid PK, kısıtlar); her adım kendi transaction'ında; `pgmigrations` durum tablosu.
+- [x] Test güvenlik kapısı: `assertTestDatabaseUrl` `_test` zorunluluğu; URL yokken entegrasyon bloğu açıkça atlanır.
+- [x] API: opsiyonel `DATABASE_URL` → health `ok`/`degraded` (enjekte edilebilir kontrol); havuz graceful shutdown'da kapanır; 3 yeni API testi.
+- [x] Root zincirler domain→contracts→database→api sırasına genişletildi; `npm run dev` değişmedi.
+
+### Aşama 42 — Kanıt, doküman ve teslim
+
+- [x] Gerçek DB entegrasyon testleri: ileri migration, tekrar güvenliği, sıra uyuşmazlığı reddi, transaction rollback, kısıt ihlalleri, sağlık (22/22).
+- [x] Canlı smoke: migrate CLI (redakte çıktı), health ok→degraded geçişi, loglarda şifre taraması (0), yedek→ayrı DB'ye geri yükleme→satır eşitliği.
+- [x] Kapılar: typecheck/lint/test(404)/build/audit/diff-check exit 0; UI HTTP 200 + port kapatıldı.
+- [x] `DATABASE_OPERATIONS.md` + DECISION_LOG (HB-2026-009) + durum/plan belgeleri; temiz checkout doğrulaması; tek atomik commit.
+
+Kabul ölçütü: Temiz test DB tek komutla kurulup doğrulanır; API DB hazır oluşunu güvenli ölçer; korunan ref'ler değişmez; sonraki tek mantıklı görev Paket 06'dır.

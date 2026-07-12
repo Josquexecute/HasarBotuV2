@@ -54,6 +54,23 @@ describe('parseConfig', () => {
     expect(message).toContain('PORT')
   })
 
+  it('DATABASE_URL opsiyoneldir: yoksa undefined, gecerliyse tasinir, gecersizse deger sizdirmadan reddedilir', () => {
+    expect(parseConfig({}).databaseUrl).toBeUndefined()
+    expect(
+      parseConfig({ DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu' }).databaseUrl,
+    ).toBe('postgres://app:pw@127.0.0.1:5432/hasarbotu')
+
+    let caught: unknown
+    try {
+      parseConfig({ DATABASE_URL: 'mysql://gizli-sifre-99@yer/db' })
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(ConfigError)
+    expect((caught as ConfigError).message).not.toContain('gizli-sifre-99')
+    expect((caught as ConfigError).message).toContain('DATABASE_URL')
+  })
+
   it('saf fonksiyondur: process.env okumaz ve degistirmez', () => {
     const before = process.env.PORT
     parseConfig({ PORT: '4242' })

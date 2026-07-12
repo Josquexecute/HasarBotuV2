@@ -44,6 +44,35 @@ describe('GET /health', () => {
     expect(healthResponseSchema.safeParse(response.json()).success).toBe(true)
   })
 
+  it('bagimlilik kontrolu false donerse status degraded olur (HTTP 200 kalir)', async () => {
+    app = buildApp({
+      clock: fixedClock('2026-07-12T09:00:00.000Z'),
+      loggerEnabled: false,
+      healthDependencyCheck: async () => false,
+    })
+    const response = await app.inject({ method: 'GET', url: '/health' })
+    expect(response.statusCode).toBe(200)
+    const body = response.json() as { status: string }
+    expect(body.status).toBe('degraded')
+    expect(healthResponseSchema.safeParse(body).success).toBe(true)
+  })
+
+  it('bagimlilik kontrolu true donerse status ok kalir; firlatirsa degraded olur', async () => {
+    app = buildApp({ loggerEnabled: false, healthDependencyCheck: async () => true })
+    expect(((await app.inject({ method: 'GET', url: '/health' })).json() as { status: string }).status).toBe('ok')
+    await app.close()
+
+    app = buildApp({
+      loggerEnabled: false,
+      healthDependencyCheck: async () => {
+        throw new Error('gizli-db-hatasi')
+      },
+    })
+    const response = await app.inject({ method: 'GET', url: '/health' })
+    expect((response.json() as { status: string }).status).toBe('degraded')
+    expect(response.payload).not.toContain('gizli-db-hatasi')
+  })
+
   it('hassas sistem bilgisi tasimaz', async () => {
     app = buildApp({ clock: fixedClock('2026-07-11T09:00:00.000Z'), loggerEnabled: false })
     const response = await app.inject({ method: 'GET', url: '/health' })

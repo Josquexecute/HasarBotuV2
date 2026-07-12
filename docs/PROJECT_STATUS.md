@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Ana yol haritası (12 Temmuz 2026) mutabakatı (yalnız dokümantasyon)
+- Aşama: Paket 05 — PostgreSQL ve migration temeli
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `planning/master-roadmap-alignment` dalı, remote yok
+- Git: Yerel repository, `foundation/package-05-postgres-migrations` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -37,9 +37,9 @@ Son güncelleme: 2026-07-11
 
 ## Test ve build sonuçları
 
-- `npm run typecheck`: Başarılı — UI + domain + contracts + API
+- `npm run typecheck`: Başarılı — UI + domain + contracts + database + API
 - `npm run lint`: Başarılı
-- `npm run test`: Başarılı — UI 2 dosya 26/26; domain 8 dosya 257/257; contracts 9 dosya 67/67; API 5 dosya 29/29; **toplam 379/379 test**
+- `npm run test`: Başarılı — UI 26/26; domain 257/257; contracts 67/67; database 22/22 (gerçek PostgreSQL entegrasyonu dahil); API 32/32; **toplam 404/404 test**
 - `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain, contracts ve API: ESM JavaScript ve declaration çıktısı üretildi.
 - `npm run schema --workspace @hasarbotu/contracts`: Başarılı — self-contained; 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez). Golden fixture'lar `test/fixtures/json-schema` altında commit'lidir.
 - `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı
@@ -286,6 +286,15 @@ Son güncelleme: 2026-07-11
 - **Açık ürün kararı (Paket 05 öncesi):** dosya durumu (`open/closed` vs 4'lü liste) ve aşama seti (K1/K2) — domain kodu bilinçli olarak değiştirilmedi.
 - Karar kaydı HB-2026-008; runtime kodu/dependency değişmedi; 379/379 test korunuyor.
 
+## Paket 05 — PostgreSQL ve migration temeli (2026-07-12)
+
+- **PostgreSQL 17.10** ofis Windows 11 makinesine servis olarak kuruldu (kullanıcı onaylı); Türkçe locale initdb hatası `UTF8 + ICU tr-TR` manuel cluster ile çözüldü. Roller: `hasarbotu_app`→`hasarbotu`, `hasarbotu_test`→`hasarbotu_test`; şifreler yalnız `%USERPROFILE%\.hasarbotu\` altında.
+- Yeni workspace `packages/database` (`@hasarbotu/database`): tam pin `pg@8.22.0` + `node-pg-migrate@8.0.4`; açık DATABASE_URL parser'ı (değer sızdırmaz, `redactDatabaseUrl` maskeler), pg.Pool fabrikası, sınırlı süreli sağlık kontrolü, programatik+CLI migration koşucusu, **UUIDv7** üreteci (kullanıcı onaylı; kimlik üretimi persistence katmanında).
+- İlk migration: `organizations` (uuid PK, unique+biçim kısıtlı `code`, `version>=1`); `pgmigrations` durum tablosu.
+- Entegrasyon kanıtları (gerçek DB): boş DB ileri migration; tekrar güvenliği (0 adım); sıra uyuşmazlığı reddi; hatalı migration'ın transaction'la iz bırakmadan geri alınması; kısıt ihlalleri (23505/23514); sağlık kontrolü. Test kapısı: `TEST_DATABASE_URL` zorunlu `_test` soneki — üretim DB'si testte reddedilir.
+- API: opsiyonel `DATABASE_URL` ile health gerçek DB ping'inden `ok`/`degraded` üretir (canlı kanıt: doğru port→ok, yanlış port→degraded; loglarda şifre 0 eşleşme); havuz graceful shutdown'da kapanır; URL yokken Paket 04 davranışı korunur.
+- Yedek/geri yükleme smoke: `pg_dump`→ayrı DB'ye `pg_restore`→satır eşitliği (2=2) doğrulandı; geçici DB/dump temizlendi. Operasyon kaydı: `DATABASE_OPERATIONS.md`; karar: HB-2026-009.
+
 ## Sonraki önerilen görev (güncel)
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 05: PostgreSQL bağlantı ve migration altyapısı — kabul önkoşulları `API_RUNTIME_FOUNDATION.md` §7 + `MASTER_ROADMAP_ALIGNMENT.md` §6'dadır; `policy_*` kavramlarının normalizasyon derinliği ve K1/K2 durum/aşama kararı Paket 05 karar kapısıdır.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 06: kullanıcılar, roller ve oturum. Öncesinde açık ürün kararları: K1/K2 dosya durumu/aşama seti (Paket 07 cases şemasını bloklar) ve oturum modeli detayları.

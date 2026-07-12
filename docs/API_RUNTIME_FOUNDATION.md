@@ -36,9 +36,9 @@ Durum: Uygulandi — `services/api` (`@hasarbotu/api@0.0.0`), dal `foundation/pa
 
 ## 5. Health semantigi
 
-- `GET /health` → 200; govde: `status: 'ok'`, `service: 'hasarbotu-api'`, `version` (API package.json surumu), `checkedAt` (kanonik UTC `Z`).
+- `GET /health` → 200; govde: `status`, `service: 'hasarbotu-api'`, `version` (API package.json surumu), `checkedAt` (kanonik UTC `Z`).
 - Zaman `Clock` adapterindan gelir: runtime'da `systemClock`, testlerde `fixedClock` (deterministik `checkedAt`).
-- Gercek database/bagimlilik kontrolu YOKTUR; sozlesmedeki `degraded` durumu korunur fakat bu pakette sahte dependency kontrolu uretilmez. PostgreSQL hazirmis izlenimi verilmez.
+- **Paket 05 guncellemesi (HB-2026-009):** `DATABASE_URL` verilirse health, `@hasarbotu/database` uzerinden sinirli sureli (1500 ms) gercek `SELECT 1` ping'iyle `ok`/`degraded` uretir; HTTP kodu 200 kalir, durum govdededir. Hata ayrintisi yanita tasinmaz. `DATABASE_URL` verilmezse Paket 04 davranisi aynen korunur (`status` hep `ok`); sahte dependency kontrolu uretilmez.
 
 ## 6. Kapsam disi (Paket 04)
 
