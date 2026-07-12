@@ -297,4 +297,4 @@ Son güncelleme: 2026-07-11
 
 ## Sonraki önerilen görev (güncel)
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 06: kullanıcılar, roller ve oturum. Öncesinde açık ürün kararları: K1/K2 dosya durumu/aşama seti (Paket 07 cases şemasını bloklar) ve oturum modeli detayları.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 06: kullanıcılar, roller ve oturum. K1/K2 dosya durumu/aşama seti kararı HB-2026-010 ile kapandı (lifecycleStatus open|closed + workflowStage + türetilmiş görünümler).
