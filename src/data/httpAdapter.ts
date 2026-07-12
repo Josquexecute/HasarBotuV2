@@ -95,6 +95,22 @@ export function mapCaseDtoToRecord(dto: CaseListItemDto, today: Date = new Date(
   }
 }
 
+/**
+ * API hata sinifi: 401 oturum gereksinimi, diger her sey servis kullanilamiyor.
+ * Sahte veri gercek API hatasini HICBIR ZAMAN maskelemez (HB-2026-014).
+ */
+export type HttpCasesErrorKind = 'unauthorized' | 'unavailable'
+
+export class HttpCasesError extends Error {
+  readonly kind: HttpCasesErrorKind
+
+  constructor(kind: HttpCasesErrorKind, message: string) {
+    super(message)
+    this.name = 'HttpCasesError'
+    this.kind = kind
+  }
+}
+
 export interface HttpCasesAdapterOptions {
   /** Tarayicida bos birakilir (ayni-origin proxy); Node testlerinde mutlak URL. */
   readonly baseUrl?: string
@@ -109,12 +125,20 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
 
   return {
     async listCases(): Promise<readonly CaseRecord[]> {
-      const response = await fetchImpl(`${baseUrl}/api/v1/cases?status=open&pageSize=100`, {
-        credentials: 'include',
-        headers: { accept: 'application/json', ...(options.headers ?? {}) },
-      })
+      let response: Response
+      try {
+        response = await fetchImpl(`${baseUrl}/api/v1/cases?status=open&pageSize=100`, {
+          credentials: 'include',
+          headers: { accept: 'application/json', ...(options.headers ?? {}) },
+        })
+      } catch {
+        throw new HttpCasesError('unavailable', 'cases API unreachable')
+      }
+      if (response.status === 401) {
+        throw new HttpCasesError('unauthorized', 'cases API HTTP 401')
+      }
       if (!response.ok) {
-        throw new Error(`cases API HTTP ${response.status}`)
+        throw new HttpCasesError('unavailable', `cases API HTTP ${response.status}`)
       }
       const body = (await response.json()) as { items: CaseListItemDto[] }
       return body.items.map((item) => mapCaseDtoToRecord(item))

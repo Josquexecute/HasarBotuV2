@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { mockCases } from '../mocks/cases'
 import {
-  createFallbackCasesAdapter,
   createHttpCasesAdapter,
   createMockCasesAdapter,
   DATA_SOURCE_STORAGE_KEY,
   deriveFollowUp,
   deriveStatus,
+  HttpCasesError,
   mapCaseDtoToRecord,
   useCases,
 } from './index'
@@ -27,7 +27,15 @@ const dto = {
   updatedAt: '2026-07-11T09:00:00.000Z',
 }
 
-describe('MockDataAdapter (varsayilan)', () => {
+function fetchResponding(status: number, body?: unknown): typeof fetch {
+  return vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  }) as unknown as typeof fetch
+}
+
+describe('MockDataAdapter (acikca secilen development/demo kaynagi)', () => {
   it('kabul edilmis mock listesini aynen dondurur', async () => {
     expect(await createMockCasesAdapter().listCases()).toBe(mockCases)
   })
@@ -57,56 +65,92 @@ describe('HttpApiAdapter esleme', () => {
     expect(deriveStatus({ status: 'open', followUpDate: null }, TODAY)).toBe('Açık')
   })
 
-  it('basarili yanit eslenmis kayitlar dondurur; hata durumunda firlatir', async () => {
-    const okFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ items: [dto] }),
-    }) as unknown as typeof fetch
-    const adapter = createHttpCasesAdapter({ baseUrl: 'http://api.test', fetchImpl: okFetch })
+  it('basarili yanit eslenmis kayitlar dondurur; gercek bos liste bos doner', async () => {
+    const adapter = createHttpCasesAdapter({
+      baseUrl: 'http://api.test',
+      fetchImpl: fetchResponding(200, { items: [dto] }),
+    })
     const cases = await adapter.listCases()
     expect(cases).toHaveLength(1)
     expect(cases[0]?.plate).toBe('34 MPA 764')
-    expect((okFetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]?.[0]).toBe(
-      'http://api.test/api/v1/cases?status=open&pageSize=100',
-    )
 
-    const failFetch = vi.fn().mockResolvedValue({ ok: false, status: 401 }) as unknown as typeof fetch
+    const empty = createHttpCasesAdapter({ fetchImpl: fetchResponding(200, { items: [] }) })
+    expect(await empty.listCases()).toEqual([])
+  })
+
+  it('hata siniflandirmasi: 401 unauthorized, 5xx/ag unavailable (mock maskeleme YOK)', async () => {
     await expect(
-      createHttpCasesAdapter({ fetchImpl: failFetch }).listCases(),
-    ).rejects.toThrow('cases API HTTP 401')
+      createHttpCasesAdapter({ fetchImpl: fetchResponding(401) }).listCases(),
+    ).rejects.toMatchObject({ name: 'HttpCasesError', kind: 'unauthorized' })
+
+    await expect(
+      createHttpCasesAdapter({ fetchImpl: fetchResponding(503) }).listCases(),
+    ).rejects.toMatchObject({ kind: 'unavailable' })
+
+    const networkFail = vi.fn().mockRejectedValue(new TypeError('failed to fetch')) as unknown as typeof fetch
+    await expect(
+      createHttpCasesAdapter({ fetchImpl: networkFail }).listCases(),
+    ).rejects.toBeInstanceOf(HttpCasesError)
   })
 })
 
-describe('guvenli fallback', () => {
-  it('birincil hata verirse mock listesi doner ve isaretlenir', async () => {
-    const broken = { listCases: () => Promise.reject(new Error('ag yok')) }
-    const result = await createFallbackCasesAdapter(broken, createMockCasesAdapter()).listCases()
-    expect(result.usedFallback).toBe(true)
-    expect(result.cases).toBe(mockCases)
-  })
-})
-
-describe('useCases kancasi', () => {
+describe('useCases kancasi (HB-2026-014)', () => {
   it('varsayilan (mock) kaynakta ilk render mock verisiyle esdegerdir ve ag cagrisi yapilmaz', () => {
     window.localStorage.removeItem(DATA_SOURCE_STORAGE_KEY)
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     const { result } = renderHook(() => useCases())
     expect(result.current.cases).toBe(mockCases)
     expect(result.current.source).toBe('mock')
+    expect(result.current.status).toBe('ok')
     expect(fetchSpy).not.toHaveBeenCalled()
     fetchSpy.mockRestore()
   })
 
-  it("api kaynagi secilip API ulasilamazsa mock'a guvenli donus yapilir", async () => {
+  it.each([
+    [401, 'unauthorized'],
+    [503, 'unavailable'],
+  ] as const)('api kaynaginda HTTP %s -> %s durumu; mock verisi ASLA gosterilmez', async (httpStatus, expected) => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockRejectedValue(new Error('baglanti yok'))
+      .mockImplementation(fetchResponding(httpStatus) as never)
     try {
       const { result } = renderHook(() => useCases())
-      expect(result.current.cases).toBe(mockCases)
-      await waitFor(() => expect(result.current.usedFallback).toBe(true))
-      expect(result.current.cases).toBe(mockCases)
+      expect(result.current.status).toBe('loading')
+      expect(result.current.cases).toEqual([])
+      await waitFor(() => expect(result.current.status).toBe(expected))
+      expect(result.current.cases).toEqual([])
+      expect(result.current.cases).not.toBe(mockCases)
+    } finally {
+      fetchSpy.mockRestore()
+      window.localStorage.removeItem(DATA_SOURCE_STORAGE_KEY)
+    }
+  })
+
+  it('api kaynaginda gercek bos liste ok durumuyla bos doner', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(fetchResponding(200, { items: [] }) as never)
+    try {
+      const { result } = renderHook(() => useCases())
+      await waitFor(() => expect(result.current.status).toBe('ok'))
+      expect(result.current.cases).toEqual([])
+    } finally {
+      fetchSpy.mockRestore()
+      window.localStorage.removeItem(DATA_SOURCE_STORAGE_KEY)
+    }
+  })
+
+  it('api kaynaginda basarili yanit gercek veriyi getirir', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(fetchResponding(200, { items: [dto] }) as never)
+    try {
+      const { result } = renderHook(() => useCases())
+      await waitFor(() => expect(result.current.status).toBe('ok'))
+      expect(result.current.cases[0]?.plate).toBe('34 MPA 764')
     } finally {
       fetchSpy.mockRestore()
       window.localStorage.removeItem(DATA_SOURCE_STORAGE_KEY)

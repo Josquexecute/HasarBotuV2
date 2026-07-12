@@ -158,7 +158,7 @@ function NewNoticeModal({ onClose }: { onClose: () => void }) {
 }
 
 export function CasesPage() {
-  const { cases } = useCases()
+  const { cases, source, status: dataStatus } = useCases()
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -174,7 +174,7 @@ export function CasesPage() {
   const [direction, setDirection] = useState<SortDirection>('asc')
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [detailOpen, setDetailOpen] = useState(true)
-  const [selectedId, setSelectedId] = useState(cases[0].caseId)
+  const [selectedId, setSelectedId] = useState(cases[0]?.caseId ?? '')
   const [activePage, setActivePage] = useState(1)
   const [prototypeNotice, setPrototypeNotice] = useState('')
   const showNewModal = searchParams.get('yeni') === 'true'
@@ -263,6 +263,9 @@ export function CasesPage() {
       <section className="page-heading page-heading--compact">
         <div>
           <h1>Tüm Dosyalar <span className="heading-count">{filteredCases.length}</span></h1>
+          {source === 'api' && dataStatus === 'unauthorized' && <p role="alert" className="page-subtitle">Oturum gerekli: gerçek veriye erişmek için API oturumu açın. Sahte veri gösterilmiyor.</p>}
+          {source === 'api' && dataStatus === 'unavailable' && <p role="alert" className="page-subtitle">Servis şu anda kullanılamıyor. Sahte veri gösterilmiyor; bağlantıyı kontrol edin.</p>}
+          {source === 'api' && dataStatus === 'loading' && <p role="status" className="page-subtitle">Gerçek veriler yükleniyor…</p>}
           <p>Açık ekspertiz dosyaları · Tek tık hızlı bakış, çift tık tam dosya</p>
         </div>
         <div className="heading-actions">

@@ -308,3 +308,18 @@ Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN Paket 08 ve hedef mimarinin `Featur
 Etkisi: 26 baseline UI testi değişmeden geçti; +7 veri katmanı testi ve 2 env-kapılı gerçek API smoke testi eklendi (canlı: oturumla gerçek liste eşlendi, oturumsuz 401→fallback). Toplam 442 (440 koşu + 2 canlı ayrı).
 
 Kaynak: 2026-07-12 tarihli Paket 08 kullanıcı talimatı.
+
+## 2026-07-12 — HB-2026-014: Paket 08 güvenlik düzeltmesi — sessiz mock fallback kaldırıldı
+
+Karar (HB-2026-013 madde 3'ü geçersiz kılar):
+
+1. API modunda hata durumunda MockDataAdapter'a **sessiz düşüş yoktur**; sahte veri gerçek API hatasını hiçbir zaman maskelemez.
+2. Mock yalnız **açıkça seçilen** development/demo veri kaynağıdır (varsayılan kaynak olarak baseline davranışı sürer).
+3. API modunda durumlar ayrışır ve UI'da açıkça gösterilir: **401 → oturum gerekli** (`unauthorized`); **ağ/5xx → servis kullanılamıyor** (`unavailable`); **gerçek boş liste → boş durum** (`ok` + boş). `HttpCasesError` sınıfı hata türünü taşır; `useCases` mock'a dönmez.
+4. Dosyalar/Dosya Detayı api modunda role=alert/status ile Türkçe durum mesajı gösterir; mock modda hiçbir uyarı çıkmaz (baseline korunur).
+
+Gerekçe: Sessiz fallback, oturum/servis sorunlarını sahte veriyle gizleyerek operasyonel yanlış karara yol açabilirdi (kullanıcı güvenlik talimatı).
+
+Etkisi: `fallback.ts` kaldırıldı; +6 durum testi ve 3 bileşen testi; UI testleri 39/39; canlı smoke 2/2 (oturumla gerçek eşleme, oturumsuz `unauthorized` türü).
+
+Kaynak: 2026-07-12 tarihli güvenlik düzeltmesi talimatı.

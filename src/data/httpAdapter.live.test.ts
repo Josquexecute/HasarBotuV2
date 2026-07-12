@@ -23,8 +23,11 @@ describeLive('HttpApiAdapter gercek API smoke', () => {
     expect(mpa).toMatchObject({ type: 'Kasko', stage: 'Ekspertiz Bekliyor', officeNumber: '2026/184' })
   })
 
-  it('oturumsuz cagri firlatir (guvenli fallback yolunun tetikleyicisi)', async () => {
+  it('oturumsuz cagri unauthorized turunde HttpCasesError firlatir', async () => {
     const adapter = createHttpCasesAdapter({ baseUrl: BASE_URL as string })
-    await expect(adapter.listCases()).rejects.toThrow('cases API HTTP 401')
+    await expect(adapter.listCases()).rejects.toMatchObject({
+      name: 'HttpCasesError',
+      kind: 'unauthorized',
+    })
   })
 })

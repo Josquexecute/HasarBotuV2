@@ -131,7 +131,7 @@ function HistoryModule({ item }: { item: CaseRecord }) {
 }
 
 export function CaseDetailPage() {
-  const { cases } = useCases()
+  const { cases, source, status: dataStatus } = useCases()
   const { caseId } = useParams()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -159,6 +159,20 @@ export function CaseDetailPage() {
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
   }, [assistantOpen, closeModalOpen])
+
+  if (source === 'api' && dataStatus !== 'ok') {
+    const message = dataStatus === 'loading'
+      ? 'Gerçek veriler yükleniyor…'
+      : dataStatus === 'unauthorized'
+        ? 'Oturum gerekli: gerçek veriye erişmek için API oturumu açın.'
+        : 'Servis şu anda kullanılamıyor; bağlantıyı kontrol edin.'
+    return (
+      <div className="page">
+        <h1>Dosya Detayı</h1>
+        <p role={dataStatus === 'loading' ? 'status' : 'alert'}>{message}</p>
+      </div>
+    )
+  }
 
   if (!item) {
     return (
