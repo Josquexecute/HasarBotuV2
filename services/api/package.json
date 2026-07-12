@@ -30,6 +30,7 @@
   "dependencies": {
     "@hasarbotu/contracts": "*",
     "@hasarbotu/database": "*",
+    "argon2": "0.44.0",
     "fastify": "5.10.0"
   },
   "devDependencies": {

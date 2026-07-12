@@ -19,6 +19,7 @@
             "conflict",
             "version_conflict",
             "idempotency_conflict",
+            "rate_limited",
             "service_unavailable",
             "internal_error"
           ]

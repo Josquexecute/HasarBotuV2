@@ -103,6 +103,26 @@ export {
 } from './v1/cases/index.js'
 
 export {
+  AUTH_LOGIN_ROUTE,
+  AUTH_LOGOUT_ROUTE,
+  AUTH_SESSION_ROUTE,
+  MAX_EMAIL_LENGTH,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  ROLE_CODES,
+  emailSchema,
+  loginRequestSchema,
+  passwordSchema,
+  roleCodeSchema,
+  sessionResponseSchema,
+  sessionUserSchema,
+  type LoginRequest,
+  type RoleCode,
+  type SessionResponse,
+  type SessionUser,
+} from './v1/auth/index.js'
+
+export {
   JSON_SCHEMA_TARGETS,
   buildJsonSchemas,
   type JsonSchemaName,

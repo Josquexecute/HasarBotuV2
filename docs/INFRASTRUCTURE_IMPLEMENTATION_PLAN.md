@@ -111,6 +111,8 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Geri alma:** Özellik bayrağıyla API oturumu devre dışı bırak; migration verisini silmeden modülü geri al.
 - **Kabul:** Yetkisiz kaynaklar reddedilir, oturum iptal edilebilir ve her kullanıcı ayırt edilir.
 
+- **Gerçekleşen sonuç (2026-07-12):** Tamamlandı. E-posta+şifre (Argon2id m=19456/t=2/p=1), sunucu taraflı iptal edilebilir oturumlar (SHA-256 token hash, TTL 12 sa, HttpOnly+SameSite=Strict çerez), 6 rol kataloğu + user_roles, append-only audit_events; hesap kilidi 5/15dk + IP 10/dk rate limit (429 rate_limited); tekdüze 401 + zamanlama eşitleme. Contracts auth şemaları ve migration 0002 eklendi; gerçek DB uçtan uca 14 testle kanıtlandı; toplam 424/424. Google giriş/şifre sıfırlama/UI login/üretim migration kapsam dışı bırakıldı (HB-2026-011). Sonraki paket Paket 07'dir.
+
 ### Paket 07 — Dosyalar salt okunur API
 
 - **Amaç:** Cases liste/detay verisini ilk gerçek, salt okunur API kaynağı olarak sunmak.

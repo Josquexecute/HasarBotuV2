@@ -40,7 +40,10 @@ export async function startServer(): Promise<void> {
   const app = buildApp({
     logLevel: config.logLevel,
     ...(pool !== undefined
-      ? { healthDependencyCheck: async () => (await checkDatabaseHealth(pool)).ok }
+      ? {
+          healthDependencyCheck: async () => (await checkDatabaseHealth(pool)).ok,
+          auth: { pool, cookieSecure: config.nodeEnv === 'production' },
+        }
       : {}),
   })
 

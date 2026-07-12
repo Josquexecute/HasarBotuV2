@@ -448,3 +448,23 @@ Kabul ölçütü: Yol haritası ile repo belgeleri tek tutarlı kaynak; açık �
 - [x] `DATABASE_OPERATIONS.md` + DECISION_LOG (HB-2026-009) + durum/plan belgeleri; temiz checkout doğrulaması; tek atomik commit.
 
 Kabul ölçütü: Temiz test DB tek komutla kurulup doğrulanır; API DB hazır oluşunu güvenli ölçer; korunan ref'ler değişmez; sonraki tek mantıklı görev Paket 06'dır.
+
+## Aktif geliştirme paketi — Paket 06 kullanıcılar, roller ve oturum
+
+### Aşama 43 — Yönetişim ve karar
+
+- [x] CLAUDE.md otonom kuralları ayrı dalda atomik commit'e alındı (governance/claude-autonomous-rules).
+- [x] HB-2026-010: lifecycleStatus open|closed; workflowStage ayrı; türetilmiş operasyon görünümleri (K1/K2 kapandı).
+
+### Aşama 44 — Kimlik/rol/oturum altyapısı
+
+- [x] Contracts: auth login/logout/session şemaları, rol kataloğu, rate_limited kodu; golden fixture 8 şema; +6 test.
+- [x] Migration 0002: users (lower(email) unique), roles seed (6), user_roles, sessions (token hash), append-only audit_events.
+- [x] API auth modülü: Argon2id (0.44.0), sunucu taraflı iptal edilebilir oturum, güvenli çerez, IP rate limit + hesap kilidi, tekdüze 401 + zamanlama eşitleme, audit kayıtları; DATABASE_URL'siz API'de uçlar güvenli 404.
+
+### Aşama 45 — Kanıt ve teslim
+
+- [x] Gerçek DB uçtan uca testler (14): login/cerez/session/logout-revoke/kilit/429/enumeration/404.
+- [x] Kapılar: typecheck/lint/test(424)/build/audit/diff-check exit 0; temiz checkout; tek atomik feat commit.
+
+Kabul ölçütü: Oturumlar iptal edilebilir ve audit'lidir; brute-force iki katman korunur; sonraki tek mantıklı görev Paket 07'dir.

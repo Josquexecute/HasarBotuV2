@@ -28,6 +28,23 @@ export {
 export { fixedClock, systemClock, type Clock } from './clock.js'
 export { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 
+export { ARGON2_OPTIONS, hashPassword, verifyPassword } from './auth/password.js'
+export { generateSessionToken, hashSessionToken } from './auth/token.js'
+export {
+  SESSION_COOKIE_NAME,
+  buildClearSessionCookie,
+  buildSessionCookie,
+  parseCookies,
+} from './auth/cookies.js'
+export { createFixedWindowLimiter, type FixedWindowLimiter } from './auth/rate-limit.js'
+export {
+  LOCKOUT_MINUTES,
+  MAX_FAILED_LOGINS,
+  SESSION_TTL_SECONDS,
+} from './auth/service.js'
+export { DEFAULT_LOGIN_RATE_LIMIT, registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
+export { createAuthStore, type AuthStore } from './auth/store.js'
+
 /**
  * Import edildiginde sunucu BASLATILMAZ. Yalniz gercek entrypoint dogrudan
  * calistirildiginda (node dist/index.js veya tsx watch src/index.ts) baslar.

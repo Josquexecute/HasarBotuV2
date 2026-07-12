@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 05 — PostgreSQL ve migration temeli
+- Aşama: Paket 06 — kullanıcılar, roller ve oturum
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `foundation/package-05-postgres-migrations` dalı, remote yok
+- Git: Yerel repository, `foundation/package-06-users-roles-sessions` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -39,7 +39,7 @@ Son güncelleme: 2026-07-11
 
 - `npm run typecheck`: Başarılı — UI + domain + contracts + database + API
 - `npm run lint`: Başarılı
-- `npm run test`: Başarılı — UI 26/26; domain 257/257; contracts 67/67; database 22/22 (gerçek PostgreSQL entegrasyonu dahil); API 32/32; **toplam 404/404 test**
+- `npm run test`: Başarılı — UI 26/26; domain 257/257; contracts 73/73; database 22/22; API 46/46 (gerçek PostgreSQL auth akışı dahil); **toplam 424/424 test**
 - `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain, contracts ve API: ESM JavaScript ve declaration çıktısı üretildi.
 - `npm run schema --workspace @hasarbotu/contracts`: Başarılı — self-contained; 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez). Golden fixture'lar `test/fixtures/json-schema` altında commit'lidir.
 - `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı
@@ -294,6 +294,15 @@ Son güncelleme: 2026-07-11
 - Entegrasyon kanıtları (gerçek DB): boş DB ileri migration; tekrar güvenliği (0 adım); sıra uyuşmazlığı reddi; hatalı migration'ın transaction'la iz bırakmadan geri alınması; kısıt ihlalleri (23505/23514); sağlık kontrolü. Test kapısı: `TEST_DATABASE_URL` zorunlu `_test` soneki — üretim DB'si testte reddedilir.
 - API: opsiyonel `DATABASE_URL` ile health gerçek DB ping'inden `ok`/`degraded` üretir (canlı kanıt: doğru port→ok, yanlış port→degraded; loglarda şifre 0 eşleşme); havuz graceful shutdown'da kapanır; URL yokken Paket 04 davranışı korunur.
 - Yedek/geri yükleme smoke: `pg_dump`→ayrı DB'ye `pg_restore`→satır eşitliği (2=2) doğrulandı; geçici DB/dump temizlendi. Operasyon kaydı: `DATABASE_OPERATIONS.md`; karar: HB-2026-009.
+
+## Paket 06 — kullanıcılar, roller ve oturum (2026-07-12)
+
+- Kimlik: e-posta+şifre, Argon2id (m=19456, t=2, p=1); tekdüze 401 + zamanlama eşitleme (enumeration koruması).
+- Oturum: sunucu taraflı, iptal edilebilir; token yalnız SHA-256 hash'iyle saklanır; TTL 12 saat; hb_session çerezi HttpOnly+SameSite=Strict (+prod Secure); logout idempotent 204.
+- Koruma: hesap kilidi 5 hata/15 dk (DB kalıcı + audit) ve IP başına 10/dk login sınırı (429 rate_limited + Retry-After).
+- Şema 0002: users (lower(email) unique), 6 rol kataloğu + user_roles, sessions, append-only audit_events; audit'e ham parola/token/e-posta yazılmaz.
+- Contracts: auth login/logout/session şemaları + rate_limited kodu; golden fixture seti 8 şema. Auth yalnız DATABASE_URL'li API'de kayıtlı; aksi halde güvenli 404.
+- Kanıt: gerçek DB üzerinde 14 uçtan uca auth testi (login/cerez/session/logout-revoke/kilit/429/404) + audit satırları. Karar: HB-2026-011.
 
 ## Sonraki önerilen görev (güncel)
 

@@ -11,6 +11,7 @@ export const API_ERROR_CODES = [
   'conflict',
   'version_conflict',
   'idempotency_conflict',
+  'rate_limited',
   'service_unavailable',
   'internal_error',
 ] as const

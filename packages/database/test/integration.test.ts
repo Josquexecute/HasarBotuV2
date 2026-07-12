@@ -43,15 +43,25 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
 
   it('bos veritabanina ileri migration deterministik uygulanir', async () => {
     const applied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(applied.map((m) => m.name)).toEqual(['0001_organizations'])
+    expect(applied.map((m) => m.name)).toEqual([
+      '0001_organizations',
+      '0002_users_roles_sessions',
+    ])
 
     const tables = await pool.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
     )
     expect(tables.rows.map((r: { table_name: string }) => r.table_name)).toEqual([
+      'audit_events',
       'organizations',
       'pgmigrations',
+      'roles',
+      'sessions',
+      'user_roles',
+      'users',
     ])
+    const roles = await pool.query('SELECT count(*)::int AS n FROM roles')
+    expect((roles.rows[0] as { n: number }).n).toBe(6)
   })
 
   it('ayni migration ikinci kez uygulanmaz (tekrar guvenligi)', async () => {

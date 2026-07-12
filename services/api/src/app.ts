@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import { errorHandler, notFoundHandler } from './errors/index.js'
 import { registerHealthRoute } from './routes/index.js'
+import { registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -37,6 +38,11 @@ export interface BuildAppOptions {
    * health her zaman `ok` doner. Sonuc `true` degilse `degraded` yansir.
    */
   readonly healthDependencyCheck?: () => Promise<boolean>
+  /**
+   * Auth uclari (Paket 06). Yalniz DB havuzu yapilandirilmissa verilir;
+   * verilmezse /api/v1/auth/* kayitli olmaz ve guvenli 404 doner.
+   */
+  readonly auth?: AuthRoutesOptions
 }
 
 /**
@@ -74,6 +80,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       ? { dependencyCheck: options.healthDependencyCheck }
       : {}),
   })
+  if (options.auth !== undefined) registerAuthRoutes(app, options.auth)
 
   return app
 }
