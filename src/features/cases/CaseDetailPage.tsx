@@ -22,7 +22,8 @@ import {
   X,
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { formatCurrency, mockCases } from '../../mocks/cases'
+import { formatCurrency } from '../../mocks/cases'
+import { useCases } from '../../data'
 import type { CaseRecord } from '../../types/case'
 
 const tabs = [
@@ -130,6 +131,7 @@ function HistoryModule({ item }: { item: CaseRecord }) {
 }
 
 export function CaseDetailPage() {
+  const { cases } = useCases()
   const { caseId } = useParams()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -141,8 +143,8 @@ export function CaseDetailPage() {
   const [assistantAnswer, setAssistantAnswer] = useState('')
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [photoMode, setPhotoMode] = useState<'normal' | 'stress'>('normal')
-  const item = mockCases.find((candidate) => candidate.caseId === caseId)
-  const currentIndex = mockCases.findIndex((candidate) => candidate.caseId === caseId)
+  const item = cases.find((candidate) => candidate.caseId === caseId)
+  const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
 
   useEffect(() => {
     window.sessionStorage.setItem('hasarbotu-active-case-tab', activeTab)
@@ -173,8 +175,8 @@ export function CaseDetailPage() {
       <section className="case-detail-head">
         <button className="icon-button" type="button" onClick={() => navigate('/dosyalar')} aria-label="Dosya listesine dön"><ArrowLeft size={19} /></button>
         <div className="case-switcher" aria-label="Dosyalar arasında geçiş">
-          <button className="icon-button" type="button" disabled={currentIndex <= 0} onClick={() => navigate(`/dosyalar/${mockCases[currentIndex - 1].caseId}`)} aria-label="Önceki dosyaya geç"><ChevronLeft size={17} /></button>
-          <button className="icon-button" type="button" disabled={currentIndex >= mockCases.length - 1} onClick={() => navigate(`/dosyalar/${mockCases[currentIndex + 1].caseId}`)} aria-label="Sonraki dosyaya geç"><ChevronRight size={17} /></button>
+          <button className="icon-button" type="button" disabled={currentIndex <= 0} onClick={() => navigate(`/dosyalar/${cases[currentIndex - 1].caseId}`)} aria-label="Önceki dosyaya geç"><ChevronLeft size={17} /></button>
+          <button className="icon-button" type="button" disabled={currentIndex >= cases.length - 1} onClick={() => navigate(`/dosyalar/${cases[currentIndex + 1].caseId}`)} aria-label="Sonraki dosyaya geç"><ChevronRight size={17} /></button>
         </div>
         <div className="case-detail-head__identity">
           <span className="plate plate--large">{item.plate}</span>

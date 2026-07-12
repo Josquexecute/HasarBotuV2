@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 07 — dosyalar salt okunur API
+- Aşama: Paket 08 — UI mock/API adapter ayrımı (DataPort)
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `foundation/package-07-cases-read` dalı, remote yok
+- Git: Yerel repository, `foundation/package-08-ui-data-port` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -39,7 +39,7 @@ Son güncelleme: 2026-07-11
 
 - `npm run typecheck`: Başarılı — UI + domain + contracts + database + API
 - `npm run lint`: Başarılı
-- `npm run test`: Başarılı — UI 26/26; domain 257/257; contracts 73/73; database 22/22; API 55/55 (gerçek PostgreSQL auth + cases okuma dahil); **toplam 433/433 test**
+- `npm run test`: Başarılı — UI 33/33 (+2 env-kapılı canlı smoke ayrı koşuldu, 2/2); domain 257/257; contracts 73/73; database 22/22; API 55/55; **toplam 440/440 (+2 canlı)**
 - `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain, contracts ve API: ESM JavaScript ve declaration çıktısı üretildi.
 - `npm run schema --workspace @hasarbotu/contracts`: Başarılı — self-contained; 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez). Golden fixture'lar `test/fixtures/json-schema` altında commit'lidir.
 - `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı
@@ -310,6 +310,12 @@ Son güncelleme: 2026-07-11
 - GET /api/v1/cases ve /:caseId: oturum zorunlu (401), tenant kapsamlı (yabancı org 404), contracts sorgusu birebir (filtreler, çok-kelimeli AND arama, NULLS LAST sıralama, pageInfo), yanıtlar şema-parse'lı; endpoint salt okunurdur.
 - Kanıt: 9 uçtan uca test (401/filtreler/aralık/arama/sıralama/sayfalama/strict-400/detay-404-400-tenant) + canlı HTTP smoke (login → ?search=34mpa764 → kanonik gövde). Karar: HB-2026-012.
 
+## Paket 08 — UI mock/API adapter ayrımı (2026-07-12)
+
+- `src/data` DataPort sınırı: MockDataAdapter (varsayılan), HttpApiAdapter (salt okunur Cases API + DTO→CaseRecord eşleme), güvenli fallback sarmalayıcısı, `useCases` kancası (ilk render daima mock ile özdeş; `hasarbotu-data-source=api` opt-in).
+- Dosyalar/Dosya Detayı porta bağlandı; Dashboard/Kapanan/Raporlar kademeli plan gereği mock'ta. Vite dev proxy `/api`→3100 (SameSite=Strict çerez aynı-origin). Durum çipi/takip görüntüsü türetilmiş görünüm (HB-2026-010).
+- Kanıt: 26 baseline UI testi değişmeden; +7 veri katmanı testi; canlı API smoke 2/2 (oturumla gerçek eşleme, oturumsuz 401→fallback); tarayıcıda varsayılan mod baseline ile özdeş, api modunda oturumsuz fallback aynı 12 satır, konsolda yalnız info. Karar: HB-2026-013.
+
 ## Sonraki önerilen görev (güncel)
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 08: UI mock/API adapter ayrımı — kabul edilmiş UI davranışı korunarak `DataPort` sınırıyla (MockDataAdapter | HttpApiAdapter) kademeli geçiş.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 09: dosya yazma uçları (yeni ihbar/oluşturma, ofis numarası ataması, güncelleme) — kritik işlem modeli ve optimistic locking ile.

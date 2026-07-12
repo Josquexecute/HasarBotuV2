@@ -139,6 +139,8 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Geri alma:** Adapter seçimini MockDataAdapter'a sabitle; doğrudan mock importlarına geri dönmeden API adapter'ı devreden çıkar.
 - **Kabul:** Aynı UI mock veya API kaynağıyla çalışır; görünüm ve iş akışı baseline ile tutarlıdır.
 
+- **Gerçekleşen sonuç (2026-07-12):** Tamamlandı. `src/data` DataPort sınırı kuruldu: MockDataAdapter varsayılan/güvenli fallback, HttpApiAdapter salt okunur Cases API'ye bağlı (stage→Türkçe etiket, türetilmiş durum/takip görünümleri, eksik sunum alanları güvenli '—'), `useCases` kancasıyla ilk render daima mock-özdeş, kaynak seçimi localStorage opt-in. Dosyalar+Dosya Detayı porta bağlandı; Vite dev proxy ile aynı-origin çerez. 26 baseline UI testi değişmeden; +7 veri testi; canlı API smoke 2/2; tarayıcıda api-modu oturumsuz güvenli fallback kanıtlı. Auth UI/yazma/Electron/File Agent kapsam dışı (HB-2026-013). Sonraki paket Paket 09'dur.
+
 ### Paket 09 — Dosya yazma komutları
 
 - **Amaç:** Case oluşturma ve güvenli alan güncellemelerini API üzerinden kalıcılaştırmak.

@@ -480,3 +480,16 @@ Kabul ölçütü: Oturumlar iptal edilebilir ve audit'lidir; brute-force iki kat
 - [x] Kapılar: typecheck/lint/test(433)/build/audit/diff-check exit 0; temiz checkout; tek atomik commit.
 
 Kabul ölçütü: Anonim seed üzerinde liste/detay sözleşmeye uygun döner; endpoint DB'ye yazmaz; sonraki tek mantıklı görev Paket 08'dir.
+
+## Aktif geliştirme paketi — Paket 08 UI mock/API adapter ayrımı
+
+### Aşama 47 — DataPort sınırı ve kademeli bağlama
+
+- [x] Governance: çalışma modu merdiveni + path-bazlı stage kuralı ayrı commit (`166dff3`); dal `foundation/package-08-ui-data-port`.
+- [x] `src/data`: ports, MockDataAdapter, HttpApiAdapter (DTO→CaseRecord türetilmiş görünümlerle), güvenli fallback, `useCases` (ilk render mock-özdeş; localStorage opt-in).
+- [x] Dosyalar + Dosya Detayı porta bağlandı; diğer ekranlar kademeli plan gereği mock'ta; Vite dev proxy `/api`.
+- [x] Testler: 26 baseline değişmeden + 7 veri katmanı + 2 env-kapılı canlı smoke (gerçek API'de 2/2).
+- [x] Tarayıcı kanıtı: varsayılan mod baseline-özdeş; api modu oturumsuz → fallback aynı liste; konsolda yalnız info.
+- [x] Kapılar: typecheck/lint/test(440)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
+
+Kabul ölçütü: Kabul edilmiş UI davranışı değişmeden DataPort sınırı çalışır; API kesintisinde UI mock ile kırılmadan sürer; sonraki tek mantıklı görev Paket 09'dur.

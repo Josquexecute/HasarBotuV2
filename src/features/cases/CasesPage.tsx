@@ -19,7 +19,8 @@ import {
 } from 'lucide-react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { EmptyState } from '../../components/StateViews'
-import { formatCurrency, mockCases } from '../../mocks/cases'
+import { formatCurrency } from '../../mocks/cases'
+import { useCases } from '../../data'
 import type { CaseRecord, CaseType, SortKey } from '../../types/case'
 import { matchesSearchQuery } from '../../utils/search'
 
@@ -157,6 +158,7 @@ function NewNoticeModal({ onClose }: { onClose: () => void }) {
 }
 
 export function CasesPage() {
+  const { cases } = useCases()
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -172,7 +174,7 @@ export function CasesPage() {
   const [direction, setDirection] = useState<SortDirection>('asc')
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [detailOpen, setDetailOpen] = useState(true)
-  const [selectedId, setSelectedId] = useState(mockCases[0].caseId)
+  const [selectedId, setSelectedId] = useState(cases[0].caseId)
   const [activePage, setActivePage] = useState(1)
   const [prototypeNotice, setPrototypeNotice] = useState('')
   const showNewModal = searchParams.get('yeni') === 'true'
@@ -182,7 +184,7 @@ export function CasesPage() {
   }, [location.key, queryParam])
 
   const filteredCases = useMemo(() => {
-    const result = mockCases.filter((item) => {
+    const result = cases.filter((item) => {
       const matchesQuery = matchesSearchQuery(query, [
         item.plate,
         item.officeNumber,
@@ -216,7 +218,7 @@ export function CasesPage() {
         : String(aValue).localeCompare(String(bValue), 'tr')
       return direction === 'asc' ? comparison : -comparison
     })
-  }, [assigneeFilter, direction, followUpFilter, query, serviceFilter, sortKey, stageFilter, statusFilter, typeFilter])
+  }, [assigneeFilter, cases, direction, followUpFilter, query, serviceFilter, sortKey, stageFilter, statusFilter, typeFilter])
 
   const selectedCase = filteredCases.find((item) => item.caseId === selectedId) ?? filteredCases[0]
   const hasFilters = query !== '' || typeFilter !== 'Tümü' || stageFilter !== 'Tümü' || statusFilter !== 'Tümü' || assigneeFilter !== 'Tümü' || serviceFilter !== 'Tümü' || followUpFilter !== 'Tümü'
@@ -286,9 +288,9 @@ export function CasesPage() {
             {query && <button type="button" onClick={() => setQuery('')} aria-label="Aramayı temizle"><X size={14} /></button>}
           </label>
           <label className="select-field"><span className="select-field__label">Tür</span><select aria-label="Dosya türü" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'Tümü' | CaseType)}><option>Tümü</option><option>Trafik</option><option>Kasko</option></select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Durum</span><select aria-label="Dosya durumu" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(mockCases.map((item) => item.status))).map((status) => <option key={status}>{status}</option>)}</select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Sorumlu</span><select aria-label="Dosya sorumlusu" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(mockCases.map((item) => item.assignee))).map((assignee) => <option key={assignee}>{assignee}</option>)}</select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Servis</span><select aria-label="Dosya servisi" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(mockCases.map((item) => item.service))).map((service) => <option key={service}>{service}</option>)}</select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Durum</span><select aria-label="Dosya durumu" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.status))).map((status) => <option key={status}>{status}</option>)}</select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Sorumlu</span><select aria-label="Dosya sorumlusu" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.assignee))).map((assignee) => <option key={assignee}>{assignee}</option>)}</select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Servis</span><select aria-label="Dosya servisi" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.service))).map((service) => <option key={service}>{service}</option>)}</select><ChevronDown size={14} /></label>
           <label className="select-field"><span className="select-field__label">Takip</span><select aria-label="Takip tarihi durumu" value={followUpFilter} onChange={(event) => setFollowUpFilter(event.target.value)}><option value="Tümü">Tümü</option><option value="late">Geciken</option><option value="today">Bugün</option><option value="normal">Planlı</option></select><ChevronDown size={14} /></label>
           <label className="select-field"><span className="select-field__label">Sırala</span><select aria-label="Dosya sıralaması" value={sortKey} onChange={(event) => { setSortKey(event.target.value as SortKey); setDirection(event.target.value === 'lastAction' ? 'desc' : 'asc') }}><option value="lastAction">Son güncelleme</option><option value="followUp">Takip tarihi</option><option value="officeNumber">Dosya numarası</option><option value="plate">Plaka A–Z</option></select><ChevronDown size={14} /></label>
           {hasFilters && <button className="filterbar__clear" type="button" onClick={resetFilters}>Temizle</button>}
