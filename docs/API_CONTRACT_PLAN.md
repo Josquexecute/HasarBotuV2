@@ -299,3 +299,13 @@ Paket 03, bu planın bir alt kümesini `@hasarbotu/contracts` (Zod 4) paketinde 
 ## 8. Paket 04 tüketimi (2026-07-12, HB-2026-006)
 
 `@hasarbotu/api` (Fastify `5.10.0`, Node 24) bu sözleşmelerin ilk gerçek HTTP tüketicisidir: `GET /health` yanıtı gönderilmeden önce health şemasıyla parse edilir; bilinmeyen route/method 404 `not_found` ve beklenmeyen hatalar 500 `internal_error` failure envelope'larıyla döner (`requestId` gerçek Fastify request ID'sidir). Cases endpoint'leri, auth, `version` taşıma yöntemi ve OpenAPI hâlâ açık karar/ileri paket kapsamındadır; ayrıntı `API_RUNTIME_FOUNDATION.md`.
+
+## 9. Kasko poliçe analizi sözleşme planı (Paket 04.5, yalnız planlama)
+
+Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz üretilmez):
+
+- Kaynaklar `policy_documents`/`policy_versions`/`policy_extractions`/`policy_scenario_rules`/`policy_conflicts`/`policy_ai_assessments`/`policy_human_approvals` kavramlarını izler (`CASCO_POLICY_CANONICAL_MODEL.md`).
+- Kapsam değerlendirme yanıtları dört durumlu `coverageOutcome` (`teminat_kapsaminda` / `sartli_kapsamda` / `kapsam_disi` / `belirsiz`) + kaynak referansı + güven + `requiresHumanApproval` taşır; `belirsiz` sessizce çözülmez.
+- AI kasko cevabı sekiz bölümlü standardı izler (Sonuç, Gerekçe, Muafiyet/limit, Servis-parça şartı, İşlem, Kaynak sayfa/kloz, Çelişki/eksik, Güven); hüküm yoksa "poliçede açık hüküm bulunamadı".
+- Çelişki kayıtları ayrı kaynak olarak sunulur; çözüm yalnız kullanıcı onaylı komutla (A2 audit) yapılır.
+- Operasyonu bağlayan sonuçlar (muafiyet uygulama, kapsam dışı, tedarik/mobil onarım engeli) insan onayı olmadan kesinleşmez.

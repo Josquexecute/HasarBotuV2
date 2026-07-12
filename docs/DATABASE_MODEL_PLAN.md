@@ -85,6 +85,27 @@ Zorunlu listedeki ilişkileri güvenli kurmak için aşağıdakiler adaydır; ke
 | `idempotency_keys` | HTTP komut tekrar koruması | Scope+key unique; request hash/response ref; sınırlı retention |
 | `rule_versions` | Evrak/onay/eşik gibi sürümlü domain kuralları | Activated version immutable; effective range; A2 activation |
 
+### 4.1 Kasko poliçe analizi kavramları (Paket 04.5; gelecekte değerlendirilecek)
+
+Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (`CASCO_POLICY_CANONICAL_MODEL.md`). SQL/migration üretilmemiştir; normalizasyon derinliği Paket 05+ karar kapısıdır.
+
+| Kavram | Sorumluluk | Kritik kurallar |
+| --- | --- | --- |
+| `policy_documents` | Dosyaya bağlı poliçe belgesi (referans, hash, şirket, poliçe no) | Belge byte'ı DB'de değil; hash zorunlu |
+| `policy_versions` | Zeyil/yeniden basım sürümleri, yürürlük aralıkları | Sürümler immutable; hasar tarihi yürürlük kontrolü |
+| `policy_extractions` | Çıkarım turları (yöntem, tarih, güven, durum) | Eski çıkarım silinmez; yeniden analiz yeni tur |
+| `policy_canonical_fields` | Kanonik alan değerleri + `sourceLabel` (orijinal alan adı) | Kaynak referanssız kanonik değer kabul edilmez |
+| `policy_clauses` | Orijinal kloz başlık + tam metin + sayfa aralığı | Orijinal metin hiçbir normalizasyonda silinmez |
+| `policy_coverages` | Teminat kalemleri (kanonik anahtar + şirket adı) | `belirsiz` durumu ayrı değerdir |
+| `policy_limits` | Teminat başına limitler (tutar/oran; olay/yıl) | Para birimi açık |
+| `policy_deductibles` | Genel + koşullu muafiyet/tenziller | "Muafiyetsiz" genel alan koşullu kayıtları engellemez |
+| `policy_exclusions` | İstisna/teminat dışı haller | Genel şart / özel kloz kaynağı ayrımı |
+| `policy_scenario_rules` | Olay-bazlı kurallar (`CASCO_POLICY_SCENARIO_RULES.md`) | Sürümlü; insan onayı alanı zorunlu |
+| `policy_source_references` | Kanonik alan/kural ↔ belge/sayfa/kloz izlenebilirlik bağı | Her çıkarımda zorunlu |
+| `policy_conflicts` | Poliçe ↔ ihbar föyü ↔ diğer belge çelişkileri | Sessiz otomatik çözüm yok; kullanıcı kararı + audit |
+| `policy_ai_assessments` | AI kapsam/muafiyet değerlendirmeleri | Kaynaksız cevap kaydedilmez; "açık hüküm bulunamadı" ayrı sonuçtur |
+| `policy_human_approvals` | Operasyonu bağlayan sonuçların insan onayı | Onaysız çıkarım operasyonu bağlamaz; A2 audit |
+
 ## 5. Kritik domain kuralları
 
 ### 5.1 Trafik/Kasko kısıtı
@@ -114,7 +135,12 @@ Zorunlu listedeki ilişkileri güvenli kurmak için aşağıdakiler adaydır; ke
 
 - Trafik vakasında süreç kaydı veya açık `not_applicable` gerekçesi gerekip gerekmediği kapanış validation'ında kontrol edilir; veri eklenir eklenmez assessment yaratmak DB trigger görevi değildir.
 - Hesap onayı için parça/işçilik final snapshot, araç doğrulaması ve rule version şarttır.
-- Kasko'da assessment isteğe bağlıdır.
+- Kasko'da assessment mevzuat/ürün kuralı olarak isteğe bağlıdır. Ofis operasyon kuralı (eksper talimatı: Kasko'da da değer kaybı çalışılır) **ayrı sürümlü alan** olarak tutulur (`value_loss_legal_requirement` / `value_loss_office_policy` kavramları); ofis kuralı mevzuat alanının anlamını değiştirmez.
+
+### 5.5a Parça bedeli izlenebilirliği
+
+- Parça bedeli hesabı KDV hariç ve iskonto uygulanmamış bedeli esas alır.
+- Parça kayıtları hesaplama kaynağını (fiyat listesi/portal/belge), fiyat tarihini ve kullanılan fiyat belgesi referansını taşır; izlenebilirlik olmadan bedel kesinleşmez.
 
 ### 5.6 Mevzuat sürümleme
 

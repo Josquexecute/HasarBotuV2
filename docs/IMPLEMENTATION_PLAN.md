@@ -398,3 +398,16 @@ Kabul ölçütü: 350/350 test; bütün kapılar temiz ortamda yeşil; bilinen P
 - [x] README, `API_RUNTIME_FOUNDATION.md`, DECISION_LOG (HB-2026-006), durum/plan belgeleri; tek atomik commit.
 
 Kabul ölçütü: 379/379 test; health gerçek HTTP üzerinde contracts-uyumlu; korunan dal/tag değişmedi; sonraki tek mantıklı görev Paket 05'tir.
+
+## Aktif geliştirme paketi — Paket 04.5 kasko poliçe kuralları (yalnız dokümantasyon)
+
+### Aşama 38 — Kasko poliçe analizi ve iş kuralı modelleme
+
+- [x] Başlangıç kapısı: dal `foundation/package-04-api-skeleton`@`03a24c0`, temiz ağaç; `planning/package-04-5-casco-policy-rules` dalı oluşturuldu.
+- [x] `CASCO_POLICY_ANALYSIS_PLAN.md`: uçtan uca poliçe işleme, analiz hattı, şirket bağımsızlığı, muafiyetli dosya akışı, parça bedeli, değer kaybı ofis kuralı.
+- [x] `CASCO_POLICY_CANONICAL_MODEL.md`: kanonik alan grupları + 14 gelecek veri kavramı + izlenebilirlik zinciri.
+- [x] `CASCO_POLICY_SCENARIO_RULES.md`: senaryo kural yapısı, dört durumlu kapsam sonucu, AI sekiz bölümlü cevap standardı, muafiyetli akış senaryosu.
+- [x] Güncellemeler: DOMAIN_RULES, PRODUCT_REQUIREMENTS, DATABASE_MODEL_PLAN (§4.1 + §5.5/5.5a), API_CONTRACT_PLAN (§9), SECURITY_AND_AI_POLICY, TESTING_AND_ACCEPTANCE, DECISION_LOG (HB-2026-007), INFRA planı, durum belgeleri.
+- [x] Doğrulama: kaynak kod/package/lockfile değişmedi; typecheck/lint/test/build + `git diff --check`; belge tutarlılık taraması.
+
+Kabul ölçütü: Runtime davranışı değişmeden kasko poliçe kuralları tek kaynaklı belgelendi; Paket 05 şema tasarımı `policy_*` kavramlarını karar kapısıyla ele alır.

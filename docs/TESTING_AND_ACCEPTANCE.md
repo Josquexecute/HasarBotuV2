@@ -38,6 +38,9 @@ Planlanan anonim örnekler:
 - 5 Değer Kaybı
 - 5 Kapanma Ücreti
 - 5 İşçilik Excel'i
+- 5 Kasko poliçe senaryosu (anonim poliçe fixture'ları)
+
+Kasko poliçe senaryoları en az şunları kapsar: genel + koşullu muafiyet tespiti ("muafiyetsiz" alanına rağmen kloz kaynaklı muafiyet); dört kapsam sonucu (kapsamda/şartlı/kapsam dışı/belirsiz); poliçe ↔ ihbar föyü çelişki üretimi; "poliçede açık hüküm bulunamadı" davranışı; muafiyetli dosya iş akışı adımları (tedarik/mobil onarım engeli, bildirim, görev, portal notu, onaylı kapanış); parça bedelinde KDV hariç + iskontosuz esas ve fiyat kaynağı izlenebilirliği. Gerçek müşteri poliçesi fixture olamaz.
 
 ## Kritik yayın engelleyiciler
 
@@ -46,6 +49,8 @@ Planlanan anonim örnekler:
 - Klasör kaybı
 - Kapanma ücretini yanlış kesinleştirme
 - Değer Kaybı kural sürümü karışıklığı
+- Muafiyetli dosyada tedarik veya mobil onarım engelinin atlanması
+- Poliçe çelişkisinin kullanıcıya gösterilmeden sessizce çözülmesi
 - Audit kaybı
 - Yetkisiz erişim
 - Yedekten dönememe

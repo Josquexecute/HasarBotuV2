@@ -54,6 +54,36 @@ Rüculu Kasko:
 
 Muafiyet yalnız var/yok değildir. Tür, oran, asgari/azami tutar, uygulandığı teminat, açıklama ve kaynak sayfa tutulur.
 
+## Kasko poliçesi analizi
+
+Kasko poliçesi yalnız özet alanlardan ibaret değildir; belgenin tamamı kritik karar kaynağıdır. Poliçe baştan sona işlenir: ürün/tür, araç ve kullanım, bütün teminatlar, limitler, genel muafiyet, koşullu muafiyet ve tenziller, özel şartlar/klozlar, istisnalar, ikame araç hakkı ve süresi, mini/mobil onarım, cam servisi, çekici, servis türü, parça türü, kıymet kazanma/eskime, pert geçmişi hükümleri, rayiç/tazmin yöntemi, istenen belgeler, aksesuar/LPG/elektrikli araç hükümleri, prim borcu/mahsup, zeyiller ve yürürlük.
+
+- "Muafiyetsiz" genel alanı, özel kloz kaynaklı koşullu muafiyet bulunmadığı anlamına gelmez; klozlar ayrıca taranır.
+- Kanonik alanlar sigorta şirketinden bağımsızdır; şirketin orijinal alan adı ve madde metni korunur, kanonik alan ↔ kaynak metin bağı izlenebilirdir.
+- Her kural olay/koşul/kapsam sonucu (kapsamda, şartlı, kapsam dışı, belirsiz)/muafiyet/limit/istisna/belge/servis ve parça şartı/işlem/kaynak/güven/insan onayı yapısıyla modellenir.
+- Poliçe, ihbar föyü ve diğer belgeler çelişirse sistem sessizce seçim yapmaz; çelişkiyi gösterir.
+
+Ayrıntı: `CASCO_POLICY_ANALYSIS_PLAN.md`, `CASCO_POLICY_CANONICAL_MODEL.md`, `CASCO_POLICY_SCENARIO_RULES.md`.
+
+## Muafiyetli dosya iş akışı
+
+Muafiyet tespit edilen kasko dosyasında:
+
+1. Tedarik yapılmaz.
+2. Mobil onarım yapılmaz.
+3. Dosya sorumlusuna bilgi verilir.
+4. Servise bilgi verilir.
+5. Servis değişikliği beklenir.
+6. Servis değiştirilmezse başka operasyon yapılmaz.
+7. Portala muafiyetle ilgili notlar girilir.
+8. Dosya sorumlusunun onayına göre dosya kapatılır.
+
+Akış bildirim, görev, portal notu, onay ve kapanış adımlarıyla modellenir; her adım audit üretir.
+
+## Parça bedeli
+
+Hasara uğrayan parça bedeli hesabında KDV hariç ve iskonto uygulanmamış bedel esas alınır. Hesaplama kaynağı, fiyat tarihi ve kullanılan fiyat belgesi izlenebilir olmalıdır.
+
 ## Onarım onayı
 
 Kasko:
@@ -127,7 +157,9 @@ AI önerisi, eksper kanaati ve merkez kararı birbirinden ayrıdır.
 
 ## Değer Kaybı
 
-Trafik dosyasında zorunlu; Kasko'da isteğe bağlıdır.
+Trafik dosyasında zorunlu; Kasko'da isteğe bağlıdır (mevzuat/ürün kuralı).
+
+Ofis operasyon kuralı: eksper talimatı gereği Kasko dosyalarında da değer kaybı çalışması yapılır. Mevzuat zorunluluğu ile ofis operasyon kuralı ayrı alanlar olarak modellenir (`valueLossLegalRequirement` / `valueLossOfficePolicy`); ofis kuralı sürümlüdür ve mevzuat alanının anlamını değiştirmez.
 
 Hazırlanma şartı:
 

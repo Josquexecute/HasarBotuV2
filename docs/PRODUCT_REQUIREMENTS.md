@@ -84,6 +84,9 @@ Sekmeler:
 
 - Bu dosyada muafiyet var mı?
 - Poliçe hasar tarihinde geçerli mi?
+- Bu hasar teminat kapsamında mı?
+- İkame araç hakkı var mı, kaç gün?
+- Servis veya parça türü şartı var mı?
 - Eksik evrak var mı?
 - Rücu ihtimali var mı?
 - Onarım onayı gerekiyor mu?
@@ -92,6 +95,12 @@ Sekmeler:
 - Değer Kaybı için hangi bilgiler eksik?
 
 Her cevap kaynak, gerekçe ve güven seviyesi göstermelidir.
+
+Kasko poliçesi cevapları ayrıca şu bölümleri içerir: Sonuç; Gerekçe; Muafiyet veya limit; Servis ve parça şartı; Yapılması gereken işlem; Kaynak sayfa ve kloz; Çelişki veya eksik bilgi; Güven seviyesi. AI tahmin yürütmez; hüküm yoksa "poliçede açık hüküm bulunamadı" der (`CASCO_POLICY_SCENARIO_RULES.md`).
+
+## Kasko operasyon takibi
+
+Kasko dosyalarında en az şunlar izlenir: muafiyet var/yok; muafiyet türü, oranı ve koşulu; hasarın teminat kapsam durumu; ikame araç durumu; poliçe ürünü/türü; servis ve parça şartı; özel kloz kaynaklı operasyon engeli. Muafiyetli dosya iş akışı `DOMAIN_RULES.md` içinde tanımlıdır.
 
 ## E-posta
 

@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 04 — merkezi API iskeleti ve health endpoint
+- Aşama: Paket 04.5 — kasko poliçe analizi ve iş kuralı modelleme (yalnız dokümantasyon)
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `foundation/package-04-api-skeleton` dalı, remote yok
+- Git: Yerel repository, `planning/package-04-5-casco-policy-rules` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -272,6 +272,13 @@ Son güncelleme: 2026-07-11
 - Root scriptler: `dev` değişmedi; `dev:api` eklendi; typecheck/test/build zincirleri domain → contracts → api sırasını deterministik kurar; testler tek sefer koşar.
 - UI `src` değişmedi; ayrıntılı mimari `API_RUNTIME_FOUNDATION.md`.
 
+## Paket 04.5 — kasko poliçe analizi ve iş kuralları (2026-07-12, yalnız dokümantasyon)
+
+- Yeni belgeler: `CASCO_POLICY_ANALYSIS_PLAN.md` (uçtan uca poliçe işleme + analiz hattı + muafiyetli dosya akışı), `CASCO_POLICY_CANONICAL_MODEL.md` (kanonik alanlar + 14 `policy_*` veri kavramı + izlenebilirlik), `CASCO_POLICY_SCENARIO_RULES.md` (senaryo kural yapısı + dört durumlu kapsam sonucu + AI sekiz bölümlü cevap standardı).
+- Bağlayıcı iş kuralları HB-2026-007 ile kayıtlı: poliçenin tamamı karar kaynağıdır; "muafiyetsiz" alanı koşullu kloz muafiyetini dışlamaz; çelişkide sessiz seçim yok; AI tahmin yürütmez ("poliçede açık hüküm bulunamadı"); değer kaybında mevzuat/ofis kuralı ayrımı; parça bedeli KDV hariç + iskontosuz ve izlenebilir; muafiyetli dosyada sekiz adımlı akış (tedarik/mobil onarım engeli dahil).
+- Güncellenen belgeler: DOMAIN_RULES, PRODUCT_REQUIREMENTS, DATABASE_MODEL_PLAN (§4.1 policy kavramları; §5.5/5.5a), API_CONTRACT_PLAN (§9), SECURITY_AND_AI_POLICY, TESTING_AND_ACCEPTANCE (+2 yayın engelleyici, +5 kasko poliçe senaryosu), DECISION_LOG, INFRASTRUCTURE_IMPLEMENTATION_PLAN, IMPLEMENTATION_PLAN.
+- Runtime kodu, API, domain paketi, package.json, lockfile ve migration değişmedi; test sayısı 379/379 korunuyor.
+
 ## Sonraki önerilen görev (güncel)
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 05: PostgreSQL bağlantı ve migration altyapısı — kabul önkoşulları `API_RUNTIME_FOUNDATION.md` §7'dedir.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 05: PostgreSQL bağlantı ve migration altyapısı — kabul önkoşulları `API_RUNTIME_FOUNDATION.md` §7'dedir; `policy_*` kavramlarının normalizasyon derinliği Paket 05 karar kapısıdır.

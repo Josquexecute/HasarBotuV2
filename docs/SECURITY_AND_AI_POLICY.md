@@ -37,6 +37,15 @@ Belge veya mevzuat cevabı mümkünse:
 
 göstermelidir.
 
+## Kasko poliçesi AI standardı
+
+Kasko poliçesi hakkındaki AI cevapları şu bölümleri içerir: Sonuç; Gerekçe; Muafiyet veya limit; Servis ve parça şartı; Yapılması gereken işlem; Kaynak sayfa ve kloz; Çelişki veya eksik bilgi; Güven seviyesi.
+
+- AI tahmin yürütmez; poliçede hüküm bulunamıyorsa cevap açıkça "poliçede açık hüküm bulunamadı" der.
+- Genel sektör bilgisi poliçe hükmü gibi sunulmaz.
+- Belgeler çelişiyorsa AI sessizce taraf seçmez; çelişkiyi gösterir.
+- Kapsam/muafiyet/operasyon engeli gibi operasyonu bağlayan sonuçlar yalnız insan onayıyla kesinleşir ve audit üretir.
+
 ## AI bütçesi
 
 - Aylık hedef/üst sınır yaklaşık 20 USD
