@@ -4,7 +4,13 @@
 
 ## Claude Code-specific rules
 
-- Varsayılan çalışma modu xhigh olmalıdır. Ultracode yalnız proje çapında mimari denetim, güvenlik incelemesi, kritik ve çözülemeyen hatalar veya açıkça istendiğinde kullanılmalıdır. Rutin paket geliştirmesinde dynamic workflow veya çoklu ajan başlatma.
+- Çalışma modu merdiveni: Low → Medium → High → Extra → Max → Ultracode.
+  - Varsayılan günlük geliştirme: High.
+  - Yeni paket, migration, API ve mimari sınır: Extra.
+  - Kritik güvenlik, karmaşık refaktör ve çözülemeyen hata: Max.
+  - Proje çapında denetim ve kritik çoklu ajan incelemesi: Ultracode.
+  - Rutin paket geliştirmesinde dynamic workflow veya çoklu ajan başlatma.
+- `git add -A` kullanma; yalnız görev dosyalarını path bazlı stage et ve commit öncesi `git diff --cached --stat` ile doğrula.
 - Her paket öncesinde `docs/PROJECT_STATUS.md`, `docs/IMPLEMENTATION_PLAN.md`, `docs/DECISION_LOG.md` ve göreve ilgili teknik planları oku.
 - `v0.1.0-ui-baseline` tag'ini ve tamamlanmış foundation dallarını değiştirme.
 - Kullanıcı açıkça istemedikçe remote ekleme, push, merge veya tag oluşturma.
