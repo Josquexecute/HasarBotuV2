@@ -295,3 +295,7 @@ Paket 03, bu planın bir alt kümesini `@hasarbotu/contracts` (Zod 4) paketinde 
 - **Hata raporu:** `unrecognized_keys` reddedilen alan ADLARINI (değer değil) en çok 10 adet, temizlenmiş olarak taşır.
 - **JSON Schema:** ifade edilebilir kurallar şemaya taşındı; runtime-only kurallar `x-hasarbotu-runtime-validation` ile işaretli; golden fixture regresyonu `packages/contracts/test/fixtures/json-schema` altındadır. JSON Schema tek başına güvenlik sınırı değildir.
 - **Sürüm:** `zod` tam `4.4.3` pinlidir.
+
+## 8. Paket 04 tüketimi (2026-07-12, HB-2026-006)
+
+`@hasarbotu/api` (Fastify `5.10.0`, Node 24) bu sözleşmelerin ilk gerçek HTTP tüketicisidir: `GET /health` yanıtı gönderilmeden önce health şemasıyla parse edilir; bilinmeyen route/method 404 `not_found` ve beklenmeyen hatalar 500 `internal_error` failure envelope'larıyla döner (`requestId` gerçek Fastify request ID'sidir). Cases endpoint'leri, auth, `version` taşıma yöntemi ve OpenAPI hâlâ açık karar/ileri paket kapsamındadır; ayrıntı `API_RUNTIME_FOUNDATION.md`.

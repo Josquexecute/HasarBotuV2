@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Proje çapında sertleştirme turu (Paket 03 sonrası)
+- Aşama: Paket 04 — merkezi API iskeleti ve health endpoint
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `hardening/project-wide-audit` dalı, remote yok
+- Git: Yerel repository, `foundation/package-04-api-skeleton` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -37,13 +37,14 @@ Son güncelleme: 2026-07-11
 
 ## Test ve build sonuçları
 
-- `npm run typecheck`: Başarılı — UI + domain + contracts (dist silinmiş halde de exit 0)
+- `npm run typecheck`: Başarılı — UI + domain + contracts + API
 - `npm run lint`: Başarılı
-- `npm run test`: Başarılı — UI 2 dosya 26/26; domain 8 dosya 257/257; contracts 9 dosya 67/67; **toplam 350/350 test**
-- `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain ve contracts: ESM JavaScript ve declaration çıktısı üretildi.
+- `npm run test`: Başarılı — UI 2 dosya 26/26; domain 8 dosya 257/257; contracts 9 dosya 67/67; API 5 dosya 29/29; **toplam 379/379 test**
+- `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain, contracts ve API: ESM JavaScript ve declaration çıktısı üretildi.
 - `npm run schema --workspace @hasarbotu/contracts`: Başarılı — self-contained; 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez). Golden fixture'lar `test/fixtures/json-schema` altında commit'lidir.
 - `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı
-- Temiz checkout (`npm ci`, worktree, node_modules+dist yok): typecheck/lint/test/build/schema/import-smoke tamamı exit 0
+- Temiz checkout (repo dışı kopya, node_modules+dist yok): `npm ci` + typecheck/lint/test/build + API paket-adı import + inject health + gerçek start/health/graceful-stop — 9/9 exit 0
+- API runtime smoke (`127.0.0.1:3100`): `GET /health` 200 contracts-uyumlu gövde; bilinmeyen route güvenli `not_found` 404; loglarda secret yok; SIGINT ile tek graceful kapanış; port sonrasında boş
 
 ## Git baseline güvenliği
 
@@ -259,6 +260,18 @@ Son güncelleme: 2026-07-11
 - UI davranış denetimi (değişiklik yapılmadan): 1366×768 taşmasız (açık/koyu), üst arama `34mpa764` → `/dosyalar?q=...` tek doğru satır, Hızlı Bakış + Escape, tema persist, konsol temiz.
 - Ayrıntılı bulgu/kanıt: `PROJECT_WIDE_AUDIT.md`.
 
+## Paket 04 — merkezi API iskeleti (2026-07-12)
+
+### Uygulanan yapı
+
+- `services/api` altında `@hasarbotu/api@0.0.0`: private, ESM, `sideEffects: false`, `engines >=24 <25`. Runtime dependency yalnız `@hasarbotu/contracts` ve tam pin `fastify@5.10.0`; dev araçları tam pin `tsx@4.23.0` ve `@types/node@24.13.3`.
+- `buildApp` (saf fabrika, port dinlemez, clock/log enjekte edilebilir) ile `startServer` (config → listen → SIGINT/SIGTERM tek-kapanışlı graceful shutdown) ayrıldı; import otomatik sunucu başlatmaz.
+- Config sınırı: `HOST=127.0.0.1`, `PORT=3100` (açık parser, 1..65535), `LOG_LEVEL`, `NODE_ENV`; geçersiz config'te başlatma yok; hata çıktısı ortam değeri taşımaz; dotenv yok.
+- Güvenli varsayımlar: `trustProxy:false`, body limit 1 MiB, request timeout 30 sn, Fastify-üretimi request ID, yapısal log redaksiyonu (authorization/cookie/set-cookie/x-api-key).
+- `GET /health` contracts şemasıyla parse edilerek döner (`hasarbotu-api`, paket sürümü, Clock adapterlı `checkedAt`); gerçek DB kontrolü yok. 404 ve beklenmeyen hatalar contracts failure envelope ile (`not_found`/`internal_error` + gerçek requestId); ham exception/stack sızmaz.
+- Root scriptler: `dev` değişmedi; `dev:api` eklendi; typecheck/test/build zincirleri domain → contracts → api sırasını deterministik kurar; testler tek sefer koşar.
+- UI `src` değişmedi; ayrıntılı mimari `API_RUNTIME_FOUNDATION.md`.
+
 ## Sonraki önerilen görev (güncel)
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 04: sertleştirilmiş `@hasarbotu/contracts` sözleşmelerini tüketen merkezi API iskeleti ve sağlık uçları.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 05: PostgreSQL bağlantı ve migration altyapısı — kabul önkoşulları `API_RUNTIME_FOUNDATION.md` §7'dedir.

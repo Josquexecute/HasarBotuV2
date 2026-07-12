@@ -372,3 +372,29 @@ Kabul ölçütü: Bütün kalite kapıları yeşildir; yalnız Paket 03 farklar�
 - [x] `PROJECT_WIDE_AUDIT.md` + ilgili belgeler; atomik commit'ler; korunan dal/tag'lere dokunulmadı.
 
 Kabul ölçütü: 350/350 test; bütün kapılar temiz ortamda yeşil; bilinen Paket 03 engelleri kapalı; sonraki tek mantıklı görev Paket 04'tür.
+
+## Aktif geliştirme paketi — Paket 04 merkezi API iskeleti
+
+### Aşama 35 — Kapı ve dal
+
+- [x] CLAUDE.md, AGENTS.md, docs, package/lock, config/domain/contracts/src ve hardening kaynaklarını incele.
+- [x] Dal/HEAD (`hardening/project-wide-audit`@`fdd1658`)/temiz ağaç/korunan ref'leri doğrula; `foundation/package-04-api-skeleton` dalını oluştur.
+
+### Aşama 36 — API iskeleti
+
+- [x] `services/api` `@hasarbotu/api@0.0.0` (private, ESM, sideEffects:false, engines `>=24 <25`); tam pin `fastify@5.10.0`, `tsx@4.23.0`, `@types/node@24.13.3`.
+- [x] `buildApp`/`startServer` ayrımı; import'ta otomatik başlatma yok; Clock adapter; config sınırı (açık PORT parser, secret sızdırmayan hata).
+- [x] Güvenli varsayımlar: trustProxy:false, 1 MiB body limit, 30 sn timeout, Fastify request ID, yapısal log redaksiyonu.
+- [x] `GET /health` contracts şemasıyla; güvenli 404/`internal_error` failure envelope'ları; graceful shutdown (tek kapanış).
+- [x] 29 API testi (config/app/health/not-found/error-handler; inject ile, gerçek port/DB/fs yok).
+
+### Aşama 37 — Bütünleşme, doğrulama ve teslim
+
+- [x] Root scriptler: `dev` korunumu, `dev:api`, domain→contracts→api deterministik zincir, tek test koşumu.
+- [x] Kapılar: typecheck/lint/test(379)/build/audit/diff-check exit 0; API workspace typecheck/lint/test/build exit 0.
+- [x] Runtime smoke: 3100'de gerçek HTTP health 200 + güvenli 404 + log-secret taraması + SIGINT graceful + port boş.
+- [x] UI regresyon: HTTP 200, 26 test, konsol temiz, port kapandı.
+- [x] Temiz checkout (repo dışı kopya): `npm ci` + 9 adım exit 0.
+- [x] README, `API_RUNTIME_FOUNDATION.md`, DECISION_LOG (HB-2026-006), durum/plan belgeleri; tek atomik commit.
+
+Kabul ölçütü: 379/379 test; health gerçek HTTP üzerinde contracts-uyumlu; korunan dal/tag değişmedi; sonraki tek mantıklı görev Paket 05'tir.

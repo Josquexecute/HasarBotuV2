@@ -8,14 +8,18 @@
   ],
   "version": "0.1.0-ui-baseline",
   "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "vite",
-    "build:packages": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts",
+    "dev:api": "npm run dev --workspace @hasarbotu/api",
+    "build:packages": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run build --workspace @hasarbotu/api",
     "prepare": "npm run build:packages",
     "build": "tsc -b && vite build && npm run build:packages",
-    "typecheck": "npm run build --workspace @hasarbotu/domain && tsc -b --pretty false && npm run typecheck --workspace @hasarbotu/domain && npm run typecheck --workspace @hasarbotu/contracts",
+    "typecheck": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && tsc -b --pretty false && npm run typecheck --workspace @hasarbotu/domain && npm run typecheck --workspace @hasarbotu/contracts && npm run typecheck --workspace @hasarbotu/api",
     "lint": "eslint .",
-    "test": "npm run build --workspace @hasarbotu/domain && vitest run src && npm run test --workspace @hasarbotu/domain && npm run test --workspace @hasarbotu/contracts",
+    "test": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && vitest run src && npm run test --workspace @hasarbotu/domain && npm run test --workspace @hasarbotu/contracts && npm run test --workspace @hasarbotu/api",
     "test:watch": "vitest"
   },
   "dependencies": {
