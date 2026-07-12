@@ -103,8 +103,18 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 | `policy_scenario_rules` | Olay-bazlı kurallar (`CASCO_POLICY_SCENARIO_RULES.md`) | Sürümlü; insan onayı alanı zorunlu |
 | `policy_source_references` | Kanonik alan/kural ↔ belge/sayfa/kloz izlenebilirlik bağı | Her çıkarımda zorunlu |
 | `policy_conflicts` | Poliçe ↔ ihbar föyü ↔ diğer belge çelişkileri | Sessiz otomatik çözüm yok; kullanıcı kararı + audit |
-| `policy_ai_assessments` | AI kapsam/muafiyet değerlendirmeleri | Kaynaksız cevap kaydedilmez; "açık hüküm bulunamadı" ayrı sonuçtur |
+| `policy_ai_assessments` | AI kapsam/muafiyet değerlendirmeleri (dokuz bölümlü cevap) | Kaynaksız cevap kaydedilmez; "açık ve doğrulanabilir hüküm bulunamadı" ayrı sonuçtur |
 | `policy_human_approvals` | Operasyonu bağlayan sonuçların insan onayı | Onaysız çıkarım operasyonu bağlamaz; A2 audit |
+| `policy_pages` / `policy_sections` | Sayfa metni ve mantıksal bölümler (ihbar föyü/poliçe/özel şart/zeyil) | Ham poliçe metni hassas veri sınıfı + saklama politikası ister |
+| `policy_cost_shares` | Poliçe kaynaklı maliyet paylaşımı (sigorta/araç sahibi payı, matrah, koşul) | Oran sabit kodlanmaz; kaynak klozdan |
+| `policy_service_rules` / `policy_part_rules` | Servis şartı ve tedarik parça türü kuralları | Araç yaşı/koşul yapılandırılmış |
+| `policy_required_documents` | Poliçenin saydığı hasar belgeleri | Evrak kural motoruyla eşleşir |
+| `policy_external_references` | Harici web klozu atıfları (URL, erişim tarihi, içerik hash, arşiv sürümü) | Güncel web geçmiş poliçeye kendiliğinden uygulanmaz |
+| `policy_action_holds` | Tedarik/mobil onarım geçici durdurmaları | Kaldırma yalnız koşul + insan onayı; audit |
+| `policy_portal_notes` / `policy_decision_history` | Portal notları ve poliçe kaynaklı karar zaman çizelgesi | Append-only |
+| `part_price_references` | Parça referans bedeli (KDV hariç iskontosuz liste; kaynak/tarih/belge; gerçek bedel/pay ayrımı) | Referans bedel ödeme tutarıyla karışmaz |
+| `ai_usage_ledger` | AI kullanım/maliyet defteri (modül/kullanıcı/model/dosya) | Bütçe raporu ve üst sınır takibi |
+| `backup_runs` / `restore_test_runs` | Yedek koşuları ve geri yükleme testi kanıtları | Yedek dosyasının varlığı başarı sayılmaz; doğrulama + audit |
 
 ## 5. Kritik domain kuralları
 
@@ -135,7 +145,9 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 
 - Trafik vakasında süreç kaydı veya açık `not_applicable` gerekçesi gerekip gerekmediği kapanış validation'ında kontrol edilir; veri eklenir eklenmez assessment yaratmak DB trigger görevi değildir.
 - Hesap onayı için parça/işçilik final snapshot, araç doğrulaması ve rule version şarttır.
-- Kasko'da assessment mevzuat/ürün kuralı olarak isteğe bağlıdır. Ofis operasyon kuralı (eksper talimatı: Kasko'da da değer kaybı çalışılır) **ayrı sürümlü alan** olarak tutulur (`value_loss_legal_requirement` / `value_loss_office_policy` kavramları); ofis kuralı mevzuat alanının anlamını değiştirmez.
+- Kasko'da assessment mevzuat/ürün kuralı olarak isteğe bağlıdır. Ofis operasyon kuralı (Baran Global: hesaplamaya uygun TÜM Kasko dosyalarında süreç açılır) **ayrı sürümlü alan** olarak tutulur (`value_loss_legal_requirement` / `value_loss_office_policy` kavramları); ofis kuralı mevzuat alanının anlamını değiştirmez.
+- Uygunluk ekseni süreç durumlarından ayrıdır: Hesaplamaya Uygun / Veri Eksik / Eksper İncelemesi Gerekli / Değer Kaybı Oluşmaz / Referans Modülle Hesaplanamaz / Ağır Hasar Nedeniyle Hesaplanamaz / **Uygulanamaz (gerekçe zorunlu)**. "Değer Kaybı Oluşmaz" adının iki eksende çakışması şema tasarımında çözülmelidir.
+- Ofis numarası ek kuralları: aktifleştirmede otomatik atama; aynı numara ikinci kez kullanılamaz; iptal edilen numara tekrar dağıtılmaz; yeniden açılan dosya eski numarasını korur.
 
 ### 5.5a Parça bedeli izlenebilirliği
 

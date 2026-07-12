@@ -28,7 +28,7 @@ Sistem kasko poliçesinden en az şu grupları işlemelidir:
 6. **Özel şartlar ve klozlar:** şirketin eklediği her kloz; orijinal başlık ve metniyle.
 7. **İstisnalar / teminat dışı haller:** hem genel şartlardan hem özel şartlardan.
 8. **İkame/kiralık araç:** hak var mı, süre (gün), olay başına/yıllık, araç sınıfı.
-9. **Mini/mobil onarım:** hak, kapsam, adet sınırı, hangi hasarlarda kullanılamayacağı.
+9. **Mini onarım ve mobil onarım (ayrı ayrı):** mini onarım poliçe teminatı/hizmetidir, mobil onarım operasyon yöntemidir; hak, kapsam, adet sınırı ve kısıtlar iki kavram için ayrı işlenir.
 10. **Cam servisi:** anlaşmalı cam servisi şartı, tenzil koşulları.
 11. **Çekici/çekme:** limit ve koşullar.
 12. **Onarım servis türü:** yetkili servis / anlaşmalı servis / özel servis şartı; hangi durumda hangi tür.
@@ -69,41 +69,47 @@ Kasko dosyası operasyon görünümünde en az şunlar takip edilir:
 
 - Muafiyet var/yok (genel alan + kloz taraması birlikte)
 - Muafiyet türü, oranı/tutarı ve koşulu
-- Hasarın teminat kapsam durumu (kapsamda / şartlı / kapsam dışı / belirsiz)
+- Hasarın teminat kapsam durumu (beş durum: kapsamda / şartlı / kapsam dışı / bilgi yetersiz / kaynaklar çelişkili)
 - İkame araç durumu (hak, süre, kullanım)
 - Poliçe ürünü/türü
 - Servis şartı ve parça türü şartı
-- Özel kloz kaynaklı operasyon engeli (ör. muafiyetli dosyada tedarik yasağı)
+- Özel kloz kaynaklı geçici operasyon durdurmaları, insan onayı ve portal notu durumu (ör. muafiyet tespitinde tedarik/mobil onarım durdurma)
 
 ## 6. AI cevap standardı (kasko poliçesi)
 
-Dosyaya özel AI'ın kasko poliçesi cevapları şu bölümleri içermelidir:
+Dosyaya özel AI'ın kasko poliçesi cevapları şu dokuz bölümü içermelidir:
 
-1. **Sonuç** — kapsam/muafiyet/limit kararı önerisi
+1. **Sonuç ve kapsam durumu** — beş durumlu kapsam kararı önerisi
 2. **Gerekçe** — hangi hükme dayandığı
-3. **Muafiyet veya limit** — tutar/oran ve uygulanma koşulu
+3. **Muafiyet, tenzil, maliyet paylaşımı veya limit** — tutar/oran, matrah ve uygulanma koşulu
 4. **Servis ve parça şartı** — varsa
-5. **Yapılması gereken işlem** — operasyon adımı önerisi
-6. **Kaynak sayfa ve kloz** — izlenebilir referans
+5. **Yapılması gereken işlem ve gerekli belgeler** — operasyon adımı önerisi
+6. **Kaynak belge, sayfa, başlık ve kloz** — izlenebilir referans
 7. **Çelişki veya eksik bilgi** — varsa açıkça
 8. **Güven seviyesi**
+9. **İnsan onayı gereksinimi**
 
-AI **tahmin yürütmez**. İlgili hüküm bulunamıyorsa cevap açıkça **"poliçede açık hüküm bulunamadı"** demelidir; genel sektör bilgisi poliçe hükmü gibi sunulamaz.
+Kaynak sırası: 1) dosya belgeleri, 2) dosya notları ve e-postaları, 3) firma bilgi bankası, 4) resmî mevzuat, 5) internet araştırması (yalnız açıkça etiketli; poliçe/mevzuat hükmü gibi sunulmaz; mevzuatta blog/forum geçersizdir).
+
+AI **tahmin yürütmez**. İlgili hüküm bulunamıyorsa cevap açıkça **"Poliçede bu konuda açık ve doğrulanabilir bir hüküm bulunamadı."** demelidir; genel sektör bilgisi poliçe hükmü gibi sunulamaz. Harici web klozuna atıf varsa URL, erişim tarihi, içerik hash'i ve kullanılan sürüm arşivlenir; güncel web sayfası geçmiş poliçeye kendiliğinden uygulanmaz.
 
 ## 7. Muafiyetli dosya iş akışı
 
-Muafiyet tespit edilen kasko dosyasında operasyon akışı:
+Muafiyet tespit edilen kasko dosyasında zorunlu ilk adımlar:
 
-1. **Tedarik yapılmaz.**
-2. **Mobil onarım yapılmaz.**
+1. **Tedarik geçici olarak durdurulur.**
+2. **Mobil onarım geçici olarak durdurulur.**
 3. Dosya sorumlusuna bilgi verilir (bildirim + görev).
 4. Servise bilgi verilir (görüşme görevi + sonuç notu).
-5. Servis değişikliği beklenir (takip görevi).
-6. Servis değiştirilmezse başka operasyon yapılmaz (operasyon engeli aktif kalır).
-7. Portala muafiyetle ilgili notlar girilir (portal notu kaydı).
-8. Dosya sorumlusunun onayına göre dosya kapatılır (onay + kapanış akışı, AGENTS.md §7 kritik işlem modeli).
+5. Kaynak poliçe maddesi, olası oran/tutar ve alternatif aksiyonlar gösterilir.
 
-Bu akış bildirim, görev, portal notu, onay ve kapanış adımlarıyla modellenir; adımlar audit kaydı üretir. Muafiyet kaynaklı operasyon engeli, kloz referansıyla dosyada görünür olmalıdır.
+Aksiyon seçenekleri (tümü insan onaylı):
+
+- Poliçeye uygun servis/yöntem seçilirse muafiyet **yeniden değerlendirilir**; engel kalkarsa normal süreç devam eder.
+- Araç sahibi mevcut serviste kalırsa poliçedeki **gerçek muafiyet, tenzil veya maliyet paylaşımı uygulanır**; yüzde/paylaşım oranı sabit kodlanmaz, kaynak kloz ve hesaplama matrahından çıkarılır.
+- Uygun çözüm kabul edilmezse portal notu, dosya sorumlusunun açık onayı ve gerekçeyle **bekletme veya kapatma** uygulanır.
+
+Bu akış bildirim, görev, portal notu, onay ve kapanış adımlarıyla modellenir; geçici durdurmalar (`policy_action_holds`) kloz referansıyla dosyada görünürdür ve kaldırılmaları dahil her adım audit üretir. Muafiyetli kapanışta ilgili kloz, portal notu, sorumlu onayı ve uygulanan maliyet paylaşımı ayrıca kaydedilir. Mini onarım (poliçe teminatı) ile mobil onarım (operasyon yöntemi) ayrı kavramlardır ve aynı alanda modellenmez.
 
 ## 8. Parça bedeli kuralı
 
@@ -117,7 +123,7 @@ Hesaplama izlenebilirliği zorunludur: kaynak (hangi fiyat listesi/portal/belge)
 ## 9. Değer kaybı: mevzuat vs ofis kuralı
 
 - Mevzuat/ürün kuralı: Trafik dosyasında zorunlu; Kasko dosyasında **isteğe bağlı** (değişmedi).
-- **Ofis operasyon kuralı:** eksper talimatı gereği Kasko dosyalarında da değer kaybı çalışması yapılır.
+- **Ofis operasyon kuralı (Baran Global):** hesaplamaya uygun TÜM Kasko dosyalarında değer kaybı süreci açılır. Pert, çalınma, tam hasar veya hesaplamaya uygun olmayan Kasko dosyasında durum **Uygulanamaz** olur ve gerekçe zorunludur.
 - Bu iki kavram **ayrı alanlar** olarak modellenir: `valueLossLegalRequirement` (mevzuat) ve `valueLossOfficePolicy` (ofis kuralı). Ofis kuralı sürümlenebilir ve firma bazında yapılandırılabilir; mevzuat alanının anlamını değiştirmez.
 
 ## 10. Kapsam dışı ve açık kararlar

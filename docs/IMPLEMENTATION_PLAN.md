@@ -411,3 +411,15 @@ Kabul ölçütü: 379/379 test; health gerçek HTTP üzerinde contracts-uyumlu; 
 - [x] Doğrulama: kaynak kod/package/lockfile değişmedi; typecheck/lint/test/build + `git diff --check`; belge tutarlılık taraması.
 
 Kabul ölçütü: Runtime davranışı değişmeden kasko poliçe kuralları tek kaynaklı belgelendi; Paket 05 şema tasarımı `policy_*` kavramlarını karar kapısıyla ele alır.
+
+## Aktif geliştirme paketi — Ana yol haritası mutabakatı (yalnız dokümantasyon)
+
+### Aşama 39 — Yol haritası DOCX incelemesi ve hizalama
+
+- [x] Güvenlik kapısı; `planning/master-roadmap-alignment` dalı `7169432` üzerinden oluşturuldu.
+- [x] Harici DOCX (33 bölüm) tam okundu; repo kararlarıyla alan alan karşılaştırıldı; kod tarafı kanıtla doğrulandı (domain enum'ları, contracts kapsamı).
+- [x] `MASTER_ROADMAP_ALIGNMENT.md`: hizalı alanlar, 21 işlenen güncelleme (G1-G21), 7 eleştirel nokta (K1-K7), Paket 05 kapısına etki.
+- [x] Güncellemeler ilgili 13 belgeye işlendi; çelişkiler (dosya durumu/aşama seti) sessizce çözülmeden karar kapısına bağlandı.
+- [x] Doğrulama: yalnız docs değişti; typecheck/lint/test/build + diff-check; tutarlılık taraması.
+
+Kabul ölçütü: Yol haritası ile repo belgeleri tek tutarlı kaynak; açık ürün kararları görünür; sonraki tek mantıklı görev Paket 05'tir (K1/K2 kararıyla birlikte).

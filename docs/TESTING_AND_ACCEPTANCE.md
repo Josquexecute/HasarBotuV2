@@ -38,9 +38,24 @@ Planlanan anonim örnekler:
 - 5 Değer Kaybı
 - 5 Kapanma Ücreti
 - 5 İşçilik Excel'i
-- 5 Kasko poliçe senaryosu (anonim poliçe fixture'ları)
+- Anonim Kasko poliçe senaryoları (aşağıdaki 12 zorunlu senaryo)
 
-Kasko poliçe senaryoları en az şunları kapsar: genel + koşullu muafiyet tespiti ("muafiyetsiz" alanına rağmen kloz kaynaklı muafiyet); dört kapsam sonucu (kapsamda/şartlı/kapsam dışı/belirsiz); poliçe ↔ ihbar föyü çelişki üretimi; "poliçede açık hüküm bulunamadı" davranışı; muafiyetli dosya iş akışı adımları (tedarik/mobil onarım engeli, bildirim, görev, portal notu, onaylı kapanış); parça bedelinde KDV hariç + iskontosuz esas ve fiyat kaynağı izlenebilirliği. Gerçek müşteri poliçesi fixture olamaz.
+Zorunlu anonim Kasko senaryo testleri:
+
+1. Genel alan muafiyetsizken özel klozun koşullu muafiyet doğurması
+2. Poliçeye uygun servis değişikliğinde durdurmanın (engelin) kalkması
+3. Serviste kalındığında poliçe kaynaklı maliyet paylaşımının uygulanması
+4. Genel ve koşullu muafiyetlerin birlikte değerlendirilmesi
+5. Mini onarım mevcutken mobil onarımın durdurulmuş olması (iki kavramın ayrı modellenmesi)
+6. Trafik değer kaybının zorunlu, Kasko değer kaybının ofis kuralı olması
+7. Pert Kasko dosyasında değer kaybının "Uygulanamaz" olması (gerekçeli)
+8. İhbar fişi, poliçe ve zeyil çelişkisinin gösterilmesi (sessiz çözüm yok)
+9. KDV hariç iskontosuz liste bedeli ile gerçek satın alma bedelinin ayrılması
+10. AI kaynak bulamadığında kesin karar vermemesi ("açık ve doğrulanabilir hüküm bulunamadı")
+11. AI bütçesi dolduğunda temel uygulamanın çalışmaya devam etmesi
+12. Yedek var görünürken geri yükleme doğrulamasının başarısız olması (yedek kanıtı ≠ dosya varlığı)
+
+Gerçek müşteri poliçesi veya gerçek poliçe PDF'i fixture olamaz.
 
 ## Kritik yayın engelleyiciler
 

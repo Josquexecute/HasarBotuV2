@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 04.5 — kasko poliçe analizi ve iş kuralı modelleme (yalnız dokümantasyon)
+- Aşama: Ana yol haritası (12 Temmuz 2026) mutabakatı (yalnız dokümantasyon)
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `planning/package-04-5-casco-policy-rules` dalı, remote yok
+- Git: Yerel repository, `planning/master-roadmap-alignment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -279,6 +279,13 @@ Son güncelleme: 2026-07-11
 - Güncellenen belgeler: DOMAIN_RULES, PRODUCT_REQUIREMENTS, DATABASE_MODEL_PLAN (§4.1 policy kavramları; §5.5/5.5a), API_CONTRACT_PLAN (§9), SECURITY_AND_AI_POLICY, TESTING_AND_ACCEPTANCE (+2 yayın engelleyici, +5 kasko poliçe senaryosu), DECISION_LOG, INFRASTRUCTURE_IMPLEMENTATION_PLAN, IMPLEMENTATION_PLAN.
 - Runtime kodu, API, domain paketi, package.json, lockfile ve migration değişmedi; test sayısı 379/379 korunuyor.
 
+## Ana yol haritası mutabakatı (2026-07-12, yalnız dokümantasyon)
+
+- Harici ana yol haritası DOCX'i (12 Temmuz 2026, 33 bölüm) repo kararlarıyla uçtan uca karşılaştırıldı; sonuç `MASTER_ROADMAP_ALIGNMENT.md`: 21 güncelleme işlendi (G1-G21), 7 nokta eleştirel değerlendirmeyle karara bağlandı veya açık bırakıldı (K1-K7).
+- Öne çıkanlar: beş durumlu kapsam sonucu; mini/mobil onarım ayrımı; muafiyet akışında geçici durdurma + maliyet paylaşımı seçeneği; 26 `policy_*` veri kavramı; dokuz bölümlü AI cevabı; AI varsayılan-kapalı bütçe politikası; fiziksel dosyaların bağımsız yedek kapsamına alınması; 12 zorunlu kasko senaryo testi; ilk sigorta şirketi Türkiye Sigorta.
+- **Açık ürün kararı (Paket 05 öncesi):** dosya durumu (`open/closed` vs 4'lü liste) ve aşama seti (K1/K2) — domain kodu bilinçli olarak değiştirilmedi.
+- Karar kaydı HB-2026-008; runtime kodu/dependency değişmedi; 379/379 test korunuyor.
+
 ## Sonraki önerilen görev (güncel)
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 05: PostgreSQL bağlantı ve migration altyapısı — kabul önkoşulları `API_RUNTIME_FOUNDATION.md` §7'dedir; `policy_*` kavramlarının normalizasyon derinliği Paket 05 karar kapısıdır.
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 05: PostgreSQL bağlantı ve migration altyapısı — kabul önkoşulları `API_RUNTIME_FOUNDATION.md` §7 + `MASTER_ROADMAP_ALIGNMENT.md` §6'dadır; `policy_*` kavramlarının normalizasyon derinliği ve K1/K2 durum/aşama kararı Paket 05 karar kapısıdır.

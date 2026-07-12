@@ -305,7 +305,7 @@ Paket 03, bu planın bir alt kümesini `@hasarbotu/contracts` (Zod 4) paketinde 
 Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz üretilmez):
 
 - Kaynaklar `policy_documents`/`policy_versions`/`policy_extractions`/`policy_scenario_rules`/`policy_conflicts`/`policy_ai_assessments`/`policy_human_approvals` kavramlarını izler (`CASCO_POLICY_CANONICAL_MODEL.md`).
-- Kapsam değerlendirme yanıtları dört durumlu `coverageOutcome` (`teminat_kapsaminda` / `sartli_kapsamda` / `kapsam_disi` / `belirsiz`) + kaynak referansı + güven + `requiresHumanApproval` taşır; `belirsiz` sessizce çözülmez.
-- AI kasko cevabı sekiz bölümlü standardı izler (Sonuç, Gerekçe, Muafiyet/limit, Servis-parça şartı, İşlem, Kaynak sayfa/kloz, Çelişki/eksik, Güven); hüküm yoksa "poliçede açık hüküm bulunamadı".
+- Kapsam değerlendirme yanıtları beş durumlu `coverageOutcome` (`teminat_kapsaminda` / `sartli_kapsamda` / `kapsam_disi` / `bilgi_yetersiz` / `kaynaklar_celiskili`) + kaynak referansı + güven + `requiresHumanApproval` taşır; belirsiz durumlar sessizce çözülmez.
+- AI kasko cevabı dokuz bölümlü standardı izler (Sonuç ve kapsam durumu; Gerekçe; Muafiyet/tenzil/maliyet paylaşımı/limit; Servis-parça şartı; İşlem ve gerekli belgeler; Kaynak belge/sayfa/başlık/kloz; Çelişki/eksik; Güven; İnsan onayı gereksinimi); hüküm yoksa "Poliçede bu konuda açık ve doğrulanabilir bir hüküm bulunamadı.".
 - Çelişki kayıtları ayrı kaynak olarak sunulur; çözüm yalnız kullanıcı onaylı komutla (A2 audit) yapılır.
-- Operasyonu bağlayan sonuçlar (muafiyet uygulama, kapsam dışı, tedarik/mobil onarım engeli) insan onayı olmadan kesinleşmez.
+- Operasyonu bağlayan sonuçlar (muafiyet uygulama, maliyet paylaşımı, kapsam dışı, tedarik/mobil onarım durdurması ve kaldırılması) insan onayı olmadan kesinleşmez.

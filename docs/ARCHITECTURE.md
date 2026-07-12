@@ -91,6 +91,10 @@ Koruma:
 - AI sağlayıcısı adapter arayüzü arkasında olmalıdır.
 - Sigorta şirketi şablonları yapılandırılabilir olmalıdır.
 
+## Depolama taşınabilirliği
+
+Fiziksel dosyalar şimdilik pCloud/`P:\` yapısında kalır; `storageRootKey + relativePath` modeli sayesinde depolama kökü ileride başka disk, sunucu veya NAS'a taşınabilir. pCloud canlı veritabanı olarak kullanılmaz; ortak SQLite dosyası pCloud'a konmaz.
+
 ## Depolama profili
 
 Örnek:
@@ -106,12 +110,13 @@ Her cihaz farklı yerel pCloud kökü seçebilir.
 
 ## Yedek
 
-Harici diske:
+Bağımsız ikinci kopya: 7/24 bağlı, BitLocker veya eşdeğer yöntemle şifrelenmiş harici disk (ana yol haritası 2026-07-12 kararı; sürekli bağlı diskin fidye yazılımı riski için periyodik çevrimdışı/immutable rotasyon açık öneridir).
 
-- Günlük
-- Haftalık
-- Aylık
+Plan: günlük yedek, haftalık tam yedek, aylık arşiv. Saklama: 14 günlük, 8 haftalık, 12 aylık.
 
-PostgreSQL ve sistem yapılandırması yedeklenir.
+Yedeklenecekler: PostgreSQL, sistem ayarları, mevzuat paketleri, kural sürümleri, AI öğrenme kayıtları, audit log ve **pCloud/P:\ fiziksel dosya deposu** (önceki "fiziksel klasörler yedek dışıdır" hükmü geçersizdir).
 
-Fiziksel pCloud klasörleri bu yedek sisteminin parçası değildir.
+- pCloud eşitlemesi tek başına yedek değildir; aylık arşivin pCloud'a kopyası yalnız ek kopyadır.
+- Yedek dosyasının oluşması başarı sayılmaz; bütünlük/okunabilirlik doğrulanır.
+- PostgreSQL için periyodik gerçek geri yükleme testi; fiziksel dosyalar için örnek geri yükleme + hash doğrulaması yapılır.
+- Yedekleme ve geri yükleme denemeleri audit kaydı üretir (`backup_runs`, `restore_test_runs`).

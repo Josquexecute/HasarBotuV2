@@ -96,7 +96,9 @@ Sekmeler:
 
 Her cevap kaynak, gerekçe ve güven seviyesi göstermelidir.
 
-Kasko poliçesi cevapları ayrıca şu bölümleri içerir: Sonuç; Gerekçe; Muafiyet veya limit; Servis ve parça şartı; Yapılması gereken işlem; Kaynak sayfa ve kloz; Çelişki veya eksik bilgi; Güven seviyesi. AI tahmin yürütmez; hüküm yoksa "poliçede açık hüküm bulunamadı" der (`CASCO_POLICY_SCENARIO_RULES.md`).
+Kasko poliçesi cevapları ayrıca şu dokuz bölümü içerir: Sonuç ve kapsam durumu; Gerekçe; Muafiyet, tenzil, maliyet paylaşımı veya limit; Servis ve parça şartı; Yapılması gereken işlem ve gerekli belgeler; Kaynak belge, sayfa, başlık ve kloz; Çelişki veya eksik bilgi; Güven seviyesi; İnsan onayı gereksinimi. AI tahmin yürütmez; hüküm yoksa "Poliçede bu konuda açık ve doğrulanabilir bir hüküm bulunamadı." der (`CASCO_POLICY_SCENARIO_RULES.md`).
+
+AI kaynak sırası: 1) dosya belgeleri, 2) dosya notları ve e-postaları, 3) firma bilgi bankası, 4) resmî mevzuat, 5) internet araştırması (açıkça etiketli).
 
 ## Kasko operasyon takibi
 
@@ -112,6 +114,12 @@ Kasko dosyalarında en az şunlar izlenir: muafiyet var/yok; muafiyet türü, or
 - Kullanıcı Gmail üzerinden gönderir
 
 Otomatik gönderim yoktur.
+
+Hazır e-posta türleri: onarım onayı talebi; eksik evrak talebi; ön rapor bilgilendirmesi; servis değişikliği; muafiyet, tenzil ve servis/parça koşulu bilgilendirmesi; portal muafiyet notu taslağı; kapanış evrakları talebi; dosya durumu; rücu evrakı; PERT değerlendirmesi; serbest talimat.
+
+## Sigorta şirketi kapsamı
+
+İlk sigorta şirketi önceliği Türkiye Sigorta'dır; sistem başlangıçtan itibaren çoklu sigorta şirketi şablonuna hazırdır (kanonik alanlar + şirket profilleri).
 
 ## Dışa aktarma
 

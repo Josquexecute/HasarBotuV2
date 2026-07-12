@@ -26,7 +26,7 @@ Tramer:
 
 Her zaman zorunlu:
 
-- Kasko Poliçe
+- Kasko Poliçe — poliçenin tüm sayfaları ve varsa zeyilleri bulunmalıdır; yalnız özet sayfası yeterli değildir. Poliçe hasar tarihinde geçerli olmalı; sürüm, zeyil ve çelişki kontrolü yapılır.
 - SBM Ağır Hasar
 - K Ruhsat
 - K Ehliyet
@@ -60,29 +60,51 @@ Kasko poliçesi yalnız özet alanlardan ibaret değildir; belgenin tamamı krit
 
 - "Muafiyetsiz" genel alanı, özel kloz kaynaklı koşullu muafiyet bulunmadığı anlamına gelmez; klozlar ayrıca taranır.
 - Kanonik alanlar sigorta şirketinden bağımsızdır; şirketin orijinal alan adı ve madde metni korunur, kanonik alan ↔ kaynak metin bağı izlenebilirdir.
-- Her kural olay/koşul/kapsam sonucu (kapsamda, şartlı, kapsam dışı, belirsiz)/muafiyet/limit/istisna/belge/servis ve parça şartı/işlem/kaynak/güven/insan onayı yapısıyla modellenir.
+- Her kural olay/koşul/beş durumlu kapsam sonucu (kapsamda, şartlı, kapsam dışı, bilgi yetersiz, kaynaklar çelişkili)/muafiyet-tenzil-maliyet paylaşımı/limit/istisna/belge/servis ve parça şartı/işlem/kaynak/güven/insan onayı yapısıyla modellenir.
 - Poliçe, ihbar föyü ve diğer belgeler çelişirse sistem sessizce seçim yapmaz; çelişkiyi gösterir.
 
 Ayrıntı: `CASCO_POLICY_ANALYSIS_PLAN.md`, `CASCO_POLICY_CANONICAL_MODEL.md`, `CASCO_POLICY_SCENARIO_RULES.md`.
 
 ## Muafiyetli dosya iş akışı
 
-Muafiyet tespit edilen kasko dosyasında:
+Muafiyet tespitinde zorunlu ilk adımlar:
 
-1. Tedarik yapılmaz.
-2. Mobil onarım yapılmaz.
+1. Tedarik geçici olarak durdurulur.
+2. Mobil onarım geçici olarak durdurulur.
 3. Dosya sorumlusuna bilgi verilir.
 4. Servise bilgi verilir.
-5. Servis değişikliği beklenir.
-6. Servis değiştirilmezse başka operasyon yapılmaz.
-7. Portala muafiyetle ilgili notlar girilir.
-8. Dosya sorumlusunun onayına göre dosya kapatılır.
+5. Kaynak poliçe maddesi, olası oran/tutar ve alternatif aksiyonlar gösterilir.
 
-Akış bildirim, görev, portal notu, onay ve kapanış adımlarıyla modellenir; her adım audit üretir.
+Aksiyon seçenekleri (tümü insan onaylı):
 
-## Parça bedeli
+- Poliçeye uygun servis/yöntem seçilirse muafiyet yeniden değerlendirilir; engel kalkarsa normal süreç devam eder.
+- Araç sahibi mevcut serviste kalırsa poliçedeki gerçek muafiyet, tenzil veya maliyet paylaşımı uygulanır; oran sabit kodlanmaz, kaynak kloz ve matrahtan çıkarılır.
+- Uygun çözüm kabul edilmezse portal notu, dosya sorumlusunun açık onayı ve gerekçeyle bekletme veya kapatma uygulanır.
 
-Hasara uğrayan parça bedeli hesabında KDV hariç ve iskonto uygulanmamış bedel esas alınır. Hesaplama kaynağı, fiyat tarihi ve kullanılan fiyat belgesi izlenebilir olmalıdır.
+Akış bildirim, görev, portal notu, onay ve kapanış adımlarıyla modellenir; hiçbir kritik aksiyon insan onayı olmadan kesinleşmez ve her adım audit üretir. Muafiyetli kapanışta ilgili kloz, portal notu, sorumlu onayı ve uygulanan maliyet paylaşımı ayrıca kaydedilir.
+
+Mini onarım poliçe teminatı/hizmetidir; mobil onarım operasyon yöntemidir. İki kavram aynı alanda modellenmez.
+
+## Parça bedeli ve maliyet paylaşımı
+
+Ortak referans bedel: KDV hariç ve iskonto uygulanmamış liste bedeli. Ayrı tutulan değerler:
+
+- Liste bedeli, KDV oranı/tutarı ve KDV dahil liste bedeli
+- İskonto oranı/tutarı ve gerçek satın alma bedeli
+- Sigorta şirketi payı ve araç sahibi payı
+- Fiyat tarihi, para birimi, tedarikçi/fiyat kaynağı ve kaynak belge
+- Kullanılan hesap kuralı ve kullanıcı onayı
+
+Kullanım alanları: değer kaybı, hasar maliyeti, PERT ekonomik analizi, parça listesi, onarım onayı. Her hesapta hangi bedelin kullanıldığı açıkça kaydedilir; referans liste bedeli gerçek ödeme tutarıyla karıştırılmaz.
+
+## Ofis dosya numarası
+
+`YYYY/N` biçimi; firma ve yıl bazında sıralıdır. Ek kurallar:
+
+- Dosya aktifleştirilirken otomatik verilir.
+- Aynı numara ikinci kez kullanılamaz.
+- İptal edilen numara tekrar dağıtılmaz.
+- Yeniden açılan dosya eski numarasını korur.
 
 ## Onarım onayı
 
@@ -159,7 +181,19 @@ AI önerisi, eksper kanaati ve merkez kararı birbirinden ayrıdır.
 
 Trafik dosyasında zorunlu; Kasko'da isteğe bağlıdır (mevzuat/ürün kuralı).
 
-Ofis operasyon kuralı: eksper talimatı gereği Kasko dosyalarında da değer kaybı çalışması yapılır. Mevzuat zorunluluğu ile ofis operasyon kuralı ayrı alanlar olarak modellenir (`valueLossLegalRequirement` / `valueLossOfficePolicy`); ofis kuralı sürümlüdür ve mevzuat alanının anlamını değiştirmez.
+Ofis operasyon kuralı (Baran Global): hesaplamaya uygun TÜM Kasko dosyalarında değer kaybı süreci açılır. Pert, çalınma, tam hasar veya hesaplamaya uygun olmayan Kasko dosyasında durum "Uygulanamaz" olur ve gerekçe zorunludur. Mevzuat zorunluluğu ile ofis operasyon kuralı ayrı alanlar olarak modellenir (`valueLossLegalRequirement` / `valueLossOfficePolicy`); ofis kuralı sürümlüdür ve mevzuat alanının anlamını değiştirmez.
+
+Uygunluk durumları (süreç durumlarından ayrı eksen):
+
+- Hesaplamaya Uygun
+- Veri Eksik
+- Eksper İncelemesi Gerekli
+- Değer Kaybı Oluşmaz
+- Referans Modülle Hesaplanamaz
+- Ağır Hasar Nedeniyle Hesaplanamaz
+- Uygulanamaz (gerekçe zorunlu)
+
+Reel piyasa emsal ölçütleri: son 30 günlük ilanlar; en az 3 emsal; marka/model/paket eşleşmesi; ±%10 kilometre uyumu; aykırı ilanların dışlanması; ilan ekran görüntüsü ve numarası; nihai rayici eksper onaylar.
 
 Hazırlanma şartı:
 
@@ -177,6 +211,10 @@ Durumlar:
 - Eksper Onaylı
 - Güncelliğini Kaybetti
 - Değer Kaybı Oluşmaz
+
+## Kapanış kontrolü
+
+Her dosyada ekspertiz raporu, ön rapor ve onarım görselleri kontrol edilir. Koşullu evraklar: Fatura, Teslim İbra ve Temlik, Taahhütname. Teslim İbra ve Temlik ile Taahhütname, anlaşmalı ve yetkili servislerde zorunludur.
 
 ## Kapanma ücreti
 
