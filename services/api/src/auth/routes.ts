@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
   AUTH_LOGIN_ROUTE,
@@ -10,7 +10,8 @@ import {
   zodErrorToApiError,
 } from '@hasarbotu/contracts'
 import { failureBody } from '../errors/failure.js'
-import { createAuthStore, type AuthStore, type SessionRow } from './store.js'
+import { resolveSession, sendUnauthorized } from './guard.js'
+import { createAuthStore } from './store.js'
 import { createFixedWindowLimiter, type FixedWindowOptions } from './rate-limit.js'
 import { login, toSessionUser } from './service.js'
 import {
@@ -33,17 +34,6 @@ export interface AuthRoutesOptions {
 export const DEFAULT_LOGIN_RATE_LIMIT: Pick<FixedWindowOptions, 'limit' | 'windowMs'> = {
   limit: 10,
   windowMs: 60_000,
-}
-
-async function resolveSession(store: AuthStore, request: FastifyRequest): Promise<{ token: string; session: SessionRow } | undefined> {
-  const token = parseCookies(request.headers.cookie)[SESSION_COOKIE_NAME]
-  if (token === undefined || token.length === 0) return undefined
-  const session = await store.findActiveSession(hashSessionToken(token))
-  return session === undefined ? undefined : { token, session }
-}
-
-function sendUnauthorized(reply: FastifyReply, requestId: string): void {
-  void reply.code(401).send(failureBody('unauthorized', 'Authentication required.', requestId))
 }
 
 /**
@@ -95,14 +85,14 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
 
   app.get(AUTH_SESSION_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const resolved = await resolveSession(store, request)
-    if (resolved === undefined) {
+    const session = await resolveSession(store, request)
+    if (session === undefined) {
       sendUnauthorized(reply, requestId)
       return
     }
     return sessionResponseSchema.parse({
-      user: toSessionUser(resolved.session.user),
-      expiresAt: resolved.session.expiresAt.toISOString(),
+      user: toSessionUser(session.user),
+      expiresAt: session.expiresAt.toISOString(),
     })
   })
 

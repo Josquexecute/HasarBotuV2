@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { errorHandler, notFoundHandler } from './errors/index.js'
 import { registerHealthRoute } from './routes/index.js'
 import { registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
+import { registerCasesRoutes } from './cases/routes.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -80,7 +81,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       ? { dependencyCheck: options.healthDependencyCheck }
       : {}),
   })
-  if (options.auth !== undefined) registerAuthRoutes(app, options.auth)
+  if (options.auth !== undefined) {
+    registerAuthRoutes(app, options.auth)
+    registerCasesRoutes(app, { pool: options.auth.pool })
+  }
 
   return app
 }

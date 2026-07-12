@@ -53,3 +53,5 @@ const entryScript = process.argv[1]
 if (entryScript !== undefined && resolve(entryScript) === fileURLToPath(import.meta.url)) {
   void startServer()
 }
+export { requireSession, resolveSession } from './auth/guard.js'
+export { createCasesStore, registerCasesRoutes, type CasesStore } from './cases/index.js'

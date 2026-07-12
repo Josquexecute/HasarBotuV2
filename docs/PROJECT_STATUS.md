@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-11
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 06 — kullanıcılar, roller ve oturum
+- Aşama: Paket 07 — dosyalar salt okunur API
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `foundation/package-06-users-roles-sessions` dalı, remote yok
+- Git: Yerel repository, `foundation/package-07-cases-read` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -39,7 +39,7 @@ Son güncelleme: 2026-07-11
 
 - `npm run typecheck`: Başarılı — UI + domain + contracts + database + API
 - `npm run lint`: Başarılı
-- `npm run test`: Başarılı — UI 26/26; domain 257/257; contracts 73/73; database 22/22; API 46/46 (gerçek PostgreSQL auth akışı dahil); **toplam 424/424 test**
+- `npm run test`: Başarılı — UI 26/26; domain 257/257; contracts 73/73; database 22/22; API 55/55 (gerçek PostgreSQL auth + cases okuma dahil); **toplam 433/433 test**
 - `npm run build`: Başarılı — UI: Vite 8.1.4, 1.594 modül; JS 354,56 kB (gzip 102,26 kB), CSS 49,16 kB (gzip 8,77 kB). Domain, contracts ve API: ESM JavaScript ve declaration çıktısı üretildi.
 - `npm run schema --workspace @hasarbotu/contracts`: Başarılı — self-contained; 6 deterministik JSON Schema `dist/json-schema` altına üretildi (Git'e commit edilmez). Golden fixture'lar `test/fixtures/json-schema` altında commit'lidir.
 - `npm audit --audit-level=moderate`: Başarılı — 0 güvenlik açığı
@@ -304,6 +304,12 @@ Son güncelleme: 2026-07-11
 - Contracts: auth login/logout/session şemaları + rate_limited kodu; golden fixture seti 8 şema. Auth yalnız DATABASE_URL'li API'de kayıtlı; aksi halde güvenli 404.
 - Kanıt: gerçek DB üzerinde 14 uçtan uca auth testi (login/cerez/session/logout-revoke/kilit/429/404) + audit satırları. Karar: HB-2026-011.
 
+## Paket 07 — dosyalar salt okunur API (2026-07-12)
+
+- Migration 0003: cases (lifecycle_status open|closed + workflow_stage; office_year/sequence/number çift benzersiz; plate_normalized indeksli; follow_up_date date) + service_centers + insurers; planlanan indeksler kuruldu.
+- GET /api/v1/cases ve /:caseId: oturum zorunlu (401), tenant kapsamlı (yabancı org 404), contracts sorgusu birebir (filtreler, çok-kelimeli AND arama, NULLS LAST sıralama, pageInfo), yanıtlar şema-parse'lı; endpoint salt okunurdur.
+- Kanıt: 9 uçtan uca test (401/filtreler/aralık/arama/sıralama/sayfalama/strict-400/detay-404-400-tenant) + canlı HTTP smoke (login → ?search=34mpa764 → kanonik gövde). Karar: HB-2026-012.
+
 ## Sonraki önerilen görev (güncel)
 
-`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 06: kullanıcılar, roller ve oturum. K1/K2 dosya durumu/aşama seti kararı HB-2026-010 ile kapandı (lifecycleStatus open|closed + workflowStage + türetilmiş görünümler).
+`INFRASTRUCTURE_IMPLEMENTATION_PLAN.md` Paket 08: UI mock/API adapter ayrımı — kabul edilmiş UI davranışı korunarak `DataPort` sınırıyla (MockDataAdapter | HttpApiAdapter) kademeli geçiş.

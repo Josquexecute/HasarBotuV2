@@ -125,6 +125,8 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Geri alma:** Endpoint ve query modülünü kaldır; ek tabloları veri kaybı olmadan kullanım dışı bırak.
 - **Kabul:** Anonim seed üzerinde mevcut UI'nin ihtiyaç duyduğu dosya listesi ve detayı sözleşmeye uygun döner.
 
+- **Gerçekleşen sonuç (2026-07-12):** Tamamlandı. Migration 0003 cases+service_centers+insurers (HB-2026-010 lifecycle/workflow ayrımı, çift benzersiz ofis numarası, plate_normalized, date tipli follow_up_date, planlanan indeksler). Salt okunur GET /api/v1/cases ve /:caseId: oturum zorunlu, tenant kapsamlı, contracts sorgu/DTO birebir, yanıtlar şema-parse'lı, yazma yok. 9 uçtan uca test + canlı HTTP smoke; toplam 433/433. UI adapter (Paket 08) ve yazma uçları (Paket 09) kapsam dışı (HB-2026-012).
+
 ### Paket 08 — UI mock/API adapter ayrımı
 
 - **Amaç:** Kabul edilmiş UI'yi değiştirmeden veri kaynağını değiştirilebilir adapter sınırına taşımak.

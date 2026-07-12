@@ -4,6 +4,7 @@
 
 ## Claude Code-specific rules
 
+- Varsayılan çalışma modu xhigh olmalıdır. Ultracode yalnız proje çapında mimari denetim, güvenlik incelemesi, kritik ve çözülemeyen hatalar veya açıkça istendiğinde kullanılmalıdır. Rutin paket geliştirmesinde dynamic workflow veya çoklu ajan başlatma.
 - Her paket öncesinde `docs/PROJECT_STATUS.md`, `docs/IMPLEMENTATION_PLAN.md`, `docs/DECISION_LOG.md` ve göreve ilgili teknik planları oku.
 - `v0.1.0-ui-baseline` tag'ini ve tamamlanmış foundation dallarını değiştirme.
 - Kullanıcı açıkça istemedikçe remote ekleme, push, merge veya tag oluşturma.

@@ -468,3 +468,15 @@ Kabul ölçütü: Temiz test DB tek komutla kurulup doğrulanır; API DB hazır 
 - [x] Kapılar: typecheck/lint/test(424)/build/audit/diff-check exit 0; temiz checkout; tek atomik feat commit.
 
 Kabul ölçütü: Oturumlar iptal edilebilir ve audit'lidir; brute-force iki katman korunur; sonraki tek mantıklı görev Paket 07'dir.
+
+## Aktif geliştirme paketi — Paket 07 dosyalar salt okunur API
+
+### Aşama 46 — Cases okuma modeli ve uçları
+
+- [x] Kapı; `foundation/package-07-cases-read` dalı `3d2cd7d` üzerinden.
+- [x] Migration 0003: cases + service_centers + insurers (HB-2026-010/012 kuralları, indeksler); database tablo beklentileri güncellendi.
+- [x] Auth guard modülü (`requireSession`) ayrıştırıldı; cases uçları oturum + tenant kapsamıyla eklendi; sorgular parametreli ve salt okunur; yanıtlar contracts şemasıyla parse'lı.
+- [x] 9 uçtan uca DB testi + canlı HTTP smoke (401 → login → arama); API vitest DB dosyaları sıralı koşacak şekilde ayarlandı.
+- [x] Kapılar: typecheck/lint/test(433)/build/audit/diff-check exit 0; temiz checkout; tek atomik commit.
+
+Kabul ölçütü: Anonim seed üzerinde liste/detay sözleşmeye uygun döner; endpoint DB'ye yazmaz; sonraki tek mantıklı görev Paket 08'dir.
