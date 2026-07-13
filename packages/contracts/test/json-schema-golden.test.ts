@@ -18,6 +18,7 @@ import { buildJsonSchemas, type JsonSchemaName } from '../src/index.js'
 const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'json-schema')
 
 const EXPECTED_NAMES: readonly JsonSchemaName[] = [
+  'agent-register-response',
   'audit-events-query',
   'audit-events-response',
   'auth-login-request',
@@ -36,6 +37,8 @@ const EXPECTED_NAMES: readonly JsonSchemaName[] = [
   'documents-list-response',
   'failure-envelope',
   'health-response',
+  'job-claim-response',
+  'job-result-request',
   'photo-register-request',
   'photos-list-response',
   'storage-roots-response',

@@ -23,6 +23,8 @@ import {
   documentsListResponseSchema,
   photosListResponseSchema,
 } from './v1/documents/dto.js'
+import { jobResultRequestSchema } from './v1/agent/commands.js'
+import { agentRegisterResponseSchema, claimResponseSchema } from './v1/agent/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -50,6 +52,9 @@ export const JSON_SCHEMA_TARGETS = {
   'documents-list-response': documentsListResponseSchema,
   'document-detail-response': documentDetailResponseSchema,
   'photos-list-response': photosListResponseSchema,
+  'job-claim-response': claimResponseSchema,
+  'job-result-request': jobResultRequestSchema,
+  'agent-register-response': agentRegisterResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

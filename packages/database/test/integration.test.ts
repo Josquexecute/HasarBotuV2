@@ -51,12 +51,14 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0005_audit_append_only',
       '0006_storage_location',
       '0007_document_metadata',
+      '0008_file_agent_jobs',
     ])
 
     const tables = await pool.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
     )
     expect(tables.rows.map((r: { table_name: string }) => r.table_name)).toEqual([
+      'agents',
       'audit_events',
       'case_location_history',
       'case_locations',
@@ -65,6 +67,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'documents',
       'idempotency_keys',
       'insurers',
+      'jobs',
       'office_counters',
       'organizations',
       'pgmigrations',

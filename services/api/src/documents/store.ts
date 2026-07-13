@@ -23,6 +23,7 @@ import {
 import { uuidv7 } from '@hasarbotu/database'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
+import { enqueueVerifyJob } from '../agent/enqueue.js'
 import { findIdempotent, insertIdempotent, isIdempotencyRace } from '../db/idempotency.js'
 
 /**
@@ -320,6 +321,22 @@ export function createDocumentsStore(pool: pg.Pool) {
             },
           })
 
+          // Belge sürümü doğrulama işini kuyruğa ekle (dosya hash+size).
+          await enqueueVerifyJob(client, {
+            organizationId: actor.organizationId,
+            type: 'verify_document',
+            targetType: 'document_version',
+            targetId: versionId,
+            targetVersion: versionNumber,
+            payload: {
+              storageRootKey: input.storageRootKey,
+              relativePath: input.relativePath,
+              kind: 'file',
+              declaredHash: input.contentHash,
+              declaredSize: input.byteSize,
+            },
+          })
+
           await insertIdempotent(client, {
             organizationId: actor.organizationId,
             scope: idem.scope,
@@ -429,6 +446,22 @@ export function createDocumentsStore(pool: pg.Pool) {
               status: 'pending',
               duplicateInSameCase: duplicate.sameCasePhotoId !== null,
               duplicateOtherCaseCount: duplicate.otherCaseCount,
+            },
+          })
+
+          // Fotoğraf doğrulama işini kuyruğa ekle (dosya hash+size).
+          await enqueueVerifyJob(client, {
+            organizationId: actor.organizationId,
+            type: 'verify_photo',
+            targetType: 'photo',
+            targetId: photoId,
+            targetVersion: 0,
+            payload: {
+              storageRootKey: input.storageRootKey,
+              relativePath: input.relativePath,
+              kind: 'file',
+              declaredHash: input.contentHash,
+              declaredSize: input.byteSize,
             },
           })
 

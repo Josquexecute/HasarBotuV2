@@ -12,6 +12,7 @@ import {
 import { uuidv7 } from '@hasarbotu/database'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
+import { enqueueVerifyJob } from '../agent/enqueue.js'
 
 /**
  * Depolama referansi / vaka konumu veri katmani (Paket 12).
@@ -29,6 +30,7 @@ interface RootRow {
 }
 
 interface LocationRow {
+  id: string
   case_id: string
   storage_root_key: string
   relative_path: string
@@ -160,7 +162,7 @@ export function createStorageStore(pool: pg.Pool) {
             `INSERT INTO case_locations
                (id, organization_id, case_id, storage_root_key, relative_path, verification_status, source)
              VALUES ($1, $2, $3, $4, $5, 'pending', $6)
-             RETURNING ${LOCATION_FIELDS}`,
+             RETURNING id, ${LOCATION_FIELDS}`,
             [uuidv7(), actor.organizationId, caseId, input.storageRootKey, input.relativePath, input.source],
           )
           row = inserted.rows[0] as LocationRow
@@ -174,7 +176,7 @@ export function createStorageStore(pool: pg.Pool) {
              SET storage_root_key = $1, relative_path = $2, source = $3,
                  verification_status = 'pending', version = version + 1, updated_at = now()
              WHERE organization_id = $4 AND case_id::text = $5
-             RETURNING ${LOCATION_FIELDS}`,
+             RETURNING id, ${LOCATION_FIELDS}`,
             [input.storageRootKey, input.relativePath, input.source, actor.organizationId, caseId],
           )
           row = updated.rows[0] as LocationRow
@@ -217,6 +219,22 @@ export function createStorageStore(pool: pg.Pool) {
             verificationStatus: row.verification_status,
             ...(fromVersion !== null ? { fromVersion } : {}),
             toVersion: row.version,
+          },
+        })
+
+        // Konum doğrulama işini kuyruğa ekle (dizin varlığı; hash yok).
+        await enqueueVerifyJob(client, {
+          organizationId: actor.organizationId,
+          type: 'verify_case_location',
+          targetType: 'case_location',
+          targetId: row.id,
+          targetVersion: row.version,
+          payload: {
+            storageRootKey: row.storage_root_key,
+            relativePath: row.relative_path,
+            kind: 'directory',
+            declaredHash: null,
+            declaredSize: null,
           },
         })
 

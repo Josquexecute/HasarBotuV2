@@ -51,6 +51,14 @@ Belge/fotoğraf META VERİSİ UYGULANDI (fiziksel işlemler ve File Agent hâlâ
 5. Hash/boyut uyuşmazlığında `status='failed'`; dosya bulunamazsa `status='missing'`. Her geçiş merkezi audit olayı üretir.
 6. Beyan edilen hash ile doğrulanan hash ASLA otomatik olarak birbirinin yerine geçmez; uyuşmazlık reconciliation/manuel-drift sinyalidir (§10, §14).
 
+### 2.3 File Agent kontrol katmanı ve iş kuyruğu (Paket 14 — HB-2026-020)
+
+Doğrulama KONTROL KATMANI ve protokol UYGULANDI (gerçek fiziksel taşıma/rename/silme hâlâ ayrı):
+
+- Ayrı `services/file-agent` workspace'i yalnız API üzerinden çalışır; DB'ye yazmaz. `agents` tablosu cihaz kimliğini tutar (secret yalnız SHA-256 hash; ham secret DB/audit/log'a yazılmaz). `jobs` tablosu PostgreSQL kuyruğudur: `FOR UPDATE SKIP LOCKED` claim (tek sahip), lease + heartbeat + timeout recovery, attempt/üstel-backoff/`dead_letter`. Job payload YALNIZ mantıksal rootKey + göreli yol + beyan hash/size taşır (mutlak yol CHECK ile engellenir).
+- Agent, `storageRootKey`'i YEREL config'teki mutlak köke çözer (§2, §2.1), göreli yolu güvenle birleştirir ve `realpath` ile symlink/junction kaçışını reddeder. SHA-256 STREAMING hesaplanır (§5 adım 6 ilkesiyle; tüm dosya belleğe alınmaz), boyut gerçek dosyadan alınır. Gözlenen değerler sunucuya bildirilir; SUNUCU beyanla karşılaştırıp `pending→ready`/`failed`/`missing` kararını verir. Metadata + iş + merkezi audit tek transaction'dadır; metadata sürüm yarışında eski sürüm ezilmez; sonuç bildirimi idempotenttir.
+- KALAN (sonraki paketler): §5 gerçek atomik yükleme/kesinleştirme, §7 lock marker, §10 staging/quarantine recovery, §13 silme/karantina, Windows service sarmalayıcısı ve cross-volume taşıma.
+
 ## 3. Göreli yol ve klasör standardı
 
 Önerilen canonical format:

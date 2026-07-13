@@ -1,10 +1,10 @@
 {
-  "name": "@hasarbotu/api",
+  "name": "@hasarbotu/file-agent",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "HasarBotu V2 merkezi API iskeleti: Fastify tabanli health ve guvenli hata sinirlari",
+  "description": "HasarBotu V2 File Agent: dosya doğrulama protokolü istemcisi (yalnız API üzerinden çalışır)",
   "engines": {
     "node": ">=24 <25"
   },
@@ -24,18 +24,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
     "lint": "eslint .",
     "test": "vitest run --config vitest.config.ts",
-    "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {
     "@hasarbotu/contracts": "*",
-    "@hasarbotu/database": "*",
-    "@hasarbotu/domain": "*",
-    "argon2": "0.44.0",
-    "fastify": "5.10.0"
+    "@hasarbotu/domain": "*"
   },
   "devDependencies": {
-    "@hasarbotu/file-agent": "*",
     "@types/node": "24.13.3",
     "tsx": "4.23.0"
   }

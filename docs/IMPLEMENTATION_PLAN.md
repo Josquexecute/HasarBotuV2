@@ -563,3 +563,20 @@ Kabul ölçütü: DB yalnız mantıksal rootKey + güvenli göreli yol saklar (m
 - [x] Kapılar: typecheck/lint(0 uyarı)/test(584)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
 
 Kabul ölçütü: Belge/sürüm/fotoğraf metadata'sı tenant izolasyonlu kaydedilir; kayıt daima `pending`; istemci/genel API `ready`/hash-doğrulandı/dosya-mevcut sonucunu belirleyemez (DB CHECK + append-only trigger ile mekanik zorlama); `content_hash` yalnız beyandır; MIME/uzantı uyuşmazlığı ve tehlikeli ad reddedilir; aynı dosya tespit edilir ama vakalar arası sessiz birleştirme yapılmaz; sürüm geçmişi append-only + optimistic locking; okuma uçları kiracı kapsamlıdır; mutlak yol yanıt/audit/log'a sızmaz; File Agent doğrulama akışı belgelenir; gerçek yükleme/içerik/OCR/thumbnail/AI/File Agent/close-reopen/UI kapsam dışıdır.
+
+## Aktif geliştirme paketi — Paket 14 File Agent kontrol katmanı ve doğrulama protokolü
+
+> Bu paket, altyapı planındaki "Paket 12 — File Agent iskeleti"ni gerçekler.
+
+### Aşama 53 — agent kimliği + iş kuyruğu + streaming doğrulama
+
+- [x] Ayrı workspace `services/file-agent` (DB bağımlılığı yok; yalnız API üzerinden); yerel `rootKey→mutlak root` config'i; dal `foundation/package-14-file-agent`.
+- [x] Migration 0008: `agents` (secret yalnız SHA-256 hash, enable/disable, last_seen) + `jobs` (SKIP LOCKED claim, lease/heartbeat/timeout recovery, attempt/backoff/dead_letter, güvenli payload CHECK'i).
+- [x] Contracts `v1/agent` (job/claim/result/agent dto + komutlar); golden 21→24.
+- [x] API: agent auth (x-agent-id/secret, hash karşılaştırma, org kapsamı), yönetici agent kayıt/enable-disable/liste, claim/heartbeat/result protokolü; doc/photo/location kaydında aynı transaction'da enqueue; `x-agent-secret` log redaksiyonu.
+- [x] File Agent: path-resolver (traversal/drive/UNC + realpath symlink/junction escape reddi), verifier (streaming SHA-256, boyut gerçek dosyadan, missing/failed), api-client, run loop (heartbeat'li).
+- [x] Doğrulama: gözlenen ile beyan SUNUCUDA karşılaştırılır → ready/failed/missing; metadata+iş+audit atomik; sürüm yarışında ezme yok; idempotent; agent istemci hash'ine güvenmez.
+- [x] Testler: +12 agent-side birim + +15 API (auth/SKIP-LOCKED/lease/recovery/retry-dead_letter/verify-ready/mismatch/missing/race/idempotency/tenant/security) + 3 gerçek uçtan uca + canlı smoke 7/7 (semantik JSON).
+- [x] Kapılar: typecheck/lint(0 uyarı)/test(614)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
+
+Kabul ölçütü: Agent yalnız API üzerinden çalışır (DB'ye yazmaz), yalnız kendi org + atanmış işiyle sınırlıdır; aynı iş iki agent tarafından uygulanamaz (SKIP LOCKED); lease/heartbeat/timeout recovery + retry/backoff/dead_letter çalışır; mutlak root yalnız agent config'inde kalır ve API/DB/audit/log'a sızmaz; traversal/drive/UNC/symlink-junction kaçışı reddedilir; SHA-256 streaming hesaplanır (dosya belleğe alınmaz); gözlenen beyanla eşleşince `ready`, uyuşmazsa `ready` olmaz; metadata+iş+audit atomik ve sürüm-yarışına dayanıklıdır; sonuç idempotenttir; ham secret/mutlak yol/ham hata API'ye taşınmaz; gerçek dosya işlemleri/upload/OCR/thumbnail/AI/Electron/UI/LAN-TLS/üretim migration kapsam dışıdır.

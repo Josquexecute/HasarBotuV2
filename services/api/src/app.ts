@@ -7,6 +7,7 @@ import { registerCasesWriteRoutes } from './cases/write-routes.js'
 import { registerAuditRoutes } from './audit/index.js'
 import { registerStorageRoutes } from './storage/index.js'
 import { registerDocumentRoutes } from './documents/index.js'
+import { registerAgentRoutes } from './agent/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -22,6 +23,7 @@ export const REDACTED_LOG_PATHS = [
   'req.headers.cookie',
   'req.headers["set-cookie"]',
   'req.headers["x-api-key"]',
+  'req.headers["x-agent-secret"]',
   'res.headers["set-cookie"]',
 ] as const
 
@@ -92,6 +94,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerAuditRoutes(app, { pool: options.auth.pool })
     registerStorageRoutes(app, { pool: options.auth.pool })
     registerDocumentRoutes(app, { pool: options.auth.pool })
+    registerAgentRoutes(app, { pool: options.auth.pool })
   }
 
   return app

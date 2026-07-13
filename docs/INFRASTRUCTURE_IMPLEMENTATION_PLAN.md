@@ -202,6 +202,8 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Geri alma:** İş üretimini durdur; Agent'ı kapat; bekleyen işler DB'de korunur.
 - **Kabul:** No-op/test işi tek kez güvenli yürür, çökme sonrası durum kaybolmaz.
 
+- **Gerçekleşen sonuç (tamamlandı; kullanıcı "Paket 14 — File Agent kontrol katmanı ve doğrulama protokolü" olarak yönlendirdi, 2026-07-13):** Ayrı `services/file-agent` workspace'i (DB bağımlılığı yok; yalnız API). Migration 0008 `agents` (secret yalnız SHA-256 hash) + `jobs` (SKIP LOCKED claim, lease/heartbeat/timeout recovery, attempt/backoff/dead_letter, güvenli payload — mutlak yol CHECK'i). İş türleri `verify_document`/`verify_photo`/`verify_case_location`, kayıtla aynı transaction'da enqueue. Agent path çözümünde traversal/drive/UNC + realpath symlink/junction kaçışı reddeder; SHA-256'yı streaming hesaplar; sunucu gözleneni beyanla karşılaştırır → `ready`/`failed`/`missing`; metadata+iş+audit atomik, sürüm-yarışına dayanıklı, idempotent. Ham secret/mutlak yol/ham hata API'ye taşınmaz. Contracts `v1/agent` (golden 24). +12 agent birim + +15 API + 3 uçtan uca + canlı smoke 7/7 (HB-2026-020). No-op/tek-sahip-lease/crash-recovery/traversal kabul ölçütleri karşılandı. KALAN: gerçek fiziksel taşıma/rename/quarantine, Windows service sarmalayıcısı, cross-volume, kök kesintisi runbook'u — sonraki pakete.
+
 ### Paket 13 — Belge ve fotoğraf akışı
 
 - **Amaç:** Belge/fotoğraf yükleme, sürümleme, listeleme ve kontrollü erişimi File Agent üzerinden tamamlamak.

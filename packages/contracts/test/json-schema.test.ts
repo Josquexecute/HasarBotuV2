@@ -4,6 +4,7 @@ import { JSON_SCHEMA_TARGETS, buildJsonSchemas } from '../src/index.js'
 describe('JSON Schema uretimi', () => {
   it('beklenen hedef semalari icerir', () => {
     expect(Object.keys(JSON_SCHEMA_TARGETS).sort()).toEqual([
+      'agent-register-response',
       'audit-events-query',
       'audit-events-response',
       'auth-login-request',
@@ -22,6 +23,8 @@ describe('JSON Schema uretimi', () => {
       'documents-list-response',
       'failure-envelope',
       'health-response',
+      'job-claim-response',
+      'job-result-request',
       'photo-register-request',
       'photos-list-response',
       'storage-roots-response',
