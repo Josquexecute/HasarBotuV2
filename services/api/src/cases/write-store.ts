@@ -1,0 +1,267 @@
+import { createHash } from 'node:crypto'
+import type pg from 'pg'
+import type { CaseCreateRequest, CaseUpdateRequest, CaseListItem } from '@hasarbotu/contracts'
+import { parsePlateNumber, plateSearchKey } from '@hasarbotu/domain'
+import { uuidv7 } from '@hasarbotu/database'
+import { rowToDto, SELECT_FIELDS, type CaseRow } from './store.js'
+
+/**
+ * Cases yazma katmani (Paket 09) — kritik islem modeli:
+ * dogrula -> tek transaction icinde uygula (ofis numarasi + kayit + audit +
+ * idempotency) -> dogrulanmis DTO dondur. Ofis numarasi firma+yil sayacindan
+ * atanir ve ASLA yeniden dagitilmaz; basarisiz transaction sayaci tuketmez.
+ */
+
+export class ReferenceCheckError extends Error {
+  readonly field: string
+
+  constructor(field: string) {
+    super(`unknown reference: ${field}`)
+    this.name = 'ReferenceCheckError'
+    this.field = field
+  }
+}
+
+export type UpdateOutcome =
+  | { readonly kind: 'ok'; readonly item: CaseListItem }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'version_conflict' }
+
+export interface IdempotentRecord {
+  readonly requestHash: string
+  readonly responseStatus: number
+  readonly responseBody: unknown
+}
+
+export function hashRequestBody(body: unknown): string {
+  return createHash('sha256').update(JSON.stringify(body)).digest('hex')
+}
+
+interface ActorContext {
+  readonly organizationId: string
+  readonly actorUserId: string
+  readonly requestId: string
+}
+
+const REFERENCE_CHECKS: readonly { field: string; table: string }[] = [
+  { field: 'responsibleUserId', table: 'users' },
+  { field: 'serviceId', table: 'service_centers' },
+  { field: 'insurerId', table: 'insurers' },
+]
+
+async function assertReferences(
+  client: pg.PoolClient,
+  organizationId: string,
+  input: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  for (const check of REFERENCE_CHECKS) {
+    const value = input[check.field]
+    if (typeof value !== 'string') continue
+    const result = await client.query(
+      `SELECT 1 FROM ${check.table} WHERE id::text = $1 AND organization_id = $2`,
+      [value, organizationId],
+    )
+    if (result.rowCount === 0) throw new ReferenceCheckError(check.field)
+  }
+}
+
+async function insertAudit(
+  client: pg.PoolClient,
+  actor: ActorContext,
+  action: string,
+  caseId: string,
+  details: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO audit_events (id, organization_id, actor_user_id, action, resource_type, resource_id, request_id, details)
+     VALUES ($1, $2, $3, $4, 'case', $5, $6, $7::jsonb)`,
+    [uuidv7(), actor.organizationId, actor.actorUserId, action, caseId, actor.requestId, JSON.stringify(details)],
+  )
+}
+
+export function createCasesWriteStore(pool: pg.Pool) {
+  return {
+    async findIdempotent(
+      organizationId: string,
+      scope: string,
+      key: string,
+    ): Promise<IdempotentRecord | undefined> {
+      const result = await pool.query(
+        'SELECT request_hash, response_status, response_body FROM idempotency_keys WHERE organization_id = $1 AND scope = $2 AND idem_key = $3',
+        [organizationId, scope, key],
+      )
+      const row = result.rows[0] as
+        | { request_hash: string; response_status: number; response_body: unknown }
+        | undefined
+      if (row === undefined) return undefined
+      return {
+        requestHash: row.request_hash,
+        responseStatus: row.response_status,
+        responseBody: row.response_body,
+      }
+    },
+
+    /**
+     * Dosya olusturma: referans kontrolu, ofis numarasi atamasi, kayit, audit
+     * ve idempotency kaydi TEK transaction icindedir. Idempotency yarisinda
+     * (ayni anahtar es zamanli) unique ihlali yakalanir ve `null` doner;
+     * cagiran saklanan yaniti yeniden okur.
+     */
+    async createCase(
+      actor: ActorContext,
+      input: CaseCreateRequest,
+      idempotency: { scope: string; key: string; requestHash: string; buildResponse: (item: CaseListItem) => unknown },
+    ): Promise<CaseListItem | null> {
+      const plateResult = parsePlateNumber(input.plate)
+      if (!plateResult.ok) throw new ReferenceCheckError('plate')
+      const plate = plateResult.value
+      const normalized = plateSearchKey(plate)
+      const year = new Date().getFullYear()
+      const caseId = uuidv7()
+
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        await assertReferences(client, actor.organizationId, input)
+
+        const counter = await client.query(
+          `INSERT INTO office_counters (organization_id, office_year, last_sequence)
+           VALUES ($1, $2, 1)
+           ON CONFLICT (organization_id, office_year)
+           DO UPDATE SET last_sequence = office_counters.last_sequence + 1
+           RETURNING last_sequence`,
+          [actor.organizationId, year],
+        )
+        const sequence = (counter.rows[0] as { last_sequence: number }).last_sequence
+        const officeNumber = `${year}/${sequence}`
+
+        await client.query(
+          `INSERT INTO cases (id, organization_id, office_year, office_sequence, office_number,
+             case_type, workflow_stage, notification_form_number, insurer_claim_number,
+             plate, plate_normalized, responsible_user_id, service_center_id, insurer_id, follow_up_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+          [
+            caseId,
+            actor.organizationId,
+            year,
+            sequence,
+            officeNumber,
+            input.caseType,
+            input.workflowStage,
+            input.notificationFormNumber ?? null,
+            input.insurerClaimNumber ?? null,
+            plate,
+            normalized,
+            input.responsibleUserId ?? null,
+            input.serviceId ?? null,
+            input.insurerId ?? null,
+            input.followUpDate ?? null,
+          ],
+        )
+
+        const row = await client.query(`SELECT ${SELECT_FIELDS} FROM cases WHERE id = $1`, [caseId])
+        const item = rowToDto(row.rows[0] as CaseRow)
+
+        await insertAudit(client, actor, 'case.created', caseId, {
+          officeCaseNumber: officeNumber,
+          caseType: input.caseType,
+        })
+        await client.query(
+          `INSERT INTO idempotency_keys (id, organization_id, scope, idem_key, request_hash, response_status, response_body, case_id)
+           VALUES ($1, $2, $3, $4, $5, 201, $6::jsonb, $7)`,
+          [
+            uuidv7(),
+            actor.organizationId,
+            idempotency.scope,
+            idempotency.key,
+            idempotency.requestHash,
+            JSON.stringify(idempotency.buildResponse(item)),
+            caseId,
+          ],
+        )
+        await client.query('COMMIT')
+        return item
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined)
+        const pgError = error as { code?: string; constraint?: string }
+        if (pgError.code === '23505' && pgError.constraint === 'idempotency_keys_unique') {
+          // Es zamanli ayni anahtar: transaction geri alindi, sayac tuketilmedi.
+          return null
+        }
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
+    /** Optimistic locking ile guvenli alan guncellemesi (PATCH semantigi). */
+    async updateCase(
+      actor: ActorContext,
+      caseId: string,
+      input: CaseUpdateRequest,
+    ): Promise<UpdateOutcome> {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const current = await client.query(
+          `SELECT version FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE`,
+          [caseId, actor.organizationId],
+        )
+        const existing = current.rows[0] as { version: number } | undefined
+        if (existing === undefined) {
+          await client.query('ROLLBACK')
+          return { kind: 'not_found' }
+        }
+        if (existing.version !== input.expectedVersion) {
+          await client.query('ROLLBACK')
+          return { kind: 'version_conflict' }
+        }
+
+        await assertReferences(client, actor.organizationId, input)
+
+        const columnByField: Record<string, string> = {
+          workflowStage: 'workflow_stage',
+          followUpDate: 'follow_up_date',
+          notificationFormNumber: 'notification_form_number',
+          insurerClaimNumber: 'insurer_claim_number',
+          responsibleUserId: 'responsible_user_id',
+          serviceId: 'service_center_id',
+          insurerId: 'insurer_id',
+        }
+        const sets: string[] = []
+        const params: unknown[] = []
+        const changedFields: string[] = []
+        for (const [field, column] of Object.entries(columnByField)) {
+          const value = (input as Record<string, unknown>)[field]
+          if (value === undefined) continue
+          params.push(value)
+          sets.push(`${column} = $${params.length}`)
+          changedFields.push(field)
+        }
+        params.push(caseId, actor.organizationId)
+        const updated = await client.query(
+          `UPDATE cases SET ${sets.join(', ')}, version = version + 1, updated_at = now()
+           WHERE id::text = $${params.length - 1} AND organization_id = $${params.length}
+           RETURNING ${SELECT_FIELDS}`,
+          params,
+        )
+        const item = rowToDto(updated.rows[0] as CaseRow)
+
+        await insertAudit(client, actor, 'case.updated', item.id, {
+          changedFields,
+          fromVersion: input.expectedVersion,
+          toVersion: item.version,
+        })
+        await client.query('COMMIT')
+        return { kind: 'ok', item }
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined)
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+  }
+}
+
+export type CasesWriteStore = ReturnType<typeof createCasesWriteStore>

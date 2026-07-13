@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "workflowStage": {
+      "type": "string",
+      "enum": [
+        "new_notification",
+        "vehicle_or_service_pending",
+        "inspection_pending",
+        "damage_assessment",
+        "parts_and_labor",
+        "repair_approval_pending",
+        "under_repair",
+        "reporting",
+        "closing_documents",
+        "ready_to_close"
+      ]
+    },
+    "followUpDate": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notificationFormNumber": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?=.*[A-Za-z0-9])[^\\\\\u0000-\u001f-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "insurerClaimNumber": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?=.*[A-Za-z0-9])[^\\\\\u0000-\u001f-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "responsibleUserId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "serviceId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "insurerId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "expectedVersion"
+  ],
+  "additionalProperties": false
+}

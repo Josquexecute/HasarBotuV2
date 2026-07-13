@@ -493,3 +493,16 @@ Kabul ölçütü: Anonim seed üzerinde liste/detay sözleşmeye uygun döner; e
 - [x] Kapılar: typecheck/lint/test(440)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
 
 Kabul ölçütü: Kabul edilmiş UI davranışı değişmeden DataPort sınırı çalışır; API kesintisinde UI mock ile kırılmadan sürer; sonraki tek mantıklı görev Paket 09'dur.
+
+## Aktif geliştirme paketi — Paket 09 dosya yazma komutları
+
+### Aşama 48 — kritik işlem modeli ile yazma uçları
+
+- [x] Contracts: `caseCreateRequestSchema` + `caseUpdateRequestSchema` (strict; `expectedVersion` zorunlu; en az bir alan); `IDEMPOTENCY_KEY_HEADER`; ofis no/lifecycle/plaka/tür komutla değiştirilemez; golden JSON Schema 8 → 10; dal `foundation/package-09-cases-write`.
+- [x] Migration 0004: `office_counters` (firma+yıl monoton sayaç) + `idempotency_keys` (org+scope+key benzersiz, saklanan yanıt).
+- [x] Yazma katmanı: tek transaction (referans → ofis no UPSERT RETURNING → kayıt → A1 audit → idempotency → COMMIT); başarısız transaction sayacı tüketmez; `SELECT ... FOR UPDATE` + `expectedVersion` optimistic locking; audit yalnız güvenli özet.
+- [x] Uçlar: POST `/api/v1/cases` (oturum + Idempotency-Key zorunlu, replay + `idempotency_conflict`), PATCH `/api/v1/cases/:caseId` (tenant kapsamlı, `version_conflict`, bilinmeyen referans 400).
+- [x] Testler: 9 gerçek-DB write testi + canlı HTTP yazma smoke 7/7.
+- [x] Kapılar: typecheck/lint/test(457)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
+
+Kabul ölçütü: Oluşturma sıralı ofis numarası atar ve idempotency tekrarında kopya üretmez; başarısız transaction ofis sayacını tüketmez; güncelleme optimistic locking ile bayat sürümü 409 reddeder; kapanış/yeniden açma bu pakette YOKTUR; sonraki tek mantıklı görev Paket 10'dur.

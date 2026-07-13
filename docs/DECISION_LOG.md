@@ -323,3 +323,21 @@ Gerekçe: Sessiz fallback, oturum/servis sorunlarını sahte veriyle gizleyerek 
 Etkisi: `fallback.ts` kaldırıldı; +6 durum testi ve 3 bileşen testi; UI testleri 39/39; canlı smoke 2/2 (oturumla gerçek eşleme, oturumsuz `unauthorized` türü).
 
 Kaynak: 2026-07-12 tarihli güvenlik düzeltmesi talimatı.
+
+## 2026-07-12 — HB-2026-015: Paket 09 dosya yazma komutları kararları
+
+Karar:
+
+1. Yazma uçları: `POST /api/v1/cases` (oluşturma) ve `PATCH /api/v1/cases/:caseId` (güvenli alan güncellemesi). Oturum zorunlu, tenant kapsamlı; her başarılı yazma A1 audit üretir (`case.created` / `case.updated`; details yalnız güvenli özet taşır: ofis no + tür / değişen alan adları + sürüm geçişi — plaka/PII yazılmaz).
+2. **Ofis numarası ataması** `office_counters` (firma+yıl) sayacından, oluşturma transaction'ı içinde `UPSERT ... RETURNING` ile yapılır: eşzamanlı güvenli, monoton, boşluksuz; başarısız transaction sayacı TÜKETMEZ; iptal/silinmede numara asla yeniden dağıtılmaz (HB-2026-008 G14 mekanik garantisi).
+3. **Optimistic locking:** güncelleme `expectedVersion` zorunludur; `SELECT ... FOR UPDATE` + sürüm karşılaştırması; uyuşmazlıkta 409 `version_conflict` ve veri ezilmez; başarıda `version + 1`.
+4. **Idempotency:** oluşturmada `Idempotency-Key` başlığı zorunludur (güvenli-ASCII 1..128). `idempotency_keys` (org+scope+key benzersiz) kaydı yanıtla birlikte AYNI transaction'da yazılır: aynı anahtar+aynı gövde → saklanan 201 aynen döner; aynı anahtar+farklı gövde → 409 `idempotency_conflict`; eşzamanlı yarışta unique ihlali yakalanıp saklanan yanıt okunur.
+5. Değiştirilemezler: `lifecycle_status` (kapanış/yeniden açma ayrı kritik işlem), `plate` ve `caseType` (fiziksel klasör kimliği; File Agent kapsamı), ofis numarası (sunucu atar). Referans alanları (`responsibleUserId`/`serviceId`/`insurerId`) org-içi varlık kontrolünden geçer; org-dışı referans 400 `unknown_reference`.
+6. Kritik işlem modeli uygulaması: doğrula → tek transaction'da uygula (numara+kayıt+audit+idempotency) → şema-doğrulanmış yanıt. UI önizleme/onay adımları UI komut adapter'ıyla birlikte ertelendi (madde 7).
+7. **Bilinçli erteleme:** plan kapsamındaki "UI komut adapter'ı" bu pakete alınmadı — login UI yokken tarayıcıdan kimlikli yazma anlamlı değildir; UI yazmaları mock modda kalır (planın geri alma stratejisiyle uyumlu). Fiziksel klasör, PDF analizi, File Agent ve poliçe motoru kullanıcı talimatıyla kapsam dışıdır.
+
+Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN Paket 09 + kullanıcı talimatı; concurrency/idempotency kararları API_CONTRACT_PLAN §1'in somutlaştırmasıdır (version taşıma yöntemi: request body `expectedVersion` olarak KAPANDI).
+
+Etkisi: Migration 0004 (`office_counters`, `idempotency_keys`); contracts +2 komut şeması (golden 10); API +11 uçtan uca yazma testi. `If-Match` alternatifi kapandı; kapanış/yeniden açma Paket 10+ kritik işlemidir.
+
+Kaynak: 2026-07-12 tarihli Paket 09 kullanıcı talimatı.

@@ -96,6 +96,15 @@ export {
   type CaseDetailResponse,
   type CaseListItem,
   type CaseListResponse,
+  // cases commands
+  CASE_UPDATABLE_FIELDS,
+  IDEMPOTENCY_KEY_HEADER,
+  caseCreateRequestSchema,
+  caseUpdateRequestSchema,
+  idempotencyKeySchema,
+  type CaseCreateRequest,
+  type CaseCreateRequestInput,
+  type CaseUpdateRequest,
   // cases mappers
   caseCoreToDetail,
   caseCoreToListItem,

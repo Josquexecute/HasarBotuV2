@@ -6,8 +6,10 @@ describe('JSON Schema uretimi', () => {
     expect(Object.keys(JSON_SCHEMA_TARGETS).sort()).toEqual([
       'auth-login-request',
       'auth-session-response',
+      'case-create-request',
       'case-detail-params',
       'case-detail-response',
+      'case-update-request',
       'cases-list-response',
       'cases-query',
       'failure-envelope',

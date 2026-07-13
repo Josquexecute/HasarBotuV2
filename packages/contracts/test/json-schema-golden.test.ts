@@ -20,8 +20,10 @@ const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'j
 const EXPECTED_NAMES: readonly JsonSchemaName[] = [
   'auth-login-request',
   'auth-session-response',
+  'case-create-request',
   'case-detail-params',
   'case-detail-response',
+  'case-update-request',
   'cases-list-response',
   'cases-query',
   'failure-envelope',

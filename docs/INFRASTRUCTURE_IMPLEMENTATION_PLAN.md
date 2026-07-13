@@ -153,6 +153,8 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Geri alma:** UI yazmaları mock/disabled moda al; endpoint'i kapat; veriyi silme.
 - **Kabul:** Yetkili kullanıcı dosya oluşturup güncelleyebilir; çakışma veri ezmeden görünür olur.
 
+- **Gerçekleşen sonuç (2026-07-13):** Tamamlandı. Contracts `caseCreateRequestSchema`/`caseUpdateRequestSchema` (strict, `expectedVersion` zorunlu, en az bir alan; ofis no/lifecycle/plaka/tür değiştirilemez), `IDEMPOTENCY_KEY_HEADER`; golden JSON Schema 8 → 10. Migration 0004: `office_counters` (firma+yıl monoton) + `idempotency_keys`. Yazma katmanı tek transaction (referans → ofis no UPSERT RETURNING → kayıt → A1 audit → idempotency → COMMIT); başarısız transaction ofis sayacını tüketmez ve numara yeniden dağıtılmaz; `SELECT ... FOR UPDATE` + `expectedVersion` optimistic locking (409 `version_conflict`); audit yalnız güvenli özet (plaka/PII yok). POST create (Idempotency-Key zorunlu, replay + `idempotency_conflict`) ve PATCH update (tenant kapsamlı, bilinmeyen referans 400). 9 gerçek-DB write testi + canlı HTTP yazma smoke 7/7; toplam 457/457. Kapanış/yeniden açma ve UI komut adapter'ı bilinçli olarak ertelendi (login UI henüz yok) (HB-2026-015). Sonraki paket Paket 10'dur.
+
 ### Paket 10 — Audit altyapısı
 
 - **Amaç:** Kritik ve kalıcı işlemler için merkezi, salt eklemeli audit kanıtı kurmak.

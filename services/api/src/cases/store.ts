@@ -13,7 +13,7 @@ import {
  * dogrulanir (sozlesme kaymasi calisma zamaninda yakalanir).
  */
 
-interface CaseRow {
+export interface CaseRow {
   id: string
   case_type: 'traffic' | 'casco'
   office_number: string
@@ -40,7 +40,7 @@ function toLocalDateString(value: Date): string {
   return `${year}-${month}-${day}`
 }
 
-function rowToDto(row: CaseRow): CaseListItem {
+export function rowToDto(row: CaseRow): CaseListItem {
   return caseListItemSchema.parse({
     id: row.id,
     caseType: row.case_type,
@@ -69,7 +69,7 @@ const SORT_COLUMNS: Record<CasesQuery['sortBy'], string> = {
   plate: 'plate_normalized',
 }
 
-const SELECT_FIELDS = `
+export const SELECT_FIELDS = `
   id, case_type, office_number, notification_form_number, insurer_claim_number,
   plate, lifecycle_status, workflow_stage, responsible_user_id, service_center_id,
   insurer_id, follow_up_date, last_intervention_at, created_at, updated_at, version

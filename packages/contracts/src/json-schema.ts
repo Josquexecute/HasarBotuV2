@@ -3,6 +3,7 @@ import { failureEnvelopeSchema } from './common/envelope.js'
 import { healthResponseSchema } from './health/index.js'
 import { loginRequestSchema, sessionResponseSchema } from './v1/auth/index.js'
 import { casesQuerySchema } from './v1/cases/query.js'
+import { caseCreateRequestSchema, caseUpdateRequestSchema } from './v1/cases/commands.js'
 import {
   caseDetailParamsSchema,
   caseDetailResponseSchema,
@@ -19,6 +20,8 @@ export const JSON_SCHEMA_TARGETS = {
   'auth-login-request': loginRequestSchema,
   'auth-session-response': sessionResponseSchema,
   'cases-query': casesQuerySchema,
+  'case-create-request': caseCreateRequestSchema,
+  'case-update-request': caseUpdateRequestSchema,
   'cases-list-response': caseListResponseSchema,
   'case-detail-params': caseDetailParamsSchema,
   'case-detail-response': caseDetailResponseSchema,

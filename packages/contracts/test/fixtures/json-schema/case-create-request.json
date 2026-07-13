@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "caseType": {
+      "type": "string",
+      "enum": [
+        "traffic",
+        "casco"
+      ]
+    },
+    "plate": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "x-hasarbotu-runtime-validation": "plate-number-canonical-form"
+    },
+    "workflowStage": {
+      "default": "new_notification",
+      "type": "string",
+      "enum": [
+        "new_notification",
+        "vehicle_or_service_pending",
+        "inspection_pending",
+        "damage_assessment",
+        "parts_and_labor",
+        "repair_approval_pending",
+        "under_repair",
+        "reporting",
+        "closing_documents",
+        "ready_to_close"
+      ]
+    },
+    "notificationFormNumber": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?=.*[A-Za-z0-9])[^\\\\\u0000-\u001f-]{1,128}$"
+    },
+    "insurerClaimNumber": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?=.*[A-Za-z0-9])[^\\\\\u0000-\u001f-]{1,128}$"
+    },
+    "responsibleUserId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "serviceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "insurerId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "followUpDate": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "x-hasarbotu-runtime-validation": "calendar-date-validity"
+    }
+  },
+  "required": [
+    "caseType",
+    "plate",
+    "workflowStage"
+  ],
+  "additionalProperties": false
+}

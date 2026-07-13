@@ -47,6 +47,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0001_organizations',
       '0002_users_roles_sessions',
       '0003_cases_read_model',
+      '0004_case_write_support',
     ])
 
     const tables = await pool.query(
@@ -55,7 +56,9 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(tables.rows.map((r: { table_name: string }) => r.table_name)).toEqual([
       'audit_events',
       'cases',
+      'idempotency_keys',
       'insurers',
+      'office_counters',
       'organizations',
       'pgmigrations',
       'roles',
