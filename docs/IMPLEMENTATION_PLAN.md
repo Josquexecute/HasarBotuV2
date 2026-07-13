@@ -550,3 +550,16 @@ Kabul ölçütü: Audit tek merkezi katmandan, iş işlemiyle atomik yazılır; 
 - [x] Kapılar: typecheck/lint(0 uyarı)/test(558)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
 
 Kabul ölçütü: DB yalnız mantıksal rootKey + güvenli göreli yol saklar (mutlak `P:\`/sürücü/UNC yazılmaz); traversal/absolute/backslash hem uygulama hem DB CHECK ile reddedilir; konum atama optimistic locking + kiracı izolasyonu + merkezi audit ile atomiktir; geçmiş append-only; mutlak yol yanıt/audit/log'a sızmaz; pCloud/`P:\` mevcut kök belgelenir ve başka disk/NAS'a config ile taşınabilir; gerçek klasör işlemleri/File Agent/P: tarama/close-reopen/Electron/fiziksel yükleme/UI kapsam dışıdır.
+
+## Aktif geliştirme paketi — Paket 13 belge/belge sürümü/fotoğraf metadata temeli
+
+### Aşama 52 — metadata modeli + güvenli registration + doğrulama-hazır durum
+
+- [x] Domain `file-metadata.ts`: güvenli dosya adı, uzantı türetimi, uzantı↔MIME tutarlılığı (allow-list), SHA-256 biçimi; +9 birim testi; dal `foundation/package-13-document-metadata`.
+- [x] Contracts `v1/documents`: durum/kaynak enum, belge/sürüm/fotoğraf dto, register komutları, liste sorgusu; golden 16→21.
+- [x] Migration 0007: `documents` (optimistic `version`), `document_versions` (immutable + `ready` CHECK + previous-version), `photos`; `metadata_append_guard` (DELETE + kayıtlı-gerçek değişimi reddi, yalnız doğrulama alanları güncellenebilir); safe-path CHECK + unique path.
+- [x] API + `db/idempotency.ts`: `POST /cases/:caseId/documents` (yeni belge/sürüm, optimistic lock, zorunlu Idempotency-Key, MIME/uzantı + kategori + tehlikeli-ad doğrulaması, duplicate tespiti/birleştirmesiz), `POST /cases/:caseId/photos`; salt-okunur `GET` liste/detay uçları. Kayıt daima `pending`; merkezi audit; mutlak yol sızmaz.
+- [x] Testler: +12 API testi (kayıt/sürüm/optimistic-lock/idempotency/MIME-uyuşmazlık/tehlikeli-ad/duplicate/kategori/tenant/okuma/ready-CHECK/immutable/append-only/audit-no-absolute) + canlı HTTP güvenlik smoke.
+- [x] Kapılar: typecheck/lint(0 uyarı)/test(584)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
+
+Kabul ölçütü: Belge/sürüm/fotoğraf metadata'sı tenant izolasyonlu kaydedilir; kayıt daima `pending`; istemci/genel API `ready`/hash-doğrulandı/dosya-mevcut sonucunu belirleyemez (DB CHECK + append-only trigger ile mekanik zorlama); `content_hash` yalnız beyandır; MIME/uzantı uyuşmazlığı ve tehlikeli ad reddedilir; aynı dosya tespit edilir ama vakalar arası sessiz birleştirme yapılmaz; sürüm geçmişi append-only + optimistic locking; okuma uçları kiracı kapsamlıdır; mutlak yol yanıt/audit/log'a sızmaz; File Agent doğrulama akışı belgelenir; gerçek yükleme/içerik/OCR/thumbnail/AI/File Agent/close-reopen/UI kapsam dışıdır.

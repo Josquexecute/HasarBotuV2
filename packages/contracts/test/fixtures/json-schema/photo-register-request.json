@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "sourceType": {
+      "type": "string",
+      "enum": [
+        "upload",
+        "email",
+        "scan",
+        "imported",
+        "manual"
+      ]
+    },
+    "originalFileName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "x-hasarbotu-runtime-validation": "safe-file-name"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "mimeType": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9.+-]*\\/[a-z0-9][a-z0-9.+-]*$"
+    },
+    "byteSize": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5368709120
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "storageRootKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400,
+      "x-hasarbotu-runtime-validation": "safe-relative-path"
+    }
+  },
+  "required": [
+    "sourceType",
+    "originalFileName",
+    "mimeType",
+    "byteSize",
+    "contentHash",
+    "storageRootKey",
+    "relativePath"
+  ],
+  "additionalProperties": false
+}

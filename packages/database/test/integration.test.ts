@@ -50,6 +50,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0004_case_write_support',
       '0005_audit_append_only',
       '0006_storage_location',
+      '0007_document_metadata',
     ])
 
     const tables = await pool.query(
@@ -60,11 +61,14 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'case_location_history',
       'case_locations',
       'cases',
+      'document_versions',
+      'documents',
       'idempotency_keys',
       'insurers',
       'office_counters',
       'organizations',
       'pgmigrations',
+      'photos',
       'roles',
       'service_centers',
       'sessions',

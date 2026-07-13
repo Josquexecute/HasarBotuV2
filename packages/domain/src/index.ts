@@ -98,4 +98,18 @@ export {
   type StorageLocation,
   type StorageRootKey,
 } from './storage-path.js'
+export {
+  ALLOWED_FILE_TYPES,
+  MAX_DISPLAY_NAME_LENGTH,
+  MAX_FILE_NAME_LENGTH,
+  extractExtension,
+  fileCategoryOf,
+  isMimeExtensionConsistent,
+  parseOriginalFileName,
+  parseSha256Hex,
+  toSafeDisplayName,
+  type FileCategory,
+  type SafeFileName,
+  type Sha256Hex,
+} from './file-metadata.js'
 export type { CaseCore } from './case-core.js'

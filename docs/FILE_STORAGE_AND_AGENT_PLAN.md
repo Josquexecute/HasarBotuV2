@@ -34,6 +34,23 @@ Bu temel UYGULANDI (fiziksel işlemler ve File Agent hâlâ ayrı):
 - Güvenli göreli yol doğrulaması hem uygulamada (domain `parseRelativePath`) hem veritabanı CHECK'inde zorlanır: `..`, absolute, sürücü ön eki, UNC/backslash, kontrol karakteri, Windows yasak karakter/aygıt adı reddedilir.
 - Konum atama/değiştirme oturum + kiracı kapsamlı, optimistic locking'li ve merkezi audit'e (Paket 11) atomik bağlıdır; mutlak yol yanıt/audit/log'a sızmaz. Fiziksel klasör oluşturma/taşıma/rename, `verified` geçişi ve `P:` tarama bu pakette YOKTUR.
 
+### 2.2 Metadata durum modeli ve File Agent doğrulaması (Paket 13 — HB-2026-019)
+
+Belge/fotoğraf META VERİSİ UYGULANDI (fiziksel işlemler ve File Agent hâlâ ayrı):
+
+- `documents` (mantıksal slot, optimistic `version`), `document_versions` (immutable kayıtlı gerçek + doğrulama durumu, önceki sürüm ilişkisi) ve `photos` (bağımsız kayıt) tabloları (Migration 0007). Alanlar: orijinal ad, güvenli gösterim adı, uzantı, MIME, byte boyutu, SHA-256 (BEYAN), `storage_root_key` + güvenli göreli yol (mutlak yol yok), belge/kaynak türü.
+- **Durum modeli** `pending | ready | failed | missing`. Kayıt DAİMA `pending` başlar. Public API veya normal istemci `ready`/doğrulama sonucunu BELİRLEYEMEZ (registration şeması bu alanları içermez). Veritabanı CHECK'i `ready`yi yalnız `hash_verified AND size_verified AND verified_at IS NOT NULL` iken mümkün kılar — fiziksel dosya doğrulanmadan `ready` OLUŞAMAZ.
+- **Append-only + immutable:** `metadata_append_guard` trigger'ı `document_versions`/`photos` üzerinde DELETE'i ve kayıtlı gerçeklerin (ad/hash/boyut/yol/tür/...) değiştirilmesini reddeder; YALNIZ doğrulama alanları (`status`, `hash_verified`, `size_verified`, `verified_at`) güncellenebilir.
+
+**File Agent doğrulaması (ileride, bu pakette YOK):**
+
+1. API `pending` metadata + göreli yol + BEYAN edilen SHA-256/boyut kaydeder (güvenilmez beyan; kesinleştirilmez).
+2. File Agent, `storage_root_key`'i yerel config'teki mutlak köke çözer ve göreli yolu kök-içinde güvenle birleştirir (traversal kontrolü tekrarlanır).
+3. Fiziksel dosya okunur; SHA-256 ve byte boyutu YENİDEN hesaplanır.
+4. Eşleşme varsa File Agent AYRICALIKLI yolla (public API değil) yalnız doğrulama alanlarını damgalar: `hash_verified=true`, `size_verified=true`, `verified_at=now()`, `status='ready'` (guard bu güncellemeye izin verir, ready CHECK'i sağlanır).
+5. Hash/boyut uyuşmazlığında `status='failed'`; dosya bulunamazsa `status='missing'`. Her geçiş merkezi audit olayı üretir.
+6. Beyan edilen hash ile doğrulanan hash ASLA otomatik olarak birbirinin yerine geçmez; uyuşmazlık reconciliation/manuel-drift sinyalidir (§10, §14).
+
 ## 3. Göreli yol ve klasör standardı
 
 Önerilen canonical format:

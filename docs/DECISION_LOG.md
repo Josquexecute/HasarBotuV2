@@ -393,3 +393,20 @@ Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN dosya depolama sırası + kullanıc
 Etkisi: Migration 0006 (`storage_roots`, `case_locations`, `case_location_history` + `append_only_guard`); domain `storage-path.ts` (+35 birim testi); contracts storage primitives + `v1/storage` (+4 golden şema, 12→16); yeni `services/api/src/storage/*`; app.ts kayıt. +12 API testi (atama/optimistic-lock/tenant/unknown-root/traversal-red/geçmiş/audit-no-absolute/DB-CHECK/append-only) + canlı HTTP güvenlik smoke 10/10.
 
 Kaynak: 2026-07-13 tarihli Paket 12 kullanıcı talimatı.
+
+## 2026-07-13 — HB-2026-019: Paket 13 belge, belge sürümü ve fotoğraf metadata temeli
+
+Karar:
+
+1. **Model:** `documents` (mantıksal slot, optimistic `version`), `document_versions` (immutable kayıtlı gerçek + doğrulama durumu + `previous_version_id`) ve `photos` (bağımsız kayıt) tabloları (Migration 0007), org/case tenant izolasyonu, UUIDv7 kimlikler. Alanlar: orijinal ad, güvenli gösterim adı, uzantı, MIME, byte boyutu, SHA-256 (BEYAN), `storage_root_key` + güvenli göreli yol, belge türü (slug) + kaynak türü (enum). Yalnız METADATA; dosya içeriği yoktur.
+2. **Durum + `ready` değişmezi:** `status ∈ {pending, ready, failed, missing}`; kayıt DAİMA `pending`. Registration şeması `status`/`hash_verified`/`size_verified`/`verified_at`'i İÇERMEZ — istemci/genel API `ready`'yi belirleyemez. Veritabanı CHECK'i `ready`'yi yalnız `hash_verified AND size_verified AND verified_at IS NOT NULL` iken mümkün kılar: fiziksel dosya doğrulanmadan `ready` OLUŞAMAZ. `content_hash` istemci BEYANIDIR ve doğrulanmış sayılmaz.
+3. **Append-only + immutable:** `metadata_append_guard` trigger'ı `document_versions`/`photos` üzerinde DELETE'i ve kayıtlı gerçeklerin değişmesini reddeder; yalnız doğrulama alanları (status/hash_verified/size_verified/verified_at) ileride File Agent tarafından AYRICALIKLI yolla güncellenebilir (public API bu yolu sağlamaz). Geçiş mekanizması `FILE_STORAGE_AND_AGENT_PLAN.md` §2.2'de belgelendi.
+4. **Registration sınırı + idempotency:** `POST /cases/:caseId/documents` (yeni belge veya mevcut belgeye `documentId`+`expectedVersion` ile yeni sürüm; optimistic locking, 409 conflict) ve `POST /cases/:caseId/photos`; her ikisi oturum + zorunlu `Idempotency-Key` (Paket 09 `idempotency_keys` yeniden kullanıldı; aynı anahtar+gövde replay, farklı gövde 409). `extension` istemciden ALINMAZ; sunucu addan türetir ve `mimeType` tutarlılığını doğrular (uyuşmazlık 400); tehlikeli dosya adı (ayraç/traversal/kontrol/aygıt-adı) reddedilir; kategori (document/photo) uzantıyla eşleşmelidir.
+5. **Duplicate tespiti, birleştirme YOK:** aynı `content_hash` vaka içinde `sameCaseVersionId`/`sameCasePhotoId` ile raporlanır, diğer vakalarda `otherCaseCount` ile sayılır; ancak vakalar arası SESSİZ otomatik birleştirme yapılmaz (farklı vaka → farklı belge).
+6. **Okuma + audit:** oturum + kiracı kapsamlı salt-okunur liste/detay (`GET /cases/:caseId/documents`, `GET /documents/:id` sürümlerle, `GET /cases/:caseId/photos`, `GET /photos/:id`). Her kayıt merkezi audit (Paket 11) üretir; audit details ve tüm yanıtlar yalnız göreli yol taşır — mutlak yol sızmaz. Kapsam dışı: gerçek yükleme/kopyalama/silme, içerik okuma, PDF/foto AI, OCR, thumbnail, File Agent, close/reopen, UI.
+
+Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN "Paket 11 — Dosya meta verisi" + kullanıcı talimatı; FILE_STORAGE_AND_AGENT_PLAN §4-6 (dosya adı güvenliği, atomik kesinleştirme, hash/duplicate) temel alındı. `ready` yalnız güvenilir doğrulama sonrası ilkesi (§1, §14) DB CHECK + trigger ile mekanik olarak zorlandı.
+
+Etkisi: Migration 0007 (`documents`, `document_versions`, `photos` + `metadata_append_guard`); domain `file-metadata.ts` (+9 birim testi); contracts `v1/documents` (+5 golden şema, 16→21); yeni `services/api/src/documents/*` + `src/db/idempotency.ts`; app.ts kayıt. +12 API testi (kayıt/sürüm/optimistic-lock/idempotency/MIME-uyuşmazlık/tehlikeli-ad/duplicate/kategori/tenant/okuma/ready-CHECK/immutable/append-only/audit-no-absolute) + canlı HTTP güvenlik smoke.
+
+Kaynak: 2026-07-13 tarihli Paket 13 kullanıcı talimatı.

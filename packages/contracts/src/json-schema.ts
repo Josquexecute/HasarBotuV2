@@ -17,6 +17,12 @@ import {
   caseLocationResponseSchema,
   storageRootsResponseSchema,
 } from './v1/storage/dto.js'
+import { registerDocumentRequestSchema, registerPhotoRequestSchema } from './v1/documents/commands.js'
+import {
+  documentDetailResponseSchema,
+  documentsListResponseSchema,
+  photosListResponseSchema,
+} from './v1/documents/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -39,6 +45,11 @@ export const JSON_SCHEMA_TARGETS = {
   'case-location-assign-request': caseLocationAssignRequestSchema,
   'case-location-response': caseLocationResponseSchema,
   'case-location-history-response': caseLocationHistoryResponseSchema,
+  'document-register-request': registerDocumentRequestSchema,
+  'photo-register-request': registerPhotoRequestSchema,
+  'documents-list-response': documentsListResponseSchema,
+  'document-detail-response': documentDetailResponseSchema,
+  'photos-list-response': photosListResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS
