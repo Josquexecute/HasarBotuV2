@@ -21,6 +21,8 @@ import {
   SESSION_COOKIE_NAME,
 } from './cookies.js'
 import { hashSessionToken } from './token.js'
+import { withTransaction } from '../db/executor.js'
+import { createAuditService } from '../audit/service.js'
 
 export interface AuthRoutesOptions {
   readonly pool: pg.Pool
@@ -43,6 +45,7 @@ export const DEFAULT_LOGIN_RATE_LIMIT: Pick<FixedWindowOptions, 'limit' | 'windo
  */
 export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOptions): void {
   const store = createAuthStore(options.pool)
+  const audit = createAuditService()
   const limiter = createFixedWindowLimiter({
     ...(options.loginRateLimit ?? DEFAULT_LOGIN_RATE_LIMIT),
   })
@@ -60,7 +63,13 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     }
 
     const outcome = await login(
-      { store, limiter, ...(options.sessionTtlSeconds !== undefined ? { sessionTtlSeconds: options.sessionTtlSeconds } : {}) },
+      {
+        store,
+        limiter,
+        pool: options.pool,
+        audit,
+        ...(options.sessionTtlSeconds !== undefined ? { sessionTtlSeconds: options.sessionTtlSeconds } : {}),
+      },
       { email: parsed.data.email, password: parsed.data.password, ip: request.ip, requestId },
     )
 
@@ -101,17 +110,21 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     const token = parseCookies(request.headers.cookie)[SESSION_COOKIE_NAME]
     if (token !== undefined && token.length > 0) {
       const tokenHash = hashSessionToken(token)
-      const session = await store.findActiveSession(tokenHash)
-      const revoked = await store.revokeSession(tokenHash)
-      if (revoked) {
-        await store.insertAudit({
-          action: 'auth.logout',
-          requestId,
-          ...(session !== undefined
-            ? { organizationId: session.user.organizationId, actorUserId: session.user.id }
-            : {}),
-        })
-      }
+      // Oturum iptali + audit AYNI transaction'da: iptal edildiyse mutlaka
+      // audit'lenir, audit yazilamazsa iptal geri alinir (yarim kayit olmaz).
+      await withTransaction(options.pool, async (client) => {
+        const session = await store.findActiveSession(tokenHash, client)
+        const revoked = await store.revokeSession(tokenHash, client)
+        if (revoked) {
+          await audit.record(client, {
+            action: 'auth.logout',
+            requestId,
+            ...(session !== undefined
+              ? { organizationId: session.user.organizationId, actorUserId: session.user.id }
+              : {}),
+          })
+        }
+      })
     }
     void reply.header('set-cookie', buildClearSessionCookie({ secure: options.cookieSecure }))
     return reply.code(204).send()

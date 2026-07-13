@@ -172,6 +172,8 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Geri alma:** Yeni özellikleri kapat; mevcut audit kayıtlarını koru; tabloyu silme.
 - **Kabul:** Dosya yazımının kim/ne/zaman/sonuç kanıtı hassas veri çoğaltmadan sorgulanır.
 
+- **Gerçekleşen sonuç (2026-07-13, kullanıcı "Paket 11" olarak yönlendirdi):** Tamamlandı. Tek merkezi `AuditService.record(executor, event)` mevcut `audit_events` tablosuna yazar (paralel sistem yok); executor (havuz/transaction istemcisi) sayesinde audit iş yazımıyla ATOMIK. Migration 0005 `BEFORE UPDATE/DELETE` trigger'ı ile append-only'yi veritabanı seviyesinde zorlar + kiracı/varlık indeksleri. Redaksiyon parola/token/cookie/session/hash/tam poliçe metni/PII'yi alan adına göre `[redacted]` yapar, uzun metni kırpar; `summarizeChange` güvenli eski/yeni özet. Login/logout/kilit/oturum-iptali + case create/update merkeze taşındı (`store.insertAudit` kaldırıldı; auth `withTransaction` ile atomik). Salt-okunur `GET /api/v1/audit-events` oturum + yönetici (403 aksi), kiracı-kapsamlı, strict filtre + sınırlı pagination. Contracts +2 şema (golden 12). +17 API testi (append-only reddi, redaksiyon, atomik rollback, olaylar, sorgu, kiracı izolasyonu, 401/403) + birim + canlı HTTP güvenlik smoke 7/7; toplam 507/507. Retention/export yalnız plan (`AUDIT_SECURITY_AND_BACKUP_PLAN.md` §6.5); UI audit ekranı/close-reopen/File Agent/SIEM/üretim migration kapsam dışı (HB-2026-017).
+
 ### Paket 11 — Dosya meta verisi
 
 - **Amaç:** Fiziksel içeriğe dokunmadan belge/fotoğraf meta verisi ve göreceli yol modelini kurmak.

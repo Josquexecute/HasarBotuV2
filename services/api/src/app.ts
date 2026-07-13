@@ -4,6 +4,7 @@ import { registerHealthRoute } from './routes/index.js'
 import { registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
 import { registerCasesRoutes } from './cases/routes.js'
 import { registerCasesWriteRoutes } from './cases/write-routes.js'
+import { registerAuditRoutes } from './audit/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -86,6 +87,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerAuthRoutes(app, options.auth)
     registerCasesRoutes(app, { pool: options.auth.pool })
     registerCasesWriteRoutes(app, { pool: options.auth.pool })
+    registerAuditRoutes(app, { pool: options.auth.pool })
   }
 
   return app

@@ -4,6 +4,7 @@ import type { CaseCreateRequest, CaseUpdateRequest, CaseListItem } from '@hasarb
 import { parsePlateNumber, plateSearchKey } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { rowToDto, SELECT_FIELDS, type CaseRow } from './store.js'
+import { createAuditService } from '../audit/service.js'
 
 /**
  * Cases yazma katmani (Paket 09) — kritik islem modeli:
@@ -65,21 +66,8 @@ async function assertReferences(
   }
 }
 
-async function insertAudit(
-  client: pg.PoolClient,
-  actor: ActorContext,
-  action: string,
-  caseId: string,
-  details: Readonly<Record<string, unknown>>,
-): Promise<void> {
-  await client.query(
-    `INSERT INTO audit_events (id, organization_id, actor_user_id, action, resource_type, resource_id, request_id, details)
-     VALUES ($1, $2, $3, $4, 'case', $5, $6, $7::jsonb)`,
-    [uuidv7(), actor.organizationId, actor.actorUserId, action, caseId, actor.requestId, JSON.stringify(details)],
-  )
-}
-
 export function createCasesWriteStore(pool: pg.Pool) {
+  const audit = createAuditService()
   return {
     async findIdempotent(
       organizationId: string,
@@ -162,9 +150,14 @@ export function createCasesWriteStore(pool: pg.Pool) {
         const row = await client.query(`SELECT ${SELECT_FIELDS} FROM cases WHERE id = $1`, [caseId])
         const item = rowToDto(row.rows[0] as CaseRow)
 
-        await insertAudit(client, actor, 'case.created', caseId, {
-          officeCaseNumber: officeNumber,
-          caseType: input.caseType,
+        await audit.record(client, {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          requestId: actor.requestId,
+          action: 'case.created',
+          entityType: 'case',
+          entityId: caseId,
+          details: { officeCaseNumber: officeNumber, caseType: input.caseType },
         })
         await client.query(
           `INSERT INTO idempotency_keys (id, organization_id, scope, idem_key, request_hash, response_status, response_body, case_id)
@@ -247,10 +240,14 @@ export function createCasesWriteStore(pool: pg.Pool) {
         )
         const item = rowToDto(updated.rows[0] as CaseRow)
 
-        await insertAudit(client, actor, 'case.updated', item.id, {
-          changedFields,
-          fromVersion: input.expectedVersion,
-          toVersion: item.version,
+        await audit.record(client, {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          requestId: actor.requestId,
+          action: 'case.updated',
+          entityType: 'case',
+          entityId: item.id,
+          details: { changedFields, fromVersion: input.expectedVersion, toVersion: item.version },
         })
         await client.query('COMMIT')
         return { kind: 'ok', item }

@@ -48,6 +48,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0002_users_roles_sessions',
       '0003_cases_read_model',
       '0004_case_write_support',
+      '0005_audit_append_only',
     ])
 
     const tables = await pool.query(

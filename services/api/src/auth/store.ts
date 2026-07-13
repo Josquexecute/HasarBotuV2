@@ -1,6 +1,7 @@
 import type pg from 'pg'
 import { uuidv7 } from '@hasarbotu/database'
 import type { RoleCode } from '@hasarbotu/contracts'
+import type { Queryable } from '../db/executor.js'
 
 /**
  * Auth veri erisimi. Yalniz parametreli sorgular; ham parola asla saklanmaz,
@@ -70,13 +71,18 @@ export function createAuthStore(pool: pg.Pool) {
       return row === undefined ? undefined : mapUser(row)
     },
 
-    /** Basarisiz girisi sayar; esik asilirsa hesabi kilitler. Yeni sayaci dondurur. */
+    /**
+     * Basarisiz girisi sayar; esik asilirsa hesabi kilitler. Yeni sayaci
+     * dondurur. `exec` verilirse (transaction istemcisi) UPDATE ile audit
+     * kaydi ayni transaction'da atomik yazilabilir.
+     */
     async recordFailedLogin(
       userId: string,
       maxFailures: number,
       lockMinutes: number,
+      exec: Queryable = pool,
     ): Promise<{ failedLoginCount: number; lockedUntil: Date | null }> {
-      const result = await pool.query(
+      const result = await exec.query(
         `UPDATE users
          SET failed_login_count = failed_login_count + 1,
              locked_until = CASE WHEN failed_login_count + 1 >= $2
@@ -91,28 +97,26 @@ export function createAuthStore(pool: pg.Pool) {
       return { failedLoginCount: row.failed_login_count, lockedUntil: row.locked_until }
     },
 
-    async resetFailedLogins(userId: string): Promise<void> {
-      await pool.query(
+    async resetFailedLogins(userId: string, exec: Queryable = pool): Promise<void> {
+      await exec.query(
         'UPDATE users SET failed_login_count = 0, locked_until = NULL, updated_at = now() WHERE id = $1',
         [userId],
       )
     },
 
-    async createSession(input: {
-      tokenHash: string
-      userId: string
-      organizationId: string
-      expiresAt: Date
-    }): Promise<void> {
-      await pool.query(
+    async createSession(
+      input: { tokenHash: string; userId: string; organizationId: string; expiresAt: Date },
+      exec: Queryable = pool,
+    ): Promise<void> {
+      await exec.query(
         'INSERT INTO sessions (id, token_hash, user_id, organization_id, expires_at) VALUES ($1, $2, $3, $4, $5)',
         [uuidv7(), input.tokenHash, input.userId, input.organizationId, input.expiresAt],
       )
     },
 
     /** Aktif (suresi gecmemis, iptal edilmemis) oturumu aktif kullaniciyla dondurur. */
-    async findActiveSession(tokenHash: string): Promise<SessionRow | undefined> {
-      const result = await pool.query(
+    async findActiveSession(tokenHash: string, exec: Queryable = pool): Promise<SessionRow | undefined> {
+      const result = await exec.query(
         `SELECT s.expires_at AS session_expires_at,
                 u.id, u.organization_id, u.email, u.display_name, u.password_hash,
                 u.status, u.failed_login_count, u.locked_until,
@@ -132,34 +136,12 @@ export function createAuthStore(pool: pg.Pool) {
     },
 
     /** Oturumu iptal eder; zaten iptal edilmisse etkisizdir (idempotent). */
-    async revokeSession(tokenHash: string): Promise<boolean> {
-      const result = await pool.query(
+    async revokeSession(tokenHash: string, exec: Queryable = pool): Promise<boolean> {
+      const result = await exec.query(
         'UPDATE sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL',
         [tokenHash],
       )
       return (result.rowCount ?? 0) > 0
-    },
-
-    /** Append-only audit kaydi; details icine ham parola/token/e-posta yazilmaz. */
-    async insertAudit(event: {
-      organizationId?: string
-      actorUserId?: string
-      action: string
-      requestId?: string
-      details?: Readonly<Record<string, string | number | boolean>>
-    }): Promise<void> {
-      await pool.query(
-        `INSERT INTO audit_events (id, organization_id, actor_user_id, action, request_id, details)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
-        [
-          uuidv7(),
-          event.organizationId ?? null,
-          event.actorUserId ?? null,
-          event.action,
-          event.requestId ?? null,
-          JSON.stringify(event.details ?? {}),
-        ],
-      )
     },
   }
 }

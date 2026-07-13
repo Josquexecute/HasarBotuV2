@@ -521,3 +521,19 @@ Kabul ölçütü: Oluşturma sıralı ofis numarası atar ve idempotency tekrar�
 - [x] Kapılar: typecheck/lint(0 uyarı)/test(488)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
 
 Kabul ölçütü: api modda oturumsuz kullanıcı login ekranı görür, giriş sonrası korumalı rotalar açılır, 401 güvenli "oturum sona erdi" akışı çalışır ve mock veri gerçek hatayı maskelemez; kabul edilmiş UI baseline'i (mock mod) değişmez; Google girişi/şifre sıfırlama/e-posta/close-reopen/File Agent/poliçe motoru kapsam dışıdır.
+
+## Aktif geliştirme paketi — Paket 11 merkezi audit altyapısı
+
+> Bu paket, altyapı planındaki özgün "Paket 10 — Audit altyapısı"nı gerçekler (HB-2026-016 ile ötelenmişti).
+
+### Aşama 50 — merkezi, append-only, redaksiyonlu audit + sorgu API'si
+
+- [x] Tek merkezi `AuditService.record(executor, event)` mevcut `audit_events` tablosuna yazar (paralel sistem yok); executor sayesinde iş transaction'ıyla atomik; dal `foundation/package-11-central-audit`.
+- [x] Migration 0005: `BEFORE UPDATE/DELETE` trigger'ı ile veritabanı seviyesinde append-only + kiracı/varlık indeksleri.
+- [x] Redaksiyon (`redact.ts`): hassas alan adı → `[redacted]`, uzun metin kırpma, derinlik/eleman sınırı; `summarizeChange` güvenli eski/yeni özet.
+- [x] Merkeze taşıma: login/logout/kilit/oturum-iptali + case create/update; `store.insertAudit` kaldırıldı; auth yazımları `withTransaction` ile atomik.
+- [x] Salt-okunur `GET /api/v1/audit-events`: oturum + yönetici (403 aksi), kiracı-kapsamlı, strict filtre + sınırlı pagination; yazma ucu yok. Contracts +2 şema (golden 12).
+- [x] Testler: +17 API testi (append-only reddi, redaksiyon, atomik rollback, merkezi olaylar, sorgu, kiracı izolasyonu, 401/403) + redaksiyon birim + canlı HTTP güvenlik smoke 7/7.
+- [x] Kapılar: typecheck/lint(0 uyarı)/test(507)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
+
+Kabul ölçütü: Audit tek merkezi katmandan, iş işlemiyle atomik yazılır; append-only DB'de zorlanır (UPDATE/DELETE reddedilir); parola/token/cookie/tam poliçe metni audit'e sızmaz; sorgu API'si yalnız yetkili kullanıcıya kiracı-kapsamlı, filtreli ve sayfalı sonuç döner; retention/export yalnız plandır; UI audit ekranı/close-reopen/File Agent/SIEM/üretim migration kapsam dışıdır.

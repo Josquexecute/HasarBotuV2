@@ -4,6 +4,8 @@ import { JSON_SCHEMA_TARGETS, buildJsonSchemas } from '../src/index.js'
 describe('JSON Schema uretimi', () => {
   it('beklenen hedef semalari icerir', () => {
     expect(Object.keys(JSON_SCHEMA_TARGETS).sort()).toEqual([
+      'audit-events-query',
+      'audit-events-response',
       'auth-login-request',
       'auth-session-response',
       'case-create-request',

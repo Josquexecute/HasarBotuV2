@@ -19,6 +19,11 @@ export function sendUnauthorized(reply: FastifyReply, requestId: string): void {
   void reply.code(401).send(failureBody('unauthorized', 'Authentication required.', requestId))
 }
 
+/** Yetki yetersiz: kimlik dogru ama rol izinsiz (403). */
+export function sendForbidden(reply: FastifyReply, requestId: string): void {
+  void reply.code(403).send(failureBody('forbidden', 'Insufficient permissions.', requestId))
+}
+
 /**
  * Korunan uclar icin oturum zorunlulugu. Ilk asamada butun aktif kullanicilar
  * tam yetkilidir (DECISIONS); rol/permission matrisi ileri paketlerdedir.

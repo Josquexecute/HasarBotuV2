@@ -358,3 +358,21 @@ Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN Paket 08 tamamlayıcısı + Paket 0
 Etkisi: UI'da `src/data/authPort.ts`, `src/data/commandPort.ts`, `src/app/session.tsx` + `src/app/sessionContext.ts`, `src/features/auth/LoginPage.tsx`; App gate + Topbar oturum/çıkış; `useCases` 401→expired sinyali. +31 UI testi (authPort/commandPort/SessionProvider/App gate) + gerçek API ve tarayıcı uçtan uca smoke. Runtime API/DB/migration değişikliği YOK.
 
 Kaynak: 2026-07-13 tarihli Paket 10 kullanıcı talimatı.
+
+## 2026-07-13 — HB-2026-017: Paket 11 merkezi audit altyapısı
+
+Karar:
+
+1. **Tek merkezi audit yolu:** Yeniden kullanılabilir `AuditService.record(executor, event)` mevcut `audit_events` tablosuna (0002) yazar; PARALEL veya ikinci bir audit sistemi kurulmadı. Alanlar tabloya birebir: organizationId, actorUserId, action, entityType (`resource_type`), entityId (`resource_id`), requestId, occurredAt (`occurred_at`), redaksiyonlu `details`.
+2. **Atomiklik:** `record` bir executor (havuz VEYA transaction istemcisi) alır; audit kaydı ilgili iş yazımıyla AYNI transaction'da yazılır. Case create/update zaten transaction içindeydi; login (başarılı: sayaç sıfırlama + oturum + audit; başarısız: sayaç artışı + audit + kilit audit) ve logout (oturum iptali + audit) `withTransaction` ile atomik hale getirildi — yarım iş/yarım audit kalmaz.
+3. **Append-only (savunma-derinliği):** Migration 0005 `audit_events` üzerinde `BEFORE UPDATE/DELETE` trigger'ı ile satır değişikliğini/silmeyi veritabanı seviyesinde reddeder (`append-only`). Uygulama katmanında güncelleme/silme ucu yoktur; yalnız ekleme servisi yazar. Kiracı/varlık sorgu indeksleri eklendi.
+4. **Redaksiyon:** `details` yazılmadan önce alan ADına göre redaksiyondan geçer: parola/token/cookie/authorization/session/hash/apiKey/kart/IBAN/SSN/tam poliçe metni/ham metin/özel anahtar `[redacted]` olur; aşırı uzun metin kırpılır; derinlik/eleman sayısı sınırlanır. `summarizeChange` güvenli eski/yeni değer özeti üretir (hassas alan değeri redakte). Gerçek DB testi + canlı smoke parola ve oturum token'ının audit'e sızmadığını doğrular.
+5. **Merkeze taşınan olaylar:** `auth.login_succeeded` / `auth.login_failed` / `auth.login_rate_limited` / `auth.account_locked` / `auth.logout` ve `case.created` / `case.updated` artık tek merkezi katmandan yazılır (`store.insertAudit` kaldırıldı).
+6. **Salt-okunur sorgu API'si:** `GET /api/v1/audit-events` oturum + **yönetici** rolü ister (aksi halde 403 `forbidden`), oturumdaki organizasyonla kiracı-kapsamlıdır (cross-tenant sızıntı yok), strict filtre (action/actorUserId/entityType/entityId/occurredFrom/occurredTo) + sınırlı sayfalama (pageSize ≤ 100) sağlar. Yazma/güncelleme/silme ucu YOKTUR.
+7. **Retention/export yalnız PLAN:** saklama süresi, arşiv, imzalı dışa aktarma ve SIEM entegrasyonu `AUDIT_SECURITY_AND_BACKUP_PLAN.md` §6.5'te plan olarak belgelendi; bu pakette uygulanmadı. UI audit ekranı, case close/reopen, File Agent, SIEM ve üretim migration çalıştırması kapsam dışıdır.
+
+Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN özgün "Paket 10 — Audit altyapısı" + kullanıcı talimatı; AUDIT_SECURITY_AND_BACKUP_PLAN §6 (asgari alanlar, önce/sonra maskeleme, append-only bütünlük) somutlaştırması.
+
+Etkisi: Migration 0005 (append-only trigger + indeksler); yeni `services/api/src/audit/*` (service/redact/query-store/routes) ve `src/db/executor.ts`; contracts +2 şema (`audit-events-query`/`audit-events-response`, golden 10→12); auth store executor parametreleri + `insertAudit` kaldırıldı. +17 API testi (append-only reddi, redaksiyon, atomik rollback, merkezi olaylar, sorgu filtre/pagination, kiracı izolasyonu, 401/403) + redaksiyon birim testleri + canlı HTTP güvenlik smoke 7/7.
+
+Kaynak: 2026-07-13 tarihli Paket 11 kullanıcı talimatı.

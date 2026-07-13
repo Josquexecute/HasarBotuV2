@@ -122,6 +122,15 @@ Audit sözleşmesindeki güvenli önceki/sonraki özet, API alan adlandırmasın
 - İhtiyaca göre zincir hash/imzalı dış arşiv sonradan değerlendirilebilir; hukuki saklama kararı olmadan zorunlu teknoloji seçilmez.
 - Saklama süresi ve yasal silme/anonimleştirme politikası hukuk/ürün kararıdır.
 
+### 6.5 Uygulama durumu (Paket 11) ve saklama/dışa aktarma planı
+
+Uygulanan (HB-2026-017): Tek merkezi `AuditService` mevcut `audit_events` tablosuna yazar (paralel sistem yok). Alanlar: organizationId, actorUserId, action, entityType (resource_type), entityId (resource_id), requestId, occurredAt, redaksiyonlu `details` (eski/yeni değer veya güvenli değişiklik özeti). Audit yazımı ilgili iş transaction'ıyla atomiktir (yarım iş/yarım audit olmaz). Append-only VERİTABANI seviyesinde bir trigger ile zorlanır: `UPDATE`/`DELETE` reddedilir; normal API'de güncelleme/silme ucu yoktur. Login/logout, hesap kilidi, oturum iptali ve Case create/update merkezi katmana taşındı. Salt-okunur sorgu API'si (`GET /api/v1/audit-events`) oturum + yönetici rolü ister, kiracı kapsamlıdır, filtre + sınırlı pagination sağlar. Redaksiyon parola/token/cookie/tam poliçe metni/gereksiz PII'yi alan ADına göre `[redacted]` yapar ve aşırı uzun metni kırpar.
+
+Yalnız PLAN (bu pakette uygulanmadı): 
+- **Saklama (retention):** varsayılan çevrimiçi saklama penceresi (öneri: en az 12 ay sıcak), ardından soğuk arşive taşıma; kesin süre hukuk/ürün kararıdır ve KVKK silme/anonimleştirme yükümlülüğüyle uzlaştırılır. Silme, append-only tabloda satır güncellemesiyle değil, yetkili operasyon aracıyla ve auditli olarak yürütülür.
+- **Dışa aktarma (export):** yetkili yönetici için imzalı/erişim-kısıtlı dışa aktarma (CSV/JSON) ve isteğe bağlı zincir-hash bütünlük kanıtı; dışa aktarmanın kendisi de bir audit olayıdır (`audit.exported`). SIEM/harici log entegrasyonu ayrı ve sonraki bir karardır (bu paket kapsamı dışında).
+- **Sorgu audit'i:** audit sorgusunun kendisinin auditlenmesi (§6.4) ileri pakete bırakıldı.
+
 ## 7. Güvenlik olayları ve hata davranışı
 
 - Yetkisiz erişim ayrıntılı iç hata sızdırmadan 401/403 döner.

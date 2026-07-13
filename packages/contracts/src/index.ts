@@ -112,6 +112,24 @@ export {
 } from './v1/cases/index.js'
 
 export {
+  // audit routes
+  AUDIT_EVENTS_ROUTE,
+  // audit query
+  MAX_AUDIT_ACTION_LENGTH,
+  MAX_AUDIT_ENTITY_TYPE_LENGTH,
+  auditActionSchema,
+  auditEntityTypeSchema,
+  auditEventsQuerySchema,
+  type AuditEventsQuery,
+  type AuditEventsQueryInput,
+  // audit dto
+  auditEventSchema,
+  auditEventsResponseSchema,
+  type AuditEvent,
+  type AuditEventsResponse,
+} from './v1/audit/index.js'
+
+export {
   AUTH_LOGIN_ROUTE,
   AUTH_LOGOUT_ROUTE,
   AUTH_SESSION_ROUTE,

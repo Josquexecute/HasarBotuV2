@@ -9,6 +9,8 @@ import {
   caseDetailResponseSchema,
   caseListResponseSchema,
 } from './v1/cases/dto.js'
+import { auditEventsQuerySchema } from './v1/audit/query.js'
+import { auditEventsResponseSchema } from './v1/audit/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -25,6 +27,8 @@ export const JSON_SCHEMA_TARGETS = {
   'cases-list-response': caseListResponseSchema,
   'case-detail-params': caseDetailParamsSchema,
   'case-detail-response': caseDetailResponseSchema,
+  'audit-events-query': auditEventsQuerySchema,
+  'audit-events-response': auditEventsResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS
