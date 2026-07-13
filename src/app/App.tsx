@@ -13,6 +13,9 @@ import { NotificationsPage } from '../features/notifications/NotificationsPage'
 import { PlaceholderPage } from '../features/placeholder/PlaceholderPage'
 import { ReportsPage } from '../features/reports/ReportsPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
+import { LoginPage } from '../features/auth/LoginPage'
+import { SessionProvider } from './session'
+import { useSession } from './sessionContext'
 import { usePersistentState } from './usePersistentState'
 
 interface AppRoutesProps {
@@ -41,6 +44,44 @@ function AppRoutes(props: AppRoutesProps) {
   )
 }
 
+interface AppGateProps extends AppRoutesProps {
+  collapsed: boolean
+  onMenuToggle: () => void
+  onThemeToggle: () => void
+  onDensityToggle: () => void
+}
+
+/**
+ * Oturum kapisi: `mock` modda (varsayilan) baseline aynen render edilir.
+ * `api` modda oturum bootstrap edilene kadar yukleme, oturum yoksa/sona erdiyse
+ * login ekrani; yalniz kimlikli oturumda korumali uygulama rotalari acilir.
+ */
+function AppGate(props: AppGateProps) {
+  const session = useSession()
+
+  if (session.mode === 'api' && session.status === 'bootstrapping') {
+    return <div className="login-screen"><LoadingState label="Oturum doğrulanıyor" /></div>
+  }
+  if (session.mode === 'api' && session.status !== 'authenticated') {
+    return <LoginPage />
+  }
+
+  return (
+    <AppShell
+      collapsed={props.collapsed}
+      theme={props.theme}
+      density={props.density}
+      onMenuToggle={props.onMenuToggle}
+      onThemeToggle={props.onThemeToggle}
+      onDensityToggle={props.onDensityToggle}
+    >
+      <Suspense fallback={<LoadingState label="Görünüm hazırlanıyor" />}>
+        <AppRoutes theme={props.theme} density={props.density} collapsed={props.collapsed} onThemeChange={props.onThemeChange} onDensityChange={props.onDensityChange} onSidebarChange={props.onSidebarChange} />
+      </Suspense>
+    </AppShell>
+  )
+}
+
 export function App() {
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>('hasarbotu-theme', 'light')
   const [density, setDensity] = usePersistentState<'compact' | 'comfortable'>('hasarbotu-density', 'compact')
@@ -50,18 +91,19 @@ export function App() {
     <ErrorBoundary>
       <div data-theme={theme} data-density={density} className="theme-root">
         <BrowserRouter>
-          <AppShell
-            collapsed={collapsed}
-            theme={theme}
-            density={density}
-            onMenuToggle={() => setCollapsed((value) => !value)}
-            onThemeToggle={() => setTheme((value) => value === 'light' ? 'dark' : 'light')}
-            onDensityToggle={() => setDensity((value) => value === 'compact' ? 'comfortable' : 'compact')}
-          >
-            <Suspense fallback={<LoadingState label="Görünüm hazırlanıyor" />}>
-              <AppRoutes theme={theme} density={density} collapsed={collapsed} onThemeChange={setTheme} onDensityChange={setDensity} onSidebarChange={setCollapsed} />
-            </Suspense>
-          </AppShell>
+          <SessionProvider>
+            <AppGate
+              theme={theme}
+              density={density}
+              collapsed={collapsed}
+              onThemeChange={setTheme}
+              onDensityChange={setDensity}
+              onSidebarChange={setCollapsed}
+              onMenuToggle={() => setCollapsed((value) => !value)}
+              onThemeToggle={() => setTheme((value) => value === 'light' ? 'dark' : 'light')}
+              onDensityToggle={() => setDensity((value) => value === 'compact' ? 'comfortable' : 'compact')}
+            />
+          </SessionProvider>
         </BrowserRouter>
       </div>
     </ErrorBoundary>

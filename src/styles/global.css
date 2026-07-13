@@ -1493,3 +1493,108 @@ button {
   .workflow-card { padding: 7px; }
   .workflow-card__meta { margin-block: 5px; padding-block: 5px; }
 }
+
+/* Oturum / login ekrani (Paket 10) — kabul edilmis tema token'lariyla. */
+.login-screen {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--bg-app);
+}
+
+.login-card {
+  display: flex;
+  width: min(380px, 100%);
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.login-card__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.login-card__logo {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-contrast);
+  border-radius: var(--radius-md);
+  background: var(--accent);
+}
+
+.login-card__brand h1 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.login-card__brand p {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.login-field input {
+  height: var(--control-height);
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-canvas);
+}
+
+.login-field input:focus {
+  border-color: var(--accent);
+  outline: 0;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.login-card__notice,
+.login-card__error {
+  padding: 8px 10px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.login-card__notice {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+
+.login-card__notice--warning {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border));
+  background: var(--warning-soft);
+}
+
+.login-card__error {
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: var(--danger-soft);
+}
+
+.login-card__foot {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}

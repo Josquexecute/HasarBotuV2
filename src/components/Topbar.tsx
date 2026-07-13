@@ -1,6 +1,7 @@
-import { Bell, Grid2X2, Menu, Moon, Search, Sun } from 'lucide-react'
+import { Bell, Grid2X2, LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { getSearchTokens } from '../utils/search'
+import { useSession } from '../app/sessionContext'
 
 interface TopbarProps {
   theme: 'light' | 'dark'
@@ -21,9 +22,18 @@ const routeTitles: Record<string, string> = {
   '/ayarlar': 'Ayarlar',
 }
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  const letters = parts.length === 1 ? parts[0]!.slice(0, 2) : `${parts[0]![0]}${parts[parts.length - 1]![0]}`
+  return letters.toLocaleUpperCase('tr')
+}
+
 export function Topbar({ theme, density, onThemeToggle, onDensityToggle, onMenuToggle }: TopbarProps) {
   const location = useLocation()
   const navigate = useNavigate()
+  const session = useSession()
+  const authenticated = session.status === 'authenticated' && session.user !== null
   const isCaseDetail = location.pathname.startsWith('/dosyalar/')
   const title = isCaseDetail ? 'Dosya Çalışma Alanı' : routeTitles[location.pathname] ?? 'HasarBotu V2'
 
@@ -57,8 +67,14 @@ export function Topbar({ theme, density, onThemeToggle, onDensityToggle, onMenuT
       </label>
 
       <div className="topbar__actions">
-        <span className="prototype-badge" title="Bu uygulama anonim mock veri kullanan bir UI prototipidir">UI Prototip · Mock Veri</span>
-        <span className="connection-status"><i aria-hidden="true" />Bağlantı aktif</span>
+        {authenticated ? (
+          <span className="connection-status" title={session.user!.email}><i aria-hidden="true" />Oturum aktif</span>
+        ) : (
+          <>
+            <span className="prototype-badge" title="Bu uygulama anonim mock veri kullanan bir UI prototipidir">UI Prototip · Mock Veri</span>
+            <span className="connection-status"><i aria-hidden="true" />Bağlantı aktif</span>
+          </>
+        )}
         <button className="topbar-action" type="button" onClick={onDensityToggle} title="Görünüm yoğunluğunu değiştir">
           <Grid2X2 size={16} aria-hidden="true" />
           <span>{density === 'compact' ? 'Kompakt' : 'Rahat'}</span>
@@ -70,7 +86,14 @@ export function Topbar({ theme, density, onThemeToggle, onDensityToggle, onMenuT
           <Bell size={18} />
           <i aria-hidden="true" />
         </button>
-        <button className="avatar avatar--button" type="button" onClick={() => navigate('/ayarlar')} title="Kullanıcı ayarları">ÖF</button>
+        <button className="avatar avatar--button" type="button" onClick={() => navigate('/ayarlar')} title={authenticated ? session.user!.displayName : 'Kullanıcı ayarları'}>
+          {authenticated ? initialsOf(session.user!.displayName) : 'ÖF'}
+        </button>
+        {authenticated && (
+          <button className="icon-button" type="button" onClick={() => { void session.logout() }} aria-label="Oturumu kapat" title="Oturumu kapat">
+            <LogOut size={18} />
+          </button>
+        )}
       </div>
     </header>
   )

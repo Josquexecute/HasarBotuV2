@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { mockCases } from '../mocks/cases'
 import type { CaseRecord } from '../types/case'
+import { useSession } from '../app/sessionContext'
 import { getConfiguredDataSource, type DataSourceKind } from './ports'
 import { createHttpCasesAdapter, HttpCasesError } from './httpAdapter'
 
@@ -22,6 +23,7 @@ export interface UseCasesResult {
  *   HICBIR ZAMAN maskelemez; mock'a sessiz dusus yoktur.
  */
 export function useCases(): UseCasesResult {
+  const { reportUnauthorized } = useSession()
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
   const [cases, setCases] = useState<readonly CaseRecord[]>(source === 'mock' ? mockCases : [])
   const [status, setStatus] = useState<CasesDataStatus>(source === 'mock' ? 'ok' : 'loading')
@@ -39,12 +41,15 @@ export function useCases(): UseCasesResult {
       .catch((error: unknown) => {
         if (cancelled) return
         setCases([])
-        setStatus(error instanceof HttpCasesError ? error.kind : 'unavailable')
+        const kind = error instanceof HttpCasesError ? error.kind : 'unavailable'
+        setStatus(kind)
+        // Oturum sona erdiyse global "tekrar giris" akisini tetikle (Paket 10).
+        if (kind === 'unauthorized') reportUnauthorized()
       })
     return () => {
       cancelled = true
     }
-  }, [source])
+  }, [source, reportUnauthorized])
 
   return { cases, source, status }
 }

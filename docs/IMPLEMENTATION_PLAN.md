@@ -506,3 +506,18 @@ Kabul ölçütü: Kabul edilmiş UI davranışı değişmeden DataPort sınırı
 - [x] Kapılar: typecheck/lint/test(457)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
 
 Kabul ölçütü: Oluşturma sıralı ofis numarası atar ve idempotency tekrarında kopya üretmez; başarısız transaction ofis sayacını tüketmez; güncelleme optimistic locking ile bayat sürümü 409 reddeder; kapanış/yeniden açma bu pakette YOKTUR; sonraki tek mantıklı görev Paket 10'dur.
+
+## Aktif geliştirme paketi — Paket 10 UI oturum yönetimi ve gerçek API entegrasyonu
+
+> Numara notu: Kullanıcı Paket 10'u UI oturum yönetimi + gerçek API entegrasyonu olarak yönlendirdi (Paket 08 UI/API sınırının tamamlayıcısı). Altyapı planındaki özgün "Paket 10 — Audit altyapısı" ayrı ve sonraki bir pakete ötelendi (HB-2026-016).
+
+### Aşama 49 — oturum kapısı ve komut sınırı
+
+- [x] İki mod: `mock` (varsayılan, oturum kapısız baseline) / `api` (gerçek oturum); mock api hatasını maskelemez, sahte oturum yok; dal `foundation/package-10-ui-session`.
+- [x] `AuthPort` (bootstrap/login/logout → `/api/v1/auth/*`); HttpOnly çerez, parola/token UI'da saklanmaz; `SessionProvider` + `sessionContext` gate; `LoginPage` yalnız api modda oturumsuz/expired.
+- [x] 401 güvenli akışı: `useCases` → `reportUnauthorized` → `expired` → "Oturumunuz sona erdi" login; Topbar api modda gerçek kullanıcı + çıkış; mock modda baseline korunur.
+- [x] `CaseCommandPort` (create Idempotency-Key + update expectedVersion → Paket 09 uçları); hata eşlemesi tam; mock komut adapteri yazma yapmaz. Yeni ekran tasarlanmadı (onaylı prototipte create/update ekranı yok).
+- [x] Testler: +31 UI testi (authPort/commandPort/SessionProvider/App gate) + gerçek API e2e (login→…→logout) + tarayıcı e2e (login → gerçek liste → çıkış).
+- [x] Kapılar: typecheck/lint(0 uyarı)/test(488)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
+
+Kabul ölçütü: api modda oturumsuz kullanıcı login ekranı görür, giriş sonrası korumalı rotalar açılır, 401 güvenli "oturum sona erdi" akışı çalışır ve mock veri gerçek hatayı maskelemez; kabul edilmiş UI baseline'i (mock mod) değişmez; Google girişi/şifre sıfırlama/e-posta/close-reopen/File Agent/poliçe motoru kapsam dışıdır.

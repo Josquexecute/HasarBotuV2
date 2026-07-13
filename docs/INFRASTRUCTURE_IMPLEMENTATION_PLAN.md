@@ -155,7 +155,12 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 
 - **Gerçekleşen sonuç (2026-07-13):** Tamamlandı. Contracts `caseCreateRequestSchema`/`caseUpdateRequestSchema` (strict, `expectedVersion` zorunlu, en az bir alan; ofis no/lifecycle/plaka/tür değiştirilemez), `IDEMPOTENCY_KEY_HEADER`; golden JSON Schema 8 → 10. Migration 0004: `office_counters` (firma+yıl monoton) + `idempotency_keys`. Yazma katmanı tek transaction (referans → ofis no UPSERT RETURNING → kayıt → A1 audit → idempotency → COMMIT); başarısız transaction ofis sayacını tüketmez ve numara yeniden dağıtılmaz; `SELECT ... FOR UPDATE` + `expectedVersion` optimistic locking (409 `version_conflict`); audit yalnız güvenli özet (plaka/PII yok). POST create (Idempotency-Key zorunlu, replay + `idempotency_conflict`) ve PATCH update (tenant kapsamlı, bilinmeyen referans 400). 9 gerçek-DB write testi + canlı HTTP yazma smoke 7/7; toplam 457/457. Kapanış/yeniden açma ve UI komut adapter'ı bilinçli olarak ertelendi (login UI henüz yok) (HB-2026-015). Sonraki paket Paket 10'dur.
 
-### Paket 10 — Audit altyapısı
+### Paket 10 (kullanıcı yönlendirmesi) — UI oturum yönetimi ve gerçek API entegrasyonu
+
+- **Not:** Kullanıcı Paket 10'u UI oturum + gerçek API entegrasyonu olarak yönlendirdi; bu, Paket 08 UI/API sınırının doğal tamamlayıcısıdır. Aşağıdaki özgün "Audit altyapısı" paketi ayrı ve sonraki bir pakete ötelendi.
+- **Gerçekleşen sonuç (2026-07-13):** Tamamlandı. İki mod ayrımı: `mock` (varsayılan, oturum kapısız baseline) / `api` (gerçek oturum). `AuthPort` bootstrap/login/logout (`/api/v1/auth/*`); HttpOnly çerez, parola/token UI'da saklanmaz. `SessionProvider` gate + `LoginPage`; 401 → `expired` "oturum sona erdi" akışı; Topbar oturum/çıkış. `CaseCommandPort` (create Idempotency-Key + update expectedVersion → Paket 09 uçları), hata eşlemesi tam; onaylı prototipte create/update ekranı olmadığından yeni ekran yok — yalnız komut sınırı + güvenli altyapı. +31 UI testi + gerçek API e2e + tarayıcı e2e; toplam 488/488. Google girişi/şifre sıfırlama/e-posta/close-reopen/File Agent/poliçe motoru kapsam dışı. Runtime API/DB/migration değişikliği yok (HB-2026-016).
+
+### Paket 10 (özgün, ötelendi) — Audit altyapısı
 
 - **Amaç:** Kritik ve kalıcı işlemler için merkezi, salt eklemeli audit kanıtı kurmak.
 - **Kapsam:** `audit_events`, olay şeması, maskeleme, actor/request/idempotency bağları ve yönetici salt okunur sorgusu.

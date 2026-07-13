@@ -341,3 +341,20 @@ Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN Paket 09 + kullanıcı talimatı; c
 Etkisi: Migration 0004 (`office_counters`, `idempotency_keys`); contracts +2 komut şeması (golden 10); API +11 uçtan uca yazma testi. `If-Match` alternatifi kapandı; kapanış/yeniden açma Paket 10+ kritik işlemidir.
 
 Kaynak: 2026-07-12 tarihli Paket 09 kullanıcı talimatı.
+
+## 2026-07-13 — HB-2026-016: Paket 10 UI oturum yönetimi ve gerçek API entegrasyonu
+
+Karar:
+
+1. **İki mod ayrımı (baseline korunur):** `mock` mod (varsayılan, HB-2026-014) açıkça seçilen demo veri kaynağıdır ve oturum kapısı YOKTUR — kabul edilmiş UI baseline'i aynen render edilir. `api` mod gerçek oturum gerektirir. Mod `getConfiguredDataSource()` (localStorage `hasarbotu-data-source`) ile belirlenir; mock, api hatasını HİÇBİR ZAMAN maskelemez ve sahte oturum uydurulmaz.
+2. **Oturum sınırı (`AuthPort`):** `bootstrap` (`GET /api/v1/auth/session` → kullanıcı | 401 null), `login` (`POST /api/v1/auth/login`), `logout` (`POST /api/v1/auth/logout`). Oturum HttpOnly çerezle SUNUCU tarafında tutulur; parola/token UI state veya localStorage'da ASLA saklanmaz. Tarayıcıda çerez `credentials: 'include'` + aynı-origin Vite proxy ile taşınır.
+3. **`SessionProvider` + gate:** api modda açılışta bootstrap; oturum yoksa/sona erdiyse `LoginPage`, yalnız kimlikli oturumda korumalı rotalar. Hatalar ayrımlı: `invalid_credentials` (401/400 tekdüze), `rate_limited` (429 + Retry-After), `unavailable` (ağ/5xx).
+4. **401 güvenli akışı:** api modda veri katmanı 401 gördüğünde `reportUnauthorized()` çağrılır; oturum `expired` olur ve "Oturumunuz sona erdi" notuyla login ekranına dönülür. Bayat mock veri gösterilmez.
+5. **`CaseCommandPort` (yazma sınırı):** `createCase` (Idempotency-Key üretir → `POST /api/v1/cases`) ve `updateCase` (`PATCH /api/v1/cases/:caseId`, `expectedVersion`); hata eşlemesi `unauthorized`/`validation`/`unknown_reference`/`version_conflict`/`idempotency_conflict`/`not_found`/`unavailable`. Mock komut adapteri demo modda HİÇBİR yazma yapmaz (çağrı reddedilir).
+6. **Bilinçli erteleme / kapsam dışı:** Onaylı prototipte gerçek create/update EKRANI olmadığı için yeni kapsamlı ekran tasarlanmadı — yalnız komut sınırı + güvenli entegrasyon altyapısı kuruldu (kullanıcı talimatı). Google girişi, şifre sıfırlama, e-posta gönderimi, fiziksel klasör işlemleri, case close/reopen, File Agent ve poliçe motoru kapsam dışıdır. Dashboard/Kapanan/Raporlar kademeli plan gereği mock içerikte kalır (HB-2026-013).
+
+Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN Paket 08 tamamlayıcısı + Paket 06 auth + Paket 09 yazma uçları; MASTER_ROADMAP_ALIGNMENT G21 (e-posta+şifre birincil; Google girişi opsiyonel ek) ve K5 sınırı.
+
+Etkisi: UI'da `src/data/authPort.ts`, `src/data/commandPort.ts`, `src/app/session.tsx` + `src/app/sessionContext.ts`, `src/features/auth/LoginPage.tsx`; App gate + Topbar oturum/çıkış; `useCases` 401→expired sinyali. +31 UI testi (authPort/commandPort/SessionProvider/App gate) + gerçek API ve tarayıcı uçtan uca smoke. Runtime API/DB/migration değişikliği YOK.
+
+Kaynak: 2026-07-13 tarihli Paket 10 kullanıcı talimatı.
