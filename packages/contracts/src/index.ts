@@ -3,6 +3,8 @@ export {
   MAX_ID_LENGTH,
   MAX_PLATE_LENGTH,
   MAX_REFERENCE_NUMBER_LENGTH,
+  MAX_RELATIVE_PATH_LENGTH,
+  MAX_STORAGE_ROOT_KEY_LENGTH,
   caseIdSchema,
   caseStageSchema,
   caseStatusSchema,
@@ -16,7 +18,9 @@ export {
   notificationFormNumberSchema,
   officeCaseNumberSchema,
   plateNumberSchema,
+  relativePathSchema,
   serviceIdSchema,
+  storageRootKeySchema,
   userIdSchema,
   utcDateTimeSchema,
   type CaseStageDto,
@@ -110,6 +114,41 @@ export {
   caseCoreToListItem,
   caseDetailToCaseCore,
 } from './v1/cases/index.js'
+
+export {
+  // storage routes
+  STORAGE_ROOTS_ROUTE,
+  CASE_LOCATION_ROUTE,
+  CASE_LOCATION_HISTORY_ROUTE,
+  // storage dto
+  LOCATION_SOURCES,
+  LOCATION_VERIFICATION_STATUSES,
+  caseLocationHistoryItemSchema,
+  caseLocationHistoryResponseSchema,
+  caseLocationParamsSchema,
+  caseLocationResponseSchema,
+  caseLocationSchema,
+  locationSourceSchema,
+  locationVerificationStatusSchema,
+  storageRootSchema,
+  storageRootsResponseSchema,
+  type CaseLocation,
+  type CaseLocationHistoryItem,
+  type CaseLocationHistoryResponse,
+  type CaseLocationParams,
+  type CaseLocationResponse,
+  type LocationSource,
+  type LocationVerificationStatus,
+  type StorageRoot,
+  type StorageRootsResponse,
+  // storage commands
+  caseLocationAssignRequestSchema,
+  caseLocationHistoryQuerySchema,
+  type CaseLocationAssignRequest,
+  type CaseLocationAssignRequestInput,
+  type CaseLocationHistoryQuery,
+  type CaseLocationHistoryQueryInput,
+} from './v1/storage/index.js'
 
 export {
   // audit routes

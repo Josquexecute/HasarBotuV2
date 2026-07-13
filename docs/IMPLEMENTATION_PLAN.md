@@ -537,3 +537,16 @@ Kabul ölçütü: api modda oturumsuz kullanıcı login ekranı görür, giriş 
 - [x] Kapılar: typecheck/lint(0 uyarı)/test(507)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
 
 Kabul ölçütü: Audit tek merkezi katmandan, iş işlemiyle atomik yazılır; append-only DB'de zorlanır (UPDATE/DELETE reddedilir); parola/token/cookie/tam poliçe metni audit'e sızmaz; sorgu API'si yalnız yetkili kullanıcıya kiracı-kapsamlı, filtreli ve sayfalı sonuç döner; retention/export yalnız plandır; UI audit ekranı/close-reopen/File Agent/SIEM/üretim migration kapsam dışıdır.
+
+## Aktif geliştirme paketi — Paket 12 depolama referansı ve güvenli göreli yol temeli
+
+### Aşama 51 — storageRootKey + güvenli göreli yol + vaka konumu
+
+- [x] Domain `parseRelativePath`/`parseStorageRootKey`/`parseStorageLocation`: traversal/absolute/sürücü/UNC/backslash/kontrol/yasak-karakter/aygıt-adı reddi; +35 birim testi; dal `foundation/package-12-storage-location`.
+- [x] Contracts: `storageRootKeySchema`/`relativePathSchema` primitives + `v1/storage` (roots/location/history dto + assign komutu); golden 12→16.
+- [x] Migration 0006: `storage_roots` (mutlak yol kolonu yok), `case_locations` (optimistic lock + composite FK + güvenlik CHECK), `case_location_history` (append-only trigger + CHECK).
+- [x] API: `GET /storage-roots`; `GET/PUT /cases/:caseId/location` (optimistic lock, 409/404/400 unknown_reference); `GET .../location/history`. Atama tek transaction'da konum + geçmiş + merkezi audit; mutlak yol yanıta/audit'e sızmaz.
+- [x] Testler: +12 API testi (atama/optimistic-lock/tenant/unknown-root/traversal-red/geçmiş/audit-no-absolute/DB-CHECK/append-only) + canlı HTTP güvenlik smoke 10/10.
+- [x] Kapılar: typecheck/lint(0 uyarı)/test(558)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
+
+Kabul ölçütü: DB yalnız mantıksal rootKey + güvenli göreli yol saklar (mutlak `P:\`/sürücü/UNC yazılmaz); traversal/absolute/backslash hem uygulama hem DB CHECK ile reddedilir; konum atama optimistic locking + kiracı izolasyonu + merkezi audit ile atomiktir; geçmiş append-only; mutlak yol yanıt/audit/log'a sızmaz; pCloud/`P:\` mevcut kök belgelenir ve başka disk/NAS'a config ile taşınabilir; gerçek klasör işlemleri/File Agent/P: tarama/close-reopen/Electron/fiziksel yükleme/UI kapsam dışıdır.

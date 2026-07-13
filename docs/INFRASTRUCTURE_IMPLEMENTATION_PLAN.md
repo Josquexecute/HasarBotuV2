@@ -186,6 +186,8 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Geri alma:** Metadata endpoint'lerini kapat; tabloları ve veriyi koru.
 - **Kabul:** Fiziksel dosya olmadan güvenli göreceli konum ve sürüm bilgisi temsil edilir.
 
+- **Gerçekleşen sonuç (kısmi; kullanıcı "Paket 12 — depolama referansı" olarak yönlendirdi, 2026-07-13):** Bu paketin DEPOLAMA REFERANSI + güvenli göreli yol TEMELİ tamamlandı. Domain `parseRelativePath` (traversal/absolute/sürücü/UNC/kontrol/yasak-karakter/aygıt-adı reddi) + contracts storage primitives; Migration 0006 `storage_roots` (mutlak yol kolonu yok) + `case_locations` (optimistic lock + composite FK + güvenlik CHECK) + append-only `case_location_history`; API `GET /storage-roots`, `GET/PUT /cases/:caseId/location`, `GET .../location/history` (oturum + kiracı + merkezi audit; mutlak yol sızmaz). pCloud/`P:\` mevcut kök belgelendi, başka disk/NAS'a config ile taşınabilir. +35 domain + +12 API testi + canlı smoke 10/10 (HB-2026-018). KALAN (sonraki paket): documents/document_versions/photos meta verisi, hash/size/READY durumu ve version/hash uniqueness. Gerçek yükleme/klasör işlemleri/File Agent hâlâ kapsam dışı.
+
 ### Paket 12 — File Agent iskeleti
 
 - **Amaç:** Kritik fiziksel dosya işlemlerinin tek yazıcısı için dayanıklı servis ve iş kuyruğu sınırını kurmak.

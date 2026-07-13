@@ -11,11 +11,15 @@ describe('JSON Schema uretimi', () => {
       'case-create-request',
       'case-detail-params',
       'case-detail-response',
+      'case-location-assign-request',
+      'case-location-history-response',
+      'case-location-response',
       'case-update-request',
       'cases-list-response',
       'cases-query',
       'failure-envelope',
       'health-response',
+      'storage-roots-response',
     ])
   })
 

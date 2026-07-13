@@ -376,3 +376,20 @@ Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN özgün "Paket 10 — Audit altyap�
 Etkisi: Migration 0005 (append-only trigger + indeksler); yeni `services/api/src/audit/*` (service/redact/query-store/routes) ve `src/db/executor.ts`; contracts +2 şema (`audit-events-query`/`audit-events-response`, golden 10→12); auth store executor parametreleri + `insertAudit` kaldırıldı. +17 API testi (append-only reddi, redaksiyon, atomik rollback, merkezi olaylar, sorgu filtre/pagination, kiracı izolasyonu, 401/403) + redaksiyon birim testleri + canlı HTTP güvenlik smoke 7/7.
 
 Kaynak: 2026-07-13 tarihli Paket 11 kullanıcı talimatı.
+
+## 2026-07-13 — HB-2026-018: Paket 12 depolama referansı ve güvenli göreli yol temeli
+
+Karar:
+
+1. **Konum modeli:** Dosya konumu yalnız MANTIKSAL `storageRootKey` + POSIX `relativePath` ile modellenir. Veritabanına mutlak `P:\`, sürücü harfi veya UNC yolu ASLA yazılmaz; cihaz→mutlak root eşlemesi yalnız yerel File Agent/config'te kalır (ARCHITECTURE + FILE_STORAGE_AND_AGENT_PLAN §1-2 somutlaştırması).
+2. **Güvenli göreli yol doğrulaması (domain `parseRelativePath`):** Güvenlik sınırıdır ve şunları REDDEDER: traversal (`..` segmenti), POSIX absolute (`/…`), sürücü ön eki (`C:`/`P:`), UNC/backslash, kontrol karakteri (null dahil), Windows yasak karakterleri (`< > : " | ? *`), ayrılmış aygıt adları (CON/PRN/NUL/COM1-9/LPT1-9), boş segment/çift ayraç, segment başı/sonu boşluk ve segment sonu nokta. Türkçe adlar ve iç boşluk (`Temmuz 2026`, `DEĞER KAYBI`) geçerlidir. Sözleşme ayracı yalnız `/`.
+3. **Veritabanı savunma-derinliği (Migration 0006):** `storage_roots` (org+root_key benzersiz, slug CHECK, MUTLAK YOL KOLONU YOK); `case_locations` (vaka başına tek, `version` optimistic lock, composite FK ile kök org'da olmalı, `(org,root,path)` benzersiz, `relative_path` üzerinde traversal/absolute/backslash/kontrol/yasak-karakter CHECK'i); `case_location_history` (append-only trigger + aynı path CHECK).
+4. **API (oturum + kiracı kapsamlı):** `GET /storage-roots`; `GET/PUT /cases/:caseId/location` (PUT optimistic locking `expectedVersion` ile, ilk atamada version 1, uyuşmazlık 409, bilinmeyen/pasif kök 400 `unknown_reference`, yabancı org 404); `GET /cases/:caseId/location/history` (sınırlı pagination). Atama tek transaction'da: güncel konum + append-only geçmiş + merkezi audit (Paket 11) atomik. `verificationStatus` istekle set EDİLEMEZ; atamada `pending` başlar (fiziksel doğrulama File Agent işidir, bu pakette YOK).
+5. **Mutlak yol sızıntısı yok:** API yanıtı, audit details ve loglar yalnız rootKey + göreli yol taşır. Gerçek DB + canlı smoke ile audit'te sürücü/backslash 0 doğrulandı.
+6. **Taşınabilirlik:** pCloud/`P:\BARAN GLOBAL EKSPERTİZ` MEVCUT kök olarak belgelenir; mantıksal rootKey sayesinde başka disk/NAS köküne geçiş yalnız yerel config değişikliğidir (şema/veri değişmez). Kapsam dışı: gerçek klasör oluşturma/taşıma/rename, File Agent uygulaması, `P:` tarama, close/reopen, Electron, fiziksel yükleme, UI.
+
+Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN dosya depolama sırası + kullanıcı talimatı; FILE_STORAGE_AND_AGENT_PLAN §1-3 (kaynak doğruluk ayrımı, storage root profili, göreli yol standardı) temel alındı.
+
+Etkisi: Migration 0006 (`storage_roots`, `case_locations`, `case_location_history` + `append_only_guard`); domain `storage-path.ts` (+35 birim testi); contracts storage primitives + `v1/storage` (+4 golden şema, 12→16); yeni `services/api/src/storage/*`; app.ts kayıt. +12 API testi (atama/optimistic-lock/tenant/unknown-root/traversal-red/geçmiş/audit-no-absolute/DB-CHECK/append-only) + canlı HTTP güvenlik smoke 10/10.
+
+Kaynak: 2026-07-13 tarihli Paket 12 kullanıcı talimatı.

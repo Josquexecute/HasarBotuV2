@@ -25,6 +25,15 @@ Geçici test agent config: C:\HasarBotuSandbox\storage
 
 Database yalnız `rootKey` + POSIX biçimli göreli yol saklar. Root config secret değildir ancak yalnız yetkili operatör tarafından değiştirilebilir ve auditlenir. Client cihazlarda opsiyonel salt-okunur mapping bulunabilir; canonical yazma root'u ana File Agent'a aittir.
 
+### 2.1 Uygulama durumu (Paket 12 — HB-2026-018)
+
+Bu temel UYGULANDI (fiziksel işlemler ve File Agent hâlâ ayrı):
+
+- Mantıksal `storage_roots` (org bazlı), vaka `case_locations` (rootKey + güvenli göreli yol + `verification_status` + `source` + optimistic `version`) ve append-only `case_location_history` tabloları (Migration 0006). Mutlak yol kolonu YOKTUR.
+- **pCloud / `P:\BARAN GLOBAL EKSPERTİZ` MEVCUT köktür**; veritabanında yalnız `rootKey` (ör. `baran-global-primary`) + göreli yol tutulur. Cihaz→mutlak eşleme yalnız yerel File Agent/config'tedir; başka disk/NAS köküne geçiş şema/veri değişmeden yalnız yerel config güncellemesiyle yapılır (taşınabilirlik).
+- Güvenli göreli yol doğrulaması hem uygulamada (domain `parseRelativePath`) hem veritabanı CHECK'inde zorlanır: `..`, absolute, sürücü ön eki, UNC/backslash, kontrol karakteri, Windows yasak karakter/aygıt adı reddedilir.
+- Konum atama/değiştirme oturum + kiracı kapsamlı, optimistic locking'li ve merkezi audit'e (Paket 11) atomik bağlıdır; mutlak yol yanıt/audit/log'a sızmaz. Fiziksel klasör oluşturma/taşıma/rename, `verified` geçişi ve `P:` tarama bu pakette YOKTUR.
+
 ## 3. Göreli yol ve klasör standardı
 
 Önerilen canonical format:

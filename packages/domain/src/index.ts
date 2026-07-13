@@ -85,4 +85,17 @@ export {
   parseEntityVersion,
   type EntityVersion,
 } from './entity-version.js'
+export {
+  MAX_PATH_SEGMENT_LENGTH,
+  MAX_RELATIVE_PATH_LENGTH,
+  MAX_STORAGE_ROOT_KEY_LENGTH,
+  isRelativePath,
+  isStorageRootKey,
+  parseRelativePath,
+  parseStorageLocation,
+  parseStorageRootKey,
+  type RelativePath,
+  type StorageLocation,
+  type StorageRootKey,
+} from './storage-path.js'
 export type { CaseCore } from './case-core.js'

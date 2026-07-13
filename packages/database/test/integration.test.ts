@@ -49,6 +49,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0003_cases_read_model',
       '0004_case_write_support',
       '0005_audit_append_only',
+      '0006_storage_location',
     ])
 
     const tables = await pool.query(
@@ -56,6 +57,8 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     )
     expect(tables.rows.map((r: { table_name: string }) => r.table_name)).toEqual([
       'audit_events',
+      'case_location_history',
+      'case_locations',
       'cases',
       'idempotency_keys',
       'insurers',
@@ -65,6 +68,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'roles',
       'service_centers',
       'sessions',
+      'storage_roots',
       'user_roles',
       'users',
     ])

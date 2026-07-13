@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "storageRootKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400,
+      "x-hasarbotu-runtime-validation": "safe-relative-path"
+    },
+    "source": {
+      "default": "manual",
+      "type": "string",
+      "enum": [
+        "manual",
+        "system",
+        "imported"
+      ]
+    },
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "storageRootKey",
+    "relativePath",
+    "source"
+  ],
+  "additionalProperties": false
+}

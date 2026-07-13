@@ -7,6 +7,7 @@ import {
   isUtcDateTime,
   parseOfficeCaseNumber,
   parsePlateNumber,
+  parseRelativePath,
 } from '@hasarbotu/domain'
 
 /**
@@ -124,6 +125,32 @@ export const localDateSchema = z
 
 /** Optimistic locking icin 1'den baslayan pozitif guvenli tam sayi. */
 export const entityVersionSchema = z.number().int().min(1)
+
+export const MAX_STORAGE_ROOT_KEY_LENGTH = 64
+export const MAX_RELATIVE_PATH_LENGTH = 400
+
+/**
+ * Mantiksal depolama kok anahtari: kucuk-harf slug (`baran-global-primary`).
+ * Mutlak yol, surucu harfi veya UNC DEGILDIR ve olamaz.
+ */
+export const storageRootKeySchema = z
+  .string()
+  .min(1)
+  .max(MAX_STORAGE_ROOT_KEY_LENGTH)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, { error: 'invalid_storage_root_key' })
+
+/**
+ * Guvenli POSIX GORELI yol. Tam guvenlik kurali (traversal `..`, absolute,
+ * surucu on eki, UNC/backslash, kontrol karakteri, Windows yasak karakter/aygit
+ * adi) domain `parseRelativePath` ile RUNTIME'da dogrulanir; JSON Schema tek
+ * basina guvenlik siniri degildir (metadata ile isaretli).
+ */
+export const relativePathSchema = z
+  .string()
+  .min(1)
+  .max(MAX_RELATIVE_PATH_LENGTH)
+  .refine((value) => parseRelativePath(value).ok, { error: 'invalid_relative_path' })
+  .meta({ 'x-hasarbotu-runtime-validation': 'safe-relative-path' })
 
 export type CaseTypeDto = z.infer<typeof caseTypeSchema>
 export type CaseStatusDto = z.infer<typeof caseStatusSchema>
