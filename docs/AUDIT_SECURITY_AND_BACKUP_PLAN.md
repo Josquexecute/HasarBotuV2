@@ -262,3 +262,9 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Mutlak path, Agent secret, belge içeriği, ham poliçe metni, gereksiz kişisel veri ve ham OS/SQL/stack hatası audit'e yazılmaz.
 - Lifecycle history append-only DB trigger ile korunur. Reopen eski close kaydını değiştirmez; aynı case/ofis numarası üzerindeki yeni bir history satırıdır.
 - Verified location switch, case lifecycle/workflow değişimi, history ve final audit merkezi transaction'da tamamlanır. Belirsiz fiziksel durumda başarı audit'i ve closed/open finalize yoktur.
+
+### 6.8 Paket 22 servis uygunluğu audit sınırı
+
+- Case create/update ve close plan audit'i servis türü, uygunluk/anlaşma durum kodu, kural sürümü ve eşleşen agreement kimlikleri gibi güvenli özetleri taşıyabilir.
+- Agreement kaynak metni, servis iletişim bilgisi, kullanıcı e-postası, belge içeriği, mutlak yol ve secret audit'e yazılmaz.
+- Agreement yönetim CRUD'u bu pakette olmadığı için paralel audit yolu kurulmaz. Mevcut Case/lifecycle yazıları merkezi `AuditService` ve mevcut transaction sınırında kalır.

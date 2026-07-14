@@ -16,6 +16,7 @@ import {
   utcDateTimeSchema,
 } from '../../common/primitives.js'
 import { pageInfoSchema } from '../../common/pagination.js'
+import { serviceReferenceSchema } from '../references/dto.js'
 
 /**
  * Wire DTO alan bicimi.
@@ -37,6 +38,7 @@ const caseDtoShape = {
   responsibleUserId: userIdSchema.nullable(),
   expertUserId: userIdSchema.nullable(),
   serviceId: serviceIdSchema.nullable(),
+  serviceProfile: serviceReferenceSchema.nullable(),
   insurerId: insurerIdSchema.nullable(),
   followUpDate: localDateSchema.nullable(),
   lossDate: localDateSchema.nullable(),

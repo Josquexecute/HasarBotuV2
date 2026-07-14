@@ -7,8 +7,10 @@ import {
   type ExpertsReferenceResponse,
   type InsurersReferenceResponse,
   type ServicesReferenceResponse,
+  type ServicesReferenceQuery,
   type UsersReferenceResponse,
 } from '@hasarbotu/contracts'
+import { loadServiceProfiles } from '../service-agreements/service.js'
 
 /** Organization-kapsamli, yalniz aktif katalog sorgulari. */
 export function createReferenceStore(pool: pg.Pool) {
@@ -21,13 +23,33 @@ export function createReferenceStore(pool: pg.Pool) {
       return insurersReferenceResponseSchema.parse({ items: result.rows })
     },
 
-    async services(organizationId: string): Promise<ServicesReferenceResponse> {
+    async services(organizationId: string, query: ServicesReferenceQuery): Promise<ServicesReferenceResponse | undefined> {
+      if (query.insurerId !== undefined) {
+        const insurer = await pool.query(
+          'SELECT 1 FROM insurers WHERE organization_id=$1 AND id::text=$2 AND is_active=true',
+          [organizationId, query.insurerId],
+        )
+        if (insurer.rowCount === 0) return undefined
+      }
       const result = await pool.query(
-        `SELECT id, name, center_type AS "centerType"
-         FROM service_centers WHERE organization_id = $1 AND is_active = true ORDER BY name, id`,
+        `SELECT id FROM service_centers WHERE organization_id = $1 AND is_active = true ORDER BY name, id`,
         [organizationId],
       )
-      return servicesReferenceResponseSchema.parse({ items: result.rows })
+      const contexts = (result.rows as Array<{ id: string }>).map((row) => ({
+        key: row.id,
+        serviceId: row.id,
+        insurerId: query.insurerId ?? null,
+        evaluationDate: query.evaluationDate ?? null,
+        dateSource: query.dateSource,
+        operation: query.operation,
+      }))
+      const profiles = await loadServiceProfiles(pool, organizationId, contexts)
+      return servicesReferenceResponseSchema.parse({
+        items: contexts.flatMap((item) => {
+          const profile = profiles.get(item.key)
+          return profile === undefined ? [] : [profile]
+        }),
+      })
     },
 
     async users(organizationId: string): Promise<UsersReferenceResponse> {

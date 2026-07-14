@@ -18,6 +18,8 @@ import {
   makeSubmissionKey,
   normalizePlateInput,
   optionalText,
+  serviceEvaluationSummary,
+  serviceOptionLabel,
 } from './caseForm'
 
 interface CaseCreateModalProps {
@@ -42,7 +44,6 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
   const commands = useMemo(() => commandPort ?? createHttpCaseCommandAdapter(), [commandPort])
   const submittingRef = useRef(false)
   const attemptRef = useRef<StableAttempt | null>(null)
-  const referenceData = useCaseReferences(referencePort)
   const [caseType, setCaseType] = useState<'traffic' | 'casco'>('traffic')
   const [plate, setPlate] = useState('')
   const [notificationFormNumber, setNotificationFormNumber] = useState('')
@@ -55,6 +56,12 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
   const [insurerId, setInsurerId] = useState('')
   const [lossDate, setLossDate] = useState('')
   const [notificationDate, setNotificationDate] = useState('')
+  const referenceData = useCaseReferences(referencePort, {
+    ...(insurerId === '' ? {} : { insurerId }),
+    ...(lossDate === '' ? {} : { evaluationDate: lossDate }),
+    dateSource: 'loss_date',
+    operation: 'closure_documents',
+  })
   const [submitting, setSubmitting] = useState(false)
   const [generalError, setGeneralError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({})
@@ -150,7 +157,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
               <label className="form-field"><span>Takip tarihi</span><input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} aria-invalid={fieldErrors.followUpDate !== undefined} /><small>LocalDate olarak gönderilir; saat içermez.</small><FieldError message={fieldErrors.followUpDate} /></label>
               <label className="form-field"><span>Sorumlu</span><select value={responsibleUserId} onChange={(event) => setResponsibleUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.users.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.responsibleUserId} /></label>
               <label className="form-field"><span>Sigorta şirketi</span><select value={insurerId} onChange={(event) => setInsurerId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.insurers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.insurerId} /></label>
-              <label className="form-field"><span>Servis</span><select value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.serviceId} /></label>
+              <label className="form-field"><span>Servis</span><select aria-label="Servis" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{serviceOptionLabel(option)}</option>)}</select><small>{serviceEvaluationSummary(referenceData.references?.services.find((option) => option.id === serviceId))}</small><FieldError message={fieldErrors.serviceId} /></label>
               <label className="form-field"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} /></label>
               <label className="form-field"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><small>LocalDate; saat içermez.</small><FieldError message={fieldErrors.lossDate} /></label>
               <label className="form-field"><span>İhbar tarihi</span><input type="date" value={notificationDate} onChange={(event) => setNotificationDate(event.target.value)} aria-invalid={fieldErrors.notificationDate !== undefined} /><small>Hasar tarihinden önce olamaz.</small><FieldError message={fieldErrors.notificationDate} /></label>

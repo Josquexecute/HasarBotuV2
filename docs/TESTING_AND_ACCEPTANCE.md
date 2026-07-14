@@ -146,3 +146,12 @@ raporlanır.
 - Gerçek tarayıcı: close preview→approve→closed ve reopen→approve→open; eksiklerle close gerekçesi; conflict reload; API modunda mock fallback olmaması; açık/koyu tema, 1366×768 ve 1920×1080 overflow/console kontrolü.
 - Gerçek `P:\` ve müşteri verisi kullanılmaz; production migration çalıştırılmaz. Kritik DB/API/Agent/tarayıcı senaryosu skip ise paket PASS sayılmaz.
 - Paket 21 uygulama sonucu: ana çalışma ağacı ve repository dışı fresh `npm ci` kopyasında 758 test geçti; 6 skip yalnız mevcut UI ortam-koşullu testleridir. Gerçek PostgreSQL migration/API/Agent testleri ve gerçek tarayıcı close/reopen smoke skip edilmedi.
+
+### Paket 22 — servis profili ve sigortacı anlaşması kabulü
+
+- Domain: aynı servis farklı sigortacı/tarih/işlemde deterministik sonuç verir; yetkili profil anlaşma sonucundan ayrıdır; kayıtsız veya insan onaysız ilişki `control_required` olur.
+- Gerçek PostgreSQL: migration 0014 ileri/tekrar/rollback-yeniden-ileri; eski profil backfill'i; sessiz agreement seed'i olmaması; tenant FK, tarih aralığı, desteklenen işlem, human approval ve version kısıtları.
+- Gerçek API: aktif/tenant referansları; sigortacı+LocalDate query; Case read/create/update servis profili; inactive/tenant dışı red; optimistic locking; güvenli merkezi audit; response/audit sızıntı kontrolü.
+- Paket 21 regresyonu: authorized ve insurer-agreed özel servis kapanış evrakını uygular; authorized servis `agreed` diye etiketlenmez; bilinmeyen özel servis koşullu evrakı `control_required` yapar.
+- Gerçek tarayıcı: create/edit formlarında Türkçe servis türü ve seçili sigortacı anlaşma sonucu; tarih/sigortacı değişiminde gerçek API yenilemesi; API hatasında mock fallback yok; 1366×768/1920×1080 açık-koyu ve overflow/console kontrolü.
+- Üretim migration, gerçek `P:\`, servis yönetim CRUD'u, poliçe AI analizi ve muafiyet hesabı çalıştırılmaz. Kritik PostgreSQL/API/tarayıcı senaryosu skip ise paket PASS sayılmaz.

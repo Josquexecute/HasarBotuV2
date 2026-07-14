@@ -144,6 +144,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
                 <div><dt>Kaynak</dt><dd>{operation.source.storageRootKey} · {operation.source.relativePath}</dd></div>
                 <div><dt>Hedef</dt><dd>{operation.destination.storageRootKey} · {operation.destination.relativePath}</dd></div>
                 <div><dt>Kural sürümleri</dt><dd>{operation.requirementSummary.documentRuleVersion} · {operation.requirementSummary.closureRuleVersion}</dd></div>
+                <div><dt>Servis koşulu</dt><dd>{operation.requirementSummary.serviceEligibility === null ? 'Servis atanmamış' : `${operation.requirementSummary.serviceEligibility.serviceType} · ${operation.requirementSummary.serviceEligibility.agreementStatus} · ${operation.requirementSummary.serviceEligibility.ruleVersion}`}</dd></div>
               </dl>
               <div className="case-lifecycle-counts"><span>{operation.requirementSummary.missingCount} eksik</span><span>{operation.requirementSummary.controlRequiredCount} kontrol gerekli</span></div>
               <ul className="case-lifecycle-requirements">

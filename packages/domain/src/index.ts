@@ -148,3 +148,17 @@ export {
   type DocumentRequirementInputDocument, type DocumentRequirementResult, type DocumentRequirementRuleSet, type DocumentRequirementStatus,
   type DocumentRequirementsEvaluation, type RecourseStatus,
 } from './document-requirements.js'
+export {
+  INSURER_SERVICE_AGREEMENT_STATUSES,
+  SERVICE_AGREEMENT_EVALUATION_VERSION,
+  SERVICE_ELIGIBILITY_STATUSES,
+  SERVICE_SUPPORTED_OPERATIONS,
+  SERVICE_TYPES,
+  evaluateServiceEligibility,
+  type InsurerServiceAgreementFact,
+  type InsurerServiceAgreementStatus,
+  type ServiceEligibilityEvaluation,
+  type ServiceEligibilityStatus,
+  type ServiceSupportedOperation,
+  type ServiceType,
+} from './service-agreement.js'

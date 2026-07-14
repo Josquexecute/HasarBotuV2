@@ -17,18 +17,32 @@ describe('Paket 18 referans HttpApiAdapter', () => {
   it('dört gerçek endpoint sonucunu tek çalışma alanında birleştirir', async () => {
     const fetchImpl = fetchSequence([
       { status: 200, body: { items: [{ id: 'ins-1', name: 'Sigorta' }] } },
-      { status: 200, body: { items: [{ id: 'srv-1', name: 'Servis', centerType: 'ozel' }] } },
+      { status: 200, body: { items: [{ id: 'srv-1', name: 'Servis', serviceType: 'private', isActive: true, agreement: {
+        status: 'eligible', agreementStatus: 'agreed', serviceType: 'private', operation: 'closure_documents',
+        evaluationDate: '2026-07-14', dateSource: 'loss_date', isAuthorized: false, isInsurerAgreed: true,
+        reason: 'Onayli anlasma bulundu.', ruleVersion: '2026.07.14.1', matchedAgreementIds: ['agreement-1'], requiresHumanReview: false,
+      } }] } },
       { status: 200, body: { items: [{ id: 'usr-1', displayName: 'Sorumlu' }] } },
       { status: 200, body: { items: [{ id: 'exp-1', displayName: 'Eksper' }] } },
     ])
-    const result = await createHttpReferenceDataAdapter({ baseUrl: 'http://api.test', fetchImpl }).getCaseReferences()
+    const result = await createHttpReferenceDataAdapter({ baseUrl: 'http://api.test', fetchImpl }).getCaseReferences({
+      insurerId: 'ins-1', evaluationDate: '2026-07-14',
+    })
     expect(result).toEqual({
       insurers: [{ id: 'ins-1', name: 'Sigorta' }],
-      services: [{ id: 'srv-1', name: 'Servis', centerType: 'ozel' }],
+      services: [{ id: 'srv-1', name: 'Servis', serviceType: 'private', isActive: true, agreement: {
+        status: 'eligible', agreementStatus: 'agreed', serviceType: 'private', operation: 'closure_documents',
+        evaluationDate: '2026-07-14', dateSource: 'loss_date', isAuthorized: false, isInsurerAgreed: true,
+        reason: 'Onayli anlasma bulundu.', ruleVersion: '2026.07.14.1', matchedAgreementIds: ['agreement-1'], requiresHumanReview: false,
+      } }],
       users: [{ id: 'usr-1', displayName: 'Sorumlu' }],
       experts: [{ id: 'exp-1', displayName: 'Eksper' }],
     })
     expect(fetchImpl).toHaveBeenCalledTimes(4)
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://api.test/api/v1/references/services?insurerId=ins-1&evaluationDate=2026-07-14&dateSource=loss_date&operation=closure_documents',
+      expect.any(Object),
+    )
   })
 
   it('401 ve ağ/5xx durumlarında mock fallback üretmez', async () => {

@@ -20,7 +20,24 @@ export interface UserReferenceRecord {
 }
 
 export interface ServiceReferenceRecord extends NamedReferenceRecord {
-  readonly centerType: 'yetkili' | 'ozel'
+  readonly serviceType: 'authorized' | 'private' | 'glass' | 'mobile' | 'other'
+  readonly isActive: boolean
+  readonly agreement: ServiceAgreementEvaluationRecord
+}
+
+export interface ServiceAgreementEvaluationRecord {
+  readonly status: 'eligible' | 'not_eligible' | 'control_required'
+  readonly agreementStatus: 'agreed' | 'not_agreed' | 'control_required'
+  readonly serviceType: ServiceReferenceRecord['serviceType']
+  readonly operation: 'closure_documents' | 'deductible_assessment' | 'policy_assessment' | 'repair_authorization'
+  readonly evaluationDate: string | null
+  readonly dateSource: 'loss_date' | 'policy_date'
+  readonly isAuthorized: boolean
+  readonly isInsurerAgreed: boolean | null
+  readonly reason: string
+  readonly ruleVersion: string
+  readonly matchedAgreementIds: readonly string[]
+  readonly requiresHumanReview: boolean
 }
 
 export interface CaseReferenceWorkspace {
@@ -31,7 +48,14 @@ export interface CaseReferenceWorkspace {
 }
 
 export interface CaseReferenceDataPort {
-  getCaseReferences(): Promise<CaseReferenceWorkspace>
+  getCaseReferences(query?: ServiceReferenceQuery): Promise<CaseReferenceWorkspace>
+}
+
+export interface ServiceReferenceQuery {
+  readonly insurerId?: string
+  readonly evaluationDate?: string
+  readonly dateSource?: 'loss_date' | 'policy_date'
+  readonly operation?: ServiceAgreementEvaluationRecord['operation']
 }
 
 export type DocumentPhysicalStatus = 'pending' | 'ready' | 'failed' | 'missing'

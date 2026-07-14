@@ -387,3 +387,7 @@ Her pakette gerçek sonuca göre şu kanıtlar raporlanır:
 ### Paket 21 ek uygulama kaydı — close/reopen saga
 
 Migration 0013, mevcut Paket 20 fiziksel operation ve PostgreSQL job queue'sunu değiştirmeden `case_lifecycle_operations` ile append-only `case_lifecycle_history` ekler. Plan yalnız server-side requirement/location preview ve rezervasyon üretir; approve mevcut move job'ını açar. Agent hedefi doğrulayıp location switch transaction'ına ulaştığında case lifecycle/workflow, operation, history ve merkezi audit birlikte kesinleşir. Fiziksel durum belirsizse lifecycle değiştirilmez ve manual recovery gerekir. `cleanup_pending`, doğrulanmış hedef/location switch sonrası kaynak temizliğinin görünür ve retry edilebilir durumudur. İkinci queue, audit sistemi, dependency, IPC, üretim migration veya gerçek `P:\` testi yoktur.
+
+### Paket 22 ek uygulama kaydı — servis agreement veri sınırı
+
+Migration 0014 expand/migrate yaklaşımıyla `service_type` alanını ekleyip eski `yetkili/özel` profilini dönüştürür; eski satırlara anlaşma üretmez. `insurer_service_agreements` tenant-bileşik FK'ler, LocalDate yürürlük aralığı, kontrollü işlem kodları, insan onayı ve optimistic version taşır. Referans ve Case read sorguları yalnız logical iş metadata'sı döndürür; File Agent, storage root, IPC ve fiziksel dosya yolu bu modelden bağımsızdır. Üretim migration çalıştırılması ayrı deployment onayı gerektirir.

@@ -198,6 +198,120 @@
               "minLength": 1,
               "maxLength": 64
             },
+            "serviceEligibility": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "eligible",
+                        "not_eligible",
+                        "control_required"
+                      ]
+                    },
+                    "agreementStatus": {
+                      "type": "string",
+                      "enum": [
+                        "agreed",
+                        "not_agreed",
+                        "control_required"
+                      ]
+                    },
+                    "serviceType": {
+                      "type": "string",
+                      "enum": [
+                        "authorized",
+                        "private",
+                        "glass",
+                        "mobile",
+                        "other"
+                      ]
+                    },
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "closure_documents",
+                        "deductible_assessment",
+                        "policy_assessment",
+                        "repair_authorization"
+                      ]
+                    },
+                    "evaluationDate": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "dateSource": {
+                      "type": "string",
+                      "enum": [
+                        "loss_date",
+                        "policy_date"
+                      ]
+                    },
+                    "isAuthorized": {
+                      "type": "boolean"
+                    },
+                    "isInsurerAgreed": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "ruleVersion": {
+                      "type": "string",
+                      "const": "2026.07.14.1"
+                    },
+                    "matchedAgreementIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "requiresHumanReview": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "agreementStatus",
+                    "serviceType",
+                    "operation",
+                    "evaluationDate",
+                    "dateSource",
+                    "isAuthorized",
+                    "isInsurerAgreed",
+                    "reason",
+                    "ruleVersion",
+                    "matchedAgreementIds",
+                    "requiresHumanReview"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "missingCount": {
               "type": "integer",
               "minimum": 0,
@@ -303,6 +417,7 @@
             "documentRuleVersion",
             "documentOverallStatus",
             "closureRuleVersion",
+            "serviceEligibility",
             "missingCount",
             "controlRequiredCount",
             "requirements"

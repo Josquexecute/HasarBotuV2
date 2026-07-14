@@ -1,4 +1,4 @@
-import type { CaseReferenceDataPort, CaseReferenceWorkspace } from './ports'
+import type { CaseReferenceDataPort, CaseReferenceWorkspace, ServiceAgreementEvaluationRecord, ServiceReferenceQuery } from './ports'
 
 export type ReferenceDataErrorKind = 'unauthorized' | 'unavailable'
 
@@ -60,12 +60,35 @@ function parseUsers(items: readonly unknown[]): CaseReferenceWorkspace['users'] 
 
 function parseServices(items: readonly unknown[]): CaseReferenceWorkspace['services'] {
   return items.map((item) => {
-    if (!objectWithKeys(item, ['id', 'name', 'centerType']) || !nonEmpty(item.id) || !nonEmpty(item.name) ||
-      (item.centerType !== 'yetkili' && item.centerType !== 'ozel')) {
+    if (!objectWithKeys(item, ['id', 'name', 'serviceType', 'isActive', 'agreement']) || !nonEmpty(item.id) || !nonEmpty(item.name) ||
+      !isServiceType(item.serviceType) || typeof item.isActive !== 'boolean') {
       throw new ReferenceDataError('unavailable', 'invalid service reference response')
     }
-    return { id: item.id, name: item.name, centerType: item.centerType }
+    return { id: item.id, name: item.name, serviceType: item.serviceType, isActive: item.isActive, agreement: parseAgreement(item.agreement) }
   })
+}
+
+function isServiceType(value: unknown): value is CaseReferenceWorkspace['services'][number]['serviceType'] {
+  return value === 'authorized' || value === 'private' || value === 'glass' || value === 'mobile' || value === 'other'
+}
+
+function parseAgreement(value: unknown): ServiceAgreementEvaluationRecord {
+  const keys = ['status', 'agreementStatus', 'serviceType', 'operation', 'evaluationDate', 'dateSource', 'isAuthorized',
+    'isInsurerAgreed', 'reason', 'ruleVersion', 'matchedAgreementIds', 'requiresHumanReview'] as const
+  if (!objectWithKeys(value, keys) || !isServiceType(value.serviceType)
+    || !['eligible', 'not_eligible', 'control_required'].includes(String(value.status))
+    || !['agreed', 'not_agreed', 'control_required'].includes(String(value.agreementStatus))
+    || !['closure_documents', 'deductible_assessment', 'policy_assessment', 'repair_authorization'].includes(String(value.operation))
+    || (value.evaluationDate !== null && typeof value.evaluationDate !== 'string')
+    || (value.dateSource !== 'loss_date' && value.dateSource !== 'policy_date')
+    || typeof value.isAuthorized !== 'boolean'
+    || (value.isInsurerAgreed !== null && typeof value.isInsurerAgreed !== 'boolean')
+    || !nonEmpty(value.reason) || !nonEmpty(value.ruleVersion)
+    || !Array.isArray(value.matchedAgreementIds) || !value.matchedAgreementIds.every(nonEmpty)
+    || typeof value.requiresHumanReview !== 'boolean') {
+    throw new ReferenceDataError('unavailable', 'invalid service agreement response')
+  }
+  return value as unknown as ServiceAgreementEvaluationRecord
 }
 
 export function createHttpReferenceDataAdapter(options: ReferenceAdapterOptions = {}): CaseReferenceDataPort {
@@ -73,10 +96,15 @@ export function createHttpReferenceDataAdapter(options: ReferenceAdapterOptions 
   const fetchImpl = options.fetchImpl ?? fetch
   const headers = options.headers ?? {}
   return {
-    async getCaseReferences(): Promise<CaseReferenceWorkspace> {
+    async getCaseReferences(query: ServiceReferenceQuery = {}): Promise<CaseReferenceWorkspace> {
+      const serviceQuery = new URLSearchParams()
+      if (query.insurerId !== undefined) serviceQuery.set('insurerId', query.insurerId)
+      if (query.evaluationDate !== undefined) serviceQuery.set('evaluationDate', query.evaluationDate)
+      serviceQuery.set('dateSource', query.dateSource ?? 'loss_date')
+      serviceQuery.set('operation', query.operation ?? 'closure_documents')
       const [insurers, services, users, experts] = await Promise.all([
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/insurers`, headers),
-        fetchList(fetchImpl, `${baseUrl}/api/v1/references/services`, headers),
+        fetchList(fetchImpl, `${baseUrl}/api/v1/references/services?${serviceQuery.toString()}`, headers),
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/users`, headers),
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/experts`, headers),
       ])

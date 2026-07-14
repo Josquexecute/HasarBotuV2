@@ -659,3 +659,15 @@ Kabul ölçütü: Kullanıcı onayı öncesi filesystem değişmez; tek aktif op
 - [x] Gerçek tarayıcı/canlı TCP close→reopen smoke, tam root kapıları ve repository dışı fresh `npm ci` temiz checkout.
 
 Kabul ölçütü: Onaydan önce fiziksel/lifecycle değişikliği yoktur; normal ve eksiklerle kapanış ayrımı açıklanır; fiziksel hedef doğrulanmadan closed/open finalize edilmez; aynı case/ofis numarası korunur; history append-only, recovery fail-closed, mutlak yol/secret sınırı korunur; kritik DB/API/Agent/tarayıcı doğrulaması skip kalmaz.
+
+## Aktif geliştirme paketi — Paket 22 servis profili ve sigortacı anlaşması
+
+- [x] Saf domain modeli: servis türü, anlaşma durumu, tarih/işlem/insan onayı facts'i ve sürümlü deterministik `eligible | not_eligible | control_required` sonucu.
+- [x] Migration 0014: backward-compatible servis profili backfill'i, tenant-güvenli `insurer_service_agreements`, tarih/operasyon/onay/version kısıtları; eski servisler için sessiz anlaşma seed'i yok.
+- [x] Contracts/API: sigortacı, LocalDate ve işlem bağlamlı servis referans query'si; Case read/create/update servis profili; aktif/tenant referans sınırı ve optimistic Case update korunur.
+- [x] Paket 21 kapanış katmanı `2026.07.14.2`: yetkili profil veya ilgili sigortacı/tarihte onaylı anlaşma; belirsiz eski ilişki `control_required`.
+- [x] Merkezi Case/lifecycle audit özetinde yalnız güvenli değerlendirme kodları/sürümleri/kimlikleri; kaynak metni, kişisel veri ve secret yok.
+- [x] Create/edit UI'da Türkçe servis türü ve seçili sigortacı anlaşma sonucu; API modunda mock fallback yok.
+- [x] Tam root, gerçek PostgreSQL, gerçek tarayıcı ve repository dışı fresh `npm ci` kapılarının son çalıştırması.
+
+Kabul ölçütü: Yetkili servis anlaşmalı diye işaretlenmez; aynı servis iki sigortacıda farklı ve tarihsel sonuç verebilir; bilinmeyen eski ilişki fail-closed `control_required` olur; Case ve kapanış cevapları kullanılan sürümü taşır; tenant, aktiflik, optimistic locking, audit ve UI no-fallback sınırları gerçek testlerle doğrulanmadan paket tamamlanmaz.

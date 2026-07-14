@@ -55,6 +55,26 @@ export interface CaseRecord {
   responsibleUserId?: string | null
   expertUserId?: string | null
   serviceId?: string | null
+  serviceProfile?: {
+    readonly id: string
+    readonly name: string
+    readonly serviceType: 'authorized' | 'private' | 'glass' | 'mobile' | 'other'
+    readonly isActive: boolean
+    readonly agreement: {
+      readonly status: 'eligible' | 'not_eligible' | 'control_required'
+      readonly agreementStatus: 'agreed' | 'not_agreed' | 'control_required'
+      readonly serviceType: 'authorized' | 'private' | 'glass' | 'mobile' | 'other'
+      readonly operation: 'closure_documents' | 'deductible_assessment' | 'policy_assessment' | 'repair_authorization'
+      readonly evaluationDate: string | null
+      readonly dateSource: 'loss_date' | 'policy_date'
+      readonly isAuthorized: boolean
+      readonly isInsurerAgreed: boolean | null
+      readonly reason: string
+      readonly ruleVersion: string
+      readonly matchedAgreementIds: readonly string[]
+      readonly requiresHumanReview: boolean
+    }
+  } | null
   insurerId?: string | null
   followUpDate?: string | null
   lossDate?: string | null

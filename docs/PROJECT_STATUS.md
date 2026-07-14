@@ -516,3 +516,23 @@ Paket 20 tamamlandıktan sonra yalnız kullanıcı tarafından ayrıca tanımlan
 ## Sonraki önerilen görev (güncel)
 
 Paket 21'in bütün kapıları ve atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket bu çalışma kapsamında değildir.
+
+## Paket 22 — Servis profili ve sigorta şirketi anlaşma modeli (2026-07-14)
+
+- Servis profili `authorized | private | glass | mobile | other` olarak ayrıştırıldı; yetkili servis niteliği sigorta şirketi anlaşmasına eşitlenmedi. Migration 0014 mevcut `yetkili/özel` kayıtları geriye uyumlu dönüştürür, fakat hiçbir eski servise sessiz anlaşma seed'i eklemez.
+- `insurer_service_agreements`; tenant, sigorta şirketi, servis, durum, etkin tarih aralığı, desteklenen işlem, kaynak referansı, insan onayı ve optimistic version taşır. Tenant bileşik foreign key'leri ve tarih/onay/operasyon kısıtları DB tarafında zorlanır.
+- Saf domain değerlendirmesi hasar veya poliçe LocalDate'i ve işlem bağlamıyla `eligible | not_eligible | control_required` üretir; kural sürümü `2026.07.14.1`'dir. Case read/create/update, referans API'leri ve güvenli audit özetleri bu sonucu taşır.
+- Paket 21 kapanış evrakı katmanı `2026.07.14.2`'ye geçti: Teslim İbra ve Temlik ile Taahhütname, yetkili servis veya ilgili sigorta şirketi/tarihte insan onaylı anlaşma varsa değerlendirilir; bilinmeyen eski ilişki `control_required` olur.
+- Create/edit UI gerçek referans listesindeki servis türünü, sigorta şirketine özel anlaşma sonucunu, gerekçeyi ve kural sürümünü gösterir. Pasif ve tenant dışı referanslar listelenmez; API kesintisinde mock fallback yapılmaz. Servis CRUD, poliçe AI/muafiyet hesaplaması, File Agent fiziksel işlemi ve üretim migration çalıştırması eklenmedi. Karar: HB-2026-028.
+
+### Doğrulama durumu (Paket 22)
+
+- `npm install`, root typecheck, lint, build ve `git diff --check` başarılı; `npm audit --audit-level=moderate` 0 açık verdi.
+- `npm run test` gerçek `hasarbotu_test` PostgreSQL ile: UI 108 (+6 ortam-koşullu skip), domain 323, contracts 118, database 29, API 152, file-agent 37; **toplam 767 başarılı, 6 skip**. Kritik DB/API testi skip kalmadı.
+- Migration 0014 ileri/tekrar/rollback-yeniden-ileri ve profil backfill'i; sessiz anlaşma olmaması; tenant/tarih/operasyon/insan onayı kısıtları gerçek PostgreSQL'de geçti.
+- Gerçek tarayıcı + canlı API: login, aktif referans filtresi, Traffic create, servis profili read, tarihsel anlaşma `eligible/agreed`, farklı sigortacıda `control_required`, optimistic edit sürüm 1→3, API kesintisinde no-fallback ve audit sızıntı taraması geçti. 1366×768 koyu/açık ve 1920×1080 açık temada yatay/dikey sayfa taşması ve console warning/error yoktu.
+- Repository dışı kopyada başlangıçta `.git`/`node_modules`/`dist` yoktu; fresh `npm ci` ardından typecheck, lint, aynı 767 test (+6 UI skip), build ve audit geçti; kopya kaldırıldı.
+
+## Sonraki önerilen görev (güncel)
+
+Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket bu çalışma kapsamında değildir.

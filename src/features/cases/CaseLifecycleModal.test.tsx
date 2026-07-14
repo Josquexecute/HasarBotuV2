@@ -18,7 +18,7 @@ const planned: LifecycleOperationRecord = {
   destination: { storageRootKey: 'test-root', relativePath: '2026/Temmuz 2026/KAPALI TEMMUZ 2026/34ABC123' },
   closeMode: 'normal', reason: null, targetWorkflowStage: 'closed', blockers: [], warnings: [], linkedFileOperation: null,
   failureReasonCode: null, canApprove: true, canCancel: true,
-  requirementSummary: { documentRuleVersion: '2026.07.14.1', closureRuleVersion: '2026.07.14.1', missingCount: 0,
+  requirementSummary: { documentRuleVersion: '2026.07.14.1', closureRuleVersion: '2026.07.14.2', serviceEligibility: null, missingCount: 0,
     controlRequiredCount: 0, requirements: [{ requirementCode: 'closure.expert_report', sourceType: 'document',
       canonicalType: 'expert_report', status: 'present', reason: 'Doğrulanmış ready metadata.', requiresHumanReview: false }] },
 }
@@ -38,7 +38,7 @@ describe('CaseLifecycleModal', () => {
     const onUpdated = vi.fn()
     const { rerender } = render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={onUpdated} onUnauthorized={vi.fn()} onReload={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
-    expect(await screen.findByText('2026.07.14.1 · 2026.07.14.1')).toBeInTheDocument()
+    expect(await screen.findByText('2026.07.14.1 · 2026.07.14.2')).toBeInTheDocument()
     expect(screen.getByText('Mevcut')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Onayla ve Kapat' }))
     await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(closed), { timeout: 2500 })

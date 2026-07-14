@@ -1,6 +1,7 @@
 import { TURKISH_MONTH_NAMES } from './case-workspace.js'
 import { OPEN_CASE_STAGES, type OpenCaseStage } from './case-status.js'
 import { parseRelativePath } from './storage-path.js'
+import type { ServiceEligibilityEvaluation } from './service-agreement.js'
 
 export const CASE_LIFECYCLE_OPERATION_TYPES = ['close', 'reopen'] as const
 export type CaseLifecycleOperationType = (typeof CASE_LIFECYCLE_OPERATION_TYPES)[number]
@@ -51,7 +52,7 @@ export interface ClosureRequirementResult {
 }
 
 export interface ClosureRequirementsEvaluation {
-  readonly version: '2026.07.14.1'
+  readonly version: '2026.07.14.2'
   readonly requirements: readonly ClosureRequirementResult[]
   readonly missingCount: number
   readonly controlRequiredCount: number
@@ -121,7 +122,7 @@ export function evaluateClosureRequirements(input: {
   readonly documents: readonly ClosureMetadataCandidate[]
   readonly repairPhotos: readonly ClosureMetadataCandidate[]
   readonly hasService: boolean
-  readonly isAuthorizedService: boolean
+  readonly serviceEligibility: ServiceEligibilityEvaluation | null
 }): ClosureRequirementsEvaluation {
   const docs = (type: string): readonly ClosureMetadataCandidate[] => input.documents.filter((item) => item.canonicalType === type)
   const requirements = [
@@ -129,29 +130,48 @@ export function evaluateClosureRequirements(input: {
     evaluateCandidate('closure.preliminary_report', 'document', 'preliminary_report', docs('preliminary_report'), true, ''),
     evaluateCandidate('closure.repair_photos', 'photo', 'repair_photos', input.repairPhotos, true, ''),
     evaluateCandidate('closure.invoice', 'document', 'invoice', docs('invoice'), input.hasService, 'Servis atanmamis; fatura uygulanamaz.'),
-    evaluateCandidate(
-      'closure.delivery_release_assignment',
-      'document',
-      'delivery_release_assignment',
-      docs('delivery_release_assignment'),
-      input.isAuthorizedService,
-      'Yetkili servis kosulu yok; Teslim Ibra ve Temlik uygulanamaz.',
-    ),
-    evaluateCandidate(
-      'closure.commitment',
-      'document',
-      'commitment',
-      docs('commitment'),
-      input.isAuthorizedService,
-      'Yetkili servis kosulu yok; Taahhutname uygulanamaz.',
-    ),
+    evaluateServiceConditionalCandidate('closure.delivery_release_assignment', 'delivery_release_assignment', docs('delivery_release_assignment'), input),
+    evaluateServiceConditionalCandidate('closure.commitment', 'commitment', docs('commitment'), input),
   ] as const
   return {
-    version: '2026.07.14.1',
+    version: '2026.07.14.2',
     requirements,
     missingCount: requirements.filter((item) => item.status === 'missing').length,
     controlRequiredCount: requirements.filter((item) => item.status === 'control_required').length,
   }
+}
+
+function evaluateServiceConditionalCandidate(
+  requirementCode: string,
+  canonicalType: string,
+  candidates: readonly ClosureMetadataCandidate[],
+  input: { readonly hasService: boolean; readonly serviceEligibility: ServiceEligibilityEvaluation | null },
+): ClosureRequirementResult {
+  if (!input.hasService) {
+    return evaluateCandidate(requirementCode, 'document', canonicalType, candidates, false, 'Servis atanmamis; kosullu kapanis evraki uygulanamaz.')
+  }
+  if (input.serviceEligibility === null || input.serviceEligibility.status === 'control_required') {
+    return {
+      requirementCode,
+      sourceType: 'document',
+      canonicalType,
+      status: 'control_required',
+      reason: input.serviceEligibility?.reason ?? 'Servis profili veya sigortaci anlasmasi dogrulanamadi.',
+      matchedMetadataIds: [],
+      relatedMetadataStatuses: [...candidates]
+        .sort((left, right) => left.id.localeCompare(right.id))
+        .map((item) => ({ metadataId: item.id, status: item.status })),
+      requiresHumanReview: true,
+    }
+  }
+  return evaluateCandidate(
+    requirementCode,
+    'document',
+    canonicalType,
+    candidates,
+    input.serviceEligibility.status === 'eligible',
+    `Servis bu sigortaci ve tarih icin kosulu karsilamiyor. ${input.serviceEligibility.reason}`,
+  )
 }
 
 export type ClosedWorkspacePathResult =

@@ -515,3 +515,14 @@ Etkisi: Migration `0012_case_file_operations`; file-operation contracts ve tenan
 7. **Yetki ve sınır:** Yalnız `admin`, `expert` ve `case_manager` close/reopen komutu verebilir; okuma tenant kapsamlı oturumla yapılır. Yeni dependency, IPC, ikinci queue/audit veya genel move/delete API eklenmedi. Üretim migration ve gerçek `P:\` testi yapılmadı; yalnız test DB ve sentetik geçici root kullanılır.
 
 Etkisi: Migration `0013_case_close_reopen_lifecycle`; domain/contracts/API lifecycle plan/approve/read/cancel akışı; mevcut Paket 20 Agent finalize işlemine atomik lifecycle kesinleştirmesi; case detayında gerçek preview/onay/recovery UI'si ve append-only kapanış geçmişi.
+
+## 2026-07-14 — HB-2026-028: Servis profili ve sigorta şirketine özel anlaşma ayrımı
+
+1. `service_centers.service_type`, servisin temel niteliğini `authorized | private | glass | mobile | other` olarak taşır. `authorized` yalnız servis profilidir; hiçbir sigorta şirketiyle anlaşma sonucunu kendiliğinden üretmez.
+2. Sigorta şirketine özel ilişki `insurer_service_agreements` içinde tenant, servis, sigortacı, yürürlük tarihleri, durum, desteklenen işlem kodları, kaynak referansı, insan onayı ve optimistic `version` ile tutulur. Aynı servis farklı sigortacılarda farklı sonuç verebilir.
+3. Deterministik değerlendirme `2026.07.14.1` sürümündedir; sigortacı, `lossDate` veya ileride `policyDate`, işlem kodu ve kontrollü agreement facts dışarıdan verilir. İnsan onaylı, aktif, tarihte geçerli ve ilgili işlemi destekleyen kayıt `agreed` olur. Kayıt/tarih/onay belirsizliği `control_required`; açıkça tarih dışı, pasif, sonlandırılmış veya işlem dışı kayıt `not_agreed` olur.
+4. Backward-compatible migration mevcut `yetkili/özel` profilleri `authorized/private` olarak taşır fakat hiçbir eski servis için sessiz anlaşma satırı üretmez. Legacy `center_type` expand/migrate uyumluluğu için geçici olarak korunur ve yeni profil alanıyla DB constraint üzerinden tutarlı tutulur.
+5. Kapanış kuralı `2026.07.14.2` sürümüne çıkarılmıştır. Teslim İbra ve Temlik ile Taahhütname, servis yetkiliyse veya ilgili sigortacı/tarihte anlaşmalıysa uygulanır. Yetkili servis anlaşmalı diye etiketlenmez; özel serviste ilişki belirsizse bu evraklar otomatik `not_applicable` değil `control_required` olur.
+6. Case read/create/update ve referans cevapları güvenli servis profili ile anlaşma değerlendirme özetini taşır. Create/update audit'i yalnız tür, sonuç, kural sürümü ve eşleşen agreement kimliklerini taşır; kaynak metni, kişisel veri veya secret içermez. Agreement yönetim CRUD'u bu pakette yoktur.
+
+Etkisi: Migration `0014_service_agreements`; saf domain uygunluk sınırı; referans query/DTO ve Case DTO zenginleştirmesi; Paket 21 kapanış snapshot'ı; gerçek API form etiketleri. File Agent, IPC, fiziksel dosya yolu, yeni dependency veya üretim migration yoktur.

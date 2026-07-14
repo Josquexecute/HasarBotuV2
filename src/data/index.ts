@@ -15,6 +15,8 @@ export {
   type PhotoMetadataRecord,
   type NamedReferenceRecord,
   type ServiceReferenceRecord,
+  type ServiceAgreementEvaluationRecord,
+  type ServiceReferenceQuery,
   type UserReferenceRecord,
 } from './ports'
 export { createMockCasesAdapter } from './mockAdapter'

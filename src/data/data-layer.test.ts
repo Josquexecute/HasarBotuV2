@@ -28,6 +28,7 @@ const dto = {
   version: 4,
   responsibleUserId: 'user-1',
   serviceId: null,
+  serviceProfile: null,
   insurerId: 'insurer-1',
   expertUserId: 'expert-1',
   lossDate: '2026-07-10',

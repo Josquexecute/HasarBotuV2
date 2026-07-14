@@ -92,8 +92,8 @@ describeDb('salt okunur Cases uclari (gercek veritabani)', () => {
       [userId, orgId, EMAIL, 'Okuyucu', await hashPassword(PASSWORD)],
     )
     await pool.query(
-      'INSERT INTO service_centers (id, organization_id, name, center_type, phone) VALUES ($1, $2, $3, $4, $5)',
-      [serviceId, orgId, 'Merkez Oto Servis', 'ozel', '0312 000 00 00'],
+      'INSERT INTO service_centers (id, organization_id, name, center_type, service_type, phone) VALUES ($1, $2, $3, $4, $5, $6)',
+      [serviceId, orgId, 'Merkez Oto Servis', 'ozel', 'private', '0312 000 00 00'],
     )
 
     caseIds = {
@@ -283,10 +283,12 @@ describeDb('salt okunur Cases uclari (gercek veritabani)', () => {
       headers: { cookie },
     })
     expect(detail.statusCode).toBe(200)
-    const body = detail.json() as { case: { plate: string; followUpDate: string } }
+    const body = detail.json() as { case: { plate: string; followUpDate: string; serviceProfile: { serviceType: string; agreement: { status: string } } } }
     expect(caseDetailResponseSchema.safeParse(body).success).toBe(true)
     expect(body.case.plate).toBe('34 MPA 764')
     expect(body.case.followUpDate).toBe('2026-07-14')
+    expect(body.case.serviceProfile).toMatchObject({ serviceType: 'private', agreement: { status: 'control_required' } })
+    expect(JSON.stringify(body)).not.toMatch(/[A-Z]:\\|password|source_reference/i)
 
     const missing = await app.inject({
       method: 'GET',

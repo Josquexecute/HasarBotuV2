@@ -15,6 +15,8 @@ import {
   commandErrorMessage,
   commandFieldMessages,
   nullableText,
+  serviceEvaluationSummary,
+  serviceOptionLabel,
 } from './caseForm'
 
 interface CaseEditModalProps {
@@ -34,7 +36,6 @@ function FieldError({ message }: { readonly message?: string }) {
 
 export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthorized, commandPort, referencePort }: CaseEditModalProps) {
   const commands = useMemo(() => commandPort ?? createHttpCaseCommandAdapter(), [commandPort])
-  const referenceData = useCaseReferences(referencePort)
   const submittingRef = useRef(false)
   const [workflowStage, setWorkflowStage] = useState<CaseStageCode>(item.workflowStage ?? 'new_notification')
   const [followUpDate, setFollowUpDate] = useState(item.followUpDate ?? '')
@@ -46,6 +47,12 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
   const [insurerId, setInsurerId] = useState(item.insurerId ?? '')
   const [lossDate, setLossDate] = useState(item.lossDate ?? '')
   const [notificationDate, setNotificationDate] = useState(item.notificationDate ?? '')
+  const referenceData = useCaseReferences(referencePort, {
+    ...(insurerId === '' ? {} : { insurerId }),
+    ...(lossDate === '' ? {} : { evaluationDate: lossDate }),
+    dateSource: 'loss_date',
+    operation: 'closure_documents',
+  })
   const [submitting, setSubmitting] = useState(false)
   const [conflict, setConflict] = useState(false)
   const [generalError, setGeneralError] = useState('')
@@ -128,7 +135,7 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
               <label className="form-field"><span>Hasar dosya numarası</span><input value={insurerClaimNumber} onChange={(event) => setInsurerClaimNumber(event.target.value)} autoComplete="off" aria-invalid={fieldErrors.insurerClaimNumber !== undefined} /><FieldError message={fieldErrors.insurerClaimNumber} /></label>
               <label className="form-field"><span>Sorumlu</span><select value={responsibleUserId} onChange={(event) => setResponsibleUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{item.responsibleUserId && !referenceData.references?.users.some((option) => option.id === item.responsibleUserId) && <option value={item.responsibleUserId}>Mevcut sorumlu · pasif/erişilemez</option>}{referenceData.references?.users.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.responsibleUserId} /></label>
               <label className="form-field"><span>Sigorta şirketi</span><select value={insurerId} onChange={(event) => setInsurerId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{item.insurerId && !referenceData.references?.insurers.some((option) => option.id === item.insurerId) && <option value={item.insurerId}>Mevcut sigorta şirketi · pasif/erişilemez</option>}{referenceData.references?.insurers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.insurerId} /></label>
-              <label className="form-field"><span>Servis</span><select value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{item.serviceId && !referenceData.references?.services.some((option) => option.id === item.serviceId) && <option value={item.serviceId}>Mevcut servis · pasif/erişilemez</option>}{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.serviceId} /></label>
+              <label className="form-field"><span>Servis</span><select aria-label="Servis" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{item.serviceId && !referenceData.references?.services.some((option) => option.id === item.serviceId) && <option value={item.serviceId}>Mevcut servis · pasif/erişilemez</option>}{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{serviceOptionLabel(option)}</option>)}</select><small>{serviceEvaluationSummary(referenceData.references?.services.find((option) => option.id === serviceId) ?? item.serviceProfile)}</small><FieldError message={fieldErrors.serviceId} /></label>
               <label className="form-field"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{item.expertUserId && !referenceData.references?.experts.some((option) => option.id === item.expertUserId) && <option value={item.expertUserId}>Mevcut eksper · pasif/uygun değil</option>}{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} /></label>
               <label className="form-field"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><small>LocalDate; boş bırakılırsa temizlenir.</small><FieldError message={fieldErrors.lossDate} /></label>
               <label className="form-field"><span>İhbar tarihi</span><input type="date" value={notificationDate} onChange={(event) => setNotificationDate(event.target.value)} aria-invalid={fieldErrors.notificationDate !== undefined} /><small>Hasar tarihinden önce olamaz.</small><FieldError message={fieldErrors.notificationDate} /></label>

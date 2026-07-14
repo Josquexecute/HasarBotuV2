@@ -5,6 +5,7 @@ import { parsePlateNumber, plateSearchKey } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { rowToDto, SELECT_FIELDS, toLocalDateString, type CaseRow } from './store.js'
 import { createAuditService } from '../audit/service.js'
+import { loadServiceProfile } from '../service-agreements/service.js'
 
 /**
  * Cases yazma katmani (Paket 09) — kritik islem modeli:
@@ -168,7 +169,15 @@ export function createCasesWriteStore(pool: pg.Pool) {
         )
 
         const row = await client.query(`SELECT ${SELECT_FIELDS} FROM cases WHERE id = $1`, [caseId])
-        const item = rowToDto(row.rows[0] as CaseRow)
+        const createdRow = row.rows[0] as CaseRow
+        const serviceProfile = createdRow.service_center_id === null ? null : await loadServiceProfile(client, actor.organizationId, {
+          serviceId: createdRow.service_center_id,
+          insurerId: createdRow.insurer_id,
+          evaluationDate: createdRow.loss_date === null ? null : toLocalDateString(createdRow.loss_date),
+          dateSource: 'loss_date',
+          operation: 'closure_documents',
+        })
+        const item = rowToDto(createdRow, serviceProfile)
 
         await audit.record(client, {
           organizationId: actor.organizationId,
@@ -186,6 +195,13 @@ export function createCasesWriteStore(pool: pg.Pool) {
             dateFieldsPresent: ['followUpDate', 'lossDate', 'notificationDate'].filter(
               (field) => (input as Record<string, unknown>)[field] !== undefined,
             ),
+            serviceEligibility: serviceProfile === null ? null : {
+              serviceType: serviceProfile.serviceType,
+              status: serviceProfile.agreement.status,
+              agreementStatus: serviceProfile.agreement.agreementStatus,
+              ruleVersion: serviceProfile.agreement.ruleVersion,
+              matchedAgreementIds: serviceProfile.agreement.matchedAgreementIds,
+            },
           },
         })
         await client.query(
@@ -276,7 +292,15 @@ export function createCasesWriteStore(pool: pg.Pool) {
            RETURNING ${SELECT_FIELDS}`,
           params,
         )
-        const item = rowToDto(updated.rows[0] as CaseRow)
+        const updatedRow = updated.rows[0] as CaseRow
+        const serviceProfile = updatedRow.service_center_id === null ? null : await loadServiceProfile(client, actor.organizationId, {
+          serviceId: updatedRow.service_center_id,
+          insurerId: updatedRow.insurer_id,
+          evaluationDate: updatedRow.loss_date === null ? null : toLocalDateString(updatedRow.loss_date),
+          dateSource: 'loss_date',
+          operation: 'closure_documents',
+        })
+        const item = rowToDto(updatedRow, serviceProfile)
 
         await audit.record(client, {
           organizationId: actor.organizationId,
@@ -285,7 +309,18 @@ export function createCasesWriteStore(pool: pg.Pool) {
           action: 'case.updated',
           entityType: 'case',
           entityId: item.id,
-          details: { changedFields, fromVersion: input.expectedVersion, toVersion: item.version },
+          details: {
+            changedFields,
+            fromVersion: input.expectedVersion,
+            toVersion: item.version,
+            serviceEligibility: serviceProfile === null ? null : {
+              serviceType: serviceProfile.serviceType,
+              status: serviceProfile.agreement.status,
+              agreementStatus: serviceProfile.agreement.agreementStatus,
+              ruleVersion: serviceProfile.agreement.ruleVersion,
+              matchedAgreementIds: serviceProfile.agreement.matchedAgreementIds,
+            },
+          },
         })
         await client.query('COMMIT')
         return { kind: 'ok', item }

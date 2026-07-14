@@ -15,6 +15,7 @@ import {
 import { requirementStatusSchema } from '../document-requirements/index.js'
 import { logicalStorageReferenceSchema, fileOperationStatusSchema } from '../file-operations/index.js'
 import { closeModeSchema } from './commands.js'
+import { serviceAgreementEvaluationSchema } from '../references/dto.js'
 
 export const lifecycleOperationTypeSchema = z.enum(CASE_LIFECYCLE_OPERATION_TYPES)
 export const lifecycleOperationStatusSchema = z.enum(CASE_LIFECYCLE_OPERATION_STATUSES)
@@ -38,6 +39,7 @@ export const lifecycleRequirementSummarySchema = z.strictObject({
   documentRuleVersion: z.string().min(1).max(64),
   documentOverallStatus: requirementStatusSchema,
   closureRuleVersion: z.string().min(1).max(64),
+  serviceEligibility: serviceAgreementEvaluationSchema.nullable(),
   missingCount: z.number().int().min(0),
   controlRequiredCount: z.number().int().min(0),
   requirements: z.array(lifecycleRequirementItemSchema),

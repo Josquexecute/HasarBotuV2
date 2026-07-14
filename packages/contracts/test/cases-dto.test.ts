@@ -18,6 +18,7 @@ const validItem = {
   responsibleUserId: 'usr-2',
   expertUserId: 'usr-expert',
   serviceId: null,
+  serviceProfile: null,
   insurerId: null,
   followUpDate: '2026-07-14',
   lossDate: '2026-07-10',

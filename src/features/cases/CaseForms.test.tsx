@@ -25,7 +25,11 @@ const USER: SessionUser = {
 const REFERENCES: CaseReferenceDataPort = {
   getCaseReferences: async () => ({
     insurers: [{ id: 'insurer-1', name: 'Güven Sigorta' }],
-    services: [{ id: 'service-1', name: 'Merkez Servis', centerType: 'ozel' }],
+    services: [{ id: 'service-1', name: 'Merkez Servis', serviceType: 'private', isActive: true, agreement: {
+      status: 'eligible', agreementStatus: 'agreed', serviceType: 'private', operation: 'closure_documents',
+      evaluationDate: '2026-07-10', dateSource: 'loss_date', isAuthorized: false, isInsurerAgreed: true,
+      reason: 'İnsan onaylı aktif anlaşma bulundu.', ruleVersion: '2026.07.14.1', matchedAgreementIds: ['agreement-1'], requiresHumanReview: false,
+    } }],
     users: [
       { id: USER.id, displayName: USER.displayName },
       { id: 'user-2', displayName: 'İkinci Kullanıcı' },
@@ -168,6 +172,8 @@ describe('CaseCreateModal gerçek API komut akışı', () => {
   it('eksper ve LocalDate alanlarını gerçek referans modeliyle sunar', async () => {
     renderCreate(commandPort())
     expect(await screen.findByRole('option', { name: 'Uzman Eksper' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Merkez Servis · Özel servis · seçili sigorta şirketiyle anlaşmalı' })).toBeInTheDocument()
+    expect(screen.getByText(/Servis seçildiğinde tür ve sigorta şirketine özel anlaşma sonucu/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Hasar tarihi/)).toHaveAttribute('type', 'date')
     expect(screen.getByLabelText(/^İhbar tarihi/)).toHaveAttribute('type', 'date')
   })

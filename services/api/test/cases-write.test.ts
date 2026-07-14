@@ -68,8 +68,8 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
       [userId, orgId, EMAIL, 'Yazici', await hashPassword(PASSWORD)],
     )
     await pool.query(
-      'INSERT INTO service_centers (id, organization_id, name, center_type) VALUES ($1, $2, $3, $4)',
-      [serviceId, orgId, 'Merkez Servis', 'ozel'],
+      'INSERT INTO service_centers (id, organization_id, name, center_type, service_type) VALUES ($1, $2, $3, $4, $5)',
+      [serviceId, orgId, 'Merkez Servis', 'ozel', 'private'],
     )
     await pool.query(
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',
@@ -78,8 +78,15 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     await pool.query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE code='expert'", [expertId])
     await pool.query('INSERT INTO insurers (id, organization_id, name) VALUES ($1, $2, $3)', [insurerId, orgId, 'Güven Sigorta'])
     await pool.query(
-      'INSERT INTO service_centers (id, organization_id, name, center_type, is_active) VALUES ($1, $2, $3, $4, false)',
-      [inactiveServiceId, orgId, 'Pasif Servis', 'ozel'],
+      `INSERT INTO insurer_service_agreements
+       (id,organization_id,insurer_id,service_center_id,agreement_status,effective_from,effective_to,supported_operations,
+        source_reference,human_approved,approved_by_user_id,approved_at)
+       VALUES ($1,$2,$3,$4,'active','2026-01-01','2026-12-31',ARRAY['closure_documents'],'sentetik-case-write',true,$5,now())`,
+      [uuidv7(), orgId, insurerId, serviceId, userId],
+    )
+    await pool.query(
+      'INSERT INTO service_centers (id, organization_id, name, center_type, service_type, is_active) VALUES ($1, $2, $3, $4, $5, false)',
+      [inactiveServiceId, orgId, 'Pasif Servis', 'ozel', 'private'],
     )
 
     app = buildApp({
@@ -125,7 +132,10 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     })
     expect(created.statusCode).toBe(201)
     const createdCase = caseDetailResponseSchema.parse(created.json()).case
-    expect(createdCase).toMatchObject({ expertUserId: expertId, lossDate: '2026-07-10', notificationDate: '2026-07-11' })
+    expect(createdCase).toMatchObject({
+      expertUserId: expertId, lossDate: '2026-07-10', notificationDate: '2026-07-11',
+      serviceProfile: { id: serviceId, serviceType: 'private', agreement: { status: 'eligible', agreementStatus: 'agreed' } },
+    })
 
     const updated = await app.inject({
       method: 'PATCH', url: `${CASES_ROUTE}/${createdCase.id}`, headers: { cookie },
@@ -135,8 +145,8 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect(caseDetailResponseSchema.parse(updated.json()).case).toMatchObject({ version: 2, lossDate: '2026-07-12', notificationDate: '2026-07-13' })
     const audits = await pool.query("SELECT action,details FROM audit_events WHERE resource_id=$1 ORDER BY occurred_at", [createdCase.id])
     expect(audits.rows).toEqual([
-      expect.objectContaining({ action: 'case.created', details: expect.objectContaining({ assignedReferenceFields: ['responsibleUserId', 'expertUserId', 'serviceId', 'insurerId'], dateFieldsPresent: ['followUpDate', 'lossDate', 'notificationDate'] }) }),
-      expect.objectContaining({ action: 'case.updated', details: expect.objectContaining({ changedFields: ['lossDate', 'notificationDate'], fromVersion: 1, toVersion: 2 }) }),
+      expect.objectContaining({ action: 'case.created', details: expect.objectContaining({ assignedReferenceFields: ['responsibleUserId', 'expertUserId', 'serviceId', 'insurerId'], dateFieldsPresent: ['followUpDate', 'lossDate', 'notificationDate'], serviceEligibility: expect.objectContaining({ status: 'eligible', agreementStatus: 'agreed' }) }) }),
+      expect.objectContaining({ action: 'case.updated', details: expect.objectContaining({ changedFields: ['lossDate', 'notificationDate'], fromVersion: 1, toVersion: 2, serviceEligibility: expect.objectContaining({ status: 'eligible', agreementStatus: 'agreed' }) }) }),
     ])
   })
 

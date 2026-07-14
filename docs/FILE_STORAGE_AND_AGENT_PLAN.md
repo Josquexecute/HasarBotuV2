@@ -254,3 +254,7 @@ Event path değerleri göreli ve gerektiğinde maskeli; raw exception/credential
 - Agent sonucu ownership/lease, lifecycle/file operation sürümü, case/location snapshot'ı ve destination reservation ile yeniden doğrulanır. Verified location switch ile lifecycle/workflow/history/audit tek transaction'da kesinleşir.
 - Same-volume atomic rename ve gerekirse staged-copy/cleanup semantiği değişmez. `cleanup_pending` finalize edilmiş lifecycle ile görünür uyarı olabilir; belirsiz durum `manual_recovery_required` olur ve kullanıcıya başarılı close/reopen gösterilmez.
 - Mutlak root Agent yerel config'inde kalır. DB/API/audit/log yalnız logical storage referansı taşır. Gerçek `P:\` üzerinde test deployment/pilot aşamasına bırakılmıştır.
+
+## 20. Paket 22 sınırı
+
+Servis profili ve sigorta şirketi anlaşması yalnız PostgreSQL iş metadata'sıdır. File Agent job protokolü, physical resolver, case workspace yolu ve close/reopen move saga'sı değişmez. Kapanış planının belge snapshot'ı yeni servis uygunluk sonucunu kullanır; bu sonuç Agent'a serbest path veya fiziksel işlem yetkisi vermez.

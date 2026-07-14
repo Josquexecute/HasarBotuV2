@@ -79,7 +79,8 @@ Zorunlu listedeki ilişkileri güvenli kurmak için aşağıdakiler adaydır; ke
 | `organizations` / `firms` | `firm_id` ve ofis numarası kapsamı | Firma silinmez; slug/code unique; ayar/retention scope |
 | `permissions`, `role_permissions` | RBAC izin kataloğu | Permission code immutable; değişiklik A2 audit |
 | `sessions` | Server-side session önerisi | Token hash, expiry, revoke; raw secret yok |
-| `service_centers` / `insurers` | Organization-kapsamlı seçim katalogları; ad/tür ve `is_active` | Firma içinde ad unique; pasif kayıt tarihsel ilişkide korunur, yeni atamada reddedilir |
+| `service_centers` / `insurers` | Organization-kapsamlı seçim katalogları; servis `service_type`, ad ve `is_active` | Firma içinde ad unique; pasif kayıt tarihsel ilişkide korunur, yeni atamada reddedilir; authorized profil anlaşma değildir |
+| `insurer_service_agreements` | Sigortacı-servis çifti için tarihsel durum, desteklenen işlemler, kaynak ve insan onayı | Tenant-bileşik FK; tarih aralığı; kontrollü operation; version; eski servisler için otomatik satır yok |
 | `storage_roots` | Root key/purpose; mutlak yol yalnız yetkili local config yaklaşımı | DB'ye client mutlak yolu yazmama kararı korunur; server root secret/secure config olabilir |
 | `file_agent_jobs` | PostgreSQL queue/idempotency/recovery | Unique idempotency key; lease/attempt/status/next_attempt; append results |
 | `idempotency_keys` | HTTP komut tekrar koruması | Scope+key unique; request hash/response ref; sınırlı retention |

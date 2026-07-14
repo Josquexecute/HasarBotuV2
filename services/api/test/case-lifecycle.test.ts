@@ -44,6 +44,11 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
   let root: string
   let agentConfig: AgentConfig
   let agentClient: ReturnType<typeof createAgentApiClient>
+  let adminUserId: string
+  let insurerId: string
+  let insurerWithoutAgreementId: string
+  let authorizedServiceId: string
+  let agreedPrivateServiceId: string
 
   const injectFetch = (async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const response = await app.inject({
@@ -56,13 +61,14 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
       json: async () => response.json(), headers: { get: () => null } } as unknown as Response
   }) as unknown as typeof fetch
 
-  async function seedUser(orgId: string, email: string, role: 'admin' | 'secretary'): Promise<void> {
+  async function seedUser(orgId: string, email: string, role: 'admin' | 'secretary'): Promise<string> {
     const id = uuidv7()
     await pool.query(
       'INSERT INTO users (id,organization_id,email,display_name,password_hash) VALUES ($1,$2,$3,$4,$5)',
       [id, orgId, email, email, await hashPassword(PASSWORD)],
     )
     await pool.query('INSERT INTO user_roles (user_id,role_id) VALUES ($1,(SELECT id FROM roles WHERE code=$2))', [id, role])
+    return id
   }
 
   async function login(email: string): Promise<string> {
@@ -71,13 +77,13 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     return String(response.headers['set-cookie']).split(';')[0] as string
   }
 
-  async function seedCase(plate: string, withReadyRequirements: boolean): Promise<{
+  async function seedCase(plate: string, withReadyRequirements: boolean, references: { insurerId?: string; serviceId?: string } = {}): Promise<{
     caseId: string; officeNumber: string; openPath: string; locationId: string
   }> {
     const response = await app.inject({
       method: 'POST', url: CASES_ROUTE,
       headers: { cookie: adminCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
-      payload: { caseType: 'traffic', plate, workflowStage: 'ready_to_close', lossDate: '2026-07-13', notificationDate: '2026-07-14' },
+      payload: { caseType: 'traffic', plate, workflowStage: 'ready_to_close', lossDate: '2026-07-13', notificationDate: '2026-07-14', ...references },
     })
     expect(response.statusCode).toBe(201)
     const body = response.json() as { case: { id: string; officeCaseNumber: string } }
@@ -161,9 +167,27 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3),($4,$5,$6)', [
       organizationId, 'p21-main', 'P21 Main', otherOrganizationId, 'p21-other', 'P21 Other',
     ])
-    await seedUser(organizationId, 'p21-admin@test.local', 'admin')
+    adminUserId = await seedUser(organizationId, 'p21-admin@test.local', 'admin')
     await seedUser(organizationId, 'p21-secretary@test.local', 'secretary')
     await seedUser(otherOrganizationId, 'p21-other@test.local', 'admin')
+    insurerId = uuidv7(); insurerWithoutAgreementId = uuidv7(); authorizedServiceId = uuidv7(); agreedPrivateServiceId = uuidv7()
+    await pool.query(
+      `INSERT INTO insurers (id,organization_id,name) VALUES
+       ($1,$3,'Anlaşmalı Sigorta'),($2,$3,'Anlaşması Belirsiz Sigorta')`,
+      [insurerId, insurerWithoutAgreementId, organizationId],
+    )
+    await pool.query(
+      `INSERT INTO service_centers (id,organization_id,name,center_type,service_type) VALUES
+       ($1,$3,'Yetkili Servis','yetkili','authorized'),($2,$3,'Özel Servis','ozel','private')`,
+      [authorizedServiceId, agreedPrivateServiceId, organizationId],
+    )
+    await pool.query(
+      `INSERT INTO insurer_service_agreements
+       (id,organization_id,insurer_id,service_center_id,agreement_status,effective_from,effective_to,supported_operations,
+        source_reference,human_approved,approved_by_user_id,approved_at)
+       VALUES ($1,$2,$3,$4,'active','2026-01-01','2026-12-31',ARRAY['closure_documents'],'sentetik-lifecycle',true,$5,now())`,
+      [uuidv7(), organizationId, insurerId, agreedPrivateServiceId, adminUserId],
+    )
     await pool.query('INSERT INTO storage_roots (id,organization_id,root_key,label) VALUES ($1,$2,$3,$4)',
       [uuidv7(), organizationId, ROOT_KEY, 'Sentetik Lifecycle'])
     app = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false, loginRateLimit: { limit: 1000, windowMs: 60_000 } } })
@@ -252,6 +276,36 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0]).toEqual({ lifecycle_status: 'closed' })
     const audit = await pool.query("SELECT details FROM audit_events WHERE action='case_lifecycle.close_with_missing_requirements' AND resource_id=$1", [plan.id])
     expect(audit.rowCount).toBe(1)
+  }, 60_000)
+
+  it('kapanis evrakini yetkili profil ile sigortaciya ozel anlasmadan ayri degerlendirir', async () => {
+    const authorized = await seedCase('34 YET 022', true, { insurerId: insurerWithoutAgreementId, serviceId: authorizedServiceId })
+    const authorizedPlan = caseLifecycleOperationResponseSchema.parse((await planClose(authorized.caseId, {
+      expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal',
+    })).json()).operation
+    expect(authorizedPlan.requirementSummary.serviceEligibility).toMatchObject({
+      status: 'eligible', agreementStatus: 'control_required', serviceType: 'authorized', isAuthorized: true,
+    })
+    expect(authorizedPlan.requirementSummary.requirements.filter((item) =>
+      ['closure.delivery_release_assignment', 'closure.commitment'].includes(item.requirementCode)).map((item) => item.status)).toEqual(['missing', 'missing'])
+
+    const agreed = await seedCase('34 ANL 022', true, { insurerId, serviceId: agreedPrivateServiceId })
+    const agreedPlan = caseLifecycleOperationResponseSchema.parse((await planClose(agreed.caseId, {
+      expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal',
+    })).json()).operation
+    expect(agreedPlan.requirementSummary.serviceEligibility).toMatchObject({
+      status: 'eligible', agreementStatus: 'agreed', serviceType: 'private', isInsurerAgreed: true,
+    })
+
+    const unknown = await seedCase('34 BEL 022', true, { insurerId: insurerWithoutAgreementId, serviceId: agreedPrivateServiceId })
+    const unknownPlan = caseLifecycleOperationResponseSchema.parse((await planClose(unknown.caseId, {
+      expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal',
+    })).json()).operation
+    expect(unknownPlan.requirementSummary.serviceEligibility).toMatchObject({
+      status: 'control_required', agreementStatus: 'control_required', requiresHumanReview: true,
+    })
+    expect(unknownPlan.requirementSummary.requirements.filter((item) =>
+      ['closure.delivery_release_assignment', 'closure.commitment'].includes(item.requirementCode)).map((item) => item.status)).toEqual(['control_required', 'control_required'])
   }, 60_000)
 
   it('401, rol 403, tenant 404 ve stale version guvenli reddedilir; mutlak yol/secret sizmaz', async () => {

@@ -138,3 +138,10 @@ formatlarında alınabilir.
 - Kapatma fiziksel klasör move'u doğrulanmadan case'i closed yapmaz. Başarıda lifecycle ve workflow `closed` olur; aynı case kimliği ve ofis numarası korunur.
 - Closed case zorunlu gerekçe ve geçerli açık workflow stage ile yeniden açılabilir. Önceki açık logical location güvenliyse hedeflenir; geçmiş kapanış kaydı append-only korunur.
 - Sadece yönetici, eksper ve dosya sorumlusu close/reopen komutu verebilir. Diğer oturumlu roller durumu okuyabilir; API modunda mock fallback veya istemciden mutlak/serbest path yoktur.
+
+## Servis profili ve sigorta şirketi anlaşması
+
+- Servis temel profili yetkili, özel, cam, mobil veya diğer olabilir; aktiflik yeni atama uygunluğunu belirler.
+- Yetkili servis olmak, herhangi bir sigorta şirketiyle anlaşmalı olmak anlamına gelmez. Anlaşma servis ve sigorta şirketi çifti için, tarih aralığı ve desteklenen işlem bazında ayrıca değerlendirilir.
+- Tarihsel sonuç öncelikle hasar tarihi, ileride poliçe değerlendirmesinde poliçe tarihi üzerinden üretilir. Kayıt, tarih veya insan onayı belirsizse sistem kesin anlaşmalı/anlaşmasız sonucu üretmez ve `control_required` gösterir.
+- Create/edit ekranı servis türünü ve seçili sigorta şirketi için anlaşma sonucunu açıkça gösterir. Kapanış, muafiyet ve poliçe motorları aynı deterministik servis uygunluk sınırını kullanır; bu paket muafiyet oranı veya poliçe içeriği hesaplamaz.

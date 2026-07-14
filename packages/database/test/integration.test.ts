@@ -57,6 +57,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0011_case_workspace_provisioning',
       '0012_case_file_operations',
       '0013_case_close_reopen_lifecycle',
+      '0014_service_agreements',
     ])
 
     const tables = await pool.query(
@@ -79,6 +80,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'document_versions',
       'documents',
       'idempotency_keys',
+      'insurer_service_agreements',
       'insurers',
       'jobs',
       'office_counters',
@@ -101,15 +103,53 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0013 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0014 geri alinabilir, eski servis profilini donusturur ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0013_case_close_reopen_lifecycle'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0014_service_agreements'])
     const removed = await pool.query(
-      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'case_lifecycle_operations'",
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'insurer_service_agreements'",
     )
     expect((removed.rows[0] as { n: number }).n).toBe(0)
+    const organizationId = uuidv7()
+    const serviceId = uuidv7()
+    await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'p22-backfill', 'P22 Backfill'])
+    await pool.query("INSERT INTO service_centers (id,organization_id,name,center_type) VALUES ($1,$2,'Eski Servis','ozel')", [serviceId, organizationId])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0013_case_close_reopen_lifecycle'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements'])
+    const profile = await pool.query('SELECT service_type FROM service_centers WHERE id=$1', [serviceId])
+    expect(profile.rows).toEqual([{ service_type: 'private' }])
+    const silentAgreements = await pool.query('SELECT count(*)::int AS n FROM insurer_service_agreements WHERE service_center_id=$1', [serviceId])
+    expect(silentAgreements.rows).toEqual([{ n: 0 }])
+  })
+
+  it('0014 tenant, tarih, operasyon ve insan onayi kisitlarini zorlar', async () => {
+    const orgA = uuidv7(); const orgB = uuidv7(); const insurerA = uuidv7(); const insurerB = uuidv7()
+    const serviceA = uuidv7(); const userA = uuidv7()
+    await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3),($4,$5,$6)',
+      [orgA, 'p22-a', 'P22 A', orgB, 'p22-b', 'P22 B'])
+    await pool.query('INSERT INTO insurers (id,organization_id,name) VALUES ($1,$2,$3),($4,$5,$6)',
+      [insurerA, orgA, 'Sigorta A', insurerB, orgB, 'Sigorta B'])
+    await pool.query("INSERT INTO service_centers (id,organization_id,name,center_type,service_type) VALUES ($1,$2,'Servis A','ozel','private')", [serviceA, orgA])
+    await pool.query("INSERT INTO users (id,organization_id,email,password_hash,display_name) VALUES ($1,$2,'p22-a@test.local','x','Onaylayan')", [userA, orgA])
+    const insert = (overrides: { insurerId?: string; from?: string; to?: string | null; operations?: string[]; approved?: boolean } = {}) => pool.query(
+      `INSERT INTO insurer_service_agreements
+       (id,organization_id,insurer_id,service_center_id,agreement_status,effective_from,effective_to,supported_operations,
+        source_reference,human_approved,approved_by_user_id,approved_at)
+       VALUES ($1,$2,$3,$4,'active',$5,$6,$7,'sentetik-test',$8,$9,CASE WHEN $8 THEN now() ELSE NULL END)`,
+      [uuidv7(), orgA, overrides.insurerId ?? insurerA, serviceA, overrides.from ?? '2026-01-01',
+        overrides.to ?? '2026-12-31', overrides.operations ?? ['closure_documents'], overrides.approved ?? true,
+        (overrides.approved ?? true) ? userA : null],
+    )
+    await insert()
+    await expect(insert({ insurerId: insurerB })).rejects.toMatchObject({ code: '23503', constraint: 'insurer_service_agreements_insurer_tenant_fk' })
+    await expect(insert({ from: '2026-12-31', to: '2026-01-01' })).rejects.toMatchObject({ code: '23514' })
+    await expect(insert({ operations: ['delete_files'] })).rejects.toMatchObject({ code: '23514' })
+    await expect(pool.query(
+      `INSERT INTO insurer_service_agreements
+       (id,organization_id,insurer_id,service_center_id,agreement_status,effective_from,supported_operations,source_reference,human_approved)
+       VALUES ($1,$2,$3,$4,'active','2027-01-01',ARRAY['closure_documents'],'onaysiz-yanlis',true)`,
+      [uuidv7(), orgA, insurerA, serviceA],
+    )).rejects.toMatchObject({ code: '23514', constraint: 'insurer_service_agreements_approval_consistent' })
   })
 
   it('0013 lifecycle tutarliligi, tek aktif operasyon, guvenli yol ve append-only gecmisi zorlar', async () => {
@@ -296,7 +336,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     const serviceId = uuidv7()
     await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1,$2,$3)', [organizationId, 'p18-db', 'P18 DB'])
     await pool.query('INSERT INTO insurers (id, organization_id, name) VALUES ($1,$2,$3)', [insurerId, organizationId, 'Aktif Sigorta'])
-    await pool.query("INSERT INTO service_centers (id, organization_id, name, center_type) VALUES ($1,$2,$3,'ozel')", [serviceId, organizationId, 'Aktif Servis'])
+    await pool.query("INSERT INTO service_centers (id, organization_id, name, center_type, service_type) VALUES ($1,$2,$3,'ozel','private')", [serviceId, organizationId, 'Aktif Servis'])
     await pool.query(
       `INSERT INTO cases (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized)
        VALUES ($1,$2,2026,18,'2026/18','traffic','new_notification','34 PK 018','34PK018')`,

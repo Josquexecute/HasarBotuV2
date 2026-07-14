@@ -326,3 +326,10 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Durumlar: `planned`, `approved`, `queued`, `applying`, `verifying`, `ready`, `failed`, `cancelled`, `stale`.
 - Yanıt yalnız `storageRootKey`, güvenli `relativePath`, sabit alt klasör isimleri, durum ve güvenli hata kodu taşır. Mutlak yol, OS hatası, secret veya dosya içeriği sözleşmede yoktur.
 - Agent job payload’ına `workspace` türü ve sabit beş alt klasör; heartbeat’e opsiyonel `applying|verifying` progress alanı eklenmiştir. Runtime Zod ve deterministik JSON Schema fixture’ları birlikte güncellenir.
+
+## 11. Paket 22 servis referans ve Case profil sözleşmeleri
+
+- `GET /api/v1/references/services`, opsiyonel `insurerId`, `evaluationDate` LocalDate, `dateSource` ve kontrollü `operation` query alanlarını strict doğrular. Endpoint yalnız oturumdaki tenant'ın aktif servislerini döndürür.
+- Servis DTO'su `serviceType`, `isActive` ve sürümlü agreement evaluation içerir. `isAuthorized` ile `isInsurerAgreed` ayrı alanlardır; belirsiz anlaşma boolean'a zorlanmaz ve `null + control_required` taşır.
+- Case list/detail/create/update cevapları seçilmiş pasif tarihsel ilişkiyi okuyabilmek için nullable güvenli `serviceProfile` taşır; yeni atama yine aktif tenant referansı gerektirir.
+- Kaynak referansı, iletişim bilgisi, mutlak path, secret ve ham hata response şemasında yoktur. Zod runtime ve 38 deterministik JSON Schema fixture aynı kabul kümesini taşır.

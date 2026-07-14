@@ -228,7 +228,7 @@ Durumlar:
 
 ## Kapanış kontrolü
 
-Her dosyada ekspertiz raporu, ön rapor ve onarım görselleri kontrol edilir. Koşullu evraklar: Fatura, Teslim İbra ve Temlik, Taahhütname. Teslim İbra ve Temlik ile Taahhütname, anlaşmalı ve yetkili servislerde zorunludur.
+Her dosyada ekspertiz raporu, ön rapor ve onarım görselleri kontrol edilir. Koşullu evraklar: Fatura, Teslim İbra ve Temlik, Taahhütname. Teslim İbra ve Temlik ile Taahhütname, servis yetkiliyse veya ilgili sigorta şirketi ve değerlendirme tarihinde insan onaylı aktif anlaşma varsa zorunludur. Yetkili servis otomatik olarak anlaşmalı servis sayılmaz; anlaşma kaydı belirsiz özel servis sonucu `control_required` olur.
 
 ## Kapanma ücreti
 
@@ -261,7 +261,7 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Lifecycle yalnız `open | closed`; workflow stage ayrı alandır. `closed` lifecycle/stage birlikte, `open` lifecycle ise yalnız açık stage'lerden biriyle bulunabilir.
 - Close planı yalnız open case, verified/current workspace location ve çakışmasız aktif işlem durumu için üretilebilir; plan filesystem veya case lifecycle'ını değiştirmez.
 - Kapalı hedef `notificationDate` ve mevcut workspace yolundan deterministik olarak `YYYY/Ay YYYY/KAPALI AY YYYY/workspace` biçiminde üretilir. Workspace adı korunur; hedef çakışmasında suffix, overwrite veya merge yoktur.
-- Kapanış katmanı sürümü `2026.07.14.1`'dir. Ekspertiz raporu, ön rapor, onarım görselleri; servis varsa fatura; servis `yetkili` ise Teslim İbra ve Temlik ile Taahhütname değerlendirilir. Yalnız verified-ready present, pending/failed control_required olur.
+- Kapanış katmanı sürümü `2026.07.14.2`'dir. Ekspertiz raporu, ön rapor, onarım görselleri; servis varsa fatura; servis profili `authorized` veya `2026.07.14.1` servis uygunluk değerlendirmesi ilgili sigortacı/tarihte `agreed` ise Teslim İbra ve Temlik ile Taahhütname değerlendirilir. Yetkili profil anlaşma bayrağından ayrıdır. Yalnız verified-ready present, pending/failed ve belirsiz servis ilişkisi control_required olur.
 - Normal close eksik/control_required gereksinimde blocked olur. Eksiklerle close yalnız zorunlu gerekçe ve server üretimli snapshot ile onaylanabilir.
 - Reopen yalnız closed case, zorunlu gerekçe ve izin verilen açık workflow stage ile yapılır; son append-only kapanış kaydındaki önceki açık location hedeflenir.
 - Fiziksel hedef doğrulanmadan lifecycle finalize edilmez. Reopen aynı `caseId` ve ofis numarasını korur; kapanış geçmişi silinmez/değiştirilmez.

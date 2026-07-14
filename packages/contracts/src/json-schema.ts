@@ -32,6 +32,7 @@ import {
   servicesReferenceResponseSchema,
   usersReferenceResponseSchema,
 } from './v1/references/dto.js'
+import { servicesReferenceQuerySchema } from './v1/references/query.js'
 import { workspacePlanRequestSchema } from './v1/workspace/commands.js'
 import { workspaceProvisioningResponseSchema } from './v1/workspace/dto.js'
 import { fileOperationPlanRequestSchema } from './v1/file-operations/commands.js'
@@ -72,6 +73,7 @@ export const JSON_SCHEMA_TARGETS = {
   'document-requirements-params': documentRequirementsParamsSchema,
   'reference-insurers-response': insurersReferenceResponseSchema,
   'reference-services-response': servicesReferenceResponseSchema,
+  'reference-services-query': servicesReferenceQuerySchema,
   'reference-users-response': usersReferenceResponseSchema,
   'reference-experts-response': expertsReferenceResponseSchema,
   'workspace-plan-request': workspacePlanRequestSchema,

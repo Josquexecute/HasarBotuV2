@@ -49,6 +49,7 @@ export function caseCoreToListItem(core: CaseCore): CaseListItem {
     responsibleUserId: nullable(core.responsibleUserId),
     expertUserId: nullable(core.expertUserId),
     serviceId: nullable(core.serviceId),
+    serviceProfile: null,
     insurerId: nullable(core.insurerId),
     followUpDate: nullable(core.followUpDate),
     lossDate: nullable(core.lossDate),

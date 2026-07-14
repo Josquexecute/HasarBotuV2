@@ -81,11 +81,12 @@ describeDb('Merkezi audit altyapisi (gercek veritabani)', () => {
     adminId = await seedUser(orgA, 'admin@a.example', 'admin')
     await seedUser(orgA, 'manager@a.example', 'case_manager')
     await seedUser(orgB, 'user@b.example', 'admin')
-    await pool.query('INSERT INTO service_centers (id, organization_id, name, center_type) VALUES ($1,$2,$3,$4)', [
+    await pool.query('INSERT INTO service_centers (id, organization_id, name, center_type, service_type) VALUES ($1,$2,$3,$4,$5)', [
       serviceAId,
       orgA,
       'Merkez',
       'ozel',
+      'private',
     ])
 
     app = buildApp({

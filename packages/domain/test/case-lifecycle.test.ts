@@ -26,13 +26,13 @@ describe('case lifecycle domain', () => {
       documents: [pending, ready],
       repairPhotos: [],
       hasService: false,
-      isAuthorizedService: false,
+      serviceEligibility: null,
     })
     expect(evaluation.requirements.find((item) => item.requirementCode === 'closure.expert_report')?.status).toBe('present')
     expect(evaluation.requirements.find((item) => item.requirementCode === 'closure.preliminary_report')?.status).toBe('control_required')
     expect(evaluation.requirements.find((item) => item.requirementCode === 'closure.invoice')?.status).toBe('not_applicable')
     expect(evaluation).toEqual(evaluateClosureRequirements({
-      documents: [pending, ready], repairPhotos: [], hasService: false, isAuthorizedService: false,
+      documents: [pending, ready], repairPhotos: [], hasService: false, serviceEligibility: null,
     }))
   })
 

@@ -5,7 +5,9 @@ import {
   type CaseDetail,
   type CaseListItem,
   type CasesQuery,
+  type ServiceReference,
 } from '@hasarbotu/contracts'
+import { loadServiceProfiles } from '../service-agreements/service.js'
 
 /**
  * Salt okunur Cases sorgu katmani. Yalniz parametreli SELECT calistirir;
@@ -43,7 +45,7 @@ export function toLocalDateString(value: Date): string {
   return `${year}-${month}-${day}`
 }
 
-export function rowToDto(row: CaseRow): CaseListItem {
+export function rowToDto(row: CaseRow, serviceProfile: ServiceReference | null = null): CaseListItem {
   return caseListItemSchema.parse({
     id: row.id,
     caseType: row.case_type,
@@ -56,6 +58,7 @@ export function rowToDto(row: CaseRow): CaseListItem {
     responsibleUserId: row.responsible_user_id,
     expertUserId: row.expert_user_id,
     serviceId: row.service_center_id,
+    serviceProfile,
     insurerId: row.insurer_id,
     followUpDate: row.follow_up_date === null ? null : toLocalDateString(row.follow_up_date),
     lossDate: row.loss_date === null ? null : toLocalDateString(row.loss_date),
@@ -138,7 +141,17 @@ export function createCasesStore(pool: pg.Pool) {
         [...params, query.pageSize, offset],
       )
 
-      return { items: (listResult.rows as CaseRow[]).map(rowToDto), totalItems }
+      const rows = listResult.rows as CaseRow[]
+      const contexts = rows.flatMap((row) => row.service_center_id === null ? [] : [{
+        key: row.id,
+        serviceId: row.service_center_id,
+        insurerId: row.insurer_id,
+        evaluationDate: row.loss_date === null ? null : toLocalDateString(row.loss_date),
+        dateSource: 'loss_date' as const,
+        operation: 'closure_documents' as const,
+      }])
+      const profiles = await loadServiceProfiles(pool, organizationId, contexts)
+      return { items: rows.map((row) => rowToDto(row, profiles.get(row.id) ?? null)), totalItems }
     },
 
     async findById(organizationId: string, caseId: string): Promise<CaseDetail | undefined> {
@@ -147,7 +160,16 @@ export function createCasesStore(pool: pg.Pool) {
         [organizationId, caseId],
       )
       const row = result.rows[0] as CaseRow | undefined
-      return row === undefined ? undefined : caseDetailSchema.parse(rowToDto(row))
+      if (row === undefined) return undefined
+      const profile = row.service_center_id === null ? null : await loadServiceProfiles(pool, organizationId, [{
+        key: row.id,
+        serviceId: row.service_center_id,
+        insurerId: row.insurer_id,
+        evaluationDate: row.loss_date === null ? null : toLocalDateString(row.loss_date),
+        dateSource: 'loss_date',
+        operation: 'closure_documents',
+      }]).then((items) => items.get(row.id) ?? null)
+      return caseDetailSchema.parse(rowToDto(row, profile))
     },
   }
 }

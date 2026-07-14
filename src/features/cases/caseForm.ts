@@ -1,4 +1,4 @@
-import { CaseCommandError, type CaseCommandFieldError } from '../../data'
+import { CaseCommandError, type CaseCommandFieldError, type ServiceReferenceRecord } from '../../data'
 import type { CaseStage, CaseStageCode } from '../../types/case'
 
 export const CASE_STAGE_OPTIONS: readonly { value: CaseStageCode; label: CaseStage }[] = [
@@ -87,6 +87,28 @@ export function commandErrorMessage(error: CaseCommandError): string {
 
 export function fieldLabel(path: string): string {
   return FIELD_LABELS[path] ?? path
+}
+
+const SERVICE_TYPE_LABELS: Record<ServiceReferenceRecord['serviceType'], string> = {
+  authorized: 'Yetkili servis',
+  private: 'Özel servis',
+  glass: 'Cam servisi',
+  mobile: 'Mobil servis',
+  other: 'Diğer servis',
+}
+
+export function serviceOptionLabel(service: ServiceReferenceRecord): string {
+  const agreement = service.agreement.agreementStatus === 'agreed'
+    ? 'seçili sigorta şirketiyle anlaşmalı'
+    : service.agreement.agreementStatus === 'not_agreed'
+      ? 'seçili sigorta şirketiyle anlaşmalı değil'
+      : 'anlaşma kontrolü gerekli'
+  return `${service.name} · ${SERVICE_TYPE_LABELS[service.serviceType]} · ${agreement}`
+}
+
+export function serviceEvaluationSummary(service: ServiceReferenceRecord | null | undefined): string {
+  if (service === null || service === undefined) return 'Servis seçildiğinde tür ve sigorta şirketine özel anlaşma sonucu gösterilir.'
+  return `${SERVICE_TYPE_LABELS[service.serviceType]} · ${service.agreement.reason} Kural ${service.agreement.ruleVersion}.`
 }
 
 export function makeSubmissionKey(): string {

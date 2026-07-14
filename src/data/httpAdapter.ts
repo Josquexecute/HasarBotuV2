@@ -20,6 +20,7 @@ interface CaseListItemDto {
   responsibleUserId?: string | null
   expertUserId?: string | null
   serviceId?: string | null
+  serviceProfile?: CaseRecord['serviceProfile']
   insurerId?: string | null
   followUpDate: string | null
   lossDate?: string | null
@@ -106,6 +107,7 @@ export function mapCaseDtoToRecord(dto: CaseListItemDto, today: Date = new Date(
     responsibleUserId: dto.responsibleUserId ?? null,
     expertUserId: dto.expertUserId ?? null,
     serviceId: dto.serviceId ?? null,
+    serviceProfile: dto.serviceProfile ?? null,
     insurerId: dto.insurerId ?? null,
     followUpDate: dto.followUpDate,
     lossDate: dto.lossDate ?? null,

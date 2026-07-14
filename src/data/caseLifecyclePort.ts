@@ -29,6 +29,13 @@ export interface LifecycleOperationRecord {
   readonly requirementSummary: {
     readonly documentRuleVersion: string
     readonly closureRuleVersion: string
+    readonly serviceEligibility: {
+      readonly status: 'eligible' | 'not_eligible' | 'control_required'
+      readonly agreementStatus: 'agreed' | 'not_agreed' | 'control_required'
+      readonly serviceType: 'authorized' | 'private' | 'glass' | 'mobile' | 'other'
+      readonly reason: string
+      readonly ruleVersion: string
+    } | null
     readonly missingCount: number
     readonly controlRequiredCount: number
     readonly requirements: readonly LifecycleRequirementRecord[]

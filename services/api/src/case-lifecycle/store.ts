@@ -10,6 +10,7 @@ import {
   type LifecycleRequirementItem,
   type LifecycleRequirementSummary,
   type ReopenPlanRequest,
+  type ServiceAgreementEvaluation,
 } from '@hasarbotu/contracts'
 import {
   buildClosedCaseWorkspacePath,
@@ -22,6 +23,7 @@ import { insertIdempotent, type IdempotentRecord } from '../db/idempotency.js'
 import { withTransaction } from '../db/executor.js'
 import { evaluateCaseDocumentRequirements } from '../document-requirements/evaluation.js'
 import { enqueueLifecycleFileOperation } from '../file-operations/store.js'
+import { loadServiceProfile } from '../service-agreements/service.js'
 
 export const LIFECYCLE_CLOSE_PLAN_SCOPE = 'case.lifecycle.close.plan'
 export const LIFECYCLE_REOPEN_PLAN_SCOPE = 'case.lifecycle.reopen.plan'
@@ -135,7 +137,7 @@ async function requirementSummary(
   caseId: string,
   evaluatedAt: string,
   hasService: boolean,
-  isAuthorizedService: boolean,
+  serviceEligibility: ServiceAgreementEvaluation | null,
 ): Promise<LifecycleRequirementSummary> {
   const base = await evaluateCaseDocumentRequirements(client, organizationId, caseId, evaluatedAt)
   if (base === undefined) throw new Error('case_missing_during_requirement_evaluation')
@@ -168,7 +170,7 @@ async function requirementSummary(
     id: string; relative_path: string; status: ClosureMetadataCandidate['status']; hash_verified: boolean; size_verified: boolean; verified_at: Date | null
   }>).filter((row) => row.relative_path.split('/').some((segment) => segment.toLocaleUpperCase('tr-TR') === 'ONARIM'))
     .map((row) => toCandidate(row, 'repair_photos'))
-  const closure = evaluateClosureRequirements({ documents: documentCandidates, repairPhotos, hasService, isAuthorizedService })
+  const closure = evaluateClosureRequirements({ documents: documentCandidates, repairPhotos, hasService, serviceEligibility })
   const baseItems: LifecycleRequirementItem[] = base.requirements.map((item) => ({
     requirementCode: item.requirementCode,
     sourceType: 'document',
@@ -189,6 +191,7 @@ async function requirementSummary(
     documentRuleVersion: base.ruleSetVersion,
     documentOverallStatus: base.overallStatus,
     closureRuleVersion: closure.version,
+    serviceEligibility,
     missingCount: requirements.filter((item) => item.status === 'missing').length,
     controlRequiredCount: requirements.filter((item) => item.status === 'control_required').length,
     requirements,
@@ -234,14 +237,14 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
     async planClose(actor: ActorContext, caseId: string, input: ClosePlanRequest, idem: IdempotencyInput): Promise<PlanOutcome> {
       return withTransaction(pool, async (client): Promise<PlanOutcome> => {
         const selected = await client.query(
-          `SELECT c.version,c.lifecycle_status,c.workflow_stage,c.notification_date,c.service_center_id,sc.center_type
-           FROM cases c LEFT JOIN service_centers sc ON sc.id=c.service_center_id
+          `SELECT c.version,c.lifecycle_status,c.workflow_stage,c.notification_date,c.loss_date,c.insurer_id,c.service_center_id
+           FROM cases c
            WHERE c.organization_id=$1 AND c.id::text=$2 FOR UPDATE OF c`,
           [actor.organizationId, caseId],
         )
         const current = selected.rows[0] as {
           version: number; lifecycle_status: 'open' | 'closed'; workflow_stage: string; notification_date: Date | null;
-          service_center_id: string | null; center_type: 'yetkili' | 'ozel' | null
+          loss_date: Date | null; insurer_id: string | null; service_center_id: string | null
         } | undefined
         if (current === undefined) return { kind: 'not_found' }
         if (current.lifecycle_status !== 'open') return { kind: 'lifecycle_conflict' }
@@ -280,9 +283,16 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           [actor.organizationId, location.storage_root_key, target.value, location.id],
         )
         if (destinationConflict.rowCount !== 0) return { kind: 'destination_conflict' }
+        const serviceProfile = current.service_center_id === null ? null : await loadServiceProfile(client, actor.organizationId, {
+          serviceId: current.service_center_id,
+          insurerId: current.insurer_id,
+          evaluationDate: dateOnly(current.loss_date),
+          dateSource: 'loss_date',
+          operation: 'closure_documents',
+        })
         const summary = await requirementSummary(
           client, actor.organizationId, caseId, new Date().toISOString(),
-          current.service_center_id !== null, current.center_type === 'yetkili',
+          current.service_center_id !== null, serviceProfile?.agreement ?? null,
         )
         const incomplete = summary.missingCount + summary.controlRequiredCount > 0
         const blockers = input.closeMode === 'normal' && incomplete ? ['requirements_incomplete'] : []
@@ -308,7 +318,8 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           entityType: 'case_lifecycle_operation', entityId: operationId,
           details: { caseId, closeMode: input.closeMode, missingCount: summary.missingCount, controlRequiredCount: summary.controlRequiredCount,
             source: { storageRootKey: location.storage_root_key, relativePath: location.relative_path },
-            destination: { storageRootKey: location.storage_root_key, relativePath: target.value }, blockers, warnings },
+            destination: { storageRootKey: location.storage_root_key, relativePath: target.value }, blockers, warnings,
+            serviceEligibility: serviceProfile?.agreement ?? null },
         })
         const operation = await readDto(client, actor.organizationId, caseId, operationId)
         if (operation === undefined) throw new Error('lifecycle_operation_insert_failed')
@@ -322,10 +333,10 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
     async planReopen(actor: ActorContext, caseId: string, input: ReopenPlanRequest, idem: IdempotencyInput): Promise<PlanOutcome> {
       return withTransaction(pool, async (client): Promise<PlanOutcome> => {
         const selected = await client.query(
-          `SELECT version,lifecycle_status,workflow_stage,service_center_id FROM cases
+          `SELECT version,lifecycle_status,workflow_stage,service_center_id,insurer_id,loss_date FROM cases
            WHERE organization_id=$1 AND id::text=$2 FOR UPDATE`, [actor.organizationId, caseId],
         )
-        const current = selected.rows[0] as { version: number; lifecycle_status: 'open' | 'closed'; workflow_stage: string; service_center_id: string | null } | undefined
+        const current = selected.rows[0] as { version: number; lifecycle_status: 'open' | 'closed'; workflow_stage: string; service_center_id: string | null; insurer_id: string | null; loss_date: Date | null } | undefined
         if (current === undefined) return { kind: 'not_found' }
         if (current.lifecycle_status !== 'closed') return { kind: 'lifecycle_conflict' }
         if (current.version !== input.expectedCaseVersion) return { kind: 'version_conflict' }
@@ -360,9 +371,15 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           [actor.organizationId, openLocation.source_storage_root_key, openLocation.source_relative_path, location.id],
         )
         if (destinationConflict.rowCount !== 0) return { kind: 'destination_conflict' }
-        const service = await client.query('SELECT center_type FROM service_centers WHERE id=$1', [current.service_center_id])
+        const serviceProfile = current.service_center_id === null ? null : await loadServiceProfile(client, actor.organizationId, {
+          serviceId: current.service_center_id,
+          insurerId: current.insurer_id,
+          evaluationDate: dateOnly(current.loss_date),
+          dateSource: 'loss_date',
+          operation: 'closure_documents',
+        })
         const summary = await requirementSummary(client, actor.organizationId, caseId, new Date().toISOString(),
-          current.service_center_id !== null, (service.rows[0] as { center_type?: string } | undefined)?.center_type === 'yetkili')
+          current.service_center_id !== null, serviceProfile?.agreement ?? null)
         const operationId = uuidv7()
         await client.query(
           `INSERT INTO case_lifecycle_operations
