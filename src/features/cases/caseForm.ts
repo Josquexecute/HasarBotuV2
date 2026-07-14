@@ -44,13 +44,18 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   notificationFormNumber: 'İhbar numarası',
   insurerClaimNumber: 'Hasar dosya numarası',
   responsibleUserId: 'Sorumlu',
+  expertUserId: 'Eksper',
   serviceId: 'Servis',
   insurerId: 'Sigorta şirketi',
   followUpDate: 'Takip tarihi',
+  lossDate: 'Hasar tarihi',
+  notificationDate: 'İhbar tarihi',
 }
 
 function fieldMessage(error: CaseCommandFieldError): string {
   if (error.code === 'unknown_reference') return 'Bu kayıt organizasyonunuzda bulunamadı.'
+  if (error.code === 'inactive_or_ineligible_reference') return 'Bu kayıt pasif veya bu alan için uygun değil.'
+  if (error.code === 'notification_before_loss_date') return 'İhbar tarihi hasar tarihinden önce olamaz.'
   if (error.code === 'required' || error.code.endsWith('_required')) return 'Bu alan zorunludur.'
   if (error.code.includes('date')) return 'Geçerli bir tarih girin.'
   if (error.path === 'plate') return 'Geçerli bir plaka girin.'

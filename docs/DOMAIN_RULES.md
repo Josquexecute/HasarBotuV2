@@ -1,5 +1,12 @@
 # HasarBotu V2 — Domain Kuralları
 
+## Case çekirdeği referans ve tarih kuralları
+
+- Sorumlu ve eksper ayrı kullanıcı ilişkileridir. Eksper yalnız aynı organization içindeki aktif ve `expert` rolüne sahip gerçek kullanıcı olabilir.
+- Sigorta şirketi ve servis yeni atama anında aktif olmalıdır. Pasif mevcut ilişki tarihsel okumada korunur; yeni atama olarak kabul edilmez.
+- `lossDate`, `notificationDate` ve `followUpDate` LocalDate'tir; saat/timezone taşımaz. `notificationDate`, `lossDate` değerinden önce olamaz.
+- Referans ve tarih güncellemeleri Case `expectedVersion` optimistic locking kuralına tabidir.
+
 ## Trafik dosyası evrakları
 
 ### Paket 15 — doğrulanmış metadata ile koşullu evrak değerlendirmesi

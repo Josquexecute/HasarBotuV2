@@ -3,7 +3,7 @@ import type pg from 'pg'
 import type { CaseCreateRequest, CaseUpdateRequest, CaseListItem } from '@hasarbotu/contracts'
 import { parsePlateNumber, plateSearchKey } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
-import { rowToDto, SELECT_FIELDS, type CaseRow } from './store.js'
+import { rowToDto, SELECT_FIELDS, toLocalDateString, type CaseRow } from './store.js'
 import { createAuditService } from '../audit/service.js'
 
 /**
@@ -15,11 +15,13 @@ import { createAuditService } from '../audit/service.js'
 
 export class ReferenceCheckError extends Error {
   readonly field: string
+  readonly code: string
 
-  constructor(field: string) {
-    super(`unknown reference: ${field}`)
+  constructor(field: string, code = 'unknown_reference') {
+    super(`invalid input: ${field}`)
     this.name = 'ReferenceCheckError'
     this.field = field
+    this.code = code
   }
 }
 
@@ -44,10 +46,17 @@ interface ActorContext {
   readonly requestId: string
 }
 
-const REFERENCE_CHECKS: readonly { field: string; table: string }[] = [
-  { field: 'responsibleUserId', table: 'users' },
-  { field: 'serviceId', table: 'service_centers' },
-  { field: 'insurerId', table: 'insurers' },
+const REFERENCE_CHECKS: readonly { field: string; sql: string }[] = [
+  { field: 'responsibleUserId', sql: "SELECT status = 'active' AS allowed FROM users WHERE id::text = $1 AND organization_id = $2" },
+  {
+    field: 'expertUserId',
+    sql: `SELECT u.status = 'active' AND EXISTS (
+      SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+      WHERE ur.user_id = u.id AND r.code = 'expert'
+    ) AS allowed FROM users u WHERE u.id::text = $1 AND u.organization_id = $2`,
+  },
+  { field: 'serviceId', sql: 'SELECT is_active AS allowed FROM service_centers WHERE id::text = $1 AND organization_id = $2' },
+  { field: 'insurerId', sql: 'SELECT is_active AS allowed FROM insurers WHERE id::text = $1 AND organization_id = $2' },
 ]
 
 async function assertReferences(
@@ -58,11 +67,17 @@ async function assertReferences(
   for (const check of REFERENCE_CHECKS) {
     const value = input[check.field]
     if (typeof value !== 'string') continue
-    const result = await client.query(
-      `SELECT 1 FROM ${check.table} WHERE id::text = $1 AND organization_id = $2`,
-      [value, organizationId],
-    )
+    const result = await client.query(check.sql, [value, organizationId])
     if (result.rowCount === 0) throw new ReferenceCheckError(check.field)
+    if ((result.rows[0] as { allowed: boolean }).allowed !== true) {
+      throw new ReferenceCheckError(check.field, 'inactive_or_ineligible_reference')
+    }
+  }
+}
+
+function assertDateOrder(lossDate: string | null | undefined, notificationDate: string | null | undefined): void {
+  if (lossDate !== null && lossDate !== undefined && notificationDate !== null && notificationDate !== undefined && notificationDate < lossDate) {
+    throw new ReferenceCheckError('notificationDate', 'notification_before_loss_date')
   }
 }
 
@@ -106,6 +121,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
       const normalized = plateSearchKey(plate)
       const year = new Date().getFullYear()
       const caseId = uuidv7()
+      assertDateOrder(input.lossDate, input.notificationDate)
 
       const client = await pool.connect()
       try {
@@ -126,8 +142,9 @@ export function createCasesWriteStore(pool: pg.Pool) {
         await client.query(
           `INSERT INTO cases (id, organization_id, office_year, office_sequence, office_number,
              case_type, workflow_stage, notification_form_number, insurer_claim_number,
-             plate, plate_normalized, responsible_user_id, service_center_id, insurer_id, follow_up_date)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+             plate, plate_normalized, responsible_user_id, expert_user_id, service_center_id, insurer_id,
+             follow_up_date, loss_date, notification_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
           [
             caseId,
             actor.organizationId,
@@ -141,9 +158,12 @@ export function createCasesWriteStore(pool: pg.Pool) {
             plate,
             normalized,
             input.responsibleUserId ?? null,
+            input.expertUserId ?? null,
             input.serviceId ?? null,
             input.insurerId ?? null,
             input.followUpDate ?? null,
+            input.lossDate ?? null,
+            input.notificationDate ?? null,
           ],
         )
 
@@ -157,7 +177,16 @@ export function createCasesWriteStore(pool: pg.Pool) {
           action: 'case.created',
           entityType: 'case',
           entityId: caseId,
-          details: { officeCaseNumber: officeNumber, caseType: input.caseType },
+          details: {
+            officeCaseNumber: officeNumber,
+            caseType: input.caseType,
+            assignedReferenceFields: ['responsibleUserId', 'expertUserId', 'serviceId', 'insurerId'].filter(
+              (field) => (input as Record<string, unknown>)[field] !== undefined,
+            ),
+            dateFieldsPresent: ['followUpDate', 'lossDate', 'notificationDate'].filter(
+              (field) => (input as Record<string, unknown>)[field] !== undefined,
+            ),
+          },
         })
         await client.query(
           `INSERT INTO idempotency_keys (id, organization_id, scope, idem_key, request_hash, response_status, response_body, case_id)
@@ -197,10 +226,10 @@ export function createCasesWriteStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const current = await client.query(
-          `SELECT version FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE`,
+          `SELECT version, loss_date, notification_date FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE`,
           [caseId, actor.organizationId],
         )
-        const existing = current.rows[0] as { version: number } | undefined
+        const existing = current.rows[0] as { version: number; loss_date: Date | null; notification_date: Date | null } | undefined
         if (existing === undefined) {
           await client.query('ROLLBACK')
           return { kind: 'not_found' }
@@ -211,6 +240,12 @@ export function createCasesWriteStore(pool: pg.Pool) {
         }
 
         await assertReferences(client, actor.organizationId, input)
+        const currentLossDate = existing.loss_date === null ? null : toLocalDateString(existing.loss_date)
+        const currentNotificationDate = existing.notification_date === null ? null : toLocalDateString(existing.notification_date)
+        assertDateOrder(
+          input.lossDate === undefined ? currentLossDate : input.lossDate,
+          input.notificationDate === undefined ? currentNotificationDate : input.notificationDate,
+        )
 
         const columnByField: Record<string, string> = {
           workflowStage: 'workflow_stage',
@@ -218,8 +253,11 @@ export function createCasesWriteStore(pool: pg.Pool) {
           notificationFormNumber: 'notification_form_number',
           insurerClaimNumber: 'insurer_claim_number',
           responsibleUserId: 'responsible_user_id',
+          expertUserId: 'expert_user_id',
           serviceId: 'service_center_id',
           insurerId: 'insurer_id',
+          lossDate: 'loss_date',
+          notificationDate: 'notification_date',
         }
         const sets: string[] = []
         const params: unknown[] = []

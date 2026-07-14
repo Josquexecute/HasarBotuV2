@@ -96,6 +96,14 @@ Audit seviyeleri:
 - **Audit:** Create/update A1; close/reopen A2 ve File Agent doğrulaması.
 - **Idempotency:** Create/close/reopen zorunlu; PATCH idempotency yerine version ile korunur.
 - **Concurrency/version:** Tüm mutable case komutlarında zorunlu.
+- **Paket 18 somutlaştırması:** Create/update/read DTO'ları nullable `expertUserId`, `lossDate`, `notificationDate` taşır; tarih alanları `YYYY-MM-DD` LocalDate'tir. Eksper aynı tenantta aktif ve `expert` rolünde olmalıdır; pasif/uygunsuz referans alan bazlı reddedilir.
+
+### 3.4.1 Case referans katalogları
+
+- **Endpoint:** `GET /api/v1/references/insurers`, `/services`, `/users`, `/experts`.
+- **Kapsam:** Oturum organization'ı ve yalnız aktif kayıtlar; experts gerçek users/roles birleşimidir. Yönetim CRUD'u yoktur.
+- **Cevap:** `{ "items": [...] }`; yalnız kimlik + güvenli görünen ad, servis için `centerType`. E-posta, rol hash'i, parola veya secret dönmez.
+- **Hata/audit:** Oturumsuz 401; salt-okunur katalog çağrısı özel audit üretmez. API modunda mock fallback yoktur.
 
 ### 3.5 Case status history
 

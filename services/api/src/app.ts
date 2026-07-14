@@ -9,6 +9,7 @@ import { registerStorageRoutes } from './storage/index.js'
 import { registerDocumentRoutes } from './documents/index.js'
 import { registerAgentRoutes } from './agent/index.js'
 import { registerDocumentRequirementsRoutes } from './document-requirements/index.js'
+import { registerReferenceRoutes } from './references/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -97,6 +98,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerDocumentRoutes(app, { pool: options.auth.pool })
     registerAgentRoutes(app, { pool: options.auth.pool })
     registerDocumentRequirementsRoutes(app, { pool: options.auth.pool })
+    registerReferenceRoutes(app, { pool: options.auth.pool })
   }
 
   return app

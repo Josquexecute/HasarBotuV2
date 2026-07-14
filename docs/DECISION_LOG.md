@@ -462,3 +462,16 @@ Karar:
 4. Mock modun onaylı belge-seçimi prototipi aynen korunur. API modunda 401, 404, validation, tenant-dışı referans, 409, 5xx veya ağ hatası mock veriye düşmez; kullanıcıya güvenli Türkçe mesaj gösterilir. Başarılı create/update mevcut merkezi audit transaction'ını kullanır; Paket 17 yeni audit yolu, migration veya yazma endpoint'i eklemez.
 
 Etkisi: `CaseCreateModal`, `CaseEditModal`, payload-sürümü/idempotency/alan-hatası UI yardımcıları; CaseRecord'ta opsiyonel komut metadata'sı; `useCases.reload`; gerçek API + tarayıcı testleri. Contracts, API, database, IPC ve dependency değişmez.
+
+## 2026-07-14 — HB-2026-024: Paket 18 aktif referanslar ve Case çekirdeği
+
+Karar:
+
+1. Sigorta şirketi, servis, kullanıcı ve eksper seçenekleri ayrı organization-kapsamlı salt-okunur `/api/v1/references/*` uçlarından gelir. Yalnız aktif kayıtlar döner; eksper listesi `users + user_roles + roles(code=expert)` kaynak doğruluğunu kullanır. API modunda sabit seçenek veya mock fallback yoktur.
+2. `expertUserId`, `lossDate` ve `notificationDate` Case domain/contracts/DB/create/update/read akışının nullable alanlarıdır. Tarihler `LocalDate`/PostgreSQL `date` taşır; saat ve timezone yoktur. İhbar tarihi hasar tarihinden önce olamaz.
+3. Migration `0010` backward-compatible'dır: mevcut case satırları yeni nullable alanlarla korunur; mevcut servis ve sigorta kayıtları `is_active=true` varsayımıyla korunur. Üretim migration bu pakette çalıştırılmaz.
+4. Yeni atamalarda referans aynı tenantta ve aktif olmalıdır; eksper ayrıca gerçek `expert` rolüne sahip olmalıdır. Pasif mevcut ilişki okunabilir kalır ancak yeniden atanamaz; UI değiştirme/temizleme olanağı verir.
+5. Case update `expectedVersion` optimistic locking modelini değiştirmez. Create audit'i yalnız atanmış alan adları ve tarih alanı varlığı; update audit'i yalnız değişen alan adları ve sürüm geçişi taşır. İsim, e-posta, tarih değeri, parola veya secret audit'e yazılmaz.
+6. Yol haritasındaki tarihsel “Paket 18 Gmail” başlığı yeniden numaralandırılmadı; bu kullanıcı talimatlı ek Paket 18, referans/Case çekirdeği kapsamıdır ve Gmail entegrasyonunu başlatmaz.
+
+Etkisi: `0010` migration, dört contracts/JSON Schema referans cevabı, references API store/routes, Case DTO/komut alanları, gerçek referans DataPort/adapter/hook ve create/edit form bağlaması. Yeni dependency, IPC, File Agent veya fiziksel dosya işlemi yoktur.

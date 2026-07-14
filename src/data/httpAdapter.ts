@@ -18,9 +18,12 @@ interface CaseListItemDto {
   status: 'open' | 'closed'
   stage: string
   responsibleUserId?: string | null
+  expertUserId?: string | null
   serviceId?: string | null
   insurerId?: string | null
   followUpDate: string | null
+  lossDate?: string | null
+  notificationDate?: string | null
   updatedAt: string
   version?: number
 }
@@ -99,9 +102,12 @@ export function mapCaseDtoToRecord(dto: CaseListItemDto, today: Date = new Date(
     ...(dto.version === undefined ? {} : { version: dto.version }),
     workflowStage: dto.stage as CaseStageCode,
     responsibleUserId: dto.responsibleUserId ?? null,
+    expertUserId: dto.expertUserId ?? null,
     serviceId: dto.serviceId ?? null,
     insurerId: dto.insurerId ?? null,
     followUpDate: dto.followUpDate,
+    lossDate: dto.lossDate ?? null,
+    notificationDate: dto.notificationDate ?? null,
   }
 }
 

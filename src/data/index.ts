@@ -5,12 +5,17 @@ export {
   type CaseDocumentsDataPort,
   type CaseDocumentWorkspaceRecord,
   type CasesDataPort,
+  type CaseReferenceDataPort,
+  type CaseReferenceWorkspace,
   type DataSourceKind,
   type DocumentPhysicalStatus,
   type DocumentRequirementRecord,
   type DocumentRequirementStatus,
   type DocumentVersionMetadataRecord,
   type PhotoMetadataRecord,
+  type NamedReferenceRecord,
+  type ServiceReferenceRecord,
+  type UserReferenceRecord,
 } from './ports'
 export { createMockCasesAdapter } from './mockAdapter'
 export {
@@ -49,3 +54,9 @@ export {
   type CaseCreateInput,
   type CaseUpdateInput,
 } from './commandPort'
+export {
+  createHttpReferenceDataAdapter,
+  ReferenceDataError,
+  type ReferenceDataErrorKind,
+} from './referenceHttpAdapter'
+export { useCaseReferences, type CaseReferencesStatus } from './useCaseReferences'

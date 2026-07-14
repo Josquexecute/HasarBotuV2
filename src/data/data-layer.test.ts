@@ -29,6 +29,9 @@ const dto = {
   responsibleUserId: 'user-1',
   serviceId: null,
   insurerId: 'insurer-1',
+  expertUserId: 'expert-1',
+  lossDate: '2026-07-10',
+  notificationDate: '2026-07-11',
 }
 
 function fetchResponding(status: number, body?: unknown): typeof fetch {
@@ -62,6 +65,9 @@ describe('HttpApiAdapter esleme', () => {
       workflowStage: 'inspection_pending',
       responsibleUserId: 'user-1',
       insurerId: 'insurer-1',
+      expertUserId: 'expert-1',
+      lossDate: '2026-07-10',
+      notificationDate: '2026-07-11',
     })
   })
 

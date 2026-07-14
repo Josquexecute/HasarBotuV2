@@ -51,9 +51,12 @@ export interface CaseRecord {
   version?: number
   workflowStage?: CaseStageCode
   responsibleUserId?: string | null
+  expertUserId?: string | null
   serviceId?: string | null
   insurerId?: string | null
   followUpDate?: string | null
+  lossDate?: string | null
+  notificationDate?: string | null
 }
 
 export type SortKey =

@@ -16,9 +16,12 @@ export interface CaseCore {
   readonly status: CaseStatus
   readonly stage: CaseStage
   readonly responsibleUserId?: UserId
+  readonly expertUserId?: UserId
   readonly insurerId?: InsurerId
   readonly serviceId?: ServiceId
   readonly followUpDate?: LocalDate
+  readonly lossDate?: LocalDate
+  readonly notificationDate?: LocalDate
   readonly lastInterventionAt?: UtcDateTime
   readonly createdAt: UtcDateTime
   readonly updatedAt: UtcDateTime

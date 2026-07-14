@@ -610,3 +610,13 @@ Kabul ölçütü: API modunda doğrulanmış metadata ve sürümlü kural sonucu
 - [x] Test: form unit/component, CaseCommandPort hata metadata'sı, gerçek PostgreSQL/API idempotency+audit, canlı browser create/update/conflict/reload/401/network ve 1366/1920 açık-koyu kontrolü.
 
 Kabul ölçütü: Mevcut create/update API sözleşmesi dışına çıkmadan mükerrersiz oluşturma ve optimistic-lock düzenleme çalışır; backend kimlik/numara/sürüm sonucu görünür; immutable/kapsam dışı alanlar yazılmaz; mock baseline ve güvenlik sınırları korunur.
+
+## Aktif geliştirme paketi — Paket 18 Referans Veriler ve Case Çekirdeği
+
+- [x] Migration 0010: aktif servis/sigorta bayrakları; nullable eksper/hasar/ihbar tarihleri; LocalDate constraint ve indeksler.
+- [x] Contracts/API: dört tenant-kapsamlı aktif katalog; gerçek expert rolü; Case create/update/read/audit alanları; deterministik JSON Schema fixture'ları.
+- [x] UI: `CaseReferenceDataPort`/HTTP adapter/hook; gerçek seçim listeleri, LocalDate alanları, pasif mevcut ilişki davranışı; API hata halinde mock fallback yok.
+- [x] Gerçek PostgreSQL/API testleri ve canlı HTTP smoke.
+- [x] Tarayıcı e2e + 1366/1920 açık-koyu: Codex Browser bootstrap hatası repository dışı olarak ayrıştırıldı; kurulu Chrome DevTools protokolüyle login, referanslar, create/update, 409/reload, negatif referanslar, no-fallback, overflow ve konsol kapıları geçti.
+
+Kabul ölçütü: Aktif ve tenant-kapsamlı gerçek referanslar create/edit'te seçilir; eksper roles kaynaklıdır; yeni alanlar LocalDate/read/write/audit boyunca korunur; pasif/uygunsuz referans reddedilir; optimistic locking ve mock ayrımı korunur; tüm tarayıcı ve temiz checkout kapıları yeşil olmadan paket tamamlandı sayılmaz.

@@ -35,9 +35,12 @@ export const caseCreateRequestSchema = z.strictObject({
   notificationFormNumber: notificationFormNumberSchema.optional(),
   insurerClaimNumber: insurerClaimNumberSchema.optional(),
   responsibleUserId: userIdSchema.optional(),
+  expertUserId: userIdSchema.optional(),
   serviceId: serviceIdSchema.optional(),
   insurerId: insurerIdSchema.optional(),
   followUpDate: localDateSchema.optional(),
+  lossDate: localDateSchema.optional(),
+  notificationDate: localDateSchema.optional(),
 })
 export type CaseCreateRequest = z.infer<typeof caseCreateRequestSchema>
 export type CaseCreateRequestInput = z.input<typeof caseCreateRequestSchema>
@@ -49,8 +52,11 @@ const caseUpdateFields = z.strictObject({
   notificationFormNumber: notificationFormNumberSchema.nullable().optional(),
   insurerClaimNumber: insurerClaimNumberSchema.nullable().optional(),
   responsibleUserId: userIdSchema.nullable().optional(),
+  expertUserId: userIdSchema.nullable().optional(),
   serviceId: serviceIdSchema.nullable().optional(),
   insurerId: insurerIdSchema.nullable().optional(),
+  lossDate: localDateSchema.nullable().optional(),
+  notificationDate: localDateSchema.nullable().optional(),
 })
 
 export const CASE_UPDATABLE_FIELDS = [
@@ -59,8 +65,11 @@ export const CASE_UPDATABLE_FIELDS = [
   'notificationFormNumber',
   'insurerClaimNumber',
   'responsibleUserId',
+  'expertUserId',
   'serviceId',
   'insurerId',
+  'lossDate',
+  'notificationDate',
 ] as const
 
 export const caseUpdateRequestSchema = caseUpdateFields.refine(

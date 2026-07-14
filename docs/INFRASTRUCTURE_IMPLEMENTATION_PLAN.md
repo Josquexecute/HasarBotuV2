@@ -350,6 +350,12 @@ Dosya Detayı sekmesi mevcut document/photo metadata ve document-requirements GE
 
 Dosyalar sayfası mevcut `CaseCommandPort` POST create ucunu payload'a bağlı kararlı Idempotency-Key ile; Dosya Detayı mevcut PATCH update ucunu `expectedVersion` optimistic locking ile kullanır. Ofis numarası yalnız serverdan gelir; plaka/tür/ofis no/lifecycle değiştirilemez. Referans liste uçları olmadığı için sahte katalog yoktur; contract dışı eksper ve olay tarihleri yazılmaz. Mock baseline korunur, API hatası mock'a düşmez. Bu paket contracts, API, database migration, IPC, dependency, File Agent veya fiziksel dosya işlemi eklemez.
 
+### Paket 18 ek uygulama kaydı — aktif referans katalogları ve Case çekirdeği
+
+Organization-kapsamlı salt-okunur insurer/service/user/expert katalogları yalnız aktif kayıtları döndürür; expert seçimi users/roles kaynaklıdır. Migration 0010 mevcut kayıtları koruyarak Case'e nullable eksper ve LocalDate hasar/ihbar alanlarını ekler. Create/update/read/audit ve UI DataPort akışı yeni alanları taşır; pasif/tenant-dışı/role uygunsuz referans reddedilir. Yeni dependency, IPC, fiziksel dosya veya yönetim CRUD'u yoktur.
+
+Tarayıcı doğrulamasında Codex Browser bootstrap'ındaki `process` yeniden tanımı repository dışı araç hatası olarak kanıtlandı. Uygulama kodu değiştirilmeden kurulu Chrome DevTools protokolüyle gerçek API login/create/update/conflict/reload, aktif referans izolasyonu, no-fallback, 1366/1920 açık-koyu overflow ve konsol kontrolleri geçti; yeni browser dependency eklenmedi.
+
 Her pakette gerçek sonuca göre şu kanıtlar raporlanır:
 
 1. Değişen dosyalar ve kullanıcı değişikliklerinden ayrımı.

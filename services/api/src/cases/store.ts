@@ -23,9 +23,12 @@ export interface CaseRow {
   lifecycle_status: 'open' | 'closed'
   workflow_stage: string
   responsible_user_id: string | null
+  expert_user_id: string | null
   service_center_id: string | null
   insurer_id: string | null
   follow_up_date: Date | null
+  loss_date: Date | null
+  notification_date: Date | null
   last_intervention_at: Date | null
   created_at: Date
   updated_at: Date
@@ -33,7 +36,7 @@ export interface CaseRow {
 }
 
 /** `date` kolonunu timezone kaydirmasi olmadan YYYY-MM-DD yazar. */
-function toLocalDateString(value: Date): string {
+export function toLocalDateString(value: Date): string {
   const year = String(value.getFullYear()).padStart(4, '0')
   const month = String(value.getMonth() + 1).padStart(2, '0')
   const day = String(value.getDate()).padStart(2, '0')
@@ -51,9 +54,12 @@ export function rowToDto(row: CaseRow): CaseListItem {
     status: row.lifecycle_status,
     stage: row.workflow_stage,
     responsibleUserId: row.responsible_user_id,
+    expertUserId: row.expert_user_id,
     serviceId: row.service_center_id,
     insurerId: row.insurer_id,
     followUpDate: row.follow_up_date === null ? null : toLocalDateString(row.follow_up_date),
+    lossDate: row.loss_date === null ? null : toLocalDateString(row.loss_date),
+    notificationDate: row.notification_date === null ? null : toLocalDateString(row.notification_date),
     lastInterventionAt:
       row.last_intervention_at === null ? null : row.last_intervention_at.toISOString(),
     createdAt: row.created_at.toISOString(),
@@ -71,8 +77,8 @@ const SORT_COLUMNS: Record<CasesQuery['sortBy'], string> = {
 
 export const SELECT_FIELDS = `
   id, case_type, office_number, notification_form_number, insurer_claim_number,
-  plate, lifecycle_status, workflow_stage, responsible_user_id, service_center_id,
-  insurer_id, follow_up_date, last_intervention_at, created_at, updated_at, version
+  plate, lifecycle_status, workflow_stage, responsible_user_id, expert_user_id, service_center_id,
+  insurer_id, follow_up_date, loss_date, notification_date, last_intervention_at, created_at, updated_at, version
 `
 
 export interface CaseListResult {

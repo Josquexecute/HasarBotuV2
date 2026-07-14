@@ -19,9 +19,12 @@ export interface CaseCreateInput {
   readonly notificationFormNumber?: string
   readonly insurerClaimNumber?: string
   readonly responsibleUserId?: string
+  readonly expertUserId?: string
   readonly serviceId?: string
   readonly insurerId?: string
   readonly followUpDate?: string
+  readonly lossDate?: string
+  readonly notificationDate?: string
 }
 
 export interface CaseUpdateInput {
@@ -31,8 +34,11 @@ export interface CaseUpdateInput {
   readonly notificationFormNumber?: string | null
   readonly insurerClaimNumber?: string | null
   readonly responsibleUserId?: string | null
+  readonly expertUserId?: string | null
   readonly serviceId?: string | null
   readonly insurerId?: string | null
+  readonly lossDate?: string | null
+  readonly notificationDate?: string | null
 }
 
 /**

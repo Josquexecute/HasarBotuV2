@@ -116,6 +116,27 @@ export {
 } from './v1/cases/index.js'
 
 export {
+  EXPERTS_REFERENCE_ROUTE,
+  INSURERS_REFERENCE_ROUTE,
+  SERVICES_REFERENCE_ROUTE,
+  USERS_REFERENCE_ROUTE,
+  expertsReferenceResponseSchema,
+  insurerReferenceSchema,
+  insurersReferenceResponseSchema,
+  serviceReferenceSchema,
+  servicesReferenceResponseSchema,
+  userReferenceSchema,
+  usersReferenceResponseSchema,
+  type ExpertsReferenceResponse,
+  type InsurerReference,
+  type InsurersReferenceResponse,
+  type ServiceReference,
+  type ServicesReferenceResponse,
+  type UserReference,
+  type UsersReferenceResponse,
+} from './v1/references/index.js'
+
+export {
   // agent routes + headers
   AGENT_CLAIM_ROUTE,
   AGENT_JOB_HEARTBEAT_ROUTE,

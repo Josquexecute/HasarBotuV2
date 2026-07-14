@@ -48,14 +48,19 @@ describe('CaseCore', () => {
       notificationFormNumber: unwrap(parseNotificationFormNumber('F-2026-0988')),
       insurerClaimNumber: unwrap(parseInsurerClaimNumber('HSR-992-881')),
       responsibleUserId: unwrap(parseUserId('usr-2')),
+      expertUserId: unwrap(parseUserId('usr-expert')),
       insurerId: unwrap(parseInsurerId('insurer-1')),
       serviceId: unwrap(parseServiceId('service-1')),
       followUpDate: unwrap(parseLocalDate('2026-07-14')),
+      lossDate: unwrap(parseLocalDate('2026-07-10')),
+      notificationDate: unwrap(parseLocalDate('2026-07-11')),
       lastInterventionAt: unwrap(parseUtcDateTime('2026-07-11T09:15:00Z')),
     }
 
     expect(completeCase.followUpDate).toBe('2026-07-14')
     expect(completeCase.responsibleUserId).toBe('usr-2')
+    expect(completeCase.expertUserId).toBe('usr-expert')
+    expect(completeCase.lossDate).toBe('2026-07-10')
   })
 
   it('sunum alanlarını çalışma zamanı nesnesine eklemez', () => {

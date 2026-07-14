@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import {
   CaseCommandError,
   type CaseCommandPort,
+  type CaseReferenceDataPort,
   type CaseCreateInput,
   type CaseUpdateInput,
   type SessionUser,
@@ -19,6 +20,18 @@ const USER: SessionUser = {
   email: 'operator@example.test',
   displayName: 'Operatör Kullanıcı',
   roles: ['case_manager'],
+}
+
+const REFERENCES: CaseReferenceDataPort = {
+  getCaseReferences: async () => ({
+    insurers: [{ id: 'insurer-1', name: 'Güven Sigorta' }],
+    services: [{ id: 'service-1', name: 'Merkez Servis', centerType: 'ozel' }],
+    users: [
+      { id: USER.id, displayName: USER.displayName },
+      { id: 'user-2', displayName: 'İkinci Kullanıcı' },
+    ],
+    experts: [{ id: 'expert-1', displayName: 'Uzman Eksper' }],
+  }),
 }
 
 function record(overrides: Partial<CaseRecord> = {}): CaseRecord {
@@ -73,7 +86,7 @@ function renderCreate(port: CaseCommandPort, unauthorized = vi.fn()) {
   return render(
     <MemoryRouter initialEntries={['/dosyalar?yeni=true']}>
       <Routes>
-        <Route path="/dosyalar" element={<CaseCreateModal currentUser={USER} onClose={vi.fn()} onUnauthorized={unauthorized} commandPort={port} />} />
+        <Route path="/dosyalar" element={<CaseCreateModal currentUser={USER} onClose={vi.fn()} onUnauthorized={unauthorized} commandPort={port} referencePort={REFERENCES} />} />
         <Route path="/dosyalar/:caseId" element={<CreationResult />} />
       </Routes>
     </MemoryRouter>,
@@ -152,11 +165,11 @@ describe('CaseCreateModal gerçek API komut akışı', () => {
     expect(screen.queryByText(/Mock analiz/)).not.toBeInTheDocument()
   })
 
-  it('desteklenmeyen eksper ve olay tarihlerini sahte yazılabilir alan olarak sunmaz', () => {
+  it('eksper ve LocalDate alanlarını gerçek referans modeliyle sunar', async () => {
     renderCreate(commandPort())
-    expect(screen.getByLabelText('Eksper')).toBeDisabled()
-    expect(screen.getByLabelText('Hasar tarihi')).toBeDisabled()
-    expect(screen.getByLabelText('İhbar tarihi')).toBeDisabled()
+    expect(await screen.findByRole('option', { name: 'Uzman Eksper' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Hasar tarihi/)).toHaveAttribute('type', 'date')
+    expect(screen.getByLabelText(/^İhbar tarihi/)).toHaveAttribute('type', 'date')
   })
 })
 
@@ -169,6 +182,7 @@ function renderEdit(port: CaseCommandPort, options: Partial<Parameters<typeof Ca
     onReload: vi.fn(),
     onUnauthorized: vi.fn(),
     commandPort: port,
+    referencePort: REFERENCES,
     ...options,
   }
   render(<CaseEditModal {...props} />)
@@ -218,7 +232,7 @@ describe('CaseEditModal optimistic locking akışı', () => {
     ]))
     renderEdit(commandPort({ update }))
     const user = userEvent.setup()
-    await user.type(screen.getByLabelText(/^Servis kimliği/), 'foreign-service')
+    await user.selectOptions(await screen.findByLabelText('Servis'), 'service-1')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
     expect(await screen.findByText('Bu kayıt organizasyonunuzda bulunamadı.')).toBeInTheDocument()
     expect(screen.queryByText(/SQL|foreign tenant/i)).not.toBeInTheDocument()

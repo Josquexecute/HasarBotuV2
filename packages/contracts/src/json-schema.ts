@@ -26,6 +26,12 @@ import {
 import { jobResultRequestSchema } from './v1/agent/commands.js'
 import { agentRegisterResponseSchema, claimResponseSchema } from './v1/agent/dto.js'
 import { documentRequirementsParamsSchema, documentRequirementsResponseSchema } from './v1/document-requirements/dto.js'
+import {
+  expertsReferenceResponseSchema,
+  insurersReferenceResponseSchema,
+  servicesReferenceResponseSchema,
+  usersReferenceResponseSchema,
+} from './v1/references/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -58,6 +64,10 @@ export const JSON_SCHEMA_TARGETS = {
   'agent-register-response': agentRegisterResponseSchema,
   'document-requirements-response': documentRequirementsResponseSchema,
   'document-requirements-params': documentRequirementsParamsSchema,
+  'reference-insurers-response': insurersReferenceResponseSchema,
+  'reference-services-response': servicesReferenceResponseSchema,
+  'reference-users-response': usersReferenceResponseSchema,
+  'reference-experts-response': expertsReferenceResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

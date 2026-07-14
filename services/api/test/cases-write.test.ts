@@ -32,6 +32,9 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
   let orgId: string
   let userId: string
   let serviceId: string
+  let expertId: string
+  let insurerId: string
+  let inactiveServiceId: string
 
   function createPayload(plate: string): Record<string, unknown> {
     return { caseType: 'casco', plate, notificationFormNumber: `F-${YEAR}-${plate.slice(-3)}` }
@@ -56,6 +59,9 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     orgId = uuidv7()
     userId = uuidv7()
     serviceId = uuidv7()
+    expertId = uuidv7()
+    insurerId = uuidv7()
+    inactiveServiceId = uuidv7()
     await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [orgId, 'baran-global', 'Baran Global'])
     await pool.query(
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',
@@ -64,6 +70,16 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     await pool.query(
       'INSERT INTO service_centers (id, organization_id, name, center_type) VALUES ($1, $2, $3, $4)',
       [serviceId, orgId, 'Merkez Servis', 'ozel'],
+    )
+    await pool.query(
+      'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',
+      [expertId, orgId, 'eksper@baran.example', 'Gerçek Eksper', await hashPassword(PASSWORD)],
+    )
+    await pool.query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE code='expert'", [expertId])
+    await pool.query('INSERT INTO insurers (id, organization_id, name) VALUES ($1, $2, $3)', [insurerId, orgId, 'Güven Sigorta'])
+    await pool.query(
+      'INSERT INTO service_centers (id, organization_id, name, center_type, is_active) VALUES ($1, $2, $3, $4, false)',
+      [inactiveServiceId, orgId, 'Pasif Servis', 'ozel'],
     )
 
     app = buildApp({
@@ -95,6 +111,50 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
       [userId],
     )
     expect((audit.rows[0] as { n: number }).n).toBe(2)
+  })
+
+  it('eksper ve LocalDate alanlarını create/read/update/audit akışında taşır', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: CASES_ROUTE,
+      headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: {
+        caseType: 'traffic', plate: '34 P 180', responsibleUserId: userId, expertUserId: expertId,
+        insurerId, serviceId, lossDate: '2026-07-10', notificationDate: '2026-07-11', followUpDate: '2026-07-20',
+      },
+    })
+    expect(created.statusCode).toBe(201)
+    const createdCase = caseDetailResponseSchema.parse(created.json()).case
+    expect(createdCase).toMatchObject({ expertUserId: expertId, lossDate: '2026-07-10', notificationDate: '2026-07-11' })
+
+    const updated = await app.inject({
+      method: 'PATCH', url: `${CASES_ROUTE}/${createdCase.id}`, headers: { cookie },
+      payload: { expectedVersion: 1, lossDate: '2026-07-12', notificationDate: '2026-07-13' },
+    })
+    expect(updated.statusCode).toBe(200)
+    expect(caseDetailResponseSchema.parse(updated.json()).case).toMatchObject({ version: 2, lossDate: '2026-07-12', notificationDate: '2026-07-13' })
+    const audits = await pool.query("SELECT action,details FROM audit_events WHERE resource_id=$1 ORDER BY occurred_at", [createdCase.id])
+    expect(audits.rows).toEqual([
+      expect.objectContaining({ action: 'case.created', details: expect.objectContaining({ assignedReferenceFields: ['responsibleUserId', 'expertUserId', 'serviceId', 'insurerId'], dateFieldsPresent: ['followUpDate', 'lossDate', 'notificationDate'] }) }),
+      expect.objectContaining({ action: 'case.updated', details: expect.objectContaining({ changedFields: ['lossDate', 'notificationDate'], fromVersion: 1, toVersion: 2 }) }),
+    ])
+  })
+
+  it('pasif referansı, expert rolü olmayan kullanıcıyı ve ters tarih sırasını alan bazlı reddeder', async () => {
+    const attempts = [
+      { field: 'serviceId', plate: '34 Z 181', payload: { serviceId: inactiveServiceId } },
+      { field: 'expertUserId', plate: '34 Z 182', payload: { expertUserId: userId } },
+      { field: 'notificationDate', plate: '34 Z 183', payload: { lossDate: '2026-07-14', notificationDate: '2026-07-13' } },
+    ]
+    for (const attempt of attempts) {
+      const response = await app.inject({
+        method: 'POST', url: CASES_ROUTE,
+        headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+        payload: { caseType: 'casco', plate: attempt.plate, ...attempt.payload },
+      })
+      expect(response.statusCode).toBe(400)
+      expect(response.json().error.fieldErrors[0].path).toBe(attempt.field)
+    }
   })
 
   it('idempotent tekrar: ayni anahtar + ayni govde ayni yaniti dondurur, kopya olusturmaz', async () => {

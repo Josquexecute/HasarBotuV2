@@ -2,6 +2,15 @@
 
 ## Genel
 
+### Paket 18 — Referans veriler ve Case çekirdeği kabulü
+
+- Dört referans GET ucu oturum ister, session organization'ı dışına çıkmaz ve yalnız aktif kayıt döndürür; eksper yalnız gerçek `expert` rolündeki aktif kullanıcıdır.
+- `expertUserId`, `lossDate`, `notificationDate` create/update/read sözleşmelerinde ve audit güvenli özetinde bulunur. Tarihler LocalDate'tir; ihbar tarihi hasar tarihinden önce olamaz.
+- Pasif/tenant-dışı/role uygun olmayan referans alan bazlı reddedilir. Mevcut pasif ilişki okunabilir; yeniden atanamaz. Optimistic locking ve idempotency regresyona uğramaz.
+- API UI formları gerçek katalogları gösterir; yükleme, 401 ve ağ/5xx halinde mock seçenek üretmez. Mock prototip değişmez.
+- Gerçek PostgreSQL'de 0010 up/repeat/down-up, mevcut kayıt korunumu ve constraint; gerçek API'de tenant/active/role/create/update/read/audit; tarayıcıda create/edit ve 1366×768/1920×1080 açık-koyu doğrulanmalıdır.
+- Paket 18 tarayıcı kanıtı: kurulu Chrome ile gerçek API login→aktif referanslar→Trafik create→zengin alanları server/detayda okuma→ikinci gerçek eksper ve LocalDate update→stale 409/reload; pasif/tenant-dışı reddi ve API kesintisinde no-fallback geçti. 1366×768 açık/koyu ile 1920×1080 koyuda body overflow yok, form scrollbar politikası korundu ve console warning/error/exception 0 kaldı.
+
 ### Paket 17 — Yeni İhbar ve temel dosya düzenleme UI kabulü
 
 - API modunda Trafik/Kasko oluşturma gerçek POST ucunu kullanır; plaka kanonik, ofis numarası server kaynaklıdır. Aynı payload retry'sı aynı Idempotency-Key'i kullanır ve çift submit tek komuttur.

@@ -105,7 +105,7 @@ export function registerCasesWriteRoutes(app: FastifyInstance, options: CasesWri
       return reply.code(201).send(caseDetailResponseSchema.parse({ case: item }))
     } catch (error) {
       if (error instanceof ReferenceCheckError) {
-        sendValidation(reply, requestId, error.field, 'unknown_reference')
+        sendValidation(reply, requestId, error.field, error.code)
         return
       }
       throw error
@@ -151,7 +151,7 @@ export function registerCasesWriteRoutes(app: FastifyInstance, options: CasesWri
       return caseDetailResponseSchema.parse({ case: outcome.item })
     } catch (error) {
       if (error instanceof ReferenceCheckError) {
-        sendValidation(reply, requestId, error.field, 'unknown_reference')
+        sendValidation(reply, requestId, error.field, error.code)
         return
       }
       throw error

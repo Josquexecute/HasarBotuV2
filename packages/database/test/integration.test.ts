@@ -53,6 +53,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0007_document_metadata',
       '0008_file_agent_jobs',
       '0009_document_requirement_rules',
+      '0010_case_reference_enrichment',
     ])
 
     const tables = await pool.query(
@@ -93,15 +94,34 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0009 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0010 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0009_document_requirement_rules'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0010_case_reference_enrichment'])
     const removed = await pool.query(
-      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_rule_versions'",
+      "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'cases' AND column_name = 'expert_user_id'",
     )
     expect((removed.rows[0] as { n: number }).n).toBe(0)
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0009_document_requirement_rules'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0010_case_reference_enrichment'])
+  })
+
+  it('0010 mevcut kayıtları korur, aktif varsayılanları ve tarih kısıtını uygular', async () => {
+    const organizationId = uuidv7()
+    const caseId = uuidv7()
+    const insurerId = uuidv7()
+    const serviceId = uuidv7()
+    await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1,$2,$3)', [organizationId, 'p18-db', 'P18 DB'])
+    await pool.query('INSERT INTO insurers (id, organization_id, name) VALUES ($1,$2,$3)', [insurerId, organizationId, 'Aktif Sigorta'])
+    await pool.query("INSERT INTO service_centers (id, organization_id, name, center_type) VALUES ($1,$2,$3,'ozel')", [serviceId, organizationId, 'Aktif Servis'])
+    await pool.query(
+      `INSERT INTO cases (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized)
+       VALUES ($1,$2,2026,18,'2026/18','traffic','new_notification','34 PK 018','34PK018')`,
+      [caseId, organizationId],
+    )
+    const defaults = await pool.query('SELECT is_active FROM insurers WHERE id=$1 UNION ALL SELECT is_active FROM service_centers WHERE id=$2', [insurerId, serviceId])
+    expect(defaults.rows).toEqual([{ is_active: true }, { is_active: true }])
+    await expect(pool.query("UPDATE cases SET loss_date='2026-07-14', notification_date='2026-07-13' WHERE id=$1", [caseId])).rejects.toMatchObject({ code: '23514' })
+    await pool.query("UPDATE cases SET loss_date='2026-07-13', notification_date='2026-07-14' WHERE id=$1", [caseId])
   })
 
   it('0009 kural sürümü ve rücu kısıtlarını veritabanında zorlar', async () => {

@@ -9,6 +9,31 @@ export interface CasesDataPort {
   listCases(): Promise<readonly CaseRecord[]>
 }
 
+export interface NamedReferenceRecord {
+  readonly id: string
+  readonly name: string
+}
+
+export interface UserReferenceRecord {
+  readonly id: string
+  readonly displayName: string
+}
+
+export interface ServiceReferenceRecord extends NamedReferenceRecord {
+  readonly centerType: 'yetkili' | 'ozel'
+}
+
+export interface CaseReferenceWorkspace {
+  readonly insurers: readonly NamedReferenceRecord[]
+  readonly services: readonly ServiceReferenceRecord[]
+  readonly users: readonly UserReferenceRecord[]
+  readonly experts: readonly UserReferenceRecord[]
+}
+
+export interface CaseReferenceDataPort {
+  getCaseReferences(): Promise<CaseReferenceWorkspace>
+}
+
 export type DocumentPhysicalStatus = 'pending' | 'ready' | 'failed' | 'missing'
 export type DocumentRequirementStatus = 'required' | 'present' | 'missing' | 'not_applicable' | 'control_required'
 

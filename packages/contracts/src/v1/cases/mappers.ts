@@ -47,9 +47,12 @@ export function caseCoreToListItem(core: CaseCore): CaseListItem {
     status: core.status,
     stage: core.stage,
     responsibleUserId: nullable(core.responsibleUserId),
+    expertUserId: nullable(core.expertUserId),
     serviceId: nullable(core.serviceId),
     insurerId: nullable(core.insurerId),
     followUpDate: nullable(core.followUpDate),
+    lossDate: nullable(core.lossDate),
+    notificationDate: nullable(core.notificationDate),
     lastInterventionAt: nullable(core.lastInterventionAt),
     createdAt: core.createdAt,
     updatedAt: core.updatedAt,
@@ -100,12 +103,18 @@ export function caseDetailToCaseCore(dto: CaseDetail): ParseResult<CaseCore> {
   if (insurerClaimNumber !== undefined && !insurerClaimNumber.ok) return fail(insurerClaimNumber.error)
   const responsibleUserId = dto.responsibleUserId === null ? undefined : parseUserId(dto.responsibleUserId)
   if (responsibleUserId !== undefined && !responsibleUserId.ok) return fail(responsibleUserId.error)
+  const expertUserId = dto.expertUserId === null ? undefined : parseUserId(dto.expertUserId)
+  if (expertUserId !== undefined && !expertUserId.ok) return fail(expertUserId.error)
   const serviceId = dto.serviceId === null ? undefined : parseServiceId(dto.serviceId)
   if (serviceId !== undefined && !serviceId.ok) return fail(serviceId.error)
   const insurerId = dto.insurerId === null ? undefined : parseInsurerId(dto.insurerId)
   if (insurerId !== undefined && !insurerId.ok) return fail(insurerId.error)
   const followUpDate = dto.followUpDate === null ? undefined : parseLocalDate(dto.followUpDate)
   if (followUpDate !== undefined && !followUpDate.ok) return fail(followUpDate.error)
+  const lossDate = dto.lossDate === null ? undefined : parseLocalDate(dto.lossDate)
+  if (lossDate !== undefined && !lossDate.ok) return fail(lossDate.error)
+  const notificationDate = dto.notificationDate === null ? undefined : parseLocalDate(dto.notificationDate)
+  if (notificationDate !== undefined && !notificationDate.ok) return fail(notificationDate.error)
   const lastInterventionAt = dto.lastInterventionAt === null ? undefined : parseUtcDateTime(dto.lastInterventionAt)
   if (lastInterventionAt !== undefined && !lastInterventionAt.ok) return fail(lastInterventionAt.error)
 
@@ -128,9 +137,14 @@ export function caseDetailToCaseCore(dto: CaseDetail): ParseResult<CaseCore> {
     ...(responsibleUserId !== undefined && responsibleUserId.ok
       ? { responsibleUserId: responsibleUserId.value }
       : {}),
+    ...(expertUserId !== undefined && expertUserId.ok ? { expertUserId: expertUserId.value } : {}),
     ...(serviceId !== undefined && serviceId.ok ? { serviceId: serviceId.value } : {}),
     ...(insurerId !== undefined && insurerId.ok ? { insurerId: insurerId.value } : {}),
     ...(followUpDate !== undefined && followUpDate.ok ? { followUpDate: followUpDate.value } : {}),
+    ...(lossDate !== undefined && lossDate.ok ? { lossDate: lossDate.value } : {}),
+    ...(notificationDate !== undefined && notificationDate.ok
+      ? { notificationDate: notificationDate.value }
+      : {}),
     ...(lastInterventionAt !== undefined && lastInterventionAt.ok
       ? { lastInterventionAt: lastInterventionAt.value }
       : {}),
