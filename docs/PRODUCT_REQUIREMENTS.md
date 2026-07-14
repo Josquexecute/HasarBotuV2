@@ -130,3 +130,11 @@ Raporlar:
 - Yazdırma
 
 formatlarında alınabilir.
+
+## Case kapatma ve yeniden açma
+
+- Kullanıcı, doğrulanmış çalışma konumu olan açık case için kapanış önizlemesi alır; önizleme belge eksiklerini, logical kapalı ay hedefini ve uyarıları açıklar.
+- Normal kapanış gereksinimler tamamlandığında; eksiklerle kapanış ise yalnız açık seçim, zorunlu gerekçe ve eksik/control_required snapshot'ı ile onaylanabilir.
+- Kapatma fiziksel klasör move'u doğrulanmadan case'i closed yapmaz. Başarıda lifecycle ve workflow `closed` olur; aynı case kimliği ve ofis numarası korunur.
+- Closed case zorunlu gerekçe ve geçerli açık workflow stage ile yeniden açılabilir. Önceki açık logical location güvenliyse hedeflenir; geçmiş kapanış kaydı append-only korunur.
+- Sadece yönetici, eksper ve dosya sorumlusu close/reopen komutu verebilir. Diğer oturumlu roller durumu okuyabilir; API modunda mock fallback veya istemciden mutlak/serbest path yoktur.

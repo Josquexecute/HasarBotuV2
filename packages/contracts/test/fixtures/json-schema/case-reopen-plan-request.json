@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "expectedCaseVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "expectedLocationVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 500,
+      "pattern": "\\S"
+    },
+    "targetWorkflowStage": {
+      "default": "new_notification",
+      "type": "string",
+      "enum": [
+        "new_notification",
+        "vehicle_or_service_pending",
+        "inspection_pending",
+        "damage_assessment",
+        "parts_and_labor",
+        "repair_approval_pending",
+        "under_repair",
+        "reporting",
+        "closing_documents",
+        "ready_to_close"
+      ]
+    }
+  },
+  "required": [
+    "expectedCaseVersion",
+    "expectedLocationVersion",
+    "reason",
+    "targetWorkflowStage"
+  ],
+  "additionalProperties": false
+}

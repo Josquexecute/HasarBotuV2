@@ -29,6 +29,7 @@ import type { CaseRecord } from '../../types/case'
 import { DocumentPhotoApiModule } from './DocumentPhotoApiModule'
 import { CaseEditModal } from './CaseEditModal'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
+import { CaseLifecycleModal } from './CaseLifecycleModal'
 
 const tabs = [
   'Özet',
@@ -153,6 +154,7 @@ export function CaseDetailPage() {
   const [caseOverride, setCaseOverride] = useState<CaseRecord | null>(null)
   const baseItem = cases.find((candidate) => candidate.caseId === caseId)
   const item = caseOverride?.caseId === caseId ? caseOverride : baseItem
+  const canChangeLifecycle = session.user?.roles.some((role) => ['admin', 'expert', 'case_manager'].includes(role)) === true
   const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
   const creationResult = (location.state as {
     creationResult?: { caseId: string; officeNumber: string; plate: string }
@@ -221,19 +223,19 @@ export function CaseDetailPage() {
               setPrototypeNotice('Güncel dosya verisi sunucudan yükleniyor.')
             } else setPrototypeNotice(`${item.plate} mock verisi yenilendi.`)
           }}><RefreshCw size={15} /> Tek Dosyayı Yenile</button>
-          {source === 'api' ? (
+          {source === 'api' && item.lifecycleStatus !== 'closed' ? (
             <button className="button button--primary" type="button" onClick={() => setEditModalOpen(true)}><Save size={15} /> Temel Bilgileri Düzenle</button>
-          ) : (
+          ) : source === 'mock' ? (
             <>
               <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('Mock not düzenleyicisi hazırlandı.')}><NotebookPen size={15} /> Not Ekle</button>
               <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('UI taslağı yerel mock durumda saklandı.')}><Save size={15} /> Taslağı Kaydet</button>
             </>
-          )}
+          ) : null}
           <button className="button button--secondary" type="button" onClick={() => setAssistantOpen((value) => !value)}>
             {assistantOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
             {assistantOpen ? 'Asistanı kapat' : 'Asistanı aç'}
           </button>
-          {source === 'mock' && <button className="button button--danger-ghost" type="button" onClick={() => setCloseModalOpen(true)}>Dosyayı Kapat</button>}
+          {(source === 'mock' || canChangeLifecycle) && <button className="button button--danger-ghost" type="button" onClick={() => setCloseModalOpen(true)}>{source === 'api' && item.lifecycleStatus === 'closed' ? 'Dosyayı Yeniden Aç' : 'Dosyayı Kapat'}</button>}
         </div>
       </section>
 
@@ -367,7 +369,22 @@ export function CaseDetailPage() {
         </aside>}
       </div>
 
-      {closeModalOpen && <CloseCaseModal onClose={() => setCloseModalOpen(false)} />}
+      {closeModalOpen && (source === 'mock'
+        ? <CloseCaseModal onClose={() => setCloseModalOpen(false)} />
+        : session.user !== null && <CaseLifecycleModal
+            item={item}
+            onClose={() => setCloseModalOpen(false)}
+            onUnauthorized={session.reportUnauthorized}
+            onReload={() => {
+              setCloseModalOpen(false)
+              reload()
+              setPrototypeNotice('Yaşam döngüsü çakışması sonrası güncel veri yükleniyor.')
+            }}
+            onUpdated={(updated) => {
+              setCaseOverride(updated)
+              setPrototypeNotice(updated.lifecycleStatus === 'closed' ? 'Dosya güvenle kapatıldı.' : 'Dosya aynı kimlik ve ofis numarasıyla yeniden açıldı.')
+            }}
+          />)}
       {editModalOpen && source === 'api' && session.user !== null && (
         <CaseEditModal
           item={item}

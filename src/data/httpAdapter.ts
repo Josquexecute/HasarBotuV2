@@ -39,6 +39,7 @@ const STAGE_LABELS: Record<string, CaseStage> = {
   reporting: 'Raporlama',
   closing_documents: 'Kapanış Evrakları',
   ready_to_close: 'Kapanmaya Hazır',
+  closed: 'Kapalı',
 }
 
 const MONTHS_TR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
@@ -71,6 +72,7 @@ export function deriveFollowUp(followUpDate: string | null, today: Date = new Da
 
 /** Yasam dongusu open|closed'tir; UI durum cipi turetilmis gorunumdur. */
 export function deriveStatus(dto: Pick<CaseListItemDto, 'status' | 'followUpDate'>, today: Date = new Date()): CaseStatus {
+  if (dto.status === 'closed') return 'Kapalı'
   if (dto.followUpDate !== null && dto.followUpDate < toLocalDateString(today)) return 'Gecikmiş'
   return 'Açık'
 }
@@ -108,6 +110,7 @@ export function mapCaseDtoToRecord(dto: CaseListItemDto, today: Date = new Date(
     followUpDate: dto.followUpDate,
     lossDate: dto.lossDate ?? null,
     notificationDate: dto.notificationDate ?? null,
+    lifecycleStatus: dto.status,
   }
 }
 

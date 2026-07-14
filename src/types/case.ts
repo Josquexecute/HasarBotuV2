@@ -11,8 +11,9 @@ export type CaseStage =
   | 'Raporlama'
   | 'Kapanış Evrakları'
   | 'Kapanmaya Hazır'
+  | 'Kapalı'
 
-export type CaseStatus = 'Açık' | 'Beklemede' | 'Gecikmiş' | 'Kontrol Bekliyor'
+export type CaseStatus = 'Açık' | 'Kapalı' | 'Beklemede' | 'Gecikmiş' | 'Kontrol Bekliyor'
 
 export type CaseStageCode =
   | 'new_notification'
@@ -25,6 +26,7 @@ export type CaseStageCode =
   | 'reporting'
   | 'closing_documents'
   | 'ready_to_close'
+  | 'closed'
 
 export interface CaseRecord {
   caseId: string
@@ -57,6 +59,7 @@ export interface CaseRecord {
   followUpDate?: string | null
   lossDate?: string | null
   notificationDate?: string | null
+  lifecycleStatus?: 'open' | 'closed'
 }
 
 export type SortKey =

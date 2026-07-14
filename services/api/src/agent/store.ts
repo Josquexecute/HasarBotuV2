@@ -253,6 +253,11 @@ export function createAgentStore(pool: pg.Pool) {
             strategy: string
           } | undefined
           if (operation !== undefined) {
+            await client.query(
+              `UPDATE case_lifecycle_operations SET status=CASE WHEN $2 THEN 'cleanup_pending' ELSE 'moving' END,updated_at=now()
+               WHERE linked_file_operation_id=$1 AND status NOT IN ('closed','reopened','failed','stale','cancelled','manual_recovery_required')`,
+              [claimed.target_id, isCleanup],
+            )
             await audit.record(client, {
               organizationId: agent.organizationId,
               actorUserId: operation.approved_by_user_id ?? undefined,
@@ -683,6 +688,125 @@ interface FileOperationApplyRow {
   approved_by_user_id: string | null
 }
 
+async function markLinkedLifecycleFailure(
+  ctx: ApplyContext,
+  operation: FileOperationApplyRow,
+  status: 'failed' | 'manual_recovery_required',
+  errorCode: string,
+  jobId: string,
+): Promise<void> {
+  const selected = await ctx.client.query(
+    `UPDATE case_lifecycle_operations SET status=$2,failure_reason_code=$3,version=version+1,updated_at=now()
+     WHERE linked_file_operation_id=$1 AND status NOT IN ('closed','reopened','stale','cancelled')
+     RETURNING id,case_id,operation_type,created_by_user_id`,
+    [operation.id, status, errorCode],
+  )
+  const lifecycle = selected.rows[0] as { id: string; case_id: string; operation_type: 'close' | 'reopen'; created_by_user_id: string | null } | undefined
+  if (lifecycle === undefined) return
+  await createAuditService().record(ctx.client, {
+    organizationId: ctx.organizationId,
+    actorUserId: lifecycle.created_by_user_id ?? undefined,
+    requestId: ctx.requestId,
+    action: status === 'manual_recovery_required' ? 'case_lifecycle.manual_recovery_required' : 'case_lifecycle.failed',
+    entityType: 'case_lifecycle_operation',
+    entityId: lifecycle.id,
+    details: { caseId: lifecycle.case_id, linkedFileOperationId: operation.id, jobId, agentId: ctx.agentId, errorCode },
+  })
+}
+
+async function finalizeLinkedLifecycle(
+  ctx: ApplyContext,
+  job: JobRow,
+  operation: FileOperationApplyRow,
+  strategy: 'atomic_rename' | 'staged_copy',
+): Promise<void> {
+  const selected = await ctx.client.query(
+    `SELECT id,case_id,operation_type,expected_case_version,expected_location_version,closure_mode,
+      requirement_snapshot,user_reason,previous_lifecycle_status,target_lifecycle_status,
+      previous_workflow_stage,target_workflow_stage,status,approved_by_user_id
+     FROM case_lifecycle_operations WHERE linked_file_operation_id=$1 FOR UPDATE`,
+    [operation.id],
+  )
+  const lifecycle = selected.rows[0] as {
+    id: string; case_id: string; operation_type: 'close' | 'reopen'; expected_case_version: number;
+    expected_location_version: number; closure_mode: 'normal' | 'with_missing_requirements' | null;
+    requirement_snapshot: { missingCount: number; controlRequiredCount: number }; user_reason: string | null;
+    previous_lifecycle_status: 'open' | 'closed'; target_lifecycle_status: 'open' | 'closed';
+    previous_workflow_stage: string; target_workflow_stage: string; status: string; approved_by_user_id: string | null
+  } | undefined
+  if (lifecycle === undefined || ['closed', 'reopened', 'cleanup_pending'].includes(lifecycle.status)) return
+  const caseResult = await ctx.client.query(
+    `SELECT version,lifecycle_status,workflow_stage,office_number FROM cases
+     WHERE organization_id=$1 AND id=$2 FOR UPDATE`, [ctx.organizationId, operation.case_id],
+  )
+  const current = caseResult.rows[0] as { version: number; lifecycle_status: string; workflow_stage: string; office_number: string } | undefined
+  if (current === undefined || current.version !== lifecycle.expected_case_version
+    || current.lifecycle_status !== lifecycle.previous_lifecycle_status
+    || current.workflow_stage !== lifecycle.previous_workflow_stage) {
+    await markLinkedLifecycleFailure(ctx, operation, 'manual_recovery_required', 'case_changed_after_move', job.id)
+    return
+  }
+  const finalStatus = lifecycle.operation_type === 'close' ? 'closed' : 'reopened'
+  if (lifecycle.operation_type === 'close') {
+    await ctx.client.query(
+      `UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',closed_at=now(),closed_by_user_id=$2,
+       latest_lifecycle_operation_id=$3,version=version+1,updated_at=now() WHERE id=$1`,
+      [operation.case_id, lifecycle.approved_by_user_id, lifecycle.id],
+    )
+  } else {
+    await ctx.client.query(
+      `UPDATE cases SET lifecycle_status='open',workflow_stage=$2,reopened_at=now(),reopened_by_user_id=$3,
+       latest_lifecycle_operation_id=$4,version=version+1,updated_at=now() WHERE id=$1`,
+      [operation.case_id, lifecycle.target_workflow_stage, lifecycle.approved_by_user_id, lifecycle.id],
+    )
+  }
+  await ctx.client.query(
+    `INSERT INTO case_lifecycle_history
+     (id,organization_id,case_id,lifecycle_operation_id,operation_type,previous_lifecycle_status,lifecycle_status,
+      previous_workflow_stage,workflow_stage,source_storage_root_key,source_relative_path,storage_root_key,relative_path,
+      closure_mode,requirement_snapshot,user_reason,actor_user_id,request_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18)`,
+    [uuidv7(), ctx.organizationId, operation.case_id, lifecycle.id, lifecycle.operation_type,
+      lifecycle.previous_lifecycle_status, lifecycle.target_lifecycle_status,
+      lifecycle.previous_workflow_stage, lifecycle.target_workflow_stage,
+      operation.source_storage_root_key, operation.source_relative_path,
+      operation.destination_storage_root_key, operation.destination_relative_path,
+      lifecycle.closure_mode, JSON.stringify(lifecycle.requirement_snapshot), lifecycle.user_reason,
+      lifecycle.approved_by_user_id, ctx.requestId],
+  )
+  await ctx.client.query(
+    `UPDATE case_lifecycle_operations SET status=$2,finalized_at=now(),failure_reason_code=NULL,
+     version=version+1,updated_at=now() WHERE id=$1`,
+    [lifecycle.id, strategy === 'staged_copy' ? 'cleanup_pending' : finalStatus],
+  )
+  await createAuditService().record(ctx.client, {
+    organizationId: ctx.organizationId,
+    actorUserId: lifecycle.approved_by_user_id ?? undefined,
+    requestId: ctx.requestId,
+    action: lifecycle.operation_type === 'close' ? 'case_lifecycle.closed' : 'case_lifecycle.reopened',
+    entityType: 'case_lifecycle_operation',
+    entityId: lifecycle.id,
+    details: {
+      caseId: operation.case_id,
+      linkedFileOperationId: operation.id,
+      jobId: job.id,
+      agentId: ctx.agentId,
+      previousLifecycle: lifecycle.previous_lifecycle_status,
+      targetLifecycle: lifecycle.target_lifecycle_status,
+      previousWorkflowStage: lifecycle.previous_workflow_stage,
+      targetWorkflowStage: lifecycle.target_workflow_stage,
+      source: { storageRootKey: operation.source_storage_root_key, relativePath: operation.source_relative_path },
+      destination: { storageRootKey: operation.destination_storage_root_key, relativePath: operation.destination_relative_path },
+      closeMode: lifecycle.closure_mode,
+      missingCount: lifecycle.requirement_snapshot.missingCount,
+      controlRequiredCount: lifecycle.requirement_snapshot.controlRequiredCount,
+      reason: lifecycle.user_reason,
+      cleanupPending: strategy === 'staged_copy',
+      officeNumberPreserved: current.office_number,
+    },
+  })
+}
+
 async function markFileOperationManualRecovery(
   ctx: ApplyContext,
   job: JobRow,
@@ -695,6 +819,7 @@ async function markFileOperationManualRecovery(
      failure_reason_code=$2,updated_at=now() WHERE id=$1 AND status NOT IN ('ready','stale','cancelled')`,
     [operation.id, errorCode],
   )
+  await markLinkedLifecycleFailure(ctx, operation, 'manual_recovery_required', errorCode, job.id)
   await audit.record(ctx.client, {
     organizationId: ctx.organizationId,
     actorUserId: operation.approved_by_user_id ?? undefined,
@@ -751,6 +876,7 @@ async function applyFileOperationResult(
       "UPDATE case_file_operations SET status='failed',failure_reason_code=$2,updated_at=now() WHERE id=$1",
       [operation.id, errorCode],
     )
+    await markLinkedLifecycleFailure(ctx, operation, 'failed', errorCode, job.id)
     await audit.record(ctx.client, {
       organizationId: ctx.organizationId,
       actorUserId: operation.approved_by_user_id ?? undefined,
@@ -799,6 +925,12 @@ async function applyFileOperationResult(
     await ctx.client.query(
       `UPDATE case_file_operations SET status='ready',cleanup_state='completed',failure_reason_code=NULL,
        finalized_at=now(),version=version+1,updated_at=now() WHERE id=$1`,
+      [operation.id],
+    )
+    await ctx.client.query(
+      `UPDATE case_lifecycle_operations lo SET status=CASE WHEN lo.operation_type='close' THEN 'closed' ELSE 'reopened' END,
+       failure_reason_code=NULL,updated_at=now()
+       WHERE lo.linked_file_operation_id=$1 AND lo.status='cleanup_pending'`,
       [operation.id],
     )
     await audit.record(ctx.client, {
@@ -930,6 +1062,8 @@ async function applyFileOperationResult(
       toVersion: switchedVersion,
     },
   })
+
+  await finalizeLinkedLifecycle(ctx, job, operation, fileResult.strategy)
 
   if (fileResult.strategy === 'staged_copy') {
     const cleanupJobId = uuidv7()

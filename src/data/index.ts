@@ -70,3 +70,12 @@ export {
   type WorkspaceProvisioningStatus,
   type WorkspaceRootRecord,
 } from './workspacePort'
+export {
+  LifecycleCommandError,
+  createHttpCaseLifecycleCommandAdapter,
+  type CaseLifecycleCommandPort,
+  type LifecycleCommandErrorKind,
+  type LifecycleOperationRecord,
+  type LifecycleOperationStatus,
+  type LifecycleRequirementRecord,
+} from './caseLifecyclePort'

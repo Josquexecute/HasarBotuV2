@@ -24,6 +24,10 @@
             "file_operation_conflict",
             "file_operation_stale",
             "destination_conflict",
+            "lifecycle_conflict",
+            "lifecycle_stale",
+            "lifecycle_blocked",
+            "manual_recovery_required",
             "rate_limited",
             "service_unavailable",
             "internal_error"

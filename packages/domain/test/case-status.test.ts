@@ -45,6 +45,7 @@ describe('CaseStage', () => {
       'reporting',
       'closing_documents',
       'ready_to_close',
+      'closed',
     ])
   })
 

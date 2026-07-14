@@ -73,7 +73,8 @@
             "under_repair",
             "reporting",
             "closing_documents",
-            "ready_to_close"
+            "ready_to_close",
+            "closed"
           ]
         },
         "responsibleUserId": {

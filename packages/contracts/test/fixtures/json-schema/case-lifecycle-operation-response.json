@@ -1,0 +1,456 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "caseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "operationType": {
+          "type": "string",
+          "enum": [
+            "close",
+            "reopen"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "planned",
+            "blocked",
+            "approval_required",
+            "approved",
+            "queued",
+            "moving",
+            "verifying",
+            "finalizing",
+            "closed",
+            "reopened",
+            "failed",
+            "stale",
+            "cancelled",
+            "cleanup_pending",
+            "manual_recovery_required"
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expectedCaseVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expectedLocationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "storageRootKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "relativePath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400,
+              "x-hasarbotu-runtime-validation": "safe-relative-path"
+            }
+          },
+          "required": [
+            "storageRootKey",
+            "relativePath"
+          ],
+          "additionalProperties": false
+        },
+        "destination": {
+          "type": "object",
+          "properties": {
+            "storageRootKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "relativePath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400,
+              "x-hasarbotu-runtime-validation": "safe-relative-path"
+            }
+          },
+          "required": [
+            "storageRootKey",
+            "relativePath"
+          ],
+          "additionalProperties": false
+        },
+        "closeMode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "normal",
+                "with_missing_requirements"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "previousLifecycleStatus": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed"
+          ]
+        },
+        "targetLifecycleStatus": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed"
+          ]
+        },
+        "previousWorkflowStage": {
+          "type": "string",
+          "enum": [
+            "new_notification",
+            "vehicle_or_service_pending",
+            "inspection_pending",
+            "damage_assessment",
+            "parts_and_labor",
+            "repair_approval_pending",
+            "under_repair",
+            "reporting",
+            "closing_documents",
+            "ready_to_close",
+            "closed"
+          ]
+        },
+        "targetWorkflowStage": {
+          "type": "string",
+          "enum": [
+            "new_notification",
+            "vehicle_or_service_pending",
+            "inspection_pending",
+            "damage_assessment",
+            "parts_and_labor",
+            "repair_approval_pending",
+            "under_repair",
+            "reporting",
+            "closing_documents",
+            "ready_to_close",
+            "closed"
+          ]
+        },
+        "requirementSummary": {
+          "type": "object",
+          "properties": {
+            "documentRuleVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "documentOverallStatus": {
+              "type": "string",
+              "enum": [
+                "required",
+                "present",
+                "missing",
+                "not_applicable",
+                "control_required"
+              ]
+            },
+            "closureRuleVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "missingCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "controlRequiredCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "requirementCode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "sourceType": {
+                    "type": "string",
+                    "enum": [
+                      "document",
+                      "photo"
+                    ]
+                  },
+                  "canonicalType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "present",
+                      "missing",
+                      "control_required",
+                      "not_applicable"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "matchedMetadataIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                    }
+                  },
+                  "relatedMetadataStatuses": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "metadataId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "ready",
+                            "failed",
+                            "missing"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "metadataId",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "requiresHumanReview": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "requirementCode",
+                  "sourceType",
+                  "canonicalType",
+                  "status",
+                  "reason",
+                  "matchedMetadataIds",
+                  "relatedMetadataStatuses",
+                  "requiresHumanReview"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "documentRuleVersion",
+            "documentOverallStatus",
+            "closureRuleVersion",
+            "missingCount",
+            "controlRequiredCount",
+            "requirements"
+          ],
+          "additionalProperties": false
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "linkedFileOperation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "planned",
+                    "approved",
+                    "queued",
+                    "applying",
+                    "verifying",
+                    "switching_location",
+                    "cleanup_pending",
+                    "ready",
+                    "failed",
+                    "stale",
+                    "cancelled",
+                    "manual_recovery_required"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "status"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failureReasonCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "canApprove": {
+          "type": "boolean"
+        },
+        "canCancel": {
+          "type": "boolean"
+        },
+        "approvedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalizedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        "updatedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        }
+      },
+      "required": [
+        "id",
+        "caseId",
+        "operationType",
+        "status",
+        "version",
+        "expectedCaseVersion",
+        "expectedLocationVersion",
+        "source",
+        "destination",
+        "closeMode",
+        "reason",
+        "previousLifecycleStatus",
+        "targetLifecycleStatus",
+        "previousWorkflowStage",
+        "targetWorkflowStage",
+        "requirementSummary",
+        "blockers",
+        "warnings",
+        "linkedFileOperation",
+        "failureReasonCode",
+        "canApprove",
+        "canCancel",
+        "approvedAt",
+        "finalizedAt",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "operation"
+  ],
+  "additionalProperties": false
+}

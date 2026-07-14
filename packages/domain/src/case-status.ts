@@ -15,9 +15,14 @@ export const CASE_STAGES = [
   'reporting',
   'closing_documents',
   'ready_to_close',
+  'closed',
 ] as const
 
 export type CaseStage = (typeof CASE_STAGES)[number]
+
+/** Kullanici tarafindan secilebilen acik vaka asamalari; `closed` yalniz lifecycle saga'si tarafindan atanir. */
+export const OPEN_CASE_STAGES = CASE_STAGES.filter((stage) => stage !== 'closed')
+export type OpenCaseStage = (typeof OPEN_CASE_STAGES)[number]
 
 export function isCaseStatus(value: unknown): value is CaseStatus {
   return typeof value === 'string' && CASE_STATUSES.some((item) => item === value)

@@ -645,3 +645,17 @@ Kabul ölçütü: Plan diske yazmaz; onaysız iş yoktur; aynı case/idempotency
 - [x] Son root kalite kapıları ve repository dışı fresh `npm ci` temiz checkout doğrulaması; atomik commit yalnız path-bazlı staged kapsam kontrolünden sonra.
 
 Kabul ölçütü: Kullanıcı onayı öncesi filesystem değişmez; tek aktif operation ve destination reservation DB'de zorlanır; same-volume rename ve staged-copy veri kaybı/overwrite olmadan doğrulanır; location switch olmadan source cleanup yapılmaz; cleanup/recovery idempotent ve belirsizlikte fail-closed'dur; mutlak root/secret/ham hata sınırı korunur; Paket 21 close/reopen veya son kullanıcı taşıma UI'si bu pakette uygulanmaz.
+
+## Aktif geliştirme paketi — Paket 21 güvenli case close/reopen yaşam döngüsü
+
+- [x] Open/closed lifecycle ile workflow stage ayrımı ve geçersiz kombinasyonların DB/contract/domain seviyesinde reddi.
+- [x] Server-side close/reopen planı: güncel case/location sürümü, doğrulanmış location, aktif operation/job ve manual recovery ön kontrolleri.
+- [x] Paket 15 belge motoru üzerinde kapanışa özel sürümlü gereksinim katmanı; normal kapanış ve gerekçeli/snapshot'lı eksiklerle kapatma.
+- [x] `YYYY/Ay YYYY/KAPALI AY YYYY/workspace` hedefi ve son append-only açık konuma reopen hedefi; istemciden serbest path yok.
+- [x] Paket 20 move/rename operation + mevcut queue/Agent kullanımı; hedef doğrulaması ve location switch olmadan lifecycle finalize etmeme.
+- [x] Migration 0013 lifecycle operation, append-only history, idempotency, tek aktif operation ve destination reservation modeli.
+- [x] Tenant/role kapsamlı plan/approve/read/cancel API, merkezi audit ve güvenli response/hata sınırı.
+- [x] Case detayında gerçek close/reopen preview/onay/durum/recovery UI'si; API modunda mock fallback yok.
+- [x] Gerçek tarayıcı/canlı TCP close→reopen smoke, tam root kapıları ve repository dışı fresh `npm ci` temiz checkout.
+
+Kabul ölçütü: Onaydan önce fiziksel/lifecycle değişikliği yoktur; normal ve eksiklerle kapanış ayrımı açıklanır; fiziksel hedef doğrulanmadan closed/open finalize edilmez; aynı case/ofis numarası korunur; history append-only, recovery fail-closed, mutlak yol/secret sınırı korunur; kritik DB/API/Agent/tarayıcı doğrulaması skip kalmaz.

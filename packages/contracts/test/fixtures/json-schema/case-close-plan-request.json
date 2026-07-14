@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "expectedCaseVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "expectedLocationVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "closeMode": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "with_missing_requirements"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 500,
+      "pattern": "\\S"
+    }
+  },
+  "required": [
+    "expectedCaseVersion",
+    "expectedLocationVersion",
+    "closeMode"
+  ],
+  "additionalProperties": false
+}

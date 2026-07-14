@@ -12,6 +12,7 @@ import { registerDocumentRequirementsRoutes } from './document-requirements/inde
 import { registerReferenceRoutes } from './references/index.js'
 import { registerWorkspaceRoutes } from './workspace/index.js'
 import { registerFileOperationRoutes } from './file-operations/index.js'
+import { registerCaseLifecycleRoutes } from './case-lifecycle/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -103,6 +104,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerReferenceRoutes(app, { pool: options.auth.pool })
     registerWorkspaceRoutes(app, { pool: options.auth.pool })
     registerFileOperationRoutes(app, { pool: options.auth.pool })
+    registerCaseLifecycleRoutes(app, { pool: options.auth.pool })
   }
 
   return app

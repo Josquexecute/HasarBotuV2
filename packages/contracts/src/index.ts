@@ -403,3 +403,5 @@ export {
   buildJsonSchemas,
   type JsonSchemaName,
 } from './json-schema.js'
+
+export * from './v1/case-lifecycle/index.js'

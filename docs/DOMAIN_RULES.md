@@ -255,3 +255,13 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Fiziksel doğrulama tamamlanmadan vaka konumu `verified` ve provisioning `ready` olamaz.
 - Kısmi başarısızlık mevcut klasörleri sildirmez; retry yalnız eksik dizinleri tamamlar.
 - Eski case location snapshot’ına ait sonuç güncel konumu ezmez ve `stale` olur.
+
+## Case close/reopen yaşam döngüsü kuralları
+
+- Lifecycle yalnız `open | closed`; workflow stage ayrı alandır. `closed` lifecycle/stage birlikte, `open` lifecycle ise yalnız açık stage'lerden biriyle bulunabilir.
+- Close planı yalnız open case, verified/current workspace location ve çakışmasız aktif işlem durumu için üretilebilir; plan filesystem veya case lifecycle'ını değiştirmez.
+- Kapalı hedef `notificationDate` ve mevcut workspace yolundan deterministik olarak `YYYY/Ay YYYY/KAPALI AY YYYY/workspace` biçiminde üretilir. Workspace adı korunur; hedef çakışmasında suffix, overwrite veya merge yoktur.
+- Kapanış katmanı sürümü `2026.07.14.1`'dir. Ekspertiz raporu, ön rapor, onarım görselleri; servis varsa fatura; servis `yetkili` ise Teslim İbra ve Temlik ile Taahhütname değerlendirilir. Yalnız verified-ready present, pending/failed control_required olur.
+- Normal close eksik/control_required gereksinimde blocked olur. Eksiklerle close yalnız zorunlu gerekçe ve server üretimli snapshot ile onaylanabilir.
+- Reopen yalnız closed case, zorunlu gerekçe ve izin verilen açık workflow stage ile yapılır; son append-only kapanış kaydındaki önceki açık location hedeflenir.
+- Fiziksel hedef doğrulanmadan lifecycle finalize edilmez. Reopen aynı `caseId` ve ofis numarasını korur; kapanış geçmişi silinmez/değiştirilmez.

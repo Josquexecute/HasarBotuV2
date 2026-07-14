@@ -137,3 +137,12 @@ Her geliştirme paketinde:
 - Bilinen risk
 
 raporlanır.
+
+### Paket 21 — case close/reopen kabulü
+
+- Domain/contracts: open/closed-stage tutarlılığı, Türkçe kapalı ay yolu, kapanış gereksinim sürümü, ready/pending/failed semantiği, normal/eksiklerle close ve reopen stage doğrulaması.
+- Gerçek PostgreSQL: migration 0013 ileri/tekrar/rollback-yeniden-ileri; lifecycle-stage constraint, idempotency, tek aktif operation, destination reservation ve append-only history.
+- Gerçek API + sentetik filesystem + Agent: plan değişiklik yapmaz, onaysız job yok, close/reopen verified move sonrası atomik finalize, aynı case/ofis no, idempotent replay, stale/manual recovery, cleanup_pending, tenant 404, role 403, 401 ve sızıntı kontrolü.
+- Gerçek tarayıcı: close preview→approve→closed ve reopen→approve→open; eksiklerle close gerekçesi; conflict reload; API modunda mock fallback olmaması; açık/koyu tema, 1366×768 ve 1920×1080 overflow/console kontrolü.
+- Gerçek `P:\` ve müşteri verisi kullanılmaz; production migration çalıştırılmaz. Kritik DB/API/Agent/tarayıcı senaryosu skip ise paket PASS sayılmaz.
+- Paket 21 uygulama sonucu: ana çalışma ağacı ve repository dışı fresh `npm ci` kopyasında 758 test geçti; 6 skip yalnız mevcut UI ortam-koşullu testleridir. Gerçek PostgreSQL migration/API/Agent testleri ve gerçek tarayıcı close/reopen smoke skip edilmedi.

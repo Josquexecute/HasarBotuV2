@@ -123,6 +123,110 @@ function operationTempPath(destinationPath: string, operationId: string): string
   return `${parent.length === 0 ? '' : `${parent}/`}.hasarbotu-rename-${operationId}`
 }
 
+export interface LifecycleFileOperationInput {
+  readonly organizationId: string
+  readonly actorUserId: string
+  readonly requestId: string
+  readonly caseId: string
+  readonly lifecycleOperationId: string
+  readonly source: { readonly locationId: string; readonly storageRootKey: string; readonly relativePath: string; readonly version: number }
+  readonly destination: { readonly storageRootKey: string; readonly relativePath: string }
+}
+
+/**
+ * Paket 21 icin server-turetilmis hedefi mevcut Paket 20 saga/job protokolune
+ * plan+approve+enqueue eder. Cagiran transaction icinde case/location kilidini
+ * ve lifecycle optimistic snapshot'ini dogrulamis olmalidir.
+ */
+export async function enqueueLifecycleFileOperation(
+  client: pg.PoolClient,
+  input: LifecycleFileOperationInput,
+): Promise<{ readonly operationId: string; readonly jobId: string; readonly status: 'queued' }> {
+  const audit = createAuditService()
+  const active = await client.query(
+    `SELECT 1 FROM case_file_operations WHERE organization_id=$1 AND case_id=$2
+     AND status NOT IN ('ready','stale','cancelled')`,
+    [input.organizationId, input.caseId],
+  )
+  if (active.rowCount !== 0) throw new Error('lifecycle_file_operation_conflict')
+  const root = await client.query(
+    'SELECT 1 FROM storage_roots WHERE organization_id=$1 AND root_key=$2 AND is_active=true',
+    [input.organizationId, input.destination.storageRootKey],
+  )
+  if (root.rowCount === 0) throw new Error('lifecycle_destination_root_inactive')
+  const collision = await client.query(
+    `SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2
+     AND lower(relative_path)=lower($3) AND id<>$4`,
+    [input.organizationId, input.destination.storageRootKey, input.destination.relativePath, input.source.locationId],
+  )
+  if (collision.rowCount !== 0) throw new Error('lifecycle_destination_conflict')
+
+  const operationId = uuidv7()
+  const jobId = uuidv7()
+  const sameRoot = input.source.storageRootKey === input.destination.storageRootKey
+  const operationType = sameRoot ? 'rename_case_workspace' : 'move_case_workspace'
+  const strategy = sameRoot ? 'atomic_rename' : 'staged_copy'
+  const keyHash = createHash('sha256').update(`lifecycle:${input.lifecycleOperationId}`).digest('hex')
+  const requestHash = createHash('sha256').update(JSON.stringify({
+    lifecycleOperationId: input.lifecycleOperationId,
+    source: input.source,
+    destination: input.destination,
+  })).digest('hex')
+  await client.query(
+    `INSERT INTO case_file_operations
+     (id,organization_id,case_id,operation_type,source_storage_root_key,source_relative_path,
+      destination_storage_root_key,destination_relative_path,expected_location_id,expected_location_version,
+      status,strategy,idempotency_key_hash,request_hash,created_by_user_id,approved_by_user_id,
+      request_id,approved_at,version)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13,$14,$14,$15,now(),2)`,
+    [
+      operationId, input.organizationId, input.caseId, operationType,
+      input.source.storageRootKey, input.source.relativePath,
+      input.destination.storageRootKey, input.destination.relativePath,
+      input.source.locationId, input.source.version, strategy, keyHash, requestHash,
+      input.actorUserId, input.requestId,
+    ],
+  )
+  await client.query(
+    `INSERT INTO jobs
+     (id,organization_id,type,status,target_type,target_id,target_version,payload,max_attempts)
+     VALUES ($1,$2,$3,'pending','file_operation',$4,2,$5::jsonb,5)`,
+    [jobId, input.organizationId, operationType, operationId, JSON.stringify({
+      kind: 'file_operation',
+      operationId,
+      operationVersion: 2,
+      operationType,
+      source: { storageRootKey: input.source.storageRootKey, relativePath: input.source.relativePath },
+      destination: input.destination,
+      strategy,
+      plannedAt: new Date().toISOString(),
+      stagingRelativePath: `.hasarbotu-staging/${operationId}`,
+      temporaryRelativePath: operationTempPath(input.destination.relativePath, operationId),
+    })],
+  )
+  await client.query('UPDATE case_file_operations SET active_job_id=$2 WHERE id=$1', [operationId, jobId])
+  for (const action of ['file_operation.planned', 'file_operation.approved', 'file_operation.queued']) {
+    await audit.record(client, {
+      organizationId: input.organizationId,
+      actorUserId: input.actorUserId,
+      requestId: input.requestId,
+      action,
+      entityType: 'case_file_operation',
+      entityId: operationId,
+      details: {
+        caseId: input.caseId,
+        lifecycleOperationId: input.lifecycleOperationId,
+        jobId,
+        operationType,
+        source: { storageRootKey: input.source.storageRootKey, relativePath: input.source.relativePath },
+        destination: input.destination,
+        strategy,
+      },
+    })
+  }
+  return { operationId, jobId, status: 'queued' }
+}
+
 export function createFileOperationStore(pool: pg.Pool) {
   const audit = createAuditService()
 

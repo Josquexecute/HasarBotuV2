@@ -30,6 +30,7 @@ type SortDirection = 'asc' | 'desc'
 
 const statusClass: Record<CaseRecord['status'], string> = {
   Açık: 'status-pill--open',
+  Kapalı: 'status-pill--waiting',
   Beklemede: 'status-pill--waiting',
   Gecikmiş: 'status-pill--late',
   'Kontrol Bekliyor': 'status-pill--review',

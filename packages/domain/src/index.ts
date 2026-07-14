@@ -43,14 +43,33 @@ export {
 } from './case-type.js'
 export {
   CASE_STAGES,
+  OPEN_CASE_STAGES,
   CASE_STATUSES,
   isCaseStage,
   isCaseStatus,
   parseCaseStage,
   parseCaseStatus,
   type CaseStage,
+  type OpenCaseStage,
   type CaseStatus,
 } from './case-status.js'
+export {
+  CASE_LIFECYCLE_OPERATION_STATUSES,
+  CASE_LIFECYCLE_OPERATION_TYPES,
+  CLOSURE_MODES,
+  CLOSURE_REQUIREMENT_STATUSES,
+  buildClosedCaseWorkspacePath,
+  evaluateClosureRequirements,
+  isOpenWorkflowStage,
+  type CaseLifecycleOperationStatus,
+  type CaseLifecycleOperationType,
+  type ClosedWorkspacePathResult,
+  type ClosureMetadataCandidate,
+  type ClosureMode,
+  type ClosureRequirementResult,
+  type ClosureRequirementStatus,
+  type ClosureRequirementsEvaluation,
+} from './case-lifecycle.js'
 export {
   MAX_OFFICE_CASE_YEAR,
   MAX_REFERENCE_NUMBER_LENGTH,

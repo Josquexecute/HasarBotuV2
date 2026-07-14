@@ -3,6 +3,7 @@ import { failureBody } from '../errors/failure.js'
 import { parseCookies, SESSION_COOKIE_NAME } from './cookies.js'
 import { hashSessionToken } from './token.js'
 import type { AuthStore, SessionRow } from './store.js'
+import type { RoleCode } from '@hasarbotu/contracts'
 
 /** Istekteki oturum cerezini cozer; aktif oturum yoksa undefined doner. */
 export async function resolveSession(
@@ -37,6 +38,22 @@ export async function requireSession(
   const session = await resolveSession(store, request)
   if (session === undefined) {
     sendUnauthorized(reply, String(request.id))
+    return undefined
+  }
+  return session
+}
+
+/** Merkezi rol kapisi; aktif oturumun rollerinden en az biri gerekli. */
+export async function requireAnyRole(
+  store: AuthStore,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  roles: readonly RoleCode[],
+): Promise<SessionRow | undefined> {
+  const session = await requireSession(store, request, reply)
+  if (session === undefined) return undefined
+  if (!session.user.roles.some((role) => roles.includes(role))) {
+    sendForbidden(reply, String(request.id))
     return undefined
   }
   return session

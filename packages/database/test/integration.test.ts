@@ -56,6 +56,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0010_case_reference_enrichment',
       '0011_case_workspace_provisioning',
       '0012_case_file_operations',
+      '0013_case_close_reopen_lifecycle',
     ])
 
     const tables = await pool.query(
@@ -65,6 +66,8 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'agents',
       'audit_events',
       'case_file_operations',
+      'case_lifecycle_history',
+      'case_lifecycle_operations',
       'case_location_history',
       'case_locations',
       'case_workspace_provisionings',
@@ -98,15 +101,67 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0012 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0013 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0012_case_file_operations'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0013_case_close_reopen_lifecycle'])
     const removed = await pool.query(
-      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'case_file_operations'",
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'case_lifecycle_operations'",
     )
     expect((removed.rows[0] as { n: number }).n).toBe(0)
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0012_case_file_operations'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0013_case_close_reopen_lifecycle'])
+  })
+
+  it('0013 lifecycle tutarliligi, tek aktif operasyon, guvenli yol ve append-only gecmisi zorlar', async () => {
+    const organizationId = uuidv7()
+    const userId = uuidv7()
+    const caseId = uuidv7()
+    const locationId = uuidv7()
+    await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'p21-db', 'P21 DB'])
+    await pool.query("INSERT INTO users (id,organization_id,email,password_hash,display_name) VALUES ($1,$2,'p21@test.local','x','P21')", [userId, organizationId])
+    await pool.query(
+      `INSERT INTO cases (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,notification_date)
+       VALUES ($1,$2,2026,21,'2026/21','traffic','ready_to_close','34 DB 121','34DB121','2026-07-14')`,
+      [caseId, organizationId],
+    )
+    await pool.query("INSERT INTO storage_roots (id,organization_id,root_key,label) VALUES ($1,$2,'test-root','Test')", [uuidv7(), organizationId])
+    await pool.query(
+      `INSERT INTO case_locations (id,organization_id,case_id,storage_root_key,relative_path,verification_status,source)
+       VALUES ($1,$2,$3,'test-root','2026/Temmuz 2026/34DB121','verified','system')`,
+      [locationId, organizationId, caseId],
+    )
+    const operationId = uuidv7()
+    const insert = (id: string, destination: string, hash: string) => pool.query(
+      `INSERT INTO case_lifecycle_operations
+       (id,organization_id,case_id,operation_type,expected_case_version,expected_location_id,expected_location_version,
+        source_storage_root_key,source_relative_path,destination_storage_root_key,destination_relative_path,closure_mode,
+        requirement_snapshot,previous_lifecycle_status,target_lifecycle_status,previous_workflow_stage,target_workflow_stage,
+        status,idempotency_key_hash,request_hash,created_by_user_id)
+       VALUES ($1,$2,$3,'close',1,$4,1,'test-root','2026/Temmuz 2026/34DB121','test-root',$5,'normal','{}','open','closed','ready_to_close','closed','approval_required',$6,$7,$8)`,
+      [id, organizationId, caseId, locationId, destination, hash, 'b'.repeat(64), userId],
+    )
+    await insert(operationId, '2026/Temmuz 2026/KAPALI TEMMUZ 2026/34DB121', 'a'.repeat(64))
+    await expect(insert(uuidv7(), '2026/Temmuz 2026/KAPALI TEMMUZ 2026/BASKA', 'c'.repeat(64)))
+      .rejects.toMatchObject({ code: '23505', constraint: 'case_lifecycle_operations_one_active_case' })
+    await pool.query("UPDATE case_lifecycle_operations SET status='cancelled' WHERE id=$1", [operationId])
+    await expect(insert(uuidv7(), '../disari', 'd'.repeat(64)))
+      .rejects.toMatchObject({ code: '23514', constraint: 'case_lifecycle_operations_destination_path_safe' })
+    await expect(pool.query("UPDATE cases SET lifecycle_status='closed' WHERE id=$1", [caseId]))
+      .rejects.toMatchObject({ code: '23514', constraint: 'cases_lifecycle_stage_consistent' })
+
+    const historyId = uuidv7()
+    await pool.query(
+      `INSERT INTO case_lifecycle_history
+       (id,organization_id,case_id,lifecycle_operation_id,operation_type,previous_lifecycle_status,lifecycle_status,
+        previous_workflow_stage,workflow_stage,source_storage_root_key,source_relative_path,storage_root_key,relative_path)
+       VALUES ($1,$2,$3,$4,'close','open','closed','ready_to_close','closed','test-root','2026/Temmuz 2026/34DB121',
+       'test-root','2026/Temmuz 2026/KAPALI TEMMUZ 2026/34DB121')`,
+      [historyId, organizationId, caseId, operationId],
+    )
+    await expect(pool.query("UPDATE case_lifecycle_history SET workflow_stage='reporting' WHERE id=$1", [historyId]))
+      .rejects.toMatchObject({ code: '23001' })
+    await expect(pool.query('DELETE FROM case_lifecycle_history WHERE id=$1', [historyId]))
+      .rejects.toMatchObject({ code: '23001' })
   })
 
   it('0012 güvenli yol, tek aktif vaka, hedef rezervasyonu ve idempotency kısıtlarını uygular', async () => {

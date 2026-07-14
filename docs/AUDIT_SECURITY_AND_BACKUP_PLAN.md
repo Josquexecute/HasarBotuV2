@@ -254,3 +254,11 @@ RPO (kabul edilebilir veri kaybı penceresi) ve RTO (kabul edilebilir hizmet dö
 | BCK-Q04 | Tatbikat sıklığı | Aylık / üç aylık / sürüm bazlı | Risk ve kapasiteyle belirle | Operasyon kabulü |
 
 Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin karar kapısında onaylanmalıdır.
+
+### 6.7 Paket 21 lifecycle audit ve append-only geçmiş
+
+- Close/reopen plan, approve, blocked/with-missing, finalized, failed, stale ve manual-recovery olayları mevcut merkezi `AuditService` üzerinden yazılır; ikinci audit kanalı yoktur.
+- Audit yalnız organization/actor-agent/case/lifecycle-operation/file-operation/job kimlikleri, önceki/yeni lifecycle-stage, logical source/destination, close mode, güvenli requirement sayıları, kullanıcı gerekçesi, requestId ve recovery durumunu taşır.
+- Mutlak path, Agent secret, belge içeriği, ham poliçe metni, gereksiz kişisel veri ve ham OS/SQL/stack hatası audit'e yazılmaz.
+- Lifecycle history append-only DB trigger ile korunur. Reopen eski close kaydını değiştirmez; aynı case/ofis numarası üzerindeki yeni bir history satırıdır.
+- Verified location switch, case lifecycle/workflow değişimi, history ve final audit merkezi transaction'da tamamlanır. Belirsiz fiziksel durumda başarı audit'i ve closed/open finalize yoktur.

@@ -496,3 +496,23 @@ Son güncelleme: 2026-07-14
 ## Sonraki önerilen görev (güncel)
 
 Paket 20 tamamlandıktan sonra yalnız kullanıcı tarafından ayrıca tanımlanacak Paket 21'e geçilmelidir; bu çalışma içinde close/reopen veya başka özellik başlatılmamıştır.
+
+## Paket 21 — Güvenli case close/reopen yaşam döngüsü (2026-07-14)
+
+- Lifecycle `open | closed` olarak kilitlendi; closed case `closed` workflow stage ile, reopen ise izin verilen açık stage ile atomik kesinleşir. Aynı `caseId` ve ofis numarası korunur.
+- Migration 0013; lifecycle operation/snapshot modeli, append-only history, case closed/reopened metadata'sı, tek aktif operation ve destination reservation kısıtlarını ekler.
+- Close/reopen planı filesystem'e dokunmaz. Server belge gereksinimlerini ve kapalı/açık logical destination'ı üretir; onay mevcut Paket 20 operation ve job queue'suna bağlanır.
+- Normal kapanış eksik/control_required kapanış gereksiniminde blocked olur. Eksiklerle kapatma zorunlu gerekçe, server snapshot'ı ve merkezi audit ile açıkça ayrılır.
+- Case detayındaki gerçek API modalı preview, onay, ilerleme, conflict reload, cleanup ve manual recovery durumlarını gösterir; API modunda mock fallback yapmaz.
+- Gerçek `P:\` veya müşteri verisi kullanılmaz; üretim migration çalıştırılmaz. Karar: HB-2026-027.
+
+### Doğrulama durumu (Paket 21)
+
+- Domain 319, contracts 116, gerçek PostgreSQL database 28, gerçek PostgreSQL/API 150 ve UI 108 test geçti; UI paketinde 6 ortam-koşullu skip vardır.
+- Root typecheck, lint, 758 test (+6 yalnız UI ortam skip'i), build, `npm audit` (0 açık) ve diff-check geçti; kritik PostgreSQL/API/File Agent testlerinde skip yoktur.
+- Gerçek tarayıcı + canlı TCP API + gerçek Agent + sentetik filesystem: normal close preview→approve→closed, reopen gerekçe/stage→approve→open; aynı case/ofis no, 1366×768 açık-koyu ve 1920×1080 koyu tema, yatay taşma 0 ve console warning/error 0. Semantik idempotent replay, stale 409, tenant 404, rol 403, 401, iki append-only history ve audit/path leak 0 doğrulandı.
+- Repository dışı kopyada başlangıçta `node_modules`/`dist` yoktu; fresh `npm ci` ardından gerçek test DB ile typecheck, lint, aynı 758 test (+6 UI skip) ve build geçti; kopya kaldırıldı.
+
+## Sonraki önerilen görev (güncel)
+
+Paket 21'in bütün kapıları ve atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket bu çalışma kapsamında değildir.

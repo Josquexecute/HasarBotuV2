@@ -383,3 +383,7 @@ Her pakette gerçek sonuca göre şu kanıtlar raporlanır:
 - UI taşınırken git geçmişini koruyan mekanik taşıma ve küçük import düzeltmeleri ayrı tutulur.
 - Her UI etkili pakette rota, Türkçe etiket, tema, menü, tablo/drawer, focus, Escape ve overflow testleri korunur.
 - Mock adapter, gerçek API yeterli kabul testini geçene kadar geliştirici/UAT geri dönüş yolu olarak tutulur; üretimde gizli fallback yapılmaz.
+
+### Paket 21 ek uygulama kaydı — close/reopen saga
+
+Migration 0013, mevcut Paket 20 fiziksel operation ve PostgreSQL job queue'sunu değiştirmeden `case_lifecycle_operations` ile append-only `case_lifecycle_history` ekler. Plan yalnız server-side requirement/location preview ve rezervasyon üretir; approve mevcut move job'ını açar. Agent hedefi doğrulayıp location switch transaction'ına ulaştığında case lifecycle/workflow, operation, history ve merkezi audit birlikte kesinleşir. Fiziksel durum belirsizse lifecycle değiştirilmez ve manual recovery gerekir. `cleanup_pending`, doğrulanmış hedef/location switch sonrası kaynak temizliğinin görünür ve retry edilebilir durumudur. İkinci queue, audit sistemi, dependency, IPC, üretim migration veya gerçek `P:\` testi yoktur.

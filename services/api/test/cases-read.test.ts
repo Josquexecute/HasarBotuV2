@@ -119,7 +119,7 @@ describeDb('salt okunur Cases uclari (gercek veritabani)', () => {
       closed: await seedCase({
         seq: 186,
         type: 'traffic',
-        stage: 'ready_to_close',
+        stage: 'closed',
         plate: '16 BRS 916',
         status: 'closed',
         updatedAt: '2026-07-10T08:00:00Z',

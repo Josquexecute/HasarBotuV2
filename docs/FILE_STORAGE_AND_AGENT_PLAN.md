@@ -246,3 +246,11 @@ Event path değerleri göreli ve gerektiğinde maskeli; raw exception/credential
 - Server Agent'ın “başarılı” beyanını koşulsuz kabul etmez: agent/job ownership ve lease, operation version/active job, beklenen case location version, destination reservation ve manifest özeti transaction içinde yeniden doğrulanır.
 - Agent lstat/realpath ile ordinary directory ve root containment kontrolü yapar. Traversal, absolute/drive/UNC/backslash, kontrol/aygıt adları, symlink/junction/reparse point ve root escape reddedilir. Mutlak root, ham OS hatası ve secret DB/API/audit/log'a çıkmaz.
 - Testler yalnız sentetik geçici root'larda çalışır. Gerçek `P:\`, gerçek müşteri klasörü ve üretim migration kullanılmaz. Paket 21 close/reopen hedef yol iş kuralını üretip bu operation katmanını kullanabilir; Paket 20 close/reopen veya son kullanıcı taşıma UI'si sağlamaz.
+
+## 19. Paket 21 — Close/reopen fiziksel saga kullanımı
+
+- Lifecycle planı istemciden path almaz. Close destination mevcut verified location + `notificationDate` ile kapalı ay altına, reopen destination son append-only close history'deki önceki açık logical location'a server tarafında üretilir.
+- Lifecycle approve yeni fiziksel sistem kurmaz; Paket 20 `case_file_operations` kaydı ve mevcut `jobs` kuyruğuna transaction içinde bağlanır. Tek aktif lifecycle/file operation ve destination reservation kısıtları birlikte geçerlidir.
+- Agent sonucu ownership/lease, lifecycle/file operation sürümü, case/location snapshot'ı ve destination reservation ile yeniden doğrulanır. Verified location switch ile lifecycle/workflow/history/audit tek transaction'da kesinleşir.
+- Same-volume atomic rename ve gerekirse staged-copy/cleanup semantiği değişmez. `cleanup_pending` finalize edilmiş lifecycle ile görünür uyarı olabilir; belirsiz durum `manual_recovery_required` olur ve kullanıcıya başarılı close/reopen gösterilmez.
+- Mutlak root Agent yerel config'inde kalır. DB/API/audit/log yalnız logical storage referansı taşır. Gerçek `P:\` üzerinde test deployment/pilot aşamasına bırakılmıştır.

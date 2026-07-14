@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import {
-  caseStageSchema,
+  openCaseStageSchema,
   caseTypeSchema,
   entityVersionSchema,
   idSchema,
@@ -31,7 +31,7 @@ export const idempotencyKeySchema = idSchema
 export const caseCreateRequestSchema = z.strictObject({
   caseType: caseTypeSchema,
   plate: plateNumberSchema,
-  workflowStage: caseStageSchema.default('new_notification'),
+  workflowStage: openCaseStageSchema.default('new_notification'),
   notificationFormNumber: notificationFormNumberSchema.optional(),
   insurerClaimNumber: insurerClaimNumberSchema.optional(),
   responsibleUserId: userIdSchema.optional(),
@@ -47,7 +47,7 @@ export type CaseCreateRequestInput = z.input<typeof caseCreateRequestSchema>
 
 const caseUpdateFields = z.strictObject({
   expectedVersion: entityVersionSchema,
-  workflowStage: caseStageSchema.optional(),
+  workflowStage: openCaseStageSchema.optional(),
   followUpDate: localDateSchema.nullable().optional(),
   notificationFormNumber: notificationFormNumberSchema.nullable().optional(),
   insurerClaimNumber: insurerClaimNumberSchema.nullable().optional(),
