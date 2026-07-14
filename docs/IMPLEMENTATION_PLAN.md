@@ -588,3 +588,14 @@ Kabul ölçütü: Agent yalnız API üzerinden çalışır (DB'ye yazmaz), yaln�
 - [x] Contracts + API: oturumlu, tenant-kapsamlı salt-okunur `GET /api/v1/cases/:caseId/document-requirements`; yanıt mutlak yol veya belge içeriği içermez.
 - [x] Audit: GET çağrısı snapshot oluşturmadığı için audit yazmaz; gürültü önlenir ve karar günlüğünde belgelenir.
 - [x] Son doğrulama: gerçek PostgreSQL 0009 up/repeat/down-up/constraint; canlı HTTP smoke; ana ağaç typecheck/lint/637 test/build/audit/diff-check; temiz kopyada fresh npm ci + typecheck/lint/test/build geçti.
+
+## Aktif geliştirme paketi — Paket 16 Evrak ve Fotoğraf gerçek API entegrasyonu
+
+- [x] `CaseDocumentsDataPort` + HTTP adapter + hook: requirements, belge listesi/detayı ve fotoğraf metadata listesi; API modunda mock fallback yok.
+- [x] Güvenlik sınırı: yalnız güvenli göreli yol; mutlak/UNC/traversal reddi; ready için fiziksel doğrulama kanıtı; içerik/hash/secret UI'ye taşınmaz.
+- [x] Onaylı iki sütunlu sekme: Trafik/Kasko/Olay/Rüculu Kasko grupları, durum/gerekçe/kural sürümü, belge sürümü ve fotoğraf metadata tabloları.
+- [x] Gerçek durumlar: loading, empty, 401, tenant 404, network/retry; pending/failed/missing ayrı rozet; mock 12/108 fotoğraf davranışı korunur.
+- [x] Yapılandırma: localStorage açık seçimi öncelikli; seçim yoksa `VITE_DATA_SOURCE=api`; varsayılan mock değişmez.
+- [x] Test: adapter + görünüm unit/integration, canlı gerçek API adapter, gerçek PostgreSQL/API/Vite tarayıcı e2e ve baseline regresyonu.
+
+Kabul ölçütü: API modunda doğrulanmış metadata ve sürümlü kural sonucu açıklanabilir biçimde görünür; sahte fallback, mutlak yol veya içerik sızıntısı yoktur; UI yeni yazma/physical file işlemi yapmaz; mock baseline korunur.

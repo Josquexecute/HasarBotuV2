@@ -342,6 +342,10 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 
 Tamamlanan ek paket; sürümlü kural seed'i, saf domain değerlendirmesi ve tenant-kapsamlı salt-okunur değerlendirme ucu sağlar. Kalıcı evaluation snapshot'ı bu GET çağrısında oluşturulmaz; çağrı audit yazmaz. Snapshot gerektiren ilerideki akış, merkezi audit ile atomik uygulanacaktır.
 
+### Paket 16 ek uygulama kaydı — Evrak ve Fotoğraf UI/API bağlama
+
+Dosya Detayı sekmesi mevcut document/photo metadata ve document-requirements GET uçlarına `CaseDocumentsDataPort` sınırıyla bağlanır. Varsayılan mock baseline korunur; API modu hata halinde mock'a düşmez. Mutlak yol ve doğrulama kanıtı eksik ready metadata DataPort'ta reddedilir. Bu paket migration, contracts/API yazma ucu, IPC, dependency veya fiziksel dosya işlemi eklemez.
+
 Her pakette gerçek sonuca göre şu kanıtlar raporlanır:
 
 1. Değişen dosyalar ve kullanıcı değişikliklerinden ayrımı.

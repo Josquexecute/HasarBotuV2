@@ -439,3 +439,15 @@ Karar:
 4. Kural seti ve sürümü migration seed + saf domain motorunda açıkça taşınır. GET değerlendirmesi snapshot veya audit yazmaz; salt-okunur her çağrıda audit gürültüsü oluşmaması için karar merkezi audit politikasına uygundur. İleride kalıcı snapshot gerekiyorsa sonuç + audit aynı transaction'da yazılacaktır.
 
 Etkisi: `0009_document_requirement_rules`, saf domain değerlendirme motoru, tenant-kapsamlı GET `/api/v1/cases/:caseId/document-requirements`, contracts ve JSON Schema fixture'ı. Dosya içeriği/mutlak yol dönmez.
+
+## 2026-07-14 — HB-2026-022: Paket 16 Evrak ve Fotoğraf gerçek API görünümü
+
+Karar:
+
+1. Dosya Detayı > Evrak ve Fotoğraf, `CaseDocumentsDataPort` üzerinden requirements + belge listesi/detayı + fotoğraf listesini okur. API modunda hata veya boş yanıt mock veriyle maskelenmez; 401, tenant-kapsamlı 404, ağ hatası, yükleniyor ve boş durumları ayrıdır. Mock modun kabul edilmiş fotoğraf stres görünümü değişmez.
+2. Arayüz yalnız metadata gösterir. Mutlak/sürücü/UNC/traversal yol DataPort sınırında reddedilir; içerik, hash ve secret gösterilmez. `ready` metadata ancak hash/boyut ve doğrulama zamanı kanıtı da varsa "Fiziksel doğrulandı" gösterilir; pending/failed/missing ayrı rozetlerdir.
+3. Trafik, Kasko, Olay Belgeleri/Tramer ve Rüculu Kasko grupları; alternatif grup gerekçesi ve `ruleSetVersion` mevcut iki sütunlu yoğun masaüstü yerleşiminde gösterilir. Yeni yazma, upload, sınıflandırma veya File Agent işlemi yoktur.
+4. Veri kaynağı varsayılanı mock kalır. Açık localStorage seçimi önceliklidir; seçim yoksa dağıtım/dev ortamı `VITE_DATA_SOURCE=api` ile API modunu varsayılan yapabilir. API modu hiçbir koşulda mock fallback yapmaz.
+5. Üç GET değerlendirmesi ve belge detay okumaları salt okunurdur. Paket 15 kararı korunur: UI çağrıları değerlendirme snapshot'ı veya `document_requirements.evaluated` audit olayı üretmez.
+
+Etkisi: `src/data` içinde yeni document workspace port/HTTP adapter/hook; `DocumentPhotoApiModule`; güvenli metadata tabloları ve gerçek durum görünümleri; unit/integration/live adapter testleri. Database, contracts, API, IPC, dependency veya veri yazma yolu değişmez.

@@ -25,6 +25,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { formatCurrency } from '../../mocks/cases'
 import { useCases } from '../../data'
 import type { CaseRecord } from '../../types/case'
+import { DocumentPhotoApiModule } from './DocumentPhotoApiModule'
 
 const tabs = [
   'Özet',
@@ -43,7 +44,7 @@ type Tab = (typeof tabs)[number]
 const tabDescriptions: Record<Tab, string> = {
   Özet: 'Dosyanın operasyonel durumu, kritik uyarıları ve son hareketleri.',
   Operasyon: 'Not, görev, görüşme ve takip kayıtlarının çalışma alanı.',
-  'Evrak ve Fotoğraf': 'Koşullu evrak kontrolü ve mock fotoğraf alanı.',
+  'Evrak ve Fotoğraf': 'Koşullu evrak kontrolü ile belge ve fotoğraf metadata alanı.',
   İşçilik: 'Parça ve işçilik kalemleri için onay öncesi taslak görünüm.',
   'Ağır Hasar': 'PERT değerlendirmesi için veri ve kanaat ayrımı.',
   'Değer Kaybı': 'Trafik dosyası için zorunlu değer kaybı hazırlık durumu.',
@@ -178,7 +179,7 @@ export function CaseDetailPage() {
     return (
       <main className="not-found">
         <h1>Dosya bulunamadı</h1>
-        <p>Mock veri içinde bu kimlikle eşleşen dosya yok.</p>
+        <p>{source === 'api' ? 'Dosya yok veya organizasyonunuzun erişim alanında değil.' : 'Mock veri içinde bu kimlikle eşleşen dosya yok.'}</p>
         <button className="button button--primary" type="button" onClick={() => navigate('/dosyalar')}>Dosyalara dön</button>
       </main>
     )
@@ -219,7 +220,7 @@ export function CaseDetailPage() {
         <section className="case-module">
           <header className="module-heading">
             <div><span className="eyebrow">{item.officeNumber}</span><h1>{activeTab}</h1><p>{tabDescriptions[activeTab]}</p></div>
-            <span className="mock-label">Mock prototip</span>
+            <span className="mock-label">{source === 'mock' ? 'Mock prototip' : 'Gerçek API'}</span>
           </header>
 
           {activeTab === 'Özet' ? (
@@ -279,7 +280,7 @@ export function CaseDetailPage() {
                 </ul>
               </aside>
             </div>
-          ) : activeTab === 'Evrak ve Fotoğraf' ? (
+          ) : activeTab === 'Evrak ve Fotoğraf' && source === 'mock' ? (
             <div className="document-photo-workspace">
               <section className="document-checklist">
                 <header><div><h2>Koşullu Evrak Kontrolü</h2><span>{item.type} dosyası · mock kural görünümü</span></div><span className="status-pill status-pill--review">{item.missingDocuments} eksik</span></header>
@@ -302,6 +303,8 @@ export function CaseDetailPage() {
                 </div>
               </section>
             </div>
+          ) : activeTab === 'Evrak ve Fotoğraf' ? (
+            <DocumentPhotoApiModule caseId={item.caseId} source={source} />
           ) : activeTab === 'İşçilik' ? <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />
             : activeTab === 'Ağır Hasar' ? <HeavyDamageModule item={item} />
               : activeTab === 'Değer Kaybı' ? <ValueLossModule item={item} onNotice={setPrototypeNotice} />
