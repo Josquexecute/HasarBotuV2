@@ -4,6 +4,7 @@ import { AgentApiError } from './api-client.js'
 import type { AgentConfig } from './config.js'
 import { verifyTarget } from './verifier.js'
 import { provisionCaseWorkspace } from './workspace-provisioner.js'
+import { executeFileOperation } from './file-operation-executor.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -18,13 +19,6 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
   const job = await client.claim()
   if (job === null) return { kind: 'no_work' }
 
-  const rootAbsolute = config.roots[job.payload.storageRootKey]
-  if (rootAbsolute === undefined) {
-    // Bu agent bu kökü eşleyemiyor; güvenli neden koduyla başarısız bildir.
-    const reported = await client.reportResult(job.id, { outcome: 'failed', errorCode: 'unknown_root_mapping' })
-    return { kind: 'reported', jobId: job.id, outcome: 'failed', reported }
-  }
-
   const heartbeatMs = Math.max(1000, Math.floor((config.leaseSeconds * 1000) / 3))
   const heartbeat = setInterval(() => {
     void client.heartbeat(job.id).catch(() => undefined)
@@ -32,15 +26,23 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
 
   let result
   try {
-    if (job.payload.kind === 'workspace') {
+    if (job.payload.kind === 'file_operation' || job.payload.kind === 'file_operation_cleanup') {
+      await client.heartbeat(job.id, job.payload.kind === 'file_operation' ? 'applying' : 'cleanup')
+      result = await executeFileOperation(config.roots, job.payload)
+    } else {
+      const rootAbsolute = config.roots[job.payload.storageRootKey]
+      if (rootAbsolute === undefined) {
+        result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
+      } else if (job.payload.kind === 'workspace') {
       await client.heartbeat(job.id, 'applying')
       result = await provisionCaseWorkspace(rootAbsolute, job.payload, {
         onVerifying: async () => {
           await client.heartbeat(job.id, 'verifying')
         },
       })
-    } else {
-      result = await verifyTarget(rootAbsolute, job.payload)
+      } else {
+        result = await verifyTarget(rootAbsolute, job.payload)
+      }
     }
   } finally {
     clearInterval(heartbeat)
@@ -51,6 +53,7 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
     ...(result.observedHash !== undefined ? { observedHash: result.observedHash } : {}),
     ...(result.observedSize !== undefined ? { observedSize: result.observedSize } : {}),
     ...(result.errorCode !== undefined ? { errorCode: result.errorCode } : {}),
+    ...('fileOperation' in result && result.fileOperation !== undefined ? { fileOperation: result.fileOperation } : {}),
   })
   return { kind: 'reported', jobId: job.id, outcome: result.outcome, reported }
 }

@@ -50,7 +50,7 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
     },
 
     /** Lease uzatır. 409 (lease kaybı) sessizce false döner. */
-    async heartbeat(jobId: string, phase?: 'applying' | 'verifying'): Promise<boolean> {
+    async heartbeat(jobId: string, phase?: 'applying' | 'verifying' | 'cleanup'): Promise<boolean> {
       const response = await fetchImpl(url(AGENT_JOB_HEARTBEAT_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
         method: 'POST',
         headers: { ...authHeaders, accept: 'application/json', ...(phase === undefined ? {} : { 'content-type': 'application/json' }) },

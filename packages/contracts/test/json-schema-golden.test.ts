@@ -38,6 +38,8 @@ const EXPECTED_NAMES: readonly JsonSchemaName[] = [
   'document-requirements-response',
   'documents-list-response',
   'failure-envelope',
+  'file-operation-plan-request',
+  'file-operation-response',
   'health-response',
   'job-claim-response',
   'job-result-request',

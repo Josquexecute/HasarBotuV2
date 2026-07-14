@@ -164,6 +164,13 @@ Yalnız endpoint, sır yönetimi, depolama kökü eşlemesi, servis barındırma
 - DNS/endpoint önceki adrese döndürülür, istemci cache süresi hesaba katılır.
 - Başarısızlık nedeni giderilmeden ikinci deneme yapılmaz.
 
+### 4.5 Paket 20 move/rename operasyon notu
+
+- File Agent servis hesabının her tanımlı source/destination root için gerekli okuma, staging oluşturma, atomik rename ve yalnız onaylı move cleanup yetkileri ayrı doğrulanmalıdır; genel silme yetkisi/endpoint'i varsayılmaz.
+- Güncelleme veya bakım öncesi `applying`, `verifying`, `switching_location` ve `cleanup_pending` operation/job'ları incelenir. Agent lease'i dolmadan aynı operasyon başka process tarafından körlemesine çalıştırılmaz.
+- `cleanup_pending` hedef ve DB location'ın doğrulanmış olduğu, kaynak cleanup'ının beklediği durumdur; hedef silinmez veya DB geri çevrilmez. `manual_recovery_required` durumunda otomasyon durur, logical source/destination ve manifest sayaçlarıyla yetkili inceleme yapılır.
+- Yerel mutlak root eşlemesi yalnız Agent service config'inde kalır. Runbook, log veya destek çıktısına credential/mutlak müşteri yolu kopyalanmaz. Üretim `P:\` üzerinde Paket 20 otomatik testi çalıştırılmaz; ayrı yetkili UAT plan/preview ile başlar.
+
 ## 5. İşletim runbook'ları
 
 Gerçek uygulama başlamadan şu kısa runbook'lar oluşturulmalıdır:

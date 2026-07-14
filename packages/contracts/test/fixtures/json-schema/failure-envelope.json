@@ -21,6 +21,9 @@
             "idempotency_conflict",
             "workspace_conflict",
             "workspace_stale",
+            "file_operation_conflict",
+            "file_operation_stale",
+            "destination_conflict",
             "rate_limited",
             "service_unavailable",
             "internal_error"

@@ -34,6 +34,8 @@ import {
 } from './v1/references/dto.js'
 import { workspacePlanRequestSchema } from './v1/workspace/commands.js'
 import { workspaceProvisioningResponseSchema } from './v1/workspace/dto.js'
+import { fileOperationPlanRequestSchema } from './v1/file-operations/commands.js'
+import { fileOperationResponseSchema } from './v1/file-operations/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -72,6 +74,8 @@ export const JSON_SCHEMA_TARGETS = {
   'reference-experts-response': expertsReferenceResponseSchema,
   'workspace-plan-request': workspacePlanRequestSchema,
   'workspace-provisioning-response': workspaceProvisioningResponseSchema,
+  'file-operation-plan-request': fileOperationPlanRequestSchema,
+  'file-operation-response': fileOperationResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

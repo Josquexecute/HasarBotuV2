@@ -235,3 +235,14 @@ Event path değerleri göreli ve gerektiğinde maskeli; raw exception/credential
 - Agent yeniden çalışırsa mevcut doğru ana/alt dizinleri başarı kabul eder ve yalnız eksikleri oluşturur. Hata hâlinde rollback-delete yoktur; job retry/dead-letter politikası ve güvenli hata kodu kullanılır.
 - Agent progress heartbeat’i `applying`/`verifying` durumunu bildirir. `verified` sonuçta server, case location yarışını tekrar kontrol eder; stale sonuç yazılmaz.
 - Başarı transaction’ı `case_locations(verified, system)`, append-only history, provisioning `ready`, job `succeeded` ve merkezi audit’i birlikte yazar.
+
+## 18. Paket 20 — Case çalışma klasörü move/rename saga altyapısı (uygulandı)
+
+- `case_file_operations` fiziksel iş kuyruğu değildir; mevcut `jobs` kuyruğundaki uzun süren DB/filesystem sagasının operation kimliği, hedef rezervasyonu, optimistic location snapshot'ı, manifest özeti ve recovery durumudur.
+- Plan/preview filesystem'i değiştirmez. Yalnız doğrulanmış mevcut Case location üzerinde, açık onay ve zorunlu idempotency anahtarıyla `rename_case_workspace` veya `move_case_workspace` işi açılır. Aynı vaka için tek aktif operasyon ve aynı case-insensitive hedef için tek rezervasyon DB'de zorlanır.
+- Same-root planı `atomic_rename` ile başlar. Hedef önceden varsa overwrite/merge yapılmaz. Case-only Windows rename operationId'ye bağlı güvenli geçici ad kullanır. Rename olmuş fakat API sonucu kesinleşmemişse Agent hedefi yeniden manifestleyerek idempotent recovery yapar; belirsizliği otomatik geri taşımaz.
+- Farklı root veya `EXDEV`, `staged_copy` kullanır: operation-specific staging → streaming copy → her dosyada SHA-256/size → tam manifest eşitliği → atomik publish → DB location switch → ayrı cleanup işi. Tam entry listesi yalnız Agent process belleğindedir; DB/API/audit yalnız manifest hash'i ve file/directory/byte sayaçlarını taşır.
+- `cleanup_pending`, doğrulanmış hedef ve yeni DB location'ın korunduğu, kaynak cleanup'ının beklediği retry edilebilir durumdur. Cleanup öncesi kaynak/hedef manifestleri yeniden doğrulanır. Kaynak değişmişse silme yoktur; kısmi silme veya çelişkili gerçek durum `manual_recovery_required` olur.
+- Server Agent'ın “başarılı” beyanını koşulsuz kabul etmez: agent/job ownership ve lease, operation version/active job, beklenen case location version, destination reservation ve manifest özeti transaction içinde yeniden doğrulanır.
+- Agent lstat/realpath ile ordinary directory ve root containment kontrolü yapar. Traversal, absolute/drive/UNC/backslash, kontrol/aygıt adları, symlink/junction/reparse point ve root escape reddedilir. Mutlak root, ham OS hatası ve secret DB/API/audit/log'a çıkmaz.
+- Testler yalnız sentetik geçici root'larda çalışır. Gerçek `P:\`, gerçek müşteri klasörü ve üretim migration kullanılmaz. Paket 21 close/reopen hedef yol iş kuralını üretip bu operation katmanını kullanabilir; Paket 20 close/reopen veya son kullanıcı taşıma UI'si sağlamaz.

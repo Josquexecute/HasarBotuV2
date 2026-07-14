@@ -46,6 +46,16 @@
 - `ready` yalnız Agent fiziksel doğrulamasından sonra; verified case location + history + provisioning/job/audit aynı transaction’da oluşmalıdır.
 - Gerçek tarayıcı smoke’unda API login → preview → açık onay → applying/verifying → ready; ağ hatasında no-fallback; 1366×768 açık/koyu ve 1920×1080 tema/overflow/console kontrolleri yapılmalıdır.
 
+### Paket 20 — güvenli File Agent move/rename altyapısı kabulü
+
+- Plan gerçek PostgreSQL'de operation kimliği ve case-insensitive hedef rezervasyonu üretir; sentetik filesystem'e yazmaz. Onay yoksa job yoktur; plan/approve replay'i ikinci operation/job üretmez.
+- Yalnız doğrulanmış mevcut Case location, güncel `expectedLocationVersion`, aktif tenant root ve güvenli göreli hedef kabul edilir. Aynı vaka ikinci aktif operation, aynı hedef ikinci case, mevcut hedef/merge, traversal/drive/UNC/backslash/Windows aygıt adı ve root hedefi reddedilir.
+- Same-volume gerçek geçici dizinde atomik rename ve case-only iki aşamalı Windows rename doğrulanır. Agent/sonuç bildirimi kesintisinde mevcut doğru hedef recovery ile DB finalize edilir; eski location/version sonucu yeni konumu ezmez.
+- `EXDEV` enjekte edilebilir filesystem adapter ile ve farklı gerçek geçici root'larla staged-copy doğrulanır. Her dosya streaming SHA-256/size manifestine katılır; staging/target manifest eşitliği olmadan location switch veya source cleanup yoktur.
+- Location switch + history + operation/job + audit aynı transaction'dadır. Cross-root başarıdan sonra kaynak korunarak `cleanup_pending`; ayrı cleanup işi hedef ve kaynak manifestlerini yeniden doğruladıktan sonra `ready/completed` üretir. Cleanup retry güvenlidir; kaynak değişimi veya kısmi/çelişkili durum `manual_recovery_required` olur.
+- Agent lease/ownership/organization ve operation/job version kontrolleri uygulanır. 401/404/409, tenant izolasyonu, cancel'ın yalnız uygulanmamış aşamada olması ve mutlak root/secret/ham OS hatası sızıntısının olmaması test edilir.
+- File Agent birim testleri sentetik temp dizin ve fault-injection; API entegrasyonu gerçek PostgreSQL + sentetik filesystem; canlı smoke çalışan HTTP server + Agent ile yapılır. Gerçek müşteri verisi, gerçek `P:\` ve üretim migration kullanılmaz. Kritik DB/File Agent testi skip kalırsa paket PASS değildir.
+
 Bir görev ancak:
 
 - Kod derleniyorsa

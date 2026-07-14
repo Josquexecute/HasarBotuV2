@@ -131,6 +131,13 @@ Yalnız PLAN (bu pakette uygulanmadı):
 - **Dışa aktarma (export):** yetkili yönetici için imzalı/erişim-kısıtlı dışa aktarma (CSV/JSON) ve isteğe bağlı zincir-hash bütünlük kanıtı; dışa aktarmanın kendisi de bir audit olayıdır (`audit.exported`). SIEM/harici log entegrasyonu ayrı ve sonraki bir karardır (bu paket kapsamı dışında).
 - **Sorgu audit'i:** audit sorgusunun kendisinin auditlenmesi (§6.4) ileri pakete bırakıldı.
 
+### 6.6 Paket 20 file-operation saga audit ve recovery sınırı
+
+- `file_operation.planned`, `approved`, `started`, `verified`, `location_switched`, `cleanup_pending`, `finalized`, `failed` ve `manual_recovery_required` olayları mevcut merkezi `AuditService` üzerinden yazılır; paralel audit sistemi yoktur.
+- Location switch, append-only location history, operation/job durumu ve ilgili audit olayları aynı PostgreSQL transaction'ında kesinleşir. Cross-volume source cleanup ayrı, idempotent Agent işidir; switch başarısından sonra cleanup hatası DB/hedefi geri almaz ve `cleanup_pending` olarak auditlenir.
+- Audit yalnız organization/actor veya agent, case/operation/job/request kimlikleri, mantıksal source/destination, strateji, manifest özeti ve güvenli sayaçları taşıyabilir. Merkezi redaksiyon politikası korunur; tam manifest entry'leri, dosya içeriği, mutlak root, secret ve ham OS exception yasaktır.
+- `manual_recovery_required`, filesystem ve DB gerçekliği belirsizken otomatik/kör geri taşıma veya silmenin durdurulduğunu gösterir. Recovery işlemi source/target manifestini yeniden doğrulamadan başarıya çevrilemez.
+
 ## 7. Güvenlik olayları ve hata davranışı
 
 - Yetkisiz erişim ayrıntılı iç hata sızdırmadan 401/403 döner.

@@ -476,6 +476,23 @@ Son güncelleme: 2026-07-14
 - Gerçek tarayıcı smoke: Codex Browser bootstrap'ındaki repository dışı `Cannot redefine property: process` hatası nedeniyle kurulu Chrome DevTools Protocol ile login → preview → approve → ready ve reload kalıcılığı; 401/404/409/ağ-no-fallback; 1366×768 ve 1920×1080 açık/koyu tema, overflow ve console kontrolleri geçti.
 - Repository dışı temiz kopya: başlangıçta `node_modules`/`dist` yok; fresh `npm ci` sonrası gerçek PostgreSQL ile typecheck, lint, 704 test (+6 skip) ve build geçti; kopya kaldırıldı.
 
+## Paket 20 — Güvenli File Agent taşıma ve yeniden adlandırma altyapısı (2026-07-14)
+
+- Migration 0012, mevcut PostgreSQL `jobs` kuyruğuna bağlı `case_file_operations` saga/reservation kaydını ekledi. Aynı vaka için tek aktif operation, aynı case-insensitive hedef için tek rezervasyon ve idempotency DB kısıtlarıyla zorlanır; source/destination yalnız logical rootKey + relativePath'tir.
+- Oturum/tenant/Idempotency-Key korumalı plan/read/approve/cancel API'leri yalnız case'in doğrulanmış mevcut location'ını ve `expectedLocationVersion` snapshot'ını kullanır. Plan filesystem'e yazmaz, açık onay öncesi job yoktur; overwrite/merge, arbitrary source ve mutlak yol yoktur.
+- File Agent same-volume atomik rename, case-only operation-specific geçici rename ve restart/replay recovery uygular. Farklı root veya EXDEV; operation-specific staging, streaming SHA-256/size manifest, tam doğrulama ve atomik publish kullanır.
+- Server Agent başarısını ownership/lease, operation/job version, current location, destination reservation ve manifest özetiyle yeniden doğrular. Location switch + history + operation/job + merkezi audit atomiktir. Cross-root source cleanup yalnız switch sonrası ayrı işte; retry edilebilir bekleme `cleanup_pending`, kaynak değişimi/kısmi veya belirsiz durum `manual_recovery_required` olur.
+- UI, IPC, dependency, close/reopen, genel delete/quarantine/upload, üretim migration ve gerçek `P:\` işlemi eklenmedi. Yalnız sentetik geçici root'lar kullanıldı. Karar: HB-2026-026.
+
+### Test ve build sonuçları (Paket 20)
+
+- `npm install`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm audit --audit-level=moderate` ve `git diff --check`: başarılı; audit 0 açık.
+- `npm run test` (`hasarbotu_test`): UI 104 (+6 ortam-koşullu skip), domain 315, contracts 110, database 27, API 146, file-agent 37; **toplam 739 başarılı, 6 skip**. Kritik database/API/File Agent testlerinde skip yoktur.
+- Gerçek PostgreSQL: migration 0012 ileri/tekrar/rollback-yeniden-ileri; path/idempotency/tek aktif case/destination reservation/case-insensitive location constraint kontrolleri geçti.
+- Gerçek sentetik filesystem: same-volume ve case-only rename; cross-root + EXDEV staged-copy; streaming manifest/hash; no-overwrite; disk-full/locked/corrupt-copy; cleanup retry/partial/manual recovery; source-change ve DB finalize kesintisi recovery testleri geçti.
+- Canlı TCP API + gerçek Agent protokolü smoke: login → plan/preview → approve → claim → same-volume ready → cross-root cleanup_pending/ready → semantic idempotent replay → stale 409 → tenant 404 → 401; response/audit/DB mutlak-yol ve secret sızıntısı 0.
+- Repository dışı temiz kopya: başlangıçta `node_modules`/`dist` yok; fresh `npm ci` ardından gerçek test DB ile typecheck, lint, 739 test (+6 UI skip) ve build geçti; kopya kaldırıldı.
+
 ## Sonraki önerilen görev (güncel)
 
-Paket 19 tamamlandıktan sonra yalnız kullanıcı tarafından ayrıca tanımlanacak sonraki pakete geçilmelidir; bu çalışma içinde başka özellik başlatılmamıştır.
+Paket 20 tamamlandıktan sonra yalnız kullanıcı tarafından ayrıca tanımlanacak Paket 21'e geçilmelidir; bu çalışma içinde close/reopen veya başka özellik başlatılmamıştır.

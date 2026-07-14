@@ -19,6 +19,15 @@ export {
   type WorkspaceProvisionHooks,
   type WorkspaceProvisionResult,
 } from './workspace-provisioner.js'
+export {
+  buildWorkspaceManifest,
+  executeFileOperation,
+  nodeFileSystemAdapter,
+  type FileOperationExecutionResult,
+  type FileSystemAdapter,
+  type WorkspaceManifest,
+  type WorkspaceManifestEntry,
+} from './file-operation-executor.js'
 
 /**
  * Import edildiğinde döngü BAŞLAMAZ. Yalnız gerçek entrypoint doğrudan

@@ -360,6 +360,10 @@ Tarayıcı doğrulamasında Codex Browser bootstrap'ındaki `process` yeniden ta
 
 Migration 0011 logical path rezervasyonu ve provisioning durumunu mevcut PostgreSQL job kuyruğuyla bağlar. Plan/preview yalnız DB metadata yazımıdır; Agent işi açık onaydan sonra oluşturulur. Agent yerel mutlak root mapping’iyle, sentetik test root’unda, eksik dizinleri bileşen bazında oluşturur ve her bileşeni `lstat + realpath` ile doğrular. Başarıda verified case location/geçmiş/provisioning/job/audit atomiktir; partial failure silme yapmaz; stale sonuç yazılmaz. Yeni servis kurulumu, dependency, IPC, LAN/TLS, üretim migration veya `P:\` testi yoktur.
 
+### Paket 20 ek uygulama kaydı — güvenli File Agent move/rename saga
+
+Migration 0012, tekrar eden fiziksel move/rename işlemleri için mevcut PostgreSQL job kuyruğunu değiştirmeden `case_file_operations` saga/reservation kaydını ekler. Plan/preview filesystem'e dokunmaz; onay source location ve sürümünü yeniden doğrulayıp tek Agent işi açar. Same-volume atomic rename ve case-only geçici ad; cross-volume/EXDEV operation-specific staging + streaming manifest + atomik publish ile yürür. Server Agent sonucunu ownership/lease/operation/location/reservation/manifest kontrolleriyle yeniden doğrular; location/history/operation/job/audit switch transaction'ında atomiktir. Staged-copy source cleanup yalnız switch sonrası ayrı işte yapılır; hata `cleanup_pending`, değişim/belirsizlik `manual_recovery_required` olur. Overwrite/merge/kör rollback, genel delete, UI, close/reopen, IPC, yeni dependency, üretim migration ve gerçek `P:\` testi yoktur. Paket 21, close/reopen iş kuralı hedefini server tarafında üretip bu düşük seviyeli operation katmanını kullanacaktır.
+
 Her pakette gerçek sonuca göre şu kanıtlar raporlanır:
 
 1. Değişen dosyalar ve kullanıcı değişikliklerinden ayrımı.

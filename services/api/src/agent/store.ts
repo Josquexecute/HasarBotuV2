@@ -190,6 +190,24 @@ export function createAgentStore(pool: pg.Pool) {
               [job.target_id, agent.organizationId],
             )
           }
+          if (job.target_type === 'file_operation') {
+            const isCleanup = job.type === 'cleanup_moved_workspace'
+            const changed = await client.query(
+              `UPDATE case_file_operations SET status=$3,cleanup_state=CASE WHEN $4 THEN 'blocked' ELSE cleanup_state END,
+               failure_reason_code='attempts_exhausted',updated_at=now()
+               WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled')`,
+              [job.target_id, agent.organizationId, isCleanup ? 'manual_recovery_required' : 'failed', isCleanup],
+            )
+            if (changed.rowCount !== 0) {
+              await audit.record(client, {
+                organizationId: agent.organizationId,
+                action: isCleanup ? 'file_operation.manual_recovery_required' : 'file_operation.failed',
+                entityType: 'case_file_operation',
+                entityId: job.target_id,
+                details: { jobId: job.id, agentId: agent.id, errorCode: 'attempts_exhausted' },
+              })
+            }
+          }
           return null
         }
 
@@ -219,6 +237,40 @@ export function createAgentStore(pool: pg.Pool) {
             })
           }
         }
+        if (claimed.target_type === 'file_operation') {
+          const isCleanup = claimed.type === 'cleanup_moved_workspace'
+          const changed = await client.query(
+            `UPDATE case_file_operations SET status=CASE WHEN $3 THEN 'cleanup_pending' ELSE 'applying' END,
+             attempt_count=$4,failure_reason_code=NULL,updated_at=now()
+             WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled','manual_recovery_required')
+             RETURNING case_id,approved_by_user_id,operation_type,strategy`,
+            [claimed.target_id, agent.organizationId, isCleanup, nextAttempt],
+          )
+          const operation = changed.rows[0] as {
+            case_id: string
+            approved_by_user_id: string | null
+            operation_type: string
+            strategy: string
+          } | undefined
+          if (operation !== undefined) {
+            await audit.record(client, {
+              organizationId: agent.organizationId,
+              actorUserId: operation.approved_by_user_id ?? undefined,
+              action: 'file_operation.started',
+              entityType: 'case_file_operation',
+              entityId: claimed.target_id,
+              details: {
+                caseId: operation.case_id,
+                jobId: claimed.id,
+                agentId: agent.id,
+                operationType: operation.operation_type,
+                strategy: operation.strategy,
+                attempt: nextAttempt,
+                phase: isCleanup ? 'cleanup' : 'apply',
+              },
+            })
+          }
+        }
         return claimedJobToDto(claimed)
       })
     },
@@ -226,7 +278,7 @@ export function createAgentStore(pool: pg.Pool) {
     async heartbeat(
       agent: { id: string; organizationId: string },
       jobId: string,
-      phase?: 'applying' | 'verifying',
+      phase?: 'applying' | 'verifying' | 'cleanup',
       requestId?: string,
       leaseSeconds = DEFAULT_LEASE_SECONDS,
     ): Promise<Date | undefined> {
@@ -260,6 +312,13 @@ export function createAgentStore(pool: pg.Pool) {
             })
           }
         }
+        if (phase !== undefined && ['rename_case_workspace', 'move_case_workspace'].includes(row.type)) {
+          await client.query(
+            `UPDATE case_file_operations SET status=$3,updated_at=now()
+             WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled','manual_recovery_required')`,
+            [row.target_id, agent.organizationId, phase === 'verifying' ? 'verifying' : 'applying'],
+          )
+        }
         return row.lease_expires_at
       })
     },
@@ -284,7 +343,7 @@ export function createAgentStore(pool: pg.Pool) {
         if (job === undefined) return { kind: 'not_found' }
 
         // Idempotent: terminal iş yeniden bildirilirse mevcut durumu döner.
-        if (['succeeded', 'failed', 'dead_letter'].includes(job.status)) {
+        if (['succeeded', 'failed', 'dead_letter', 'cancelled'].includes(job.status)) {
           return { kind: 'ok', status: job.status, lastErrorCode: job.last_error_code }
         }
         if (job.status !== 'leased') return { kind: 'conflict' }
@@ -316,12 +375,83 @@ export function createAgentStore(pool: pg.Pool) {
               })
             }
           }
+          if (job.target_type === 'file_operation') {
+            const manual = result.fileOperation?.phase === 'manual_recovery_required'
+            const stale = errorCode === 'source_changed_since_plan' || errorCode === 'location_changed'
+            const isCleanup = job.type === 'cleanup_moved_workspace'
+            const operationStatus = manual
+              ? 'manual_recovery_required'
+              : stale
+                ? 'stale'
+                : isCleanup
+                  ? 'cleanup_pending'
+                  : 'failed'
+            const changed = await client.query(
+              `UPDATE case_file_operations SET status=$3,
+               cleanup_state=CASE WHEN $4 THEN 'blocked' WHEN $5 THEN 'pending' ELSE cleanup_state END,
+               failure_reason_code=$6,updated_at=now()
+               WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled')
+               RETURNING case_id,approved_by_user_id,operation_type,strategy`,
+              [job.target_id, agent.organizationId, operationStatus, manual, isCleanup && !manual, errorCode],
+            )
+            const operation = changed.rows[0] as {
+              case_id: string
+              approved_by_user_id: string | null
+              operation_type: string
+              strategy: string
+            } | undefined
+            if (operation !== undefined) {
+              await audit.record(client, {
+                organizationId: agent.organizationId,
+                actorUserId: operation.approved_by_user_id ?? undefined,
+                requestId,
+                action: manual
+                  ? 'file_operation.manual_recovery_required'
+                  : isCleanup
+                    ? 'file_operation.cleanup_pending'
+                    : 'file_operation.failed',
+                entityType: 'case_file_operation',
+                entityId: job.target_id,
+                details: {
+                  caseId: operation.case_id,
+                  jobId: job.id,
+                  agentId: agent.id,
+                  operationType: operation.operation_type,
+                  strategy: operation.strategy,
+                  errorCode,
+                  attempt: job.attempt_count,
+                },
+              })
+            }
+            if (manual || stale) {
+              await client.query(
+                "UPDATE jobs SET status='dead_letter',last_error_code=$2,leased_by_agent_id=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1",
+                [job.id, errorCode],
+              )
+              return { kind: 'ok', status: 'dead_letter', lastErrorCode: errorCode }
+            }
+          }
           if (job.attempt_count >= job.max_attempts) {
             await client.query(
               "UPDATE jobs SET status = 'dead_letter', last_error_code = $2, leased_by_agent_id = NULL, lease_expires_at = NULL, updated_at = now() WHERE id = $1",
               [job.id, errorCode],
             )
             await recordJobAudit(ctx, job, 'job.dead_letter', { errorCode })
+            if (job.target_type === 'file_operation' && job.type === 'cleanup_moved_workspace') {
+              await client.query(
+                `UPDATE case_file_operations SET status='manual_recovery_required',cleanup_state='blocked',
+                 failure_reason_code='attempts_exhausted',updated_at=now() WHERE id=$1`,
+                [job.target_id],
+              )
+              await audit.record(client, {
+                organizationId: agent.organizationId,
+                requestId,
+                action: 'file_operation.manual_recovery_required',
+                entityType: 'case_file_operation',
+                entityId: job.target_id,
+                details: { jobId: job.id, agentId: agent.id, errorCode: 'attempts_exhausted' },
+              })
+            }
             return { kind: 'ok', status: 'dead_letter', lastErrorCode: errorCode }
           }
           await client.query(
@@ -373,6 +503,9 @@ async function applyVerification(
   result: JobResultRequest,
 ): Promise<AppliedResult> {
   const { client } = ctx
+  if (job.target_type === 'file_operation') {
+    return applyFileOperationResult(ctx, job, result)
+  }
   if (job.target_type === 'workspace_provisioning') {
     const audit = createAuditService()
     const planResult = await client.query(
@@ -526,6 +659,350 @@ async function applyVerification(
     auditAction: status === 'verified' ? 'job.verified' : 'job.verification_missing',
     jobStatus: 'succeeded',
   }
+}
+
+interface FileOperationApplyRow {
+  id: string
+  case_id: string
+  operation_type: string
+  source_storage_root_key: string
+  source_relative_path: string
+  destination_storage_root_key: string
+  destination_relative_path: string
+  expected_location_id: string
+  expected_location_version: number
+  status: string
+  strategy: 'atomic_rename' | 'staged_copy'
+  manifest_hash: string | null
+  file_count: number | null
+  directory_count: number | null
+  total_bytes: string | null
+  cleanup_state: string
+  version: number
+  active_job_id: string | null
+  approved_by_user_id: string | null
+}
+
+async function markFileOperationManualRecovery(
+  ctx: ApplyContext,
+  job: JobRow,
+  operation: FileOperationApplyRow,
+  errorCode: string,
+): Promise<AppliedResult> {
+  const audit = createAuditService()
+  await ctx.client.query(
+    `UPDATE case_file_operations SET status='manual_recovery_required',cleanup_state='blocked',
+     failure_reason_code=$2,updated_at=now() WHERE id=$1 AND status NOT IN ('ready','stale','cancelled')`,
+    [operation.id, errorCode],
+  )
+  await audit.record(ctx.client, {
+    organizationId: ctx.organizationId,
+    actorUserId: operation.approved_by_user_id ?? undefined,
+    requestId: ctx.requestId,
+    action: 'file_operation.manual_recovery_required',
+    entityType: 'case_file_operation',
+    entityId: operation.id,
+    details: {
+      caseId: operation.case_id,
+      jobId: job.id,
+      agentId: ctx.agentId,
+      operationType: operation.operation_type,
+      strategy: operation.strategy,
+      errorCode,
+    },
+  })
+  return {
+    metadataResult: 'manual_recovery_required',
+    errorCode,
+    auditAction: 'job.verification_failed',
+    jobStatus: 'failed',
+  }
+}
+
+async function applyFileOperationResult(
+  ctx: ApplyContext,
+  job: JobRow & { last_error_code: string | null },
+  result: JobResultRequest,
+): Promise<AppliedResult> {
+  const audit = createAuditService()
+  const selected = await ctx.client.query(
+    `SELECT id,case_id,operation_type,source_storage_root_key,source_relative_path,
+      destination_storage_root_key,destination_relative_path,expected_location_id,expected_location_version,
+      status,strategy,manifest_hash,file_count,directory_count,total_bytes,cleanup_state,version,
+      active_job_id,approved_by_user_id
+     FROM case_file_operations WHERE id::text=$1 AND organization_id=$2 FOR UPDATE`,
+    [job.target_id, ctx.organizationId],
+  )
+  const operation = selected.rows[0] as FileOperationApplyRow | undefined
+  if (operation === undefined) {
+    return { metadataResult: 'missing_operation', errorCode: 'operation_missing', auditAction: 'job.verification_failed', jobStatus: 'failed' }
+  }
+  if (['ready', 'stale', 'cancelled'].includes(operation.status)) {
+    return { metadataResult: 'stale_skipped', errorCode: null, auditAction: 'job.verification_stale', jobStatus: 'succeeded' }
+  }
+  if (operation.version !== job.target_version || operation.active_job_id !== job.id) {
+    return markFileOperationManualRecovery(ctx, job, operation, 'operation_version_changed')
+  }
+
+  const fileResult = result.fileOperation
+  if (result.outcome !== 'verified' || fileResult === undefined) {
+    const errorCode = result.outcome === 'missing' ? 'source_missing' : 'invalid_agent_result'
+    await ctx.client.query(
+      "UPDATE case_file_operations SET status='failed',failure_reason_code=$2,updated_at=now() WHERE id=$1",
+      [operation.id, errorCode],
+    )
+    await audit.record(ctx.client, {
+      organizationId: ctx.organizationId,
+      actorUserId: operation.approved_by_user_id ?? undefined,
+      requestId: ctx.requestId,
+      action: 'file_operation.failed',
+      entityType: 'case_file_operation',
+      entityId: operation.id,
+      details: { caseId: operation.case_id, jobId: job.id, agentId: ctx.agentId, errorCode },
+    })
+    return { metadataResult: 'failed', errorCode, auditAction: 'job.verification_failed', jobStatus: 'failed' }
+  }
+  if (fileResult.phase === 'manual_recovery_required') {
+    return markFileOperationManualRecovery(ctx, job, operation, fileResult.safeOutcomeCode ?? 'ambiguous_filesystem_state')
+  }
+  if (fileResult.manifestHash === undefined
+    || fileResult.fileCount === undefined
+    || fileResult.directoryCount === undefined
+    || fileResult.totalBytes === undefined) {
+    return markFileOperationManualRecovery(ctx, job, operation, 'incomplete_manifest_summary')
+  }
+
+  if (fileResult.phase === 'cleanup_completed') {
+    if (job.type !== 'cleanup_moved_workspace'
+      || fileResult.strategy !== 'staged_copy'
+      || operation.manifest_hash !== fileResult.manifestHash
+      || operation.file_count !== fileResult.fileCount
+      || operation.directory_count !== fileResult.directoryCount
+      || Number(operation.total_bytes) !== fileResult.totalBytes) {
+      return markFileOperationManualRecovery(ctx, job, operation, 'cleanup_result_mismatch')
+    }
+    const locationResult = await ctx.client.query(
+      `SELECT storage_root_key,relative_path,verification_status,version FROM case_locations
+       WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`,
+      [ctx.organizationId, operation.case_id],
+    )
+    const location = locationResult.rows[0] as {
+      storage_root_key: string; relative_path: string; verification_status: string; version: number
+    } | undefined
+    if (location === undefined
+      || location.storage_root_key !== operation.destination_storage_root_key
+      || location.relative_path !== operation.destination_relative_path
+      || location.verification_status !== 'verified'
+      || location.version !== operation.expected_location_version + 1) {
+      return markFileOperationManualRecovery(ctx, job, operation, 'location_changed_before_cleanup_finalize')
+    }
+    await ctx.client.query(
+      `UPDATE case_file_operations SET status='ready',cleanup_state='completed',failure_reason_code=NULL,
+       finalized_at=now(),version=version+1,updated_at=now() WHERE id=$1`,
+      [operation.id],
+    )
+    await audit.record(ctx.client, {
+      organizationId: ctx.organizationId,
+      actorUserId: operation.approved_by_user_id ?? undefined,
+      requestId: ctx.requestId,
+      action: 'file_operation.finalized',
+      entityType: 'case_file_operation',
+      entityId: operation.id,
+      details: {
+        caseId: operation.case_id,
+        jobId: job.id,
+        agentId: ctx.agentId,
+        strategy: 'staged_copy',
+        cleanupState: 'completed',
+        manifestHash: fileResult.manifestHash,
+        fileCount: fileResult.fileCount,
+        directoryCount: fileResult.directoryCount,
+        totalBytes: fileResult.totalBytes,
+      },
+    })
+    return { metadataResult: 'ready', errorCode: null, auditAction: 'job.verified', jobStatus: 'succeeded' }
+  }
+
+  if (job.type === 'cleanup_moved_workspace') {
+    return markFileOperationManualRecovery(ctx, job, operation, 'invalid_cleanup_phase')
+  }
+  if (operation.strategy === 'staged_copy' && fileResult.strategy !== 'staged_copy') {
+    return markFileOperationManualRecovery(ctx, job, operation, 'strategy_mismatch')
+  }
+
+  const destinationRoot = await ctx.client.query(
+    'SELECT 1 FROM storage_roots WHERE organization_id=$1 AND root_key=$2 AND is_active=true',
+    [ctx.organizationId, operation.destination_storage_root_key],
+  )
+  if (destinationRoot.rowCount === 0) {
+    return markFileOperationManualRecovery(ctx, job, operation, 'destination_root_inactive_after_apply')
+  }
+
+  const locationResult = await ctx.client.query(
+    `SELECT id,storage_root_key,relative_path,verification_status,version FROM case_locations
+     WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`,
+    [ctx.organizationId, operation.case_id],
+  )
+  const location = locationResult.rows[0] as {
+    id: string; storage_root_key: string; relative_path: string; verification_status: string; version: number
+  } | undefined
+  if (location === undefined
+    || location.id !== operation.expected_location_id
+    || location.version !== operation.expected_location_version
+    || location.storage_root_key !== operation.source_storage_root_key
+    || location.relative_path !== operation.source_relative_path
+    || location.verification_status !== 'verified') {
+    return markFileOperationManualRecovery(ctx, job, operation, 'location_changed_after_apply')
+  }
+  const destinationCollision = await ctx.client.query(
+    `SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2
+     AND lower(relative_path)=lower($3) AND id<>$4`,
+    [ctx.organizationId, operation.destination_storage_root_key, operation.destination_relative_path, location.id],
+  )
+  if (destinationCollision.rowCount !== 0) {
+    return markFileOperationManualRecovery(ctx, job, operation, 'destination_reservation_lost')
+  }
+
+  await ctx.client.query(
+    `UPDATE case_file_operations SET status='switching_location',strategy=$2,manifest_hash=$3,file_count=$4,
+     directory_count=$5,total_bytes=$6,failure_reason_code=NULL,updated_at=now() WHERE id=$1`,
+    [operation.id, fileResult.strategy, fileResult.manifestHash, fileResult.fileCount, fileResult.directoryCount, fileResult.totalBytes],
+  )
+  await audit.record(ctx.client, {
+    organizationId: ctx.organizationId,
+    actorUserId: operation.approved_by_user_id ?? undefined,
+    requestId: ctx.requestId,
+    action: 'file_operation.verified',
+    entityType: 'case_file_operation',
+    entityId: operation.id,
+    details: {
+      caseId: operation.case_id,
+      jobId: job.id,
+      agentId: ctx.agentId,
+      source: { storageRootKey: operation.source_storage_root_key, relativePath: operation.source_relative_path },
+      destination: { storageRootKey: operation.destination_storage_root_key, relativePath: operation.destination_relative_path },
+      strategy: fileResult.strategy,
+      manifestHash: fileResult.manifestHash,
+      fileCount: fileResult.fileCount,
+      directoryCount: fileResult.directoryCount,
+      totalBytes: fileResult.totalBytes,
+    },
+  })
+
+  const switched = await ctx.client.query(
+    `UPDATE case_locations SET storage_root_key=$2,relative_path=$3,verification_status='verified',source='system',
+     version=version+1,updated_at=now() WHERE id=$1 RETURNING version`,
+    [location.id, operation.destination_storage_root_key, operation.destination_relative_path],
+  )
+  const switchedVersion = (switched.rows[0] as { version: number }).version
+  await ctx.client.query(
+    `INSERT INTO case_location_history
+     (id,organization_id,case_id,storage_root_key,relative_path,previous_storage_root_key,previous_relative_path,
+      verification_status,source,changed_by_user_id,request_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'verified','system',$8,$9)`,
+    [
+      uuidv7(),
+      ctx.organizationId,
+      operation.case_id,
+      operation.destination_storage_root_key,
+      operation.destination_relative_path,
+      operation.source_storage_root_key,
+      operation.source_relative_path,
+      operation.approved_by_user_id,
+      ctx.requestId,
+    ],
+  )
+  await audit.record(ctx.client, {
+    organizationId: ctx.organizationId,
+    actorUserId: operation.approved_by_user_id ?? undefined,
+    requestId: ctx.requestId,
+    action: 'file_operation.location_switched',
+    entityType: 'case_file_operation',
+    entityId: operation.id,
+    details: {
+      caseId: operation.case_id,
+      jobId: job.id,
+      agentId: ctx.agentId,
+      source: { storageRootKey: operation.source_storage_root_key, relativePath: operation.source_relative_path },
+      destination: { storageRootKey: operation.destination_storage_root_key, relativePath: operation.destination_relative_path },
+      strategy: fileResult.strategy,
+      fromVersion: location.version,
+      toVersion: switchedVersion,
+    },
+  })
+
+  if (fileResult.strategy === 'staged_copy') {
+    const cleanupJobId = uuidv7()
+    const nextOperationVersion = operation.version + 1
+    // Handoff aynı transaction'dadır: apply job terminal yapılmadan ikinci aktif
+    // job rezervasyonu açılamaz; sonra cleanup işi ve operation pointer yazılır.
+    await ctx.client.query("UPDATE jobs SET status='succeeded',updated_at=now() WHERE id=$1", [job.id])
+    await ctx.client.query(
+      `INSERT INTO jobs
+       (id,organization_id,type,status,target_type,target_id,target_version,payload,max_attempts)
+       VALUES ($1,$2,'cleanup_moved_workspace','pending','file_operation',$3,$4,$5::jsonb,5)`,
+      [
+        cleanupJobId,
+        ctx.organizationId,
+        operation.id,
+        nextOperationVersion,
+        JSON.stringify({
+          kind: 'file_operation_cleanup',
+          operationId: operation.id,
+          operationVersion: nextOperationVersion,
+          source: { storageRootKey: operation.source_storage_root_key, relativePath: operation.source_relative_path },
+          destination: { storageRootKey: operation.destination_storage_root_key, relativePath: operation.destination_relative_path },
+          manifestHash: fileResult.manifestHash,
+          fileCount: fileResult.fileCount,
+          directoryCount: fileResult.directoryCount,
+          totalBytes: fileResult.totalBytes,
+        }),
+      ],
+    )
+    await ctx.client.query(
+      `UPDATE case_file_operations SET status='cleanup_pending',cleanup_state='pending',active_job_id=$2,
+       strategy='staged_copy',manifest_hash=$3,file_count=$4,directory_count=$5,total_bytes=$6,
+       version=$7,updated_at=now() WHERE id=$1`,
+      [operation.id, cleanupJobId, fileResult.manifestHash, fileResult.fileCount, fileResult.directoryCount, fileResult.totalBytes, nextOperationVersion],
+    )
+    await audit.record(ctx.client, {
+      organizationId: ctx.organizationId,
+      actorUserId: operation.approved_by_user_id ?? undefined,
+      requestId: ctx.requestId,
+      action: 'file_operation.cleanup_pending',
+      entityType: 'case_file_operation',
+      entityId: operation.id,
+      details: { caseId: operation.case_id, jobId: cleanupJobId, previousJobId: job.id, agentId: ctx.agentId },
+    })
+    return { metadataResult: 'cleanup_pending', errorCode: null, auditAction: 'job.verified', jobStatus: 'succeeded' }
+  }
+
+  await ctx.client.query(
+    `UPDATE case_file_operations SET status='ready',cleanup_state='not_required',active_job_id=$2,
+     strategy='atomic_rename',manifest_hash=$3,file_count=$4,directory_count=$5,total_bytes=$6,
+     finalized_at=now(),failure_reason_code=NULL,version=version+1,updated_at=now() WHERE id=$1`,
+    [operation.id, job.id, fileResult.manifestHash, fileResult.fileCount, fileResult.directoryCount, fileResult.totalBytes],
+  )
+  await audit.record(ctx.client, {
+    organizationId: ctx.organizationId,
+    actorUserId: operation.approved_by_user_id ?? undefined,
+    requestId: ctx.requestId,
+    action: 'file_operation.finalized',
+    entityType: 'case_file_operation',
+    entityId: operation.id,
+    details: {
+      caseId: operation.case_id,
+      jobId: job.id,
+      agentId: ctx.agentId,
+      strategy: 'atomic_rename',
+      cleanupState: 'not_required',
+      manifestHash: fileResult.manifestHash,
+      fileCount: fileResult.fileCount,
+      directoryCount: fileResult.directoryCount,
+      totalBytes: fileResult.totalBytes,
+    },
+  })
+  return { metadataResult: 'ready', errorCode: null, auditAction: 'job.verified', jobStatus: 'succeeded' }
 }
 
 export type AgentStore = ReturnType<typeof createAgentStore>

@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "caseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "operationType": {
+          "type": "string",
+          "enum": [
+            "rename_case_workspace",
+            "move_case_workspace"
+          ]
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "storageRootKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "relativePath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400,
+              "x-hasarbotu-runtime-validation": "safe-relative-path"
+            }
+          },
+          "required": [
+            "storageRootKey",
+            "relativePath"
+          ],
+          "additionalProperties": false
+        },
+        "destination": {
+          "type": "object",
+          "properties": {
+            "storageRootKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "relativePath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400,
+              "x-hasarbotu-runtime-validation": "safe-relative-path"
+            }
+          },
+          "required": [
+            "storageRootKey",
+            "relativePath"
+          ],
+          "additionalProperties": false
+        },
+        "expectedLocationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "planned",
+            "approved",
+            "queued",
+            "applying",
+            "verifying",
+            "switching_location",
+            "cleanup_pending",
+            "ready",
+            "failed",
+            "stale",
+            "cancelled",
+            "manual_recovery_required"
+          ]
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "atomic_rename",
+            "staged_copy"
+          ]
+        },
+        "manifestHash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fileCount": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "directoryCount": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "totalBytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5368709120
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cleanupState": {
+          "type": "string",
+          "enum": [
+            "not_required",
+            "pending",
+            "completed",
+            "blocked"
+          ]
+        },
+        "failureReasonCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9_]+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "canApprove": {
+          "type": "boolean"
+        },
+        "canCancel": {
+          "type": "boolean"
+        },
+        "approvedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalizedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        "updatedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        }
+      },
+      "required": [
+        "id",
+        "caseId",
+        "operationType",
+        "source",
+        "destination",
+        "expectedLocationVersion",
+        "status",
+        "strategy",
+        "manifestHash",
+        "fileCount",
+        "directoryCount",
+        "totalBytes",
+        "cleanupState",
+        "failureReasonCode",
+        "version",
+        "canApprove",
+        "canCancel",
+        "approvedAt",
+        "finalizedAt",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "operation"
+  ],
+  "additionalProperties": false
+}

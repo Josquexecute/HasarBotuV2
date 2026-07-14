@@ -24,6 +24,56 @@
       "minLength": 1,
       "maxLength": 64,
       "pattern": "^[a-z0-9_]+$"
+    },
+    "fileOperation": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": "string",
+          "enum": [
+            "destination_verified",
+            "cleanup_completed",
+            "manual_recovery_required"
+          ]
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "atomic_rename",
+            "staged_copy"
+          ]
+        },
+        "manifestHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "directoryCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "totalBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5368709120
+        },
+        "safeOutcomeCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9_]+$"
+        }
+      },
+      "required": [
+        "phase",
+        "strategy"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

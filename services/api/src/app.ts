@@ -11,6 +11,7 @@ import { registerAgentRoutes } from './agent/index.js'
 import { registerDocumentRequirementsRoutes } from './document-requirements/index.js'
 import { registerReferenceRoutes } from './references/index.js'
 import { registerWorkspaceRoutes } from './workspace/index.js'
+import { registerFileOperationRoutes } from './file-operations/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -101,6 +102,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerDocumentRequirementsRoutes(app, { pool: options.auth.pool })
     registerReferenceRoutes(app, { pool: options.auth.pool })
     registerWorkspaceRoutes(app, { pool: options.auth.pool })
+    registerFileOperationRoutes(app, { pool: options.auth.pool })
   }
 
   return app

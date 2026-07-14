@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { idSchema, relativePathSchema, storageRootKeySchema, utcDateTimeSchema } from '../../common/primitives.js'
 import { byteSizeSchema, sha256HexSchema } from '../documents/dto.js'
+import {
+  fileOperationStrategySchema,
+  fileOperationTypeSchema,
+  logicalStorageReferenceSchema,
+} from '../file-operations/dto.js'
 
 /**
  * File Agent iş kuyruğu ve doğrulama sözleşmeleri (Paket 14).
@@ -9,20 +14,28 @@ import { byteSizeSchema, sha256HexSchema } from '../documents/dto.js'
  * göreli yol + beyan hash/size. MUTLAK YOL, sürücü harfi veya UNC ASLA taşınmaz;
  * cihaz→mutlak eşleme yalnız Agent'ın yerel config'indedir.
  */
-export const JOB_TYPES = ['verify_document', 'verify_photo', 'verify_case_location', 'provision_case_workspace'] as const
+export const JOB_TYPES = [
+  'verify_document',
+  'verify_photo',
+  'verify_case_location',
+  'provision_case_workspace',
+  'rename_case_workspace',
+  'move_case_workspace',
+  'cleanup_moved_workspace',
+] as const
 export type JobType = (typeof JOB_TYPES)[number]
 export const jobTypeSchema = z.enum(JOB_TYPES)
 
-export const JOB_STATUSES = ['pending', 'leased', 'succeeded', 'failed', 'dead_letter'] as const
+export const JOB_STATUSES = ['pending', 'leased', 'succeeded', 'failed', 'dead_letter', 'cancelled'] as const
 export type JobStatus = (typeof JOB_STATUSES)[number]
 export const jobStatusSchema = z.enum(JOB_STATUSES)
 
-export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning'] as const
+export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning', 'file_operation'] as const
 export type JobTargetType = (typeof JOB_TARGET_TYPES)[number]
 export const jobTargetTypeSchema = z.enum(JOB_TARGET_TYPES)
 
 /** Doğrulama hedefi: dosya (hash+size) veya dizin (yalnız varlık). */
-export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace'] as const
+export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace', 'file_operation', 'file_operation_cleanup'] as const
 export const jobPayloadKindSchema = z.enum(JOB_PAYLOAD_KINDS)
 
 /** Agent'a verilen güvenli payload. Mutlak yol yoktur. */
@@ -45,7 +58,35 @@ export const workspaceJobPayloadSchema = z.strictObject({
     z.literal('DEĞER KAYBI'),
   ]),
 })
-export const jobPayloadSchema = z.discriminatedUnion('kind', [verificationJobPayloadSchema, workspaceJobPayloadSchema])
+export const fileOperationJobPayloadSchema = z.strictObject({
+  kind: z.literal('file_operation'),
+  operationId: idSchema,
+  operationVersion: z.number().int().min(1),
+  operationType: fileOperationTypeSchema,
+  source: logicalStorageReferenceSchema,
+  destination: logicalStorageReferenceSchema,
+  strategy: fileOperationStrategySchema,
+  plannedAt: utcDateTimeSchema,
+  stagingRelativePath: relativePathSchema,
+  temporaryRelativePath: relativePathSchema,
+})
+export const fileOperationCleanupJobPayloadSchema = z.strictObject({
+  kind: z.literal('file_operation_cleanup'),
+  operationId: idSchema,
+  operationVersion: z.number().int().min(1),
+  source: logicalStorageReferenceSchema,
+  destination: logicalStorageReferenceSchema,
+  manifestHash: sha256HexSchema,
+  fileCount: z.number().int().min(0),
+  directoryCount: z.number().int().min(0),
+  totalBytes: byteSizeSchema,
+})
+export const jobPayloadSchema = z.discriminatedUnion('kind', [
+  verificationJobPayloadSchema,
+  workspaceJobPayloadSchema,
+  fileOperationJobPayloadSchema,
+  fileOperationCleanupJobPayloadSchema,
+])
 export type JobPayload = z.infer<typeof jobPayloadSchema>
 
 /** Claim edilen iş: agent'ın çalışacağı güvenli görev. */

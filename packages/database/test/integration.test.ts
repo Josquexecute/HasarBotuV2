@@ -55,6 +55,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0009_document_requirement_rules',
       '0010_case_reference_enrichment',
       '0011_case_workspace_provisioning',
+      '0012_case_file_operations',
     ])
 
     const tables = await pool.query(
@@ -63,6 +64,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(tables.rows.map((r: { table_name: string }) => r.table_name)).toEqual([
       'agents',
       'audit_events',
+      'case_file_operations',
       'case_location_history',
       'case_locations',
       'case_workspace_provisionings',
@@ -96,15 +98,100 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0011 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0012 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0011_case_workspace_provisioning'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0012_case_file_operations'])
     const removed = await pool.query(
-      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'case_workspace_provisionings'",
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'case_file_operations'",
     )
     expect((removed.rows[0] as { n: number }).n).toBe(0)
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0011_case_workspace_provisioning'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0012_case_file_operations'])
+  })
+
+  it('0012 güvenli yol, tek aktif vaka, hedef rezervasyonu ve idempotency kısıtlarını uygular', async () => {
+    const organizationId = uuidv7()
+    const userId = uuidv7()
+    const firstCaseId = uuidv7()
+    const secondCaseId = uuidv7()
+    const firstLocationId = uuidv7()
+    const secondLocationId = uuidv7()
+    const rootId = uuidv7()
+    await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1,$2,$3)', [organizationId, 'p20-db', 'P20 DB'])
+    await pool.query(
+      "INSERT INTO users (id,organization_id,email,password_hash,display_name) VALUES ($1,$2,'p20@test.local','x','P20')",
+      [userId, organizationId],
+    )
+    await pool.query(
+      `INSERT INTO cases (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,notification_date)
+       VALUES ($1,$3,2026,20,'2026/20','traffic','new_notification','34 DB 020','34DB020','2026-07-14'),
+              ($2,$3,2026,21,'2026/21','traffic','new_notification','34 DB 021','34DB021','2026-07-14')`,
+      [firstCaseId, secondCaseId, organizationId],
+    )
+    await pool.query("INSERT INTO storage_roots (id,organization_id,root_key,label) VALUES ($1,$2,'test-root','Test')", [rootId, organizationId])
+    await pool.query(
+      `INSERT INTO case_locations (id,organization_id,case_id,storage_root_key,relative_path,verification_status,source)
+       VALUES ($1,$3,$4,'test-root','2026/Temmuz 2026/34DB020','verified','system'),
+              ($2,$3,$5,'test-root','2026/Temmuz 2026/34DB021','verified','system')`,
+      [firstLocationId, secondLocationId, organizationId, firstCaseId, secondCaseId],
+    )
+
+    const insertOperation = async (overrides: {
+      id?: string
+      caseId?: string
+      locationId?: string
+      destination?: string
+      idempotencyHash?: string
+    } = {}): Promise<void> => {
+      await pool.query(
+        `INSERT INTO case_file_operations
+         (id,organization_id,case_id,operation_type,source_storage_root_key,source_relative_path,
+          destination_storage_root_key,destination_relative_path,expected_location_id,expected_location_version,
+          strategy,idempotency_key_hash,request_hash,created_by_user_id)
+         VALUES ($1,$2,$3,'rename_case_workspace','test-root','2026/Temmuz 2026/34DB020',
+                 'test-root',$4,$5,1,'atomic_rename',$6,$7,$8)`,
+        [
+          overrides.id ?? uuidv7(),
+          organizationId,
+          overrides.caseId ?? firstCaseId,
+          overrides.destination ?? '2026/Temmuz 2026/34DB020-YENI',
+          overrides.locationId ?? firstLocationId,
+          overrides.idempotencyHash ?? 'a'.repeat(64),
+          'b'.repeat(64),
+          userId,
+        ],
+      )
+    }
+
+    await insertOperation()
+    await expect(insertOperation({ idempotencyHash: 'c'.repeat(64), destination: '2026/Temmuz 2026/BASKA' }))
+      .rejects.toMatchObject({ code: '23505', constraint: 'case_file_operations_one_active_case' })
+    await expect(insertOperation({
+      caseId: secondCaseId,
+      locationId: secondLocationId,
+      idempotencyHash: 'd'.repeat(64),
+    })).rejects.toMatchObject({ code: '23505', constraint: 'case_file_operations_destination_reservation' })
+    await expect(insertOperation({
+      caseId: secondCaseId,
+      locationId: secondLocationId,
+      destination: '../disari',
+      idempotencyHash: 'e'.repeat(64),
+    })).rejects.toMatchObject({ code: '23514', constraint: 'case_file_operations_destination_path_safe' })
+
+    await expect(pool.query(
+      "UPDATE case_locations SET relative_path='2026/temmuz 2026/34db020' WHERE id=$1",
+      [secondLocationId],
+    )).rejects.toMatchObject({ code: '23505', constraint: 'case_locations_path_ci_unique' })
+
+    await expect(pool.query(
+      `INSERT INTO jobs (id,organization_id,type,target_type,target_id,target_version,payload)
+       VALUES ($1,$2,'rename_case_workspace','file_operation',$3,1,$4::jsonb)`,
+      [uuidv7(), organizationId, uuidv7(), JSON.stringify({
+        kind: 'file_operation',
+        source: { storageRootKey: 'test-root', relativePath: '../disari' },
+        destination: { storageRootKey: 'test-root', relativePath: '2026/hedef' },
+      })],
+    )).rejects.toMatchObject({ code: '23514', constraint: 'jobs_payload_no_absolute_path' })
   })
 
   it('0011 göreli yol, tek vaka rezervasyonu ve tek aktif iş kısıtlarını uygular', async () => {

@@ -632,3 +632,16 @@ Kabul ölçütü: Aktif ve tenant-kapsamlı gerçek referanslar create/edit'te s
 - [x] Son kapılar: tam gerçek PostgreSQL/API/temp-filesystem, gerçek tarayıcı, root kalite kapıları ve temiz checkout doğrulaması.
 
 Kabul ölçütü: Plan diske yazmaz; onaysız iş yoktur; aynı case/idempotency/onay yarışı mükerrer klasör veya job üretmez; Agent doğru/kısmi yapıyı güvenle tamamlar ve doğrular; traversal/reparse/root escape reddedilir; stale job location’ı ezmez; mutlak yol/secret sızmaz; tarayıcı ve temiz checkout dâhil bütün kapılar geçmeden commit oluşturulmaz.
+
+## Aktif geliştirme paketi — Paket 20 güvenli File Agent move/rename altyapısı
+
+- [x] Migration 0012: file-operation saga kimliği, source/destination logical snapshot, case-insensitive destination reservation, tek aktif operation/case, idempotency, manifest/recovery/cleanup alanları; mevcut jobs/location history genişletmesi.
+- [x] Contracts/API: tenant+oturum+Idempotency-Key korumalı plan/read/approve/cancel; doğrulanmış location + expected version; güvenli response/error ve deterministik JSON Schema fixture'ları.
+- [x] File Agent same-volume atomic rename, operation-specific case-only temp rename, no-overwrite/no-merge ve restart/replay recovery.
+- [x] Cross-root/EXDEV staged-copy: streaming SHA-256+size manifest, staging verify, atomic publish, transaction içinde location switch ve ayrı retry edilebilir cleanup job.
+- [x] Recovery: cleanup_pending, stale ve manual_recovery_required; kaynak değişiminde silmeme, belirsizlikte kör rollback yapmama; server-side ownership/lease/version/reservation/manifest yeniden doğrulaması.
+- [x] Merkezi audit: plan/onay/başlatma/doğrulama/location switch/cleanup/finalize/failure/manual recovery; logical path ve güvenli sayaçlar, mutlak path/secret/içerik yok.
+- [x] Gerçek PostgreSQL ve sentetik geçici filesystem testleri; fault-injected EXDEV/disk-full/locked/hash/partial/recovery; gerçek HTTP/API-Agent smoke. Gerçek `P:\` veya müşteri verisi yok.
+- [x] Son root kalite kapıları ve repository dışı fresh `npm ci` temiz checkout doğrulaması; atomik commit yalnız path-bazlı staged kapsam kontrolünden sonra.
+
+Kabul ölçütü: Kullanıcı onayı öncesi filesystem değişmez; tek aktif operation ve destination reservation DB'de zorlanır; same-volume rename ve staged-copy veri kaybı/overwrite olmadan doğrulanır; location switch olmadan source cleanup yapılmaz; cleanup/recovery idempotent ve belirsizlikte fail-closed'dur; mutlak root/secret/ham hata sınırı korunur; Paket 21 close/reopen veya son kullanıcı taşıma UI'si bu pakette uygulanmaz.
