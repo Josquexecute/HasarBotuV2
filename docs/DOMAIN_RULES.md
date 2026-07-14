@@ -265,3 +265,12 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Normal close eksik/control_required gereksinimde blocked olur. Eksiklerle close yalnız zorunlu gerekçe ve server üretimli snapshot ile onaylanabilir.
 - Reopen yalnız closed case, zorunlu gerekçe ve izin verilen açık workflow stage ile yapılır; son append-only kapanış kaydındaki önceki açık location hedeflenir.
 - Fiziksel hedef doğrulanmadan lifecycle finalize edilmez. Reopen aynı `caseId` ve ofis numarasını korur; kapanış geçmişi silinmez/değiştirilmez.
+
+## Kanıtlı Kasko poliçe senaryo kuralları — Paket 23
+
+- Ana analiz yalnız Kasko case ve aynı tenant/case'e ait `ready + hashVerified + sizeVerified + verifiedAt` poliçe `documentVersion` ile oluşturulur.
+- Kaynak: `documentId`, `documentVersionId`, pozitif sayfa, bölüm, madde, en çok 1.000 karakter alıntı, alıntı hash'i, locator, kaynak türü ve 0..1 confidence. Kaynaksız rule kesin sonuç üretemez.
+- Approved sürüm immutable; düzeltme yeni sürümdür. Eski sürüm silinmez, gerekirse `superseded` olur. Açık conflict approval'ı ve kesin senaryo sonucunu engeller.
+- Öncelik aynı seviyede farklı outcome veriyorsa `control_required`; sessiz winner seçilmez. Muafiyetler kodla tekilleştirilir fakat farklı koşullu muafiyetler kaybolmaz.
+- Servis facts'i `serviceType` ile sigortacıya/tarihe özel `agreementStatus` alanlarını ayrı taşır. Muafiyet riski tedarik/mobil onarım için `pause/control_required`; gerçek iş emrini bu paket değiştirmez.
+- Tarihler LocalDate, işlem zamanları UTC'dir; clock, analysisVersion ve ruleVersion dışarıdan verilir. Motor DB/HTTP/AI bağımlılığı ve yan etki taşımaz.

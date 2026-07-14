@@ -112,3 +112,9 @@ Orijinal metin (`policy_clauses.text`) hiçbir normalizasyonda silinmez; kanonik
 ## 5. Parça bedeli izlenebilirliği
 
 Parça bedeli kayıtları (işçilik/parça modülü) şu alanları taşır: `amountExclVat` (KDV hariç), `undiscounted: true` esası, `priceSource` (liste/portal/belge), `priceDate`, `priceDocumentRef`. Bu kavramlar Paket 05+ `parts` tablolarının tasarımına girdi olarak eklenmiştir; burada şema üretilmez.
+
+## 6. Paket 23 kanonik persistence sınırı
+
+Paket 23'te kanonik model tek bir doğrulanamaz JSON belgeye gömülmez. Kimlik ve sürüm `policy_analyses` / `policy_analysis_versions`; kaynaklar `policy_source_references`; teminat, muafiyet, servis, parça, ikame araç, istisna ve gerekli belgeler ayrı doğrulanabilir fact tablolarında tutulur. Değişken koşul ifadeleri ve güvenli scenario snapshot'ı JSONB olabilir; her uygulanabilir fact/rule `policy_evidence_links` üzerinden immutable kaynak referansına bağlanır.
+
+Kanonik değer orijinal başlık veya sınırlı kaynak alıntısının yerine geçmez. Kaynak belgenin yeni fiziksel sürümü yeni analiz sürümü gerektirir; onaylı önceki sürüm ve kaynak zinciri korunur. Approved sürümde fact/source mutation DB guard ile reddedilir.

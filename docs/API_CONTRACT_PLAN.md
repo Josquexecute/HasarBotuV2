@@ -333,3 +333,10 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Servis DTO'su `serviceType`, `isActive` ve sürümlü agreement evaluation içerir. `isAuthorized` ile `isInsurerAgreed` ayrı alanlardır; belirsiz anlaşma boolean'a zorlanmaz ve `null + control_required` taşır.
 - Case list/detail/create/update cevapları seçilmiş pasif tarihsel ilişkiyi okuyabilmek için nullable güvenli `serviceProfile` taşır; yeni atama yine aktif tenant referansı gerektirir.
 - Kaynak referansı, iletişim bilgisi, mutlak path, secret ve ham hata response şemasında yoktur. Zod runtime ve 38 deterministik JSON Schema fixture aynı kabul kümesini taşır.
+
+## 12. Paket 23 Kasko poliçe analiz contracts/API
+
+- Uçlar: case-kapsamlı analysis create/list/detail/version list+create, approve/reject, conflict list/resolve ve scenario evaluate. Bütün POST'larda zorunlu `Idempotency-Key`; bütün uçlarda oturum+tenant sınırı vardır.
+- Create/version payload yalnız kontrollü adapter/manual import içindir; source key'ler aynı payload'daki sayfa/madde/excerpt referanslarına bağlanır. Server excerpt'i normalize edip hash'i kendisi üretir ve hazır/doğrulanmış case documentVersion bağını tekrar doğrular.
+- Yönetici/eksper version+approve/reject+conflict çözebilir; dosya sorumlusu import/evaluate yapabilir fakat approve edemez. Diğer roller yalnız izinli read görür.
+- Runtime Zod ve 45 golden JSON Schema aynı strict kabul kümesini taşır. LocalDate ve UTC datetime ayrımı korunur; mutlak yol, binary, tam poliçe metni, secret ve ham hata response'ta yoktur.

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "resolutionStatus": {
+      "type": "string",
+      "enum": [
+        "resolved_source_a",
+        "resolved_source_b",
+        "resolved_manual",
+        "not_applicable"
+      ]
+    },
+    "resolutionReason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    }
+  },
+  "required": [
+    "expectedVersion",
+    "resolutionStatus",
+    "resolutionReason"
+  ],
+  "additionalProperties": false
+}

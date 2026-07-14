@@ -155,3 +155,11 @@ raporlanır.
 - Paket 21 regresyonu: authorized ve insurer-agreed özel servis kapanış evrakını uygular; authorized servis `agreed` diye etiketlenmez; bilinmeyen özel servis koşullu evrakı `control_required` yapar.
 - Gerçek tarayıcı: create/edit formlarında Türkçe servis türü ve seçili sigortacı anlaşma sonucu; tarih/sigortacı değişiminde gerçek API yenilemesi; API hatasında mock fallback yok; 1366×768/1920×1080 açık-koyu ve overflow/console kontrolü.
 - Üretim migration, gerçek `P:\`, servis yönetim CRUD'u, poliçe AI analizi ve muafiyet hesabı çalıştırılmaz. Kritik PostgreSQL/API/tarayıcı senaryosu skip ise paket PASS sayılmaz.
+
+### Paket 23 — kanıtlı Kasko poliçe analiz kabulü
+
+- Domain/contracts: kaynak validator, 12 scenario türü, determinism, precedence conflict, genel muafiyetsiz+koşullu muafiyet, çoklu deductible, fail-closed tavsiye, strict Zod/JSON Schema eşliği.
+- Gerçek PostgreSQL: 0015 ileri/tekrar/rollback-reapply; Kasko+ready source, tenant bileşik FK, tek aktif approved, version geçmişi, approved/superseded immutability, append-only evidence/evaluation ve conflict approval blokajı.
+- Gerçek API: login, sentetik import, idempotent replay, pre-approval control, conflict resolve, approve, scenario/source page-clause, stale 409, tenant 404, role 403, 401 ve audit/snapshot leak taraması.
+- Gerçek tarayıcı: Kasko vaka, analiz sürümü/onay/kaynak sayfa-madde/conflict/senaryo; API kesintisinde no-fallback; 1366×768 ve 1920×1080 açık/koyu overflow ile console warning/error kontrolü.
+- Gerçek müşteri verisi, PDF/OCR/AI, üretim migration ve gerçek `P:\` yoktur. Kritik PostgreSQL/API/domain/tarayıcı senaryosu skip ise Paket 23 PASS sayılmaz.

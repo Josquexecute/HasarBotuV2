@@ -145,3 +145,10 @@ formatlarında alınabilir.
 - Yetkili servis olmak, herhangi bir sigorta şirketiyle anlaşmalı olmak anlamına gelmez. Anlaşma servis ve sigorta şirketi çifti için, tarih aralığı ve desteklenen işlem bazında ayrıca değerlendirilir.
 - Tarihsel sonuç öncelikle hasar tarihi, ileride poliçe değerlendirmesinde poliçe tarihi üzerinden üretilir. Kayıt, tarih veya insan onayı belirsizse sistem kesin anlaşmalı/anlaşmasız sonucu üretmez ve `control_required` gösterir.
 - Create/edit ekranı servis türünü ve seçili sigorta şirketi için anlaşma sonucunu açıkça gösterir. Kapanış, muafiyet ve poliçe motorları aynı deterministik servis uygunluk sınırını kullanır; bu paket muafiyet oranı veya poliçe içeriği hesaplamaz.
+
+### Kasko poliçe analiz çekirdeği — Paket 23
+
+- Poliçenin yalnız ilk sayfası değil tüm sayfa/özel şart/zeyil kapsamı kanonik modele aktarılabilir; her madde sayfa+bölüm+kloz+sınırlı alıntı kanıtı taşır.
+- Onaylanmamış, kaynaksız veya çelişkili analiz operasyonel kesin karar değildir. Bilinmeyen sonuç tahmin edilmez; `unknown` veya `control_required` gösterilir.
+- Genel muafiyetsiz ifade koşullu servis/cam/parça/betterment/önceki total loss şartını ezmez. Yetkili, anlaşmalı ve poliçeye uygun servis ayrı değerlendirilir.
+- Kasko vaka görünümü sürüm/onay/kaynak/teminat/muafiyet/servis-parça/ikame araç/istisna/conflict ve 12 senaryo sonucunu gösterir. PDF/OCR/AI çıkarımı ve gerçek operasyon blokajı bu pakette yoktur.

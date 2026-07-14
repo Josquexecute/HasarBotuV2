@@ -58,6 +58,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0012_case_file_operations',
       '0013_case_close_reopen_lifecycle',
       '0014_service_agreements',
+      '0015_casco_policy_analysis',
     ])
 
     const tables = await pool.query(
@@ -87,6 +88,20 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'organizations',
       'pgmigrations',
       'photos',
+      'policy_analyses',
+      'policy_analysis_versions',
+      'policy_conflicts',
+      'policy_coverages',
+      'policy_deductibles',
+      'policy_evidence_links',
+      'policy_exclusions',
+      'policy_part_rules',
+      'policy_replacement_vehicle_rules',
+      'policy_required_documents',
+      'policy_scenario_evaluations',
+      'policy_scenario_rules',
+      'policy_service_rules',
+      'policy_source_references',
       'roles',
       'service_centers',
       'sessions',
@@ -103,9 +118,20 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0014 geri alinabilir, eski servis profilini donusturur ve yeniden ileri uygulanabilir', async () => {
+  it('0015 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0014_service_agreements'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis'])
+    const removed = await pool.query(
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'policy_analyses'",
+    )
+    expect(removed.rows).toEqual([{ n: 0 }])
+    const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis'])
+  })
+
+  it('0014 geri alinabilir, eski servis profilini donusturur ve yeniden ileri uygulanabilir', async () => {
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0014_service_agreements'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'insurer_service_agreements'",
     )
@@ -115,11 +141,92 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'p22-backfill', 'P22 Backfill'])
     await pool.query("INSERT INTO service_centers (id,organization_id,name,center_type) VALUES ($1,$2,'Eski Servis','ozel')", [serviceId, organizationId])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis'])
     const profile = await pool.query('SELECT service_type FROM service_centers WHERE id=$1', [serviceId])
     expect(profile.rows).toEqual([{ service_type: 'private' }])
     const silentAgreements = await pool.query('SELECT count(*)::int AS n FROM insurer_service_agreements WHERE service_center_id=$1', [serviceId])
     expect(silentAgreements.rows).toEqual([{ n: 0 }])
+  })
+
+  it('0015 Kasko kaynagi, tenant, evidence, approval ve immutable surum kisitlarini zorlar', async () => {
+    const organizationId = uuidv7(); const foreignOrganizationId = uuidv7(); const userId = uuidv7()
+    const cascoCaseId = uuidv7(); const trafficCaseId = uuidv7(); const sourceDocumentId = uuidv7()
+    const sourceVersionId = uuidv7(); const pendingDocumentId = uuidv7(); const pendingVersionId = uuidv7()
+    await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3),($4,$5,$6)',
+      [organizationId, 'p23-a', 'P23 A', foreignOrganizationId, 'p23-b', 'P23 B'])
+    await pool.query("INSERT INTO users (id,organization_id,email,password_hash,display_name) VALUES ($1,$2,'p23@test.local','x','P23')", [userId, organizationId])
+    await pool.query(
+      `INSERT INTO cases (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,notification_date)
+       VALUES ($1,$3,2026,2301,'2026/2301','casco','new_notification','34 P 2301','34P2301','2026-07-14'),
+              ($2,$3,2026,2302,'2026/2302','traffic','new_notification','34 P 2302','34P2302','2026-07-14')`,
+      [cascoCaseId, trafficCaseId, organizationId],
+    )
+    await pool.query(
+      `INSERT INTO documents (id,organization_id,case_id,document_type,status)
+       VALUES ($1,$3,$4,'casco_policy','ready'),($2,$3,$4,'endorsement','pending')`,
+      [sourceDocumentId, pendingDocumentId, organizationId, cascoCaseId],
+    )
+    await pool.query(
+      `INSERT INTO document_versions
+       (id,organization_id,document_id,case_id,version_number,original_file_name,display_name,mime_type,byte_size,content_hash,
+        storage_root_key,relative_path,source_type,status,hash_verified,size_verified,verified_at)
+       VALUES ($1,$3,$4,$5,1,'sentetik-police.pdf','Sentetik Poliçe','application/pdf',10,$6,'test-root','sentetik/police.pdf','manual','ready',true,true,now()),
+              ($2,$3,$7,$5,1,'sentetik-zeyil.pdf','Sentetik Zeyil','application/pdf',10,$8,'test-root','sentetik/zeyil.pdf','manual','pending',false,false,NULL)`,
+      [sourceVersionId, pendingVersionId, organizationId, sourceDocumentId, cascoCaseId, 'a'.repeat(64), pendingDocumentId, 'b'.repeat(64)],
+    )
+    await pool.query('UPDATE documents SET current_version_id=$1,current_version_number=1 WHERE id=$2', [sourceVersionId, sourceDocumentId])
+    await pool.query('UPDATE documents SET current_version_id=$1,current_version_number=1 WHERE id=$2', [pendingVersionId, pendingDocumentId])
+
+    const analysisId = uuidv7(); const versionId = uuidv7()
+    await pool.query(
+      `INSERT INTO policy_analyses
+       (id,organization_id,case_id,source_document_id,source_document_version_id,created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [analysisId, organizationId, cascoCaseId, sourceDocumentId, sourceVersionId, userId],
+    )
+    await expect(pool.query(
+      `INSERT INTO policy_analyses (id,organization_id,case_id,source_document_id,source_document_version_id)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [uuidv7(), organizationId, trafficCaseId, sourceDocumentId, sourceVersionId],
+    )).rejects.toMatchObject({ code: '23514' })
+    await pool.query(
+      `INSERT INTO policy_analysis_versions
+       (id,organization_id,case_id,analysis_id,source_document_id,source_document_version_id,analysis_version,analysis_status,source_completeness,created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,1,'draft','complete',$7)`,
+      [versionId, organizationId, cascoCaseId, analysisId, sourceDocumentId, sourceVersionId, userId],
+    )
+    await pool.query('UPDATE policy_analyses SET current_version_id=$1 WHERE id=$2', [versionId, analysisId])
+
+    const sourceReferenceId = uuidv7()
+    await pool.query(
+      `INSERT INTO policy_source_references
+       (id,organization_id,case_id,analysis_version_id,document_id,document_version_id,page_number,section_heading,
+        clause_identifier,raw_excerpt,excerpt_hash,source_type,confidence)
+       VALUES ($1,$2,$3,$4,$5,$6,2,'Muafiyetler','M-1','Sentetik koşullu muafiyet maddesi',$7,'special_conditions',0.98)`,
+      [sourceReferenceId, organizationId, cascoCaseId, versionId, sourceDocumentId, sourceVersionId, 'c'.repeat(64)],
+    )
+    await expect(pool.query(
+      `INSERT INTO policy_source_references
+       (id,organization_id,case_id,analysis_version_id,document_id,document_version_id,page_number,section_heading,
+        clause_identifier,raw_excerpt,excerpt_hash,source_type,confidence)
+       VALUES ($1,$2,$3,$4,$5,$6,1,'Zeyil','Z-1','Doğrulanmamış sentetik kaynak',$7,'endorsement',0.5)`,
+      [uuidv7(), organizationId, cascoCaseId, versionId, pendingDocumentId, pendingVersionId, 'd'.repeat(64)],
+    )).rejects.toMatchObject({ code: '23514' })
+    await expect(pool.query('UPDATE policy_source_references SET page_number=3 WHERE id=$1', [sourceReferenceId]))
+      .rejects.toMatchObject({ code: '23001' })
+
+    await pool.query(
+      `UPDATE policy_analysis_versions SET analysis_status='approved',human_approval_status='approved',approved_by_user_id=$1,approved_at=now(),is_active=true
+       WHERE id=$2`, [userId, versionId],
+    )
+    await expect(pool.query("UPDATE policy_analysis_versions SET product_name='Değiştirilemez' WHERE id=$1", [versionId]))
+      .rejects.toMatchObject({ code: '23001' })
+    await expect(pool.query(
+      `INSERT INTO policy_coverages
+       (id,organization_id,case_id,analysis_version_id,code,canonical_type,original_heading,original_wording,inclusion,confidence)
+       VALUES ($1,$2,$3,$4,'COLLISION','collision','Çarpışma','Sentetik madde','included',1)`,
+      [uuidv7(), organizationId, cascoCaseId, versionId],
+    )).rejects.toMatchObject({ code: '23001' })
   })
 
   it('0014 tenant, tarih, operasyon ve insan onayi kisitlarini zorlar', async () => {

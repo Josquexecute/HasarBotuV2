@@ -93,3 +93,11 @@ Bu örnekler yalnız kural biçimini gösterir; gerçek değerler her poliçenin
 ## 6. Test ve kabul bağlantısı
 
 `TESTING_AND_ACCEPTANCE.md` domain regresyon setine kasko poliçe senaryoları eklenir: anonim poliçe fixture'ları üzerinde muafiyet tespiti (genel + koşullu), beş durumlu kapsam sonucu, çelişki üretimi, "Poliçede bu konuda açık ve doğrulanabilir bir hüküm bulunamadı." davranışı ve muafiyetli dosya akış adımları (12 zorunlu senaryo listesi TESTING_AND_ACCEPTANCE.md içindedir). Gerçek müşteri poliçesi test fixture'ı olamaz.
+
+## 7. Paket 23 yürütülebilir kural sınırı
+
+- İlk kural sürümü `2026.07.14.1` ve sonuç kümesi `covered | excluded | conditional | control_required | unknown` olarak sabitlenmiştir.
+- Eşleşme; hasar/ihbar LocalDate'i, sigortacı, servis profili, sigortacıya özel servis anlaşması, hasar kategorisi, onarım yöntemi, istenen operasyon ve doğrulanmış belge durumunu kullanır.
+- Aynı precedence seviyesinde çelişen sonuçlar otomatik seçilmez. Açık conflict veya onaylanmamış analiz `control_required`; kaynak bulunmaması `unknown` üretir.
+- Birden fazla muafiyet kod bazında tekilleştirilerek kaybolmadan döner. Tutar, oran, sigortacı/sigortalı payı yalnız kaynaklı rule/fact'ten gelir; sabit oran yoktur.
+- Muafiyet ihtimali veya kesin olmayan sonuç tedarik ve mobil onarım tavsiyesini fail-closed yapar. Bu çıktı karar desteğidir; gerçek tedarik veya iş emri yazmaz.

@@ -18,6 +18,14 @@ export {
   type ServiceAgreementEvaluationRecord,
   type ServiceReferenceQuery,
   type UserReferenceRecord,
+  type PolicyAnalysisDataPort,
+  type PolicyAnalysisRecord,
+  type PolicyAnalysisStatus,
+  type PolicyConflictRecord,
+  type PolicyDeductibleRecord,
+  type PolicyScenarioEvaluationRecord,
+  type PolicyScenarioType,
+  type PolicySourceReferenceRecord,
 } from './ports'
 export { createMockCasesAdapter } from './mockAdapter'
 export {
@@ -37,6 +45,8 @@ export {
   type HttpDocumentWorkspaceErrorKind,
 } from './documentHttpAdapter'
 export { useCaseDocuments, type CaseDocumentsStatus, type UseCaseDocumentsResult } from './useCaseDocuments'
+export { createHttpPolicyAnalysisAdapter, HttpPolicyAnalysisError, type HttpPolicyAnalysisAdapterOptions, type HttpPolicyAnalysisErrorKind } from './policyAnalysisHttpAdapter'
+export { usePolicyAnalysis, type PolicyAnalysisLoadStatus } from './usePolicyAnalysis'
 export {
   createHttpAuthAdapter,
   HttpAuthError,

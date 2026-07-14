@@ -1,0 +1,1675 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "sourceDocumentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "sourceDocumentVersionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "insurerId": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "policyNumber": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "endorsementNumber": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "productName": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "productType": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "insurerFormat": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "policyStartDate": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "policyEndDate": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "issueDate": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "insuredVehicleReference": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sourceCompleteness": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "unknown"
+      ]
+    },
+    "initialStatus": {
+      "default": "draft",
+      "type": "string",
+      "enum": [
+        "draft",
+        "extracted",
+        "control_required",
+        "awaiting_approval"
+      ]
+    },
+    "sourceReferences": {
+      "minItems": 1,
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sourceKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "documentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "documentVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "pageNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "sectionHeading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "clauseIdentifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "rawExcerpt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "locator": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "policy",
+              "endorsement",
+              "general_conditions",
+              "special_conditions",
+              "notice_form",
+              "external_reference"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "sourceKey",
+          "documentId",
+          "documentVersionId",
+          "pageNumber",
+          "sectionHeading",
+          "clauseIdentifier",
+          "rawExcerpt",
+          "locator",
+          "sourceType",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "coverages": {
+      "default": [],
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "canonicalType": {
+            "type": "string",
+            "enum": [
+              "collision",
+              "fire",
+              "theft",
+              "natural_disaster",
+              "flood",
+              "earthquake",
+              "terror",
+              "glass",
+              "key_loss",
+              "roadside_assistance",
+              "replacement_vehicle",
+              "mini_repair",
+              "mobile_repair",
+              "legal_protection",
+              "personal_accident",
+              "third_party_liability",
+              "loss_of_use",
+              "wrong_fuel",
+              "animal_damage",
+              "electronic_mechanical_damage",
+              "other"
+            ]
+          },
+          "originalHeading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "originalWording": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "inclusion": {
+            "type": "string",
+            "enum": [
+              "included",
+              "excluded",
+              "conditional",
+              "unknown"
+            ]
+          },
+          "limit": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "amount",
+                      "percentage",
+                      "event_count",
+                      "duration",
+                      "other"
+                    ]
+                  },
+                  "amount": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "currency": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 3,
+                        "pattern": "^[A-Z]{3}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sublimit": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "waitingPeriodDays": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "geographicScope": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "amount",
+                  "currency",
+                  "sublimit",
+                  "waitingPeriodDays",
+                  "geographicScope"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "conditions": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "exceptions": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "requiredDocuments": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "sourceKeys": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "code",
+          "canonicalType",
+          "originalHeading",
+          "originalWording",
+          "inclusion",
+          "limit",
+          "conditions",
+          "exceptions",
+          "requiredDocuments",
+          "sourceKeys",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "deductibles": {
+      "default": [],
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "general",
+              "conditional",
+              "uncontracted_service",
+              "unauthorized_service",
+              "glass_service",
+              "key_theft",
+              "previous_total_loss",
+              "betterment",
+              "age_usage",
+              "driver_condition",
+              "geographic",
+              "part_difference",
+              "claim_count",
+              "other"
+            ]
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "conditions": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "calculationType": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "percentage",
+              "share",
+              "conditional",
+              "unknown"
+            ]
+          },
+          "fixedAmount": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "percentage": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minimumAmount": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maximumAmount": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insurerShare": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insuredShare": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "affectedCoverage": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "collision",
+                  "fire",
+                  "theft",
+                  "natural_disaster",
+                  "flood",
+                  "earthquake",
+                  "terror",
+                  "glass",
+                  "key_loss",
+                  "roadside_assistance",
+                  "replacement_vehicle",
+                  "mini_repair",
+                  "mobile_repair",
+                  "legal_protection",
+                  "personal_accident",
+                  "third_party_liability",
+                  "loss_of_use",
+                  "wrong_fuel",
+                  "animal_damage",
+                  "electronic_mechanical_damage",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "affectedRepairMethod": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "affectedServiceType": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "authorized",
+                  "private",
+                  "glass",
+                  "mobile",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "affectedPartRule": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exception": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceKeys": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "approvalStatus": {
+            "default": "unreviewed",
+            "type": "string",
+            "enum": [
+              "unreviewed",
+              "approved",
+              "rejected"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "type",
+          "trigger",
+          "conditions",
+          "calculationType",
+          "fixedAmount",
+          "percentage",
+          "minimumAmount",
+          "maximumAmount",
+          "insurerShare",
+          "insuredShare",
+          "affectedCoverage",
+          "affectedRepairMethod",
+          "affectedServiceType",
+          "affectedPartRule",
+          "exception",
+          "sourceKeys",
+          "confidence",
+          "approvalStatus"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "serviceRules": {
+      "default": [],
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "authorizedServiceRequirement": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insurerContractedServiceRequirement": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serviceFreedom": {
+            "type": "string",
+            "enum": [
+              "free",
+              "restricted",
+              "conditional",
+              "unknown"
+            ]
+          },
+          "glassNetwork": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mobileRepairRestriction": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "miniRepairRestriction": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "towingDestination": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "laborRestriction": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "condition": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceKeys": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "code",
+          "authorizedServiceRequirement",
+          "insurerContractedServiceRequirement",
+          "serviceFreedom",
+          "glassNetwork",
+          "mobileRepairRestriction",
+          "miniRepairRestriction",
+          "towingDestination",
+          "laborRestriction",
+          "condition",
+          "sourceKeys",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "partRules": {
+      "default": [],
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "allowedPartTypes": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "original",
+                "equivalent",
+                "aftermarket",
+                "used"
+              ]
+            }
+          },
+          "procurementRule": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repairVsReplacementCondition": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bettermentCondition": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "condition": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceKeys": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "code",
+          "allowedPartTypes",
+          "procurementRule",
+          "repairVsReplacementCondition",
+          "bettermentCondition",
+          "condition",
+          "sourceKeys",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "replacementVehicleRules": {
+      "default": [],
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "available": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no",
+              "conditional",
+              "unknown"
+            ]
+          },
+          "vehicleClass": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duration": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maximumDays": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eventLimit": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waitingPeriodDays": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serviceCondition": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exclusions": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "sourceKeys": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "code",
+          "available",
+          "vehicleClass",
+          "duration",
+          "maximumDays",
+          "eventLimit",
+          "waitingPeriodDays",
+          "serviceCondition",
+          "exclusions",
+          "sourceKeys",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "exclusions": {
+      "default": [],
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "originalWording": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "affectedCoverage": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "collision",
+                  "fire",
+                  "theft",
+                  "natural_disaster",
+                  "flood",
+                  "earthquake",
+                  "terror",
+                  "glass",
+                  "key_loss",
+                  "roadside_assistance",
+                  "replacement_vehicle",
+                  "mini_repair",
+                  "mobile_repair",
+                  "legal_protection",
+                  "personal_accident",
+                  "third_party_liability",
+                  "loss_of_use",
+                  "wrong_fuel",
+                  "animal_damage",
+                  "electronic_mechanical_damage",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exceptionToExclusion": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requiredDocuments": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "sourceKeys": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "code",
+          "originalWording",
+          "trigger",
+          "affectedCoverage",
+          "exceptionToExclusion",
+          "requiredDocuments",
+          "sourceKeys",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "requiredDocuments": {
+      "default": [],
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "trigger": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceKeys": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "description",
+          "trigger",
+          "sourceKeys"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "scenarioRules": {
+      "default": [],
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "ruleVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "scenarioType": {
+            "type": "string",
+            "enum": [
+              "coverage",
+              "deductible",
+              "uncontracted_service",
+              "authorized_service",
+              "glass_service",
+              "mini_repair",
+              "mobile_repair",
+              "replacement_vehicle",
+              "roadside_assistance",
+              "part_type",
+              "betterment",
+              "previous_total_loss"
+            ]
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "conditions": {
+            "default": [],
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "damageCategory",
+                    "repairMethod",
+                    "requestedOperation",
+                    "serviceType",
+                    "insurerAgreementStatus",
+                    "documentState"
+                  ]
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "equals",
+                    "not_equals",
+                    "in"
+                  ]
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "field",
+                "operator",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "coverageOutcome": {
+            "type": "string",
+            "enum": [
+              "covered",
+              "excluded",
+              "conditional",
+              "unknown"
+            ]
+          },
+          "coverageCode": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[A-Za-z0-9._-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deductibleCodes": {
+            "default": [],
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "limit": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exception": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requiredDocuments": {
+            "default": [],
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "serviceCondition": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partCondition": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "sourceKeys": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "humanApprovalRequired": {
+            "default": true,
+            "type": "boolean"
+          },
+          "precedence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "effectiveFrom": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effectiveTo": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ruleId",
+          "ruleVersion",
+          "scenarioType",
+          "trigger",
+          "conditions",
+          "coverageOutcome",
+          "coverageCode",
+          "deductibleCodes",
+          "limit",
+          "exception",
+          "requiredDocuments",
+          "serviceCondition",
+          "partCondition",
+          "action",
+          "sourceKeys",
+          "confidence",
+          "humanApprovalRequired",
+          "precedence",
+          "effectiveFrom",
+          "effectiveTo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "conflicts": {
+      "default": [],
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "conflictType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "affectedTopic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "sourceAKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "sourceBKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "explanation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          }
+        },
+        "required": [
+          "conflictType",
+          "affectedTopic",
+          "sourceAKey",
+          "sourceBKey",
+          "explanation",
+          "severity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "sourceDocumentId",
+    "sourceDocumentVersionId",
+    "insurerId",
+    "policyNumber",
+    "endorsementNumber",
+    "productName",
+    "productType",
+    "insurerFormat",
+    "policyStartDate",
+    "policyEndDate",
+    "issueDate",
+    "insuredVehicleReference",
+    "sourceCompleteness",
+    "initialStatus",
+    "sourceReferences",
+    "coverages",
+    "deductibles",
+    "serviceRules",
+    "partRules",
+    "replacementVehicleRules",
+    "exclusions",
+    "requiredDocuments",
+    "scenarioRules",
+    "conflicts",
+    "expectedVersion"
+  ],
+  "additionalProperties": false
+}

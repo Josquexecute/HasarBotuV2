@@ -268,3 +268,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Case create/update ve close plan audit'i servis türü, uygunluk/anlaşma durum kodu, kural sürümü ve eşleşen agreement kimlikleri gibi güvenli özetleri taşıyabilir.
 - Agreement kaynak metni, servis iletişim bilgisi, kullanıcı e-postası, belge içeriği, mutlak yol ve secret audit'e yazılmaz.
 - Agreement yönetim CRUD'u bu pakette olmadığı için paralel audit yolu kurulmaz. Mevcut Case/lifecycle yazıları merkezi `AuditService` ve mevcut transaction sınırında kalır.
+
+### 6.9 Paket 23 poliçe analiz audit sınırı
+
+- Merkezi olaylar: `policy_analysis.created/version_created/control_required/conflict_detected/approved/rejected/superseded`, `policy_conflict.resolved`, `policy_scenario.evaluated`.
+- Audit yalnız organization/case/analysis/version/source document kimlikleri, kaynak ve conflict sayıları, actor, approval/result/rule version ve requestId taşır. Aynı kullanıcının kendi importunu onaylaması `selfApproved` özetiyle görünürdür.
+- Tam poliçe metni, raw excerpt, poliçe numarası, plaka/kişisel veri, mutlak yol, secret ve ham hata audit'e yazılmaz. İş yazısı, approval/conflict/evaluation ve audit aynı transaction'dadır.
+- Approved/superseded version ve evidence DB trigger ile immutable/append-only korunur; düzeltme eski audit/veriyi değiştirmez, yeni sürüm ve yeni olay üretir.

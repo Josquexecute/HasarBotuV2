@@ -536,3 +536,14 @@ Paket 21'in bütün kapıları ve atomik commit'i tamamlandıktan sonra durulmal
 ## Sonraki önerilen görev (güncel)
 
 Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket bu çalışma kapsamında değildir.
+
+## Paket 23 — Kanıtlı Kasko poliçe analiz çekirdeği (2026-07-14)
+
+- Migration 0015; tenant-kapsamlı analiz/sürüm, sınırlı kaynak referansı, teminat, muafiyet, servis/parça, ikame araç, istisna, conflict, scenario rule/evaluation tablolarını ekler. Approved/superseded sürüm ve kanıtlar append-only/immutable korunur.
+- Saf domain motoru 12 kanonik senaryoyu kaynak, öncelik, etkin tarih, servis anlaşması ve belge doğrulama facts'iyle deterministik değerlendirir; kaynak/onay/çelişki belirsizliğinde fail-closed kalır. Kural sürümü `2026.07.14.1`'dir.
+- Tenant-kapsamlı API kontrollü sentetik/manual import, yeni sürüm, approve/reject, conflict çözümü ve scenario evaluate uçlarını merkezi rol/idempotency/audit sınırında sunar. PDF/OCR/AI veya upload yoktur.
+- Kasko vaka detayındaki gerçek API görünümü analiz sürümü, kaynak sayfa/madde, teminat/muafiyet/servis/parça/ikame araç, conflict ve scenario sonucunu gösterir; API hatasında mock fallback yapmaz. Mock prototip değişmez.
+- Karar: HB-2026-029. Ana çalışma ağacında `npm install`, typecheck, lint, 815 PASS / 6 mevcut UI-baseline skip, build, 0-vulnerability moderate audit ve diff-check geçti. Migration 0015 ileri/tekrar/rollback-reapply, constraint, tenant, ready-source, versioning ve immutable approval kontrolleri gerçek `_test` PostgreSQL üzerinde geçti.
+- Gerçek TCP API smoke; login, sentetik import/idempotent replay, conflict çözümü, approve/supersede, koşullu muafiyet ve sigortacıya özel servis bağlamlı scenario, stale 409, tenant 404, role 403, 401, audit ve sızıntı kontrollerini geçti.
+- Kurulu Codex Browser yoluyla gerçek API/UI; kaynak sayfa-madde, approved sürüm, muafiyet/servis/parça/ikame araç, conflict alanı ve scenario sonucunu gösterdi. API kesintisinde güvenli hata/no-mock-fallback, 1366×768 açık+koyu ve 1920×1080 koyu tema, overflow ile console warning/error kontrolleri geçti.
+- Repository dışı, `.git`/`node_modules`/`dist` içermeyen kopyada fresh `npm ci`, typecheck, lint, aynı 815 PASS / 6 baseline skip ve build geçti. Gerçek müşteri poliçesi, üretim migration, OCR/AI ve gerçek `P:\\` kullanılmadı.

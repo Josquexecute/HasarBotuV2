@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "analysisId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "policyAnalysisVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "scenarioType": {
+      "type": "string",
+      "enum": [
+        "coverage",
+        "deductible",
+        "uncontracted_service",
+        "authorized_service",
+        "glass_service",
+        "mini_repair",
+        "mobile_repair",
+        "replacement_vehicle",
+        "roadside_assistance",
+        "part_type",
+        "betterment",
+        "previous_total_loss"
+      ]
+    },
+    "damageCategory": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "repairMethod": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requestedOperation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "documentState": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "unverified",
+        "missing"
+      ]
+    }
+  },
+  "required": [
+    "analysisId",
+    "policyAnalysisVersion",
+    "scenarioType",
+    "damageCategory",
+    "repairMethod",
+    "requestedOperation",
+    "documentState"
+  ],
+  "additionalProperties": false
+}

@@ -137,3 +137,12 @@ Açık kararlar (karar kapısı):
 - Güven seviyesi ölçeği (ör. yüksek/orta/düşük vs 0-1) ve insan onayı eşiği.
 - Poliçe analiz maliyetinin AI bütçesindeki payı ve cache stratejisi.
 - `policy_*` kavramlarının Paket 05+ şema tasarımındaki normalizasyon derinliği.
+
+## 11. Paket 23 uygulama kaydı (2026-07-14)
+
+- Paket 23, PDF/OCR/AI çıkarımı yapmadan kanıtlı analiz çekirdeğini `policy_analyses`, sürümlü analiz, sınırlı kaynak referansı, kanonik fact, conflict ve scenario evaluation kayıtlarıyla kurar.
+- Kaynak yalnız vakaya ve tenant'a ait `ready`/fiziksel doğrulanmış `document_version` olabilir. Sayfa, bölüm/madde, sınırlı alıntı ve server tarafından üretilen alıntı hash'i zorunludur; tam poliçe metni ve mutlak yol saklanmaz.
+- Onaylı sürüm immutable ve tek aktif onaylıdır. Düzeltme yeni sürüm üretir; eski sürüm silinmez ve gerektiğinde `superseded` olur. Açık conflict, eksik kaynak kapsamı veya insan onayı yokluğu fail-closed sonuç üretir.
+- Genel “muafiyetsiz” ifadesi koşullu muafiyetleri silmez. Servis, parça, cam, mini/mobil onarım, ikame araç, betterment ve önceki total-loss koşulları ayrı kanonik facts/rules olarak değerlendirilir.
+- Senaryo motoru yalnız kaynak bağlantılı kuralları kullanır; muafiyet veya belirsizlikte tedarik/mobil onarım için `pause | control_required` tavsiyesi üretir fakat gerçek operasyonu değiştirmez.
+- Gerçek müşteri verisi kullanılmaz. Otomatik metin çıkarımı, OCR ve AI sonraki ayrı pakete bırakılmıştır.

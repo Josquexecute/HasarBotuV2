@@ -391,3 +391,7 @@ Migration 0013, mevcut Paket 20 fiziksel operation ve PostgreSQL job queue'sunu 
 ### Paket 22 ek uygulama kaydı — servis agreement veri sınırı
 
 Migration 0014 expand/migrate yaklaşımıyla `service_type` alanını ekleyip eski `yetkili/özel` profilini dönüştürür; eski satırlara anlaşma üretmez. `insurer_service_agreements` tenant-bileşik FK'ler, LocalDate yürürlük aralığı, kontrollü işlem kodları, insan onayı ve optimistic version taşır. Referans ve Case read sorguları yalnız logical iş metadata'sı döndürür; File Agent, storage root, IPC ve fiziksel dosya yolu bu modelden bağımsızdır. Üretim migration çalıştırılması ayrı deployment onayı gerektirir.
+
+### Paket 23 ek uygulama kaydı — poliçe analiz persistence sınırı
+
+Migration 0015, mevcut documents/document_versions modelini kopyalamadan yalnız doğrulanmış sürüm kimliğine bağlı kanonik analiz tabloları ekler. Kaynak alıntısı sınırlıdır; tam belge metni/binary/mutlak yol tutulmaz. Tenant bileşik FK'ler, source guard, approved/superseded immutability ve append-only evidence DB tarafından zorlanır. Scenario evaluation güvenli input/result snapshot'ı ve kaynak kimlikleri taşır; uzun excerpt audit'e veya snapshot'a kopyalanmaz. API transaction'ı iş yazısı, idempotency ve merkezi audit'i atomik tamamlar. Yeni queue, File Agent, IPC, dependency veya üretim migration yoktur.

@@ -194,3 +194,10 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - İlk migration öncesi ID türü, query/migration aracı, firm tablosu ve retention sınıfları onaylanmalıdır.
 - Destructive migration iki aşamalı expand/migrate/contract yaklaşımı kullanır.
 - Otomatik veri purge başlangıç kapsamı değildir; legal retention kararı olmadan yalnız quarantine/soft delete.
+
+## Paket 23 uygulanan PostgreSQL modeli
+
+- `policy_analyses` aggregate kimliği ve optimistic version; `policy_analysis_versions` immutable/sürümlü analiz gerçeğidir.
+- `policy_source_references` sınırlı kanıt; coverage/deductible/service/part/replacement/exclusion/required-document/scenario-rule tabloları doğrulanabilir kanonik maddelerdir. `policy_evidence_links` madde-kaynak bağını taşır.
+- `policy_conflicts` çözüm geçmişi ve `policy_scenario_evaluations` güvenli değerlendirme snapshot'ıdır. JSONB yalnız değişken koşul/listeler ve güvenli snapshot içindir; analiz tek doğrulanamaz blob değildir.
+- Tenant bileşik FK, etkin tarih/check, tek aktif approved source, ready/verified source trigger, append-only evidence/evaluation ve approved/superseded fact guard zorunludur. Mutlak yol veya tam belge metni kolonu yoktur.

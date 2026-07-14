@@ -1,0 +1,27 @@
+import type { PolicyAnalysisDataPort,PolicyAnalysisRecord,PolicyAnalysisStatus,PolicyScenarioEvaluationRecord } from './ports'
+
+export type HttpPolicyAnalysisErrorKind='unauthorized'|'forbidden'|'not_found'|'conflict'|'unavailable'
+export class HttpPolicyAnalysisError extends Error{constructor(readonly kind:HttpPolicyAnalysisErrorKind,message:string){super(message);this.name='HttpPolicyAnalysisError'}}
+export interface HttpPolicyAnalysisAdapterOptions{readonly baseUrl?:string;readonly fetchImpl?:typeof fetch;readonly headers?:Readonly<Record<string,string>>;readonly idempotencyKeyFactory?:()=>string}
+function record(value:unknown):value is Record<string,unknown>{return typeof value==='object'&&value!==null}
+const statuses:readonly PolicyAnalysisStatus[]=['draft','extracted','control_required','conflict_detected','awaiting_approval','approved','superseded','rejected','failed']
+function analysis(value:unknown):PolicyAnalysisRecord{
+  if(!record(value)||typeof value.id!=='string'||typeof value.currentAnalysisVersion!=='number'||typeof value.version!=='number'||!statuses.includes(value.currentStatus as PolicyAnalysisStatus)||!record(value.currentVersion))throw new HttpPolicyAnalysisError('unavailable','policy analysis response is invalid')
+  const v=value.currentVersion
+  for(const key of ['sourceReferences','coverages','deductibles','serviceRules','partRules','replacementVehicleRules','exclusions','conflicts'])if(!Array.isArray(v[key]))throw new HttpPolicyAnalysisError('unavailable','policy analysis collection is invalid')
+  for(const source of v.sourceReferences as unknown[]){if(!record(source)||typeof source.id!=='string'||typeof source.documentId!=='string'||typeof source.documentVersionId!=='string'||typeof source.pageNumber!=='number'||source.pageNumber<1||typeof source.sectionHeading!=='string'||typeof source.clauseIdentifier!=='string'||typeof source.rawExcerpt!=='string'||source.rawExcerpt.length<1||source.rawExcerpt.length>1000||typeof source.confidence!=='number')throw new HttpPolicyAnalysisError('unavailable','policy source reference is invalid')}
+  return value as unknown as PolicyAnalysisRecord
+}
+function evaluation(value:unknown):PolicyScenarioEvaluationRecord{
+  if(!record(value)||!['covered','excluded','conditional','control_required','unknown'].includes(String(value.result))||!Array.isArray(value.reasoning)||!Array.isArray(value.sourceReferences)||!Array.isArray(value.deductibles)||!Array.isArray(value.conflicts)||!Array.isArray(value.missingInformation)||typeof value.ruleVersion!=='string'||!record(value.operationalRecommendation))throw new HttpPolicyAnalysisError('unavailable','policy scenario response is invalid')
+  return value as unknown as PolicyScenarioEvaluationRecord
+}
+export function createHttpPolicyAnalysisAdapter(options:HttpPolicyAnalysisAdapterOptions={}):PolicyAnalysisDataPort{
+  const base=options.baseUrl??'',fetchImpl=options.fetchImpl??fetch,headers={accept:'application/json',...(options.headers??{})}
+  const request=async(path:string,init?:RequestInit)=>{let response:Response;try{response=await fetchImpl(`${base}${path}`,{credentials:'include',...init,headers:{...headers,...(init?.headers??{})}})}catch{throw new HttpPolicyAnalysisError('unavailable','policy analysis API unreachable')}
+    if(response.status===401)throw new HttpPolicyAnalysisError('unauthorized','policy analysis API HTTP 401');if(response.status===403)throw new HttpPolicyAnalysisError('forbidden','policy analysis API HTTP 403');if(response.status===404)throw new HttpPolicyAnalysisError('not_found','policy analysis API HTTP 404');if(response.status===409)throw new HttpPolicyAnalysisError('conflict','policy analysis API HTTP 409');if(!response.ok)throw new HttpPolicyAnalysisError('unavailable',`policy analysis API HTTP ${response.status}`);try{return await response.json()}catch{throw new HttpPolicyAnalysisError('unavailable','policy analysis API returned invalid JSON')}}
+  return{
+    async getCurrentAnalysis(caseId){const encoded=encodeURIComponent(caseId);const list=await request(`/api/v1/cases/${encoded}/policy-analyses`);if(!record(list)||!Array.isArray(list.items))throw new HttpPolicyAnalysisError('unavailable','policy analysis list is invalid');if(list.items.length===0)return null;const first=list.items[0];if(!record(first)||typeof first.id!=='string')throw new HttpPolicyAnalysisError('unavailable','policy analysis summary is invalid');const detail=await request(`/api/v1/cases/${encoded}/policy-analyses/${encodeURIComponent(first.id)}`);if(!record(detail))throw new HttpPolicyAnalysisError('unavailable','policy analysis detail is invalid');return analysis(detail.analysis)},
+    async evaluateScenario(caseId,input){const value=await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-scenarios/evaluate`,{method:'POST',headers:{'content-type':'application/json','Idempotency-Key':options.idempotencyKeyFactory?.()??crypto.randomUUID()},body:JSON.stringify(input)});if(!record(value))throw new HttpPolicyAnalysisError('unavailable','policy scenario envelope is invalid');return evaluation(value.evaluation)},
+  }
+}

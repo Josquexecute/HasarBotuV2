@@ -1,0 +1,773 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "evaluation": {
+      "type": "object",
+      "properties": {
+        "evaluationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "analysisId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "evaluatedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "covered",
+            "excluded",
+            "conditional",
+            "control_required",
+            "unknown"
+          ]
+        },
+        "reasoning": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "applicableCoverage": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deductibles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[A-Za-z0-9._-]+$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "conditional",
+                  "uncontracted_service",
+                  "unauthorized_service",
+                  "glass_service",
+                  "key_theft",
+                  "previous_total_loss",
+                  "betterment",
+                  "age_usage",
+                  "driver_condition",
+                  "geographic",
+                  "part_difference",
+                  "claim_count",
+                  "other"
+                ]
+              },
+              "trigger": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "conditions": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                }
+              },
+              "calculationType": {
+                "type": "string",
+                "enum": [
+                  "fixed",
+                  "percentage",
+                  "share",
+                  "conditional",
+                  "unknown"
+                ]
+              },
+              "fixedAmount": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "percentage": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "minimumAmount": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "maximumAmount": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "insurerShare": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "insuredShare": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "affectedCoverage": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "collision",
+                      "fire",
+                      "theft",
+                      "natural_disaster",
+                      "flood",
+                      "earthquake",
+                      "terror",
+                      "glass",
+                      "key_loss",
+                      "roadside_assistance",
+                      "replacement_vehicle",
+                      "mini_repair",
+                      "mobile_repair",
+                      "legal_protection",
+                      "personal_accident",
+                      "third_party_liability",
+                      "loss_of_use",
+                      "wrong_fuel",
+                      "animal_damage",
+                      "electronic_mechanical_damage",
+                      "other"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "affectedRepairMethod": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "affectedServiceType": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "authorized",
+                      "private",
+                      "glass",
+                      "mobile",
+                      "other"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "affectedPartRule": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "exception": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceReferenceIds": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                }
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "approvalStatus": {
+                "type": "string",
+                "enum": [
+                  "unreviewed",
+                  "approved",
+                  "rejected"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "code",
+              "type",
+              "trigger",
+              "conditions",
+              "calculationType",
+              "fixedAmount",
+              "percentage",
+              "minimumAmount",
+              "maximumAmount",
+              "insurerShare",
+              "insuredShare",
+              "affectedCoverage",
+              "affectedRepairMethod",
+              "affectedServiceType",
+              "affectedPartRule",
+              "exception",
+              "sourceReferenceIds",
+              "confidence",
+              "approvalStatus"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "insuredShare": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "insurerShare": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "serviceCondition": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "partCondition": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requiredAction": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requiredDocuments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sourceReferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              "documentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              "documentVersionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              "pageNumber": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              },
+              "sectionHeading": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "clauseIdentifier": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "rawExcerpt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "excerptHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "locator": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceType": {
+                "type": "string",
+                "enum": [
+                  "policy",
+                  "endorsement",
+                  "general_conditions",
+                  "special_conditions",
+                  "notice_form",
+                  "external_reference"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "id",
+              "documentId",
+              "documentVersionId",
+              "pageNumber",
+              "sectionHeading",
+              "clauseIdentifier",
+              "rawExcerpt",
+              "excerptHash",
+              "locator",
+              "sourceType",
+              "confidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              "conflictType": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "affectedTopic": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "sourceAId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              "sourceBId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              "explanation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              "resolutionStatus": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "control_required",
+                  "resolved_source_a",
+                  "resolved_source_b",
+                  "resolved_manual",
+                  "not_applicable"
+                ]
+              },
+              "resolvedBy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "resolvedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                    "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "resolutionReason": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "conflictType",
+              "affectedTopic",
+              "sourceAId",
+              "sourceBId",
+              "explanation",
+              "severity",
+              "resolutionStatus",
+              "resolvedBy",
+              "resolvedAt",
+              "resolutionReason",
+              "version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "missingInformation": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "humanApprovalRequired": {
+          "type": "boolean"
+        },
+        "policyAnalysisVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "ruleVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "operationalRecommendation": {
+          "type": "object",
+          "properties": {
+            "procurementStatus": {
+              "type": "string",
+              "enum": [
+                "continue",
+                "pause",
+                "control_required"
+              ]
+            },
+            "mobileRepairStatus": {
+              "type": "string",
+              "enum": [
+                "continue",
+                "pause",
+                "control_required"
+              ]
+            },
+            "caseOwnerNotificationRequired": {
+              "type": "boolean"
+            },
+            "serviceNotificationRequired": {
+              "type": "boolean"
+            },
+            "availableAlternatives": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sourceReferences": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  "documentVersionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  "pageNumber": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000
+                  },
+                  "sectionHeading": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "clauseIdentifier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "rawExcerpt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "excerptHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "locator": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceType": {
+                    "type": "string",
+                    "enum": [
+                      "policy",
+                      "endorsement",
+                      "general_conditions",
+                      "special_conditions",
+                      "notice_form",
+                      "external_reference"
+                    ]
+                  },
+                  "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "id",
+                  "documentId",
+                  "documentVersionId",
+                  "pageNumber",
+                  "sectionHeading",
+                  "clauseIdentifier",
+                  "rawExcerpt",
+                  "excerptHash",
+                  "locator",
+                  "sourceType",
+                  "confidence"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "approvalRequired": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "procurementStatus",
+            "mobileRepairStatus",
+            "caseOwnerNotificationRequired",
+            "serviceNotificationRequired",
+            "availableAlternatives",
+            "sourceReferences",
+            "approvalRequired"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "evaluationId",
+        "analysisId",
+        "evaluatedAt",
+        "result",
+        "reasoning",
+        "applicableCoverage",
+        "deductibles",
+        "limit",
+        "insuredShare",
+        "insurerShare",
+        "serviceCondition",
+        "partCondition",
+        "requiredAction",
+        "requiredDocuments",
+        "sourceReferences",
+        "conflicts",
+        "missingInformation",
+        "confidence",
+        "humanApprovalRequired",
+        "policyAnalysisVersion",
+        "ruleVersion",
+        "operationalRecommendation"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "evaluation"
+  ],
+  "additionalProperties": false
+}

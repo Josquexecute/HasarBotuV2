@@ -671,3 +671,14 @@ Kabul ölçütü: Onaydan önce fiziksel/lifecycle değişikliği yoktur; normal
 - [x] Tam root, gerçek PostgreSQL, gerçek tarayıcı ve repository dışı fresh `npm ci` kapılarının son çalıştırması.
 
 Kabul ölçütü: Yetkili servis anlaşmalı diye işaretlenmez; aynı servis iki sigortacıda farklı ve tarihsel sonuç verebilir; bilinmeyen eski ilişki fail-closed `control_required` olur; Case ve kapanış cevapları kullanılan sürümü taşır; tenant, aktiflik, optimistic locking, audit ve UI no-fallback sınırları gerçek testlerle doğrulanmadan paket tamamlanmaz.
+
+## Paket 23 — Kanıtlı Kasko poliçe analiz çekirdeği
+
+- [x] Saf domain: kanonik enumlar, kaynak validator, version state, precedence/conflict, çoklu muafiyet ve fail-closed scenario evaluator.
+- [x] Contracts: kontrollü import/version/approve/reject/conflict/evaluate şemaları ve deterministik JSON Schema fixture'ları.
+- [x] Migration 0015: normalize facts, tenant bileşik FK, ready-source guard, append-only evidence/evaluation ve approved immutability.
+- [x] API: Kasko/tenant/rol/idempotency/optimistic locking/merkezi audit; list/detail/version/approve/reject/conflict/evaluate.
+- [x] UI: yalnız Kasko case'te gerçek API analiz görünümü; kaynak sayfa/madde ve no-fallback senaryo paneli; mock baseline korunur.
+- [x] Tam root, gerçek PostgreSQL, canlı API/tarayıcı ve repository dışı fresh `npm ci` kapıları tamamlandı; doğrulama sonuçları PROJECT_STATUS'a işlendi.
+
+Kapsam dışı: PDF binary/OCR/LLM, upload, gerçek tedarik/mobil onarım yazısı, File Agent/IPC, üretim migration ve gerçek müşteri poliçesi.

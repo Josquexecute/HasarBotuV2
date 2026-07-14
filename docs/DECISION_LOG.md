@@ -526,3 +526,15 @@ Etkisi: Migration `0013_case_close_reopen_lifecycle`; domain/contracts/API lifec
 6. Case read/create/update ve referans cevapları güvenli servis profili ile anlaşma değerlendirme özetini taşır. Create/update audit'i yalnız tür, sonuç, kural sürümü ve eşleşen agreement kimliklerini taşır; kaynak metni, kişisel veri veya secret içermez. Agreement yönetim CRUD'u bu pakette yoktur.
 
 Etkisi: Migration `0014_service_agreements`; saf domain uygunluk sınırı; referans query/DTO ve Case DTO zenginleştirmesi; Paket 21 kapanış snapshot'ı; gerçek API form etiketleri. File Agent, IPC, fiziksel dosya yolu, yeni dependency veya üretim migration yoktur.
+
+## 2026-07-14 — HB-2026-029: Kanıtlı Kasko poliçe analiz çekirdeği
+
+1. Analiz şirket formatından bağımsız kanonik alanlarla tutulur; orijinal başlık/metin yalnız 1.000 karakteri aşmayan madde alıntısı, sayfa, bölüm, madde, locator ve SHA-256 kanıtıyla birlikte korunur. Tüm poliçe metni DB/audit/log'a alınmaz.
+2. Kaynak referansı yalnız aynı tenant/vakadaki fiziksel olarak `ready`, hash+size doğrulanmış `documentVersion` olabilir. Ana kaynak `casco_policy` ve vaka Kasko olmalıdır; Traffic vaka reddedilir.
+3. Analiz sürümleri `draft → … → approved → superseded` akışındadır. Approved ve superseded sürüm ile kanonik maddeleri immutable; düzeltme yeni `analysisVersion` üretir. Bir vaka/poliçe kaynağında yalnız bir aktif approved sürüm bulunur.
+4. Poliçe, zeyil, özel/genel şart, ihbar föyü ve kontrollü dış kaynak çelişkileri ayrı kayıttır. Açık çelişki kesin sonuç ve onayı engeller; çözüm aktör/zaman/gerekçeyle ve merkezi audit ile kaydedilir.
+5. Senaryo motoru kaynaklı kuralları öncelik ve etkin tarihle deterministik değerlendirir. Genel “muafiyetsiz” kural koşullu muafiyeti silmez; birden çok muafiyet kod bazında korunur. Kaynak/onay eksikliği veya çelişki `unknown/control_required` ve fail-closed operasyon tavsiyesi üretir.
+6. Yetkili servis, sigortacıya özel anlaşma ve poliçeye uygun servis ayrı girdilerdir. Paket 22'nin tarihsel agreement sonucu senaryo facts içinde kullanılır; oran/tutar hardcode edilmez.
+7. Bu pakette PDF/OCR/LLM, upload, gerçek tedarik durdurma, File Agent, Electron IPC ve üretim migration yoktur. Yalnız sentetik poliçe metadata'sı kullanılır; otomatik çıkarım sonraki, ayrı onaylı pakete bırakılır.
+
+Etkisi: Migration `0015_casco_policy_analysis`; saf domain scenario/version/conflict sınırı; strict contracts ve tenant-kapsamlı API; Kasko vaka detayında salt okunur analiz/senaryo görünümü. Yeni dependency yoktur.
