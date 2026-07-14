@@ -275,3 +275,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Audit yalnız organization/case/analysis/version/source document kimlikleri, kaynak ve conflict sayıları, actor, approval/result/rule version ve requestId taşır. Aynı kullanıcının kendi importunu onaylaması `selfApproved` özetiyle görünürdür.
 - Tam poliçe metni, raw excerpt, poliçe numarası, plaka/kişisel veri, mutlak yol, secret ve ham hata audit'e yazılmaz. İş yazısı, approval/conflict/evaluation ve audit aynı transaction'dadır.
 - Approved/superseded version ve evidence DB trigger ile immutable/append-only korunur; düzeltme eski audit/veriyi değiştirmez, yeni sürüm ve yeni olay üretir.
+
+### 6.10 Paket 24 PDF extraction audit sınırı
+
+- Merkezi olaylar: `document_text.extraction_queued`, `document_text.extraction_started`, `document_text.extraction_completed`, `document_text.extraction_partial`, `document_text.ocr_required`, `document_text.extraction_failed`, `document_text.extraction_cancelled`, `document_text.source_reference_created`.
+- Audit organization/case/document/version/extraction/job/agent kimlikleri, exact parser+normalizasyon, status, sayfa/segment/sayaç, output hash, bounded locator offsetleri ve güvenli hata kodu taşıyabilir.
+- Raw/normalized sayfa metni, excerpt içeriği, PDF binary, original filename, logical/absolute path, local root/temp path, secret, parser stack ve ham OS hatası audit’e yazılmaz.
+- Queue/extraction ve final metadata/audit aynı transaction’dadır. Chunk replay içerik eşitse idempotent; farklıysa reddedilir. Page/segment append-only ve terminal extraction immutable guard yedek/audit bütünlüğünü korur.

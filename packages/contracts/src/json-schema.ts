@@ -50,6 +50,17 @@ import {
   policyAnalysisResponseSchema,
   policyScenarioEvaluationResponseSchema,
 } from './v1/policy-analysis/dto.js'
+import {
+  pdfTextExtractionCancelRequestSchema,
+  pdfTextExtractionCreateRequestSchema,
+  pdfTextSourceReferenceRequestSchema,
+} from './v1/pdf-text-extractions/commands.js'
+import {
+  pdfExtractionChunkRequestSchema,
+  pdfTextExtractionResponseSchema,
+  pdfTextPagesResponseSchema,
+  pdfTextSegmentsResponseSchema,
+} from './v1/pdf-text-extractions/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -101,6 +112,13 @@ export const JSON_SCHEMA_TARGETS = {
   'policy-conflict-resolution-request': policyConflictResolutionRequestSchema,
   'policy-scenario-evaluate-request': policyScenarioEvaluateRequestSchema,
   'policy-scenario-evaluation-response': policyScenarioEvaluationResponseSchema,
+  'pdf-text-extraction-create-request': pdfTextExtractionCreateRequestSchema,
+  'pdf-text-extraction-cancel-request': pdfTextExtractionCancelRequestSchema,
+  'pdf-text-extraction-response': pdfTextExtractionResponseSchema,
+  'pdf-text-pages-response': pdfTextPagesResponseSchema,
+  'pdf-text-segments-response': pdfTextSegmentsResponseSchema,
+  'pdf-text-source-reference-request': pdfTextSourceReferenceRequestSchema,
+  'pdf-extraction-chunk-request': pdfExtractionChunkRequestSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

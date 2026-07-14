@@ -395,3 +395,7 @@ Migration 0014 expand/migrate yaklaşımıyla `service_type` alanını ekleyip e
 ### Paket 23 ek uygulama kaydı — poliçe analiz persistence sınırı
 
 Migration 0015, mevcut documents/document_versions modelini kopyalamadan yalnız doğrulanmış sürüm kimliğine bağlı kanonik analiz tabloları ekler. Kaynak alıntısı sınırlıdır; tam belge metni/binary/mutlak yol tutulmaz. Tenant bileşik FK'ler, source guard, approved/superseded immutability ve append-only evidence DB tarafından zorlanır. Scenario evaluation güvenli input/result snapshot'ı ve kaynak kimlikleri taşır; uzun excerpt audit'e veya snapshot'a kopyalanmaz. API transaction'ı iş yazısı, idempotency ve merkezi audit'i atomik tamamlar. Yeni queue, File Agent, IPC, dependency veya üretim migration yoktur.
+
+### Paket 24 ek uygulama kaydı — izole PDF parser hattı
+
+Migration 0016 mevcut documents ve job queue’yu genişletir; ikinci queue oluşturmaz. `document_text_extractions` iş/sürüm özeti, pages bounded raw+normalized metin, segments exact Unicode locator tutar. Agent yalnız local config root’unu resolve eder; kaynak hash/size’ı streaming doğrulayıp agent-owned temp kopyada ayrı worker başlatır. Worker 192 MB memory, 30 saniye, 1.000 sayfa, 64 MiB kaynak ve 5 milyon karakter üst sınırlarıyla çalışır; tamamlanınca zorla sonlandırılır ve temp temizlenir. Chunk/final transaction’ları lease, ownership, version, sıra ve server-recomputed hash/sayaçları doğrular. OCR/AI, network, shell, Electron IPC, üretim migration ve gerçek `P:\` yoktur.

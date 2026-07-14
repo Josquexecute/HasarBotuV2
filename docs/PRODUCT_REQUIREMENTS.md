@@ -152,3 +152,10 @@ formatlarında alınabilir.
 - Onaylanmamış, kaynaksız veya çelişkili analiz operasyonel kesin karar değildir. Bilinmeyen sonuç tahmin edilmez; `unknown` veya `control_required` gösterilir.
 - Genel muafiyetsiz ifade koşullu servis/cam/parça/betterment/önceki total loss şartını ezmez. Yetkili, anlaşmalı ve poliçeye uygun servis ayrı değerlendirilir.
 - Kasko vaka görünümü sürüm/onay/kaynak/teminat/muafiyet/servis-parça/ikame araç/istisna/conflict ve 12 senaryo sonucunu gösterir. PDF/OCR/AI çıkarımı ve gerçek operasyon blokajı bu pakette yoktur.
+
+### Kasko PDF metin çıkarımı — Paket 24
+
+- Yalnız fiziksel olarak doğrulanmış `ready` Kasko poliçe PDF sürümü, açık kullanıcı komutuyla mevcut File Agent kuyruğunda işlenir. Aynı parser/normalizasyon kimliği için tekrar çağrı mükerrer extraction üretmez.
+- Çıktı sayfa bazında raw+normalize metin, text/image-only/empty/failed durumu, deterministik segment, parser/normalizasyon sürümü ve exact Unicode locator taşır. Kaynağı olmayan yorum veya operasyonel karar üretmez.
+- Metin katmanı yoksa `ocr_required`, karışık sonuçta `partial`; encrypted/malformed/limit/timeout hataları kanonik güvenli kodlarla gösterilir. OCR, AI ve tam poliçe analizi bu paketin işi değildir.
+- API modunda mock fallback yoktur. Mutlak root/path, PDF binary, tam metin, secret ve ham parser/OS hatası API/audit/log yüzeyine çıkamaz.

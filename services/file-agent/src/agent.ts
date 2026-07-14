@@ -1,10 +1,11 @@
-import type { JobResultResponse } from '@hasarbotu/contracts'
+import type { JobResultRequestInput, JobResultResponse } from '@hasarbotu/contracts'
 import type { AgentApiClient } from './api-client.js'
 import { AgentApiError } from './api-client.js'
 import type { AgentConfig } from './config.js'
 import { verifyTarget } from './verifier.js'
 import { provisionCaseWorkspace } from './workspace-provisioner.js'
 import { executeFileOperation } from './file-operation-executor.js'
+import { extractPdfText, type PdfTextExtractionResult } from './pdf-text-extractor.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -26,7 +27,16 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
 
   let result
   try {
-    if (job.payload.kind === 'file_operation' || job.payload.kind === 'file_operation_cleanup') {
+    if (job.payload.kind === 'pdf_text_extraction') {
+      const rootAbsolute = config.roots[job.payload.storageRootKey]
+      if (rootAbsolute === undefined) result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
+      else {
+        result = await extractPdfText(rootAbsolute, job.payload, {
+          onHeartbeat: async () => { await client.heartbeat(job.id, 'applying') },
+          onChunk: async (chunk) => { await client.reportExtractionChunk(job.id, chunk) },
+        })
+      }
+    } else if (job.payload.kind === 'file_operation' || job.payload.kind === 'file_operation_cleanup') {
       await client.heartbeat(job.id, job.payload.kind === 'file_operation' ? 'applying' : 'cleanup')
       result = await executeFileOperation(config.roots, job.payload)
     } else {
@@ -48,13 +58,15 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
     clearInterval(heartbeat)
   }
 
-  const reported = await client.reportResult(job.id, {
+  const reportInput: JobResultRequestInput = {
     outcome: result.outcome,
     ...(result.observedHash !== undefined ? { observedHash: result.observedHash } : {}),
     ...(result.observedSize !== undefined ? { observedSize: result.observedSize } : {}),
     ...(result.errorCode !== undefined ? { errorCode: result.errorCode } : {}),
     ...('fileOperation' in result && result.fileOperation !== undefined ? { fileOperation: result.fileOperation } : {}),
-  })
+    ...((result as PdfTextExtractionResult).pdfExtraction !== undefined ? { pdfExtraction: (result as PdfTextExtractionResult).pdfExtraction } : {}),
+  }
+  const reported = await client.reportResult(job.id, reportInput)
   return { kind: 'reported', jobId: job.id, outcome: result.outcome, reported }
 }
 

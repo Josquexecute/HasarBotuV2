@@ -6,6 +6,7 @@ import {
   AGENT_DETAIL_ROUTE,
   AGENT_JOB_HEARTBEAT_ROUTE,
   AGENT_JOB_RESULT_ROUTE,
+  AGENT_JOB_EXTRACTION_CHUNKS_ROUTE,
   agentParamsSchema,
   agentRegisterRequestSchema,
   agentRegisterResponseSchema,
@@ -19,6 +20,8 @@ import {
   jobParamsSchema,
   jobResultRequestSchema,
   jobResultResponseSchema,
+  pdfExtractionChunkRequestSchema,
+  pdfExtractionChunkResponseSchema,
   zodErrorToApiError,
 } from '@hasarbotu/contracts'
 import { failureBody } from '../errors/failure.js'
@@ -26,6 +29,7 @@ import { requireSession, sendForbidden } from '../auth/guard.js'
 import { createAuthStore } from '../auth/store.js'
 import { createAgentStore } from './store.js'
 import { requireAgent } from './auth.js'
+import { acceptPdfExtractionChunk, TextExtractionStoreError } from '../text-extractions/store.js'
 
 export interface AgentRoutesOptions {
   readonly pool: pg.Pool
@@ -87,6 +91,29 @@ export function registerAgentRoutes(app: FastifyInstance, options: AgentRoutesOp
     if (outcome.kind === 'not_leaseholder') return reply.code(403).send(failureBody('forbidden', 'Job is leased by another agent.', requestId))
     if (outcome.kind === 'conflict') return reply.code(409).send(failureBody('conflict', 'Job lease is not held or has expired.', requestId))
     return jobResultResponseSchema.parse({ jobId: params.data.jobId, status: outcome.status, lastErrorCode: outcome.lastErrorCode })
+  })
+
+  app.post(AGENT_JOB_EXTRACTION_CHUNKS_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const agent = await requireAgent(agentStore, request, reply)
+    if (agent === undefined) return
+    const params = jobParamsSchema.safeParse(request.params)
+    const body = pdfExtractionChunkRequestSchema.safeParse(request.body)
+    if (!params.success || !body.success) {
+      const zod = (!params.success ? params.error : !body.success ? body.error : undefined)!
+      return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false, error:zodErrorToApiError(zod, requestId) }))
+    }
+    try {
+      const accepted = await acceptPdfExtractionChunk(options.pool, agent, params.data.jobId, body.data)
+      return pdfExtractionChunkResponseSchema.parse({ jobId:params.data.jobId, extractionId:body.data.extractionId, sequence:body.data.sequence, acceptedPageCount:accepted.acceptedPageCount })
+    } catch (error) {
+      if (error instanceof TextExtractionStoreError) {
+        if (error.code === 'not_found') return reply.code(404).send(failureBody('not_found', 'Job not found.', requestId))
+        if (error.code === 'lease_conflict') return reply.code(409).send(failureBody('conflict', 'Job lease is not held or has expired.', requestId))
+        return reply.code(409).send(failureBody('pdf_extraction_stale', 'Extraction chunk was rejected.', requestId))
+      }
+      throw error
+    }
   })
 
   // ---- Agent yönetimi (kullanıcı oturumu + yönetici) ----

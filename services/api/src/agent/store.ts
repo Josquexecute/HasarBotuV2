@@ -11,6 +11,11 @@ import { uuidv7 } from '@hasarbotu/database'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
 import { generateAgentSecret, hashAgentSecret } from './auth.js'
+import {
+  finalizePdfExtraction,
+  markPdfExtractionFailure,
+  markPdfExtractionStarted,
+} from '../text-extractions/store.js'
 
 /**
  * File Agent kontrol katmanı veri erişimi (Paket 14). Agent kimliği + iş
@@ -208,6 +213,13 @@ export function createAgentStore(pool: pg.Pool) {
               })
             }
           }
+          if (job.target_type === 'document_text_extraction') {
+            await markPdfExtractionFailure(client, {
+              organizationId: agent.organizationId,
+              agentId: agent.id,
+              requestId: `job-${job.id}`,
+            }, { id:job.id, target_id:job.target_id, attempt_count:job.max_attempts, max_attempts:job.max_attempts }, 'attempts_exhausted', true)
+          }
           return null
         }
 
@@ -275,6 +287,9 @@ export function createAgentStore(pool: pg.Pool) {
               },
             })
           }
+        }
+        if (claimed.target_type === 'document_text_extraction') {
+          await markPdfExtractionStarted(client, agent.organizationId, claimed.target_id, claimed.id, agent.id)
         }
         return claimedJobToDto(claimed)
       })
@@ -360,6 +375,22 @@ export function createAgentStore(pool: pg.Pool) {
         // ---- retry edilebilir hata ----
         if (result.outcome === 'failed') {
           const errorCode = result.errorCode ?? 'verification_failed'
+          if (job.target_type === 'document_text_extraction') {
+            const nonRetryable = new Set([
+              'encrypted_pdf','malformed_pdf','invalid_pdf_magic','source_size_limit_exceeded',
+              'page_limit_exceeded','output_limit_exceeded','source_changed','root_escape',
+              'reparse_point_rejected','not_a_file',
+            ]).has(errorCode)
+            await markPdfExtractionFailure(client, ctx, job, errorCode, nonRetryable)
+            if (nonRetryable) {
+              await client.query(
+                "UPDATE jobs SET status='dead_letter',last_error_code=$2,leased_by_agent_id=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1",
+                [job.id, errorCode],
+              )
+              await recordJobAudit(ctx, job, 'job.dead_letter', { errorCode })
+              return { kind: 'ok', status: 'dead_letter', lastErrorCode: errorCode }
+            }
+          }
           if (job.type === 'provision_case_workspace') {
             const failedPlan = await client.query(
               `UPDATE case_workspace_provisionings SET status='failed', last_error_code=$3, updated_at=now()
@@ -510,6 +541,13 @@ async function applyVerification(
   const { client } = ctx
   if (job.target_type === 'file_operation') {
     return applyFileOperationResult(ctx, job, result)
+  }
+  if (job.target_type === 'document_text_extraction') {
+    const applied = await finalizePdfExtraction(ctx.client, ctx, job, result.pdfExtraction)
+    if (applied.jobStatus === 'failed') {
+      await markPdfExtractionFailure(ctx.client, ctx, job, applied.errorCode ?? 'extraction_finalize_failed', true)
+    }
+    return applied
   }
   if (job.target_type === 'workspace_provisioning') {
     const audit = createAuditService()

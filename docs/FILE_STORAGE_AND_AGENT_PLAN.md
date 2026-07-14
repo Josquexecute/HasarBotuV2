@@ -258,3 +258,11 @@ Event path değerleri göreli ve gerektiğinde maskeli; raw exception/credential
 ## 20. Paket 22 sınırı
 
 Servis profili ve sigorta şirketi anlaşması yalnız PostgreSQL iş metadata'sıdır. File Agent job protokolü, physical resolver, case workspace yolu ve close/reopen move saga'sı değişmez. Kapanış planının belge snapshot'ı yeni servis uygunluk sonucunu kullanır; bu sonuç Agent'a serbest path veya fiziksel işlem yetkisi vermez.
+
+## 21. Paket 24 — PDF text extraction Agent sınırı
+
+- Kaynak yalnız server’ın doğruladığı case documentVersion logical `storageRootKey + relativePath` değeridir; istemci/Agent mutlak veya serbest yol göndermez.
+- Resolver traversal/drive/UNC/backslash/control/device ve root escape’i; her lexical bileşende symlink/junction/reparse noktasını reddeder. Kaynak plan/uygulama hash+size ile yeniden doğrulanır.
+- Agent kaynağı streaming `wx` temp kopyaya alır, kopyayı tekrar hash’ler ve PDF magic’i doğrular. Parser ayrı worker, exact sürüm, memory/timeout/output sınırı ve ağ/shell olmadan çalışır; complete/hata/timeout sonrası worker+temp kapanır.
+- Her page chunk server’da tekrar sanitize/normalize/segment/hash doğrulamasından geçer. Final summary yalnız lease/ownership/version, ardışık sayfa ve output manifest eşleşirse ready/partial/ocr_required olur.
+- Encrypted/malformed/locked/missing/changed/limit/timeout güvenli kodlardır; ham OS/parser hata veya mutlak temp/root path API/audit/log’a taşınmaz. OCR/AI ve gerçek `P:\` testi yoktur.

@@ -1736,7 +1736,54 @@ button {
 .lifecycle-requirement--control_required { color: var(--warning); background: var(--warning-soft); }
 .lifecycle-requirement--not_applicable { color: var(--text-tertiary); background: var(--surface-muted); }
 
+.policy-pdf-module { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.policy-pdf-module > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border-bottom: 1px solid var(--border); }
+.policy-pdf-module h2, .policy-pdf-module h3, .policy-pdf-module p { margin: 0; }
+.policy-pdf-module h2 { margin-top: 2px; font-size: 15px; }
+.policy-pdf-module h3 { font-size: 11px; }
+.policy-pdf-module > header p { margin-top: 3px; color: var(--text-tertiary); font-size: 9px; }
+.policy-pdf-state { min-height: 160px; }
+.policy-pdf-toolbar { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(150px, .7fr) minmax(180px, .8fr); gap: 9px; padding: 10px; background: var(--surface-muted); border-bottom: 1px solid var(--border); }
+.policy-pdf-toolbar label, .policy-pdf-parser { display: grid; gap: 4px; color: var(--text-tertiary); font-size: 9px; }
+.policy-pdf-toolbar select { min-width: 0; height: 30px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface); color: var(--text-primary); font-size: 10px; }
+.policy-pdf-parser { padding: 6px 8px; border: 1px solid var(--border); background: var(--surface); }
+.policy-pdf-parser strong { color: var(--text-primary); font-size: 10px; }
+.policy-pdf-parser small { overflow-wrap: anywhere; }
+.policy-pdf-empty { display: grid; place-items: center; gap: 5px; min-height: 120px; padding: 16px; color: var(--text-tertiary); text-align: center; font-size: 10px; }
+.policy-pdf-empty strong { color: var(--text-primary); }
+.policy-pdf-summary { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+.policy-pdf-summary dl { display: grid; grid-template-columns: repeat(4, minmax(70px, 1fr)); flex: 1; gap: 6px; margin: 0; }
+.policy-pdf-summary dl div { padding: 5px 7px; background: var(--surface-muted); }
+.policy-pdf-summary dt { color: var(--text-tertiary); font-size: 8px; }
+.policy-pdf-summary dd { margin: 2px 0 0; font-size: 11px; font-weight: 700; }
+.status-badge--queued, .status-badge--processing { color: var(--accent); }
+.status-badge--ready { color: var(--success); }
+.status-badge--partial, .status-badge--ocr_required { color: var(--warning); }
+.status-badge--failed, .status-badge--stale { color: var(--danger); }
+.policy-pdf-notice { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--accent); font-size: 10px; }
+.policy-pdf-notice svg { width: 15px; height: 15px; flex: none; }
+.policy-pdf-notice--warning { color: var(--warning); }
+.policy-pdf-notice--danger { color: var(--danger); }
+.policy-pdf-pages, .policy-pdf-segments { display: grid; gap: 7px; padding: 10px; border-top: 1px solid var(--border); }
+.policy-pdf-pages__head { display: flex; align-items: center; justify-content: space-between; }
+.policy-pdf-page { min-width: 0; border: 1px solid var(--border); background: var(--surface-muted); }
+.policy-pdf-page > header { display: flex; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 9px; }
+.policy-pdf-page pre { max-height: 180px; margin: 0; overflow: auto; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: 9px/1.45 var(--font-mono); }
+.policy-pdf-segments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.policy-pdf-segments h3 { grid-column: 1 / -1; }
+.policy-pdf-segments button { display: grid; min-width: 0; gap: 4px; padding: 8px; border: 1px solid var(--border); background: var(--surface-muted); color: var(--text-primary); text-align: left; cursor: pointer; }
+.policy-pdf-segments button:hover { border-color: var(--accent); }
+.policy-pdf-segments span, .policy-pdf-segments small { color: var(--text-tertiary); font-size: 8px; }
+.policy-pdf-segments strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+.policy-pdf-reference { display: flex; gap: 8px; margin: 0 10px 10px; padding: 8px; border: 1px solid var(--success); color: var(--success); }
+.policy-pdf-reference svg { width: 16px; flex: none; }
+.policy-pdf-reference div { display: grid; min-width: 0; gap: 3px; }
+.policy-pdf-reference span, .policy-pdf-reference q { color: var(--text-secondary); font-size: 9px; overflow-wrap: anywhere; }
+
 @media (max-width: 1366px) {
   .modal--case-lifecycle { max-height: calc(100vh - 24px); }
   .case-lifecycle-requirements { max-height: 190px; }
+  .policy-pdf-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .policy-pdf-parser { grid-column: 1 / -1; }
+  .policy-pdf-segments { grid-template-columns: minmax(0, 1fr); }
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { byteSizeSchema, sha256HexSchema } from '../documents/dto.js'
 import { fileOperationStrategySchema } from '../file-operations/dto.js'
+import { pdfExtractionResultSummarySchema } from '../pdf-text-extractions/dto.js'
 
 /**
  * Agent iş sonucu bildirimi (Paket 14).
@@ -45,6 +46,7 @@ export const jobResultRequestSchema = z.strictObject({
     .regex(/^[a-z0-9_]+$/, { error: 'invalid_error_code' })
     .optional(),
   fileOperation: fileOperationResultSchema.optional(),
+  pdfExtraction: pdfExtractionResultSummarySchema.optional(),
 })
 export type JobResultRequest = z.infer<typeof jobResultRequestSchema>
 export type JobResultRequestInput = z.input<typeof jobResultRequestSchema>

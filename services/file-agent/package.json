@@ -28,7 +28,8 @@
   },
   "dependencies": {
     "@hasarbotu/contracts": "*",
-    "@hasarbotu/domain": "*"
+    "@hasarbotu/domain": "*",
+    "pdfjs-dist": "6.1.200"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

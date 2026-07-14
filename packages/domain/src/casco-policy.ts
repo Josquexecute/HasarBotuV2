@@ -70,6 +70,13 @@ export interface PolicySourceReference {
   readonly locator: string | null
   readonly sourceType: PolicySourceType
   readonly confidence: number
+  readonly extractionLocator?: {
+    readonly extractionId: string
+    readonly pageId: string
+    readonly segmentId: string | null
+    readonly startOffset: number
+    readonly endOffset: number
+  } | null
 }
 
 export interface PolicyDeductible {

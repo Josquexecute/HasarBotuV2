@@ -44,6 +44,13 @@ export const policySourceReferenceSchema = z.strictObject({
   locator: z.string().trim().min(1).max(300).nullable(),
   sourceType: policySourceTypeSchema,
   confidence: policyConfidenceSchema,
+  extractionLocator: z.strictObject({
+    extractionId: idSchema,
+    pageId: idSchema,
+    segmentId: idSchema.nullable(),
+    startOffset: z.number().int().min(0),
+    endOffset: z.number().int().min(1),
+  }).nullable().default(null),
 })
 export type PolicySourceReferenceDto = z.infer<typeof policySourceReferenceSchema>
 

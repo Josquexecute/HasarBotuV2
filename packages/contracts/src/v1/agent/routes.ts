@@ -4,6 +4,7 @@ import { API_V1_BASE } from '../../common/routes.js'
 export const AGENT_CLAIM_ROUTE = `${API_V1_BASE}/agent/jobs/claim` as const
 export const AGENT_JOB_HEARTBEAT_ROUTE = `${API_V1_BASE}/agent/jobs/:jobId/heartbeat` as const
 export const AGENT_JOB_RESULT_ROUTE = `${API_V1_BASE}/agent/jobs/:jobId/result` as const
+export const AGENT_JOB_EXTRACTION_CHUNKS_ROUTE = `${API_V1_BASE}/agent/jobs/:jobId/extraction-chunks` as const
 
 /** Agent yönetimi (yalnız yönetici). */
 export const AGENTS_ROUTE = `${API_V1_BASE}/agents` as const

@@ -538,3 +538,15 @@ Etkisi: Migration `0014_service_agreements`; saf domain uygunluk sınırı; refe
 7. Bu pakette PDF/OCR/LLM, upload, gerçek tedarik durdurma, File Agent, Electron IPC ve üretim migration yoktur. Yalnız sentetik poliçe metadata'sı kullanılır; otomatik çıkarım sonraki, ayrı onaylı pakete bırakılır.
 
 Etkisi: Migration `0015_casco_policy_analysis`; saf domain scenario/version/conflict sınırı; strict contracts ve tenant-kapsamlı API; Kasko vaka detayında salt okunur analiz/senaryo görünümü. Yeni dependency yoktur.
+
+## 2026-07-14 — HB-2026-030: Güvenli Kasko PDF metin çıkarım hattı
+
+1. Yalnız aynı tenant/vakadaki `casco_policy`, `application/pdf`, `ready + hashVerified + sizeVerified + verifiedAt` documentVersion çıkarılabilir. Traffic, pending, doğrulanmamış, farklı tenant ve source hash/size değişimi fail-closed reddedilir.
+2. Parser `pdfjs-dist@6.1.200` olarak exact pinlenmiştir. Parser ve `pdf-text-normalization/1.0.0` sürümü her extraction kaydında/cevabında taşınır; documentVersion veya sürüm değişince eski çıktı sessizce değiştirilmez.
+3. Parser, Agent’ın oluşturduğu tek kullanımlık temp kopyada, ayrı Node worker içinde 192 MB old-generation sınırı, 30 saniye timeout, sayfa/kaynak/çıktı limitleri ve ağ/shell çağrısı olmayan girişle çalışır. Temp içerik başarı, hata ve timeout sonunda temizlenir; symlink/junction/reparse bileşenleri reddedilir.
+4. Raw metin güvenli kontrollerden arındırılarak sayfa bazında; normalize metin NFC ve sürümlü whitespace kuralıyla saklanır. Segmentler deterministik reading-order satırlarıdır; locator offsetleri sıfır tabanlı, half-open Unicode code point’tir.
+5. Metin katmanı olmayan sayfa `image_only`, tamamı görselse extraction `ocr_required`, karışık/eksik sayfalar `partial` olur. Bu paket OCR, AI, poliçe yorumu veya otomatik analiz üretmez.
+6. Agent sonucu koşulsuz kabul edilmez: lease/ownership, job ve extraction version, kaynak hash/size, chunk sırası, server-side yeniden normalizasyon/segmentasyon ve final manifest hash/sayaçları doğrulanır. Invalid veya stale sonuç metadata’yı kesinleştiremez.
+7. Paket 23 source reference, yalnız ready/partial doğrulanmış extraction’ın text sayfasındaki exact bounded range’e bağlanabilir. Sayfa/segment/range FK ve DB trigger ile doğrulanır; tam belge metni audit/log’a yazılmaz.
+
+Etkisi: Migration `0016_policy_pdf_text_extraction`; mevcut PostgreSQL job queue/File Agent genişlemesi; tenant ve RBAC kapsamlı extraction/read/cancel/source-reference API’leri; Kasko belge sekmesinde no-fallback metin/segment görünümü. Yeni dependency yalnız File Agent’ta exact `pdfjs-dist@6.1.200` (Apache-2.0); OCR/AI ve üretim migration kapsam dışıdır.

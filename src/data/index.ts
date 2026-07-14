@@ -26,6 +26,13 @@ export {
   type PolicyScenarioEvaluationRecord,
   type PolicyScenarioType,
   type PolicySourceReferenceRecord,
+  type PdfPolicySourceRecord,
+  type PdfTextExtractionRecord,
+  type PdfTextExtractionStatus,
+  type PdfTextPageRecord,
+  type PdfTextSegmentRecord,
+  type PdfTextSourceReferenceRecord,
+  type PolicyPdfTextDataPort,
 } from './ports'
 export { createMockCasesAdapter } from './mockAdapter'
 export {
@@ -47,6 +54,8 @@ export {
 export { useCaseDocuments, type CaseDocumentsStatus, type UseCaseDocumentsResult } from './useCaseDocuments'
 export { createHttpPolicyAnalysisAdapter, HttpPolicyAnalysisError, type HttpPolicyAnalysisAdapterOptions, type HttpPolicyAnalysisErrorKind } from './policyAnalysisHttpAdapter'
 export { usePolicyAnalysis, type PolicyAnalysisLoadStatus } from './usePolicyAnalysis'
+export { createHttpPolicyPdfTextAdapter, HttpPolicyPdfTextError, type HttpPolicyPdfTextErrorKind } from './policyPdfTextHttpAdapter'
+export { usePolicyPdfText, type PolicyPdfTextLoadStatus } from './usePolicyPdfText'
 export {
   createHttpAuthAdapter,
   HttpAuthError,

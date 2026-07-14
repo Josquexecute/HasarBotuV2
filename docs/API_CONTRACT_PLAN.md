@@ -340,3 +340,11 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Create/version payload yalnız kontrollü adapter/manual import içindir; source key'ler aynı payload'daki sayfa/madde/excerpt referanslarına bağlanır. Server excerpt'i normalize edip hash'i kendisi üretir ve hazır/doğrulanmış case documentVersion bağını tekrar doğrular.
 - Yönetici/eksper version+approve/reject+conflict çözebilir; dosya sorumlusu import/evaluate yapabilir fakat approve edemez. Diğer roller yalnız izinli read görür.
 - Runtime Zod ve 45 golden JSON Schema aynı strict kabul kümesini taşır. LocalDate ve UTC datetime ayrımı korunur; mutlak yol, binary, tam poliçe metni, secret ve ham hata response'ta yoktur.
+
+## 13. Paket 24 PDF metin çıkarım contracts/API
+
+- Uçlar: documentVersion-kapsamlı extraction create/list; case-kapsamlı detail/pages/segments/cancel/source-reference. Create/cancel/source-reference zorunlu `Idempotency-Key`; bütün uçlar oturum+tenant, yazılar admin/expert/case_manager rol sınırındadır.
+- Agent protokolü mevcut claim/heartbeat/result akışına `extract_pdf_text`, `document_text_extraction` hedefi ve en çok dört bounded sayfalı chunk endpoint’i ekler. Payload yalnız logical root key/relative path, declared hash/size, exact parser/normalizasyon ve limitleri taşır.
+- DTO extraction/page/segment durumlarını, `pdfjs-dist 6.1.200`, `pdf-text-normalization/1.0.0`, `unicode_code_point`, sayaç/hash ve güvenli failure code alanlarını strict doğrular.
+- Paket 23 source reference opsiyonel extraction/page/segment/start/end locator taşır. Eski kontrollü manuel referanslar `null` locator ile backward-compatible kalır; server exact excerpt’i kendisi üretir.
+- Runtime Zod ve 52 golden JSON Schema semantik olarak eşittir. Mutlak path, PDF binary, parser stack, secret ve ham OS hatası response kabul kümesinde yoktur.

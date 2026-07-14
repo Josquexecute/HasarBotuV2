@@ -201,3 +201,10 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - `policy_source_references` sınırlı kanıt; coverage/deductible/service/part/replacement/exclusion/required-document/scenario-rule tabloları doğrulanabilir kanonik maddelerdir. `policy_evidence_links` madde-kaynak bağını taşır.
 - `policy_conflicts` çözüm geçmişi ve `policy_scenario_evaluations` güvenli değerlendirme snapshot'ıdır. JSONB yalnız değişken koşul/listeler ve güvenli snapshot içindir; analiz tek doğrulanamaz blob değildir.
 - Tenant bileşik FK, etkin tarih/check, tek aktif approved source, ready/verified source trigger, append-only evidence/evaluation ve approved/superseded fact guard zorunludur. Mutlak yol veya tam belge metni kolonu yoktur.
+
+## Paket 24 uygulanan PostgreSQL modeli
+
+- `document_text_extractions`: documentVersion + exact parser/normalizasyon kimliği, optimistic version, queue/job bağı, safe status/failure, source/output hash ve bounded sayaçlar.
+- `document_text_extraction_pages`: sayfa sıra/status, bounded raw+normalized metin ve hash; `document_text_extraction_segments`: deterministic type/text/hash ve Unicode code point range. Sayfa/segment append-only, terminal extraction immutable’dır.
+- Tenant/case/document/version bileşik FK, tek extraction identity/version, tek aktif extraction job, strict engine/status/count/hash ve source-reference locator guard DB tarafından zorlanır.
+- `policy_source_references` nullable extraction/page/segment/range ile genişler; eski satırlar değişmez. Mutlak root/path, PDF binary, tam belge blob’u, parser stack veya secret kolonu yoktur.

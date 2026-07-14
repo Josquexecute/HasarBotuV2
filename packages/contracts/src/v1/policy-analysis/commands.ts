@@ -20,6 +20,15 @@ import {
 import { SERVICE_TYPES } from '@hasarbotu/domain'
 
 const sourceKeySchema = policyCodeSchema
+export const policyExtractionLocatorInputSchema = z.strictObject({
+  extractionId: idSchema,
+  pageId: idSchema,
+  segmentId: idSchema.nullable().default(null),
+  startOffset: z.number().int().min(0),
+  endOffset: z.number().int().min(1),
+}).superRefine((value, context) => {
+  if (value.endOffset <= value.startOffset) context.addIssue({ code: 'custom', path: ['endOffset'], message: 'invalid_offset_range' })
+})
 export const policySourceReferenceInputSchema = z.strictObject({
   sourceKey: sourceKeySchema,
   documentId: idSchema,
@@ -31,6 +40,7 @@ export const policySourceReferenceInputSchema = z.strictObject({
   locator: z.string().trim().min(1).max(300).nullable().default(null),
   sourceType: policySourceTypeSchema,
   confidence: policyConfidenceSchema,
+  extractionLocator: policyExtractionLocatorInputSchema.nullable().default(null),
 })
 
 const evidenceKeysSchema = z.array(sourceKeySchema).min(1).max(20)

@@ -146,6 +146,7 @@ export {
   AGENT_CLAIM_ROUTE,
   AGENT_JOB_HEARTBEAT_ROUTE,
   AGENT_JOB_RESULT_ROUTE,
+  AGENT_JOB_EXTRACTION_CHUNKS_ROUTE,
   AGENTS_ROUTE,
   AGENT_DETAIL_ROUTE,
   AGENT_ID_HEADER,
@@ -161,6 +162,7 @@ export {
   jobPayloadSchema,
   fileOperationJobPayloadSchema,
   fileOperationCleanupJobPayloadSchema,
+  pdfTextExtractionJobPayloadSchema,
   claimedJobSchema,
   claimResponseSchema,
   heartbeatResponseSchema,
@@ -411,3 +413,4 @@ export {
 
 export * from './v1/case-lifecycle/index.js'
 export * from './v1/policy-analysis/index.js'
+export * from './v1/pdf-text-extractions/index.js'

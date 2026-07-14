@@ -274,3 +274,11 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Öncelik aynı seviyede farklı outcome veriyorsa `control_required`; sessiz winner seçilmez. Muafiyetler kodla tekilleştirilir fakat farklı koşullu muafiyetler kaybolmaz.
 - Servis facts'i `serviceType` ile sigortacıya/tarihe özel `agreementStatus` alanlarını ayrı taşır. Muafiyet riski tedarik/mobil onarım için `pause/control_required`; gerçek iş emrini bu paket değiştirmez.
 - Tarihler LocalDate, işlem zamanları UTC'dir; clock, analysisVersion ve ruleVersion dışarıdan verilir. Motor DB/HTTP/AI bağımlılığı ve yan etki taşımaz.
+
+## PDF metin kanıtı kuralları — Paket 24
+
+- Kaynak uygunluğu: Kasko case + `casco_policy` + PDF MIME/extension + aynı tenant/case + `ready/hashVerified/sizeVerified/verifiedAt`.
+- Raw metin yalnız kontrol karakteri/line-ending güvenliğiyle korunur. Normalize metin `pdf-text-normalization/1.0.0` ile NFC, NBSP ve whitespace kurallarından deterministik üretilir; semantik anlam eklenmez.
+- Segment aynı normalize girdide aynı tür, sıra, metin hash’i ve Unicode code point `[start,end)` offsetini üretir. Server Agent’ın gönderdiği segmenti yeniden hesaplar.
+- Tamamı text sayfası `ready`; en az bir text ve image-only/empty/failed sayfa `partial`; text sayfası yoksa `ocr_required`. Bu sonuç analiz/onay değildir.
+- Paket 23 kanıt alıntısı yalnız doğrulanmış extraction text sayfasındaki en çok 1.000 code point exact range olabilir; segment verilirse range segment içinde kalmalıdır.

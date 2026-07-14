@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "extractionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "extractionVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "pages": {
+      "minItems": 1,
+      "maxItems": 4,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pageNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "text",
+              "image_only",
+              "empty",
+              "failed",
+              "skipped"
+            ]
+          },
+          "rawText": {
+            "type": "string",
+            "maxLength": 200000
+          },
+          "normalizedText": {
+            "type": "string",
+            "maxLength": 200000
+          },
+          "rawTextHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "normalizedTextHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "segments": {
+            "maxItems": 2000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "segmentIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "title",
+                    "heading",
+                    "clause",
+                    "paragraph",
+                    "list",
+                    "table",
+                    "header_footer",
+                    "unknown"
+                  ]
+                },
+                "startOffset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "endOffset": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "textHash": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "segmentIndex",
+                "type",
+                "startOffset",
+                "endOffset",
+                "textHash"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "pageNumber",
+          "status",
+          "rawText",
+          "normalizedText",
+          "rawTextHash",
+          "normalizedTextHash",
+          "segments"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "extractionId",
+    "extractionVersion",
+    "sequence",
+    "pages"
+  ],
+  "additionalProperties": false
+}

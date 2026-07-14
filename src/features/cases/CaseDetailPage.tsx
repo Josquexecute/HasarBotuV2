@@ -31,6 +31,7 @@ import { CaseEditModal } from './CaseEditModal'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
 import { PolicyAnalysisApiModule } from './PolicyAnalysisApiModule'
+import { PolicyPdfTextApiModule } from './PolicyPdfTextApiModule'
 
 const tabs = [
   'Özet',
@@ -348,7 +349,7 @@ export function CaseDetailPage() {
               </section>
             </div>
           ) : activeTab === 'Evrak ve Fotoğraf' ? (
-            item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyAnalysisApiModule caseId={item.caseId} source={source}/></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
+            item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyAnalysisApiModule caseId={item.caseId} source={source}/></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
           ) : activeTab === 'İşçilik' ? <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />
             : activeTab === 'Ağır Hasar' ? <HeavyDamageModule item={item} />
               : activeTab === 'Değer Kaybı' ? <ValueLossModule item={item} onNotice={setPrototypeNotice} />

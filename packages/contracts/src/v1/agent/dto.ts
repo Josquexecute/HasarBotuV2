@@ -6,6 +6,10 @@ import {
   fileOperationTypeSchema,
   logicalStorageReferenceSchema,
 } from '../file-operations/dto.js'
+import {
+  pdfNormalizationVersionSchema,
+  pdfParserVersionSchema,
+} from '../pdf-text-extractions/dto.js'
 
 /**
  * File Agent iş kuyruğu ve doğrulama sözleşmeleri (Paket 14).
@@ -22,6 +26,7 @@ export const JOB_TYPES = [
   'rename_case_workspace',
   'move_case_workspace',
   'cleanup_moved_workspace',
+  'extract_pdf_text',
 ] as const
 export type JobType = (typeof JOB_TYPES)[number]
 export const jobTypeSchema = z.enum(JOB_TYPES)
@@ -30,12 +35,12 @@ export const JOB_STATUSES = ['pending', 'leased', 'succeeded', 'failed', 'dead_l
 export type JobStatus = (typeof JOB_STATUSES)[number]
 export const jobStatusSchema = z.enum(JOB_STATUSES)
 
-export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning', 'file_operation'] as const
+export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning', 'file_operation', 'document_text_extraction'] as const
 export type JobTargetType = (typeof JOB_TARGET_TYPES)[number]
 export const jobTargetTypeSchema = z.enum(JOB_TARGET_TYPES)
 
 /** Doğrulama hedefi: dosya (hash+size) veya dizin (yalnız varlık). */
-export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace', 'file_operation', 'file_operation_cleanup'] as const
+export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace', 'file_operation', 'file_operation_cleanup', 'pdf_text_extraction'] as const
 export const jobPayloadKindSchema = z.enum(JOB_PAYLOAD_KINDS)
 
 /** Agent'a verilen güvenli payload. Mutlak yol yoktur. */
@@ -81,11 +86,29 @@ export const fileOperationCleanupJobPayloadSchema = z.strictObject({
   directoryCount: z.number().int().min(0),
   totalBytes: byteSizeSchema,
 })
+export const pdfTextExtractionJobPayloadSchema = z.strictObject({
+  kind: z.literal('pdf_text_extraction'),
+  extractionId: idSchema,
+  extractionVersion: z.number().int().min(1),
+  storageRootKey: storageRootKeySchema,
+  relativePath: relativePathSchema,
+  declaredHash: sha256HexSchema,
+  declaredSize: byteSizeSchema,
+  parserVersion: pdfParserVersionSchema,
+  normalizationVersion: pdfNormalizationVersionSchema,
+  maxSourceBytes: byteSizeSchema,
+  maxPages: z.number().int().min(1).max(1_000),
+  maxPageCharacters: z.number().int().min(1).max(200_000),
+  maxTotalCharacters: z.number().int().min(1).max(5_000_000),
+  timeoutMs: z.number().int().min(1_000).max(120_000),
+  workerMemoryMb: z.number().int().min(64).max(512),
+})
 export const jobPayloadSchema = z.discriminatedUnion('kind', [
   verificationJobPayloadSchema,
   workspaceJobPayloadSchema,
   fileOperationJobPayloadSchema,
   fileOperationCleanupJobPayloadSchema,
+  pdfTextExtractionJobPayloadSchema,
 ])
 export type JobPayload = z.infer<typeof jobPayloadSchema>
 

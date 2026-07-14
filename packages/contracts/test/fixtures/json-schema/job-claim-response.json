@@ -22,7 +22,8 @@
                 "provision_case_workspace",
                 "rename_case_workspace",
                 "move_case_workspace",
-                "cleanup_moved_workspace"
+                "cleanup_moved_workspace",
+                "extract_pdf_text"
               ]
             },
             "targetType": {
@@ -32,7 +33,8 @@
                 "photo",
                 "case_location",
                 "workspace_provisioning",
-                "file_operation"
+                "file_operation",
+                "document_text_extraction"
               ]
             },
             "targetId": {
@@ -371,6 +373,103 @@
                     "fileCount",
                     "directoryCount",
                     "totalBytes"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "pdf_text_extraction"
+                    },
+                    "extractionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                    },
+                    "extractionVersion": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "storageRootKey": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                    },
+                    "relativePath": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400,
+                      "x-hasarbotu-runtime-validation": "safe-relative-path"
+                    },
+                    "declaredHash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "declaredSize": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 5368709120
+                    },
+                    "parserVersion": {
+                      "type": "string",
+                      "const": "6.1.200"
+                    },
+                    "normalizationVersion": {
+                      "type": "string",
+                      "const": "pdf-text-normalization/1.0.0"
+                    },
+                    "maxSourceBytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 5368709120
+                    },
+                    "maxPages": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1000
+                    },
+                    "maxPageCharacters": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 200000
+                    },
+                    "maxTotalCharacters": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 5000000
+                    },
+                    "timeoutMs": {
+                      "type": "integer",
+                      "minimum": 1000,
+                      "maximum": 120000
+                    },
+                    "workerMemoryMb": {
+                      "type": "integer",
+                      "minimum": 64,
+                      "maximum": 512
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "extractionId",
+                    "extractionVersion",
+                    "storageRootKey",
+                    "relativePath",
+                    "declaredHash",
+                    "declaredSize",
+                    "parserVersion",
+                    "normalizationVersion",
+                    "maxSourceBytes",
+                    "maxPages",
+                    "maxPageCharacters",
+                    "maxTotalCharacters",
+                    "timeoutMs",
+                    "workerMemoryMb"
                   ],
                   "additionalProperties": false
                 }

@@ -440,6 +440,62 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1
+              },
+              "extractionLocator": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extractionId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                      },
+                      "pageId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                      },
+                      "segmentId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "startOffset": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "endOffset": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "extractionId",
+                      "pageId",
+                      "segmentId",
+                      "startOffset",
+                      "endOffset"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -453,7 +509,8 @@
               "excerptHash",
               "locator",
               "sourceType",
-              "confidence"
+              "confidence",
+              "extractionLocator"
             ],
             "additionalProperties": false
           }
@@ -705,6 +762,62 @@
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1
+                  },
+                  "extractionLocator": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "extractionId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                          },
+                          "pageId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                          },
+                          "segmentId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "startOffset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "endOffset": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "extractionId",
+                          "pageId",
+                          "segmentId",
+                          "startOffset",
+                          "endOffset"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -718,7 +831,8 @@
                   "excerptHash",
                   "locator",
                   "sourceType",
-                  "confidence"
+                  "confidence",
+                  "extractionLocator"
                 ],
                 "additionalProperties": false
               }

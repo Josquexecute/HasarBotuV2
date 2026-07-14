@@ -163,3 +163,12 @@ raporlanır.
 - Gerçek API: login, sentetik import, idempotent replay, pre-approval control, conflict resolve, approve, scenario/source page-clause, stale 409, tenant 404, role 403, 401 ve audit/snapshot leak taraması.
 - Gerçek tarayıcı: Kasko vaka, analiz sürümü/onay/kaynak sayfa-madde/conflict/senaryo; API kesintisinde no-fallback; 1366×768 ve 1920×1080 açık/koyu overflow ile console warning/error kontrolü.
 - Gerçek müşteri verisi, PDF/OCR/AI, üretim migration ve gerçek `P:\` yoktur. Kritik PostgreSQL/API/domain/tarayıcı senaryosu skip ise Paket 23 PASS sayılmaz.
+
+### Paket 24 — güvenli Kasko PDF metin çıkarım kabulü
+
+- Domain/contracts: SHA-256 bilinen vektör, NFC/whitespace determinism, Unicode code point exact offset, segment/status/output hash ve strict Zod/52 golden JSON Schema eşliği.
+- Gerçek sentetik PDF/File Agent: text, image-only, mixed, encrypted, malformed/non-PDF, changed hash/size, source/page/output limit, timeout/temp cleanup ve junction/reparse reddi; aynı input aynı output hash.
+- Gerçek PostgreSQL: 0016 up/repeat/down/reapply; tenant/document/version FK, exact engine, identity, append-only page/segment, terminal immutability ve locator guard.
+- Gerçek API: login, Kasko source/idempotent create, claim/heartbeat/chunk/finalize, pages/segments/source-reference, Paket 23 analysis locator, Traffic/tenant/RBAC/401 ve response/audit leak taraması.
+- Gerçek tarayıcı: Kasko vaka Evrak ve Fotoğraf sekmesi, extraction status/parser/rule/page/segment/source locator; OCR/partial/failed/no-fallback; 1366×768 ve 1920×1080 açık/koyu overflow ve console kontrolü.
+- Gerçek müşteri PDF’i, OCR/AI, üretim migration ve gerçek `P:\` kullanılmaz. Kritik DB/API/File Agent/PDF/tarayıcı senaryosu skip ise Paket 24 PASS sayılmaz.

@@ -59,6 +59,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0013_case_close_reopen_lifecycle',
       '0014_service_agreements',
       '0015_casco_policy_analysis',
+      '0016_policy_pdf_text_extraction',
     ])
 
     const tables = await pool.query(
@@ -78,6 +79,9 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'document_rule_evaluations',
       'document_rule_sets',
       'document_rule_versions',
+      'document_text_extraction_pages',
+      'document_text_extraction_segments',
+      'document_text_extractions',
       'document_versions',
       'documents',
       'idempotency_keys',
@@ -118,20 +122,31 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0015 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0016 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0016_policy_pdf_text_extraction'])
+    const removed = await pool.query(
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_text_extractions'",
+    )
+    expect(removed.rows).toEqual([{ n: 0 }])
+    const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0016_policy_pdf_text_extraction'])
+  })
+
+  it('0015 geri alınabilir ve 0016 ile birlikte yeniden ileri uygulanabilir', async () => {
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'policy_analyses'",
     )
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction'])
   })
 
   it('0014 geri alinabilir, eski servis profilini donusturur ve yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0014_service_agreements'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 3, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'insurer_service_agreements'",
     )
@@ -141,7 +156,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'p22-backfill', 'P22 Backfill'])
     await pool.query("INSERT INTO service_centers (id,organization_id,name,center_type) VALUES ($1,$2,'Eski Servis','ozel')", [serviceId, organizationId])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction'])
     const profile = await pool.query('SELECT service_type FROM service_centers WHERE id=$1', [serviceId])
     expect(profile.rows).toEqual([{ service_type: 'private' }])
     const silentAgreements = await pool.query('SELECT count(*)::int AS n FROM insurer_service_agreements WHERE service_center_id=$1', [serviceId])
@@ -227,6 +242,37 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
        VALUES ($1,$2,$3,$4,'COLLISION','collision','Çarpışma','Sentetik madde','included',1)`,
       [uuidv7(), organizationId, cascoCaseId, versionId],
     )).rejects.toMatchObject({ code: '23001' })
+  })
+
+  it('0016 tenant, exact parser, append-only sayfa/segment ve terminal sürüm kısıtlarını zorlar', async () => {
+    const organizationId = uuidv7(); const otherOrganizationId = uuidv7(); const caseId = uuidv7()
+    const documentId = uuidv7(); const documentVersionId = uuidv7(); const extractionId = uuidv7(); const pageId = uuidv7()
+    await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3),($4,$5,$6)', [organizationId, 'p24-db', 'P24 DB', otherOrganizationId, 'p24-other', 'P24 Other'])
+    await pool.query(`INSERT INTO cases (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,notification_date)
+      VALUES ($1,$2,2026,2401,'2026/2401','casco','new_notification','34 P 2401','34P2401','2026-07-14')`, [caseId, organizationId])
+    await pool.query("INSERT INTO documents (id,organization_id,case_id,document_type,status) VALUES ($1,$2,$3,'casco_policy','ready')", [documentId, organizationId, caseId])
+    await pool.query(`INSERT INTO document_versions
+      (id,organization_id,document_id,case_id,version_number,original_file_name,display_name,mime_type,byte_size,content_hash,storage_root_key,relative_path,source_type,status,hash_verified,size_verified,verified_at)
+      VALUES ($1,$2,$3,$4,1,'sentetik.pdf','Sentetik PDF','application/pdf',100,$5,'test-root','EVRAK/sentetik.pdf','manual','ready',true,true,now())`, [documentVersionId, organizationId, documentId, caseId, 'a'.repeat(64)])
+    await pool.query('UPDATE documents SET current_version_id=$1,current_version_number=1 WHERE id=$2', [documentVersionId, documentId])
+    const insertExtraction = (id: string, org = organizationId, parserVersion = '6.1.200', extractionVersion = 1) => pool.query(`INSERT INTO document_text_extractions
+      (id,organization_id,case_id,document_id,document_version_id,extraction_version,parser_name,parser_version,normalization_version,offset_unit,source_hash,source_size)
+      VALUES ($1,$2,$3,$4,$5,$6,'pdfjs-dist',$7,'pdf-text-normalization/1.0.0','unicode_code_point',$8,100)`, [id, org, caseId, documentId, documentVersionId, extractionVersion, parserVersion, 'a'.repeat(64)])
+    await insertExtraction(extractionId)
+    await expect(insertExtraction(uuidv7())).rejects.toMatchObject({ code: '23505', constraint: 'document_text_extractions_identity_unique' })
+    await expect(insertExtraction(uuidv7(), organizationId, 'latest')).rejects.toMatchObject({ code: '23514', constraint: 'document_text_extractions_engine_valid' })
+    await expect(insertExtraction(uuidv7(), otherOrganizationId, '6.1.200', 2)).rejects.toMatchObject({ code: '23503' })
+
+    const normalized = 'POLİÇE 🚗'
+    await pool.query(`INSERT INTO document_text_extraction_pages
+      (id,organization_id,case_id,extraction_id,page_number,status,raw_text,normalized_text,raw_text_hash,normalized_text_hash,raw_character_count,normalized_character_count,segment_count)
+      VALUES ($1,$2,$3,$4,1,'text',$5,$5,$6,$6,char_length($5),char_length($5),1)`, [pageId, organizationId, caseId, extractionId, normalized, 'b'.repeat(64)])
+    await pool.query(`INSERT INTO document_text_extraction_segments
+      (id,organization_id,case_id,extraction_id,page_id,page_number,segment_index,segment_type,start_offset,end_offset,segment_text,text_hash)
+      VALUES ($1,$2,$3,$4,$5,1,0,'title',0,char_length($6),$6,$7)`, [uuidv7(), organizationId, caseId, extractionId, pageId, normalized, 'c'.repeat(64)])
+    await expect(pool.query("UPDATE document_text_extraction_pages SET normalized_text='değişti' WHERE id=$1", [pageId])).rejects.toMatchObject({ code: '23001' })
+    await pool.query(`UPDATE document_text_extractions SET status='ready',page_count=1,text_page_count=1,segment_count=1,raw_character_count=char_length($2),normalized_character_count=char_length($2),output_hash=$3,completed_at=now(),version=2 WHERE id=$1`, [extractionId, normalized, 'd'.repeat(64)])
+    await expect(pool.query("UPDATE document_text_extractions SET status='stale' WHERE id=$1", [extractionId])).rejects.toMatchObject({ code: '23001' })
   })
 
   it('0014 tenant, tarih, operasyon ve insan onayi kisitlarini zorlar', async () => {

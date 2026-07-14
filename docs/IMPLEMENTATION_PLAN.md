@@ -682,3 +682,15 @@ Kabul ölçütü: Yetkili servis anlaşmalı diye işaretlenmez; aynı servis ik
 - [x] Tam root, gerçek PostgreSQL, canlı API/tarayıcı ve repository dışı fresh `npm ci` kapıları tamamlandı; doğrulama sonuçları PROJECT_STATUS'a işlendi.
 
 Kapsam dışı: PDF binary/OCR/LLM, upload, gerçek tedarik/mobil onarım yazısı, File Agent/IPC, üretim migration ve gerçek müşteri poliçesi.
+
+## Paket 24 — Güvenli Kasko PDF metin çıkarımı
+
+- [x] Exact parser araştırması/pin: `pdfjs-dist@6.1.200`; lisans ve Node 24 uyumu doğrulandı.
+- [x] Saf domain normalizasyon/hash/segment/status kuralları ve strict contracts/JSON Schema fixture’ları.
+- [x] Migration 0016: extraction/page/segment, tenant FK, append-only/terminal guard, queue genişlemesi ve Package 23 locator bağı.
+- [x] File Agent: safe resolver/reparse reddi, streaming hash+temp copy, izole worker, limit/timeout, chunk ve deterministic summary.
+- [x] API: tenant/RBAC/idempotency, queue/lease/chunk/finalize, cancel/source-reference ve merkezi audit.
+- [x] UI: Kasko belge sekmesinde gerçek PDF extraction durumu, sayfa/segment ve no-fallback kaynak görünümü; mock fiziksel işlem yapmaz.
+- [x] Tam root, tarayıcı ve repository dışı fresh checkout kapılarının nihai sonuçları PROJECT_STATUS’a işlendi.
+
+Kapsam dışı: OCR, LLM/AI, otomatik poliçe analizi/onayı, upload, File Agent deployment, üretim migration, gerçek `P:\\` ve müşteri poliçesi.

@@ -3,13 +3,16 @@ import {
   AGENT_ID_HEADER,
   AGENT_JOB_HEARTBEAT_ROUTE,
   AGENT_JOB_RESULT_ROUTE,
+  AGENT_JOB_EXTRACTION_CHUNKS_ROUTE,
   AGENT_SECRET_HEADER,
   claimResponseSchema,
   heartbeatResponseSchema,
   jobResultResponseSchema,
+  pdfExtractionChunkResponseSchema,
   type ClaimedJob,
   type JobResultRequestInput,
   type JobResultResponse,
+  type PdfExtractionChunkRequest,
 } from '@hasarbotu/contracts'
 
 /**
@@ -71,6 +74,17 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
       })
       if (!response.ok) throw new AgentApiError(response.status, 'result report failed')
       return jobResultResponseSchema.parse(await response.json())
+    },
+
+    /** Bounded page chunk; server re-normalizes and validates before append. */
+    async reportExtractionChunk(jobId: string, chunk: PdfExtractionChunkRequest): Promise<void> {
+      const response = await fetchImpl(url(AGENT_JOB_EXTRACTION_CHUNKS_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
+        method: 'POST',
+        headers: { ...authHeaders, accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(chunk),
+      })
+      if (!response.ok) throw new AgentApiError(response.status, 'extraction chunk report failed')
+      pdfExtractionChunkResponseSchema.parse(await response.json())
     },
   }
 }

@@ -117,6 +117,13 @@ async function loadVersion(exec: Queryable, organizationId: string, caseId: stri
     pageNumber: row.page_number, sectionHeading: row.section_heading, clauseIdentifier: row.clause_identifier,
     rawExcerpt: row.raw_excerpt, excerptHash: row.excerpt_hash, locator: row.locator,
     sourceType: row.source_type, confidence: Number(row.confidence),
+    extractionLocator: row.text_extraction_id === null ? null : {
+      extractionId: row.text_extraction_id,
+      pageId: row.text_page_id,
+      segmentId: row.text_segment_id,
+      startOffset: row.start_offset,
+      endOffset: row.end_offset,
+    },
   }))
   const ids = (type: string, id: unknown) => evidence.get(`${type}:${String(id)}`) ?? []
   return policyAnalysisVersionSchema.parse({
@@ -219,7 +226,26 @@ async function validateSource(exec: Queryable, organizationId: string, caseId: s
 
 async function validatePayloadSources(exec: Queryable, organizationId: string, caseId: string, input: PolicyAnalysisCreateRequest): Promise<void> {
   await validateSource(exec, organizationId, caseId, input.sourceDocumentId, input.sourceDocumentVersionId, true)
-  for (const source of input.sourceReferences) await validateSource(exec, organizationId, caseId, source.documentId, source.documentVersionId, false)
+  for (const source of input.sourceReferences) {
+    await validateSource(exec, organizationId, caseId, source.documentId, source.documentVersionId, false)
+    if (source.extractionLocator !== null) {
+      const locator = source.extractionLocator
+      const selected = await exec.query(
+        `SELECT p.normalized_text,p.page_number,s.start_offset segment_start,s.end_offset segment_end
+         FROM document_text_extractions e JOIN document_text_extraction_pages p ON p.extraction_id=e.id
+         LEFT JOIN document_text_extraction_segments s ON s.id=$6
+         WHERE e.organization_id=$1 AND e.case_id=$2 AND e.id=$3 AND e.document_version_id=$4
+           AND p.id=$5 AND p.extraction_id=e.id AND p.status='text' AND e.status IN ('ready','partial')
+           AND ($6::uuid IS NULL OR (s.page_id=p.id AND s.extraction_id=e.id))`,
+        [organizationId, caseId, locator.extractionId, source.documentVersionId, locator.pageId, locator.segmentId],
+      )
+      const row = selected.rows[0] as { normalized_text:string;page_number:number;segment_start:number|null;segment_end:number|null }|undefined
+      const excerpt = row === undefined ? '' : Array.from(row.normalized_text).slice(locator.startOffset, locator.endOffset).join('')
+      if (row === undefined || row.page_number !== source.pageNumber || locator.endOffset > Array.from(row.normalized_text).length
+        || (locator.segmentId !== null && (row.segment_start === null || row.segment_start > locator.startOffset || row.segment_end! < locator.endOffset))
+        || excerpt !== normalizeExcerpt(source.rawExcerpt)) throw new PolicyStoreError('invalid_source')
+    }
+  }
   if (input.insurerId !== null) {
     const insurer = await exec.query('SELECT 1 FROM insurers WHERE organization_id=$1 AND id=$2', [organizationId, input.insurerId])
     if ((insurer.rowCount ?? 0) === 0) throw new PolicyStoreError('invalid_insurer')
@@ -247,11 +273,13 @@ async function insertVersion(exec: pg.PoolClient, actor: ActorContext, analysisI
     await exec.query(
       `INSERT INTO policy_source_references
        (id,organization_id,case_id,analysis_version_id,document_id,document_version_id,page_number,section_heading,
-        clause_identifier,raw_excerpt,excerpt_hash,locator,source_type,confidence)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        clause_identifier,raw_excerpt,excerpt_hash,locator,source_type,confidence,text_extraction_id,text_page_id,text_segment_id,start_offset,end_offset)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [id, actor.organizationId, actor.caseId, versionId, source.documentId, source.documentVersionId,
         source.pageNumber, source.sectionHeading.trim(), source.clauseIdentifier.trim(), excerpt, excerptHash(excerpt),
-        source.locator, source.sourceType, source.confidence],
+        source.locator, source.sourceType, source.confidence, source.extractionLocator?.extractionId ?? null,
+        source.extractionLocator?.pageId ?? null, source.extractionLocator?.segmentId ?? null,
+        source.extractionLocator?.startOffset ?? null, source.extractionLocator?.endOffset ?? null],
     )
   }
   const link = async (ownerType: string, ownerId: string, keys: readonly string[]) => {
@@ -451,7 +479,7 @@ export function createPolicyAnalysisStore(pool: pg.Pool): PolicyAnalysisStore {
         const physical=await client.query("SELECT status,hash_verified,size_verified,verified_at FROM document_versions WHERE id=$1",[vr.source_document_version_id]);const pv=physical.rows[0]as{status:string;hash_verified:boolean;size_verified:boolean;verified_at:Date|null}
         const documentState=pv.status==='ready'&&pv.hash_verified&&pv.size_verified&&pv.verified_at!==null?'verified':pv.status==='missing'?'missing':'unverified'
         const service=c.service_center_id===null?null:await loadServiceProfile(client,actor.organizationId,{serviceId:c.service_center_id,insurerId:c.insurer_id,evaluationDate:localDate(c.loss_date),dateSource:'loss_date',operation:'policy_assessment'})
-        const sourceById=new Map(version.sourceReferences.map((source)=>[source.id,source]));const sourceFor=(ids:readonly string[])=>ids.map((id)=>sourceById.get(id)).filter((item):item is PolicySourceReference=>item!==undefined)
+        const sourceById=new Map(version.sourceReferences.map((source)=>[source.id,source]));const sourceFor=(ids:readonly string[])=>ids.map((id)=>sourceById.get(id)).filter((item)=>item!==undefined) as PolicySourceReference[]
         const deductibles:PolicyDeductible[]=version.deductibles.map((item)=>({code:item.code,type:item.type,trigger:item.trigger,calculationType:item.calculationType,fixedAmount:item.fixedAmount,percentage:item.percentage,minimumAmount:item.minimumAmount,maximumAmount:item.maximumAmount,insurerShare:item.insurerShare,insuredShare:item.insuredShare,affectedCoverage:item.affectedCoverage,affectedRepairMethod:item.affectedRepairMethod,affectedServiceType:item.affectedServiceType,affectedPartRule:item.affectedPartRule,exception:item.exception,sourceReferences:sourceFor(item.sourceReferenceIds),confidence:item.confidence,approvalStatus:item.approvalStatus}))
         const rules:PolicyScenarioRule[]=version.scenarioRules.map((item)=>({ruleId:item.ruleId,ruleVersion:item.ruleVersion,scenarioType:item.scenarioType,trigger:item.trigger,conditions:item.conditions,coverageOutcome:item.coverageOutcome,coverageCode:item.coverageCode,deductibleCodes:item.deductibleCodes,limit:item.limit,exception:item.exception,requiredDocuments:item.requiredDocuments,serviceCondition:item.serviceCondition,partCondition:item.partCondition,action:item.action,sourceReferences:sourceFor(item.sourceReferenceIds),confidence:item.confidence,humanApprovalRequired:item.humanApprovalRequired,precedence:item.precedence,effectiveFrom:item.effectiveFrom,effectiveTo:item.effectiveTo}))
         const conflicts:PolicyConflictFact[]=version.conflicts.map((item)=>({id:item.id,affectedTopic:item.affectedTopic,explanation:item.explanation,severity:item.severity,resolutionStatus:item.resolutionStatus,sourceA:sourceById.get(item.sourceAId)!,sourceB:sourceById.get(item.sourceBId)!})).filter((item)=>item.sourceA!==undefined&&item.sourceB!==undefined)
@@ -460,7 +488,7 @@ export function createPolicyAnalysisStore(pool: pg.Pool): PolicyAnalysisStore {
         const dto=policyScenarioEvaluationSchema.parse({evaluationId,analysisId:input.analysisId,evaluatedAt:evaluatedAt.toISOString(),...evaluation,
           deductibles:evaluation.deductibles.map((item)=>version.deductibles.find((dtoItem)=>dtoItem.code===item.code)),
           conflicts:evaluation.conflicts.map((item)=>version.conflicts.find((dtoItem)=>dtoItem.id===item.id))})
-        const safeSnapshot={...dto,sourceReferences:dto.sourceReferences.map((source)=>({id:source.id,documentId:source.documentId,documentVersionId:source.documentVersionId,pageNumber:source.pageNumber,sectionHeading:source.sectionHeading,clauseIdentifier:source.clauseIdentifier,excerptHash:source.excerptHash,locator:source.locator,sourceType:source.sourceType,confidence:source.confidence})),deductibles:dto.deductibles.map((item)=>({...item,sourceReferenceIds:item.sourceReferenceIds})),conflicts:dto.conflicts}
+        const safeSnapshot={...dto,sourceReferences:dto.sourceReferences.map((source)=>({id:source.id,documentId:source.documentId,documentVersionId:source.documentVersionId,pageNumber:source.pageNumber,sectionHeading:source.sectionHeading,clauseIdentifier:source.clauseIdentifier,excerptHash:source.excerptHash,locator:source.locator,sourceType:source.sourceType,confidence:source.confidence,extractionLocator:source.extractionLocator})),deductibles:dto.deductibles.map((item)=>({...item,sourceReferenceIds:item.sourceReferenceIds})),conflicts:dto.conflicts}
         await client.query(`INSERT INTO policy_scenario_evaluations
           (id,organization_id,case_id,analysis_id,analysis_version_id,policy_analysis_version,scenario_type,rule_version,input_summary,result_code,result_snapshot,evaluated_by_user_id,request_id,evaluated_at)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,[evaluationId,actor.organizationId,caseId,input.analysisId,vr.id,input.policyAnalysisVersion,input.scenarioType,dto.ruleVersion,JSON.stringify({damageCategory:input.damageCategory,repairMethod:input.repairMethod,requestedOperation:input.requestedOperation,documentState}),dto.result,JSON.stringify(safeSnapshot),actor.actorUserId,actor.requestId,evaluatedAt])
