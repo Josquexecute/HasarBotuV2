@@ -28,6 +28,7 @@ import { useSession } from '../../app/sessionContext'
 import type { CaseRecord } from '../../types/case'
 import { DocumentPhotoApiModule } from './DocumentPhotoApiModule'
 import { CaseEditModal } from './CaseEditModal'
+import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
 
 const tabs = [
   'Özet',
@@ -290,6 +291,13 @@ export function CaseDetailPage() {
                   <div><span>Görev · 14:30</span><p>Eksik evrak dönüşünü kontrol et · {item.assignee}</p></div>
                 </div>
               </section>
+              {source === 'api' && (
+                <WorkspaceProvisioningPanel
+                  caseId={item.caseId}
+                  notificationDate={item.notificationDate ?? null}
+                  onUnauthorized={session.reportUnauthorized}
+                />
+              )}
             </div>
           ) : activeTab === 'Operasyon' ? (
             <div className="module-workspace">

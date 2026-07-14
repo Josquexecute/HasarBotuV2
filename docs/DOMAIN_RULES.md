@@ -244,3 +244,14 @@ Durumlar:
 - Kullanıcı Tarafından Düzeltildi
 
 Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından düzeltilmiş kesin tutar girer.
+
+## Case çalışma klasörü
+
+- Yıl ve ay yalnız `notificationDate` LocalDate değerinden alınır: `YYYY/Ay YYYY/PLAKA`.
+- Plaka kanonik değerden boşluksuz klasör segmentine çevrilir; ihbar/hasar/poliçe numarası path parçası olamaz.
+- Aynı ay ve plakada ilk boş sıra `PLAKA`, `PLAKA - 2`, `PLAKA - 3` olarak seçilir.
+- Zorunlu alt klasörler: `EVRAK`, `HASAR`, `OLAY YERİ`, `ONARIM`, `DEĞER KAYBI`.
+- Plan/preview fiziksel yazma yapmaz; Agent işi açık kullanıcı onayı olmadan kuyruğa alınamaz.
+- Fiziksel doğrulama tamamlanmadan vaka konumu `verified` ve provisioning `ready` olamaz.
+- Kısmi başarısızlık mevcut klasörleri sildirmez; retry yalnız eksik dizinleri tamamlar.
+- Eski case location snapshot’ına ait sonuç güncel konumu ezmez ve `stale` olur.

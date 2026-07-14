@@ -115,6 +115,7 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 | `part_price_references` | Parça referans bedeli (KDV hariç iskontosuz liste; kaynak/tarih/belge; gerçek bedel/pay ayrımı) | Referans bedel ödeme tutarıyla karışmaz |
 | `ai_usage_ledger` | AI kullanım/maliyet defteri (modül/kullanıcı/model/dosya) | Bütçe raporu ve üst sınır takibi |
 | `backup_runs` / `restore_test_runs` | Yedek koşuları ve geri yükleme testi kanıtları | Yedek dosyasının varlığı başarı sayılmaz; doğrulama + audit |
+| `case_workspace_provisionings` | Case çalışma klasörü planı, güvenli göreli yol rezervasyonu ve Agent durum snapshot’ı | Vaka başına tek rezervasyon; org/root/path unique; mutlak yol yok; ready yalnız Agent doğrulamasıyla |
 
 ## 5. Kritik domain kuralları
 

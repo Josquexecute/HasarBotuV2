@@ -31,6 +31,12 @@ export const jobResultRequestSchema = z.strictObject({
 export type JobResultRequest = z.infer<typeof jobResultRequestSchema>
 export type JobResultRequestInput = z.input<typeof jobResultRequestSchema>
 
+export const JOB_PROGRESS_PHASES = ['applying', 'verifying'] as const
+export const jobHeartbeatRequestSchema = z.strictObject({
+  phase: z.enum(JOB_PROGRESS_PHASES).optional(),
+})
+export type JobHeartbeatRequest = z.infer<typeof jobHeartbeatRequestSchema>
+
 /** Agent kaydı isteği (yönetici). */
 export const agentRegisterRequestSchema = z.strictObject({
   name: z

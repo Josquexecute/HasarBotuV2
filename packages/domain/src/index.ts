@@ -114,6 +114,15 @@ export {
 } from './file-metadata.js'
 export type { CaseCore } from './case-core.js'
 export {
+  CASE_WORKSPACE_SUBDIRECTORIES,
+  TURKISH_MONTH_NAMES,
+  buildCaseWorkspaceBasePath,
+  selectAvailableCaseWorkspacePath,
+  type CaseWorkspacePathError,
+  type CaseWorkspacePathResult,
+  type CaseWorkspaceSubdirectory,
+} from './case-workspace.js'
+export {
   CANONICAL_DOCUMENT_TYPES, DOCUMENT_REQUIREMENT_RULE_SET_ID, DOCUMENT_REQUIREMENT_RULE_VERSION, DOCUMENT_REQUIREMENT_STATUSES,
   defaultDocumentRequirementRuleSet, evaluateDocumentRequirements,
   type AlternativeDocumentGroupResult, type CanonicalDocumentType, type DocumentMetadataStatus, type DocumentRequirementFact,

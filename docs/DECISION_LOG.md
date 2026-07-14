@@ -475,3 +475,17 @@ Karar:
 6. Yol haritasındaki tarihsel “Paket 18 Gmail” başlığı yeniden numaralandırılmadı; bu kullanıcı talimatlı ek Paket 18, referans/Case çekirdeği kapsamıdır ve Gmail entegrasyonunu başlatmaz.
 
 Etkisi: `0010` migration, dört contracts/JSON Schema referans cevabı, references API store/routes, Case DTO/komut alanları, gerçek referans DataPort/adapter/hook ve create/edit form bağlaması. Yeni dependency, IPC, File Agent veya fiziksel dosya işlemi yoktur.
+
+## 2026-07-14 — HB-2026-025: Paket 19 güvenli Case çalışma klasörü provisioning
+
+Karar:
+
+1. Çalışma klasörü yolu `notificationDate` ve kanonik plakadan deterministik olarak `YYYY/Ay YYYY/PLAKA` üretilir. Aynı org/root/ay/plaka rezervasyonları PostgreSQL advisory lock altında `PLAKA`, `PLAKA - 2`, `PLAKA - 3` sırasıyla ayrılır. DB, API ve audit yalnız `storageRootKey + relativePath` taşır; mutlak kök yalnız Agent yerel config’indedir.
+2. Plan/preview dosya sistemine yazmaz. Zorunlu `Idempotency-Key` ve açık kullanıcı onayı sonrasında tek `provision_case_workspace` işi kuyruğa alınır. Vaka başına tek provisioning rezervasyonu ve provisioning hedefi başına tek aktif job DB unique kısıtlarıyla zorlanır.
+3. Fiziksel işlem yalnız File Agent’da, eklemeli ve idempotenttir: ana klasör ile `EVRAK`, `HASAR`, `OLAY YERİ`, `ONARIM`, `DEĞER KAYBI` eksikse oluşturulur; mevcut doğru dizin başarıdır. Kısmi hatada hiçbir klasör silinmez/taşınmaz/yeniden adlandırılmaz; güvenli hata koduyla retry yapılır.
+4. Domain traversal/drive/UNC denetimine ek olarak Agent her mevcut/oluşturulan bileşeni `lstat + realpath` ile doğrular; symlink/junction/reparse point ve root dışı çözüm reddedilir. Ham OS hatası, mutlak yol ve agent secret yanıt/audit/log’a taşınmaz.
+5. Durum akışı `planned → approved → queued → applying → verifying → ready`; `failed/cancelled/stale` güvenli terminal/ara durumları desteklenir. `ready` yalnız Agent beş alt klasörü fiziksel olarak doğruladıktan sonra oluşur. Case location başka işlemce oluşturulmuş/değişmişse eski job `stale` olur ve sonucu yazmaz.
+6. Başarılı sonuçta verified `case_locations` kaydı, append-only location history, provisioning `ready`, job sonucu ve merkezi audit aynı transaction’da kesinleşir. Audit yalnız actor/request/job/agent kimlikleri ile güvenli logical path özetini taşır.
+7. Dosya Detayı’ndaki sınırlı panel yalnız API modunda aktif root listesini, plan preview’ını, açık onayı ve durumu gösterir; 401/404/conflict/ağ hatası mock ile maskelenmez. Mock modda fiziksel işlem yoktur.
+
+Etkisi: Migration `0011_case_workspace_provisioning`; workspace contracts/API/DataPort/UI; File Agent provisioning yürütücüsü ve job progress protokolü. Yeni dependency, IPC, upload, move/rename/delete, OCR/AI veya üretim `P:\` işlemi yoktur.

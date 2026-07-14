@@ -37,6 +37,15 @@
 - Gerçek PostgreSQL + çalışan API + Vite proxy tarayıcı akışında login, Trafik, rüculu Kasko, rücu belirsizliği, tenant 404 ve logout sonrası 401 doğrulanır. GET sonrası snapshot/evaluation-audit sayaçları değişmez.
 - UI etkisi 1366×768 açık/koyu ve 1920×1080 koyu tema; iç scrollbar ve yatay metadata tablosu ile görsel olarak kontrol edilir.
 
+### Paket 19 — güvenli Case çalışma klasörü kabulü
+
+- Plan/preview çağrısı gerçek PostgreSQL’de rezervasyon ve güvenli özet üretir; sentetik filesystem’de hiçbir dizin oluşturmaz. Onaysız plan için provisioning job bulunmaz.
+- Onay zorunlu `Idempotency-Key` taşır; replay ve eşzamanlı iki onay tek aktif işe ve tek fiziksel klasör yapısına dönüşür.
+- File Agent yalnız sentetik geçici root’ta ana klasör + beş sabit alt klasörü oluşturur; mevcut/kısmi yapı idempotent tamamlanır, kısmi hatada silme yoktur ve retry eksikleri tamamlar.
+- Traversal, drive, UNC, symlink/junction/reparse point; tenant dışı erişim; stale location; 401/404/409; mutlak yol/secret/ham hata sızıntısı negatif testleri geçmelidir.
+- `ready` yalnız Agent fiziksel doğrulamasından sonra; verified case location + history + provisioning/job/audit aynı transaction’da oluşmalıdır.
+- Gerçek tarayıcı smoke’unda API login → preview → açık onay → applying/verifying → ready; ağ hatasında no-fallback; 1366×768 açık/koyu ve 1920×1080 tema/overflow/console kontrolleri yapılmalıdır.
+
 Bir görev ancak:
 
 - Kod derleniyorsa

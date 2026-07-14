@@ -37,6 +37,7 @@ function errno(error: unknown): string | undefined {
 }
 
 export async function verifyTarget(rootAbsolute: string, payload: JobPayload): Promise<VerifyResult> {
+  if (payload.kind === 'workspace') return { outcome: 'failed', errorCode: 'unsupported_job_kind' }
   let candidate: string
   try {
     candidate = resolveUnderRoot(rootAbsolute, payload.relativePath)

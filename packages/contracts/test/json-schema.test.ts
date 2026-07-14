@@ -34,6 +34,8 @@ describe('JSON Schema uretimi', () => {
       'reference-services-response',
       'reference-users-response',
       'storage-roots-response',
+      'workspace-plan-request',
+      'workspace-provisioning-response',
     ])
   })
 

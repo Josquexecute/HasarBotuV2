@@ -184,6 +184,12 @@ export function createAgentStore(pool: pg.Pool) {
             "UPDATE jobs SET status = 'dead_letter', leased_by_agent_id = NULL, lease_expires_at = NULL, updated_at = now() WHERE id = $1",
             [job.id],
           )
+          if (job.type === 'provision_case_workspace') {
+            await client.query(
+              "UPDATE case_workspace_provisionings SET status='failed', last_error_code='attempts_exhausted', updated_at=now() WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled')",
+              [job.target_id, agent.organizationId],
+            )
+          }
           return null
         }
 
@@ -193,24 +199,69 @@ export function createAgentStore(pool: pg.Pool) {
            WHERE id = $1 RETURNING ${JOB_FIELDS}`,
           [job.id, nextAttempt, agent.id, leaseSeconds],
         )
-        return claimedJobToDto(upd.rows[0] as JobRow)
+        const claimed = upd.rows[0] as JobRow
+        if (claimed.type === 'provision_case_workspace') {
+          const changed = await client.query(
+            `UPDATE case_workspace_provisionings SET status='applying', last_error_code=NULL, updated_at=now()
+             WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled')
+             RETURNING approved_by_user_id`,
+            [claimed.target_id, agent.organizationId],
+          )
+          const plan = changed.rows[0] as { approved_by_user_id: string | null } | undefined
+          if (plan !== undefined) {
+            await audit.record(client, {
+              organizationId: agent.organizationId,
+              actorUserId: plan.approved_by_user_id ?? undefined,
+              action: 'case.workspace_applying',
+              entityType: 'case_workspace_provisioning',
+              entityId: claimed.target_id,
+              details: { jobId: claimed.id, agentId: agent.id, attempt: nextAttempt },
+            })
+          }
+        }
+        return claimedJobToDto(claimed)
       })
     },
 
     async heartbeat(
       agent: { id: string; organizationId: string },
       jobId: string,
+      phase?: 'applying' | 'verifying',
+      requestId?: string,
       leaseSeconds = DEFAULT_LEASE_SECONDS,
     ): Promise<Date | undefined> {
-      const result = await pool.query(
-        `UPDATE jobs SET lease_expires_at = now() + make_interval(secs => $4), heartbeat_at = now(), updated_at = now()
-         WHERE id::text = $1 AND organization_id = $2 AND leased_by_agent_id = $3
-           AND status = 'leased' AND lease_expires_at > now()
-         RETURNING lease_expires_at`,
-        [jobId, agent.organizationId, agent.id, leaseSeconds],
-      )
-      const row = result.rows[0] as { lease_expires_at: Date } | undefined
-      return row?.lease_expires_at
+      return withTransaction(pool, async (client) => {
+        const result = await client.query(
+          `UPDATE jobs SET lease_expires_at = now() + make_interval(secs => $4), heartbeat_at = now(), updated_at = now()
+           WHERE id::text = $1 AND organization_id = $2 AND leased_by_agent_id = $3
+             AND status = 'leased' AND lease_expires_at > now()
+           RETURNING lease_expires_at, type, target_id`,
+          [jobId, agent.organizationId, agent.id, leaseSeconds],
+        )
+        const row = result.rows[0] as { lease_expires_at: Date; type: string; target_id: string } | undefined
+        if (row === undefined) return undefined
+        if (phase !== undefined && row.type === 'provision_case_workspace') {
+          const changed = await client.query(
+            `UPDATE case_workspace_provisionings SET status=$3, updated_at=now()
+             WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled') AND status<>$3
+             RETURNING approved_by_user_id`,
+            [row.target_id, agent.organizationId, phase],
+          )
+          const plan = changed.rows[0] as { approved_by_user_id: string | null } | undefined
+          if (plan !== undefined) {
+            await audit.record(client, {
+              organizationId: agent.organizationId,
+              actorUserId: plan.approved_by_user_id ?? undefined,
+              requestId,
+              action: `case.workspace_${phase}`,
+              entityType: 'case_workspace_provisioning',
+              entityId: row.target_id,
+              details: { jobId, agentId: agent.id },
+            })
+          }
+        }
+        return row.lease_expires_at
+      })
     },
 
     /**
@@ -245,6 +296,26 @@ export function createAgentStore(pool: pg.Pool) {
         // ---- retry edilebilir hata ----
         if (result.outcome === 'failed') {
           const errorCode = result.errorCode ?? 'verification_failed'
+          if (job.type === 'provision_case_workspace') {
+            const failedPlan = await client.query(
+              `UPDATE case_workspace_provisionings SET status='failed', last_error_code=$3, updated_at=now()
+               WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled')
+               RETURNING approved_by_user_id, case_id`,
+              [job.target_id, agent.organizationId, errorCode],
+            )
+            const plan = failedPlan.rows[0] as { approved_by_user_id: string | null; case_id: string } | undefined
+            if (plan !== undefined) {
+              await audit.record(client, {
+                organizationId: agent.organizationId,
+                actorUserId: plan.approved_by_user_id ?? undefined,
+                requestId,
+                action: 'case.workspace_failed',
+                entityType: 'case_workspace_provisioning',
+                entityId: job.target_id,
+                details: { caseId: plan.case_id, jobId: job.id, agentId: agent.id, errorCode, attempt: job.attempt_count },
+              })
+            }
+          }
           if (job.attempt_count >= job.max_attempts) {
             await client.query(
               "UPDATE jobs SET status = 'dead_letter', last_error_code = $2, leased_by_agent_id = NULL, lease_expires_at = NULL, updated_at = now() WHERE id = $1",
@@ -302,6 +373,107 @@ async function applyVerification(
   result: JobResultRequest,
 ): Promise<AppliedResult> {
   const { client } = ctx
+  if (job.target_type === 'workspace_provisioning') {
+    const audit = createAuditService()
+    const planResult = await client.query(
+      `SELECT case_id, storage_root_key, relative_path, status, approved_by_user_id
+       FROM case_workspace_provisionings WHERE id::text=$1 AND organization_id=$2 FOR UPDATE`,
+      [job.target_id, ctx.organizationId],
+    )
+    const plan = planResult.rows[0] as {
+      case_id: string
+      storage_root_key: string
+      relative_path: string
+      status: string
+      approved_by_user_id: string | null
+    } | undefined
+    if (plan === undefined || ['ready', 'stale', 'cancelled'].includes(plan.status)) {
+      return { metadataResult: 'stale_skipped', errorCode: null, auditAction: 'job.verification_stale', jobStatus: 'succeeded' }
+    }
+    if (result.outcome === 'missing') {
+      await client.query(
+        "UPDATE case_workspace_provisionings SET status='failed', last_error_code='workspace_missing', updated_at=now() WHERE id=$1",
+        [job.target_id],
+      )
+      return { metadataResult: 'failed', errorCode: 'workspace_missing', auditAction: 'job.verification_failed', jobStatus: 'failed' }
+    }
+
+    const locationResult = await client.query(
+      `SELECT id, case_id FROM case_locations
+       WHERE organization_id=$1 AND (case_id=$2 OR (storage_root_key=$3 AND relative_path=$4))
+       FOR UPDATE`,
+      [ctx.organizationId, plan.case_id, plan.storage_root_key, plan.relative_path],
+    )
+    if (locationResult.rowCount !== 0) {
+      await client.query(
+        "UPDATE case_workspace_provisionings SET status='stale', last_error_code='location_changed', updated_at=now() WHERE id=$1",
+        [job.target_id],
+      )
+      await audit.record(client, {
+        organizationId: ctx.organizationId,
+        actorUserId: plan.approved_by_user_id ?? undefined,
+        requestId: ctx.requestId,
+        action: 'case.workspace_stale',
+        entityType: 'case_workspace_provisioning',
+        entityId: job.target_id,
+        details: { caseId: plan.case_id, jobId: job.id, agentId: ctx.agentId, reason: 'location_changed' },
+      })
+      return { metadataResult: 'stale_skipped', errorCode: null, auditAction: 'job.verification_stale', jobStatus: 'succeeded' }
+    }
+
+    const locationId = uuidv7()
+    await client.query(
+      `INSERT INTO case_locations
+       (id,organization_id,case_id,storage_root_key,relative_path,verification_status,source,version)
+       VALUES ($1,$2,$3,$4,$5,'verified','system',1)`,
+      [locationId, ctx.organizationId, plan.case_id, plan.storage_root_key, plan.relative_path],
+    )
+    await client.query(
+      `INSERT INTO case_location_history
+       (id,organization_id,case_id,storage_root_key,relative_path,previous_relative_path,
+        verification_status,source,changed_by_user_id,request_id)
+       VALUES ($1,$2,$3,$4,$5,NULL,'verified','system',$6,$7)`,
+      [uuidv7(), ctx.organizationId, plan.case_id, plan.storage_root_key, plan.relative_path, plan.approved_by_user_id, ctx.requestId],
+    )
+    await client.query(
+      "UPDATE case_workspace_provisionings SET status='ready', ready_at=now(), last_error_code=NULL, updated_at=now() WHERE id=$1",
+      [job.target_id],
+    )
+    await audit.record(client, {
+      organizationId: ctx.organizationId,
+      actorUserId: plan.approved_by_user_id ?? undefined,
+      requestId: ctx.requestId,
+      action: 'case.workspace_ready',
+      entityType: 'case_workspace_provisioning',
+      entityId: job.target_id,
+      details: {
+        caseId: plan.case_id,
+        jobId: job.id,
+        agentId: ctx.agentId,
+        storageRootKey: plan.storage_root_key,
+        relativePath: plan.relative_path,
+        locationId,
+        locationVersion: 1,
+      },
+    })
+    await audit.record(client, {
+      organizationId: ctx.organizationId,
+      actorUserId: plan.approved_by_user_id ?? undefined,
+      requestId: ctx.requestId,
+      action: 'case.location_assigned',
+      entityType: 'case',
+      entityId: plan.case_id,
+      details: {
+        storageRootKey: plan.storage_root_key,
+        relativePath: plan.relative_path,
+        source: 'system',
+        verificationStatus: 'verified',
+        toVersion: 1,
+        provisioningId: job.target_id,
+      },
+    })
+    return { metadataResult: 'ready', errorCode: null, auditAction: 'job.verified', jobStatus: 'succeeded' }
+  }
   if (job.target_type === 'document_version' || job.target_type === 'photo') {
     const table = job.target_type === 'photo' ? 'photos' : 'document_versions'
     const row = await client.query(

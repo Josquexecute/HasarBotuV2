@@ -356,6 +356,10 @@ Organization-kapsamlı salt-okunur insurer/service/user/expert katalogları yaln
 
 Tarayıcı doğrulamasında Codex Browser bootstrap'ındaki `process` yeniden tanımı repository dışı araç hatası olarak kanıtlandı. Uygulama kodu değiştirilmeden kurulu Chrome DevTools protokolüyle gerçek API login/create/update/conflict/reload, aktif referans izolasyonu, no-fallback, 1366/1920 açık-koyu overflow ve konsol kontrolleri geçti; yeni browser dependency eklenmedi.
 
+### Paket 19 ek uygulama kaydı — güvenli Case çalışma klasörü provisioning
+
+Migration 0011 logical path rezervasyonu ve provisioning durumunu mevcut PostgreSQL job kuyruğuyla bağlar. Plan/preview yalnız DB metadata yazımıdır; Agent işi açık onaydan sonra oluşturulur. Agent yerel mutlak root mapping’iyle, sentetik test root’unda, eksik dizinleri bileşen bazında oluşturur ve her bileşeni `lstat + realpath` ile doğrular. Başarıda verified case location/geçmiş/provisioning/job/audit atomiktir; partial failure silme yapmaz; stale sonuç yazılmaz. Yeni servis kurulumu, dependency, IPC, LAN/TLS, üretim migration veya `P:\` testi yoktur.
+
 Her pakette gerçek sonuca göre şu kanıtlar raporlanır:
 
 1. Değişen dosyalar ve kullanıcı değişikliklerinden ayrımı.

@@ -18,7 +18,8 @@
               "enum": [
                 "verify_document",
                 "verify_photo",
-                "verify_case_location"
+                "verify_case_location",
+                "provision_case_workspace"
               ]
             },
             "targetType": {
@@ -26,7 +27,8 @@
               "enum": [
                 "document_version",
                 "photo",
-                "case_location"
+                "case_location",
+                "workspace_provisioning"
               ]
             },
             "targetId": {
@@ -56,59 +58,116 @@
               "x-hasarbotu-runtime-validation": "calendar-date-validity"
             },
             "payload": {
-              "type": "object",
-              "properties": {
-                "storageRootKey": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 64,
-                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
-                },
-                "relativePath": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 400,
-                  "x-hasarbotu-runtime-validation": "safe-relative-path"
-                },
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "file",
-                    "directory"
-                  ]
-                },
-                "declaredHash": {
-                  "anyOf": [
-                    {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "storageRootKey": {
                       "type": "string",
-                      "pattern": "^[a-f0-9]{64}$"
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
                     },
-                    {
-                      "type": "null"
+                    "relativePath": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400,
+                      "x-hasarbotu-runtime-validation": "safe-relative-path"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "file",
+                        "directory"
+                      ]
+                    },
+                    "declaredHash": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "declaredSize": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 5368709120
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
-                  ]
+                  },
+                  "required": [
+                    "storageRootKey",
+                    "relativePath",
+                    "kind",
+                    "declaredHash",
+                    "declaredSize"
+                  ],
+                  "additionalProperties": false
                 },
-                "declaredSize": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 5368709120
+                {
+                  "type": "object",
+                  "properties": {
+                    "storageRootKey": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
                     },
-                    {
-                      "type": "null"
+                    "relativePath": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400,
+                      "x-hasarbotu-runtime-validation": "safe-relative-path"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "workspace"
+                    },
+                    "requiredSubdirectories": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "string",
+                          "const": "EVRAK"
+                        },
+                        {
+                          "type": "string",
+                          "const": "HASAR"
+                        },
+                        {
+                          "type": "string",
+                          "const": "OLAY YERİ"
+                        },
+                        {
+                          "type": "string",
+                          "const": "ONARIM"
+                        },
+                        {
+                          "type": "string",
+                          "const": "DEĞER KAYBI"
+                        }
+                      ]
                     }
-                  ]
+                  },
+                  "required": [
+                    "storageRootKey",
+                    "relativePath",
+                    "kind",
+                    "requiredSubdirectories"
+                  ],
+                  "additionalProperties": false
                 }
-              },
-              "required": [
-                "storageRootKey",
-                "relativePath",
-                "kind",
-                "declaredHash",
-                "declaredSize"
-              ],
-              "additionalProperties": false
+              ]
             }
           },
           "required": [

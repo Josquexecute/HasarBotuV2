@@ -14,6 +14,11 @@ export {
 export { streamSha256, verifyTarget, type VerifyResult } from './verifier.js'
 export { AgentApiError, createAgentApiClient, type AgentApiClient, type AgentApiClientOptions } from './api-client.js'
 export { runLoop, runOnce, type RunOnceResult } from './agent.js'
+export {
+  provisionCaseWorkspace,
+  type WorkspaceProvisionHooks,
+  type WorkspaceProvisionResult,
+} from './workspace-provisioner.js'
 
 /**
  * Import edildiğinde döngü BAŞLAMAZ. Yalnız gerçek entrypoint doğrudan
@@ -22,7 +27,9 @@ export { runLoop, runOnce, type RunOnceResult } from './agent.js'
 async function main(): Promise<void> {
   const config = loadAgentConfigFromEnv()
   const client = createAgentApiClient({ baseUrl: config.apiBaseUrl, agentId: config.agentId, secret: config.agentSecret })
-  await runLoop(client, config)
+  await runLoop(client, config, {
+    onCycleError: (code) => console.error(`File Agent cycle failed: ${code}`),
+  })
 }
 
 const entryScript = process.argv[1]

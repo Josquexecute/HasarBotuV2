@@ -188,7 +188,32 @@ export {
   type JobResultRequestInput,
   type AgentRegisterRequest,
   type AgentUpdateRequest,
+  JOB_PROGRESS_PHASES,
+  jobHeartbeatRequestSchema,
+  type JobHeartbeatRequest,
 } from './v1/agent/index.js'
+
+export {
+  CASE_WORKSPACE_PLANS_ROUTE,
+  CASE_WORKSPACE_PLAN_ROUTE,
+  CASE_WORKSPACE_APPROVE_ROUTE,
+  WORKSPACE_PROVISIONING_STATUSES,
+  workspaceProvisioningStatusSchema,
+  caseWorkspaceSubdirectoriesSchema,
+  workspacePlanRequestSchema,
+  workspaceApproveRequestSchema,
+  workspaceProvisioningSchema,
+  workspaceProvisioningResponseSchema,
+  workspacePlanParamsSchema,
+  workspaceProvisioningParamsSchema,
+  type WorkspacePlanRequest,
+  type WorkspaceApproveRequest,
+  type WorkspaceProvisioning,
+  type WorkspaceProvisioningResponse,
+  type WorkspaceProvisioningStatus,
+  type WorkspacePlanParams,
+  type WorkspaceProvisioningParams,
+} from './v1/workspace/index.js'
 
 export {
   // document routes + scopes

@@ -60,3 +60,13 @@ export {
   type ReferenceDataErrorKind,
 } from './referenceHttpAdapter'
 export { useCaseReferences, type CaseReferencesStatus } from './useCaseReferences'
+export {
+  WorkspaceCommandError,
+  createHttpWorkspaceCommandAdapter,
+  type WorkspaceCommandAdapterOptions,
+  type WorkspaceCommandErrorKind,
+  type WorkspaceCommandPort,
+  type WorkspaceProvisioningRecord,
+  type WorkspaceProvisioningStatus,
+  type WorkspaceRootRecord,
+} from './workspacePort'

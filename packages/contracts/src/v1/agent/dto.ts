@@ -9,7 +9,7 @@ import { byteSizeSchema, sha256HexSchema } from '../documents/dto.js'
  * göreli yol + beyan hash/size. MUTLAK YOL, sürücü harfi veya UNC ASLA taşınmaz;
  * cihaz→mutlak eşleme yalnız Agent'ın yerel config'indedir.
  */
-export const JOB_TYPES = ['verify_document', 'verify_photo', 'verify_case_location'] as const
+export const JOB_TYPES = ['verify_document', 'verify_photo', 'verify_case_location', 'provision_case_workspace'] as const
 export type JobType = (typeof JOB_TYPES)[number]
 export const jobTypeSchema = z.enum(JOB_TYPES)
 
@@ -17,22 +17,35 @@ export const JOB_STATUSES = ['pending', 'leased', 'succeeded', 'failed', 'dead_l
 export type JobStatus = (typeof JOB_STATUSES)[number]
 export const jobStatusSchema = z.enum(JOB_STATUSES)
 
-export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location'] as const
+export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning'] as const
 export type JobTargetType = (typeof JOB_TARGET_TYPES)[number]
 export const jobTargetTypeSchema = z.enum(JOB_TARGET_TYPES)
 
 /** Doğrulama hedefi: dosya (hash+size) veya dizin (yalnız varlık). */
-export const JOB_PAYLOAD_KINDS = ['file', 'directory'] as const
+export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace'] as const
 export const jobPayloadKindSchema = z.enum(JOB_PAYLOAD_KINDS)
 
 /** Agent'a verilen güvenli payload. Mutlak yol yoktur. */
-export const jobPayloadSchema = z.strictObject({
+export const verificationJobPayloadSchema = z.strictObject({
   storageRootKey: storageRootKeySchema,
   relativePath: relativePathSchema,
-  kind: jobPayloadKindSchema,
+  kind: z.enum(['file', 'directory']),
   declaredHash: sha256HexSchema.nullable(),
   declaredSize: byteSizeSchema.nullable(),
 })
+export const workspaceJobPayloadSchema = z.strictObject({
+  storageRootKey: storageRootKeySchema,
+  relativePath: relativePathSchema,
+  kind: z.literal('workspace'),
+  requiredSubdirectories: z.tuple([
+    z.literal('EVRAK'),
+    z.literal('HASAR'),
+    z.literal('OLAY YERİ'),
+    z.literal('ONARIM'),
+    z.literal('DEĞER KAYBI'),
+  ]),
+})
+export const jobPayloadSchema = z.discriminatedUnion('kind', [verificationJobPayloadSchema, workspaceJobPayloadSchema])
 export type JobPayload = z.infer<typeof jobPayloadSchema>
 
 /** Claim edilen iş: agent'ın çalışacağı güvenli görev. */

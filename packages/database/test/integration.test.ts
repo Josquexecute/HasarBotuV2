@@ -54,6 +54,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0008_file_agent_jobs',
       '0009_document_requirement_rules',
       '0010_case_reference_enrichment',
+      '0011_case_workspace_provisioning',
     ])
 
     const tables = await pool.query(
@@ -64,6 +65,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'audit_events',
       'case_location_history',
       'case_locations',
+      'case_workspace_provisionings',
       'cases',
       'document_rule_evaluation_items',
       'document_rule_evaluations',
@@ -94,15 +96,55 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0010 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0011 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0010_case_reference_enrichment'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0011_case_workspace_provisioning'])
     const removed = await pool.query(
-      "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'cases' AND column_name = 'expert_user_id'",
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'case_workspace_provisionings'",
     )
     expect((removed.rows[0] as { n: number }).n).toBe(0)
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0010_case_reference_enrichment'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0011_case_workspace_provisioning'])
+  })
+
+  it('0011 göreli yol, tek vaka rezervasyonu ve tek aktif iş kısıtlarını uygular', async () => {
+    const organizationId = uuidv7()
+    const userId = uuidv7()
+    const caseId = uuidv7()
+    const rootId = uuidv7()
+    await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1,$2,$3)', [organizationId, 'p19-db', 'P19 DB'])
+    await pool.query("INSERT INTO users (id,organization_id,email,password_hash,display_name) VALUES ($1,$2,'p19@test.local','x','P19')", [userId, organizationId])
+    await pool.query(
+      `INSERT INTO cases (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,notification_date)
+       VALUES ($1,$2,2026,19,'2026/19','traffic','new_notification','34 DB 019','34DB019','2026-07-14')`,
+      [caseId, organizationId],
+    )
+    await pool.query("INSERT INTO storage_roots (id,organization_id,root_key,label) VALUES ($1,$2,'test-root','Test')", [rootId, organizationId])
+    const planId = uuidv7()
+    await pool.query(
+      `INSERT INTO case_workspace_provisionings
+       (id,organization_id,case_id,storage_root_key,relative_path,created_by_user_id)
+       VALUES ($1,$2,$3,'test-root','2026/Temmuz 2026/34DB019',$4)`,
+      [planId, organizationId, caseId, userId],
+    )
+    await expect(pool.query(
+      `INSERT INTO case_workspace_provisionings
+       (id,organization_id,case_id,storage_root_key,relative_path)
+       VALUES ($1,$2,$3,'test-root','../kaçış')`,
+      [uuidv7(), organizationId, caseId],
+    )).rejects.toMatchObject({ code: '23514', constraint: 'case_workspace_provisionings_relative_path_safe' })
+
+    const payload = JSON.stringify({ storageRootKey: 'test-root', relativePath: '2026/Temmuz 2026/34DB019', kind: 'workspace', requiredSubdirectories: ['EVRAK','HASAR','OLAY YERİ','ONARIM','DEĞER KAYBI'] })
+    await pool.query(
+      `INSERT INTO jobs (id,organization_id,type,target_type,target_id,payload)
+       VALUES ($1,$2,'provision_case_workspace','workspace_provisioning',$3,$4::jsonb)`,
+      [uuidv7(), organizationId, planId, payload],
+    )
+    await expect(pool.query(
+      `INSERT INTO jobs (id,organization_id,type,target_type,target_id,payload)
+       VALUES ($1,$2,'provision_case_workspace','workspace_provisioning',$3,$4::jsonb)`,
+      [uuidv7(), organizationId, planId, payload],
+    )).rejects.toMatchObject({ code: '23505', constraint: 'jobs_one_active_workspace_job' })
   })
 
   it('0010 mevcut kayıtları korur, aktif varsayılanları ve tarih kısıtını uygular', async () => {

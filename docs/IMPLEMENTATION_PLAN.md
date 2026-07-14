@@ -620,3 +620,15 @@ Kabul ölçütü: Mevcut create/update API sözleşmesi dışına çıkmadan mü
 - [x] Tarayıcı e2e + 1366/1920 açık-koyu: Codex Browser bootstrap hatası repository dışı olarak ayrıştırıldı; kurulu Chrome DevTools protokolüyle login, referanslar, create/update, 409/reload, negatif referanslar, no-fallback, overflow ve konsol kapıları geçti.
 
 Kabul ölçütü: Aktif ve tenant-kapsamlı gerçek referanslar create/edit'te seçilir; eksper roles kaynaklıdır; yeni alanlar LocalDate/read/write/audit boyunca korunur; pasif/uygunsuz referans reddedilir; optimistic locking ve mock ayrımı korunur; tüm tarayıcı ve temiz checkout kapıları yeşil olmadan paket tamamlandı sayılmaz.
+
+## Aktif geliştirme paketi — Paket 19 güvenli Case çalışma klasörü
+
+- [x] Saf domain yol planı: notificationDate, Türkçe ay, kanonik plaka ve deterministik `-2/-3` seçimi.
+- [x] Migration 0011: provisioning rezervasyonu/durumları, logical path kısıtları, genişletilmiş job türü ve tek aktif provisioning job.
+- [x] Tenant/oturum/idempotency korumalı plan, preview/status ve approve API sözleşmeleri.
+- [x] File Agent: bileşen bazlı idempotent mkdir, beş alt klasör, realpath/lstat reparse-point koruması, partial-failure/no-delete ve progress heartbeat.
+- [x] Atomik finalize: stale location kontrolü; verified case location + append-only history + provisioning/job + merkezi audit.
+- [x] Dosya Detayı API paneli: aktif root, preview, açık onay, durum/retry; mock modda fiziksel işlem ve API hata fallback’i yok.
+- [x] Son kapılar: tam gerçek PostgreSQL/API/temp-filesystem, gerçek tarayıcı, root kalite kapıları ve temiz checkout doğrulaması.
+
+Kabul ölçütü: Plan diske yazmaz; onaysız iş yoktur; aynı case/idempotency/onay yarışı mükerrer klasör veya job üretmez; Agent doğru/kısmi yapıyı güvenle tamamlar ve doğrular; traversal/reparse/root escape reddedilir; stale job location’ı ezmez; mutlak yol/secret sızmaz; tarayıcı ve temiz checkout dâhil bütün kapılar geçmeden commit oluşturulmaz.

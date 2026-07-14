@@ -226,3 +226,12 @@ Event path değerleri göreli ve gerektiğinde maskeli; raw exception/credential
 - pCloud dışı bağımsız fiziksel dosya yedeğinin sahibi ve retention'ı.
 - Karantina süresi ve kalıcı purge yetki modeli.
 - Büyük fotoğraf/thumbnail cache konumu.
+
+## 17. Paket 19 — Case çalışma klasörü oluşturma (uygulandı)
+
+- `case_workspace_provisionings` planı göreli yolu DB’de rezerve eder; plan ve GET preview filesystem’e dokunmaz.
+- `provision_case_workspace` işi yalnız oturumlu kullanıcının açık onayından sonra PostgreSQL kuyruğuna girer. Vaka başına tek rezervasyon ve hedef başına tek aktif job DB kısıtıdır.
+- Agent `mkdir` işlemini recursive toplu çağrı yerine bileşen bileşen yapar; her adımda `lstat + realpath` ile ordinary-directory/root containment denetimi uygular. Symlink/junction/reparse point reddedilir.
+- Agent yeniden çalışırsa mevcut doğru ana/alt dizinleri başarı kabul eder ve yalnız eksikleri oluşturur. Hata hâlinde rollback-delete yoktur; job retry/dead-letter politikası ve güvenli hata kodu kullanılır.
+- Agent progress heartbeat’i `applying`/`verifying` durumunu bildirir. `verified` sonuçta server, case location yarışını tekrar kontrol eder; stale sonuç yazılmaz.
+- Başarı transaction’ı `case_locations(verified, system)`, append-only history, provisioning `ready`, job `succeeded` ve merkezi audit’i birlikte yazar.

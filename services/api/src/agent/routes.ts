@@ -15,6 +15,7 @@ import {
   claimResponseSchema,
   failureEnvelopeSchema,
   heartbeatResponseSchema,
+  jobHeartbeatRequestSchema,
   jobParamsSchema,
   jobResultRequestSchema,
   jobResultResponseSchema,
@@ -58,7 +59,11 @@ export function registerAgentRoutes(app: FastifyInstance, options: AgentRoutesOp
     if (!params.success) {
       return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
     }
-    const leaseExpiresAt = await agentStore.heartbeat(agent, params.data.jobId)
+    const body = jobHeartbeatRequestSchema.safeParse(request.body ?? {})
+    if (!body.success) {
+      return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(body.error, requestId) }))
+    }
+    const leaseExpiresAt = await agentStore.heartbeat(agent, params.data.jobId, body.data.phase, requestId)
     if (leaseExpiresAt === undefined) {
       return reply.code(409).send(failureBody('conflict', 'Job lease is not held or has expired.', requestId))
     }

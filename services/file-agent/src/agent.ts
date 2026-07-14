@@ -1,7 +1,9 @@
 import type { JobResultResponse } from '@hasarbotu/contracts'
 import type { AgentApiClient } from './api-client.js'
+import { AgentApiError } from './api-client.js'
 import type { AgentConfig } from './config.js'
 import { verifyTarget } from './verifier.js'
+import { provisionCaseWorkspace } from './workspace-provisioner.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -30,7 +32,16 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
 
   let result
   try {
-    result = await verifyTarget(rootAbsolute, job.payload)
+    if (job.payload.kind === 'workspace') {
+      await client.heartbeat(job.id, 'applying')
+      result = await provisionCaseWorkspace(rootAbsolute, job.payload, {
+        onVerifying: async () => {
+          await client.heartbeat(job.id, 'verifying')
+        },
+      })
+    } else {
+      result = await verifyTarget(rootAbsolute, job.payload)
+    }
   } finally {
     clearInterval(heartbeat)
   }
@@ -48,12 +59,21 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
 export async function runLoop(
   client: AgentApiClient,
   config: AgentConfig,
-  options: { readonly signal?: AbortSignal } = {},
+  options: {
+    readonly signal?: AbortSignal
+    /** Ham exception yerine yalnız güvenli döngü hata kodu bildirilir. */
+    readonly onCycleError?: (code: 'api_unavailable' | 'agent_cycle_failed') => void
+  } = {},
 ): Promise<void> {
   const { signal } = options
   while (signal === undefined || !signal.aborted) {
-    const result = await runOnce(client, config)
-    if (result.kind === 'no_work') {
+    try {
+      const result = await runOnce(client, config)
+      if (result.kind !== 'no_work') continue
+    } catch (error) {
+      options.onCycleError?.(error instanceof AgentApiError ? 'api_unavailable' : 'agent_cycle_failed')
+    }
+    if (signal === undefined || !signal.aborted) {
       await new Promise((resolvePromise) => setTimeout(resolvePromise, config.pollIntervalMs))
     }
   }

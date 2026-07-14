@@ -317,3 +317,12 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - AI kasko cevabı dokuz bölümlü standardı izler (Sonuç ve kapsam durumu; Gerekçe; Muafiyet/tenzil/maliyet paylaşımı/limit; Servis-parça şartı; İşlem ve gerekli belgeler; Kaynak belge/sayfa/başlık/kloz; Çelişki/eksik; Güven; İnsan onayı gereksinimi); hüküm yoksa "Poliçede bu konuda açık ve doğrulanabilir bir hüküm bulunamadı.".
 - Çelişki kayıtları ayrı kaynak olarak sunulur; çözüm yalnız kullanıcı onaylı komutla (A2 audit) yapılır.
 - Operasyonu bağlayan sonuçlar (muafiyet uygulama, maliyet paylaşımı, kapsam dışı, tedarik/mobil onarım durdurması ve kaldırılması) insan onayı olmadan kesinleşmez.
+
+## 10. Paket 19 çalışma klasörü sözleşmeleri
+
+- `POST /api/v1/cases/:caseId/workspace-plans`: oturum + tenant + zorunlu `Idempotency-Key`; `{storageRootKey}` ile filesystem’e yazmadan plan/preview üretir.
+- `GET /api/v1/cases/:caseId/workspace-plans` mevcut vaka planını; `GET /api/v1/cases/:caseId/workspace-plans/:planId` belirli planı ve güncel işlem durumunu okur. Kayıt yok veya yabancı tenant 404’tür.
+- `POST /api/v1/cases/:caseId/workspace-plans/:planId/approve`: `{approved:true}` + zorunlu `Idempotency-Key`; açık onaydan sonra tek provisioning job kuyruğa alır.
+- Durumlar: `planned`, `approved`, `queued`, `applying`, `verifying`, `ready`, `failed`, `cancelled`, `stale`.
+- Yanıt yalnız `storageRootKey`, güvenli `relativePath`, sabit alt klasör isimleri, durum ve güvenli hata kodu taşır. Mutlak yol, OS hatası, secret veya dosya içeriği sözleşmede yoktur.
+- Agent job payload’ına `workspace` türü ve sabit beş alt klasör; heartbeat’e opsiyonel `applying|verifying` progress alanı eklenmiştir. Runtime Zod ve deterministik JSON Schema fixture’ları birlikte güncellenir.
