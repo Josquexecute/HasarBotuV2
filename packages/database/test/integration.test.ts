@@ -52,6 +52,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0006_storage_location',
       '0007_document_metadata',
       '0008_file_agent_jobs',
+      '0009_document_requirement_rules',
     ])
 
     const tables = await pool.query(
@@ -63,6 +64,10 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'case_location_history',
       'case_locations',
       'cases',
+      'document_rule_evaluation_items',
+      'document_rule_evaluations',
+      'document_rule_sets',
+      'document_rule_versions',
       'document_versions',
       'documents',
       'idempotency_keys',
@@ -86,6 +91,36 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
   it('ayni migration ikinci kez uygulanmaz (tekrar guvenligi)', async () => {
     const applied = await runMigrations({ databaseUrl: config.url, quiet: true })
     expect(applied).toEqual([])
+  })
+
+  it('0009 geri alinabilir ve yeniden ileri uygulanabilir', async () => {
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0009_document_requirement_rules'])
+    const removed = await pool.query(
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_rule_versions'",
+    )
+    expect((removed.rows[0] as { n: number }).n).toBe(0)
+    const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0009_document_requirement_rules'])
+  })
+
+  it('0009 kural sürümü ve rücu kısıtlarını veritabanında zorlar', async () => {
+    const organizationId = uuidv7()
+    const caseId = uuidv7()
+    await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1,$2,$3)', [organizationId, 'p15-db', 'P15 DB'])
+    await pool.query(
+      `INSERT INTO cases
+       (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized)
+       VALUES ($1,$2,2026,1,'2026/1','traffic','new_notification','34 DB 015','34DB015')`,
+      [caseId, organizationId],
+    )
+    await expect(pool.query("UPDATE cases SET recourse_status='invalid' WHERE id=$1", [caseId])).rejects.toMatchObject({ code: '23514' })
+    await expect(pool.query(
+      `INSERT INTO document_rule_versions
+       (id,rule_set_id,version,effective_from,effective_to,conditions,requirements,source_reference,status)
+       VALUES ($1,(SELECT id FROM document_rule_sets WHERE case_type='traffic'),'invalid-range','2026-07-15','2026-07-14','{}','{}','test','active')`,
+      [uuidv7()],
+    )).rejects.toMatchObject({ code: '23514' })
   })
 
   it('uygulanmis migrationdan ONCE gelen kosulmamis migration reddedilir (surum uyusmazligi)', async () => {

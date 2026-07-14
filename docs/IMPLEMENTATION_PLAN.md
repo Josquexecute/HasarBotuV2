@@ -580,3 +580,11 @@ Kabul ölçütü: Belge/sürüm/fotoğraf metadata'sı tenant izolasyonlu kayded
 - [x] Kapılar: typecheck/lint(0 uyarı)/test(614)/build/audit/diff-check exit 0; temiz checkout; path-bazlı stage ile tek feat commit.
 
 Kabul ölçütü: Agent yalnız API üzerinden çalışır (DB'ye yazmaz), yalnız kendi org + atanmış işiyle sınırlıdır; aynı iş iki agent tarafından uygulanamaz (SKIP LOCKED); lease/heartbeat/timeout recovery + retry/backoff/dead_letter çalışır; mutlak root yalnız agent config'inde kalır ve API/DB/audit/log'a sızmaz; traversal/drive/UNC/symlink-junction kaçışı reddedilir; SHA-256 streaming hesaplanır (dosya belleğe alınmaz); gözlenen beyanla eşleşince `ready`, uyuşmazsa `ready` olmaz; metadata+iş+audit atomik ve sürüm-yarışına dayanıklıdır; sonuç idempotenttir; ham secret/mutlak yol/ham hata API'ye taşınmaz; gerçek dosya işlemleri/upload/OCR/thumbnail/AI/Electron/UI/LAN-TLS/üretim migration kapsam dışıdır.
+
+## Aktif geliştirme paketi — Paket 15 koşullu evrak gereksinimi motoru
+
+- [x] Saf domain motoru: kanonik belge türleri, all_of/any_of/exactly_one geleceğe açık model, doğrulanmış ready kuralı, açıklanabilir sonuç ve sürüm.
+- [x] Migration 0009: sürümlü rule set/version seed'i, isteğe bağlı evaluation snapshot tabloları ve kesinleşmiş rücu durumu alanı.
+- [x] Contracts + API: oturumlu, tenant-kapsamlı salt-okunur `GET /api/v1/cases/:caseId/document-requirements`; yanıt mutlak yol veya belge içeriği içermez.
+- [x] Audit: GET çağrısı snapshot oluşturmadığı için audit yazmaz; gürültü önlenir ve karar günlüğünde belgelenir.
+- [x] Son doğrulama: gerçek PostgreSQL 0009 up/repeat/down-up/constraint; canlı HTTP smoke; ana ağaç typecheck/lint/637 test/build/audit/diff-check; temiz kopyada fresh npm ci + typecheck/lint/test/build geçti.

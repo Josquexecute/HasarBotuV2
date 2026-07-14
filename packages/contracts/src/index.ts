@@ -269,6 +269,12 @@ export {
 } from './v1/storage/index.js'
 
 export {
+  DOCUMENT_REQUIREMENTS_ROUTE, requirementStatusSchema, canonicalDocumentTypeSchema, relatedDocumentStatusSchema,
+  requirementResultSchema, alternativeGroupSchema, documentRequirementsParamsSchema, documentRequirementsResponseSchema,
+  type DocumentRequirementsResponse,
+} from './v1/document-requirements/index.js'
+
+export {
   // audit routes
   AUDIT_EVENTS_ROUTE,
   // audit query

@@ -1,15 +1,23 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-13
+Son güncelleme: 2026-07-14
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 14 — File Agent kontrol katmanı ve belge doğrulama protokolü
+- Aşama: Paket 15 — Koşullu evrak gereksinimi ve eksik belge kural motoru
 - Durum: **Tamamlandı ve doğrulandı**
-- Git: Yerel repository, `foundation/package-14-file-agent` dalı, remote yok
+- Git: Yerel repository, `foundation/package-15-document-rules` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 15 doğrulama sonucu
+
+- Kural sürümü: `2026.07.14.1`; domain motoruna tarih ve rule set sürümü dışarıdan enjekte edilir, API etkin DB sürümünü seçer.
+- Gerçek PostgreSQL: 0009 ileri migration, tekrar güvenliği, down/up geri dönüşü ve CHECK/unique kısıtları geçti.
+- Canlı HTTP smoke: login; Trafik/Kasko/rüculu Kasko/rücu belirsizliği; ready/pending/failed; Zabıt/KTT/Beyan; Tramer; tenant 404; 401; response/audit sızıntısı; GET için snapshot/audit yazılmaması geçti.
+- Ana ağaç: typecheck, lint, 637/637 test (+4 UI env-kapılı skip), build, audit (0 açık) ve diff-check geçti. Domain/contracts/database/API testlerinde skip yok.
+- Temiz kopya: `.git`, `node_modules` ve `dist` olmadan fresh `npm ci` + typecheck/lint/test/build geçti.
 
 ## Kabul edilen kapsam
 

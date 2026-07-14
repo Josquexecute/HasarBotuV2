@@ -2,6 +2,13 @@
 
 ## Trafik dosyası evrakları
 
+### Paket 15 — doğrulanmış metadata ile koşullu evrak değerlendirmesi
+
+- `ready` yalnız File Agent hash, boyut ve zaman doğrulamasıyla mevcut sayılır. `pending` ve `failed` mevcut değildir; `control_required` döner. `missing` eksik döner.
+- Zabıt, KTT ve Beyan olay belgesi alternatif grubudur. Zabıt varsa KTT/Beyan ve Tramer `not_applicable`; zabıt yoksa KTT veya Beyandan en az biri gerekir ve Tramer ayrıca zorunludur.
+- Rüculu Kasko ek gereksinimleri yalnız `recourse_status=confirmed` iken zorunludur. `unknown` ise otomatik eksik yerine `control_required` döner; AI tahmini kullanılmaz.
+- Kural seti kod tabanında sürümlüdür (`2026.07.14.1`); değerlendirme kullanılan sürümü açıkça taşır.
+
 Her zaman zorunlu:
 
 - M Trafik Poliçe

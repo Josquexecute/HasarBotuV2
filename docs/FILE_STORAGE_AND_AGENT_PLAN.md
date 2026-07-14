@@ -61,6 +61,10 @@ Doğrulama KONTROL KATMANI ve protokol UYGULANDI (gerçek fiziksel taşıma/rena
 
 ## 3. Göreli yol ve klasör standardı
 
+### 2.4 Koşullu evrak kural motoru (Paket 15)
+
+Değerlendirme yalnız belge sürümünün doğrulanmış `ready` durumunu kullanır. `pending` ve `failed` adayları dosyayı mevcut yapmaz; kullanıcı kontrolü ister. Salt-okunur API yalnız güvenli kimlik ve durum referansı döndürür; fiziksel yol veya içerik taşımaz.
+
 Önerilen canonical format:
 
 ```text

@@ -428,3 +428,14 @@ Gerekçe: INFRASTRUCTURE_IMPLEMENTATION_PLAN "Paket 12 — File Agent iskeleti" 
 Etkisi: Migration 0008 (`agents`, `jobs`); contracts `v1/agent` (+3 golden şema, 21→24); yeni `services/api/src/agent/*` (auth/store/routes/enqueue) + doc/photo/location kayıt akışına enqueue kancaları; app.ts kayıt + `x-agent-secret` redaksiyonu; yeni `services/file-agent` workspace'i (config/path-resolver/verifier/api-client/agent). +12 agent-side birim (path/verifier, symlink/junction escape) + +15 API testi (auth, SKIP-LOCKED, lease/heartbeat, expired recovery, retry/dead-letter, verify→ready atomik, mismatch, missing, sürüm yarışı, idempotency, tenant, security) + gerçek uçtan uca (agent+API+geçici dosya) + canlı HTTP güvenlik smoke 7/7.
 
 Kaynak: 2026-07-13 tarihli Paket 14 kullanıcı talimatı.
+
+## 2026-07-14 — HB-2026-021: Paket 15 koşullu evrak gereksinimi motoru
+
+Karar:
+
+1. Evrak mevcutluğu yalnız `ready` + hash/boyut + `verified_at` doğrulamasıyla belirlenir; `pending`/`failed` `control_required`, `missing` eksik sayılır. Genel API bu doğrulamayı değiştiremez.
+2. Trafik ve Kasko olay belgesi Zabıt/KTT/Beyan alternatif grubudur. Zabıt varsa KTT, Beyan ve Tramer uygulanmaz; yoksa KTT veya Beyandan biri gerekir, Tramer zorunludur.
+3. Kasko rücu ek belgeleri yalnız kesinleşmiş rücuda zorunludur. Rücu belirsizse kontrol gerekir; AI tahmini veya otomatik missing yoktur.
+4. Kural seti ve sürümü migration seed + saf domain motorunda açıkça taşınır. GET değerlendirmesi snapshot veya audit yazmaz; salt-okunur her çağrıda audit gürültüsü oluşmaması için karar merkezi audit politikasına uygundur. İleride kalıcı snapshot gerekiyorsa sonuç + audit aynı transaction'da yazılacaktır.
+
+Etkisi: `0009_document_requirement_rules`, saf domain değerlendirme motoru, tenant-kapsamlı GET `/api/v1/cases/:caseId/document-requirements`, contracts ve JSON Schema fixture'ı. Dosya içeriği/mutlak yol dönmez.

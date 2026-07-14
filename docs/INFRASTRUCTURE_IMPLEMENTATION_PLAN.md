@@ -338,6 +338,10 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 
 ## 4. Paketler arası kalıcı kalite kapıları
 
+### Paket 15 ek uygulama kaydı — koşullu evrak gereksinimleri
+
+Tamamlanan ek paket; sürümlü kural seed'i, saf domain değerlendirmesi ve tenant-kapsamlı salt-okunur değerlendirme ucu sağlar. Kalıcı evaluation snapshot'ı bu GET çağrısında oluşturulmaz; çağrı audit yazmaz. Snapshot gerektiren ilerideki akış, merkezi audit ile atomik uygulanacaktır.
+
 Her pakette gerçek sonuca göre şu kanıtlar raporlanır:
 
 1. Değişen dosyalar ve kullanıcı değişikliklerinden ayrımı.
