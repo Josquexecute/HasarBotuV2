@@ -1,0 +1,127 @@
+import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { AlertTriangle, LoaderCircle, RefreshCw, Save, X } from 'lucide-react'
+import {
+  CaseCommandError,
+  createHttpCaseCommandAdapter,
+  type CaseCommandPort,
+  type CaseUpdateInput,
+  type SessionUser,
+} from '../../data'
+import type { CaseRecord, CaseStageCode } from '../../types/case'
+import {
+  CASE_STAGE_OPTIONS,
+  commandErrorMessage,
+  commandFieldMessages,
+  nullableText,
+} from './caseForm'
+
+interface CaseEditModalProps {
+  readonly item: CaseRecord
+  readonly currentUser: SessionUser
+  readonly onClose: () => void
+  readonly onUpdated: (item: CaseRecord) => void
+  readonly onReload: () => void
+  readonly onUnauthorized: () => void
+  readonly commandPort?: CaseCommandPort
+}
+
+function FieldError({ message }: { readonly message?: string }) {
+  return message === undefined ? null : <span className="form-field__error">{message}</span>
+}
+
+export function CaseEditModal({ item, currentUser, onClose, onUpdated, onReload, onUnauthorized, commandPort }: CaseEditModalProps) {
+  const commands = useMemo(() => commandPort ?? createHttpCaseCommandAdapter(), [commandPort])
+  const submittingRef = useRef(false)
+  const [workflowStage, setWorkflowStage] = useState<CaseStageCode>(item.workflowStage ?? 'new_notification')
+  const [followUpDate, setFollowUpDate] = useState(item.followUpDate ?? '')
+  const [notificationFormNumber, setNotificationFormNumber] = useState(item.noticeNumber === '—' ? '' : item.noticeNumber)
+  const [insurerClaimNumber, setInsurerClaimNumber] = useState(item.claimNumber === '—' ? '' : item.claimNumber)
+  const [responsibleUserId, setResponsibleUserId] = useState(item.responsibleUserId ?? '')
+  const [serviceId, setServiceId] = useState(item.serviceId ?? '')
+  const [insurerId, setInsurerId] = useState(item.insurerId ?? '')
+  const [submitting, setSubmitting] = useState(false)
+  const [conflict, setConflict] = useState(false)
+  const [generalError, setGeneralError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({})
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (submittingRef.current) return
+    if (item.version === undefined) {
+      setGeneralError('Güncelleme sürümü yüklenemedi. Dosyayı yeniden yükleyin.')
+      return
+    }
+
+    const input: CaseUpdateInput = { expectedVersion: item.version }
+    if (workflowStage !== item.workflowStage) Object.assign(input, { workflowStage })
+    if (followUpDate !== (item.followUpDate ?? '')) Object.assign(input, { followUpDate: followUpDate === '' ? null : followUpDate })
+    if (nullableText(notificationFormNumber) !== (item.noticeNumber === '—' ? null : item.noticeNumber)) Object.assign(input, { notificationFormNumber: nullableText(notificationFormNumber) })
+    if (nullableText(insurerClaimNumber) !== (item.claimNumber === '—' ? null : item.claimNumber)) Object.assign(input, { insurerClaimNumber: nullableText(insurerClaimNumber) })
+    if (nullableText(responsibleUserId) !== (item.responsibleUserId ?? null)) Object.assign(input, { responsibleUserId: nullableText(responsibleUserId) })
+    if (nullableText(serviceId) !== (item.serviceId ?? null)) Object.assign(input, { serviceId: nullableText(serviceId) })
+    if (nullableText(insurerId) !== (item.insurerId ?? null)) Object.assign(input, { insurerId: nullableText(insurerId) })
+
+    if (Object.keys(input).length === 1) {
+      setGeneralError('Kaydedilecek bir değişiklik yok.')
+      return
+    }
+
+    submittingRef.current = true
+    setSubmitting(true)
+    setConflict(false)
+    setGeneralError('')
+    setFieldErrors({})
+    try {
+      const updated = await commands.updateCase(item.caseId, input)
+      onUpdated(updated)
+    } catch (error) {
+      const safeError = error instanceof CaseCommandError
+        ? error
+        : new CaseCommandError('unavailable', 'unknown command failure')
+      setConflict(safeError.kind === 'version_conflict')
+      setGeneralError(commandErrorMessage(safeError))
+      setFieldErrors(commandFieldMessages(safeError))
+      if (safeError.kind === 'unauthorized') onUnauthorized()
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.currentTarget === event.target && !submitting) onClose()
+    }}>
+      <section className="modal modal--case-form" role="dialog" aria-modal="true" aria-labelledby="case-edit-title" aria-busy={submitting}>
+        <form onSubmit={submit} noValidate>
+          <header className="modal__header">
+            <div><span className="eyebrow">Gerçek API · optimistic locking</span><h2 id="case-edit-title">Temel Dosya Bilgilerini Düzenle</h2></div>
+            <button className="icon-button" type="button" onClick={onClose} disabled={submitting} aria-label="Pencereyi kapat"><X size={18} /></button>
+          </header>
+          <div className="modal__body case-form-scroll">
+            <div className="case-form-note"><span>Sürüm {item.version ?? '—'}</span><span>Plaka, dosya türü, ofis numarası ve yaşam döngüsü bu ekrandan değiştirilemez.</span></div>
+            {generalError && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{generalError}</span>{conflict && <button className="button button--secondary" type="button" onClick={onReload}><RefreshCw size={15} /> Güncel Veriyi Yükle</button>}</div>}
+            <div className="case-form-grid">
+              <label className="form-field form-field--immutable"><span>Plaka</span><input value={item.plate} readOnly /></label>
+              <label className="form-field form-field--immutable"><span>Dosya türü</span><input value={item.type} readOnly /></label>
+              <label className="form-field form-field--immutable"><span>Ofis dosya numarası</span><input value={item.officeNumber} readOnly /></label>
+              <label className="form-field form-field--immutable"><span>Yaşam döngüsü</span><input value="Açık · kapatma/yeniden açma ayrı işlem" readOnly /></label>
+              <label className="form-field"><span>Workflow aşaması</span><select autoFocus value={workflowStage} onChange={(event) => setWorkflowStage(event.target.value as CaseStageCode)}>{CASE_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><FieldError message={fieldErrors.workflowStage} /></label>
+              <label className="form-field"><span>Takip tarihi</span><input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} aria-invalid={fieldErrors.followUpDate !== undefined} /><small>LocalDate; boş bırakılırsa temizlenir.</small><FieldError message={fieldErrors.followUpDate} /></label>
+              <label className="form-field"><span>İhbar numarası</span><input value={notificationFormNumber} onChange={(event) => setNotificationFormNumber(event.target.value)} autoComplete="off" aria-invalid={fieldErrors.notificationFormNumber !== undefined} /><FieldError message={fieldErrors.notificationFormNumber} /></label>
+              <label className="form-field"><span>Hasar dosya numarası</span><input value={insurerClaimNumber} onChange={(event) => setInsurerClaimNumber(event.target.value)} autoComplete="off" aria-invalid={fieldErrors.insurerClaimNumber !== undefined} /><FieldError message={fieldErrors.insurerClaimNumber} /></label>
+              <label className="form-field"><span>Sorumlu</span><select value={responsibleUserId} onChange={(event) => setResponsibleUserId(event.target.value)}><option value="">Atanmadı</option>{item.responsibleUserId !== null && item.responsibleUserId !== undefined && item.responsibleUserId !== currentUser.id && <option value={item.responsibleUserId}>Mevcut sorumlu · {item.responsibleUserId}</option>}<option value={currentUser.id}>{currentUser.displayName} · oturum kullanıcısı</option></select><FieldError message={fieldErrors.responsibleUserId} /></label>
+              <label className="form-field"><span>Sigorta şirketi kimliği</span><input value={insurerId} onChange={(event) => setInsurerId(event.target.value)} placeholder="Opsiyonel referans kimliği" autoComplete="off" aria-invalid={fieldErrors.insurerId !== undefined} /><small>Liste endpoint’i yok; yalnız bilinen gerçek kimlik.</small><FieldError message={fieldErrors.insurerId} /></label>
+              <label className="form-field"><span>Servis kimliği</span><input value={serviceId} onChange={(event) => setServiceId(event.target.value)} placeholder="Opsiyonel referans kimliği" autoComplete="off" aria-invalid={fieldErrors.serviceId !== undefined} /><small>Yabancı tenant referansı güvenli biçimde reddedilir.</small><FieldError message={fieldErrors.serviceId} /></label>
+              <label className="form-field form-field--unsupported"><span>Eksper / hasar tarihi / ihbar tarihi</span><input value="Mevcut Case update contract’ında yok" readOnly disabled /></label>
+            </div>
+          </div>
+          <footer className="modal__footer">
+            <button className="button button--secondary" type="button" onClick={onClose} disabled={submitting}>İptal</button>
+            <button className="button button--primary" type="submit" disabled={submitting}>{submitting ? <><LoaderCircle className="spin" size={16} /> Kaydediliyor…</> : <><Save size={16} /> Değişiklikleri Kaydet</>}</button>
+          </footer>
+        </form>
+      </section>
+    </div>
+  )
+}

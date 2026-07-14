@@ -451,3 +451,14 @@ Karar:
 5. Üç GET değerlendirmesi ve belge detay okumaları salt okunurdur. Paket 15 kararı korunur: UI çağrıları değerlendirme snapshot'ı veya `document_requirements.evaluated` audit olayı üretmez.
 
 Etkisi: `src/data` içinde yeni document workspace port/HTTP adapter/hook; `DocumentPhotoApiModule`; güvenli metadata tabloları ve gerçek durum görünümleri; unit/integration/live adapter testleri. Database, contracts, API, IPC, dependency veya veri yazma yolu değişmez.
+
+## 2026-07-14 — HB-2026-023: Paket 17 create/edit UI komut sınırı
+
+Karar:
+
+1. API modundaki Yeni İhbar formu yalnız mevcut `CaseCommandPort.createCase` komutunu kullanır. Plaka UI'da domain ile aynı kuralla kanonikleştirilir; ofis numarası istemciden alınmaz. Bir payload için üretilen Idempotency-Key ağ hatası/yeniden denemede korunur, form değişirse yeni anahtar üretilir; eşzamanlı ikinci submit senkron guard ile engellenir.
+2. Temel düzenleme yalnız mevcut Case update contract alanlarını gönderir ve zorunlu `expectedVersion` taşır. Sunucunun döndürdüğü yeni `version` istemci state'ine alınır. `version_conflict` ham hata göstermeden açıklanır ve tek dosyayı yeniden yükleme akışı sunulur. Plaka, caseType, ofis numarası ve lifecycle değiştirilemez; close/reopen bu UI'da yoktur.
+3. Kullanıcı/servis/sigorta liste endpoint'i bulunmadığından sabit sahte kayıtlar gerçek seçenek gibi sunulmaz. Oturum kullanıcısı gerçek sorumlu seçeneğidir; servis ve sigorta geçici olarak açıkça referans kimliği alanıdır ve server tenant kontrolüne tabidir. Ayrı eksper, hasar tarihi ve ihbar tarihi mevcut Case create/update contract'ında olmadığı için disabled açıklanır ve payload'a eklenmez.
+4. Mock modun onaylı belge-seçimi prototipi aynen korunur. API modunda 401, 404, validation, tenant-dışı referans, 409, 5xx veya ağ hatası mock veriye düşmez; kullanıcıya güvenli Türkçe mesaj gösterilir. Başarılı create/update mevcut merkezi audit transaction'ını kullanır; Paket 17 yeni audit yolu, migration veya yazma endpoint'i eklemez.
+
+Etkisi: `CaseCreateModal`, `CaseEditModal`, payload-sürümü/idempotency/alan-hatası UI yardımcıları; CaseRecord'ta opsiyonel komut metadata'sı; `useCases.reload`; gerçek API + tarayıcı testleri. Contracts, API, database, IPC ve dependency değişmez.

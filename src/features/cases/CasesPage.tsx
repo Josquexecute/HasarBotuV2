@@ -21,8 +21,10 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { EmptyState } from '../../components/StateViews'
 import { formatCurrency } from '../../mocks/cases'
 import { useCases } from '../../data'
+import { useSession } from '../../app/sessionContext'
 import type { CaseRecord, CaseType, SortKey } from '../../types/case'
 import { matchesSearchQuery } from '../../utils/search'
+import { CaseCreateModal } from './CaseCreateModal'
 
 type SortDirection = 'asc' | 'desc'
 
@@ -122,7 +124,7 @@ function QuickDetail({ item, onClose, onMockAction }: { item: CaseRecord; onClos
   )
 }
 
-function NewNoticeModal({ onClose }: { onClose: () => void }) {
+function MockNewNoticeModal({ onClose }: { onClose: () => void }) {
   const [documentSelected, setDocumentSelected] = useState(false)
   const [analysisReady, setAnalysisReady] = useState(false)
 
@@ -159,6 +161,7 @@ function NewNoticeModal({ onClose }: { onClose: () => void }) {
 
 export function CasesPage() {
   const { cases, source, status: dataStatus } = useCases()
+  const session = useSession()
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -352,7 +355,7 @@ export function CasesPage() {
             )}
           </div>
           <footer className="table-footer">
-            <span>{filteredCases.length} / 1.284 dosya gösteriliyor</span>
+            <span>{filteredCases.length} / {source === 'api' ? cases.length : '1.284'} dosya gösteriliyor</span>
             <span className="table-footer__hint"><ListFilter size={13} />Sıralama: {sortKey} · {direction === 'asc' ? 'artan' : 'azalan'}</span>
             <div className="pagination">
               <button type="button" disabled={activePage === 1} onClick={() => setActivePage((page) => Math.max(1, page - 1))}>‹</button>
@@ -366,7 +369,14 @@ export function CasesPage() {
         {detailOpen && selectedCase && <QuickDetail item={selectedCase} onClose={() => setDetailOpen(false)} onMockAction={setPrototypeNotice} />}
       </div>
 
-      {showNewModal && <NewNoticeModal onClose={closeNewModal} />}
+      {showNewModal && source === 'mock' && <MockNewNoticeModal onClose={closeNewModal} />}
+      {showNewModal && source === 'api' && session.user !== null && (
+        <CaseCreateModal
+          currentUser={session.user}
+          onClose={closeNewModal}
+          onUnauthorized={session.reportUnauthorized}
+        />
+      )}
       {prototypeNotice && <button className="prototype-toast" type="button" onClick={() => setPrototypeNotice('')} aria-live="polite"><Check size={15} />{prototypeNotice}<X size={14} /></button>}
     </main>
   )

@@ -599,3 +599,14 @@ Kabul ölçütü: Agent yalnız API üzerinden çalışır (DB'ye yazmaz), yaln�
 - [x] Test: adapter + görünüm unit/integration, canlı gerçek API adapter, gerçek PostgreSQL/API/Vite tarayıcı e2e ve baseline regresyonu.
 
 Kabul ölçütü: API modunda doğrulanmış metadata ve sürümlü kural sonucu açıklanabilir biçimde görünür; sahte fallback, mutlak yol veya içerik sızıntısı yoktur; UI yeni yazma/physical file işlemi yapmaz; mock baseline korunur.
+
+## Aktif geliştirme paketi — Paket 17 Yeni İhbar ve temel dosya düzenleme UI
+
+- [x] Gerçek create formu: Trafik/Kasko, kanonik plaka, ihbar/hasar numarası, mevcut workflow/takip/referans alanları; server ofis no + caseId sonucu ve detay yönlendirmesi.
+- [x] Tekrar güvenliği: payload'a bağlı kararlı Idempotency-Key, submit sırasında senkron çift-tıklama engeli, retry'da aynı anahtar.
+- [x] Gerçek edit formu: contract destekli alanlar + `expectedVersion`; başarılı yanıtta yeni version; 409 conflict + yeniden yükleme; immutable alanlar read-only, close/reopen yok.
+- [x] Veri kaynağı dürüstlüğü: mevcut oturum kullanıcısı gerçek sorumlu seçeneği; liste endpoint'i olmayan servis/sigorta açıkça kimlik alanı; contract dışı eksper/olay tarihleri disabled; API modunda mock fallback yok.
+- [x] Güvenli hata/UI: fieldErrors eşleme; 401/login, 404, unknown_reference, validation, conflict, 5xx/ağ; ham SQL/stack/secret yok; mock modal baseline'i korunur.
+- [x] Test: form unit/component, CaseCommandPort hata metadata'sı, gerçek PostgreSQL/API idempotency+audit, canlı browser create/update/conflict/reload/401/network ve 1366/1920 açık-koyu kontrolü.
+
+Kabul ölçütü: Mevcut create/update API sözleşmesi dışına çıkmadan mükerrersiz oluşturma ve optimistic-lock düzenleme çalışır; backend kimlik/numara/sürüm sonucu görünür; immutable/kapsam dışı alanlar yazılmaz; mock baseline ve güvenlik sınırları korunur.

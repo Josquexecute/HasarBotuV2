@@ -49,13 +49,20 @@ export type CaseCommandErrorKind =
   | 'not_found'
   | 'unavailable'
 
+export interface CaseCommandFieldError {
+  readonly path: string
+  readonly code: string
+}
+
 export class CaseCommandError extends Error {
   readonly kind: CaseCommandErrorKind
+  readonly fieldErrors: readonly CaseCommandFieldError[]
 
-  constructor(kind: CaseCommandErrorKind, message: string) {
+  constructor(kind: CaseCommandErrorKind, message: string, fieldErrors: readonly CaseCommandFieldError[] = []) {
     super(message)
     this.name = 'CaseCommandError'
     this.kind = kind
+    this.fieldErrors = fieldErrors
   }
 }
 
@@ -73,13 +80,29 @@ export interface CaseCommandAdapterOptions {
 }
 
 function defaultIdempotencyKey(): string {
-  const cryptoRef = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
+  const cryptoRef = (globalThis as {
+    crypto?: { randomUUID?: () => string; getRandomValues?: (array: Uint8Array) => Uint8Array }
+  }).crypto
   if (cryptoRef?.randomUUID !== undefined) return cryptoRef.randomUUID()
-  return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+  if (cryptoRef?.getRandomValues !== undefined) {
+    const bytes = cryptoRef.getRandomValues(new Uint8Array(16))
+    return `idem-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`
+  }
+  throw new CaseCommandError('unavailable', 'secure idempotency key generation unavailable')
 }
 
 interface FailureBodyShape {
-  error?: { code?: string; fieldErrors?: { code?: string }[] }
+  error?: { code?: string; fieldErrors?: { path?: string; code?: string }[] }
+}
+
+function fieldErrorsOf(body: unknown): readonly CaseCommandFieldError[] {
+  const errors = (body as FailureBodyShape | null)?.error?.fieldErrors
+  if (!Array.isArray(errors)) return []
+  return errors.flatMap((item) =>
+    typeof item.path === 'string' && typeof item.code === 'string'
+      ? [{ path: item.path, code: item.code }]
+      : [],
+  )
 }
 
 /** 400/409 govdesindeki kararli hata kodunu guvenli okur. */
@@ -103,13 +126,14 @@ function mapCommandError(status: number, body: unknown): CaseCommandError {
   if (status === 401) return new CaseCommandError('unauthorized', 'session required')
   if (status === 404) return new CaseCommandError('not_found', 'case not found')
   const code = errorCodeOf(body)
+  const fieldErrors = fieldErrorsOf(body)
   if (status === 409) {
     if (code === 'idempotency_conflict') return new CaseCommandError('idempotency_conflict', 'idempotency conflict')
     return new CaseCommandError('version_conflict', 'version conflict')
   }
   if (status === 400) {
-    if (code === 'unknown_reference') return new CaseCommandError('unknown_reference', 'unknown reference')
-    return new CaseCommandError('validation', 'validation failed')
+    if (code === 'unknown_reference') return new CaseCommandError('unknown_reference', 'unknown reference', fieldErrors)
+    return new CaseCommandError('validation', 'validation failed', fieldErrors)
   }
   return new CaseCommandError('unavailable', `cases command HTTP ${status}`)
 }

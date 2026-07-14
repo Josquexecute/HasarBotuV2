@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { mockCases } from '../mocks/cases'
 import type { CaseRecord } from '../types/case'
 import { useSession } from '../app/sessionContext'
@@ -11,6 +11,7 @@ export interface UseCasesResult {
   readonly cases: readonly CaseRecord[]
   readonly source: DataSourceKind
   readonly status: CasesDataStatus
+  reload(): void
 }
 
 /**
@@ -27,6 +28,13 @@ export function useCases(): UseCasesResult {
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
   const [cases, setCases] = useState<readonly CaseRecord[]>(source === 'mock' ? mockCases : [])
   const [status, setStatus] = useState<CasesDataStatus>(source === 'mock' ? 'ok' : 'loading')
+  const [reloadToken, setReloadToken] = useState(0)
+
+  const reload = useCallback(() => {
+    if (source !== 'api') return
+    setStatus('loading')
+    setReloadToken((value) => value + 1)
+  }, [source])
 
   useEffect(() => {
     if (source !== 'api') return
@@ -49,7 +57,7 @@ export function useCases(): UseCasesResult {
     return () => {
       cancelled = true
     }
-  }, [source, reportUnauthorized])
+  }, [source, reportUnauthorized, reloadToken])
 
-  return { cases, source, status }
+  return { cases, source, status, reload }
 }

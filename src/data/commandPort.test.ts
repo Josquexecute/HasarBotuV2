@@ -62,6 +62,22 @@ describe('HttpCaseCommandAdapter createCase', () => {
     })
   })
 
+  it('validation fieldErrors path/code bilgisini UI icin guvenli tasir', async () => {
+    const adapter = createHttpCaseCommandAdapter({
+      fetchImpl: respond(400, {
+        error: {
+          code: 'validation_error',
+          message: 'raw detail ignored by UI',
+          fieldErrors: [{ path: 'plate', code: 'invalid_plate_number', message: 'raw field detail' }],
+        },
+      }),
+    })
+    await expect(adapter.createCase({ caseType: 'traffic', plate: 'AB' })).rejects.toMatchObject({
+      kind: 'validation',
+      fieldErrors: [{ path: 'plate', code: 'invalid_plate_number' }],
+    })
+  })
+
   it('ag hatasi -> unavailable', async () => {
     const netFail = vi.fn().mockRejectedValue(new TypeError('down')) as unknown as typeof fetch
     await expect(

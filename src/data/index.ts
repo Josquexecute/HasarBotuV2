@@ -44,6 +44,7 @@ export {
   createMockCaseCommandAdapter,
   type CaseCommandAdapterOptions,
   type CaseCommandErrorKind,
+  type CaseCommandFieldError,
   type CaseCommandPort,
   type CaseCreateInput,
   type CaseUpdateInput,

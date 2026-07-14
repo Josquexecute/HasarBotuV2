@@ -2,6 +2,15 @@
 
 ## Genel
 
+### Paket 17 — Yeni İhbar ve temel dosya düzenleme UI kabulü
+
+- API modunda Trafik/Kasko oluşturma gerçek POST ucunu kullanır; plaka kanonik, ofis numarası server kaynaklıdır. Aynı payload retry'sı aynı Idempotency-Key'i kullanır ve çift submit tek komuttur.
+- Başarı yeni caseId detayına yönlenir ve server ofis no/caseId sonucu görünür. Validation/unknown-reference alan bazlı; 401/404/409/5xx/ağ hataları güvenli ve mock fallback olmadan gösterilir.
+- Düzenleme yalnız Case update contract alanlarını ve `expectedVersion`'ı gönderir; yeni version saklanır. Stale version 409'da yeniden yükleme sunulur; plaka/tür/ofis no/lifecycle değiştirilemez, close/reopen yoktur.
+- Referans endpoint'i olmayan kataloglar sahte kayıtla doldurulmaz. Contract dışı eksper, hasar tarihi ve ihbar tarihi disabled görünür ve payload'a yazılmaz.
+- Gerçek PostgreSQL/API testinde Traffic/Kasko create, idempotent replay, update/stale/reload, tenant reddi ve merkezi audit doğrulanır; audit'te teknik/secret sızıntısı yoktur.
+- Canlı Vite/browser akışı login→create→edit→conflict→reload→edit→logout; ağ kesintisinde mock fallback yok; 1366×768 ve 1920×1080 açık/koyu taşma kontrolü geçmelidir.
+
 ### Paket 15 — koşullu evrak motoru kabulü
 
 - `ready` yalnız doğrulanmış File Agent metadata'sı ile mevcut sayılır; pending/failed kontrol gerektirir.

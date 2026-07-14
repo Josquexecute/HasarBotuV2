@@ -17,7 +17,7 @@ const describeLive =
     : describe
 
 describeLive('Auth + komut gercek API uctan uca', () => {
-  it('login -> bootstrap -> liste -> create -> update -> logout', async () => {
+  it('login -> Traffic/Kasko create -> idempotent replay -> update -> stale conflict -> reload -> logout', async () => {
     let cookie = ''
     const captureFetch: typeof fetch = async (input, init) => {
       const response = await fetch(input, init)
@@ -39,10 +39,38 @@ describeLive('Auth + komut gercek API uctan uca', () => {
     await expect(list.listCases()).resolves.toBeInstanceOf(Array)
 
     const commands = createHttpCaseCommandAdapter({ baseUrl: BASE_URL as string, headers: { cookie } })
-    const created = await commands.createCase({ caseType: 'traffic', plate: '34 LIVE 10', notificationFormNumber: 'F-LIVE-10' })
-    expect(created.caseId.length).toBeGreaterThan(0)
-    const updated = await commands.updateCase(created.caseId, { expectedVersion: 1, notificationFormNumber: 'F-LIVE-11' })
-    expect(updated.caseId).toBe(created.caseId)
+    const idempotencyKey = `live-${Date.now()}`
+    const trafficInput = { caseType: 'traffic' as const, plate: '34 LIVE 10', notificationFormNumber: 'F-LIVE-10' }
+    const traffic = await commands.createCase(trafficInput, idempotencyKey)
+    expect(traffic.caseId.length).toBeGreaterThan(0)
+    expect(traffic.version).toBe(1)
+
+    const replay = await commands.createCase(trafficInput, idempotencyKey)
+    expect(replay.caseId).toBe(traffic.caseId)
+
+    const casco = await commands.createCase({ caseType: 'casco', plate: '06 LIVE 20', notificationFormNumber: 'F-LIVE-20' })
+    expect(casco.type).toBe('Kasko')
+    expect(casco.officeNumber).not.toBe(traffic.officeNumber)
+
+    const updated = await commands.updateCase(traffic.caseId, {
+      expectedVersion: 1,
+      workflowStage: 'inspection_pending',
+      followUpDate: '2026-07-20',
+    })
+    expect(updated).toMatchObject({
+      caseId: traffic.caseId,
+      version: 2,
+      stage: 'Ekspertiz Bekliyor',
+      followUpDate: '2026-07-20',
+    })
+    await expect(
+      commands.updateCase(traffic.caseId, { expectedVersion: 1, workflowStage: 'reporting' }),
+    ).rejects.toMatchObject({ kind: 'version_conflict' })
+
+    const reloaded = await list.listCases()
+    expect(reloaded.find((item) => item.caseId === traffic.caseId)?.version).toBe(2)
+    const savedAgain = await commands.updateCase(traffic.caseId, { expectedVersion: 2, workflowStage: 'reporting' })
+    expect(savedAgain).toMatchObject({ version: 3, stage: 'Raporlama' })
 
     // Node'da cerez otomatik tasinmaz; cikis cagrisi da oturum cerezini gondermeli.
     await authWithCookie.logout()

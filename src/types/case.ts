@@ -14,6 +14,18 @@ export type CaseStage =
 
 export type CaseStatus = 'Açık' | 'Beklemede' | 'Gecikmiş' | 'Kontrol Bekliyor'
 
+export type CaseStageCode =
+  | 'new_notification'
+  | 'vehicle_or_service_pending'
+  | 'inspection_pending'
+  | 'damage_assessment'
+  | 'parts_and_labor'
+  | 'repair_approval_pending'
+  | 'under_repair'
+  | 'reporting'
+  | 'closing_documents'
+  | 'ready_to_close'
+
 export interface CaseRecord {
   caseId: string
   plate: string
@@ -35,6 +47,13 @@ export interface CaseRecord {
   insured: string
   estimatedDamage: number
   notes: readonly string[]
+  /** Gercek API komutlari icin wire metadata; mock kayitlarda bulunmaz. */
+  version?: number
+  workflowStage?: CaseStageCode
+  responsibleUserId?: string | null
+  serviceId?: string | null
+  insurerId?: string | null
+  followUpDate?: string | null
 }
 
 export type SortKey =

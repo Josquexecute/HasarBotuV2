@@ -21,11 +21,13 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { formatCurrency } from '../../mocks/cases'
 import { useCases } from '../../data'
+import { useSession } from '../../app/sessionContext'
 import type { CaseRecord } from '../../types/case'
 import { DocumentPhotoApiModule } from './DocumentPhotoApiModule'
+import { CaseEditModal } from './CaseEditModal'
 
 const tabs = [
   'Özet',
@@ -132,9 +134,11 @@ function HistoryModule({ item }: { item: CaseRecord }) {
 }
 
 export function CaseDetailPage() {
-  const { cases, source, status: dataStatus } = useCases()
+  const { cases, source, status: dataStatus, reload } = useCases()
   const { caseId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const session = useSession()
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const saved = window.sessionStorage.getItem('hasarbotu-active-case-tab')
     return tabs.includes(saved as Tab) ? saved as Tab : 'Özet'
@@ -144,8 +148,14 @@ export function CaseDetailPage() {
   const [assistantAnswer, setAssistantAnswer] = useState('')
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [photoMode, setPhotoMode] = useState<'normal' | 'stress'>('normal')
-  const item = cases.find((candidate) => candidate.caseId === caseId)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [caseOverride, setCaseOverride] = useState<CaseRecord | null>(null)
+  const baseItem = cases.find((candidate) => candidate.caseId === caseId)
+  const item = caseOverride?.caseId === caseId ? caseOverride : baseItem
   const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
+  const creationResult = (location.state as {
+    creationResult?: { caseId: string; officeNumber: string; plate: string }
+  } | null)?.creationResult
 
   useEffect(() => {
     window.sessionStorage.setItem('hasarbotu-active-case-tab', activeTab)
@@ -154,12 +164,17 @@ export function CaseDetailPage() {
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      if (closeModalOpen) setCloseModalOpen(false)
+      if (editModalOpen) setEditModalOpen(false)
+      else if (closeModalOpen) setCloseModalOpen(false)
       else if (assistantOpen) setAssistantOpen(false)
     }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [assistantOpen, closeModalOpen])
+  }, [assistantOpen, closeModalOpen, editModalOpen])
+
+  useEffect(() => {
+    setCaseOverride(null)
+  }, [caseId, baseItem?.version])
 
   if (source === 'api' && dataStatus !== 'ok') {
     const message = dataStatus === 'loading'
@@ -199,16 +214,34 @@ export function CaseDetailPage() {
         </div>
         <div className="case-detail-head__stage"><span>Aşama</span><strong>{item.stage}</strong></div>
         <div className="case-detail-head__actions">
-          <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice(`${item.plate} mock verisi yenilendi.`)}><RefreshCw size={15} /> Tek Dosyayı Yenile</button>
-          <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('Mock not düzenleyicisi hazırlandı.')}><NotebookPen size={15} /> Not Ekle</button>
-          <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('UI taslağı yerel mock durumda saklandı.')}><Save size={15} /> Taslağı Kaydet</button>
+          <button className="button button--secondary" type="button" onClick={() => {
+            if (source === 'api') {
+              reload()
+              setPrototypeNotice('Güncel dosya verisi sunucudan yükleniyor.')
+            } else setPrototypeNotice(`${item.plate} mock verisi yenilendi.`)
+          }}><RefreshCw size={15} /> Tek Dosyayı Yenile</button>
+          {source === 'api' ? (
+            <button className="button button--primary" type="button" onClick={() => setEditModalOpen(true)}><Save size={15} /> Temel Bilgileri Düzenle</button>
+          ) : (
+            <>
+              <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('Mock not düzenleyicisi hazırlandı.')}><NotebookPen size={15} /> Not Ekle</button>
+              <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('UI taslağı yerel mock durumda saklandı.')}><Save size={15} /> Taslağı Kaydet</button>
+            </>
+          )}
           <button className="button button--secondary" type="button" onClick={() => setAssistantOpen((value) => !value)}>
             {assistantOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
             {assistantOpen ? 'Asistanı kapat' : 'Asistanı aç'}
           </button>
-          <button className="button button--danger-ghost" type="button" onClick={() => setCloseModalOpen(true)}>Dosyayı Kapat</button>
+          {source === 'mock' && <button className="button button--danger-ghost" type="button" onClick={() => setCloseModalOpen(true)}>Dosyayı Kapat</button>}
         </div>
       </section>
+
+      {creationResult?.caseId === item.caseId && (
+        <div className="case-created-banner" role="status">
+          <CheckCircle2 size={17} />
+          <span><strong>Dosya oluşturuldu.</strong> Backend sonucu: {creationResult.officeNumber} · {creationResult.caseId}</span>
+        </div>
+      )}
 
       <nav className="case-tabs" aria-label="Dosya modülleri">
         {tabs.map((tab) => (
@@ -327,6 +360,24 @@ export function CaseDetailPage() {
       </div>
 
       {closeModalOpen && <CloseCaseModal onClose={() => setCloseModalOpen(false)} />}
+      {editModalOpen && source === 'api' && session.user !== null && (
+        <CaseEditModal
+          item={item}
+          currentUser={session.user}
+          onClose={() => setEditModalOpen(false)}
+          onUnauthorized={session.reportUnauthorized}
+          onReload={() => {
+            setEditModalOpen(false)
+            reload()
+            setPrototypeNotice('Çakışma sonrası güncel veri sunucudan yükleniyor.')
+          }}
+          onUpdated={(updated) => {
+            setCaseOverride(updated)
+            setEditModalOpen(false)
+            setPrototypeNotice(`Değişiklik kaydedildi · yeni sürüm ${updated.version ?? '—'}`)
+          }}
+        />
+      )}
       {prototypeNotice && <button className="prototype-toast" type="button" onClick={() => setPrototypeNotice('')} aria-live="polite"><CheckCircle2 size={15} />{prototypeNotice}<X size={14} /></button>}
     </main>
   )

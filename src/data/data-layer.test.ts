@@ -25,6 +25,10 @@ const dto = {
   stage: 'inspection_pending',
   followUpDate: '2026-07-14',
   updatedAt: '2026-07-11T09:00:00.000Z',
+  version: 4,
+  responsibleUserId: 'user-1',
+  serviceId: null,
+  insurerId: 'insurer-1',
 }
 
 function fetchResponding(status: number, body?: unknown): typeof fetch {
@@ -54,6 +58,10 @@ describe('HttpApiAdapter esleme', () => {
       status: 'Açık',
       followUp: '14 Tem',
       followUpTone: 'normal',
+      version: 4,
+      workflowStage: 'inspection_pending',
+      responsibleUserId: 'user-1',
+      insurerId: 'insurer-1',
     })
   })
 

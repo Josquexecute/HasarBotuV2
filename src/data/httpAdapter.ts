@@ -1,4 +1,4 @@
-import type { CaseRecord, CaseStage, CaseStatus, CaseType } from '../types/case'
+import type { CaseRecord, CaseStage, CaseStageCode, CaseStatus, CaseType } from '../types/case'
 import type { CasesDataPort } from './ports'
 
 /**
@@ -17,8 +17,12 @@ interface CaseListItemDto {
   plate: string
   status: 'open' | 'closed'
   stage: string
+  responsibleUserId?: string | null
+  serviceId?: string | null
+  insurerId?: string | null
   followUpDate: string | null
   updatedAt: string
+  version?: number
 }
 
 const STAGE_LABELS: Record<string, CaseStage> = {
@@ -92,6 +96,12 @@ export function mapCaseDtoToRecord(dto: CaseListItemDto, today: Date = new Date(
     insured: '—',
     estimatedDamage: 0,
     notes: [],
+    ...(dto.version === undefined ? {} : { version: dto.version }),
+    workflowStage: dto.stage as CaseStageCode,
+    responsibleUserId: dto.responsibleUserId ?? null,
+    serviceId: dto.serviceId ?? null,
+    insurerId: dto.insurerId ?? null,
+    followUpDate: dto.followUpDate,
   }
 }
 

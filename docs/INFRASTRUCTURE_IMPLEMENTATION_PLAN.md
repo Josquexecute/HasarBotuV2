@@ -346,6 +346,10 @@ Tamamlanan ek paket; sürümlü kural seed'i, saf domain değerlendirmesi ve ten
 
 Dosya Detayı sekmesi mevcut document/photo metadata ve document-requirements GET uçlarına `CaseDocumentsDataPort` sınırıyla bağlanır. Varsayılan mock baseline korunur; API modu hata halinde mock'a düşmez. Mutlak yol ve doğrulama kanıtı eksik ready metadata DataPort'ta reddedilir. Bu paket migration, contracts/API yazma ucu, IPC, dependency veya fiziksel dosya işlemi eklemez.
 
+### Paket 17 ek uygulama kaydı — Case create/edit UI komut bağlama
+
+Dosyalar sayfası mevcut `CaseCommandPort` POST create ucunu payload'a bağlı kararlı Idempotency-Key ile; Dosya Detayı mevcut PATCH update ucunu `expectedVersion` optimistic locking ile kullanır. Ofis numarası yalnız serverdan gelir; plaka/tür/ofis no/lifecycle değiştirilemez. Referans liste uçları olmadığı için sahte katalog yoktur; contract dışı eksper ve olay tarihleri yazılmaz. Mock baseline korunur, API hatası mock'a düşmez. Bu paket contracts, API, database migration, IPC, dependency, File Agent veya fiziksel dosya işlemi eklemez.
+
 Her pakette gerçek sonuca göre şu kanıtlar raporlanır:
 
 1. Değişen dosyalar ve kullanıcı değişikliklerinden ayrımı.
