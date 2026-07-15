@@ -292,3 +292,13 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Block→line→word parent, ordinal, reading order, range/hash ve box server/DB’de doğrulanır. Negatif, NaN/Infinity, sayfa dışı box veya normalize metinle eşleşmeyen range reddedilir.
 - Kalite `high|medium|low|insufficient|control_required`; reading order `reliable|probable|ambiguous|control_required`. Yalnız `high` teknik kaynak adayı insan incelemesizdir; yine de poliçe yorumu/onayı değildir.
 - Paket 24 ve OCR katmanı ayrı kalır. Composite sonuç `pdf_text_only|ocr_only|combined_non_overlapping|conflict_detected|control_required`; sessiz concat, duplicate veya conflict winner yoktur.
+
+## AI source bundle ve candidate kuralları — Paket 26
+
+- Bundle şeması `policy-ai-source-bundle/1.0.0`, prompt contract `policy-ai-extraction/1.0.0`, output schema `policy-ai-candidates/1.0.0` sürümündedir.
+- Source item sırası anchor kimliğine göre deterministiktir; hash aynı sürüm ve aynı girdide aynıdır. Ready bundle immutable, kaynak değişikliği yeni bundle’dır.
+- Poliçe metni güvenilmeyen veridir. Injection benzeri içerik warning’dir; sistem contract’ını değiştiremez.
+- Candidate önemli bir alan için en az bir geçerli anchor taşır. `originalValue` ve normalize sayı/LocalDate kaynak metinde bulunamazsa kanıt reddedilir.
+- Provider confidence kaynak kalitesini yükseltemez. Düşük veya control-required OCR kaynağı candidate’ı insan kontrolünde tutar.
+- Aynı alanın farklı değerleri, farklı muafiyet/limit/servis/parça şartları ve PDF/OCR farkları sessiz çözülmez. Genel muafiyetsiz sonucu koşullu muafiyeti ezmez.
+- Bütçe bütün değerleri safe integer minor unit’tir. Disabled/budget blocked fail-closed’tur ve provider çağrısı yoktur.

@@ -569,3 +569,18 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Gerçek tarayıcıda API login → Kasko vaka → Evrak ve Fotoğraf → yerel OCR tetikleme/idempotent replay → hazır sonuç → raw/normalize/PDF karşılaştırma → kalite/okuma sırası → blok/satır/kelime → source reference geçti. API kesintisinde mock fallback olmadı; 1366×768 ve 1920×1080 açık/koyu temalarda yatay taşma 0, iç kanıt kaydırması erişilebilir ve console warning/error 0'dı.
 - Ana çalışma ağacında UI 146 (+6 ortam-koşullu skip), domain 355, contracts 155, database 34, API 164 ve File Agent 53 olmak üzere **907 test geçti, 6 skip** kaldı. `npm install`, typecheck, lint, build, moderate audit (0 açık) ve diff-check geçti; kritik PostgreSQL/API/File Agent/OCR testi skip değildir.
 - Repository dışındaki `.git`/`node_modules`/`dist` içermeyen kopyada fresh `npm ci`, gerçek `_test` PostgreSQL ile typecheck, lint, aynı 907/6 sonucu ve build geçti; geçici kopya kaldırıldı. Üretim migration, gerçek `P:\`, müşteri poliçesi, cloud OCR/AI ve Paket 26 çalıştırılmadı.
+
+## Paket 26 — Kanıtlı AI orchestration çekirdeği (2026-07-15)
+
+- Migration 0018; organization provider policy, immutable source bundle/item, extraction run, kanonik candidate/source link, conflict proposal ve append-only usage ledger yapılarını ekler. Mutlak yol, secret, binary, full prompt veya raw provider response kolonu yoktur.
+- API-owned provider sınırı timeout/cancellation ve boyut limitlidir. Uygulama varsayılanında registry boş ve AI kapalıdır; yalnız testte beş deterministik provider enjekte edilir. Network, AI SDK, background service veya File Agent kullanılmaz.
+- Yalnız ready/verified documentVersion’a bağlı Paket 24 PDF segmenti ile Paket 25 ready/partial/control OCR satırı, stabil sourceAnchor üzerinden deterministik ve immutable bundle’a alınır. Tarihsel kaynak ancak açık seçimle kullanılır.
+- Strict structured output ve server-side evidence doğrulaması; anchor üyeliğini, kaynak kalitesini, original/numeric/date eşleşmesini ve PDF/OCR conflict warning’lerini fail-closed değerlendirir. Genel muafiyetsiz adayı koşullu muafiyeti silmez.
+- Kasko detayındaki “AI Alan Adayları” paneli plan/bütçe/provider durumu, source kalite uyarısı, salt-okunur candidate ve conflict bilgisini gösterir; accept/edit/reject/promotion sunmaz ve API hatasında mock fallback yapmaz.
+- Karar: HB-2026-032. Paket 27 human review/promotion; Paket 28 gerçek provider ve PII payload güvenliği sınırıdır.
+
+### Doğrulama durumu (Paket 26)
+
+- Ana çalışma ağacında `npm install`, typecheck, lint, gerçek `_test` PostgreSQL kullanan **952 başarılı / 6 mevcut ortam-koşullu UI skip**, build, 0-vulnerability moderate audit ve diff-check geçti. Migration 0018 ileri/tekrar/rollback-reapply, tenant/immutable bundle/source/candidate/usage constraint'leri ile deterministic provider API smoke doğrulandı.
+- Gerçek API tarayıcı smoke'unda login, Kasko kaynak seçimi, provider-disabled ve budget preview, açık start onayı, 5 kanıt-bağlı candidate, conflict/control-required, idempotent replay, no-fallback ve audit/sızıntı kontrolleri geçti. 1366×768 açık/koyu ile 1920×1080 koyu temada yatay taşma ve console error/warning yoktu; iç çalışma alanı scroll'u erişilebilirdi.
+- Repository dışındaki `.git`/`node_modules`/`dist` içermeyen kopyada fresh `npm ci`, güvenli process ortamındaki `_test` PostgreSQL bağlantısıyla typecheck, lint, aynı 952/6 test sonucu ve build geçti; geçici kopya kaldırıldı. İlk clean-copy denemesindeki assertion dışı Vitest worker kapanması ikinci tam temiz geçişte tekrarlanmadı.

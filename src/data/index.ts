@@ -40,6 +40,15 @@ export {
   type PolicyOcrRunRecord,
   type PolicyOcrRunStatus,
   type PolicyOcrSourceReferenceRecord,
+  type PolicyAiDataPort,
+  type PolicyAiRunRecord,
+  type PolicyAiRunStatus,
+  type PolicyAiCandidateRecord,
+  type PolicyAiCandidateCategory,
+  type PolicyAiSourceItemRecord,
+  type PolicyAiSourceOverviewRecord,
+  type PolicyAiSourceSelectionRecord,
+  type PolicyAiWorkspaceRecord,
 } from './ports'
 export { createMockCasesAdapter } from './mockAdapter'
 export {
@@ -65,6 +74,8 @@ export { createHttpPolicyPdfTextAdapter, HttpPolicyPdfTextError, type HttpPolicy
 export { usePolicyPdfText, type PolicyPdfTextLoadStatus } from './usePolicyPdfText'
 export { createHttpPolicyOcrAdapter, HttpPolicyOcrError, type HttpPolicyOcrErrorKind } from './policyOcrHttpAdapter'
 export { usePolicyOcr, type PolicyOcrLoadStatus } from './usePolicyOcr'
+export {createHttpPolicyAiAdapter,HttpPolicyAiError,type HttpPolicyAiErrorKind} from './policyAiHttpAdapter'
+export {usePolicyAi,type PolicyAiLoadStatus} from './usePolicyAi'
 export {
   createHttpAuthAdapter,
   HttpAuthError,

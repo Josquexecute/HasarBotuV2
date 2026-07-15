@@ -61,6 +61,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0015_casco_policy_analysis',
       '0016_policy_pdf_text_extraction',
       '0017_policy_ocr_pipeline',
+      '0018_policy_ai_orchestration',
     ])
 
     const tables = await pool.query(
@@ -68,6 +69,14 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     )
     expect(tables.rows.map((r: { table_name: string }) => r.table_name)).toEqual([
       'agents',
+      'ai_candidate_conflicts',
+      'ai_candidate_source_links',
+      'ai_extraction_candidates',
+      'ai_extraction_runs',
+      'ai_provider_policies',
+      'ai_source_bundle_items',
+      'ai_source_bundles',
+      'ai_usage_ledger',
       'audit_events',
       'case_file_operations',
       'case_lifecycle_history',
@@ -128,31 +137,40 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0017 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0018 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration'])
+    const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'ai_extraction_runs'")
+    expect(removed.rows).toEqual([{ n: 0 }])
+    const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration'])
+  })
+
+  it('0017 geri alınabilir ve 0018 ile yeniden ileri uygulanabilir', async () => {
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration', '0017_policy_ocr_pipeline'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_ocr_runs'",
     )
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0018_policy_ai_orchestration'])
   })
 
   it('0015 geri alınabilir ve 0016/0017 ile birlikte yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 3, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 4, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'policy_analyses'",
     )
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration'])
   })
 
   it('0014 geri alinabilir, eski servis profilini donusturur ve yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 4, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 5, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'insurer_service_agreements'",
     )
@@ -162,7 +180,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'p22-backfill', 'P22 Backfill'])
     await pool.query("INSERT INTO service_centers (id,organization_id,name,center_type) VALUES ($1,$2,'Eski Servis','ozel')", [serviceId, organizationId])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration'])
     const profile = await pool.query('SELECT service_type FROM service_centers WHERE id=$1', [serviceId])
     expect(profile.rows).toEqual([{ service_type: 'private' }])
     const silentAgreements = await pool.query('SELECT count(*)::int AS n FROM insurer_service_agreements WHERE service_center_id=$1', [serviceId])
@@ -305,6 +323,36 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await expect(insertRun(uuidv7(),otherOrganizationId,'7.0.0',2)).rejects.toMatchObject({code:'23503'})
     await expect(insertRun(uuidv7(),organizationId,'7.0.0',2)).rejects.toMatchObject({code:'23505',constraint:'document_ocr_runs_exact_identity_unique'})
     await expect(insertRun(uuidv7(),organizationId,'7.0.0',1)).rejects.toMatchObject({code:'23505',constraint:'document_ocr_runs_version_unique'})
+  })
+
+  it('0018 AI bundle/run/candidate tenant zinciri, immutable links ve safe integer sinirlarini zorlar', async () => {
+    const sourceResult=await pool.query(`SELECT r.organization_id,r.case_id,r.document_id,r.document_version_id,r.id extraction_id,l.id source_item_id,l.page_number,l.element_text source_text,l.text_hash
+      FROM document_ocr_runs r JOIN document_ocr_lines l ON l.ocr_run_id=r.id JOIN organizations o ON o.id=r.organization_id
+      WHERE o.code='p25-db' AND r.status='ready' LIMIT 1`)
+    const source=sourceResult.rows[0] as {organization_id:string;case_id:string;document_id:string;document_version_id:string;extraction_id:string;source_item_id:string;page_number:number;source_text:string;text_hash:string}
+    expect(source).toBeDefined()
+    const otherOrganizationId=String((await pool.query("SELECT id FROM organizations WHERE code='p25-other'")).rows[0].id),userId=uuidv7(),bundleId=uuidv7(),bundleHash='2'.repeat(64),anchorId='1'.repeat(64),runId=uuidv7()
+    await pool.query("INSERT INTO users(id,organization_id,email,password_hash,display_name)VALUES($1,$2,'p26-db@test.local','x','P26 DB')",[userId,source.organization_id])
+    await pool.query("INSERT INTO ai_source_bundles(id,organization_id,case_id,source_bundle_hash,bundle_schema_version,status,input_characters,source_count,created_by_user_id)VALUES($1,$2,$3,$4,'policy-ai-source-bundle/1.0.0','building',$5,1,$6)",[bundleId,source.organization_id,source.case_id,bundleHash,source.source_text.length,userId])
+    await pool.query("INSERT INTO ai_source_bundle_items(source_anchor_id,bundle_id,organization_id,case_id,source_type,document_id,document_version_id,extraction_id,source_item_id,page_number,source_text,text_hash,source_quality,ordinal)VALUES($1,$2,$3,$4,'ocr',$5,$6,$7,$8,$9,$10,$11,'high',0)",[anchorId,bundleId,source.organization_id,source.case_id,source.document_id,source.document_version_id,source.extraction_id,source.source_item_id,source.page_number,source.source_text,source.text_hash])
+    await pool.query("UPDATE ai_source_bundles SET status='ready',completed_at=now() WHERE id=$1",[bundleId])
+    const insertRun=(id:string,hash=bundleHash,estimate:bigint|number=1)=>pool.query("INSERT INTO ai_extraction_runs(id,organization_id,case_id,source_bundle_id,source_bundle_hash,provider_id,provider_version,model_id,prompt_template_version,output_schema_version,input_characters,estimated_cost_minor,created_by_user_id)VALUES($1,$2,$3,$4,$5,'deterministic-success','deterministic/1.0.0','local-fixture-v1','policy-ai-extraction/1.0.0','policy-ai-candidates/1.0.0',$6,$7,$8)",[id,source.organization_id,source.case_id,bundleId,hash,source.source_text.length,estimate,userId])
+    await insertRun(runId)
+    await expect(insertRun(uuidv7(),'f'.repeat(64))).rejects.toMatchObject({code:'23503',constraint:'ai_extraction_runs_bundle_fk'})
+    await expect(pool.query('UPDATE ai_extraction_runs SET estimated_cost_minor=$1 WHERE id=$2',[9007199254740992n,runId])).rejects.toMatchObject({code:'23514',constraint:'ai_extraction_runs_valid'})
+
+    const insertCandidate=async(candidateId:string)=>{const client=await pool.connect();try{await client.query('BEGIN');await client.query("INSERT INTO ai_extraction_candidates(organization_id,case_id,run_id,candidate_id,category,canonical_field,normalized_value,original_value,provider_confidence,source_quality,validation_status,conflict_status,human_review_status,provider_id,provider_version,model_id,prompt_template_version,output_schema_version)VALUES($1,$2,$3,$4,'special_condition','special.test','\"CAM\"','CAM',0.8,'high','validated','none','pending','deterministic-success','deterministic/1.0.0','local-fixture-v1','policy-ai-extraction/1.0.0','policy-ai-candidates/1.0.0')",[source.organization_id,source.case_id,runId,candidateId]);await client.query('INSERT INTO ai_candidate_source_links(organization_id,case_id,run_id,candidate_id,bundle_id,source_anchor_id)VALUES($1,$2,$3,$4,$5,$6)',[source.organization_id,source.case_id,runId,candidateId,bundleId,anchorId]);await client.query('COMMIT')}catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}}
+    await insertCandidate('candidate-1');await insertCandidate('candidate-2')
+    await expect(pool.query("DELETE FROM ai_candidate_source_links WHERE run_id=$1 AND candidate_id='candidate-1'",[runId])).rejects.toMatchObject({code:'23001'})
+
+    const secondBundleId=uuidv7(),secondAnchor='3'.repeat(64),secondHash='4'.repeat(64)
+    await pool.query("INSERT INTO ai_source_bundles(id,organization_id,case_id,source_bundle_hash,bundle_schema_version,status,input_characters,source_count,created_by_user_id)VALUES($1,$2,$3,$4,'policy-ai-source-bundle/1.0.0','building',$5,1,$6)",[secondBundleId,source.organization_id,source.case_id,secondHash,source.source_text.length,userId])
+    await pool.query("INSERT INTO ai_source_bundle_items(source_anchor_id,bundle_id,organization_id,case_id,source_type,document_id,document_version_id,extraction_id,source_item_id,page_number,source_text,text_hash,source_quality,ordinal)VALUES($1,$2,$3,$4,'ocr',$5,$6,$7,$8,$9,$10,$11,'high',0)",[secondAnchor,secondBundleId,source.organization_id,source.case_id,source.document_id,source.document_version_id,source.extraction_id,source.source_item_id,source.page_number,source.source_text,source.text_hash])
+    await pool.query("UPDATE ai_source_bundles SET status='ready',completed_at=now() WHERE id=$1",[secondBundleId])
+    await expect(pool.query("INSERT INTO ai_candidate_source_links(organization_id,case_id,run_id,candidate_id,bundle_id,source_anchor_id)VALUES($1,$2,$3,'candidate-1',$4,$5)",[source.organization_id,source.case_id,runId,secondBundleId,secondAnchor])).rejects.toMatchObject({code:'23503',constraint:'ai_candidate_source_links_run_bundle_fk'})
+    await expect(pool.query("INSERT INTO ai_candidate_conflicts(id,organization_id,case_id,run_id,left_candidate_id,right_candidate_id,status,reason)VALUES($1,$2,$3,$4,'candidate-1','candidate-2','conflict_detected','TENANT_MISMATCH')",[uuidv7(),otherOrganizationId,source.case_id,runId])).rejects.toMatchObject({code:'23503'})
+    const conflictId=uuidv7();await pool.query("INSERT INTO ai_candidate_conflicts(id,organization_id,case_id,run_id,left_candidate_id,right_candidate_id,status,reason)VALUES($1,$2,$3,$4,'candidate-1','candidate-2','conflict_detected','SAFE_CONFLICT')",[conflictId,source.organization_id,source.case_id,runId]);await expect(pool.query("UPDATE ai_candidate_conflicts SET reason='CHANGED' WHERE id=$1",[conflictId])).rejects.toMatchObject({code:'23001'})
+    await expect(pool.query("INSERT INTO ai_usage_ledger(id,organization_id,case_id,run_id,provider_id,model_id,request_hash,input_characters,estimated_cost_minor,actual_cost_minor,status,started_at)VALUES($1,$2,$3,$4,'deterministic-success','local-fixture-v1',$5,1,1,$6,'failed',now())",[uuidv7(),source.organization_id,source.case_id,runId,'5'.repeat(64),9007199254740992n])).rejects.toMatchObject({code:'23514',constraint:'ai_usage_ledger_valid'})
   })
 
   it('0014 tenant, tarih, operasyon ve insan onayi kisitlarini zorlar', async () => {

@@ -73,6 +73,8 @@ import {
   policyOcrPagesResponseSchema,
   policyOcrRunResponseSchema,
 } from './v1/policy-ocr/dto.js'
+import {policyAiCancelRequestSchema,policyAiPlanRequestSchema,policyAiStartRequestSchema} from './v1/policy-ai/commands.js'
+import {policyAiRunResponseSchema,policyAiCandidatesResponseSchema,policyAiProviderOutputSchema,policyAiUsageResponseSchema} from './v1/policy-ai/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -139,6 +141,13 @@ export const JSON_SCHEMA_TARGETS = {
   'policy-ocr-elements-response': policyOcrElementsResponseSchema,
   'policy-ocr-source-reference-request': policyOcrSourceReferenceRequestSchema,
   'policy-ocr-chunk-request': policyOcrChunkRequestSchema,
+  'policy-ai-plan-request': policyAiPlanRequestSchema,
+  'policy-ai-start-request': policyAiStartRequestSchema,
+  'policy-ai-cancel-request': policyAiCancelRequestSchema,
+  'policy-ai-provider-output': policyAiProviderOutputSchema,
+  'policy-ai-run-response': policyAiRunResponseSchema,
+  'policy-ai-candidates-response': policyAiCandidatesResponseSchema,
+  'policy-ai-usage-response': policyAiUsageResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

@@ -357,3 +357,11 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Page DTO ayrı bounded raw/normalized OCR, confidence/quality/reading/composite, low-confidence/unreadable sayaç, render metadata ve süre taşır. Element DTO block/line/word, `sourceLayer=ocr`, code-point range ve render-pixel box taşır.
 - OCR locator server’ın exact range/element box’ından üretilir; engine/language/locator/quality/reading metadata’sını içerir. Client excerpt/hash/box göndermez. Runtime Zod ve 60 golden JSON Schema aynı kabul kümesidir.
 - Mutlak path/root/temp, PDF/image/model binary, secret, worker command/stdout/stderr, stack ve ham OS hata sözleşmede yoktur.
+
+## 15. Paket 26 policy AI contracts/API
+
+- Tenant/oturum korumalı uçlar: `POST .../policy-ai-extractions/plan`, `POST .../:runId/start`, run list/detail/candidates, güvenli cancel ve yetkili `/api/v1/ai/usage`.
+- Plan provider çağrısı yapmaz; kaynak, kalite warning’i, input boyutu, tahmini integer maliyet ve provider/bütçe durumunu döndürür.
+- Start zorunlu `Idempotency-Key`, `expectedVersion` ve `expectedSourceBundleHash` kullanır. Exact replay ikinci run veya provider çağrısı oluşturmaz.
+- Provider output schema strict’tir; unknown alan, enum dışı değer, non-finite sayı, bounded olmayan içerik, duplicate candidate ve geçersiz anchor reddedilir.
+- Cevap yalnız bounded excerpt ve güvenli source metadata taşır; full prompt/output, binary, mutlak yol, secret ve belge dump’ı içermez.

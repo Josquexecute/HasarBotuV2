@@ -16,6 +16,7 @@ import { registerCaseLifecycleRoutes } from './case-lifecycle/index.js'
 import { registerPolicyAnalysisRoutes } from './policy-analysis/index.js'
 import { registerTextExtractionRoutes } from './text-extractions/index.js'
 import { registerPolicyOcrRoutes } from './policy-ocr/index.js'
+import { registerPolicyAiRoutes, type PolicyAiProviderRegistry } from './policy-ai/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -58,6 +59,8 @@ export interface BuildAppOptions {
    * verilmezse /api/v1/auth/* kayitli olmaz ve guvenli 404 doner.
    */
   readonly auth?: AuthRoutesOptions
+  /** Paket 26 provider adapter kaydı. Varsayılan boştur; core AI kapalı çalışır. */
+  readonly policyAiProviders?: PolicyAiProviderRegistry
 }
 
 /**
@@ -111,6 +114,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerPolicyAnalysisRoutes(app, { pool: options.auth.pool })
     registerTextExtractionRoutes(app, { pool: options.auth.pool })
     registerPolicyOcrRoutes(app, { pool: options.auth.pool })
+    registerPolicyAiRoutes(app, { pool: options.auth.pool, providers: options.policyAiProviders ?? { get: () => undefined } })
   }
 
   return app

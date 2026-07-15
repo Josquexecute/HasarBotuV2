@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "month": {
+      "type": "string",
+      "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])$"
+    },
+    "totalCostMinor": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "items": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "caseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "providerId": {
+            "type": "string",
+            "enum": [
+              "deterministic-success",
+              "deterministic-invalid-schema",
+              "deterministic-timeout",
+              "deterministic-failure",
+              "deterministic-prompt-injection-attempt"
+            ]
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "inputCharacters": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "outputCharacters": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "estimatedCostMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "actualCostMinor": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "provider_disabled",
+              "budget_blocked",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "safeErrorCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z0-9_]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "runId",
+          "caseId",
+          "providerId",
+          "modelId",
+          "inputCharacters",
+          "outputCharacters",
+          "estimatedCostMinor",
+          "actualCostMinor",
+          "status",
+          "safeErrorCode",
+          "startedAt",
+          "completedAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "month",
+    "totalCostMinor",
+    "items"
+  ],
+  "additionalProperties": false
+}

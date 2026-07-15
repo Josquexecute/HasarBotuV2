@@ -216,3 +216,11 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - Exact identity unique index; tek aktif source işi; tenant bileşik FK; sabit engine/language/render/profile check; count/status/hash/quality check; element range+box trigger; terminal run ve OCR evidence append-only guard DB tarafındadır.
 - `policy_source_references`, OCR run/page/block/line/word, range, exact versions, quality/reading ve box ile backward-compatible genişler. Trigger excerpt/range/parent/tenant/documentVersion bağını yeniden doğrular.
 - Mutlak/logical path, PDF/image/model binary, worker stack/stdout/stderr, secret ve tam belge blob kolonu yoktur. OCR metni tek doğrulanamaz JSONB değildir; yalnız bounded preprocessing config JSONB’dir.
+
+## Paket 26 uygulanan PostgreSQL modeli
+
+- Migration `0018_policy_ai_orchestration`; `ai_provider_policies`, `ai_source_bundles`, `ai_source_bundle_items`, `ai_extraction_runs`, `ai_extraction_candidates`, `ai_candidate_source_links`, `ai_candidate_conflicts`, `ai_usage_ledger` tablolarını ekler.
+- Bundle ready olduktan sonra ve bundle item/source anchor kayıtları append-only/immutable’dır. Candidate provider facts değiştirilemez; deferred constraint her candidate için aynı bundle/run içinden source link zorlar.
+- Exact identity, organization-scope idempotency, bundle içi anchor, tenant bileşik foreign key ve safe integer/bounded text kontrolleri DB’de zorlanır.
+- Usage ledger append-only’dır. Tam prompt/provider response, PDF/OCR binary, mutlak yol, root, secret veya tüm belge metni için kolon yoktur.
+- Migration ileri, tekrar, rollback/reapply, tenant, immutable ve constraint testlerine dahildir; üretim migration bu pakette çalıştırılmaz.

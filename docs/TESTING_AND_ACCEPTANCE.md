@@ -182,3 +182,11 @@ raporlanır.
 - Gerçek tarayıcı: Kasko OCR-required sayfa; trigger/progress/ready-low confidence; raw/normalized OCR; Paket 24 karşılaştırma; element/locator; source reference; no-fallback; 1366×768 açık+koyu ve 1920×1080 koyu; overflow/console/focus.
 - Gerçek müşteri belgesi, gerçek `P:\`, cloud/AI, üretim migration ve sonraki paket yoktur. Kritik PostgreSQL/API/File Agent/OCR/tarayıcı senaryosu skip ise Paket 25 PASS sayılmaz.
 - Paket 25 uygulama sonucu: ana çalışma ağacı ve repository dışı fresh `npm ci` kopyasında 907 test geçti; 6 skip yalnız mevcut ortam-koşullu UI testleridir. Gerçek PostgreSQL migration/API, gerçek yerel OCR/File Agent ve gerçek tarayıcı senaryoları skip edilmedi; audit 0 açık ve tarayıcı console warning/error 0'dır.
+
+### Paket 26 — AI orchestration kabulü
+
+- Gerçek `_test` PostgreSQL’de migration 0018 up/repeat/down/reapply; tenant, exact identity, idempotency, immutable bundle/candidate, zorunlu source link, integer budget ve append-only usage test edilir.
+- Beş deterministik provider; success, strict-schema failure, timeout, safe failure ve injection anchor attempt senaryolarını network/SDK olmadan çalıştırır.
+- API smoke; login, Kasko/Traffic ayrımı, PDF+OCR bundle/hash, provider disabled, budget hard stop, start/replay, stale, evidence/conflict, tenant 404, rol 403, 401 ve audit/sızıntı kontrolünü kapsar.
+- UI/browser; provider/bütçe planı, açık start onayı, source kalite/excerpt, candidate/conflict/control, no-fallback, 1366×768 açık-koyu ve 1920×1080 koyu tema, overflow ve console kontrolünü geçmelidir.
+- Kritik PostgreSQL/API/provider/browser testi skip kalırsa Paket 26 PASS sayılmaz. Gerçek müşteri verisi, cloud provider, File Agent, gerçek `P:\` veya üretim migration kullanılmaz.

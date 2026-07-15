@@ -407,3 +407,11 @@ Migration 0017 mevcut `jobs` kuyruğunu `ocr_policy_pages/document_ocr_run` ile 
 OCR ayrı Node worker’dadır: 512 MB old-generation, 8 MB stack, 300 saniye, 64 MiB PDF, 30 milyon render pixel, 200 bin karakter/sayfa, 5 milyon karakter/job ve 20 bin element/sayfa sınırı vardır. Dil asset’i local package’tan hash+size doğrulanarak temp’e alınır; URL/runtime download/telemetry yoktur. Tesseract Node worker/core yolu kurulu package içindedir ve `langPath` yalnız local absolute dizindir. Timeout/crash ana Agent’ı düşürmez; worker ve temp `finally` ile temizlenir.
 
 Chunk server’da lease/Agent ownership, run/job version, extraction page, source identity, raw/normalize hash, code-point range, hierarchy, box/page bounds ve sayaçlarla tekrar doğrulanır. Final status/output hash merkezi transaction’da kesinleşir. Tam OCR metni job/audit/log’a kopyalanmaz; page read endpoint’i ayrıca sayfalıdır.
+
+### Paket 26 ek uygulama kaydı — API-owned AI orchestration
+
+- AI candidate orchestration mevcut API process’inde bounded servis olarak çalışır; yeni background service veya job queue yoktur.
+- File Agent’ın job türü, protokolü, secret’ı, root mapping’i ve filesystem erişimi değişmez; AI katmanına verilmez.
+- Provider registry varsayılan boş ve policy varsayılan disabled’dır. Deterministik adapter’lar yalnız test/smoke composition root’undan enjekte edilir.
+- Adapter interface; provider/model/version/capability, maksimum input/output, timeout/cancellation, structured output, usage ve safe error mapping taşır. Runtime HTTP yoktur.
+- Gerçek provider deployment, secret yönetimi, outbound ağ kontrolü ve PII payload politikası Paket 28’in ayrı güvenlik kapısıdır.

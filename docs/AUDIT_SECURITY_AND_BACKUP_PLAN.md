@@ -289,3 +289,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Audit yalnız organization/case/document/version/extraction/page/run/job/agent/actor kimlikleri; engine/language/render/preprocess/locator sürümleri; status/quality/sayaç/output hash; safe failure code ve requestId taşır.
 - Audit/log tam raw/normalized OCR metni, uzun excerpt, müşteri verisi, filename, logical/absolute root/path/temp, render görüntüsü, PDF/model binary, Agent secret, worker command/stdout/stderr, stack veya ham OS/SQL hatası taşımaz.
 - Request/queue ve terminal metadata/audit merkezi transaction’dadır. Eşit chunk replay idempotent, farklı replay reddedilir. OCR evidence append-only ve terminal run immutable olduğu için yedek geri yüklemede kanıt sürümü sessizce değişmez.
+
+### 6.12 Paket 26 AI orchestration audit sınırı
+
+- Merkezi audit yalnız organization/case/run, provider-model-prompt-schema sürümü, kaynak/candidate/conflict/control sayıları, integer kullanım/maliyet, durum/result code, actor ve requestId taşır.
+- Full prompt, full provider output, poliçe/OCR metni, uzun excerpt, kişisel veri, session, secret, binary, mutlak yol, stack veya ham provider hatası yasaktır.
+- `planned`, `started`, `review_required`, `failed`, `provider_disabled`, `budget_blocked`, `cancelled` ve candidate conflict olayları mevcut AuditService ile ilgili transaction’da yazılır.
+- Raw provider response varsayılan olarak DB’de tutulmaz. Usage ledger append-only güvenli sayaçtır; audit’in yerine geçen ikinci bir olay sistemi değildir.

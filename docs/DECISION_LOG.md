@@ -563,3 +563,15 @@ Etkisi: Migration `0016_policy_pdf_text_extraction`; mevcut PostgreSQL job queue
 8. Audit tam OCR metni, excerpt, görüntü/PDF binary, filename/path/root/temp path, model binary, secret, stdout/stderr, stack veya ham OS hatası taşımaz. Paket 26 yalnız doğrulanmış PDF/OCR locator’larını kullanabilir; OCR metni kendi başına onaylı analiz kaynağı değildir.
 
 Etkisi: Migration `0017_policy_ocr_pipeline`; exact pinli beş File Agent dependency’si; saf OCR domain/strict contracts; tenant/RBAC/idempotency API; Kasko detayında no-fallback yerel OCR görünümü. Electron IPC, üretim migration, gerçek `P:\`, müşteri belgesi ve sonraki paket kapsam dışıdır.
+
+## 2026-07-15 — HB-2026-032: Kanıtlı AI orchestration ve aday doğrulama sınırı
+
+1. AI orchestration API servisinin sahip olduğu, süre ve boyut sınırları olan bir provider adapter arkasındadır. File Agent, job protokolü, root mapping, filesystem ve secret bu akışta kullanılmaz. Varsayılan registry boştur; yalnız testte enjekte edilen deterministik provider’lar vardır. HTTP/AI SDK/cloud provider eklenmez.
+2. Provider’a yalnız aynı tenant/Kasko vaka içindeki doğrulanmış Paket 24 PDF segmentleri ve Paket 25 OCR satırları gönderilir. Server bunları stabil `sourceAnchorId` ile immutable, sıralı ve sürümlü source bundle’a bağlar. Provider sayfa, excerpt, hash veya locator üretse bile kanıt sayılmaz; gerçek kaynak server tarafından anchor üzerinden çözülür.
+3. Poliçe metni güvenilmeyen veridir. Sistem extraction contract’ı, strict output schema ve source bundle ayrı request alanlarıdır. Belgedeki talimat, URL veya tool çağırma metni yalnız warning üretir; kaynak değiştirilmez ve hiçbir araç/ağ çağrısı doğurmaz.
+4. Provider çıktısı strict schema, unknown alan, finite number, liste/string sınırı, candidate kimliği, anchor üyeliği ve kullanım sayaçları yönünden doğrulanır. Server ayrıca original/numeric/date değerlerini kaynakta arar; düşük OCR kalitesi provider confidence ile yükseltilemez. Geçersiz çıktı veya kanıt fail-closed `failed/rejected_evidence/control_required` olur.
+5. Organization policy varsayılan `enabled=false`, monthly hard stop açıktır. Bütçe minor integer ile hesaplanır. Disabled veya budget blocked durumda provider çağrılmaz, fallback yapılmaz; append-only usage ledger yalnız güvenli sayaç ve kod taşır.
+6. Exact run identity ve zorunlu `Idempotency-Key` ikinci run/provider çağrısını engeller. Kaynak değişimi eski bundle/run’ı değiştirmez ve stale/superseded sınırında kalır. Candidate çatışmaları sessiz çözülmez; yalnız conflict proposal saklanır.
+7. Bu pakette accept/edit/reject, Paket 23 promotion/approval, gerçek provider, PII payload politikası veya operasyonel otomasyon yoktur. Human review/promotion Paket 27’ye; gerçek provider ve PII güvenliği Paket 28’e bırakılır.
+
+Etkisi: Migration `0018_policy_ai_orchestration`; saf source-bundle/evidence/conflict domain’i; strict contracts; tenant/RBAC/idempotency/audit API’si ve Kasko detayında salt-okunur “AI Alan Adayları” paneli. Yeni dependency, IPC, File Agent değişikliği veya fiziksel veri yazma yolu yoktur.

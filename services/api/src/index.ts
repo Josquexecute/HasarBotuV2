@@ -55,3 +55,4 @@ if (entryScript !== undefined && resolve(entryScript) === fileURLToPath(import.m
 }
 export { requireSession, resolveSession } from './auth/guard.js'
 export { createCasesStore, registerCasesRoutes, type CasesStore } from './cases/index.js'
+export {createDeterministicPolicyAiProviderRegistry,type DeterministicPolicyAiProviderRegistry,type PolicyAiProviderAdapter,type PolicyAiProviderRegistry} from './policy-ai/index.js'

@@ -55,6 +55,13 @@ const EXPECTED_NAMES: readonly JsonSchemaName[] = [
   'pdf-text-source-reference-request',
   'photo-register-request',
   'photos-list-response',
+  'policy-ai-cancel-request',
+  'policy-ai-candidates-response',
+  'policy-ai-plan-request',
+  'policy-ai-provider-output',
+  'policy-ai-run-response',
+  'policy-ai-start-request',
+  'policy-ai-usage-response',
   'policy-analysis-approval-request',
   'policy-analysis-create-request',
   'policy-analysis-response',
@@ -100,5 +107,15 @@ describe('golden JSON Schema fixtures', () => {
     expect(serialized).toContain('x-hasarbotu-runtime-validation')
     expect(serialized).toContain('calendar-date-validity')
     expect(serialized).toContain('plate-number-canonical-form')
+  })
+
+  it('policy AI runtime parity ve bounded normalized-value metadata tasir', () => {
+    const schemas = buildJsonSchemas()
+    const plan = JSON.stringify(schemas['policy-ai-plan-request'])
+    const providerOutput = JSON.stringify(schemas['policy-ai-provider-output'])
+    expect(plan).toContain('unique-source-selection')
+    expect(providerOutput).toContain('unique-candidate-id')
+    expect(providerOutput).toContain('max-object-properties-20')
+    expect(providerOutput).toContain('"maxProperties":20')
   })
 })

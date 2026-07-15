@@ -707,3 +707,16 @@ Kapsam dışı: OCR, LLM/AI, otomatik poliçe analizi/onayı, upload, File Agent
 - [x] Tam root, tarayıcı, canlı smoke ve repository dışı fresh checkout kapıları tamamlandı; gerçek sonuçlar PROJECT_STATUS'a işlendi.
 
 Kapsam dışı: cloud OCR, AI/LLM, spell correction, teminat/muafiyet yorumu, upload, Electron IPC, üretim migration, gerçek müşteri belgesi/`P:\` ve Paket 26.
+
+## Paket 26 — Kanıtlı AI orchestration çekirdeği
+
+Uygulanan sıra:
+
+1. Paket 24/25 metadata’sından bounded, immutable source bundle ve stabil anchor üretimi.
+2. API-owned, provider-neutral adapter ile beş deterministik test provider’ı; runtime network ve SDK olmadan timeout/cancellation.
+3. Strict structured-output, server evidence ve conflict doğrulaması.
+4. Disabled-by-default organization policy, integer budget ve append-only usage ledger.
+5. Tenant/RBAC/idempotency/audit korumalı plan/start/read/cancel/usage API’leri.
+6. Kasko detayında salt-okunur plan/candidate/source paneli ve no-fallback durumları.
+
+Paket 27 accept/edit/reject ve Paket 23’e promotion yapacaktır. Paket 28 gerçek provider, secret ve PII payload güvenliği sınırını kuracaktır. Paket 26 bu işlere başlamaz.

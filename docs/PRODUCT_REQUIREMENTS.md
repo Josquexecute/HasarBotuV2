@@ -167,3 +167,11 @@ formatlarında alınabilir.
 - Paket 24 raw/normalized metni değişmez. OCR raw/normalized katmanı, blok/satır/kelime render-pixel koordinatları, Unicode code point aralığı, okuma sırası ve kalite sonucu ayrı immutable sürüm olarak saklanır.
 - `ready` yalnız teknik tamamlanmadır. Düşük güven, yetersiz metin, çok sütun belirsizliği veya PDF/OCR çelişkisi `control_required`/insan kontrolü üretir; OCR tek başına poliçe yorumu veya onaylı analiz değildir.
 - UI gerçek API durum/progress, motor/dil/render/preprocess sürümü, iki metin katmanı, kalite, güven, geometri ve bounded source locator gösterir. API kesintisinde mock fallback; mock modda fiziksel OCR yoktur.
+
+### Kanıtlı AI alan adayları — Paket 26
+
+- Kasko poliçesi için AI extraction yalnız doğrulanmış PDF/OCR segmentlerinden, server üretimi `sourceAnchorId` referanslarıyla planlanır.
+- AI varsayılan kapalıdır; core vaka işlemleri AI olmadan çalışır. Provider disabled veya bütçe aşımı çağrı/fallback üretmez.
+- Provider çıktısı nihai karar değildir. Candidate; kategori, kanonik alan, değer, koşul/istisna, kaynak, kalite, confidence ve conflict/control durumunu taşır.
+- Kullanıcı bu pakette candidate kabul edemez, düzenleyemez, reddedemez veya Paket 23 analizine taşıyamaz. UI bunu açıkça belirtir.
+- Uygulama full prompt, full provider response, belge binary’si, mutlak yol, secret veya tüm vaka dump’ını provider/audit/log sınırına taşımaz.
