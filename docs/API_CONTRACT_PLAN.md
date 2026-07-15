@@ -348,3 +348,12 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - DTO extraction/page/segment durumlarını, `pdfjs-dist 6.1.200`, `pdf-text-normalization/1.0.0`, `unicode_code_point`, sayaç/hash ve güvenli failure code alanlarını strict doğrular.
 - Paket 23 source reference opsiyonel extraction/page/segment/start/end locator taşır. Eski kontrollü manuel referanslar `null` locator ile backward-compatible kalır; server exact excerpt’i kendisi üretir.
 - Runtime Zod ve 52 golden JSON Schema semantik olarak eşittir. Mutlak path, PDF binary, parser stack, secret ve ham OS hatası response kabul kümesinde yoktur.
+
+## 14. Paket 25 yerel OCR contracts/API
+
+- DocumentVersion-kapsamlı create/list ve case-kapsamlı run detail/pages/elements/cancel/retry/source-reference uçları oturum+tenant kapsamlıdır. Yazılar `admin|expert|case_manager` ve zorunlu `Idempotency-Key` kullanır; read izinli vaka oturumuna açıktır.
+- Create `textExtractionId`, `tur|eng|tur+eng`, `standard|high_quality` ve opsiyonel bounded sayfaları strict doğrular. Server document/extraction/page/source identity’sini yeniden üretir; client path/hash/status beyanına güvenmez.
+- Run DTO 14 aşamalı status/progress, exact engine/language/render/preprocess/normalizer/locator, counts/hash ve safe failure code taşır. List cevap tam OCR metni taşımaz; pages/elements pagination maksimum 100’dür.
+- Page DTO ayrı bounded raw/normalized OCR, confidence/quality/reading/composite, low-confidence/unreadable sayaç, render metadata ve süre taşır. Element DTO block/line/word, `sourceLayer=ocr`, code-point range ve render-pixel box taşır.
+- OCR locator server’ın exact range/element box’ından üretilir; engine/language/locator/quality/reading metadata’sını içerir. Client excerpt/hash/box göndermez. Runtime Zod ve 60 golden JSON Schema aynı kabul kümesidir.
+- Mutlak path/root/temp, PDF/image/model binary, secret, worker command/stdout/stderr, stack ve ham OS hata sözleşmede yoktur.

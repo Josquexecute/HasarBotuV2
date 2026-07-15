@@ -29,7 +29,11 @@
   "dependencies": {
     "@hasarbotu/contracts": "*",
     "@hasarbotu/domain": "*",
-    "pdfjs-dist": "6.1.200"
+    "@napi-rs/canvas": "1.0.2",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/tur": "1.0.0",
+    "pdfjs-dist": "6.1.200",
+    "tesseract.js": "7.0.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

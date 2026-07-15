@@ -34,7 +34,7 @@ describe('Kasko PDF metin çıkarım görünümü', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request) => {
       const url = String(input); if (url.endsWith('/documents?page=1&pageSize=100')) return response(200, { items: [{ id: DOC, documentType: 'casco_policy' }] }); if (url.endsWith(`/documents/${DOC}`)) return response(200, { document: { versions: [{ id: VERSION, versionNumber: 1, displayName: 'Görsel Poliçe', mimeType: 'application/pdf', extension: 'pdf', byteSize: 1000, status: 'ready', hashVerified: true, sizeVerified: true, verifiedAt: '2026-07-14T08:00:00.000Z' }] } }); if (url.includes('/pages?') || url.includes('/segments?')) return response(200, { items: [] }); return response(200, { items: [{ ...extraction, status: 'ocr_required', textPageCount: 0, imageOnlyPageCount: 1, segmentCount: 0 }] })
     }) as never)
-    render(<PolicyPdfTextApiModule caseId={CASE} source="api" />); await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('OCR bu paketin kapsamı dışındadır')); expect(fetchMock).toHaveBeenCalled()
+    render(<PolicyPdfTextApiModule caseId={CASE} source="api" />); await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('yerel OCR katmanında işlenebilir')); expect(fetchMock).toHaveBeenCalled()
   })
 
   it.each([[401, 'Oturum gerekli'], [403, 'Yetki yetersiz'], [404, 'Dosya bulunamadı']] as const)('HTTP %s durumunda mock fallback yapmaz', async (status, label) => {

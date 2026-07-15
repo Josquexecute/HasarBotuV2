@@ -6,6 +6,7 @@ import { verifyTarget } from './verifier.js'
 import { provisionCaseWorkspace } from './workspace-provisioner.js'
 import { executeFileOperation } from './file-operation-executor.js'
 import { extractPdfText, type PdfTextExtractionResult } from './pdf-text-extractor.js'
+import { extractPolicyOcr, type PolicyOcrExtractionResult } from './policy-ocr-extractor.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -27,7 +28,16 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
 
   let result
   try {
-    if (job.payload.kind === 'pdf_text_extraction') {
+    if (job.payload.kind === 'policy_ocr') {
+      const rootAbsolute = config.roots[job.payload.storageRootKey]
+      if (rootAbsolute === undefined) result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
+      else {
+        result = await extractPolicyOcr(rootAbsolute, job.payload, {
+          onHeartbeat: async (phase) => { await client.heartbeat(job.id, phase) },
+          onChunk: async (chunk) => { await client.reportPolicyOcrChunk(job.id, chunk) },
+        })
+      }
+    } else if (job.payload.kind === 'pdf_text_extraction') {
       const rootAbsolute = config.roots[job.payload.storageRootKey]
       if (rootAbsolute === undefined) result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
       else {
@@ -65,6 +75,7 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
     ...(result.errorCode !== undefined ? { errorCode: result.errorCode } : {}),
     ...('fileOperation' in result && result.fileOperation !== undefined ? { fileOperation: result.fileOperation } : {}),
     ...((result as PdfTextExtractionResult).pdfExtraction !== undefined ? { pdfExtraction: (result as PdfTextExtractionResult).pdfExtraction } : {}),
+    ...((result as PolicyOcrExtractionResult).policyOcr !== undefined ? { policyOcr: (result as PolicyOcrExtractionResult).policyOcr } : {}),
   }
   const reported = await client.reportResult(job.id, reportInput)
   return { kind: 'reported', jobId: job.id, outcome: result.outcome, reported }

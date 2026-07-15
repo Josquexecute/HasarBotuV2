@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "textExtractionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "languageMode": {
+      "default": "tur+eng",
+      "type": "string",
+      "enum": [
+        "tur",
+        "eng",
+        "tur+eng"
+      ]
+    },
+    "renderProfile": {
+      "default": "standard",
+      "type": "string",
+      "enum": [
+        "standard",
+        "high_quality"
+      ]
+    },
+    "pageNumbers": {
+      "minItems": 1,
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000
+      }
+    }
+  },
+  "required": [
+    "textExtractionId",
+    "languageMode",
+    "renderProfile"
+  ],
+  "additionalProperties": false
+}

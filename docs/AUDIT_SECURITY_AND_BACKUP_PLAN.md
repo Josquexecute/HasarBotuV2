@@ -282,3 +282,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Audit organization/case/document/version/extraction/job/agent kimlikleri, exact parser+normalizasyon, status, sayfa/segment/sayaç, output hash, bounded locator offsetleri ve güvenli hata kodu taşıyabilir.
 - Raw/normalized sayfa metni, excerpt içeriği, PDF binary, original filename, logical/absolute path, local root/temp path, secret, parser stack ve ham OS hatası audit’e yazılmaz.
 - Queue/extraction ve final metadata/audit aynı transaction’dadır. Chunk replay içerik eşitse idempotent; farklıysa reddedilir. Page/segment append-only ve terminal extraction immutable guard yedek/audit bütünlüğünü korur.
+
+### 6.11 Paket 25 OCR audit ve veri güvenliği sınırı
+
+- Merkezi olaylar: `document_page_ocr.requested/started/completed/partial/low_confidence/control_required/failed/cancelled/superseded` ve `document_page_ocr_source_reference.created`.
+- Audit yalnız organization/case/document/version/extraction/page/run/job/agent/actor kimlikleri; engine/language/render/preprocess/locator sürümleri; status/quality/sayaç/output hash; safe failure code ve requestId taşır.
+- Audit/log tam raw/normalized OCR metni, uzun excerpt, müşteri verisi, filename, logical/absolute root/path/temp, render görüntüsü, PDF/model binary, Agent secret, worker command/stdout/stderr, stack veya ham OS/SQL hatası taşımaz.
+- Request/queue ve terminal metadata/audit merkezi transaction’dadır. Eşit chunk replay idempotent, farklı replay reddedilir. OCR evidence append-only ve terminal run immutable olduğu için yedek geri yüklemede kanıt sürümü sessizce değişmez.

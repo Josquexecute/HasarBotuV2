@@ -23,7 +23,8 @@
                 "rename_case_workspace",
                 "move_case_workspace",
                 "cleanup_moved_workspace",
-                "extract_pdf_text"
+                "extract_pdf_text",
+                "ocr_policy_pages"
               ]
             },
             "targetType": {
@@ -34,7 +35,8 @@
                 "case_location",
                 "workspace_provisioning",
                 "file_operation",
-                "document_text_extraction"
+                "document_text_extraction",
+                "document_ocr_run"
               ]
             },
             "targetId": {
@@ -468,6 +470,214 @@
                     "maxPages",
                     "maxPageCharacters",
                     "maxTotalCharacters",
+                    "timeoutMs",
+                    "workerMemoryMb"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "policy_ocr"
+                    },
+                    "ocrRunId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                    },
+                    "ocrRunVersion": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "textExtractionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                    },
+                    "storageRootKey": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                    },
+                    "relativePath": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400,
+                      "x-hasarbotu-runtime-validation": "safe-relative-path"
+                    },
+                    "declaredHash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "declaredSize": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 5368709120
+                    },
+                    "languageMode": {
+                      "type": "string",
+                      "enum": [
+                        "tur",
+                        "eng",
+                        "tur+eng"
+                      ]
+                    },
+                    "languageDataVersion": {
+                      "type": "string",
+                      "const": "tessdata-4.0.0-full/1.0.0"
+                    },
+                    "languageDataHash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "engineVersion": {
+                      "type": "string",
+                      "const": "7.0.0"
+                    },
+                    "renderProfile": {
+                      "type": "string",
+                      "enum": [
+                        "standard",
+                        "high_quality"
+                      ]
+                    },
+                    "renderProfileVersion": {
+                      "type": "string",
+                      "enum": [
+                        "policy-ocr-render-standard/1.0.0",
+                        "policy-ocr-render-high-quality/1.0.0"
+                      ]
+                    },
+                    "preprocessingVersion": {
+                      "type": "string",
+                      "const": "policy-ocr-preprocessing/1.0.0"
+                    },
+                    "qualityVersion": {
+                      "type": "string",
+                      "const": "policy-ocr-quality/1.0.0"
+                    },
+                    "normalizationVersion": {
+                      "type": "string",
+                      "const": "policy-ocr-normalization/1.0.0"
+                    },
+                    "locatorVersion": {
+                      "type": "string",
+                      "const": "policy-ocr-locator/1.0.0"
+                    },
+                    "renderDpi": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "const": 300
+                        },
+                        {
+                          "type": "number",
+                          "const": 400
+                        }
+                      ]
+                    },
+                    "eligiblePages": {
+                      "minItems": 1,
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "textPageId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                          },
+                          "pageNumber": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          },
+                          "sourcePageStatus": {
+                            "type": "string",
+                            "enum": [
+                              "image_only",
+                              "text"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "textPageId",
+                          "pageNumber",
+                          "sourcePageStatus"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "maxSourceBytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 5368709120
+                    },
+                    "maxImagePixels": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 30000000
+                    },
+                    "maxPageCharacters": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 200000
+                    },
+                    "maxTotalCharacters": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 5000000
+                    },
+                    "maxElementsPerPage": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 20000
+                    },
+                    "timeoutMs": {
+                      "type": "integer",
+                      "minimum": 1000,
+                      "maximum": 600000
+                    },
+                    "workerMemoryMb": {
+                      "type": "integer",
+                      "minimum": 128,
+                      "maximum": 1024
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ocrRunId",
+                    "ocrRunVersion",
+                    "textExtractionId",
+                    "storageRootKey",
+                    "relativePath",
+                    "declaredHash",
+                    "declaredSize",
+                    "languageMode",
+                    "languageDataVersion",
+                    "languageDataHash",
+                    "engineVersion",
+                    "renderProfile",
+                    "renderProfileVersion",
+                    "preprocessingVersion",
+                    "qualityVersion",
+                    "normalizationVersion",
+                    "locatorVersion",
+                    "renderDpi",
+                    "eligiblePages",
+                    "maxSourceBytes",
+                    "maxImagePixels",
+                    "maxPageCharacters",
+                    "maxTotalCharacters",
+                    "maxElementsPerPage",
                     "timeoutMs",
                     "workerMemoryMb"
                   ],

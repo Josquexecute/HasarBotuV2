@@ -124,6 +124,21 @@ async function loadVersion(exec: Queryable, organizationId: string, caseId: stri
       startOffset: row.start_offset,
       endOffset: row.end_offset,
     },
+    ocrLocator: row.ocr_run_id === null ? null : {
+      ocrRunId: row.ocr_run_id,
+      pageId: row.ocr_page_id,
+      blockId: row.ocr_block_id,
+      lineId: row.ocr_line_id,
+      wordId: row.ocr_word_id,
+      startOffset: row.ocr_start_offset,
+      endOffset: row.ocr_end_offset,
+      engineVersion: row.ocr_engine_version,
+      languageDataVersion: row.ocr_language_data_version,
+      locatorVersion: row.ocr_locator_version,
+      qualityStatus: row.ocr_quality_status,
+      readingOrderQuality: row.ocr_reading_order_quality,
+      bbox: { x: row.ocr_bbox_x, y: row.ocr_bbox_y, width: row.ocr_bbox_width, height: row.ocr_bbox_height },
+    },
   }))
   const ids = (type: string, id: unknown) => evidence.get(`${type}:${String(id)}`) ?? []
   return policyAnalysisVersionSchema.parse({
@@ -245,6 +260,34 @@ async function validatePayloadSources(exec: Queryable, organizationId: string, c
         || (locator.segmentId !== null && (row.segment_start === null || row.segment_start > locator.startOffset || row.segment_end! < locator.endOffset))
         || excerpt !== normalizeExcerpt(source.rawExcerpt)) throw new PolicyStoreError('invalid_source')
     }
+    if (source.ocrLocator !== null) {
+      const locator = source.ocrLocator
+      const selected = await exec.query(
+        `SELECT p.normalized_text,p.page_number,p.quality_status,p.reading_order_quality,p.image_width,p.image_height,r.engine_version,r.language_data_version,r.locator_version,
+          b.start_offset block_start,b.end_offset block_end,b.bbox_x block_x,b.bbox_y block_y,b.bbox_width block_width,b.bbox_height block_height,
+          l.block_id line_block_id,l.start_offset line_start,l.end_offset line_end,l.bbox_x line_x,l.bbox_y line_y,l.bbox_width line_width,l.bbox_height line_height,
+          w.block_id word_block_id,w.line_id word_line_id,w.start_offset word_start,w.end_offset word_end,w.bbox_x word_x,w.bbox_y word_y,w.bbox_width word_width,w.bbox_height word_height
+         FROM document_ocr_runs r JOIN document_ocr_pages p ON p.ocr_run_id=r.id
+         LEFT JOIN document_ocr_blocks b ON b.id=$6
+         LEFT JOIN document_ocr_lines l ON l.id=$7
+         LEFT JOIN document_ocr_words w ON w.id=$8
+         WHERE r.organization_id=$1 AND r.case_id=$2 AND r.id=$3 AND r.document_version_id=$4
+           AND p.id=$5 AND p.ocr_run_id=r.id AND p.status IN ('accepted_candidate','partial','low_confidence','control_required')
+           AND r.status IN ('ready','partial','low_confidence','control_required')`,
+        [organizationId, caseId, locator.ocrRunId, source.documentVersionId, locator.pageId, locator.blockId, locator.lineId, locator.wordId],
+      )
+      const row = selected.rows[0] as Record<string,unknown>|undefined
+      const within = (start:unknown,end:unknown) => typeof start==='number'&&typeof end==='number'&&start<=locator.startOffset&&end>=locator.endOffset
+      const excerpt = row===undefined?'':Array.from(String(row.normalized_text)).slice(locator.startOffset,locator.endOffset).join('')
+      const expectedBox=locator.wordId!==null?{x:row?.word_x,y:row?.word_y,width:row?.word_width,height:row?.word_height}:locator.lineId!==null?{x:row?.line_x,y:row?.line_y,width:row?.line_width,height:row?.line_height}:locator.blockId!==null?{x:row?.block_x,y:row?.block_y,width:row?.block_width,height:row?.block_height}:{x:0,y:0,width:row?.image_width,height:row?.image_height}
+      if(row===undefined||Number(row.page_number)!==source.pageNumber||locator.endOffset>Array.from(String(row.normalized_text)).length
+        ||(locator.blockId!==null&&!within(row.block_start,row.block_end))
+        ||(locator.lineId!==null&&(row.line_block_id!==locator.blockId||!within(row.line_start,row.line_end)))
+        ||(locator.wordId!==null&&(row.word_block_id!==locator.blockId||row.word_line_id!==locator.lineId||!within(row.word_start,row.word_end)))
+        ||locator.engineVersion!==row.engine_version||locator.languageDataVersion!==row.language_data_version||locator.locatorVersion!==row.locator_version||locator.qualityStatus!==row.quality_status||locator.readingOrderQuality!==row.reading_order_quality
+        ||locator.bbox.x!==Number(expectedBox.x)||locator.bbox.y!==Number(expectedBox.y)||locator.bbox.width!==Number(expectedBox.width)||locator.bbox.height!==Number(expectedBox.height)
+        ||normalizeExcerpt(excerpt)!==normalizeExcerpt(source.rawExcerpt))throw new PolicyStoreError('invalid_source')
+    }
   }
   if (input.insurerId !== null) {
     const insurer = await exec.query('SELECT 1 FROM insurers WHERE organization_id=$1 AND id=$2', [organizationId, input.insurerId])
@@ -273,13 +316,21 @@ async function insertVersion(exec: pg.PoolClient, actor: ActorContext, analysisI
     await exec.query(
       `INSERT INTO policy_source_references
        (id,organization_id,case_id,analysis_version_id,document_id,document_version_id,page_number,section_heading,
-        clause_identifier,raw_excerpt,excerpt_hash,locator,source_type,confidence,text_extraction_id,text_page_id,text_segment_id,start_offset,end_offset)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        clause_identifier,raw_excerpt,excerpt_hash,locator,source_type,confidence,text_extraction_id,text_page_id,text_segment_id,start_offset,end_offset,
+        ocr_run_id,ocr_page_id,ocr_block_id,ocr_line_id,ocr_word_id,ocr_start_offset,ocr_end_offset,
+        ocr_engine_version,ocr_language_data_version,ocr_locator_version,ocr_quality_status,ocr_reading_order_quality,ocr_bbox_x,ocr_bbox_y,ocr_bbox_width,ocr_bbox_height)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)`,
       [id, actor.organizationId, actor.caseId, versionId, source.documentId, source.documentVersionId,
         source.pageNumber, source.sectionHeading.trim(), source.clauseIdentifier.trim(), excerpt, excerptHash(excerpt),
         source.locator, source.sourceType, source.confidence, source.extractionLocator?.extractionId ?? null,
         source.extractionLocator?.pageId ?? null, source.extractionLocator?.segmentId ?? null,
-        source.extractionLocator?.startOffset ?? null, source.extractionLocator?.endOffset ?? null],
+        source.extractionLocator?.startOffset ?? null, source.extractionLocator?.endOffset ?? null,
+        source.ocrLocator?.ocrRunId ?? null, source.ocrLocator?.pageId ?? null,
+        source.ocrLocator?.blockId ?? null, source.ocrLocator?.lineId ?? null,
+        source.ocrLocator?.wordId ?? null, source.ocrLocator?.startOffset ?? null,
+        source.ocrLocator?.endOffset ?? null,source.ocrLocator?.engineVersion??null,source.ocrLocator?.languageDataVersion??null,
+        source.ocrLocator?.locatorVersion??null,source.ocrLocator?.qualityStatus??null,source.ocrLocator?.readingOrderQuality??null,
+        source.ocrLocator?.bbox.x??null,source.ocrLocator?.bbox.y??null,source.ocrLocator?.bbox.width??null,source.ocrLocator?.bbox.height??null],
     )
   }
   const link = async (ownerType: string, ownerId: string, keys: readonly string[]) => {
@@ -488,7 +539,7 @@ export function createPolicyAnalysisStore(pool: pg.Pool): PolicyAnalysisStore {
         const dto=policyScenarioEvaluationSchema.parse({evaluationId,analysisId:input.analysisId,evaluatedAt:evaluatedAt.toISOString(),...evaluation,
           deductibles:evaluation.deductibles.map((item)=>version.deductibles.find((dtoItem)=>dtoItem.code===item.code)),
           conflicts:evaluation.conflicts.map((item)=>version.conflicts.find((dtoItem)=>dtoItem.id===item.id))})
-        const safeSnapshot={...dto,sourceReferences:dto.sourceReferences.map((source)=>({id:source.id,documentId:source.documentId,documentVersionId:source.documentVersionId,pageNumber:source.pageNumber,sectionHeading:source.sectionHeading,clauseIdentifier:source.clauseIdentifier,excerptHash:source.excerptHash,locator:source.locator,sourceType:source.sourceType,confidence:source.confidence,extractionLocator:source.extractionLocator})),deductibles:dto.deductibles.map((item)=>({...item,sourceReferenceIds:item.sourceReferenceIds})),conflicts:dto.conflicts}
+        const safeSnapshot={...dto,sourceReferences:dto.sourceReferences.map((source)=>({id:source.id,documentId:source.documentId,documentVersionId:source.documentVersionId,pageNumber:source.pageNumber,sectionHeading:source.sectionHeading,clauseIdentifier:source.clauseIdentifier,excerptHash:source.excerptHash,locator:source.locator,sourceType:source.sourceType,confidence:source.confidence,extractionLocator:source.extractionLocator,ocrLocator:source.ocrLocator})),deductibles:dto.deductibles.map((item)=>({...item,sourceReferenceIds:item.sourceReferenceIds})),conflicts:dto.conflicts}
         await client.query(`INSERT INTO policy_scenario_evaluations
           (id,organization_id,case_id,analysis_id,analysis_version_id,policy_analysis_version,scenario_type,rule_version,input_summary,result_code,result_snapshot,evaluated_by_user_id,request_id,evaluated_at)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,[evaluationId,actor.organizationId,caseId,input.analysisId,vr.id,input.policyAnalysisVersion,input.scenarioType,dto.ruleVersion,JSON.stringify({damageCategory:input.damageCategory,repairMethod:input.repairMethod,requestedOperation:input.requestedOperation,documentState}),dto.result,JSON.stringify(safeSnapshot),actor.actorUserId,actor.requestId,evaluatedAt])

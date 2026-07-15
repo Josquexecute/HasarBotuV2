@@ -266,3 +266,11 @@ Servis profili ve sigorta şirketi anlaşması yalnız PostgreSQL iş metadata's
 - Agent kaynağı streaming `wx` temp kopyaya alır, kopyayı tekrar hash’ler ve PDF magic’i doğrular. Parser ayrı worker, exact sürüm, memory/timeout/output sınırı ve ağ/shell olmadan çalışır; complete/hata/timeout sonrası worker+temp kapanır.
 - Her page chunk server’da tekrar sanitize/normalize/segment/hash doğrulamasından geçer. Final summary yalnız lease/ownership/version, ardışık sayfa ve output manifest eşleşirse ready/partial/ocr_required olur.
 - Encrypted/malformed/locked/missing/changed/limit/timeout güvenli kodlardır; ham OS/parser hata veya mutlak temp/root path API/audit/log’a taşınmaz. OCR/AI ve gerçek `P:\` testi yoktur.
+
+## 22. Paket 25 — yerel OCR File Agent sınırı
+
+- `ocr_policy_pages` mevcut claim/lease/heartbeat/retry/dead-letter protokolünü kullanır. Payload yalnız logical root key + safe relative path, source hash/size, extraction/page kimliği, exact sürümler ve limitler taşır.
+- Agent mevcut lexical+realpath resolver ile traversal/drive/UNC/backslash ve symlink/junction/reparse kaçışını reddeder. Source streaming hash/size ve `%PDF-` magic doğrulanmadan temp veya OCR başlamaz.
+- Yalnız seçili sayfalar 300/400 DPI kontrollü profille, beyaz zemin ve 30 milyon pixel sınırı içinde render edilir. Render ve dil asset’i operation temp’inde kalır; binary DB/API’ye gönderilmez ve her çıkışta temizlenir.
+- `tesseract.js@7.0.0` izole worker yalnız local `langPath` ve local package worker/core kullanır. Asset eksik/hash/size sapması runtime download fallback’i olmadan fail-closed; worker URL girdisi, shell ve telemetry yoktur.
+- Chunk/finalize server tarafından lease/version/hash/page/range/geometry/count/output hash ile yeniden doğrulanır. Agent success beyanı tek başına ready değildir. Gerçek `P:\`, müşteri poliçesi ve Windows Service deployment testi yapılmaz.

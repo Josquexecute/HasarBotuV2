@@ -172,3 +172,13 @@ raporlanır.
 - Gerçek API: login, Kasko source/idempotent create, claim/heartbeat/chunk/finalize, pages/segments/source-reference, Paket 23 analysis locator, Traffic/tenant/RBAC/401 ve response/audit leak taraması.
 - Gerçek tarayıcı: Kasko vaka Evrak ve Fotoğraf sekmesi, extraction status/parser/rule/page/segment/source locator; OCR/partial/failed/no-fallback; 1366×768 ve 1920×1080 açık/koyu overflow ve console kontrolü.
 - Gerçek müşteri PDF’i, OCR/AI, üretim migration ve gerçek `P:\` kullanılmaz. Kritik DB/API/File Agent/PDF/tarayıcı senaryosu skip ise Paket 24 PASS sayılmaz.
+
+### Paket 25 — yerel poliçe OCR kabulü
+
+- Domain/contracts: raw/normalize determinism, Unicode code-point offset, geometry/reading order, çok sütun ambiguity, çok sinyalli quality, PDF/OCR duplicate/conflict ve 60 golden JSON Schema eşliği.
+- Gerçek sentetik OCR/File Agent: tur, eng, tur+eng; rotated, düşük kontrast, iki sütun; local asset hash+size; yalnız seçili sayfa; render/output limit; source stale; traversal/reparse; timeout/crash/temp cleanup. Runtime URL/model download yolu fail-closed olmalıdır.
+- Gerçek PostgreSQL 0017: up/repeat/down/reapply; exact identity; tenant/extraction/page FK; status/hash/confidence/count; page-bound box/range; immutable evidence/terminal run ve OCR source locator.
+- Gerçek API: login, Kasko image-only, request/idempotent replay, Agent claim/heartbeat/chunk/finalize, page/element/source locator, Paket 23 analysis locator, Traffic/tenant/RBAC/401/stale ve audit/leak kontrolü.
+- Gerçek tarayıcı: Kasko OCR-required sayfa; trigger/progress/ready-low confidence; raw/normalized OCR; Paket 24 karşılaştırma; element/locator; source reference; no-fallback; 1366×768 açık+koyu ve 1920×1080 koyu; overflow/console/focus.
+- Gerçek müşteri belgesi, gerçek `P:\`, cloud/AI, üretim migration ve sonraki paket yoktur. Kritik PostgreSQL/API/File Agent/OCR/tarayıcı senaryosu skip ise Paket 25 PASS sayılmaz.
+- Paket 25 uygulama sonucu: ana çalışma ağacı ve repository dışı fresh `npm ci` kopyasında 907 test geçti; 6 skip yalnız mevcut ortam-koşullu UI testleridir. Gerçek PostgreSQL migration/API, gerçek yerel OCR/File Agent ve gerçek tarayıcı senaryoları skip edilmedi; audit 0 açık ve tarayıcı console warning/error 0'dır.

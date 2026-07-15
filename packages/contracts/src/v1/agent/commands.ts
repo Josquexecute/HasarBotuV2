@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { byteSizeSchema, sha256HexSchema } from '../documents/dto.js'
 import { fileOperationStrategySchema } from '../file-operations/dto.js'
 import { pdfExtractionResultSummarySchema } from '../pdf-text-extractions/dto.js'
+import { policyOcrResultSummarySchema } from '../policy-ocr/dto.js'
 
 /**
  * Agent iş sonucu bildirimi (Paket 14).
@@ -47,11 +48,12 @@ export const jobResultRequestSchema = z.strictObject({
     .optional(),
   fileOperation: fileOperationResultSchema.optional(),
   pdfExtraction: pdfExtractionResultSummarySchema.optional(),
+  policyOcr: policyOcrResultSummarySchema.optional(),
 })
 export type JobResultRequest = z.infer<typeof jobResultRequestSchema>
 export type JobResultRequestInput = z.input<typeof jobResultRequestSchema>
 
-export const JOB_PROGRESS_PHASES = ['applying', 'verifying', 'cleanup'] as const
+export const JOB_PROGRESS_PHASES = ['applying', 'verifying', 'cleanup', 'rendering', 'preprocessing', 'recognizing', 'normalizing', 'validating', 'ocr'] as const
 export const jobHeartbeatRequestSchema = z.strictObject({
   phase: z.enum(JOB_PROGRESS_PHASES).optional(),
 })

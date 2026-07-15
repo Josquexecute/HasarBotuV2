@@ -178,6 +178,169 @@
         "outputHash"
       ],
       "additionalProperties": false
+    },
+    "policyOcr": {
+      "type": "object",
+      "properties": {
+        "ocrRunId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "ocrRunVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "partial",
+            "low_confidence",
+            "control_required"
+          ]
+        },
+        "engineVersion": {
+          "type": "string",
+          "const": "7.0.0"
+        },
+        "languageDataVersion": {
+          "type": "string",
+          "const": "tessdata-4.0.0-full/1.0.0"
+        },
+        "languageDataHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "renderProfileVersion": {
+          "type": "string",
+          "enum": [
+            "policy-ocr-render-standard/1.0.0",
+            "policy-ocr-render-high-quality/1.0.0"
+          ]
+        },
+        "preprocessingVersion": {
+          "type": "string",
+          "const": "policy-ocr-preprocessing/1.0.0"
+        },
+        "qualityVersion": {
+          "type": "string",
+          "const": "policy-ocr-quality/1.0.0"
+        },
+        "normalizationVersion": {
+          "type": "string",
+          "const": "policy-ocr-normalization/1.0.0"
+        },
+        "locatorVersion": {
+          "type": "string",
+          "const": "policy-ocr-locator/1.0.0"
+        },
+        "sourceHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sourceSize": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5368709120
+        },
+        "eligiblePageCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "processedPageCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "readyPageCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "lowQualityPageCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "emptyPageCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "failedPageCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "blockCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lineCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "wordCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "normalizedCharacterCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "meanConfidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "ocrRunId",
+        "ocrRunVersion",
+        "status",
+        "engineVersion",
+        "languageDataVersion",
+        "languageDataHash",
+        "renderProfileVersion",
+        "preprocessingVersion",
+        "qualityVersion",
+        "normalizationVersion",
+        "locatorVersion",
+        "sourceHash",
+        "sourceSize",
+        "eligiblePageCount",
+        "processedPageCount",
+        "readyPageCount",
+        "lowQualityPageCount",
+        "emptyPageCount",
+        "failedPageCount",
+        "blockCount",
+        "lineCount",
+        "wordCount",
+        "normalizedCharacterCount",
+        "meanConfidence",
+        "outputHash"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

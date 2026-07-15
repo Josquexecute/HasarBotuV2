@@ -208,3 +208,11 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - `document_text_extraction_pages`: sayfa sıra/status, bounded raw+normalized metin ve hash; `document_text_extraction_segments`: deterministic type/text/hash ve Unicode code point range. Sayfa/segment append-only, terminal extraction immutable’dır.
 - Tenant/case/document/version bileşik FK, tek extraction identity/version, tek aktif extraction job, strict engine/status/count/hash ve source-reference locator guard DB tarafından zorlanır.
 - `policy_source_references` nullable extraction/page/segment/range ile genişler; eski satırlar değişmez. Mutlak root/path, PDF binary, tam belge blob’u, parser stack veya secret kolonu yoktur.
+
+## Paket 25 uygulanan PostgreSQL modeli
+
+- `document_ocr_runs`: tenant/case/document/version/extraction, exact OCR identity ve sürüm, queue/job, status/progress, source/output hash, güvenli sayaç ve optimistic version.
+- `document_ocr_pages`: bounded raw+normalized OCR, render/preprocess sonucu, confidence/quality/reading/composite ve page geometry. `document_ocr_blocks|lines|words`: parent, sıra, Unicode range/hash, confidence ve render-pixel box.
+- Exact identity unique index; tek aktif source işi; tenant bileşik FK; sabit engine/language/render/profile check; count/status/hash/quality check; element range+box trigger; terminal run ve OCR evidence append-only guard DB tarafındadır.
+- `policy_source_references`, OCR run/page/block/line/word, range, exact versions, quality/reading ve box ile backward-compatible genişler. Trigger excerpt/range/parent/tenant/documentVersion bağını yeniden doğrular.
+- Mutlak/logical path, PDF/image/model binary, worker stack/stdout/stderr, secret ve tam belge blob kolonu yoktur. OCR metni tek doğrulanamaz JSONB değildir; yalnız bounded preprocessing config JSONB’dir.

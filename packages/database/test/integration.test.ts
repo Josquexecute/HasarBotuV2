@@ -60,6 +60,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0014_service_agreements',
       '0015_casco_policy_analysis',
       '0016_policy_pdf_text_extraction',
+      '0017_policy_ocr_pipeline',
     ])
 
     const tables = await pool.query(
@@ -75,6 +76,11 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'case_locations',
       'case_workspace_provisionings',
       'cases',
+      'document_ocr_blocks',
+      'document_ocr_lines',
+      'document_ocr_pages',
+      'document_ocr_runs',
+      'document_ocr_words',
       'document_rule_evaluation_items',
       'document_rule_evaluations',
       'document_rule_sets',
@@ -122,31 +128,31 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0016 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0017 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0016_policy_pdf_text_extraction'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline'])
     const removed = await pool.query(
-      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_text_extractions'",
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_ocr_runs'",
     )
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0016_policy_pdf_text_extraction'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline'])
   })
 
-  it('0015 geri alınabilir ve 0016 ile birlikte yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
+  it('0015 geri alınabilir ve 0016/0017 ile birlikte yeniden ileri uygulanabilir', async () => {
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 3, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'policy_analyses'",
     )
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline'])
   })
 
   it('0014 geri alinabilir, eski servis profilini donusturur ve yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 3, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 4, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'insurer_service_agreements'",
     )
@@ -156,7 +162,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'p22-backfill', 'P22 Backfill'])
     await pool.query("INSERT INTO service_centers (id,organization_id,name,center_type) VALUES ($1,$2,'Eski Servis','ozel')", [serviceId, organizationId])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline'])
     const profile = await pool.query('SELECT service_type FROM service_centers WHERE id=$1', [serviceId])
     expect(profile.rows).toEqual([{ service_type: 'private' }])
     const silentAgreements = await pool.query('SELECT count(*)::int AS n FROM insurer_service_agreements WHERE service_center_id=$1', [serviceId])
@@ -273,6 +279,32 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await expect(pool.query("UPDATE document_text_extraction_pages SET normalized_text='değişti' WHERE id=$1", [pageId])).rejects.toMatchObject({ code: '23001' })
     await pool.query(`UPDATE document_text_extractions SET status='ready',page_count=1,text_page_count=1,segment_count=1,raw_character_count=char_length($2),normalized_character_count=char_length($2),output_hash=$3,completed_at=now(),version=2 WHERE id=$1`, [extractionId, normalized, 'd'.repeat(64)])
     await expect(pool.query("UPDATE document_text_extractions SET status='stale' WHERE id=$1", [extractionId])).rejects.toMatchObject({ code: '23001' })
+  })
+
+  it('0017 tenant, sabit OCR motoru, append-only geometri ve terminal sürüm kısıtlarını zorlar', async () => {
+    const organizationId=uuidv7(),otherOrganizationId=uuidv7(),caseId=uuidv7(),documentId=uuidv7(),documentVersionId=uuidv7(),extractionId=uuidv7(),textPageId=uuidv7(),runId=uuidv7(),ocrPageId=uuidv7(),blockId=uuidv7(),lineId=uuidv7(),wordId=uuidv7()
+    await pool.query('INSERT INTO organizations(id,code,name)VALUES($1,$2,$3),($4,$5,$6)',[organizationId,'p25-db','P25 DB',otherOrganizationId,'p25-other','P25 Other'])
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,notification_date)VALUES($1,$2,2026,2501,'2026/2501','casco','new_notification','34 P 2501','34P2501','2026-07-15')`,[caseId,organizationId])
+    await pool.query("INSERT INTO documents(id,organization_id,case_id,document_type,status)VALUES($1,$2,$3,'casco_policy','ready')",[documentId,organizationId,caseId])
+    await pool.query(`INSERT INTO document_versions(id,organization_id,document_id,case_id,version_number,original_file_name,display_name,mime_type,byte_size,content_hash,storage_root_key,relative_path,source_type,status,hash_verified,size_verified,verified_at)VALUES($1,$2,$3,$4,1,'sentetik.pdf','Sentetik OCR PDF','application/pdf',100,$5,'test-root','EVRAK/sentetik.pdf','manual','ready',true,true,now())`,[documentVersionId,organizationId,documentId,caseId,'a'.repeat(64)])
+    await pool.query('UPDATE documents SET current_version_id=$1,current_version_number=1 WHERE id=$2',[documentVersionId,documentId])
+    await pool.query(`INSERT INTO document_text_extractions(id,organization_id,case_id,document_id,document_version_id,extraction_version,status,parser_name,parser_version,normalization_version,offset_unit,source_hash,source_size,output_hash,completed_at)VALUES($1,$2,$3,$4,$5,1,'ocr_required','pdfjs-dist','6.1.200','pdf-text-normalization/1.0.0','unicode_code_point',$6,100,$7,now())`,[extractionId,organizationId,caseId,documentId,documentVersionId,'a'.repeat(64),'b'.repeat(64)])
+    await pool.query(`INSERT INTO document_text_extraction_pages(id,organization_id,case_id,extraction_id,page_number,status,raw_text,normalized_text,raw_text_hash,normalized_text_hash,raw_character_count,normalized_character_count,segment_count)VALUES($1,$2,$3,$4,1,'image_only','','',$5,$5,0,0,0)`,[textPageId,organizationId,caseId,extractionId,'e'.repeat(64)])
+    const insertRun=(id:string,org=organizationId,engineVersion='7.0.0',version=1)=>pool.query(`INSERT INTO document_ocr_runs(id,organization_id,case_id,document_id,document_version_id,text_extraction_id,ocr_version,engine_name,engine_version,language_data_version,language_data_hash,language_mode,render_profile,render_profile_version,preprocessing_version,preprocessing_config,quality_version,normalization_version,locator_version,offset_unit,source_hash,source_size,eligible_page_count,selected_page_numbers)VALUES($1,$2,$3,$4,$5,$6,$7,'tesseract.js',$8,'tessdata-4.0.0-full/1.0.0',$9,'tur+eng','standard','policy-ocr-render-standard/1.0.0','policy-ocr-preprocessing/1.0.0','{}','policy-ocr-quality/1.0.0','policy-ocr-normalization/1.0.0','policy-ocr-locator/1.0.0','unicode_code_point',$10,100,1,ARRAY[1])`,[id,org,caseId,documentId,documentVersionId,extractionId,version,engineVersion,'c'.repeat(64),'a'.repeat(64)])
+    await insertRun(runId)
+    await pool.query(`INSERT INTO document_ocr_pages(id,organization_id,case_id,ocr_run_id,text_page_id,page_number,status,language_mode,image_width,image_height,render_dpi,rotation_degrees,deskew_degrees,threshold_value,raw_ocr_text,raw_text_hash,normalized_text,normalized_text_hash,normalized_character_count,mean_confidence,minimum_confidence,quality_status,reading_order_quality,composite_status,quality_reason_code,requires_human_review,block_count,line_count,word_count,low_confidence_word_count,unreadable_region_count,processing_duration_ms)VALUES($1,$2,$3,$4,$5,1,'accepted_candidate','tur+eng',100,100,300,0,0,127,'CAM',$6,'CAM',$6,3,90,85,'high','reliable','ocr_only','quality_good',false,1,1,1,0,0,10)`,[ocrPageId,organizationId,caseId,runId,textPageId,'d'.repeat(64)])
+    const columns='id,organization_id,case_id,ocr_run_id,page_id,page_number,element_index,reading_order,start_offset,end_offset,element_text,text_hash,confidence,bbox_x,bbox_y,bbox_width,bbox_height'
+    await pool.query(`INSERT INTO document_ocr_blocks(${columns})VALUES($1,$2,$3,$4,$5,1,0,0,0,3,'CAM',$6,90,0,0,30,10)`,[blockId,organizationId,caseId,runId,ocrPageId,'f'.repeat(64)])
+    await pool.query(`INSERT INTO document_ocr_lines(${columns},block_id)VALUES($1,$2,$3,$4,$5,1,1,1,0,3,'CAM',$6,90,0,0,30,10,$7)`,[lineId,organizationId,caseId,runId,ocrPageId,'f'.repeat(64),blockId])
+    await pool.query(`INSERT INTO document_ocr_words(${columns},block_id,line_id)VALUES($1,$2,$3,$4,$5,1,2,2,0,3,'CAM',$6,90,0,0,30,10,$7,$8)`,[wordId,organizationId,caseId,runId,ocrPageId,'f'.repeat(64),blockId,lineId])
+    await expect(pool.query(`INSERT INTO document_ocr_words(${columns},block_id,line_id)VALUES($1,$2,$3,$4,$5,1,3,3,0,3,'CAM',$6,90,90,0,20,10,$7,$8)`,[uuidv7(),organizationId,caseId,runId,ocrPageId,'f'.repeat(64),blockId,lineId])).rejects.toMatchObject({code:'23514'})
+    await expect(pool.query("UPDATE document_ocr_pages SET normalized_text='DEĞİŞTİ' WHERE id=$1",[ocrPageId])).rejects.toMatchObject({code:'23001'})
+    await pool.query(`UPDATE document_ocr_runs SET status='ready',processed_page_count=1,ready_page_count=1,block_count=1,line_count=1,word_count=1,normalized_character_count=3,mean_confidence=90,output_hash=$2,completed_at=now(),version=2 WHERE id=$1`,[runId,'1'.repeat(64)])
+    await expect(pool.query("UPDATE document_ocr_runs SET status='stale' WHERE id=$1",[runId])).rejects.toMatchObject({code:'23001'})
+    await expect(insertRun(uuidv7(),organizationId,'latest',2)).rejects.toMatchObject({code:'23514',constraint:'document_ocr_runs_engine_valid'})
+    await expect(insertRun(uuidv7(),otherOrganizationId,'7.0.0',2)).rejects.toMatchObject({code:'23503'})
+    await expect(insertRun(uuidv7(),organizationId,'7.0.0',2)).rejects.toMatchObject({code:'23505',constraint:'document_ocr_runs_exact_identity_unique'})
+    await expect(insertRun(uuidv7(),organizationId,'7.0.0',1)).rejects.toMatchObject({code:'23505',constraint:'document_ocr_runs_version_unique'})
   })
 
   it('0014 tenant, tarih, operasyon ve insan onayi kisitlarini zorlar', async () => {

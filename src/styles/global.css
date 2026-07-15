@@ -1756,10 +1756,10 @@ button {
 .policy-pdf-summary dl div { padding: 5px 7px; background: var(--surface-muted); }
 .policy-pdf-summary dt { color: var(--text-tertiary); font-size: 8px; }
 .policy-pdf-summary dd { margin: 2px 0 0; font-size: 11px; font-weight: 700; }
-.status-badge--queued, .status-badge--processing { color: var(--accent); }
+.status-badge--queued, .status-badge--processing, .status-badge--rendering, .status-badge--preprocessing, .status-badge--recognizing, .status-badge--normalizing, .status-badge--validating { color: var(--accent); }
 .status-badge--ready { color: var(--success); }
-.status-badge--partial, .status-badge--ocr_required { color: var(--warning); }
-.status-badge--failed, .status-badge--stale { color: var(--danger); }
+.status-badge--partial, .status-badge--low_confidence, .status-badge--ocr_required, .status-badge--superseded { color: var(--warning); }
+.status-badge--failed, .status-badge--stale, .status-badge--cancelled { color: var(--danger); }
 .policy-pdf-notice { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--accent); font-size: 10px; }
 .policy-pdf-notice svg { width: 15px; height: 15px; flex: none; }
 .policy-pdf-notice--warning { color: var(--warning); }
@@ -1780,10 +1780,67 @@ button {
 .policy-pdf-reference div { display: grid; min-width: 0; gap: 3px; }
 .policy-pdf-reference span, .policy-pdf-reference q { color: var(--text-secondary); font-size: 9px; overflow-wrap: anywhere; }
 
+.policy-ocr-module { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.policy-ocr-module > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border-bottom: 1px solid var(--border); }
+.policy-ocr-module h2, .policy-ocr-module h3, .policy-ocr-module p { margin: 0; }
+.policy-ocr-module h2 { margin-top: 2px; font-size: 15px; }
+.policy-ocr-module h3 { font-size: 11px; }
+.policy-ocr-module > header p { margin-top: 3px; color: var(--text-tertiary); font-size: 9px; }
+.policy-ocr-state { min-height: 150px; }
+.policy-ocr-safety { display: flex; flex-wrap: wrap; gap: 5px 16px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--accent-soft); color: var(--text-secondary); font-size: 9px; }
+.policy-ocr-safety strong { color: var(--accent); }
+.policy-ocr-toolbar { display: grid; grid-template-columns: minmax(170px,1fr) minmax(150px,.8fr) minmax(120px,.55fr) minmax(130px,.6fr) minmax(220px,1fr); gap: 8px; padding: 10px; background: var(--surface-muted); border-bottom: 1px solid var(--border); }
+.policy-ocr-toolbar label { display: grid; gap: 4px; color: var(--text-tertiary); font-size: 9px; }
+.policy-ocr-toolbar select { min-width: 0; height: 30px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface); color: var(--text-primary); font-size: 10px; }
+.policy-ocr-engine { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border: 1px solid var(--border); background: var(--surface); }
+.policy-ocr-engine > svg { width: 16px; color: var(--accent); }
+.policy-ocr-engine > div { display: grid; min-width: 0; gap: 2px; }
+.policy-ocr-engine span, .policy-ocr-engine small { color: var(--text-tertiary); font-size: 8px; overflow-wrap: anywhere; }
+.policy-ocr-engine strong { font-size: 10px; }
+.policy-ocr-empty { display: grid; place-items: center; gap: 5px; min-height: 110px; padding: 16px; color: var(--text-tertiary); text-align: center; font-size: 10px; }
+.policy-ocr-empty strong { color: var(--text-primary); }
+.policy-ocr-summary { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+.policy-ocr-summary dl { display: grid; grid-template-columns: repeat(5,minmax(70px,1fr)); flex: 1; gap: 6px; margin: 0; }
+.policy-ocr-summary dl div { padding: 5px 7px; background: var(--surface-muted); }
+.policy-ocr-summary dt { color: var(--text-tertiary); font-size: 8px; }
+.policy-ocr-summary dd { margin: 2px 0 0; font-size: 11px; font-weight: 700; }
+.policy-ocr-version { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.policy-ocr-version span { padding: 3px 6px; background: var(--surface-muted); color: var(--text-tertiary); font: 8px var(--font-mono); overflow-wrap: anywhere; }
+.status-badge--control_required { color: var(--warning); }
+.policy-ocr-pages, .policy-ocr-elements { display: grid; gap: 7px; padding: 10px; border-top: 1px solid var(--border); }
+.policy-ocr-page { min-width: 0; border: 1px solid var(--border); background: var(--surface-muted); }
+.policy-ocr-page--medium, .policy-ocr-page--low, .policy-ocr-page--insufficient, .policy-ocr-page--control_required { border-color: color-mix(in srgb, var(--warning) 60%, var(--border)); }
+.policy-ocr-page > header { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 9px; }
+.policy-ocr-page__meta { display: flex; flex-wrap: wrap; gap: 5px 12px; padding: 6px 8px; color: var(--text-tertiary); font-size: 8px; }
+.policy-ocr-page__meta strong { color: var(--warning); }
+.policy-ocr-page pre { max-height: 180px; margin: 0; overflow: auto; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: 9px/1.45 var(--font-mono); }
+.policy-ocr-comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border-top: 1px solid var(--border); }
+.policy-ocr-comparison section { min-width: 0; }
+.policy-ocr-comparison section + section { border-left: 1px solid var(--border); }
+.policy-ocr-comparison h4 { margin: 0; padding: 5px 8px; color: var(--text-tertiary); font-size: 8px; text-transform: uppercase; }
+.policy-ocr-page details { border-top: 1px solid var(--border); }
+.policy-ocr-page summary { padding: 6px 8px; color: var(--text-tertiary); font-size: 9px; cursor: pointer; }
+.policy-ocr-elements { grid-template-columns: repeat(2,minmax(0,1fr)); max-height: 360px; overflow: auto; }
+.policy-ocr-elements h3, .policy-ocr-elements > p { grid-column: 1/-1; }
+.policy-ocr-elements > p { color: var(--text-tertiary); font-size: 8px; }
+.policy-ocr-elements button { display: grid; min-width: 0; gap: 4px; padding: 8px; border: 1px solid var(--border); background: var(--surface-muted); color: var(--text-primary); text-align: left; cursor: pointer; }
+.policy-ocr-elements button:hover { border-color: var(--accent); }
+.policy-ocr-elements span, .policy-ocr-elements small { color: var(--text-tertiary); font-size: 8px; }
+.policy-ocr-elements strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+.policy-ocr-pagination { grid-column: 1/-1; display: flex; align-items: center; justify-content: center; gap: 8px; position: sticky; bottom: 0; padding: 6px; background: var(--surface); border-top: 1px solid var(--border); }
+.policy-ocr-pagination .button { display: inline-flex; width: auto; padding: 5px 9px; }
+.policy-ocr-pagination span { min-width: 52px; text-align: center; }
+
 @media (max-width: 1366px) {
   .modal--case-lifecycle { max-height: calc(100vh - 24px); }
   .case-lifecycle-requirements { max-height: 190px; }
   .policy-pdf-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .policy-pdf-parser { grid-column: 1 / -1; }
   .policy-pdf-segments { grid-template-columns: minmax(0, 1fr); }
+  .policy-ocr-toolbar { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .policy-ocr-engine { grid-column: 1/-1; }
+  .policy-ocr-summary dl { grid-template-columns: repeat(3,minmax(70px,1fr)); }
+  .policy-ocr-comparison { grid-template-columns: minmax(0,1fr); }
+  .policy-ocr-comparison section + section { border-left: 0; border-top: 1px solid var(--border); }
+  .policy-ocr-elements { grid-template-columns: minmax(0,1fr); }
 }

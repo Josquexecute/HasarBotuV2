@@ -694,3 +694,16 @@ Kapsam dışı: PDF binary/OCR/LLM, upload, gerçek tedarik/mobil onarım yazıs
 - [x] Tam root, tarayıcı ve repository dışı fresh checkout kapılarının nihai sonuçları PROJECT_STATUS’a işlendi.
 
 Kapsam dışı: OCR, LLM/AI, otomatik poliçe analizi/onayı, upload, File Agent deployment, üretim migration, gerçek `P:\\` ve müşteri poliçesi.
+
+## Paket 25 — Yerel ve güvenli poliçe OCR hattı
+
+- [x] `tesseract.js@7.0.0`, Türkçe/İngilizce asset exact pin, boyut/SHA-256 manifesti ve offline dağıtım sınırı.
+- [x] Saf domain: raw/normalize katman, render/preprocess/locator version, Unicode offset, geometri/reading-order, çok sinyalli kalite ve fail-closed PDF/OCR composite.
+- [x] Strict contracts + 60 deterministik JSON Schema: run/page/element/chunk/result/source locator ve Agent phase/protokolü.
+- [x] Migration 0017: run/page/block/line/word, exact identity, tenant FK, geometry/range guard, append-only snapshot ve Paket 23 OCR locator bağları.
+- [x] File Agent: mevcut queue/lease, safe resolver, source hash+PDF magic, operation temp, yerel asset, izole worker, memory/time/result limit, chunk ve temp cleanup.
+- [x] API: Kasko eligibility, RBAC, idempotency, cancel, farklı render profile retry, server-side chunk/finalize/source-reference doğrulaması ve merkezi audit.
+- [x] UI: OCR geçmişi/progress, dil/render/profile, raw/normalize metin, Paket 24 karşılaştırması, kalite/reading order, geometri ve bounded kaynak locator; no-fallback/mock güvenliği.
+- [x] Tam root, tarayıcı, canlı smoke ve repository dışı fresh checkout kapıları tamamlandı; gerçek sonuçlar PROJECT_STATUS'a işlendi.
+
+Kapsam dışı: cloud OCR, AI/LLM, spell correction, teminat/muafiyet yorumu, upload, Electron IPC, üretim migration, gerçek müşteri belgesi/`P:\` ve Paket 26.

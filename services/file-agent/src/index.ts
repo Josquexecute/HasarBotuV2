@@ -29,6 +29,7 @@ export {
   type WorkspaceManifestEntry,
 } from './file-operation-executor.js'
 export { extractPdfText, type PdfTextExtractionResult, type PdfTextExtractorHooks } from './pdf-text-extractor.js'
+export { extractPolicyOcr, type PolicyOcrExtractionResult, type PolicyOcrExtractorHooks } from './policy-ocr-extractor.js'
 
 /**
  * Import edildiğinde döngü BAŞLAMAZ. Yalnız gerçek entrypoint doğrudan

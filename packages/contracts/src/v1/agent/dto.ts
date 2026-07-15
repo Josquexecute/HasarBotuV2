@@ -10,6 +10,23 @@ import {
   pdfNormalizationVersionSchema,
   pdfParserVersionSchema,
 } from '../pdf-text-extractions/dto.js'
+import {
+  policyOcrLanguageModeSchema,
+} from '../policy-ocr/dto.js'
+import {
+  MAX_POLICY_OCR_ELEMENTS_PER_PAGE,
+  MAX_POLICY_OCR_IMAGE_PIXELS,
+  MAX_POLICY_OCR_RAW_TEXT_LENGTH,
+  MAX_POLICY_OCR_TOTAL_CHARACTERS,
+  POLICY_OCR_ENGINE_VERSION,
+  POLICY_OCR_LANGUAGE_DATA_VERSION,
+  POLICY_OCR_LOCATOR_VERSION,
+  POLICY_OCR_NORMALIZATION_VERSION,
+  POLICY_OCR_PREPROCESSING_VERSION,
+  POLICY_OCR_QUALITY_VERSION,
+  POLICY_OCR_RENDER_DPI,
+  POLICY_OCR_RENDER_PROFILE_VERSIONS,
+} from '@hasarbotu/domain'
 
 /**
  * File Agent iş kuyruğu ve doğrulama sözleşmeleri (Paket 14).
@@ -27,6 +44,7 @@ export const JOB_TYPES = [
   'move_case_workspace',
   'cleanup_moved_workspace',
   'extract_pdf_text',
+  'ocr_policy_pages',
 ] as const
 export type JobType = (typeof JOB_TYPES)[number]
 export const jobTypeSchema = z.enum(JOB_TYPES)
@@ -35,12 +53,12 @@ export const JOB_STATUSES = ['pending', 'leased', 'succeeded', 'failed', 'dead_l
 export type JobStatus = (typeof JOB_STATUSES)[number]
 export const jobStatusSchema = z.enum(JOB_STATUSES)
 
-export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning', 'file_operation', 'document_text_extraction'] as const
+export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning', 'file_operation', 'document_text_extraction', 'document_ocr_run'] as const
 export type JobTargetType = (typeof JOB_TARGET_TYPES)[number]
 export const jobTargetTypeSchema = z.enum(JOB_TARGET_TYPES)
 
 /** Doğrulama hedefi: dosya (hash+size) veya dizin (yalnız varlık). */
-export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace', 'file_operation', 'file_operation_cleanup', 'pdf_text_extraction'] as const
+export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace', 'file_operation', 'file_operation_cleanup', 'pdf_text_extraction', 'policy_ocr'] as const
 export const jobPayloadKindSchema = z.enum(JOB_PAYLOAD_KINDS)
 
 /** Agent'a verilen güvenli payload. Mutlak yol yoktur. */
@@ -103,12 +121,46 @@ export const pdfTextExtractionJobPayloadSchema = z.strictObject({
   timeoutMs: z.number().int().min(1_000).max(120_000),
   workerMemoryMb: z.number().int().min(64).max(512),
 })
+export const policyOcrJobPayloadSchema = z.strictObject({
+  kind: z.literal('policy_ocr'),
+  ocrRunId: idSchema,
+  ocrRunVersion: z.number().int().min(1),
+  textExtractionId: idSchema,
+  storageRootKey: storageRootKeySchema,
+  relativePath: relativePathSchema,
+  declaredHash: sha256HexSchema,
+  declaredSize: byteSizeSchema,
+  languageMode: policyOcrLanguageModeSchema,
+  languageDataVersion: z.literal(POLICY_OCR_LANGUAGE_DATA_VERSION),
+  languageDataHash: sha256HexSchema,
+  engineVersion: z.literal(POLICY_OCR_ENGINE_VERSION),
+  renderProfile: z.enum(['standard', 'high_quality']),
+  renderProfileVersion: z.enum([POLICY_OCR_RENDER_PROFILE_VERSIONS.standard, POLICY_OCR_RENDER_PROFILE_VERSIONS.high_quality]),
+  preprocessingVersion: z.literal(POLICY_OCR_PREPROCESSING_VERSION),
+  qualityVersion: z.literal(POLICY_OCR_QUALITY_VERSION),
+  normalizationVersion: z.literal(POLICY_OCR_NORMALIZATION_VERSION),
+  locatorVersion: z.literal(POLICY_OCR_LOCATOR_VERSION),
+  renderDpi: z.union([z.literal(POLICY_OCR_RENDER_DPI.standard), z.literal(POLICY_OCR_RENDER_DPI.high_quality)]),
+  eligiblePages: z.array(z.strictObject({
+    textPageId: idSchema,
+    pageNumber: z.number().int().min(1).max(1_000),
+    sourcePageStatus: z.enum(['image_only', 'text']),
+  })).min(1).max(1_000),
+  maxSourceBytes: byteSizeSchema,
+  maxImagePixels: z.number().int().min(1).max(MAX_POLICY_OCR_IMAGE_PIXELS),
+  maxPageCharacters: z.number().int().min(1).max(MAX_POLICY_OCR_RAW_TEXT_LENGTH),
+  maxTotalCharacters: z.number().int().min(1).max(MAX_POLICY_OCR_TOTAL_CHARACTERS),
+  maxElementsPerPage: z.number().int().min(1).max(MAX_POLICY_OCR_ELEMENTS_PER_PAGE),
+  timeoutMs: z.number().int().min(1_000).max(600_000),
+  workerMemoryMb: z.number().int().min(128).max(1_024),
+})
 export const jobPayloadSchema = z.discriminatedUnion('kind', [
   verificationJobPayloadSchema,
   workspaceJobPayloadSchema,
   fileOperationJobPayloadSchema,
   fileOperationCleanupJobPayloadSchema,
   pdfTextExtractionJobPayloadSchema,
+  policyOcrJobPayloadSchema,
 ])
 export type JobPayload = z.infer<typeof jobPayloadSchema>
 

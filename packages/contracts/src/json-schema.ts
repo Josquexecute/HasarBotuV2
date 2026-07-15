@@ -61,6 +61,18 @@ import {
   pdfTextPagesResponseSchema,
   pdfTextSegmentsResponseSchema,
 } from './v1/pdf-text-extractions/dto.js'
+import {
+  policyOcrRunCancelRequestSchema,
+  policyOcrRunCreateRequestSchema,
+  policyOcrRunRetryRequestSchema,
+  policyOcrSourceReferenceRequestSchema,
+} from './v1/policy-ocr/commands.js'
+import {
+  policyOcrChunkRequestSchema,
+  policyOcrElementsResponseSchema,
+  policyOcrPagesResponseSchema,
+  policyOcrRunResponseSchema,
+} from './v1/policy-ocr/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -119,6 +131,14 @@ export const JSON_SCHEMA_TARGETS = {
   'pdf-text-segments-response': pdfTextSegmentsResponseSchema,
   'pdf-text-source-reference-request': pdfTextSourceReferenceRequestSchema,
   'pdf-extraction-chunk-request': pdfExtractionChunkRequestSchema,
+  'policy-ocr-run-create-request': policyOcrRunCreateRequestSchema,
+  'policy-ocr-run-cancel-request': policyOcrRunCancelRequestSchema,
+  'policy-ocr-run-retry-request': policyOcrRunRetryRequestSchema,
+  'policy-ocr-run-response': policyOcrRunResponseSchema,
+  'policy-ocr-pages-response': policyOcrPagesResponseSchema,
+  'policy-ocr-elements-response': policyOcrElementsResponseSchema,
+  'policy-ocr-source-reference-request': policyOcrSourceReferenceRequestSchema,
+  'policy-ocr-chunk-request': policyOcrChunkRequestSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

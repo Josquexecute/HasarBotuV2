@@ -399,3 +399,11 @@ Migration 0015, mevcut documents/document_versions modelini kopyalamadan yalnız
 ### Paket 24 ek uygulama kaydı — izole PDF parser hattı
 
 Migration 0016 mevcut documents ve job queue’yu genişletir; ikinci queue oluşturmaz. `document_text_extractions` iş/sürüm özeti, pages bounded raw+normalized metin, segments exact Unicode locator tutar. Agent yalnız local config root’unu resolve eder; kaynak hash/size’ı streaming doğrulayıp agent-owned temp kopyada ayrı worker başlatır. Worker 192 MB memory, 30 saniye, 1.000 sayfa, 64 MiB kaynak ve 5 milyon karakter üst sınırlarıyla çalışır; tamamlanınca zorla sonlandırılır ve temp temizlenir. Chunk/final transaction’ları lease, ownership, version, sıra ve server-recomputed hash/sayaçları doğrular. OCR/AI, network, shell, Electron IPC, üretim migration ve gerçek `P:\` yoktur.
+
+### Paket 25 ek uygulama kaydı — offline OCR worker
+
+Migration 0017 mevcut `jobs` kuyruğunu `ocr_policy_pages/document_ocr_run` ile genişletir; ikinci queue veya Agent kimliği yoktur. Server doğrulanmış logical storage referansı ve exact identity/limit payload’ı üretir. Agent absolute root’u yalnız process belleğinde resolve eder, reparse/root escape’i reddeder, source hash/size/PDF magic’i doğrular ve `wx` temp kopya oluşturur.
+
+OCR ayrı Node worker’dadır: 512 MB old-generation, 8 MB stack, 300 saniye, 64 MiB PDF, 30 milyon render pixel, 200 bin karakter/sayfa, 5 milyon karakter/job ve 20 bin element/sayfa sınırı vardır. Dil asset’i local package’tan hash+size doğrulanarak temp’e alınır; URL/runtime download/telemetry yoktur. Tesseract Node worker/core yolu kurulu package içindedir ve `langPath` yalnız local absolute dizindir. Timeout/crash ana Agent’ı düşürmez; worker ve temp `finally` ile temizlenir.
+
+Chunk server’da lease/Agent ownership, run/job version, extraction page, source identity, raw/normalize hash, code-point range, hierarchy, box/page bounds ve sayaçlarla tekrar doğrulanır. Final status/output hash merkezi transaction’da kesinleşir. Tam OCR metni job/audit/log’a kopyalanmaz; page read endpoint’i ayrıca sayfalıdır.

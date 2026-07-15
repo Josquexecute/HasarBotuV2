@@ -282,3 +282,13 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Segment aynı normalize girdide aynı tür, sıra, metin hash’i ve Unicode code point `[start,end)` offsetini üretir. Server Agent’ın gönderdiği segmenti yeniden hesaplar.
 - Tamamı text sayfası `ready`; en az bir text ve image-only/empty/failed sayfa `partial`; text sayfası yoksa `ocr_required`. Bu sonuç analiz/onay değildir.
 - Paket 23 kanıt alıntısı yalnız doğrulanmış extraction text sayfasındaki en çok 1.000 code point exact range olabilir; segment verilirse range segment içinde kalmalıdır.
+
+## Yerel OCR kanıt kuralları — Paket 25
+
+- Uygun kaynak Kasko `casco_policy`, fiziksel `ready + verifiedAt + hashVerified + sizeVerified`, aynı tenant/case/documentVersion ve terminal olmayan Paket 24 `partial|ocr_required` extraction’dır. Varsayılan aday yalnız `image_only` sayfadır; text-ready sayfa son kullanıcı OCR akışında seçilmez.
+- Identity: source hash/size + documentVersion + extraction + seçili sayfalar + language set + engine/language-data + render + preprocessing + normalization + locator sürümü. Aynı identity tekrarında mevcut run döner.
+- Render `standard/1.0.0` 300 DPI veya `high_quality/1.0.0` 400 DPI’dır. Preprocess `policy-ocr-preprocessing/1.0.0`: beyaz deterministik zemin, BT.601 grayscale, full-range contrast, Otsu threshold ve bounded rotate/deskew metadata’sı. Kelime düzeltme ve anlamsal tamamlama yoktur.
+- Raw OCR yalnız control-character/line-ending güvenliği ve NFC görür. Normalize OCR `policy-ocr-normalization/1.0.0` ile NFC/whitespace üretir. Offset `unicode_code_point`, sıfır tabanlı ve `[start,end)`; box origin sol üst, +x sağa, +y aşağı, integer render pixel’idir.
+- Block→line→word parent, ordinal, reading order, range/hash ve box server/DB’de doğrulanır. Negatif, NaN/Infinity, sayfa dışı box veya normalize metinle eşleşmeyen range reddedilir.
+- Kalite `high|medium|low|insufficient|control_required`; reading order `reliable|probable|ambiguous|control_required`. Yalnız `high` teknik kaynak adayı insan incelemesizdir; yine de poliçe yorumu/onayı değildir.
+- Paket 24 ve OCR katmanı ayrı kalır. Composite sonuç `pdf_text_only|ocr_only|combined_non_overlapping|conflict_detected|control_required`; sessiz concat, duplicate veya conflict winner yoktur.

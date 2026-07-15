@@ -550,3 +550,16 @@ Etkisi: Migration `0015_casco_policy_analysis`; saf domain scenario/version/conf
 7. Paket 23 source reference, yalnız ready/partial doğrulanmış extraction’ın text sayfasındaki exact bounded range’e bağlanabilir. Sayfa/segment/range FK ve DB trigger ile doğrulanır; tam belge metni audit/log’a yazılmaz.
 
 Etkisi: Migration `0016_policy_pdf_text_extraction`; mevcut PostgreSQL job queue/File Agent genişlemesi; tenant ve RBAC kapsamlı extraction/read/cancel/source-reference API’leri; Kasko belge sekmesinde no-fallback metin/segment görünümü. Yeni dependency yalnız File Agent’ta exact `pdfjs-dist@6.1.200` (Apache-2.0); OCR/AI ve üretim migration kapsam dışıdır.
+
+## 2026-07-15 — HB-2026-031: Tamamen yerel ve kanıtlı poliçe OCR katmanı
+
+1. OCR motoru Node/Windows uyumlu `tesseract.js@7.0.0` (Apache-2.0) seçildi. Türkçe ve İngilizce `@tesseract.js-data/*@1.0.0` asset’leri `tessdata-4.0.0-full/1.0.0` kimliğiyle paketlenir; `tur` 8.063.205 bayt / `1a151a9aee3fe92ab46a3d8ed859273da970e1ac60b469a20cd0144c15ae84c9`, `eng` 10.923.060 bayt / `ed350f3752f81ee8f38769edc14d92d997dababe23b565c59879372cc46a2468` doğrulanmadan worker başlamaz.
+2. Runtime model indirme, URL, telemetry, bulut OCR ve AI yasaktır. Asset’ler local package içinden operation-specific temp alana kopyalanır; Tesseract’a yalnız absolute local `langPath` verilir. Eksik/boyut/hash sapması fail-closed olur.
+3. Paket 24 PDF raw/normalized katmanı immutable kalır. Paket 25 raw OCR, normalize OCR, blok/satır/kelime, render-pixel box ve sıfır tabanlı half-open Unicode code point locator’ı ayrı append-only sürümde tutar.
+4. Identity documentVersion, extraction, sayfalar, source hash, dil seti, exact engine/language-data, render, preprocessing, normalization ve locator sürümüne bağlıdır. Aynı identity DB unique index ve idempotency ile tek sonuçtur; kalite retry’sı yalnız farklı `high_quality` render identity’si üretir.
+5. `ready` teknik tamamlanmadır, onay veya poliçe yorumu değildir. `policy-ocr-quality/1.0.0` eşikleri ortalama güven, düşük güvenli kelime, okunamayan bölge, metin bütünlüğü ve okuma sırasını birlikte değerlendirir. Belirsizlik `low_confidence/control_required` ve insan kontrolüdür.
+6. Tek sütun okuma sırası geometriyle deterministik; yan yana sütun adayı `ambiguous` olur. PDF ve OCR katmanları concatenate edilmez: aynı içerik `pdf_text_only`, ayrık içerik `combined_non_overlapping`, örtüşen farklı içerik `conflict_detected` olur.
+7. Mevcut queue, Agent auth/lease/heartbeat/retry/dead-letter, safe path resolver ve AuditService kullanılır. API/server OCR çalıştırmaz; server Agent chunk’ını lease/version/hash/geometry/range/count ile yeniden doğrular.
+8. Audit tam OCR metni, excerpt, görüntü/PDF binary, filename/path/root/temp path, model binary, secret, stdout/stderr, stack veya ham OS hatası taşımaz. Paket 26 yalnız doğrulanmış PDF/OCR locator’larını kullanabilir; OCR metni kendi başına onaylı analiz kaynağı değildir.
+
+Etkisi: Migration `0017_policy_ocr_pipeline`; exact pinli beş File Agent dependency’si; saf OCR domain/strict contracts; tenant/RBAC/idempotency API; Kasko detayında no-fallback yerel OCR görünümü. Electron IPC, üretim migration, gerçek `P:\`, müşteri belgesi ve sonraki paket kapsam dışıdır.

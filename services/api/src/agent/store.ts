@@ -16,6 +16,11 @@ import {
   markPdfExtractionFailure,
   markPdfExtractionStarted,
 } from '../text-extractions/store.js'
+import {
+  finalizePolicyOcr,
+  markPolicyOcrFailure,
+  markPolicyOcrStarted,
+} from '../policy-ocr/store.js'
 
 /**
  * File Agent kontrol katmanı veri erişimi (Paket 14). Agent kimliği + iş
@@ -220,6 +225,13 @@ export function createAgentStore(pool: pg.Pool) {
               requestId: `job-${job.id}`,
             }, { id:job.id, target_id:job.target_id, attempt_count:job.max_attempts, max_attempts:job.max_attempts }, 'attempts_exhausted', true)
           }
+          if (job.target_type === 'document_ocr_run') {
+            await markPolicyOcrFailure(client, {
+              organizationId: agent.organizationId,
+              agentId: agent.id,
+              requestId: `job-${job.id}`,
+            }, { id:job.id, target_id:job.target_id, attempt_count:job.max_attempts, max_attempts:job.max_attempts }, 'attempts_exhausted', true)
+          }
           return null
         }
 
@@ -291,6 +303,9 @@ export function createAgentStore(pool: pg.Pool) {
         if (claimed.target_type === 'document_text_extraction') {
           await markPdfExtractionStarted(client, agent.organizationId, claimed.target_id, claimed.id, agent.id)
         }
+        if (claimed.target_type === 'document_ocr_run') {
+          await markPolicyOcrStarted(client, agent.organizationId, claimed.target_id, claimed.id, agent.id)
+        }
         return claimedJobToDto(claimed)
       })
     },
@@ -298,7 +313,7 @@ export function createAgentStore(pool: pg.Pool) {
     async heartbeat(
       agent: { id: string; organizationId: string },
       jobId: string,
-      phase?: 'applying' | 'verifying' | 'cleanup',
+      phase?: 'applying' | 'verifying' | 'cleanup' | 'rendering' | 'preprocessing' | 'recognizing' | 'normalizing' | 'validating' | 'ocr',
       requestId?: string,
       leaseSeconds = DEFAULT_LEASE_SECONDS,
     ): Promise<Date | undefined> {
@@ -338,6 +353,16 @@ export function createAgentStore(pool: pg.Pool) {
              WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled','manual_recovery_required')`,
             [row.target_id, agent.organizationId, phase === 'verifying' ? 'verifying' : 'applying'],
           )
+        }
+        if (phase !== undefined && row.type === 'ocr_policy_pages') {
+          const status = phase === 'ocr' ? 'recognizing' : phase
+          if (['rendering','preprocessing','recognizing','normalizing','validating'].includes(status)) {
+            await client.query(
+              `UPDATE document_ocr_runs SET status=$3,updated_at=now()
+               WHERE id=$1 AND organization_id=$2 AND status IN ('rendering','preprocessing','recognizing','normalizing','validating')`,
+              [row.target_id, agent.organizationId, status],
+            )
+          }
         }
         return row.lease_expires_at
       })
@@ -382,6 +407,23 @@ export function createAgentStore(pool: pg.Pool) {
               'reparse_point_rejected','not_a_file',
             ]).has(errorCode)
             await markPdfExtractionFailure(client, ctx, job, errorCode, nonRetryable)
+            if (nonRetryable) {
+              await client.query(
+                "UPDATE jobs SET status='dead_letter',last_error_code=$2,leased_by_agent_id=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1",
+                [job.id, errorCode],
+              )
+              await recordJobAudit(ctx, job, 'job.dead_letter', { errorCode })
+              return { kind: 'ok', status: 'dead_letter', lastErrorCode: errorCode }
+            }
+          }
+          if (job.target_type === 'document_ocr_run') {
+            const nonRetryable = new Set([
+              'encrypted_pdf','malformed_pdf','invalid_pdf_magic','source_size_limit_exceeded',
+              'page_limit_exceeded','image_pixel_limit_exceeded','output_limit_exceeded','source_changed',
+              'root_escape','reparse_point_rejected','not_a_file','language_asset_missing',
+              'language_asset_hash_mismatch','engine_version_mismatch','network_access_blocked',
+            ]).has(errorCode)
+            await markPolicyOcrFailure(client, ctx, job, errorCode, nonRetryable)
             if (nonRetryable) {
               await client.query(
                 "UPDATE jobs SET status='dead_letter',last_error_code=$2,leased_by_agent_id=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1",
@@ -546,6 +588,13 @@ async function applyVerification(
     const applied = await finalizePdfExtraction(ctx.client, ctx, job, result.pdfExtraction)
     if (applied.jobStatus === 'failed') {
       await markPdfExtractionFailure(ctx.client, ctx, job, applied.errorCode ?? 'extraction_finalize_failed', true)
+    }
+    return applied
+  }
+  if (job.target_type === 'document_ocr_run') {
+    const applied = await finalizePolicyOcr(ctx.client, ctx, job, result.policyOcr)
+    if (applied.jobStatus === 'failed') {
+      await markPolicyOcrFailure(ctx.client, ctx, job, applied.errorCode ?? 'ocr_finalize_failed', true)
     }
     return applied
   }

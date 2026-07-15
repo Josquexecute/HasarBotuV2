@@ -17,7 +17,14 @@ import {
   policySourceTypeSchema,
   policyTextSchema,
 } from './dto.js'
-import { SERVICE_TYPES } from '@hasarbotu/domain'
+import {
+  POLICY_OCR_ENGINE_VERSION,
+  POLICY_OCR_LANGUAGE_DATA_VERSION,
+  POLICY_OCR_LOCATOR_VERSION,
+  POLICY_OCR_QUALITY_STATUSES,
+  POLICY_OCR_READING_ORDER_QUALITIES,
+  SERVICE_TYPES,
+} from '@hasarbotu/domain'
 
 const sourceKeySchema = policyCodeSchema
 export const policyExtractionLocatorInputSchema = z.strictObject({
@@ -28,6 +35,30 @@ export const policyExtractionLocatorInputSchema = z.strictObject({
   endOffset: z.number().int().min(1),
 }).superRefine((value, context) => {
   if (value.endOffset <= value.startOffset) context.addIssue({ code: 'custom', path: ['endOffset'], message: 'invalid_offset_range' })
+})
+export const policyOcrLocatorInputSchema = z.strictObject({
+  ocrRunId: idSchema,
+  pageId: idSchema,
+  blockId: idSchema.nullable().default(null),
+  lineId: idSchema.nullable().default(null),
+  wordId: idSchema.nullable().default(null),
+  startOffset: z.number().int().min(0),
+  endOffset: z.number().int().min(1),
+  engineVersion: z.literal(POLICY_OCR_ENGINE_VERSION),
+  languageDataVersion: z.literal(POLICY_OCR_LANGUAGE_DATA_VERSION),
+  locatorVersion: z.literal(POLICY_OCR_LOCATOR_VERSION),
+  qualityStatus: z.enum(POLICY_OCR_QUALITY_STATUSES),
+  readingOrderQuality: z.enum(POLICY_OCR_READING_ORDER_QUALITIES),
+  bbox: z.strictObject({
+    x: z.number().int().nonnegative(),
+    y: z.number().int().nonnegative(),
+    width: z.number().int().nonnegative(),
+    height: z.number().int().nonnegative(),
+  }),
+}).superRefine((value, context) => {
+  if (value.endOffset <= value.startOffset) context.addIssue({ code: 'custom', path: ['endOffset'], message: 'invalid_offset_range' })
+  if (value.wordId !== null && value.lineId === null) context.addIssue({ code: 'custom', path: ['wordId'], message: 'word_requires_line' })
+  if (value.lineId !== null && value.blockId === null) context.addIssue({ code: 'custom', path: ['lineId'], message: 'line_requires_block' })
 })
 export const policySourceReferenceInputSchema = z.strictObject({
   sourceKey: sourceKeySchema,
@@ -41,6 +72,11 @@ export const policySourceReferenceInputSchema = z.strictObject({
   sourceType: policySourceTypeSchema,
   confidence: policyConfidenceSchema,
   extractionLocator: policyExtractionLocatorInputSchema.nullable().default(null),
+  ocrLocator: policyOcrLocatorInputSchema.nullable().default(null),
+}).superRefine((value, context) => {
+  if (value.extractionLocator !== null && value.ocrLocator !== null) {
+    context.addIssue({ code: 'custom', path: ['ocrLocator'], message: 'multiple_evidence_locators' })
+  }
 })
 
 const evidenceKeysSchema = z.array(sourceKeySchema).min(1).max(20)

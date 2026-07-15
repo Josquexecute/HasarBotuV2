@@ -159,3 +159,11 @@ formatlarında alınabilir.
 - Çıktı sayfa bazında raw+normalize metin, text/image-only/empty/failed durumu, deterministik segment, parser/normalizasyon sürümü ve exact Unicode locator taşır. Kaynağı olmayan yorum veya operasyonel karar üretmez.
 - Metin katmanı yoksa `ocr_required`, karışık sonuçta `partial`; encrypted/malformed/limit/timeout hataları kanonik güvenli kodlarla gösterilir. OCR, AI ve tam poliçe analizi bu paketin işi değildir.
 - API modunda mock fallback yoktur. Mutlak root/path, PDF binary, tam metin, secret ve ham parser/OS hatası API/audit/log yüzeyine çıkamaz.
+
+### Yerel poliçe OCR hattı — Paket 25
+
+- Yalnız doğrulanmış `ready` Kasko poliçesinin Paket 24 tarafından `image_only` OCR adayı yapılan sayfaları, kullanıcı komutuyla mevcut File Agent kuyruğunda işlenir. Varsayılan profil `standard` 300 DPI; `high_quality` 400 DPI ayrı identity ve sürümdür.
+- OCR `tesseract.js@7.0.0` ile tamamen yerel çalışır; Türkçe/İngilizce language asset’leri exact pin, boyut ve SHA-256 ile worker başlamadan doğrulanır. Runtime indirme, telemetry, dış URL, bulut OCR, LLM ve AI yoktur.
+- Paket 24 raw/normalized metni değişmez. OCR raw/normalized katmanı, blok/satır/kelime render-pixel koordinatları, Unicode code point aralığı, okuma sırası ve kalite sonucu ayrı immutable sürüm olarak saklanır.
+- `ready` yalnız teknik tamamlanmadır. Düşük güven, yetersiz metin, çok sütun belirsizliği veya PDF/OCR çelişkisi `control_required`/insan kontrolü üretir; OCR tek başına poliçe yorumu veya onaylı analiz değildir.
+- UI gerçek API durum/progress, motor/dil/render/preprocess sürümü, iki metin katmanı, kalite, güven, geometri ve bounded source locator gösterir. API kesintisinde mock fallback; mock modda fiziksel OCR yoktur.

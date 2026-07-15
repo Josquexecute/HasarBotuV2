@@ -4,15 +4,18 @@ import {
   AGENT_JOB_HEARTBEAT_ROUTE,
   AGENT_JOB_RESULT_ROUTE,
   AGENT_JOB_EXTRACTION_CHUNKS_ROUTE,
+  AGENT_JOB_OCR_CHUNKS_ROUTE,
   AGENT_SECRET_HEADER,
   claimResponseSchema,
   heartbeatResponseSchema,
   jobResultResponseSchema,
   pdfExtractionChunkResponseSchema,
+  policyOcrChunkResponseSchema,
   type ClaimedJob,
   type JobResultRequestInput,
   type JobResultResponse,
   type PdfExtractionChunkRequest,
+  type PolicyOcrChunkRequest,
 } from '@hasarbotu/contracts'
 
 /**
@@ -53,7 +56,7 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
     },
 
     /** Lease uzatır. 409 (lease kaybı) sessizce false döner. */
-    async heartbeat(jobId: string, phase?: 'applying' | 'verifying' | 'cleanup'): Promise<boolean> {
+    async heartbeat(jobId: string, phase?: 'applying' | 'verifying' | 'cleanup' | 'rendering' | 'preprocessing' | 'recognizing' | 'normalizing' | 'validating' | 'ocr'): Promise<boolean> {
       const response = await fetchImpl(url(AGENT_JOB_HEARTBEAT_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
         method: 'POST',
         headers: { ...authHeaders, accept: 'application/json', ...(phase === undefined ? {} : { 'content-type': 'application/json' }) },
@@ -85,6 +88,17 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
       })
       if (!response.ok) throw new AgentApiError(response.status, 'extraction chunk report failed')
       pdfExtractionChunkResponseSchema.parse(await response.json())
+    },
+
+    /** Offline OCR page chunk; text and geometry are contract-validated server-side. */
+    async reportPolicyOcrChunk(jobId: string, chunk: PolicyOcrChunkRequest): Promise<void> {
+      const response = await fetchImpl(url(AGENT_JOB_OCR_CHUNKS_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
+        method: 'POST',
+        headers: { ...authHeaders, accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(chunk),
+      })
+      if (!response.ok) throw new AgentApiError(response.status, 'OCR chunk report failed')
+      policyOcrChunkResponseSchema.parse(await response.json())
     },
   }
 }
