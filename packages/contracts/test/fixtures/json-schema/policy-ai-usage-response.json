@@ -36,7 +36,8 @@
               "deterministic-invalid-schema",
               "deterministic-timeout",
               "deterministic-failure",
-              "deterministic-prompt-injection-attempt"
+              "deterministic-prompt-injection-attempt",
+              "openai-responses"
             ]
           },
           "modelId": {
@@ -53,6 +54,35 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "inputTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outputTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pricingVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
           },
           "estimatedCostMinor": {
             "type": "integer",
@@ -117,6 +147,9 @@
           "modelId",
           "inputCharacters",
           "outputCharacters",
+          "inputTokens",
+          "outputTokens",
+          "pricingVersion",
           "estimatedCostMinor",
           "actualCostMinor",
           "status",

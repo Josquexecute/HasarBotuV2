@@ -586,3 +586,16 @@ Etkisi: Migration `0017_policy_ocr_pipeline`; exact pinli beş File Agent depend
 8. Gerçek provider, provider secret’ı ve PII payload politikası hâlâ Paket 28 kapsamıdır. File Agent, job protokolü, filesystem ve dependency bu kararla değişmez.
 
 Etkisi: Migration `0018_policy_ai_orchestration`; saf source-bundle/evidence/conflict domain’i; strict contracts; tenant/RBAC/idempotency/audit API’si ve Kasko detayında salt-okunur “AI Alan Adayları” paneli. Yeni dependency, IPC, File Agent değişikliği veya fiziksel veri yazma yolu yoktur.
+
+## 2026-07-15 — HB-2026-034: Gerçek AI sağlayıcısı, PII ve secret güvenlik sınırı
+
+1. İlk gerçek adapter `openai-responses/1.0.0` kimliğiyle provider-neutral API-owned orchestration katmanına eklenir. Yeni worker, File Agent işi, AI SDK veya genel amaçlı dış ağ katmanı oluşturulmaz.
+2. Provider secret yalnız API process environment’ında bulunur. Eksik veya kısmi config fail-closed’tur; secret DB/API/audit/log/UI’ya yazılmaz ve istemciye gönderilmez.
+3. Dış payload yalnız seçilmiş source-anchor metinlerinden oluşur. Server `policy-ai-pii-redaction/1.0.0` ile PII adaylarını kararlı placeholder’lara çevirir ve immutable payload hash/sayaç özeti tutar; PDF/görüntü binary’si, File Agent/root, mutlak yol, session ve tüm case/document dump’ı gönderilmez.
+4. Responses isteği strict JSON Schema, `store:false`, tools kapalı, bounded input/output, timeout/cancellation ve client request digest kullanır. Provider’ın sayfa/excerpt/hash/locator beyanı kanıt değildir; anchor ve original/numeric/date kanıtı server tarafından yeniden doğrulanır.
+5. Organization AI policy varsayılan kapalıdır. Provider allow-list, per-request ve monthly hard stop çağrıdan önce uygulanır; fiyatlar deploy edilen model için integer minor-unit/milyon-token config’i ve sürümüyle hesaplanır. Gerçek token kullanımının maliyeti append-only ledger’a yazılır, otomatik provider fallback yapılmaz.
+6. `store:false` yalnız provider uygulama-state saklamasını kapatır; sıfır veri saklama garantisi sayılmaz. Gerçek pilot, organization onayı yanında sağlayıcıdaki Zero Data Retention/Modified Abuse Monitoring uygunluğunun deployment aşamasında ayrıca doğrulanmasını gerektirir.
+7. Gerçek provider çıktısı da Paket 27 insan review’undan geçer; yalnız accepted/kanıtlı edited adaylar Paket 23’te yeni pending taslak sürüme taşınabilir. Otomatik approval veya operasyonel karar yoktur.
+8. Yerel geliştirme ortamında gerçek provider secret’ı bulunmadığı için ücretli çağrı yapılmaz. Sentetik local wire test cloud extraction kalitesini veya dış retention yapılandırmasını kanıtlamaz.
+
+Etkisi: Migration `0020_real_policy_ai_provider`; PII redaction domain’i, OpenAI Responses adapter’ı, privacy/usage contracts, güvenli API composition ve Kasko AI panelinde dış-payload özeti. Dependency, IPC, File Agent ve fiziksel veri yazma yolu değişmez.

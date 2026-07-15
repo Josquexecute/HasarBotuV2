@@ -63,6 +63,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0017_policy_ocr_pipeline',
       '0018_policy_ai_orchestration',
       '0019_policy_ai_candidate_review',
+      '0020_real_policy_ai_provider',
     ])
 
     const tables = await pool.query(
@@ -143,49 +144,58 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0019 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0020 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider'])
+    const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name='ai_extraction_runs' AND column_name='external_provider'")
+    expect(removed.rows).toEqual([{ n: 0 }])
+    const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider'])
+  })
+
+  it('0019 geri alınabilir ve 0020 ile yeniden ileri uygulanabilir', async () => {
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider', '0019_policy_ai_candidate_review'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'ai_candidate_reviews'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review', '0020_real_policy_ai_provider'])
   })
 
-  it('0018 geri alınabilir ve 0019 ile yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review', '0018_policy_ai_orchestration'])
-    const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'ai_extraction_runs'")
-    expect(removed.rows).toEqual([{ n: 0 }])
-    const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration', '0019_policy_ai_candidate_review'])
-  })
-
-  it('0017 geri alınabilir ve 0018/0019 ile yeniden ileri uygulanabilir', async () => {
+  it('0018 geri alınabilir ve 0019/0020 ile yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 3, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration'])
     const removed = await pool.query(
-      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_ocr_runs'",
+      "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'ai_extraction_runs'",
     )
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider'])
+  })
+
+  it('0017 geri alınabilir ve sonraki AI migrationlariyla yeniden uygulanabilir', async () => {
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 4, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline'])
+    const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_ocr_runs'")
+    expect(removed.rows).toEqual([{ n: 0 }])
+    const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider'])
   })
 
   it('0015 geri alınabilir ve 0016/0017 ile birlikte yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 5, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 6, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'policy_analyses'",
     )
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider'])
   })
 
   it('0014 geri alinabilir, eski servis profilini donusturur ve yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 6, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 7, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'insurer_service_agreements'",
     )
@@ -195,7 +205,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'p22-backfill', 'P22 Backfill'])
     await pool.query("INSERT INTO service_centers (id,organization_id,name,center_type) VALUES ($1,$2,'Eski Servis','ozel')", [serviceId, organizationId])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider'])
     const profile = await pool.query('SELECT service_type FROM service_centers WHERE id=$1', [serviceId])
     expect(profile.rows).toEqual([{ service_type: 'private' }])
     const silentAgreements = await pool.query('SELECT count(*)::int AS n FROM insurer_service_agreements WHERE service_center_id=$1', [serviceId])
@@ -368,6 +378,20 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await expect(pool.query("INSERT INTO ai_candidate_conflicts(id,organization_id,case_id,run_id,left_candidate_id,right_candidate_id,status,reason)VALUES($1,$2,$3,$4,'candidate-1','candidate-2','conflict_detected','TENANT_MISMATCH')",[uuidv7(),otherOrganizationId,source.case_id,runId])).rejects.toMatchObject({code:'23503'})
     const conflictId=uuidv7();await pool.query("INSERT INTO ai_candidate_conflicts(id,organization_id,case_id,run_id,left_candidate_id,right_candidate_id,status,reason)VALUES($1,$2,$3,$4,'candidate-1','candidate-2','conflict_detected','SAFE_CONFLICT')",[conflictId,source.organization_id,source.case_id,runId]);await expect(pool.query("UPDATE ai_candidate_conflicts SET reason='CHANGED' WHERE id=$1",[conflictId])).rejects.toMatchObject({code:'23001'})
     await expect(pool.query("INSERT INTO ai_usage_ledger(id,organization_id,case_id,run_id,provider_id,model_id,request_hash,input_characters,estimated_cost_minor,actual_cost_minor,status,started_at)VALUES($1,$2,$3,$4,'deterministic-success','local-fixture-v1',$5,1,1,$6,'failed',now())",[uuidv7(),source.organization_id,source.case_id,runId,'5'.repeat(64),9007199254740992n])).rejects.toMatchObject({code:'23514',constraint:'ai_usage_ledger_valid'})
+  })
+
+  it('0020 real provider privacy, provider allow-list ve token muhasebesi kisitlarini zorlar', async () => {
+    const selected=await pool.query(`SELECT b.organization_id,b.case_id,b.id bundle_id,b.source_bundle_hash,b.input_characters,u.id user_id
+      FROM ai_source_bundles b JOIN users u ON u.organization_id=b.organization_id AND u.email='p26-db@test.local'
+      WHERE b.status='ready' ORDER BY b.created_at LIMIT 1`)
+    const row=selected.rows[0] as {organization_id:string;case_id:string;bundle_id:string;source_bundle_hash:string;input_characters:number;user_id:string}
+    const runId=uuidv7(),privacyHash='6'.repeat(64)
+    await pool.query(`INSERT INTO ai_extraction_runs(id,organization_id,case_id,source_bundle_id,source_bundle_hash,provider_id,provider_version,model_id,prompt_template_version,output_schema_version,input_characters,estimated_cost_minor,created_by_user_id,external_provider,privacy_policy_version,outbound_payload_hash,outbound_input_characters,redacted_value_count,redacted_categories,provider_retention_mode,pricing_version)
+      VALUES($1,$2,$3,$4,$5,'openai-responses','openai-responses/1.0.0','gpt-5-mini-pinned','policy-ai-extraction/1.0.0','policy-ai-candidates/1.0.0',$6,2,$7,true,'policy-ai-pii-redaction/1.0.0',$8,$6,2,ARRAY['email','name'],'store_false','configured-token-pricing/1.0.0')`,[runId,row.organization_id,row.case_id,row.bundle_id,row.source_bundle_hash,row.input_characters,row.user_id,privacyHash])
+    await expect(pool.query("UPDATE ai_extraction_runs SET outbound_payload_hash=$1 WHERE id=$2",['7'.repeat(64),runId])).rejects.toMatchObject({code:'23001'})
+    await expect(pool.query("INSERT INTO ai_usage_ledger(id,organization_id,case_id,run_id,provider_id,model_id,request_hash,input_characters,input_tokens,output_tokens,estimated_cost_minor,status,pricing_version,started_at) VALUES($1,$2,$3,$4,'openai-responses','gpt-5-mini-pinned',$5,1,10,NULL,1,'failed','configured-token-pricing/1.0.0',now())",[uuidv7(),row.organization_id,row.case_id,runId,'8'.repeat(64)])).rejects.toMatchObject({code:'23514',constraint:'ai_usage_token_accounting_valid'})
+    await pool.query("INSERT INTO ai_provider_policies(id,organization_id,allowed_provider_ids) VALUES($1,$2,ARRAY['openai-responses'])",[uuidv7(),row.organization_id])
+    await expect(pool.query("UPDATE ai_provider_policies SET allowed_provider_ids=ARRAY['unknown-provider'] WHERE organization_id=$1",[row.organization_id])).rejects.toMatchObject({code:'23514',constraint:'ai_provider_policies_provider_valid'})
   })
 
   it('0019 review version, tenant, provider fact ve append-only kisitlarini zorlar', async () => {

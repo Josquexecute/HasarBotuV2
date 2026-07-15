@@ -303,3 +303,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Audit yalnız organization/case/run/candidate, review/promotion/analysis sürümü, eylem, evidence durumu, kaynak ve conflict sayıları, aktör, result code ve requestId taşır.
 - Human review metninin kanıt değeri, full prompt/provider output, poliçe/OCR metni, bounded source excerpt, kişisel veri, secret, mutlak path, SQL/stack veya ham hata audit’e kopyalanmaz.
 - Review, promotion provenance, yeni Paket 23 taslak sürümü, source link/conflict ve audit ilgili merkezi transaction içinde atomiktir. Append-only DB guard’ları yedek/restore sonrasında geçmiş kararın sessiz değişmesini engeller.
+
+### 6.14 Paket 28 gerçek provider ve privacy audit sınırı
+
+- Audit provider/model/prompt/schema/privacy/pricing sürümü, external flag, redaksiyon kategori/sayısı, token/maliyet sayacı, run sonucu, actor ve requestId gibi güvenli özetleri taşıyabilir.
+- Authorization header/API key, full outbound payload/prompt/provider output, raw veya redacted poliçe metni, excerpt, PII placeholder eşlemesi, binary, session, mutlak yol, stack ve ham provider hatası audit/log’a yazılmaz.
+- Secret yalnız API process environment’ındadır. Rotation/deployment platformu kapsamındadır; DB/API/UI üzerinden secret yönetimi yapılmaz.
+- `store:false` provider uygulama-state saklamasını kapatır ancak tek başına ZDR garantisi değildir. Gerçek müşteri pilotunda sağlayıcı organization retention ayarı, sözleşme ve egress kontrolü ayrıca güvenlik kapısıdır.

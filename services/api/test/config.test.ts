@@ -71,6 +71,37 @@ describe('parseConfig', () => {
     expect((caught as ConfigError).message).toContain('DATABASE_URL')
   })
 
+  it('OpenAI policy provider secretini yalniz eksiksiz server config ile kabul eder', () => {
+    const config = parseConfig({
+      OPENAI_API_KEY: 'sk-test-only-not-a-real-secret-0001',
+      OPENAI_POLICY_MODEL: 'gpt-5-mini-pinned',
+      OPENAI_POLICY_INPUT_COST_MINOR_PER_MILLION: '25',
+      OPENAI_POLICY_OUTPUT_COST_MINOR_PER_MILLION: '200',
+      OPENAI_POLICY_MAX_OUTPUT_TOKENS: '2048',
+    })
+    expect(config.openAiPolicyProvider).toMatchObject({
+      modelId: 'gpt-5-mini-pinned',
+      inputCostMinorPerMillionTokens: 25,
+      outputCostMinorPerMillionTokens: 200,
+      maximumOutputTokens: 2048,
+    })
+    expect(parseConfig({}).openAiPolicyProvider).toBeUndefined()
+    expect(() => parseConfig({ OPENAI_POLICY_MODEL: 'gpt-5-mini' })).toThrow(ConfigError)
+  })
+
+  it('OpenAI secret veya fiyat degerini config hatasina sizdirmaz', () => {
+    const secret = 'gizli gecersiz key degeri'
+    let caught: unknown
+    try {
+      parseConfig({ OPENAI_API_KEY: secret, OPENAI_POLICY_MODEL: 'gpt-5-mini' })
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(ConfigError)
+    expect((caught as ConfigError).message).not.toContain(secret)
+    expect((caught as ConfigError).message).toContain('OPENAI_API_KEY')
+  })
+
   it('saf fonksiyondur: process.env okumaz ve degistirmez', () => {
     const before = process.env.PORT
     parseConfig({ PORT: '4242' })

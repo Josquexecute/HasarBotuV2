@@ -31,6 +31,7 @@ const validationStatuses = ['validated', 'control_required', 'rejected_evidence'
 const conflictStatuses = ['none', 'duplicate', 'conflict_detected', 'control_required'] as const
 const humanReviewStatuses = ['pending', 'control_required'] as const
 const reviewActions = ['accepted', 'edited', 'rejected', 'control_required'] as const
+const piiCategories = ['address', 'email', 'iban', 'name', 'phone', 'plate', 'reference_number', 'tax_identity', 'turkish_identity', 'vehicle_identity'] as const
 const sha256Pattern = /^[a-f0-9]{64}$/
 const maximumBundleItems = 200
 const maximumItemsPerExtraction = 40
@@ -118,7 +119,7 @@ function sourceItem(value: unknown): PolicyAiSourceItemRecord {
     || !hasString(value.extractionId, 80)
     || !hasString(value.sourceItemId, 80)
     || !isNonnegativeInteger(value.pageNumber) || value.pageNumber < 1
-    || !hasString(value.boundedExcerpt, 2_000)
+    || !hasString(value.boundedExcerpt, 4_000)
     || !hasString(value.textHash, 64) || !sha256Pattern.test(value.textHash)
     || !sourceQualities.includes(value.sourceQuality as typeof sourceQualities[number])
     || !hasStringArray(value.warnings, 20, 64)
@@ -149,6 +150,17 @@ function run(value: unknown): PolicyAiRunRecord {
     || !hasString(value.createdAt, 40)
     || !isNullableString(value.startedAt, 40)
     || !isNullableString(value.completedAt, 40)
+    || !record(value.privacy)
+    || typeof value.privacy.externalProvider !== 'boolean'
+    || !hasString(value.privacy.policyVersion, 80)
+    || !(value.privacy.outboundPayloadHash === null || (hasString(value.privacy.outboundPayloadHash, 64) && sha256Pattern.test(value.privacy.outboundPayloadHash)))
+    || !isNonnegativeInteger(value.privacy.outboundInputCharacters) || value.privacy.outboundInputCharacters < 1
+    || !isNonnegativeInteger(value.privacy.redactedValueCount)
+    || !Array.isArray(value.privacy.redactedCategories) || value.privacy.redactedCategories.length > piiCategories.length || !value.privacy.redactedCategories.every((category) => piiCategories.includes(category as typeof piiCategories[number]))
+    || !['local_only', 'store_false'].includes(String(value.privacy.retentionMode))
+    || !hasString(value.privacy.pricingVersion, 80)
+    || (value.privacy.externalProvider && (value.privacy.outboundPayloadHash === null || value.privacy.retentionMode !== 'store_false'))
+    || (!value.privacy.externalProvider && (value.privacy.outboundPayloadHash !== null || value.privacy.redactedValueCount !== 0 || value.privacy.retentionMode !== 'local_only'))
     || !record(value.budget)
     || typeof value.budget.enabled !== 'boolean'
     || typeof value.budget.providerAvailable !== 'boolean'
@@ -346,7 +358,7 @@ export function createHttpPolicyAiAdapter(options: { readonly baseUrl?: string; 
         if (source.sourceType === 'ocr' && source.ocrRunId !== undefined && source.elementId !== undefined) return { sourceType: 'ocr' as const, ocrRunId: source.ocrRunId, elementId: source.elementId }
         throw new HttpPolicyAiError('unavailable', 'policy AI source selection is invalid')
       })
-      const value = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/plan`, { method: 'POST', headers: { 'content-type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ providerId: 'deterministic-success', sources: selected }) })
+      const value = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/plan`, { method: 'POST', headers: { 'content-type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ providerId: 'openai-responses', sources: selected }) })
       if (!record(value)) throw new HttpPolicyAiError('unavailable', 'policy AI plan is invalid')
       const planned = run(value.run)
       if (planned.caseId !== caseId) throw new HttpPolicyAiError('unavailable', 'policy AI plan case identity is invalid')

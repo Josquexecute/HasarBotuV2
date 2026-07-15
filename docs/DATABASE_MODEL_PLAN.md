@@ -232,3 +232,10 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - `ai_candidate_promotions` ve `ai_candidate_promotion_items`: run/review-set/analysis version atomik promotion kimliği ve aday-review-fact bağlantısı.
 - `ai_candidate_promotion_conflicts`: AI conflict proposal’ın promotion geçmişi ve varsa Paket 23 conflict kaydıyla ilişkisi.
 - Tenant bileşik foreign key’leri, sequential review version, accepted fact eşitliği, source-anchor membership, idempotent tek promotion ve approved fact immutability DB guard’larıyla zorlanır. Mutlak path, secret, full prompt/provider response veya tam belge metni kolonu yoktur.
+
+## Paket 28 uygulanan PostgreSQL modeli
+
+- Migration `0020_real_policy_ai_provider`, provider allow-list ve Paket 23 AI fact provenance guard’ını `openai-responses` için genişletir.
+- `ai_extraction_runs`; external-provider bayrağı, privacy policy, outbound payload hash/character sayısı, redacted kategori/sayı, retention mode ve pricing version taşır. Completed privacy/provider fact alanları trigger ile immutable’dır.
+- `ai_usage_ledger`; input/output token çiftini ve pricing version’ı append-only tutar. Safe integer/birlikte-null constraint’i eksik kullanım çiftini reddeder.
+- Provider secret, Authorization header, full prompt/request/response, redacted veya raw kaynak metni, binary ve mutlak path için kolon yoktur. Tenant, idempotency, source anchor ve Paket 27 promotion ilişkileri mevcut guard’ları kullanır.

@@ -16,10 +16,11 @@ const SEGMENT = '019f7000-0000-7000-8000-000000000033'
 const ANCHOR = 'a'.repeat(64)
 
 const budget = { enabled: true, providerAvailable: true, providerAllowed: true, estimatedCostMinor: 1, currentMonthCostMinor: 0, monthlyBudgetMinor: 100, perRequestBudgetMinor: 10, allowed: true, reasonCode: null }
+const localPrivacy = { externalProvider: false, policyVersion: 'policy-ai-pii/local-only', outboundPayloadHash: null, outboundInputCharacters: 64, redactedValueCount: 0, redactedCategories: [], retentionMode: 'local_only', pricingVersion: 'deterministic-cost/1.0.0' }
 const source = { sourceAnchorId: ANCHOR, sourceType: 'ocr', documentId: DOCUMENT, documentVersionId: VERSION, extractionId: EXTRACTION, sourceItemId: SEGMENT, pageNumber: 4, boundedExcerpt: 'Koşullu muafiyet %10 ve anlaşmasız servis.', textHash: 'c'.repeat(64), sourceQuality: 'low', warnings: ['OCR_HUMAN_REVIEW_REQUIRED'], historicalSelected: false }
 
 function summary(status = 'planned', caseId = CASE, id = RUN, hash = 'b'.repeat(64)) {
-  return { id, caseId, status, providerId: 'deterministic-success', providerVersion: 'deterministic/1.0.0', modelId: 'local-fixture-v1', promptTemplateVersion: 'policy-ai-extraction/1.0.0', outputSchemaVersion: 'policy-ai-candidates/1.0.0', sourceBundleHash: hash, sourceBundleId: BUNDLE, candidateCount: status === 'review_required' ? 2 : 0, conflictCount: status === 'review_required' ? 1 : 0, controlRequiredCount: status === 'review_required' ? 2 : 0, inputCharacters: 64, estimatedCostMinor: 1, actualCostMinor: status === 'review_required' ? 1 : null, safeErrorCode: null, version: status === 'planned' ? 1 : 4, createdAt: '2026-07-15T08:00:00.000Z', startedAt: status === 'planned' ? null : '2026-07-15T08:01:00.000Z', completedAt: status === 'planned' ? null : '2026-07-15T08:01:01.000Z' }
+  return { id, caseId, status, providerId: 'deterministic-success', providerVersion: 'deterministic/1.0.0', modelId: 'local-fixture-v1', promptTemplateVersion: 'policy-ai-extraction/1.0.0', outputSchemaVersion: 'policy-ai-candidates/1.0.0', sourceBundleHash: hash, sourceBundleId: BUNDLE, candidateCount: status === 'review_required' ? 2 : 0, conflictCount: status === 'review_required' ? 1 : 0, controlRequiredCount: status === 'review_required' ? 2 : 0, inputCharacters: 64, estimatedCostMinor: 1, actualCostMinor: status === 'review_required' ? 1 : null, safeErrorCode: null, version: status === 'planned' ? 1 : 4, createdAt: '2026-07-15T08:00:00.000Z', startedAt: status === 'planned' ? null : '2026-07-15T08:01:00.000Z', completedAt: status === 'planned' ? null : '2026-07-15T08:01:01.000Z', privacy: localPrivacy }
 }
 
 function detail(status = 'planned', caseId = CASE, id = RUN, hash = 'b'.repeat(64)) {
@@ -73,6 +74,25 @@ describe('AI alan adayları görünümü', () => {
     render(<PolicyAiCandidatesModule caseId={CASE} source="api" />)
     await waitFor(() => expect(screen.getByText(/Provider çağrısı yapılmadı/)).toBeInTheDocument())
     expect(screen.queryByText('Mock yanıt')).not.toBeInTheDocument()
+  })
+
+  it('gerçek dış sağlayıcı planında PII minimizasyonu, retention ve açık gönderim onayını gösterir', async () => {
+    const externalPrivacy = { externalProvider: true, policyVersion: 'policy-ai-pii-redaction/1.0.0', outboundPayloadHash: 'e'.repeat(64), outboundInputCharacters: 48, redactedValueCount: 3, redactedCategories: ['email', 'name', 'phone'], retentionMode: 'store_false', pricingVersion: 'configured-token-pricing/1.0.0' }
+    const planned = detail('planned').run
+    const external = { run: { ...planned, providerId: 'openai-responses', providerVersion: 'openai-responses/1.0.0', modelId: 'gpt-5-mini-pinned', privacy: externalPrivacy, bundle: { ...planned.bundle, items: [{ ...source, boundedExcerpt: 'A'.repeat(4_000) }] } } }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/documents?')) return response(200, { items: [] })
+      if (url.endsWith(`/policy-ai-extractions/${RUN}`)) return response(200, external)
+      return response(200, { items: [{ ...summary(), providerId: 'openai-responses', privacy: externalPrivacy }] })
+    }) as never)
+    render(<PolicyAiCandidatesModule caseId={CASE} source="api" />)
+    expect(await screen.findByText('Dış sağlayıcı veri sınırı')).toBeInTheDocument()
+    expect(screen.getByText(/3 hassas değer maskelendi/)).toBeInTheDocument()
+    expect(screen.getByText(/store: false/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Maskelenmiş kaynak parçalarının dış AI sağlayıcısına/)).toBeInTheDocument()
+    expect(screen.queryByText('Bağlantı kurulamadı')).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('sk-')
   })
 
   it('kontrol, kabul ve düzenleme kararlarından sonra açık onayla Paket 23 taslağına aktarır',async()=>{

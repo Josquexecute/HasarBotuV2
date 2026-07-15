@@ -9,7 +9,8 @@
         "deterministic-invalid-schema",
         "deterministic-timeout",
         "deterministic-failure",
-        "deterministic-prompt-injection-attempt"
+        "deterministic-prompt-injection-attempt",
+        "openai-responses"
       ]
     },
     "sources": {

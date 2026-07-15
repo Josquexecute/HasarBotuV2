@@ -75,3 +75,11 @@ bir yapı getiriyorsa kullanıcıya açıkça bildirilmeden eklenmez.
 İlk sürümde AI taslak hazırlar ve Gmail ekranı açılır.
 
 Otomatik gönderim yoktur.
+
+## Gerçek AI sağlayıcısı güvenlik kapısı
+
+- AI provider varsayılan kapalıdır. Organization allow-list, per-request/monthly integer bütçe ve açık kullanıcı onayı olmadan dış çağrı yapılmaz; otomatik fallback yoktur.
+- Provider API key yalnız server process environment’ında bulunur. Secret DB, client bundle, API response, audit veya log’a yazılmaz; eksik/kısmi config fail-closed olur.
+- Dış payload yalnız seçilmiş, doğrulanmış source-anchor metnidir ve `policy-ai-pii-redaction/1.0.0` ile minimize/redact edilir. Binary, tam poliçe/case dump’ı, File Agent/root, mutlak yol ve session gönderilmez.
+- Provider strict JSON Schema dışında veri üretemez; tool listesi boştur ve `store:false` kullanılır. Server bütün anchor/evidence’i yeniden doğrular; sonuç insan review ve Paket 23 onayı olmadan kesin karar değildir.
+- `store:false`, sağlayıcı abuse-monitoring retention’ını tek başına kapatmaz. Gerçek müşteri pilotu ancak onaylı ZDR/Modified Abuse Monitoring durumu, egress politikası, secret rotation ve veri işleme hukuki değerlendirmesiyle açılır.

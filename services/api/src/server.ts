@@ -7,6 +7,7 @@ import {
 import type pg from 'pg'
 import { buildApp } from './app.js'
 import { ConfigError, parseConfig } from './config.js'
+import { createOpenAiPolicyProvider, createPolicyAiProviderRegistry } from './policy-ai/index.js'
 
 /**
  * Sunucu yasam dongusu: config oku -> (varsa) DB havuzu kur -> uygulamayi kur
@@ -43,6 +44,9 @@ export async function startServer(): Promise<void> {
       ? {
           healthDependencyCheck: async () => (await checkDatabaseHealth(pool)).ok,
           auth: { pool, cookieSecure: config.nodeEnv === 'production' },
+          ...(config.openAiPolicyProvider !== undefined
+            ? { policyAiProviders: createPolicyAiProviderRegistry([createOpenAiPolicyProvider(config.openAiPolicyProvider)]) }
+            : {}),
         }
       : {}),
   })

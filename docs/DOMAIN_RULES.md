@@ -311,3 +311,11 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Promotion için her candidate’ın güncel kararı bulunmalı, en az bir kabul/düzenleme olmalı, source policy belgesi tekil olmalı ve run/target analysis/review-set sürümleri değişmemiş olmalıdır.
 - Promotion yeni Paket 23 sürümünü insan onayı `pending` ile oluşturur. Eksik kontrol kararı varsa `control_required`; taşınan conflict varsa `conflict_detected`; aksi durumda `draft` olur.
 - Provider confidence kaynak kalitesini veya insan onayını yükseltmez. Promotion sonrası da Paket 23 immutable approval ve conflict kuralları aynen uygulanır.
+
+## Gerçek provider privacy ve maliyet kuralları — Paket 28
+
+- Dış provider payload’ı `policy-ai-pii-redaction/1.0.0` ile deterministik hazırlanır. Aynı kaynak/sürüm aynı redacted metin ve hash’i üretir; plan sonrası kaynak veya privacy snapshot değişirse start fail-closed olur.
+- PII placeholder’ı kanıt metnini uydurmaz. Original/numeric/date evidence kontrolü server’daki gerçek source-anchor metni üzerinde yapılır; provider confidence redaksiyon veya düşük OCR kalitesini yükseltemez.
+- Gerçek provider run’ı `externalProvider=true`, retention/pricing sürümü, outbound character/hash ve redaksiyon sayaçları taşır. Bu alanlar provider fact olarak immutable’dır.
+- Maliyet yalnız safe integer minor-unit ile ve deploy edilen pricing sürümüyle hesaplanır. Plan çağrısı yapmaz; per-request/monthly hard stop provider’dan önce uygulanır; token çiftinin eksik veya geçersiz gelmesi güvenli provider failure’dır.
+- Dış provider adayı da append-only insan review’ı olmadan Paket 23’e promote edilemez; promotion onay değildir.

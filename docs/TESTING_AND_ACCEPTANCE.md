@@ -199,3 +199,12 @@ raporlanır.
 - Gerçek tarayıcı: candidate kararları, düzenleme/gerekçe modalı, promotion preview/onay/sonuç, Paket 23 taslak fact ve kaynak sayfa/madde; no-fallback; 1366×768 açık-koyu ve 1920×1080 koyu overflow/console kontrolü.
 - Gerçek müşteri verisi, cloud provider, File Agent, gerçek `P:\`, üretim migration veya otomatik Paket 23 approval yoktur. Kritik PostgreSQL/API/browser testi skip kalırsa Paket 27 PASS sayılmaz.
 - Paket 27 uygulama sonucu: ana ağaç ve repository dışı fresh `npm ci` kopyasında 965 test geçti; 6 skip yalnız mevcut ortam-koşullu UI testleridir. Gerçek PostgreSQL migration/API, append-only review/promotion, kaynak/çatışma koruması ve gerçek tarayıcı akışı skip edilmedi; moderate audit 0 açık, başarılı tarayıcı akışında console warning/error 0'dı.
+
+### Paket 28 — gerçek provider güvenlik pilotu kabulü
+
+- Domain/config/adapter: deterministik PII redaction/hash; eksik config ve secret sızıntısı; strict Responses schema, tools kapalı, `store:false`, bounded response, timeout/safe error ve integer token cost.
+- Gerçek PostgreSQL 0020: up/repeat/down/reapply; provider allow-list, immutable privacy facts, token/pricing constraints, append-only usage, tenant ve Paket 27→23 provenance.
+- Gerçek API + sentetik local provider wire: provider-disabled, budget hard stop, redacted payload, secret yokluğu, strict candidate, server-side evidence, idempotent replay, review, promotion, audit/log sızıntı kontrolü.
+- Tarayıcı: external provider privacy/bütçe önizlemesi, açık start onayı, aday/review/promotion görünümü, no-fallback; 1366×768 açık-koyu ve 1920×1080 koyu overflow/console kontrolü.
+- Yetkili `OPENAI_API_KEY` ve onaylı retention ayarı olmadan gerçek ücretli dış ağ pilotu çalıştırılmaz ve PASS diye raporlanmaz. Kritik PostgreSQL/API/UI testi skip kalırsa Paket 28 tamamlanmış sayılmaz.
+- Paket 28 uygulama sonucu: ana ağaç ve repository dışı fresh `npm ci` kopyasında **975 test geçti; 6 skip yalnız mevcut ortam-koşullu UI testleridir**. Gerçek PostgreSQL 0020 up/repeat/down/reapply, provider wire/API, strict-output/evidence, budget/redaction, append-only review→promotion ve tarayıcı senaryoları skip edilmedi; moderate audit 0 açık ve tarayıcı console warning/error 0'dı. Gerçek ücretli OpenAI çağrısı secret bulunmadığı için kapsamlı biçimde çalıştırılmadı ve PASS olarak sayılmadı.

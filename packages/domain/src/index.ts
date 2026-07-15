@@ -319,3 +319,12 @@ export {
   type PolicyAiReviewFact,
   type PolicyAiPromotionReadiness,
 } from './policy-ai.js'
+export {
+  POLICY_AI_LOCAL_PRIVACY_POLICY_VERSION,
+  POLICY_AI_PII_CATEGORIES,
+  POLICY_AI_PII_POLICY_VERSION,
+  minimizePolicyAiSources,
+  type PolicyAiPiiCategory,
+  type PolicyAiPrivacySource,
+  type PolicyAiRedactionSummary,
+} from './policy-ai-privacy.js'

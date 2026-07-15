@@ -183,3 +183,11 @@ formatlarında alınabilir.
 - Promotion önizlemesi bekleyen, kabul edilen, düzenlenen, reddedilen, kontrol gereken ve çatışmalı aday sayılarını; hedef Paket 23 analiz sürümünü ve engelleri gösterir.
 - Yalnız kabul edilen/düzenlenen adaylar yeni Paket 23 taslak analiz sürümüne aktarılır. Kaynak, sağlayıcı ve insan kararı provenance’ı ile açık çatışmalar korunur.
 - Promotion analiz onayı değildir. Paket 23 onay ve conflict çözüm akışı ayrıca çalıştırılmadan adaylar kesin teminat, muafiyet veya operasyon kararı sayılmaz.
+
+### Gerçek AI sağlayıcısı pilotu — Paket 28
+
+- Gerçek provider kullanımı organization bazında açıkça etkinleştirilir; provider allow-list ve bütçe hard stop aşılmadan dış çağrı yapılmaz. AI kapalıyken bütün core case akışları çalışmaya devam eder.
+- Provider secret yalnız server process’indedir. UI/API/audit/log/DB’ye secret, session, File Agent bilgisi, mutlak yol, binary veya tüm vaka/poliçe dump’ı taşınmaz.
+- Dış istek öncesi seçilmiş source-anchor metni deterministik PII minimizasyonu/redaksiyonundan geçer. UI dış sağlayıcı, redaksiyon sayısı/kategorileri, input boyutu, retention modu ve tahmini maliyeti açık onaydan önce gösterir.
+- Strict structured output yalnız adaydır. Server kanıt doğrulaması, Paket 27 insan review’ı ve Paket 23 pending promotion/approval sınırları aynen uygulanır; provider sonucu doğrudan kesin karara dönüşmez.
+- `store:false` ZDR taahhüdü değildir. Gerçek müşteri pilotu sağlayıcı retention sözleşmesi/organizasyon ayarı ve yetkili secret kurulumu ayrıca doğrulanmadan başlatılmaz.

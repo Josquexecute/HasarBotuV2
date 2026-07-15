@@ -422,3 +422,11 @@ Chunk server’da lease/Agent ownership, run/job version, extraction page, sourc
 - Review yazısı candidate ile aynı tenant/case/run ve aynı bundle source-anchor kümesinde doğrulanır. Kabul/düzenleme kaynak kanıtını yükseltmez; stale review version ve stale review-set hash reddedilir.
 - Promotion; yeni Paket 23 analysis version, bounded source reference/evidence link, candidate provenance, conflict kopyası, idempotency sonucu ve merkezi audit’i tek PostgreSQL transaction’ında yazar.
 - File Agent, job queue, filesystem, IPC, runtime network ve dependency değişmez. Gerçek provider/secret/outbound ağ/PII payload dağıtımı Paket 28’e bırakılır.
+
+### Paket 28 ek uygulama kaydı — dış provider güvenlik kapısı
+
+- OpenAI Responses adapter’ı mevcut API process’indeki provider interface arkasındadır; yeni service/queue/Agent işi yoktur. Runtime yalnız adapter organization policy ile izinliyse HTTPS çağrısı yapar.
+- Secret yalnız process environment’ından okunur; config tam değilse adapter registry’ye eklenmez. Secret için DB kolonu, client contract’ı veya log/audit alanı oluşturulmaz.
+- Outbound payload source-anchor bazında minimize/redact edilir; binary, tam case/document dump’ı, File Agent/root, mutlak yol ve session dışarı çıkmaz. Strict schema, tools kapalı ve `store:false` zorlanır.
+- Migration 0020 mevcut orchestration tablolarını privacy snapshot, retention/pricing version ve token usage ile genişletir. Raw request/response saklanmaz; File Agent, IPC ve fiziksel yazma yolu değişmez.
+- Deployment gerçek müşteri pilotundan önce egress allow-list, provider project/model yetkisi, secret injection/rotation ve ZDR veya Modified Abuse Monitoring uygunluğunu ayrıca doğrulamalıdır.

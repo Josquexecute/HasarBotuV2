@@ -731,3 +731,15 @@ Paket 27 accept/edit/reject ve Paket 23’e promotion yapacaktır. Paket 28 ger�
 - [x] Tam root, gerçek PostgreSQL/API, tarayıcı ve repository dışı fresh `npm ci` doğrulaması tamamlandı; PROJECT_STATUS gerçek sonuçlarla güncellendi.
 
 Kapsam dışı: Paket 23 otomatik approval, gerçek cloud provider, provider secret/PII payload politikası, File Agent, background worker, üretim migration ve sonraki paket.
+
+## Paket 28 — Gerçek AI provider, PII ve bütçe güvenlik sınırı
+
+- [x] Provider-neutral adapter’a native-fetch OpenAI Responses implementasyonu; strict schema, bounded output, timeout/cancellation, `store:false` ve tools kapalı.
+- [x] Deterministik source-anchor PII minimizasyonu/redaksiyonu ve immutable privacy snapshot/hash.
+- [x] Server-only environment secret/config doğrulaması; provider varsayılan kapalı, allow-list ve integer bütçe hard stop.
+- [x] Migration 0020 ile run privacy/retention/pricing alanları ve append-only ledger token sayaçları.
+- [x] Gerçek provider adayının Paket 26 evidence doğrulaması, Paket 27 review ve Paket 23 pending draft promotion zinciri.
+- [x] Kasko AI panelinde external provider/redaksiyon/retention/bütçe önizlemesi ve açık kullanıcı onayı; API modunda fallback yok.
+- [ ] Yetkili production secret ve sağlayıcı retention onayıyla gerçek dış ağ poliçe pilotu. Geliştirme makinesinde secret bulunmadığından bu deployment adımı çalıştırılmadı.
+
+Kapsam dışı: otomatik Paket 23 approval, File Agent/filesystem, yeni background worker, provider yönetim UI’si, üretim migration ve sonraki paket.

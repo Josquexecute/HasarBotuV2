@@ -3,7 +3,7 @@ import { sha256Text } from './pdf-text-extraction.js'
 export const POLICY_AI_BUNDLE_SCHEMA_VERSION = 'policy-ai-source-bundle/1.0.0' as const
 export const POLICY_AI_PROMPT_TEMPLATE_VERSION = 'policy-ai-extraction/1.0.0' as const
 export const POLICY_AI_OUTPUT_SCHEMA_VERSION = 'policy-ai-candidates/1.0.0' as const
-export const POLICY_AI_PROVIDER_IDS = ['deterministic-success','deterministic-invalid-schema','deterministic-timeout','deterministic-failure','deterministic-prompt-injection-attempt'] as const
+export const POLICY_AI_PROVIDER_IDS = ['deterministic-success','deterministic-invalid-schema','deterministic-timeout','deterministic-failure','deterministic-prompt-injection-attempt','openai-responses'] as const
 export const POLICY_AI_RUN_STATUSES = ['planned','provider_disabled','budget_blocked','running','validating','review_required','failed','stale','cancelled','superseded'] as const
 export const POLICY_AI_CANDIDATE_CATEGORIES = ['policy_identity','coverage','deductible','service_rule','part_rule','replacement_vehicle','assistance','valuation','exclusion','required_document','special_condition'] as const
 export const POLICY_AI_VALIDATION_STATUSES = ['validated','control_required','rejected_evidence'] as const

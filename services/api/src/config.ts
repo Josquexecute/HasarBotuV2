@@ -1,4 +1,5 @@
 import { parseDatabaseUrl } from '@hasarbotu/database'
+import type { OpenAiPolicyProviderConfig } from './policy-ai/openai-provider.js'
 
 /**
  * API runtime yapilandirma siniri.
@@ -36,6 +37,8 @@ export interface ApiConfig {
    * BASLATILMAZ. Deger hicbir hata mesajina yazilmaz.
    */
   readonly databaseUrl?: string
+  /** Sunucu-sahipli secret ve fiyat ayarlari; istemci/API cevabina asla tasinmaz. */
+  readonly openAiPolicyProvider?: OpenAiPolicyProviderConfig
 }
 
 /** Yapilandirma hatasi: alan adi + kural tasir, deger tasimaz. */
@@ -50,6 +53,8 @@ export class ConfigError extends Error {
 }
 
 const INTEGER_PATTERN = /^\d+$/
+const OPENAI_MODEL_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/
+const OPENAI_KEY_PATTERN = /^[A-Za-z0-9_-]{20,512}$/
 
 function parseHost(raw: string | undefined): string {
   if (raw === undefined) return DEFAULT_HOST
@@ -98,17 +103,44 @@ function parseOptionalDatabaseUrl(raw: string | undefined): string | undefined {
   return raw
 }
 
+function parsePositiveInteger(field: string, raw: string | undefined, maximum: number): number {
+  if (raw === undefined || !INTEGER_PATTERN.test(raw)) throw new ConfigError(field, `expected an integer between 1 and ${maximum}.`)
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value < 1 || value > maximum) throw new ConfigError(field, `expected an integer between 1 and ${maximum}.`)
+  return value
+}
+
+function parseOpenAiPolicyProvider(env: Readonly<Record<string, string | undefined>>): OpenAiPolicyProviderConfig | undefined {
+  const fields = [env.OPENAI_API_KEY, env.OPENAI_POLICY_MODEL, env.OPENAI_POLICY_INPUT_COST_MINOR_PER_MILLION, env.OPENAI_POLICY_OUTPUT_COST_MINOR_PER_MILLION, env.OPENAI_POLICY_MAX_OUTPUT_TOKENS]
+  if (fields.every((value) => value === undefined || value.length === 0)) return undefined
+  if (env.OPENAI_API_KEY === undefined || !OPENAI_KEY_PATTERN.test(env.OPENAI_API_KEY)) throw new ConfigError('OPENAI_API_KEY', 'expected a non-empty server secret with a valid key shape.')
+  if (env.OPENAI_POLICY_MODEL === undefined || !OPENAI_MODEL_PATTERN.test(env.OPENAI_POLICY_MODEL)) throw new ConfigError('OPENAI_POLICY_MODEL', 'expected an explicit model id containing only safe identifier characters.')
+  return {
+    apiKey: env.OPENAI_API_KEY,
+    modelId: env.OPENAI_POLICY_MODEL,
+    inputCostMinorPerMillionTokens: parsePositiveInteger('OPENAI_POLICY_INPUT_COST_MINOR_PER_MILLION', env.OPENAI_POLICY_INPUT_COST_MINOR_PER_MILLION, 1_000_000_000),
+    outputCostMinorPerMillionTokens: parsePositiveInteger('OPENAI_POLICY_OUTPUT_COST_MINOR_PER_MILLION', env.OPENAI_POLICY_OUTPUT_COST_MINOR_PER_MILLION, 1_000_000_000),
+    maximumInputCharacters: 50_000,
+    maximumOutputSize: 100_000,
+    maximumOutputTokens: env.OPENAI_POLICY_MAX_OUTPUT_TOKENS === undefined
+      ? 4_096
+      : parsePositiveInteger('OPENAI_POLICY_MAX_OUTPUT_TOKENS', env.OPENAI_POLICY_MAX_OUTPUT_TOKENS, 100_000),
+  }
+}
+
 /**
  * Ortam nesnesinden API yapilandirmasini uretir. Saf fonksiyondur: testler
  * gercek process ortamina bagimli olmadan acik nesnelerle calisir.
  */
 export function parseConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
   const databaseUrl = parseOptionalDatabaseUrl(env.DATABASE_URL)
+  const openAiPolicyProvider = parseOpenAiPolicyProvider(env)
   return {
     host: parseHost(env.HOST),
     port: parsePort(env.PORT),
     logLevel: parseLogLevel(env.LOG_LEVEL),
     nodeEnv: parseNodeEnv(env.NODE_ENV),
     ...(databaseUrl !== undefined ? { databaseUrl } : {}),
+    ...(openAiPolicyProvider !== undefined ? { openAiPolicyProvider } : {}),
   }
 }

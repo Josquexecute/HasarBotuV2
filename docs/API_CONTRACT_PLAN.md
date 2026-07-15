@@ -373,3 +373,10 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - `POST /api/v1/cases/:caseId/policy-ai-extractions/:runId/promote`: zorunlu Idempotency-Key, açık `confirmed`, expected run/review-set/analysis version ile yeni Paket 23 taslak sürümü üretir.
 - Candidate listesi son append-only review’ı taşır. Paket 23 detail cevabı promote edilen generic AI fact provenance’ını ve source reference kimliklerini gösterir.
 - Tenant dışı kaynak/aday/hedef 404; rol reddi 403; stale review/promotion 409; response içinde full prompt/output, poliçe metni, binary, secret veya mutlak yol yoktur.
+
+## 17. Paket 28 gerçek provider ve privacy contracts/API
+
+- Provider enum’u `openai-responses` ile genişler. Plan cevabındaki `privacy`; external provider, redaction policy/version, outbound character sayısı, redacted kategori/sayı, retention ve pricing sürümünü güvenli özet olarak taşır.
+- Start endpoint’i değişmez: zorunlu Idempotency-Key, expected run version ve sourceBundleHash kullanır. Server start anında privacy snapshot’ı yeniden üretir; uyuşmazlık stale/fail-closed olur.
+- Usage cevabı input/output token sayaçlarını ve pricing version’ı taşır; para safe integer minor-unit’tir. Secret, Authorization header, full request/response veya kaynak metni hiçbir contract’ta yoktur.
+- Provider disabled/budget blocked çağrı üretmez. External provider hataları yalnız kanonik güvenli hata kodlarına çevrilir; HTTP body, stack ve provider secret response’a taşınmaz.

@@ -39,7 +39,8 @@
             "deterministic-invalid-schema",
             "deterministic-timeout",
             "deterministic-failure",
-            "deterministic-prompt-injection-attempt"
+            "deterministic-prompt-injection-attempt",
+            "openai-responses"
           ]
         },
         "providerVersion": {
@@ -151,6 +152,82 @@
               "type": "null"
             }
           ]
+        },
+        "privacy": {
+          "type": "object",
+          "properties": {
+            "externalProvider": {
+              "type": "boolean"
+            },
+            "policyVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "outboundPayloadHash": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "outboundInputCharacters": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "redactedValueCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "redactedCategories": {
+              "maxItems": 10,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "address",
+                  "email",
+                  "iban",
+                  "name",
+                  "phone",
+                  "plate",
+                  "reference_number",
+                  "tax_identity",
+                  "turkish_identity",
+                  "vehicle_identity"
+                ]
+              }
+            },
+            "retentionMode": {
+              "type": "string",
+              "enum": [
+                "local_only",
+                "store_false"
+              ]
+            },
+            "pricingVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "required": [
+            "externalProvider",
+            "policyVersion",
+            "outboundPayloadHash",
+            "outboundInputCharacters",
+            "redactedValueCount",
+            "redactedCategories",
+            "retentionMode",
+            "pricingVersion"
+          ],
+          "additionalProperties": false
         },
         "budget": {
           "type": "object",
@@ -423,6 +500,7 @@
         "createdAt",
         "startedAt",
         "completedAt",
+        "privacy",
         "budget",
         "bundle"
       ],
