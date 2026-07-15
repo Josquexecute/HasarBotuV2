@@ -190,3 +190,12 @@ raporlanır.
 - API smoke; login, Kasko/Traffic ayrımı, PDF+OCR bundle/hash, provider disabled, budget hard stop, start/replay, stale, evidence/conflict, tenant 404, rol 403, 401 ve audit/sızıntı kontrolünü kapsar.
 - UI/browser; provider/bütçe planı, açık start onayı, source kalite/excerpt, candidate/conflict/control, no-fallback, 1366×768 açık-koyu ve 1920×1080 koyu tema, overflow ve console kontrolünü geçmelidir.
 - Kritik PostgreSQL/API/provider/browser testi skip kalırsa Paket 26 PASS sayılmaz. Gerçek müşteri verisi, cloud provider, File Agent, gerçek `P:\` veya üretim migration kullanılmaz.
+
+### Paket 27 — AI adayı insan incelemesi ve promotion kabulü
+
+- Domain/contracts: dört review eylemi, aynı anchor’da edited evidence, deterministic review-set hash/readiness, strict Zod/JSON Schema eşliği ve stale version.
+- Gerçek PostgreSQL 0019: up/repeat/down/reapply; sequential append-only review, accepted provider-fact eşitliği, tenant/source-anchor bütünlüğü, promotion provenance ve approved fact immutability.
+- Gerçek API: accept/edit/reject/control, gerekçe ve evidence redleri; bütün adaylar incelenmeden promotion blokajı; idempotent promotion; yeni Paket 23 pending draft/control/conflict sürümü; source/conflict korunması; tenant/RBAC/401/409 ve güvenli audit.
+- Gerçek tarayıcı: candidate kararları, düzenleme/gerekçe modalı, promotion preview/onay/sonuç, Paket 23 taslak fact ve kaynak sayfa/madde; no-fallback; 1366×768 açık-koyu ve 1920×1080 koyu overflow/console kontrolü.
+- Gerçek müşteri verisi, cloud provider, File Agent, gerçek `P:\`, üretim migration veya otomatik Paket 23 approval yoktur. Kritik PostgreSQL/API/browser testi skip kalırsa Paket 27 PASS sayılmaz.
+- Paket 27 uygulama sonucu: ana ağaç ve repository dışı fresh `npm ci` kopyasında 965 test geçti; 6 skip yalnız mevcut ortam-koşullu UI testleridir. Gerçek PostgreSQL migration/API, append-only review/promotion, kaynak/çatışma koruması ve gerçek tarayıcı akışı skip edilmedi; moderate audit 0 açık, başarılı tarayıcı akışında console warning/error 0'dı.

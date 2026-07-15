@@ -415,3 +415,10 @@ Chunk server’da lease/Agent ownership, run/job version, extraction page, sourc
 - Provider registry varsayılan boş ve policy varsayılan disabled’dır. Deterministik adapter’lar yalnız test/smoke composition root’undan enjekte edilir.
 - Adapter interface; provider/model/version/capability, maksimum input/output, timeout/cancellation, structured output, usage ve safe error mapping taşır. Runtime HTTP yoktur.
 - Gerçek provider deployment, secret yönetimi, outbound ağ kontrolü ve PII payload politikası Paket 28’in ayrı güvenlik kapısıdır.
+
+### Paket 27 ek uygulama kaydı — append-only review ve atomik draft promotion
+
+- Migration 0019 provider candidate tablosunu değiştirmeden append-only review, promotion provenance ve Paket 23 AI fact tablolarını ekler. Completed provider facts ve source bundle immutable kalır.
+- Review yazısı candidate ile aynı tenant/case/run ve aynı bundle source-anchor kümesinde doğrulanır. Kabul/düzenleme kaynak kanıtını yükseltmez; stale review version ve stale review-set hash reddedilir.
+- Promotion; yeni Paket 23 analysis version, bounded source reference/evidence link, candidate provenance, conflict kopyası, idempotency sonucu ve merkezi audit’i tek PostgreSQL transaction’ında yazar.
+- File Agent, job queue, filesystem, IPC, runtime network ve dependency değişmez. Gerçek provider/secret/outbound ağ/PII payload dağıtımı Paket 28’e bırakılır.

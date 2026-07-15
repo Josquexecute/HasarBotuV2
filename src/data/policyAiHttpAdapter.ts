@@ -1,6 +1,9 @@
 import type {
   PolicyAiCandidateRecord,
+  PolicyAiCandidateReviewRecord,
   PolicyAiDataPort,
+  PolicyAiPromotionPreviewRecord,
+  PolicyAiPromotionRecord,
   PolicyAiRunRecord,
   PolicyAiRunStatus,
   PolicyAiSourceItemRecord,
@@ -27,6 +30,7 @@ const sourceQualities = ['high', 'medium', 'low', 'control_required'] as const
 const validationStatuses = ['validated', 'control_required', 'rejected_evidence'] as const
 const conflictStatuses = ['none', 'duplicate', 'conflict_detected', 'control_required'] as const
 const humanReviewStatuses = ['pending', 'control_required'] as const
+const reviewActions = ['accepted', 'edited', 'rejected', 'control_required'] as const
 const sha256Pattern = /^[a-f0-9]{64}$/
 const maximumBundleItems = 200
 const maximumItemsPerExtraction = 40
@@ -53,6 +57,46 @@ function isNullableNonnegativeInteger(value: unknown): value is number | null {
 
 function isNullableString(value: unknown, maximum = 100): value is string | null {
   return value === null || hasString(value, maximum)
+}
+
+function candidateReview(value: unknown): PolicyAiCandidateReviewRecord {
+  if (!record(value)
+    || value.schemaVersion !== 'policy-ai-human-review/1.0.0'
+    || !hasString(value.runId, 128) || !hasString(value.candidateId, 80)
+    || !isNonnegativeInteger(value.reviewVersion) || value.reviewVersion < 1
+    || !reviewActions.includes(value.action as typeof reviewActions[number])
+    || !isNormalizedValue(value.normalizedValue) || !hasString(value.originalValue, 1_000)
+    || !hasStringArray(value.conditions, 20) || !hasStringArray(value.exceptions, 20)
+    || !hasStringArray(value.sourceAnchorIds, 20, 64) || value.sourceAnchorIds.length === 0 || !value.sourceAnchorIds.every((id) => sha256Pattern.test(id))
+    || !isNullableString(value.reason, 500)
+    || !validationStatuses.includes(value.evidenceStatus as typeof validationStatuses[number])
+    || !hasString(value.reviewedByUserId, 128) || !hasString(value.reviewedAt, 40)) throw new HttpPolicyAiError('unavailable', 'policy AI review response is invalid')
+  return value as unknown as PolicyAiCandidateReviewRecord
+}
+
+function promotionPreview(value: unknown): PolicyAiPromotionPreviewRecord {
+  if (!record(value) || value.schemaVersion !== 'policy-ai-promotion/1.0.0'
+    || !hasString(value.runId, 128) || !isNonnegativeInteger(value.runVersion) || value.runVersion < 1
+    || !hasString(value.reviewSetHash, 64) || !sha256Pattern.test(value.reviewSetHash)
+    || !['totalCandidateCount','acceptedCount','editedCount','rejectedCount','controlRequiredCount','pendingCount','promotableCount','sourceCount','conflictCount','preservedConflictCount','nextAnalysisVersion'].every((key) => isNonnegativeInteger(value[key]))
+    || !hasStringArray(value.blockers, 20, 64) || !hasStringArray(value.warnings, 20, 64)
+    || typeof value.canPromote !== 'boolean' || !isNullableString(value.targetAnalysisId, 128)
+    || !isNullableNonnegativeInteger(value.targetAnalysisVersion)
+    || (value.targetAnalysisVersion !== null && value.targetAnalysisVersion < 1)
+    || Number(value.nextAnalysisVersion) < 1) throw new HttpPolicyAiError('unavailable', 'policy AI promotion preview is invalid')
+  return value as unknown as PolicyAiPromotionPreviewRecord
+}
+
+function promotion(value: unknown): PolicyAiPromotionRecord {
+  if (!record(value) || value.schemaVersion !== 'policy-ai-promotion/1.0.0'
+    || !hasString(value.id, 128) || !hasString(value.runId, 128)
+    || !hasString(value.reviewSetHash, 64) || !sha256Pattern.test(value.reviewSetHash)
+    || !hasString(value.analysisId, 128) || !hasString(value.analysisVersionId, 128)
+    || !isNonnegativeInteger(value.analysisVersion) || value.analysisVersion < 1
+    || !isNonnegativeInteger(value.promotedCandidateCount) || value.promotedCandidateCount < 1
+    || !isNonnegativeInteger(value.preservedConflictCount) || !hasString(value.promotedByUserId, 128)
+    || !hasString(value.promotedAt, 40)) throw new HttpPolicyAiError('unavailable', 'policy AI promotion response is invalid')
+  return value as unknown as PolicyAiPromotionRecord
 }
 
 function isNormalizedValue(value: unknown, depth = 0): boolean {
@@ -155,8 +199,11 @@ function candidate(value: unknown): PolicyAiCandidateRecord {
     || !hasString(value.providerVersion, 80)
     || !hasString(value.modelId, 80)
     || !hasString(value.promptTemplateVersion, 80)
-    || !hasString(value.outputSchemaVersion, 80)) throw new HttpPolicyAiError('unavailable', 'policy AI candidate response is invalid')
-  return value as unknown as PolicyAiCandidateRecord
+    || !hasString(value.outputSchemaVersion, 80)
+    || !Object.hasOwn(value, 'review')) throw new HttpPolicyAiError('unavailable', 'policy AI candidate response is invalid')
+  const review = value.review === null ? null : candidateReview(value.review)
+  if (review !== null && (review.candidateId !== value.candidateId || review.sourceAnchorIds.some((id) => !(value.sourceAnchorIds as string[]).includes(id)))) throw new HttpPolicyAiError('unavailable', 'policy AI review identity is invalid')
+  return { ...value, review } as unknown as PolicyAiCandidateRecord
 }
 
 function candidates(value: unknown): Pick<PolicyAiWorkspaceRecord, 'candidates' | 'conflicts'> {
@@ -269,7 +316,7 @@ export function createHttpPolicyAiAdapter(options: { readonly baseUrl?: string; 
       const [discovery, list] = await Promise.all([discover(caseId), request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions`)])
       if (!record(list) || !Array.isArray(list.items)) throw new HttpPolicyAiError('unavailable', 'policy AI list is invalid')
       const summary = list.items[0]
-      if (!record(summary)) return { run: null, candidates: [], conflicts: [], availableSources: discovery.selections, sourceOverviews: discovery.overviews }
+      if (!record(summary)) return { run: null, candidates: [], conflicts: [], availableSources: discovery.selections, sourceOverviews: discovery.overviews, promotionPreview: null, promotion: null }
       if (!hasString(summary.id, 80)) throw new HttpPolicyAiError('unavailable', 'policy AI list item is invalid')
       const detail = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/${encodeURIComponent(summary.id)}`)
       if (!record(detail)) throw new HttpPolicyAiError('unavailable', 'policy AI detail is invalid')
@@ -284,7 +331,14 @@ export function createHttpPolicyAiAdapter(options: { readonly baseUrl?: string; 
           || candidateData.candidates.some((item) => item.sourceAnchorIds.some((anchor) => !anchors.has(anchor)))
           || candidateData.conflicts.some((item) => !candidateIds.has(item.leftCandidateId) || !candidateIds.has(item.rightCandidateId))) throw new HttpPolicyAiError('unavailable', 'policy AI candidate evidence response is invalid')
       }
-      return { run: current, ...candidateData, availableSources: discovery.selections, sourceOverviews: discovery.overviews }
+      let currentPromotionPreview: PolicyAiPromotionPreviewRecord | null = null
+      if (current.status === 'review_required') {
+        const value = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/${encodeURIComponent(current.id)}/promotion-preview`)
+        if (!record(value)) throw new HttpPolicyAiError('unavailable', 'policy AI promotion preview response is invalid')
+        currentPromotionPreview = promotionPreview(value.preview)
+        if (currentPromotionPreview.runId !== current.id || currentPromotionPreview.runVersion !== current.version) throw new HttpPolicyAiError('unavailable', 'policy AI promotion preview identity is invalid')
+      }
+      return { run: current, ...candidateData, availableSources: discovery.selections, sourceOverviews: discovery.overviews, promotionPreview: currentPromotionPreview, promotion: null }
     },
     async plan(caseId, sources, idempotencyKey) {
       const selected = sources.map((source) => {
@@ -304,6 +358,27 @@ export function createHttpPolicyAiAdapter(options: { readonly baseUrl?: string; 
       const started = run(value.run)
       if (started.caseId !== caseId || started.id !== current.id || started.sourceBundleHash !== current.sourceBundleHash) throw new HttpPolicyAiError('unavailable', 'policy AI start identity is invalid')
       return started
+    },
+    async review(caseId, runId, candidateId, input, idempotencyKey) {
+      const value = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/${encodeURIComponent(runId)}/candidates/${encodeURIComponent(candidateId)}/review`, { method: 'POST', headers: { 'content-type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(input) })
+      if (!record(value)) throw new HttpPolicyAiError('unavailable', 'policy AI review response is invalid')
+      const reviewed = candidateReview(value.review)
+      if (reviewed.runId !== runId || reviewed.candidateId !== candidateId) throw new HttpPolicyAiError('unavailable', 'policy AI review identity is invalid')
+      return reviewed
+    },
+    async previewPromotion(caseId, runId) {
+      const value = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/${encodeURIComponent(runId)}/promotion-preview`)
+      if (!record(value)) throw new HttpPolicyAiError('unavailable', 'policy AI promotion preview response is invalid')
+      const preview = promotionPreview(value.preview)
+      if (preview.runId !== runId) throw new HttpPolicyAiError('unavailable', 'policy AI promotion preview identity is invalid')
+      return preview
+    },
+    async promote(caseId, preview, idempotencyKey) {
+      const value = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/${encodeURIComponent(preview.runId)}/promote`, { method: 'POST', headers: { 'content-type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ confirmed: true, expectedRunVersion: preview.runVersion, expectedReviewSetHash: preview.reviewSetHash, expectedAnalysisId: preview.targetAnalysisId, expectedAnalysisVersion: preview.targetAnalysisVersion }) })
+      if (!record(value)) throw new HttpPolicyAiError('unavailable', 'policy AI promotion response is invalid')
+      const promoted = promotion(value.promotion)
+      if (promoted.runId !== preview.runId || promoted.reviewSetHash !== preview.reviewSetHash) throw new HttpPolicyAiError('unavailable', 'policy AI promotion identity is invalid')
+      return promoted
     },
   }
 }

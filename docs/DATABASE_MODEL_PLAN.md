@@ -224,3 +224,11 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - Exact identity, organization-scope idempotency, bundle içi anchor, tenant bileşik foreign key ve safe integer/bounded text kontrolleri DB’de zorlanır.
 - Usage ledger append-only’dır. Tam prompt/provider response, PDF/OCR binary, mutlak yol, root, secret veya tüm belge metni için kolon yoktur.
 - Migration ileri, tekrar, rollback/reapply, tenant, immutable ve constraint testlerine dahildir; üretim migration bu pakette çalıştırılmaz.
+
+## Paket 27 uygulanan PostgreSQL modeli
+
+- `ai_candidate_reviews`: candidate başına sıralı append-only review version; eylem, insan değeri, source anchor kümesi, evidence durumu, aktör ve UTC zaman.
+- `policy_analysis_ai_facts`: yeni Paket 23 analysis version’ına taşınan kabul/düzenleme gerçekleri; provider fact, review ve source-anchor provenance’ı immutable korunur.
+- `ai_candidate_promotions` ve `ai_candidate_promotion_items`: run/review-set/analysis version atomik promotion kimliği ve aday-review-fact bağlantısı.
+- `ai_candidate_promotion_conflicts`: AI conflict proposal’ın promotion geçmişi ve varsa Paket 23 conflict kaydıyla ilişkisi.
+- Tenant bileşik foreign key’leri, sequential review version, accepted fact eşitliği, source-anchor membership, idempotent tek promotion ve approved fact immutability DB guard’larıyla zorlanır. Mutlak path, secret, full prompt/provider response veya tam belge metni kolonu yoktur.

@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest'
 import {POLICY_AI_MAX_CANDIDATES} from '@hasarbotu/domain'
-import {policyAiBundleSchema,policyAiCancelRequestSchema,policyAiNormalizedValueSchema,policyAiPlanRequestSchema,policyAiProviderOutputSchema,policyAiStartRequestSchema} from '../src/index.js'
+import {policyAiBundleSchema,policyAiCancelRequestSchema,policyAiCandidateReviewRequestSchema,policyAiNormalizedValueSchema,policyAiPlanRequestSchema,policyAiPromotionRequestSchema,policyAiProviderOutputSchema,policyAiStartRequestSchema} from '../src/index.js'
 const id='018f1f7b-7a80-7000-8000-000000000001',hash='a'.repeat(64)
 describe('policy AI contracts',()=>{
   it('plan kaynaklarını strict ve benzersiz doğrular',()=>{expect(policyAiPlanRequestSchema.parse({providerId:'deterministic-success',sources:[{sourceType:'pdf_text',extractionId:id,segmentId:id}]}).allowHistorical).toBe(false);expect(()=>policyAiPlanRequestSchema.parse({providerId:'deterministic-success',sources:[{sourceType:'pdf_text',extractionId:id,segmentId:id},{sourceType:'pdf_text',extractionId:id,segmentId:id}]})).toThrow();expect(()=>policyAiPlanRequestSchema.parse({providerId:'deterministic-success',sources:[{sourceType:'pdf_text',extractionId:id,segmentId:id,absolutePath:'P:\\x'}]})).toThrow()})
@@ -17,5 +17,15 @@ describe('policy AI contracts',()=>{
   it('bundle completeness ve eksik/OCR gereken sayfa preview alanlarını taşır',()=>{
     const bundle={id,sourceBundleHash:hash,bundleSchemaVersion:'policy-ai-source-bundle/1.0.0',documentVersionIds:[id],inputCharacters:12,sourceCount:1,completeness:'partial',missingPages:[2],ocrRequiredPages:[3],qualityWarnings:['OCR_REQUIRED'],createdAt:'2026-07-14T12:00:00.000Z',items:[{sourceAnchorId:hash,sourceType:'pdf_text',documentId:id,documentVersionId:id,extractionId:id,sourceItemId:id,pageNumber:1,boundedExcerpt:'sentetik metin',textHash:hash,sourceQuality:'medium',warnings:[],historicalSelected:false}]}
     expect(policyAiBundleSchema.parse(bundle)).toMatchObject({completeness:'partial',missingPages:[2],ocrRequiredPages:[3]})
+  })
+  it('insan review eylemlerini strict ve ilk karar icin version sifirla dogrular',()=>{
+    expect(policyAiCandidateReviewRequestSchema.parse({action:'accepted',expectedReviewVersion:0})).toEqual({action:'accepted',expectedReviewVersion:0,reason:null})
+    expect(()=>policyAiCandidateReviewRequestSchema.parse({action:'edited',expectedReviewVersion:0,reason:'Duzeltildi'})).toThrow()
+    expect(()=>policyAiCandidateReviewRequestSchema.parse({action:'rejected',expectedReviewVersion:0})).toThrow()
+  })
+  it('promotion acik onay ve tam optimistic target identity ister',()=>{
+    expect(policyAiPromotionRequestSchema.parse({confirmed:true,expectedRunVersion:2,expectedReviewSetHash:hash})).toMatchObject({expectedAnalysisId:null,expectedAnalysisVersion:null})
+    expect(()=>policyAiPromotionRequestSchema.parse({confirmed:false,expectedRunVersion:2,expectedReviewSetHash:hash})).toThrow()
+    expect(()=>policyAiPromotionRequestSchema.parse({confirmed:true,expectedRunVersion:2,expectedReviewSetHash:hash,expectedAnalysisId:id})).toThrow()
   })
 })

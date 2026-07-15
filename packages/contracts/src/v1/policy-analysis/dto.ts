@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import {
   MAX_POLICY_EXCERPT_LENGTH,
+  POLICY_AI_CANDIDATE_CATEGORIES,
+  POLICY_AI_PROVIDER_IDS,
+  POLICY_AI_REVIEW_ACTIONS,
+  POLICY_AI_SOURCE_QUALITIES,
   POLICY_ANALYSIS_STATUSES,
   POLICY_CONFLICT_RESOLUTION_STATUSES,
   POLICY_COVERAGE_TYPES,
@@ -23,6 +27,7 @@ import {
   utcDateTimeSchema,
   userIdSchema,
 } from '../../common/primitives.js'
+import { policyAiAnchorIdSchema, policyAiCandidateIdSchema, policyAiNormalizedValueSchema } from '../policy-ai/dto.js'
 
 export const policyAnalysisStatusSchema = z.enum(POLICY_ANALYSIS_STATUSES)
 export const policySourceTypeSchema = z.enum(POLICY_SOURCE_TYPES)
@@ -36,6 +41,30 @@ export const policyConfidenceSchema = z.number().min(0).max(1)
 export const policyTextSchema = z.string().trim().min(1).max(2_000)
 export const policyShortTextSchema = z.string().trim().min(1).max(300)
 export const policyCodeSchema = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._-]+$/)
+
+export const policyAnalysisAiFactSchema = z.strictObject({
+  id: idSchema,
+  category: z.enum(POLICY_AI_CANDIDATE_CATEGORIES),
+  canonicalField: z.string().regex(/^[a-z0-9_.-]{1,120}$/),
+  normalizedValue: policyAiNormalizedValueSchema,
+  originalValue: z.string().trim().min(1).max(1_000),
+  conditions: z.array(z.string().trim().min(1).max(500)).max(20),
+  exceptions: z.array(z.string().trim().min(1).max(500)).max(20),
+  reviewAction: z.enum(POLICY_AI_REVIEW_ACTIONS).extract(['accepted','edited']),
+  originRunId: idSchema,
+  originCandidateId: policyAiCandidateIdSchema,
+  originReviewVersion: z.number().int().min(1),
+  sourceAnchorIds: z.array(policyAiAnchorIdSchema).min(1).max(20),
+  sourceReferenceIds: z.array(idSchema).min(1).max(20),
+  providerConfidence: policyConfidenceSchema,
+  sourceQuality: z.enum(POLICY_AI_SOURCE_QUALITIES),
+  providerId: z.enum(POLICY_AI_PROVIDER_IDS),
+  providerVersion: z.string().trim().min(1).max(80),
+  modelId: z.string().trim().min(1).max(80),
+  reviewedByUserId: userIdSchema,
+  reviewedAt: utcDateTimeSchema,
+})
+export type PolicyAnalysisAiFactDto = z.infer<typeof policyAnalysisAiFactSchema>
 
 export const policySourceReferenceSchema = z.strictObject({
   id: idSchema,
@@ -268,6 +297,7 @@ export const policyAnalysisVersionSchema = z.strictObject({
   isActive: z.boolean(),
   version: entityVersionSchema,
   createdAt: utcDateTimeSchema,
+  aiCandidateFacts: z.array(policyAnalysisAiFactSchema),
   sourceReferences: z.array(policySourceReferenceSchema),
   coverages: z.array(policyCoverageSchema),
   deductibles: z.array(policyDeductibleSchema),

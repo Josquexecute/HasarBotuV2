@@ -296,3 +296,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Full prompt, full provider output, poliçe/OCR metni, uzun excerpt, kişisel veri, session, secret, binary, mutlak yol, stack veya ham provider hatası yasaktır.
 - `planned`, `started`, `review_required`, `failed`, `provider_disabled`, `budget_blocked`, `cancelled` ve candidate conflict olayları mevcut AuditService ile ilgili transaction’da yazılır.
 - Raw provider response varsayılan olarak DB’de tutulmaz. Usage ledger append-only güvenli sayaçtır; audit’in yerine geçen ikinci bir olay sistemi değildir.
+
+### 6.13 Paket 27 review/promotion audit sınırı
+
+- Merkezi olaylar candidate için `accepted`, `edited`, `rejected`, `control_required`; promotion için `policy_ai_candidate.promoted` ve Paket 23 `policy_analysis.version_created` olaylarıdır.
+- Audit yalnız organization/case/run/candidate, review/promotion/analysis sürümü, eylem, evidence durumu, kaynak ve conflict sayıları, aktör, result code ve requestId taşır.
+- Human review metninin kanıt değeri, full prompt/provider output, poliçe/OCR metni, bounded source excerpt, kişisel veri, secret, mutlak path, SQL/stack veya ham hata audit’e kopyalanmaz.
+- Review, promotion provenance, yeni Paket 23 taslak sürümü, source link/conflict ve audit ilgili merkezi transaction içinde atomiktir. Append-only DB guard’ları yedek/restore sonrasında geçmiş kararın sessiz değişmesini engeller.

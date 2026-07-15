@@ -105,6 +105,7 @@ async function loadVersion(exec: Queryable, organizationId: string, caseId: stri
   const exclusionResult = await exec.query('SELECT * FROM policy_exclusions WHERE analysis_version_id=$1 ORDER BY code,id', [versionId])
   const requiredResult = await exec.query('SELECT * FROM policy_required_documents WHERE analysis_version_id=$1 ORDER BY code,id', [versionId])
   const scenarioResult = await exec.query('SELECT * FROM policy_scenario_rules WHERE analysis_version_id=$1 ORDER BY precedence DESC,rule_id', [versionId])
+  const aiFactResult = await exec.query('SELECT * FROM policy_analysis_ai_facts WHERE analysis_version_id=$1 ORDER BY category,canonical_field,id', [versionId])
   const evidenceResult = await exec.query('SELECT owner_type,owner_id,source_reference_id FROM policy_evidence_links WHERE analysis_version_id=$1 ORDER BY source_reference_id', [versionId])
   const conflictResult = await exec.query('SELECT * FROM policy_conflicts WHERE analysis_version_id=$1 ORDER BY created_at,id', [versionId])
   const evidence = new Map<string, string[]>()
@@ -152,7 +153,18 @@ async function loadVersion(exec: Queryable, organizationId: string, caseId: stri
     humanApprovalStatus: version.human_approval_status, approvedBy: version.approved_by_user_id,
     approvedAt: version.approved_at instanceof Date ? version.approved_at.toISOString() : version.approved_at,
     isActive: version.is_active, version: version.version,
-    createdAt: (version.created_at as Date).toISOString(), sourceReferences: refs,
+    createdAt: (version.created_at as Date).toISOString(),
+    aiCandidateFacts: aiFactResult.rows.map((row: Record<string, unknown>) => ({
+      id: row.id, category: row.category, canonicalField: row.canonical_field,
+      normalizedValue: row.normalized_value, originalValue: row.original_value,
+      conditions: row.conditions, exceptions: row.exceptions, reviewAction: row.review_action,
+      originRunId: row.origin_run_id, originCandidateId: row.origin_candidate_id,
+      originReviewVersion: row.origin_review_version, sourceAnchorIds: row.source_anchor_ids,
+      sourceReferenceIds: ids('ai_candidate_fact', row.id), providerConfidence: Number(row.provider_confidence),
+      sourceQuality: row.source_quality, providerId: row.provider_id, providerVersion: row.provider_version,
+      modelId: row.model_id, reviewedByUserId: row.reviewed_by_user_id,
+      reviewedAt: (row.reviewed_at as Date).toISOString(),
+    })), sourceReferences: refs,
     coverages: coverageResult.rows.map((row: Record<string, unknown>) => ({
       id: row.id, code: row.code, canonicalType: row.canonical_type, originalHeading: row.original_heading,
       originalWording: row.original_wording, inclusion: row.inclusion, limit: row.limit_data,

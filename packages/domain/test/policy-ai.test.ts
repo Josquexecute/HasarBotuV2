@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {buildPolicyAiSourceBundleHash,detectPolicyAiCandidateConflicts,detectPolicyAiPromptInjection,evaluatePolicyAiBudget,validatePolicyAiCandidateEvidence,type PolicyAiCandidateInput,type PolicyAiSourceBundleItem} from '../src/index.js'
+import {buildPolicyAiReviewSetHash,buildPolicyAiSourceBundleHash,detectPolicyAiCandidateConflicts,detectPolicyAiPromptInjection,evaluatePolicyAiBudget,evaluatePolicyAiHumanReview,evaluatePolicyAiPromotionReadiness,validatePolicyAiCandidateEvidence,type PolicyAiCandidateInput,type PolicyAiReviewFact,type PolicyAiSourceBundleItem} from '../src/index.js'
 
 const item=(overrides:Partial<PolicyAiSourceBundleItem>={}):PolicyAiSourceBundleItem=>({sourceAnchorId:'anchor-a',sourceType:'pdf_text',documentVersionId:'doc-v',extractionId:'extract',sourceItemId:'segment',pageNumber:1,text:'Koşullu muafiyet %10 uygulanır.',textHash:'a'.repeat(64),sourceQuality:'high',warnings:[],historicalSelected:false,...overrides})
 const candidate=(overrides:Partial<PolicyAiCandidateInput>={}):PolicyAiCandidateInput=>({candidateId:'candidate-a',category:'deductible',canonicalField:'deductible.conditional',normalizedValue:{percentage:10},originalValue:'%10',conditions:[],exceptions:[],sourceAnchorIds:['anchor-a'],providerConfidence:0.9,...overrides})
@@ -29,5 +29,20 @@ describe('kanıtlı policy AI domain çekirdeği',()=>{
     expect(proposals.find(item=>item.rightCandidateId==='candidate-b')).toMatchObject({status:'control_required',reason:'same_field_same_value_different_context'})
     expect(proposals.find(item=>item.rightCandidateId==='candidate-c')).toMatchObject({status:'control_required',reason:'same_field_same_value_different_source'})
     expect(detectPolicyAiCandidateConflicts([differentCondition,base,differentSource])).toEqual(proposals)
+  })
+  it('insan review kararını kanıtla yeniden doğrular ve accept ile provider gerçeğini değiştirtmez',()=>{
+    const original=candidate()
+    expect(evaluatePolicyAiHumanReview(original,'accepted',original,[item()],'validated').allowed).toBe(true)
+    expect(evaluatePolicyAiHumanReview(original,'accepted',{...original,originalValue:'%20'},[item()],'validated')).toEqual({allowed:false,code:'candidate_evidence_rejected'})
+    expect(evaluatePolicyAiHumanReview(original,'edited',{...original,originalValue:'%20',normalizedValue:{percentage:20}},[item()],'validated')).toEqual({allowed:false,code:'edited_evidence_rejected'})
+    expect(evaluatePolicyAiHumanReview(original,'rejected',original,[item()],'rejected_evidence').allowed).toBe(true)
+  })
+  it('review set hashini sırasız girdide deterministik üretir ve promotion blockerlarını açıklar',()=>{
+    const review=(candidateId:string,action:PolicyAiReviewFact['action'],reviewVersion=1):PolicyAiReviewFact=>({candidateId,action,reviewVersion,normalizedValue:{value:candidateId},originalValue:candidateId,conditions:[],exceptions:[],sourceAnchorIds:['anchor-a']})
+    const accepted=review('a','accepted'),rejected=review('b','rejected')
+    expect(buildPolicyAiReviewSetHash('run-1',[accepted,rejected])).toBe(buildPolicyAiReviewSetHash('run-1',[rejected,accepted]))
+    expect(evaluatePolicyAiPromotionReadiness(['a','b'],[accepted,rejected])).toMatchObject({canPromote:true,acceptedCount:1,rejectedCount:1,pendingCount:0})
+    expect(evaluatePolicyAiPromotionReadiness(['a','b'],[accepted])).toMatchObject({canPromote:false,pendingCount:1,blockers:['AI_REVIEW_PENDING']})
+    expect(evaluatePolicyAiPromotionReadiness(['a'],[review('a','control_required')])).toMatchObject({canPromote:false,blockers:['AI_NO_APPROVED_CANDIDATE']})
   })
 })

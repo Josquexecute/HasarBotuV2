@@ -584,3 +584,19 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Ana çalışma ağacında `npm install`, typecheck, lint, gerçek `_test` PostgreSQL kullanan **952 başarılı / 6 mevcut ortam-koşullu UI skip**, build, 0-vulnerability moderate audit ve diff-check geçti. Migration 0018 ileri/tekrar/rollback-reapply, tenant/immutable bundle/source/candidate/usage constraint'leri ile deterministic provider API smoke doğrulandı.
 - Gerçek API tarayıcı smoke'unda login, Kasko kaynak seçimi, provider-disabled ve budget preview, açık start onayı, 5 kanıt-bağlı candidate, conflict/control-required, idempotent replay, no-fallback ve audit/sızıntı kontrolleri geçti. 1366×768 açık/koyu ile 1920×1080 koyu temada yatay taşma ve console error/warning yoktu; iç çalışma alanı scroll'u erişilebilirdi.
 - Repository dışındaki `.git`/`node_modules`/`dist` içermeyen kopyada fresh `npm ci`, güvenli process ortamındaki `_test` PostgreSQL bağlantısıyla typecheck, lint, aynı 952/6 test sonucu ve build geçti; geçici kopya kaldırıldı. İlk clean-copy denemesindeki assertion dışı Vitest worker kapanması ikinci tam temiz geçişte tekrarlanmadı.
+
+## Paket 27 — AI adayı insan incelemesi ve Paket 23 taslak promotion (2026-07-15)
+
+- Candidate provider gerçekleri immutable bırakıldı; kabul, kanıtla sınırlı düzenleme, gerekçeli red ve kontrol gerekir kararları append-only review sürümleri olarak eklendi.
+- Migration 0019; review geçmişi, Paket 23 AI fact provenance’ı, promotion item/conflict geçmişi ve tenant/anchor/immutable DB guard’larını ekler.
+- Promotion önizlemesi bütün aday kararlarını ve deterministic review-set hash’ini doğrular. Yalnız kabul/düzenleme adayları kaynak sayfa/anchor ve conflict’leri korunarak yeni Paket 23 sürümüne taşınır; insan onayı daima pending kalır.
+- Kasko detayındaki AI Alan Adayları paneli gerçek accept/edit/reject/control ve açık promotion onayı sunar. Paket 23 görünümü taşınan insan-onaylı taslak gerçekleri kaynaklarıyla gösterir; API modunda mock fallback yoktur.
+- Karar: HB-2026-033. Gerçek cloud provider, provider secret/PII payload politikası ve otomatik analiz onayı eklenmedi; File Agent/job/IPC/dependency değişmedi.
+
+### Doğrulama durumu (Paket 27)
+
+- Ana çalışma ağacında `npm install`, typecheck, lint, gerçek `_test` PostgreSQL kullanan **965 başarılı / 6 mevcut ortam-koşullu UI skip**, build, 0-vulnerability moderate audit ve diff-check geçti. Kritik PostgreSQL/API/File Agent/Paket 27 testi skip değildir.
+- Migration 0019 ileri/tekrar/rollback-reapply, sequential append-only review, tenant/source-anchor bütünlüğü, immutable provider fact, approved fact guard ve atomik promotion/rollback kontrolleri gerçek PostgreSQL'de geçti. API akışı; dört review eylemi, stale/idempotency, source/conflict korunması ve audit sızıntı sınırını doğruladı.
+- Gerçek API tarayıcı smoke'unda login, Kasko AI aday paneli, sırasıyla red→kabul ve control_required→düzenleme, promotion preview/onay, yeni `draft/pending` Paket 23 sürümü ve tekrar promotion blokajı geçti. 1366×768 açık/koyu ile 1920×1080 koyu temada yatay sayfa taşması ve başarılı akışta console warning/error yoktu; API kesintisinde mock fallback yerine güvenli bağlantı hatası gösterildi.
+- Windows'ta iç içe gerçek PDF/OCR `worker_threads` testlerini uzun root zincirinde kararsız kapatan Vitest `forks` havuzu yalnız API/File Agent test harness'inde `threads` olarak sabitlendi; runtime, File Agent protokolü, IPC, dependency ve fiziksel yazma yolu değişmedi.
+- Repository dışındaki `.git`/`node_modules`/`dist` içermeyen kopyada fresh `npm ci`, güvenli process ortamındaki `_test` PostgreSQL bağlantısıyla typecheck, lint, aynı 965/6 test sonucu ve build geçti; geçici kopya kaldırıldı.

@@ -73,8 +73,8 @@ import {
   policyOcrPagesResponseSchema,
   policyOcrRunResponseSchema,
 } from './v1/policy-ocr/dto.js'
-import {policyAiCancelRequestSchema,policyAiPlanRequestSchema,policyAiStartRequestSchema} from './v1/policy-ai/commands.js'
-import {policyAiRunResponseSchema,policyAiCandidatesResponseSchema,policyAiProviderOutputSchema,policyAiUsageResponseSchema} from './v1/policy-ai/dto.js'
+import {policyAiCancelRequestSchema,policyAiCandidateReviewRequestSchema,policyAiPlanRequestSchema,policyAiPromotionRequestSchema,policyAiStartRequestSchema} from './v1/policy-ai/commands.js'
+import {policyAiCandidateReviewResponseSchema,policyAiCandidatesResponseSchema,policyAiPromotionPreviewResponseSchema,policyAiPromotionResponseSchema,policyAiProviderOutputSchema,policyAiRunResponseSchema,policyAiUsageResponseSchema} from './v1/policy-ai/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -144,6 +144,11 @@ export const JSON_SCHEMA_TARGETS = {
   'policy-ai-plan-request': policyAiPlanRequestSchema,
   'policy-ai-start-request': policyAiStartRequestSchema,
   'policy-ai-cancel-request': policyAiCancelRequestSchema,
+  'policy-ai-candidate-review-request': policyAiCandidateReviewRequestSchema,
+  'policy-ai-candidate-review-response': policyAiCandidateReviewResponseSchema,
+  'policy-ai-promotion-request': policyAiPromotionRequestSchema,
+  'policy-ai-promotion-preview-response': policyAiPromotionPreviewResponseSchema,
+  'policy-ai-promotion-response': policyAiPromotionResponseSchema,
   'policy-ai-provider-output': policyAiProviderOutputSchema,
   'policy-ai-run-response': policyAiRunResponseSchema,
   'policy-ai-candidates-response': policyAiCandidatesResponseSchema,

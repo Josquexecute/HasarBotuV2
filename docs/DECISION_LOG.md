@@ -574,4 +574,15 @@ Etkisi: Migration `0017_policy_ocr_pipeline`; exact pinli beş File Agent depend
 6. Exact run identity ve zorunlu `Idempotency-Key` ikinci run/provider çağrısını engeller. Kaynak değişimi eski bundle/run’ı değiştirmez ve stale/superseded sınırında kalır. Candidate çatışmaları sessiz çözülmez; yalnız conflict proposal saklanır.
 7. Bu pakette accept/edit/reject, Paket 23 promotion/approval, gerçek provider, PII payload politikası veya operasyonel otomasyon yoktur. Human review/promotion Paket 27’ye; gerçek provider ve PII güvenliği Paket 28’e bırakılır.
 
+## 2026-07-15 — HB-2026-033: AI adayı insan incelemesi ve Paket 23 taslak promotion sınırı
+
+1. Provider candidate gerçekleri immutable kalır. Kullanıcı kararı `accepted | edited | rejected | control_required` olarak yeni, append-only bir review sürümü üretir; eski karar değiştirilmez veya silinmez.
+2. Kabul, provider’ın kanıt durumunu yükseltmez. Düzenlenen değer, koşul ve istisnalar aynı source-anchor kümesi üzerinde server tarafından yeniden doğrulanır; kanıtı bulunmayan değişiklik kabul edilmez.
+3. Promotion önizlemesi bütün adayların güncel insan kararını, deterministik review-set hash’ini, hedef analiz optimistic version’ını ve engel/uyarıları taşır. Bekleyen aday varken veya kabul edilebilir aday yokken promotion yapılmaz.
+4. Yalnız `accepted` ve `edited` adaylar Paket 23 içinde yeni bir analiz sürümüne taşınır. Sonuç `draft`, `control_required` veya `conflict_detected` durumunda ve insan onayı `pending` olarak oluşturulur; hiçbir AI adayı otomatik onaylı poliçe kuralı veya operasyonel karar olmaz.
+5. Promotion sourceAnchor, document/documentVersion, sayfa, bounded excerpt, provider kimliği ve review provenance’ını korur. Reddedilen ve kontrol gereken adaylar promotion dışı kalır fakat karar geçmişleri saklanır.
+6. İki taşınan aday arasındaki conflict sessizce çözülmez; hem promotion provenance’ında hem Paket 23 conflict kaydında korunur. Paket 23 onay kuralları açık conflict’i fail-closed tutmaya devam eder.
+7. Review ve promotion idempotency, tenant/RBAC, optimistic locking, merkezi transaction ve AuditService sınırındadır. Audit tam provider çıktısı, poliçe/OCR metni, uzun excerpt, kişisel veri, secret veya mutlak yol taşımaz.
+8. Gerçek provider, provider secret’ı ve PII payload politikası hâlâ Paket 28 kapsamıdır. File Agent, job protokolü, filesystem ve dependency bu kararla değişmez.
+
 Etkisi: Migration `0018_policy_ai_orchestration`; saf source-bundle/evidence/conflict domain’i; strict contracts; tenant/RBAC/idempotency/audit API’si ve Kasko detayında salt-okunur “AI Alan Adayları” paneli. Yeni dependency, IPC, File Agent değişikliği veya fiziksel veri yazma yolu yoktur.

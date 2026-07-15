@@ -911,6 +911,909 @@
           "outputSchemaVersion": {
             "type": "string",
             "const": "policy-ai-candidates/1.0.0"
+          },
+          "review": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "string",
+                    "const": "policy-ai-human-review/1.0.0"
+                  },
+                  "runId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  "candidateId": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                  },
+                  "reviewVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "accepted",
+                      "edited",
+                      "rejected",
+                      "control_required"
+                    ]
+                  },
+                  "normalizedValue": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 2000
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            {
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "maxLength": 2000
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                          },
+                                          "additionalProperties": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "maxProperties": 20,
+                                          "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                    },
+                                    "additionalProperties": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                          },
+                                          "additionalProperties": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "maxProperties": 20,
+                                          "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                        }
+                                      ]
+                                    },
+                                    "maxProperties": 20,
+                                    "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                              },
+                              "additionalProperties": {
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "maxLength": 2000
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                          },
+                                          "additionalProperties": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "maxProperties": 20,
+                                          "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                    },
+                                    "additionalProperties": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                          },
+                                          "additionalProperties": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "maxProperties": 20,
+                                          "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                        }
+                                      ]
+                                    },
+                                    "maxProperties": 20,
+                                    "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                  }
+                                ]
+                              },
+                              "maxProperties": 20,
+                              "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                        },
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            {
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "maxLength": 2000
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                          },
+                                          "additionalProperties": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "maxProperties": 20,
+                                          "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                    },
+                                    "additionalProperties": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                          },
+                                          "additionalProperties": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "maxProperties": 20,
+                                          "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                        }
+                                      ]
+                                    },
+                                    "maxProperties": 20,
+                                    "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                              },
+                              "additionalProperties": {
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "maxLength": 2000
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                          },
+                                          "additionalProperties": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "maxProperties": 20,
+                                          "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                    },
+                                    "additionalProperties": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[a-zA-Z0-9_.-]{1,80}$"
+                                          },
+                                          "additionalProperties": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "maxProperties": 20,
+                                          "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                        }
+                                      ]
+                                    },
+                                    "maxProperties": 20,
+                                    "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                                  }
+                                ]
+                              },
+                              "maxProperties": 20,
+                              "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                            }
+                          ]
+                        },
+                        "maxProperties": 20,
+                        "x-hasarbotu-runtime-validation": "max-object-properties-20"
+                      }
+                    ]
+                  },
+                  "originalValue": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "conditions": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "exceptions": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "sourceAnchorIds": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "evidenceStatus": {
+                    "type": "string",
+                    "enum": [
+                      "validated",
+                      "control_required",
+                      "rejected_evidence"
+                    ]
+                  },
+                  "reviewedByUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  "reviewedAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                    "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "runId",
+                  "candidateId",
+                  "reviewVersion",
+                  "action",
+                  "normalizedValue",
+                  "originalValue",
+                  "conditions",
+                  "exceptions",
+                  "sourceAnchorIds",
+                  "reason",
+                  "evidenceStatus",
+                  "reviewedByUserId",
+                  "reviewedAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -931,7 +1834,8 @@
           "providerVersion",
           "modelId",
           "promptTemplateVersion",
-          "outputSchemaVersion"
+          "outputSchemaVersion",
+          "review"
         ],
         "additionalProperties": false
       }

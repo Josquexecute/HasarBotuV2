@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "preview": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "policy-ai-promotion/1.0.0"
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "runVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "reviewSetHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "totalCandidateCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "acceptedCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "editedCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "rejectedCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "controlRequiredCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pendingCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "promotableCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sourceCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "conflictCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "preservedConflictCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "canPromote": {
+          "type": "boolean"
+        },
+        "blockers": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]{1,64}$"
+          }
+        },
+        "warnings": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]{1,64}$"
+          }
+        },
+        "targetAnalysisId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "targetAnalysisVersion": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nextAnalysisVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "runId",
+        "runVersion",
+        "reviewSetHash",
+        "totalCandidateCount",
+        "acceptedCount",
+        "editedCount",
+        "rejectedCount",
+        "controlRequiredCount",
+        "pendingCount",
+        "promotableCount",
+        "sourceCount",
+        "conflictCount",
+        "preservedConflictCount",
+        "canPromote",
+        "blockers",
+        "warnings",
+        "targetAnalysisId",
+        "targetAnalysisVersion",
+        "nextAnalysisVersion"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "preview"
+  ],
+  "additionalProperties": false
+}

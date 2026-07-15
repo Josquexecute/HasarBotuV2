@@ -365,3 +365,11 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Start zorunlu `Idempotency-Key`, `expectedVersion` ve `expectedSourceBundleHash` kullanır. Exact replay ikinci run veya provider çağrısı oluşturmaz.
 - Provider output schema strict’tir; unknown alan, enum dışı değer, non-finite sayı, bounded olmayan içerik, duplicate candidate ve geçersiz anchor reddedilir.
 - Cevap yalnız bounded excerpt ve güvenli source metadata taşır; full prompt/output, binary, mutlak yol, secret ve belge dump’ı içermez.
+
+## 16. Paket 27 candidate review ve promotion contracts/API
+
+- `POST /api/v1/cases/:caseId/policy-ai-extractions/:runId/candidates/:candidateId/review`: `expectedReviewVersion` ve `accepted | edited | rejected | control_required`; düzenleme değer/koşul/istisna taşır, red/kontrol gerekçe zorlar.
+- `GET /api/v1/cases/:caseId/policy-ai-extractions/:runId/promotion-preview`: güncel review-set hash, karar sayıları, blockers/warnings ve hedef Paket 23 analysis/version bilgisini döndürür; yazma yapmaz.
+- `POST /api/v1/cases/:caseId/policy-ai-extractions/:runId/promote`: zorunlu Idempotency-Key, açık `confirmed`, expected run/review-set/analysis version ile yeni Paket 23 taslak sürümü üretir.
+- Candidate listesi son append-only review’ı taşır. Paket 23 detail cevabı promote edilen generic AI fact provenance’ını ve source reference kimliklerini gösterir.
+- Tenant dışı kaynak/aday/hedef 404; rol reddi 403; stale review/promotion 409; response içinde full prompt/output, poliçe metni, binary, secret veya mutlak yol yoktur.

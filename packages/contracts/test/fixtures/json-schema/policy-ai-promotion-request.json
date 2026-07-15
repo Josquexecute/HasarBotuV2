@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    },
+    "expectedRunVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "expectedReviewSetHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "expectedAnalysisId": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "expectedAnalysisVersion": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "confirmed",
+    "expectedRunVersion",
+    "expectedReviewSetHash",
+    "expectedAnalysisId",
+    "expectedAnalysisVersion"
+  ],
+  "additionalProperties": false
+}

@@ -302,3 +302,12 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Provider confidence kaynak kalitesini yükseltemez. Düşük veya control-required OCR kaynağı candidate’ı insan kontrolünde tutar.
 - Aynı alanın farklı değerleri, farklı muafiyet/limit/servis/parça şartları ve PDF/OCR farkları sessiz çözülmez. Genel muafiyetsiz sonucu koşullu muafiyeti ezmez.
 - Bütçe bütün değerleri safe integer minor unit’tir. Disabled/budget blocked fail-closed’tur ve provider çağrısı yoktur.
+
+## AI candidate insan inceleme ve promotion kuralları — Paket 27
+
+- Review şeması `policy-ai-human-review/1.0.0`, promotion şeması `policy-ai-promotion/1.0.0` sürümündedir. Güncel review set hash’i aday kimliği, review sürümü, eylem, değer, koşul/istisna ve anchor kimliklerinden deterministik üretilir.
+- `accepted`, provider candidate değerini ve kaynaklarını aynen korur. `edited`, aynı anchor kümesi üzerinde yeni değer/koşul/istisnayı yeniden kanıtlar. `rejected` ve `control_required` gerekçe taşır ve promotion kapsamına girmez.
+- Candidate review geçmişi append-only’dir. Optimistic `expectedReviewVersion` eski formun yeni kararı ezmesini engeller.
+- Promotion için her candidate’ın güncel kararı bulunmalı, en az bir kabul/düzenleme olmalı, source policy belgesi tekil olmalı ve run/target analysis/review-set sürümleri değişmemiş olmalıdır.
+- Promotion yeni Paket 23 sürümünü insan onayı `pending` ile oluşturur. Eksik kontrol kararı varsa `control_required`; taşınan conflict varsa `conflict_detected`; aksi durumda `draft` olur.
+- Provider confidence kaynak kalitesini veya insan onayını yükseltmez. Promotion sonrası da Paket 23 immutable approval ve conflict kuralları aynen uygulanır.

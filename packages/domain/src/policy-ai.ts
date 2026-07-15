@@ -11,6 +11,9 @@ export const POLICY_AI_CONFLICT_STATUSES = ['none','duplicate','conflict_detecte
 export const POLICY_AI_SOURCE_QUALITIES = ['high','medium','low','control_required'] as const
 export const POLICY_AI_SOURCE_COMPLETENESS = ['complete','partial','control_required','unknown'] as const
 export const POLICY_AI_HUMAN_REVIEW_STATUSES = ['pending','control_required'] as const
+export const POLICY_AI_REVIEW_ACTIONS = ['accepted','edited','rejected','control_required'] as const
+export const POLICY_AI_REVIEW_SCHEMA_VERSION = 'policy-ai-human-review/1.0.0' as const
+export const POLICY_AI_PROMOTION_SCHEMA_VERSION = 'policy-ai-promotion/1.0.0' as const
 export const POLICY_AI_SOURCE_TYPES = ['pdf_text','ocr'] as const
 export const POLICY_AI_MAX_ANCHOR_TEXT = 4_000
 export const POLICY_AI_MAX_BUNDLE_ITEMS = 200
@@ -28,6 +31,7 @@ export type PolicyAiConflictStatus=(typeof POLICY_AI_CONFLICT_STATUSES)[number]
 export type PolicyAiSourceQuality=(typeof POLICY_AI_SOURCE_QUALITIES)[number]
 export type PolicyAiSourceCompleteness=(typeof POLICY_AI_SOURCE_COMPLETENESS)[number]
 export type PolicyAiSourceType=(typeof POLICY_AI_SOURCE_TYPES)[number]
+export type PolicyAiReviewAction=(typeof POLICY_AI_REVIEW_ACTIONS)[number]
 
 export interface PolicyAiSourceBundleItem {
   readonly sourceAnchorId:string
@@ -159,4 +163,67 @@ export function detectPolicyAiCandidateConflicts(candidates:readonly PolicyAiCan
   const generalNone=deductibles.find(item=>item.canonicalField==='deductible.general'&&item.normalizedValue==='none')
   if(generalNone!==undefined)for(const conditional of deductibles.filter(item=>item.canonicalField==='deductible.conditional'))result.push({leftCandidateId:generalNone.candidateId,rightCandidateId:conditional.candidateId,status:'control_required',reason:'general_no_deductible_does_not_override_conditional'})
   return result
+}
+
+export interface PolicyAiReviewFact {
+  readonly candidateId:string
+  readonly reviewVersion:number
+  readonly action:PolicyAiReviewAction
+  readonly normalizedValue:unknown
+  readonly originalValue:string
+  readonly conditions:readonly string[]
+  readonly exceptions:readonly string[]
+  readonly sourceAnchorIds:readonly string[]
+}
+
+export function buildPolicyAiReviewSetHash(runId:string,reviews:readonly PolicyAiReviewFact[]):string {
+  const ordered=[...reviews].sort((left,right)=>left.candidateId.localeCompare(right.candidateId,'en'))
+  return sha256Text(canonical({schemaVersion:POLICY_AI_REVIEW_SCHEMA_VERSION,runId,reviews:ordered}))
+}
+
+export type PolicyAiReviewDecision=
+  | {readonly allowed:true;readonly evidence:PolicyAiEvidenceValidation}
+  | {readonly allowed:false;readonly code:'candidate_evidence_rejected'|'edited_evidence_rejected'}
+
+export function evaluatePolicyAiHumanReview(
+  original:PolicyAiCandidateInput,
+  action:PolicyAiReviewAction,
+  reviewed:PolicyAiCandidateInput,
+  sources:readonly PolicyAiSourceBundleItem[],
+  originalValidationStatus:PolicyAiValidationStatus,
+):PolicyAiReviewDecision {
+  if(action==='rejected'||action==='control_required')return {allowed:true,evidence:{status:'control_required',sourceQuality:'control_required',reason:'human_review_decision'}}
+  if(originalValidationStatus==='rejected_evidence')return {allowed:false,code:'candidate_evidence_rejected'}
+  const evidence=validatePolicyAiCandidateEvidence(reviewed,sources)
+  if(evidence.status==='rejected_evidence')return {allowed:false,code:action==='edited'?'edited_evidence_rejected':'candidate_evidence_rejected'}
+  if(action==='accepted'&&canonical({normalizedValue:reviewed.normalizedValue,originalValue:reviewed.originalValue,conditions:reviewed.conditions,exceptions:reviewed.exceptions})!==canonical({normalizedValue:original.normalizedValue,originalValue:original.originalValue,conditions:original.conditions,exceptions:original.exceptions}))return {allowed:false,code:'edited_evidence_rejected'}
+  return {allowed:true,evidence}
+}
+
+export interface PolicyAiPromotionReadiness {
+  readonly canPromote:boolean
+  readonly acceptedCount:number
+  readonly editedCount:number
+  readonly rejectedCount:number
+  readonly controlRequiredCount:number
+  readonly pendingCount:number
+  readonly blockers:readonly ('AI_REVIEW_PENDING'|'AI_NO_APPROVED_CANDIDATE')[]
+}
+
+export function evaluatePolicyAiPromotionReadiness(candidateIds:readonly string[],reviews:readonly PolicyAiReviewFact[]):PolicyAiPromotionReadiness {
+  const latest=new Map<string,PolicyAiReviewFact>()
+  for(const review of reviews){
+    const current=latest.get(review.candidateId)
+    if(current===undefined||review.reviewVersion>current.reviewVersion)latest.set(review.candidateId,review)
+  }
+  const actions=candidateIds.map(candidateId=>latest.get(candidateId)?.action)
+  const acceptedCount=actions.filter(action=>action==='accepted').length
+  const editedCount=actions.filter(action=>action==='edited').length
+  const rejectedCount=actions.filter(action=>action==='rejected').length
+  const controlRequiredCount=actions.filter(action=>action==='control_required').length
+  const pendingCount=actions.filter(action=>action===undefined).length
+  const blockers:('AI_REVIEW_PENDING'|'AI_NO_APPROVED_CANDIDATE')[]=[]
+  if(pendingCount>0)blockers.push('AI_REVIEW_PENDING')
+  if(acceptedCount+editedCount===0)blockers.push('AI_NO_APPROVED_CANDIDATE')
+  return {canPromote:blockers.length===0,acceptedCount,editedCount,rejectedCount,controlRequiredCount,pendingCount,blockers}
 }

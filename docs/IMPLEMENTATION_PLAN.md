@@ -720,3 +720,14 @@ Uygulanan sıra:
 6. Kasko detayında salt-okunur plan/candidate/source paneli ve no-fallback durumları.
 
 Paket 27 accept/edit/reject ve Paket 23’e promotion yapacaktır. Paket 28 gerçek provider, secret ve PII payload güvenliği sınırını kuracaktır. Paket 26 bu işlere başlamaz.
+
+## Paket 27 — AI adayı insan incelemesi ve Paket 23 promotion
+
+- [x] Saf domain: review eylemleri, kanıtı yeniden doğrulanan düzenleme, deterministik review-set hash ve promotion readiness.
+- [x] Contracts: review komutu/cevabı, promotion preview/confirm/sonuç DTO’ları ve deterministik JSON Schema fixture’ları.
+- [x] Migration 0019: append-only review sürümü, Package 23 AI fact provenance’ı, promotion item/conflict geçmişi ve DB guard’ları.
+- [x] API: tenant/RBAC/idempotency/optimistic locking; accept/edit/reject/control; preview ve atomik yeni Paket 23 taslak sürümü.
+- [x] UI: candidate bazında insan kararları, gerekçeli modal, promotion özeti/onayı ve Paket 23 taslak gerçek görünümü; API modunda fallback yok.
+- [x] Tam root, gerçek PostgreSQL/API, tarayıcı ve repository dışı fresh `npm ci` doğrulaması tamamlandı; PROJECT_STATUS gerçek sonuçlarla güncellendi.
+
+Kapsam dışı: Paket 23 otomatik approval, gerçek cloud provider, provider secret/PII payload politikası, File Agent, background worker, üretim migration ve sonraki paket.
