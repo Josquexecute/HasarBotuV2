@@ -652,3 +652,15 @@ Etkisi: API composition/config, salt-okunur provider availability contract/endpo
 8. Kanıt, emsal ve approval event geçmişi append-only; approved/superseded sürüm immutable’dır. Düzeltme yeni version üretir.
 
 Etkisi: Migration `0022_traffic_value_loss_core`; saf domain evaluator; strict contracts/JSON Schema; tenant/RBAC/idempotency/audit API. UI, AI, web scraping, SBM entegrasyonu, File Agent ve yeni dependency yoktur.
+
+## 2026-07-16 — HB-2026-039: Trafik değer kaybı kullanıcı çalışma alanı ve kanıt seçimi
+
+1. Dosya Detayı > Değer Kaybı sekmesi gerçek API modunda Paket 32’nin mevcut read/version/submit/approve/reject uçlarını `TrafficValueLossDataPort` üzerinden kullanır. Yeni endpoint, migration, background iş veya paralel iş kuralı oluşturulmaz.
+2. Kullanıcı formu araç, kusur, hasarlı parça, önceki hasar ve piyasa değerlerini taslak girdi olarak toplar. Her hesaplama mevcut sürümü değiştirmek yerine yeni immutable assessment version üretir; önceki sürümler aynı çalışma alanındaki geçmişte kalır.
+3. Yalnız `ready + hashVerified + sizeVerified + verifiedAt` documentVersion kanıt seçimine açılır. Belge seçmek tek başına hiçbir alanı doğrulanmış saymaz; kullanıcı belgeyle desteklenen kanıt alanlarını tek tek işaretler. Adapter gerçek `contentHash` değerini yalnız API komut kanıtına taşır; hash, mutlak yol ve belge içeriği kullanıcıya gösterilmez.
+4. Piyasa emsalleri kaza öncesi/onarım sonrası taraf, minor-unit tutar, kilometre, LocalDate, güvenli `https://` veya `ref:` kaynak ve kullanıcı doğrulama/çelişki bayrağıyla girilir. Kullanıcı gözlemi `control_required` kalır; doğrulanmış documentVersion yerine geçmez.
+5. Belirsizlikler ve `canSubmitForApproval` sonucu server cevabından gösterilir. Bloklayan belirsizlik varken submit kapalıdır. Submit açık teyit ister; approve/reject yalnız mevcut rol sınırı içinde ve ayrı insan inceleme teyidi/gerekçesiyle yürür.
+6. API hatasında mock fallback yoktur. Mock moddaki kabul edilmiş Değer Kaybı prototipi aynen korunur. Paket 33 yalnız Trafik vakayı gerçek çekirdeğe bağlar; Kasko için sahte hesaplama üretilmez ve destek dışı sınır açık gösterilir.
+7. UI dense masaüstü düzenini, görünür iç scroll alanlarını, açık/koyu temayı ve 1366×768 ile 1920×1080 taşma sınırını korur. File Agent, IPC, fiziksel dosya erişimi, ilan scraping, SBM entegrasyonu, AI tahmini, rapor/PDF ve yeni dependency yoktur.
+
+Etkisi: Trafik Değer Kaybı UI DataPort/adapter/hook’u; gerçek dosya detayında kanıt/emsal girişi, taslak, belirsizlik, geçmiş, submit ve insan onayı çalışma alanı. Paket 32 domain/API kural sürümü `2026.07.01.1` değişmez.

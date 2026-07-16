@@ -105,7 +105,8 @@ function mapDocumentVersions(value: unknown): readonly DocumentVersionMetadataRe
     if (!isRecord(candidate) || typeof candidate.id !== 'string' || typeof candidate.documentId !== 'string'
       || typeof candidate.versionNumber !== 'number' || typeof candidate.originalFileName !== 'string'
       || typeof candidate.displayName !== 'string' || typeof candidate.mimeType !== 'string'
-      || typeof candidate.byteSize !== 'number' || !isPhysicalStatus(candidate.status)) {
+      || typeof candidate.byteSize !== 'number' || typeof candidate.contentHash !== 'string'
+      || !/^[a-f0-9]{64}$/.test(candidate.contentHash) || !isPhysicalStatus(candidate.status)) {
       throw new HttpDocumentWorkspaceError('unavailable', 'document version response is invalid')
     }
     if (candidate.status === 'ready' && (candidate.hashVerified !== true || candidate.sizeVerified !== true || typeof candidate.verifiedAt !== 'string')) {
@@ -120,6 +121,7 @@ function mapDocumentVersions(value: unknown): readonly DocumentVersionMetadataRe
       displayName: candidate.displayName,
       mimeType: candidate.mimeType,
       byteSize: candidate.byteSize,
+      contentHash: candidate.contentHash,
       relativePath: ensureSafePath(candidate.relativePath),
       status: candidate.status,
       hashVerified: candidate.hashVerified === true,

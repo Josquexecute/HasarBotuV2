@@ -800,3 +800,17 @@ Kapsam dışı: yeni provider/model, gerçek müşteri verisiyle çağrı, secre
 - [x] Tam root kapıları, canlı TCP smoke ve repository dışı fresh `npm ci` doğrulaması tamamlandı; path bazlı stage ve atomik commit son teslim adımıdır.
 
 Kapsam dışı: Kasko değer kaybı, UI entegrasyonu, ilan scraping, SBM entegrasyonu, AI rayiç tahmini, rapor/PDF üretimi, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 33 — Trafik değer kaybı gerçek dosya detayı entegrasyonu
+
+- [x] Paket 32 API cevaplarını strict runtime kontrolüyle okuyan `TrafficValueLossDataPort` ve React hook sınırını ekle.
+- [x] API modunda Trafik vaka için araç/kusur/parça/piyasa değerleri, güvenli emsal ve doğrulanmış belge metadata kanıtı girişini bağla.
+- [x] Belge seçimini alan-bazlı açık kullanıcı işaretlemesine bağla; ready fakat fiziksel doğrulama kanıtı eksik sürümü kanıt seçimine alma.
+- [x] Server hesaplama taslağı, kural sürümü, gerekçe/kaynak, belirsizlik ve submit uygunluğunu göster.
+- [x] Immutable assessment version oluşturma, sürüm geçmişi, submit teyidi ve rol-kapsamlı insan approve/reject akışını ekle.
+- [x] 401/403/404/409/5xx/ağ durumlarında güvenli mesaj ve API modunda no-fallback davranışını koru.
+- [x] Mock Değer Kaybı prototipini değiştirme; API Kasko vakada sahte sonuç üretme.
+- [x] Unit/component, gerçek PostgreSQL/API ve gerçek tarayıcı kapılarını; açık/koyu 1366×768 ve 1920×1080 taşma/console kontrolünü çalıştır.
+- [x] Tam root ve repository dışı fresh `npm ci` kalite zincirini tamamla; yalnız Paket 33 dosyalarını path bazlı commit et.
+
+Kapsam dışı: yeni migration/endpoint/domain formülü, Kasko değer kaybı, ilan scraping, SBM entegrasyonu, AI rayiç tahmini, PDF/rapor, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.

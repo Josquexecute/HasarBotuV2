@@ -91,3 +91,13 @@ Varsayılan Kompakt.
 - Candidate kartında provider değeri, insan kararı, koşul/istisna, confidence, kaynak kalitesi ve güvenli kanıt açma eylemi birlikte görünür.
 - Kanıt dialogu masaüstü yoğunluğunu korur; bounded excerpt ve güvenli metadata görünür, uzun kimlikler satır kırar, Escape ile kapanır.
 - Promotion sonrası yeni Paket 23 analiz sürümü sayfa yenilenmeden aynı çalışma alanında gösterilir. Taslak uygulama ile nihai insan onayı görsel ve metinsel olarak ayrılır.
+
+## Trafik değer kaybı çalışma alanı
+
+- Gerçek API modunda yalnız Trafik dosyasının Değer Kaybı sekmesinde; üst kural/sürüm özeti, ana girdi-kanıt alanı ve sağ sonuç/onay/geçmiş sütunu görünür.
+- Araç/kusur/piyasa alanları kompakt form grid’inde; hasarlı parçalar satır düzeninde; emsaller yatay iç scroll taşıyan yoğun tabloda gösterilir.
+- Ready/verified belge metadata listesinde belge seçimi ve desteklediği kanıt alanları ayrı checkbox’lardır. Mutlak yol, hash veya içerik gösterilmez.
+- Hesaplama taslağı, resmî kural linkleri, reasoning ve belirsizlikler ayrı panellerdir. Control-required öğe kod, alan ve kullanıcı dostu gerekçeyle görünür.
+- Submit ve insan onayı açık checkbox teyidi ister. Reddetme gerekçesi zorunludur; optimistic conflict kullanıcıya güncel veriyi yükleme eylemi sunar.
+- 1920×1080’de ana/yan sütun; 1366×768’de tek ana akış ve iki sütunlu sonuç alanı kullanılır. Büyük emsal tablosu sayfayı taşırmaz; kendi görünür scrollbar’ını korur.
+- Açık/koyu tema, klavye label ilişkileri, loading/empty/401/403/404/409/5xx/network ve no-fallback durumları korunur.

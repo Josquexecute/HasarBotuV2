@@ -28,7 +28,7 @@ function successFetch(): typeof fetch {
       controlRequiredCount: 1,
       evaluatedAt: '2026-07-14T08:00:00.000Z',
     })
-    if (url.includes(`/documents/${DOCUMENT_ID}`)) return jsonResponse(200, { document: { documentType: 'casco_policy', versions: [{ id: 'version-1', documentId: DOCUMENT_ID, versionNumber: 3, originalFileName: 'kasko-police.pdf', displayName: 'Kasko Poliçesi', mimeType: 'application/pdf', byteSize: 3072, relativePath: 'EVRAK/kasko-police.pdf', status: 'ready', hashVerified: true, sizeVerified: true, verifiedAt: '2026-07-14T08:00:00.000Z' }] } })
+    if (url.includes(`/documents/${DOCUMENT_ID}`)) return jsonResponse(200, { document: { documentType: 'casco_policy', versions: [{ id: 'version-1', documentId: DOCUMENT_ID, versionNumber: 3, originalFileName: 'kasko-police.pdf', displayName: 'Kasko Poliçesi', mimeType: 'application/pdf', byteSize: 3072, contentHash: 'a'.repeat(64), relativePath: 'EVRAK/kasko-police.pdf', status: 'ready', hashVerified: true, sizeVerified: true, verifiedAt: '2026-07-14T08:00:00.000Z' }] } })
     if (url.includes('/documents?')) return jsonResponse(200, { items: [{ id: DOCUMENT_ID, documentType: 'casco_policy' }], pageInfo: { page: 1, pageSize: 100, totalItems: 1, totalPages: 1 } })
     if (url.includes('/photos?')) return jsonResponse(200, { items: [{ id: 'photo-1', originalFileName: 'hasar.jpg', displayName: 'Hasar Ön', mimeType: 'image/jpeg', byteSize: 4096, relativePath: 'HASAR/hasar.jpg', status: 'pending', hashVerified: false, sizeVerified: false, verifiedAt: null }], pageInfo: { page: 1, pageSize: 100, totalItems: 1, totalPages: 1 } })
     return jsonResponse(404, {})

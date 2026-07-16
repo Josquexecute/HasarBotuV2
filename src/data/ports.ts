@@ -98,6 +98,7 @@ export interface DocumentVersionMetadataRecord {
   readonly displayName: string
   readonly mimeType: string
   readonly byteSize: number
+  readonly contentHash: string
   readonly relativePath: string
   readonly status: DocumentPhysicalStatus
   readonly hashVerified: boolean

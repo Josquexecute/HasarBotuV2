@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import { createHttpDocumentWorkspaceAdapter, HttpDocumentWorkspaceError } from './documentHttpAdapter'
-import type { CaseDocumentWorkspaceRecord, DataSourceKind } from './ports'
+import type { CaseDocumentsDataPort, CaseDocumentWorkspaceRecord, DataSourceKind } from './ports'
 
 export type CaseDocumentsStatus = 'idle' | 'loading' | 'ok' | 'empty' | 'unauthorized' | 'not_found' | 'unavailable'
 
@@ -11,8 +11,14 @@ export interface UseCaseDocumentsResult {
   retry(): void
 }
 
-export function useCaseDocuments(caseId: string, source: DataSourceKind, enabled: boolean): UseCaseDocumentsResult {
+export function useCaseDocuments(
+  caseId: string,
+  source: DataSourceKind,
+  enabled: boolean,
+  suppliedPort?: CaseDocumentsDataPort,
+): UseCaseDocumentsResult {
   const { reportUnauthorized } = useSession()
+  const port = useMemo(() => suppliedPort ?? createHttpDocumentWorkspaceAdapter(), [suppliedPort])
   const [data, setData] = useState<CaseDocumentWorkspaceRecord | null>(null)
   const [status, setStatus] = useState<CaseDocumentsStatus>('idle')
   const [requestVersion, setRequestVersion] = useState(0)
@@ -27,7 +33,7 @@ export function useCaseDocuments(caseId: string, source: DataSourceKind, enabled
     let cancelled = false
     setData(null)
     setStatus('loading')
-    createHttpDocumentWorkspaceAdapter().getCaseDocumentWorkspace(caseId)
+    port.getCaseDocumentWorkspace(caseId)
       .then((workspace) => {
         if (cancelled) return
         setData(workspace)
@@ -43,7 +49,7 @@ export function useCaseDocuments(caseId: string, source: DataSourceKind, enabled
     return () => {
       cancelled = true
     }
-  }, [caseId, enabled, reportUnauthorized, requestVersion, source])
+  }, [caseId, enabled, port, reportUnauthorized, requestVersion, source])
 
   return { data, status, retry }
 }

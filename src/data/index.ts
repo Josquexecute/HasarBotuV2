@@ -86,6 +86,25 @@ export { usePolicyOcr, type PolicyOcrLoadStatus } from './usePolicyOcr'
 export {createHttpPolicyAiAdapter,HttpPolicyAiError,type HttpPolicyAiErrorKind} from './policyAiHttpAdapter'
 export {usePolicyAi,type PolicyAiLoadStatus} from './usePolicyAi'
 export {
+  createHttpTrafficValueLossAdapter,
+  TrafficValueLossError,
+  type TrafficValueLossAdapterOptions,
+  type TrafficValueLossAssessmentRecord,
+  type TrafficValueLossComparableInput,
+  type TrafficValueLossDamagePartInput,
+  type TrafficValueLossDataPort,
+  type TrafficValueLossDraftInput,
+  type TrafficValueLossEligibilityStatus,
+  type TrafficValueLossErrorKind,
+  type TrafficValueLossEvidenceField,
+  type TrafficValueLossEvidenceInput,
+  type TrafficValueLossEvidenceRecord,
+  type TrafficValueLossStatus,
+  type TrafficValueLossVersionRecord,
+  type TrafficValueLossWorkspaceRecord,
+} from './trafficValueLossPort'
+export { useTrafficValueLoss, type TrafficValueLossLoadStatus } from './useTrafficValueLoss'
+export {
   createHttpAuthAdapter,
   HttpAuthError,
   type AuthAdapterOptions,

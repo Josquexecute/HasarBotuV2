@@ -216,3 +216,12 @@ formatlarında alınabilir.
 - Eksik veya çelişkili bilgi açık belirsizlik kodu ve gerekçesiyle gösterilir; sistem tahmin ederek kesin tutar oluşturmaz.
 - Sonuç `calculable | no_value_loss | not_applicable | control_required` olabilir. Hiçbiri expert/admin onayı olmadan kesinleşmez.
 - Düzeltmeler yeni sürüm üretir; eski onay, kanıt ve emsal geçmişi silinmez.
+
+### Trafik değer kaybı kullanıcı çalışma alanı — Paket 33
+
+- Gerçek API modunda Trafik dosyasının Değer Kaybı sekmesi Paket 32 assessment’ını oluşturur, okur ve sürüm geçmişiyle gösterir.
+- Kullanıcı araç/kusur/parça/piyasa girdilerini, kaza öncesi ve onarım sonrası emsalleri ve doğrulanmış belge metadata kanıtlarını açıkça seçer; belge seçimi desteklenen kanıt alanlarını otomatik varsaymaz.
+- Sonuç taslak tutar, gerekçe, resmî kural kaynağı, belirsizlik ve kullanılan `2026.07.01.1` rule version ile gösterilir.
+- Bloklayan belirsizlik submit’i kapatır. Submit ayrı teyit; approve/reject ayrı insan inceleme teyidi ve mevcut rol yetkisi gerektirir.
+- Her düzeltme yeni sürüm oluşturur. API modunda bağlantı veya yetki hatası mock veriyle maskelenmez; mock demo görünümü değişmez.
+- Kasko vaka bu pakette gerçek Trafik hesabına sokulmaz; destek dışı durum açıkça gösterilir.

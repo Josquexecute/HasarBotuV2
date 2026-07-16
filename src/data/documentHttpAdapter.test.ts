@@ -46,6 +46,7 @@ const documentDetail = {
       displayName: 'Mağdur Poliçesi',
       mimeType: 'application/pdf',
       byteSize: 2048,
+      contentHash: 'a'.repeat(64),
       relativePath: '2026/34ABC123/EVRAK/magdur-police.pdf',
       status: 'pending',
       hashVerified: false,
@@ -91,7 +92,7 @@ describe('Document workspace HttpApiAdapter', () => {
     const data = await createHttpDocumentWorkspaceAdapter({ baseUrl: 'http://api.test', fetchImpl }).getCaseDocumentWorkspace(CASE_ID)
     expect(data.ruleSetVersion).toBe('2026.07.14.1')
     expect(data.requirements[0]).toMatchObject({ status: 'control_required', canonicalDocumentType: 'victim_traffic_policy' })
-    expect(data.documents[0]).toMatchObject({ versionNumber: 2, status: 'pending', relativePath: '2026/34ABC123/EVRAK/magdur-police.pdf' })
+    expect(data.documents[0]).toMatchObject({ versionNumber: 2, status: 'pending', contentHash: 'a'.repeat(64), relativePath: '2026/34ABC123/EVRAK/magdur-police.pdf' })
     expect(data.photos[0]).toMatchObject({ status: 'ready', mimeType: 'image/jpeg' })
     expect(fetchImpl).toHaveBeenCalledTimes(4)
   })

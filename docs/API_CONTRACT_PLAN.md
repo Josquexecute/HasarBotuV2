@@ -416,3 +416,12 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - `POST .../versions/:versionId/submit|approve|reject`: optimistic version ve rol kapısı; approve yalnız submit edilmiş ve blocker içermeyen sürümde çalışır, reject gerekçe zorlar.
 - Kasko case veya başka tenant kaynak 400/404; stale 409; oturumsuz 401; yetkisiz rol 403.
 - Response mutlak path, filename, belge içeriği, kişisel veri, secret veya ham DB/OS hatası taşımaz.
+
+## 22. Paket 33 Trafik değer kaybı UI adapter sınırı
+
+- Paket 33 yeni server endpoint’i veya JSON Schema eklemez; Paket 32 current/version/create/submit/approve/reject contract’larını tüketir.
+- UI adapter response envelope’ını runtime’da status, rule version, minor-unit sonuç, uncertainty, evidence, comparable ve approval alanları yönünden fail-closed doğrular.
+- `GET current` 404, daha önce tenant-kapsamlı Case detail başarıyla okunduğu çalışma alanında “henüz assessment yok” başlangıcına çevrilir. Tenant izolasyonu ve Case 404 otoritesi dış Case read kapısında kalır.
+- Create/submit/approve/reject komutları güvenli `Idempotency-Key`, cookie oturumu ve güncel optimistic assessment version taşır.
+- Document metadata adapter’ı verified document evidence için `contentHash` değerini DataPort’a ekler. Değer UI’da render edilmez; yalnız Paket 32 source-hash komutuna gider.
+- 401/403/400/404/409/5xx/ağ hataları güvenli UI sınıflarına map edilir; response body, SQL, stack, secret, mutlak yol veya belge içeriği gösterilmez ve mock fallback yapılmaz.

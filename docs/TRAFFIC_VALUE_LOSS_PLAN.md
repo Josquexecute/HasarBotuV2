@@ -77,3 +77,14 @@ Eşik karşılanmazsa tutar taslağı hesaplanabilse bile `control_required` olu
 - Gerçek PostgreSQL’de migration ileri/tekrar/rollback-reapply, tenant, idempotency, optimistic locking, append-only geçmiş ve approved immutability geçti.
 - Gerçek TCP smoke login→draft→idempotent replay→submit→approve, 401/404 ve sızıntı sınırını doğruladı.
 - Ana ve repository-dışı fresh `npm ci` kopyasında 1050 başarılı / 6 mevcut ortam-koşullu UI skip; Paket 32 kritik testlerinde skip yoktur.
+
+## 8. Paket 33 kullanıcı çalışma alanı
+
+- Gerçek API modunda Dosya Detayı > Değer Kaybı, Paket 32 assessment/read/version/submit/approve/reject akışına DataPort üzerinden bağlanır.
+- Kullanıcı araç, kusur, parça ve iki piyasa değerini; her iki taraf için emsalleri; ready/verified belge metadata kanıtlarını girer.
+- DocumentVersion seçimi otomatik kanıt kabulü değildir. Araç kimliği, kilometre, kullanım, parçalar, önceki hasar, kusur ve ağır/tam hasar destekleri kullanıcı tarafından ayrı ayrı seçilir.
+- Emsal girdileri güvenli kaynak referansı, tarih, kilometre, tutar, doğrulama ve çelişki bayrağı taşır. Adapter mutlak yol veya belge içeriği göstermez; content hash yalnız kanıt komutunda kullanılır.
+- Sonuç kartı server taslağı, rule version, resmî kaynak, reasoning, belirsizlik ve submit uygunluğunu gösterir. Bloklayan belirsizlikte kullanıcı yeni version oluşturarak düzeltir.
+- Submit ve insan approve/reject adımları ayrı teyitlerdir. Geçmiş version’lar görünür; approved sonuç insan aktörü ve zamanıyla ayrılır.
+- Mock modu mevcut prototipi korur; API hatasında mock fallback yoktur. Kasko için bu Trafik hesabı çalıştırılmaz.
+- Paket 33 doğrulaması ana ve fresh kopyada 1060 başarılı / 6 mevcut ortam-koşullu UI skip verdi. Gerçek Chrome’da incomplete/control-required → ikinci calculable version → submit → human approve ve API kesintisinde no-fallback; gerçek PostgreSQL’de 2 version, 9 evidence, 6 comparable, 2 approval event ve sızıntısız audit geçti.

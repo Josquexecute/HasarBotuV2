@@ -1,13 +1,13 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-14
+Son güncelleme: 2026-07-16
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 18 — Referans Veriler ve Case Çekirdeği Zenginleştirme
-- Durum: **Kod, PostgreSQL/API, gerçek Chrome tarayıcı ve temiz checkout kalite kapıları geçti; commit hazırlığı tamamlandı**
-- Git: Yerel repository, `foundation/package-18-reference-case-core` dalı, remote yok
+- Aşama: Paket 33 — Trafik Değer Kaybı gerçek dosya detayı entegrasyonu
+- Durum: **Kod, gerçek PostgreSQL/API, gerçek Chrome ve repository dışı fresh checkout kalite kapıları geçti; commit hazırlığı tamamlandı**
+- Git: Yerel repository, `foundation/package-33-traffic-value-loss-ui` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -678,3 +678,16 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Migration 0022 ileri/tekrar/rollback-reapply; tenant/constraint/immutable history, API 401/403/404, ready document evidence, idempotent draft, stale conflict, submit→approve/reject ve audit/response sızıntı sınırı gerçek PostgreSQL’de geçti. Gerçek TCP smoke login→draft→replay→submit→approve akışını tamamladı.
 - Repository dışındaki yeni kopyada normal fresh `npm ci`, process-scope `_test` bağlantısıyla typecheck, lint, aynı **1050/6** test ve build yeniden geçti. UI değişmediği için Paket 32’ye özel tarayıcı senaryosu eklenmedi; mevcut UI baseline testleri korundu.
 - Build’in mevcut büyük chunk uyarısı sürüyor: ana JS 540.15 kB (gzip 144.79 kB). `npm ci`, mevcut `glob@11.1.0` deprecation uyarısını verdi; moderate audit 0 açıktır.
+
+## Paket 33 — Trafik değer kaybı gerçek dosya detayı entegrasyonu (2026-07-16)
+
+- Dosya Detayı > Değer Kaybı gerçek API modunda Paket 32 current/version/create/submit/approve/reject uçlarına DataPort/hook sınırıyla bağlandı; API hatasında mock fallback yoktur.
+- Trafik çalışma alanı araç/kusur/parça/piyasa girdisi, 3+3 emsal, güvenli kaynak, ready/verified document metadata ve kullanıcı tarafından tek tek seçilen kanıt alanlarını sürümlü taslağa gönderir.
+- Server taslağı minor-unit tutar, rule version `2026.07.01.1`, gerekçe/resmî kaynak, belirsizlik ve submit uygunluğuyla gösterilir. Her düzeltme yeni version; geçmiş görünür ve append-only server modeline dokunulmaz.
+- Submit açık teyit; approve/reject mevcut rol ve insan inceleme teyidi/gerekçesiyle çalışır. Control-required belirsizlik submit’i kapalı tutar.
+- Mock moddaki kabul edilmiş Değer Kaybı prototipi değişmedi. API Kasko vakada sahte Trafik hesabı üretmez. Migration, endpoint, domain formülü, dependency, File Agent, IPC veya fiziksel dosya yazma yolu değişmedi. Karar: HB-2026-039.
+- Ana ağaçta `npm install`, typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1060 başarılı / 6 mevcut ortam-koşullu UI skip**, build, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 166/6; domain 379; contracts 191; database 43; API 228; file-agent 53. Paket 33 adapter/component testleri 19/19; gerçek Trafik Değer Kaybı API testi 8/8 ve skip edilmedi.
+- Gerçek Chrome/CDP smoke: API login; incomplete draft/control-required; ready/verified belge ve alan-bazlı kanıt seçimi; 3+3 emsal; ikinci version; 7.500.000 minor-unit kusur sonrası taslak; version history; submit; expert/admin human approval; API kesintisinde no-fallback geçti. DB’de 2 version, 9 evidence, 6 comparable, 2 approval event ve güvenli audit zinciri doğrulandı.
+- 1366×768 açık/koyu ve 1920×1080 koyu temada body yatay taşması yoktu; emsal tablosu kendi iç scroll’unu korudu. JavaScript console warning/error ve exception 0’dı. Chrome resource günlüğündeki kayıtlar beklenen bootstrap/boş-assessment 401/404 ve mevcut favicon 404’üdür.
+- Repository dışı `.git/node_modules/dist/coverage` içermeyen kopyada fresh `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1060/6** test ve build yeniden geçti. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını verdi; audit 0 açıktır.
+- Build mevcut büyük chunk uyarısını sürdürür: ana JS 575,64 kB (gzip 152,99 kB). Paket 33 işlevini engellemez; ayrı performans/code-splitting bakımında ele alınmalıdır.

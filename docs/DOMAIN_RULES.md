@@ -361,3 +361,13 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Eksik veya çelişkili kanıt `control_required` olur. Provider/AI confidence veya kullanıcı beyanı doğrulanmamış belgeyi kanıt yapmaz.
 - Ağır/tam hasar `not_applicable`; sıfır/negatif piyasa farkı `no_value_loss` taslağıdır. Her sonuç insan onayı gerektirir.
 - Approved/superseded version, evidence, comparable ve approval history append-only/immutable’dır; düzeltme yeni version üretir.
+
+## Trafik değer kaybı kullanıcı kanıtı ve onay kuralları — Paket 33
+
+- UI yeni bir değer kaybı formülü çalıştırmaz; yalnız Paket 32 API’sinin hesaplama ve `canSubmitForApproval` sonucunu gösterir.
+- Belge kanıtı yalnız fiziksel doğrulaması tamamlanmış `ready` documentVersion’dan seçilebilir. Kullanıcı bir belgeyi seçtiğinde desteklenen kanıt alanlarını ayrıca işaretlemelidir; otomatik toplu doğrulama yoktur.
+- Kullanıcının araç, hasar ve piyasa değerleri girişi `expert_observation` kaynağıdır ve tek başına `verified` olamaz. Doğrulanmış belge veya kontrollü emsal kanıtı eksikliği `control_required` kalır.
+- Emsal kaynağı yalnız bounded `https://` veya traversal/drive/backslash içermeyen `ref:` referansıdır. Referans, tutar, kilometre, tarih ve doğrulama bayrağı birlikte sürümlenir.
+- Formdaki her hesaplama yeni immutable version oluşturur. Eski version’ı ekranda seçmek yalnız incelemedir; submit/approve/reject daima server’ın güncel assessment version’ına uygulanır.
+- Bloklayan belirsizlik varken submit yapılamaz. Submit kullanıcı teyidi; approve insan inceleme teyidi; reject zorunlu gerekçe ister. Rol ve optimistic version kontrolünün nihai otoritesi API’dir.
+- API modu mock sonuca düşmez. Kasko vaka Trafik değer kaybı akışına alınmaz.

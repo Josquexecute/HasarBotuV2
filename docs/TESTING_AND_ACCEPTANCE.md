@@ -253,3 +253,14 @@ raporlanır.
 - Canlı TCP smoke: login→draft→replay→submit→approve→read/version history; sentetik veri dışında müşteri bilgisi kullanılmaz.
 - UI, Kasko, scraping/SBM entegrasyonu, AI tahmini, File Agent ve üretim migration kapsam dışıdır. Kritik domain/contracts/DB/API testi skip kalırsa PASS sayılmaz.
 - Gerçek sonuç: ana ve repository-dışı fresh kopyada 1050 başarılı / 6 mevcut ortam-koşullu UI skip; Paket 32 domain/contracts/PostgreSQL/API/TCP senaryolarında skip yoktur.
+
+### Paket 33 — Trafik değer kaybı gerçek dosya detayı kabulü
+
+- Adapter/component: gerçek boş başlangıç, strict response, ready/verified document hash, alan-bazlı kanıt seçimi, altı emsal, yeni draft version, history, submit ve expert/admin approval akışı.
+- Belirsizlik: control-required kod/alan/gerekçe görünür; `canSubmitForApproval=false` iken submit yapılamaz; yeni version ile düzeltme yolu korunur.
+- Güvenlik: API 401/403/404/409/5xx/ağ durumunda güvenli mesaj; mock fallback yok; mutlak yol, document content/hash, secret veya ham hata render edilmez.
+- Regresyon: mock Değer Kaybı prototipi değişmez; Kasko vaka gerçek Trafik evaluator’a girmez; Paket 32 domain/contracts/PostgreSQL/API testleri yeniden geçer.
+- Gerçek API/tarayıcı: login → Trafik dosya → verified belge + 3/3 emsal → draft → history → submit → approve; ayrıca incomplete draft/control-required ve no-fallback doğrulanır.
+- 1366×768 açık/koyu ve 1920×1080 tema; body overflow, emsal iç scroll ve console warning/error kontrolü geçmelidir.
+- Repository dışı fresh `npm ci`, gerçek `_test` PostgreSQL ile typecheck, lint, test ve build tamamlanmadan Paket 33 PASS sayılmaz.
+- Gerçek sonuç: ana ve repository-dışı fresh kopyada **1060 başarılı / 6 mevcut ortam-koşullu UI skip**. Paket 33 adapter/component 19/19, Paket 32 gerçek PostgreSQL/API/TCP 8/8 ve gerçek Chrome draft→submit→approve akışı skip edilmeden geçti.
