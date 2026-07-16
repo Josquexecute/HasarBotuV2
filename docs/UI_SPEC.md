@@ -69,6 +69,9 @@ Varsayılan Kompakt.
 - Liste satırlarında en fazla 3 thumbnail
 - Büyük tabloda sanallaştırma değerlendirilebilir
 - Her filtre değişiminde gereksiz tam render yapılmaz
+- Dosya Detayı ve ağır gerçek API modülleri kullanıcı ilgili route/sekmeye girmeden yüklenmez.
+- Lazy yükleme sırasında boş ekran yerine mevcut route veya Türkçe loading görünümü korunur.
+- Modül yükleme hatası merkezi hata sınırında güvenli mesaj ve yeniden yükleme eylemi gösterir.
 
 ## Zorunlu ekran testleri
 

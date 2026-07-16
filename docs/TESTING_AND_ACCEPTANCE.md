@@ -273,3 +273,13 @@ raporlanır.
 - PDF: A4, Türkçe karakterler, çok sayfa, bölüm taşması, başlık/altlık/sayfa numarası, kaynak/emsal/hesap/belirsizlik/kural içeriği Poppler render ve görsel incelemeyle geçmelidir.
 - Gerçek tarayıcı: login → Trafik case → onaylı değer kaybı → nihai not → önizleme → açık confirmation → PDF üretim/download; no-fallback, 1366×768 açık/koyu ve 1920×1080 tema/overflow/console kontrolü.
 - Kritik DB/API/PDF/tarayıcı testi skip kalırsa Paket 34 PASS sayılmaz. Fiziksel case klasörü, gerçek müşteri verisi ve üretim migration kullanılmaz.
+
+### Paket 35 — frontend lazy-loading ve bundle bütçesi kabulü
+
+- Production build başlangıç JS grafiği ve her tekil JS chunk 500.000 baytın altında olmalıdır; eşik aşımı veya beklenen lazy chunk’ın başlangıç preload’una dönmesi build’i başarısız yapmalıdır.
+- Dosya Detayı, Evrak/Fotoğraf, PDF metin, OCR, Kasko poliçe analizi ve Trafik değer kaybı modülleri ayrı chunk olarak üretilmeli; uygulama ilk açılışında istenmemeli ve yalnız ilgili kullanıcı akışında yüklenmelidir.
+- Route/sekme geçişinde boş çalışma alanı oluşmamalı; mevcut route korunması veya güvenli loading görünümü bulunmalıdır. Lazy import reddi mevcut ErrorBoundary içinde kullanıcı dostu hata ve yeniden yükleme eylemi göstermelidir.
+- Mock prototip, gerçek API no-fallback, login, Trafik/Kasko dosya detayı ve sekme davranışları regresyona uğramamalıdır.
+- Gerçek production Chrome doğrulaması; network chunk istekleri, chunk 404, console warning/error, 1366×768 açık/koyu, 1920×1080 tema ve yatay/dikey overflow kontrolünü kapsamalıdır.
+- Root ve repository dışı fresh kopyada typecheck, lint, gerçek `_test` PostgreSQL testleri, build ve bundle kapısı geçmeden Paket 35 PASS sayılmaz.
+- Gerçek sonuç: ana ve fresh kopyada **1.075 başarılı / 6 mevcut ortam-koşullu UI skip**; başlangıç grafiği 420.291 bayt, en büyük chunk 281.355 bayt, altı modül on-demand ve production Chrome console warning/error 0.

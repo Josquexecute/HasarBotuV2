@@ -677,3 +677,14 @@ Etkisi: Trafik Değer Kaybı UI DataPort/adapter/hook’u; gerçek dosya detayı
 8. Yalnız `traffic_value_loss.report_generated` merkezi audit olayı yazılır. Audit rapor metni, plaka, ilan URL’si, belge adı/içeriği, mutlak yol veya PDF binary’si değil; version ve güvenli sayaçları taşır.
 
 Etkisi: Migration `0023_traffic_value_loss_reports`; saf rapor-content builder; strict preview/generate/read/PDF contracts; API-owned PDF renderer ve Dosya Detayı > Değer Kaybı kullanıcı kontrollü final çıktı paneli.
+
+## 2026-07-16 — HB-2026-041: Frontend lazy-loading ve ölçülebilir başlangıç bundle bütçesi
+
+1. Uygulama kabuğu, login, durum panosu ve dosya listesi başlangıç akışında eager kalır. Ağır Dosya Detayı route’u `React.lazy` ile ayrı chunk’tır.
+2. Dosya Detayı içindeki gerçek API ağırlıklı Evrak/Fotoğraf, PDF metin, OCR, poliçe analiz çalışma alanı ve Trafik değer kaybı modülleri yalnız ilgili sekme açıldığında dinamik import edilir. Mock/demo görünümü fiziksel veya API işi başlatmadan mevcut davranışını korur.
+3. Route seviyesinde mevcut `Suspense` ve uygulama `ErrorBoundary` sınırı korunur. Sekme düzeyi `Suspense`, modül gelene kadar güvenli Türkçe loading görünümü sunar; import reddi fatal hata sınırına gider ve boş çalışma alanı üretmez.
+4. Production build başlangıç JS grafiği `dist/index.html` içindeki doğrudan script ve modulepreload referanslarından deterministik hesaplanır. Başlangıç grafiği ve her tekil JS chunk Vite uyarı sınırı olan 500.000 baytı aşarsa build fail-closed olur.
+5. Build kapısı ayrıca altı beklenen lazy chunk’ın ayrı üretildiğini ve başlangıç preload grafiğine girmediğini doğrular. Böylece gelecekteki statik import regresyonu yalnız Vite uyarısı olarak kalmaz.
+6. Paket 34 tabanındaki 591,47 kB giriş bundle’ı 281.355 bayt giriş chunk’ına, toplam başlangıç JS grafiği 420.291 bayta düşmüştür. Ağır modüller kullanıcı akışıyla on-demand yüklenir.
+
+Etkisi: Yalnız frontend import/bundle sınırı, build script’i ve hata-sınırı regresyon testi değişti. Yeni dependency, backend/API, migration, contract, IPC, File Agent veya veri yazma yolu yoktur.

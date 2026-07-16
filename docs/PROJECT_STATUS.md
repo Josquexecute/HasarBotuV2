@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-16
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 33 — Trafik Değer Kaybı gerçek dosya detayı entegrasyonu
-- Durum: **Kod, gerçek PostgreSQL/API, gerçek Chrome ve repository dışı fresh checkout kalite kapıları geçti; commit hazırlığı tamamlandı**
-- Git: Yerel repository, `foundation/package-33-traffic-value-loss-ui` dalı, remote yok
+- Aşama: Paket 35 — Frontend güvenli lazy-loading ve code-splitting
+- Durum: **Kod, gerçek PostgreSQL regresyonu, üretim bundle bütçesi, gerçek Chrome ve repository dışı fresh checkout kalite kapıları geçti; commit hazırlığı tamamlandı**
+- Git: Yerel repository, `foundation/package-35-frontend-code-splitting` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -704,3 +704,14 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - 1366×768 açık önizleme, 1366×768 koyu final ve 1920×1080 koyu final görünümünde yatay taşma yoktu; modül içi dikey scroll erişilebilirdi. JavaScript console warning/error/exception 0’dı; yalnız mevcut favicon ve boş workspace-plan için üç beklenen 404 resource kaydı görüldü.
 - Repository dışındaki `.git/node_modules/dist/coverage/tmp` içermeyen kopyada process çalışma dizini ayrıca doğrulanarak fresh `npm ci`, typecheck, lint, gerçek `_test` PostgreSQL ile aynı **1.074/6** test ve build yeniden geçti; geçici kopya kaldırıldı.
 - Build mevcut büyük chunk uyarısını sürdürüyor: ana JS 591,47 kB (gzip 155,70 kB). Yeni API direct dependency’leri `@napi-rs/canvas@1.0.2` ve `pdfjs-dist@6.1.200` lockfile’da sabittir; audit 0 açıktır. Üretim migration’ı ve gerçek müşteri verisi kullanılmadı.
+
+## Paket 35 — Frontend güvenli lazy-loading ve code-splitting (2026-07-16)
+
+- Dosya Detayı route’u `React.lazy` ile uygulama kabuğundan ayrıldı. Evrak/Fotoğraf, PDF metin, OCR, Kasko poliçe analizi ve Trafik değer kaybı gerçek API modülleri ayrıca sekme düzeyinde dinamik import edildi; mock prototip davranışı ve ana navigasyon eager kaldı.
+- Uygulama kabuğundaki mevcut `Suspense` ve `ErrorBoundary` korunurken dosya-detayı sekmelerine güvenli iç loading durumu eklendi. Reddedilen lazy import’un fatal hata sınırı ve yeniden yükleme eylemiyle yakalandığı regresyon testi eklendi.
+- `npm run build` artık üretim UI build’i sonrasında başlangıç JS grafiğini, her JS chunk’ını ve altı zorunlu lazy modülün gerçekten ayrı/başlangıç dışı olduğunu doğrular. Sınır Vite’ın 500.000 bayt uyarı eşiğidir ve aşım build’i başarısız yapar.
+- Paket 34 tabanındaki 591,47 kB tek giriş JS’i 281.355 bayt giriş chunk’ına düştü. `index.html` tarafından başlangıçta kullanılan JS grafiği 420.291 bayttır; en büyük chunk 500.000 baytın altındadır ve Vite büyük chunk uyarısı kalkmıştır.
+- Gerçek Chrome/CDP production smoke’unda ilk yüklemede altı ağır chunk istenmedi; Trafik/Kasko vaka sekmeleri açıldıkça doğru chunk’lar tek tek yüklendi. Route geçişinde boş ekran oluşmadı; 1366×768 açık/koyu ve 1920×1080 koyu temada yatay taşma, chunk 404 veya console warning/error görülmedi.
+- Ana ağaçta typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.075 başarılı / 6 mevcut ortam-koşullu UI skip**, build+bütçe kapısı, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 169/6; domain 381; contracts 197; database 45; API 230; file-agent 53.
+- Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen fresh kopyada `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.075/6** test ve build+bütçe kapısı yeniden geçti; kopya kaldırıldı.
+- Yeni dependency, migration, API/contract, IPC, File Agent veya veri yazma yolu değişikliği yoktur. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını vermeye devam eder; moderate audit 0 açıktır.

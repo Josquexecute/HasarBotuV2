@@ -1,9 +1,8 @@
-import { Suspense } from 'react'
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { LoadingState } from '../components/StateViews'
-import { CaseDetailPage } from '../features/cases/CaseDetailPage'
 import { CasesPage } from '../features/cases/CasesPage'
 import { ClosedCasesPage } from '../features/closed/ClosedCasesPage'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
@@ -17,6 +16,11 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { SessionProvider } from './session'
 import { useSession } from './sessionContext'
 import { usePersistentState } from './usePersistentState'
+
+const CaseDetailPage = lazy(async () => {
+  const module = await import('../features/cases/CaseDetailPage')
+  return { default: module.CaseDetailPage }
+})
 
 interface AppRoutesProps {
   theme: 'light' | 'dark'

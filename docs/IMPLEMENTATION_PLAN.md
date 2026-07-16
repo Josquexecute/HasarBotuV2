@@ -826,3 +826,15 @@ Kapsam dışı: yeni migration/endpoint/domain formülü, Kasko değer kaybı, i
 - [x] Gerçek PostgreSQL/API, PDF render, tarayıcı, tam root ve repository dışı fresh `npm ci` kapılarını tamamla; path bazlı atomik commit oluştur.
 
 Kapsam dışı: onaysız taslaktan çıktı, rapor editörü, genel rapor yönetimi, e-posta gönderimi, File Agent/fiziksel klasör yazımı, Kasko değer kaybı, üretim migration ve sonraki paket.
+
+## Paket 35 — Frontend güvenli lazy-loading ve code-splitting
+
+- [x] Başlangıç import grafiğini ve Paket 34 bundle ölçümünü çıkar; kullanıcı akışını bozmadan ayrılabilecek ağır sınırları belirle.
+- [x] Dosya Detayı route’unu lazy-load et; uygulama kabuğu, login, durum panosu ve dosya listesi başlangıç akışını koru.
+- [x] Gerçek API ağırlıklı belge, PDF, OCR, poliçe analizi ve Trafik değer kaybı sekmelerini ayrı dinamik chunk’lara ayır.
+- [x] Mevcut `Suspense`/`ErrorBoundary` davranışını koru; sekme loading görünümü ve lazy import hata regresyon testi ekle.
+- [x] Başlangıç JS grafiğini ve her chunk’ı 500.000 bayt altında zorlayan, beklenen lazy chunk’ların preload edilmediğini doğrulayan build kapısı ekle.
+- [x] Production Chrome’da ilk yükleme ve on-demand chunk isteklerini; mock/API akışlarını; açık/koyu 1366×768 ve 1920×1080 taşma/console durumunu doğrula.
+- [x] Root typecheck/lint/test/build/audit/diff-check ve repository dışı fresh `npm ci` kapılarını tamamla.
+
+Kapsam dışı: UI yeniden tasarımı, yeni iş özelliği, backend/API/contracts/database/File Agent/IPC değişikliği, yeni dependency ve sonraki paket.

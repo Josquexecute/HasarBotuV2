@@ -91,6 +91,14 @@ Koruma:
 - AI sağlayıcısı adapter arayüzü arkasında olmalıdır.
 - Sigorta şirketi şablonları yapılandırılabilir olmalıdır.
 
+## Frontend yükleme sınırı
+
+- Uygulama kabuğu ve sık kullanılan liste/navigasyon akışları başlangıç bundle’ında kalır.
+- Dosya Detayı route’u ve yüksek maliyetli gerçek API sekmeleri `React.lazy`/dinamik import sınırlarıyla ayrı chunk’lardır.
+- Lazy route ve modüller mevcut `Suspense` ile loading, merkezi `ErrorBoundary` ile güvenli hata davranışını korur.
+- Production build başlangıç JS grafiği ile her tekil chunk’ı 500.000 baytın altında doğrular; beklenen lazy modüllerin başlangıç preload’una dönmesi build regresyonudur.
+- Code-splitting yalnız renderer yükleme davranışını değiştirir; DataPort, API, database, IPC ve fiziksel veri yazma sınırlarını değiştirmez.
+
 ## Depolama taşınabilirliği
 
 Fiziksel dosyalar şimdilik pCloud/`P:\` yapısında kalır; `storageRootKey + relativePath` modeli sayesinde depolama kökü ileride başka disk, sunucu veya NAS'a taşınabilir. pCloud canlı veritabanı olarak kullanılmaz; ortak SQLite dosyası pCloud'a konmaz.

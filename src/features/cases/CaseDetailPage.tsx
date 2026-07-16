@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -25,15 +25,32 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { formatCurrency } from '../../mocks/cases'
 import { useCases } from '../../data'
 import { useSession } from '../../app/sessionContext'
+import { LoadingState } from '../../components/StateViews'
 import type { CaseRecord } from '../../types/case'
-import { DocumentPhotoApiModule } from './DocumentPhotoApiModule'
 import { CaseEditModal } from './CaseEditModal'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
-import { PolicyPdfTextApiModule } from './PolicyPdfTextApiModule'
-import { PolicyOcrApiModule } from './PolicyOcrApiModule'
-import { PolicyAnalysisWorkspace } from './PolicyAnalysisWorkspace'
-import { TrafficValueLossApiModule } from './TrafficValueLossApiModule'
+
+const DocumentPhotoApiModule = lazy(async () => {
+  const module = await import('./DocumentPhotoApiModule')
+  return { default: module.DocumentPhotoApiModule }
+})
+const PolicyPdfTextApiModule = lazy(async () => {
+  const module = await import('./PolicyPdfTextApiModule')
+  return { default: module.PolicyPdfTextApiModule }
+})
+const PolicyOcrApiModule = lazy(async () => {
+  const module = await import('./PolicyOcrApiModule')
+  return { default: module.PolicyOcrApiModule }
+})
+const PolicyAnalysisWorkspace = lazy(async () => {
+  const module = await import('./PolicyAnalysisWorkspace')
+  return { default: module.PolicyAnalysisWorkspace }
+})
+const TrafficValueLossApiModule = lazy(async () => {
+  const module = await import('./TrafficValueLossApiModule')
+  return { default: module.TrafficValueLossApiModule }
+})
 
 const tabs = [
   'Özet',
@@ -263,7 +280,8 @@ export function CaseDetailPage() {
             <span className="mock-label">{source === 'mock' ? 'Mock prototip' : 'Gerçek API'}</span>
           </header>
 
-          {activeTab === 'Özet' ? (
+          <Suspense fallback={<LoadingState label={`${activeTab} modülü hazırlanıyor`} />}>
+            {activeTab === 'Özet' ? (
             <div className="overview-grid">
               <section className="info-panel overview-grid__main">
                 <header><h2>Dosya Özeti</h2><span className="status-pill status-pill--open">{item.status}</span></header>
@@ -360,6 +378,7 @@ export function CaseDetailPage() {
                 : activeTab === 'Raporlar ve Ücretler' ? <CaseReportsModule item={item} onNotice={setPrototypeNotice} />
                   : activeTab === 'E-postalar' ? <EmailsModule item={item} onNotice={setPrototypeNotice} />
                     : <HistoryModule item={item} />}
+          </Suspense>
         </section>
 
         {assistantOpen && <aside className="assistant-rail">
