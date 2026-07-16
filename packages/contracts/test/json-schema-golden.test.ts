@@ -64,6 +64,7 @@ const EXPECTED_NAMES: readonly JsonSchemaName[] = [
   'policy-ai-promotion-request',
   'policy-ai-promotion-response',
   'policy-ai-provider-output',
+  'policy-ai-providers-response',
   'policy-ai-run-response',
   'policy-ai-start-request',
   'policy-ai-usage-response',
@@ -118,9 +119,12 @@ describe('golden JSON Schema fixtures', () => {
     const schemas = buildJsonSchemas()
     const plan = JSON.stringify(schemas['policy-ai-plan-request'])
     const providerOutput = JSON.stringify(schemas['policy-ai-provider-output'])
+    const providerAvailability = JSON.stringify(schemas['policy-ai-providers-response'])
     expect(plan).toContain('unique-source-selection')
     expect(providerOutput).toContain('unique-candidate-id')
     expect(providerOutput).toContain('max-object-properties-20')
     expect(providerOutput).toContain('"maxProperties":20')
+    expect(providerAvailability).toContain('provider-availability-consistency')
+    expect(providerAvailability).toContain('unique-provider-availability')
   })
 })

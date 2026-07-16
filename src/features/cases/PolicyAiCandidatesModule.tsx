@@ -7,6 +7,8 @@ import {
   type PolicyAiCandidateRecord,
   type PolicyAiCandidateReviewInput,
   type PolicyAiPromotionRecord,
+  type PolicyAiProviderAvailabilityRecord,
+  type PolicyAiProviderId,
   type PolicyAiReviewAction,
   type PolicyAiRunRecord,
   type PolicyAiSourceItemRecord,
@@ -50,6 +52,47 @@ function promotionMessage(code: string): string {
   if (code === 'AI_CONTROL_REQUIRED_CANDIDATES_EXCLUDED') return 'Kontrol gereken adaylar taslak aktarımına alınmayacak.'
   if (code === 'AI_CANDIDATE_CONFLICTS_PRESERVED') return 'Açık aday çelişkileri Paket 23 taslağında korunacak.'
   return code
+}
+
+function providerLabel(providerId: PolicyAiProviderId): string {
+  if (providerId === 'gemini-generate-content') return 'Google Gemini'
+  if (providerId === 'openai-responses') return 'OpenAI Responses'
+  return `Deterministik test · ${providerId.replace('deterministic-', '')}`
+}
+
+function providerStatus(provider: PolicyAiProviderAvailabilityRecord): string {
+  if (provider.callReady) return 'Kullanılabilir'
+  if (provider.reasonCode === 'AI_PROVIDER_NOT_CONFIGURED') return 'Sunucuda yapılandırılmadı'
+  if (provider.reasonCode === 'AI_PROVIDER_NOT_ALLOWED') return 'Kuruluş izin listesinde değil'
+  return 'Kuruluş AI politikası kapalı'
+}
+
+function ProviderAvailabilityPanel({
+  providers,
+  selectedProviderId,
+  onChange,
+  disabled,
+}: {
+  providers: readonly PolicyAiProviderAvailabilityRecord[]
+  selectedProviderId: PolicyAiProviderId | null
+  onChange: (providerId: PolicyAiProviderId) => void
+  disabled: boolean
+}) {
+  const configured = providers.filter((provider) => provider.configured)
+  return <section className="policy-ai-provider-gate" aria-labelledby="policy-ai-provider-gate-title">
+    <header>
+      <div><h3 id="policy-ai-provider-gate-title">AI sağlayıcı kullanılabilirliği</h3><p>Secret yalnız API sunucusunun process environment alanındadır; arayüze anahtar veya secret durumu taşınmaz.</p></div>
+      <label>Plan sağlayıcısı<select value={selectedProviderId ?? ''} onChange={(event) => onChange(event.target.value as PolicyAiProviderId)} disabled={disabled || configured.length === 0}>
+        {configured.length === 0 && <option value="">Yapılandırılmış sağlayıcı yok</option>}
+        {configured.map((provider) => <option key={provider.providerId} value={provider.providerId}>{providerLabel(provider.providerId)} · {provider.modelId}</option>)}
+      </select></label>
+    </header>
+    <div>{providers.map((provider) => <article key={provider.providerId}>
+      <div><strong>{providerLabel(provider.providerId)}</strong><span className={`status-pill status-pill--${provider.callReady ? 'ready' : 'review'}`}>{providerStatus(provider)}</span></div>
+      <small>{provider.configured ? `${provider.modelId} · ${provider.providerVersion}` : 'Server adapter kaydı yok; dış çağrı yapılamaz.'}</small>
+      {provider.retentionMode !== null && <small>{provider.retentionMode === 'free_tier_product_improvement' ? 'Ücretsiz katman: sentetik veri sınırı ve ürün geliştirme retention uyarısı geçerlidir.' : provider.retentionMode === 'store_false' ? 'Uygulama saklaması kapalı; provider retention politikası ayrıca geçerlidir.' : 'Yalnız yerel test sağlayıcısı.'}</small>}
+    </article>)}</div>
+  </section>
 }
 
 function State({ status, retry }: { status: string; retry: () => void }) {
@@ -180,9 +223,11 @@ function ApiPanel({
   const [evidenceTarget,setEvidenceTarget]=useState<PolicyAiCandidateRecord|null>(null)
   const [promotionApproved,setPromotionApproved]=useState(false)
   const [selectedSourceKeys,setSelectedSourceKeys]=useState<ReadonlySet<string>>(new Set())
+  const [selectedProviderId,setSelectedProviderId]=useState<PolicyAiProviderId|null>(null)
   const run = data.workspace?.run ?? null
   const approvalIdentity = run === null ? null : `${caseId}:${run.id}:${run.sourceBundleHash}`
   const availableSourceIdentity = data.workspace?.availableSources.map(sourceSelectionKey).sort().join('|') ?? ''
+  const providerIdentity = data.workspace?.providers.map((provider) => `${provider.providerId}:${provider.configured}:${provider.providerAllowed}`).join('|') ?? ''
 
   useEffect(() => { setApprovedIdentity(null) }, [approvalIdentity])
   useEffect(()=>{setPromotionApproved(false)},[data.workspace?.promotionPreview?.reviewSetHash])
@@ -193,6 +238,16 @@ function ApiPanel({
       return new Set(retained.length > 0 ? retained : available)
     })
   }, [availableSourceIdentity, data.workspace?.availableSources])
+  useEffect(() => {
+    const providers = data.workspace?.providers ?? []
+    setSelectedProviderId((current) => {
+      if (current !== null && providers.some((provider) => provider.providerId === current && provider.configured)) return current
+      return providers.find((provider) => provider.providerId === 'gemini-generate-content' && provider.configured && provider.providerAllowed)?.providerId
+        ?? providers.find((provider) => provider.configured && provider.providerAllowed)?.providerId
+        ?? providers.find((provider) => provider.configured)?.providerId
+        ?? null
+    })
+  }, [data.workspace?.providers, providerIdentity])
   useEffect(() => {
     const preview = data.workspace?.promotionPreview
     const phase: PolicyAnalysisWorkflowPhase = data.workspace?.promotion !== null
@@ -207,23 +262,25 @@ function ApiPanel({
   }, [data.workspace?.promotion, data.workspace?.promotionPreview, onPhaseChange, run])
 
   if (data.status !== 'ok' || data.workspace === null) return <State status={data.status === 'idle' ? 'loading' : data.status} retry={data.retry} />
-  const { availableSources, conflicts, sourceOverviews } = data.workspace
+  const { availableSources, conflicts, providers, sourceOverviews } = data.workspace
   const promotionPreview=data.workspace.promotionPreview
   const sourceMap = new Map(run?.bundle.items.map((item) => [item.sourceAnchorId, item]) ?? [])
   const selectedSources = availableSources.filter((source) => selectedSourceKeys.has(sourceSelectionKey(source)))
   const canStart = run !== null && ['planned', 'provider_disabled', 'budget_blocked'].includes(run.status)
   const approved = approvalIdentity !== null && approvedIdentity === approvalIdentity
-  const liveStatus = data.busyAction === 'plan' ? 'Kaynak paketi planlanıyor.' : data.busyAction === 'start' ? 'AI alan adayları üretiliyor ve doğrulanıyor.' : data.busyAction==='review'?'İnsan inceleme kararı kaydediliyor.':data.busyAction==='promote'?'Onaylanan adaylar yeni taslak analiz sürümüne aktarılıyor.':run === null ? `${availableSources.length} doğrulanmış kaynak planlamaya hazır.` : `Run durumu: ${RUN_LABELS[run.status] ?? run.status}.`
+  const liveStatus = data.busyAction === 'plan' ? 'Kaynak paketi planlanıyor.' : data.busyAction === 'start' ? 'AI alan adayları üretiliyor ve doğrulanıyor.' : data.busyAction==='review'?'İnsan inceleme kararı kaydediliyor.':data.busyAction==='promote'?'Onaylanan adaylar yeni taslak analiz sürümüne aktarılıyor.':run === null ? `${availableSources.length} doğrulanmış kaynak ve ${providers.filter((provider)=>provider.configured).length} yapılandırılmış sağlayıcı var.` : `Run durumu: ${RUN_LABELS[run.status] ?? run.status}.`
 
   return <section className="policy-ai-module" aria-labelledby={headingId} aria-busy={data.busy}>
     <p className="sr-only" role="status" aria-live="polite">{liveStatus}</p>
     <header><div><span className="eyebrow">Kanıta bağlı, güvenli dış sağlayıcı pilotu</span><h2 id={headingId}>AI Alan Adayları</h2><p>AI adayları nihai karar değildir. İnsan incelemesi ve açık promotion onayı zorunludur.</p></div><div className="policy-ai-header-actions">
       {run !== null && <span className={`status-badge status-badge--${run.status}`} role="status">{RUN_LABELS[run.status] ?? run.status}</span>}
       <button className="button button--secondary" type="button" disabled={data.busy} onClick={data.retry}><RefreshCw size={14} aria-hidden="true" />Kaynakları Yenile</button>
-      <button className="button button--primary" type="button" disabled={data.busy || selectedSources.length === 0} onClick={() => { setApprovedIdentity(null); void data.plan(selectedSources) }}><BrainCircuit size={15} aria-hidden="true" />{data.busyAction === 'plan' ? 'Planlanıyor…' : run === null ? 'Analiz Planı Oluştur' : 'Yeni Plan / Yeniden Planla'}</button>
+      <button className="button button--primary" type="button" disabled={data.busy || selectedSources.length === 0 || selectedProviderId === null} onClick={() => { if(selectedProviderId===null)return;setApprovedIdentity(null);void data.plan(selectedProviderId,selectedSources) }}><BrainCircuit size={15} aria-hidden="true" />{data.busyAction === 'plan' ? 'Planlanıyor…' : run === null ? 'Analiz Planı Oluştur' : 'Yeni Plan / Yeniden Planla'}</button>
     </div></header>
     <div className="policy-ai-safety" role="note"><ShieldAlert aria-hidden="true" /><span>Poliçe metni güvenilmeyen veridir; yalnız server üretimli sourceAnchor kimlikleri kanıt sayılır.</span><strong>File Agent, fiziksel dosya ve provider secret istemciye açılmaz.</strong></div>
-    {run === null ? <><div className="policy-ai-ready"><Sparkles aria-hidden="true" /><div><strong>{availableSources.length} doğrulanmış kaynak parçası hazır</strong><span>{availableSources.filter((item) => item.sourceType === 'pdf_text').length} PDF · {availableSources.filter((item) => item.sourceType === 'ocr').length} OCR</span></div></div><SourceDiscoveryPreview sources={availableSources} overviews={sourceOverviews} selectedKeys={selectedSourceKeys} onSelectionChange={(key, selected) => setSelectedSourceKeys((current) => {
+    <ProviderAvailabilityPanel providers={providers} selectedProviderId={selectedProviderId} onChange={setSelectedProviderId} disabled={data.busy}/>
+    {!data.workspace.providerPolicy.enabled && <div className="policy-ai-warning" role="status"><ShieldAlert aria-hidden="true"/><div><strong>Kuruluş AI politikası kapalıdır.</strong><span>Dosya, belge ve onaylı poliçe analizi okumaları çalışmaya devam eder; dış provider çağrısı ve mock fallback yapılmaz.</span></div></div>}
+    {run === null ? <><div className="policy-ai-ready"><Sparkles aria-hidden="true" /><div><strong>{availableSources.length} doğrulanmış kaynak parçası hazır</strong><span>{availableSources.filter((item) => item.sourceType === 'pdf_text').length} PDF · {availableSources.filter((item) => item.sourceType === 'ocr').length} OCR</span></div></div>{availableSources.length===0&&<div className="policy-ai-warning" role="status"><FileSearch aria-hidden="true"/><span>Planlanabilir ready PDF/OCR kaynağı yok. Mevcut case çekirdeği ve onaylı analiz okumaları etkilenmez.</span></div>}<SourceDiscoveryPreview sources={availableSources} overviews={sourceOverviews} selectedKeys={selectedSourceKeys} onSelectionChange={(key, selected) => setSelectedSourceKeys((current) => {
       const next = new Set(current)
       if (selected) next.add(key)
       else next.delete(key)

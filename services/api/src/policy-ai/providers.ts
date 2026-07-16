@@ -78,6 +78,7 @@ export interface PolicyAiProviderAdapter {
 
 export interface PolicyAiProviderRegistry {
   get(providerId: PolicyAiProviderId): PolicyAiProviderAdapter | undefined
+  list(): readonly PolicyAiProviderDescriptor[]
 }
 
 const REQUIRED_CAPABILITIES = ['structured_output', 'source_anchors'] as const
@@ -186,13 +187,24 @@ export function createPolicyAiProviderRegistry(adapters: readonly PolicyAiProvid
     if (map.has(adapter.descriptor.providerId)) throw new Error('duplicate_policy_ai_provider')
     map.set(adapter.descriptor.providerId, adapter)
   }
-  return { get: (id) => map.get(id) }
+  return {
+    get: (id) => map.get(id),
+    list: () => [...map.values()]
+      .map((adapter) => adapter.descriptor)
+      .sort((left, right) => left.providerId.localeCompare(right.providerId, 'en')),
+  }
 }
 
 export function createDeterministicPolicyAiProviderRegistry(): DeterministicPolicyAiProviderRegistry {
   const map = new Map<PolicyAiProviderId, DeterministicProvider>()
   for (const id of ['deterministic-success', 'deterministic-invalid-schema', 'deterministic-timeout', 'deterministic-failure', 'deterministic-prompt-injection-attempt'] as const) map.set(id, new DeterministicProvider(id))
-  return { get: (id) => map.get(id), getCallCount: (id) => map.get(id)?.calls ?? 0 }
+  return {
+    get: (id) => map.get(id),
+    list: () => [...map.values()]
+      .map((adapter) => adapter.descriptor)
+      .sort((left, right) => left.providerId.localeCompare(right.providerId, 'en')),
+    getCallCount: (id) => map.get(id)?.calls ?? 0,
+  }
 }
 
 export async function executePolicyAiProvider(

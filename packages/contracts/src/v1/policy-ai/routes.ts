@@ -10,6 +10,7 @@ export const POLICY_AI_PROMOTION_PREVIEW_ROUTE=`${POLICY_AI_RUN_ROUTE}/promotion
 export const POLICY_AI_PROMOTE_ROUTE=`${POLICY_AI_RUN_ROUTE}/promote` as const
 export const POLICY_AI_CANCEL_ROUTE=`${POLICY_AI_RUN_ROUTE}/cancel` as const
 export const POLICY_AI_USAGE_ROUTE=`${API_V1_BASE}/ai/usage` as const
+export const POLICY_AI_PROVIDERS_ROUTE=`${API_V1_BASE}/ai/providers` as const
 export const POLICY_AI_PLAN_SCOPE='policy_ai_extraction.plan' as const
 export const POLICY_AI_START_SCOPE='policy_ai_extraction.start' as const
 export const POLICY_AI_CANCEL_SCOPE='policy_ai_extraction.cancel' as const

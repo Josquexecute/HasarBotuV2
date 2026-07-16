@@ -9,7 +9,7 @@ export {
   REDACTED_LOG_PATHS,
   type BuildAppOptions,
 } from './app.js'
-export { startServer } from './server.js'
+export { createConfiguredPolicyAiProviderRegistry, startServer } from './server.js'
 export {
   ConfigError,
   DEFAULT_HOST,

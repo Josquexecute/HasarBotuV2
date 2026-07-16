@@ -430,3 +430,11 @@ Chunk server’da lease/Agent ownership, run/job version, extraction page, sourc
 - Outbound payload source-anchor bazında minimize/redact edilir; binary, tam case/document dump’ı, File Agent/root, mutlak yol ve session dışarı çıkmaz. Strict schema, tools kapalı ve `store:false` zorlanır.
 - Migration 0020 mevcut orchestration tablolarını privacy snapshot, retention/pricing version ve token usage ile genişletir. Raw request/response saklanmaz; File Agent, IPC ve fiziksel yazma yolu değişmez.
 - Deployment gerçek müşteri pilotundan önce egress allow-list, provider project/model yetkisi, secret injection/rotation ve ZDR veya Modified Abuse Monitoring uygunluğunu ayrıca doğrulamalıdır.
+
+### Paket 31 ek uygulama kaydı — Gemini runtime composition
+
+- Gemini adapter mevcut API process’indeki provider registry’ye yalnız server-only opt-in/config ile eklenir. Yeni service, worker, queue, File Agent işi veya IPC yoktur.
+- `GEMINI_API_KEY` yalnız process memory’de adapter config’ine geçer; descriptor/list API’si secret taşımaz. Eksik opt-in config fail-closed, disabled config ise boş registry ile çekirdek başlangıcıdır.
+- Deployment provider kaydı ile organization policy/bütçe birbirinden bağımsızdır. Salt-okunur availability endpoint’i bu kapıları güvenli biçimde birleştirir; provider çağrısı veya audit yazısı yapmaz.
+- Production composition otomatik Gemini model fallback’i yapmaz. Model değişimi açık environment config ve kontrollü restart/deployment gerektirir.
+- Migration, dependency, File Agent, filesystem ve fiziksel veri yazma yolu değişmez.

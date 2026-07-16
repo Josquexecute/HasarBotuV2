@@ -5,6 +5,7 @@ import type {
   DataSourceKind,
   PolicyAiCandidateCategory,
   PolicyAiCandidateReviewInput,
+  PolicyAiProviderId,
   PolicyAiPromotionRecord,
   PolicyAiSourceSelectionRecord,
   PolicyAiWorkspaceRecord,
@@ -53,15 +54,17 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
     void adapter.current.load(caseId).then((value) => {
       if (cancelled) return
       setWorkspace(value)
-      setStatus(value.run === null && value.availableSources.length === 0 ? 'empty' : 'ok')
+      setStatus('ok')
     }).catch((error: unknown) => {
       if (!cancelled) fail(error)
     })
     return () => { cancelled = true }
   }, [caseId, fail, source, version])
 
-  const plan = useCallback(async (selectedSources: readonly PolicyAiSourceSelectionRecord[]) => {
+  const plan = useCallback(async (providerId: PolicyAiProviderId, selectedSources: readonly PolicyAiSourceSelectionRecord[]) => {
     if (workspace === null || selectedSources.length === 0 || busyAction !== null) return
+    const provider = workspace.providers.find((item) => item.providerId === providerId)
+    if (provider?.configured !== true) return
     const availableSourceKeys = new Set(workspace.availableSources.map((item) => item.sourceType === 'pdf_text'
       ? `pdf:${item.extractionId}:${item.segmentId}`
       : `ocr:${item.ocrRunId}:${item.elementId}`))
@@ -70,11 +73,11 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
       : `ocr:${item.ocrRunId}:${item.elementId}`)
     if (new Set(selectedSourceKeys).size !== selectedSourceKeys.length || selectedSourceKeys.some((key) => !availableSourceKeys.has(key))) return
     const sourceIdentity = [...selectedSourceKeys].sort().join('|')
-    const identity = `${caseId}:plan:${sourceIdentity}`
+    const identity = `${caseId}:plan:${providerId}:${sourceIdentity}`
     if (planAttempt.current?.identity !== identity) planAttempt.current = { identity, key: crypto.randomUUID() }
     setBusyAction('plan')
     try {
-      const planned = await adapter.current.plan(caseId, selectedSources, planAttempt.current.key)
+      const planned = await adapter.current.plan(caseId, providerId, selectedSources, planAttempt.current.key)
       planAttempt.current = null
       startAttempt.current = null
       setWorkspace({ ...workspace, run: planned, candidates: [], conflicts: [], promotionPreview: null, promotion: null })

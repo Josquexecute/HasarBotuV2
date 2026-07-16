@@ -627,3 +627,15 @@ Etkisi: Migration `0021_policy_ai_provider_recovery`; Gemini provider/retention 
 5. Accept/edit/reject/control kararları ve promotion semantiği Paket 27 ile aynıdır. Yalnız accepted/edited adaylar açık onayla Paket 23 içinde yeni pending taslak sürüme uygulanır; bu işlem nihai analiz approval değildir.
 6. Promotion transaction'ı başarıyla tamamlanınca dosya detayındaki Paket 23 analiz görünümü otomatik yenilenir. Kullanıcı aynı ekranda yeni analiz sürümünü, insan onay durumunu ve sayfa/bölüm/madde kanıtını görür; sayfa yenilemesi veya mock fallback gerekmez.
 7. UI adımları kaynak seçimi → plan/start → insan incelemesi → taslağa uygulama olarak görünürdür. API/DB/contracts/audit semantiği değişmez; yeni migration, endpoint, dependency, File Agent işi, IPC veya fiziksel veri yazma yolu eklenmez.
+
+## 2026-07-16 — HB-2026-037: Gemini production/deployment etkinleştirme kapısı
+
+1. Gemini adapter’ının API runtime’a kaydı yalnız `GEMINI_POLICY_PROVIDER_ENABLED=true` açık opt-in’i ile yapılır. Bayrak yoksa veya `false` ise Gemini registry’ye girmez; API ve bütün çekirdek case/document/policy-analysis read akışları normal çalışır.
+2. `GEMINI_API_KEY` yalnız API process environment’ından okunur. Anahtar biçimi regex ile tahmin edilmez; yalnız trim, boş olmama ve 4096 karakter güvenli üst sınırı uygulanır. Secret DB, contract, response, UI, audit veya log’a taşınmaz.
+3. Deployment model seçimi açık ve allow-list tabanlıdır: `gemini-3.5-flash` veya `gemini-2.5-flash`. Production composition otomatik model/provider fallback yapmaz; Paket 29’daki 503 fallback yalnız sentetik pilot runner davranışıdır.
+4. Provider’ın sunucuda kayıtlı olması ile organization AI policy’sinin açık/allow-list’te olması ayrı kapılardır. Çağrı hazırlığı yalnız `configured && organizationEnabled && providerAllowed` olduğunda true olur; per-request/monthly bütçe ve kullanıcı onayı sonraki mevcut kapılar olarak korunur.
+5. Oturum gerektiren salt-okunur `GET /api/v1/ai/providers`, yalnız güvenli provider/model/version/retention/limit ve organization policy/bütçe özetini döndürür. Secret veya config ham değeri dönmez; salt-okunur durum sorgusu audit gürültüsü üretmez.
+6. UI, Gemini/OpenAI deployment ve organization kullanılabilirliğini ayrı rozetlerle gösterir. Provider kapalı veya yapılandırılmamışsa mock fallback yapmaz; çekirdek uygulamanın çalışmaya devam ettiğini açıkça belirtir.
+7. Gemini ücretsiz katmanının `free_tier_product_improvement` retention bilgisi görünür kalır. Bu deployment kapısı gerçek müşteri verisi gönderimine onay vermez; hukuki/retention/egress ve secret rotation onayı ayrıca gereklidir.
+
+Etkisi: API composition/config, salt-okunur provider availability contract/endpoint ve Kasko AI paneli güncellendi. Migration, dependency, IPC, File Agent veya fiziksel veri yazma yolu değişmedi.

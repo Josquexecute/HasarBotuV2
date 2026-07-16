@@ -328,3 +328,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Kaynak seçiminin UI state’i kalıcı iş verisi değildir. Server plan audit’i yalnız mevcut güvenli source/candidate sayaçlarını ve kimlikleri taşır; checkbox etiketi, tam excerpt veya istemci ekran durumu audit’e yazılmaz.
 - Promotion sonrası otomatik analysis refresh salt okunurdur ve ek audit gürültüsü oluşturmaz.
 - Kanıt dialogu yalnız API’nin bounded sourceAnchor metadata’sını gösterir; mutlak yol, binary, secret, full prompt/output ve tam poliçe metni istemci modeline eklenmez.
+
+### 6.17 Paket 31 deployment availability ve secret audit sınırı
+
+- Gemini API key yalnız API process environment’ındadır; DB yedeği, audit export, client bundle, API response ve log kapsamına girmez. Rotation/deployment platformunun sorumluluğudur.
+- `GET /api/v1/ai/providers` salt-okunur kullanılabilirlik sorgusudur ve her ekran yenilemesinde audit gürültüsü üretmez. Provider start ve usage olayları mevcut AuditService/ledger kurallarıyla auditlenmeye devam eder.
+- Availability cevabı yalnız güvenli provider/model/version/retention, deployment kayıt durumu ve organization policy/bütçe özetini taşır. Secret varlığına ilişkin ham config değeri, key uzunluğu/biçimi veya environment adı kullanıcı verisi olarak dönmez.
+- Provider kapalı veya yapılandırılmamış durumda dış çağrı ve fallback yoktur. Bu durum case/document/policy-analysis read/write audit akışlarını değiştirmez.

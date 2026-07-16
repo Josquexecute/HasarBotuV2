@@ -4,6 +4,9 @@ import type {
   PolicyAiDataPort,
   PolicyAiPromotionPreviewRecord,
   PolicyAiPromotionRecord,
+  PolicyAiProviderAvailabilityRecord,
+  PolicyAiProviderId,
+  PolicyAiProviderPolicyRecord,
   PolicyAiRunRecord,
   PolicyAiRunStatus,
   PolicyAiSourceItemRecord,
@@ -31,6 +34,8 @@ const validationStatuses = ['validated', 'control_required', 'rejected_evidence'
 const conflictStatuses = ['none', 'duplicate', 'conflict_detected', 'control_required'] as const
 const humanReviewStatuses = ['pending', 'control_required'] as const
 const reviewActions = ['accepted', 'edited', 'rejected', 'control_required'] as const
+const providerIds: readonly PolicyAiProviderId[] = ['deterministic-success', 'deterministic-invalid-schema', 'deterministic-timeout', 'deterministic-failure', 'deterministic-prompt-injection-attempt', 'openai-responses', 'gemini-generate-content']
+const providerAvailabilityReasons = ['AI_PROVIDER_DISABLED', 'AI_PROVIDER_NOT_CONFIGURED', 'AI_PROVIDER_NOT_ALLOWED'] as const
 const piiCategories = ['address', 'email', 'iban', 'name', 'phone', 'plate', 'reference_number', 'tax_identity', 'turkish_identity', 'vehicle_identity'] as const
 const sha256Pattern = /^[a-f0-9]{64}$/
 const maximumBundleItems = 200
@@ -234,6 +239,46 @@ function candidates(value: unknown): Pick<PolicyAiWorkspaceRecord, 'candidates' 
   return { candidates: items, conflicts }
 }
 
+function providerAvailability(value: unknown): Pick<PolicyAiWorkspaceRecord, 'providerPolicy' | 'providers'> {
+  if (!record(value) || !record(value.policy) || !Array.isArray(value.providers)
+    || typeof value.policy.enabled !== 'boolean'
+    || !isNonnegativeInteger(value.policy.monthlyBudgetMinor)
+    || !isNonnegativeInteger(value.policy.perRequestBudgetMinor)
+    || typeof value.policy.monthlyHardStop !== 'boolean'
+    || !isNonnegativeInteger(value.policy.currentMonthCostMinor)
+    || !isNonnegativeInteger(value.policy.maximumInputCharacters) || value.policy.maximumInputCharacters < 1
+    || !isNonnegativeInteger(value.policy.maximumCandidates) || value.policy.maximumCandidates < 1
+    || !isNonnegativeInteger(value.policy.requestTimeoutMs) || value.policy.requestTimeoutMs < 1
+    || value.providers.length < 1 || value.providers.length > providerIds.length) throw new HttpPolicyAiError('unavailable', 'policy AI provider availability response is invalid')
+  const providers = value.providers.map((item) => {
+    if (!record(item)
+      || !providerIds.includes(item.providerId as PolicyAiProviderId)
+      || typeof item.configured !== 'boolean'
+      || typeof item.organizationEnabled !== 'boolean'
+      || typeof item.providerAllowed !== 'boolean'
+      || typeof item.callReady !== 'boolean'
+      || !isNullableString(item.providerVersion, 80)
+      || !isNullableString(item.modelId, 80)
+      || typeof item.externalProvider !== 'boolean'
+      || !(item.retentionMode === null || ['local_only', 'store_false', 'free_tier_product_improvement'].includes(String(item.retentionMode)))
+      || !isNullableString(item.pricingVersion, 80)
+      || !(item.maximumInputCharacters === null || (isNonnegativeInteger(item.maximumInputCharacters) && item.maximumInputCharacters > 0))
+      || !(item.reasonCode === null || providerAvailabilityReasons.includes(item.reasonCode as typeof providerAvailabilityReasons[number]))) throw new HttpPolicyAiError('unavailable', 'policy AI provider availability item is invalid')
+    const facts = [item.providerVersion, item.modelId, item.retentionMode, item.pricingVersion, item.maximumInputCharacters]
+    const expectedReady = item.configured && item.organizationEnabled && item.providerAllowed
+    const expectedReason = !item.configured ? 'AI_PROVIDER_NOT_CONFIGURED' : !item.organizationEnabled ? 'AI_PROVIDER_DISABLED' : !item.providerAllowed ? 'AI_PROVIDER_NOT_ALLOWED' : null
+    if (item.callReady !== expectedReady
+      || item.reasonCode !== expectedReason
+      || (item.configured ? facts.some((fact) => fact === null) : facts.some((fact) => fact !== null))) throw new HttpPolicyAiError('unavailable', 'policy AI provider availability consistency is invalid')
+    return item as unknown as PolicyAiProviderAvailabilityRecord
+  })
+  if (new Set(providers.map((provider) => provider.providerId)).size !== providers.length) throw new HttpPolicyAiError('unavailable', 'policy AI provider availability identifiers are invalid')
+  return {
+    providerPolicy: value.policy as unknown as PolicyAiProviderPolicyRecord,
+    providers,
+  }
+}
+
 function ocrPageWarnings(page: PolicyOcrPageRecord): string[] {
   return [
     ...(page.requiresHumanReview ? ['OCR_HUMAN_REVIEW_REQUIRED'] : []),
@@ -325,10 +370,15 @@ export function createHttpPolicyAiAdapter(options: { readonly baseUrl?: string; 
 
   return {
     async load(caseId) {
-      const [discovery, list] = await Promise.all([discover(caseId), request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions`)])
+      const [discovery, list, providerData] = await Promise.all([
+        discover(caseId),
+        request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions`),
+        request('/api/v1/ai/providers'),
+      ])
+      const availability = providerAvailability(providerData)
       if (!record(list) || !Array.isArray(list.items)) throw new HttpPolicyAiError('unavailable', 'policy AI list is invalid')
       const summary = list.items[0]
-      if (!record(summary)) return { run: null, candidates: [], conflicts: [], availableSources: discovery.selections, sourceOverviews: discovery.overviews, promotionPreview: null, promotion: null }
+      if (!record(summary)) return { run: null, candidates: [], conflicts: [], availableSources: discovery.selections, sourceOverviews: discovery.overviews, ...availability, promotionPreview: null, promotion: null }
       if (!hasString(summary.id, 80)) throw new HttpPolicyAiError('unavailable', 'policy AI list item is invalid')
       const detail = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/${encodeURIComponent(summary.id)}`)
       if (!record(detail)) throw new HttpPolicyAiError('unavailable', 'policy AI detail is invalid')
@@ -350,15 +400,15 @@ export function createHttpPolicyAiAdapter(options: { readonly baseUrl?: string; 
         currentPromotionPreview = promotionPreview(value.preview)
         if (currentPromotionPreview.runId !== current.id || currentPromotionPreview.runVersion !== current.version) throw new HttpPolicyAiError('unavailable', 'policy AI promotion preview identity is invalid')
       }
-      return { run: current, ...candidateData, availableSources: discovery.selections, sourceOverviews: discovery.overviews, promotionPreview: currentPromotionPreview, promotion: null }
+      return { run: current, ...candidateData, availableSources: discovery.selections, sourceOverviews: discovery.overviews, ...availability, promotionPreview: currentPromotionPreview, promotion: null }
     },
-    async plan(caseId, sources, idempotencyKey) {
+    async plan(caseId, providerId, sources, idempotencyKey) {
       const selected = sources.map((source) => {
         if (source.sourceType === 'pdf_text' && source.extractionId !== undefined && source.segmentId !== undefined) return { sourceType: 'pdf_text' as const, extractionId: source.extractionId, segmentId: source.segmentId }
         if (source.sourceType === 'ocr' && source.ocrRunId !== undefined && source.elementId !== undefined) return { sourceType: 'ocr' as const, ocrRunId: source.ocrRunId, elementId: source.elementId }
         throw new HttpPolicyAiError('unavailable', 'policy AI source selection is invalid')
       })
-      const value = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/plan`, { method: 'POST', headers: { 'content-type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ providerId: 'openai-responses', sources: selected }) })
+      const value = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/policy-ai-extractions/plan`, { method: 'POST', headers: { 'content-type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ providerId, sources: selected }) })
       if (!record(value)) throw new HttpPolicyAiError('unavailable', 'policy AI plan is invalid')
       const planned = run(value.run)
       if (planned.caseId !== caseId) throw new HttpPolicyAiError('unavailable', 'policy AI plan case identity is invalid')

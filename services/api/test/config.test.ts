@@ -5,6 +5,9 @@ import {
   DEFAULT_LOG_LEVEL,
   DEFAULT_NODE_ENV,
   DEFAULT_PORT,
+  GEMINI_FREE_TIER_FALLBACK_MODEL_ID,
+  GEMINI_FREE_TIER_MODEL_ID,
+  createConfiguredPolicyAiProviderRegistry,
   parseConfig,
 } from '../src/index.js'
 
@@ -100,6 +103,58 @@ describe('parseConfig', () => {
     expect(caught).toBeInstanceOf(ConfigError)
     expect((caught as ConfigError).message).not.toContain(secret)
     expect((caught as ConfigError).message).toContain('OPENAI_API_KEY')
+  })
+
+  it('Gemini deployment opt-in olmadan kapali kalir ve cekirdek config calisir', () => {
+    expect(parseConfig({
+      GEMINI_API_KEY: 'installed-but-disabled-secret',
+      GEMINI_POLICY_MODEL: GEMINI_FREE_TIER_MODEL_ID,
+    }).geminiPolicyProvider).toBeUndefined()
+    expect(createConfiguredPolicyAiProviderRegistry(parseConfig({})).list()).toEqual([])
+  })
+
+  it.each([GEMINI_FREE_TIER_MODEL_ID, GEMINI_FREE_TIER_FALLBACK_MODEL_ID])(
+    'Gemini secretini bicim tahmini yapmadan eksiksiz server config ile kaydeder: %s',
+    (modelId) => {
+      const config = parseConfig({
+        GEMINI_POLICY_PROVIDER_ENABLED: 'true',
+        GEMINI_API_KEY: '  anahtar-noktalama.icerir+ve-regex-tahmini-yok  ',
+        GEMINI_POLICY_MODEL: modelId,
+        GEMINI_POLICY_MAX_OUTPUT_TOKENS: '4096',
+      })
+      expect(config.geminiPolicyProvider).toMatchObject({
+        apiKey: 'anahtar-noktalama.icerir+ve-regex-tahmini-yok',
+        modelId,
+        maximumOutputTokens: 4_096,
+      })
+      const descriptors = createConfiguredPolicyAiProviderRegistry(config).list()
+      expect(descriptors).toHaveLength(1)
+      expect(descriptors[0]).toMatchObject({
+        providerId: 'gemini-generate-content',
+        modelId,
+        retentionMode: 'free_tier_product_improvement',
+      })
+      expect(JSON.stringify(descriptors)).not.toContain('anahtar-noktalama')
+    },
+  )
+
+  it('Gemini opt-in kismi/gecersiz configi secret sizdirmadan fail-closed reddeder', () => {
+    const secret = 'bu-deger-hata-mesajina-girmemeli'
+    expect(() => parseConfig({ GEMINI_POLICY_PROVIDER_ENABLED: 'yes' })).toThrow(ConfigError)
+    expect(() => parseConfig({ GEMINI_POLICY_PROVIDER_ENABLED: 'true', GEMINI_POLICY_MODEL: GEMINI_FREE_TIER_MODEL_ID })).toThrow(ConfigError)
+    expect(() => parseConfig({ GEMINI_POLICY_PROVIDER_ENABLED: 'true', GEMINI_API_KEY: secret, GEMINI_POLICY_MODEL: 'gemini-tahmini-model' })).toThrow(ConfigError)
+    expect(() => parseConfig({
+      GEMINI_POLICY_PROVIDER_ENABLED: 'true',
+      GEMINI_API_KEY: 'x'.repeat(4_097),
+      GEMINI_POLICY_MODEL: GEMINI_FREE_TIER_MODEL_ID,
+    })).toThrow(ConfigError)
+    try {
+      parseConfig({ GEMINI_POLICY_PROVIDER_ENABLED: 'true', GEMINI_API_KEY: secret, GEMINI_POLICY_MODEL: 'gemini-tahmini-model' })
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigError)
+      expect((error as ConfigError).message).not.toContain(secret)
+      expect((error as ConfigError).message).toContain('GEMINI_POLICY_MODEL')
+    }
   })
 
   it('saf fonksiyondur: process.env okumaz ve degistirmez', () => {

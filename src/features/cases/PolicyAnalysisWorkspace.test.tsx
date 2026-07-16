@@ -234,6 +234,7 @@ describe('Kasko poliçe analiz uçtan uca çalışma alanı', () => {
     let promoted = false
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, { policy: { enabled: true, monthlyBudgetMinor: 100, perRequestBudgetMinor: 10, monthlyHardStop: true, currentMonthCostMinor: 0, maximumInputCharacters: 50_000, maximumCandidates: 50, requestTimeoutMs: 5_000 }, providers: [{ providerId: 'deterministic-success', configured: true, organizationEnabled: true, providerAllowed: true, callReady: true, providerVersion: 'deterministic/1.0.0', modelId: 'local-fixture-v1', externalProvider: false, retentionMode: 'local_only', pricingVersion: 'deterministic-cost/1.0.0', maximumInputCharacters: 200_000, reasonCode: null }] })
       if (url.includes('/documents?')) return response(200, { items: [] })
       if (init?.method === 'POST' && url.endsWith('/promote')) {
         promoted = true

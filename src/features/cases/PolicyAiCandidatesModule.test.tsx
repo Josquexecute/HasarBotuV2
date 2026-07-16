@@ -16,6 +16,9 @@ const SEGMENT = '019f7000-0000-7000-8000-000000000033'
 const ANCHOR = 'a'.repeat(64)
 
 const budget = { enabled: true, providerAvailable: true, providerAllowed: true, estimatedCostMinor: 1, currentMonthCostMinor: 0, monthlyBudgetMinor: 100, perRequestBudgetMinor: 10, allowed: true, reasonCode: null }
+const providerPolicy = { enabled: true, monthlyBudgetMinor: 100, perRequestBudgetMinor: 10, monthlyHardStop: true, currentMonthCostMinor: 0, maximumInputCharacters: 50_000, maximumCandidates: 50, requestTimeoutMs: 5_000 }
+const providerAvailability = { policy: providerPolicy, providers: [{ providerId: 'deterministic-success', configured: true, organizationEnabled: true, providerAllowed: true, callReady: true, providerVersion: 'deterministic/1.0.0', modelId: 'local-fixture-v1', externalProvider: false, retentionMode: 'local_only', pricingVersion: 'deterministic-cost/1.0.0', maximumInputCharacters: 200_000, reasonCode: null }] }
+const disabledProviderAvailability = { policy: { ...providerPolicy, enabled: false }, providers: [{ providerId: 'gemini-generate-content', configured: true, organizationEnabled: false, providerAllowed: true, callReady: false, providerVersion: 'gemini-generate-content/1.0.0', modelId: 'gemini-2.5-flash', externalProvider: true, retentionMode: 'free_tier_product_improvement', pricingVersion: 'gemini-free-tier/2026-07-15', maximumInputCharacters: 50_000, reasonCode: 'AI_PROVIDER_DISABLED' }] }
 const localPrivacy = { externalProvider: false, policyVersion: 'policy-ai-pii/local-only', outboundPayloadHash: null, outboundInputCharacters: 64, redactedValueCount: 0, redactedCategories: [], retentionMode: 'local_only', pricingVersion: 'deterministic-cost/1.0.0' }
 const source = { sourceAnchorId: ANCHOR, sourceType: 'ocr', documentId: DOCUMENT, documentVersionId: VERSION, extractionId: EXTRACTION, sourceItemId: SEGMENT, pageNumber: 4, boundedExcerpt: 'Koşullu muafiyet %10 ve anlaşmasız servis.', textHash: 'c'.repeat(64), sourceQuality: 'low', warnings: ['OCR_HUMAN_REVIEW_REQUIRED'], historicalSelected: false }
 
@@ -40,6 +43,7 @@ describe('AI alan adayları görünümü', () => {
     let started = false
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, providerAvailability)
       if (url.includes('/documents?')) return response(200, { items: [] })
       if (init?.method === 'POST' && url.endsWith('/start')) { started = true; return response(200, detail('review_required')) }
       if (url.includes('/candidates?')) return response(200, { items: [generalCandidate, candidate], conflicts: [conflict], pageInfo: { page: 1, pageSize: 100, totalItems: 2, totalPages: 1 } })
@@ -71,6 +75,7 @@ describe('AI alan adayları görünümü', () => {
   it('provider kapalı durumunu mock fallback olmadan gösterir', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, disabledProviderAvailability)
       if (url.includes('/documents?')) return response(200, { items: [] })
       if (url.endsWith(`/policy-ai-extractions/${RUN}`)) return response(200, { run: { ...detail('provider_disabled').run, safeErrorCode: 'AI_PROVIDER_DISABLED', budget: { ...budget, enabled: false, allowed: false, reasonCode: 'AI_PROVIDER_DISABLED' } } })
       return response(200, { items: [summary('provider_disabled')] })
@@ -78,6 +83,8 @@ describe('AI alan adayları görünümü', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(fetchMock as never)
     render(<PolicyAiCandidatesModule caseId={CASE} source="api" />)
     await waitFor(() => expect(screen.getByText(/Provider çağrısı yapılmadı/)).toBeInTheDocument())
+    expect(screen.getByText('Kuruluş AI politikası kapalıdır.')).toBeInTheDocument()
+    expect(screen.getByText('Google Gemini')).toBeInTheDocument()
     expect(screen.queryByText('Mock yanıt')).not.toBeInTheDocument()
   })
 
@@ -87,6 +94,7 @@ describe('AI alan adayları görünümü', () => {
     const external = { run: { ...planned, providerId: 'openai-responses', providerVersion: 'openai-responses/1.0.0', modelId: 'gpt-5-mini-pinned', privacy: externalPrivacy, bundle: { ...planned.bundle, items: [{ ...source, boundedExcerpt: 'A'.repeat(4_000) }] } } }
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, providerAvailability)
       if (url.includes('/documents?')) return response(200, { items: [] })
       if (url.endsWith(`/policy-ai-extractions/${RUN}`)) return response(200, external)
       return response(200, { items: [{ ...summary(), providerId: 'openai-responses', privacy: externalPrivacy }] })
@@ -106,6 +114,7 @@ describe('AI alan adayları görünümü', () => {
     const external = { run: { ...planned, providerId: 'gemini-generate-content', providerVersion: 'gemini-generate-content/1.0.0', modelId: 'gemini-3.5-flash', privacy: externalPrivacy } }
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, providerAvailability)
       if (url.includes('/documents?')) return response(200, { items: [] })
       if (url.endsWith(`/policy-ai-extractions/${RUN}`)) return response(200, external)
       return response(200, { items: [{ ...summary(), providerId: 'gemini-generate-content', privacy: externalPrivacy }] })
@@ -122,6 +131,7 @@ describe('AI alan adayları görünümü', () => {
     const currentPreview=()=>{const values=[...reviews.values()],accepted=values.filter(value=>value.action==='accepted').length,edited=values.filter(value=>value.action==='edited').length,pending=2-values.length;return{...preview,acceptedCount:accepted,editedCount:edited,pendingCount:pending,promotableCount:accepted+edited,sourceCount:accepted+edited,canPromote:pending===0&&accepted+edited>0,blockers:pending===0?[]:['AI_REVIEW_PENDING']}}
     vi.spyOn(globalThis,'fetch').mockImplementation(vi.fn(async(input:string|URL|Request,init?:RequestInit)=>{
       const url=String(input)
+      if(url.endsWith('/api/v1/ai/providers'))return response(200,providerAvailability)
       if(url.includes('/documents?'))return response(200,{items:[]})
       if(init?.method==='POST'&&url.endsWith('/review')){const body=JSON.parse(String(init.body)) as Record<string,unknown>,candidateId=url.split('/').at(-2)!,base=items.find(item=>item.candidateId===candidateId)!,existing=reviews.get(candidateId),review={schemaVersion:'policy-ai-human-review/1.0.0',runId:RUN,candidateId,reviewVersion:Number(existing?.reviewVersion??0)+1,action:body.action,normalizedValue:body.action==='edited'?body.normalizedValue:base.normalizedValue,originalValue:body.action==='edited'?body.originalValue:base.originalValue,conditions:body.action==='edited'?body.conditions:base.conditions,exceptions:body.action==='edited'?body.exceptions:base.exceptions,sourceAnchorIds:base.sourceAnchorIds,reason:body.reason??null,evidenceStatus:'control_required',reviewedByUserId:DOCUMENT,reviewedAt:'2026-07-15T09:00:00.000Z'};reviews.set(candidateId,review);return response(200,{review})}
       if(init?.method==='POST'&&url.endsWith('/promote'))return response(201,{promotion:{id:BUNDLE,schemaVersion:'policy-ai-promotion/1.0.0',runId:RUN,reviewSetHash:'d'.repeat(64),analysisId:DOCUMENT,analysisVersionId:VERSION,analysisVersion:1,promotedCandidateCount:2,preservedConflictCount:1,promotedByUserId:DOCUMENT,promotedAt:'2026-07-15T09:01:00.000Z'}})
@@ -152,6 +162,7 @@ describe('AI alan adayları görünümü', () => {
   it('onayı case ve bundle kimliğine bağlar; case değişiminde temizler', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, providerAvailability)
       if (url.includes('/documents?')) return response(200, { items: [] })
       const second = url.includes(CASE_TWO)
       const runId = second ? RUN_TWO : RUN
@@ -181,6 +192,7 @@ describe('AI alan adayları görünümü', () => {
     const segment = { id: SEGMENT, extractionId: EXTRACTION, pageId: PAGE, pageNumber: 1, segmentIndex: 0, type: 'clause', startOffset: 0, endOffset: 20, text: 'Kasko teminat metni', textHash: 'e'.repeat(64) }
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, providerAvailability)
       if (url.includes('/documents?')) return response(200, { items: [{ id: DOCUMENT, documentType: 'casco_policy' }] })
       if (url.includes(`/api/v1/documents/${DOCUMENT}`)) return response(200, { document: { versions: [{ id: VERSION, versionNumber: 2, displayName: 'Sentetik Kasko Poliçesi.pdf', byteSize: 2048, mimeType: 'application/pdf', extension: 'pdf', status: 'ready', hashVerified: true, sizeVerified: true, verifiedAt: '2026-07-15T08:00:00.000Z' }] } })
       if (url.includes('/text-extractions') && url.endsWith('/text-extractions')) return response(200, { items: [extraction] })
@@ -214,12 +226,13 @@ describe('AI alan adayları görünümü', () => {
     expect(planKey).toMatch(/^[0-9a-f-]{36}$/)
     expect(startKey).toMatch(/^[0-9a-f-]{36}$/)
     expect(startKey).not.toBe(planKey)
-    expect(planBody).toMatchObject({ sources: [{ sourceType: 'pdf_text', extractionId: EXTRACTION, segmentId: SEGMENT }] })
+    expect(planBody).toMatchObject({ providerId: 'deterministic-success', sources: [{ sourceType: 'pdf_text', extractionId: EXTRACTION, segmentId: SEGMENT }] })
   })
 
   it('malformed run/bundle response için fail-closed unavailable gösterir', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, providerAvailability)
       if (url.includes('/documents?')) return response(200, { items: [] })
       if (url.endsWith(`/policy-ai-extractions/${RUN}`)) return response(200, { run: { ...detail().run, sourceBundleHash: 'd'.repeat(64) } })
       return response(200, { items: [summary()] })

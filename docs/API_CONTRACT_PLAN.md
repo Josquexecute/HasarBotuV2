@@ -399,3 +399,11 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Plan request yalnız kullanıcının seçtiği `PolicyAiSourceSelection` kayıtlarını taşır; server eligibility ve tenant doğrulaması değişmeden son otoritedir.
 - Promotion response içindeki `analysisId` ve `analysisVersion`, başarılı write sonrasında Paket 23 list/detail read’ini yenilemek için kullanılır. İstemci bu kimliklerden analiz içeriği uydurmaz.
 - UI orchestration ikinci bir write, otomatik approval veya yeni audit olayı üretmez. 401/403/404/409/5xx ve network hatalarında mevcut güvenli hata eşlemesi ve no-fallback davranışı korunur.
+
+## 20. Paket 31 provider availability contracts/API
+
+- `GET /api/v1/ai/providers` oturum gerektiren, organization kapsamlı ve salt-okunur bir durum endpoint’idir. Provider çağrısı, policy değişikliği veya audit yazısı üretmez.
+- Response; provider/model/version, external flag, retention/pricing sürümü, maksimum input, `configured`, organization policy özeti, current-month cost, `providerAllowed`, `callReady` ve kanonik unavailable reason taşır.
+- `callReady`, yalnız server provider kaydı, organization enabled ve provider allow-list birlikte sağlandığında true olabilir. Bütçe hard stop ve kullanıcı onayı mevcut plan/start sözleşmelerinde ayrıca uygulanır.
+- Secret, environment değişkeni, API key biçimi, header, endpoint override, full prompt/output veya kaynak metni response şemasında bulunmaz.
+- Runtime Zod ve deterministik JSON Schema fixture aynı kabul kümesidir. API modunda istemci bilinmeyen/bozuk availability cevabını mock veriyle maskelemez.

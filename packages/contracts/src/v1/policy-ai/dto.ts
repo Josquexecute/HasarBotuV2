@@ -13,6 +13,7 @@ const providerFactSchema=z.string().trim().min(1).max(80)
 const normalizedKeySchema=z.string().regex(/^[a-zA-Z0-9_.-]{1,80}$/)
 const MAX_POLICY_AI_CONFLICTS=(POLICY_AI_MAX_CANDIDATES*(POLICY_AI_MAX_CANDIDATES-1))/2+POLICY_AI_MAX_CANDIDATES
 const MAX_POLICY_AI_USAGE_ITEMS=1_000
+export const POLICY_AI_PROVIDER_AVAILABILITY_REASONS=['AI_PROVIDER_DISABLED','AI_PROVIDER_NOT_CONFIGURED','AI_PROVIDER_NOT_ALLOWED'] as const
 
 function createNormalizedValueSchema(depth:number):z.ZodType<unknown>{
   if(depth>=POLICY_AI_MAX_NORMALIZED_DEPTH)return jsonPrimitive
@@ -45,6 +46,44 @@ export const policyAiPromotionPreviewResponseSchema=z.strictObject({preview:poli
 export const policyAiPromotionResponseSchema=z.strictObject({promotion:policyAiPromotionSchema})
 export const policyAiUsageItemSchema=z.strictObject({runId:idSchema,caseId:caseIdSchema,providerId:z.enum(POLICY_AI_PROVIDER_IDS),modelId:providerFactSchema,inputCharacters:z.number().int().nonnegative(),outputCharacters:z.number().int().nonnegative(),inputTokens:z.number().int().nonnegative().nullable(),outputTokens:z.number().int().nonnegative().nullable(),pricingVersion:providerFactSchema,estimatedCostMinor:z.number().int().nonnegative(),actualCostMinor:z.number().int().nonnegative().nullable(),status:z.enum(['provider_disabled','budget_blocked','completed','failed','cancelled']),safeErrorCode:safeCodeSchema.nullable(),startedAt:utcDateTimeSchema,completedAt:utcDateTimeSchema.nullable()})
 export const policyAiUsageResponseSchema=z.strictObject({month:z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/),totalCostMinor:z.number().int().nonnegative(),items:z.array(policyAiUsageItemSchema).max(MAX_POLICY_AI_USAGE_ITEMS)})
+export const policyAiProviderPolicySchema=z.strictObject({
+  enabled:z.boolean(),
+  monthlyBudgetMinor:z.number().int().nonnegative(),
+  perRequestBudgetMinor:z.number().int().nonnegative(),
+  monthlyHardStop:z.boolean(),
+  currentMonthCostMinor:z.number().int().nonnegative(),
+  maximumInputCharacters:z.number().int().positive(),
+  maximumCandidates:z.number().int().positive(),
+  requestTimeoutMs:z.number().int().positive(),
+})
+export const policyAiProviderAvailabilitySchema=z.strictObject({
+  providerId:z.enum(POLICY_AI_PROVIDER_IDS),
+  configured:z.boolean(),
+  organizationEnabled:z.boolean(),
+  providerAllowed:z.boolean(),
+  callReady:z.boolean(),
+  providerVersion:providerFactSchema.nullable(),
+  modelId:providerFactSchema.nullable(),
+  externalProvider:z.boolean(),
+  retentionMode:z.enum(['local_only','store_false','free_tier_product_improvement']).nullable(),
+  pricingVersion:providerFactSchema.nullable(),
+  maximumInputCharacters:z.number().int().positive().nullable(),
+  reasonCode:z.enum(POLICY_AI_PROVIDER_AVAILABILITY_REASONS).nullable(),
+}).superRefine((value,context)=>{
+  const facts=[value.providerVersion,value.modelId,value.retentionMode,value.pricingVersion,value.maximumInputCharacters]
+  if(value.configured&&facts.some((fact)=>fact===null))context.addIssue({code:'custom',message:'configured_provider_facts_required'})
+  if(!value.configured&&facts.some((fact)=>fact!==null))context.addIssue({code:'custom',message:'unconfigured_provider_facts_forbidden'})
+  if(value.callReady!==(value.configured&&value.organizationEnabled&&value.providerAllowed))context.addIssue({code:'custom',message:'provider_call_readiness_invalid'})
+  const expectedReason=!value.configured?'AI_PROVIDER_NOT_CONFIGURED':!value.organizationEnabled?'AI_PROVIDER_DISABLED':!value.providerAllowed?'AI_PROVIDER_NOT_ALLOWED':null
+  if(value.reasonCode!==expectedReason)context.addIssue({code:'custom',message:'provider_availability_reason_invalid'})
+}).meta({'x-hasarbotu-runtime-validation':'provider-availability-consistency'})
+export const policyAiProvidersResponseSchema=z.strictObject({
+  policy:policyAiProviderPolicySchema,
+  providers:z.array(policyAiProviderAvailabilitySchema).min(1).max(POLICY_AI_PROVIDER_IDS.length),
+}).superRefine((value,context)=>{
+  const ids=value.providers.map((provider)=>provider.providerId)
+  if(new Set(ids).size!==ids.length)context.addIssue({code:'custom',path:['providers'],message:'duplicate_provider_id'})
+}).meta({'x-hasarbotu-runtime-validation':'unique-provider-availability'})
 export const policyAiCaseParamsSchema=z.strictObject({caseId:caseIdSchema})
 export const policyAiRunParamsSchema=z.strictObject({caseId:caseIdSchema,runId:idSchema})
 export const policyAiCandidateParamsSchema=z.strictObject({caseId:caseIdSchema,runId:idSchema,candidateId:policyAiCandidateIdSchema})
@@ -63,3 +102,6 @@ export type PolicyAiCandidateReviewResponse=z.infer<typeof policyAiCandidateRevi
 export type PolicyAiPromotionPreviewResponse=z.infer<typeof policyAiPromotionPreviewResponseSchema>
 export type PolicyAiPromotionResponse=z.infer<typeof policyAiPromotionResponseSchema>
 export type PolicyAiUsageResponse=z.infer<typeof policyAiUsageResponseSchema>
+export type PolicyAiProviderPolicy=z.infer<typeof policyAiProviderPolicySchema>
+export type PolicyAiProviderAvailability=z.infer<typeof policyAiProviderAvailabilitySchema>
+export type PolicyAiProvidersResponse=z.infer<typeof policyAiProvidersResponseSchema>

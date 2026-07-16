@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "policy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "monthlyBudgetMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "perRequestBudgetMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "monthlyHardStop": {
+          "type": "boolean"
+        },
+        "currentMonthCostMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maximumInputCharacters": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maximumCandidates": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "requestTimeoutMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "enabled",
+        "monthlyBudgetMinor",
+        "perRequestBudgetMinor",
+        "monthlyHardStop",
+        "currentMonthCostMinor",
+        "maximumInputCharacters",
+        "maximumCandidates",
+        "requestTimeoutMs"
+      ],
+      "additionalProperties": false
+    },
+    "providers": {
+      "minItems": 1,
+      "maxItems": 7,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "enum": [
+              "deterministic-success",
+              "deterministic-invalid-schema",
+              "deterministic-timeout",
+              "deterministic-failure",
+              "deterministic-prompt-injection-attempt",
+              "openai-responses",
+              "gemini-generate-content"
+            ]
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "organizationEnabled": {
+            "type": "boolean"
+          },
+          "providerAllowed": {
+            "type": "boolean"
+          },
+          "callReady": {
+            "type": "boolean"
+          },
+          "providerVersion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modelId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "externalProvider": {
+            "type": "boolean"
+          },
+          "retentionMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local_only",
+                  "store_false",
+                  "free_tier_product_improvement"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pricingVersion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maximumInputCharacters": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasonCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "AI_PROVIDER_DISABLED",
+                  "AI_PROVIDER_NOT_CONFIGURED",
+                  "AI_PROVIDER_NOT_ALLOWED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "providerId",
+          "configured",
+          "organizationEnabled",
+          "providerAllowed",
+          "callReady",
+          "providerVersion",
+          "modelId",
+          "externalProvider",
+          "retentionMode",
+          "pricingVersion",
+          "maximumInputCharacters",
+          "reasonCode"
+        ],
+        "additionalProperties": false,
+        "x-hasarbotu-runtime-validation": "provider-availability-consistency"
+      }
+    }
+  },
+  "required": [
+    "policy",
+    "providers"
+  ],
+  "additionalProperties": false,
+  "x-hasarbotu-runtime-validation": "unique-provider-availability"
+}

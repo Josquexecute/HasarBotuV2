@@ -50,6 +50,7 @@ describe('JSON Schema uretimi', () => {
       'policy-ai-promotion-request',
       'policy-ai-promotion-response',
       'policy-ai-provider-output',
+      'policy-ai-providers-response',
       'policy-ai-run-response',
       'policy-ai-start-request',
       'policy-ai-usage-response',

@@ -6,8 +6,28 @@ import {
 } from '@hasarbotu/database'
 import type pg from 'pg'
 import { buildApp } from './app.js'
-import { ConfigError, parseConfig } from './config.js'
-import { createOpenAiPolicyProvider, createPolicyAiProviderRegistry } from './policy-ai/index.js'
+import { ConfigError, parseConfig, type ApiConfig } from './config.js'
+import {
+  createGeminiPolicyProvider,
+  createOpenAiPolicyProvider,
+  createPolicyAiProviderRegistry,
+  type PolicyAiProviderAdapter,
+  type PolicyAiProviderRegistry,
+} from './policy-ai/index.js'
+
+/** Server environment config'inden secret sızdırmadan provider registry kurar. */
+export function createConfiguredPolicyAiProviderRegistry(
+  config: Pick<ApiConfig, 'openAiPolicyProvider' | 'geminiPolicyProvider'>,
+): PolicyAiProviderRegistry {
+  const adapters: PolicyAiProviderAdapter[] = []
+  if (config.openAiPolicyProvider !== undefined) {
+    adapters.push(createOpenAiPolicyProvider(config.openAiPolicyProvider))
+  }
+  if (config.geminiPolicyProvider !== undefined) {
+    adapters.push(createGeminiPolicyProvider(config.geminiPolicyProvider))
+  }
+  return createPolicyAiProviderRegistry(adapters)
+}
 
 /**
  * Sunucu yasam dongusu: config oku -> (varsa) DB havuzu kur -> uygulamayi kur
@@ -44,9 +64,7 @@ export async function startServer(): Promise<void> {
       ? {
           healthDependencyCheck: async () => (await checkDatabaseHealth(pool)).ok,
           auth: { pool, cookieSecure: config.nodeEnv === 'production' },
-          ...(config.openAiPolicyProvider !== undefined
-            ? { policyAiProviders: createPolicyAiProviderRegistry([createOpenAiPolicyProvider(config.openAiPolicyProvider)]) }
-            : {}),
+          policyAiProviders: createConfiguredPolicyAiProviderRegistry(config),
         }
       : {}),
   })

@@ -647,3 +647,21 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - API response/audit taramasında mutlak/UNC yol, sentetik parola, provider secret kalıbı, full prompt/system contract veya provider output sızıntısı bulunmadı.
 - Repository dışı `.git`/`node_modules`/`dist` içermeyen fresh kopyada `npm ci`, typecheck, lint, gerçek `_test` PostgreSQL ile aynı **1015/6**, build yeniden geçti; kopya güvenle kaldırıldı.
 - Build mevcut büyük chunk uyarısını sürdürür: ana JS 534.55 kB (gzip 143.26 kB). Paket 30 işlevini engellemez; ileride ayrı performans/code-splitting paketiyle ele alınmalıdır.
+
+## Paket 31 — Gemini production/deployment güvenlik kapısı (2026-07-16)
+
+- API composition, Gemini’yi yalnız açık `GEMINI_POLICY_PROVIDER_ENABLED=true`, güvenli process secret’ı ve izinli model ile provider registry’ye kaydeder. Bayrak kapalıyken veya yokken çekirdek API normal başlar; eksik/kısmi opt-in fail-closed config hatasıdır.
+- Secret biçimi regex ile tahmin edilmez; trim, boş değer ve 4096 karakter üst sınırı uygulanır. Secret hiçbir provider descriptor, contract, API response, UI state, audit veya log alanına girmez.
+- Yeni oturum korumalı `GET /api/v1/ai/providers`, server deployment durumu ile organization enabled/allow-list/bütçe durumunu ayrı ve güvenli özetler. Endpoint salt okunurdur ve audit gürültüsü üretmez.
+- Kasko AI paneli Gemini/OpenAI için “sunucuda yapılandırıldı”, “organization policy kapalı” ve “izin verilmedi” durumlarını ayırır; yalnız yapılandırılmış provider seçilebilir. API modunda mock fallback yoktur.
+- Production composition otomatik model/provider fallback yapmaz. Paket 29’un 503 sonrası `gemini-2.5-flash` fallback’i yalnız sentetik pilot runner kapsamındadır.
+- Migration, dependency, File Agent, IPC veya fiziksel veri yazma yolu değişmedi. Karar: HB-2026-037.
+
+### Doğrulama durumu (Paket 31)
+
+- Ana çalışma ağacında `npm install`, typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1022 başarılı / 6 mevcut ortam-koşullu UI skip**, build, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 156/6; domain 370; contracts 181; database 42; API 220; file-agent 53.
+- Gerçek PostgreSQL/API testinde authenticated provider availability, 401, organization policy kapalı/açık, configured/unconfigured provider, call-ready bileşimi, salt-okunur GET’te audit sayısının değişmemesi, secret sızıntısı olmaması ve boş registry ile Cases detail’in çalışması doğrulandı.
+- Gerçek Chrome/CDP smoke’unda API login, Kasko case, Gemini/OpenAI deployment rozetleri, provider seçimi, organization policy disabled görünümü, çekirdek Paket 23 analiz read’i ve no-fallback doğrulandı. 1366×768 açık/koyu ile 1920×1080 koyu temada yatay taşma yoktu; iç scroll erişilebilirdi ve kararlı sayfada console warning/error/exception 0’dı.
+- Browser composition testinde Gemini sentetik server-only secret ile registry’ye alındı; availability yalnız `gemini-2.5-flash` ve güvenli descriptor gösterdi, secret response/DOM/log’a taşınmadı. Organization policy kapalı olduğu için provider çağrısı oluşmadı; çekirdek uygulama çalışmaya devam etti.
+- Repository dışı `.git`/`node_modules`/`dist`/`coverage` içermeyen fresh kopyada `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1022/6**, build yeniden geçti ve geçici kopya güvenle kaldırıldı.
+- Build mevcut büyük chunk uyarısını sürdürür: ana JS 540.15 kB (gzip 144.79 kB). `npm ci` ayrıca mevcut `glob@11.1.0` deprecation uyarısını gösterir; moderate audit 0 açıktır. Bunlar Paket 31 güvenlik işlevini engellemez ancak ayrı dependency/performance bakımında ele alınmalıdır.

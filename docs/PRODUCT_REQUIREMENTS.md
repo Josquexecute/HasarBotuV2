@@ -200,3 +200,10 @@ formatlarında alınabilir.
 - Yalnız kabul edilen veya kanıt sınırında düzenlenen adaylar açık onayla yeni pending Paket 23 analiz sürümüne uygulanır. Red ve kontrol gereken adaylar uygulanmaz; conflict ve provenance geçmişi korunur.
 - Uygulama tamamlanınca yeni analiz sürümü aynı dosya detayında otomatik görünür. Bu taslak, ayrıca Paket 23 insan onayı verilmeden kesin teminat/muafiyet veya operasyon kararı değildir.
 - API hatasında gerçek akış mock veriye düşmez. Mutlak yol, secret, binary, ham provider cevabı ve tam poliçe metni kullanıcı arayüzüne taşınmaz.
+
+### Gemini deployment kullanılabilirliği — Paket 31
+
+- Gemini yalnız güvenli server-side opt-in ve secret config ile kullanılabilir. Provider kapalı veya yapılandırılmamışken temel case, belge ve onaylı analiz işlemleri kesintisiz çalışır.
+- Kullanıcı arayüzü server deployment durumu ile organization AI policy/allow-list durumunu ayrı gösterir; kullanılabilir olmayan provider için çağrı veya mock fallback yapmaz.
+- API key, environment ham değeri ve secret biçimi hiçbir istemci contract’ına girmez. UI yalnız güvenli provider/model/version/retention ve bütçe özetini gösterir.
+- Production runtime otomatik model/provider fallback yapmaz. Gerçek müşteri içeriği için retention/egress/hukuki ve secret rotation onayı deployment ön koşuludur.

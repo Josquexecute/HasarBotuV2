@@ -342,3 +342,11 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Provider adayını kabul etmek Paket 23 analizini onaylamak değildir. Yalnız `accepted` ve kanıt sınırındaki `edited` review kayıtları promotion ile pending analiz taslağına uygulanabilir.
 - Promotion sonrası görünen Paket 23 sürümü `draft | control_required | conflict_detected` ve `humanApprovalStatus=pending` sınırını korur. Açık conflict veya eksik kaynak sessizce kesin karara dönüşmez.
 - Dosya detayı otomatik yenilemesi yalnız başarılı promotion sonucunu okur; ikinci promotion, yeni provider çağrısı veya başka bir veri yazma işlemi üretmez.
+
+## Gemini deployment ve availability kuralları — Paket 31
+
+- Deployment config ile organization provider policy ayrı deterministik gerçeklerdir. `callReady = configured && organizationEnabled && providerAllowed`; bütçe ve açık kullanıcı onayı ayrıca plan/start aşamasında uygulanır.
+- Opt-in yoksa Gemini adapter yoktur; bu bir core uygulama hatası değildir. Opt-in true iken secret/model eksik veya geçersizse başlangıç fail-closed olur.
+- Secret doğrulaması provider key desenini tahmin etmez. Yalnız trim, boş olmama ve bounded uzunluk uygulanır; gerçek credential geçerliliği provider cevabıyla belirlenir.
+- Production composition otomatik provider/model fallback yapmaz. Paket 29 fallback’i sentetik pilot runner’a özgüdür.
+- Availability read’i salt okunurdur ve provider çağrısı/audit olayı üretmez. Response yalnız güvenli descriptor ve organization policy/bütçe özetidir; secret veya ham config yoktur.

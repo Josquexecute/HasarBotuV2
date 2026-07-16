@@ -235,3 +235,11 @@ raporlanır.
 - API/PostgreSQL regresyonu mevcut gerçek-DB AI review→promotion→policy-analysis detail zincirini, idempotency/tenant/RBAC/audit ve sızıntı sınırlarını yeniden çalıştırır. Paket 30 yeni migration veya endpoint eklemez.
 - Gerçek tarayıcı: login → Kasko dosya → source seçimi → plan/start → candidate kanıtı → review → promotion → aynı ekranda yeni Paket 23 taslağı; API kesintisinde no-fallback; 1366×768 açık/koyu ve 1920×1080 tema, overflow ve console kontrolü.
 - Kritik UI/API/PostgreSQL/tarayıcı testi skip kalırsa Paket 30 PASS sayılmaz. Gerçek müşteri belgesi, gerçek `P:\`, üretim migration veya otomatik analiz approval kullanılmaz.
+
+### Paket 31 — Gemini deployment güvenlik kapısı kabulü
+
+- Config testleri; opt-in yokken çekirdek başlangıcı, iki izinli model, key biçimi regex tahmini yapılmaması, trim/boş/4096 üst sınırı, eksik/kısmi config ve secret’sız hata mesajını doğrular.
+- Contracts/API; authenticated provider availability, 401, runtime JSON Schema eşliği, configured/unconfigured ayrımı, organization enabled/allow-list, safe reason, no-secret ve salt-okunur sorguda audit sayısının değişmemesini doğrular.
+- Gerçek PostgreSQL/API; provider kapalıyken Cases detail’in çalışmasını, organization policy kapalı/açık durumunu ve call-ready bileşimini gerçek `_test` DB üzerinde doğrular.
+- UI/tarayıcı; gerçek login, Gemini/OpenAI deployment rozetleri, provider seçimi, core policy-analysis görünümü, no-fallback, 1366×768 açık/koyu ve 1920×1080 tema, overflow ve kararlı sayfada console warning/error kontrolünü geçmelidir.
+- Paket 31 gerçek provider çağrısını tekrar etmez; Paket 29 canlı sentetik pilot kanıtı korunur. Secret test/repository/log/audit’e alınmaz. Kritik PostgreSQL/API/UI/tarayıcı testi skip kalırsa PASS sayılmaz.

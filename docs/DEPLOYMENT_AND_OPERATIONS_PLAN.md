@@ -209,3 +209,14 @@ Her runbook sahip, ön koşul, komut/işlem, beklenen çıktı, durdurma ölçü
 - Docker yarar ve riskleri açıkça değerlendirilmiş, zorunlu hale getirilmemiştir.
 - Geçiş ve rollback adımları veri ayrışması riskini gözetir.
 - Açık kararlar öneri olarak kalmış, yeni bağlayıcı ürün kararı alınmamıştır.
+
+## 8. Gemini provider deployment runbook’u — Paket 31
+
+1. API hizmet hesabı secret store/process environment katmanında `GEMINI_API_KEY` değerini kurar; değeri repository, `.env`, komut çıktısı, audit veya log’a yazmaz.
+2. Açık etkinleştirme için `GEMINI_POLICY_PROVIDER_ENABLED=true` ve izinli `GEMINI_POLICY_MODEL` (`gemini-3.5-flash` veya `gemini-2.5-flash`) ayarlanır. Gerekirse bounded `GEMINI_POLICY_MAX_OUTPUT_TOKENS` verilir.
+3. Organization `ai_provider_policies` kaydı ayrıca `enabled`, provider allow-list, per-request/monthly integer bütçe ve hard stop ile onaylanır. Server secret kurulumu organization izni sayılmaz.
+4. Kontrollü restart öncesi eksik/kısmi config’in fail-closed olduğu; flag kapalıyken çekirdek API’nin başladığı test edilir.
+5. Oturumlu `GET /api/v1/ai/providers` ile yalnız güvenli descriptor ve organization durumu doğrulanır. API key veya environment ham değeri hiçbir yanıtta görünmemelidir.
+6. Production composition otomatik model/provider fallback yapmaz. Model değişimi açık config değişikliği, yeniden başlatma ve yeni smoke gerektirir.
+7. Gerçek müşteri verisi ancak retention/egress, veri işleme hukuki onayı, secret rotation sahibi/süresi ve incident revoke prosedürü tamamlanınca açılabilir. Gemini ücretsiz katmanı müşteri verisi için kullanılmaz.
+8. Kapatma/rollback: önce organization policy disabled yapılır, sonra deployment opt-in kaldırılır ve API restart edilir. Çekirdek case/document/policy-analysis akışlarının çalıştığı ve dış çağrı oluşmadığı doğrulanır.

@@ -83,3 +83,12 @@ Otomatik gönderim yoktur.
 - Dış payload yalnız seçilmiş, doğrulanmış source-anchor metnidir ve `policy-ai-pii-redaction/1.0.0` ile minimize/redact edilir. Binary, tam poliçe/case dump’ı, File Agent/root, mutlak yol ve session gönderilmez.
 - Provider strict JSON Schema dışında veri üretemez; tool listesi boştur ve `store:false` kullanılır. Server bütün anchor/evidence’i yeniden doğrular; sonuç insan review ve Paket 23 onayı olmadan kesin karar değildir.
 - `store:false`, sağlayıcı abuse-monitoring retention’ını tek başına kapatmaz. Gerçek müşteri pilotu ancak onaylı ZDR/Modified Abuse Monitoring durumu, egress politikası, secret rotation ve veri işleme hukuki değerlendirmesiyle açılır.
+
+## Gemini deployment yapılandırması — Paket 31
+
+- Runtime etkinleştirme açık opt-in’dir: `GEMINI_POLICY_PROVIDER_ENABLED=true` olmadan adapter registry’ye girmez. Kapalı durumda temel uygulama ve mevcut manuel/kanıtlı analiz akışları çalışır.
+- Secret yalnız `GEMINI_API_KEY` process environment değeridir. Regex ile provider key biçimi tahmini yapılmaz; trim, boş olmama ve 4096 karakter üst sınırı dışında gerçek doğrulama provider’a bırakılır.
+- Model açıkça `GEMINI_POLICY_MODEL=gemini-3.5-flash|gemini-2.5-flash` olarak seçilir. `GEMINI_POLICY_MAX_OUTPUT_TOKENS` bounded opsiyonel ayardır. Production composition otomatik model veya provider fallback yapmaz.
+- Server deployment kaydı organization `enabled/allowedProviderIds` ve integer bütçe politikasının yerine geçmez. UI yalnız güvenli birleşik kullanılabilirlik durumunu gösterir; secret veya environment ayrıntısı göstermez.
+- Eksik/kısmi opt-in API başlangıcını fail-closed durdurur; kapalı veya eksiksiz yapılandırma deterministik başlar. Secret repository `.env` dosyasına, log’a, audit’e veya destek çıktısına yazılmaz.
+- Gemini ücretsiz katmanı gerçek müşteri verisi için onaylı değildir. Retention/egress, veri işleme hukuki değerlendirmesi ve secret rotation runbook’u ayrıca tamamlanmadan production müşteri çağrısı açılmaz.

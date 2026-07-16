@@ -114,7 +114,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerPolicyAnalysisRoutes(app, { pool: options.auth.pool })
     registerTextExtractionRoutes(app, { pool: options.auth.pool })
     registerPolicyOcrRoutes(app, { pool: options.auth.pool })
-    registerPolicyAiRoutes(app, { pool: options.auth.pool, providers: options.policyAiProviders ?? { get: () => undefined } })
+    registerPolicyAiRoutes(app, {
+      pool: options.auth.pool,
+      providers: options.policyAiProviders ?? { get: () => undefined, list: () => [] },
+    })
   }
 
   return app

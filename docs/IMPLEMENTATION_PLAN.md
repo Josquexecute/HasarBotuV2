@@ -777,3 +777,14 @@ Kapsam dışı: gerçek müşteri poliçesi, otomatik review/promotion/approval,
 - [x] Paket 30 dosyalarını path bazlı stage et, staged kapsamı doğrula ve atomik commit oluştur.
 
 Kapsam dışı: yeni provider/AI modeli, otomatik Paket 23 approval, yeni conflict çözüm UI’si, PDF/OCR motoru değişikliği, File Agent/filesystem, yeni migration/endpoint/dependency, üretim migration ve sonraki paket.
+
+## Paket 31 — Gemini production/deployment güvenlik kapısı
+
+- [x] API process environment’ında açık Gemini opt-in, safe secret normalizasyonu, model allow-list ve bounded output config’i ekle.
+- [x] Production provider registry composition’ını Gemini/OpenAI server config’inden kur; provider kapalıyken boş registry ile çekirdeğin normal başlamasını koru.
+- [x] Oturum korumalı salt-okunur provider availability contract/endpoint’i ekle; deployment ve organization policy kapılarını ayrı göster, secret döndürme.
+- [x] Kasko AI panelini gerçek provider availability verisine bağla; yalnız yapılandırılmış provider seçimine izin ver ve API modunda mock fallback yapma.
+- [x] Config, contracts, API/gerçek PostgreSQL ve UI regresyon testlerini ekle; salt-okunur endpoint’in audit yazmadığını ve secret sızdırmadığını doğrula.
+- [x] Tam root kapıları ve repository dışı fresh `npm ci` doğrulaması tamamlandı; path bazlı stage ve atomik commit son teslim adımıdır.
+
+Kapsam dışı: yeni provider/model, gerçek müşteri verisiyle çağrı, secret yönetim UI’si, otomatik fallback, migration, File Agent/filesystem, IPC, yeni dependency, üretim migration ve sonraki paket.

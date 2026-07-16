@@ -1,4 +1,11 @@
 import { parseDatabaseUrl } from '@hasarbotu/database'
+import {
+  GEMINI_FREE_TIER_FALLBACK_MODEL_ID,
+  GEMINI_FREE_TIER_MODEL_ID,
+  normalizeGeminiApiKey,
+  type GeminiFreeTierModelId,
+  type GeminiPolicyProviderConfig,
+} from './policy-ai/gemini-provider.js'
 import type { OpenAiPolicyProviderConfig } from './policy-ai/openai-provider.js'
 
 /**
@@ -39,6 +46,11 @@ export interface ApiConfig {
   readonly databaseUrl?: string
   /** Sunucu-sahipli secret ve fiyat ayarlari; istemci/API cevabina asla tasinmaz. */
   readonly openAiPolicyProvider?: OpenAiPolicyProviderConfig
+  /**
+   * Gemini yalnız açık deployment opt-in + eksiksiz server environment config
+   * ile kaydedilir. API key hiçbir DTO/log/audit yüzeyine taşınmaz.
+   */
+  readonly geminiPolicyProvider?: GeminiPolicyProviderConfig
 }
 
 /** Yapilandirma hatasi: alan adi + kural tasir, deger tasimaz. */
@@ -110,6 +122,35 @@ function parsePositiveInteger(field: string, raw: string | undefined, maximum: n
   return value
 }
 
+function parseGeminiModel(raw: string | undefined): GeminiFreeTierModelId {
+  if (raw === GEMINI_FREE_TIER_MODEL_ID || raw === GEMINI_FREE_TIER_FALLBACK_MODEL_ID) return raw
+  throw new ConfigError(
+    'GEMINI_POLICY_MODEL',
+    `expected one of: ${GEMINI_FREE_TIER_MODEL_ID}, ${GEMINI_FREE_TIER_FALLBACK_MODEL_ID}.`,
+  )
+}
+
+function parseGeminiPolicyProvider(env: Readonly<Record<string, string | undefined>>): GeminiPolicyProviderConfig | undefined {
+  const enabled = env.GEMINI_POLICY_PROVIDER_ENABLED
+  if (enabled === undefined || enabled === 'false') return undefined
+  if (enabled !== 'true') {
+    throw new ConfigError('GEMINI_POLICY_PROVIDER_ENABLED', 'expected true or false.')
+  }
+  const apiKey = normalizeGeminiApiKey(env.GEMINI_API_KEY)
+  if (apiKey === null) {
+    throw new ConfigError('GEMINI_API_KEY', 'expected a non-empty server secret within the safe length limit.')
+  }
+  return {
+    apiKey,
+    modelId: parseGeminiModel(env.GEMINI_POLICY_MODEL),
+    maximumInputCharacters: 50_000,
+    maximumOutputSize: 100_000,
+    maximumOutputTokens: env.GEMINI_POLICY_MAX_OUTPUT_TOKENS === undefined
+      ? 4_096
+      : parsePositiveInteger('GEMINI_POLICY_MAX_OUTPUT_TOKENS', env.GEMINI_POLICY_MAX_OUTPUT_TOKENS, 100_000),
+  }
+}
+
 function parseOpenAiPolicyProvider(env: Readonly<Record<string, string | undefined>>): OpenAiPolicyProviderConfig | undefined {
   const fields = [env.OPENAI_API_KEY, env.OPENAI_POLICY_MODEL, env.OPENAI_POLICY_INPUT_COST_MINOR_PER_MILLION, env.OPENAI_POLICY_OUTPUT_COST_MINOR_PER_MILLION, env.OPENAI_POLICY_MAX_OUTPUT_TOKENS]
   if (fields.every((value) => value === undefined || value.length === 0)) return undefined
@@ -135,6 +176,7 @@ function parseOpenAiPolicyProvider(env: Readonly<Record<string, string | undefin
 export function parseConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
   const databaseUrl = parseOptionalDatabaseUrl(env.DATABASE_URL)
   const openAiPolicyProvider = parseOpenAiPolicyProvider(env)
+  const geminiPolicyProvider = parseGeminiPolicyProvider(env)
   return {
     host: parseHost(env.HOST),
     port: parsePort(env.PORT),
@@ -142,5 +184,6 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
     nodeEnv: parseNodeEnv(env.NODE_ENV),
     ...(databaseUrl !== undefined ? { databaseUrl } : {}),
     ...(openAiPolicyProvider !== undefined ? { openAiPolicyProvider } : {}),
+    ...(geminiPolicyProvider !== undefined ? { geminiPolicyProvider } : {}),
   }
 }
