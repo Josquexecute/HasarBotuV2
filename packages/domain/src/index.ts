@@ -402,3 +402,17 @@ export {
   type CaseTaskStatus,
   type CaseTaskTransition,
 } from './case-operations.js'
+export {
+  CLOSURE_FEE_CURRENCY,
+  CLOSURE_FEE_RULE_VERSION,
+  CLOSURE_FEE_SOURCE_TYPES,
+  CLOSURE_FEE_STATUSES,
+  MAX_CLOSURE_FEE_MINOR,
+  evaluateClosureFeeSource,
+  isApprovedClosureFeeStatus,
+  isValidClosureFeeMinor,
+  type ClosureFeeSourceEligibility,
+  type ClosureFeeSourceFacts,
+  type ClosureFeeSourceType,
+  type ClosureFeeStatus,
+} from './closure-fee.js'

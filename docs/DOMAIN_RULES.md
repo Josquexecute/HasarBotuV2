@@ -371,3 +371,13 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Rapor; onaylı hesaplama gerçeğini yeniden hesaplamaz. Input/evaluation snapshot, evidence, comparables, uncertainties ve rule sources değişmeden rapor modeline taşınır; sıralanabilir listeler deterministik sıralanır.
 - Genel output şablonu `traffic-value-loss-final-report-tr/1.0.0`, content şeması `traffic-value-loss-final-report/1.0.0` sürümündedir. Kural sürümü ayrı olarak `2026.07.01.1` kalır.
 - Bir onaylı hesap version’ı bir nihai rapor üretir. Rapor düzeltmesi yeni hesap version’ı ve yeni insan onayı gerektirir; eski rapor değiştirilmez veya silinmez.
+
+## Kapanma ücreti kuralları — Paket 39
+
+- İlk rule-set sürümü `closure-fee/1.0.0`'dır. Motor saf, deterministik ve database/HTTP/sistem saati bağımsızdır.
+- Kaynak uygunluğu: `lifecycleStatus=closed`, canonical document type `expert_report`, fiziksel durum `ready`, `hashVerified=true`, `sizeVerified=true` ve `verifiedAt` mevcut olmalıdır.
+- `pending`, `failed`, `missing`, fiziksel doğrulaması eksik veya farklı document type ücret kaynağı sayılamaz.
+- Tutar safe integer minor-unit ve `TRY`'dir. `control_required` adayın `approvedAmountMinor` değeri yoktur.
+- Yalnız `approved | corrected` güncel sürüm kesin toplamda kullanılabilir. Düzeltme eski sürümü değiştirmez; zorunlu gerekçeyle yeni sürüm üretir.
+- Aynı case için tek ücret aggregate vardır. Komutlar idempotency ve optimistic version ile korunur; aynı onay replay'i ikinci sürüm üretmez.
+- Dönem temeli `open_created_closed_finalized`: açık vaka `created_at`, kapalı vaka `closed_at` ile seçilen ayın `[başlangıç, sonraki ay başlangıcı)` aralığında değerlendirilir.

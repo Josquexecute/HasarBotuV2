@@ -431,3 +431,13 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - `GET .../reports/:reportId/pdf`: doğrulanmış `application/pdf`, güvenli ASCII filename, `private,no-store` ve `nosniff` header’larıyla binary çıktı verir.
 - Preview onaysız source, stale version veya uyuşmayan digest için 409; tenant dışı kaynak/rapor 404; oturumsuz 401; üretim rolü yetersizse 403 döner.
 - JSON contracts source/emsal/hesap/belirsizlik/rule/approval içeriğini strict doğrular. Mutlak path, storage root, belge filename/içeriği, secret veya ham hata alanı yoktur.
+
+## 24. Paket 39 kapanma ücreti ve dönem raporu contracts/API
+
+- `GET /api/v1/cases/:caseId/fee`: current append-only sürüm geçmişi ve rol/lifecycle kaynaklı izinleri döndürür; ücret yoksa `fee:null`.
+- `POST /api/v1/cases/:caseId/fee/candidates`: zorunlu Idempotency-Key, expected case version, safe integer minor tutar, doğrulanmış final-report documentVersion ve kaynak sayfa ister.
+- `POST /api/v1/fees/:feeId/approve`: expected fee version ve `confirmed=true`; yalnız `control_required` güncel sürümü yeni `approved` sürüme taşır.
+- `POST /api/v1/fees/:feeId/correct`: expected fee version, yeni minor tutar, doğrulanmış kaynak/sayfa, bounded güvenli gerekçe ve `confirmed=true`; yeni `corrected` sürüm oluşturur.
+- `GET /api/v1/fees`: tenant-kapsamlı kapalı case ücret listesidir. `GET /api/v1/reports/case-summary?period=YYYY-MM` dönem özeti, filtre seçenekleri ve kontrol bekleyen adayları döndürür.
+- Oturumsuz 401, yetkisiz komut 403, tenant dışı case/fee 404, stale/state/idempotency conflict 409 olur. Runtime Zod ve JSON Schema kabul kümeleri aynıdır.
+- Response; mutlak path, belge içeriği, düzeltme gerekçesinin audit kopyası, SQL/stack, secret veya ham hata içermez. API modunda istemci mock fallback yapmaz.

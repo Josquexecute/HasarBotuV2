@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import type { CaseRecord } from '../types/case'
 import { createHttpCasesAdapter, HttpCasesError } from './httpAdapter'
-import { getConfiguredDataSource, type DataSourceKind } from './ports'
+import { getConfiguredDataSource, type CasesDataPort, type DataSourceKind } from './ports'
 
 export type ClosedCasesDataStatus = 'idle' | 'loading' | 'ok' | 'unauthorized' | 'unavailable'
 
@@ -13,8 +13,9 @@ export interface UseClosedCasesResult {
   reload(): void
 }
 
-export function useClosedCases(): UseClosedCasesResult {
+export function useClosedCases(suppliedPort?: CasesDataPort): UseClosedCasesResult {
   const { reportUnauthorized } = useSession()
+  const port = useMemo(() => suppliedPort ?? createHttpCasesAdapter(), [suppliedPort])
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
   const [cases, setCases] = useState<readonly CaseRecord[]>([])
   const [status, setStatus] = useState<ClosedCasesDataStatus>(source === 'api' ? 'loading' : 'idle')
@@ -29,7 +30,7 @@ export function useClosedCases(): UseClosedCasesResult {
   useEffect(() => {
     if (source !== 'api') return
     let cancelled = false
-    createHttpCasesAdapter().listCases('closed')
+    port.listCases('closed')
       .then((items) => {
         if (cancelled) return
         setCases(items)
@@ -46,7 +47,7 @@ export function useClosedCases(): UseClosedCasesResult {
     return () => {
       cancelled = true
     }
-  }, [reportUnauthorized, requestVersion, source])
+  }, [port, reportUnauthorized, requestVersion, source])
 
   return { cases, source, status, reload }
 }

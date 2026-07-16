@@ -357,3 +357,11 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Audit organization/actor/case/note-task kimliği, not türü, görev priority/due/status, from/to version ve requestId gibi güvenli metadata taşıyabilir.
 - Not subject/body, görev title, tamamlanma sonucu ve iptal gerekçesi audit detayına kopyalanmaz. Parola/secret, mutlak yol, SQL/stack ve ham hata zaten merkezi redaksiyon sınırındadır.
 - Not/görev veya takip geçmişi satırı ile audit aynı transaction’da yazılır. Salt-okunur Operasyon workspace ve Dashboard GET audit gürültüsü üretmez.
+
+### 6.21 Paket 39 kapanma ücreti ve rapor audit sınırı
+
+- Olaylar: `closure_fee.candidate_created`, `closure_fee.approved`, `closure_fee.corrected`.
+- Audit yalnız organization/actor/case/fee kimliği, fee version/status, minor-unit tutar, source documentVersion/page, rule version, self-approval özeti ve requestId taşıyabilir.
+- Düzeltme gerekçesi, belge adı/içeriği, mutlak path, secret, SQL/stack veya ham hata audit detayına kopyalanmaz.
+- Ücret version satırı, aggregate current pointer, idempotency sonucu ve audit aynı transaction içinde atomiktir.
+- Salt-okunur case fee/list/report GET çağrıları audit gürültüsü üretmez. Backup/restore sonrası append-only version guard'ı eski onaylı tutarın sessizce değiştirilmesini engeller.

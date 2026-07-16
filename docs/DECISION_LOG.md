@@ -736,3 +736,21 @@ Etkisi:
 - Yeni backend endpoint’i, migration, File Agent işi, IPC veya fiziksel/veritabanı yazma yolu eklenmez.
 - Root UI, mevcut Cases contracts paketini runtime dependency olarak kullanır; harici dependency eklenmez.
 - Mock prototip development/demo modunda korunur; production ve API modu fail-closed davranır.
+
+## 2026-07-16 — HB-2026-045: Kapanma ücreti ve dönem raporu kullanıcı onayı sınırı
+
+Karar:
+
+1. Kapanma ücreti yalnız lifecycle durumu `closed` olan case için ve aynı tenant/case içindeki `expert_report` türünde `ready + hashVerified + sizeVerified + verifiedAt` documentVersion kaynağıyla oluşturulabilir.
+2. İlk kayıt `control_required` durumunda manuel adaydır. Aday tutar aylık kesin toplamda yer almaz; yalnız açık kullanıcı teyidiyle oluşan `approved` veya yeni sürüm olarak kaydedilen `corrected` tutar rapor toplamına girer.
+3. Onaylanmış sürüm değiştirilmez. Düzeltme; güncel optimistic version, yeni tutar, doğrulanmış kaynak rapor/sayfa ve zorunlu gerekçeyle append-only yeni ücret sürümü üretir.
+4. Para değerleri floating point değil safe integer minor-unit ve sabit `TRY` olarak saklanır. İlk kural sürümü `closure-fee/1.0.0`'dır.
+5. Dönem raporu; açık vakaları `created_at`, kapanan vakaları `closed_at` üzerinden seçilen ayın yarı açık tarih aralığında sayar. Bu temel `open_created_closed_finalized` olarak response içinde görünür.
+6. Salt-okunur ücret ve rapor GET çağrıları audit yazmaz. Aday, onay ve düzeltme; idempotency sonucu ve merkezi audit olayıyla aynı transaction içinde tamamlanır.
+7. API modunda mock toplam veya ücret fallback'i yoktur. Kapanan Dosyalar yalnız onaylı/düzeltilmiş tutarı kesin ücret olarak gösterir; aday `Kontrol gerekli`, kayıt yoksa bilinmeyen kalır.
+8. PDF metni okuma, OCR/AI ücret çıkarımı, Excel dışa aktarımı, genel muhasebe yönetimi, File Agent ve fiziksel dosya yazımı bu paketin kapsamı dışındadır.
+
+Etkisi:
+
+- Migration `0025_closure_fees_reports`; saf kapanma ücreti kaynak kuralı; strict contracts/JSON Schema; tenant/RBAC/idempotency/optimistic locking/audit API ve gerçek Dosya Detayı/Kapanan Dosyalar/Raporlar UI entegrasyonu eklendi.
+- Yeni harici dependency, IPC, File Agent işi veya fiziksel dosya yazma yolu eklenmedi.

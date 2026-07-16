@@ -69,6 +69,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       '0022_traffic_value_loss_core',
       '0023_traffic_value_loss_reports',
       '0024_case_notes_tasks',
+      '0025_closure_fees_reports',
     ])
 
     const tables = await pool.query(
@@ -115,6 +116,8 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'document_text_extractions',
       'document_versions',
       'documents',
+      'fee_record_versions',
+      'fee_records',
       'idempotency_keys',
       'insurer_service_agreements',
       'insurers',
@@ -160,92 +163,101 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0024 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
+  it('0025 geri alınabilir ve yeniden ileri uygulanabilir', async () => {
     const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports'])
+    const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name='fee_records'")
+    expect(removed.rows).toEqual([{ n: 0 }])
+    const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports'])
+  })
+
+  it('0024 geri alınabilir ve 0025 ile yeniden ileri uygulanabilir', async () => {
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name='case_tasks'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0023 geri alınabilir ve 0024 ile yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 2, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 3, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name='traffic_value_loss_reports'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0022 geri alınabilir ve 0023/0024 ile yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 3, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 4, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name='traffic_value_loss_assessments'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0021 geri alınabilir ve sonraki migrationlarla yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 4, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 5, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name='ai_provider_call_receipts'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0020 geri alınabilir ve sonraki migrationlarla yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 5, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 6, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name='ai_extraction_runs' AND column_name='external_provider'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0019 geri alınabilir ve sonraki migrationlarla yeniden uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 6, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 7, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'ai_candidate_reviews'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0018 geri alınabilir ve sonraki migrationlarla yeniden uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 7, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 8, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'ai_extraction_runs'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0017 geri alınabilir ve sonraki migrationlarla yeniden uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 8, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 9, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline'])
     const removed = await pool.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'document_ocr_runs'")
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0015 geri alınabilir ve sonraki migrationlarla yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 10, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 11, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'policy_analyses'",
     )
     expect(removed.rows).toEqual([{ n: 0 }])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
   })
 
   it('0014 geri alinabilir, eski servis profilini donusturur ve yeniden ileri uygulanabilir', async () => {
-    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 11, quiet: true })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
+    const rolledBack = await runMigrations({ databaseUrl: config.url, direction: 'down', count: 12, quiet: true })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0025_closure_fees_reports', '0024_case_notes_tasks', '0023_traffic_value_loss_reports', '0022_traffic_value_loss_core', '0021_policy_ai_provider_recovery', '0020_real_policy_ai_provider', '0019_policy_ai_candidate_review', '0018_policy_ai_orchestration', '0017_policy_ocr_pipeline', '0016_policy_pdf_text_extraction', '0015_casco_policy_analysis', '0014_service_agreements'])
     const removed = await pool.query(
       "SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 'insurer_service_agreements'",
     )
@@ -255,11 +267,101 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'p22-backfill', 'P22 Backfill'])
     await pool.query("INSERT INTO service_centers (id,organization_id,name,center_type) VALUES ($1,$2,'Eski Servis','ozel')", [serviceId, organizationId])
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0014_service_agreements', '0015_casco_policy_analysis', '0016_policy_pdf_text_extraction', '0017_policy_ocr_pipeline', '0018_policy_ai_orchestration', '0019_policy_ai_candidate_review', '0020_real_policy_ai_provider', '0021_policy_ai_provider_recovery', '0022_traffic_value_loss_core', '0023_traffic_value_loss_reports', '0024_case_notes_tasks', '0025_closure_fees_reports'])
     const profile = await pool.query('SELECT service_type FROM service_centers WHERE id=$1', [serviceId])
     expect(profile.rows).toEqual([{ service_type: 'private' }])
     const silentAgreements = await pool.query('SELECT count(*)::int AS n FROM insurer_service_agreements WHERE service_center_id=$1', [serviceId])
     expect(silentAgreements.rows).toEqual([{ n: 0 }])
+  })
+
+  it('0025 tenant, minor-unit, kaynak FK ve append-only ücret sürümünü zorlar', async () => {
+    const organizationId = uuidv7()
+    const foreignOrganizationId = uuidv7()
+    const userId = uuidv7()
+    const foreignUserId = uuidv7()
+    const caseId = uuidv7()
+    const documentId = uuidv7()
+    const documentVersionId = uuidv7()
+    const feeId = uuidv7()
+    const feeVersionId = uuidv7()
+    await pool.query(
+      `INSERT INTO organizations (id,code,name)
+       VALUES ($1,'p39-db','P39 DB'),($2,'p39-db-foreign','P39 DB Foreign')`,
+      [organizationId, foreignOrganizationId],
+    )
+    await pool.query(
+      `INSERT INTO users (id,organization_id,email,password_hash,display_name)
+       VALUES ($1,$3,'p39-db@test.local','x','P39 DB'),
+              ($2,$4,'p39-db-foreign@test.local','x','P39 DB Foreign')`,
+      [userId, foreignUserId, organizationId, foreignOrganizationId],
+    )
+    await pool.query(
+      `INSERT INTO cases
+       (id,organization_id,office_year,office_sequence,office_number,case_type,lifecycle_status,
+        workflow_stage,plate,plate_normalized,closed_at)
+       VALUES ($1,$2,2026,3901,'2026/3901','traffic','closed','closed','34 DB 391','34DB391',now())`,
+      [caseId, organizationId],
+    )
+    await pool.query(
+      `INSERT INTO storage_roots (id,organization_id,root_key,label)
+       VALUES ($1,$2,'synthetic-root','Sentetik Root')`,
+      [uuidv7(), organizationId],
+    )
+    await pool.query(
+      `INSERT INTO documents
+       (id,organization_id,case_id,document_type,current_version_number,status)
+       VALUES ($1,$2,$3,'expert_report',1,'ready')`,
+      [documentId, organizationId, caseId],
+    )
+    await pool.query(
+      `INSERT INTO document_versions
+       (id,organization_id,document_id,case_id,version_number,original_file_name,display_name,
+        extension,mime_type,byte_size,content_hash,storage_root_key,relative_path,source_type,
+        status,hash_verified,size_verified,verified_at,registered_by_user_id)
+       VALUES ($1,$2,$3,$4,1,'sentetik-nihai.pdf','Sentetik Nihai','pdf','application/pdf',128,
+               $5,'synthetic-root','sentetik/nihai.pdf','manual','ready',true,true,now(),$6)`,
+      [documentVersionId, organizationId, documentId, caseId, 'a'.repeat(64), userId],
+    )
+    await pool.query('UPDATE documents SET current_version_id=$2 WHERE id=$1', [documentId, documentVersionId])
+    await pool.query(
+      `INSERT INTO fee_records (id,organization_id,case_id) VALUES ($1,$2,$3)`,
+      [feeId, organizationId, caseId],
+    )
+    await pool.query(
+      `INSERT INTO fee_record_versions
+       (id,organization_id,case_id,fee_record_id,fee_version,status,candidate_amount_minor,
+        source_document_version_id,source_page,rule_version,created_by_user_id)
+       VALUES ($1,$2,$3,$4,1,'control_required',485000,$5,12,'closure-fee/1.0.0',$6)`,
+      [feeVersionId, organizationId, caseId, feeId, documentVersionId, userId],
+    )
+    await pool.query('UPDATE fee_records SET current_version_id=$2 WHERE id=$1', [feeId, feeVersionId])
+
+    await expect(pool.query(
+      `INSERT INTO fee_records (id,organization_id,case_id) VALUES ($1,$2,$3)`,
+      [uuidv7(), organizationId, caseId],
+    )).rejects.toMatchObject({ code: '23505', constraint: 'fee_records_case_unique' })
+    await expect(pool.query(
+      `INSERT INTO fee_record_versions
+       (id,organization_id,case_id,fee_record_id,fee_version,status,candidate_amount_minor,
+        source_document_version_id,source_page,rule_version,created_by_user_id)
+       VALUES ($1,$2,$3,$4,2,'control_required',0,$5,12,'closure-fee/1.0.0',$6)`,
+      [uuidv7(), organizationId, caseId, feeId, documentVersionId, userId],
+    )).rejects.toMatchObject({ code: '23514', constraint: 'fee_record_versions_amount_valid' })
+    await expect(pool.query(
+      'UPDATE fee_record_versions SET source_page=13 WHERE id=$1',
+      [feeVersionId],
+    )).rejects.toMatchObject({ code: '23001' })
+    await expect(pool.query(
+      'DELETE FROM fee_record_versions WHERE id=$1',
+      [feeVersionId],
+    )).rejects.toMatchObject({ code: '23001' })
+    await expect(pool.query(
+      `INSERT INTO fee_record_versions
+       (id,organization_id,case_id,fee_record_id,fee_version,status,candidate_amount_minor,
+        source_document_version_id,source_page,rule_version,created_by_user_id)
+       VALUES ($1,$2,$3,$4,2,'control_required',485000,$5,12,'closure-fee/1.0.0',$6)`,
+      [uuidv7(), organizationId, caseId, feeId, documentVersionId, foreignUserId],
+    )).rejects.toMatchObject({ code: '23503', constraint: 'fee_record_versions_creator_fk' })
   })
 
   it('0024 tenant, append-only geçmiş ve görev geçiş constraintlerini zorlar', async () => {

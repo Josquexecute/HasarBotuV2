@@ -883,3 +883,17 @@ Kapsam dışı: not edit/delete/revision UI, görev reopen veya genel görev yö
 - [x] Paket 38 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: yeni rapor/ücret endpoint’i, kapanış ücret modeli, işçilik/PERT/e-posta backend’i, genel server-side arama UI refactor’ı, DB tenant composite migration’ı, log serializer sertleştirmesi, Electron/IPC, File Agent, üretim migration ve sonraki paket.
+
+## Paket 39 — Kapanma ücreti ve dönem raporu gerçek API entegrasyonu
+
+- [x] `closure-fee/1.0.0` saf domain kaynak uygunluğu ve safe integer minor-unit kurallarını ekle.
+- [x] Manuel aday, açık onay ve append-only düzeltme komutları için strict contracts/JSON Schema oluştur.
+- [x] Migration 0025 ile tenant-kapsamlı ücret aggregate/version modeli, current pointer, optimistic version ve append-only guard ekle.
+- [x] Idempotency, RBAC, verified final-report source, optimistic locking ve merkezi audit kullanan ücret API'sini ekle.
+- [x] Seçilen dönem için açık/kapanan dosya sayıları, dağılım, kontrol bekleyen ücretler ve yalnız onaylı toplamı veren salt-okunur rapor API'sini ekle.
+- [x] Dosya Detayı > Raporlar ve Ücretler sekmesinde aday→onay→düzeltme ve sürüm geçmişini gerçek API'ye bağla.
+- [x] Kapanan Dosyalar ve ana Raporlar ekranlarını gerçek ücret/rapor verisine bağla; API modunda mock fallback yapma.
+- [x] Gerçek PostgreSQL, tam root, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 39 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: PDF/OCR/AI ile otomatik ücret çıkarımı, ücret yönetim CRUD'u, Excel/PDF dışa aktarma, e-posta, File Agent, filesystem, IPC, üretim migration ve sonraki paket.

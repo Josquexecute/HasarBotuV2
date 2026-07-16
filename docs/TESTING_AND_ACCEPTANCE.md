@@ -314,3 +314,13 @@ raporlanır.
 - Gerçek Chrome: login, 101 açık case, kapalı case direct detail, bağlı olmayan modül fail-closed, gerçek Kapanan Dosyalar, Raporlar no-mock, API kesintisinde no-fallback; 1366×768 açık/koyu ve 1920×1080 koyu overflow/console kontrolü.
 - Başlangıç JavaScript grafiği ve her chunk 500.000 bayt altında kalmalıdır; contracts doğrulaması bu bütçeyi bozarsa Paket 38 PASS sayılmaz.
 - Kritik UI/domain/API/PostgreSQL/tarayıcı veya fresh checkout kapısı tamamlanmadan Paket 38 commit edilmez.
+
+### Paket 39 — kapanma ücreti ve dönem raporu kabulü
+
+- Domain/contracts: kapalı case + verified final-report kaynağı, safe minor-unit, strict request/response, explicit confirmation, düzeltme gerekçesi ve Zod/JSON Schema semantik eşliği.
+- Gerçek PostgreSQL 0025: up/repeat/down/reapply; tenant FK, tek aggregate/case, version uniqueness, status/amount/shape/path constraint, current pointer ve append-only update/delete reddi.
+- Gerçek API: 401/403/404, açık case veya pending/failed kaynak reddi, idempotent aday/approve replay, stale 409, append-only correction, audit atomikliği ve aday tutarın rapor toplamına girmemesi.
+- UI: Dosya Detayı aday→onay→düzeltme/sürüm geçmişi; Kapanan Dosyalar approved/control-required/unknown ayrımı; aylık rapor filtreleri ve yalnız onaylı toplam; API no-fallback.
+- Gerçek Chrome: login, sentetik kapalı case/final report, aday, açık onay, rapor toplamı, kapanan dosya tutarı, 1366×768 açık/koyu ve 1920×1080 koyu, overflow/console ve API kesintisi no-fallback.
+- Kritik DB/API/UI/tarayıcı testi skip kalırsa Paket 39 PASS sayılmaz. Repository dışı fresh `npm ci`, gerçek `_test` PostgreSQL ile typecheck, lint, test ve build tamamlanmadan commit oluşturulmaz.
+- Gerçek sonuç: ana ve repository dışı fresh kopyada **1.156 başarılı / 6 mevcut ortam-koşullu UI skip**; migration 0025 ve Paket 39 API 5/5 skip edilmeden; Chrome aday→onay→rapor toplamı/no-fallback akışı üç çözünürlükte geçti.

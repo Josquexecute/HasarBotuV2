@@ -752,3 +752,17 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Build başlangıç JavaScript grafiğini **446.764 bayt** tuttu; en büyük chunk 289.707 bayt ve 7 zorunlu lazy modül ayrı kaldı. Contracts runtime doğrulaması API çağrısında lazy yüklenir. Moderate audit 0 açıktır.
 - Repository dışı `.git/node_modules/dist/coverage` içermeyen fresh kopyada `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.132/6** test ve build/bundle bütçesi yeniden geçti.
 - Yeni migration, endpoint, IPC, File Agent veya veri yazma yolu eklenmedi. Root UI yalnız mevcut workspace `@hasarbotu/contracts` paketini runtime dependency olarak tüketir.
+
+## Paket 39 — Kapanma ücreti ve dönem raporu gerçek API entegrasyonu (2026-07-16)
+
+- `closure-fee/1.0.0` saf domain kuralı yalnız kapalı case ve `ready + hashVerified + sizeVerified + verifiedAt` nihai ekspertiz raporu kaynağını kabul eder. Para safe integer minor-unit ve `TRY`'dir.
+- Migration `0025_closure_fees_reports`; case başına tek optimistic aggregate, current pointer ve append-only `control_required → approved | corrected` version geçmişi ekler. Düzeltme eski onaylı sürümü değiştirmez.
+- Tenant/oturum/RBAC/idempotency korumalı ücret API'si manuel aday, açık onay ve gerekçeli düzeltmeyi merkezi audit ile atomik tamamlar. Salt-okunur fee/list/report çağrıları audit yazmaz.
+- `GET /api/v1/reports/case-summary`, `open_created_closed_finalized` dönem temeliyle vaka dağılımını ve yalnız güncel onaylı/düzeltilmiş ücret toplamını döndürür; aday tutar kesin toplama girmez.
+- Dosya Detayı > Raporlar ve Ücretler gerçek aday/onay/düzeltme ve sürüm geçmişini; Kapanan Dosyalar approved/control-required/unknown ayrımını; ana Raporlar ekranı dönem/servis/sorumlu filtrelerini gerçek API'yle gösterir. API modunda mock fallback yoktur.
+- Ana ağaçta `npm install`, typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.156 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 199/6; domain 393; contracts 218; database 49; API 244; file-agent 53.
+- Migration 0025 ileri/tekrar/rollback-reapply; tenant, amount/shape/path, current pointer ve append-only kısıtları gerçek PostgreSQL'de geçti. Paket 39 gerçek API testi 5/5 ve skip edilmedi.
+- Gerçek Chrome/CDP smoke: login; verified final report; 485.000 minor-unit aday; `control_required`; açık kullanıcı onayı; onaylı aylık toplam ve Kapanan Dosyalar tutarı; audit sızıntı kontrolü; API kesintisinde no-fallback geçti. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma ve beklenmeyen console warning/error yoktu.
+- Build başlangıç JavaScript grafiğini **458.876 baytta** tuttu; en büyük chunk 296.930 bayt ve Kapanma Ücreti dahil **7 lazy modül** ayrı kaldı.
+- Repository dışı `.git/node_modules/dist/coverage` içermeyen kopyada fresh `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.156/6** test ve build/bundle yeniden geçti. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını verdi; audit açığı yoktur.
+- Yeni harici dependency, IPC, File Agent işi, PDF/OCR/AI çıkarımı veya fiziksel dosya yazma yolu eklenmedi. Üretim migration çalıştırılmadı.

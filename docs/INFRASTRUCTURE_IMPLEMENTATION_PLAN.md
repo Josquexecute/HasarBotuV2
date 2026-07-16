@@ -452,3 +452,10 @@ Chunk server’da lease/Agent ownership, run/job version, extraction page, sourc
 - Assessment command’ları mevcut PostgreSQL transaction, idempotency ve merkezi AuditService sınırındadır.
 - Piyasa emsali toplama otomasyonu yoktur; yalnız kontrollü `https://`/`ref:` logical reference ve hash saklanır. Mutlak filesystem yolu yoktur.
 - Yeni runtime dependency, IPC veya fiziksel yazma yolu eklenmez.
+
+### Paket 39 ek uygulama kaydı — ücret persistence ve rapor read modeli
+
+- Migration 0025 mevcut Cases/Documents/Users/Auth/Audit altyapısını kullanır; ikinci audit, queue, worker veya File Agent işi oluşturmaz.
+- Ücret komutları mevcut PostgreSQL transaction ve idempotency altyapısındadır. Fiziksel belge okunmaz; yalnız ready/verified documentVersion metadata bağı server tarafında yeniden doğrulanır.
+- Dönem raporu aynı PostgreSQL kaynağından salt-okunur üretilir ve snapshot/audit yazmaz. Harici raporlama servisi veya cache eklenmez.
+- UI runtime contracts paketini dinamik import eder; Paket 35 başlangıç bundle bütçesi korunur. Yeni dependency, IPC, filesystem veya fiziksel dosya yazma yolu yoktur.

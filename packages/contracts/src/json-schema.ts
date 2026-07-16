@@ -104,6 +104,16 @@ import {
   caseOperationsResponseSchema,
   caseTaskResponseSchema,
 } from './v1/case-operations/dto.js'
+import {
+  closureFeeApproveRequestSchema,
+  closureFeeCandidateCreateRequestSchema,
+  closureFeeCorrectRequestSchema,
+} from './v1/fees/commands.js'
+import {
+  caseClosureFeeResponseSchema,
+  caseSummaryReportResponseSchema,
+  closureFeeListResponseSchema,
+} from './v1/fees/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -202,6 +212,12 @@ export const JSON_SCHEMA_TARGETS = {
   'case-task-complete-request': caseTaskCompleteRequestSchema,
   'case-task-cancel-request': caseTaskCancelRequestSchema,
   'case-task-response': caseTaskResponseSchema,
+  'closure-fee-candidate-create-request': closureFeeCandidateCreateRequestSchema,
+  'closure-fee-approve-request': closureFeeApproveRequestSchema,
+  'closure-fee-correct-request': closureFeeCorrectRequestSchema,
+  'case-closure-fee-response': caseClosureFeeResponseSchema,
+  'closure-fees-list-response': closureFeeListResponseSchema,
+  'case-summary-report-response': caseSummaryReportResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

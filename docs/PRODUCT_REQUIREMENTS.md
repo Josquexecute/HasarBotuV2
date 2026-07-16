@@ -246,3 +246,12 @@ formatlarında alınabilir.
 - Nihai PDF, açık kullanıcı confirmation’ı olmadan oluşmamalı; aynı onaylı version için mükerrer final çıktı üretmemelidir.
 - Üretilmiş rapor indirilebilir ve tarihsel olarak aynı version’a bağlı kalmalıdır. Yeni hesap veya düzeltme eski raporu sessizce değiştirmemelidir.
 - API kesintisinde mock rapor gösterilmez. Fiziksel case klasörüne otomatik yazma, e-posta gönderme ve genel rapor editörü bu paketin kapsamında değildir.
+
+### Kapanma ücreti ve dönem raporu — Paket 39
+
+- Kapalı case için kapanma ücreti yalnız fiziksel doğrulaması tamamlanmış `ready` nihai ekspertiz raporu metadata'sına ve kaynak sayfasına bağlanarak manuel aday olarak girilebilir.
+- Aday ücret kesin değildir ve aylık toplamda yer almaz. Yetkili kullanıcı kaynak/tutarı açıkça teyit etmeden ücret `approved` olmaz.
+- Onaylı tutar sessizce değiştirilemez. Düzeltme zorunlu gerekçe, yeni tutar, doğrulanmış kaynak ve yeni append-only sürümle yapılır.
+- Raporlar ekranı seçilen ayda açılan açık vakaları ve o ay finalize edilen kapalı vakaları ayrı sayar; yalnız güncel kullanıcı onaylı/düzeltilmiş ücretleri kesin toplamda gösterir.
+- Kapanan Dosyalar aday ücreti `Kontrol gerekli`, kayıtsız ücreti bilinmeyen, onaylı/düzeltilmiş ücreti gerçek tutar olarak gösterir.
+- API modunda mock toplam veya ücret fallback'i yapılmaz. Otomatik PDF/AI ücret çıkarımı, dışa aktarma ve muhasebe yönetimi bu paketin kapsamında değildir.

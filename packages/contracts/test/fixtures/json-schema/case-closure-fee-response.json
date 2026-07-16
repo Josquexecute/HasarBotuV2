@@ -1,0 +1,358 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "fee": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            "caseId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "currentVersion": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                },
+                "feeVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "control_required",
+                    "approved",
+                    "corrected"
+                  ]
+                },
+                "candidateAmountMinor": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000000000
+                },
+                "approvedAmountMinor": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "currency": {
+                  "type": "string",
+                  "const": "TRY"
+                },
+                "sourceDocumentVersionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                },
+                "sourcePage": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "sourceType": {
+                  "type": "string",
+                  "enum": [
+                    "manual"
+                  ]
+                },
+                "ruleVersion": {
+                  "type": "string",
+                  "const": "closure-fee/1.0.0"
+                },
+                "correctionReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 500
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdByUserId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                },
+                "approvedByUserId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "approvedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                      "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                  "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                }
+              },
+              "required": [
+                "id",
+                "feeVersion",
+                "status",
+                "candidateAmountMinor",
+                "approvedAmountMinor",
+                "currency",
+                "sourceDocumentVersionId",
+                "sourcePage",
+                "sourceType",
+                "ruleVersion",
+                "correctionReason",
+                "createdByUserId",
+                "approvedByUserId",
+                "approvedAt",
+                "createdAt"
+              ],
+              "additionalProperties": false
+            },
+            "history": {
+              "minItems": 1,
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  "feeVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "control_required",
+                      "approved",
+                      "corrected"
+                    ]
+                  },
+                  "candidateAmountMinor": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000000
+                  },
+                  "approvedAmountMinor": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "currency": {
+                    "type": "string",
+                    "const": "TRY"
+                  },
+                  "sourceDocumentVersionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  "sourcePage": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000
+                  },
+                  "sourceType": {
+                    "type": "string",
+                    "enum": [
+                      "manual"
+                    ]
+                  },
+                  "ruleVersion": {
+                    "type": "string",
+                    "const": "closure-fee/1.0.0"
+                  },
+                  "correctionReason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "createdByUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  "approvedByUserId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "approvedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                        "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                    "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                  }
+                },
+                "required": [
+                  "id",
+                  "feeVersion",
+                  "status",
+                  "candidateAmountMinor",
+                  "approvedAmountMinor",
+                  "currency",
+                  "sourceDocumentVersionId",
+                  "sourcePage",
+                  "sourceType",
+                  "ruleVersion",
+                  "correctionReason",
+                  "createdByUserId",
+                  "approvedByUserId",
+                  "approvedAt",
+                  "createdAt"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "permissions": {
+              "type": "object",
+              "properties": {
+                "canCreateCandidate": {
+                  "type": "boolean"
+                },
+                "canApprove": {
+                  "type": "boolean"
+                },
+                "canCorrect": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "canCreateCandidate",
+                "canApprove",
+                "canCorrect"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "id",
+            "caseId",
+            "version",
+            "currentVersion",
+            "history",
+            "permissions"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "canCreateCandidate": {
+          "type": "boolean"
+        },
+        "canApprove": {
+          "type": "boolean"
+        },
+        "canCorrect": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "canCreateCandidate",
+        "canApprove",
+        "canCorrect"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "fee",
+    "permissions"
+  ],
+  "additionalProperties": false
+}

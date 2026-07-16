@@ -55,6 +55,10 @@ const CaseOperationsApiModule = lazy(async () => {
   const module = await import('./CaseOperationsApiModule')
   return { default: module.CaseOperationsApiModule }
 })
+const CaseFeeApiModule = lazy(async () => {
+  const module = await import('./CaseFeeApiModule')
+  return { default: module.CaseFeeApiModule }
+})
 
 const tabs = [
   'Özet',
@@ -427,7 +431,7 @@ export function CaseDetailPage() {
                 ? <TrafficValueLossApiModule item={item} source={source} />
                 : <ValueLossModule item={item} onNotice={setPrototypeNotice} />
                 : activeTab === 'Raporlar ve Ücretler' ? source === 'api'
-                  ? <ApiModuleUnavailable title="Raporlar ve Ücretler" guidance="Gerçek rapor ve ücret endpoint’i bağlanmadan aday tutar veya hazır rapor gösterilmez." />
+                  ? <CaseFeeApiModule item={item} source={source} />
                   : <CaseReportsModule item={item} onNotice={setPrototypeNotice} />
                   : activeTab === 'E-postalar' ? source === 'api'
                     ? <ApiModuleUnavailable title="E-postalar" guidance="Gerçek e-posta veya taslak veri kaynağı bu paketin kapsamında değildir." />

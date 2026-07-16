@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArchiveRestore, CheckCircle2, ChevronDown, Search, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useClosedCases } from '../../data'
+import {
+  useClosedCases,
+  useClosureFeeList,
+  type CasesDataPort,
+  type ClosureFeeStatusRecord,
+  type ReportsFeesDataPort,
+} from '../../data'
 import { formatCurrency } from '../../mocks/cases'
 import { closedCases } from '../../mocks/workspaces'
 import type { CaseType } from '../../types/case'
@@ -18,19 +24,28 @@ interface ClosedCaseView {
   readonly company: string
   readonly reason: string
   readonly expertFee: number | null
+  readonly feeStatus: ClosureFeeStatusRecord | 'mock_approved' | null
   readonly valueLossStatus: string
   readonly service: string
   readonly assignee: string
   readonly hasClosureDetails: boolean
 }
 
-function feeLabel(value: number | null): string {
+function feeLabel(value: number | null, status: ClosedCaseView['feeStatus']): string {
+  if (status === 'control_required') return 'Kontrol gerekli'
   return value === null ? '—' : formatCurrency(value)
 }
 
-export function ClosedCasesPage() {
+export function ClosedCasesPage({
+  casesPort,
+  feePort,
+}: {
+  readonly casesPort?: CasesDataPort
+  readonly feePort?: ReportsFeesDataPort
+} = {}) {
   const navigate = useNavigate()
-  const { cases: apiCases, source, status } = useClosedCases()
+  const { cases: apiCases, source, status } = useClosedCases(casesPort)
+  const feeList = useClosureFeeList(source === 'api', feePort)
   const [query, setQuery] = useState('')
   const [type, setType] = useState('Tümü')
   const [reason, setReason] = useState('Tümü')
@@ -50,24 +65,32 @@ export function ClosedCasesPage() {
 
   const records = useMemo<readonly ClosedCaseView[]>(() => {
     if (source === 'mock') {
-      return closedCases.map((item) => ({ ...item, hasClosureDetails: true }))
+      return closedCases.map((item) => ({ ...item, feeStatus: 'mock_approved' as const, hasClosureDetails: true }))
     }
-    return apiCases.map((item) => ({
+    const feeByCase = new Map(feeList.items.map((item) => [item.caseId, item]))
+    return apiCases.map((item) => {
+      const feeItem = feeByCase.get(item.caseId)
+      const feeVersion = feeItem?.fee.currentVersion
+      return {
       id: item.caseId,
       caseId: item.caseId,
-      closedAt: '—',
+      closedAt: feeItem === undefined ? '—' : new Date(feeItem.closedAt).toLocaleDateString('tr-TR'),
       officeNumber: item.officeNumber,
       plate: item.plate,
       type: item.type,
       company: item.company,
       reason: 'Kapanış ayrıntısı henüz bağlı değil',
-      expertFee: null,
+      expertFee: feeVersion?.approvedAmountMinor === null || feeVersion?.approvedAmountMinor === undefined
+        ? null
+        : feeVersion.approvedAmountMinor / 100,
+      feeStatus: feeVersion?.status ?? null,
       valueLossStatus: 'Detay ekranından kontrol edin',
       service: item.service,
       assignee: item.assignee,
       hasClosureDetails: false,
-    }))
-  }, [apiCases, source])
+    }}
+    )
+  }, [apiCases, feeList.items, source])
 
   const filtered = useMemo(() => {
     const normalized = query.toLocaleLowerCase('tr-TR')
@@ -92,6 +115,7 @@ export function ClosedCasesPage() {
           {source === 'api' && status === 'loading' && <p role="status" className="page-subtitle">Kapalı dosyalar yükleniyor…</p>}
           {source === 'api' && status === 'unauthorized' && <p role="alert" className="page-subtitle">Oturum gerekli; mock veri gösterilmiyor.</p>}
           {source === 'api' && status === 'unavailable' && <p role="alert" className="page-subtitle">Kapalı dosya servisine ulaşılamıyor; mock veri gösterilmiyor.</p>}
+          {source === 'api' && feeList.status === 'unavailable' && <p role="alert" className="page-subtitle">Ücret servisine ulaşılamıyor; ücret alanlarında varsayım yapılmıyor.</p>}
         </div>
         {source === 'mock' && (
           <button className="button button--secondary" type="button" onClick={() => setNotice('Yeniden açma önizlemesi mock olarak hazırlandı.')}><ArchiveRestore size={15} /> Yeniden Açma Önizlemesi</button>
@@ -112,7 +136,7 @@ export function ClosedCasesPage() {
               <thead><tr><th>Kapanış</th><th>Dosya No</th><th>Plaka</th><th>Tür</th><th>Sigorta Şirketi</th><th>Kapanış Sebebi</th><th>Eksper Ücreti</th><th>Değer Kaybı</th></tr></thead>
               <tbody>{filtered.map((item) => (
                 <tr key={item.id} tabIndex={0} className={selected?.id === item.id ? 'is-selected' : ''} onClick={() => setSelectedId(item.id)} onKeyDown={(event) => { if (event.key === 'Enter') setSelectedId(item.id) }}>
-                  <td>{item.closedAt}</td><td className="mono">{item.officeNumber}</td><td><span className="plate plate--table">{item.plate}</span></td><td>{item.type}</td><td>{item.company}</td><td>{item.reason}</td><td><strong>{feeLabel(item.expertFee)}</strong></td><td>{item.valueLossStatus}</td>
+                  <td>{item.closedAt}</td><td className="mono">{item.officeNumber}</td><td><span className="plate plate--table">{item.plate}</span></td><td>{item.type}</td><td>{item.company}</td><td>{item.reason}</td><td><strong>{feeLabel(item.expertFee, item.feeStatus)}</strong></td><td>{item.valueLossStatus}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -127,7 +151,7 @@ export function ClosedCasesPage() {
           <header><div><span className="eyebrow">Kapanan dosya</span><h2>{selected.plate}</h2></div><button className="icon-button" type="button" onClick={() => setSelectedId(null)} aria-label="Kapanan dosya detayını kapat"><X size={18} /></button></header>
           <div className="office-detail__body">
             <span className="plate plate--large">{selected.plate}</span>
-            <dl className="detail-list office-detail__list"><div><dt>Dosya No</dt><dd>{selected.officeNumber}</dd></div><div><dt>Kapanış</dt><dd>{selected.closedAt}</dd></div><div><dt>Şirket</dt><dd>{selected.company}</dd></div><div><dt>Servis</dt><dd>{selected.service}</dd></div><div><dt>Sorumlu</dt><dd>{selected.assignee}</dd></div><div><dt>Ücret</dt><dd>{feeLabel(selected.expertFee)}</dd></div></dl>
+            <dl className="detail-list office-detail__list"><div><dt>Dosya No</dt><dd>{selected.officeNumber}</dd></div><div><dt>Kapanış</dt><dd>{selected.closedAt}</dd></div><div><dt>Şirket</dt><dd>{selected.company}</dd></div><div><dt>Servis</dt><dd>{selected.service}</dd></div><div><dt>Sorumlu</dt><dd>{selected.assignee}</dd></div><div><dt>Ücret</dt><dd>{feeLabel(selected.expertFee, selected.feeStatus)}</dd></div><div><dt>Ücret Durumu</dt><dd>{selected.feeStatus === 'approved' ? 'Kullanıcı Onaylı' : selected.feeStatus === 'corrected' ? 'Kullanıcı Düzeltti' : selected.feeStatus === 'control_required' ? 'Kontrol Gerekli' : 'Kayıt yok'}</dd></div></dl>
             {selected.hasClosureDetails
               ? <div className="alert-panel alert-panel--success"><CheckCircle2 size={17} /><div><strong>Kapanış kontrolü tamamlandı</strong><span>{selected.reason}</span></div></div>
               : <div className="alert-panel alert-panel--warning"><AlertTriangle size={17} /><div><strong>Kapanış ayrıntıları bağlı değil</strong><span>Case kimliği ve yaşam döngüsü gerçektir; ücret veya kapanış gerekçesi varsayılmadı.</span></div></div>}

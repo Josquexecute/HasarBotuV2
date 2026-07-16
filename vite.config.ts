@@ -15,5 +15,8 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: true,
     globals: true,
+    // Test dosyaları ortak jsdom global'inde fetch/localStorage ve cleanup
+    // kullandığı için dosya-paralel koşu açık render'ları kesebiliyor.
+    fileParallelism: false,
   },
 })

@@ -271,3 +271,11 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - Kayıt; content snapshot, content/PDF SHA-256, PDF byte-size, content schema, template, rule version, generator ve UTC zamanı taşır. PDF binary, filesystem path, storage root veya File Agent bilgisi DB’de tutulmaz.
 - Unique assessment-version constraint ikinci final raporu engeller. Insert guard yalnız insan onaylı `approved | superseded` kaynağı kabul eder; snapshot identity alanları kolonlarla eşleşir.
 - Report satırı update/delete trigger’ıyla append-only’dir. Düzeltme yeni Trafik değer kaybı version/approval/report zinciridir.
+
+## Paket 39 uygulanan PostgreSQL modeli
+
+- Migration `0025_closure_fees_reports`, case başına tenant-kapsamlı tek `fee_records` aggregate ve append-only `fee_record_versions` geçmişi ekler.
+- Aggregate current version pointer ve optimistic `version` taşır. Version satırı aday/onaylı tutar, final-report documentVersion, kaynak sayfa, actor/onay zamanı, rule version ve düzeltme gerekçesini tutar.
+- Para `bigint` safe minor-unit ve sabit `TRY`'dir; floating point kolon yoktur. Status/shape constraint'i `control_required`, `approved` ve `corrected` alan bütünlüğünü zorlar.
+- Composite tenant/case foreign key'leri case, documentVersion ve kullanıcı bağlarını doğrular. Aynı case için tek aggregate ve aggregate içinde tek version numarası unique constraint ile korunur.
+- Version satırları update/delete append-only trigger'ıyla korunur. Mutlak path, belge içeriği, PDF binary, secret veya ham hata kolonu yoktur.

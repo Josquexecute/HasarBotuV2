@@ -208,3 +208,22 @@ export {
   type LifecycleOperationStatus,
   type LifecycleRequirementRecord,
 } from './caseLifecyclePort'
+export {
+  ReportsFeesError,
+  createHttpReportsFeesAdapter,
+  type CaseClosureFeeWorkspaceRecord,
+  type CaseSummaryReportRecord,
+  type ClosureFeeListItemRecord,
+  type ClosureFeePermissionsRecord,
+  type ClosureFeeRecord,
+  type ClosureFeeStatusRecord,
+  type ClosureFeeVersionRecord,
+  type ReportsFeesDataPort,
+  type ReportsFeesErrorKind,
+} from './reportsFeesPort'
+export {
+  useCaseFee,
+  useCaseSummaryReport,
+  useClosureFeeList,
+  type ReportsFeesLoadStatus,
+} from './useReportsFees'
