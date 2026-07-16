@@ -335,3 +335,11 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - `GET /api/v1/ai/providers` salt-okunur kullanılabilirlik sorgusudur ve her ekran yenilemesinde audit gürültüsü üretmez. Provider start ve usage olayları mevcut AuditService/ledger kurallarıyla auditlenmeye devam eder.
 - Availability cevabı yalnız güvenli provider/model/version/retention, deployment kayıt durumu ve organization policy/bütçe özetini taşır. Secret varlığına ilişkin ham config değeri, key uzunluğu/biçimi veya environment adı kullanıcı verisi olarak dönmez.
 - Provider kapalı veya yapılandırılmamış durumda dış çağrı ve fallback yoktur. Bu durum case/document/policy-analysis read/write audit akışlarını değiştirmez.
+
+### 6.18 Paket 32 Trafik değer kaybı audit sınırı
+
+- Olaylar: `traffic_value_loss.draft_created`, `version_created`, `control_required`, `submitted`, `approved`, `rejected`.
+- Audit yalnız organization/actor/case/assessment version, rule version, result code, uncertainty/evidence/comparable sayıları, selfApproved ve requestId taşıyabilir.
+- Piyasa ilan URL’si, araç/plaka, belge adı/içeriği, değer kanıt metni, mutlak yol, secret, SQL/stack veya ham hata audit’e yazılmaz.
+- Version, evidence, comparable, approval event ve audit aynı command transaction’ında atomiktir.
+- Approved/superseded version ile evidence/comparable/approval geçmişi DB trigger’larıyla immutable/append-only korunur.

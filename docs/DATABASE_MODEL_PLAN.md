@@ -154,6 +154,16 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 ### 5.5a Parça bedeli izlenebilirliği
 
 - Parça bedeli hesabı KDV hariç ve iskonto uygulanmamış bedeli esas alır.
+
+### 5.6 Trafik değer kaybı çekirdeği — Paket 32
+
+- `traffic_value_loss_assessments`: organization/case tekil assessment kimliği, current version ve optimistic version.
+- `traffic_value_loss_versions`: `2026.07.01.1` rule snapshot, LocalDate evaluation, bounded input/result JSONB, sonuç/durum, insan onayı ve active approved sürüm.
+- `traffic_value_loss_evidence`: documentVersion veya kontrollü market/SBM/eksper referansı, SHA-256, desteklediği alanlar, verification/conflict; append-only.
+- `traffic_value_loss_comparables`: pre-accident/post-repair tarafı, minor-unit değer, kilometre, gözlem tarihi, evidence FK ve gerekçeli dışlama; append-only.
+- `traffic_value_loss_approval_events`: submit/approve/reject actor, zaman ve gerekçe geçmişi; append-only.
+- Tenant bileşik FK, case başına tek assessment, version uniqueness, tek active approved, ready-document server doğrulaması ve terminal immutability uygulanır.
+- Mutlak yol, belge içeriği, müşteri kişisel verisi veya eski Ek-1 katsayı sonucu saklanmaz.
 - Parça kayıtları hesaplama kaynağını (fiyat listesi/portal/belge), fiyat tarihini ve kullanılan fiyat belgesi referansını taşır; izlenebilirlik olmadan bedel kesinleşmez.
 
 ### 5.6 Mevzuat sürümleme

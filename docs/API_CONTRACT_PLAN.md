@@ -407,3 +407,12 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - `callReady`, yalnız server provider kaydı, organization enabled ve provider allow-list birlikte sağlandığında true olabilir. Bütçe hard stop ve kullanıcı onayı mevcut plan/start sözleşmelerinde ayrıca uygulanır.
 - Secret, environment değişkeni, API key biçimi, header, endpoint override, full prompt/output veya kaynak metni response şemasında bulunmaz.
 - Runtime Zod ve deterministik JSON Schema fixture aynı kabul kümesidir. API modunda istemci bilinmeyen/bozuk availability cevabını mock veriyle maskelemez.
+
+## 21. Paket 32 Trafik değer kaybı contracts/API
+
+- `GET /api/v1/cases/:caseId/traffic-value-loss`: current assessment/version, girdi snapshot’ı, kanıt/emsal, belirsizlikler, rule sources ve approval durumu.
+- `GET /api/v1/cases/:caseId/traffic-value-loss/versions`: immutable version geçmişi.
+- `POST .../traffic-value-loss/versions`: zorunlu Idempotency-Key ve `expectedVersion`; sonuç/uncertainty client’tan alınmaz, server domain evaluator ile üretilir.
+- `POST .../versions/:versionId/submit|approve|reject`: optimistic version ve rol kapısı; approve yalnız submit edilmiş ve blocker içermeyen sürümde çalışır, reject gerekçe zorlar.
+- Kasko case veya başka tenant kaynak 400/404; stale 409; oturumsuz 401; yetkisiz rol 403.
+- Response mutlak path, filename, belge içeriği, kişisel veri, secret veya ham DB/OS hatası taşımaz.

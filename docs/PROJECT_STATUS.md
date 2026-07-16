@@ -665,3 +665,16 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Browser composition testinde Gemini sentetik server-only secret ile registry’ye alındı; availability yalnız `gemini-2.5-flash` ve güvenli descriptor gösterdi, secret response/DOM/log’a taşınmadı. Organization policy kapalı olduğu için provider çağrısı oluşmadı; çekirdek uygulama çalışmaya devam etti.
 - Repository dışı `.git`/`node_modules`/`dist`/`coverage` içermeyen fresh kopyada `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1022/6**, build yeniden geçti ve geçici kopya güvenle kaldırıldı.
 - Build mevcut büyük chunk uyarısını sürdürür: ana JS 540.15 kB (gzip 144.79 kB). `npm ci` ayrıca mevcut `glob@11.1.0` deprecation uyarısını gösterir; moderate audit 0 açıktır. Bunlar Paket 31 güvenlik işlevini engellemez ancak ayrı dependency/performance bakımında ele alınmalıdır.
+
+## Paket 32 — 01.07.2026 Trafik değer kaybı domain/API çekirdeği (2026-07-16)
+
+- Resmî Gazete 33278 değişikliği ve SEDDK 2026/11 Ek-1.1 kaynakları `2026.07.01.1` kural sürümüne bağlandı. Eski Ek-1 `%19 × hasar × km` formülü uygulanmıyor.
+- Saf domain motoru kaza öncesi/onarım sonrası piyasa değer farkını ve kusur baz puanını safe integer minor-unit ile taslaklıyor; eksik dönem, araç, hasar, geçmiş hasar, kusur, piyasa kanıtı, emsal ve kaynak çelişkilerini ayrı kodlarla döndürüyor.
+- Migration 0022; case başına assessment, immutable version snapshot, append-only evidence/comparable/approval events ve approved-version guard ekliyor.
+- Tenant ve oturum korumalı API; read/version list, draft version create, submit, approve ve reject akışlarını idempotency ve optimistic locking ile sunuyor. Kasko case reddediliyor; yalnız ready/verified documentVersion kabul ediliyor.
+- Ağır/tam hasar `not_applicable`, piyasa farkı sıfır `no_value_loss` taslağıdır; ikisi de insan onayı olmadan kesinleşmez.
+- UI, AI, ilan toplama/web scraping, SBM dış entegrasyonu, rapor/PDF üretimi, File Agent, IPC ve yeni dependency eklenmedi. Karar: HB-2026-038.
+- Ana çalışma ağacında `npm install`, typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1050 başarılı / 6 mevcut ortam-koşullu UI skip**, build, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 156/6; domain 379; contracts 191; database 43; API 228; file-agent 53.
+- Migration 0022 ileri/tekrar/rollback-reapply; tenant/constraint/immutable history, API 401/403/404, ready document evidence, idempotent draft, stale conflict, submit→approve/reject ve audit/response sızıntı sınırı gerçek PostgreSQL’de geçti. Gerçek TCP smoke login→draft→replay→submit→approve akışını tamamladı.
+- Repository dışındaki yeni kopyada normal fresh `npm ci`, process-scope `_test` bağlantısıyla typecheck, lint, aynı **1050/6** test ve build yeniden geçti. UI değişmediği için Paket 32’ye özel tarayıcı senaryosu eklenmedi; mevcut UI baseline testleri korundu.
+- Build’in mevcut büyük chunk uyarısı sürüyor: ana JS 540.15 kB (gzip 144.79 kB). `npm ci`, mevcut `glob@11.1.0` deprecation uyarısını verdi; moderate audit 0 açıktır.

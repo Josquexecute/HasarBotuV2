@@ -75,6 +75,16 @@ import {
 } from './v1/policy-ocr/dto.js'
 import {policyAiCancelRequestSchema,policyAiCandidateReviewRequestSchema,policyAiPlanRequestSchema,policyAiPromotionRequestSchema,policyAiStartRequestSchema} from './v1/policy-ai/commands.js'
 import {policyAiCandidateReviewResponseSchema,policyAiCandidatesResponseSchema,policyAiPromotionPreviewResponseSchema,policyAiPromotionResponseSchema,policyAiProviderOutputSchema,policyAiProvidersResponseSchema,policyAiRunResponseSchema,policyAiUsageResponseSchema} from './v1/policy-ai/dto.js'
+import {
+  trafficValueLossApproveRequestSchema,
+  trafficValueLossRejectRequestSchema,
+  trafficValueLossSubmitRequestSchema,
+  trafficValueLossVersionCreateRequestSchema,
+} from './v1/traffic-value-loss/commands.js'
+import {
+  trafficValueLossResponseSchema,
+  trafficValueLossVersionsResponseSchema,
+} from './v1/traffic-value-loss/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -154,6 +164,12 @@ export const JSON_SCHEMA_TARGETS = {
   'policy-ai-run-response': policyAiRunResponseSchema,
   'policy-ai-candidates-response': policyAiCandidatesResponseSchema,
   'policy-ai-usage-response': policyAiUsageResponseSchema,
+  'traffic-value-loss-version-create-request': trafficValueLossVersionCreateRequestSchema,
+  'traffic-value-loss-submit-request': trafficValueLossSubmitRequestSchema,
+  'traffic-value-loss-approve-request': trafficValueLossApproveRequestSchema,
+  'traffic-value-loss-reject-request': trafficValueLossRejectRequestSchema,
+  'traffic-value-loss-response': trafficValueLossResponseSchema,
+  'traffic-value-loss-versions-response': trafficValueLossVersionsResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

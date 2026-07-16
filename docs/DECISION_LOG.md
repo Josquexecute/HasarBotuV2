@@ -639,3 +639,16 @@ Etkisi: Migration `0021_policy_ai_provider_recovery`; Gemini provider/retention 
 7. Gemini ücretsiz katmanının `free_tier_product_improvement` retention bilgisi görünür kalır. Bu deployment kapısı gerçek müşteri verisi gönderimine onay vermez; hukuki/retention/egress ve secret rotation onayı ayrıca gereklidir.
 
 Etkisi: API composition/config, salt-okunur provider availability contract/endpoint ve Kasko AI paneli güncellendi. Migration, dependency, IPC, File Agent veya fiziksel veri yazma yolu değişmedi.
+
+## 2026-07-16 — HB-2026-038: 01.07.2026 Trafik değer kaybı piyasa farkı ve insan onayı sınırı
+
+1. 12.06.2026 tarihli 33278 sayılı Resmî Gazete değişikliğinin Madde 2, 6 ve 8 hükümleri esas alınır: 01.07.2026’da eski Ek-1 katsayı formülü kaldırılmıştır; değer kaybı kaza öncesi ve onarım sonrası ikinci el satış değeri farkı üzerinden eksperce belirlenir.
+2. SEDDK 2026/11 Madde 4 ve Ek-1.1; geçmiş hasar, hasarlı/parça işlemleri, piyasa araştırması, araç özellikleri, kilometre/kullanım, kusur ve değer kaybı özetinin kanıt şablonudur.
+3. İlk kural seti `traffic-value-loss-market-difference`, sürüm `2026.07.01.1`, yürürlük `2026-07-01` olarak sabitlenir. 01.07.2026 öncesi hasar bu sürümle kesinleştirilmez.
+4. Brüt taslak `max(0, kaza öncesi değer - onarım sonrası değer)`, kusur uygulanmış taslak safe integer minor-unit ve `half_up_minor_unit` yuvarlama sürümüyle hesaplanır. Eski `%19`, hasar boyutu ve kilometre katsayısı kullanılmaz.
+5. Son 30 gün, her iki değer tarafında en az üç emsal ve ±%10 kilometre kontrolü yasal formül değil, sürümlü ofis kanıt yeterliliği politikasıdır. Eksiklik `control_required` üretir.
+6. Yalnız aynı tenant/case içindeki fiziksel olarak doğrulanmış documentVersion ve kontrollü market/SBM/eksper referansı kanıt olabilir. Kaynak çelişkisi sessiz çözülmez.
+7. Taslak, `not_applicable` ve `no_value_loss` dahil bütün sonuçlar insan onayı gerektirir. `case_manager|expert|admin` taslak/submit; yalnız `expert|admin` approve/reject yapabilir.
+8. Kanıt, emsal ve approval event geçmişi append-only; approved/superseded sürüm immutable’dır. Düzeltme yeni version üretir.
+
+Etkisi: Migration `0022_traffic_value_loss_core`; saf domain evaluator; strict contracts/JSON Schema; tenant/RBAC/idempotency/audit API. UI, AI, web scraping, SBM entegrasyonu, File Agent ve yeni dependency yoktur.

@@ -207,3 +207,12 @@ formatlarında alınabilir.
 - Kullanıcı arayüzü server deployment durumu ile organization AI policy/allow-list durumunu ayrı gösterir; kullanılabilir olmayan provider için çağrı veya mock fallback yapmaz.
 - API key, environment ham değeri ve secret biçimi hiçbir istemci contract’ına girmez. UI yalnız güvenli provider/model/version/retention ve bütçe özetini gösterir.
 - Production runtime otomatik model/provider fallback yapmaz. Gerçek müşteri içeriği için retention/egress/hukuki ve secret rotation onayı deployment ön koşuludur.
+
+### Trafik değer kaybı domain/API çekirdeği — Paket 32
+
+- Trafik case’inde 01.07.2026 kural dönemiyle sürümlü değer kaybı assessment’ı bulunur; Kasko bu pakette desteklenmez.
+- Hesaplama kullanıcı tarafından girilen doğrulanmış kaza öncesi ve onarım sonrası piyasa değerleri, kusur oranı ve kanıtlı araç/hasar bilgileriyle yalnız taslak üretir.
+- Kullanıcı her piyasa değeri için emsal ve kaynak bağlantılarını; önceki hasar, hasarlı parçalar, kilometre/kullanım ve ağır/tam hasar kanıtını görebilmelidir.
+- Eksik veya çelişkili bilgi açık belirsizlik kodu ve gerekçesiyle gösterilir; sistem tahmin ederek kesin tutar oluşturmaz.
+- Sonuç `calculable | no_value_loss | not_applicable | control_required` olabilir. Hiçbiri expert/admin onayı olmadan kesinleşmez.
+- Düzeltmeler yeni sürüm üretir; eski onay, kanıt ve emsal geçmişi silinmez.

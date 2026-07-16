@@ -788,3 +788,15 @@ Kapsam dışı: yeni provider/AI modeli, otomatik Paket 23 approval, yeni confli
 - [x] Tam root kapıları ve repository dışı fresh `npm ci` doğrulaması tamamlandı; path bazlı stage ve atomik commit son teslim adımıdır.
 
 Kapsam dışı: yeni provider/model, gerçek müşteri verisiyle çağrı, secret yönetim UI’si, otomatik fallback, migration, File Agent/filesystem, IPC, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 32 — 01.07.2026 Trafik değer kaybı çekirdeği
+
+- [x] Resmî Gazete 33278 ve SEDDK 2026/11 kaynaklarını sürümlü rule-set metadata’sına bağla; eski Ek-1 formülünü kullanma.
+- [x] Saf domain: piyasa değer farkı, kusur baz puanı, minor-unit yuvarlama, emsal yeterliliği, belirsizlik ve ağır/tam hasar sonucu.
+- [x] Strict contracts ve deterministik JSON Schema: girdiler, kanıtlar, emsaller, sonuç taslağı, version/read ve submit/approve/reject komutları.
+- [x] Migration 0022: assessment/version, append-only evidence/comparable/approval history, tenant FK, optimistic version ve approved immutability.
+- [x] API: Traffic-only, session/RBAC, idempotency, ready/verified document evidence, draft→submit→approve/reject ve güvenli audit.
+- [x] Domain/contracts ve gerçek PostgreSQL migration/API hedef testleri.
+- [x] Tam root kapıları, canlı TCP smoke ve repository dışı fresh `npm ci` doğrulaması tamamlandı; path bazlı stage ve atomik commit son teslim adımıdır.
+
+Kapsam dışı: Kasko değer kaybı, UI entegrasyonu, ilan scraping, SBM entegrasyonu, AI rayiç tahmini, rapor/PDF üretimi, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.

@@ -56,3 +56,9 @@ if (entryScript !== undefined && resolve(entryScript) === fileURLToPath(import.m
 export { requireSession, resolveSession } from './auth/guard.js'
 export { createCasesStore, registerCasesRoutes, type CasesStore } from './cases/index.js'
 export {createDeterministicPolicyAiProviderRegistry,createGeminiPolicyProvider,createOpenAiPolicyProvider,createPolicyAiProviderRegistry,DEFAULT_GEMINI_API_ORIGIN,GEMINI_FREE_TIER_FALLBACK_MODEL_ID,GEMINI_FREE_TIER_MODEL_ID,GEMINI_UNAVAILABLE_BACKOFF_MS,MAX_GEMINI_API_KEY_LENGTH,normalizeGeminiApiKey,type DeterministicPolicyAiProviderRegistry,type GeminiFreeTierModelId,type GeminiPolicyProviderConfig,type OpenAiPolicyProviderConfig,type PolicyAiProviderAdapter,type PolicyAiProviderRegistry} from './policy-ai/index.js'
+export {
+  createTrafficValueLossStore,
+  registerTrafficValueLossRoutes,
+  TrafficValueLossStoreError,
+  type TrafficValueLossStore,
+} from './traffic-value-loss/index.js'

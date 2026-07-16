@@ -350,3 +350,14 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Secret doğrulaması provider key desenini tahmin etmez. Yalnız trim, boş olmama ve bounded uzunluk uygulanır; gerçek credential geçerliliği provider cevabıyla belirlenir.
 - Production composition otomatik provider/model fallback yapmaz. Paket 29 fallback’i sentetik pilot runner’a özgüdür.
 - Availability read’i salt okunurdur ve provider çağrısı/audit olayı üretmez. Response yalnız güvenli descriptor ve organization policy/bütçe özetidir; secret veya ham config yoktur.
+
+## Trafik değer kaybı kuralları — 01.07.2026 / Paket 32
+
+- Kural seti `traffic-value-loss-market-difference`, sürüm `2026.07.01.1`, yürürlük `2026-07-01`’dir.
+- 01.07.2026 döneminde yürürlükten kaldırılmış Ek-1 katsayı formülü kullanılmaz. Taslak brüt sonuç `max(0, kaza öncesi ikinci el değer - onarım sonrası ikinci el değer)` olarak hesaplanır.
+- Kusur oranı 0..10000 baz puandır; para safe integer minor-unit’tir; yuvarlama `half_up_minor_unit` sürümüyle açıkça taşınır.
+- Marka/model/varyant/model yılı, kilometre, kullanım şekli, hasarlı parçalar/işlemler, önceki hasar, ağır/tam hasar, kusur ve iki piyasa değeri kanıt bağlantısı taşır.
+- Son 30 gün, her değer tarafında en az üç emsal ve hedef kilometrenin ±%10 aralığı sürümlü ofis kanıt yeterliliğidir; mevzuat formülü olarak sunulmaz.
+- Eksik veya çelişkili kanıt `control_required` olur. Provider/AI confidence veya kullanıcı beyanı doğrulanmamış belgeyi kanıt yapmaz.
+- Ağır/tam hasar `not_applicable`; sıfır/negatif piyasa farkı `no_value_loss` taslağıdır. Her sonuç insan onayı gerektirir.
+- Approved/superseded version, evidence, comparable ve approval history append-only/immutable’dır; düzeltme yeni version üretir.

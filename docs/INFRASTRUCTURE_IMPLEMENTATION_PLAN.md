@@ -438,3 +438,11 @@ Chunk server’da lease/Agent ownership, run/job version, extraction page, sourc
 - Deployment provider kaydı ile organization policy/bütçe birbirinden bağımsızdır. Salt-okunur availability endpoint’i bu kapıları güvenli biçimde birleştirir; provider çağrısı veya audit yazısı yapmaz.
 - Production composition otomatik Gemini model fallback’i yapmaz. Model değişimi açık environment config ve kontrollü restart/deployment gerektirir.
 - Migration, dependency, File Agent, filesystem ve fiziksel veri yazma yolu değişmez.
+
+### Paket 32 ek uygulama kaydı — Trafik değer kaybı persistence/API
+
+- Migration 0022 mevcut Cases/Documents/Auth/Audit altyapısını kullanır; ikinci audit, queue, worker veya File Agent işi oluşturmaz.
+- Domain evaluator database/HTTP bağımsızdır. API case tarihini ve documentVersion fiziksel doğrulamasını server tarafında enjekte eder.
+- Assessment command’ları mevcut PostgreSQL transaction, idempotency ve merkezi AuditService sınırındadır.
+- Piyasa emsali toplama otomasyonu yoktur; yalnız kontrollü `https://`/`ref:` logical reference ve hash saklanır. Mutlak filesystem yolu yoktur.
+- Yeni runtime dependency, IPC veya fiziksel yazma yolu eklenmez.

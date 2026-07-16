@@ -243,3 +243,13 @@ raporlanır.
 - Gerçek PostgreSQL/API; provider kapalıyken Cases detail’in çalışmasını, organization policy kapalı/açık durumunu ve call-ready bileşimini gerçek `_test` DB üzerinde doğrular.
 - UI/tarayıcı; gerçek login, Gemini/OpenAI deployment rozetleri, provider seçimi, core policy-analysis görünümü, no-fallback, 1366×768 açık/koyu ve 1920×1080 tema, overflow ve kararlı sayfada console warning/error kontrolünü geçmelidir.
 - Paket 31 gerçek provider çağrısını tekrar etmez; Paket 29 canlı sentetik pilot kanıtı korunur. Secret test/repository/log/audit’e alınmaz. Kritik PostgreSQL/API/UI/tarayıcı testi skip kalırsa PASS sayılmaz.
+
+### Paket 32 — 01.07.2026 Trafik değer kaybı kabulü
+
+- Domain: piyasa farkı ve kusur hesabı; eski Ek-1 formülünün kullanılmaması; dönem, ağır/tam hasar, eksik kanıt, emsal yeterliliği, kaynak çelişkisi ve deterministik tekrar.
+- Contracts: strict unknown-key, safe integer minor-unit, baz puan, LocalDate, evidence/comparable bağları, mutlak yol reddi ve Zod/JSON Schema semantik eşliği.
+- Gerçek PostgreSQL 0022: up/repeat/down/reapply; tenant FK, tek assessment, version uniqueness, active approved, append-only evidence/comparable/approval ve approved immutability.
+- Gerçek API: 401/403, Traffic-only, ready/verified source, idempotent draft, stale, control-required submit blokajı, submit→approve, submit→reject, version supersede, tenant 404 ve audit/response sızıntı kontrolü.
+- Canlı TCP smoke: login→draft→replay→submit→approve→read/version history; sentetik veri dışında müşteri bilgisi kullanılmaz.
+- UI, Kasko, scraping/SBM entegrasyonu, AI tahmini, File Agent ve üretim migration kapsam dışıdır. Kritik domain/contracts/DB/API testi skip kalırsa PASS sayılmaz.
+- Gerçek sonuç: ana ve repository-dışı fresh kopyada 1050 başarılı / 6 mevcut ortam-koşullu UI skip; Paket 32 domain/contracts/PostgreSQL/API/TCP senaryolarında skip yoktur.

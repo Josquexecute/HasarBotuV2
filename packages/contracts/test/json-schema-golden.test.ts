@@ -89,6 +89,12 @@ const EXPECTED_NAMES: readonly JsonSchemaName[] = [
   'reference-services-response',
   'reference-users-response',
   'storage-roots-response',
+  'traffic-value-loss-approve-request',
+  'traffic-value-loss-reject-request',
+  'traffic-value-loss-response',
+  'traffic-value-loss-submit-request',
+  'traffic-value-loss-version-create-request',
+  'traffic-value-loss-versions-response',
   'workspace-plan-request',
   'workspace-provisioning-response',
 ]
