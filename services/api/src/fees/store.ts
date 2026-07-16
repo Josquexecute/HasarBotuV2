@@ -402,11 +402,47 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
            COALESCE(sum(current.approved_amount_minor)
              FILTER (WHERE current.status IN ('approved','corrected')),0)::text AS approved_fee_total_minor,
            count(*) FILTER (WHERE current.status='control_required')::int AS control_required_fee_count,
-           count(*) FILTER (WHERE c.lifecycle_status='closed' AND fee.id IS NULL)::int AS closed_without_fee_count
+           count(*) FILTER (WHERE c.lifecycle_status='closed' AND fee.id IS NULL)::int AS closed_without_fee_count,
+           count(*) FILTER (
+             WHERE c.lifecycle_status='closed' AND c.case_type='traffic'
+               AND value_loss.status='approved'
+               AND value_loss.human_approval_status='approved'
+               AND value_loss.result_code<>'control_required'
+               AND value_loss_report.id IS NOT NULL
+               AND value_loss_report.rule_version=value_loss.rule_version
+           )::int AS approved_value_loss_count,
+           COALESCE(sum(
+             CASE WHEN c.lifecycle_status='closed' AND c.case_type='traffic'
+               AND value_loss.status='approved'
+               AND value_loss.human_approval_status='approved'
+               AND value_loss.result_code<>'control_required'
+               AND value_loss_report.id IS NOT NULL
+               AND value_loss_report.rule_version=value_loss.rule_version
+             THEN COALESCE((value_loss.result_snapshot->>'faultAdjustedValueLossMinor')::bigint,0)
+             ELSE 0 END
+           ),0)::text AS approved_value_loss_total_minor,
+           count(*) FILTER (
+             WHERE c.lifecycle_status='closed' AND c.case_type='traffic'
+               AND NOT COALESCE((
+                 value_loss.status='approved'
+                 AND value_loss.human_approval_status='approved'
+                 AND value_loss.result_code<>'control_required'
+                 AND value_loss_report.id IS NOT NULL
+                 AND value_loss_report.rule_version=value_loss.rule_version
+               ),false)
+           )::int AS control_required_value_loss_count,
+           count(*) FILTER (WHERE c.lifecycle_status='closed' AND c.case_type='casco')::int AS not_applicable_value_loss_count
          FROM cases c
          LEFT JOIN fee_records fee
            ON fee.organization_id=c.organization_id AND fee.case_id=c.id
          LEFT JOIN fee_record_versions current ON current.id=fee.current_version_id
+         LEFT JOIN traffic_value_loss_assessments value_loss_assessment
+           ON value_loss_assessment.organization_id=c.organization_id
+          AND value_loss_assessment.case_id=c.id
+         LEFT JOIN traffic_value_loss_versions value_loss
+           ON value_loss.id=value_loss_assessment.current_version_id
+         LEFT JOIN traffic_value_loss_reports value_loss_report
+           ON value_loss_report.assessment_version_id=value_loss.id
          WHERE ${scopedSql}`,
         params,
       )
@@ -420,6 +456,10 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
         approved_fee_total_minor: string
         control_required_fee_count: number
         closed_without_fee_count: number
+        approved_value_loss_count: number
+        approved_value_loss_total_minor: string
+        control_required_value_loss_count: number
+        not_applicable_value_loss_count: number
       }
       const pendingResult = await pool.query(
         `SELECT fee.id AS fee_id,c.id AS case_id,c.office_number,c.plate,c.case_type,
@@ -488,6 +528,10 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
           approvedFeeTotalMinor: safeMinor(summary.approved_fee_total_minor),
           controlRequiredFeeCount: summary.control_required_fee_count,
           closedCaseWithoutFeeCount: summary.closed_without_fee_count,
+          approvedValueLossCount: summary.approved_value_loss_count,
+          approvedValueLossTotalMinor: safeMinor(summary.approved_value_loss_total_minor),
+          controlRequiredValueLossCount: summary.control_required_value_loss_count,
+          notApplicableValueLossCount: summary.not_applicable_value_loss_count,
         },
         distribution: [
           { code: 'traffic', count: summary.traffic_case_count },

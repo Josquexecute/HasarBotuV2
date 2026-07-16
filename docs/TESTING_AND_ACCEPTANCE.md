@@ -324,3 +324,12 @@ raporlanır.
 - Gerçek Chrome: login, sentetik kapalı case/final report, aday, açık onay, rapor toplamı, kapanan dosya tutarı, 1366×768 açık/koyu ve 1920×1080 koyu, overflow/console ve API kesintisi no-fallback.
 - Kritik DB/API/UI/tarayıcı testi skip kalırsa Paket 39 PASS sayılmaz. Repository dışı fresh `npm ci`, gerçek `_test` PostgreSQL ile typecheck, lint, test ve build tamamlanmadan commit oluşturulmaz.
 - Gerçek sonuç: ana ve repository dışı fresh kopyada **1.156 başarılı / 6 mevcut ortam-koşullu UI skip**; migration 0025 ve Paket 39 API 5/5 skip edilmeden; Chrome aday→onay→rapor toplamı/no-fallback akışı üç çözünürlükte geçti.
+
+### Paket 40 — değer kaybı kapanış özeti kabulü
+
+- Domain/contracts: approved+human-approved+same-version final report → `present`; eksik/onaysız/raporsuz/stale → `control_required`; Kasko → `not_applicable`; strict runtime/JSON Schema eşliği.
+- Gerçek PostgreSQL/API: lifecycle plan/history snapshot, normal close blocker, eksiklerle close, tenant/401, closed summary endpoint ve aylık approved minor-unit toplamı.
+- UI: kapanış önizlemesinde sonuç/tutar/rule/report; Kapanan Dosyalar gerçek status; Raporlar approved total/control count; API kesintisinde no-fallback.
+- Gerçek Chrome: login, Trafik close preview, değer kaybı özeti, Kapanan Dosyalar, aylık rapor; 1366×768 açık/koyu ve 1920×1080 koyu overflow/console kontrolü.
+- Kritik PostgreSQL/API/UI/tarayıcı veya repository dışı fresh `npm ci` kapısı tamamlanmadan Paket 40 PASS sayılmaz.
+- Gerçek sonuç: ana ve repository dışı fresh kopyada **1.162 başarılı / 6 mevcut ortam-koşullu UI skip**; lifecycle 5/5 ve fee/report/value-loss summary 5/5 gerçek PostgreSQL’de skip edilmeden geçti. Chrome close preview/aylık toplam/Kapanan Dosyalar/no-fallback akışı üç görünümde geçti.

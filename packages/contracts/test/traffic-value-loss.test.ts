@@ -4,6 +4,7 @@ import {
   TRAFFIC_VALUE_LOSS_REPORT_PREVIEW_ROUTE,
   TRAFFIC_VALUE_LOSS_ROUTE,
   trafficValueLossEvaluationSchema,
+  trafficValueLossClosureListResponseSchema,
   trafficValueLossReportGenerateRequestSchema,
   trafficValueLossReportPreviewRequestSchema,
   trafficValueLossVersionCreateRequestSchema,
@@ -13,6 +14,36 @@ const id = '019f7000-0000-7000-8000-000000000001'
 const hash = 'a'.repeat(64)
 
 describe('Trafik değer kaybı contracts', () => {
+  it('kapanış özet listesini strict kimlik ve minor-unit alanlarıyla doğrular', () => {
+    expect(trafficValueLossClosureListResponseSchema.safeParse({
+      items: [{
+        caseId: id,
+        officeCaseNumber: '2026/40',
+        plate: '34 PK 040',
+        caseType: 'traffic',
+        closedAt: '2026-07-16T10:00:00.000Z',
+        closureMode: 'normal',
+        closureReason: null,
+        summary: {
+          status: 'present',
+          reason: 'Onaylı sonuç ve nihai rapor bulundu.',
+          ruleVersion: 'traffic-value-loss-closure/1.0.0',
+          requiresHumanReview: false,
+          assessmentId: id,
+          assessmentVersionId: id,
+          assessmentVersion: 1,
+          assessmentStatus: 'approved',
+          humanApprovalStatus: 'approved',
+          calculationRuleVersion: '2026.07.01.1',
+          resultCode: 'calculable',
+          amountMinor: 245_000,
+          reportId: id,
+          reportGeneratedAt: '2026-07-16T10:00:00.000Z',
+        },
+      }],
+    }).success).toBe(true)
+  })
+
   it('route ve 01.07.2026 kural sürümünü sabitler', () => {
     expect(TRAFFIC_VALUE_LOSS_ROUTE).toContain('/traffic-value-loss')
     expect(TRAFFIC_VALUE_LOSS_APPROVE_ROUTE).toContain('/approve')

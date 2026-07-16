@@ -92,6 +92,7 @@ import {
   trafficValueLossReportResponseSchema,
   trafficValueLossReportsResponseSchema,
 } from './v1/traffic-value-loss/report.js'
+import { trafficValueLossClosureListResponseSchema } from './v1/traffic-value-loss/closure.js'
 import { dashboardResponseSchema } from './v1/dashboard/dto.js'
 import {
   caseNoteCreateRequestSchema,
@@ -204,6 +205,7 @@ export const JSON_SCHEMA_TARGETS = {
   'traffic-value-loss-report-preview-response': trafficValueLossReportPreviewResponseSchema,
   'traffic-value-loss-report-response': trafficValueLossReportResponseSchema,
   'traffic-value-loss-reports-response': trafficValueLossReportsResponseSchema,
+  'traffic-value-loss-closure-list-response': trafficValueLossClosureListResponseSchema,
   'dashboard-response': dashboardResponseSchema,
   'case-operations-response': caseOperationsResponseSchema,
   'case-note-create-request': caseNoteCreateRequestSchema,

@@ -4,6 +4,7 @@ import {
   CASE_REOPEN_PLAN_ROUTE,
   closePlanRequestSchema,
   reopenPlanRequestSchema,
+  trafficValueLossClosureSummarySchema,
 } from '../src/index.js'
 
 describe('case lifecycle contracts', () => {
@@ -20,5 +21,24 @@ describe('case lifecycle contracts', () => {
   it('reopen closed workflow hedefini reddeder ve gerekce ister', () => {
     expect(reopenPlanRequestSchema.safeParse({ expectedCaseVersion: 2, expectedLocationVersion: 2, reason: 'Yeniden inceleme', targetWorkflowStage: 'reporting' }).success).toBe(true)
     expect(reopenPlanRequestSchema.safeParse({ expectedCaseVersion: 2, expectedLocationVersion: 2, reason: 'Yeniden inceleme', targetWorkflowStage: 'closed' }).success).toBe(false)
+  })
+
+  it('değer kaybı kapanış özetini strict ve sürümlü doğrular', () => {
+    expect(trafficValueLossClosureSummarySchema.parse({
+      status: 'control_required',
+      reason: 'Nihai rapor bulunamadı.',
+      ruleVersion: 'traffic-value-loss-closure/1.0.0',
+      requiresHumanReview: true,
+      assessmentId: null,
+      assessmentVersionId: null,
+      assessmentVersion: null,
+      assessmentStatus: null,
+      humanApprovalStatus: null,
+      calculationRuleVersion: null,
+      resultCode: null,
+      amountMinor: null,
+      reportId: null,
+      reportGeneratedAt: null,
+    }).status).toBe('control_required')
   })
 })

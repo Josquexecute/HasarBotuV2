@@ -381,3 +381,13 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Yalnız `approved | corrected` güncel sürüm kesin toplamda kullanılabilir. Düzeltme eski sürümü değiştirmez; zorunlu gerekçeyle yeni sürüm üretir.
 - Aynı case için tek ücret aggregate vardır. Komutlar idempotency ve optimistic version ile korunur; aynı onay replay'i ikinci sürüm üretmez.
 - Dönem temeli `open_created_closed_finalized`: açık vaka `created_at`, kapalı vaka `closed_at` ile seçilen ayın `[başlangıç, sonraki ay başlangıcı)` aralığında değerlendirilir.
+
+## Trafik değer kaybı kapanış özeti kuralları — Paket 40
+
+- İlk kural sürümü `traffic-value-loss-closure/1.0.0`'dır; saf evaluator database/HTTP/sistem saati kullanmaz.
+- Trafik case için yalnız current assessment version `approved`, human approval `approved` ve aynı version’a ait ready immutable final report varsa kapanış sonucu `present` olur.
+- Assessment yok, current version onaysız/rejected/control-required, report yok veya report-version/rule uyumsuzsa `control_required` olur.
+- Eski superseded assessment/report güncel kapanış gerçeği olarak otomatik seçilmez. Hesap yeniden çalıştırılmaz; saklı result snapshot kullanılır.
+- Kasko case Trafik değer kaybı kapanış gereksiniminde `not_applicable` olur.
+- `control_required`, normal close’un mevcut eksik gereksinim blocker’ına katılır. Eksiklerle kapatma mevcut zorunlu gerekçe/onay/snapshot akışını kullanır.
+- Snapshot assessment/report kimliği, assessment version, result code, minor-unit tutar ve rule version taşır; emsal veya belge içeriği taşımaz.

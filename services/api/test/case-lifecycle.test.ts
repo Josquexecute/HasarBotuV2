@@ -104,6 +104,7 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     if (withReadyRequirements) {
       for (const type of BASE_TYPES) await seedDocument(body.case.id, type, 'ready')
       await seedPhoto(body.case.id, 'ready')
+      await seedApprovedValueLoss(body.case.id)
     }
     return { caseId: body.case.id, officeNumber: body.case.officeCaseNumber, openPath, locationId }
   }
@@ -140,6 +141,49 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
       [uuidv7(), organizationId, caseId, 'b'.repeat(64), ROOT_KEY,
         `2026/Temmuz 2026/METADATA/ONARIM/${caseId}-onarim.jpg`, status, ready,
         ready ? new Date('2026-07-14T10:00:00.000Z') : null],
+    )
+  }
+
+  async function seedApprovedValueLoss(caseId: string): Promise<void> {
+    const assessmentId = uuidv7()
+    const versionId = uuidv7()
+    const reportId = uuidv7()
+    await pool.query(
+      `INSERT INTO traffic_value_loss_assessments
+       (id,organization_id,case_id,created_by_user_id)
+       VALUES ($1,$2,$3,$4)`,
+      [assessmentId, organizationId, caseId, adminUserId],
+    )
+    await pool.query(
+      `INSERT INTO traffic_value_loss_versions
+       (id,organization_id,case_id,assessment_id,assessment_version,status,rule_set_id,rule_version,
+        effective_from,evaluated_on,input_snapshot,result_snapshot,result_code,human_approval_status,
+        approved_by_user_id,approved_at,is_active,created_by_user_id)
+       VALUES ($1,$2,$3,$4,1,'approved','traffic-value-loss-market-difference','2026.07.01.1',
+               '2026-07-01','2026-07-14','{}'::jsonb,$5::jsonb,'calculable','approved',$6,now(),true,$6)`,
+      [versionId, organizationId, caseId, assessmentId, JSON.stringify({
+        faultAdjustedValueLossMinor: 245_000,
+        canSubmitForApproval: true,
+      }), adminUserId],
+    )
+    await pool.query(
+      'UPDATE traffic_value_loss_assessments SET current_version_id=$2 WHERE id=$1',
+      [assessmentId, versionId],
+    )
+    await pool.query(
+      `INSERT INTO traffic_value_loss_reports
+       (id,organization_id,case_id,assessment_id,assessment_version_id,assessment_version,
+        schema_version,template_version,rule_version,content_snapshot,content_hash,pdf_hash,
+        pdf_byte_size,generated_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,1,'traffic-value-loss-final-report/1.0.0',
+               'traffic-value-loss-final-report-tr/1.0.0','2026.07.01.1',$6::jsonb,$7,$8,128,$9)`,
+      [reportId, organizationId, caseId, assessmentId, versionId, JSON.stringify({
+        schemaVersion: 'traffic-value-loss-final-report/1.0.0',
+        templateVersion: 'traffic-value-loss-final-report-tr/1.0.0',
+        assessment: { assessmentId, versionId, assessmentVersion: 1 },
+        rule: { ruleVersion: '2026.07.01.1' },
+        caseReference: { caseId, caseType: 'traffic' },
+      }), 'c'.repeat(64), 'd'.repeat(64), adminUserId],
     )
   }
 
@@ -217,6 +261,12 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     expect(planned).toMatchObject({ operationType: 'close', status: 'approval_required', blockers: [],
       destination: { relativePath: `2026/Temmuz 2026/KAPALI TEMMUZ 2026/${seeded.openPath.split('/').at(-1)}` } })
     expect(planned.requirementSummary.missingCount).toBe(0)
+    expect(planned.requirementSummary.valueLossSummary).toMatchObject({
+      status: 'present',
+      amountMinor: 245_000,
+      assessmentVersion: 1,
+    })
+    expect(planned.requirementSummary.valueLossSummary?.reportId).not.toBeNull()
     await expect(access(join(root, ...planned.destination.relativePath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
     const replay = await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' }, adminCookie, closeKey)
     expect(replay.json()).toEqual(plannedResponse.json())
@@ -245,6 +295,17 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     const reopened = await pool.query('SELECT lifecycle_status,workflow_stage,version,office_number FROM cases WHERE id=$1', [seeded.caseId])
     expect(reopened.rows[0]).toMatchObject({ lifecycle_status: 'open', workflow_stage: 'reporting', version: 3, office_number: seeded.officeNumber })
     expect((await pool.query('SELECT count(*)::int AS n FROM case_lifecycle_history WHERE case_id=$1', [seeded.caseId])).rows[0]).toEqual({ n: 2 })
+    const closeSnapshot = await pool.query(
+      `SELECT requirement_snapshot->'valueLossSummary' AS value_loss
+       FROM case_lifecycle_history
+       WHERE case_id=$1 AND operation_type='close'`,
+      [seeded.caseId],
+    )
+    expect(closeSnapshot.rows[0].value_loss).toMatchObject({
+      status: 'present',
+      amountMinor: 245_000,
+      assessmentVersion: 1,
+    })
     const actions = await pool.query("SELECT action FROM audit_events WHERE resource_id IN (SELECT id::text FROM case_lifecycle_operations WHERE case_id=$1)", [seeded.caseId])
     expect((actions.rows as { action: string }[]).map((row) => row.action)).toEqual(expect.arrayContaining([
       'case_lifecycle.close_planned', 'case_lifecycle.close_approved', 'case_lifecycle.closed',
@@ -262,6 +323,7 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     const blocked = caseLifecycleOperationResponseSchema.parse(normal.json()).operation
     expect(blocked.status).toBe('blocked')
     expect(blocked.requirementSummary.controlRequiredCount).toBeGreaterThanOrEqual(3)
+    expect(blocked.requirementSummary.valueLossSummary?.status).toBe('control_required')
     expect(blocked.requirementSummary.requirements.filter((item) => ['pending', 'failed'].includes(item.relatedMetadataStatuses[0]?.status ?? '')).every((item) => item.status === 'control_required')).toBe(true)
     expect((await approve(seeded.caseId, blocked)).statusCode).toBe(409)
     expect((await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'with_missing_requirements' })).statusCode).toBe(400)

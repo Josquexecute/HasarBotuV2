@@ -279,3 +279,11 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - Para `bigint` safe minor-unit ve sabit `TRY`'dir; floating point kolon yoktur. Status/shape constraint'i `control_required`, `approved` ve `corrected` alan bütünlüğünü zorlar.
 - Composite tenant/case foreign key'leri case, documentVersion ve kullanıcı bağlarını doğrular. Aynı case için tek aggregate ve aggregate içinde tek version numarası unique constraint ile korunur.
 - Version satırları update/delete append-only trigger'ıyla korunur. Mutlak path, belge içeriği, PDF binary, secret veya ham hata kolonu yoktur.
+
+## Paket 40 PostgreSQL kullanımı
+
+- Yeni migration veya tablo yoktur. Lifecycle operation/history içindeki mevcut `requirement_snapshot jsonb`, sürümlü değer kaybı kapanış özetini backward-compatible taşır.
+- Özet kaynağı yalnız `traffic_value_loss_assessments.current_version_id`, bağlı `traffic_value_loss_versions` approval/result snapshot’ı ve aynı version’a unique bağlı `traffic_value_loss_reports` satırıdır.
+- Kapanış finalization mevcut operation snapshot’ını history’ye append-only kopyalar; sonradan oluşan yeni assessment version eski kapanış snapshot’ını değiştirmez.
+- Aylık rapor salt-okunur join ile saklı minor-unit sonucu toplar; hesaplama fonksiyonunu tekrar çalıştırmaz ve yeni snapshot/audit yazmaz.
+- Mutlak path, PDF binary, emsal metni veya yeni kişisel veri kolonu eklenmez.

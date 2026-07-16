@@ -10,6 +10,7 @@ export const TRAFFIC_VALUE_LOSS_REPORTS_ROUTE = `${API_V1_BASE}/cases/:caseId/tr
 export const TRAFFIC_VALUE_LOSS_VERSION_REPORTS_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/versions/:versionId/reports` as const
 export const TRAFFIC_VALUE_LOSS_REPORT_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/reports/:reportId` as const
 export const TRAFFIC_VALUE_LOSS_REPORT_PDF_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/reports/:reportId/pdf` as const
+export const TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE = `${API_V1_BASE}/traffic-value-loss/closure-summaries` as const
 
 export const TRAFFIC_VALUE_LOSS_VERSION_SCOPE = 'traffic_value_loss.version_create' as const
 export const TRAFFIC_VALUE_LOSS_SUBMIT_SCOPE = 'traffic_value_loss.submit' as const

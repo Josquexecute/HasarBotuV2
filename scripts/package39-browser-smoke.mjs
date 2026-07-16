@@ -168,6 +168,7 @@ async function seed() {
   const organizationId = uuidv7()
   const userId = uuidv7()
   const caseId = uuidv7()
+  const openCaseId = uuidv7()
   const documentId = uuidv7()
   const documentVersionId = uuidv7()
   const password = 'p39-browser-sentetik-parola-42'
@@ -201,6 +202,22 @@ async function seed() {
     [caseId, organizationId, userId],
   )
   await pool.query(
+    `INSERT INTO cases
+     (id,organization_id,office_year,office_sequence,office_number,case_type,lifecycle_status,
+      workflow_stage,plate,plate_normalized,responsible_user_id,loss_date,notification_date,
+      created_at,updated_at,version)
+     VALUES ($1,$2,2026,4001,'2026/4001','traffic','open','ready_to_close','34 P 4001','34P4001',
+             $3,'2026-07-09','2026-07-10','2026-07-01T09:00:00Z',
+             '2026-07-15T10:00:00Z',1)`,
+    [openCaseId, organizationId, userId],
+  )
+  await pool.query(
+    `INSERT INTO case_locations
+     (id,organization_id,case_id,storage_root_key,relative_path,verification_status,source)
+     VALUES ($1,$2,$3,'synthetic-root','2026/Temmuz 2026/34P4001','verified','system')`,
+    [uuidv7(), organizationId, openCaseId],
+  )
+  await pool.query(
     `INSERT INTO documents
      (id,organization_id,case_id,document_type,current_version_number,status)
      VALUES ($1,$2,$3,'expert_report',1,'ready')`,
@@ -229,9 +246,89 @@ async function seed() {
     [documentId, documentVersionId],
   )
 
+  const readyTypes = [
+    'victim_traffic_policy', 'insured_traffic_policy', 'sbm_heavy_damage_result',
+    'victim_registration', 'insured_registration', 'victim_driver_license',
+    'insured_driver_license', 'accident_report', 'expert_report', 'preliminary_report',
+  ]
+  for (const [index, documentType] of readyTypes.entries()) {
+    const readyDocumentId = uuidv7()
+    const readyVersionId = uuidv7()
+    await pool.query(
+      `INSERT INTO documents
+       (id,organization_id,case_id,document_type,current_version_number,status)
+       VALUES ($1,$2,$3,$4,1,'ready')`,
+      [readyDocumentId, organizationId, openCaseId, documentType],
+    )
+    await pool.query(
+      `INSERT INTO document_versions
+       (id,organization_id,document_id,case_id,version_number,original_file_name,display_name,
+        extension,mime_type,byte_size,content_hash,storage_root_key,relative_path,source_type,
+        status,hash_verified,size_verified,verified_at,registered_by_user_id)
+       VALUES ($1,$2,$3,$4,1,$5,$5,'pdf','application/pdf',128,$6,'synthetic-root',$7,
+               'manual','ready',true,true,'2026-07-15T08:00:00Z',$8)`,
+      [
+        readyVersionId, organizationId, readyDocumentId, openCaseId,
+        `${documentType}.pdf`, String(index + 1).padStart(64, 'a').slice(-64),
+        `sentetik/${openCaseId}/${documentType}.pdf`, userId,
+      ],
+    )
+    await pool.query('UPDATE documents SET current_version_id=$2 WHERE id=$1', [readyDocumentId, readyVersionId])
+  }
+  await pool.query(
+    `INSERT INTO photos
+     (id,organization_id,case_id,original_file_name,display_name,mime_type,byte_size,content_hash,
+      storage_root_key,relative_path,source_type,status,hash_verified,size_verified,verified_at)
+     VALUES ($1,$2,$3,'onarim.jpg','Onarım','image/jpeg',128,$4,'synthetic-root',$5,
+             'manual','ready',true,true,'2026-07-15T08:00:00Z')`,
+    [uuidv7(), organizationId, openCaseId, 'e'.repeat(64), `sentetik/${openCaseId}/ONARIM/onarim.jpg`],
+  )
+
+  async function seedValueLoss(targetCaseId) {
+    const assessmentId = uuidv7()
+    const versionId = uuidv7()
+    await pool.query(
+      `INSERT INTO traffic_value_loss_assessments
+       (id,organization_id,case_id,created_by_user_id)
+       VALUES ($1,$2,$3,$4)`,
+      [assessmentId, organizationId, targetCaseId, userId],
+    )
+    await pool.query(
+      `INSERT INTO traffic_value_loss_versions
+       (id,organization_id,case_id,assessment_id,assessment_version,status,rule_set_id,rule_version,
+        effective_from,evaluated_on,input_snapshot,result_snapshot,result_code,human_approval_status,
+        approved_by_user_id,approved_at,is_active,created_by_user_id)
+       VALUES ($1,$2,$3,$4,1,'approved','traffic-value-loss-market-difference','2026.07.01.1',
+               '2026-07-01','2026-07-15','{}'::jsonb,$5::jsonb,'calculable','approved',$6,now(),true,$6)`,
+      [versionId, organizationId, targetCaseId, assessmentId, JSON.stringify({
+        faultAdjustedValueLossMinor: 245_000,
+        canSubmitForApproval: true,
+      }), userId],
+    )
+    await pool.query('UPDATE traffic_value_loss_assessments SET current_version_id=$2 WHERE id=$1', [assessmentId, versionId])
+    await pool.query(
+      `INSERT INTO traffic_value_loss_reports
+       (id,organization_id,case_id,assessment_id,assessment_version_id,assessment_version,
+        schema_version,template_version,rule_version,content_snapshot,content_hash,pdf_hash,
+        pdf_byte_size,generated_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,1,'traffic-value-loss-final-report/1.0.0',
+               'traffic-value-loss-final-report-tr/1.0.0','2026.07.01.1',$6::jsonb,$7,$8,128,$9)`,
+      [uuidv7(), organizationId, targetCaseId, assessmentId, versionId, JSON.stringify({
+        schemaVersion: 'traffic-value-loss-final-report/1.0.0',
+        templateVersion: 'traffic-value-loss-final-report-tr/1.0.0',
+        assessment: { assessmentId, versionId, assessmentVersion: 1 },
+        rule: { ruleVersion: '2026.07.01.1' },
+        caseReference: { caseId: targetCaseId, caseType: 'traffic' },
+      }), 'f'.repeat(64), '9'.repeat(64), userId],
+    )
+  }
+  await seedValueLoss(caseId)
+  await seedValueLoss(openCaseId)
+
   return {
     organizationId,
     caseId,
+    openCaseId,
     documentVersionId,
     email: 'p39-browser@test.local',
     password,
@@ -295,6 +392,17 @@ try {
   await clickExact('Giriş Yap')
   await waitFor("document.body.textContent.includes('Operasyon Durumu')")
 
+  await evaluate(`location.href=${JSON.stringify(`http://127.0.0.1:4179/dosyalar/${seeded.openCaseId}`)}; true`)
+  await waitFor("document.body.textContent.includes('34 P 4001')")
+  await clickExact('Dosyayı Kapat')
+  await clickExact('Önizleme Oluştur')
+  await waitFor("document.body.textContent.includes('Değer Kaybı Kapanış Özeti')")
+  await waitFor("document.body.textContent.includes('₺2.450,00')")
+  await waitFor("document.body.textContent.includes('Doğrulanmış rapor bağlı')")
+  await waitFor("document.body.textContent.includes('0 kontrol gerekli')")
+  await assertNoHorizontalOverflow('CLOSE_PREVIEW_1366_LIGHT')
+  await clickExact('Vazgeç')
+
   await evaluate(`location.href=${JSON.stringify(`http://127.0.0.1:4179/dosyalar/${seeded.caseId}`)}; true`)
   await waitFor("document.body.textContent.includes('34 P 3901')")
   await waitFor(`(() => {
@@ -333,6 +441,7 @@ try {
   await evaluate("location.href='http://127.0.0.1:4179/raporlar-ve-ucretler'; true")
   await waitFor("location.pathname==='/raporlar-ve-ucretler' && document.body.textContent.includes('Onaylı Eksper Ücreti')")
   await waitFor("document.body.textContent.includes('₺4.850')")
+  await waitFor("document.body.textContent.includes('₺2.450')")
   const reportsText = await evaluate('document.body.textContent')
   if (reportsText.includes('28.750') || reportsText.includes('26 ESK 26')) {
     throw new Error('REPORTS_MOCK_LEAK')
@@ -347,6 +456,7 @@ try {
   await evaluate("location.href='http://127.0.0.1:4179/kapanan-dosyalar'; true")
   await waitFor("location.pathname==='/kapanan-dosyalar' && document.body.textContent.includes('34 P 3901')")
   await waitFor("document.body.textContent.includes('₺4.850')")
+  await waitFor("document.body.textContent.includes('₺2.450')")
   const closedText = await evaluate('document.body.textContent')
   if (closedText.includes('Kontrol gerekli') || closedText.includes('26 ESK 26')) {
     throw new Error('CLOSED_FEE_STATE_INVALID')
@@ -427,6 +537,9 @@ try {
       explicitApproval: true,
       approvedMonthlyTotal: true,
       approvedClosedCaseFee: true,
+      closePreviewValueLossSummary: true,
+      approvedMonthlyValueLossTotal: true,
+      approvedClosedCaseValueLoss: true,
       auditSafe: true,
       noFallback: true,
       consoleClean: true,

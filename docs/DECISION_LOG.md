@@ -754,3 +754,21 @@ Etkisi:
 
 - Migration `0025_closure_fees_reports`; saf kapanma ücreti kaynak kuralı; strict contracts/JSON Schema; tenant/RBAC/idempotency/optimistic locking/audit API ve gerçek Dosya Detayı/Kapanan Dosyalar/Raporlar UI entegrasyonu eklendi.
 - Yeni harici dependency, IPC, File Agent işi veya fiziksel dosya yazma yolu eklenmedi.
+
+## 2026-07-16 — HB-2026-046: Trafik değer kaybı kapanış özeti fail-closed sınırı
+
+Karar:
+
+1. Trafik case kapanışında yalnız assessment aggregate’ının güncel sürümü `approved`, insan onayı `approved` ve aynı assessment version’a ait immutable nihai rapor mevcutsa değer kaybı gereksinimi `present` olur.
+2. Assessment yoksa, güncel sürüm taslak/onay bekliyor/rejected/control-required ise, nihai rapor yoksa veya rapor sürümü/kuralı güncel hesapla uyuşmuyorsa sonuç `control_required` olur. Eski superseded rapor sessizce güncel sonuç sayılmaz.
+3. Kasko case için Trafik değer kaybı kapanış özeti `not_applicable` olur. Bu paket Kasko değer kaybı hesabı veya ofis kuralı üretmez.
+4. Kapanış planı; durum, gerekçe, hesap/rapor kimliği, assessment version, sonuç kodu, minor-unit tutar ve kural sürümlerini mevcut lifecycle `requirement_snapshot` JSONB’sine yazar. Snapshot lifecycle history’ye append-only kopyalanır; eski kayıtlar `valueLossSummary:null` ile backward-compatible okunur.
+5. Normal kapanışta `control_required` değer kaybı mevcut `requirements_incomplete` blocker’ına katılır. Kullanıcı yalnız mevcut “Eksiklerle Kapat” yolu, zorunlu gerekçe ve açık onayla ilerleyebilir.
+6. Kapanan Dosyalar tenant-kapsamlı salt-okunur kapanış özetinden gerçek değer kaybı durumunu gösterir. Aylık rapor yalnız kapanmış Trafik case’lerde güncel onaylı+raporlu minor-unit sonucu toplar; hesaplama yeniden çalıştırılmaz.
+7. Salt-okunur özet/rapor çağrıları audit yazmaz. Plan/finalize audit’inde yalnız güvenli status/version/report kimliği bulunabilir; emsal, belge içeriği, plaka, mutlak yol veya secret bulunmaz.
+8. Mevcut lifecycle JSONB snapshot ve Trafik değer kaybı tabloları yeterlidir; yeni migration/tablo, File Agent işi, IPC veya fiziksel dosya yazma yolu eklenmez.
+
+Etkisi:
+
+- `traffic-value-loss-closure/1.0.0` saf domain değerlendirmesi, strict contracts/JSON Schema, tenant-kapsamlı read endpoint’i ve lifecycle/report/UI entegrasyonu eklenir.
+- v0.10 Kapanış kapsamındaki değer kaybı kapanış özeti tamamlanır; Kasko/dış emsal geliştirmesi v0.9’un ayrı açık kapsamıdır.

@@ -3,6 +3,7 @@ import type pg from 'pg'
 import {
   IDEMPOTENCY_KEY_HEADER,
   TRAFFIC_VALUE_LOSS_APPROVE_ROUTE,
+  TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE,
   TRAFFIC_VALUE_LOSS_APPROVE_SCOPE,
   TRAFFIC_VALUE_LOSS_REJECT_ROUTE,
   TRAFFIC_VALUE_LOSS_REJECT_SCOPE,
@@ -20,6 +21,7 @@ import {
   failureEnvelopeSchema,
   idempotencyKeySchema,
   trafficValueLossApproveRequestSchema,
+  trafficValueLossClosureListResponseSchema,
   trafficValueLossParamsSchema,
   trafficValueLossRejectRequestSchema,
   trafficValueLossReportGenerateRequestSchema,
@@ -46,6 +48,7 @@ import {
   TrafficValueLossReportStoreError,
 } from './report-store.js'
 import { trafficValueLossReportFilename } from './report-pdf.js'
+import { createTrafficValueLossClosureStore } from './closure-store.js'
 
 export interface TrafficValueLossRoutesOptions { readonly pool: pg.Pool }
 const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const
@@ -83,10 +86,19 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
   const auth = createAuthStore(options.pool)
   const store = createTrafficValueLossStore(options.pool)
   const reports = createTrafficValueLossReportStore(options.pool)
+  const closure = createTrafficValueLossClosureStore(options.pool)
   const actor = (session: { user: { organizationId: string; id: string } }, request: FastifyRequest) => ({
     organizationId: session.user.organizationId,
     actorUserId: session.user.id,
     requestId: String(request.id),
+  })
+
+  app.get(TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE, async (request, reply) => {
+    const session = await requireSession(auth, request, reply)
+    if (session === undefined) return
+    return trafficValueLossClosureListResponseSchema.parse(
+      await closure.list(session.user.organizationId),
+    )
   })
 
   app.get(TRAFFIC_VALUE_LOSS_ROUTE, async (request, reply) => {

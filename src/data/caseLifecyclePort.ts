@@ -8,7 +8,7 @@ export type LifecycleOperationStatus =
 
 export interface LifecycleRequirementRecord {
   readonly requirementCode: string
-  readonly sourceType: 'document' | 'photo'
+  readonly sourceType: 'document' | 'photo' | 'module'
   readonly canonicalType: string
   readonly status: 'present' | 'missing' | 'control_required' | 'not_applicable'
   readonly reason: string
@@ -35,6 +35,18 @@ export interface LifecycleOperationRecord {
       readonly serviceType: 'authorized' | 'private' | 'glass' | 'mobile' | 'other'
       readonly reason: string
       readonly ruleVersion: string
+    } | null
+    readonly valueLossSummary: {
+      readonly status: 'present' | 'control_required' | 'not_applicable'
+      readonly reason: string
+      readonly ruleVersion: 'traffic-value-loss-closure/1.0.0'
+      readonly requiresHumanReview: boolean
+      readonly assessmentVersion: number | null
+      readonly calculationRuleVersion: string | null
+      readonly resultCode: 'calculable' | 'no_value_loss' | 'not_applicable' | 'control_required' | null
+      readonly amountMinor: number | null
+      readonly reportId: string | null
+      readonly reportGeneratedAt: string | null
     } | null
     readonly missingCount: number
     readonly controlRequiredCount: number

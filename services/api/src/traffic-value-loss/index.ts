@@ -15,3 +15,8 @@ export {
   renderTrafficValueLossReportPdf,
   trafficValueLossReportFilename,
 } from './report-pdf.js'
+export {
+  createTrafficValueLossClosureStore,
+  loadTrafficValueLossClosureSummaries,
+  type TrafficValueLossClosureStore,
+} from './closure-store.js'

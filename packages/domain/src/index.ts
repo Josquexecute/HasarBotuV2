@@ -378,6 +378,15 @@ export {
   type TrafficValueLossReportSource,
 } from './traffic-value-loss-report.js'
 export {
+  TRAFFIC_VALUE_LOSS_CLOSURE_RULE_VERSION,
+  TRAFFIC_VALUE_LOSS_CLOSURE_STATUSES,
+  evaluateTrafficValueLossClosure,
+  type TrafficValueLossClosureAssessmentFact,
+  type TrafficValueLossClosureEvaluation,
+  type TrafficValueLossClosureReportFact,
+  type TrafficValueLossClosureStatus,
+} from './traffic-value-loss-closure.js'
+export {
   DASHBOARD_ATTENTION_CODES,
   DASHBOARD_PRIORITY_VERSION,
   compareDashboardItems,

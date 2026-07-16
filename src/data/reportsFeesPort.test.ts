@@ -64,6 +64,10 @@ describe('reports/fees HTTP adapter', () => {
             approvedFeeTotalMinor: 0,
             controlRequiredFeeCount: 1,
             closedCaseWithoutFeeCount: 0,
+            approvedValueLossCount: 1,
+            approvedValueLossTotalMinor: 245_000,
+            controlRequiredValueLossCount: 0,
+            notApplicableValueLossCount: 0,
           },
           distribution: [
             { code: 'traffic', count: 1 },
@@ -86,6 +90,7 @@ describe('reports/fees HTTP adapter', () => {
         })
       }
       if (url.endsWith('/api/v1/fees')) return response({ items: [] })
+      if (url.endsWith('/api/v1/traffic-value-loss/closure-summaries')) return response({ items: [] })
       return response({ fee, permissions: fee.permissions })
     })
     const adapter = createHttpReportsFeesAdapter({ baseUrl: 'http://api.test', fetchImpl })

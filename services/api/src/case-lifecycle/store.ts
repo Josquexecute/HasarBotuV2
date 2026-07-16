@@ -24,6 +24,7 @@ import { withTransaction } from '../db/executor.js'
 import { evaluateCaseDocumentRequirements } from '../document-requirements/evaluation.js'
 import { enqueueLifecycleFileOperation } from '../file-operations/store.js'
 import { loadServiceProfile } from '../service-agreements/service.js'
+import { loadTrafficValueLossClosureSummaries } from '../traffic-value-loss/closure-store.js'
 
 export const LIFECYCLE_CLOSE_PLAN_SCOPE = 'case.lifecycle.close.plan'
 export const LIFECYCLE_REOPEN_PLAN_SCOPE = 'case.lifecycle.reopen.plan'
@@ -138,6 +139,7 @@ async function requirementSummary(
   evaluatedAt: string,
   hasService: boolean,
   serviceEligibility: ServiceAgreementEvaluation | null,
+  caseType: 'traffic' | 'casco',
 ): Promise<LifecycleRequirementSummary> {
   const base = await evaluateCaseDocumentRequirements(client, organizationId, caseId, evaluatedAt)
   if (base === undefined) throw new Error('case_missing_during_requirement_evaluation')
@@ -186,12 +188,32 @@ async function requirementSummary(
     matchedMetadataIds: [...item.matchedMetadataIds],
     relatedMetadataStatuses: item.relatedMetadataStatuses.map((related) => ({ ...related })),
   }))
-  const requirements = [...baseItems, ...closureItems]
+  const valueLossSummary = (await loadTrafficValueLossClosureSummaries(
+    client,
+    organizationId,
+    [{ caseId, caseType }],
+  )).get(caseId)
+  if (valueLossSummary === undefined) throw new Error('value_loss_closure_summary_missing')
+  const valueLossItem: LifecycleRequirementItem = {
+    requirementCode: 'closure.traffic_value_loss',
+    sourceType: 'module',
+    canonicalType: 'traffic_value_loss',
+    status: valueLossSummary.status,
+    reason: valueLossSummary.reason,
+    matchedMetadataIds: [
+      ...(valueLossSummary.assessmentVersionId === null ? [] : [valueLossSummary.assessmentVersionId]),
+      ...(valueLossSummary.reportId === null ? [] : [valueLossSummary.reportId]),
+    ],
+    relatedMetadataStatuses: [],
+    requiresHumanReview: valueLossSummary.requiresHumanReview,
+  }
+  const requirements = [...baseItems, ...closureItems, valueLossItem]
   return {
     documentRuleVersion: base.ruleSetVersion,
     documentOverallStatus: base.overallStatus,
     closureRuleVersion: closure.version,
     serviceEligibility,
+    valueLossSummary,
     missingCount: requirements.filter((item) => item.status === 'missing').length,
     controlRequiredCount: requirements.filter((item) => item.status === 'control_required').length,
     requirements,
@@ -237,13 +259,13 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
     async planClose(actor: ActorContext, caseId: string, input: ClosePlanRequest, idem: IdempotencyInput): Promise<PlanOutcome> {
       return withTransaction(pool, async (client): Promise<PlanOutcome> => {
         const selected = await client.query(
-          `SELECT c.version,c.lifecycle_status,c.workflow_stage,c.notification_date,c.loss_date,c.insurer_id,c.service_center_id
+          `SELECT c.version,c.case_type,c.lifecycle_status,c.workflow_stage,c.notification_date,c.loss_date,c.insurer_id,c.service_center_id
            FROM cases c
            WHERE c.organization_id=$1 AND c.id::text=$2 FOR UPDATE OF c`,
           [actor.organizationId, caseId],
         )
         const current = selected.rows[0] as {
-          version: number; lifecycle_status: 'open' | 'closed'; workflow_stage: string; notification_date: Date | null;
+          version: number; case_type: 'traffic' | 'casco'; lifecycle_status: 'open' | 'closed'; workflow_stage: string; notification_date: Date | null;
           loss_date: Date | null; insurer_id: string | null; service_center_id: string | null
         } | undefined
         if (current === undefined) return { kind: 'not_found' }
@@ -293,6 +315,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         const summary = await requirementSummary(
           client, actor.organizationId, caseId, new Date().toISOString(),
           current.service_center_id !== null, serviceProfile?.agreement ?? null,
+          current.case_type,
         )
         const incomplete = summary.missingCount + summary.controlRequiredCount > 0
         const blockers = input.closeMode === 'normal' && incomplete ? ['requirements_incomplete'] : []
@@ -319,7 +342,10 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           details: { caseId, closeMode: input.closeMode, missingCount: summary.missingCount, controlRequiredCount: summary.controlRequiredCount,
             source: { storageRootKey: location.storage_root_key, relativePath: location.relative_path },
             destination: { storageRootKey: location.storage_root_key, relativePath: target.value }, blockers, warnings,
-            serviceEligibility: serviceProfile?.agreement ?? null },
+            serviceEligibility: serviceProfile?.agreement ?? null,
+            valueLossStatus: summary.valueLossSummary?.status ?? null,
+            valueLossAssessmentVersion: summary.valueLossSummary?.assessmentVersion ?? null,
+            valueLossReportId: summary.valueLossSummary?.reportId ?? null },
         })
         const operation = await readDto(client, actor.organizationId, caseId, operationId)
         if (operation === undefined) throw new Error('lifecycle_operation_insert_failed')
@@ -333,10 +359,10 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
     async planReopen(actor: ActorContext, caseId: string, input: ReopenPlanRequest, idem: IdempotencyInput): Promise<PlanOutcome> {
       return withTransaction(pool, async (client): Promise<PlanOutcome> => {
         const selected = await client.query(
-          `SELECT version,lifecycle_status,workflow_stage,service_center_id,insurer_id,loss_date FROM cases
+          `SELECT version,case_type,lifecycle_status,workflow_stage,service_center_id,insurer_id,loss_date FROM cases
            WHERE organization_id=$1 AND id::text=$2 FOR UPDATE`, [actor.organizationId, caseId],
         )
-        const current = selected.rows[0] as { version: number; lifecycle_status: 'open' | 'closed'; workflow_stage: string; service_center_id: string | null; insurer_id: string | null; loss_date: Date | null } | undefined
+        const current = selected.rows[0] as { version: number; case_type: 'traffic' | 'casco'; lifecycle_status: 'open' | 'closed'; workflow_stage: string; service_center_id: string | null; insurer_id: string | null; loss_date: Date | null } | undefined
         if (current === undefined) return { kind: 'not_found' }
         if (current.lifecycle_status !== 'closed') return { kind: 'lifecycle_conflict' }
         if (current.version !== input.expectedCaseVersion) return { kind: 'version_conflict' }
@@ -379,7 +405,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           operation: 'closure_documents',
         })
         const summary = await requirementSummary(client, actor.organizationId, caseId, new Date().toISOString(),
-          current.service_center_id !== null, serviceProfile?.agreement ?? null)
+          current.service_center_id !== null, serviceProfile?.agreement ?? null, current.case_type)
         const operationId = uuidv7()
         await client.query(
           `INSERT INTO case_lifecycle_operations

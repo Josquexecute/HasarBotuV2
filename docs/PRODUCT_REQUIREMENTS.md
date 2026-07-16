@@ -255,3 +255,11 @@ formatlarında alınabilir.
 - Raporlar ekranı seçilen ayda açılan açık vakaları ve o ay finalize edilen kapalı vakaları ayrı sayar; yalnız güncel kullanıcı onaylı/düzeltilmiş ücretleri kesin toplamda gösterir.
 - Kapanan Dosyalar aday ücreti `Kontrol gerekli`, kayıtsız ücreti bilinmeyen, onaylı/düzeltilmiş ücreti gerçek tutar olarak gösterir.
 - API modunda mock toplam veya ücret fallback'i yapılmaz. Otomatik PDF/AI ücret çıkarımı, dışa aktarma ve muhasebe yönetimi bu paketin kapsamında değildir.
+
+### Değer kaybı kapanış özeti — Paket 40
+
+- Trafik case kapanış önizlemesi, güncel değer kaybı çalışmasının insan onayı, sonuç/tutar, hesap kural sürümü ve nihai rapor durumunu ayrı bir özet olarak göstermelidir.
+- Onaysız, belirsiz, raporsuz veya güncel version ile uyuşmayan çalışma kesin sonuç gibi gösterilmez; `Kontrol gerekli` olur ve normal kapanış mevcut eksik gereksinim davranışını kullanır.
+- Kullanıcı mevcut “Eksiklerle Kapat” yoluyla gerekçe ve açık onay verirse değer kaybı özeti kapanış snapshot/audit geçmişinde korunmalıdır.
+- Kapanan Dosyalar gerçek sonucu/tutarı veya kontrol/uygulanmaz durumunu; aylık rapor yalnız onaylı ve nihai raporlu Trafik tutarlarını göstermelidir.
+- Kasko case’te Trafik değer kaybı özeti uygulanmaz. API kesintisinde mock değer kaybı sonucu gösterilmez.

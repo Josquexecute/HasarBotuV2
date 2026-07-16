@@ -15,11 +15,11 @@ Kaynak: Ana ürün yol haritası (harici DOCX, son revizyon 12 Temmuz 2026) + `D
 | v0.7 — İşçilik AI | Excel şablon profilleri, AI öneri, eksper onayı, öğrenme sözlüğü, güvenli Excel yazımı | Bekliyor |
 | v0.8 — PERT | Ekonomik analiz, rayiç, yapısal değerlendirme, fotoğraf AI, eksper kanaati, merkez kararı | Bekliyor |
 | v0.9 — Değer Kaybı | Reel Piyasa Analizi, kural sürümleri, emsal ilanlar, uygunluk motoru, eksper onayı, denetim geçmişi, Kasko ofis kuralı + "Uygulanamaz" gerekçesi | **Trafik çekirdeği/UI/nihai PDF tamamlandı; Kasko ve dış emsal entegrasyonu bekliyor** |
-| v0.10 — Kapanış | Kapanan dosyalar, eksiklerle kapatma, nihai rapor okuma, kapanma ücreti, aylık raporlar, değer kaybı kapanış özeti | **Close/reopen ve kullanıcı onaylı kapanma ücreti/aylık rapor çekirdeği tamamlandı; değer kaybı kapanış özeti bekliyor** |
+| v0.10 — Kapanış | Kapanan dosyalar, eksiklerle kapatma, nihai rapor okuma, kapanma ücreti, aylık raporlar, değer kaybı kapanış özeti | **Tamamlandı:** close/reopen, kullanıcı onaylı kapanma ücreti, aylık rapor ve kanıtlı değer kaybı kapanış özeti mevcut |
 | v0.11 — Mevzuat | Kaynak kütüphanesi, otomatik izleme, sürüm karşılaştırma, dosyaya özel analiz | Bekliyor |
 | v0.12 — V1 aktarımı | Toplu tarama, önizleme, mükerrer kontrolü, seçmeli aktarım, aktarım raporu | Bekliyor |
 | v1.0 — Üretim | Kritik modüller tam, ofis kabul testleri, yedekleme doğrulanmış, güncelleme sistemi, V1 geçişi | Bekliyor |
 
 ## Sıradaki paket
 
-Paket 39 kapanma ücreti ve dönem raporu gerçek API entegrasyonu tamamlandı. Sonraki paket bu çalışmada başlatılmaz.
+Paket 40 değer kaybı kapanış özeti entegrasyonu tamamlandı. Sonraki paket bu çalışmada başlatılmaz.

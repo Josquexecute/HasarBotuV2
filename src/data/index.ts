@@ -220,10 +220,13 @@ export {
   type ClosureFeeVersionRecord,
   type ReportsFeesDataPort,
   type ReportsFeesErrorKind,
+  type TrafficValueLossClosureListItemRecord,
+  type TrafficValueLossClosureSummaryRecord,
 } from './reportsFeesPort'
 export {
   useCaseFee,
   useCaseSummaryReport,
   useClosureFeeList,
+  useValueLossClosureList,
   type ReportsFeesLoadStatus,
 } from './useReportsFees'

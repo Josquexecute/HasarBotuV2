@@ -23,6 +23,12 @@ const STATUS_LABELS: Readonly<Record<string, string>> = {
 }
 const TERMINAL = new Set(['closed', 'reopened', 'failed', 'stale', 'cancelled', 'manual_recovery_required', 'cleanup_pending'])
 
+function minorCurrency(value: number | null): string {
+  return value === null
+    ? 'Tutar uygulanmıyor'
+    : new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value / 100)
+}
+
 function safeError(error: unknown): string {
   if (!(error instanceof LifecycleCommandError)) return 'İşlem güvenli biçimde tamamlanamadı.'
   switch (error.kind) {
@@ -146,6 +152,21 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
                 <div><dt>Kural sürümleri</dt><dd>{operation.requirementSummary.documentRuleVersion} · {operation.requirementSummary.closureRuleVersion}</dd></div>
                 <div><dt>Servis koşulu</dt><dd>{operation.requirementSummary.serviceEligibility === null ? 'Servis atanmamış' : `${operation.requirementSummary.serviceEligibility.serviceType} · ${operation.requirementSummary.serviceEligibility.agreementStatus} · ${operation.requirementSummary.serviceEligibility.ruleVersion}`}</dd></div>
               </dl>
+              {operation.requirementSummary.valueLossSummary !== null && (
+                <section className="case-lifecycle-value-loss" aria-label="Değer kaybı kapanış özeti">
+                  <header>
+                    <div><span>Değer Kaybı Kapanış Özeti</span><strong>{STATUS_LABELS[operation.requirementSummary.valueLossSummary.status]}</strong></div>
+                    <small>{operation.requirementSummary.valueLossSummary.ruleVersion}</small>
+                  </header>
+                  <p>{operation.requirementSummary.valueLossSummary.reason}</p>
+                  <dl>
+                    <div><dt>Sonuç</dt><dd>{operation.requirementSummary.valueLossSummary.resultCode ?? 'Belirsiz'}</dd></div>
+                    <div><dt>Tutar</dt><dd>{minorCurrency(operation.requirementSummary.valueLossSummary.amountMinor)}</dd></div>
+                    <div><dt>Hesap Sürümü</dt><dd>{operation.requirementSummary.valueLossSummary.assessmentVersion === null ? '—' : `v${operation.requirementSummary.valueLossSummary.assessmentVersion}`}</dd></div>
+                    <div><dt>Nihai Rapor</dt><dd>{operation.requirementSummary.valueLossSummary.reportId === null ? 'Bulunamadı' : 'Doğrulanmış rapor bağlı'}</dd></div>
+                  </dl>
+                </section>
+              )}
               <div className="case-lifecycle-counts"><span>{operation.requirementSummary.missingCount} eksik</span><span>{operation.requirementSummary.controlRequiredCount} kontrol gerekli</span></div>
               <ul className="case-lifecycle-requirements">
                 {operation.requirementSummary.requirements.map((requirement) => <li key={requirement.requirementCode}>

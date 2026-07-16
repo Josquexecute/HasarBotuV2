@@ -6,7 +6,7 @@ const operation = {
   source: { storageRootKey: 'test-root', relativePath: '2026/Temmuz 2026/34ABC123' },
   destination: { storageRootKey: 'test-root', relativePath: '2026/Temmuz 2026/KAPALI TEMMUZ 2026/34ABC123' },
   closeMode: 'normal', reason: null, targetWorkflowStage: 'closed',
-  requirementSummary: { documentRuleVersion: '2026.07.14.1', closureRuleVersion: '2026.07.14.2', serviceEligibility: null, missingCount: 0,
+  requirementSummary: { documentRuleVersion: '2026.07.14.1', closureRuleVersion: '2026.07.14.2', serviceEligibility: null, valueLossSummary: null, missingCount: 0,
     controlRequiredCount: 0, requirements: [] },
   blockers: [], warnings: [], linkedFileOperation: null, failureReasonCode: null, canApprove: true, canCancel: true,
 } as const

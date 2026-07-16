@@ -8,6 +8,7 @@ import {
   type ClosureFeeListItemRecord,
   type ReportsFeesDataPort,
   type ReportsFeesErrorKind,
+  type TrafficValueLossClosureListItemRecord,
 } from './reportsFeesPort'
 
 export type ReportsFeesLoadStatus = 'idle' | 'loading' | 'ok' | ReportsFeesErrorKind
@@ -129,6 +130,45 @@ export function useClosureFeeList(
     let cancelled = false
     setStatus('loading')
     port.listFees().then((value) => {
+      if (cancelled) return
+      setItems(value)
+      setStatus('ok')
+    }).catch((error: unknown) => {
+      if (cancelled) return
+      setItems([])
+      const kind = error instanceof ReportsFeesError ? error.kind : 'unavailable'
+      setStatus(kind)
+      if (kind === 'unauthorized') reportUnauthorized()
+    })
+    return () => { cancelled = true }
+  }, [enabled, port, reportUnauthorized])
+
+  return { items, status }
+}
+
+export function useValueLossClosureList(
+  enabled: boolean,
+  suppliedPort?: ReportsFeesDataPort,
+) {
+  const port = usePort(suppliedPort)
+  const { reportUnauthorized } = useSession()
+  const [items, setItems] = useState<readonly TrafficValueLossClosureListItemRecord[]>([])
+  const [status, setStatus] = useState<ReportsFeesLoadStatus>('idle')
+
+  useEffect(() => {
+    if (!enabled) {
+      setItems([])
+      setStatus('idle')
+      return
+    }
+    if (port.listValueLossClosures === undefined) {
+      setItems([])
+      setStatus('unavailable')
+      return
+    }
+    let cancelled = false
+    setStatus('loading')
+    port.listValueLossClosures().then((value) => {
       if (cancelled) return
       setItems(value)
       setStatus('ok')

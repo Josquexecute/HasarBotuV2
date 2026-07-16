@@ -90,6 +90,7 @@ describe('JSON Schema uretimi', () => {
       'reference-users-response',
       'storage-roots-response',
       'traffic-value-loss-approve-request',
+      'traffic-value-loss-closure-list-response',
       'traffic-value-loss-reject-request',
       'traffic-value-loss-report-generate-request',
       'traffic-value-loss-report-preview-request',

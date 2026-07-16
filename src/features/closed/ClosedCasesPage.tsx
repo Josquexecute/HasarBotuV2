@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import {
   useClosedCases,
   useClosureFeeList,
+  useValueLossClosureList,
   type CasesDataPort,
   type ClosureFeeStatusRecord,
   type ReportsFeesDataPort,
+  type TrafficValueLossClosureSummaryRecord,
 } from '../../data'
 import { formatCurrency } from '../../mocks/cases'
 import { closedCases } from '../../mocks/workspaces'
@@ -26,6 +28,7 @@ interface ClosedCaseView {
   readonly expertFee: number | null
   readonly feeStatus: ClosureFeeStatusRecord | 'mock_approved' | null
   readonly valueLossStatus: string
+  readonly valueLossSummary: TrafficValueLossClosureSummaryRecord | null
   readonly service: string
   readonly assignee: string
   readonly hasClosureDetails: boolean
@@ -34,6 +37,14 @@ interface ClosedCaseView {
 function feeLabel(value: number | null, status: ClosedCaseView['feeStatus']): string {
   if (status === 'control_required') return 'Kontrol gerekli'
   return value === null ? '—' : formatCurrency(value)
+}
+
+function valueLossLabel(summary: TrafficValueLossClosureSummaryRecord | null, fallback: string): string {
+  if (summary === null) return fallback
+  if (summary.status === 'not_applicable') return 'Uygulanmaz'
+  if (summary.status === 'control_required') return 'Kontrol gerekli'
+  if (summary.resultCode === 'no_value_loss') return 'Değer kaybı oluşmaz'
+  return summary.amountMinor === null ? 'Onaylı ve raporlu' : formatCurrency(summary.amountMinor / 100)
 }
 
 export function ClosedCasesPage({
@@ -46,6 +57,7 @@ export function ClosedCasesPage({
   const navigate = useNavigate()
   const { cases: apiCases, source, status } = useClosedCases(casesPort)
   const feeList = useClosureFeeList(source === 'api', feePort)
+  const valueLossList = useValueLossClosureList(source === 'api', feePort)
   const [query, setQuery] = useState('')
   const [type, setType] = useState('Tümü')
   const [reason, setReason] = useState('Tümü')
@@ -65,32 +77,39 @@ export function ClosedCasesPage({
 
   const records = useMemo<readonly ClosedCaseView[]>(() => {
     if (source === 'mock') {
-      return closedCases.map((item) => ({ ...item, feeStatus: 'mock_approved' as const, hasClosureDetails: true }))
+      return closedCases.map((item) => ({ ...item, feeStatus: 'mock_approved' as const, valueLossSummary: null, hasClosureDetails: true }))
     }
     const feeByCase = new Map(feeList.items.map((item) => [item.caseId, item]))
+    const valueLossByCase = new Map(valueLossList.items.map((item) => [item.caseId, item]))
     return apiCases.map((item) => {
       const feeItem = feeByCase.get(item.caseId)
       const feeVersion = feeItem?.fee.currentVersion
+      const valueLossItem = valueLossByCase.get(item.caseId)
       return {
       id: item.caseId,
       caseId: item.caseId,
-      closedAt: feeItem === undefined ? '—' : new Date(feeItem.closedAt).toLocaleDateString('tr-TR'),
+      closedAt: valueLossItem === undefined
+        ? feeItem === undefined ? '—' : new Date(feeItem.closedAt).toLocaleDateString('tr-TR')
+        : new Date(valueLossItem.closedAt).toLocaleDateString('tr-TR'),
       officeNumber: item.officeNumber,
       plate: item.plate,
       type: item.type,
       company: item.company,
-      reason: 'Kapanış ayrıntısı henüz bağlı değil',
+      reason: valueLossItem === undefined
+        ? 'Kapanış ayrıntısı henüz bağlı değil'
+        : valueLossItem.closureReason ?? (valueLossItem.closureMode === 'with_missing_requirements' ? 'Eksiklerle kapatıldı' : 'Normal kapanış'),
       expertFee: feeVersion?.approvedAmountMinor === null || feeVersion?.approvedAmountMinor === undefined
         ? null
         : feeVersion.approvedAmountMinor / 100,
       feeStatus: feeVersion?.status ?? null,
-      valueLossStatus: 'Detay ekranından kontrol edin',
+      valueLossStatus: valueLossLabel(valueLossItem?.summary ?? null, 'Kapanış özeti bağlı değil'),
+      valueLossSummary: valueLossItem?.summary ?? null,
       service: item.service,
       assignee: item.assignee,
-      hasClosureDetails: false,
+      hasClosureDetails: valueLossItem !== undefined,
     }}
     )
-  }, [apiCases, feeList.items, source])
+  }, [apiCases, feeList.items, source, valueLossList.items])
 
   const filtered = useMemo(() => {
     const normalized = query.toLocaleLowerCase('tr-TR')
@@ -116,6 +135,7 @@ export function ClosedCasesPage({
           {source === 'api' && status === 'unauthorized' && <p role="alert" className="page-subtitle">Oturum gerekli; mock veri gösterilmiyor.</p>}
           {source === 'api' && status === 'unavailable' && <p role="alert" className="page-subtitle">Kapalı dosya servisine ulaşılamıyor; mock veri gösterilmiyor.</p>}
           {source === 'api' && feeList.status === 'unavailable' && <p role="alert" className="page-subtitle">Ücret servisine ulaşılamıyor; ücret alanlarında varsayım yapılmıyor.</p>}
+          {source === 'api' && valueLossList.status === 'unavailable' && <p role="alert" className="page-subtitle">Değer kaybı kapanış özetine ulaşılamıyor; mock veya tahmini sonuç gösterilmiyor.</p>}
         </div>
         {source === 'mock' && (
           <button className="button button--secondary" type="button" onClick={() => setNotice('Yeniden açma önizlemesi mock olarak hazırlandı.')}><ArchiveRestore size={15} /> Yeniden Açma Önizlemesi</button>
@@ -151,8 +171,10 @@ export function ClosedCasesPage({
           <header><div><span className="eyebrow">Kapanan dosya</span><h2>{selected.plate}</h2></div><button className="icon-button" type="button" onClick={() => setSelectedId(null)} aria-label="Kapanan dosya detayını kapat"><X size={18} /></button></header>
           <div className="office-detail__body">
             <span className="plate plate--large">{selected.plate}</span>
-            <dl className="detail-list office-detail__list"><div><dt>Dosya No</dt><dd>{selected.officeNumber}</dd></div><div><dt>Kapanış</dt><dd>{selected.closedAt}</dd></div><div><dt>Şirket</dt><dd>{selected.company}</dd></div><div><dt>Servis</dt><dd>{selected.service}</dd></div><div><dt>Sorumlu</dt><dd>{selected.assignee}</dd></div><div><dt>Ücret</dt><dd>{feeLabel(selected.expertFee, selected.feeStatus)}</dd></div><div><dt>Ücret Durumu</dt><dd>{selected.feeStatus === 'approved' ? 'Kullanıcı Onaylı' : selected.feeStatus === 'corrected' ? 'Kullanıcı Düzeltti' : selected.feeStatus === 'control_required' ? 'Kontrol Gerekli' : 'Kayıt yok'}</dd></div></dl>
-            {selected.hasClosureDetails
+            <dl className="detail-list office-detail__list"><div><dt>Dosya No</dt><dd>{selected.officeNumber}</dd></div><div><dt>Kapanış</dt><dd>{selected.closedAt}</dd></div><div><dt>Şirket</dt><dd>{selected.company}</dd></div><div><dt>Servis</dt><dd>{selected.service}</dd></div><div><dt>Sorumlu</dt><dd>{selected.assignee}</dd></div><div><dt>Ücret</dt><dd>{feeLabel(selected.expertFee, selected.feeStatus)}</dd></div><div><dt>Ücret Durumu</dt><dd>{selected.feeStatus === 'approved' ? 'Kullanıcı Onaylı' : selected.feeStatus === 'corrected' ? 'Kullanıcı Düzeltti' : selected.feeStatus === 'control_required' ? 'Kontrol Gerekli' : 'Kayıt yok'}</dd></div><div><dt>Değer Kaybı</dt><dd>{selected.valueLossStatus}</dd></div><div><dt>Değer Kaybı Kuralı</dt><dd>{selected.valueLossSummary?.calculationRuleVersion ?? selected.valueLossSummary?.ruleVersion ?? '—'}</dd></div><div><dt>Nihai Rapor</dt><dd>{selected.valueLossSummary?.reportId === null || selected.valueLossSummary === null ? '—' : 'Doğrulanmış rapor bağlı'}</dd></div></dl>
+            {selected.valueLossSummary?.status === 'control_required'
+              ? <div className="alert-panel alert-panel--warning"><AlertTriangle size={17} /><div><strong>Kapanış özeti kontrol gerektiriyor</strong><span>{selected.valueLossSummary.reason}</span></div></div>
+              : selected.hasClosureDetails
               ? <div className="alert-panel alert-panel--success"><CheckCircle2 size={17} /><div><strong>Kapanış kontrolü tamamlandı</strong><span>{selected.reason}</span></div></div>
               : <div className="alert-panel alert-panel--warning"><AlertTriangle size={17} /><div><strong>Kapanış ayrıntıları bağlı değil</strong><span>Case kimliği ve yaşam döngüsü gerçektir; ücret veya kapanış gerekçesi varsayılmadı.</span></div></div>}
           </div>

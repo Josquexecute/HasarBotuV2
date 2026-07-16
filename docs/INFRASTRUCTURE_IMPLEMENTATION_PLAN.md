@@ -459,3 +459,11 @@ Chunk server’da lease/Agent ownership, run/job version, extraction page, sourc
 - Ücret komutları mevcut PostgreSQL transaction ve idempotency altyapısındadır. Fiziksel belge okunmaz; yalnız ready/verified documentVersion metadata bağı server tarafında yeniden doğrulanır.
 - Dönem raporu aynı PostgreSQL kaynağından salt-okunur üretilir ve snapshot/audit yazmaz. Harici raporlama servisi veya cache eklenmez.
 - UI runtime contracts paketini dinamik import eder; Paket 35 başlangıç bundle bütçesi korunur. Yeni dependency, IPC, filesystem veya fiziksel dosya yazma yolu yoktur.
+
+### Paket 40 ek uygulama kaydı — değer kaybı kapanış read/snapshot entegrasyonu
+
+- Yeni migration veya servis yoktur. Mevcut lifecycle `requirement_snapshot` JSONB’si backward-compatible değer kaybı özeti taşır ve finalize transaction’ında append-only history’ye kopyalanır.
+- API evaluator yalnız current assessment/version ve aynı version final report metadata’sını okur; PDF/kanıt/emsal içeriği veya filesystem erişimi yapmaz.
+- Tenant-kapsamlı kapanış özet GET’i ve dönem raporu salt-okunurdur; audit/snapshot/cache yazmaz. Kapanış plan/finalize mevcut merkezi audit ve saga sınırını kullanır.
+- UI runtime contracts paketini lazy import eder. Başlangıç grafiği 462.166 bayt, en büyük chunk 299.340 bayt ve 7 lazy modül ile Paket 35 bütçesi içinde kaldı.
+- Yeni dependency, IPC, File Agent işi, filesystem veya fiziksel dosya yazma yolu yoktur.

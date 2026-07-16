@@ -70,6 +70,26 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100000
+        },
+        "approvedValueLossCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "approvedValueLossTotalMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "controlRequiredValueLossCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "notApplicableValueLossCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
         }
       },
       "required": [
@@ -81,7 +101,11 @@
         "approvedFeeCount",
         "approvedFeeTotalMinor",
         "controlRequiredFeeCount",
-        "closedCaseWithoutFeeCount"
+        "closedCaseWithoutFeeCount",
+        "approvedValueLossCount",
+        "approvedValueLossTotalMinor",
+        "controlRequiredValueLossCount",
+        "notApplicableValueLossCount"
       ],
       "additionalProperties": false
     },

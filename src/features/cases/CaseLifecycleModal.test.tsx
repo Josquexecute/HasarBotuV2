@@ -18,7 +18,12 @@ const planned: LifecycleOperationRecord = {
   destination: { storageRootKey: 'test-root', relativePath: '2026/Temmuz 2026/KAPALI TEMMUZ 2026/34ABC123' },
   closeMode: 'normal', reason: null, targetWorkflowStage: 'closed', blockers: [], warnings: [], linkedFileOperation: null,
   failureReasonCode: null, canApprove: true, canCancel: true,
-  requirementSummary: { documentRuleVersion: '2026.07.14.1', closureRuleVersion: '2026.07.14.2', serviceEligibility: null, missingCount: 0,
+  requirementSummary: { documentRuleVersion: '2026.07.14.1', closureRuleVersion: '2026.07.14.2', serviceEligibility: null, valueLossSummary: {
+    status: 'present', reason: 'Onaylı sonuç ve rapor mevcut.', ruleVersion: 'traffic-value-loss-closure/1.0.0',
+    requiresHumanReview: false, assessmentVersion: 2, calculationRuleVersion: '2026.07.01.1',
+    resultCode: 'calculable', amountMinor: 245_000, reportId: '018f3f4c-89ab-7def-8123-456789abcdef',
+    reportGeneratedAt: '2026-07-16T10:00:00.000Z',
+  }, missingCount: 0,
     controlRequiredCount: 0, requirements: [{ requirementCode: 'closure.expert_report', sourceType: 'document',
       canonicalType: 'expert_report', status: 'present', reason: 'Doğrulanmış ready metadata.', requiresHumanReview: false }] },
 }
@@ -39,7 +44,9 @@ describe('CaseLifecycleModal', () => {
     const { rerender } = render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={onUpdated} onUnauthorized={vi.fn()} onReload={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
     expect(await screen.findByText('2026.07.14.1 · 2026.07.14.2')).toBeInTheDocument()
-    expect(screen.getByText('Mevcut')).toBeInTheDocument()
+    expect(screen.getAllByText('Mevcut')).toHaveLength(2)
+    expect(screen.getByText('Değer Kaybı Kapanış Özeti')).toBeInTheDocument()
+    expect(screen.getByText(/2\.450,00/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Onayla ve Kapat' }))
     await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(closed), { timeout: 2500 })
     expect(port.approve).toHaveBeenCalledTimes(1)

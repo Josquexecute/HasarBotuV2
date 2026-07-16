@@ -441,3 +441,11 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - `GET /api/v1/fees`: tenant-kapsamlı kapalı case ücret listesidir. `GET /api/v1/reports/case-summary?period=YYYY-MM` dönem özeti, filtre seçenekleri ve kontrol bekleyen adayları döndürür.
 - Oturumsuz 401, yetkisiz komut 403, tenant dışı case/fee 404, stale/state/idempotency conflict 409 olur. Runtime Zod ve JSON Schema kabul kümeleri aynıdır.
 - Response; mutlak path, belge içeriği, düzeltme gerekçesinin audit kopyası, SQL/stack, secret veya ham hata içermez. API modunda istemci mock fallback yapmaz.
+
+## 25. Paket 40 değer kaybı kapanış özeti contracts/API
+
+- `GET /api/v1/traffic-value-loss/closure-summaries`: oturum ve organization kapsamlı kapalı case listesini; kapanış modu/gerekçesi ile `present | control_required | not_applicable` değer kaybı özetini döndürür.
+- Özet; closure rule version, assessment/version/status, human approval, calculation rule/result/minor-unit amount ve final report kimliği/zamanını nullable ve strict alanlarla taşır.
+- Case lifecycle operation response’undaki requirement item `module` source type’ını ve backward-compatible nullable `valueLossSummary` alanını destekler.
+- `GET /api/v1/reports/case-summary` summary alanı; kapanmış case’ler için approved/reported value-loss count/total, control-required Traffic count ve not-applicable Kasko count taşır.
+- Salt-okunur çağrılar audit veya snapshot yazmaz. 401 ve tenant izolasyonu mevcut merkezi guard’ları kullanır; response mutlak path, belge/emsal içeriği, secret veya ham hata taşımaz.

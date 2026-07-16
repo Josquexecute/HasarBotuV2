@@ -50,6 +50,34 @@ export interface ClosureFeeListItemRecord {
   readonly fee: ClosureFeeRecord
 }
 
+export interface TrafficValueLossClosureSummaryRecord {
+  readonly status: 'present' | 'control_required' | 'not_applicable'
+  readonly reason: string
+  readonly ruleVersion: 'traffic-value-loss-closure/1.0.0'
+  readonly requiresHumanReview: boolean
+  readonly assessmentId: string | null
+  readonly assessmentVersionId: string | null
+  readonly assessmentVersion: number | null
+  readonly assessmentStatus: 'draft' | 'control_required' | 'awaiting_approval' | 'approved' | 'rejected' | 'superseded' | null
+  readonly humanApprovalStatus: 'pending' | 'approved' | 'rejected' | null
+  readonly calculationRuleVersion: string | null
+  readonly resultCode: 'calculable' | 'no_value_loss' | 'not_applicable' | 'control_required' | null
+  readonly amountMinor: number | null
+  readonly reportId: string | null
+  readonly reportGeneratedAt: string | null
+}
+
+export interface TrafficValueLossClosureListItemRecord {
+  readonly caseId: string
+  readonly officeCaseNumber: string
+  readonly plate: string
+  readonly caseType: 'traffic' | 'casco'
+  readonly closedAt: string
+  readonly closureMode: 'normal' | 'with_missing_requirements' | null
+  readonly closureReason: string | null
+  readonly summary: TrafficValueLossClosureSummaryRecord
+}
+
 export interface CaseSummaryReportRecord {
   readonly period: string
   readonly periodStart: string
@@ -66,6 +94,10 @@ export interface CaseSummaryReportRecord {
     readonly approvedFeeTotalMinor: number
     readonly controlRequiredFeeCount: number
     readonly closedCaseWithoutFeeCount: number
+    readonly approvedValueLossCount: number
+    readonly approvedValueLossTotalMinor: number
+    readonly controlRequiredValueLossCount: number
+    readonly notApplicableValueLossCount: number
   }
   readonly distribution: readonly {
     readonly code: 'traffic' | 'casco' | 'closed'
@@ -79,6 +111,7 @@ export interface CaseSummaryReportRecord {
 export interface ReportsFeesDataPort {
   getCaseFee(caseId: string): Promise<CaseClosureFeeWorkspaceRecord>
   listFees(): Promise<readonly ClosureFeeListItemRecord[]>
+  listValueLossClosures?(): Promise<readonly TrafficValueLossClosureListItemRecord[]>
   getCaseSummaryReport(input: {
     period: string
     responsibleUserId?: string
@@ -197,6 +230,17 @@ export function createHttpReportsFeesAdapter(
       } catch (error) {
         if (error instanceof ReportsFeesError) throw error
         throw new ReportsFeesError('unavailable', 'fee list response invalid')
+      }
+    },
+    async listValueLossClosures() {
+      try {
+        const { trafficValueLossClosureListResponseSchema } = await import('@hasarbotu/contracts')
+        return trafficValueLossClosureListResponseSchema.parse(
+          await request('/api/v1/traffic-value-loss/closure-summaries'),
+        ).items as TrafficValueLossClosureListItemRecord[]
+      } catch (error) {
+        if (error instanceof ReportsFeesError) throw error
+        throw new ReportsFeesError('unavailable', 'value loss closure response invalid')
       }
     },
     async getCaseSummaryReport(input) {

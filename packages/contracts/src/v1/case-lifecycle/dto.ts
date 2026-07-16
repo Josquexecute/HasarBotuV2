@@ -16,6 +16,7 @@ import { requirementStatusSchema } from '../document-requirements/index.js'
 import { logicalStorageReferenceSchema, fileOperationStatusSchema } from '../file-operations/index.js'
 import { closeModeSchema } from './commands.js'
 import { serviceAgreementEvaluationSchema } from '../references/dto.js'
+import { trafficValueLossClosureSummarySchema } from '../traffic-value-loss/closure.js'
 
 export const lifecycleOperationTypeSchema = z.enum(CASE_LIFECYCLE_OPERATION_TYPES)
 export const lifecycleOperationStatusSchema = z.enum(CASE_LIFECYCLE_OPERATION_STATUSES)
@@ -23,7 +24,7 @@ export const closureRequirementStatusSchema = z.enum(CLOSURE_REQUIREMENT_STATUSE
 
 export const lifecycleRequirementItemSchema = z.strictObject({
   requirementCode: z.string().min(1).max(100),
-  sourceType: z.enum(['document', 'photo']),
+  sourceType: z.enum(['document', 'photo', 'module']),
   canonicalType: z.string().min(1).max(100),
   status: closureRequirementStatusSchema,
   reason: z.string().min(1).max(500),
@@ -40,6 +41,7 @@ export const lifecycleRequirementSummarySchema = z.strictObject({
   documentOverallStatus: requirementStatusSchema,
   closureRuleVersion: z.string().min(1).max(64),
   serviceEligibility: serviceAgreementEvaluationSchema.nullable(),
+  valueLossSummary: trafficValueLossClosureSummarySchema.nullable().default(null),
   missingCount: z.number().int().min(0),
   controlRequiredCount: z.number().int().min(0),
   requirements: z.array(lifecycleRequirementItemSchema),

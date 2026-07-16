@@ -817,7 +817,15 @@ async function finalizeLinkedLifecycle(
   const lifecycle = selected.rows[0] as {
     id: string; case_id: string; operation_type: 'close' | 'reopen'; expected_case_version: number;
     expected_location_version: number; closure_mode: 'normal' | 'with_missing_requirements' | null;
-    requirement_snapshot: { missingCount: number; controlRequiredCount: number }; user_reason: string | null;
+    requirement_snapshot: {
+      missingCount: number
+      controlRequiredCount: number
+      valueLossSummary?: {
+        status: string
+        assessmentVersion: number | null
+        reportId: string | null
+      } | null
+    }; user_reason: string | null;
     previous_lifecycle_status: 'open' | 'closed'; target_lifecycle_status: 'open' | 'closed';
     previous_workflow_stage: string; target_workflow_stage: string; status: string; approved_by_user_id: string | null
   } | undefined
@@ -887,6 +895,9 @@ async function finalizeLinkedLifecycle(
       closeMode: lifecycle.closure_mode,
       missingCount: lifecycle.requirement_snapshot.missingCount,
       controlRequiredCount: lifecycle.requirement_snapshot.controlRequiredCount,
+      valueLossStatus: lifecycle.requirement_snapshot.valueLossSummary?.status ?? null,
+      valueLossAssessmentVersion: lifecycle.requirement_snapshot.valueLossSummary?.assessmentVersion ?? null,
+      valueLossReportId: lifecycle.requirement_snapshot.valueLossSummary?.reportId ?? null,
       reason: lifecycle.user_reason,
       cleanupPending: strategy === 'staged_copy',
       officeNumberPreserved: current.office_number,

@@ -48,8 +48,37 @@ describe('production truth sayfalari', () => {
     })
     const feePort = createHttpReportsFeesAdapter({
       fetchImpl: async (input, init) => {
-        void input
+        const url = String(input)
         void init
+        if (url.endsWith('/traffic-value-loss/closure-summaries')) {
+          return new Response(JSON.stringify({
+            items: [{
+              caseId: CLOSED_CASE.id,
+              officeCaseNumber: CLOSED_CASE.officeCaseNumber,
+              plate: CLOSED_CASE.plate,
+              caseType: 'traffic',
+              closedAt: '2026-07-16T10:00:00.000Z',
+              closureMode: 'normal',
+              closureReason: null,
+              summary: {
+                status: 'control_required',
+                reason: 'Nihai rapor bulunamadı.',
+                ruleVersion: 'traffic-value-loss-closure/1.0.0',
+                requiresHumanReview: true,
+                assessmentId: null,
+                assessmentVersionId: null,
+                assessmentVersion: null,
+                assessmentStatus: null,
+                humanApprovalStatus: null,
+                calculationRuleVersion: null,
+                resultCode: null,
+                amountMinor: null,
+                reportId: null,
+                reportGeneratedAt: null,
+              },
+            }],
+          }), { status: 200, headers: { 'content-type': 'application/json' } })
+        }
         return new Response(JSON.stringify({ items: [] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -61,10 +90,10 @@ describe('production truth sayfalari', () => {
 
     expect(await screen.findByText('34 GER 038')).toBeInTheDocument()
     expect(screen.queryByText('26 ESK 26')).not.toBeInTheDocument()
-    expect(screen.getByText('Kapanış ayrıntısı henüz bağlı değil')).toBeInTheDocument()
+    expect(screen.getByText('Normal kapanış')).toBeInTheDocument()
     await user.click(screen.getByText('34 GER 038'))
-    await waitFor(() => expect(screen.getByText('Kapanış ayrıntıları bağlı değil')).toBeInTheDocument())
-    expect(screen.queryByText('Kapanış kontrolü tamamlandı')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Kapanış özeti kontrol gerektiriyor')).toBeInTheDocument())
+    expect(screen.getAllByText('Kontrol gerekli').length).toBeGreaterThan(0)
   })
 
   it('Raporlar API modunda gerçek dönem toplamını gösterir ve mock toplama düşmez', async () => {
@@ -90,6 +119,10 @@ describe('production truth sayfalari', () => {
             approvedFeeTotalMinor: 485_000,
             controlRequiredFeeCount: 0,
             closedCaseWithoutFeeCount: 1,
+            approvedValueLossCount: 1,
+            approvedValueLossTotalMinor: 245_000,
+            controlRequiredValueLossCount: 0,
+            notApplicableValueLossCount: 1,
           },
           distribution: [
             { code: 'traffic', count: 2 },
@@ -105,6 +138,7 @@ describe('production truth sayfalari', () => {
     render(<MemoryRouter><ReportsPage reportPort={reportPort} /></MemoryRouter>)
     expect((await screen.findAllByText(/₺4\.850/))).toHaveLength(2)
     expect(screen.getByText('Onaylı Eksper Ücreti')).toBeInTheDocument()
+    expect(screen.getAllByText('Onaylı Değer Kaybı')).toHaveLength(2)
     expect(screen.queryByText(/28\.750,00/)).not.toBeInTheDocument()
   })
 })

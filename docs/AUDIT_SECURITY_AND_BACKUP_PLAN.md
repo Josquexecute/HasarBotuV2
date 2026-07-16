@@ -365,3 +365,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Düzeltme gerekçesi, belge adı/içeriği, mutlak path, secret, SQL/stack veya ham hata audit detayına kopyalanmaz.
 - Ücret version satırı, aggregate current pointer, idempotency sonucu ve audit aynı transaction içinde atomiktir.
 - Salt-okunur case fee/list/report GET çağrıları audit gürültüsü üretmez. Backup/restore sonrası append-only version guard'ı eski onaylı tutarın sessizce değiştirilmesini engeller.
+
+### 6.22 Paket 40 değer kaybı kapanış özeti audit sınırı
+
+- Salt-okunur kapanış özeti ve dönem raporu GET çağrıları audit/snapshot yazmaz.
+- Lifecycle plan/finalize audit’i value-loss status, assessment version ve final report kimliği gibi güvenli referansları taşıyabilir.
+- Assessment input, emsal, kanıt metni/URL’si, rapor içeriği, plaka, mutlak path, secret, SQL/stack veya ham hata audit’e kopyalanmaz.
+- Lifecycle operation snapshot ve append-only history aynı mevcut saga transaction’ında korunur; yeni assessment version eski kapanış özetini sessizce değiştirmez.

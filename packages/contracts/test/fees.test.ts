@@ -77,6 +77,10 @@ describe('kapanma ücreti ve rapor contracts', () => {
         approvedFeeTotalMinor: 0,
         controlRequiredFeeCount: 0,
         closedCaseWithoutFeeCount: 0,
+        approvedValueLossCount: 0,
+        approvedValueLossTotalMinor: 0,
+        controlRequiredValueLossCount: 0,
+        notApplicableValueLossCount: 0,
       },
       distribution: [
         { code: 'traffic', count: 0 },

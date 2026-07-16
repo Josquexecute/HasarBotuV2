@@ -6,10 +6,12 @@ import {
   CASE_SUMMARY_REPORT_ROUTE,
   FEES_ROUTE,
   IDEMPOTENCY_KEY_HEADER,
+  TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE,
   caseClosureFeeResponseSchema,
   caseSummaryReportResponseSchema,
   closureFeeListResponseSchema,
   closureFeeResponseSchema,
+  trafficValueLossClosureListResponseSchema,
 } from '@hasarbotu/contracts'
 import {
   assertTestDatabaseUrl,
@@ -86,6 +88,45 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
     )
     await pool.query('UPDATE documents SET current_version_id=$2 WHERE id=$1', [documentId, versionId])
     return versionId
+  }
+
+  async function seedApprovedValueLoss(caseId: string): Promise<void> {
+    const assessmentId = uuidv7()
+    const versionId = uuidv7()
+    await pool.query(
+      `INSERT INTO traffic_value_loss_assessments
+       (id,organization_id,case_id,created_by_user_id)
+       VALUES ($1,$2,$3,$4)`,
+      [assessmentId, organizationId, caseId, managerUserId],
+    )
+    await pool.query(
+      `INSERT INTO traffic_value_loss_versions
+       (id,organization_id,case_id,assessment_id,assessment_version,status,rule_set_id,rule_version,
+        effective_from,evaluated_on,input_snapshot,result_snapshot,result_code,human_approval_status,
+        approved_by_user_id,approved_at,is_active,created_by_user_id)
+       VALUES ($1,$2,$3,$4,2,'approved','traffic-value-loss-market-difference','2026.07.01.1',
+               '2026-07-01','2026-07-15','{}'::jsonb,$5::jsonb,'calculable','approved',$6,now(),true,$6)`,
+      [versionId, organizationId, caseId, assessmentId, JSON.stringify({
+        faultAdjustedValueLossMinor: 245_000,
+        canSubmitForApproval: true,
+      }), managerUserId],
+    )
+    await pool.query('UPDATE traffic_value_loss_assessments SET current_version_id=$2 WHERE id=$1', [assessmentId, versionId])
+    await pool.query(
+      `INSERT INTO traffic_value_loss_reports
+       (id,organization_id,case_id,assessment_id,assessment_version_id,assessment_version,
+        schema_version,template_version,rule_version,content_snapshot,content_hash,pdf_hash,
+        pdf_byte_size,generated_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,2,'traffic-value-loss-final-report/1.0.0',
+               'traffic-value-loss-final-report-tr/1.0.0','2026.07.01.1',$6::jsonb,$7,$8,128,$9)`,
+      [uuidv7(), organizationId, caseId, assessmentId, versionId, JSON.stringify({
+        schemaVersion: 'traffic-value-loss-final-report/1.0.0',
+        templateVersion: 'traffic-value-loss-final-report-tr/1.0.0',
+        assessment: { assessmentId, versionId, assessmentVersion: 2 },
+        rule: { ruleVersion: '2026.07.01.1' },
+        caseReference: { caseId, caseType: 'traffic' },
+      }), 'c'.repeat(64), 'd'.repeat(64), managerUserId],
+    )
   }
 
   beforeAll(async () => {
@@ -168,6 +209,7 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
       ],
     )
     readyReportVersionId = await seedExpertReport(closedCaseId, 'ready')
+    await seedApprovedValueLoss(closedCaseId)
     await seedExpertReport(openCaseId, 'ready')
     await seedExpertReport(closedWithoutFeeCaseId, 'pending')
 
@@ -288,6 +330,10 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
       approvedFeeTotalMinor: 0,
       controlRequiredFeeCount: 1,
       closedCaseWithoutFeeCount: 1,
+      approvedValueLossCount: 1,
+      approvedValueLossTotalMinor: 245_000,
+      controlRequiredValueLossCount: 0,
+      notApplicableValueLossCount: 1,
     })
     expect(report.pendingFees).toHaveLength(1)
   })
@@ -374,6 +420,10 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
       approvedFeeTotalMinor: 510_000,
       controlRequiredFeeCount: 0,
       closedCaseWithoutFeeCount: 1,
+      approvedValueLossCount: 1,
+      approvedValueLossTotalMinor: 245_000,
+      controlRequiredValueLossCount: 0,
+      notApplicableValueLossCount: 1,
     })
     expect(report.pendingFees).toEqual([])
     expect(report.responsibleUsers).toContainEqual({ id: managerUserId, name: 'P39 Dosya Sorumlusu' })
@@ -388,6 +438,23 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
       caseId: closedCaseId,
       fee: { currentVersion: { status: 'corrected', approvedAmountMinor: 510_000 } },
     })
+    expect((await app.inject({
+      method: 'GET',
+      url: TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE,
+    })).statusCode).toBe(401)
+    const valueLoss = trafficValueLossClosureListResponseSchema.parse((await app.inject({
+      method: 'GET',
+      url: TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE,
+      headers: { cookie: accountingCookie },
+    })).json())
+    expect(valueLoss.items).toHaveLength(2)
+    expect(valueLoss.items.find((item) => item.caseId === closedCaseId)?.summary).toMatchObject({
+      status: 'present',
+      assessmentVersion: 2,
+      amountMinor: 245_000,
+    })
+    expect(valueLoss.items.find((item) => item.caseId === closedWithoutFeeCaseId)?.summary.status)
+      .toBe('not_applicable')
     const audit = JSON.stringify((await pool.query(
       "SELECT action,details FROM audit_events WHERE organization_id=$1 AND action LIKE 'closure_fee.%'",
       [organizationId],

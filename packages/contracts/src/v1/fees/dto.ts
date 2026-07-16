@@ -87,6 +87,10 @@ export const reportFeeSummarySchema = z.strictObject({
   approvedFeeTotalMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   controlRequiredFeeCount: z.number().int().min(0).max(100_000),
   closedCaseWithoutFeeCount: z.number().int().min(0).max(100_000),
+  approvedValueLossCount: z.number().int().min(0).max(100_000),
+  approvedValueLossTotalMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  controlRequiredValueLossCount: z.number().int().min(0).max(100_000),
+  notApplicableValueLossCount: z.number().int().min(0).max(100_000),
 })
 
 export const reportDistributionItemSchema = z.strictObject({

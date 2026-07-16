@@ -766,3 +766,16 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Build başlangıç JavaScript grafiğini **458.876 baytta** tuttu; en büyük chunk 296.930 bayt ve Kapanma Ücreti dahil **7 lazy modül** ayrı kaldı.
 - Repository dışı `.git/node_modules/dist/coverage` içermeyen kopyada fresh `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.156/6** test ve build/bundle yeniden geçti. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını verdi; audit açığı yoktur.
 - Yeni harici dependency, IPC, File Agent işi, PDF/OCR/AI çıkarımı veya fiziksel dosya yazma yolu eklenmedi. Üretim migration çalıştırılmadı.
+
+## Paket 40 — Değer kaybı kapanış özeti entegrasyonu (2026-07-16)
+
+- `traffic-value-loss-closure/1.0.0` saf evaluator; yalnız current insan onaylı Trafik assessment version ve aynı version immutable final report varsa `present`, diğer Trafik durumlarında `control_required`, Kasko’da `not_applicable` döndürür.
+- Case close planı değer kaybını `module` gereksinimi olarak mevcut requirement snapshot’a alır. Assessment/report kimliği, version, result, minor-unit tutar ve rule version append-only lifecycle history’de korunur; eski snapshot’lar nullable alanla okunur.
+- `GET /api/v1/traffic-value-loss/closure-summaries` tenant/oturum kapsamlı kapalı case özetini döndürür. Aylık case summary yalnız kapanmış, güncel onaylı+raporlu Trafik sonucunu toplar; hesaplamayı yeniden çalıştırmaz ve GET audit yazmaz.
+- Kapanış önizlemesi, Kapanan Dosyalar ve Raporlar gerçek değer kaybı durum/tutar/rule/report verisini gösterir. API modunda mock fallback yoktur.
+- Ana ağaçta `npm install`, typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.162 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 199/6; domain 396; contracts 221; database 49; API 244; file-agent 53.
+- Paket 40 hedefli gerçek PostgreSQL/API doğrulaması: lifecycle close/reopen 5/5; kapanma ücreti/rapor/değer kaybı özeti 5/5; kritik DB/API testi skip edilmedi.
+- Gerçek Chrome/CDP smoke: login; açık Trafik case close preview; onaylı/raporlu ₺2.450 değer kaybı özeti; kapanma ücreti akışı; aylık toplam; Kapanan Dosyalar; audit sızıntı kontrolü ve API kesintisinde no-fallback geçti. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma ve beklenmeyen console warning/error yoktu.
+- Build başlangıç JavaScript grafiğini **462.166 baytta** tuttu; en büyük chunk 299.340 bayt ve **7 lazy modül** ayrı kaldı.
+- Repository dışı `.git/node_modules/dist/coverage` içermeyen kopyada fresh `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.162/6** test ve build/bundle yeniden geçti. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını verdi; audit açığı yoktur.
+- Yeni migration, dependency, IPC, File Agent işi veya fiziksel dosya yazma yolu eklenmedi. Üretim migration çalıştırılmadı.

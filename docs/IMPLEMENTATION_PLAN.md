@@ -897,3 +897,16 @@ Kapsam dışı: yeni rapor/ücret endpoint’i, kapanış ücret modeli, işçil
 - [x] Yalnız Paket 39 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: PDF/OCR/AI ile otomatik ücret çıkarımı, ücret yönetim CRUD'u, Excel/PDF dışa aktarma, e-posta, File Agent, filesystem, IPC, üretim migration ve sonraki paket.
+
+## Paket 40 — Değer kaybı kapanış özeti entegrasyonu
+
+- [x] `traffic-value-loss-closure/1.0.0` saf ve fail-closed domain değerlendirmesini ekle.
+- [x] Güncel insan onaylı assessment + aynı version immutable final report şartını kapanış gereksinimine bağla.
+- [x] Lifecycle plan/history JSONB snapshot’ını backward-compatible değer kaybı özetiyle genişlet.
+- [x] Tenant-kapsamlı salt-okunur kapanış özet endpoint’i ve strict contracts/JSON Schema ekle.
+- [x] Aylık rapora onaylı/raporlu değer kaybı sayı ve minor-unit toplamlarını yeniden hesaplama yapmadan ekle.
+- [x] Kapanış önizlemesi, Kapanan Dosyalar ve Raporlar UI’ını gerçek özet verisine bağla; API modunda mock fallback yapma.
+- [x] Gerçek PostgreSQL, tam root, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 40 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: yeni değer kaybı formülü, Kasko değer kaybı hesabı, dış emsal entegrasyonu, final report yeniden üretimi, File Agent/fiziksel dosya işlemi, IPC, yeni dependency, üretim migration ve sonraki paket.
