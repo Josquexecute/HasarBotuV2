@@ -35,6 +35,7 @@ const EXPECTED_NAMES: readonly JsonSchemaName[] = [
   'case-update-request',
   'cases-list-response',
   'cases-query',
+  'dashboard-response',
   'document-detail-response',
   'document-register-request',
   'document-requirements-params',

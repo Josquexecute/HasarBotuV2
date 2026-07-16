@@ -9,6 +9,8 @@ export interface CasesDataPort {
   listCases(): Promise<readonly CaseRecord[]>
 }
 
+export type { DashboardDataPort } from './dashboardPort'
+
 export interface NamedReferenceRecord {
   readonly id: string
   readonly name: string

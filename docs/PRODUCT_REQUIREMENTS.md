@@ -37,6 +37,16 @@ Aşamalar:
 - Kapanış Evrakları
 - Kapanmaya Hazır
 
+Durum Panosu gerçek açık vaka verisini kullanmalıdır:
+
+- Yaklaşan, bugün ve gecikmiş takipler ayrı görünmeli
+- Eksik evrak ve fiziksel doğrulama kontrolü gereken evrak ayrılmalı
+- Bekleyen insan onayları görünmeli
+- Manuel kurtarma, başarısız/bloke işlem ve diğer işlem gereken vakalar önceliklendirilmelidir
+- Sorumlu, işlem türü, öncelik ve serbest arama filtreleri birlikte çalışmalıdır
+- Karttan doğrudan gerçek dosya detayına geçilmelidir
+- API modunda loading, boş, 401 ve bağlantı hatası mock veriye düşmeden gösterilmelidir
+
 ### Dosyalar
 
 Varsayılan sütunlar:

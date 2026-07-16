@@ -377,3 +377,15 @@ export {
   type TrafficValueLossReportEvidence,
   type TrafficValueLossReportSource,
 } from './traffic-value-loss-report.js'
+export {
+  DASHBOARD_ATTENTION_CODES,
+  DASHBOARD_PRIORITY_VERSION,
+  compareDashboardItems,
+  daysBetweenLocalDates,
+  evaluateDashboardPriority,
+  type DashboardAttentionCode,
+  type DashboardPriority,
+  type DashboardPriorityInput,
+  type DashboardPriorityResult,
+  type DashboardSortableItem,
+} from './dashboard.js'

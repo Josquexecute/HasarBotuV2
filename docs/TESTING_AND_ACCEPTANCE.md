@@ -283,3 +283,13 @@ raporlanır.
 - Gerçek production Chrome doğrulaması; network chunk istekleri, chunk 404, console warning/error, 1366×768 açık/koyu, 1920×1080 tema ve yatay/dikey overflow kontrolünü kapsamalıdır.
 - Root ve repository dışı fresh kopyada typecheck, lint, gerçek `_test` PostgreSQL testleri, build ve bundle kapısı geçmeden Paket 35 PASS sayılmaz.
 - Gerçek sonuç: ana ve fresh kopyada **1.075 başarılı / 6 mevcut ortam-koşullu UI skip**; başlangıç grafiği 420.291 bayt, en büyük chunk 281.355 bayt, altı modül on-demand ve production Chrome console warning/error 0.
+
+### Paket 36 — Durum Panosu gerçek API kabulü
+
+- Domain; öncelik sinyal sırası, LocalDate takip sınıflaması, eşitlik bağlayıcıları ve aynı girdide deterministik sonucu doğrular.
+- Contracts; strict unknown-key, enum, non-negative safe integer, bütün açık stage sayaçları, unique attention/onay dizileri ve Zod/JSON Schema semantik eşliğini doğrular.
+- Gerçek PostgreSQL/API; 401, tenant izolasyonu, geciken/bugün/yaklaşan takip, Paket 15 ready/pending belge davranışı, bekleyen insan onayı, normal vaka ve deterministik sıra/özet sonuçlarını doğrular.
+- Dashboard GET öncesi/sonrası audit sayısı aynı kalmalı; response içinde mutlak yol, belge içeriği, raw excerpt, parola veya secret bulunmamalıdır.
+- UI adapter/component; gerçek response mapping, bozuk/unknown response fail-closed, API ağ/5xx/401 no-fallback, gerçek boş sonuç, mock modun ağsız korunması, filtreler ve klavye/tıklama detay geçişini doğrular.
+- Gerçek tarayıcı; login → gerçek dashboard → onay/işlem filtreleri → arama → dosya detayı; API blokajında no-fallback; 1366×768 açık/koyu ve 1920×1080 koyu tema; body overflow, pano iç scroll ve console warning/error kontrolünü kapsar.
+- Kritik dashboard PostgreSQL/API/tarayıcı testi skip kalırsa Paket 36 PASS sayılmaz. Repository dışı fresh `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL testleri ve build tamamlanmadan commit oluşturulmaz.

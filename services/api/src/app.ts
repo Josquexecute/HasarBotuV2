@@ -18,6 +18,7 @@ import { registerTextExtractionRoutes } from './text-extractions/index.js'
 import { registerPolicyOcrRoutes } from './policy-ocr/index.js'
 import { registerPolicyAiRoutes, type PolicyAiProviderRegistry } from './policy-ai/index.js'
 import { registerTrafficValueLossRoutes } from './traffic-value-loss/index.js'
+import { registerDashboardRoutes } from './dashboard/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -120,6 +121,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       providers: options.policyAiProviders ?? { get: () => undefined, list: () => [] },
     })
     registerTrafficValueLossRoutes(app, { pool: options.auth.pool })
+    registerDashboardRoutes(app, {
+      pool: options.auth.pool,
+      clock: options.clock ?? systemClock,
+    })
   }
 
   return app

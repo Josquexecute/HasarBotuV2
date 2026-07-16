@@ -130,11 +130,11 @@ describe('HasarBotu V2 UI prototipi', () => {
 
     const boardSearch = screen.getByPlaceholderText('Panoda ara...')
     await user.type(boardSearch, '55 SAM 605')
-    expect(screen.getByRole('article', { name: '55 SAM 605, Yeni İhbar. Tek tıkla dosyalarda göster, Enter ile tam dosyayı aç.' })).toBeInTheDocument()
-    expect(screen.queryByRole('article', { name: '34 MPA 764, Ekspertiz Bekliyor. Tek tıkla dosyalarda göster, Enter ile tam dosyayı aç.' })).not.toBeInTheDocument()
+    expect(screen.getByRole('article', { name: '55 SAM 605, Yeni İhbar, Kritik öncelik. Dosyayı aç.' })).toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: /34 MPA 764, Ekspertiz Bekliyor/ })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('article', { name: '55 SAM 605, Yeni İhbar. Tek tıkla dosyalarda göster, Enter ile tam dosyayı aç.' }))
-    expect(screen.getByRole('heading', { name: /Tüm Dosyalar/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('article', { name: '55 SAM 605, Yeni İhbar, Kritik öncelik. Dosyayı aç.' }))
+    expect(await screen.findByRole('button', { name: 'Tek Dosyayı Yenile' })).toBeInTheDocument()
     expect(screen.getAllByText('55 SAM 605').length).toBeGreaterThan(0)
   })
 

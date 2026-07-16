@@ -7,6 +7,15 @@
 - `lossDate`, `notificationDate` ve `followUpDate` LocalDate'tir; saat/timezone taşımaz. `notificationDate`, `lossDate` değerinden önce olamaz.
 - Referans ve tarih güncellemeleri Case `expectedVersion` optimistic locking kuralına tabidir.
 
+## Durum Panosu öncelik kuralları
+
+- Öncelik değerlendirmesi saf, deterministik ve sürümlüdür. İlk sürüm `dashboard-priority/1.0.0` değeridir; değerlendirme tarihi dışarıdan LocalDate olarak verilir.
+- Sinyal önceliği: `manual_recovery` → `operation_failed` → `operation_blocked` → `overdue_follow_up` → `human_approval` → `missing_documents` → `document_control_required` → `follow_up_today` → `unassigned` → `upcoming_follow_up`.
+- Yaklaşan takip, değerlendirme tarihinden sonraki yedi takvim günü içindeki takip tarihidir. Tarih bulunmaması yaklaşan/geciken takip üretmez.
+- Evrak sinyali Paket 15 değerlendirmesinden gelir. Yalnız fiziksel doğrulamalı `ready` present olabilir; `pending/failed` kontrol gerektirir.
+- Aynı girdiler aynı sinyal, birincil gerekçe, skor ve sıralama sonucunu üretmelidir. Eşitlikte takip tarihi, güncelleme zamanı ve caseId deterministik bağlayıcıdır.
+- `requiresAction`; recovery/hata/blokaj, geciken/bugün/yaklaşan takip, insan onayı, eksik/kontrol evrakı veya sorumlu eksikliği varsa true olur. Normal açık vaka sahte uyarı üretmez.
+
 ## Trafik dosyası evrakları
 
 ### Paket 15 — doğrulanmış metadata ile koşullu evrak değerlendirmesi

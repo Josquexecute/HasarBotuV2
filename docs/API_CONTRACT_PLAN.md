@@ -53,6 +53,16 @@ Audit seviyeleri:
 
 ## 3. Kaynak sözleşmeleri
 
+### 3.0 Durum Panosu
+
+- **Amaç ve endpoint:** `GET /api/v1/dashboard`; oturumlu kullanıcının organization kapsamındaki açık vakalarını tek salt-okunur operasyon snapshot’ında döndürür.
+- **Cevap:** `asOfDate`, `evaluatedAt`, `priorityVersion`, özet sayaçları, açık workflow stage sayaçları ve vaka öğeleri. Her öğe güvenli vaka kimliği/metadata’sı, takip tarihi, evrak eksik/kontrol sayıları, insan onayı türleri, operasyon recovery/hata sayıları, öncelik ve açık attention kodlarını taşır.
+- **Evrak sınırı:** Paket 15 motorunun aktif kural sürümü kullanılır; response her vaka için `documentRuleVersion` taşır. Belge içeriği, hash, raw excerpt veya path dönmez.
+- **Yetki/tenant:** Oturum zorunlu; bütün alt sorgular organizationId ile sınırlandırılır. Yabancı tenant kaydı snapshot’a giremez.
+- **Audit/idempotency:** A0 salt-okunur; snapshot/audit yazısı ve Idempotency-Key yoktur.
+- **Hatalar:** `401 AUTHENTICATION_REQUIRED`; dependency/aktif evrak kuralı bulunmaması güvenli 5xx sınırından döner. UI API modunda mock fallback yapmaz.
+- **Sürüm:** `priorityVersion=dashboard-priority/1.0.0`; response strict runtime Zod ve deterministik JSON Schema fixture ile doğrulanır.
+
 ### 3.1 Authentication / session
 
 - **Amaç ve endpoint:** `POST /auth/login`, `POST /auth/logout`, `GET /auth/session`, `POST /auth/session/refresh`; kimlik ve aktif session yönetimi.

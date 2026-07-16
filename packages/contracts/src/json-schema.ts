@@ -92,6 +92,7 @@ import {
   trafficValueLossReportResponseSchema,
   trafficValueLossReportsResponseSchema,
 } from './v1/traffic-value-loss/report.js'
+import { dashboardResponseSchema } from './v1/dashboard/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -182,6 +183,7 @@ export const JSON_SCHEMA_TARGETS = {
   'traffic-value-loss-report-preview-response': trafficValueLossReportPreviewResponseSchema,
   'traffic-value-loss-report-response': trafficValueLossReportResponseSchema,
   'traffic-value-loss-reports-response': trafficValueLossReportsResponseSchema,
+  'dashboard-response': dashboardResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

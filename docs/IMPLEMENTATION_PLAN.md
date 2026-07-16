@@ -838,3 +838,18 @@ Kapsam dışı: onaysız taslaktan çıktı, rapor editörü, genel rapor yönet
 - [x] Root typecheck/lint/test/build/audit/diff-check ve repository dışı fresh `npm ci` kapılarını tamamla.
 
 Kapsam dışı: UI yeniden tasarımı, yeni iş özelliği, backend/API/contracts/database/File Agent/IPC değişikliği, yeni dependency ve sonraki paket.
+
+## Paket 36 — Durum Panosu gerçek API entegrasyonu
+
+- [x] Açık tenant vakalarını, takip tarihlerini, sorumlu/sigorta/servis metadata’sını tek salt-okunur snapshot’ta birleştir.
+- [x] Paket 15 evrak değerlendirmesini güncel verified documentVersion metadata’sıyla vaka bazında çalıştır; eksik ve kontrol gereken sayıları ayır.
+- [x] Lifecycle, Kasko poliçe analizi, AI aday incelemesi ve Trafik değer kaybı bekleyen insan onaylarını agregasyona ekle.
+- [x] Workspace/file/lifecycle recovery, failed ve blocked durumlarını işlem gereken sinyallere ekle.
+- [x] Saf `dashboard-priority/1.0.0` domain sıralaması, strict contracts ve deterministik JSON Schema fixture oluştur.
+- [x] `GET /api/v1/dashboard` endpoint’ini oturum/tenant sınırıyla ekle; response/audit/path/secret sızıntısı ve yazısız okuma davranışını doğrula.
+- [x] Dashboard DataPort/hook ve API no-fallback sınırını ekle; mock prototipi ayrı koru.
+- [x] Summary, sorumlu, işlem, öncelik, arama filtreleri ve karttan gerçek dosya detayına tıklama/Enter geçişini bağla.
+- [x] Domain/contracts/UI ve gerçek PostgreSQL/API testleri ile gerçek Chrome 1366×768/1920×1080 tema/overflow/console kapısını geç.
+- [x] Repository dışı fresh `npm ci`, tam kapılar, path bazlı stage ve atomik commit.
+
+Kapsam dışı: yeni dashboard yazma endpoint’i, snapshot persistence, yeni audit olayı, yeni migration, yönetim ekranı, File Agent/IPC/fiziksel dosya işlemi, UI yeniden tasarımı ve sonraki paket.

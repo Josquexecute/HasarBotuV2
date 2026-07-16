@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-16
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 35 — Frontend güvenli lazy-loading ve code-splitting
-- Durum: **Kod, gerçek PostgreSQL regresyonu, üretim bundle bütçesi, gerçek Chrome ve repository dışı fresh checkout kalite kapıları geçti; commit hazırlığı tamamlandı**
-- Git: Yerel repository, `foundation/package-35-frontend-code-splitting` dalı, remote yok
+- Aşama: Paket 36 — Durum Panosu gerçek API entegrasyonu
+- Durum: **Kod, gerçek PostgreSQL/API, gerçek Chrome ve repository dışı fresh checkout kapıları geçti; commit hazırlığı tamamlandı**
+- Git: Yerel repository, `foundation/package-36-dashboard-api` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -715,3 +715,13 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Ana ağaçta typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.075 başarılı / 6 mevcut ortam-koşullu UI skip**, build+bütçe kapısı, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 169/6; domain 381; contracts 197; database 45; API 230; file-agent 53.
 - Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen fresh kopyada `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.075/6** test ve build+bütçe kapısı yeniden geçti; kopya kaldırıldı.
 - Yeni dependency, migration, API/contract, IPC, File Agent veya veri yazma yolu değişikliği yoktur. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını vermeye devam eder; moderate audit 0 açıktır.
+
+## Paket 36 — Durum Panosu gerçek API entegrasyonu (2026-07-16)
+
+- Oturum ve organization kapsamlı `GET /api/v1/dashboard`; açık vaka çekirdeğini sorumlu, sigorta, servis, takip tarihi, mevcut belge metadata’sı, Paket 15 evrak değerlendirmesi, bekleyen insan onayları ve operasyon kurtarma/hata durumlarıyla tek salt-okunur snapshot’ta birleştirir.
+- Saf domain öncelik motoru `dashboard-priority/1.0.0`; manuel kurtarma → operasyon hatası/blokajı → gecikmiş takip → insan onayı → eksik/kontrol evrakı → bugün/atanmamış/yaklaşan takip sırasını deterministik uygular. Aynı girdiler aynı skor, sinyal ve sıra sonucunu üretir.
+- UI gerçek API modunda summary, sorumlu, işlem gereksinimi, öncelik ve serbest arama filtrelerini kullanır; kart tıklaması/Enter gerçek `/dosyalar/:caseId` detayına gider. Loading, gerçek boş, 401 ve ağ/API hatası ayrı gösterilir; API hatasında mock fallback yoktur. Mock moddaki kabul edilmiş 12 kayıtlı prototip korunur.
+- Dashboard GET snapshot veya audit yazmaz. Mevcut tablolar okunur; migration, yeni dependency, IPC, File Agent işi veya fiziksel/veritabanı yazma yolu eklenmedi. Response mutlak yol, belge içeriği, secret ve ham müşteri belgesi taşımaz.
+- Ana ağaçta gerçek `hasarbotu_test` PostgreSQL ile **1.090 başarılı / 6 mevcut ortam-koşullu UI skip** geçti. Dağılım: UI 175/6; domain 385; contracts 200; database 45; API 232; file-agent 53. Paket 36 gerçek dashboard API testi 2/2 ve skip edilmedi.
+- Gerçek Chrome/CDP smoke: API login; 5 açık vaka; geciken 1, bugün 1, eksik evraklı 1, bekleyen insan onayı 1 ve işlem gereken 4 özeti; onay/işlem filtreleri; arama; dosya detayına geçiş; API kesintisinde no-fallback; 1366×768 açık/koyu ve 1920×1080 koyu görünüm geçti. Body yatay taşma yok, workflow panosu kendi `overflow-x:auto` kaydırmasını koruyor ve kararlı ekranda console warning/error/exception 0.
+- Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen fresh kopyada `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.090/6** test ve build/bundle bütçesi yeniden geçti. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını verdi; moderate audit ana ağaçta 0 açıktır.

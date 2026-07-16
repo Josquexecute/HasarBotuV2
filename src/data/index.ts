@@ -70,6 +70,25 @@ export {
 } from './httpAdapter'
 export { useCases, type CasesDataStatus, type UseCasesResult } from './useCases'
 export {
+  buildMockDashboard,
+  createHttpDashboardAdapter,
+  DashboardError,
+  type DashboardAdapterOptions,
+  type DashboardAttentionCodeRecord,
+  type DashboardCaseRecord,
+  type DashboardDataPort,
+  type DashboardErrorKind,
+  type DashboardHumanApprovalKindRecord,
+  type DashboardPriorityRecord,
+  type DashboardSnapshotRecord,
+  type DashboardSummaryRecord,
+} from './dashboardPort'
+export {
+  useDashboard,
+  type DashboardLoadStatus,
+  type UseDashboardResult,
+} from './useDashboard'
+export {
   createHttpDocumentWorkspaceAdapter,
   HttpDocumentWorkspaceError,
   isSafeMetadataRelativePath,

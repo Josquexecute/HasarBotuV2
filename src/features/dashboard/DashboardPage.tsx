@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   ArrowRight,
   CalendarClock,
   CheckCircle2,
@@ -9,56 +10,137 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldAlert,
+  UserRoundCheck,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { caseStages, mockCases } from '../../mocks/cases'
-import type { CaseRecord } from '../../types/case'
+import { EmptyState, LoadingState } from '../../components/StateViews'
+import { caseStages } from '../../mocks/cases'
+import {
+  useDashboard,
+  type DashboardAttentionCodeRecord,
+  type DashboardCaseRecord,
+  type DashboardPriorityRecord,
+} from '../../data'
+import { matchesSearchQuery } from '../../utils/search'
 
-const summaryItems = [
-  { label: 'Açık Dosya', value: 142, detail: 'Bu ay +18', tone: 'neutral' },
-  { label: 'Bugün Takip', value: 12, detail: '4 görüşme', tone: 'info' },
-  { label: 'Geciken', value: 5, detail: '2 kritik', tone: 'danger' },
-  { label: 'Eksik Evraklı', value: 24, detail: '7 yeni', tone: 'warning' },
-  { label: 'Onarım Onayı', value: 8, detail: 'Kontrol bekliyor', tone: 'neutral' },
-  { label: 'Kapanmaya Hazır', value: 15, detail: 'Bugün 3 dosya', tone: 'success' },
-] as const
+type AttentionFilter =
+  | 'all'
+  | 'action'
+  | 'overdue'
+  | 'today'
+  | 'upcoming'
+  | 'missing'
+  | 'control'
+  | 'approval'
 
-const boardStages = caseStages.filter((stage) =>
-  ['Yeni İhbar', 'Araç / Servis Bekleniyor', 'Ekspertiz Bekliyor', 'Hasar Tespiti', 'Parça ve İşçilik', 'Onarım Onayı Bekleniyor', 'Onarımda', 'Raporlama', 'Kapanış Evrakları', 'Kapanmaya Hazır'].includes(stage),
-)
+const priorityLabels: Readonly<Record<DashboardPriorityRecord, string>> = {
+  critical: 'Kritik',
+  high: 'Yüksek',
+  medium: 'Orta',
+  normal: 'Normal',
+}
 
-function WorkflowCard({ item }: { item: CaseRecord }) {
+const attentionLabels: Readonly<Record<DashboardAttentionCodeRecord, string>> = {
+  manual_recovery: 'Manuel kurtarma',
+  operation_failed: 'İşlem hatası',
+  operation_blocked: 'İşlem blokajı',
+  overdue_follow_up: 'Geciken takip',
+  human_approval: 'İnsan onayı',
+  missing_documents: 'Eksik evrak',
+  document_control_required: 'Evrak kontrolü',
+  follow_up_today: 'Bugün takip',
+  unassigned: 'Sorumlu atanmamış',
+  upcoming_follow_up: 'Yaklaşan takip',
+}
+
+const attentionFilterLabels: Readonly<Record<AttentionFilter, string>> = {
+  all: 'Tüm dosyalar',
+  action: 'İşlem gereken',
+  overdue: 'Geciken takip',
+  today: 'Bugün takip',
+  upcoming: 'Yaklaşan takip',
+  missing: 'Eksik evrak',
+  control: 'Kontrol gereken evrak',
+  approval: 'Bekleyen insan onayı',
+}
+
+function formatDashboardDate(value: string): string {
+  return new Intl.DateTimeFormat('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    weekday: 'long',
+    timeZone: 'UTC',
+  }).format(new Date(`${value}T00:00:00Z`))
+}
+
+function formatRefreshTime(value: string): string {
+  return new Intl.DateTimeFormat('tr-TR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Istanbul',
+  }).format(new Date(value))
+}
+
+function matchesAttention(item: DashboardCaseRecord, filter: AttentionFilter): boolean {
+  if (filter === 'all') return true
+  if (filter === 'action') return item.requiresAction
+  if (filter === 'overdue') return item.attentionCodes.includes('overdue_follow_up')
+  if (filter === 'today') return item.attentionCodes.includes('follow_up_today')
+  if (filter === 'upcoming') return item.attentionCodes.includes('upcoming_follow_up')
+  if (filter === 'missing') return item.missingDocumentCount > 0
+  if (filter === 'control') return item.controlRequiredDocumentCount > 0
+  return item.pendingHumanApprovalCount > 0
+}
+
+function WorkflowCard({ item }: { readonly item: DashboardCaseRecord }) {
   const navigate = useNavigate()
+  const visibleSignals = item.attentionCodes.slice(0, 2)
 
   return (
     <article
-      className="workflow-card"
+      className={`workflow-card workflow-card--${item.priority}`}
       tabIndex={0}
-      onClick={() => navigate(`/dosyalar?q=${encodeURIComponent(item.plate)}`)}
+      onClick={() => navigate(`/dosyalar/${item.caseId}`)}
       onKeyDown={(event) => {
         if (event.key === 'Enter') navigate(`/dosyalar/${item.caseId}`)
       }}
-      aria-label={`${item.plate}, ${item.stage}. Tek tıkla dosyalarda göster, Enter ile tam dosyayı aç.`}
+      aria-label={`${item.plate}, ${item.stage}, ${priorityLabels[item.priority]} öncelik. Dosyayı aç.`}
     >
       <div className="workflow-card__head">
         <span className="plate">{item.plate}</span>
-        <span className={`type-badge type-badge--${item.type.toLocaleLowerCase('tr-TR')}`}>{item.type}</span>
+        <span className={`dashboard-priority dashboard-priority--${item.priority}`}>
+          {priorityLabels[item.priority]}
+        </span>
       </div>
       <div className="workflow-card__numbers">
         <span>Ofis {item.officeNumber}</span>
-        <span>{item.noticeNumber}</span>
+        <span>{item.type}</span>
       </div>
       <div className="workflow-card__meta">
-        <span>{item.service}</span>
-        <span>{item.assignee}</span>
+        <span>{item.insurerName}</span>
+        <span>{item.serviceName}</span>
+        <span>{item.responsibleUserName}</span>
       </div>
+      {visibleSignals.length > 0 && (
+        <div className="workflow-card__signals" aria-label="İşlem gerekçeleri">
+          {visibleSignals.map((signal) => <span key={signal}>{attentionLabels[signal]}</span>)}
+          {item.attentionCodes.length > visibleSignals.length && (
+            <span>+{item.attentionCodes.length - visibleSignals.length}</span>
+          )}
+        </div>
+      )}
       <div className="workflow-card__footer">
-        {item.missingDocuments > 0 ? (
-          <span className="inline-status inline-status--warning"><FileWarning size={13} />{item.missingDocuments} eksik evrak</span>
-        ) : (
-          <span className="inline-status inline-status--success"><CheckCircle2 size={13} />Evrak tam</span>
-        )}
-        <span className={`follow-up follow-up--${item.followUpTone}`}>{item.followUp}</span>
+        <span className="workflow-card__counts">
+          {item.missingDocumentCount > 0 && <span title="Eksik evrak"><FileWarning size={12} />{item.missingDocumentCount}</span>}
+          {item.controlRequiredDocumentCount > 0 && <span title="Kontrol gereken evrak"><ShieldAlert size={12} />{item.controlRequiredDocumentCount}</span>}
+          {item.pendingHumanApprovalCount > 0 && <span title="Bekleyen insan onayı"><UserRoundCheck size={12} />{item.pendingHumanApprovalCount}</span>}
+          {item.missingDocumentCount + item.controlRequiredDocumentCount + item.pendingHumanApprovalCount === 0 && (
+            <span className="text-success"><CheckCircle2 size={12} />Kontrol yok</span>
+          )}
+        </span>
+        <span className={`follow-up follow-up--${item.followUpTone}`}>{item.followUpLabel}</span>
       </div>
     </article>
   )
@@ -66,31 +148,115 @@ function WorkflowCard({ item }: { item: CaseRecord }) {
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const { dashboard, source, status, reload } = useDashboard()
   const [query, setQuery] = useState('')
-  const [assignee, setAssignee] = useState('Tüm sorumlular')
-  const [refreshedAt, setRefreshedAt] = useState('10:42')
+  const [assignee, setAssignee] = useState('all')
+  const [attentionFilter, setAttentionFilter] = useState<AttentionFilter>('all')
+  const [priorityFilter, setPriorityFilter] = useState<'all' | DashboardPriorityRecord>('all')
+  const [mockRefreshLabel, setMockRefreshLabel] = useState<string | null>(null)
+
+  const assignees = useMemo(() => {
+    if (dashboard === null) return []
+    return [...new Map(
+      dashboard.items
+        .filter((item) => item.responsibleUserId !== null)
+        .map((item) => [item.responsibleUserId as string, item.responsibleUserName]),
+    ).entries()].sort((left, right) => left[1].localeCompare(right[1], 'tr'))
+  }, [dashboard])
 
   const visibleCases = useMemo(() => {
-    const normalizedQuery = query.toLocaleLowerCase('tr-TR')
-    return mockCases.filter((item) => {
-      const matchesQuery = !normalizedQuery || [item.plate, item.officeNumber, item.company, item.service]
-        .some((field) => field.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
-      const matchesAssignee = assignee === 'Tüm sorumlular' || item.assignee === assignee
-      return matchesQuery && matchesAssignee
+    if (dashboard === null) return []
+    return dashboard.items.filter((item) => {
+      const matchesQuery = matchesSearchQuery(query, [
+        item.plate,
+        item.officeNumber,
+        item.insurerName,
+        item.serviceName,
+        item.responsibleUserName,
+        item.stage,
+        ...item.attentionCodes.map((code) => attentionLabels[code]),
+      ])
+      const matchesAssignee = assignee === 'all' || item.responsibleUserId === assignee
+      const matchesPriority = priorityFilter === 'all' || item.priority === priorityFilter
+      return matchesQuery && matchesAssignee && matchesPriority && matchesAttention(item, attentionFilter)
     })
-  }, [assignee, query])
+  }, [assignee, attentionFilter, dashboard, priorityFilter, query])
+
+  const resetFilters = () => {
+    setQuery('')
+    setAssignee('all')
+    setAttentionFilter('all')
+    setPriorityFilter('all')
+  }
+
+  const handleReload = () => {
+    if (source === 'mock') setMockRefreshLabel('şimdi')
+    else reload()
+  }
+
+  const summaryItems = dashboard === null ? [] : [
+    {
+      label: 'Açık Dosya',
+      value: dashboard.summary.openCaseCount,
+      detail: `${dashboard.summary.criticalCaseCount} kritik`,
+      tone: 'neutral',
+      filter: 'all' as const,
+    },
+    {
+      label: 'Bugün Takip',
+      value: dashboard.summary.dueTodayCount,
+      detail: `${dashboard.summary.upcomingFollowUpCount} yaklaşan`,
+      tone: 'info',
+      filter: 'today' as const,
+    },
+    {
+      label: 'Geciken',
+      value: dashboard.summary.overdueFollowUpCount,
+      detail: 'Öncelikli takip',
+      tone: 'danger',
+      filter: 'overdue' as const,
+    },
+    {
+      label: 'Eksik Evraklı',
+      value: dashboard.summary.missingDocumentCaseCount,
+      detail: `${dashboard.summary.controlRequiredDocumentCaseCount} kontrol`,
+      tone: 'warning',
+      filter: 'missing' as const,
+    },
+    {
+      label: 'Bekleyen Onay',
+      value: dashboard.summary.pendingHumanApprovalCaseCount,
+      detail: 'İnsan kararı',
+      tone: 'neutral',
+      filter: 'approval' as const,
+    },
+    {
+      label: 'İşlem Gereken',
+      value: dashboard.summary.actionRequiredCaseCount,
+      detail: dashboard.priorityVersion,
+      tone: 'success',
+      filter: 'action' as const,
+    },
+  ]
+
+  const refreshLabel = mockRefreshLabel
+    ?? (dashboard === null ? '—' : formatRefreshTime(dashboard.evaluatedAt))
 
   return (
     <main className="page dashboard-page">
       <section className="page-heading">
         <div>
           <h1>Operasyon Durumu</h1>
-          <p>10 Temmuz 2026 Cuma · Açık dosyaların güncel iş akışı</p>
+          <p>
+            {dashboard === null
+              ? 'Açık dosyaların güncel iş akışı'
+              : `${formatDashboardDate(dashboard.asOfDate)} · Açık dosyaların güncel iş akışı`}
+          </p>
         </div>
         <div className="heading-actions">
-          <span className="refresh-label">Son güncelleme {refreshedAt}</span>
-          <button className="button button--secondary" type="button" onClick={() => setRefreshedAt('şimdi')}>
-            <RefreshCw size={15} /> Yenile
+          <span className="refresh-label">Son güncelleme {refreshLabel}</span>
+          <button className="button button--secondary" type="button" onClick={handleReload} disabled={status === 'loading'}>
+            <RefreshCw size={15} /> {status === 'loading' ? 'Yükleniyor' : 'Yenile'}
           </button>
           <button className="button button--primary" type="button" onClick={() => navigate('/dosyalar?yeni=true')}>
             <Plus size={16} /> Yeni İhbar
@@ -98,20 +264,22 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <section className="summary-strip" aria-label="Operasyon özeti">
-        {summaryItems.map((item) => (
-          <button
-            type="button"
-            key={item.label}
-            className={`summary-item summary-item--${item.tone}`}
-            onClick={() => navigate(`/dosyalar?ozet=${encodeURIComponent(item.label)}`)}
-          >
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <small>{item.detail}</small>
-          </button>
-        ))}
-      </section>
+      {dashboard !== null && (
+        <section className="summary-strip" aria-label="Operasyon özeti">
+          {summaryItems.map((item) => (
+            <button
+              type="button"
+              key={item.label}
+              className={`summary-item summary-item--${item.tone}${attentionFilter === item.filter ? ' is-active' : ''}`}
+              onClick={() => setAttentionFilter(item.filter)}
+            >
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.detail}</small>
+            </button>
+          ))}
+        </section>
+      )}
 
       <section className="board-toolbar" aria-label="Durum panosu araçları">
         <div className="segmented-control">
@@ -125,49 +293,87 @@ export function DashboardPage() {
         </label>
         <label className="select-field">
           <span className="sr-only">Sorumlu filtresi</span>
-          <select value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-            <option>Tüm sorumlular</option>
-            <option>Ahmet Yılmaz</option>
-            <option>Selin Aras</option>
-            <option>Zeynep Demir</option>
+          <select aria-label="Pano sorumlusu" value={assignee} onChange={(event) => setAssignee(event.target.value)}>
+            <option value="all">Tüm sorumlular</option>
+            {assignees.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+          <ChevronDown size={14} />
+        </label>
+        <label className="select-field">
+          <span className="sr-only">İşlem filtresi</span>
+          <select aria-label="İşlem gereksinimi" value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as AttentionFilter)}>
+            {Object.entries(attentionFilterLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <ChevronDown size={14} />
+        </label>
+        <label className="select-field">
+          <span className="sr-only">Öncelik filtresi</span>
+          <select aria-label="Pano önceliği" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as 'all' | DashboardPriorityRecord)}>
+            <option value="all">Tüm öncelikler</option>
+            {Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
           <ChevronDown size={14} />
         </label>
         <div className="board-toolbar__legend" aria-label="Takip durumu göstergeleri">
-          <span><i className="dot dot--danger" />Geciken</span>
-          <span><i className="dot dot--warning" />Bugün</span>
-          <span><i className="dot dot--neutral" />Planlı</span>
+          <span><i className="dot dot--danger" />Kritik</span>
+          <span><i className="dot dot--warning" />Yüksek/Orta</span>
+          <span><i className="dot dot--neutral" />Normal</span>
         </div>
       </section>
 
-      <section className="workflow-board" aria-label="Dosya iş akışı panosu">
-        {boardStages.map((stage) => {
-          const stageCases = visibleCases.filter((item) => item.stage === stage)
-          return (
-            <section className="workflow-column" key={stage}>
-              <header className="workflow-column__head">
-                <span>{stage}</span>
-                <strong>{stageCases.length}</strong>
-              </header>
-              <div className="workflow-column__body">
-                {stageCases.map((item) => <WorkflowCard key={item.caseId} item={item} />)}
-                {stageCases.length === 0 && (
-                  <div className="workflow-empty">
-                    <span>Bu aşamada eşleşen dosya yok</span>
-                  </div>
-                )}
-              </div>
-            </section>
-          )
-        })}
-      </section>
+      {status === 'loading' && dashboard === null && <LoadingState label="Gerçek durum panosu yükleniyor" />}
+      {status === 'unauthorized' && dashboard === null && (
+        <div className="dashboard-state" role="alert">
+          <CircleAlert size={24} />
+          <strong>Oturum gerekli</strong>
+          <span>Gerçek durum panosu için yeniden giriş yapın. Sahte veri gösterilmiyor.</span>
+        </div>
+      )}
+      {status === 'unavailable' && dashboard === null && (
+        <div className="dashboard-state" role="alert">
+          <AlertTriangle size={24} />
+          <strong>Durum panosu alınamadı</strong>
+          <span>API veya ağ bağlantısını kontrol edin. Sahte veriye geçiş yapılmadı.</span>
+          <button className="button button--secondary" type="button" onClick={reload}>Tekrar dene</button>
+        </div>
+      )}
 
-      <footer className="statusbar">
-        <span><CheckCircle2 size={14} />{visibleCases.length} mock dosya gösteriliyor</span>
-        <span><CalendarClock size={14} />12 dosya bugün takip edilecek</span>
-        <span className="statusbar__warning"><CircleAlert size={14} />5 geciken görev</span>
-        <button type="button" onClick={() => navigate('/dosyalar')}>Tüm dosyaları aç <ArrowRight size={14} /></button>
-      </footer>
+      {dashboard !== null && visibleCases.length > 0 && (
+        <section className="workflow-board" aria-label="Dosya iş akışı panosu">
+          {caseStages.map((stage) => {
+            const stageCases = visibleCases.filter((item) => item.stage === stage)
+            return (
+              <section className="workflow-column" key={stage}>
+                <header className="workflow-column__head">
+                  <span>{stage}</span>
+                  <strong>{stageCases.length}</strong>
+                </header>
+                <div className="workflow-column__body">
+                  {stageCases.map((item) => <WorkflowCard key={item.caseId} item={item} />)}
+                  {stageCases.length === 0 && (
+                    <div className="workflow-empty">
+                      <span>Bu aşamada eşleşen dosya yok</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )
+          })}
+        </section>
+      )}
+
+      {dashboard !== null && visibleCases.length === 0 && (
+        <EmptyState onReset={resetFilters} />
+      )}
+
+      {dashboard !== null && (
+        <footer className="statusbar">
+          <span><CheckCircle2 size={14} />{visibleCases.length} / {dashboard.summary.openCaseCount} dosya gösteriliyor</span>
+          <span><CalendarClock size={14} />{dashboard.summary.dueTodayCount} bugün · {dashboard.summary.upcomingFollowUpCount} yaklaşan takip</span>
+          <span className="statusbar__warning"><CircleAlert size={14} />{dashboard.summary.actionRequiredCaseCount} işlem gerekiyor</span>
+          <button type="button" onClick={() => navigate('/dosyalar')}>Tüm dosyaları aç <ArrowRight size={14} /></button>
+        </footer>
+      )}
     </main>
   )
 }

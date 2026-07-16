@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "asOfDate": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "x-hasarbotu-runtime-validation": "calendar-date-validity"
+    },
+    "evaluatedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "x-hasarbotu-runtime-validation": "calendar-date-validity"
+    },
+    "priorityVersion": {
+      "type": "string",
+      "const": "dashboard-priority/1.0.0"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "openCaseCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "overdueFollowUpCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "dueTodayCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "upcomingFollowUpCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "missingDocumentCaseCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "controlRequiredDocumentCaseCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "pendingHumanApprovalCaseCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "actionRequiredCaseCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "criticalCaseCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "required": [
+        "openCaseCount",
+        "overdueFollowUpCount",
+        "dueTodayCount",
+        "upcomingFollowUpCount",
+        "missingDocumentCaseCount",
+        "controlRequiredDocumentCaseCount",
+        "pendingHumanApprovalCaseCount",
+        "actionRequiredCaseCount",
+        "criticalCaseCount"
+      ],
+      "additionalProperties": false
+    },
+    "stageCounts": {
+      "minItems": 10,
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "new_notification",
+              "vehicle_or_service_pending",
+              "inspection_pending",
+              "damage_assessment",
+              "parts_and_labor",
+              "repair_approval_pending",
+              "under_repair",
+              "reporting",
+              "closing_documents",
+              "ready_to_close"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "stage",
+          "count"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "items": {
+      "maxItems": 5000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "caseType": {
+            "type": "string",
+            "enum": [
+              "traffic",
+              "casco"
+            ]
+          },
+          "officeCaseNumber": {
+            "type": "string",
+            "pattern": "^[2-9]\\d{3}\\/[1-9]\\d{0,14}$"
+          },
+          "plate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "x-hasarbotu-runtime-validation": "plate-number-canonical-form"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "new_notification",
+              "vehicle_or_service_pending",
+              "inspection_pending",
+              "damage_assessment",
+              "parts_and_labor",
+              "repair_approval_pending",
+              "under_repair",
+              "reporting",
+              "closing_documents",
+              "ready_to_close"
+            ]
+          },
+          "responsibleUserId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "responsibleUserName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insurerName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serviceName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "followUpDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "missingDocumentCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "controlRequiredDocumentCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "documentRuleVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "pendingHumanApprovalCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "pendingHumanApprovalKinds": {
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "case_lifecycle",
+                "policy_analysis",
+                "policy_ai_review",
+                "traffic_value_loss"
+              ]
+            },
+            "x-hasarbotu-runtime-validation": "unique-dashboard-approval-kind"
+          },
+          "manualRecoveryCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "failedOperationCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "blockedOperationCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "normal"
+            ]
+          },
+          "priorityScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000
+          },
+          "primaryAttention": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "manual_recovery",
+                  "operation_failed",
+                  "operation_blocked",
+                  "overdue_follow_up",
+                  "human_approval",
+                  "missing_documents",
+                  "document_control_required",
+                  "follow_up_today",
+                  "unassigned",
+                  "upcoming_follow_up"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attentionCodes": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "manual_recovery",
+                "operation_failed",
+                "operation_blocked",
+                "overdue_follow_up",
+                "human_approval",
+                "missing_documents",
+                "document_control_required",
+                "follow_up_today",
+                "unassigned",
+                "upcoming_follow_up"
+              ]
+            },
+            "x-hasarbotu-runtime-validation": "unique-dashboard-attention-code"
+          },
+          "requiresAction": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "caseId",
+          "caseType",
+          "officeCaseNumber",
+          "plate",
+          "stage",
+          "responsibleUserId",
+          "responsibleUserName",
+          "insurerName",
+          "serviceName",
+          "followUpDate",
+          "updatedAt",
+          "version",
+          "missingDocumentCount",
+          "controlRequiredDocumentCount",
+          "documentRuleVersion",
+          "pendingHumanApprovalCount",
+          "pendingHumanApprovalKinds",
+          "manualRecoveryCount",
+          "failedOperationCount",
+          "blockedOperationCount",
+          "priority",
+          "priorityScore",
+          "primaryAttention",
+          "attentionCodes",
+          "requiresAction"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "asOfDate",
+    "evaluatedAt",
+    "priorityVersion",
+    "summary",
+    "stageCounts",
+    "items"
+  ],
+  "additionalProperties": false
+}

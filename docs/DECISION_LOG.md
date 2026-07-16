@@ -688,3 +688,15 @@ Etkisi: Migration `0023_traffic_value_loss_reports`; saf rapor-content builder; 
 6. Paket 34 tabanındaki 591,47 kB giriş bundle’ı 281.355 bayt giriş chunk’ına, toplam başlangıç JS grafiği 420.291 bayta düşmüştür. Ağır modüller kullanıcı akışıyla on-demand yüklenir.
 
 Etkisi: Yalnız frontend import/bundle sınırı, build script’i ve hata-sınırı regresyon testi değişti. Yeni dependency, backend/API, migration, contract, IPC, File Agent veya veri yazma yolu yoktur.
+
+## 2026-07-16 — HB-2026-042: Durum Panosu salt-okunur snapshot ve sürümlü öncelik sırası
+
+1. Durum Panosu organization kapsamlı, oturum gerektiren tek bir `GET /api/v1/dashboard` snapshot’ı kullanır. UI’ın vaka başına ayrı evrak/onay/operasyon sorguları yapması veya istemcide iş önceliği uydurması kabul edilmez.
+2. Öncelik sırası `dashboard-priority/1.0.0` ile sürümlüdür: manuel kurtarma, operasyon hatası, operasyon blokajı, geciken takip, bekleyen insan onayı, eksik evrak, kontrol gereken evrak, bugün takip, sorumlu atanmamış ve yedi gün içindeki yaklaşan takip. Skor yalnız deterministik sıralama içindir; sonuç ayrıca açık sinyal kodlarını taşır.
+3. Evrak sayıları yalnız Paket 15 motoru ve güncel documentVersion metadata’sından hesaplanır. Fiziksel doğrulaması tamamlanmamış `pending/failed` belge `present` sayılmaz; `control_required` olarak panoya yansır.
+4. İnsan onayı sinyali mevcut lifecycle approval, Kasko poliçe analizi approval, incelenmemiş AI adayı ve Trafik değer kaybı approval kayıtlarından gelir. Operasyon sinyali mevcut workspace provisioning, file-operation ve lifecycle recovery durumlarından gelir; ikinci bir queue veya durum modeli kurulmaz.
+5. Endpoint salt okunurdur; snapshot veya audit olayı yazmaz. Her pano yenilemesinde audit gürültüsü üretilmez. Tenant filtreleri bütün alt sorgularda server tarafında uygulanır.
+6. API response yalnız logical vaka ve güvenli metadata özetlerini taşır. Mutlak yol, belge içeriği, raw excerpt, secret veya ham hata bulunmaz. Runtime contract strict’tir; UI bilinmeyen response alanlarında fail-closed davranır.
+7. API modunda ağ/5xx/bozuk response mock veriye düşmez. Mock mod, kabul edilmiş prototip kayıtlarını ağ çağrısı yapmadan korur. Kart tıklaması ve Enter doğrudan gerçek dosya detayına gider.
+
+Etkisi: Saf dashboard öncelik domain’i, strict contracts/JSON Schema, salt-okunur API agregasyonu ve gerçek API bağlı Durum Panosu UI’ı eklendi. Migration, dependency, IPC, File Agent veya veri yazma yolu değişmedi.
