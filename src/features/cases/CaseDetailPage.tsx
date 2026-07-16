@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { formatCurrency } from '../../mocks/cases'
-import { useCases } from '../../data'
+import { useCase, useCases } from '../../data'
 import { useSession } from '../../app/sessionContext'
 import { LoadingState } from '../../components/StateViews'
 import type { CaseRecord } from '../../types/case'
@@ -160,9 +160,28 @@ function HistoryModule({ item }: { item: CaseRecord }) {
   return <section className="info-panel history-panel"><header><h2>Dosya Geçmişi</h2><History size={16} /></header><div className="audit-timeline">{events.map(([date, action, actor]) => <article key={`${date}-${action}`}><i /><time>{date}</time><div><strong>{action}</strong><span>{actor}</span></div></article>)}</div></section>
 }
 
+function ApiModuleUnavailable({ title, guidance }: { title: string; guidance: string }) {
+  return (
+    <section className="info-panel">
+      <header><h2>{title}</h2><AlertTriangle size={16} /></header>
+      <div className="assistant-note">
+        <AlertTriangle size={15} />
+        <span>Bu modül henüz gerçek API verisine bağlı değildir; mock kayıt gösterilmez.</span>
+      </div>
+      <p>{guidance}</p>
+    </section>
+  )
+}
+
 export function CaseDetailPage() {
-  const { cases, source, status: dataStatus, reload } = useCases()
+  const { cases } = useCases()
   const { caseId } = useParams()
+  const {
+    item: detailItem,
+    source,
+    status: dataStatus,
+    reload: reloadCase,
+  } = useCase(caseId ?? '')
   const navigate = useNavigate()
   const location = useLocation()
   const session = useSession()
@@ -177,7 +196,9 @@ export function CaseDetailPage() {
   const [photoMode, setPhotoMode] = useState<'normal' | 'stress'>('normal')
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [caseOverride, setCaseOverride] = useState<CaseRecord | null>(null)
-  const baseItem = cases.find((candidate) => candidate.caseId === caseId)
+  const baseItem = source === 'api'
+    ? detailItem
+    : cases.find((candidate) => candidate.caseId === caseId) ?? null
   const item = caseOverride?.caseId === caseId ? caseOverride : baseItem
   const canChangeLifecycle = session.user?.roles.some((role) => ['admin', 'expert', 'case_manager'].includes(role)) === true
   const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
@@ -204,7 +225,7 @@ export function CaseDetailPage() {
     setCaseOverride(null)
   }, [caseId, baseItem?.version])
 
-  if (source === 'api' && dataStatus !== 'ok') {
+  if (source === 'api' && dataStatus !== 'ok' && dataStatus !== 'not_found') {
     const message = dataStatus === 'loading'
       ? 'Gerçek veriler yükleniyor…'
       : dataStatus === 'unauthorized'
@@ -233,8 +254,14 @@ export function CaseDetailPage() {
       <section className="case-detail-head">
         <button className="icon-button" type="button" onClick={() => navigate('/dosyalar')} aria-label="Dosya listesine dön"><ArrowLeft size={19} /></button>
         <div className="case-switcher" aria-label="Dosyalar arasında geçiş">
-          <button className="icon-button" type="button" disabled={currentIndex <= 0} onClick={() => navigate(`/dosyalar/${cases[currentIndex - 1].caseId}`)} aria-label="Önceki dosyaya geç"><ChevronLeft size={17} /></button>
-          <button className="icon-button" type="button" disabled={currentIndex >= cases.length - 1} onClick={() => navigate(`/dosyalar/${cases[currentIndex + 1].caseId}`)} aria-label="Sonraki dosyaya geç"><ChevronRight size={17} /></button>
+          <button className="icon-button" type="button" disabled={currentIndex <= 0} onClick={() => {
+            const previous = cases[currentIndex - 1]
+            if (previous !== undefined) navigate(`/dosyalar/${previous.caseId}`)
+          }} aria-label="Önceki dosyaya geç"><ChevronLeft size={17} /></button>
+          <button className="icon-button" type="button" disabled={currentIndex < 0 || currentIndex >= cases.length - 1} onClick={() => {
+            const next = cases[currentIndex + 1]
+            if (next !== undefined) navigate(`/dosyalar/${next.caseId}`)
+          }} aria-label="Sonraki dosyaya geç"><ChevronRight size={17} /></button>
         </div>
         <div className="case-detail-head__identity">
           <span className="plate plate--large">{item.plate}</span>
@@ -244,7 +271,7 @@ export function CaseDetailPage() {
         <div className="case-detail-head__actions">
           <button className="button button--secondary" type="button" onClick={() => {
             if (source === 'api') {
-              reload()
+              reloadCase()
               setPrototypeNotice('Güncel dosya verisi sunucudan yükleniyor.')
             } else setPrototypeNotice(`${item.plate} mock verisi yenilendi.`)
           }}><RefreshCw size={15} /> Tek Dosyayı Yenile</button>
@@ -295,7 +322,7 @@ export function CaseDetailPage() {
                   <div><dt>Hasar Dosya No</dt><dd>{item.claimNumber}</dd></div>
                   <div><dt>İhbar Föyü No</dt><dd>{item.noticeNumber}</dd></div>
                   <div><dt>Servis</dt><dd>{item.service}</dd></div>
-                  <div><dt>Tahmini Hasar</dt><dd>{formatCurrency(item.estimatedDamage)}</dd></div>
+                  <div><dt>Tahmini Hasar</dt><dd>{source === 'api' ? 'Henüz bağlı değil' : formatCurrency(item.estimatedDamage)}</dd></div>
                   <div><dt>Sorumlu</dt><dd>{item.assignee}</dd></div>
                   <div><dt>Eksper</dt><dd>{item.expert}</dd></div>
                 </dl>
@@ -303,13 +330,15 @@ export function CaseDetailPage() {
               <section className="info-panel">
                 <header><h2>Bugünkü Takip</h2><CalendarClock size={16} /></header>
                 <strong className={`overview-follow overview-follow--${item.followUpTone}`}>{item.followUp}</strong>
-                <p>Servisten işlem durumu ve eksik evrak dönüşü alınacak.</p>
+                <p>{source === 'api' ? 'Takip tarihi gerçek case metadata kaydından gösterilir.' : 'Servisten işlem durumu ve eksik evrak dönüşü alınacak.'}</p>
                 <button className="text-button" type="button" onClick={() => setActiveTab('Operasyon')}>Takibi düzenle <ChevronRight size={14} /></button>
               </section>
               <section className="info-panel">
                 <header><h2>Evrak Durumu</h2><FileCheck2 size={16} /></header>
-                <strong className={item.missingDocuments ? 'text-warning' : 'text-success'}>{item.missingDocuments ? `${item.missingDocuments} eksik evrak` : 'Evraklar tam'}</strong>
-                <p>Koşullu evrak kuralları dosya türüne göre gösteriliyor.</p>
+                {source === 'api'
+                  ? <strong>Gerçek değerlendirme sekmede yüklenir</strong>
+                  : <strong className={item.missingDocuments ? 'text-warning' : 'text-success'}>{item.missingDocuments ? `${item.missingDocuments} eksik evrak` : 'Evraklar tam'}</strong>}
+                <p>{source === 'api' ? 'Liste özeti belge tamlığı hakkında varsayım üretmez.' : 'Koşullu evrak kuralları dosya türüne göre gösteriliyor.'}</p>
                 <button className="text-button" type="button" onClick={() => setActiveTab('Evrak ve Fotoğraf')}>Evraklara git <ChevronRight size={14} /></button>
               </section>
               <section className="info-panel overview-grid__wide">
@@ -335,7 +364,7 @@ export function CaseDetailPage() {
               item={item}
               source={source}
               onUnauthorized={session.reportUnauthorized}
-              onReloadCase={reload}
+              onReloadCase={reloadCase}
               onUpdated={(updated) => {
                 setCaseOverride(updated)
                 setPrototypeNotice(`Takip tarihi kaydedildi · yeni sürüm ${updated.version ?? '—'}`)
@@ -388,26 +417,42 @@ export function CaseDetailPage() {
             </div>
           ) : activeTab === 'Evrak ve Fotoğraf' ? (
             item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
-          ) : activeTab === 'İşçilik' ? <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />
-            : activeTab === 'Ağır Hasar' ? <HeavyDamageModule item={item} />
+          ) : activeTab === 'İşçilik' ? source === 'api'
+            ? <ApiModuleUnavailable title="İşçilik" guidance="Gerçek işçilik ve parça verisi bağlanana kadar bu sekme salt bilgilendirme durumundadır." />
+            : <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />
+            : activeTab === 'Ağır Hasar' ? source === 'api'
+              ? <ApiModuleUnavailable title="Ağır Hasar" guidance="PERT veya ağır hasar sonucu için doğrulanmış gerçek veri kaynağı henüz bağlı değildir." />
+              : <HeavyDamageModule item={item} />
               : activeTab === 'Değer Kaybı' ? source === 'api'
                 ? <TrafficValueLossApiModule item={item} source={source} />
                 : <ValueLossModule item={item} onNotice={setPrototypeNotice} />
-                : activeTab === 'Raporlar ve Ücretler' ? <CaseReportsModule item={item} onNotice={setPrototypeNotice} />
-                  : activeTab === 'E-postalar' ? <EmailsModule item={item} onNotice={setPrototypeNotice} />
-                    : <HistoryModule item={item} />}
+                : activeTab === 'Raporlar ve Ücretler' ? source === 'api'
+                  ? <ApiModuleUnavailable title="Raporlar ve Ücretler" guidance="Gerçek rapor ve ücret endpoint’i bağlanmadan aday tutar veya hazır rapor gösterilmez." />
+                  : <CaseReportsModule item={item} onNotice={setPrototypeNotice} />
+                  : activeTab === 'E-postalar' ? source === 'api'
+                    ? <ApiModuleUnavailable title="E-postalar" guidance="Gerçek e-posta veya taslak veri kaynağı bu paketin kapsamında değildir." />
+                    : <EmailsModule item={item} onNotice={setPrototypeNotice} />
+                    : source === 'api'
+                      ? <ApiModuleUnavailable title="Geçmiş" guidance="Gerçek not, görev ve takip geçmişi için Operasyon sekmesini kullanın." />
+                      : <HistoryModule item={item} />}
           </Suspense>
         </section>
 
         {assistantOpen && <aside className="assistant-rail">
-          <header><Bot size={17} /><div><strong>Dosya Asistanı</strong><span>Karar desteği · mock</span></div></header>
+          <header><Bot size={17} /><div><strong>Dosya Asistanı</strong><span>{source === 'api' ? 'Gerçek veri bağlantısı bekleniyor' : 'Karar desteği · mock'}</span></div></header>
           <div className="assistant-rail__body">
-            <span className="assistant-rail__label">Hızlı sorular</span>
-            <button type="button" onClick={() => setAssistantAnswer(item.missingDocuments ? `${item.missingDocuments} eksik evrak görünüyor; kullanıcı kontrolü gerekli.` : 'Mock kural kontrolünde eksik evrak görünmüyor.')}>Eksik evrak var mı?</button>
-            <button type="button" onClick={() => setAssistantAnswer('Onarım onayı gerekliliği dosya türü, olay belgesi ve hasar eşiğiyle birlikte kontrol edilmelidir.')}>Onarım onayı gerekiyor mu?</button>
-            <button type="button" onClick={() => setAssistantAnswer('Muafiyet bilgisi için poliçe belgesi ve kaynak sayfa kullanıcı tarafından doğrulanmalıdır.')}>Bu dosyada muafiyet var mı?</button>
-            {assistantAnswer && <div className="assistant-answer" aria-live="polite"><strong>Mock yanıt</strong><span>{assistantAnswer}</span></div>}
-            <div className="assistant-note"><AlertTriangle size={15} /><span>AI önerileri kullanıcı onayı olmadan dosyada değişiklik yapamaz.</span></div>
+            {source === 'api' ? (
+              <div className="assistant-note"><AlertTriangle size={15} /><span>Genel dosya asistanı gerçek API’ye henüz bağlı değildir; mock yanıt üretilmez. Kasko poliçe ve Değer Kaybı için bağlı modülleri kullanın.</span></div>
+            ) : (
+              <>
+                <span className="assistant-rail__label">Hızlı sorular</span>
+                <button type="button" onClick={() => setAssistantAnswer(item.missingDocuments ? `${item.missingDocuments} eksik evrak görünüyor; kullanıcı kontrolü gerekli.` : 'Mock kural kontrolünde eksik evrak görünmüyor.')}>Eksik evrak var mı?</button>
+                <button type="button" onClick={() => setAssistantAnswer('Onarım onayı gerekliliği dosya türü, olay belgesi ve hasar eşiğiyle birlikte kontrol edilmelidir.')}>Onarım onayı gerekiyor mu?</button>
+                <button type="button" onClick={() => setAssistantAnswer('Muafiyet bilgisi için poliçe belgesi ve kaynak sayfa kullanıcı tarafından doğrulanmalıdır.')}>Bu dosyada muafiyet var mı?</button>
+                {assistantAnswer && <div className="assistant-answer" aria-live="polite"><strong>Mock yanıt</strong><span>{assistantAnswer}</span></div>}
+                <div className="assistant-note"><AlertTriangle size={15} /><span>AI önerileri kullanıcı onayı olmadan dosyada değişiklik yapamaz.</span></div>
+              </>
+            )}
           </div>
         </aside>}
       </div>
@@ -420,7 +465,7 @@ export function CaseDetailPage() {
             onUnauthorized={session.reportUnauthorized}
             onReload={() => {
               setCloseModalOpen(false)
-              reload()
+              reloadCase()
               setPrototypeNotice('Yaşam döngüsü çakışması sonrası güncel veri yükleniyor.')
             }}
             onUpdated={(updated) => {
@@ -436,7 +481,7 @@ export function CaseDetailPage() {
           onUnauthorized={session.reportUnauthorized}
           onReload={() => {
             setEditModalOpen(false)
-            reload()
+            reloadCase()
             setPrototypeNotice('Çakışma sonrası güncel veri sunucudan yükleniyor.')
           }}
           onUpdated={(updated) => {

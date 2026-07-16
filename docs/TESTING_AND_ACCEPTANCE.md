@@ -301,3 +301,16 @@ raporlanır.
 - Gerçek API: login; note create/idempotent replay; task create/complete/cancel; zorunlu result/reason; stale 409; takip history; read-only 403; tenant 404; 401; kapalı case conflict ve audit içerik sızıntısız atomiklik.
 - UI/tarayıcı: Operasyon sekmesinde gerçek not/görev/takip; API no-fallback; dashboard task sinyalleri; 1366×768 açık/koyu ve 1920×1080 tema, overflow/scroll ve console warning/error.
 - Kritik DB/API/UI/tarayıcı testi skip kalırsa Paket 37 PASS sayılmaz. Repository dışı fresh `npm ci`, gerçek `_test` PostgreSQL ile typecheck, lint, test ve build tamamlanmadan commit oluşturulmaz.
+
+### Paket 38 — Production doğruluğu ve case navigasyonu kabulü
+
+- Production veri kaynağı, persisted mock seçimine rağmen `api`; development/test mock prototipi korunur.
+- Production API, `DATABASE_URL` olmadan config aşamasında secret sızdırmadan reddedilir.
+- Cases list/detail/create/update/lifecycle başarılı cevapları ortak strict contracts şemasıyla doğrulanır; bozuk enum veya eksik alan fail-closed olur.
+- 101+ açık case senaryosunda ikinci ve sonraki server sayfaları kaybolmaz; kapalı case gerçek detail endpoint’inden doğrudan açılır.
+- API modunda “Evraklar tam”, “Zorunlu evraklar tam”, `0 TL` veya mock işçilik/PERT/rapor/e-posta/geçmiş sonucu gerçek veri etiketi altında gösterilmez.
+- Kapanan Dosyalar gerçek `status=closed` verisini gösterir; mock kapalı vaka, ücret veya kapanış gerekçesi API moduna sızmaz. Raporlar gerçek endpoint yokken fail-closed bilgi durumu gösterir.
+- Pending/failed Zabıt + ready KTT/Beyan, olay belgesi grubunu `present` ve diğer gereksinimler tamken overall sonucu `present` yapar; aday fiziksel durum metadata’sı korunur.
+- Gerçek Chrome: login, 101 açık case, kapalı case direct detail, bağlı olmayan modül fail-closed, gerçek Kapanan Dosyalar, Raporlar no-mock, API kesintisinde no-fallback; 1366×768 açık/koyu ve 1920×1080 koyu overflow/console kontrolü.
+- Başlangıç JavaScript grafiği ve her chunk 500.000 bayt altında kalmalıdır; contracts doğrulaması bu bütçeyi bozarsa Paket 38 PASS sayılmaz.
+- Kritik UI/domain/API/PostgreSQL/tarayıcı veya fresh checkout kapısı tamamlanmadan Paket 38 commit edilmez.

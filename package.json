@@ -26,6 +26,7 @@
     "pilot:gemini:policy": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run pilot:gemini:policy --workspace @hasarbotu/api"
   },
   "dependencies": {
+    "@hasarbotu/contracts": "*",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

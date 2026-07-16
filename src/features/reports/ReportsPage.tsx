@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
-import { CalendarRange, CheckCircle2, ChevronDown, FileDown, Printer, X } from 'lucide-react'
+import { AlertTriangle, CalendarRange, CheckCircle2, ChevronDown, FileDown, Printer, X } from 'lucide-react'
+import { getConfiguredDataSource } from '../../data'
 import { formatCurrency, mockCases } from '../../mocks/cases'
 import { closedCases, pendingClosedFees } from '../../mocks/workspaces'
 
 export function ReportsPage() {
+  const [source] = useState(getConfiguredDataSource)
   const [period, setPeriod] = useState('Temmuz 2026')
   const [assignee, setAssignee] = useState('Tümü')
   const [service, setService] = useState('Tümü')
@@ -13,6 +15,21 @@ export function ReportsPage() {
   const traffic = visibleCases.filter((item) => item.type === 'Trafik').length
   const kasko = visibleCases.length - traffic
   const approvedFee = closedCases.reduce((sum, item) => sum + item.expertFee, 0)
+
+  if (source === 'api') {
+    return (
+      <main className="page office-page reports-page">
+        <section className="page-heading page-heading--compact">
+          <div><h1>Raporlar ve Ücretler</h1><p>Gerçek API modu</p></div>
+        </section>
+        <section className="info-panel">
+          <header><h2>Gerçek rapor verisi henüz bağlı değil</h2><AlertTriangle size={16} /></header>
+          <div className="assistant-note"><AlertTriangle size={15} /><span>Mock dosya, ücret veya dönem toplamı gösterilmiyor.</span></div>
+          <p>Rapor ve kullanıcı onaylı ücret endpoint’leri tamamlandığında bu çalışma alanı gerçek veriye bağlanacaktır.</p>
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className="page office-page reports-page">

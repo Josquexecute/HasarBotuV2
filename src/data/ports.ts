@@ -6,7 +6,8 @@ import type { CaseRecord } from '../types/case'
  * salt okunur Cases API'sine baglanir. UI davranisi degismez.
  */
 export interface CasesDataPort {
-  listCases(): Promise<readonly CaseRecord[]>
+  listCases(status?: 'open' | 'closed'): Promise<readonly CaseRecord[]>
+  getCase(caseId: string): Promise<CaseRecord>
 }
 
 export type { DashboardDataPort } from './dashboardPort'
@@ -195,15 +196,29 @@ export interface PolicyAiDataPort{load(caseId:string):Promise<PolicyAiWorkspaceR
 
 export type DataSourceKind = 'mock' | 'api'
 
-/** localStorage acik secimi ortam varsayilanina baskindir; varsayilan yine mock'tur. */
+/** Production her zaman API'dir; mock secimi yalniz development/test icindir. */
 export const DATA_SOURCE_STORAGE_KEY = 'hasarbotu-data-source'
 
+export function resolveConfiguredDataSource(input: {
+  readonly production: boolean
+  readonly environmentValue: string | undefined
+  readonly storedValue: string | null
+}): DataSourceKind {
+  if (input.production) return 'api'
+  if (input.storedValue === 'api' || input.storedValue === 'mock') return input.storedValue
+  return input.environmentValue === 'api' ? 'api' : 'mock'
+}
+
 export function getConfiguredDataSource(): DataSourceKind {
+  let storedValue: string | null = null
   try {
-    const stored = window.localStorage.getItem(DATA_SOURCE_STORAGE_KEY)
-    if (stored === 'api' || stored === 'mock') return stored
+    storedValue = window.localStorage.getItem(DATA_SOURCE_STORAGE_KEY)
   } catch {
-    // localStorage kapaliysa guvenli ortam varsayilanina gecilir.
+    // localStorage kapaliysa ortam politikasina gecilir.
   }
-  return import.meta.env.VITE_DATA_SOURCE === 'api' ? 'api' : 'mock'
+  return resolveConfiguredDataSource({
+    production: import.meta.env.PROD,
+    environmentValue: import.meta.env.VITE_DATA_SOURCE,
+    storedValue,
+  })
 }

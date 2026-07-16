@@ -866,3 +866,20 @@ Kapsam dışı: yeni dashboard yazma endpoint’i, snapshot persistence, yeni au
 - [x] Gerçek Chrome, tam root kapıları ve repository dışı fresh `npm ci` doğrulamasını tamamla.
 
 Kapsam dışı: not edit/delete/revision UI, görev reopen veya genel görev yönetim ekranı, bildirim motoru, çalışma takvimi/tatil servisi, File Agent/IPC/fiziksel dosya işlemi, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 38 — Production doğruluğu ve case navigasyonu sertleştirme
+
+- [x] Production frontend’de veri kaynağını zorunlu API yap; localStorage/env mock override’ını development/test ile sınırla.
+- [x] Production API başlangıcında `DATABASE_URL` zorunluluğunu fail-closed uygula.
+- [x] Cases başarılı response’larını ortak contracts Zod şemalarıyla runtime doğrula; bozuk case type/stage/response’u reddet.
+- [x] Açık ve kapalı case listelerinde bütün server pagination sayfalarını deterministik topla.
+- [x] Dosya detayını liste aramasından ayırıp gerçek case detail endpoint’ine bağla.
+- [x] API modunda evrak tamlığı, tahmini hasar ve bağlı olmayan modüller için mock/0/başarılı varsayımı üretme.
+- [x] Kapanan Dosyalar ekranını gerçek closed case listesine geçir; kapanış ayrıntısı/ücreti yoksa bilinmeyen göster.
+- [x] Raporlar API modunda gerçek endpoint olmadan mock toplam göstermesin.
+- [x] Pending/failed Zabıt + ready KTT/Beyan alternatifinde gereksiz overall `control_required` sonucunu düzelt.
+- [x] UI/domain/API regresyonu, gerçek PostgreSQL ve gerçek Chrome smoke testlerini ekle.
+- [x] Tam root kapıları ve repository dışı fresh `npm ci` doğrulamasını tamamla.
+- [x] Paket 38 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: yeni rapor/ücret endpoint’i, kapanış ücret modeli, işçilik/PERT/e-posta backend’i, genel server-side arama UI refactor’ı, DB tenant composite migration’ı, log serializer sertleştirmesi, Electron/IPC, File Agent, üretim migration ve sonraki paket.

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
+import { caseListItemSchema } from '@hasarbotu/contracts'
 import { mockCases } from '../mocks/cases'
 import {
   createHttpCasesAdapter,
@@ -9,12 +10,14 @@ import {
   deriveStatus,
   HttpCasesError,
   mapCaseDtoToRecord,
+  resolveConfiguredDataSource,
+  useCase,
   useCases,
 } from './index'
 
 const TODAY = new Date(2026, 6, 12) // 12 Temmuz 2026 (yerel)
 
-const dto = {
+const dto = caseListItemSchema.parse({
   id: 'case-1',
   caseType: 'casco' as const,
   officeCaseNumber: '2026/184',
@@ -24,6 +27,8 @@ const dto = {
   status: 'open' as const,
   stage: 'inspection_pending',
   followUpDate: '2026-07-14',
+  lastInterventionAt: null,
+  createdAt: '2026-07-10T08:00:00.000Z',
   updatedAt: '2026-07-11T09:00:00.000Z',
   version: 4,
   responsibleUserId: 'user-1',
@@ -33,6 +38,10 @@ const dto = {
   expertUserId: 'expert-1',
   lossDate: '2026-07-10',
   notificationDate: '2026-07-11',
+})
+
+function listBody(items: readonly unknown[], page = 1, totalPages = items.length === 0 ? 0 : 1, totalItems = items.length) {
+  return { items, pageInfo: { page, pageSize: 100, totalItems, totalPages } }
 }
 
 function fetchResponding(status: number, body?: unknown): typeof fetch {
@@ -45,7 +54,9 @@ function fetchResponding(status: number, body?: unknown): typeof fetch {
 
 describe('MockDataAdapter (acikca secilen development/demo kaynagi)', () => {
   it('kabul edilmis mock listesini aynen dondurur', async () => {
-    expect(await createMockCasesAdapter().listCases()).toBe(mockCases)
+    const adapter = createMockCasesAdapter()
+    expect(await adapter.listCases()).toBe(mockCases)
+    expect(await adapter.getCase(mockCases[0]!.caseId)).toBe(mockCases[0])
   })
 })
 
@@ -83,14 +94,38 @@ describe('HttpApiAdapter esleme', () => {
   it('basarili yanit eslenmis kayitlar dondurur; gercek bos liste bos doner', async () => {
     const adapter = createHttpCasesAdapter({
       baseUrl: 'http://api.test',
-      fetchImpl: fetchResponding(200, { items: [dto] }),
+      fetchImpl: fetchResponding(200, listBody([dto])),
     })
     const cases = await adapter.listCases()
     expect(cases).toHaveLength(1)
     expect(cases[0]?.plate).toBe('34 MPA 764')
 
-    const empty = createHttpCasesAdapter({ fetchImpl: fetchResponding(200, { items: [] }) })
+    const empty = createHttpCasesAdapter({ fetchImpl: fetchResponding(200, listBody([])) })
     expect(await empty.listCases()).toEqual([])
+  })
+
+  it('server pagination sayfalarinin tamamini toplar ve detail endpointini ayri okur', async () => {
+    const second = { ...dto, id: 'case-2', officeCaseNumber: '2026/185', plate: '34 MPA 765' }
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/cases/case-2')) return fetchResponding(200, { case: second })(input)
+      if (url.includes('page=2')) return fetchResponding(200, listBody([second], 2, 2, 2))(input)
+      return fetchResponding(200, listBody([dto], 1, 2, 2))(input)
+    }) as unknown as typeof fetch
+    const adapter = createHttpCasesAdapter({ fetchImpl })
+    expect((await adapter.listCases()).map((item) => item.caseId)).toEqual(['case-1', 'case-2'])
+    expect(await adapter.getCase('case-2')).toMatchObject({ caseId: 'case-2', plate: '34 MPA 765' })
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('page=2&pageSize=100'), expect.anything())
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case-2', expect.anything())
+  })
+
+  it('bozuk successful response contracts sinirinda fail-closed reddedilir', async () => {
+    await expect(createHttpCasesAdapter({
+      fetchImpl: fetchResponding(200, { items: [{ ...dto, caseType: 'unknown' }], pageInfo: { page: 1, pageSize: 100, totalItems: 1, totalPages: 1 } }),
+    }).listCases()).rejects.toMatchObject({ kind: 'unavailable' })
+    await expect(createHttpCasesAdapter({
+      fetchImpl: fetchResponding(200, { case: { ...dto, stage: 'unknown_stage' } }),
+    }).getCase('case-1')).rejects.toMatchObject({ kind: 'unavailable' })
   })
 
   it('hata siniflandirmasi: 401 unauthorized, 5xx/ag unavailable (mock maskeleme YOK)', async () => {
@@ -146,7 +181,7 @@ describe('useCases kancasi (HB-2026-014)', () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockImplementation(fetchResponding(200, { items: [] }) as never)
+      .mockImplementation(fetchResponding(200, listBody([])) as never)
     try {
       const { result } = renderHook(() => useCases())
       await waitFor(() => expect(result.current.status).toBe('ok'))
@@ -161,7 +196,7 @@ describe('useCases kancasi (HB-2026-014)', () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockImplementation(fetchResponding(200, { items: [dto] }) as never)
+      .mockImplementation(fetchResponding(200, listBody([dto])) as never)
     try {
       const { result } = renderHook(() => useCases())
       await waitFor(() => expect(result.current.status).toBe('ok'))
@@ -170,5 +205,50 @@ describe('useCases kancasi (HB-2026-014)', () => {
       fetchSpy.mockRestore()
       window.localStorage.removeItem(DATA_SOURCE_STORAGE_KEY)
     }
+  })
+})
+
+describe('tek case detail kancasi', () => {
+  it('API listesinde olmasa bile kapali case detail endpointinden yuklenir', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const closed = { ...dto, status: 'closed' as const, stage: 'closed' as const }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      fetchResponding(200, { case: closed }) as never,
+    )
+    try {
+      const { result } = renderHook(() => useCase('case-1'))
+      await waitFor(() => expect(result.current.status).toBe('ok'))
+      expect(result.current.item).toMatchObject({ caseId: 'case-1', lifecycleStatus: 'closed', status: 'Kapalı' })
+      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-1', expect.anything())
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('detail 404 durumunu not_found olarak ayirir', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(fetchResponding(404) as never)
+    try {
+      const { result } = renderHook(() => useCase('case-yok'))
+      await waitFor(() => expect(result.current.status).toBe('not_found'))
+      expect(result.current.item).toBeNull()
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+})
+
+describe('veri kaynagi production kapisi', () => {
+  it('production build localStorage mock degerini ve env mock varsayimini yok sayar', () => {
+    expect(resolveConfiguredDataSource({
+      production: true,
+      environmentValue: 'mock',
+      storedValue: 'mock',
+    })).toBe('api')
+    expect(resolveConfiguredDataSource({
+      production: false,
+      environmentValue: undefined,
+      storedValue: 'mock',
+    })).toBe('mock')
   })
 })

@@ -56,9 +56,10 @@ interface AppGateProps extends AppRoutesProps {
 }
 
 /**
- * Oturum kapisi: `mock` modda (varsayilan) baseline aynen render edilir.
+ * Oturum kapisi: development/test `mock` modda baseline aynen render edilir.
  * `api` modda oturum bootstrap edilene kadar yukleme, oturum yoksa/sona erdiyse
  * login ekrani; yalniz kimlikli oturumda korumali uygulama rotalari acilir.
+ * Production build veri kaynagini zorunlu `api` olarak cozer.
  */
 function AppGate(props: AppGateProps) {
   const session = useSession()

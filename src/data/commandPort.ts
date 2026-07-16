@@ -169,8 +169,10 @@ export function createHttpCaseCommandAdapter(options: CaseCommandAdapterOptions 
         throw new CaseCommandError('unavailable', 'cases create endpoint unreachable')
       }
       if (response.status !== 201) throw mapCommandError(response.status, await readJson(response))
-      const body = (await response.json()) as { case: Parameters<typeof mapCaseDtoToRecord>[0] }
-      return mapCaseDtoToRecord(body.case)
+      const { caseDetailResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = caseDetailResponseSchema.safeParse(await readJson(response))
+      if (!parsed.success) throw new CaseCommandError('unavailable', 'cases create response is invalid')
+      return mapCaseDtoToRecord(parsed.data.case)
     },
 
     async updateCase(caseId: string, input: CaseUpdateInput): Promise<CaseRecord> {
@@ -186,8 +188,10 @@ export function createHttpCaseCommandAdapter(options: CaseCommandAdapterOptions 
         throw new CaseCommandError('unavailable', 'cases update endpoint unreachable')
       }
       if (!response.ok) throw mapCommandError(response.status, await readJson(response))
-      const body = (await response.json()) as { case: Parameters<typeof mapCaseDtoToRecord>[0] }
-      return mapCaseDtoToRecord(body.case)
+      const { caseDetailResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = caseDetailResponseSchema.safeParse(await readJson(response))
+      if (!parsed.success) throw new CaseCommandError('unavailable', 'cases update response is invalid')
+      return mapCaseDtoToRecord(parsed.data.case)
     },
   }
 }

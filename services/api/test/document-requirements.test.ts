@@ -179,6 +179,26 @@ describeDb('Paket 15 belge gereksinimleri (gerçek PostgreSQL)', () => {
     expect(body.controlRequiredCount).toBeGreaterThanOrEqual(2)
   })
 
+  it.each(['pending', 'failed'] as const)('Zabıt %s olsa da ready KTT olay grubunu karşılar ve overall present kalır', async (status) => {
+    const caseId = await seedCase(orgA, 'traffic', 'not_confirmed')
+    await seedReadySet(orgA, caseId, [...TRAFFIC_BASE, 'ktt', 'tramer_result'])
+    await seedDocument(orgA, caseId, 'accident_report', status)
+    const { body } = await evaluate(cookieA, caseId)
+    expect(body.overallStatus).toBe('present')
+    expect(body.controlRequiredCount).toBe(0)
+    expect(requirement(body, 'accident_report')).toMatchObject({
+      status: 'not_applicable',
+      requiresHumanReview: false,
+    })
+    expect(requirement(body, 'accident_report').relatedDocumentStatuses).toEqual([
+      expect.objectContaining({ status }),
+    ])
+    expect(body.alternativeGroups.find((group) => group.groupCode === 'incident_document')).toMatchObject({
+      status: 'present',
+      requiresHumanReview: false,
+    })
+  })
+
   it('Kasko temel evrakları ve Beyan alternatifi present olur; Trafik Tramer kuralı eklenmez', async () => {
     const caseId = await seedCase(orgA, 'casco', 'not_confirmed')
     await seedReadySet(orgA, caseId, [...CASCO_BASE, 'statement'])

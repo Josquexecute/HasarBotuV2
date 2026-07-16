@@ -25,8 +25,20 @@ describe('parseConfig', () => {
 
   it('gecerli ozel degerleri kabul eder', () => {
     expect(
-      parseConfig({ HOST: '0.0.0.0', PORT: '8080', LOG_LEVEL: 'debug', NODE_ENV: 'production' }),
-    ).toEqual({ host: '0.0.0.0', port: 8080, logLevel: 'debug', nodeEnv: 'production' })
+      parseConfig({
+        HOST: '0.0.0.0',
+        PORT: '8080',
+        LOG_LEVEL: 'debug',
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu',
+      }),
+    ).toEqual({
+      host: '0.0.0.0',
+      port: 8080,
+      logLevel: 'debug',
+      nodeEnv: 'production',
+      databaseUrl: 'postgres://app:pw@127.0.0.1:5432/hasarbotu',
+    })
     expect(parseConfig({ PORT: '1' }).port).toBe(1)
     expect(parseConfig({ PORT: '65535' }).port).toBe(65_535)
   })
@@ -57,8 +69,9 @@ describe('parseConfig', () => {
     expect(message).toContain('PORT')
   })
 
-  it('DATABASE_URL opsiyoneldir: yoksa undefined, gecerliyse tasinir, gecersizse deger sizdirmadan reddedilir', () => {
+  it('DATABASE_URL development/test icin opsiyonel, production icin zorunludur', () => {
     expect(parseConfig({}).databaseUrl).toBeUndefined()
+    expect(() => parseConfig({ NODE_ENV: 'production' })).toThrow(ConfigError)
     expect(
       parseConfig({ DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu' }).databaseUrl,
     ).toBe('postgres://app:pw@127.0.0.1:5432/hasarbotu')

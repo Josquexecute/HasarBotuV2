@@ -17,8 +17,9 @@ export interface UseCasesResult {
 /**
  * Dosya listesi veri kancasi (DataPort tuketimi, HB-2026-014).
  *
- * - mock: yalniz ACIKCA secilen development/demo veri kaynagidir (varsayilan);
+ * - mock: yalniz ACIKCA secilen development/test/demo veri kaynagidir;
  *   ilk render kabul edilmis baseline ile esdegerdir.
+ * - production: veri kaynagi zorunlu `api`dir.
  * - api: gercek durumu oldugu gibi yansitir — 401 `unauthorized`, ag/5xx
  *   `unavailable`, gercek bos liste `ok`+bos. Sahte veri gercek API hatasini
  *   HICBIR ZAMAN maskelemez; mock'a sessiz dusus yoktur.
@@ -49,7 +50,8 @@ export function useCases(): UseCasesResult {
       .catch((error: unknown) => {
         if (cancelled) return
         setCases([])
-        const kind = error instanceof HttpCasesError ? error.kind : 'unavailable'
+        const rawKind = error instanceof HttpCasesError ? error.kind : 'unavailable'
+        const kind: CasesDataStatus = rawKind === 'not_found' ? 'unavailable' : rawKind
         setStatus(kind)
         // Oturum sona erdiyse global "tekrar giris" akisini tetikle (Paket 10).
         if (kind === 'unauthorized') reportUnauthorized()

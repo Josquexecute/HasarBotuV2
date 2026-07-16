@@ -38,8 +38,9 @@ export interface ApiConfig {
   readonly logLevel: LogLevel
   readonly nodeEnv: NodeEnv
   /**
-   * Opsiyonel PostgreSQL baglantisi. Verilmezse API veritabanisiz calisir ve
-   * health her zaman `ok` doner (Paket 04 davranisi). Verilirse bicimi
+   * Development/test icin opsiyonel PostgreSQL baglantisi. Production'da
+   * zorunludur. Development/test'te verilmezse API veritabanisiz calisir ve
+   * health `ok` doner (Paket 04 uyumlulugu). Verilirse bicimi
    * @hasarbotu/database parseDatabaseUrl ile dogrulanir; gecersizse sunucu
    * BASLATILMAZ. Deger hicbir hata mesajina yazilmaz.
    */
@@ -174,14 +175,18 @@ function parseOpenAiPolicyProvider(env: Readonly<Record<string, string | undefin
  * gercek process ortamina bagimli olmadan acik nesnelerle calisir.
  */
 export function parseConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
+  const nodeEnv = parseNodeEnv(env.NODE_ENV)
   const databaseUrl = parseOptionalDatabaseUrl(env.DATABASE_URL)
+  if (nodeEnv === 'production' && databaseUrl === undefined) {
+    throw new ConfigError('DATABASE_URL', 'required when NODE_ENV is production.')
+  }
   const openAiPolicyProvider = parseOpenAiPolicyProvider(env)
   const geminiPolicyProvider = parseGeminiPolicyProvider(env)
   return {
     host: parseHost(env.HOST),
     port: parsePort(env.PORT),
     logLevel: parseLogLevel(env.LOG_LEVEL),
-    nodeEnv: parseNodeEnv(env.NODE_ENV),
+    nodeEnv,
     ...(databaseUrl !== undefined ? { databaseUrl } : {}),
     ...(openAiPolicyProvider !== undefined ? { openAiPolicyProvider } : {}),
     ...(geminiPolicyProvider !== undefined ? { geminiPolicyProvider } : {}),

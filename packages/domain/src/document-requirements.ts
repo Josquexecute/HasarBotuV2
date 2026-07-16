@@ -72,12 +72,25 @@ export function evaluateDocumentRequirements(facts: DocumentRequirementFact, eva
   const version = ruleSet.version
   const requirements = (facts.caseType === 'traffic' ? trafficBase : cascoBase).map(([code, type]) => result(code, type, facts, evaluatedAt, version, 'base_required'))
   const rawAccident = result('accident_report', 'accident_report', facts, evaluatedAt, version, 'incident_document')
-  const accident = rawAccident.status === 'missing'
-    ? result('accident_report', 'accident_report', facts, evaluatedAt, version, 'incident_document', 'not_applicable', 'Zabıt yok; KTT veya Beyan alternatifi değerlendirildi.')
-    : rawAccident
-  const reportPresent = accident.status === 'present'
   const rawKtt = result('ktt', 'ktt', facts, evaluatedAt, version, 'incident_alternative')
   const rawStatement = result('statement', 'statement', facts, evaluatedAt, version, 'incident_alternative')
+  const reportPresent = rawAccident.status === 'present'
+  const accidentSatisfiedByAlternative = !reportPresent
+    && (rawKtt.status === 'present' || rawStatement.status === 'present')
+  const accident = rawAccident.status === 'missing' || accidentSatisfiedByAlternative
+    ? result(
+        'accident_report',
+        'accident_report',
+        facts,
+        evaluatedAt,
+        version,
+        'incident_document',
+        'not_applicable',
+        accidentSatisfiedByAlternative
+          ? `${rawKtt.status === 'present' ? 'KTT' : 'Beyan'} doğrulanmış olduğundan Zabıt ayrıca zorunlu değildir.`
+          : 'Zabıt yok; KTT veya Beyan alternatifi değerlendirildi.',
+      )
+    : rawAccident
   const kttSatisfiedByAlternative = !reportPresent && rawStatement.status === 'present' && rawKtt.status !== 'present'
   const statementSatisfiedByAlternative = !reportPresent && rawKtt.status === 'present' && rawStatement.status !== 'present'
   const ktt = reportPresent || kttSatisfiedByAlternative

@@ -6,11 +6,12 @@ import { SessionContext, type SessionContextValue, type SessionStatus } from './
 /**
  * Oturum sinir saglayicisi (Paket 10).
  *
- * - `mock` mod (varsayilan, HB-2026-014): acikca secilen demo veri kaynagidir;
+ * - `mock` mod (development/test, HB-2026-014): acikca secilen demo veri kaynagidir;
  *   oturum kapisi YOKTUR ve kabul edilmis UI baseline'i aynen render edilir.
  * - `api` mod: uygulama acilisinda gercek oturum bootstrap edilir; oturum yoksa
  *   login ekrani, 401 sonrasi "oturum sona erdi" akisi calisir. Sahte oturum
  *   ASLA uydurulmaz; mock, api hatasini HICBIR ZAMAN maskelemez.
+ * - Production build localStorage/env mock secimini kabul etmez ve API modudur.
  */
 interface SessionProviderProps {
   readonly children: ReactNode

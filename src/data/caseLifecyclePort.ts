@@ -169,9 +169,10 @@ export function createHttpCaseLifecycleCommandAdapter(options: AdapterOptions = 
       const response = await request(`/api/v1/cases/${encodeURIComponent(caseId)}`, { headers: { accept: 'application/json', ...headers } })
       const body = await jsonOf(response)
       if (!response.ok) throw errorFor(response.status, body)
-      const item = (body as { case?: Parameters<typeof mapCaseDtoToRecord>[0] } | null)?.case
-      if (item === undefined) throw new LifecycleCommandError('unavailable', 'invalid case response')
-      return mapCaseDtoToRecord(item)
+      const { caseDetailResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = caseDetailResponseSchema.safeParse(body)
+      if (!parsed.success) throw new LifecycleCommandError('unavailable', 'invalid case response')
+      return mapCaseDtoToRecord(parsed.data.case)
     },
   }
 }

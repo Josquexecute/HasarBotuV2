@@ -35,8 +35,9 @@ export function createConfiguredPolicyAiProviderRegistry(
  *
  * - Gecersiz config'te sunucu BASLATILMAZ; hata mesaji yalnizca alan adi ve
  *   kurali tasir (deger/secret/process.env icerigi yazilmaz).
- * - DATABASE_URL verilmisse health, sinirli sureli gercek DB ping'iyle
- *   `ok`/`degraded` uretir; verilmemisse Paket 04 davranisi korunur.
+ * - Production DATABASE_URL olmadan config asamasinda durur. Development/test
+ *   DB verilmisse health gercek ping'le `ok`/`degraded` uretir; verilmemisse
+ *   Paket 04 uyumlulugu korunur.
  * - SIGINT ve SIGTERM graceful kapanis baslatir; ayni anda yalniz BIR kapanis
  *   yurur ve DB havuzu da kapatilir.
  */

@@ -1,6 +1,7 @@
 export {
   DATA_SOURCE_STORAGE_KEY,
   getConfiguredDataSource,
+  resolveConfiguredDataSource,
   type AlternativeDocumentGroupRecord,
   type CaseDocumentsDataPort,
   type CaseDocumentWorkspaceRecord,
@@ -69,6 +70,12 @@ export {
   type HttpCasesErrorKind,
 } from './httpAdapter'
 export { useCases, type CasesDataStatus, type UseCasesResult } from './useCases'
+export { useCase, type CaseDataStatus, type UseCaseResult } from './useCase'
+export {
+  useClosedCases,
+  type ClosedCasesDataStatus,
+  type UseClosedCasesResult,
+} from './useClosedCases'
 export {
   buildMockDashboard,
   createHttpDashboardAdapter,

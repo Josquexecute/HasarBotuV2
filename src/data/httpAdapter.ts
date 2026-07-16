@@ -1,35 +1,15 @@
-import type { CaseRecord, CaseStage, CaseStageCode, CaseStatus, CaseType } from '../types/case'
+import type { CaseListItem, CaseStageDto } from '@hasarbotu/contracts'
+import type { CaseRecord, CaseStage, CaseStatus, CaseType } from '../types/case'
 import type { CasesDataPort } from './ports'
 
 /**
- * HttpApiAdapter: salt okunur `GET /api/v1/cases` ucunu tuketir ve wire DTO'yu
- * UI CaseRecord modeline cevirir. Oturum cerezi tarayicida ayni-origin Vite
- * proxy'siyle tasinir (`credentials: 'include'`); Node testleri `headers` ile
- * cerez enjekte eder. API'de bulunmayan sunum alanlari guvenli '—' ile doldurulur.
+ * Cases HTTP siniri:
+ * - Basarili cevaplari ortak contracts paketiyle runtime'da dogrular.
+ * - Listeyi server pagination'i uzerinden eksiksiz ve deterministik toplar.
+ * - Tek case detayini gercek detail endpoint'inden okur.
  */
 
-interface CaseListItemDto {
-  id: string
-  caseType: 'traffic' | 'casco'
-  officeCaseNumber: string
-  notificationFormNumber: string | null
-  insurerClaimNumber: string | null
-  plate: string
-  status: 'open' | 'closed'
-  stage: string
-  responsibleUserId?: string | null
-  expertUserId?: string | null
-  serviceId?: string | null
-  serviceProfile?: CaseRecord['serviceProfile']
-  insurerId?: string | null
-  followUpDate: string | null
-  lossDate?: string | null
-  notificationDate?: string | null
-  updatedAt: string
-  version?: number
-}
-
-const STAGE_LABELS: Record<string, CaseStage> = {
+const STAGE_LABELS: Record<CaseStageDto, CaseStage> = {
   new_notification: 'Yeni İhbar',
   vehicle_or_service_pending: 'Araç / Servis Bekleniyor',
   inspection_pending: 'Ekspertiz Bekliyor',
@@ -44,6 +24,7 @@ const STAGE_LABELS: Record<string, CaseStage> = {
 }
 
 const MONTHS_TR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+const MAX_CASE_LIST_PAGES = 10_000
 
 function toLocalDateString(value: Date): string {
   const month = String(value.getMonth() + 1).padStart(2, '0')
@@ -51,10 +32,6 @@ function toLocalDateString(value: Date): string {
   return `${value.getFullYear()}-${month}-${day}`
 }
 
-/**
- * Takip goruntusu ve tonu TURETILMIS operasyon gorunumudur (HB-2026-010):
- * gecmis gun 'late', bugun 'today', ilerisi 'normal'.
- */
 export function deriveFollowUp(followUpDate: string | null, today: Date = new Date()): {
   followUp: string
   followUpTone: CaseRecord['followUpTone']
@@ -71,14 +48,16 @@ export function deriveFollowUp(followUpDate: string | null, today: Date = new Da
   }
 }
 
-/** Yasam dongusu open|closed'tir; UI durum cipi turetilmis gorunumdur. */
-export function deriveStatus(dto: Pick<CaseListItemDto, 'status' | 'followUpDate'>, today: Date = new Date()): CaseStatus {
+export function deriveStatus(
+  dto: { readonly status: 'open' | 'closed'; readonly followUpDate: string | null },
+  today: Date = new Date(),
+): CaseStatus {
   if (dto.status === 'closed') return 'Kapalı'
   if (dto.followUpDate !== null && dto.followUpDate < toLocalDateString(today)) return 'Gecikmiş'
   return 'Açık'
 }
 
-export function mapCaseDtoToRecord(dto: CaseListItemDto, today: Date = new Date()): CaseRecord {
+export function mapCaseDtoToRecord(dto: CaseListItem, today: Date = new Date()): CaseRecord {
   const { followUp, followUpTone } = deriveFollowUp(dto.followUpDate, today)
   const caseType: CaseType = dto.caseType === 'traffic' ? 'Trafik' : 'Kasko'
   return {
@@ -90,37 +69,33 @@ export function mapCaseDtoToRecord(dto: CaseListItemDto, today: Date = new Date(
     company: '—',
     type: caseType,
     status: deriveStatus(dto, today),
-    stage: STAGE_LABELS[dto.stage] ?? 'Yeni İhbar',
+    stage: STAGE_LABELS[dto.stage],
     missingDocuments: 0,
     assignee: '—',
     expert: '—',
-    service: '—',
+    service: dto.serviceProfile?.name ?? '—',
     followUp,
     followUpTone,
-    lastAction: '—',
+    lastAction: dto.lastInterventionAt ?? '—',
     vehicle: '—',
     insured: '—',
     estimatedDamage: 0,
     notes: [],
-    ...(dto.version === undefined ? {} : { version: dto.version }),
-    workflowStage: dto.stage as CaseStageCode,
-    responsibleUserId: dto.responsibleUserId ?? null,
-    expertUserId: dto.expertUserId ?? null,
-    serviceId: dto.serviceId ?? null,
-    serviceProfile: dto.serviceProfile ?? null,
-    insurerId: dto.insurerId ?? null,
+    version: dto.version,
+    workflowStage: dto.stage,
+    responsibleUserId: dto.responsibleUserId,
+    expertUserId: dto.expertUserId,
+    serviceId: dto.serviceId,
+    serviceProfile: dto.serviceProfile,
+    insurerId: dto.insurerId,
     followUpDate: dto.followUpDate,
-    lossDate: dto.lossDate ?? null,
-    notificationDate: dto.notificationDate ?? null,
+    lossDate: dto.lossDate,
+    notificationDate: dto.notificationDate,
     lifecycleStatus: dto.status,
   }
 }
 
-/**
- * API hata sinifi: 401 oturum gereksinimi, diger her sey servis kullanilamiyor.
- * Sahte veri gercek API hatasini HICBIR ZAMAN maskelemez (HB-2026-014).
- */
-export type HttpCasesErrorKind = 'unauthorized' | 'unavailable'
+export type HttpCasesErrorKind = 'unauthorized' | 'not_found' | 'unavailable'
 
 export class HttpCasesError extends Error {
   readonly kind: HttpCasesErrorKind
@@ -133,36 +108,59 @@ export class HttpCasesError extends Error {
 }
 
 export interface HttpCasesAdapterOptions {
-  /** Tarayicida bos birakilir (ayni-origin proxy); Node testlerinde mutlak URL. */
   readonly baseUrl?: string
   readonly fetchImpl?: typeof fetch
-  /** Node testleri icin ek basliklar (ör. oturum cerezi). */
   readonly headers?: Readonly<Record<string, string>>
 }
 
 export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): CasesDataPort {
   const baseUrl = options.baseUrl ?? ''
   const fetchImpl = options.fetchImpl ?? fetch
+  const headers = { accept: 'application/json', ...(options.headers ?? {}) }
+
+  const requestJson = async (path: string): Promise<unknown> => {
+    let response: Response
+    try {
+      response = await fetchImpl(`${baseUrl}${path}`, { credentials: 'include', headers })
+    } catch {
+      throw new HttpCasesError('unavailable', 'cases API unreachable')
+    }
+    if (response.status === 401) throw new HttpCasesError('unauthorized', 'cases API HTTP 401')
+    if (response.status === 404) throw new HttpCasesError('not_found', 'cases API HTTP 404')
+    if (!response.ok) throw new HttpCasesError('unavailable', `cases API HTTP ${response.status}`)
+    try {
+      return await response.json()
+    } catch {
+      throw new HttpCasesError('unavailable', 'cases API returned invalid JSON')
+    }
+  }
 
   return {
-    async listCases(): Promise<readonly CaseRecord[]> {
-      let response: Response
-      try {
-        response = await fetchImpl(`${baseUrl}/api/v1/cases?status=open&pageSize=100`, {
-          credentials: 'include',
-          headers: { accept: 'application/json', ...(options.headers ?? {}) },
-        })
-      } catch {
-        throw new HttpCasesError('unavailable', 'cases API unreachable')
+    async listCases(status = 'open'): Promise<readonly CaseRecord[]> {
+      const result: CaseRecord[] = []
+      let page = 1
+      const { caseListResponseSchema } = await import('@hasarbotu/contracts')
+      while (true) {
+        const parsed = caseListResponseSchema.safeParse(
+          await requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100`),
+        )
+        if (!parsed.success || parsed.data.pageInfo.page !== page
+          || parsed.data.pageInfo.totalPages > MAX_CASE_LIST_PAGES) {
+          throw new HttpCasesError('unavailable', 'cases API pagination response is invalid')
+        }
+        result.push(...parsed.data.items.map((item) => mapCaseDtoToRecord(item)))
+        if (page >= parsed.data.pageInfo.totalPages) return result
+        page += 1
       }
-      if (response.status === 401) {
-        throw new HttpCasesError('unauthorized', 'cases API HTTP 401')
-      }
-      if (!response.ok) {
-        throw new HttpCasesError('unavailable', `cases API HTTP ${response.status}`)
-      }
-      const body = (await response.json()) as { items: CaseListItemDto[] }
-      return body.items.map((item) => mapCaseDtoToRecord(item))
+    },
+
+    async getCase(caseId: string): Promise<CaseRecord> {
+      const { caseDetailResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = caseDetailResponseSchema.safeParse(
+        await requestJson(`/api/v1/cases/${encodeURIComponent(caseId)}`),
+      )
+      if (!parsed.success) throw new HttpCasesError('unavailable', 'case detail response is invalid')
+      return mapCaseDtoToRecord(parsed.data.case)
     },
   }
 }

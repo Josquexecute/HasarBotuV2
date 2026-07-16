@@ -713,3 +713,26 @@ Etkisi: Saf dashboard öncelik domain’i, strict contracts/JSON Schema, salt-ok
 8. Dashboard kuralı `dashboard-priority/1.1.0` ile geciken görev → geciken takip ve bugün/yaklaşan görev → ilgili takip sinyallerini ayrı taşır. Görev status’u UI tarafında tahmin edilmez.
 
 Etkisi: Migration `0024_case_notes_tasks`; strict Case Operations contracts/JSON Schema; tenant/RBAC/idempotency/audit API; gerçek Dosya Detayı Operasyon UI’ı ve Dashboard görev sinyalleri. Yeni dependency, IPC, File Agent veya fiziksel dosya yazma yolu yoktur.
+
+## 2026-07-16 — HB-2026-044: Production veri doğruluğu ve case navigasyonu fail-closed sınırı
+
+Karar:
+
+1. Production frontend veri kaynağı her zaman `api` olur. `localStorage` veya `VITE_DATA_SOURCE=mock`, production build’de gerçek veriyi mock ile değiştiremez; mock yalnız development/test/demo sınırıdır.
+2. `NODE_ENV=production` API süreci geçerli `DATABASE_URL` olmadan başlamaz. DB’siz health-only çalışma yalnız development/test uyumluluğu için korunur.
+3. Cases istemcisi ortak `@hasarbotu/contracts` Zod şemalarını runtime’da uygular. Şema dışı case type/stage veya eksik response alanı güvenli `unavailable` sonucudur; varsayılan case türü/aşaması üretilmez.
+4. Açık ve kapalı case listeleri server pagination sayfalarını eksiksiz toplar. Dosya detayı liste içinde aranmaz; `GET /api/v1/cases/:caseId` doğrudan kullanılır.
+5. API modunda liste/detail DTO’sunda bulunmayan evrak tamlığı, tahmini hasar, rapor, ücret, işçilik, PERT, e-posta veya genel geçmiş sonucu gerçekmiş gibi gösterilmez. Bağlı olmayan alan açıkça “henüz bağlı değil” durumudur; mock fallback yapılmaz.
+6. Kapanan Dosyalar gerçek `status=closed` case listesini kullanır. Kapanış gerekçesi/ücreti için gerçek endpoint yoksa değer uydurulmaz. Raporlar ekranı da gerçek endpoint olmadan mock toplam göstermez.
+7. Zabıt `pending/failed` olsa bile doğrulanmış KTT veya Beyan olay belgesi alternatif grubunu karşılıyorsa seçilmeyen Zabıt gereksinimi `not_applicable` olur. Fiziksel aday durumu `relatedDocumentStatuses` içinde korunur.
+8. Contracts runtime paketi frontend başlangıç bundle’ına eager eklenmez; API çağrısı sırasında lazy yüklenir ve Paket 35’in 500.000 bayt başlangıç bütçesi korunur.
+
+Gerekçe:
+
+Paket 1–37 denetiminde API modunda bilinmeyen alanların `0` veya “tam” gibi gösterilebildiği, ilk 100 açık dosya dışındaki kayıtların görünmediği, kapalı dosya detayının listeye bağımlı olduğu ve production’ın mock/DB’siz başlayabildiği kanıtlandı. Operasyon uygulamasında bilinmeyen veri başarılı gerçek olarak sunulamaz.
+
+Etkisi:
+
+- Yeni backend endpoint’i, migration, File Agent işi, IPC veya fiziksel/veritabanı yazma yolu eklenmez.
+- Root UI, mevcut Cases contracts paketini runtime dependency olarak kullanır; harici dependency eklenmez.
+- Mock prototip development/demo modunda korunur; production ve API modu fail-closed davranır.

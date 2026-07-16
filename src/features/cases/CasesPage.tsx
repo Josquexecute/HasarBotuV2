@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
@@ -41,7 +42,12 @@ function SortIcon({ column, sortKey, direction }: { column: SortKey; sortKey: So
   return direction === 'asc' ? <ArrowUp size={13} aria-hidden="true" /> : <ArrowDown size={13} aria-hidden="true" />
 }
 
-function QuickDetail({ item, onClose, onMockAction }: { item: CaseRecord; onClose: () => void; onMockAction: (message: string) => void }) {
+function QuickDetail({ item, source, onClose, onMockAction }: {
+  item: CaseRecord
+  source: 'mock' | 'api'
+  onClose: () => void
+  onMockAction: (message: string) => void
+}) {
   const navigate = useNavigate()
 
   return (
@@ -76,7 +82,12 @@ function QuickDetail({ item, onClose, onMockAction }: { item: CaseRecord; onClos
           </dl>
         </section>
 
-        {item.missingDocuments > 0 ? (
+        {source === 'api' ? (
+          <section className="alert-panel alert-panel--warning">
+            <AlertTriangle size={17} />
+            <div><strong>Evrak özeti bu listede hesaplanmıyor</strong><span>Gerçek kural sonucunu dosyanın Evrak ve Fotoğraf sekmesinde açın.</span></div>
+          </section>
+        ) : item.missingDocuments > 0 ? (
           <section className="alert-panel alert-panel--warning">
             <strong>{item.missingDocuments} eksik evrak bulunuyor</strong>
             <span>{item.type === 'Trafik' ? 'KTT / Beyan ve ruhsat kontrolü gerekiyor.' : 'Poliçe eki ve ruhsat kontrolü gerekiyor.'}</span>
@@ -94,13 +105,15 @@ function QuickDetail({ item, onClose, onMockAction }: { item: CaseRecord; onClos
             <div><dt>Aşama</dt><dd>{item.stage}</dd></div>
             <div><dt>Takip</dt><dd className={`text-${item.followUpTone}`}>{item.followUp}</dd></div>
             <div><dt>Servis</dt><dd>{item.service}</dd></div>
-            <div><dt>Tahmini Hasar</dt><dd>{formatCurrency(item.estimatedDamage)}</dd></div>
+            <div><dt>Tahmini Hasar</dt><dd>{source === 'api' ? 'Henüz bağlı değil' : formatCurrency(item.estimatedDamage)}</dd></div>
           </dl>
         </section>
 
         <section className="quick-section">
           <h3><History size={14} /> Son Gelişmeler</h3>
-          <div className="timeline">
+          {source === 'api' ? (
+            <p>Gerçek not, görev ve takip geçmişi dosya detayındaki Operasyon sekmesinde gösterilir.</p>
+          ) : <div className="timeline">
             {item.notes.map((note, index) => (
               <div className="timeline__item" key={note}>
                 <i aria-hidden="true" />
@@ -108,7 +121,7 @@ function QuickDetail({ item, onClose, onMockAction }: { item: CaseRecord; onClos
                 <p>{note}</p>
               </div>
             ))}
-          </div>
+          </div>}
         </section>
       </div>
 
@@ -116,10 +129,10 @@ function QuickDetail({ item, onClose, onMockAction }: { item: CaseRecord; onClos
         <button className="button button--primary button--block" type="button" onClick={() => navigate(`/dosyalar/${item.caseId}`)}>
           <ExternalLink size={16} /> Tam Dosyayı Aç
         </button>
-        <div>
+        {source === 'mock' && <div>
           <button className="button button--secondary" type="button" onClick={() => onMockAction(`${item.plate} için mock not alanı hazırlandı.`)}><NotebookPen size={15} /> Not Ekle</button>
           <button className="button button--secondary" type="button" onClick={() => onMockAction(`${item.plate} için takip planlama önizlemesi açıldı.`)}><SlidersHorizontal size={15} /> Takip Ayarla</button>
-        </div>
+        </div>}
       </footer>
     </aside>
   )
@@ -344,7 +357,11 @@ export function CasesPage() {
                       <td><strong>{item.company}</strong><small>{item.type}</small></td>
                       <td><span className={`status-pill ${statusClass[item.status]}`}>{item.status}</span></td>
                       <td><span className="stage-text">{item.stage}</span></td>
-                      <td>{item.missingDocuments > 0 ? <span className="missing-count">{item.missingDocuments}</span> : <span className="complete-mark"><Check size={14} /></span>}</td>
+                      <td>{source === 'api'
+                        ? <span title="Gerçek evrak özeti detay sekmesinde yüklenir">—</span>
+                        : item.missingDocuments > 0
+                          ? <span className="missing-count">{item.missingDocuments}</span>
+                          : <span className="complete-mark"><Check size={14} /></span>}</td>
                       <td>{item.assignee}</td>
                       <td className="truncate-cell" title={item.service}>{item.service}</td>
                       <td><span className={`follow-up follow-up--${item.followUpTone}`}>{item.followUp}</span></td>
@@ -358,16 +375,18 @@ export function CasesPage() {
           <footer className="table-footer">
             <span>{filteredCases.length} / {source === 'api' ? cases.length : '1.284'} dosya gösteriliyor</span>
             <span className="table-footer__hint"><ListFilter size={13} />Sıralama: {sortKey} · {direction === 'asc' ? 'artan' : 'azalan'}</span>
-            <div className="pagination">
+            {source === 'api' ? (
+              <span className="table-footer__hint">Sunucudaki tüm açık dosya sayfaları yüklendi</span>
+            ) : <div className="pagination">
               <button type="button" disabled={activePage === 1} onClick={() => setActivePage((page) => Math.max(1, page - 1))}>‹</button>
               {[1, 2, 3].map((page) => <button className={activePage === page ? 'is-active' : ''} type="button" key={page} onClick={() => setActivePage(page)}>{page}</button>)}
               <span>…</span>
               <button type="button" onClick={() => setActivePage((page) => Math.min(3, page + 1))}>›</button>
-            </div>
+            </div>}
           </footer>
         </section>
 
-        {detailOpen && selectedCase && <QuickDetail item={selectedCase} onClose={() => setDetailOpen(false)} onMockAction={setPrototypeNotice} />}
+        {detailOpen && selectedCase && <QuickDetail item={selectedCase} source={source} onClose={() => setDetailOpen(false)} onMockAction={setPrototypeNotice} />}
       </div>
 
       {showNewModal && source === 'mock' && <MockNewNoticeModal onClose={closeNewModal} />}
