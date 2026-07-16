@@ -333,3 +333,13 @@ raporlanır.
 - Gerçek Chrome: login, Trafik close preview, değer kaybı özeti, Kapanan Dosyalar, aylık rapor; 1366×768 açık/koyu ve 1920×1080 koyu overflow/console kontrolü.
 - Kritik PostgreSQL/API/UI/tarayıcı veya repository dışı fresh `npm ci` kapısı tamamlanmadan Paket 40 PASS sayılmaz.
 - Gerçek sonuç: ana ve repository dışı fresh kopyada **1.162 başarılı / 6 mevcut ortam-koşullu UI skip**; lifecycle 5/5 ve fee/report/value-loss summary 5/5 gerçek PostgreSQL’de skip edilmeden geçti. Chrome close preview/aylık toplam/Kapanan Dosyalar/no-fallback akışı üç görünümde geçti.
+
+### Paket 41 — kullanıcı kontrollü e-posta taslağı kabulü
+
+- Domain/contracts: deterministik template, recipient normalize/duplicate reddi, strict preview/create/revise/handoff ve Zod/JSON Schema semantik eşliği.
+- Gerçek PostgreSQL 0026: up/repeat/down/reapply; tenant/draft/version composite FK, version zinciri/current pointer, recipient, attachment shape ve append-only update/delete reddi.
+- Gerçek API: preview yazmasız; ready/verified attachment-only; 401/403/404/closed/stale/idempotency; immutable revision; `not_sent` handoff ve içeriksiz güvenli audit.
+- UI: preview, kullanıcı recipient/subject/body kontrolü, verified ek seçimi, açık save/revision/egress onayı, version/handoff geçmişi ve API no-fallback.
+- Gerçek Chrome: login, case E-postalar, preview, taslak save, revision, güvenli Gmail URL yakalama, `not_sent`, API kesintisi; 1366×768 açık/koyu ve 1920×1080 koyu overflow/console kontrolü.
+- Gmail web smoke gerçek e-posta göndermez. Gerçek müşteri verisi, gerçek Gmail hesabı, OAuth secret veya fiziksel ek kullanılmaz.
+- Kritik DB/API/UI/tarayıcı veya repository dışı fresh `npm ci` kapısı tamamlanmadan Paket 41 PASS sayılmaz.

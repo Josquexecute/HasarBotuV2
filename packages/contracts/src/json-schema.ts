@@ -115,6 +115,18 @@ import {
   caseSummaryReportResponseSchema,
   closureFeeListResponseSchema,
 } from './v1/fees/dto.js'
+import {
+  emailDraftCreateRequestSchema,
+  emailDraftHandoffRequestSchema,
+  emailDraftPreviewRequestSchema,
+  emailDraftReviseRequestSchema,
+} from './v1/email-drafts/commands.js'
+import {
+  emailDraftHandoffResponseSchema,
+  emailDraftPreviewResponseSchema,
+  emailDraftResponseSchema,
+  emailDraftWorkspaceResponseSchema,
+} from './v1/email-drafts/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -220,6 +232,14 @@ export const JSON_SCHEMA_TARGETS = {
   'case-closure-fee-response': caseClosureFeeResponseSchema,
   'closure-fees-list-response': closureFeeListResponseSchema,
   'case-summary-report-response': caseSummaryReportResponseSchema,
+  'email-draft-preview-request': emailDraftPreviewRequestSchema,
+  'email-draft-preview-response': emailDraftPreviewResponseSchema,
+  'email-draft-create-request': emailDraftCreateRequestSchema,
+  'email-draft-revise-request': emailDraftReviseRequestSchema,
+  'email-draft-handoff-request': emailDraftHandoffRequestSchema,
+  'email-draft-response': emailDraftResponseSchema,
+  'email-draft-handoff-response': emailDraftHandoffResponseSchema,
+  'email-draft-workspace-response': emailDraftWorkspaceResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

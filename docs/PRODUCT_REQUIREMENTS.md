@@ -263,3 +263,14 @@ formatlarında alınabilir.
 - Kullanıcı mevcut “Eksiklerle Kapat” yoluyla gerekçe ve açık onay verirse değer kaybı özeti kapanış snapshot/audit geçmişinde korunmalıdır.
 - Kapanan Dosyalar gerçek sonucu/tutarı veya kontrol/uygulanmaz durumunu; aylık rapor yalnız onaylı ve nihai raporlu Trafik tutarlarını göstermelidir.
 - Kasko case’te Trafik değer kaybı özeti uygulanmaz. API kesintisinde mock değer kaybı sonucu gösterilmez.
+
+### Kullanıcı kontrollü e-posta taslakları — Paket 41
+
+- Dosya Detayı > E-postalar alanı gerçek case bağlamında sürümlü Türkçe taslak önizlemesi oluşturmalıdır.
+- Kullanıcı alıcı, CC, konu, mesaj ve doğrulanmış ek metadata’sını inceleyip açıkça onaylamadan taslak kaydedilmemelidir.
+- Recipient adresleri otomatik tahmin edilmemeli; eksik veya geçersiz adres güvenli alan hatası olmalıdır.
+- Ek önerileri yalnız File Agent tarafından fiziksel doğrulaması tamamlanmış current belge/fotoğraf metadata’sından gelmelidir. Mutlak yol veya dosya içeriği gösterilmemelidir.
+- Düzeltme eski taslağı değiştirmemeli; zorunlu gerekçeyle yeni sürüm üretmeli ve geçmişi görünür tutmalıdır.
+- Gmail açma işlemi ayrıca harici veri çıkışı onayı istemeli; uygulama otomatik e-posta göndermemeli ve handoff’u gönderilmiş saymamalıdır.
+- API modunda ağ/5xx/bozuk response mock taslakla maskelenmemelidir. Mock/demo modu gerçek Gmail veya veri yazma işlemi yapmamalıdır.
+- İlk paket Gmail OAuth/API, gelen e-posta senkronizasyonu, provider teslim durumu ve AI metin üretimi içermez.

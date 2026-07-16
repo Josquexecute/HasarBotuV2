@@ -230,3 +230,28 @@ export {
   useValueLossClosureList,
   type ReportsFeesLoadStatus,
 } from './useReportsFees'
+export {
+  EmailDraftError,
+  buildGmailWebComposeUrl,
+  createHttpEmailDraftAdapter,
+  type EmailDraftAdapterOptions,
+  type EmailDraftAttachmentInput,
+  type EmailDraftAttachmentOptionRecord,
+  type EmailDraftAttachmentRecord,
+  type EmailDraftCreateInput,
+  type EmailDraftDataPort,
+  type EmailDraftErrorKind,
+  type EmailDraftHandoffRecord,
+  type EmailDraftHandoffHistoryRecord,
+  type EmailDraftPreviewInput,
+  type EmailDraftPreviewRecord,
+  type EmailDraftRecord,
+  type EmailDraftReviseInput,
+  type EmailDraftTypeRecord,
+  type EmailDraftVersionRecord,
+  type EmailDraftWorkspaceRecord,
+} from './emailDraftPort'
+export {
+  useEmailDrafts,
+  type EmailDraftLoadStatus,
+} from './useEmailDrafts'

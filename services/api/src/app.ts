@@ -21,6 +21,7 @@ import { registerTrafficValueLossRoutes } from './traffic-value-loss/index.js'
 import { registerDashboardRoutes } from './dashboard/index.js'
 import { registerCaseOperationsRoutes } from './case-operations/index.js'
 import { registerFeeRoutes } from './fees/index.js'
+import { registerEmailDraftRoutes } from './email-drafts/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -132,6 +133,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       clock: options.clock ?? systemClock,
     })
     registerFeeRoutes(app, {
+      pool: options.auth.pool,
+      clock: options.clock ?? systemClock,
+    })
+    registerEmailDraftRoutes(app, {
       pool: options.auth.pool,
       clock: options.clock ?? systemClock,
     })

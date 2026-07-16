@@ -910,3 +910,17 @@ Kapsam dışı: PDF/OCR/AI ile otomatik ücret çıkarımı, ücret yönetim CRU
 - [x] Yalnız Paket 40 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: yeni değer kaybı formülü, Kasko değer kaybı hesabı, dış emsal entegrasyonu, final report yeniden üretimi, File Agent/fiziksel dosya işlemi, IPC, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 41 — Kullanıcı kontrollü e-posta taslak çekirdeği
+
+- [x] Sürümlü deterministik Türkçe taslak türlerini ve recipient/Gmail compose domain kurallarını ekle.
+- [x] Strict preview/create/revise/handoff contracts ve deterministik JSON Schema fixture’larını ekle.
+- [x] Migration 0026 ile tenant-kapsamlı aggregate, immutable version, recipient, verified attachment ve `not_sent` handoff geçmişini ekle.
+- [x] Preview’ı yazmasız; create/revise/handoff komutlarını RBAC, idempotency, optimistic locking ve merkezi audit ile uygula.
+- [x] Yalnız current ready/verified documentVersion/photo metadata’sını ek seçimine aç; mutlak yol ve fiziksel içeriği sınır dışında tut.
+- [x] Dosya Detayı > E-postalar sekmesini gerçek API çalışma alanına bağla; mock mod prototipini ve API no-fallback davranışını koru.
+- [x] Açık kullanıcı onaylı Gmail web handoff’u `not_sent` olarak kaydet; otomatik gönderim veya gönderim doğrulaması üretme.
+- [x] Gerçek PostgreSQL, API/UI, Chrome/CDP, tam root ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 41 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: Gmail OAuth/API, gelen e-posta senkronizasyonu, provider message durumu, otomatik gönderim, bulut AI metin üretimi, fiziksel ek yükleme, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.

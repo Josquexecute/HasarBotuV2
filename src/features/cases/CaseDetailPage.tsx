@@ -59,6 +59,10 @@ const CaseFeeApiModule = lazy(async () => {
   const module = await import('./CaseFeeApiModule')
   return { default: module.CaseFeeApiModule }
 })
+const EmailDraftApiModule = lazy(async () => {
+  const module = await import('./EmailDraftApiModule')
+  return { default: module.EmailDraftApiModule }
+})
 
 const tabs = [
   'Özet',
@@ -434,7 +438,7 @@ export function CaseDetailPage() {
                   ? <CaseFeeApiModule item={item} source={source} />
                   : <CaseReportsModule item={item} onNotice={setPrototypeNotice} />
                   : activeTab === 'E-postalar' ? source === 'api'
-                    ? <ApiModuleUnavailable title="E-postalar" guidance="Gerçek e-posta veya taslak veri kaynağı bu paketin kapsamında değildir." />
+                    ? <EmailDraftApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
                     : <EmailsModule item={item} onNotice={setPrototypeNotice} />
                     : source === 'api'
                       ? <ApiModuleUnavailable title="Geçmiş" guidance="Gerçek not, görev ve takip geçmişi için Operasyon sekmesini kullanın." />

@@ -779,3 +779,17 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Build başlangıç JavaScript grafiğini **462.166 baytta** tuttu; en büyük chunk 299.340 bayt ve **7 lazy modül** ayrı kaldı.
 - Repository dışı `.git/node_modules/dist/coverage` içermeyen kopyada fresh `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.162/6** test ve build/bundle yeniden geçti. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını verdi; audit açığı yoktur.
 - Yeni migration, dependency, IPC, File Agent işi veya fiziksel dosya yazma yolu eklenmedi. Üretim migration çalıştırılmadı.
+
+## Paket 41 — Kullanıcı kontrollü e-posta taslak çekirdeği (2026-07-16)
+
+- `email-draft-template/1.0.0` saf domain builder; 11 Türkçe e-posta türünü deterministik üretir. Recipient otomatik tahmin edilmez; en az bir normalize `to`, benzersiz `to/cc` ve açık insan kontrolü zorunludur.
+- Migration `0026_email_draft_core`; tenant-kapsamlı aggregate, immutable draft version/recipient/attachment ve append-only Gmail handoff geçmişi ekler. Composite FK ve trigger’lar current/previous version’ın aynı draft zincirinde olmasını zorlar.
+- Preview salt okunur ve audit yazmaz. Create/revise/handoff; Idempotency-Key, expected version, RBAC, kapalı-case kilidi ve merkezi audit ile atomiktir. Audit subject/body/recipient/revision metni veya Gmail URL’si taşımaz.
+- Ek seçimi yalnız current `ready + hashVerified + sizeVerified + verifiedAt` documentVersion/photo metadata’sıdır. Fiziksel dosya okunmaz; path response/audit/Gmail URL’sine girmez ve ekler Gmail’de manuel seçilir.
+- Dosya Detayı > E-postalar API modunda preview, kullanıcı recipient/subject/body kontrolü, verified ekler, açık save/revision onayı, sürüm geçmişi ve ayrı harici veri çıkışı onaylı Gmail web handoff sunar. Handoff her zaman `not_sent`; otomatik gönderim/doğrulama yoktur. Mock prototip ayrı korunur ve API hatasında fallback yapılmaz.
+- Ana çalışma ağacında `npm install`, typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.191 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 205/6; domain 400; contracts 232; database 51; API 250; file-agent 53.
+- Migration 0026 ileri/tekrar/rollback-reapply, tenant/composite draft-version FK, recipient/attachment shape, current pointer ve append-only kısıtları gerçek PostgreSQL’de geçti. Paket 41 gerçek API testi 6/6 ve kritik DB/API testi skip edilmedi.
+- Gerçek Chrome/CDP smoke: login; yazmasız preview; verified ön rapor önerisi; açık kayıt onayı; immutable sürüm 2; açık Gmail veri çıkışı; güvenli compose URL; `not_sent`; audit sızıntı kontrolü ve API kesintisinde no-fallback geçti. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma ve beklenmeyen console warning/error yoktu.
+- Build başlangıç JavaScript grafiğini **466.306 baytta** tuttu; en büyük chunk 299.225 bayt ve E-posta dahil **8 lazy modül** ayrı kaldı.
+- Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen kopyada fresh `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.191/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını verdi; audit açığı yoktur.
+- Yeni harici dependency, OAuth/API secret, provider network çağrısı, File Agent işi, IPC veya fiziksel dosya yazma yolu eklenmedi. Gmail API/incoming sync ve AI taslak ayrı sonraki kapsamdır; üretim migration çalıştırılmadı.

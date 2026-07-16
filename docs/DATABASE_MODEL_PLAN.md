@@ -287,3 +287,12 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - Kapanış finalization mevcut operation snapshot’ını history’ye append-only kopyalar; sonradan oluşan yeni assessment version eski kapanış snapshot’ını değiştirmez.
 - Aylık rapor salt-okunur join ile saklı minor-unit sonucu toplar; hesaplama fonksiyonunu tekrar çalıştırmaz ve yeni snapshot/audit yazmaz.
 - Mutlak path, PDF binary, emsal metni veya yeni kişisel veri kolonu eklenmez.
+
+## Paket 41 uygulanan PostgreSQL modeli
+
+- Migration `0026_email_draft_core`; case başına birden çok `email_drafts` aggregate’ı ve her aggregate için immutable `email_draft_versions` zinciri ekler.
+- `email_draft_recipients`, `email_draft_attachments` ve `email_handoffs` append-only child geçmişidir. Composite tenant/case/draft/version FK’leri başka draft sürümüne çapraz bağlanmayı engeller.
+- Aggregate `current_version_id` ve optimistic `version` taşır. Insert/update guard’ları version sırası, previous pointer ve current pointer’ın aynı draft/version zincirine ait olmasını zorlar.
+- Attachment satırı ya documentVersion ya photo referansı taşır; ikisini birlikte veya boş taşıyamaz. Ready/verified uygunluğunun nihai otoritesi API command transaction’ıdır.
+- Handoff yalnız `gmail_web` ve append-only sequence taşır; sent/delivered/provider message ID semantiği yoktur.
+- Subject/body vaka-kapsamlı iş verisidir; audit’e kopyalanmaz. OAuth tokenı, secret, mutlak/relative filesystem path, binary veya tam dosya içeriği kolonu yoktur.

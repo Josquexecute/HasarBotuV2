@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "draftType": {
+      "type": "string",
+      "enum": [
+        "repair_approval_request",
+        "missing_document_request",
+        "preliminary_report_notice",
+        "service_change_notice",
+        "deductible_service_part_notice",
+        "portal_deductible_note",
+        "closure_documents_request",
+        "case_status_update",
+        "recourse_documents_request",
+        "pert_evaluation_notice",
+        "custom_instruction"
+      ]
+    },
+    "instruction": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 2000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "draftType",
+    "instruction"
+  ],
+  "additionalProperties": false
+}

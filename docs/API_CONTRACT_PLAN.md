@@ -449,3 +449,13 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Case lifecycle operation response’undaki requirement item `module` source type’ını ve backward-compatible nullable `valueLossSummary` alanını destekler.
 - `GET /api/v1/reports/case-summary` summary alanı; kapanmış case’ler için approved/reported value-loss count/total, control-required Traffic count ve not-applicable Kasko count taşır.
 - Salt-okunur çağrılar audit veya snapshot yazmaz. 401 ve tenant izolasyonu mevcut merkezi guard’ları kullanır; response mutlak path, belge/emsal içeriği, secret veya ham hata taşımaz.
+
+## 26. Paket 41 e-posta taslağı contracts/API
+
+- `GET /api/v1/cases/:caseId/email-drafts`: tenant-kapsamlı draft/version/handoff geçmişi ve role/lifecycle izinlerini döndürür.
+- `POST .../email-drafts/preview`: strict draft type ve bounded instruction alır; yazmasız template, requirement kodları, verified attachment seçenekleri, preview hash ve `requiresHumanReview=true` döndürür.
+- `POST .../email-drafts`: zorunlu Idempotency-Key, expected case version, preview hash, normalize recipient’lar, kullanıcı subject/body düzenlemesi, verified attachment referansları ve `confirmed=true` ister.
+- `POST .../email-drafts/:draftId/versions`: expected draft version, recipient/subject/body/attachment snapshot’ı, bounded zorunlu gerekçe ve `confirmed=true` ile append-only yeni sürüm üretir.
+- `POST .../email-drafts/:draftId/handoffs`: expected draft version ve `confirmed=true` ile Gmail web compose payload’ı hazırlar. Response `deliveryStatus=not_sent`; provider message/sent/delivered alanı yoktur.
+- Preview GET/POST’u audit veya snapshot yazmaz. Create/revise/handoff 401/403/404/409, idempotency ve optimistic locking sınırlarını kullanır.
+- Response mutlak path, storage root, file content, OAuth token, provider secret, session, SQL/stack veya ham hata taşımaz. API modunda istemci mock fallback yapmaz.

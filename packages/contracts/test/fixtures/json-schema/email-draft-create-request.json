@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "expectedCaseVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "draftType": {
+      "type": "string",
+      "enum": [
+        "repair_approval_request",
+        "missing_document_request",
+        "preliminary_report_notice",
+        "service_change_notice",
+        "deductible_service_part_notice",
+        "portal_deductible_note",
+        "closure_documents_request",
+        "case_status_update",
+        "recourse_documents_request",
+        "pert_evaluation_notice",
+        "custom_instruction"
+      ]
+    },
+    "instruction": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 2000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "previewHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "to": {
+      "minItems": 1,
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 254,
+        "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+      }
+    },
+    "cc": {
+      "default": [],
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 254,
+        "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+      }
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000
+    },
+    "attachments": {
+      "default": [],
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string",
+            "enum": [
+              "document_version",
+              "photo"
+            ]
+          },
+          "resourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          }
+        },
+        "required": [
+          "resourceType",
+          "resourceId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "expectedCaseVersion",
+    "draftType",
+    "instruction",
+    "previewHash",
+    "to",
+    "cc",
+    "subject",
+    "body",
+    "attachments",
+    "confirmed"
+  ],
+  "additionalProperties": false
+}

@@ -467,3 +467,11 @@ Chunk server’da lease/Agent ownership, run/job version, extraction page, sourc
 - Tenant-kapsamlı kapanış özet GET’i ve dönem raporu salt-okunurdur; audit/snapshot/cache yazmaz. Kapanış plan/finalize mevcut merkezi audit ve saga sınırını kullanır.
 - UI runtime contracts paketini lazy import eder. Başlangıç grafiği 462.166 bayt, en büyük chunk 299.340 bayt ve 7 lazy modül ile Paket 35 bütçesi içinde kaldı.
 - Yeni dependency, IPC, File Agent işi, filesystem veya fiziksel dosya yazma yolu yoktur.
+
+### Paket 41 ek uygulama kaydı — e-posta taslak persistence ve Gmail web handoff
+
+- Migration 0026 mevcut Cases/Documents/Auth/Idempotency/Audit altyapısını kullanır; ikinci queue, audit sistemi veya provider service oluşturmaz.
+- Preview; case/document-requirements ve current ready/verified metadata’yı salt-okunur birleştirir. Fiziksel dosya açma, File Agent çağrısı veya filesystem erişimi yapmaz.
+- Create/revise/handoff mevcut PostgreSQL transaction ve merkezi AuditService sınırındadır. Gmail handoff yalnız güvenli compose DTO’su üretir; API sunucusu Google’a ağ çağrısı yapmaz.
+- UI module ve contracts runtime doğrulaması lazy yüklenir. Mock prototip ayrı kalır ve API hatasında fallback olmaz.
+- Gmail OAuth/API, incoming sync, provider message state, AI content generation, IPC, File Agent ve fiziksel ek yazma/okuma sonraki ayrı paketlerin konusudur.

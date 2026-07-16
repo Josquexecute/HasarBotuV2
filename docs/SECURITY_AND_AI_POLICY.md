@@ -76,6 +76,14 @@ bir yapı getiriyorsa kullanıcıya açıkça bildirilmeden eklenmez.
 
 Otomatik gönderim yoktur.
 
+Paket 41 sınırı:
+
+- İlk gerçek sürüm AI çağrısı yapmayan deterministik şablon ve kullanıcı düzenlemesi kullanır.
+- Gmail web handoff yalnız açık harici veri çıkışı onayıyla recipient/subject/body alanlarını tarayıcıda açar; OAuth tokenı veya provider secret kullanılmaz.
+- Uygulama eki Gmail’e otomatik yüklemez, dosya yolu aktarmaz ve gönderim/teslim durumunu doğrulamaz.
+- Taslak ve düzeltmeler sürümlü iş verisidir; içerik audit/log’a kopyalanmaz.
+- AI taslak iyileştirmesi ileride eklenirse mevcut provider, PII minimizasyonu, bütçe, kaynak ve insan onayı kapılarından geçmek zorundadır.
+
 ## Gerçek AI sağlayıcısı güvenlik kapısı
 
 - AI provider varsayılan kapalıdır. Organization allow-list, per-request/monthly integer bütçe ve açık kullanıcı onayı olmadan dış çağrı yapılmaz; otomatik fallback yoktur.

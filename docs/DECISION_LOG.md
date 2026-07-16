@@ -772,3 +772,22 @@ Etkisi:
 
 - `traffic-value-loss-closure/1.0.0` saf domain değerlendirmesi, strict contracts/JSON Schema, tenant-kapsamlı read endpoint’i ve lifecycle/report/UI entegrasyonu eklenir.
 - v0.10 Kapanış kapsamındaki değer kaybı kapanış özeti tamamlanır; Kasko/dış emsal geliştirmesi v0.9’un ayrı açık kapsamıdır.
+
+## 2026-07-16 — HB-2026-047: Kullanıcı kontrollü e-posta taslağı ve Gmail web handoff sınırı
+
+Karar:
+
+1. İlk gerçek e-posta çekirdeği sürümlü ve deterministik `email-draft-template/1.0.0` şablonlarını kullanır. Taslak nihai iletişim değildir; alıcı, konu, gövde ve ek seçimi kullanıcı tarafından açıkça kontrol edilmeden kaydedilmez.
+2. Alıcı adresi case, servis, sigortacı veya kullanıcı metadata’sından tahmin edilmez. En az bir `to` adresi zorunludur; `to` ve `cc` adresleri normalize edilir, tekrar ve geçersiz biçim reddedilir.
+3. Ek önerisi yalnız aynı tenant/case içindeki current `ready + hashVerified + sizeVerified + verifiedAt` documentVersion veya photo metadata’sından gelir. Fiziksel dosya okunmaz, Gmail URL’sine eklenmez ve mutlak yol taşınmaz; kullanıcı eki Gmail ekranında manuel seçer.
+4. Preview salt okunurdur ve audit/snapshot yazmaz. Taslak oluşturma ve düzeltme zorunlu Idempotency-Key, optimistic version ve açık onay kullanır. Düzeltme eski sürümü değiştirmez; append-only yeni sürüm üretir.
+5. Gmail web handoff otomatik gönderim değildir. Ayrı açık harici veri çıkışı onayı ister, yalnız compose alanlarını kullanıcı tarayıcısında açar ve kalıcı olarak `deliveryStatus=not_sent` semantiğini korur. Gönderildi/teslim edildi sonucu üretilmez.
+6. Taslak subject/body/recipient içeriği vaka-kapsamlı iş verisidir; merkezi audit’e kopyalanmaz. Audit yalnız draft/version/provider, recipient/attachment sayıları, `not_sent`, actor ve requestId gibi güvenli metadata taşır.
+7. Yazma ve handoff rolleri `admin | expert | case_manager | secretary`; diğer case erişimli roller salt okunurdur. Kapalı case e-posta geçmişi salt okunurdur.
+8. Migration 0026 taslak aggregate’ı, immutable version/recipient/attachment/handoff geçmişini ve aynı draft içindeki composite version bağlarını DB seviyesinde zorlar. OAuth tokenı, provider message ID, secret, mutlak yol veya fiziksel dosya içeriği kolonu yoktur.
+9. Bu paket Gmail OAuth/API, gelen e-posta senkronizasyonu, gönderim doğrulaması ve bulut AI ile metin üretimi yapmaz. Bunlar ayrı güvenlik/deployment kararları gerektirir; core uygulama bunlar olmadan çalışır.
+
+Etkisi:
+
+- Saf domain şablonları, strict contracts/JSON Schema, migration 0026, tenant/RBAC/idempotency/audit API, gerçek Dosya Detayı e-posta çalışma alanı ve ayrı lazy chunk eklenir.
+- Yeni harici dependency, File Agent işi, IPC veya fiziksel dosya yazma yolu eklenmez.

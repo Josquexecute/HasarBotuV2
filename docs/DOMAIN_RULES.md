@@ -391,3 +391,14 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Kasko case Trafik değer kaybı kapanış gereksiniminde `not_applicable` olur.
 - `control_required`, normal close’un mevcut eksik gereksinim blocker’ına katılır. Eksiklerle kapatma mevcut zorunlu gerekçe/onay/snapshot akışını kullanır.
 - Snapshot assessment/report kimliği, assessment version, result code, minor-unit tutar ve rule version taşır; emsal veya belge içeriği taşımaz.
+
+## E-posta taslağı kuralları — Paket 41
+
+- İlk şablon sürümü `email-draft-template/1.0.0`’dır. Domain builder database, HTTP, filesystem, sistem saati veya AI kullanmaz; aynı girdiden aynı konu/gövde/ek türü önerisini üretir.
+- Desteklenen ilk türler onarım onayı, eksik evrak, ön rapor, servis değişikliği, muafiyet/servis/parça, portal notu, kapanış evrakı, dosya durumu, rücu evrakı, PERT ve serbest talimattır.
+- Recipient kuralı en az bir `to`, en fazla 10 `to` ve 10 `cc`, normalize edilmiş benzersiz adreslerdir. Sistem adres tahmini yapmaz.
+- Ek adayı yalnız current ve fiziksel doğrulaması tamamlanmış `ready` belge/fotoğraf metadata’sıdır. `pending`, `failed`, `missing` veya hash/size doğrulaması eksik kaynak önerilemez.
+- İlk taslak ve her düzeltme immutable version’dır. Düzeltme yeni version ve zorunlu gerekçe üretir; eski subject/body/recipient/attachment kaydı değişmez.
+- Gmail compose handoff yalnız kullanıcı onayıyla hazırlanır. Sonuç her zaman `not_sent` kabul edilir; kullanıcı Gmail’de gönderse dahi provider doğrulaması olmadan uygulama gönderildi sonucu üretmez.
+- Handoff URL’si yalnız normalize recipient, konu ve gövde taşır. Fiziksel ek, relative/absolute path, secret veya session bilgisi taşımaz.
+- Kapalı case salt okunurdur. Preview yazmasızdır; create/revise/handoff komutları idempotent ve optimistic sürüm kontrollüdür.

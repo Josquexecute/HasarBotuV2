@@ -372,3 +372,11 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Lifecycle plan/finalize audit’i value-loss status, assessment version ve final report kimliği gibi güvenli referansları taşıyabilir.
 - Assessment input, emsal, kanıt metni/URL’si, rapor içeriği, plaka, mutlak path, secret, SQL/stack veya ham hata audit’e kopyalanmaz.
 - Lifecycle operation snapshot ve append-only history aynı mevcut saga transaction’ında korunur; yeni assessment version eski kapanış özetini sessizce değiştirmez.
+
+### 6.23 Paket 41 e-posta taslağı ve handoff audit sınırı
+
+- Olaylar: `email_draft.created`, `email_draft.revised`, `email_draft.handoff_prepared`.
+- Audit organization/actor/case/draft kimliği, draft/version, template/source type, recipient ve attachment sayıları, provider, `deliveryStatus=not_sent` ve requestId gibi güvenli metadata taşıyabilir.
+- Subject, body, recipient adresleri, revision reason metni, attachment display name, Gmail compose URL, dosya yolu/içeriği, OAuth tokenı, secret, SQL/stack veya ham hata audit’e kopyalanmaz.
+- Draft/version/recipient/attachment veya handoff satırı, idempotency sonucu ve audit aynı transaction içindedir.
+- Preview ve workspace GET audit gürültüsü üretmez. Handoff kaydı gönderim kanıtı değildir ve yedek/restore sonrasında da `not_sent` anlamını korur.
