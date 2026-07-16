@@ -328,3 +328,12 @@ export {
   type PolicyAiPrivacySource,
   type PolicyAiRedactionSummary,
 } from './policy-ai-privacy.js'
+export {
+  POLICY_AI_PILOT_QUALITY_VERSION,
+  evaluatePolicyAiPilotQuality,
+  type PolicyAiPilotActualCandidate,
+  type PolicyAiPilotExpectedCandidate,
+  type PolicyAiPilotQualityResult,
+  type PolicyAiPilotQualityThresholds,
+  type PolicyAiPilotSource,
+} from './policy-ai-pilot.js'

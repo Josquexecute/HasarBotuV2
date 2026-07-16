@@ -307,6 +307,17 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 ### 6.14 Paket 28 gerçek provider ve privacy audit sınırı
 
 - Audit provider/model/prompt/schema/privacy/pricing sürümü, external flag, redaksiyon kategori/sayısı, token/maliyet sayacı, run sonucu, actor ve requestId gibi güvenli özetleri taşıyabilir.
-- Authorization header/API key, full outbound payload/prompt/provider output, raw veya redacted poliçe metni, excerpt, PII placeholder eşlemesi, binary, session, mutlak yol, stack ve ham provider hatası audit/log’a yazılmaz.
+- Authorization header/API key, full outbound payload/prompt/provider output, raw veya redacted poliçe metni, excerpt, PII placeholder eşlemesi, binary, session, mutlak yol, stack ve ham provider hatası audit/log'a yazılmaz.
+- Canlı pilot canonical-output teşhisi de aynı sınırdadır: yalnız allowlist DTO alan yolu ve sabit validation issue sınıfı stderr'e çıkabilir; reddedilen değer, Zod mesajı, provider output veya kaynak anchor değeri gösterilmez ve kalıcı kayda yazılmaz.
 - Secret yalnız API process environment’ındadır. Rotation/deployment platformu kapsamındadır; DB/API/UI üzerinden secret yönetimi yapılmaz.
 - `store:false` provider uygulama-state saklamasını kapatır ancak tek başına ZDR garantisi değildir. Gerçek müşteri pilotunda sağlayıcı organization retention ayarı, sözleşme ve egress kontrolü ayrıca güvenlik kapısıdır.
+
+### 6.15 Paket 29 provider receipt ve recovery audit sınırı
+
+- `ai_provider_call_receipts`, ücretli çağrı öncesi durable güvenlik kaydıdır; audit'in yerine geçmez. Provider/model/pricing kimliği, request/output hash, safe provider response/request kimliği, token/karakter/maliyet sayacı ve güvenli sonuç kodu taşıyabilir.
+- Full prompt, ham provider response, source text/excerpt, PII/redaction eşlemesi, authorization header/API key, session, mutlak yol, stack veya ham provider hatası receipt/audit/log'a yazılmaz.
+- Receipt `response_recorded` olduğunda DB finalize recovery provider'ı yeniden çağırmaz. Sonucu belirsiz dış çağrı `outcome_unknown` olarak terminal ve immutable kalır; otomatik retry/audit başarı olayı üretilmez.
+- Kesin HTTP 503 retry'ları yeni DB receipt veya yeni idempotency kaydı üretmez; aynı logical dispatch içinde bounded kalır. Tükenme güvenli `AI_PROVIDER_UNAVAILABLE` koduyla `response_recorded→finalized` olur. Model fallback yalnız sentetik pilot runner'ında ayrı model denemesi olarak raporlanır; secret, response body veya backoff ayrıntısı audit'e yazılmaz.
+- Gemini pilotunda official GenerateContent endpoint'i, `x-goog-api-key` secret sınırı ve tools/cached-content yokluğu kod/test düzeyinde doğrulanır. Ücretsiz katmanın `free_tier_product_improvement` retention davranışı açıkça saklanır ve UI'da gösterilir; bu yüzden gerçek müşteri verisi pilot girdisi olamaz.
+- 4xx diagnostic yalnız bounded HTTP/provider-status ile sabit neden ve izinli alan sınıfıdır; DB/audit/log'a yazılmaz. Provider hata `message`/`description`, ham response body ve structured-output payload bellekte sınıflandırıldıktan sonra atılır; kullanıcı verisinden serbest diagnostic token üretilmez. Schema-preflight ve timeout tanısı yalnız stage/status/safe code taşır, kalıcılaştırılmaz. Başarılı pilot tek wire probe kullanır; 400 tanı çağrıları audit/usage ledger olayı değildir.
+- Thought summary/signature, candidate raw part listesi ve finish message DB/audit/log'a yazılmaz. Preflight yalnız sabit finish-reason sınıfını yerel tanıda gösterir; gerçek adapter kanonik JSON dışındaki part metadata'sını bellekte attıktan sonra strict server doğrulamasına geçer.

@@ -39,6 +39,23 @@ export interface PolicyAiProviderUsage {
 export interface PolicyAiProviderResponse {
   readonly output: unknown
   readonly usage: PolicyAiProviderUsage
+  readonly responseMetadata?: {
+    readonly providerResponseId: string | null
+    readonly providerRequestId: string | null
+  }
+}
+
+export type PolicyAiProviderRequestOutcome = 'response_received' | 'unknown'
+
+export class PolicyAiProviderExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly requestOutcome: PolicyAiProviderRequestOutcome,
+    readonly providerRequestId: string | null = null,
+    readonly safeDiagnosticCode: string | null = null,
+  ) {
+    super(message)
+  }
 }
 
 export interface PolicyAiProviderDescriptor {
@@ -49,7 +66,7 @@ export interface PolicyAiProviderDescriptor {
   readonly maximumInputCharacters: number
   readonly maximumOutputSize: number
   readonly externalProvider: boolean
-  readonly retentionMode: 'local_only' | 'store_false'
+  readonly retentionMode: 'local_only' | 'store_false' | 'free_tier_product_improvement'
   readonly pricingVersion: string
   estimateCostMinor(inputCharacters: number): number
 }
@@ -83,7 +100,7 @@ export function isPolicyAiProviderDescriptorCompatible(
     || descriptor.maximumOutputSize < 1
     || descriptor.maximumOutputSize > 1_000_000
   ) return false
-  if (descriptor.externalProvider && descriptor.retentionMode !== 'store_false') return false
+  if (descriptor.externalProvider && !['store_false', 'free_tier_product_improvement'].includes(descriptor.retentionMode)) return false
   if (expected === undefined) return true
   return descriptor.providerId === expected.providerId
     && descriptor.providerVersion === expected.providerVersion
@@ -188,7 +205,7 @@ export async function executePolicyAiProvider(
   const deadline = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
       controller.abort()
-      reject(new Error('provider_timeout'))
+      reject(new PolicyAiProviderExecutionError('provider_timeout', 'unknown'))
     }, timeoutMs)
   })
   const relayAbort = () => controller.abort()

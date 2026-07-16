@@ -40,7 +40,8 @@
             "deterministic-timeout",
             "deterministic-failure",
             "deterministic-prompt-injection-attempt",
-            "openai-responses"
+            "openai-responses",
+            "gemini-generate-content"
           ]
         },
         "providerVersion": {
@@ -208,7 +209,8 @@
               "type": "string",
               "enum": [
                 "local_only",
-                "store_false"
+                "store_false",
+                "free_tier_product_improvement"
               ]
             },
             "pricingVersion": {

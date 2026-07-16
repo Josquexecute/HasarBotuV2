@@ -380,3 +380,15 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Start endpoint’i değişmez: zorunlu Idempotency-Key, expected run version ve sourceBundleHash kullanır. Server start anında privacy snapshot’ı yeniden üretir; uyuşmazlık stale/fail-closed olur.
 - Usage cevabı input/output token sayaçlarını ve pricing version’ı taşır; para safe integer minor-unit’tir. Secret, Authorization header, full request/response veya kaynak metni hiçbir contract’ta yoktur.
 - Provider disabled/budget blocked çağrı üretmez. External provider hataları yalnız kanonik güvenli hata kodlarına çevrilir; HTTP body, stack ve provider secret response’a taşınmaz.
+
+## 18. Paket 29 Gemini pilot ve recovery contracts/API
+
+- Provider enum’u `gemini-generate-content` ile; privacy retention enum’u `free_tier_product_improvement` ile genişler. Bu değer ücretsiz katmanda sentetik içeriğin ürün geliştirmede kullanılabileceğini açıkça belirtir.
+- Runtime Zod ve deterministik JSON Schema fixture’ları aynı kabul kümesini taşır. Gemini strict structured output şeması ortak provider şemasını kullanır; son otorite yine runtime contract/evidence doğrulamasıdır.
+- API start sözleşmesi değişmez. Durable receipt ve finalize recovery server içidir; client full prompt/provider response, secret veya recovery payload’ı alamaz.
+- HTTP 503 server içinde `AI_PROVIDER_UNAVAILABLE` güvenli koduna eşlenir ve bounded retry ayrıntısı response contract'ını genişletmez. Sentetik canlı pilot runner'ı kullanılan gerçek model ile model-bazlı deneme sayılarını yalnız yerel doğrulama raporunda gösterir; auth/kota/schema/evidence hatasında model fallback yapmaz.
+- Structured-output wire payload provider içidir ve bütün GenerateContent modellerinde `responseMimeType/responseJsonSchema` kullanır; `responseFormat` veya model-bazlı ayrım yoktur. Başarılı pilot tek wire probe kullanır; 400 sonrası bounded tanı ve güvenli timeout aşaması public/API response veya kalıcı contract alanı değildir, yalnız test ve yerel sentetik pilot teşhisidir.
+- Gemini wire schema `normalizedValueJson` ile temel type/properties/required/items alt kümesini kullanır; bu provider-private alan public DTO değildir. Adapter parse sonrası `normalizedValue` üretir ve mevcut runtime Zod/JSON Schema kabul kümesi değişmez; enum/bound/evidence veya parse hatası aday olarak başarılı gösterilmez.
+- Wire schema sadeleştirmesi public/canonical contract bilgisini kaldırmaz. Adapter request'teki exact output schema version ve maximum candidate sınırı ile domain category/biçim kurallarını trusted provider instruction'a taşır; provider cevabı bu kurallara uymuyorsa API DTO'suna veya receipt'e canonical başarı olarak giremez.
+- Gemini REST response içindeki thought/signature metadata public DTO değildir. Adapter yalnız bounded non-thought text part'larını birleştirir; finish reason veya JSON parse hatası API contract'ını genişletmeden mevcut kanonik provider failure sınırında kalır.
+- Paket 28 OpenAI production adapter’ı korunur. Gemini ücretsiz-katman çağrısı yalnız açık opt-in sentetik pilot komutunda çalışır; UI retention uyarısını gösterir ve API kesintisinde mock fallback yapmaz.

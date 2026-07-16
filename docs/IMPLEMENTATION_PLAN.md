@@ -743,3 +743,23 @@ Kapsam dışı: Paket 23 otomatik approval, gerçek cloud provider, provider sec
 - [ ] Yetkili production secret ve sağlayıcı retention onayıyla gerçek dış ağ poliçe pilotu. Geliştirme makinesinde secret bulunmadığından bu deployment adımı çalıştırılmadı.
 
 Kapsam dışı: otomatik Paket 23 approval, File Agent/filesystem, yeni background worker, provider yönetim UI’si, üretim migration ve sonraki paket.
+
+## Paket 29 — Gerçek Gemini ücretsiz-katman sentetik kalite ve recovery pilotu
+
+- [x] Migration 0021: durable provider-call receipt, tek run/request kimliği, terminal immutability ve aktif/unknown maliyet rezervasyonu.
+- [x] Provider çağrısını PostgreSQL transaction dışına çıkar; response-recorded finalize recovery ve outcome-unknown no-retry davranışını ekle.
+- [x] Gemini GenerateContent adapter'ında strict structured output, tools/cached content kapalı, header-only secret ve official endpoint; provider response/request kimliklerini yalnız güvenli receipt metadata'sı olarak sakla.
+- [x] HTTP 503'ü retryable provider-unavailable olarak eşle; 500/1500 ms bounded backoff, aynı receipt kimliği ve cancellation/ortak timeout sınırı uygula. `gemini-3.5-flash` 503 ile tükenirse yalnız sentetik pilotta bir kez ücretsiz stable `gemini-2.5-flash` fallback kullan; auth/kota/schema/evidence hatalarında fallback yapma.
+- [x] Bütün Gemini GenerateContent modellerinde tek `responseMimeType/responseJsonSchema` structured-output payload'ı kullan; hatalı `responseFormat` ve model ayrımını kaldır; 4xx için ham body/message taşımayan bounded safe diagnostic üret.
+- [x] Gerçek aday şemasını Gemini subset'ine sadeleştir: recursive `anyOf/additionalProperties` kaldır, `normalizedValueJson` wire alanını adapter'da parse et ve mevcut strict Zod/evidence doğrulamasını son otorite olarak koru.
+- [x] Minimal nesneden üretim wire şemasına ve eski constraint gruplarına ilerleyen bounded canlı schema preflight ekle; 4xx ham metninden yalnız sabit neden ve izinli alan kodlarını türet.
+- [x] Başarılı canlı yolu tek wire probe + extraction olarak sınırla; minimal kademeli tanıyı yalnız 400 reddi sonrasında çalıştır ve timeout aşamasını güvenli kodla ayır.
+- [x] Scalar preflight için output bütçesini thinking-aware 4096 yap; preflight ve gerçek adapter'da ortak multi-part/thought-signature güvenli parser kullan ve finish reason'ı ayrı teşhis et.
+- [x] Sade Gemini wire schema ile strict canonical DTO arasındaki sözleşme boşluğunu kapat: server-owned output version/limit/category/biçim kurallarını trusted system contract'a ekle ve canlı pilotta değer sızdırmayan alan/issue teşhisi üret.
+- [x] Sürümlü sentetik kalite ölçümü: recall, precision, exact source anchor ve metin kanıtı basis-point sonuçları.
+- [x] Açık opt-in, birincil stable `gemini-3.5-flash`, 503-only stable `gemini-2.5-flash` fallback, process secret, ücretsiz-katman retention açıklaması, official egress ve sentetik-veri sınırı isteyen fail-fast canlı pilot komutu.
+- [x] Yetkili terminalde sentetik schema preflight ve gerçek Gemini çağrısı başarıyla tamamlandı; provider secret Codex process'ine veya repository'ye aktarılmadan kalite/kaynak/maliyet/egress ve retention kapısı doğrulandı.
+- [x] Repository dışı fresh `npm ci` kopyasında typecheck, lint, gerçek `_test` PostgreSQL ile güncel 1014 başarılı / 6 mevcut ortam-koşullu UI skip ve build.
+- [x] Gerçek çağrı sonrasında son kapıları yenile, Paket 29 dosyalarını path bazlı stage et ve atomik commit oluştur.
+
+Kapsam dışı: gerçek müşteri poliçesi, otomatik review/promotion/approval, 503 dışı otomatik provider fallback, File Agent/filesystem, üretim migration ve sonraki paket.

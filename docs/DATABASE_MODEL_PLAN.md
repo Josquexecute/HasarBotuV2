@@ -239,3 +239,10 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - `ai_extraction_runs`; external-provider bayrağı, privacy policy, outbound payload hash/character sayısı, redacted kategori/sayı, retention mode ve pricing version taşır. Completed privacy/provider fact alanları trigger ile immutable’dır.
 - `ai_usage_ledger`; input/output token çiftini ve pricing version’ı append-only tutar. Safe integer/birlikte-null constraint’i eksik kullanım çiftini reddeder.
 - Provider secret, Authorization header, full prompt/request/response, redacted veya raw kaynak metni, binary ve mutlak path için kolon yoktur. Tenant, idempotency, source anchor ve Paket 27 promotion ilişkileri mevcut guard’ları kullanır.
+
+## Paket 29 uygulanan PostgreSQL modeli
+
+- Migration `0021_policy_ai_provider_recovery`, provider allow-list/provenance guard’larını `gemini-generate-content` ve run privacy guard’ını `free_tier_product_improvement` için backward-compatible genişletir.
+- `ai_provider_call_receipts`, dış çağrıdan önce commit edilen tenant/case/run/request kimliği ve bütçe rezervasyonudur. Response-received canonical output ayrı transaction'da kaydedilir; candidate/usage finalize replay ile provider çağrısı tekrarlanmadan tamamlanabilir.
+- Receipt terminal durumda immutable’dır. `outcome_unknown` otomatik retry edilmez; tahmini maliyet hard-stop hesabında rezerve kalır. Tenant/run/actor bileşik FK, request/client-id unique ve bounded metadata constraint’leri DB’de zorlanır.
+- Full prompt, ham provider response, source text, PII, secret, authorization header, binary veya mutlak yol kolonu yoktur. Migration up/repeat/down/reapply ve privacy/tenant/immutability constraint testleri gerçek PostgreSQL’de çalışır.

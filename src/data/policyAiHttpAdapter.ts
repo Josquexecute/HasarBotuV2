@@ -157,9 +157,9 @@ function run(value: unknown): PolicyAiRunRecord {
     || !isNonnegativeInteger(value.privacy.outboundInputCharacters) || value.privacy.outboundInputCharacters < 1
     || !isNonnegativeInteger(value.privacy.redactedValueCount)
     || !Array.isArray(value.privacy.redactedCategories) || value.privacy.redactedCategories.length > piiCategories.length || !value.privacy.redactedCategories.every((category) => piiCategories.includes(category as typeof piiCategories[number]))
-    || !['local_only', 'store_false'].includes(String(value.privacy.retentionMode))
+    || !['local_only', 'store_false', 'free_tier_product_improvement'].includes(String(value.privacy.retentionMode))
     || !hasString(value.privacy.pricingVersion, 80)
-    || (value.privacy.externalProvider && (value.privacy.outboundPayloadHash === null || value.privacy.retentionMode !== 'store_false'))
+    || (value.privacy.externalProvider && (value.privacy.outboundPayloadHash === null || !['store_false', 'free_tier_product_improvement'].includes(String(value.privacy.retentionMode))))
     || (!value.privacy.externalProvider && (value.privacy.outboundPayloadHash !== null || value.privacy.redactedValueCount !== 0 || value.privacy.retentionMode !== 'local_only'))
     || !record(value.budget)
     || typeof value.budget.enabled !== 'boolean'

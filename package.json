@@ -20,7 +20,8 @@
     "typecheck": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run build --workspace @hasarbotu/database && tsc -b --pretty false && npm run typecheck --workspace @hasarbotu/domain && npm run typecheck --workspace @hasarbotu/contracts && npm run typecheck --workspace @hasarbotu/database && npm run typecheck --workspace @hasarbotu/api && npm run typecheck --workspace @hasarbotu/file-agent",
     "lint": "eslint .",
     "test": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run build --workspace @hasarbotu/database && vitest run src && npm run test --workspace @hasarbotu/domain && npm run test --workspace @hasarbotu/contracts && npm run test --workspace @hasarbotu/database && npm run test --workspace @hasarbotu/api && npm run test --workspace @hasarbotu/file-agent",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "pilot:gemini:policy": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run pilot:gemini:policy --workspace @hasarbotu/api"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

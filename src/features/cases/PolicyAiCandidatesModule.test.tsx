@@ -95,6 +95,22 @@ describe('AI alan adayları görünümü', () => {
     expect(document.body.textContent).not.toContain('sk-')
   })
 
+  it('Gemini ücretsiz katmanını sentetik veri sınırı ve ürün geliştirme uyarısıyla gösterir', async () => {
+    const externalPrivacy = { externalProvider: true, policyVersion: 'policy-ai-pii-redaction/1.0.0', outboundPayloadHash: 'f'.repeat(64), outboundInputCharacters: 48, redactedValueCount: 3, redactedCategories: ['email', 'name', 'phone'], retentionMode: 'free_tier_product_improvement', pricingVersion: 'gemini-free-tier/2026-07-15' }
+    const planned = detail('planned').run
+    const external = { run: { ...planned, providerId: 'gemini-generate-content', providerVersion: 'gemini-generate-content/1.0.0', modelId: 'gemini-3.5-flash', privacy: externalPrivacy } }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/documents?')) return response(200, { items: [] })
+      if (url.endsWith(`/policy-ai-extractions/${RUN}`)) return response(200, external)
+      return response(200, { items: [{ ...summary(), providerId: 'gemini-generate-content', privacy: externalPrivacy }] })
+    }) as never)
+    render(<PolicyAiCandidatesModule caseId={CASE} source="api" />)
+    expect(await screen.findByText('Dış sağlayıcı veri sınırı')).toBeInTheDocument()
+    expect(screen.getByText(/ürün geliştirme amacıyla kullanılabilir/)).toBeInTheDocument()
+    expect(screen.getByText(/gerçek müşteri verisi gönderilmez/)).toBeInTheDocument()
+  })
+
   it('kontrol, kabul ve düzenleme kararlarından sonra açık onayla Paket 23 taslağına aktarır',async()=>{
     const reviews=new Map<string,Record<string,unknown>>()
     const items=[generalCandidate,candidate]

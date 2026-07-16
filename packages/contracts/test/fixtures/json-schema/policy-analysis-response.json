@@ -1178,7 +1178,8 @@
                       "deterministic-timeout",
                       "deterministic-failure",
                       "deterministic-prompt-injection-attempt",
-                      "openai-responses"
+                      "openai-responses",
+                      "gemini-generate-content"
                     ]
                   },
                   "providerVersion": {
