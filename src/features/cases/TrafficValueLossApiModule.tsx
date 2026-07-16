@@ -23,10 +23,12 @@ import {
   type TrafficValueLossDraftInput,
   type TrafficValueLossEvidenceField,
   type TrafficValueLossEvidenceInput,
+  type TrafficValueLossReportDataPort,
   type TrafficValueLossVersionRecord,
 } from '../../data'
 import { useSession } from '../../app/sessionContext'
 import type { CaseRecord } from '../../types/case'
+import { TrafficValueLossReportPanel } from './TrafficValueLossReportPanel'
 
 interface ComparableDraft {
   readonly id: string
@@ -184,11 +186,13 @@ export function TrafficValueLossApiModule({
   source,
   port,
   documentPort,
+  reportPort,
 }: {
   readonly item: CaseRecord
   readonly source: DataSourceKind
   readonly port?: TrafficValueLossDataPort
   readonly documentPort?: CaseDocumentsDataPort
+  readonly reportPort?: TrafficValueLossReportDataPort
 }) {
   const session = useSession()
   const valueLoss = useTrafficValueLoss(item.caseId, source, item.type === 'Trafik', port)
@@ -451,7 +455,7 @@ export function TrafficValueLossApiModule({
 
   return <section className="value-loss-workspace" aria-labelledby="traffic-value-loss-heading">
     <header className="value-loss-workspace__header">
-      <div><span className="eyebrow">Paket 33 · gerçek API</span><h2 id="traffic-value-loss-heading">Trafik Değer Kaybı Çalışma Alanı</h2><p>Girdi ve kanıtlar sürümlenir; sonuç yalnız taslaktır ve insan onayı olmadan kesinleşmez.</p></div>
+      <div><span className="eyebrow">Paket 34 · gerçek API</span><h2 id="traffic-value-loss-heading">Trafik Değer Kaybı Çalışma Alanı</h2><p>Girdi ve kanıtlar sürümlenir; insan onaylı sürüm kullanıcı önizlemesiyle nihai rapora dönüştürülür.</p></div>
       <div className="value-loss-rule"><span>Kural sürümü</span><strong>{currentVersion?.ruleVersion ?? '2026.07.01.1'}</strong><small>Yürürlük 01.07.2026</small></div>
     </header>
 
@@ -522,6 +526,13 @@ export function TrafficValueLossApiModule({
           <span>Girdi değişiklikleri mevcut sürümü değiştirmez; yeni immutable taslak sürümü oluşturur.</span>
           <button className="button button--primary" type="button" disabled={!canWrite || valueLoss.busy} onClick={() => void run('create', async (key) => valueLoss.createVersion(await buildInput(), key), 'Yeni hesaplama taslağı ve sürümü oluşturuldu.')}>{valueLoss.busy ? <LoaderCircle className="spin" size={14} /> : <Calculator size={14} />} Taslağı Hesapla ve Sürümle</button>
         </div>
+        <TrafficValueLossReportPanel
+          caseId={item.caseId}
+          source={source}
+          version={shownVersion}
+          assessmentVersion={valueLoss.assessment?.version ?? 0}
+          port={reportPort}
+        />
       </div>
 
       <aside className="value-loss-side">

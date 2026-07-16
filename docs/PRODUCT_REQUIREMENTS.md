@@ -225,3 +225,11 @@ formatlarında alınabilir.
 - Bloklayan belirsizlik submit’i kapatır. Submit ayrı teyit; approve/reject ayrı insan inceleme teyidi ve mevcut rol yetkisi gerektirir.
 - Her düzeltme yeni sürüm oluşturur. API modunda bağlantı veya yetki hatası mock veriyle maskelenmez; mock demo görünümü değişmez.
 - Kasko vaka bu pakette gerçek Trafik hesabına sokulmaz; destek dışı durum açıkça gösterilir.
+
+### Trafik değer kaybı nihai raporu — Paket 34
+
+- Kullanıcı yalnız insan onaylı Trafik değer kaybı version’ı için nihai rapor önizleyebilir.
+- Önizleme kaynakları, emsalleri, araç/parça snapshot’ını, hesaplamayı, belirsizlikleri, insan onayını ve kullanılan kural sürümünü anlaşılır biçimde birlikte göstermelidir.
+- Nihai PDF, açık kullanıcı confirmation’ı olmadan oluşmamalı; aynı onaylı version için mükerrer final çıktı üretmemelidir.
+- Üretilmiş rapor indirilebilir ve tarihsel olarak aynı version’a bağlı kalmalıdır. Yeni hesap veya düzeltme eski raporu sessizce değiştirmemelidir.
+- API kesintisinde mock rapor gösterilmez. Fiziksel case klasörüne otomatik yazma, e-posta gönderme ve genel rapor editörü bu paketin kapsamında değildir.

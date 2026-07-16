@@ -4,6 +4,9 @@ import type pg from 'pg'
 import {
   AUTH_LOGIN_ROUTE,
   IDEMPOTENCY_KEY_HEADER,
+  trafficValueLossReportPreviewResponseSchema,
+  trafficValueLossReportResponseSchema,
+  trafficValueLossReportsResponseSchema,
   trafficValueLossResponseSchema,
 } from '@hasarbotu/contracts'
 import {
@@ -299,6 +302,185 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
     const audit = await pool.query("SELECT details::text AS details FROM audit_events WHERE action LIKE 'traffic_value_loss.%'")
     const serialized = JSON.stringify({ response: response.json(), audit: audit.rows })
     expect(serialized).not.toMatch(/[A-Z]:\\|\\\\|p32-sentetik-guclu-parola|original_file_name|relative_path/i)
+    expect(serialized).not.toContain('sentetik-rapor.pdf')
+  })
+
+  it('onaylı sürümden yazmasız önizleme ve immutable, idempotent PDF nihai çıktı üretir', async () => {
+    const reportCaseId = uuidv7()
+    await pool.query(
+      `INSERT INTO cases
+       (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,loss_date,notification_date)
+       VALUES ($1,$2,2026,3401,'2026/3401','traffic','reporting','34 P 3401','34P3401','2026-07-02','2026-07-03')`,
+      [reportCaseId, organizationId],
+    )
+    const reportSource = await seedDocument(reportCaseId, 'ready')
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: payload(0, {}, reportSource),
+    })
+    const createdAssessment = trafficValueLossResponseSchema.parse(created.json()).assessment
+    const versionId = createdAssessment.currentVersion.id
+    const blockedPreview = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions/${versionId}/report-preview`,
+      headers: { cookie: managerCookie },
+      payload: { expectedAssessmentVersion: createdAssessment.version, reportNote: null },
+    })
+    expect(blockedPreview.statusCode).toBe(409)
+    const submitted = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions/${versionId}/submit`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { expectedVersion: createdAssessment.version },
+    })
+    const submittedAssessment = trafficValueLossResponseSchema.parse(submitted.json()).assessment
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions/${versionId}/approve`,
+      headers: { cookie: adminCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { expectedVersion: submittedAssessment.version, reason: 'Sentetik rapor kanıtları incelendi.' },
+    })
+    const approvedAssessment = trafficValueLossResponseSchema.parse(approved.json()).assessment
+
+    const beforePreviewReports = Number((await pool.query(
+      'SELECT count(*) AS n FROM traffic_value_loss_reports WHERE case_id=$1',
+      [reportCaseId],
+    )).rows[0].n)
+    const beforePreviewAudit = Number((await pool.query(
+      "SELECT count(*) AS n FROM audit_events WHERE action='traffic_value_loss.report_generated' AND details->>'caseId'=$1",
+      [reportCaseId],
+    )).rows[0].n)
+    const preview = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions/${versionId}/report-preview`,
+      headers: { cookie: managerCookie },
+      payload: {
+        expectedAssessmentVersion: approvedAssessment.version,
+        reportNote: 'Kullanıcı kontrollü sentetik nihai rapor.',
+      },
+    })
+    expect(preview.statusCode, preview.payload).toBe(200)
+    const previewBody = trafficValueLossReportPreviewResponseSchema.parse(preview.json())
+    expect(previewBody.content).toMatchObject({
+      caseReference: { officeNumber: '2026/3401', plate: '34 P 3401' },
+      assessment: { versionId, humanApprovalStatus: 'approved' },
+      calculation: {
+        grossValueLossMinor: 10_000_000,
+        faultAdjustedValueLossMinor: 7_500_000,
+      },
+      rule: { ruleVersion: '2026.07.01.1' },
+    })
+    expect(previewBody.content.evidence).toHaveLength(3)
+    expect(previewBody.content.comparables).toHaveLength(6)
+    expect(Number((await pool.query('SELECT count(*) AS n FROM traffic_value_loss_reports WHERE case_id=$1', [reportCaseId])).rows[0].n))
+      .toBe(beforePreviewReports)
+    expect(Number((await pool.query(
+      "SELECT count(*) AS n FROM audit_events WHERE action='traffic_value_loss.report_generated' AND details->>'caseId'=$1",
+      [reportCaseId],
+    )).rows[0].n)).toBe(beforePreviewAudit)
+
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions/${versionId}/reports`,
+      headers: { cookie: secretaryCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: {
+        expectedAssessmentVersion: approvedAssessment.version,
+        reportNote: 'Kullanıcı kontrollü sentetik nihai rapor.',
+        confirmed: true,
+        previewHash: previewBody.previewHash,
+      },
+    })
+    expect(forbidden.statusCode).toBe(403)
+    expect(Number((await pool.query('SELECT count(*) AS n FROM traffic_value_loss_reports WHERE case_id=$1', [reportCaseId])).rows[0].n))
+      .toBe(beforePreviewReports)
+
+    const stale = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions/${versionId}/reports`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: {
+        expectedAssessmentVersion: approvedAssessment.version,
+        reportNote: 'Kullanıcı kontrollü sentetik nihai rapor.',
+        confirmed: true,
+        previewHash: 'f'.repeat(64),
+      },
+    })
+    expect(stale.statusCode).toBe(409)
+
+    const idempotencyKey = uuidv7()
+    const generatePayload = {
+      expectedAssessmentVersion: approvedAssessment.version,
+      reportNote: 'Kullanıcı kontrollü sentetik nihai rapor.',
+      confirmed: true,
+      previewHash: previewBody.previewHash,
+    }
+    const generated = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions/${versionId}/reports`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+      payload: generatePayload,
+    })
+    expect(generated.statusCode, generated.payload).toBe(201)
+    const report = trafficValueLossReportResponseSchema.parse(generated.json()).report
+    expect(report).toMatchObject({
+      assessmentVersionId: versionId,
+      status: 'ready',
+      format: 'pdf',
+      ruleVersion: '2026.07.01.1',
+      contentHash: previewBody.previewHash,
+    })
+    const replay = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/versions/${versionId}/reports`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+      payload: generatePayload,
+    })
+    expect(replay.statusCode).toBe(201)
+    expect(replay.json()).toEqual(generated.json())
+    expect((await pool.query('SELECT count(*)::int AS n FROM traffic_value_loss_reports WHERE case_id=$1', [reportCaseId])).rows)
+      .toEqual([{ n: 1 }])
+
+    const list = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/reports`,
+      headers: { cookie: managerCookie },
+    })
+    expect(trafficValueLossReportsResponseSchema.parse(list.json()).reports).toHaveLength(1)
+    const pdf = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/reports/${report.id}/pdf`,
+      headers: { cookie: managerCookie },
+    })
+    expect(pdf.statusCode).toBe(200)
+    expect(pdf.headers['content-type']).toContain('application/pdf')
+    expect(pdf.headers['content-disposition']).toContain('trafik-deger-kaybi-v1.pdf')
+    expect(pdf.rawPayload.subarray(0, 8).toString()).toBe('%PDF-1.4')
+    expect(pdf.rawPayload.length).toBe(report.pdfByteSize)
+    expect((await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/reports/${report.id}/pdf`,
+    })).statusCode).toBe(401)
+    expect((await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${reportCaseId}/traffic-value-loss/reports/${report.id}`,
+      headers: { cookie: otherCookie },
+    })).statusCode).toBe(404)
+
+    await expect(pool.query(
+      "UPDATE traffic_value_loss_reports SET rule_version='degisti' WHERE id=$1",
+      [report.id],
+    )).rejects.toMatchObject({ code: '23001' })
+    await expect(pool.query('DELETE FROM traffic_value_loss_reports WHERE id=$1', [report.id]))
+      .rejects.toMatchObject({ code: '23001' })
+    const audit = await pool.query(
+      "SELECT details::text AS details FROM audit_events WHERE action='traffic_value_loss.report_generated' AND resource_id=$1",
+      [report.id],
+    )
+    expect(audit.rows).toHaveLength(1)
+    const serialized = JSON.stringify({ report, audit: audit.rows })
+    expect(serialized).not.toMatch(/[A-Z]:\\|\\\\|p32-sentetik-guclu-parola|relative_path|original_file_name/i)
     expect(serialized).not.toContain('sentetik-rapor.pdf')
   })
 

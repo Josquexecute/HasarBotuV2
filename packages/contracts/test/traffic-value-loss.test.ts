@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   TRAFFIC_VALUE_LOSS_APPROVE_ROUTE,
+  TRAFFIC_VALUE_LOSS_REPORT_PREVIEW_ROUTE,
   TRAFFIC_VALUE_LOSS_ROUTE,
   trafficValueLossEvaluationSchema,
+  trafficValueLossReportGenerateRequestSchema,
+  trafficValueLossReportPreviewRequestSchema,
   trafficValueLossVersionCreateRequestSchema,
 } from '../src/index.js'
 
@@ -13,7 +16,27 @@ describe('Trafik değer kaybı contracts', () => {
   it('route ve 01.07.2026 kural sürümünü sabitler', () => {
     expect(TRAFFIC_VALUE_LOSS_ROUTE).toContain('/traffic-value-loss')
     expect(TRAFFIC_VALUE_LOSS_APPROVE_ROUTE).toContain('/approve')
+    expect(TRAFFIC_VALUE_LOSS_REPORT_PREVIEW_ROUTE).toContain('/report-preview')
     expect(trafficValueLossEvaluationSchema.shape.ruleVersion.value).toBe('2026.07.01.1')
+  })
+
+  it('rapor önizleme ve kesin çıktı onayını strict biçimde doğrular', () => {
+    expect(trafficValueLossReportPreviewRequestSchema.parse({
+      expectedAssessmentVersion: 3,
+      reportNote: 'Sentetik nihai rapor notu.',
+    })).toMatchObject({ expectedAssessmentVersion: 3 })
+    expect(trafficValueLossReportGenerateRequestSchema.safeParse({
+      expectedAssessmentVersion: 3,
+      reportNote: null,
+      confirmed: true,
+      previewHash: hash,
+    }).success).toBe(true)
+    expect(trafficValueLossReportGenerateRequestSchema.safeParse({
+      expectedAssessmentVersion: 3,
+      reportNote: null,
+      confirmed: false,
+      previewHash: hash,
+    }).success).toBe(false)
   })
 
   it('strict sürüm girdisini ve kanıt bağlantılarını doğrular', () => {

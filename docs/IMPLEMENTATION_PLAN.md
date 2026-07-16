@@ -814,3 +814,15 @@ Kapsam dışı: Kasko değer kaybı, UI entegrasyonu, ilan scraping, SBM entegra
 - [x] Tam root ve repository dışı fresh `npm ci` kalite zincirini tamamla; yalnız Paket 33 dosyalarını path bazlı commit et.
 
 Kapsam dışı: yeni migration/endpoint/domain formülü, Kasko değer kaybı, ilan scraping, SBM entegrasyonu, AI rayiç tahmini, PDF/rapor, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 34 — Trafik değer kaybı nihai rapor önizleme ve çıktı
+
+- [x] Onaylı/superseded insan onaylı version’dan kaynak, emsal, hesaplama, belirsizlik ve kural sürümünü deterministik rapor content snapshot’ına dönüştür.
+- [x] Salt-okunur önizleme ile açık kullanıcı onaylı, idempotent nihai rapor üretimini ayır; stale preview/assessment version’ı reddet.
+- [x] Migration 0023 ile version başına tek immutable rapor, tenant FK, content/PDF digest, byte-size, şema/şablon sürümü ve append-only guard ekle.
+- [x] Tenant/oturum/RBAC korumalı preview, generate, list/detail ve doğrulanmış PDF download endpoint/contracts/JSON Schema ekle.
+- [x] API-owned, Türkçe font gömülü, A4 ve çok sayfalı deterministik PDF renderer ekle; File Agent veya fiziksel case klasörü yazma yolu kullanma.
+- [x] Gerçek API UI’da onaylı version için nihai not, kapsamlı önizleme, açık confirmation, tek final PDF ve download akışını bağla; API kesintisinde mock fallback yapma.
+- [x] Gerçek PostgreSQL/API, PDF render, tarayıcı, tam root ve repository dışı fresh `npm ci` kapılarını tamamla; path bazlı atomik commit oluştur.
+
+Kapsam dışı: onaysız taslaktan çıktı, rapor editörü, genel rapor yönetimi, e-posta gönderimi, File Agent/fiziksel klasör yazımı, Kasko değer kaybı, üretim migration ve sonraki paket.

@@ -6,16 +6,29 @@ import {
   TRAFFIC_VALUE_LOSS_APPROVE_SCOPE,
   TRAFFIC_VALUE_LOSS_REJECT_ROUTE,
   TRAFFIC_VALUE_LOSS_REJECT_SCOPE,
+  TRAFFIC_VALUE_LOSS_REPORT_GENERATE_SCOPE,
+  TRAFFIC_VALUE_LOSS_REPORT_PDF_ROUTE,
+  TRAFFIC_VALUE_LOSS_REPORT_PREVIEW_ROUTE,
+  TRAFFIC_VALUE_LOSS_REPORT_ROUTE,
+  TRAFFIC_VALUE_LOSS_REPORTS_ROUTE,
   TRAFFIC_VALUE_LOSS_ROUTE,
   TRAFFIC_VALUE_LOSS_SUBMIT_ROUTE,
   TRAFFIC_VALUE_LOSS_SUBMIT_SCOPE,
   TRAFFIC_VALUE_LOSS_VERSION_SCOPE,
   TRAFFIC_VALUE_LOSS_VERSIONS_ROUTE,
+  TRAFFIC_VALUE_LOSS_VERSION_REPORTS_ROUTE,
   failureEnvelopeSchema,
   idempotencyKeySchema,
   trafficValueLossApproveRequestSchema,
   trafficValueLossParamsSchema,
   trafficValueLossRejectRequestSchema,
+  trafficValueLossReportGenerateRequestSchema,
+  trafficValueLossReportParamsSchema,
+  trafficValueLossReportPreviewRequestSchema,
+  trafficValueLossReportPreviewResponseSchema,
+  trafficValueLossReportResponseSchema,
+  trafficValueLossReportsResponseSchema,
+  trafficValueLossReportVersionParamsSchema,
   trafficValueLossResponseSchema,
   trafficValueLossSubmitRequestSchema,
   trafficValueLossVersionCreateRequestSchema,
@@ -28,6 +41,11 @@ import { createAuthStore } from '../auth/store.js'
 import { hashRequestBody, isIdempotencyRace } from '../db/idempotency.js'
 import { failureBody } from '../errors/failure.js'
 import { createTrafficValueLossStore, TrafficValueLossStoreError } from './store.js'
+import {
+  createTrafficValueLossReportStore,
+  TrafficValueLossReportStoreError,
+} from './report-store.js'
+import { trafficValueLossReportFilename } from './report-pdf.js'
 
 export interface TrafficValueLossRoutesOptions { readonly pool: pg.Pool }
 const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const
@@ -50,9 +68,21 @@ function storeError(reply: FastifyReply, requestId: string, error: TrafficValueL
   return reply.code(409).send(failureBody('traffic_value_loss_conflict', 'Traffic value loss state does not permit this operation.', requestId))
 }
 
+function reportStoreError(reply: FastifyReply, requestId: string, error: TrafficValueLossReportStoreError) {
+  if (error.code === 'not_found') return reply.code(404).send(failureBody('not_found', 'Traffic value loss report source not found.', requestId))
+  if (error.code === 'version_conflict') return reply.code(409).send(failureBody('traffic_value_loss_stale', 'Traffic value loss version changed.', requestId))
+  if (error.code === 'not_approved') return reply.code(409).send(failureBody('traffic_value_loss_report_not_approved', 'Only a human-approved traffic value loss version can be reported.', requestId))
+  if (error.code === 'preview_mismatch') return reply.code(409).send(failureBody('traffic_value_loss_report_preview_stale', 'Report preview changed and must be reviewed again.', requestId))
+  if (error.code === 'report_exists') return reply.code(409).send(failureBody('traffic_value_loss_report_exists', 'A final report already exists for this approved version.', requestId))
+  if (error.code === 'idempotency_conflict') return reply.code(409).send(failureBody('idempotency_conflict', 'Idempotency key was used with a different request.', requestId))
+  if (error.code === 'render_mismatch') return reply.code(409).send(failureBody('traffic_value_loss_report_verification_failed', 'Stored report output could not be verified.', requestId))
+  return reply.code(400).send(failureBody('traffic_value_loss_report_invalid', 'Traffic value loss report content is invalid.', requestId))
+}
+
 export function registerTrafficValueLossRoutes(app: FastifyInstance, options: TrafficValueLossRoutesOptions): void {
   const auth = createAuthStore(options.pool)
   const store = createTrafficValueLossStore(options.pool)
+  const reports = createTrafficValueLossReportStore(options.pool)
   const actor = (session: { user: { organizationId: string; id: string } }, request: FastifyRequest) => ({
     organizationId: session.user.organizationId,
     actorUserId: session.user.id,
@@ -79,6 +109,71 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
     const versions = await store.versions(session.user.organizationId, params.data.caseId)
     if (versions === undefined) return reply.code(404).send(failureBody('not_found', 'Traffic value loss assessment not found.', requestId))
     return trafficValueLossVersionsResponseSchema.parse({ versions })
+  })
+
+  app.post(TRAFFIC_VALUE_LOSS_REPORT_PREVIEW_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireSession(auth, request, reply)
+    if (session === undefined) return
+    const params = trafficValueLossReportVersionParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(params.error,requestId) }))
+    const body = trafficValueLossReportPreviewRequestSchema.safeParse(request.body)
+    if (!body.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(body.error,requestId) }))
+    try {
+      const preview = await reports.preview(
+        session.user.organizationId,
+        params.data.caseId,
+        params.data.versionId,
+        body.data,
+      )
+      return trafficValueLossReportPreviewResponseSchema.parse(preview)
+    } catch (error) {
+      if (error instanceof TrafficValueLossReportStoreError) return reportStoreError(reply, requestId, error)
+      throw error
+    }
+  })
+
+  app.get(TRAFFIC_VALUE_LOSS_REPORTS_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireSession(auth, request, reply)
+    if (session === undefined) return
+    const params = trafficValueLossParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(params.error,requestId) }))
+    const items = await reports.list(session.user.organizationId, params.data.caseId)
+    if (items === undefined) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
+    return trafficValueLossReportsResponseSchema.parse({ reports: items })
+  })
+
+  app.get(TRAFFIC_VALUE_LOSS_REPORT_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireSession(auth, request, reply)
+    if (session === undefined) return
+    const params = trafficValueLossReportParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(params.error,requestId) }))
+    const report = await reports.find(session.user.organizationId, params.data.caseId, params.data.reportId)
+    if (report === undefined) return reply.code(404).send(failureBody('not_found', 'Traffic value loss report not found.', requestId))
+    return trafficValueLossReportResponseSchema.parse({ report })
+  })
+
+  app.get(TRAFFIC_VALUE_LOSS_REPORT_PDF_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireSession(auth, request, reply)
+    if (session === undefined) return
+    const params = trafficValueLossReportParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(params.error,requestId) }))
+    try {
+      const output = await reports.pdf(session.user.organizationId, params.data.caseId, params.data.reportId)
+      if (output === undefined) return reply.code(404).send(failureBody('not_found', 'Traffic value loss report not found.', requestId))
+      return reply
+        .header('content-type', 'application/pdf')
+        .header('content-disposition', `attachment; filename="${trafficValueLossReportFilename(output.report)}"`)
+        .header('cache-control', 'private, no-store')
+        .header('x-content-type-options', 'nosniff')
+        .send(output.bytes)
+    } catch (error) {
+      if (error instanceof TrafficValueLossReportStoreError) return reportStoreError(reply, requestId, error)
+      throw error
+    }
   })
 
   async function command(request: FastifyRequest, reply: FastifyReply, kind: 'version' | 'submit' | 'approve' | 'reject') {
@@ -128,4 +223,38 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
   app.post(TRAFFIC_VALUE_LOSS_SUBMIT_ROUTE, async (request, reply) => command(request, reply, 'submit'))
   app.post(TRAFFIC_VALUE_LOSS_APPROVE_ROUTE, async (request, reply) => command(request, reply, 'approve'))
   app.post(TRAFFIC_VALUE_LOSS_REJECT_ROUTE, async (request, reply) => command(request, reply, 'reject'))
+  app.post(TRAFFIC_VALUE_LOSS_VERSION_REPORTS_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireAnyRole(auth, request, reply, WRITE_ROLES)
+    if (session === undefined) return
+    const idemKey = key(request)
+    if (idemKey === undefined) return keyRequired(reply, requestId)
+    const params = trafficValueLossReportVersionParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(params.error,requestId) }))
+    const body = trafficValueLossReportGenerateRequestSchema.safeParse(request.body)
+    if (!body.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(body.error,requestId) }))
+    const idem = {
+      scope: TRAFFIC_VALUE_LOSS_REPORT_GENERATE_SCOPE,
+      key: idemKey,
+      requestHash: hashRequestBody({ caseId: params.data.caseId, versionId: params.data.versionId, ...body.data }),
+    }
+    const run = () => reports.generate(
+      actor(session, request),
+      params.data.caseId,
+      params.data.versionId,
+      body.data,
+      idem,
+    )
+    try {
+      let result
+      try { result = await run() } catch (error) {
+        if (!isIdempotencyRace(error)) throw error
+        result = await run()
+      }
+      return reply.code(result.status).send(trafficValueLossReportResponseSchema.parse(result.body))
+    } catch (error) {
+      if (error instanceof TrafficValueLossReportStoreError) return reportStoreError(reply, requestId, error)
+      throw error
+    }
+  })
 }

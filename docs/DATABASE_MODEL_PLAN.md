@@ -256,3 +256,10 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - `ai_provider_call_receipts`, dış çağrıdan önce commit edilen tenant/case/run/request kimliği ve bütçe rezervasyonudur. Response-received canonical output ayrı transaction'da kaydedilir; candidate/usage finalize replay ile provider çağrısı tekrarlanmadan tamamlanabilir.
 - Receipt terminal durumda immutable’dır. `outcome_unknown` otomatik retry edilmez; tahmini maliyet hard-stop hesabında rezerve kalır. Tenant/run/actor bileşik FK, request/client-id unique ve bounded metadata constraint’leri DB’de zorlanır.
 - Full prompt, ham provider response, source text, PII, secret, authorization header, binary veya mutlak yol kolonu yoktur. Migration up/repeat/down/reapply ve privacy/tenant/immutability constraint testleri gerçek PostgreSQL’de çalışır.
+
+## Paket 34 uygulanan PostgreSQL modeli
+
+- Migration `0023_traffic_value_loss_reports`, onaylı assessment version’a tenant-bileşik FK ile bağlı tek final report kaydı ekler.
+- Kayıt; content snapshot, content/PDF SHA-256, PDF byte-size, content schema, template, rule version, generator ve UTC zamanı taşır. PDF binary, filesystem path, storage root veya File Agent bilgisi DB’de tutulmaz.
+- Unique assessment-version constraint ikinci final raporu engeller. Insert guard yalnız insan onaylı `approved | superseded` kaynağı kabul eder; snapshot identity alanları kolonlarla eşleşir.
+- Report satırı update/delete trigger’ıyla append-only’dir. Düzeltme yeni Trafik değer kaybı version/approval/report zinciridir.

@@ -88,3 +88,12 @@ Eşik karşılanmazsa tutar taslağı hesaplanabilse bile `control_required` olu
 - Submit ve insan approve/reject adımları ayrı teyitlerdir. Geçmiş version’lar görünür; approved sonuç insan aktörü ve zamanıyla ayrılır.
 - Mock modu mevcut prototipi korur; API hatasında mock fallback yoktur. Kasko için bu Trafik hesabı çalıştırılmaz.
 - Paket 33 doğrulaması ana ve fresh kopyada 1060 başarılı / 6 mevcut ortam-koşullu UI skip verdi. Gerçek Chrome’da incomplete/control-required → ikinci calculable version → submit → human approve ve API kesintisinde no-fallback; gerçek PostgreSQL’de 2 version, 9 evidence, 6 comparable, 2 approval event ve sızıntısız audit geçti.
+
+## 9. Paket 34 nihai rapor ve çıktı
+
+- Rapor kaynağı yalnız insan onaylı `approved | superseded` assessment version’dır. Rapor; case/ofis referansı, araç ve parça snapshot’ı, piyasa değerleri, kusur hesabı, emsaller, kanıt kimlikleri, belirsizlikler, reasoning, insan onayı ve mevzuat/kural sürümünü birlikte taşır.
+- Önizleme hiçbir DB veya audit yazısı üretmez. Kullanıcının isteğe bağlı bounded nihai notu dahil canonical content digest’i hesaplanır; nihai oluşturma aynı digest, güncel assessment optimistic version, açık confirmation ve Idempotency-Key olmadan çalışmaz.
+- Her assessment version için tek final rapor üretilir. Rapor ve snapshot append-only’dir; sonraki hesap version’ı eski çıktıyı değiştirmez.
+- PDF A4, Türkçe Liberation Sans, sayfa başlığı/altlığı, sayfa numarası ve görünür bölüm hiyerarşisiyle API process içinde bellekte üretilir. Fiziksel çalışma klasörüne otomatik yazılmaz.
+- İndirme sırasında PDF aynı immutable snapshot’tan yeniden oluşturulur ve kayıtlı byte-size/hash ile doğrulanır. Response yalnız PDF binary’sidir; mutlak yol veya storage root bulunmaz.
+- UI önizlemede hesap özeti, emsal ve kanıt listeleri, belirsizlikler ve kural kaynaklarını gösterir. Açık kullanıcı onayından sonra final PDF oluşur; API hatasında mock çıktı yoktur.

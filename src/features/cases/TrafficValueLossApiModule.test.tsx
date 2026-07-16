@@ -7,9 +7,12 @@ import type {
   TrafficValueLossAssessmentRecord,
   TrafficValueLossDataPort,
   TrafficValueLossDraftInput,
+  TrafficValueLossReportContentRecord,
+  TrafficValueLossReportDataPort,
+  TrafficValueLossReportRecord,
   TrafficValueLossVersionRecord,
 } from '../../data'
-import { TrafficValueLossError } from '../../data'
+import { TrafficValueLossError, TrafficValueLossReportError } from '../../data'
 import type { CaseRecord } from '../../types/case'
 import { TrafficValueLossApiModule } from './TrafficValueLossApiModule'
 
@@ -88,6 +91,108 @@ const documentPort: CaseDocumentsDataPort = {
     }],
     photos: [],
   }),
+}
+
+function reportContent(version: TrafficValueLossVersionRecord): TrafficValueLossReportContentRecord {
+  const evidenceById = new Map(version.evidence.map((evidence) => [evidence.id, evidence]))
+  return {
+    schemaVersion: 'traffic-value-loss-final-report/1.0.0',
+    templateVersion: 'traffic-value-loss-final-report-tr/1.0.0',
+    title: 'Trafik Değer Kaybı Nihai Raporu',
+    caseReference: {
+      caseId: CASE_ID,
+      officeNumber: item.officeNumber,
+      plate: item.plate,
+      caseType: 'traffic',
+      lossDate: item.lossDate ?? null,
+      notificationDate: item.notificationDate ?? null,
+    },
+    assessment: {
+      assessmentId: '019fa000-0000-7000-8000-000000000007',
+      versionId: version.id,
+      assessmentVersion: version.assessmentVersion,
+      status: 'approved',
+      humanApprovalStatus: 'approved',
+      approvedBy: USER_ID,
+      approvedAt: '2026-07-16T09:00:00.000Z',
+      approvalReason: 'Kanıtlar insan tarafından kontrol edildi.',
+    },
+    vehicle: version.input.vehicle,
+    damageParts: version.input.damageParts,
+    calculation: {
+      eligibilityStatus: version.evaluation.eligibilityStatus,
+      calculationMethod: version.evaluation.calculationMethod,
+      roundingRule: version.evaluation.roundingRule,
+      preAccidentMarketValueMinor: version.input.preAccidentMarketValueMinor,
+      postRepairMarketValueMinor: version.input.postRepairMarketValueMinor,
+      grossValueLossMinor: version.evaluation.grossValueLossMinor,
+      faultRateBasisPoints: version.input.faultRateBasisPoints,
+      faultAdjustedValueLossMinor: version.evaluation.faultAdjustedValueLossMinor,
+      qualifyingPreComparableCount: version.evaluation.qualifyingPreComparableCount,
+      qualifyingPostComparableCount: version.evaluation.qualifyingPostComparableCount,
+      reasoning: version.evaluation.reasoning,
+    },
+    evidence: version.evidence,
+    comparables: version.comparables.map((comparable) => {
+      const evidence = evidenceById.get(comparable.evidenceId)
+      return {
+        ...comparable,
+        evidenceKey: evidence?.evidenceKey ?? 'missing',
+        sourceReference: evidence?.externalReference ?? null,
+      }
+    }),
+    uncertainties: version.evaluation.uncertainties,
+    rule: {
+      ruleSetId: version.ruleSetId,
+      ruleVersion: version.ruleVersion,
+      effectiveFrom: version.effectiveFrom,
+      sources: version.evaluation.ruleSources,
+    },
+    reportNote: 'Sentetik nihai rapor notu.',
+  }
+}
+
+function mutableReportPort(sourceVersion: () => TrafficValueLossVersionRecord | null): TrafficValueLossReportDataPort {
+  let reports: readonly TrafficValueLossReportRecord[] = []
+  return {
+    list: vi.fn(async () => reports),
+    preview: vi.fn(async () => {
+      const version = sourceVersion()
+      if (version === null) throw new Error('report source not set')
+      return {
+        content: reportContent(version),
+        previewHash: 'd'.repeat(64),
+        previewedAt: '2026-07-16T09:30:00.000Z',
+      }
+    }),
+    generate: vi.fn(async () => {
+      const version = sourceVersion()
+      if (version === null) throw new Error('report source not set')
+      const content = reportContent(version)
+      const report: TrafficValueLossReportRecord = {
+        id: '019fa000-0000-7000-8000-000000000009',
+        caseId: CASE_ID,
+        assessmentId: content.assessment.assessmentId,
+        assessmentVersionId: version.id,
+        assessmentVersion: version.assessmentVersion,
+        status: 'ready',
+        format: 'pdf',
+        schemaVersion: content.schemaVersion,
+        templateVersion: content.templateVersion,
+        ruleVersion: content.rule.ruleVersion,
+        contentHash: 'd'.repeat(64),
+        pdfHash: 'e'.repeat(64),
+        pdfByteSize: 4096,
+        content,
+        generatedBy: USER_ID,
+        generatedAt: '2026-07-16T09:31:00.000Z',
+        version: 1,
+      }
+      reports = [report]
+      return report
+    }),
+    download: vi.fn(async () => ({ blob: new Blob(['%PDF-1.4'], { type: 'application/pdf' }), filename: 'trafik-deger-kaybi-v1.pdf' })),
+  }
 }
 
 function versionFrom(
@@ -217,10 +322,14 @@ function mutablePort() {
   return port
 }
 
-function renderModule(port: TrafficValueLossDataPort, record: CaseRecord = item) {
+function renderModule(
+  port: TrafficValueLossDataPort,
+  record: CaseRecord = item,
+  reportPort?: TrafficValueLossReportDataPort,
+) {
   return render(
     <SessionContext.Provider value={session}>
-      <TrafficValueLossApiModule item={record} source="api" port={port} documentPort={documentPort} />
+      <TrafficValueLossApiModule item={record} source="api" port={port} documentPort={documentPort} reportPort={reportPort} />
     </SessionContext.Provider>,
   )
 }
@@ -229,7 +338,11 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
   it('emsal ve kanıt girdisinden sürüm üretir, submit eder ve insan onayıyla kesinleştirir', async () => {
     const user = userEvent.setup()
     const port = mutablePort()
-    renderModule(port)
+    const reportPort = mutableReportPort(() => {
+      const input = vi.mocked(port.createVersion).mock.calls[0]?.[2]
+      return input === undefined ? null : versionFrom(input, 'approved', 'approved')
+    })
+    renderModule(port, item, reportPort)
 
     await screen.findByText(/1 doğrulanmış belge sürümü/)
     await user.selectOptions(screen.getByLabelText('Ağır / tam hasar'), 'no')
@@ -278,7 +391,25 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     await waitFor(() => expect(port.approve).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('İnsan onaylı sonuç')).toBeInTheDocument()
     expect(screen.getByText('Hesap v1')).toBeInTheDocument()
-  }, 15_000)
+
+    await user.type(screen.getByLabelText('Nihai rapor notu (isteğe bağlı)'), 'Sentetik nihai rapor notu.')
+    await user.click(screen.getByRole('button', { name: 'Nihai Raporu Önizle' }))
+    await waitFor(() => expect(reportPort.preview).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Trafik Değer Kaybı Nihai Raporu')).toBeInTheDocument()
+    expect(screen.getAllByText('2026.07.01.1').length).toBeGreaterThanOrEqual(2)
+    await user.click(screen.getByRole('checkbox', { name: /bu önizlemeden nihai PDF/ }))
+    await user.click(screen.getByRole('button', { name: 'Onayla ve Nihai PDF Oluştur' }))
+    await waitFor(() => expect(reportPort.generate).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Final PDF hazır')).toBeInTheDocument()
+    const downloadButton = screen.getByRole('button', { name: 'PDF İndir' })
+    expect(downloadButton).toBeEnabled()
+    vi.mocked(reportPort.download).mockRejectedValueOnce(
+      new TrafficValueLossReportError('unavailable', 'network'),
+    )
+    await user.click(downloadButton)
+    expect(await screen.findByText('Nihai rapor servisine ulaşılamadı. Mock çıktıya geçilmedi.')).toBeInTheDocument()
+    expect(screen.queryByText('PDF çıktısı tarayıcıya aktarılamadı.')).not.toBeInTheDocument()
+  }, 25_000)
 
   it('API kesintisinde mock sonuç göstermez ve Kasko dosyasında destek dışı sınırı korur', async () => {
     const unavailable: TrafficValueLossDataPort = {

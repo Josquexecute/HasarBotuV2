@@ -363,3 +363,17 @@ export {
   type TrafficValueLossUncertainty,
   type TrafficValueLossUncertaintyCode,
 } from './traffic-value-loss.js'
+export {
+  MAX_TRAFFIC_VALUE_LOSS_REPORT_NOTE_LENGTH,
+  TRAFFIC_VALUE_LOSS_REPORT_SCHEMA_VERSION,
+  TRAFFIC_VALUE_LOSS_REPORT_TEMPLATE_VERSION,
+  TRAFFIC_VALUE_LOSS_REPORT_TITLE,
+  buildTrafficValueLossReportContent,
+  canonicalizeTrafficValueLossReportContent,
+  type TrafficValueLossReportBuildError,
+  type TrafficValueLossReportBuildResult,
+  type TrafficValueLossReportComparable,
+  type TrafficValueLossReportContent,
+  type TrafficValueLossReportEvidence,
+  type TrafficValueLossReportSource,
+} from './traffic-value-loss-report.js'

@@ -664,3 +664,16 @@ Etkisi: Migration `0022_traffic_value_loss_core`; saf domain evaluator; strict c
 7. UI dense masaüstü düzenini, görünür iç scroll alanlarını, açık/koyu temayı ve 1366×768 ile 1920×1080 taşma sınırını korur. File Agent, IPC, fiziksel dosya erişimi, ilan scraping, SBM entegrasyonu, AI tahmini, rapor/PDF ve yeni dependency yoktur.
 
 Etkisi: Trafik Değer Kaybı UI DataPort/adapter/hook’u; gerçek dosya detayında kanıt/emsal girişi, taslak, belirsizlik, geçmiş, submit ve insan onayı çalışma alanı. Paket 32 domain/API kural sürümü `2026.07.01.1` değişmez.
+
+## 2026-07-16 — HB-2026-040: Onaylı Trafik değer kaybı nihai rapor snapshot ve PDF sınırı
+
+1. Nihai rapor yalnız `humanApprovalStatus=approved` olan `approved | superseded` Trafik değer kaybı sürümünden üretilebilir. Draft, control-required, onay bekleyen veya reddedilmiş sürüm raporlanamaz.
+2. Önizleme salt okunurdur; report veya audit kaydı yazmaz. Kullanıcı önizlemede kaynakları, emsalleri, hesaplamayı, belirsizlikleri, insan onayını ve `2026.07.01.1` kural sürümünü görmeden nihai çıktı oluşturamaz.
+3. Önizleme içeriği deterministik canonical snapshot ve SHA-256 digest ile bağlanır. Nihai komut `expectedAssessmentVersion`, açık `confirmed=true`, önizleme digest’i ve zorunlu `Idempotency-Key` taşır; stale veya değişmiş önizleme 409 olur.
+4. Her onaylı assessment version için en fazla bir immutable nihai rapor vardır. Düzeltme gerekiyorsa eski rapor veya approved version değiştirilmez; yeni hesap version’ı, insan onayı ve yeni rapor gerekir.
+5. Migration 0023 yalnız logical snapshot, content/PDF digest’i, byte sayısı, şema/şablon/kural sürümü ve üretim actor/zamanını saklar. Mutlak path, müşteri belge binary’si, File Agent root’u veya secret saklanmaz.
+6. PDF API service içinde, exact `@napi-rs/canvas@1.0.2` ve `pdfjs-dist@6.1.200` Liberation Sans fontlarıyla bellekte deterministik üretilir. File Agent, fiziksel case klasörü, IPC veya otomatik dosya yazma kullanılmaz.
+7. PDF indirme endpoint’i snapshot’tan çıktıyı yeniden üretip saklanan byte size ve SHA-256 ile doğrular; uyumsuzluk başarı olarak sunulmaz.
+8. Yalnız `traffic_value_loss.report_generated` merkezi audit olayı yazılır. Audit rapor metni, plaka, ilan URL’si, belge adı/içeriği, mutlak yol veya PDF binary’si değil; version ve güvenli sayaçları taşır.
+
+Etkisi: Migration `0023_traffic_value_loss_reports`; saf rapor-content builder; strict preview/generate/read/PDF contracts; API-owned PDF renderer ve Dosya Detayı > Değer Kaybı kullanıcı kontrollü final çıktı paneli.

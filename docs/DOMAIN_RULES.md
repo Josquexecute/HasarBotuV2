@@ -371,3 +371,11 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Formdaki her hesaplama yeni immutable version oluşturur. Eski version’ı ekranda seçmek yalnız incelemedir; submit/approve/reject daima server’ın güncel assessment version’ına uygulanır.
 - Bloklayan belirsizlik varken submit yapılamaz. Submit kullanıcı teyidi; approve insan inceleme teyidi; reject zorunlu gerekçe ister. Rol ve optimistic version kontrolünün nihai otoritesi API’dir.
 - API modu mock sonuca düşmez. Kasko vaka Trafik değer kaybı akışına alınmaz.
+
+## Trafik değer kaybı nihai rapor kuralları — Paket 34
+
+- Rapor content builder saf ve deterministiktir; database, HTTP, filesystem veya sistem saati bağımlılığı taşımaz. Aynı onaylı version ve aynı nihai not aynı canonical content’i üretir.
+- Yalnız insan onaylı `approved | superseded` version rapor kaynağıdır. Eksik approver/zaman, kopuk emsal-kanıt bağlantısı veya path/UNC içeren içerik fail-closed reddedilir.
+- Rapor; onaylı hesaplama gerçeğini yeniden hesaplamaz. Input/evaluation snapshot, evidence, comparables, uncertainties ve rule sources değişmeden rapor modeline taşınır; sıralanabilir listeler deterministik sıralanır.
+- Genel output şablonu `traffic-value-loss-final-report-tr/1.0.0`, content şeması `traffic-value-loss-final-report/1.0.0` sürümündedir. Kural sürümü ayrı olarak `2026.07.01.1` kalır.
+- Bir onaylı hesap version’ı bir nihai rapor üretir. Rapor düzeltmesi yeni hesap version’ı ve yeni insan onayı gerektirir; eski rapor değiştirilmez veya silinmez.

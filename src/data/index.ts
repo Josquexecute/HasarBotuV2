@@ -105,6 +105,22 @@ export {
 } from './trafficValueLossPort'
 export { useTrafficValueLoss, type TrafficValueLossLoadStatus } from './useTrafficValueLoss'
 export {
+  createHttpTrafficValueLossReportAdapter,
+  TrafficValueLossReportError,
+  type TrafficValueLossReportAdapterOptions,
+  type TrafficValueLossReportComparableRecord,
+  type TrafficValueLossReportContentRecord,
+  type TrafficValueLossReportDataPort,
+  type TrafficValueLossReportErrorKind,
+  type TrafficValueLossReportEvidenceRecord,
+  type TrafficValueLossReportPreviewRecord,
+  type TrafficValueLossReportRecord,
+} from './trafficValueLossReportPort'
+export {
+  useTrafficValueLossReports,
+  type TrafficValueLossReportLoadStatus,
+} from './useTrafficValueLossReports'
+export {
   createHttpAuthAdapter,
   HttpAuthError,
   type AuthAdapterOptions,

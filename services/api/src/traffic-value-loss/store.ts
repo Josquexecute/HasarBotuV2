@@ -83,7 +83,7 @@ function domainDate(value: string) {
   return parsed.value
 }
 
-async function loadVersion(exec: Queryable, organizationId: string, caseId: string, versionId: string): Promise<TrafficValueLossVersionDto | undefined> {
+export async function loadTrafficValueLossVersion(exec: Queryable, organizationId: string, caseId: string, versionId: string): Promise<TrafficValueLossVersionDto | undefined> {
   const versionResult = await exec.query(
     'SELECT * FROM traffic_value_loss_versions WHERE organization_id=$1 AND case_id=$2 AND id=$3',
     [organizationId, caseId, versionId],
@@ -144,7 +144,7 @@ async function loadAssessment(exec: Queryable, organizationId: string, caseId: s
   )
   const row = result.rows[0] as Record<string, unknown> | undefined
   if (row === undefined || row.current_version_id === null) return undefined
-  const currentVersion = await loadVersion(exec, organizationId, caseId, String(row.current_version_id))
+  const currentVersion = await loadTrafficValueLossVersion(exec, organizationId, caseId, String(row.current_version_id))
   if (currentVersion === undefined) return undefined
   return trafficValueLossAssessmentSchema.parse({
     id: row.id,
@@ -230,7 +230,7 @@ export function createTrafficValueLossStore(pool: pg.Pool): TrafficValueLossStor
       const result = await pool.query('SELECT id FROM traffic_value_loss_versions WHERE assessment_id=$1 ORDER BY assessment_version DESC', [row.id])
       const versions: TrafficValueLossVersionDto[] = []
       for (const item of result.rows as Array<{ id: string }>) {
-        const version = await loadVersion(pool, organizationId, caseId, item.id)
+        const version = await loadTrafficValueLossVersion(pool, organizationId, caseId, item.id)
         if (version !== undefined) versions.push(version)
       }
       return versions

@@ -343,3 +343,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Piyasa ilan URL’si, araç/plaka, belge adı/içeriği, değer kanıt metni, mutlak yol, secret, SQL/stack veya ham hata audit’e yazılmaz.
 - Version, evidence, comparable, approval event ve audit aynı command transaction’ında atomiktir.
 - Approved/superseded version ile evidence/comparable/approval geçmişi DB trigger’larıyla immutable/append-only korunur.
+
+### 6.19 Paket 34 nihai Trafik değer kaybı raporu audit sınırı
+
+- Salt-okunur report preview audit ve DB yazısı üretmez; ekran yenilemesi audit gürültüsüne dönüşmez.
+- Yalnız başarılı immutable çıktı transaction’ında `traffic_value_loss.report_generated` yazılır. Organization/actor/case/report/version, rule/schema/template version, evidence/comparable/uncertainty sayıları, PDF byte-size ve requestId taşınabilir.
+- Audit’e rapor metni/notu, plaka, piyasa URL’si, belge adı/içeriği, source hash, PDF binary, mutlak yol, secret, SQL/stack veya ham renderer hatası yazılmaz.
+- Report row ve audit aynı transaction’dadır. Report append-only olduğu için yedek/restore sonrasında onaylı version’a ait nihai çıktı sessizce değişmez.

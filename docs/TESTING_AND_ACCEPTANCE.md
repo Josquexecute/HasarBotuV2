@@ -264,3 +264,12 @@ raporlanır.
 - 1366×768 açık/koyu ve 1920×1080 tema; body overflow, emsal iç scroll ve console warning/error kontrolü geçmelidir.
 - Repository dışı fresh `npm ci`, gerçek `_test` PostgreSQL ile typecheck, lint, test ve build tamamlanmadan Paket 33 PASS sayılmaz.
 - Gerçek sonuç: ana ve repository-dışı fresh kopyada **1060 başarılı / 6 mevcut ortam-koşullu UI skip**. Paket 33 adapter/component 19/19, Paket 32 gerçek PostgreSQL/API/TCP 8/8 ve gerçek Chrome draft→submit→approve akışı skip edilmeden geçti.
+
+### Paket 34 — Trafik değer kaybı nihai rapor kabulü
+
+- Domain/contracts: onaysız kaynak reddi, deterministik content/digest, emsal-kanıt bağlantısı, strict preview/generate schema ve Zod/JSON Schema semantik eşliği.
+- Gerçek PostgreSQL 0023: up/repeat/down/reapply, yalnız approved source, version başına tek report, tenant FK, snapshot identity/path guard ve append-only update/delete reddi.
+- Gerçek API: preview’da DB/audit yazısı yok; stale/hash mismatch; idempotent tek generate; list/detail/PDF; byte/hash yeniden doğrulama; 401/403/404 ve sızıntısız audit.
+- PDF: A4, Türkçe karakterler, çok sayfa, bölüm taşması, başlık/altlık/sayfa numarası, kaynak/emsal/hesap/belirsizlik/kural içeriği Poppler render ve görsel incelemeyle geçmelidir.
+- Gerçek tarayıcı: login → Trafik case → onaylı değer kaybı → nihai not → önizleme → açık confirmation → PDF üretim/download; no-fallback, 1366×768 açık/koyu ve 1920×1080 tema/overflow/console kontrolü.
+- Kritik DB/API/PDF/tarayıcı testi skip kalırsa Paket 34 PASS sayılmaz. Fiziksel case klasörü, gerçek müşteri verisi ve üretim migration kullanılmaz.

@@ -425,3 +425,12 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Create/submit/approve/reject komutları güvenli `Idempotency-Key`, cookie oturumu ve güncel optimistic assessment version taşır.
 - Document metadata adapter’ı verified document evidence için `contentHash` değerini DataPort’a ekler. Değer UI’da render edilmez; yalnız Paket 32 source-hash komutuna gider.
 - 401/403/400/404/409/5xx/ağ hataları güvenli UI sınıflarına map edilir; response body, SQL, stack, secret, mutlak yol veya belge içeriği gösterilmez ve mock fallback yapılmaz.
+
+## 23. Paket 34 Trafik değer kaybı nihai rapor contracts/API
+
+- `POST .../versions/:versionId/report-preview`: salt-okunur; `expectedAssessmentVersion` ve bounded nullable `reportNote` alır, canonical content, `previewHash` ve UTC `previewedAt` döndürür.
+- `POST .../versions/:versionId/reports`: zorunlu Idempotency-Key, `confirmed=true`, aynı note, expected assessment version ve preview hash ile tek immutable PDF rapor kaydı üretir.
+- `GET .../traffic-value-loss/reports`, `GET .../reports/:reportId`: tenant-kapsamlı immutable rapor metadata/content read’idir.
+- `GET .../reports/:reportId/pdf`: doğrulanmış `application/pdf`, güvenli ASCII filename, `private,no-store` ve `nosniff` header’larıyla binary çıktı verir.
+- Preview onaysız source, stale version veya uyuşmayan digest için 409; tenant dışı kaynak/rapor 404; oturumsuz 401; üretim rolü yetersizse 403 döner.
+- JSON contracts source/emsal/hesap/belirsizlik/rule/approval içeriğini strict doğrular. Mutlak path, storage root, belge filename/içeriği, secret veya ham hata alanı yoktur.
