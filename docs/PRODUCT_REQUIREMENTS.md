@@ -191,3 +191,12 @@ formatlarında alınabilir.
 - Dış istek öncesi seçilmiş source-anchor metni deterministik PII minimizasyonu/redaksiyonundan geçer. UI dış sağlayıcı, redaksiyon sayısı/kategorileri, input boyutu, retention modu ve tahmini maliyeti açık onaydan önce gösterir.
 - Strict structured output yalnız adaydır. Server kanıt doğrulaması, Paket 27 insan review’ı ve Paket 23 pending promotion/approval sınırları aynen uygulanır; provider sonucu doğrudan kesin karara dönüşmez.
 - `store:false` ZDR taahhüdü değildir. Gerçek müşteri pilotu sağlayıcı retention sözleşmesi/organizasyon ayarı ve yetkili secret kurulumu ayrıca doğrulanmadan başlatılmaz.
+
+### Kasko poliçe analiz uçtan uca kullanıcı akışı — Paket 30
+
+- Kasko dosya detayında doğrulanmış PDF/OCR kaynakları, analiz planı, sağlayıcı onayı, AI adayları, insan inceleme kararları ve Paket 23 taslak sonucu tek çalışma bağlamında sunulur.
+- Kullanıcı kullanılacak kaynak parçalarını seçebilir. Plan yalnız seçilen ve server tarafından yeniden doğrulanan source kayıtlarıyla oluşturulur; kaynak seçmeden analiz başlatılamaz.
+- Aday incelemesinde provider değeri ile insan düzenlemesi ayrılır. Kanıt görünümü belge/documentVersion, extraction, sayfa, bounded excerpt, kalite/warning ve sourceAnchor bilgisini gösterir.
+- Yalnız kabul edilen veya kanıt sınırında düzenlenen adaylar açık onayla yeni pending Paket 23 analiz sürümüne uygulanır. Red ve kontrol gereken adaylar uygulanmaz; conflict ve provenance geçmişi korunur.
+- Uygulama tamamlanınca yeni analiz sürümü aynı dosya detayında otomatik görünür. Bu taslak, ayrıca Paket 23 insan onayı verilmeden kesin teminat/muafiyet veya operasyon kararı değildir.
+- API hatasında gerçek akış mock veriye düşmez. Mutlak yol, secret, binary, ham provider cevabı ve tam poliçe metni kullanıcı arayüzüne taşınmaz.

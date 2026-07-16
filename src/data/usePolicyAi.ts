@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import { createHttpPolicyAiAdapter, HttpPolicyAiError } from './policyAiHttpAdapter'
-import type { DataSourceKind, PolicyAiCandidateCategory, PolicyAiCandidateReviewInput, PolicyAiWorkspaceRecord } from './ports'
+import type {
+  DataSourceKind,
+  PolicyAiCandidateCategory,
+  PolicyAiCandidateReviewInput,
+  PolicyAiPromotionRecord,
+  PolicyAiSourceSelectionRecord,
+  PolicyAiWorkspaceRecord,
+} from './ports'
 
 export type PolicyAiLoadStatus = 'idle' | 'loading' | 'ok' | 'empty' | 'unauthorized' | 'forbidden' | 'not_found' | 'conflict' | 'unavailable'
 type BusyAction = 'plan' | 'start' | 'review' | 'promote' | null
@@ -53,14 +60,21 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
     return () => { cancelled = true }
   }, [caseId, fail, source, version])
 
-  const plan = useCallback(async () => {
-    if (workspace === null || workspace.availableSources.length === 0 || busyAction !== null) return
-    const sourceIdentity = workspace.availableSources.map((item) => item.sourceType === 'pdf_text' ? `pdf:${item.extractionId}:${item.segmentId}` : `ocr:${item.ocrRunId}:${item.elementId}`).sort().join('|')
+  const plan = useCallback(async (selectedSources: readonly PolicyAiSourceSelectionRecord[]) => {
+    if (workspace === null || selectedSources.length === 0 || busyAction !== null) return
+    const availableSourceKeys = new Set(workspace.availableSources.map((item) => item.sourceType === 'pdf_text'
+      ? `pdf:${item.extractionId}:${item.segmentId}`
+      : `ocr:${item.ocrRunId}:${item.elementId}`))
+    const selectedSourceKeys = selectedSources.map((item) => item.sourceType === 'pdf_text'
+      ? `pdf:${item.extractionId}:${item.segmentId}`
+      : `ocr:${item.ocrRunId}:${item.elementId}`)
+    if (new Set(selectedSourceKeys).size !== selectedSourceKeys.length || selectedSourceKeys.some((key) => !availableSourceKeys.has(key))) return
+    const sourceIdentity = [...selectedSourceKeys].sort().join('|')
     const identity = `${caseId}:plan:${sourceIdentity}`
     if (planAttempt.current?.identity !== identity) planAttempt.current = { identity, key: crypto.randomUUID() }
     setBusyAction('plan')
     try {
-      const planned = await adapter.current.plan(caseId, workspace.availableSources, planAttempt.current.key)
+      const planned = await adapter.current.plan(caseId, selectedSources, planAttempt.current.key)
       planAttempt.current = null
       startAttempt.current = null
       setWorkspace({ ...workspace, run: planned, candidates: [], conflicts: [], promotionPreview: null, promotion: null })
@@ -112,10 +126,10 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
     }
   }, [busyAction, caseId, fail, workspace])
 
-  const promote = useCallback(async () => {
-    if (workspace === null) return
+  const promote = useCallback(async (): Promise<PolicyAiPromotionRecord | null> => {
+    if (workspace === null) return null
     const preview = workspace.promotionPreview
-    if (preview === null || !preview.canPromote || busyAction !== null) return
+    if (preview === null || !preview.canPromote || busyAction !== null) return null
     const identity = `${caseId}:promote:${preview.runId}:${preview.reviewSetHash}:${preview.targetAnalysisId ?? 'new'}:${preview.targetAnalysisVersion ?? 0}`
     if (promoteAttempt.current?.identity !== identity) promoteAttempt.current = { identity, key: crypto.randomUUID() }
     setBusyAction('promote')
@@ -124,8 +138,10 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
       promoteAttempt.current = null
       setWorkspace({ ...workspace, promotion: promoted })
       setStatus('ok')
+      return promoted
     } catch (error) {
       fail(error)
+      return null
     } finally {
       setBusyAction(null)
     }

@@ -224,3 +224,14 @@ raporlanır.
 - Provider schema regresyonu `anyOf`, recursive object, schema-valued `additionalProperties`, enum ve provider-side bounds bulunmadığını; `normalizedValueJson` stringinin primitive/object canonical değere dönüştüğünü ve bozuk JSON'un `provider_response_invalid` ile fail-closed kaldığını doğrulamalıdır. Enum/uzunluk/adet/sayı sınırları ile gerçek kanıt kontrolleri server-side runtime contract'ta korunmalıdır.
 - Gemini request testi sade wire şemaya rağmen trusted system instruction içinde exact schema version, candidate limiti, izinli category listesi ve canonical biçim kurallarının bulunduğunu kanıtlamalıdır. Canlı pilot canonical reddi full output, original value, anchor veya Zod mesajı sızdırmadan yalnız allowlist alan yolu ve issue sınıfını göstermelidir.
 - Gerçek Gemini çağrısı, kalite/kaynak doğruluğu ve ücretsiz-katman retention/egress kontrolü tamamlanmadan Paket 29 PASS veya commit sayılmaz. Gerçek müşteri verisi kullanılamaz.
+
+### Paket 30 — dosya detayında poliçe analiz akışı kabulü
+
+- UI component/integration: doğrulanmış source listesi yüklenir; kullanıcı en az bir source seçmeden plan başlatamaz; plan gövdesi yalnız seçili source kimliklerini taşır.
+- Plan ve start ayrı idempotency kimlikleri kullanır. Dış sağlayıcı için PII/retention/bütçe özeti ve case+bundle’a bağlı açık onay korunur.
+- Candidate kanıt dialogu doğru belge/documentVersion, extraction, sayfa, sourceAnchor, bounded excerpt, kalite/warning ve hash bilgisini gösterir; Escape ve açık kapatma eylemi çalışır.
+- Accept/edit/reject/control kararları mevcut Paket 27 API’sine gider. Promotion yalnız bütün adaylar incelendiğinde ve en az bir accepted/edited aday olduğunda etkinleşir.
+- Promotion sonrası Paket 23 analiz listesi/detayı aynı dosya detayında otomatik yeniden okunur; yeni sürüm, pending insan onayı ve kaynak sayfa/bölüm/madde görünür olur.
+- API/PostgreSQL regresyonu mevcut gerçek-DB AI review→promotion→policy-analysis detail zincirini, idempotency/tenant/RBAC/audit ve sızıntı sınırlarını yeniden çalıştırır. Paket 30 yeni migration veya endpoint eklemez.
+- Gerçek tarayıcı: login → Kasko dosya → source seçimi → plan/start → candidate kanıtı → review → promotion → aynı ekranda yeni Paket 23 taslağı; API kesintisinde no-fallback; 1366×768 açık/koyu ve 1920×1080 tema, overflow ve console kontrolü.
+- Kritik UI/API/PostgreSQL/tarayıcı testi skip kalırsa Paket 30 PASS sayılmaz. Gerçek müşteri belgesi, gerçek `P:\`, üretim migration veya otomatik analiz approval kullanılmaz.

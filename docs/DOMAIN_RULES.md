@@ -334,3 +334,11 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Gemini response parser yalnız `STOP` candidate'ın non-thought text part'larını sıralı birleştirir. Thought summary ve opaque thought signature kanonik çıktıya/audit'e taşınmaz. `MAX_TOKENS`, eksik text ve unsupported part kesin aday sayılmaz; güvenli kontrol/failure üretir.
 - Provider-private wire şema Gemini uyumluluğu için sade tutulduğunda server-owned canonical sözleşme kaybolmaz: exact output schema version, candidate üst sınırı, izinli category değerleri, candidate/canonical alan biçimi, anchor üyeliği ve confidence sınırı trusted system contract içinde açıkça verilir. Model çıktısı yine strict runtime Zod ve server-side evidence doğrulamasından geçer; prompt bu kontrollerin yerine geçmez.
 - Gemini ücretsiz katmanı içerikleri ürün geliştirmede kullanabildiği için `free_tier_product_improvement` ayrı ve görünür retention değeridir. Gerçek müşteri verisi bu pilotta yasaktır; ücretsiz maliyet sonucu veri saklama güvencesi değildir.
+
+## Kullanıcı kontrollü analiz uygulama sınırı — Paket 30
+
+- Kaynak keşfi istemci kolaylığıdır; plan isteğindeki her PDF/OCR source server tarafından tenant, case, ready/verified durum ve sürüm yönünden yeniden doğrulanır.
+- Kullanıcının kaynak seçimi yeni bir kanıt üretmez ve source kalitesini yükseltmez. Seçilmemiş source plan bundle’ına girmez; boş kaynak kümesiyle plan oluşturulmaz.
+- Provider adayını kabul etmek Paket 23 analizini onaylamak değildir. Yalnız `accepted` ve kanıt sınırındaki `edited` review kayıtları promotion ile pending analiz taslağına uygulanabilir.
+- Promotion sonrası görünen Paket 23 sürümü `draft | control_required | conflict_detected` ve `humanApprovalStatus=pending` sınırını korur. Açık conflict veya eksik kaynak sessizce kesin karara dönüşmez.
+- Dosya detayı otomatik yenilemesi yalnız başarılı promotion sonucunu okur; ikinci promotion, yeni provider çağrısı veya başka bir veri yazma işlemi üretmez.

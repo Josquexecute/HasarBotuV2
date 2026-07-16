@@ -617,3 +617,13 @@ Etkisi: Migration `0020_real_policy_ai_provider`; PII redaction domain’i, Open
 12. GenerateContent REST cevabı tek text part varsayımıyla ayrıştırılmaz. Thought-summary işaretli part JSON çıktısına katılmaz; yalnız thought-signature metadata taşıyan boş part kabul edilir; kalan text part'ları sıralı ve bounded birleştirilir. Preflight 4096 output token kullanır. `MAX_TOKENS`, candidate/content/parts ve output JSON bozukluğu ayrı sabit safe code üretir; ham response veya thought signature saklanmaz.
 
 Etkisi: Migration `0021_policy_ai_provider_recovery`; Gemini provider/retention enum genişlemesi; provider çağrısını DB transaction dışına alan durable receipt/recovery akışı; sentetik pilot kalite ölçümü ve fail-fast gerçek Gemini pilot komutu. Paket 28 OpenAI production adapter'ı değişmeden kalır. Yeni runtime dependency, IPC, File Agent veya fiziksel veri yazma yolu yoktur.
+
+## 2026-07-16 — HB-2026-036: Dosya detayında kullanıcı kontrollü poliçe analiz akışı
+
+1. Paket 24–29 yetenekleri yeni bir AI veya analiz motoru kurmadan, Kasko dosyasının mevcut `Evrak ve Fotoğraf` çalışma alanında tek bir yönlendirilmiş akış olarak birleştirilir.
+2. Kullanıcı server tarafından keşfedilen doğrulanmış PDF/OCR parçalarından kullanılacak kaynakları açıkça seçer. Seçilmemiş kaynak plan isteğine girmez; boş seçimle plan başlatılamaz.
+3. Plan ve dış sağlayıcı çağrısı ayrı kullanıcı eylemleridir. Dış gönderim, mevcut PII/retention/bütçe özeti ve case+bundle kimliğine bağlı açık onay olmadan başlatılmaz.
+4. Candidate kanıt görünümü yalnız server çözümlü sourceAnchor, belge/documentVersion kimliği, extraction kimliği, sayfa, bounded excerpt, kalite/warning ve hash özetini gösterir. Mutlak yol, binary, secret, ham provider çıktısı veya tam poliçe metni gösterilmez.
+5. Accept/edit/reject/control kararları ve promotion semantiği Paket 27 ile aynıdır. Yalnız accepted/edited adaylar açık onayla Paket 23 içinde yeni pending taslak sürüme uygulanır; bu işlem nihai analiz approval değildir.
+6. Promotion transaction'ı başarıyla tamamlanınca dosya detayındaki Paket 23 analiz görünümü otomatik yenilenir. Kullanıcı aynı ekranda yeni analiz sürümünü, insan onay durumunu ve sayfa/bölüm/madde kanıtını görür; sayfa yenilemesi veya mock fallback gerekmez.
+7. UI adımları kaynak seçimi → plan/start → insan incelemesi → taslağa uygulama olarak görünürdür. API/DB/contracts/audit semantiği değişmez; yeni migration, endpoint, dependency, File Agent işi, IPC veya fiziksel veri yazma yolu eklenmez.

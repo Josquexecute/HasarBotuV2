@@ -60,6 +60,11 @@ describe('AI alan adayları görünümü', () => {
     expect(screen.getAllByText(/Düşük OCR kalitesi/).length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText(/Genel muafiyetsiz ifade koşullu muafiyeti/)).toBeInTheDocument()
     expect(screen.getByText(/İnsan kararı append-only/)).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: /Kanıtı Görüntüle/ })[0]!)
+    expect(screen.getByRole('dialog', { name: /Muafiyet · deductible.general/ })).toBeInTheDocument()
+    expect(screen.getAllByText(ANCHOR).length).toBeGreaterThan(0)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: /Muafiyet · deductible.general/ })).not.toBeInTheDocument()
     expect(document.body.textContent).not.toContain('P:\\')
   })
 
@@ -130,7 +135,7 @@ describe('AI alan adayları görünümü', () => {
     await user.click(screen.getAllByRole('button',{name:'Kontrol Gerektirir'})[0]!);await user.type(screen.getByLabelText('Gerekçe'),'İkinci uzman görmeli');await user.click(screen.getByRole('button',{name:'Kararı Kaydet'}));await waitFor(()=>expect(reviews.get('deductible-general')?.action).toBe('control_required'))
     await user.click(screen.getAllByRole('button',{name:'Kabul Et'})[0]!);await waitFor(()=>expect(reviews.get('deductible-general')?.action).toBe('accepted'))
     await user.click(screen.getAllByRole('button',{name:'Düzenle'})[1]!);await user.type(screen.getByLabelText('Gerekçe'),'Koşul uzman tarafından açıklandı');await user.click(screen.getByRole('button',{name:'Kararı Kaydet'}));await waitFor(()=>expect(reviews.get('deductible-10')?.action).toBe('edited'))
-    const promotionCheckbox=screen.getByLabelText(/yeni, onaysız Paket 23 taslak sürümüne/);expect(promotionCheckbox).toBeEnabled();await user.click(promotionCheckbox);await user.click(screen.getByRole('button',{name:'Yeni Taslak Sürüm Oluştur'}));await waitFor(()=>expect(screen.getByText('Taslak analiz sürümü oluşturuldu')).toBeInTheDocument());expect(screen.getByText(/2 aday ve 1 çelişki/)).toBeInTheDocument()
+    const promotionCheckbox=screen.getByLabelText(/yeni, onaysız Paket 23 taslak sürümüne uygulanmasını/);expect(promotionCheckbox).toBeEnabled();await user.click(promotionCheckbox);await user.click(screen.getByRole('button',{name:'Onaylanan Adayları Uygula'}));await waitFor(()=>expect(screen.getByText('Taslak analiz sürümü oluşturuldu')).toBeInTheDocument());expect(screen.getByText(/2 aday ve 1 çelişki/)).toBeInTheDocument()
   })
 
   it('ağ hatasında mock fallback yapmaz; mock mod provider çağırmaz', async () => {
@@ -169,6 +174,7 @@ describe('AI alan adayları görünümü', () => {
     let started = false
     let planKey: string | null = null
     let startKey: string | null = null
+    let planBody: Record<string, unknown> | null = null
     const extraction = { id: EXTRACTION, documentId: DOCUMENT, documentVersionId: VERSION, extractionVersion: 3, status: 'ready', parserName: 'pdfjs-dist', parserVersion: '6.1.200', normalizationVersion: 'pdf-text-normalization/1.0.0', offsetUnit: 'unicode_code_point', pageCount: 2, textPageCount: 1, imageOnlyPageCount: 1, emptyPageCount: 0, failedPageCount: 0, segmentCount: 1, rawCharacterCount: 40, normalizedCharacterCount: 40, outputHash: 'e'.repeat(64), failureCode: null, version: 2, createdAt: '2026-07-15T08:00:00.000Z', startedAt: null, completedAt: '2026-07-15T08:00:01.000Z' }
     const page = { id: PAGE, extractionId: EXTRACTION, pageNumber: 1, status: 'text', rawText: 'Kasko teminat metni', normalizedText: 'Kasko teminat metni', rawTextHash: 'e'.repeat(64), normalizedTextHash: 'e'.repeat(64), segmentCount: 1 }
     const imagePage = { ...page, id: RUN_TWO, pageNumber: 2, status: 'image_only', rawText: '', normalizedText: '', segmentCount: 0 }
@@ -181,7 +187,7 @@ describe('AI alan adayları görünümü', () => {
       if (url.includes('/ocr-runs')) return response(200, { items: [] })
       if (url.includes('/segments?')) return response(200, { items: [segment] })
       if (url.includes('/pages?')) return response(200, { items: [page, imagePage] })
-      if (init?.method === 'POST' && url.endsWith('/plan')) { planKey = new Headers(init.headers).get('Idempotency-Key'); planned = true; return response(201, detail('planned')) }
+      if (init?.method === 'POST' && url.endsWith('/plan')) { planKey = new Headers(init.headers).get('Idempotency-Key'); planBody = JSON.parse(String(init.body)) as Record<string, unknown>; planned = true; return response(201, detail('planned')) }
       if (init?.method === 'POST' && url.endsWith('/start')) { startKey = new Headers(init.headers).get('Idempotency-Key'); started = true; return response(200, detail('review_required')) }
       if (url.includes('/candidates?')) return response(200, { items: [generalCandidate, candidate], conflicts: [conflict], pageInfo: { page: 1, pageSize: 100, totalItems: 2, totalPages: 1 } })
       if (url.endsWith('/promotion-preview')) return response(200,{preview})
@@ -193,14 +199,22 @@ describe('AI alan adayları görünümü', () => {
     render(<PolicyAiCandidatesModule caseId={CASE} source="api" />)
     expect(await screen.findByText('Sentetik Kasko Poliçesi.pdf · belge sürümü 2')).toBeInTheDocument()
     expect(screen.getByText('OCR/kontrol gereken sayfalar: 2')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Extraction Planı Oluştur' }))
+    const sourceCheckbox = screen.getByLabelText(/PDF · Sayfa 1 · clause/)
+    await waitFor(() => expect(sourceCheckbox).toBeChecked())
+    const planButton = screen.getByRole('button', { name: 'Analiz Planı Oluştur' })
+    await user.click(sourceCheckbox)
+    expect(planButton).toBeDisabled()
+    await user.click(sourceCheckbox)
+    expect(planButton).toBeEnabled()
+    await user.click(planButton)
     const startButton = await screen.findByRole('button', { name: 'Aday Üretimini Başlat' })
-    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByLabelText(/Bu case ve source bundle/))
     await user.click(startButton)
     await waitFor(() => expect(screen.getByText('deductible.conditional')).toBeInTheDocument())
     expect(planKey).toMatch(/^[0-9a-f-]{36}$/)
     expect(startKey).toMatch(/^[0-9a-f-]{36}$/)
     expect(startKey).not.toBe(planKey)
+    expect(planBody).toMatchObject({ sources: [{ sourceType: 'pdf_text', extractionId: EXTRACTION, segmentId: SEGMENT }] })
   })
 
   it('malformed run/bundle response için fail-closed unavailable gösterir', async () => {

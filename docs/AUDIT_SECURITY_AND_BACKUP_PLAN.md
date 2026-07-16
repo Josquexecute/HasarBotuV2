@@ -321,3 +321,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Gemini pilotunda official GenerateContent endpoint'i, `x-goog-api-key` secret sınırı ve tools/cached-content yokluğu kod/test düzeyinde doğrulanır. Ücretsiz katmanın `free_tier_product_improvement` retention davranışı açıkça saklanır ve UI'da gösterilir; bu yüzden gerçek müşteri verisi pilot girdisi olamaz.
 - 4xx diagnostic yalnız bounded HTTP/provider-status ile sabit neden ve izinli alan sınıfıdır; DB/audit/log'a yazılmaz. Provider hata `message`/`description`, ham response body ve structured-output payload bellekte sınıflandırıldıktan sonra atılır; kullanıcı verisinden serbest diagnostic token üretilmez. Schema-preflight ve timeout tanısı yalnız stage/status/safe code taşır, kalıcılaştırılmaz. Başarılı pilot tek wire probe kullanır; 400 tanı çağrıları audit/usage ledger olayı değildir.
 - Thought summary/signature, candidate raw part listesi ve finish message DB/audit/log'a yazılmaz. Preflight yalnız sabit finish-reason sınıfını yerel tanıda gösterir; gerçek adapter kanonik JSON dışındaki part metadata'sını bellekte attıktan sonra strict server doğrulamasına geçer.
+
+### 6.16 Paket 30 dosya detayı entegrasyonu audit sınırı
+
+- Dosya detayı entegrasyonu yeni audit olayı üretmez. Mevcut plan/start/review/promotion ve Paket 23 write olayları merkezi AuditService üzerinden aynı transaction sınırlarında kalır.
+- Kaynak seçiminin UI state’i kalıcı iş verisi değildir. Server plan audit’i yalnız mevcut güvenli source/candidate sayaçlarını ve kimlikleri taşır; checkbox etiketi, tam excerpt veya istemci ekran durumu audit’e yazılmaz.
+- Promotion sonrası otomatik analysis refresh salt okunurdur ve ek audit gürültüsü oluşturmaz.
+- Kanıt dialogu yalnız API’nin bounded sourceAnchor metadata’sını gösterir; mutlak yol, binary, secret, full prompt/output ve tam poliçe metni istemci modeline eklenmez.

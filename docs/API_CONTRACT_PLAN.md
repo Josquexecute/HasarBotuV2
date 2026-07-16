@@ -392,3 +392,10 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - Wire schema sadeleştirmesi public/canonical contract bilgisini kaldırmaz. Adapter request'teki exact output schema version ve maximum candidate sınırı ile domain category/biçim kurallarını trusted provider instruction'a taşır; provider cevabı bu kurallara uymuyorsa API DTO'suna veya receipt'e canonical başarı olarak giremez.
 - Gemini REST response içindeki thought/signature metadata public DTO değildir. Adapter yalnız bounded non-thought text part'larını birleştirir; finish reason veya JSON parse hatası API contract'ını genişletmeden mevcut kanonik provider failure sınırında kalır.
 - Paket 28 OpenAI production adapter’ı korunur. Gemini ücretsiz-katman çağrısı yalnız açık opt-in sentetik pilot komutunda çalışır; UI retention uyarısını gösterir ve API kesintisinde mock fallback yapmaz.
+
+## 19. Paket 30 dosya detayı orchestration kullanımı
+
+- Paket 30 yeni endpoint veya DTO eklemez. Mevcut Paket 24/25 read, Paket 26 plan/start/list, Paket 27 review/promotion ve Paket 23 analysis read sözleşmeleri aynı case bağlamında sıralı kullanılır.
+- Plan request yalnız kullanıcının seçtiği `PolicyAiSourceSelection` kayıtlarını taşır; server eligibility ve tenant doğrulaması değişmeden son otoritedir.
+- Promotion response içindeki `analysisId` ve `analysisVersion`, başarılı write sonrasında Paket 23 list/detail read’ini yenilemek için kullanılır. İstemci bu kimliklerden analiz içeriği uydurmaz.
+- UI orchestration ikinci bir write, otomatik approval veya yeni audit olayı üretmez. 401/403/404/409/5xx ve network hatalarında mevcut güvenli hata eşlemesi ve no-fallback davranışı korunur.

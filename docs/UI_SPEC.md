@@ -82,3 +82,12 @@ Varsayılan Kompakt.
 - Uzun not
 - 100+ fotoğraf
 - Sağ AI paneli açık/kapalı
+
+## Kasko poliçe analiz çalışma alanı
+
+- Mevcut `Evrak ve Fotoğraf` sekmesi korunur; Kasko vakada PDF/OCR hazırlığı ile poliçe analiz akışı aynı dikey çalışma alanında görünür.
+- Akış adımları kompakt olarak `Kaynağı seç ve planla → Analizi başlat → Adayları incele → Taslağa uygula` biçiminde gösterilir.
+- Kaynak seçimi checkbox ile klavye erişilebilir olmalı; boş seçim plan butonunu devre dışı bırakmalıdır.
+- Candidate kartında provider değeri, insan kararı, koşul/istisna, confidence, kaynak kalitesi ve güvenli kanıt açma eylemi birlikte görünür.
+- Kanıt dialogu masaüstü yoğunluğunu korur; bounded excerpt ve güvenli metadata görünür, uzun kimlikler satır kırar, Escape ile kapanır.
+- Promotion sonrası yeni Paket 23 analiz sürümü sayfa yenilenmeden aynı çalışma alanında gösterilir. Taslak uygulama ile nihai insan onayı görsel ve metinsel olarak ayrılır.

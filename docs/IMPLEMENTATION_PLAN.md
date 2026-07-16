@@ -763,3 +763,17 @@ Kapsam dışı: otomatik Paket 23 approval, File Agent/filesystem, yeni backgrou
 - [x] Gerçek çağrı sonrasında son kapıları yenile, Paket 29 dosyalarını path bazlı stage et ve atomik commit oluştur.
 
 Kapsam dışı: gerçek müşteri poliçesi, otomatik review/promotion/approval, 503 dışı otomatik provider fallback, File Agent/filesystem, üretim migration ve sonraki paket.
+
+## Paket 30 — Dosya detayında kullanıcı kontrollü Kasko poliçe analiz akışı
+
+- [x] Mevcut Paket 24 PDF, Paket 25 OCR, Paket 26 plan/start, Paket 27 review/promotion ve Paket 23 analiz görünümünü tek Kasko dosya detayı çalışma alanında birleştir.
+- [x] Doğrulanmış source parçalarını kullanıcı seçimine aç; boş seçimde planı engelle ve yalnız seçilen kaynakları mevcut plan API’sine gönder.
+- [x] Plan ve provider start adımlarını ayrı tut; mevcut bundle/bütçe/retention/PII önizlemesi ile açık onay sınırını koru.
+- [x] Candidate için server çözümlü belge, sürüm, extraction, sayfa, sourceAnchor, bounded excerpt, kalite ve hash bilgilerini güvenli kanıt dialogunda göster.
+- [x] Accept/edit/reject/control kararlarını ve promotion preview/onayını mevcut append-only Paket 27 API’siyle yürüt.
+- [x] Promotion sonrası oluşturulan Paket 23 pending taslak sürümünü aynı dosya detayında otomatik yenile; yeni sürümün kaynak sayfa/bölüm/madde zincirini görünür kıl.
+- [x] API modunda mock fallback yapma; mock prototip davranışını ve mevcut tasarım sistemi/tab yapısını koru.
+- [x] Root, gerçek PostgreSQL/API, tarayıcı ve repository dışı fresh `npm ci` kapılarını tamamla; gerçek sonuçları PROJECT_STATUS’a işle.
+- [x] Paket 30 dosyalarını path bazlı stage et, staged kapsamı doğrula ve atomik commit oluştur.
+
+Kapsam dışı: yeni provider/AI modeli, otomatik Paket 23 approval, yeni conflict çözüm UI’si, PDF/OCR motoru değişikliği, File Agent/filesystem, yeni migration/endpoint/dependency, üretim migration ve sonraki paket.

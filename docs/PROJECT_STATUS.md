@@ -629,3 +629,21 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Gerçek PostgreSQL migration zinciri 42/42, domain 370/370, contracts 179/179 ve API 215/215 test geçti. Finalize hata enjeksiyonu, outcome-unknown no-retry ve 503 tükenmesi sonrası `AI_PROVIDER_UNAVAILABLE` finalized/idempotent replay senaryoları geçmiştir.
 - Başarılı yetkili sentetik Gemini pilotu kullanıcı tarafından doğrulandı. Codex process'ine provider secret aktarılmadığı için çağrı tekrar edilmedi; secret repository, log, audit veya test çıktısına taşınmadı.
 - Pilot sonrasında ana çalışma ağacında `npm install`, typecheck, lint, gerçek `_test` PostgreSQL ile **1014 başarılı / 6 mevcut ortam-koşullu UI skip**, build, moderate audit (0 açık) ve diff-check yeniden geçti. Repository dışı yeni fresh `npm ci` kopyasında aynı 1014/6, typecheck, lint ve build yeniden geçti.
+
+## Paket 30 — Dosya detayında kullanıcı kontrollü Kasko poliçe analiz akışı (2026-07-16)
+
+- Kasko `Evrak ve Fotoğraf` alanındaki Paket 24 PDF, Paket 25 OCR, Paket 26 plan/start, Paket 27 insan review/promotion ve Paket 23 analiz görünümü tek yönlendirilmiş çalışma alanında birleştirildi.
+- Kullanıcı doğrulanmış PDF/OCR source parçalarını seçebilir; boş seçim planı engeller ve yalnız seçilen source kimlikleri mevcut plan API’sine gönderilir. Plan ve provider start ayrı eylem/idempotency ve açık dış gönderim onayı sınırını korur.
+- Candidate kanıt dialogu belge/documentVersion, extraction, sayfa, sourceAnchor, bounded excerpt, kalite/warning ve hash özetini gösterir; mutlak yol, binary, secret, ham provider output veya tam belge metni göstermez.
+- Accept/edit/reject/control ve promotion mevcut Paket 27 API’sini kullanır. Başarılı promotion aynı dosya detayındaki Paket 23 görünümünü otomatik yeniler; yeni sürüm `draft`, kaynak kapsamı `complete`, insan onayı `pending` olarak ve sayfa/bölüm/madde kanıtlarıyla görünür. Otomatik analiz approval eklenmedi.
+- Yeni migration, endpoint, contract/JSON Schema, dependency, File Agent işi, IPC veya fiziksel veri yazma yolu yoktur. Karar: HB-2026-036.
+
+### Doğrulama durumu (Paket 30)
+
+- Ana çalışma ağacında `npm install`, typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1015 başarılı / 6 mevcut ortam-koşullu UI skip**, build, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 156/6; domain 370; contracts 179; database 42; API 215; file-agent 53.
+- Gerçek PostgreSQL/API regresyonunda migration 0001–0021 zinciri, review→promotion→policy-analysis detail, tenant/RBAC/idempotency/audit ve immutable provenance testleri skip edilmedi.
+- Gerçek Chrome/CDP smoke’unda login → Kasko dosya → kaynak seçimi → plan/start → dört kanıtlı aday → kanıt dialogu → dört kabul → promotion → aynı ekranda Paket 23 taslağı tamamlandı. DB sonucu: 1 run, 4 candidate, 4 append-only review, 1 promotion, 1 analiz, 4 AI fact ve 4 source reference; analiz `draft/complete/pending`.
+- 1366×768 açık/koyu ve 1920×1080 koyu temada yatay taşma yoktu; `case-module` ve candidate alanındaki dikey scroll erişilebilirdi. Görsel kontrol kabul edilen dense-functional masaüstü yönünü korudu. Uygulama exception/console warning yoktu; Chrome’un otomatik ve uygulama dışı `favicon.ico` isteği 404 üretti.
+- API response/audit taramasında mutlak/UNC yol, sentetik parola, provider secret kalıbı, full prompt/system contract veya provider output sızıntısı bulunmadı.
+- Repository dışı `.git`/`node_modules`/`dist` içermeyen fresh kopyada `npm ci`, typecheck, lint, gerçek `_test` PostgreSQL ile aynı **1015/6**, build yeniden geçti; kopya güvenle kaldırıldı.
+- Build mevcut büyük chunk uyarısını sürdürür: ana JS 534.55 kB (gzip 143.26 kB). Paket 30 işlevini engellemez; ileride ayrı performans/code-splitting paketiyle ele alınmalıdır.
