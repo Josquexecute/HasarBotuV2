@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  ClipboardList,
   CircleAlert,
   FileWarning,
   Plus,
@@ -45,12 +46,15 @@ const attentionLabels: Readonly<Record<DashboardAttentionCodeRecord, string>> = 
   manual_recovery: 'Manuel kurtarma',
   operation_failed: 'İşlem hatası',
   operation_blocked: 'İşlem blokajı',
+  overdue_task: 'Geciken görev',
   overdue_follow_up: 'Geciken takip',
   human_approval: 'İnsan onayı',
   missing_documents: 'Eksik evrak',
   document_control_required: 'Evrak kontrolü',
+  task_due_today: 'Bugün görev',
   follow_up_today: 'Bugün takip',
   unassigned: 'Sorumlu atanmamış',
+  upcoming_task: 'Yaklaşan görev',
   upcoming_follow_up: 'Yaklaşan takip',
 }
 
@@ -86,9 +90,9 @@ function formatRefreshTime(value: string): string {
 function matchesAttention(item: DashboardCaseRecord, filter: AttentionFilter): boolean {
   if (filter === 'all') return true
   if (filter === 'action') return item.requiresAction
-  if (filter === 'overdue') return item.attentionCodes.includes('overdue_follow_up')
-  if (filter === 'today') return item.attentionCodes.includes('follow_up_today')
-  if (filter === 'upcoming') return item.attentionCodes.includes('upcoming_follow_up')
+  if (filter === 'overdue') return item.attentionCodes.includes('overdue_follow_up') || item.attentionCodes.includes('overdue_task')
+  if (filter === 'today') return item.attentionCodes.includes('follow_up_today') || item.attentionCodes.includes('task_due_today')
+  if (filter === 'upcoming') return item.attentionCodes.includes('upcoming_follow_up') || item.attentionCodes.includes('upcoming_task')
   if (filter === 'missing') return item.missingDocumentCount > 0
   if (filter === 'control') return item.controlRequiredDocumentCount > 0
   return item.pendingHumanApprovalCount > 0
@@ -136,7 +140,8 @@ function WorkflowCard({ item }: { readonly item: DashboardCaseRecord }) {
           {item.missingDocumentCount > 0 && <span title="Eksik evrak"><FileWarning size={12} />{item.missingDocumentCount}</span>}
           {item.controlRequiredDocumentCount > 0 && <span title="Kontrol gereken evrak"><ShieldAlert size={12} />{item.controlRequiredDocumentCount}</span>}
           {item.pendingHumanApprovalCount > 0 && <span title="Bekleyen insan onayı"><UserRoundCheck size={12} />{item.pendingHumanApprovalCount}</span>}
-          {item.missingDocumentCount + item.controlRequiredDocumentCount + item.pendingHumanApprovalCount === 0 && (
+          {item.openTaskCount > 0 && <span title="Açık görev"><ClipboardList size={12} />{item.openTaskCount}</span>}
+          {item.missingDocumentCount + item.controlRequiredDocumentCount + item.pendingHumanApprovalCount + item.openTaskCount === 0 && (
             <span className="text-success"><CheckCircle2 size={12} />Kontrol yok</span>
           )}
         </span>
@@ -204,15 +209,15 @@ export function DashboardPage() {
     },
     {
       label: 'Bugün Takip',
-      value: dashboard.summary.dueTodayCount,
-      detail: `${dashboard.summary.upcomingFollowUpCount} yaklaşan`,
+      value: dashboard.summary.dueTodayCount + dashboard.summary.taskDueTodayCaseCount,
+      detail: `${dashboard.summary.upcomingFollowUpCount + dashboard.summary.upcomingTaskCaseCount} yaklaşan takip/görev`,
       tone: 'info',
       filter: 'today' as const,
     },
     {
       label: 'Geciken',
-      value: dashboard.summary.overdueFollowUpCount,
-      detail: 'Öncelikli takip',
+      value: dashboard.summary.overdueFollowUpCount + dashboard.summary.overdueTaskCaseCount,
+      detail: `${dashboard.summary.openTaskCount} açık görev`,
       tone: 'danger',
       filter: 'overdue' as const,
     },
@@ -369,7 +374,7 @@ export function DashboardPage() {
       {dashboard !== null && (
         <footer className="statusbar">
           <span><CheckCircle2 size={14} />{visibleCases.length} / {dashboard.summary.openCaseCount} dosya gösteriliyor</span>
-          <span><CalendarClock size={14} />{dashboard.summary.dueTodayCount} bugün · {dashboard.summary.upcomingFollowUpCount} yaklaşan takip</span>
+          <span><CalendarClock size={14} />{dashboard.summary.dueTodayCount + dashboard.summary.taskDueTodayCaseCount} bugün · {dashboard.summary.upcomingFollowUpCount + dashboard.summary.upcomingTaskCaseCount} yaklaşan takip/görev</span>
           <span className="statusbar__warning"><CircleAlert size={14} />{dashboard.summary.actionRequiredCaseCount} işlem gerekiyor</span>
           <button type="button" onClick={() => navigate('/dosyalar')}>Tüm dosyaları aç <ArrowRight size={14} /></button>
         </footer>

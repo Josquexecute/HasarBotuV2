@@ -1,15 +1,18 @@
-export const DASHBOARD_PRIORITY_VERSION = 'dashboard-priority/1.0.0' as const
+export const DASHBOARD_PRIORITY_VERSION = 'dashboard-priority/1.1.0' as const
 
 export const DASHBOARD_ATTENTION_CODES = [
   'manual_recovery',
   'operation_failed',
   'operation_blocked',
+  'overdue_task',
   'overdue_follow_up',
   'human_approval',
   'missing_documents',
   'document_control_required',
+  'task_due_today',
   'follow_up_today',
   'unassigned',
+  'upcoming_task',
   'upcoming_follow_up',
 ] as const
 
@@ -28,6 +31,10 @@ export interface DashboardPriorityInput {
   readonly manualRecoveryCount: number
   readonly failedOperationCount: number
   readonly blockedOperationCount: number
+  readonly openTaskCount: number
+  readonly overdueTaskCount: number
+  readonly dueTodayTaskCount: number
+  readonly upcomingTaskCount: number
 }
 
 export interface DashboardPriorityResult {
@@ -42,12 +49,15 @@ const ATTENTION_BASE_SCORE: Readonly<Record<DashboardAttentionCode, number>> = {
   manual_recovery: 1_000,
   operation_failed: 950,
   operation_blocked: 900,
+  overdue_task: 875,
   overdue_follow_up: 850,
   human_approval: 750,
   missing_documents: 650,
   document_control_required: 550,
+  task_due_today: 475,
   follow_up_today: 450,
   unassigned: 400,
+  upcoming_task: 325,
   upcoming_follow_up: 300,
 }
 
@@ -68,10 +78,13 @@ export function evaluateDashboardPriority(
   if (input.manualRecoveryCount > 0) attention.add('manual_recovery')
   if (input.failedOperationCount > 0) attention.add('operation_failed')
   if (input.blockedOperationCount > 0) attention.add('operation_blocked')
+  if (input.overdueTaskCount > 0) attention.add('overdue_task')
   if (input.pendingHumanApprovalCount > 0) attention.add('human_approval')
   if (input.missingDocumentCount > 0) attention.add('missing_documents')
   if (input.controlRequiredDocumentCount > 0) attention.add('document_control_required')
+  if (input.dueTodayTaskCount > 0) attention.add('task_due_today')
   if (input.responsibleUserId === null) attention.add('unassigned')
+  if (input.upcomingTaskCount > 0) attention.add('upcoming_task')
 
   if (input.followUpDate !== null) {
     const days = daysBetweenLocalDates(asOfDate, input.followUpDate)
@@ -91,7 +104,8 @@ export function evaluateDashboardPriority(
       + input.pendingHumanApprovalCount
       + input.manualRecoveryCount
       + input.failedOperationCount
-      + input.blockedOperationCount,
+      + input.blockedOperationCount
+      + input.openTaskCount,
   )
   const priorityScore = baseScore + secondaryWeight + countWeight
   const priority: DashboardPriority =

@@ -99,6 +99,12 @@ Sonraki tek mantıklı görev Paket 02'dir. Sonraki paketler, önceki paketin ka
 - **Kabul:** API DB hazır oluşunu güvenli ölçer; temiz test DB tek komutla kurulup doğrulanır.
 - **Gerçekleşen sonuç (2026-07-12):** Tamamlandı. PostgreSQL 17.10 ofis makinesine servis olarak kuruldu (kullanıcı onaylı; Türkçe locale initdb hatası UTF8+ICU tr-TR manuel cluster ile çözüldü — `DATABASE_OPERATIONS.md`). `packages/database` (`@hasarbotu/database`): tam pin `pg@8.22.0` + `node-pg-migrate@8.0.4`, açık/sızıntısız DATABASE_URL parser'ı + redaksiyon, pool fabrikası, sınırlı süreli sağlık kontrolü, programatik/CLI migration koşucusu ve UUIDv7 üreteci (HB-2026-009; kimlik üretimi persistence katmanında). İlk migration `organizations` kabuğu; durum `pgmigrations`. Gerçek DB kanıtları: boş DB ileri migration, tekrar güvenliği, sıra uyuşmazlığı reddi, transaction rollback (iz yok), kısıt ihlalleri, sağlık kontrolü; test kapısı `_test` soneki zorunlu — üretim bağlantısı testte reddedilir. API health opsiyonel `DATABASE_URL` ile gerçek ping'ten `ok`/`degraded` üretir (canlı kanıtlı); havuz graceful shutdown'da kapanır. Yedek→ayrı DB'ye geri yükleme→satır eşitliği smoke'u geçti. Kapılar: 404/404 test, audit 0, temiz checkout. Sonraki paket Paket 06'dır; K1/K2 kararı Paket 07 cases şemasını bloklamaya devam eder.
 
+### Paket 37 — operasyon kayıt altyapısı
+
+- Migration `0024_case_notes_tasks`, mevcut `cases`, `users`, `idempotency_keys` ve merkezi `audit_events` altyapısını genişletir; ikinci queue/audit/veri kaynağı oluşturmaz.
+- Not, görev event’i ve takip tarihi geçmişi append-only guard ile; görev terminal geçişi optimistic version ve DB trigger ile korunur.
+- Yeni runtime dependency, File Agent job türü, IPC veya fiziksel dosya erişimi yoktur. Üretim migration çalıştırılmaz; yalnız `_test` PostgreSQL’de up/repeat/down/reapply ve constraint doğrulaması yapılır.
+
 ### Paket 06 — Kullanıcılar, roller ve oturum
 
 - **Amaç:** Merkezi kimlik doğrulama ve sunucu taraflı yetkilendirme temelini kurmak.

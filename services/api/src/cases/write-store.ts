@@ -167,6 +167,14 @@ export function createCasesWriteStore(pool: pg.Pool) {
             input.notificationDate ?? null,
           ],
         )
+        if (input.followUpDate !== undefined) {
+          await client.query(
+            `INSERT INTO case_follow_up_history
+               (id,organization_id,case_id,previous_follow_up_date,new_follow_up_date,source,case_version,actor_user_id)
+             VALUES ($1,$2,$3,NULL,$4,'case_create',1,$5)`,
+            [uuidv7(), actor.organizationId, caseId, input.followUpDate, actor.actorUserId],
+          )
+        }
 
         const row = await client.query(`SELECT ${SELECT_FIELDS} FROM cases WHERE id = $1`, [caseId])
         const createdRow = row.rows[0] as CaseRow
@@ -242,10 +250,16 @@ export function createCasesWriteStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const current = await client.query(
-          `SELECT version, loss_date, notification_date FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE`,
+          `SELECT version, follow_up_date, loss_date, notification_date
+           FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE`,
           [caseId, actor.organizationId],
         )
-        const existing = current.rows[0] as { version: number; loss_date: Date | null; notification_date: Date | null } | undefined
+        const existing = current.rows[0] as {
+          version: number
+          follow_up_date: Date | null
+          loss_date: Date | null
+          notification_date: Date | null
+        } | undefined
         if (existing === undefined) {
           await client.query('ROLLBACK')
           return { kind: 'not_found' }
@@ -301,6 +315,37 @@ export function createCasesWriteStore(pool: pg.Pool) {
           operation: 'closure_documents',
         })
         const item = rowToDto(updatedRow, serviceProfile)
+        const previousFollowUpDate = existing.follow_up_date === null ? null : toLocalDateString(existing.follow_up_date)
+        const followUpChanged = input.followUpDate !== undefined && input.followUpDate !== previousFollowUpDate
+        if (followUpChanged) {
+          await client.query(
+            `INSERT INTO case_follow_up_history
+               (id,organization_id,case_id,previous_follow_up_date,new_follow_up_date,source,case_version,actor_user_id)
+             VALUES ($1,$2,$3,$4,$5,'case_update',$6,$7)`,
+            [
+              uuidv7(),
+              actor.organizationId,
+              caseId,
+              previousFollowUpDate,
+              input.followUpDate,
+              item.version,
+              actor.actorUserId,
+            ],
+          )
+          await audit.record(client, {
+            organizationId: actor.organizationId,
+            actorUserId: actor.actorUserId,
+            requestId: actor.requestId,
+            action: 'case.follow_up_changed',
+            entityType: 'case',
+            entityId: item.id,
+            details: {
+              previousFollowUpDate,
+              newFollowUpDate: input.followUpDate,
+              caseVersion: item.version,
+            },
+          })
+        }
 
         await audit.record(client, {
           organizationId: actor.organizationId,

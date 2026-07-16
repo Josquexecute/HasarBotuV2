@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "caseId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "asOfDate": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "x-hasarbotu-runtime-validation": "calendar-date-validity"
+    },
+    "notes": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "noteType": {
+            "type": "string",
+            "enum": [
+              "internal",
+              "contact"
+            ]
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "createdByDisplayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "createdAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          }
+        },
+        "required": [
+          "id",
+          "noteType",
+          "subject",
+          "body",
+          "createdByUserId",
+          "createdByDisplayName",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "tasks": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "normal",
+              "high"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "assignedUserId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assignedUserDisplayName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          },
+          "dueStatus": {
+            "type": "string",
+            "enum": [
+              "overdue",
+              "today",
+              "upcoming",
+              "scheduled"
+            ]
+          },
+          "resolutionNote": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolvedByUserId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolvedByDisplayName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolvedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "createdByDisplayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "createdAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          },
+          "updatedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "priority",
+          "status",
+          "assignedUserId",
+          "assignedUserDisplayName",
+          "dueDate",
+          "dueStatus",
+          "resolutionNote",
+          "resolvedByUserId",
+          "resolvedByDisplayName",
+          "resolvedAt",
+          "version",
+          "createdByUserId",
+          "createdByDisplayName",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "followUpHistory": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "previousFollowUpDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "newFollowUpDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "case_create",
+              "case_update"
+            ]
+          },
+          "caseVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "actorUserId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "actorDisplayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "changedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          }
+        },
+        "required": [
+          "id",
+          "previousFollowUpDate",
+          "newFollowUpDate",
+          "source",
+          "caseVersion",
+          "actorUserId",
+          "actorDisplayName",
+          "changedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "canWrite": {
+          "type": "boolean"
+        },
+        "canCompleteTasks": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "canWrite",
+        "canCompleteTasks"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "caseId",
+    "asOfDate",
+    "notes",
+    "tasks",
+    "followUpHistory",
+    "permissions"
+  ],
+  "additionalProperties": false
+}

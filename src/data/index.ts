@@ -89,6 +89,24 @@ export {
   type UseDashboardResult,
 } from './useDashboard'
 export {
+  CaseOperationsError,
+  createHttpCaseOperationsAdapter,
+  type CaseFollowUpHistoryRecord,
+  type CaseNoteRecord,
+  type CaseNoteTypeRecord,
+  type CaseOperationsErrorKind,
+  type CaseOperationsPort,
+  type CaseOperationsRecord,
+  type CaseTaskDueStatusRecord,
+  type CaseTaskPriorityRecord,
+  type CaseTaskRecord,
+  type CaseTaskStatusRecord,
+} from './caseOperationsPort'
+export {
+  useCaseOperations,
+  type CaseOperationsLoadStatus,
+} from './useCaseOperations'
+export {
   createHttpDocumentWorkspaceAdapter,
   HttpDocumentWorkspaceError,
   isSafeMetadataRelativePath,

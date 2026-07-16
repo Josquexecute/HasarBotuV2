@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-16
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 36 — Durum Panosu gerçek API entegrasyonu
-- Durum: **Kod, gerçek PostgreSQL/API, gerçek Chrome ve repository dışı fresh checkout kapıları geçti; commit hazırlığı tamamlandı**
-- Git: Yerel repository, `foundation/package-36-dashboard-api` dalı, remote yok
+- Aşama: Paket 37 — Case notları, görevler ve takip geçmişi
+- Durum: **Tamamlandı; gerçek PostgreSQL/API, Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
+- Git: Yerel repository, `foundation/package-37-case-notes-tasks` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -725,3 +725,16 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Ana ağaçta gerçek `hasarbotu_test` PostgreSQL ile **1.090 başarılı / 6 mevcut ortam-koşullu UI skip** geçti. Dağılım: UI 175/6; domain 385; contracts 200; database 45; API 232; file-agent 53. Paket 36 gerçek dashboard API testi 2/2 ve skip edilmedi.
 - Gerçek Chrome/CDP smoke: API login; 5 açık vaka; geciken 1, bugün 1, eksik evraklı 1, bekleyen insan onayı 1 ve işlem gereken 4 özeti; onay/işlem filtreleri; arama; dosya detayına geçiş; API kesintisinde no-fallback; 1366×768 açık/koyu ve 1920×1080 koyu görünüm geçti. Body yatay taşma yok, workflow panosu kendi `overflow-x:auto` kaydırmasını koruyor ve kararlı ekranda console warning/error/exception 0.
 - Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen fresh kopyada `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.090/6** test ve build/bundle bütçesi yeniden geçti. `npm ci` mevcut `glob@11.1.0` deprecation uyarısını verdi; moderate audit ana ağaçta 0 açıktır.
+
+## Paket 37 — Case notları, görevler ve takip geçmişi (2026-07-16)
+
+- Migration `0024_case_notes_tasks`; organization/case kapsamında append-only `case_notes`, optimistic `case_tasks`, append-only `case_task_events` ve `case_follow_up_history` tablolarını ekler. Not ve geçmiş fiziksel olarak güncellenemez/silinemez; görev yalnız `open → completed|cancelled` geçişi yapar.
+- Gerçek Operasyon API’si; workspace read, idempotent not/görev create ve expectedVersion kullanan tamamla/iptal komutlarını sağlar. Görev tamamlamada sonuç notu, iptalde gerekçe zorunludur; atanan kullanıcı aktif ve aynı organization içinde olmalıdır.
+- Case `followUpDate` create/update transaction’ı aynı anda append-only takip geçmişi yazar. Takip güncellemesi mevcut Case optimistic locking sınırını kullanır.
+- Dosya Detayı > Operasyon sekmesi API modunda gerçek not, görev, görev sonucu/iptali ve takip geçmişini gösterir; 401/403/404/409/ağ durumlarında mock fallback yapmaz. Mock prototip ayrı ve değişmeden kalır.
+- Dashboard priority `dashboard-priority/1.1.0` oldu. Geciken, bugün ve yaklaşan açık görevler takip tarihinden ayrı sinyal ve sayaç olarak agregasyona katılır.
+- Merkezi audit yalnız not türü, görev kimliği/durumu/sürümü ve güvenli sayaçları taşır; not metni, görev başlığı, sonuç/iptal açıklaması audit’e kopyalanmaz.
+- Ana ağaçta gerçek `hasarbotu_test` PostgreSQL ile **1.119 başarılı / 6 mevcut ortam-koşullu UI skip** geçti. Dağılım: UI 185/6; domain 388; contracts 209; database 47; API 237; file-agent 53. Migration 0024 ileri/tekrar/rollback-yeniden-ileri, tenant/append-only/geçiş kısıtları ve Operasyon API testi skip edilmedi.
+- Gerçek Chrome/CDP smoke: API login; not ekleme; görev oluşturma/tamamlama; geciken açık görevin Dashboard önceliğine yansıması; takip tarihi güncelleme ve geçmiş; API kesintisinde no-fallback geçti. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yok; console/runtime yalnız senaryoda beklenen ve açıkça izin verilen 401/404 ağ kayıtlarını taşıdı.
+- Build başlangıç JavaScript grafiğini 440.912 baytta tuttu; en büyük chunk 286.664 bayt ve Operasyon dahil **7 lazy modül** ayrı kaldı. Moderate audit 0 açıktır.
+- Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen fresh kopyada `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.119/6** test ve build/bundle bütçesi yeniden geçti; geçici kopya kaldırıldı.

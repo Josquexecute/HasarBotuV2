@@ -389,3 +389,16 @@ export {
   type DashboardPriorityResult,
   type DashboardSortableItem,
 } from './dashboard.js'
+export {
+  CASE_NOTE_TYPES,
+  CASE_TASK_DUE_STATUSES,
+  CASE_TASK_PRIORITIES,
+  CASE_TASK_STATUSES,
+  canTransitionCaseTask,
+  classifyCaseTaskDueDate,
+  type CaseNoteType,
+  type CaseTaskDueStatus,
+  type CaseTaskPriority,
+  type CaseTaskStatus,
+  type CaseTaskTransition,
+} from './case-operations.js'

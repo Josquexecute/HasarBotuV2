@@ -93,6 +93,17 @@ import {
   trafficValueLossReportsResponseSchema,
 } from './v1/traffic-value-loss/report.js'
 import { dashboardResponseSchema } from './v1/dashboard/dto.js'
+import {
+  caseNoteCreateRequestSchema,
+  caseTaskCancelRequestSchema,
+  caseTaskCompleteRequestSchema,
+  caseTaskCreateRequestSchema,
+} from './v1/case-operations/commands.js'
+import {
+  caseNoteResponseSchema,
+  caseOperationsResponseSchema,
+  caseTaskResponseSchema,
+} from './v1/case-operations/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -184,6 +195,13 @@ export const JSON_SCHEMA_TARGETS = {
   'traffic-value-loss-report-response': trafficValueLossReportResponseSchema,
   'traffic-value-loss-reports-response': trafficValueLossReportsResponseSchema,
   'dashboard-response': dashboardResponseSchema,
+  'case-operations-response': caseOperationsResponseSchema,
+  'case-note-create-request': caseNoteCreateRequestSchema,
+  'case-note-response': caseNoteResponseSchema,
+  'case-task-create-request': caseTaskCreateRequestSchema,
+  'case-task-complete-request': caseTaskCompleteRequestSchema,
+  'case-task-cancel-request': caseTaskCancelRequestSchema,
+  'case-task-response': caseTaskResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

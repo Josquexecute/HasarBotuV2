@@ -159,6 +159,18 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     await seedCompleteTrafficDocuments(caseIds.approval)
     await seedCompleteTrafficDocuments(caseIds.normal)
     await seedTrafficDocumentsExcept(caseIds.missing, 'victim_traffic_policy')
+    await pool.query(
+      `INSERT INTO case_tasks
+       (id,organization_id,case_id,title,priority,assigned_user_id,due_date,created_by_user_id)
+       VALUES ($1,$2,$3,'Geciken sentetik görev','high',$4,'2026-07-15',$4),
+              ($5,$2,$6,'Bugünkü sentetik görev','normal',$4,'2026-07-16',$4),
+              ($7,$2,$8,'Yaklaşan sentetik görev','low',$4,'2026-07-20',$4)`,
+      [
+        uuidv7(), organizationId, caseIds.overdue, userId,
+        uuidv7(), caseIds.control,
+        uuidv7(), caseIds.normal,
+      ],
+    )
 
     const assessmentId = uuidv7()
     const valueLossVersionId = uuidv7()
@@ -234,16 +246,20 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     const body = response.json() as DashboardResponse
     expect(dashboardResponseSchema.safeParse(body).success).toBe(true)
     expect(body.asOfDate).toBe('2026-07-16')
-    expect(body.priorityVersion).toBe('dashboard-priority/1.0.0')
+    expect(body.priorityVersion).toBe('dashboard-priority/1.1.0')
     expect(body.summary).toMatchObject({
       openCaseCount: 5,
       overdueFollowUpCount: 1,
       dueTodayCount: 1,
       upcomingFollowUpCount: 1,
+      openTaskCount: 3,
+      overdueTaskCaseCount: 1,
+      taskDueTodayCaseCount: 1,
+      upcomingTaskCaseCount: 1,
       missingDocumentCaseCount: 1,
       controlRequiredDocumentCaseCount: 1,
       pendingHumanApprovalCaseCount: 1,
-      actionRequiredCaseCount: 4,
+      actionRequiredCaseCount: 5,
       criticalCaseCount: 1,
     })
     expect(body.items.map((item) => item.caseId)).toEqual([
@@ -255,8 +271,10 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     ])
     expect(body.items.find((item) => item.caseId === caseIds.overdue)).toMatchObject({
       priority: 'critical',
-      primaryAttention: 'overdue_follow_up',
+      primaryAttention: 'overdue_task',
       missingDocumentCount: 0,
+      openTaskCount: 1,
+      overdueTaskCount: 1,
     })
     expect(body.items.find((item) => item.caseId === caseIds.approval)).toMatchObject({
       priority: 'high',
@@ -277,7 +295,9 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     })
     expect(body.items.find((item) => item.caseId === caseIds.normal)).toMatchObject({
       priority: 'normal',
-      requiresAction: false,
+      primaryAttention: 'upcoming_task',
+      upcomingTaskCount: 1,
+      requiresAction: true,
     })
     expect(JSON.stringify(body)).not.toMatch(/[A-Z]:\\|password|secret|documentContent|rawExcerpt/i)
     const auditAfter = await pool.query(

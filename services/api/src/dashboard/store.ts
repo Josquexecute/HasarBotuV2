@@ -65,6 +65,14 @@ interface OperationIssueRow {
   item_count: number
 }
 
+interface TaskSummaryRow {
+  case_id: string
+  open_task_count: number
+  overdue_task_count: number
+  due_today_task_count: number
+  upcoming_task_count: number
+}
+
 function dateOnly(value: Date | string): string {
   return typeof value === 'string' ? value.slice(0, 10) : toLocalDateString(value)
 }
@@ -147,6 +155,7 @@ export function createDashboardStore(pool: pg.Pool) {
 
       const approvalsByCase = new Map<string, ApprovalRow[]>()
       const operationIssuesByCase = new Map<string, OperationIssueRow[]>()
+      const tasksByCase = new Map<string, TaskSummaryRow>()
       if (caseIds.length > 0) {
         const approvalsResult = await pool.query(
           `WITH pending AS (
@@ -223,6 +232,19 @@ export function createDashboardStore(pool: pg.Pool) {
         for (const issue of issuesResult.rows as OperationIssueRow[]) {
           pushMapValue(operationIssuesByCase, issue.case_id, issue)
         }
+
+        const tasksResult = await pool.query(
+          `SELECT case_id::text,
+                  count(*)::int AS open_task_count,
+                  count(*) FILTER (WHERE due_date<$3::date)::int AS overdue_task_count,
+                  count(*) FILTER (WHERE due_date=$3::date)::int AS due_today_task_count,
+                  count(*) FILTER (WHERE due_date>$3::date AND due_date<=$3::date+7)::int AS upcoming_task_count
+           FROM case_tasks
+           WHERE organization_id=$1 AND case_id=ANY($2::uuid[]) AND status='open'
+           GROUP BY case_id`,
+          [organizationId, caseIds, asOfDate],
+        )
+        for (const task of tasksResult.rows as TaskSummaryRow[]) tasksByCase.set(task.case_id, task)
       }
 
       const items = rows.map((row) => {
@@ -254,6 +276,11 @@ export function createDashboardStore(pool: pg.Pool) {
         const manualRecoveryCount = issueCount('manual_recovery')
         const failedOperationCount = issueCount('failed')
         const blockedOperationCount = issueCount('blocked')
+        const taskSummary = tasksByCase.get(row.id)
+        const openTaskCount = taskSummary?.open_task_count ?? 0
+        const overdueTaskCount = taskSummary?.overdue_task_count ?? 0
+        const dueTodayTaskCount = taskSummary?.due_today_task_count ?? 0
+        const upcomingTaskCount = taskSummary?.upcoming_task_count ?? 0
         const priority = evaluateDashboardPriority({
           caseId: row.id,
           officeCaseNumber: row.office_number,
@@ -266,6 +293,10 @@ export function createDashboardStore(pool: pg.Pool) {
           manualRecoveryCount,
           failedOperationCount,
           blockedOperationCount,
+          openTaskCount,
+          overdueTaskCount,
+          dueTodayTaskCount,
+          upcomingTaskCount,
         }, asOfDate)
 
         return {
@@ -289,6 +320,10 @@ export function createDashboardStore(pool: pg.Pool) {
           manualRecoveryCount,
           failedOperationCount,
           blockedOperationCount,
+          openTaskCount,
+          overdueTaskCount,
+          dueTodayTaskCount,
+          upcomingTaskCount,
           ...priority,
         }
       }).sort(compareDashboardItems)
@@ -302,6 +337,10 @@ export function createDashboardStore(pool: pg.Pool) {
         overdueFollowUpCount: items.filter((item) => item.attentionCodes.includes('overdue_follow_up')).length,
         dueTodayCount: items.filter((item) => item.attentionCodes.includes('follow_up_today')).length,
         upcomingFollowUpCount: items.filter((item) => item.attentionCodes.includes('upcoming_follow_up')).length,
+        openTaskCount: items.reduce((sum, item) => sum + item.openTaskCount, 0),
+        overdueTaskCaseCount: items.filter((item) => item.overdueTaskCount > 0).length,
+        taskDueTodayCaseCount: items.filter((item) => item.dueTodayTaskCount > 0).length,
+        upcomingTaskCaseCount: items.filter((item) => item.upcomingTaskCount > 0).length,
         missingDocumentCaseCount: items.filter((item) => item.missingDocumentCount > 0).length,
         controlRequiredDocumentCaseCount: items.filter((item) => item.controlRequiredDocumentCount > 0).length,
         pendingHumanApprovalCaseCount: items.filter((item) => item.pendingHumanApprovalCount > 0).length,

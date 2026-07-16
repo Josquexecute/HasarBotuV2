@@ -9,12 +9,12 @@
 
 ## Durum Panosu öncelik kuralları
 
-- Öncelik değerlendirmesi saf, deterministik ve sürümlüdür. İlk sürüm `dashboard-priority/1.0.0` değeridir; değerlendirme tarihi dışarıdan LocalDate olarak verilir.
-- Sinyal önceliği: `manual_recovery` → `operation_failed` → `operation_blocked` → `overdue_follow_up` → `human_approval` → `missing_documents` → `document_control_required` → `follow_up_today` → `unassigned` → `upcoming_follow_up`.
+- Öncelik değerlendirmesi saf, deterministik ve sürümlüdür. Paket 37 sürümü `dashboard-priority/1.1.0` değeridir; değerlendirme tarihi dışarıdan LocalDate olarak verilir.
+- Sinyal önceliği: `manual_recovery` → `operation_failed` → `operation_blocked` → `overdue_task` → `overdue_follow_up` → `human_approval` → `missing_documents` → `document_control_required` → `task_due_today` → `follow_up_today` → `unassigned` → `upcoming_task` → `upcoming_follow_up`.
 - Yaklaşan takip, değerlendirme tarihinden sonraki yedi takvim günü içindeki takip tarihidir. Tarih bulunmaması yaklaşan/geciken takip üretmez.
 - Evrak sinyali Paket 15 değerlendirmesinden gelir. Yalnız fiziksel doğrulamalı `ready` present olabilir; `pending/failed` kontrol gerektirir.
 - Aynı girdiler aynı sinyal, birincil gerekçe, skor ve sıralama sonucunu üretmelidir. Eşitlikte takip tarihi, güncelleme zamanı ve caseId deterministik bağlayıcıdır.
-- `requiresAction`; recovery/hata/blokaj, geciken/bugün/yaklaşan takip, insan onayı, eksik/kontrol evrakı veya sorumlu eksikliği varsa true olur. Normal açık vaka sahte uyarı üretmez.
+- `requiresAction`; recovery/hata/blokaj, geciken/bugün/yaklaşan görev veya takip, insan onayı, eksik/kontrol evrakı veya sorumlu eksikliği varsa true olur. Normal açık vaka sahte uyarı üretmez.
 
 ## Trafik dosyası evrakları
 
@@ -143,30 +143,13 @@ Trafik:
 
 100.000 TL eşiği sabit kodlanmaz; sürümlü kuraldır.
 
-## Notlar
+## Notlar ve görevler — Paket 37
 
-Not türleri:
-
-- Genel Not
-- Servis Görüşmesi
-- Mağdur Görüşmesi
-- Sigorta Şirketi Görüşmesi
-- Eksper Notu
-- İç Not
-
-Notlar fiziksel olarak silinmez. Aktif, Düzenlendi veya Silindi durumunda geçmişiyle saklanır.
-
-## Görevler
-
-Durumlar:
-
-- Bekliyor
-- Devam Ediyor
-- Tamamlandı
-- İptal Edildi
-- Gecikti
-
-Servis, mağdur, sigorta şirketi görüşmesi, onarım onayı, evrak talebi ve kapanış kontrolü görevlerinde sonuç notu zorunludur.
+- İlk gerçek not türleri `internal` ve `contact`’tır. Not append-only’dir; düzenleme veya fiziksel silme yoktur. Daha ayrıntılı görüşme alt türleri ileride sürümlü genişletilebilir.
+- Görev durumları `open`, `completed`, `cancelled`’dır. `overdue`, `today`, `upcoming`, `scheduled` durum değil; `dueDate` ve değerlendirme LocalDate’inden türetilen görünüm sinyalidir.
+- Yalnız `open → completed` ve `open → cancelled` geçişi geçerlidir. Tamamlama sonuç notu, iptal gerekçesi zorunludur.
+- Atanan kullanıcı varsa aktif ve aynı organization kapsamında olmalıdır. Terminal görev değiştirilmez; yeni iş yeni görev olarak açılır.
+- `followUpDate` LocalDate değişiklikleri eski/yeni değer, actor ve case version ile append-only kaydedilir.
 
 ## Çalışma takvimi
 

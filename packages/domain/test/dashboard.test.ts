@@ -19,13 +19,35 @@ const base: DashboardPriorityInput = {
   manualRecoveryCount: 0,
   failedOperationCount: 0,
   blockedOperationCount: 0,
+  openTaskCount: 0,
+  overdueTaskCount: 0,
+  dueTodayTaskCount: 0,
+  upcomingTaskCount: 0,
 }
 
 describe('dashboard öncelik motoru', () => {
   it('sürümü sabittir ve LocalDate farkını timezone kullanmadan hesaplar', () => {
-    expect(DASHBOARD_PRIORITY_VERSION).toBe('dashboard-priority/1.0.0')
+    expect(DASHBOARD_PRIORITY_VERSION).toBe('dashboard-priority/1.1.0')
     expect(daysBetweenLocalDates('2026-07-16', '2026-07-15')).toBe(-1)
     expect(daysBetweenLocalDates('2026-07-16', '2026-07-23')).toBe(7)
+  })
+
+  it('geciken ve yaklaşan görevleri takip tarihinden ayrı, sürümlü sinyal olarak taşır', () => {
+    expect(evaluateDashboardPriority({
+      ...base,
+      openTaskCount: 2,
+      overdueTaskCount: 1,
+      dueTodayTaskCount: 1,
+    }, '2026-07-16')).toMatchObject({
+      priority: 'critical',
+      primaryAttention: 'overdue_task',
+      attentionCodes: ['overdue_task', 'task_due_today'],
+    })
+    expect(evaluateDashboardPriority({
+      ...base,
+      openTaskCount: 1,
+      upcomingTaskCount: 1,
+    }, '2026-07-16').primaryAttention).toBe('upcoming_task')
   })
 
   it('manuel recovery ve gecikmiş takibi diğer sinyallerin önünde tutar', () => {

@@ -350,3 +350,10 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Yalnız başarılı immutable çıktı transaction’ında `traffic_value_loss.report_generated` yazılır. Organization/actor/case/report/version, rule/schema/template version, evidence/comparable/uncertainty sayıları, PDF byte-size ve requestId taşınabilir.
 - Audit’e rapor metni/notu, plaka, piyasa URL’si, belge adı/içeriği, source hash, PDF binary, mutlak yol, secret, SQL/stack veya ham renderer hatası yazılmaz.
 - Report row ve audit aynı transaction’dadır. Report append-only olduğu için yedek/restore sonrasında onaylı version’a ait nihai çıktı sessizce değişmez.
+
+### 6.20 Paket 37 not, görev ve takip audit sınırı
+
+- Olaylar: `case_note.created`, `case_task.created`, `case_task.completed`, `case_task.cancelled`, `case.follow_up_changed`.
+- Audit organization/actor/case/note-task kimliği, not türü, görev priority/due/status, from/to version ve requestId gibi güvenli metadata taşıyabilir.
+- Not subject/body, görev title, tamamlanma sonucu ve iptal gerekçesi audit detayına kopyalanmaz. Parola/secret, mutlak yol, SQL/stack ve ham hata zaten merkezi redaksiyon sınırındadır.
+- Not/görev veya takip geçmişi satırı ile audit aynı transaction’da yazılır. Salt-okunur Operasyon workspace ve Dashboard GET audit gürültüsü üretmez.

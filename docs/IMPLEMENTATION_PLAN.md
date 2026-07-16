@@ -853,3 +853,16 @@ Kapsam dışı: UI yeniden tasarımı, yeni iş özelliği, backend/API/contract
 - [x] Repository dışı fresh `npm ci`, tam kapılar, path bazlı stage ve atomik commit.
 
 Kapsam dışı: yeni dashboard yazma endpoint’i, snapshot persistence, yeni audit olayı, yeni migration, yönetim ekranı, File Agent/IPC/fiziksel dosya işlemi, UI yeniden tasarımı ve sonraki paket.
+
+## Paket 37 — Case notları, görevler ve takip geçmişi
+
+- [x] Saf görev geçişi ve LocalDate due sınıflamasını ekle; Dashboard priority’yi `1.1.0` görev sinyalleriyle sürümle.
+- [x] Migration 0024 ile append-only not/task-event/follow-up history ve optimistic görev modelini ekle.
+- [x] Strict Case Operations contracts, route sabitleri ve deterministik JSON Schema fixture’larını ekle.
+- [x] Tenant/RBAC/idempotency/optimistic locking ve merkezi audit kullanan Operasyon API’sini ekle.
+- [x] Case followUpDate create/update transaction’ını append-only takip geçmişine bağla.
+- [x] API modunda gerçek Operasyon sekmesini ve Dashboard görev sinyallerini bağla; mock no-fallback sınırını koru.
+- [x] Domain/contracts/UI ve hedefli gerçek PostgreSQL/API testlerini ekle.
+- [x] Gerçek Chrome, tam root kapıları ve repository dışı fresh `npm ci` doğrulamasını tamamla.
+
+Kapsam dışı: not edit/delete/revision UI, görev reopen veya genel görev yönetim ekranı, bildirim motoru, çalışma takvimi/tatil servisi, File Agent/IPC/fiziksel dosya işlemi, yeni dependency, üretim migration ve sonraki paket.

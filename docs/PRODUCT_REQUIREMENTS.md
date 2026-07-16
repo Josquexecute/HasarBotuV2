@@ -46,6 +46,7 @@ Durum Panosu gerçek açık vaka verisini kullanmalıdır:
 - Sorumlu, işlem türü, öncelik ve serbest arama filtreleri birlikte çalışmalıdır
 - Karttan doğrudan gerçek dosya detayına geçilmelidir
 - API modunda loading, boş, 401 ve bağlantı hatası mock veriye düşmeden gösterilmelidir
+- Geciken, bugün ve yaklaşan açık görevler takip tarihinden ayrı sayaç ve sinyal olarak görünmelidir
 
 ### Dosyalar
 
@@ -77,6 +78,8 @@ Sekmeler:
 - Raporlar ve Ücretler
 - E-postalar
 - Geçmiş
+
+Operasyon sekmesi gerçek API modunda append-only iç/görüşme notlarını, açık ve sonuçlanmış görevleri, zorunlu görev sonucu/iptal gerekçesini ve takip tarihi geçmişini göstermelidir. Kapalı dosya salt-okunur olmalı; API hatasında mock operasyon kaydı gösterilmemelidir.
 
 ## Yeni İhbar akışı
 

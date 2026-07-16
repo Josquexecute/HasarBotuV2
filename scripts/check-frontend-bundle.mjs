@@ -11,6 +11,7 @@ const REQUIRED_LAZY_CHUNKS = [
   'PolicyOcrApiModule-',
   'PolicyAnalysisWorkspace-',
   'TrafficValueLossApiModule-',
+  'CaseOperationsApiModule-',
 ]
 
 const indexHtml = await readFile(`${DIST_DIR}index.html`, 'utf8')

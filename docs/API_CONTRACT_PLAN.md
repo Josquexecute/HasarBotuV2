@@ -61,7 +61,7 @@ Audit seviyeleri:
 - **Yetki/tenant:** Oturum zorunlu; bütün alt sorgular organizationId ile sınırlandırılır. Yabancı tenant kaydı snapshot’a giremez.
 - **Audit/idempotency:** A0 salt-okunur; snapshot/audit yazısı ve Idempotency-Key yoktur.
 - **Hatalar:** `401 AUTHENTICATION_REQUIRED`; dependency/aktif evrak kuralı bulunmaması güvenli 5xx sınırından döner. UI API modunda mock fallback yapmaz.
-- **Sürüm:** `priorityVersion=dashboard-priority/1.0.0`; response strict runtime Zod ve deterministik JSON Schema fixture ile doğrulanır.
+- **Sürüm:** `priorityVersion=dashboard-priority/1.1.0`; response takip sinyallerine ek olarak açık/geciken/bugün/yaklaşan görev sayaçlarını taşır ve strict runtime Zod + deterministik JSON Schema fixture ile doğrulanır.
 
 ### 3.1 Authentication / session
 
@@ -126,27 +126,14 @@ Audit seviyeleri:
 - **Idempotency:** POST zorunlu.
 - **Concurrency/version:** Case version zorunlu; history append-only.
 
-### 3.6 Notes
+### 3.6 Case Operations — Paket 37
 
-- **Amaç ve endpoint:** `GET/POST /cases/{caseId}/notes`, `PATCH /notes/{noteId}`, `POST /notes/{noteId}/delete` (mantıksal).
-- **Örnek istek:** `{ "type": "Servis Görüşmesi", "content": "Anonim görüşme notu", "expectedVersion": 2 }`.
-- **Örnek cevap:** `{ "id": "note_...", "status": "ACTIVE", "revision": 1, "version": 1 }`.
-- **Hatalar:** `NOTE_TYPE_INVALID`, `NOTE_IMMUTABLE_REVISION`, validation/concurrency.
-- **Yetki:** `notes.read`, `notes.write`; vaka erişimi ayrıca kontrol edilir.
-- **Audit:** A1; fiziksel silme yok, revision/status kaydı.
-- **Idempotency:** Create zorunlu; update version ile.
-- **Concurrency/version:** Note version ve case last-intervention transaction'ı.
-
-### 3.7 Tasks
-
-- **Amaç ve endpoint:** `GET/POST /cases/{caseId}/tasks`, `PATCH /tasks/{taskId}`, `POST /tasks/{taskId}/complete`.
-- **Örnek istek:** `{ "title": "Servis dönüşünü kontrol et", "dueAt": "...", "assigneeId": "usr_...", "expectedVersion": 1 }`.
-- **Örnek cevap:** `{ "id": "task_...", "status": "BEKLIYOR", "dueAt": "...", "version": 2 }`.
-- **Hatalar:** `TASK_STATUS_INVALID`, `RESULT_NOTE_REQUIRED`, `NON_WORKDAY_WARNING`, concurrency.
-- **Yetki:** `tasks.read/write`; assignee değiştirme ayrı permission olabilir.
-- **Audit:** A1; tamamla/iptal sonucu dahil.
-- **Idempotency:** Create/complete zorunlu.
-- **Concurrency/version:** Task version zorunlu.
+- **Read:** `GET /api/v1/cases/:caseId/operations`; notlar, görevler, takip geçmişi, `asOfDate` ve rol/lifecycle yazma izinlerini tek tenant-kapsamlı cevapta döndürür.
+- **Not create:** `POST /api/v1/cases/:caseId/notes`; `{ noteType: internal|contact, subject?, body }`; zorunlu Idempotency-Key. Not update/delete endpoint’i yoktur.
+- **Görev create:** `POST /api/v1/cases/:caseId/tasks`; `{ title, priority, assignedUserId?, dueDate }`; dueDate LocalDate ve Idempotency-Key zorunludur.
+- **Görev sonu:** `POST .../tasks/:taskId/complete` `{ expectedVersion, resultNote }`; `POST .../cancel` `{ expectedVersion, reason }`. Her ikisi Idempotency-Key kullanır.
+- **Hata/yetki:** 401 oturumsuz, 403 yazma rolü yok, tenant-dışı case/task 404, stale/terminal/kapalı case 409, geçersiz veya pasif/tenant-dışı assignee alan bazlı 400.
+- **Audit:** A1; içerik audit’e kopyalanmaz. API modunda mock fallback yoktur.
 
 ### 3.8 Documents
 

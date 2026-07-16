@@ -1335,6 +1335,37 @@ button {
 .task-list li:last-child { border-bottom: 0; }
 .task-list span { font-size: 11px; }
 .task-list strong { color: var(--warning); font-size: 9px; }
+.case-operations { display: grid; gap: 10px; min-width: 0; }
+.case-operations__grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(330px, .75fr); gap: 10px; align-items: start; }
+.case-operations__alert { margin: 0; }
+.case-operations__form { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); }
+.case-operations__form label, .case-operations__follow-form label, .case-task-card__resolution label { display: grid; gap: 4px; min-width: 0; }
+.case-operations__form label > span, .case-operations__follow-form label > span, .case-task-card__resolution label > span { color: var(--text-secondary); font-size: 10px; font-weight: 700; }
+.case-operations__form input, .case-operations__form select, .case-operations__form textarea,
+.case-operations__follow-form input, .case-task-card__resolution textarea { width: 100%; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); padding: 7px 8px; font: inherit; font-size: 11px; }
+.case-operations__form textarea, .case-task-card__resolution textarea { resize: vertical; }
+.case-operations__form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.case-operations__notes, .case-task-cards { display: grid; gap: 8px; max-height: 440px; overflow: auto; padding-right: 3px; }
+.case-operations__empty { margin: 0; padding: 12px; border: 1px dashed var(--border); border-radius: var(--radius-sm); color: var(--text-tertiary); font-size: 11px; text-align: center; }
+.case-task-card { display: grid; gap: 7px; padding: 9px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--surface-muted); }
+.case-task-card--overdue { border-left-color: var(--danger); }
+.case-task-card--today { border-left-color: var(--warning); }
+.case-task-card--resolved { border-left-color: var(--success); opacity: .86; }
+.case-task-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.case-task-card__head strong { font-size: 11px; }
+.case-task-card__head span { flex: 0 0 auto; color: var(--warning); font-size: 9px; font-weight: 700; }
+.case-task-card__meta { display: flex; flex-wrap: wrap; gap: 5px 10px; color: var(--text-tertiary); font-size: 9px; }
+.case-task-card__actions, .case-task-card__resolution > div { display: flex; gap: 6px; justify-content: flex-end; }
+.case-task-card__resolution { display: grid; gap: 7px; padding-top: 7px; border-top: 1px solid var(--border); }
+.case-task-card p { margin: 0; color: var(--text-secondary); font-size: 10px; line-height: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.case-task-card small { color: var(--text-tertiary); }
+.case-operations__follow-up { min-width: 0; }
+.case-operations__follow-form { display: flex; align-items: end; gap: 8px; margin-bottom: 10px; }
+.case-follow-up-history { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-height: 220px; overflow: auto; }
+.case-follow-up-history article { display: grid; gap: 4px; padding: 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); }
+.case-follow-up-history span, .case-follow-up-history small { color: var(--text-tertiary); font-size: 9px; }
+.case-follow-up-history strong { font-size: 10px; }
+.case-operations-state { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 180px; padding: 20px; border: 1px dashed var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); }
 
 .document-photo-workspace { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 10px; height: calc(100% - 2px); min-height: 360px; }
 .document-checklist, .photo-library { min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }

@@ -14,7 +14,7 @@
     },
     "priorityVersion": {
       "type": "string",
-      "const": "dashboard-priority/1.0.0"
+      "const": "dashboard-priority/1.1.0"
     },
     "summary": {
       "type": "object",
@@ -35,6 +35,26 @@
           "maximum": 100000
         },
         "upcomingFollowUpCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "openTaskCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "overdueTaskCaseCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "taskDueTodayCaseCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "upcomingTaskCaseCount": {
           "type": "integer",
           "minimum": 0,
           "maximum": 100000
@@ -70,6 +90,10 @@
         "overdueFollowUpCount",
         "dueTodayCount",
         "upcomingFollowUpCount",
+        "openTaskCount",
+        "overdueTaskCaseCount",
+        "taskDueTodayCaseCount",
+        "upcomingTaskCaseCount",
         "missingDocumentCaseCount",
         "controlRequiredDocumentCaseCount",
         "pendingHumanApprovalCaseCount",
@@ -277,6 +301,26 @@
             "minimum": 0,
             "maximum": 100000
           },
+          "openTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "overdueTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "dueTodayTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "upcomingTaskCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
           "priority": {
             "type": "string",
             "enum": [
@@ -299,12 +343,15 @@
                   "manual_recovery",
                   "operation_failed",
                   "operation_blocked",
+                  "overdue_task",
                   "overdue_follow_up",
                   "human_approval",
                   "missing_documents",
                   "document_control_required",
+                  "task_due_today",
                   "follow_up_today",
                   "unassigned",
+                  "upcoming_task",
                   "upcoming_follow_up"
                 ]
               },
@@ -314,7 +361,7 @@
             ]
           },
           "attentionCodes": {
-            "maxItems": 10,
+            "maxItems": 13,
             "type": "array",
             "items": {
               "type": "string",
@@ -322,12 +369,15 @@
                 "manual_recovery",
                 "operation_failed",
                 "operation_blocked",
+                "overdue_task",
                 "overdue_follow_up",
                 "human_approval",
                 "missing_documents",
                 "document_control_required",
+                "task_due_today",
                 "follow_up_today",
                 "unassigned",
+                "upcoming_task",
                 "upcoming_follow_up"
               ]
             },
@@ -358,6 +408,10 @@
           "manualRecoveryCount",
           "failedOperationCount",
           "blockedOperationCount",
+          "openTaskCount",
+          "overdueTaskCount",
+          "dueTodayTaskCount",
+          "upcomingTaskCount",
           "priority",
           "priorityScore",
           "primaryAttention",

@@ -143,6 +143,14 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - `last_intervention_at` not/görev/durum gibi anlamlı iş transaction'ında sunucuda güncellenir; UI metni kaynak değildir.
 - Geciken sorgular için partial/compound index planlanır.
 
+### 5.4a Paket 37 uygulanan not/görev/takip modeli
+
+- `case_notes`: tenant/case/creator FK, `internal|contact`, bounded subject/body ve UTC create zamanı; update/delete trigger’ıyla append-only.
+- `case_tasks`: tenant/case/user FK, `low|normal|high`, LocalDate `due_date`, `open|completed|cancelled`, zorunlu terminal resolution, optimistic version ve açık-görev due index’i.
+- `case_task_events`: created/completed/cancelled task version geçmişi; append-only ve task-version tekil.
+- `case_follow_up_history`: eski/yeni LocalDate, case create/update kaynağı, actor ve resulting case version; append-only ve case-version tekil.
+- İlk sürümde not revision/edit/delete ve görev reopen yoktur. Eski tablolar sessizce taşınmaz; migration backward-compatible yeni tablolar ekler.
+
 ### 5.5 Değer Kaybı zorunluluğu
 
 - Trafik vakasında süreç kaydı veya açık `not_applicable` gerekçesi gerekip gerekmediği kapanış validation'ında kontrol edilir; veri eklenir eklenmez assessment yaratmak DB trigger görevi değildir.

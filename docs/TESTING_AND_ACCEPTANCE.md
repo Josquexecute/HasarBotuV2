@@ -293,3 +293,11 @@ raporlanır.
 - UI adapter/component; gerçek response mapping, bozuk/unknown response fail-closed, API ağ/5xx/401 no-fallback, gerçek boş sonuç, mock modun ağsız korunması, filtreler ve klavye/tıklama detay geçişini doğrular.
 - Gerçek tarayıcı; login → gerçek dashboard → onay/işlem filtreleri → arama → dosya detayı; API blokajında no-fallback; 1366×768 açık/koyu ve 1920×1080 koyu tema; body overflow, pano iç scroll ve console warning/error kontrolünü kapsar.
 - Kritik dashboard PostgreSQL/API/tarayıcı testi skip kalırsa Paket 36 PASS sayılmaz. Repository dışı fresh `npm ci`, typecheck, lint, aynı gerçek `_test` PostgreSQL testleri ve build tamamlanmadan commit oluşturulmaz.
+
+### Paket 37 — Case not, görev ve takip geçmişi kabulü
+
+- Domain/contracts: görev geçişi, LocalDate due sınıflaması, strict command/response, unknown-key ve deterministik JSON Schema fixture.
+- Gerçek PostgreSQL 0024: up/repeat/down/reapply; tenant FK, append-only note/event/follow-up, terminal task transition, optimistic version ve aktif assignee constraint.
+- Gerçek API: login; note create/idempotent replay; task create/complete/cancel; zorunlu result/reason; stale 409; takip history; read-only 403; tenant 404; 401; kapalı case conflict ve audit içerik sızıntısız atomiklik.
+- UI/tarayıcı: Operasyon sekmesinde gerçek not/görev/takip; API no-fallback; dashboard task sinyalleri; 1366×768 açık/koyu ve 1920×1080 tema, overflow/scroll ve console warning/error.
+- Kritik DB/API/UI/tarayıcı testi skip kalırsa Paket 37 PASS sayılmaz. Repository dışı fresh `npm ci`, gerçek `_test` PostgreSQL ile typecheck, lint, test ve build tamamlanmadan commit oluşturulmaz.

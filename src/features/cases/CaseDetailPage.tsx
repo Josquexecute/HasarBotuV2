@@ -51,6 +51,10 @@ const TrafficValueLossApiModule = lazy(async () => {
   const module = await import('./TrafficValueLossApiModule')
   return { default: module.TrafficValueLossApiModule }
 })
+const CaseOperationsApiModule = lazy(async () => {
+  const module = await import('./CaseOperationsApiModule')
+  return { default: module.CaseOperationsApiModule }
+})
 
 const tabs = [
   'Özet',
@@ -300,7 +304,7 @@ export function CaseDetailPage() {
                 <header><h2>Bugünkü Takip</h2><CalendarClock size={16} /></header>
                 <strong className={`overview-follow overview-follow--${item.followUpTone}`}>{item.followUp}</strong>
                 <p>Servisten işlem durumu ve eksik evrak dönüşü alınacak.</p>
-                <button className="text-button" type="button">Takibi düzenle <ChevronRight size={14} /></button>
+                <button className="text-button" type="button" onClick={() => setActiveTab('Operasyon')}>Takibi düzenle <ChevronRight size={14} /></button>
               </section>
               <section className="info-panel">
                 <header><h2>Evrak Durumu</h2><FileCheck2 size={16} /></header>
@@ -310,10 +314,13 @@ export function CaseDetailPage() {
               </section>
               <section className="info-panel overview-grid__wide">
                 <header><h2>Notlar ve Görevler</h2><History size={16} /></header>
-                <div className="note-list">
-                  {item.notes.map((note) => <div key={note}><span>Bugün</span><p>{note}</p></div>)}
-                  <div><span>Görev · 14:30</span><p>Eksik evrak dönüşünü kontrol et · {item.assignee}</p></div>
-                </div>
+                {source === 'api'
+                  ? <p>Gerçek not, görev ve takip geçmişi Operasyon sekmesinde gösterilir.</p>
+                  : <div className="note-list">
+                      {item.notes.map((note) => <div key={note}><span>Bugün</span><p>{note}</p></div>)}
+                      <div><span>Görev · 14:30</span><p>Eksik evrak dönüşünü kontrol et · {item.assignee}</p></div>
+                    </div>}
+                <button className="text-button" type="button" onClick={() => setActiveTab('Operasyon')}>Operasyon kayıtlarına git <ChevronRight size={14} /></button>
               </section>
               {source === 'api' && (
                 <WorkspaceProvisioningPanel
@@ -323,6 +330,17 @@ export function CaseDetailPage() {
                 />
               )}
             </div>
+          ) : activeTab === 'Operasyon' && source === 'api' ? (
+            <CaseOperationsApiModule
+              item={item}
+              source={source}
+              onUnauthorized={session.reportUnauthorized}
+              onReloadCase={reload}
+              onUpdated={(updated) => {
+                setCaseOverride(updated)
+                setPrototypeNotice(`Takip tarihi kaydedildi · yeni sürüm ${updated.version ?? '—'}`)
+              }}
+            />
           ) : activeTab === 'Operasyon' ? (
             <div className="module-workspace">
               <section className="info-panel module-workspace__main">

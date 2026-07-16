@@ -700,3 +700,16 @@ Etkisi: Yalnız frontend import/bundle sınırı, build script’i ve hata-sın�
 7. API modunda ağ/5xx/bozuk response mock veriye düşmez. Mock mod, kabul edilmiş prototip kayıtlarını ağ çağrısı yapmadan korur. Kart tıklaması ve Enter doğrudan gerçek dosya detayına gider.
 
 Etkisi: Saf dashboard öncelik domain’i, strict contracts/JSON Schema, salt-okunur API agregasyonu ve gerçek API bağlı Durum Panosu UI’ı eklendi. Migration, dependency, IPC, File Agent veya veri yazma yolu değişmedi.
+
+## 2026-07-16 — HB-2026-043: Case notu, görev sonucu ve takip geçmişi sınırı
+
+1. İlk gerçek not modeli `internal | contact` türlerinde append-only kayıttır. Not düzenleme/silme ve revision zinciri bu pakette yoktur; düzeltme yeni notla yapılır.
+2. Görev durumları `open | completed | cancelled` olarak kilitlenir. Gecikme ayrı durum değil, LocalDate son tarihten deterministik türetilen `overdue | today | upcoming | scheduled` sinyalidir.
+3. Tamamlama sonuç notu, iptal gerekçesi olmadan yapılamaz. Terminal görev yeniden açılmaz veya ikinci terminal duruma geçmez; düzeltme yeni görevdir.
+4. Not/görev create ile görev terminal komutları zorunlu Idempotency-Key kullanır. Görev geçişi `expectedVersion`; takip tarihi ise mevcut Case `expectedVersion` sınırıyla korunur.
+5. `followUpDate` her değiştiğinde eski/yeni LocalDate, actor ve resulting case version append-only geçmişe aynı transaction içinde yazılır.
+6. Yazma yetkisi ilk ürün rol modeliyle `admin | expert | case_manager | secretary` içindir. Diğer oturumlu roller salt-okunur; kapalı case Operasyon alanında salt-okunurdur.
+7. Audit içerik deposu değildir. Not gövdesi/konusu, görev başlığı, sonuç notu ve iptal gerekçesi merkezi audit detayına kopyalanmaz.
+8. Dashboard kuralı `dashboard-priority/1.1.0` ile geciken görev → geciken takip ve bugün/yaklaşan görev → ilgili takip sinyallerini ayrı taşır. Görev status’u UI tarafında tahmin edilmez.
+
+Etkisi: Migration `0024_case_notes_tasks`; strict Case Operations contracts/JSON Schema; tenant/RBAC/idempotency/audit API; gerçek Dosya Detayı Operasyon UI’ı ve Dashboard görev sinyalleri. Yeni dependency, IPC, File Agent veya fiziksel dosya yazma yolu yoktur.

@@ -6,12 +6,15 @@ export type DashboardAttentionCodeRecord =
   | 'manual_recovery'
   | 'operation_failed'
   | 'operation_blocked'
+  | 'overdue_task'
   | 'overdue_follow_up'
   | 'human_approval'
   | 'missing_documents'
   | 'document_control_required'
+  | 'task_due_today'
   | 'follow_up_today'
   | 'unassigned'
+  | 'upcoming_task'
   | 'upcoming_follow_up'
 export type DashboardHumanApprovalKindRecord =
   | 'case_lifecycle'
@@ -44,6 +47,10 @@ export interface DashboardCaseRecord {
   readonly manualRecoveryCount: number
   readonly failedOperationCount: number
   readonly blockedOperationCount: number
+  readonly openTaskCount: number
+  readonly overdueTaskCount: number
+  readonly dueTodayTaskCount: number
+  readonly upcomingTaskCount: number
   readonly priority: DashboardPriorityRecord
   readonly priorityScore: number
   readonly primaryAttention: DashboardAttentionCodeRecord | null
@@ -56,6 +63,10 @@ export interface DashboardSummaryRecord {
   readonly overdueFollowUpCount: number
   readonly dueTodayCount: number
   readonly upcomingFollowUpCount: number
+  readonly openTaskCount: number
+  readonly overdueTaskCaseCount: number
+  readonly taskDueTodayCaseCount: number
+  readonly upcomingTaskCaseCount: number
   readonly missingDocumentCaseCount: number
   readonly controlRequiredDocumentCaseCount: number
   readonly pendingHumanApprovalCaseCount: number
@@ -100,6 +111,10 @@ const SUMMARY_KEYS = new Set([
   'overdueFollowUpCount',
   'dueTodayCount',
   'upcomingFollowUpCount',
+  'openTaskCount',
+  'overdueTaskCaseCount',
+  'taskDueTodayCaseCount',
+  'upcomingTaskCaseCount',
   'missingDocumentCaseCount',
   'controlRequiredDocumentCaseCount',
   'pendingHumanApprovalCaseCount',
@@ -128,6 +143,10 @@ const ITEM_KEYS = new Set([
   'manualRecoveryCount',
   'failedOperationCount',
   'blockedOperationCount',
+  'openTaskCount',
+  'overdueTaskCount',
+  'dueTodayTaskCount',
+  'upcomingTaskCount',
   'priority',
   'priorityScore',
   'primaryAttention',
@@ -140,12 +159,15 @@ const ATTENTION_CODES = new Set<DashboardAttentionCodeRecord>([
   'manual_recovery',
   'operation_failed',
   'operation_blocked',
+  'overdue_task',
   'overdue_follow_up',
   'human_approval',
   'missing_documents',
   'document_control_required',
+  'task_due_today',
   'follow_up_today',
   'unassigned',
+  'upcoming_task',
   'upcoming_follow_up',
 ])
 const APPROVAL_KINDS = new Set<DashboardHumanApprovalKindRecord>([
@@ -212,6 +234,10 @@ function parseDashboardResponse(value: unknown): DashboardSnapshotRecord {
     overdueFollowUpCount: count(value.summary.overdueFollowUpCount),
     dueTodayCount: count(value.summary.dueTodayCount),
     upcomingFollowUpCount: count(value.summary.upcomingFollowUpCount),
+    openTaskCount: count(value.summary.openTaskCount),
+    overdueTaskCaseCount: count(value.summary.overdueTaskCaseCount),
+    taskDueTodayCaseCount: count(value.summary.taskDueTodayCaseCount),
+    upcomingTaskCaseCount: count(value.summary.upcomingTaskCaseCount),
     missingDocumentCaseCount: count(value.summary.missingDocumentCaseCount),
     controlRequiredDocumentCaseCount: count(value.summary.controlRequiredDocumentCaseCount),
     pendingHumanApprovalCaseCount: count(value.summary.pendingHumanApprovalCaseCount),
@@ -272,6 +298,10 @@ function parseDashboardResponse(value: unknown): DashboardSnapshotRecord {
       manualRecoveryCount: count(raw.manualRecoveryCount),
       failedOperationCount: count(raw.failedOperationCount),
       blockedOperationCount: count(raw.blockedOperationCount),
+      openTaskCount: count(raw.openTaskCount),
+      overdueTaskCount: count(raw.overdueTaskCount),
+      dueTodayTaskCount: count(raw.dueTodayTaskCount),
+      upcomingTaskCount: count(raw.upcomingTaskCount),
       priority,
       priorityScore: count(raw.priorityScore),
       primaryAttention,
@@ -389,6 +419,10 @@ export function buildMockDashboard(): DashboardSnapshotRecord {
       manualRecoveryCount: 0,
       failedOperationCount: 0,
       blockedOperationCount: 0,
+      openTaskCount: 0,
+      overdueTaskCount: 0,
+      dueTodayTaskCount: 0,
+      upcomingTaskCount: 0,
       ...priority,
     }
   }).sort((left, right) => right.priorityScore - left.priorityScore || left.caseId.localeCompare(right.caseId))
@@ -403,6 +437,10 @@ export function buildMockDashboard(): DashboardSnapshotRecord {
       overdueFollowUpCount: countWith('overdue_follow_up'),
       dueTodayCount: countWith('follow_up_today'),
       upcomingFollowUpCount: 0,
+      openTaskCount: 0,
+      overdueTaskCaseCount: 0,
+      taskDueTodayCaseCount: 0,
+      upcomingTaskCaseCount: 0,
       missingDocumentCaseCount: items.filter((item) => item.missingDocumentCount > 0).length,
       controlRequiredDocumentCaseCount: 0,
       pendingHumanApprovalCaseCount: items.filter((item) => item.pendingHumanApprovalCount > 0).length,
