@@ -2112,3 +2112,10 @@ button {
 .labor-history { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .labor-history li { display: flex; flex-direction: column; padding: 7px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); font-size: 11px; }
 .labor-history li span { color: var(--text-secondary); font-size: 10px; }
+
+/* İşçilik AI önerisi (Paket 44) */
+.labor-ai-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; padding: 10px; border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: var(--radius-md); background: var(--surface-muted); }
+.labor-ai-panel > header h3 { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--accent); font-size: 12px; }
+.labor-ai-panel textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); font-size: 12px; resize: vertical; }
+.labor-ai-panel textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.labor-ai-plan, .labor-ai-run { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }

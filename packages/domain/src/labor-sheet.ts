@@ -9,7 +9,7 @@
 export const LABOR_SHEET_SCHEMA_VERSION = 'labor-sheet/1.0.0' as const
 export const LABOR_SHEET_CURRENCY = 'TRY' as const
 
-export const LABOR_SHEET_SOURCE_TYPES = ['user_entered', 'manual_revision'] as const
+export const LABOR_SHEET_SOURCE_TYPES = ['user_entered', 'ai_assisted', 'manual_revision'] as const
 export type LaborSheetSourceType = (typeof LABOR_SHEET_SOURCE_TYPES)[number]
 
 export const MAX_LABOR_SHEET_ITEMS = 200

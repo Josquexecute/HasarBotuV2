@@ -23,7 +23,7 @@ describe('labor sheet contracts', () => {
       expectedCaseVersion: 1,
       items: [item],
       confirmed: true,
-    })).toEqual({ expectedCaseVersion: 1, items: [item], confirmed: true })
+    })).toEqual({ expectedCaseVersion: 1, items: [item], laborAiSuggestionRunId: null, confirmed: true })
 
     expect(() => laborSheetCreateRequestSchema.parse({
       expectedCaseVersion: 1,
@@ -86,6 +86,7 @@ describe('labor sheet contracts', () => {
           schemaVersion: 'labor-sheet/1.0.0',
           currency: 'TRY',
           sourceType: 'user_entered',
+          laborAiSuggestionRunId: null,
           revisionReason: null,
           createdByUserId: userId,
           createdByDisplayName: 'P43 Yetkili',
@@ -100,6 +101,7 @@ describe('labor sheet contracts', () => {
           schemaVersion: 'labor-sheet/1.0.0',
           currency: 'TRY',
           sourceType: 'user_entered',
+          laborAiSuggestionRunId: null,
           revisionReason: null,
           createdByUserId: userId,
           createdByDisplayName: 'P43 Yetkili',

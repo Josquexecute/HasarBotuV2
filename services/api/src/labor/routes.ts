@@ -74,6 +74,9 @@ function sendOutcomeError(
   if (outcome.kind === 'sheet_exists') {
     return reply.code(409).send(failureBody('conflict', 'Case already has a labor sheet; revise the current version instead.', requestId))
   }
+  if (outcome.kind === 'invalid_ai_suggestion') {
+    return sendFieldError(reply, requestId, 'laborAiSuggestionRunId', 'invalid_ai_suggestion')
+  }
   const path = outcome.itemOrdinal === null ? 'items' : `items[${outcome.itemOrdinal - 1}]`
   return sendFieldError(reply, requestId, path, outcome.reasonCode)
 }

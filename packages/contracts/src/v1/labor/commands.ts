@@ -6,7 +6,7 @@ import {
   MAX_LABOR_REVISION_REASON_LENGTH,
   MAX_LABOR_SHEET_ITEMS,
 } from '@hasarbotu/domain'
-import { entityVersionSchema } from '../../common/primitives.js'
+import { entityVersionSchema, idSchema } from '../../common/primitives.js'
 
 const normalizedText = (maximum: number) => z.string().trim().min(1).max(maximum)
 const amountMinorSchema = z.number().int().min(0).max(MAX_LABOR_AMOUNT_MINOR)
@@ -23,6 +23,7 @@ const laborItemListSchema = z.array(laborItemInputSchema).min(1).max(MAX_LABOR_S
 export const laborSheetCreateRequestSchema = z.strictObject({
   expectedCaseVersion: entityVersionSchema,
   items: laborItemListSchema,
+  laborAiSuggestionRunId: idSchema.nullable().default(null),
   confirmed: z.literal(true),
 })
 
@@ -30,6 +31,7 @@ export const laborSheetReviseRequestSchema = z.strictObject({
   expectedVersion: entityVersionSchema,
   items: laborItemListSchema,
   reason: normalizedText(MAX_LABOR_REVISION_REASON_LENGTH),
+  laborAiSuggestionRunId: idSchema.nullable().default(null),
   confirmed: z.literal(true),
 })
 

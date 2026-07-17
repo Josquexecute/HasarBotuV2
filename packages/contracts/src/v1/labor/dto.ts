@@ -49,6 +49,7 @@ export const laborSheetVersionSchema = z.strictObject({
   schemaVersion: z.literal(LABOR_SHEET_SCHEMA_VERSION),
   currency: z.literal(LABOR_SHEET_CURRENCY),
   sourceType: z.enum(LABOR_SHEET_SOURCE_TYPES),
+  laborAiSuggestionRunId: idSchema.nullable(),
   revisionReason: z.string().min(1).max(MAX_LABOR_REVISION_REASON_LENGTH).nullable(),
   createdByUserId: userIdSchema,
   createdByDisplayName: displayNameSchema,

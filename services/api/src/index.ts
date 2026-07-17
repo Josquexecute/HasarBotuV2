@@ -74,6 +74,17 @@ export {
   type EmailAiProviderRegistry,
 } from './email-ai/index.js'
 export {
+  createDeterministicLaborAiProviderRegistry,
+  createLaborAiProviderRegistry,
+  createGeminiLaborAiProvider,
+  type DeterministicLaborAiProviderRegistry,
+  type LaborAiProviderAdapter,
+  type LaborAiProviderDescriptor,
+  type LaborAiProviderRequest,
+  type LaborAiProviderResponse,
+  type LaborAiProviderRegistry,
+} from './labor-ai/index.js'
+export {
   createTrafficValueLossReportStore,
   createTrafficValueLossStore,
   hashTrafficValueLossReportPdf,

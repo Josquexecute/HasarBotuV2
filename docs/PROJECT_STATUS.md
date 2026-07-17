@@ -1,13 +1,13 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-17
+Son güncelleme: 2026-07-18
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 43 — Kullanıcı kontrollü İşçilik çekirdeği
+- Aşama: Paket 44 — Kanıtlı AI işçilik önerisi
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-43-labor-core` dalı, remote yok
+- Git: Yerel repository, `foundation/package-44-labor-ai` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -820,3 +820,17 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Gerçek Chrome/CDP smoke (8/8 senaryo): login; boş föy durumu; kullanıcı kontrollü kalem girişi + açık onayla kayıt; DB'de sheet/version/item provenance; düzeltmede immutable sürüm 2; audit yalnız güvenli sayı/toplam metadata; API kapatılınca mock fallback yok; console temiz. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yoktu.
 - Build başlangıç JavaScript grafiğini **469.250 baytta** tuttu; en büyük chunk 299.199 bayt ve İşçilik dahil **9 lazy modül** bundle guard'ında zorunlu kılınarak ayrı kaldı.
 - Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen kopyada fresh `npm ci` (0 açık; bilinen `glob@11.1.0` deprecation uyarısıyla), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.257/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
+
+## Paket 44 — Kanıtlı AI işçilik önerisi (2026-07-17)
+
+- Paket 43 çekirdeği üzerine `labor-ai-draft/1.0.0` planı eklendi (HB-2026-050). Girdi bounded hasar tarifi + mevcut föy kalemleridir; external payload PII-minimize edilir, plaka/ofis numarası dışarı çıkmaz ve hasar tarifi ham metni DB/audit/log'a yazılmaz.
+- Organization işçilik AI opt-in/allow-list'i varsayılan kapalıdır. Plan provider çağrısı veya audit yazmaz; start güncel case/föy sürümü + plan hash, zorunlu Idempotency-Key, üç modüllü ortak `ai_usage_ledger` (`policy_analysis | email_draft | labor_sheet`) hard-stop'u ve açık egress onayı ister. Her modülün ay-içi hesabı diğer modüllerin aktif receipt rezervasyonlarını da sayar.
+- Migration 0029 immutable suggestion run, durable provider receipt, `ai_provider_policies` labor opt-in kolonları ve `labor_sheet_versions` üzerinde `ai_assisted` + `labor_ai_suggestion_run_id` provenance'ını ekler. Provider cevabı sonrası finalize kesintisi ikinci çağrı olmadan recover edilir; belirsiz network sonucu otomatik retry yapmadan `outcome_unknown` kalır.
+- Strict server doğrulaması schema dışı, Paket 43 kalem/tutar sınırı ihlali, PII/placeholder, URL ve filesystem path içeren çıktıyı öneri yapmaz; ham provider çıktısı saklanmaz. Gemini adapter mevcut server-only secret sınırını, secret-header ve sınırlı 503 backoff'unu kullanır.
+- İşçilik editörü privacy/bütçe planını, prompt-injection uyarısını, egress onayını ve insan incelemeli kalem önerisini gösterir. "Öneriyi uygula" yalnız düzenleme satırlarını değiştirir ve kayıt onayını sıfırlar; açık onayla kaydedilen sürüm `ai_assisted` provenance taşır. Mock prototip ve API hatasında no-fallback sınırı değişmedi.
+- Ana çalışma ağacında typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.286 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 214/6; domain 426; contracts 259; database 57; API 277; file-agent 53 (Paket 43'e göre +29; kritik testlerde skip yok).
+- Migration 0029 tekil ve 0028→0021 ile kademeli rollback-reapply gerçek PostgreSQL'de geçti; 0029 kısıt testi labor policy allow-list CHECK'ini, terminal run immutability'sini, run bağı olmayan `ai_assisted` sürüm reddini ve run bağı olmayan `labor_sheet` usage reddini doğruladı. Paket 44 gerçek API testi 9/9: plan salt-okunur + kapalı provider çağrısız; RBAC/tenant/kapalı-case; strict öneri + idempotent replay; stale plan 409; geçersiz çıktı raw saklamadan fail-closed; bütçe hard-stop çağrıdan önce; `outcome_unknown` no-retry; ai_assisted provenance + geçersiz run reddi; audit/run sızıntısızlığı.
+- Gerçek Chrome/CDP smoke (13/13 senaryo): login; provider kapalıyken çağrı yok ve plan state yazmaz; PII-minimize egress (tarifteki ad/e-posta redakte, plaka/ofis no dışarı çıkmaz, injection metni yalnız veri); açık egress onayı; insan incelemeli öneri; "öneriyi uygula" yalnız form state + onay sıfırlama; DB'de `ai_assisted` + run + `labor_sheet` usage provenance; bütçe hard-stop; audit sızıntısız; API kapatılınca fallback yok; console temiz. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yoktu.
+- Build başlangıç JavaScript grafiğini **469.250 baytta** tuttu; AI paneli lazy İşçilik chunk'ında kaldı ve **9 zorunlu lazy modül** korundu.
+- Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.286/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
+- Yeni dependency, Excel yazımı, öğrenme sözlüğü, Gmail, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Üretim migration çalıştırılmadı.

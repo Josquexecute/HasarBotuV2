@@ -144,6 +144,15 @@ import {
   laborSheetResponseSchema,
   laborSheetWorkspaceResponseSchema,
 } from './v1/labor/dto.js'
+import {
+  laborAiPlanRequestSchema,
+  laborAiStartRequestSchema,
+} from './v1/labor-ai/commands.js'
+import {
+  laborAiPlanResponseSchema,
+  laborAiRunResponseSchema,
+  laborAiRunsResponseSchema,
+} from './v1/labor-ai/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -266,6 +275,11 @@ export const JSON_SCHEMA_TARGETS = {
   'labor-sheet-revise-request': laborSheetReviseRequestSchema,
   'labor-sheet-response': laborSheetResponseSchema,
   'labor-sheet-workspace-response': laborSheetWorkspaceResponseSchema,
+  'labor-ai-plan-request': laborAiPlanRequestSchema,
+  'labor-ai-start-request': laborAiStartRequestSchema,
+  'labor-ai-plan-response': laborAiPlanResponseSchema,
+  'labor-ai-run-response': laborAiRunResponseSchema,
+  'labor-ai-runs-response': laborAiRunsResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

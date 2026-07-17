@@ -59,8 +59,9 @@ interface VersionRow {
   readonly sheet_id: string
   readonly sheet_version: number
   readonly previous_version_id: string | null
-  readonly source_type: 'user_entered' | 'manual_revision'
+  readonly source_type: 'user_entered' | 'ai_assisted' | 'manual_revision'
   readonly currency: string
+  readonly labor_ai_suggestion_run_id: string | null
   readonly revision_reason: string | null
   readonly created_by_user_id: string
   readonly created_by_display_name: string
@@ -84,6 +85,7 @@ export type LaborCommandOutcome<T> =
   | { readonly kind: 'sheet_exists' }
   | { readonly kind: 'sheet_missing' }
   | { readonly kind: 'invalid_items'; readonly reasonCode: LaborSheetInvalidReason; readonly itemOrdinal: number | null }
+  | { readonly kind: 'invalid_ai_suggestion' }
   | { readonly kind: 'idempotency_race' }
 
 function safeMinor(value: string): number {
@@ -124,7 +126,8 @@ async function loadSheet(
   if (sheet === undefined) return undefined
   const versionsResult = await exec.query(
     `SELECT v.id,v.sheet_id,v.sheet_version,v.previous_version_id,v.source_type,v.currency,
-            v.revision_reason,v.created_by_user_id,creator.display_name AS created_by_display_name,
+            v.labor_ai_suggestion_run_id,v.revision_reason,
+            v.created_by_user_id,creator.display_name AS created_by_display_name,
             v.created_at
        FROM labor_sheet_versions v
        JOIN users creator ON creator.organization_id=v.organization_id AND creator.id=v.created_by_user_id
@@ -162,6 +165,7 @@ async function loadSheet(
       schemaVersion: LABOR_SHEET_SCHEMA_VERSION,
       currency: version.currency,
       sourceType: version.source_type,
+      laborAiSuggestionRunId: version.labor_ai_suggestion_run_id,
       revisionReason: version.revision_reason,
       createdByUserId: version.created_by_user_id,
       createdByDisplayName: version.created_by_display_name,
@@ -181,6 +185,20 @@ async function loadSheet(
     createdAt: sheet.created_at.toISOString(),
     updatedAt: sheet.updated_at.toISOString(),
   })
+}
+
+async function validLaborAiSuggestion(
+  exec: Queryable,
+  organizationId: string,
+  caseId: string,
+  runId: string,
+): Promise<boolean> {
+  const result = await exec.query(
+    `SELECT 1 FROM labor_ai_suggestion_runs
+      WHERE organization_id=$1 AND case_id=$2 AND id=$3 AND status='review_required'`,
+    [organizationId, caseId, runId],
+  )
+  return result.rowCount === 1
 }
 
 async function insertItems(
@@ -274,6 +292,12 @@ export function createLaborStore(pool: pg.Pool) {
           await client.query('ROLLBACK')
           return { kind: 'sheet_exists' }
         }
+        const aiRunId = input.laborAiSuggestionRunId
+        if (aiRunId !== null && !await validLaborAiSuggestion(client, actor.organizationId, caseId, aiRunId)) {
+          await client.query('ROLLBACK')
+          return { kind: 'invalid_ai_suggestion' }
+        }
+        const sourceType = aiRunId === null ? 'user_entered' : 'ai_assisted'
         const sheetId = uuidv7()
         const versionId = uuidv7()
         await client.query(
@@ -282,9 +306,10 @@ export function createLaborStore(pool: pg.Pool) {
         )
         await client.query(
           `INSERT INTO labor_sheet_versions
-             (id,organization_id,case_id,sheet_id,sheet_version,source_type,currency,created_by_user_id)
-           VALUES ($1,$2,$3,$4,1,'user_entered',$5,$6)`,
-          [versionId, actor.organizationId, caseId, sheetId, LABOR_SHEET_CURRENCY, actor.actorUserId],
+             (id,organization_id,case_id,sheet_id,sheet_version,source_type,currency,
+              labor_ai_suggestion_run_id,created_by_user_id)
+           VALUES ($1,$2,$3,$4,1,$5,$6,$7,$8)`,
+          [versionId, actor.organizationId, caseId, sheetId, sourceType, LABOR_SHEET_CURRENCY, aiRunId, actor.actorUserId],
         )
         await insertItems(client, actor, caseId, sheetId, versionId, validation.items)
         await client.query(
@@ -308,7 +333,8 @@ export function createLaborStore(pool: pg.Pool) {
             partTotalMinor: validation.totals.partTotalMinor,
             laborTotalMinor: validation.totals.laborTotalMinor,
             grandTotalMinor: validation.totals.grandTotalMinor,
-            sourceType: 'user_entered',
+            sourceType,
+            laborAiSuggestionRunId: aiRunId,
           },
         })
         await insertIdempotent(client, {
@@ -368,13 +394,19 @@ export function createLaborStore(pool: pg.Pool) {
           await client.query('ROLLBACK')
           return { kind: 'version_conflict' }
         }
+        const aiRunId = input.laborAiSuggestionRunId
+        if (aiRunId !== null && !await validLaborAiSuggestion(client, actor.organizationId, caseId, aiRunId)) {
+          await client.query('ROLLBACK')
+          return { kind: 'invalid_ai_suggestion' }
+        }
+        const sourceType = aiRunId === null ? 'manual_revision' : 'ai_assisted'
         const nextVersion = sheet.version + 1
         const versionId = uuidv7()
         await client.query(
           `INSERT INTO labor_sheet_versions
              (id,organization_id,case_id,sheet_id,sheet_version,previous_version_id,source_type,
-              currency,revision_reason,created_by_user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,'manual_revision',$7,$8,$9)`,
+              currency,labor_ai_suggestion_run_id,revision_reason,created_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [
             versionId,
             actor.organizationId,
@@ -382,7 +414,9 @@ export function createLaborStore(pool: pg.Pool) {
             sheet.id,
             nextVersion,
             sheet.current_version_id,
+            sourceType,
             LABOR_SHEET_CURRENCY,
+            aiRunId,
             input.reason,
             actor.actorUserId,
           ],
@@ -409,7 +443,8 @@ export function createLaborStore(pool: pg.Pool) {
             partTotalMinor: validation.totals.partTotalMinor,
             laborTotalMinor: validation.totals.laborTotalMinor,
             grandTotalMinor: validation.totals.grandTotalMinor,
-            sourceType: 'manual_revision',
+            sourceType,
+            laborAiSuggestionRunId: aiRunId,
           },
         })
         await insertIdempotent(client, {

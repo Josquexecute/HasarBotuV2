@@ -289,3 +289,19 @@ export {
   useLabor,
   type LaborLoadStatus,
 } from './useLabor'
+export {
+  LaborAiError,
+  createHttpLaborAiAdapter,
+  type LaborAiAdapterOptions,
+  type LaborAiBudgetRecord,
+  type LaborAiDataPort,
+  type LaborAiErrorKind,
+  type LaborAiPlanInput,
+  type LaborAiPlanRecord,
+  type LaborAiPrivacyRecord,
+  type LaborAiProviderIdRecord,
+  type LaborAiRunRecord,
+  type LaborAiRunsRecord,
+  type LaborAiStartInput,
+  type LaborAiSuggestedItemRecord,
+} from './laborAiPort'

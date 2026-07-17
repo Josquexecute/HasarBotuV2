@@ -828,3 +828,22 @@ Etkisi:
 
 - `labor-sheet/1.0.0` saf domain doğrulama/hesap katmanı, strict contracts/JSON Schema, migration 0028, tenant/RBAC/idempotency/audit API ve gerçek Dosya Detayı İşçilik çalışma alanı eklenir.
 - v0.7 İşçilik AI’nın AI önerisi, Excel şablon profili ve güvenli Excel yazımı ayrı sonraki dilimlerdir; yeni harici dependency, AI/provider çağrısı, Gmail, Excel yazımı, File Agent işi, IPC veya fiziksel dosya yazma yolu eklenmez.
+
+## 2026-07-17 — HB-2026-050: PII-minimize, bütçe kontrollü AI işçilik önerisi
+
+Karar:
+
+1. İşçilik AI katmanı Paket 43 çekirdeğinin kullanıcı kontrolünü değiştirmez; yalnız satır kalemi önerisi üretir. Föy kaydına, sürüme, kapanışa veya Excel’e karar veremez; öneri föye otomatik yazılamaz.
+2. Öneri girdisi kullanıcının bounded hasar tarifi (en çok 2.000 karakter) ve mevcut föyün güncel kalemleridir. Benzer dosya taraması ve öğrenme sözlüğü bu dilimde yoktur; sonraki açık kapsamdır.
+3. Plan salt okunurdur. Provider çağrısı ancak organization `laborEnabled`, ayrı labor provider allow-list, ortak integer bütçe, güncel case/föy sürümü + plan hash ve harici sağlayıcıda açık egress onayı birlikte sağlanırsa yapılır.
+4. Dış payload PII-minimize edilmiş hasar tarifi, minimize kalem metinleri ve case türüdür. Plaka, ofis numarası veya başka vaka kimliği provider’a gönderilmez; hasar tarifi ham metni DB/audit/log’a yazılmaz, yalnız hash/karakter sayısı saklanır.
+5. Kullanıcı tarifindeki prompt-injection metni güvenilmeyen veri olarak korunur ve provider system contract’ını değiştiremez. Provider çıktısı strict doğrulanır: bilinmeyen alan, Paket 43 kalem/tutar sınırı ihlali, PII/placeholder, URL veya dosya yolu içeren çıktı öneri sayılmaz; ham çıktı saklanmaz.
+6. Durable receipt/finalize/recovery modeli HB-2026-048 §6 ile birebirdir: provider çağrısı transaction dışında, receipt önce; cevap sonrası kesinti ikinci çağrı olmadan recover edilir; belirsiz network sonucu otomatik retry olmadan `outcome_unknown` kalır.
+7. `ai_usage_ledger` üç modüllü ortak bütçe gerçeğine genişler: `policy_analysis | email_draft | labor_sheet`. Her modülün ay-içi hesabı diğer modüllerin aktif receipt rezervasyonlarını da sayar; ayrı bütçe sistemi kurulmaz.
+8. UI öneriyi yalnız düzenleme alanlarına uygular ve Paket 43 kayıt onayını sıfırlar. Açık onayla kaydedilen föy sürümü `ai_assisted` source ve `labor_ai_suggestion_run_id` provenance’ı taşır; e-postadan farklı olarak revize sürümlerinde de `ai_assisted` provenance’a izin verilir (gerekçe zorunluluğu korunur), çünkü editör hem oluşturma hem düzeltmede öneri uygulayabilir.
+9. Gerçek Gemini adapter mevcut server-only secret/config sınırını kullanır. Organization işçilik opt-in’i varsayılan kapalıdır; provider kapalı/yapılandırılmamış veya bütçe doluysa çekirdek İşçilik akışı çalışır, mock veya provider fallback yapılmaz.
+
+Etkisi:
+
+- Migration `0029_labor_ai_suggestions`; saf labor-AI privacy/çıktı doğrulama domain’i; strict contracts/JSON Schema; tenant/RBAC/idempotency/recovery/audit API ve Paket 43 editöründe sınırlı AI öneri paneli eklenir.
+- Yeni dependency, Excel yazımı, öğrenme sözlüğü, Gmail, File Agent, IPC, fiziksel dosya erişimi veya otomatik kayıt yoktur.

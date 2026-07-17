@@ -23,7 +23,8 @@ export interface LaborSheetVersionRecord {
   readonly totals: LaborSheetTotalsRecord
   readonly schemaVersion: 'labor-sheet/1.0.0'
   readonly currency: 'TRY'
-  readonly sourceType: 'user_entered' | 'manual_revision'
+  readonly sourceType: 'user_entered' | 'ai_assisted' | 'manual_revision'
+  readonly laborAiSuggestionRunId: string | null
   readonly revisionReason: string | null
   readonly createdByUserId: string
   readonly createdByDisplayName: string
@@ -55,6 +56,7 @@ export interface LaborSheetWorkspaceRecord {
 export interface LaborSheetCreateInput {
   readonly expectedCaseVersion: number
   readonly items: readonly LaborItemInputRecord[]
+  readonly laborAiSuggestionRunId?: string | null
   readonly confirmed: true
 }
 
@@ -62,6 +64,7 @@ export interface LaborSheetReviseInput {
   readonly expectedVersion: number
   readonly items: readonly LaborItemInputRecord[]
   readonly reason: string
+  readonly laborAiSuggestionRunId?: string | null
   readonly confirmed: true
 }
 

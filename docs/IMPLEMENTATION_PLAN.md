@@ -950,3 +950,16 @@ Kapsam dışı: recipient önerisi, otomatik taslak kaydı, otomatik gönderim, 
 - [x] Yalnız Paket 43 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: AI işçilik önerisi, Excel şablon profili, güvenli Excel yazımı, öğrenme sözlüğü, tutar dağıtımı, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 44 — Kanıtlı AI işçilik önerisi
+
+- [x] Bounded hasar tarifi + mevcut kalemlerden PII-minimize outbound context ve plan hash üret.
+- [x] Organization labor opt-in/allow-list ve üç modüllü ortak `ai_usage_ledger` bütçe sınırını ekle.
+- [x] Strict provider çıktı doğrulaması: Paket 43 kalem/tutar sınırları + PII/placeholder/URL/path reddi.
+- [x] Durable receipt, response-recorded recovery, outcome-unknown no-retry ve idempotent replay akışını ekle.
+- [x] Strict contracts/JSON Schema ve migration 0029 tenant/immutability/provenance sınırlarını ekle.
+- [x] Paket 43 editörüne plan, egress onayı, bütçe/privacy, öneri inceleme ve yerel uygulama panelini ekle; kayıt `ai_assisted` provenance taşısın.
+- [x] Gerçek PostgreSQL/API, tam root, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 44 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: benzer dosya taraması/öğrenme sözlüğü, Excel şablon profili, güvenli Excel yazımı, otomatik föy kaydı, Gmail, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.

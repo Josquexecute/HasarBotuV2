@@ -24,6 +24,7 @@ import { registerFeeRoutes } from './fees/index.js'
 import { registerEmailDraftRoutes } from './email-drafts/index.js'
 import { registerEmailAiRoutes, type EmailAiProviderRegistry } from './email-ai/index.js'
 import { registerLaborRoutes } from './labor/index.js'
+import { registerLaborAiRoutes, type LaborAiProviderRegistry } from './labor-ai/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -70,6 +71,8 @@ export interface BuildAppOptions {
   readonly policyAiProviders?: PolicyAiProviderRegistry
   /** Paket 42 e-posta AI provider kaydı. Varsayılan boştur; e-posta çekirdeği AI olmadan çalışır. */
   readonly emailAiProviders?: EmailAiProviderRegistry
+  /** Paket 44 işçilik AI provider kaydı. Varsayılan boştur; İşçilik çekirdeği AI olmadan çalışır. */
+  readonly laborAiProviders?: LaborAiProviderRegistry
 }
 
 /**
@@ -151,6 +154,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     })
     registerLaborRoutes(app, {
       pool: options.auth.pool,
+    })
+    registerLaborAiRoutes(app, {
+      pool: options.auth.pool,
+      clock: options.clock ?? systemClock,
+      providers: options.laborAiProviders ?? { get: () => undefined, list: () => [] },
     })
   }
 

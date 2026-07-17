@@ -1,10 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, History, Plus, RefreshCw, Save, Trash2, Wrench } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, History, Plus, RefreshCw, Save, ShieldCheck, Sparkles, Trash2, Wrench } from 'lucide-react'
 import { formatCurrency } from '../../mocks/cases'
 import {
+  LaborAiError,
   LaborError,
+  createHttpLaborAiAdapter,
   useLabor,
   type DataSourceKind,
+  type LaborAiDataPort,
+  type LaborAiPlanRecord,
+  type LaborAiRunRecord,
   type LaborDataPort,
   type LaborItemInputRecord,
   type LaborSheetVersionRecord,
@@ -16,6 +21,7 @@ interface Props {
   readonly source: DataSourceKind
   readonly onUnauthorized: () => void
   readonly port?: LaborDataPort
+  readonly aiPort?: LaborAiDataPort
 }
 
 interface EditableRow {
@@ -62,17 +68,26 @@ function rowsFromVersion(version: LaborSheetVersionRecord): EditableRow[] {
 }
 
 function safeMessage(error: unknown): string {
-  if (error instanceof LaborError) {
-    if (error.kind === 'conflict') return 'Föy değişti veya bu durumda işlem yapılamıyor. Güncel veriyi yükleyin.'
-    if (error.kind === 'validation') return 'Girilen kalem, işlem veya tutar geçerli değil.'
+  if (error instanceof LaborError || error instanceof LaborAiError) {
+    if (error.kind === 'conflict') return 'Föy veya AI planı değişti; güncel veriyle tekrar deneyin.'
+    if (error.kind === 'validation') return 'Girilen kalem, işlem, tutar veya AI öneri bağı geçerli değil.'
     if (error.kind === 'forbidden') return 'Bu işlem için yetkiniz yok.'
-    if (error.kind === 'unavailable') return 'İşçilik servisine ulaşılamadı; mock fallback yapılmadı.'
+    if (error.kind === 'unavailable') return 'Servise ulaşılamadı; mock fallback yapılmadı.'
   }
   return 'İşlem tamamlanamadı.'
 }
 
-export function LaborApiModule({ item, source, onUnauthorized, port }: Props) {
+function runStatusMessage(run: LaborAiRunRecord): string | null {
+  if (run.status === 'provider_disabled') return 'AI sağlayıcısı organizasyon için kapalıdır. Çekirdek işçilik akışı AI olmadan çalışır.'
+  if (run.status === 'budget_blocked') return 'Bütçe limiti nedeniyle çağrı yapılmadı.'
+  if (run.status === 'failed') return 'Sağlayıcı çıktısı güvenli doğrulamadan geçemedi; öneri üretilmedi.'
+  if (run.status === 'outcome_unknown') return 'Ağ sonucu belirsiz kaldı; otomatik yeniden deneme yapılmaz.'
+  return null
+}
+
+export function LaborApiModule({ item, source, onUnauthorized, port, aiPort }: Props) {
   const workspace = useLabor(item.caseId, source, true, port)
+  const resolvedAiPort = useMemo(() => aiPort ?? createHttpLaborAiAdapter(), [aiPort])
   const busyRef = useRef(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -81,6 +96,11 @@ export function LaborApiModule({ item, source, onUnauthorized, port }: Props) {
   const [rows, setRows] = useState<EditableRow[]>([emptyRow()])
   const [reason, setReason] = useState('')
   const [confirmed, setConfirmed] = useState(false)
+  const [damageDescription, setDamageDescription] = useState('')
+  const [aiPlan, setAiPlan] = useState<LaborAiPlanRecord | null>(null)
+  const [aiRun, setAiRun] = useState<LaborAiRunRecord | null>(null)
+  const [aiEgressConfirmed, setAiEgressConfirmed] = useState(false)
+  const [appliedAiRunId, setAppliedAiRunId] = useState<string | null>(null)
 
   const data = workspace.data
   const sheet = data?.sheet ?? null
@@ -113,12 +133,21 @@ export function LaborApiModule({ item, source, onUnauthorized, port }: Props) {
     }
   }
 
+  const resetAiState = () => {
+    setAiPlan(null)
+    setAiRun(null)
+    setAiEgressConfirmed(false)
+    setAppliedAiRunId(null)
+  }
+
   const startEdit = () => {
     setRows(sheet ? rowsFromVersion(sheet.currentVersion) : [emptyRow()])
     setReason('')
     setConfirmed(false)
     setError('')
     setNotice('')
+    resetAiState()
+    setDamageDescription('')
     setEditing(true)
   }
 
@@ -126,6 +155,61 @@ export function LaborApiModule({ item, source, onUnauthorized, port }: Props) {
     setEditing(false)
     setError('')
     setNotice('')
+    resetAiState()
+  }
+
+  const requestAiPlan = () => {
+    if (damageDescription.trim().length === 0) {
+      setError('AI önerisi için önce hasar tarifini girin.')
+      return
+    }
+    void run('ai-plan', async () => {
+      const next = await resolvedAiPort.plan(item.caseId, {
+        damageDescription: damageDescription.trim(),
+        providerId: 'gemini-generate-content',
+      })
+      setAiPlan(next)
+      setAiRun(null)
+      setAiEgressConfirmed(false)
+      setNotice(next.canStart
+        ? 'AI öneri planı hazırlandı. PII minimizasyonu, bütçe ve veri çıkışını kontrol edin.'
+        : 'AI çağrısı yapılmadı. Sağlayıcı ve bütçe durumu aşağıda gösteriliyor.')
+    })
+  }
+
+  const startAiSuggestion = () => {
+    if (aiPlan === null) return
+    if (aiPlan.requiresExplicitEgressConfirmation && !aiEgressConfirmed) {
+      setError('Minimize edilmiş verinin harici sağlayıcıya çıkışını açıkça onaylayın.')
+      return
+    }
+    void run('ai-start', async () => {
+      const next = await resolvedAiPort.start(item.caseId, {
+        damageDescription: damageDescription.trim(),
+        providerId: aiPlan.providerId,
+        expectedCaseVersion: aiPlan.caseVersion,
+        expectedSheetVersion: aiPlan.baseSheetVersion,
+        planHash: aiPlan.planHash,
+        confirmed: true,
+      })
+      setAiRun(next)
+      setNotice(next.status === 'review_required'
+        ? 'İnsan incelemesi gerekli: öneriyi kontrol edip isterseniz editöre uygulayın.'
+        : 'AI önerisi üretilmedi; güvenli durum aşağıda gösteriliyor.')
+    })
+  }
+
+  const applyAiSuggestion = () => {
+    if (aiRun?.suggestion == null) return
+    setRows(aiRun.suggestion.items.map((line) => ({
+      description: line.description,
+      action: line.action,
+      part: line.partAmountMinor === 0 ? '' : String(line.partAmountMinor / 100),
+      labor: line.laborAmountMinor === 0 ? '' : String(line.laborAmountMinor / 100),
+    })))
+    setAppliedAiRunId(aiRun.id)
+    setConfirmed(false)
+    setNotice('Öneri yalnız düzenleme alanlarına uygulandı; kayıt için kalemleri kontrol edip açık onay verin.')
   }
 
   const updateRow = (index: number, field: keyof EditableRow, value: string) => {
@@ -176,6 +260,7 @@ export function LaborApiModule({ item, source, onUnauthorized, port }: Props) {
         await workspace.port.create(item.caseId, {
           expectedCaseVersion: data.caseVersion,
           items,
+          laborAiSuggestionRunId: appliedAiRunId,
           confirmed: true,
         })
         setNotice('İşçilik föyü kullanıcı onayıyla kaydedildi.')
@@ -184,12 +269,14 @@ export function LaborApiModule({ item, source, onUnauthorized, port }: Props) {
           expectedVersion: sheet.version,
           items,
           reason: reason.trim(),
+          laborAiSuggestionRunId: appliedAiRunId,
           confirmed: true,
         })
         setNotice('İşçilik föyünün yeni sürümü kaydedildi.')
       }
       setEditing(false)
       setConfirmed(false)
+      resetAiState()
       workspace.reload()
     })
   }
@@ -277,6 +364,92 @@ export function LaborApiModule({ item, source, onUnauthorized, port }: Props) {
               </table>
             </div>
             <button className="button button--secondary" type="button" onClick={addRow}><Plus size={15} /> Satır ekle</button>
+
+            <section className="labor-ai-panel">
+              <header><h3><Sparkles size={14} /> AI İşçilik Önerisi</h3></header>
+              <p className="labor-empty">Öneri yalnız karar desteğidir; föye otomatik yazılmaz. Plaka ve ofis numarası sağlayıcıya gönderilmez.</p>
+              <label className="form-field"><span>Hasar tarifi (AI için)</span>
+                <textarea
+                  value={damageDescription}
+                  onChange={(event) => setDamageDescription(event.target.value)}
+                  placeholder="Örnek: Ön tampon ve sol çamurluk hasarlı; far bağlantı ayağı kırık."
+                  maxLength={2000}
+                  rows={3}
+                />
+              </label>
+              <div className="labor-editor__actions">
+                <button className="button" type="button" onClick={requestAiPlan} disabled={busy !== ''}>
+                  <ShieldCheck size={15} /> Gizlilik ve Bütçe Planını Göster
+                </button>
+              </div>
+
+              {aiPlan !== null && (
+                <div className="labor-ai-plan">
+                  <dl className="detail-list">
+                    <div><dt>PII minimizasyonu</dt><dd>{aiPlan.privacy.externalProvider ? `${aiPlan.privacy.redactedValueCount} değer redakte edildi` : 'Yerel sağlayıcı; veri dışarı çıkmaz'}</dd></div>
+                    <div><dt>Tahmini maliyet</dt><dd>{formatMinor(aiPlan.budget.estimatedCostMinor)}</dd></div>
+                    <div><dt>Aylık kullanım</dt><dd>{formatMinor(aiPlan.budget.currentMonthCostMinor)} / {formatMinor(aiPlan.budget.monthlyBudgetMinor)}</dd></div>
+                  </dl>
+                  {aiPlan.privacy.warnings.length > 0 && (
+                    <p className="form-alert form-alert--error"><AlertTriangle size={15} /> Belge/tarif içinde güvenilmeyen yönlendirme tespit edildi; bu metin yalnız veri olarak işlenir, talimat sayılmaz.</p>
+                  )}
+                  {!aiPlan.budget.enabled && <p className="labor-empty">AI sağlayıcısı organizasyon için kapalıdır. Çekirdek işçilik akışı AI olmadan çalışır.</p>}
+                  {aiPlan.budget.enabled && !aiPlan.budget.allowed && aiPlan.budget.reasonCode === 'AI_BUDGET_EXCEEDED' && (
+                    <p className="labor-empty">Bütçe limiti nedeniyle çağrı yapılmadı.</p>
+                  )}
+                  {aiPlan.canStart && aiPlan.requiresExplicitEgressConfirmation && (
+                    <label className="email-draft-confirm labor-confirm">
+                      <input type="checkbox" checked={aiEgressConfirmed} onChange={(event) => setAiEgressConfirmed(event.target.checked)} />
+                      <span>PII ile minimize edilen içerik özetinin harici AI sağlayıcısına gönderilmesini onaylıyorum.</span>
+                    </label>
+                  )}
+                  {aiPlan.canStart && (
+                    <div className="labor-editor__actions">
+                      <button className="button button--primary" type="button" onClick={startAiSuggestion} disabled={busy !== ''}>
+                        <Sparkles size={15} /> AI Önerisini Oluştur
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {aiRun !== null && (
+                <div className="labor-ai-run">
+                  {aiRun.suggestion !== null
+                    ? (
+                      <>
+                        <p className="form-alert form-alert--ok"><CheckCircle2 size={15} /> İnsan incelemesi gerekli — güven: %{Math.round(aiRun.suggestion.confidence * 100)}</p>
+                        <div className="table-scroll module-table-scroll">
+                          <table className="data-table module-table">
+                            <thead><tr><th>Kalem</th><th>İşlem</th><th>Parça</th><th>İşçilik</th></tr></thead>
+                            <tbody>
+                              {aiRun.suggestion.items.map((line, index) => (
+                                <tr key={index}>
+                                  <td>{line.description}</td>
+                                  <td>{line.action}</td>
+                                  <td>{formatMinor(line.partAmountMinor)}</td>
+                                  <td>{formatMinor(line.laborAmountMinor)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="labor-empty">{aiRun.suggestion.reasoning}</p>
+                        {aiRun.suggestion.warnings.map((warning) => (
+                          <p key={warning} className="labor-empty"><AlertTriangle size={12} /> {warning}</p>
+                        ))}
+                        <div className="labor-editor__actions">
+                          <button className="button button--secondary" type="button" onClick={applyAiSuggestion} disabled={busy !== ''}>
+                            Öneriyi Düzenleme Alanlarına Uygula
+                          </button>
+                        </div>
+                      </>
+                    )
+                    : <p className="labor-empty">{runStatusMessage(aiRun) ?? 'AI önerisi üretilmedi.'}</p>}
+                </div>
+              )}
+            </section>
+
             {sheet !== null && (
               <label className="form-field"><span>Sürüm gerekçesi</span>
                 <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Örnek: Parça bedeli güncellendi" maxLength={500} />

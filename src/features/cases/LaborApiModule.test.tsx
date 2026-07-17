@@ -1,7 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { LaborDataPort, LaborSheetRecord, LaborSheetWorkspaceRecord } from '../../data'
+import type {
+  LaborAiDataPort,
+  LaborAiPlanRecord,
+  LaborAiRunRecord,
+  LaborDataPort,
+  LaborSheetRecord,
+  LaborSheetWorkspaceRecord,
+} from '../../data'
 import type { CaseRecord } from '../../types/case'
 import { LaborApiModule } from './LaborApiModule'
 
@@ -49,6 +56,7 @@ const sheet: LaborSheetRecord = {
     schemaVersion: 'labor-sheet/1.0.0',
     currency: 'TRY',
     sourceType: 'user_entered',
+    laborAiSuggestionRunId: null,
     revisionReason: null,
     createdByUserId: USER_ID,
     createdByDisplayName: 'P43 Yetkili',
@@ -63,6 +71,7 @@ const sheet: LaborSheetRecord = {
     schemaVersion: 'labor-sheet/1.0.0',
     currency: 'TRY',
     sourceType: 'user_entered',
+    laborAiSuggestionRunId: null,
     revisionReason: null,
     createdByUserId: USER_ID,
     createdByDisplayName: 'P43 Yetkili',
@@ -79,6 +88,83 @@ function makePort(workspace: LaborSheetWorkspaceRecord): LaborDataPort {
     load: vi.fn().mockResolvedValue(workspace),
     create: vi.fn().mockResolvedValue(sheet),
     revise: vi.fn().mockResolvedValue(sheet),
+  }
+}
+
+const AI_RUN_ID = '018f3f4c-89ab-7def-8123-456789abcdee'
+
+const aiPlan: LaborAiPlanRecord = {
+  caseId: CASE_ID,
+  caseVersion: 3,
+  baseSheetVersion: null,
+  providerId: 'gemini-generate-content',
+  providerVersion: 'gemini-labor/1.0.0',
+  modelId: 'gemini-fixture',
+  promptTemplateVersion: 'labor-ai-draft/1.0.0',
+  outputSchemaVersion: 'labor-ai-suggestion/1.0.0',
+  planHash: 'b'.repeat(64),
+  privacy: {
+    externalProvider: true,
+    policyVersion: 'labor-ai-pii-redaction/1.0.0',
+    outboundPayloadHash: 'c'.repeat(64),
+    outboundInputCharacters: 180,
+    redactedValueCount: 2,
+    redactedCategories: ['email', 'name'],
+    retentionMode: 'free_tier_product_improvement',
+    warnings: ['damage-description:PROMPT_INJECTION'],
+  },
+  budget: {
+    enabled: true,
+    providerAvailable: true,
+    providerAllowed: true,
+    estimatedCostMinor: 5,
+    currentMonthCostMinor: 0,
+    monthlyBudgetMinor: 100,
+    perRequestBudgetMinor: 10,
+    allowed: true,
+    reasonCode: null,
+  },
+  canStart: true,
+  requiresExplicitEgressConfirmation: true,
+  requiresHumanReview: true,
+}
+
+const aiRun: LaborAiRunRecord = {
+  id: AI_RUN_ID,
+  caseId: CASE_ID,
+  status: 'review_required',
+  providerId: 'gemini-generate-content',
+  providerVersion: 'gemini-labor/1.0.0',
+  modelId: 'gemini-fixture',
+  promptTemplateVersion: 'labor-ai-draft/1.0.0',
+  outputSchemaVersion: 'labor-ai-suggestion/1.0.0',
+  baseSheetVersion: null,
+  planHash: 'b'.repeat(64),
+  version: 2,
+  privacy: aiPlan.privacy,
+  budget: aiPlan.budget,
+  suggestion: {
+    schemaVersion: 'labor-ai-suggestion/1.0.0',
+    items: [
+      { description: 'Ön tampon kaplama', action: 'Değişim', partAmountMinor: 18_400_00, laborAmountMinor: 2_200_00 },
+      { description: 'Sol ön çamurluk', action: 'Onarım + boya', partAmountMinor: 0, laborAmountMinor: 6_750_00 },
+    ],
+    reasoning: 'Tarif edilen hasar bölgesine göre standart dağılım önerildi.',
+    warnings: ['Tutarlar eksper tarafından doğrulanmalıdır.'],
+    confidence: 0.86,
+    requiresHumanReview: true,
+  },
+  safeErrorCode: null,
+  createdAt: '2026-07-17T12:00:00.000Z',
+  startedAt: '2026-07-17T12:00:00.000Z',
+  completedAt: '2026-07-17T12:00:01.000Z',
+}
+
+function makeAiPort(): LaborAiDataPort {
+  return {
+    list: vi.fn().mockResolvedValue({ caseId: CASE_ID, items: [], permissions: { canStart: true } }),
+    plan: vi.fn().mockResolvedValue(aiPlan),
+    start: vi.fn().mockResolvedValue(aiRun),
   }
 }
 
@@ -110,6 +196,7 @@ describe('LaborApiModule', () => {
     await waitFor(() => expect(port.create).toHaveBeenCalledWith(CASE_ID, {
       expectedCaseVersion: 3,
       items: [{ description: 'Ön tampon', action: 'Değişim', partAmountMinor: 18_400_00, laborAmountMinor: 2_200_00 }],
+      laborAiSuggestionRunId: null,
       confirmed: true,
     }))
   })
@@ -133,6 +220,49 @@ describe('LaborApiModule', () => {
     expect(await screen.findByText('Ön tampon kaplama')).toBeInTheDocument()
     expect(screen.getAllByText('Sürüm 1').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Föyü Düzenle' })).toBeInTheDocument()
+  })
+
+  it('AI önerisi egress onayıyla üretilir, yalnız editöre uygulanır ve save onayını sıfırlar', async () => {
+    const port = makePort(emptyWorkspace(true))
+    const ai = makeAiPort()
+    render(<LaborApiModule item={item} source="api" onUnauthorized={vi.fn()} port={port} aiPort={ai} />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'İşçilik Föyü Oluştur' }))
+    await user.type(screen.getByLabelText('Hasar tarifi (AI için)'), 'Ön tampon hasarlı.')
+    await user.click(screen.getByRole('button', { name: /Gizlilik ve Bütçe Planını Göster/ }))
+    expect(await screen.findByText(/2 değer redakte edildi/)).toBeInTheDocument()
+    expect(screen.getByText(/güvenilmeyen yönlendirme tespit edildi/)).toBeInTheDocument()
+
+    // Egress onayı olmadan başlatma engellenir; provider çağrılmaz.
+    await user.click(screen.getByRole('button', { name: /AI Önerisini Oluştur/ }))
+    expect(await screen.findByText(/açıkça onaylayın/)).toBeInTheDocument()
+    expect(ai.start).not.toHaveBeenCalled()
+
+    await user.click(screen.getByLabelText(/harici AI sağlayıcısına gönderilmesini onaylıyorum/))
+    await user.click(screen.getByRole('button', { name: /AI Önerisini Oluştur/ }))
+    expect(await screen.findByText(/İnsan incelemesi gerekli — güven/)).toBeInTheDocument()
+    expect(ai.start).toHaveBeenCalledWith(CASE_ID, expect.objectContaining({
+      providerId: 'gemini-generate-content',
+      planHash: 'b'.repeat(64),
+      confirmed: true,
+    }))
+
+    // Kayıt onayını ver, öneriyi uygula: onay sıfırlanır ve kayıt otomatik yapılmaz.
+    await user.click(screen.getByLabelText(/sürümlü olarak kaydedilmesini onaylıyorum/))
+    await user.click(screen.getByRole('button', { name: 'Öneriyi Düzenleme Alanlarına Uygula' }))
+    expect(screen.getByLabelText('Kalem 1')).toHaveValue('Ön tampon kaplama')
+    expect(screen.getByLabelText('İşlem 2')).toHaveValue('Onarım + boya')
+    expect(screen.getByLabelText(/sürümlü olarak kaydedilmesini onaylıyorum/)).not.toBeChecked()
+    expect(port.create).not.toHaveBeenCalled()
+
+    // Açık onaydan sonra kayıt provenance run kimliğini taşır.
+    await user.click(screen.getByLabelText(/sürümlü olarak kaydedilmesini onaylıyorum/))
+    await user.click(screen.getByRole('button', { name: /Föyü Kaydet/ }))
+    await waitFor(() => expect(port.create).toHaveBeenCalledWith(CASE_ID, expect.objectContaining({
+      laborAiSuggestionRunId: AI_RUN_ID,
+      confirmed: true,
+    })))
   })
 
   it('salt-okunur/kapalı dosyada düzenleme sunmaz', async () => {

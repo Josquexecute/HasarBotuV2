@@ -130,7 +130,21 @@
               "type": "string",
               "enum": [
                 "user_entered",
+                "ai_assisted",
                 "manual_revision"
+              ]
+            },
+            "laborAiSuggestionRunId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "revisionReason": {
@@ -171,6 +185,7 @@
             "schemaVersion",
             "currency",
             "sourceType",
+            "laborAiSuggestionRunId",
             "revisionReason",
             "createdByUserId",
             "createdByDisplayName",
@@ -290,7 +305,21 @@
                 "type": "string",
                 "enum": [
                   "user_entered",
+                  "ai_assisted",
                   "manual_revision"
+                ]
+              },
+              "laborAiSuggestionRunId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               },
               "revisionReason": {
@@ -331,6 +360,7 @@
               "schemaVersion",
               "currency",
               "sourceType",
+              "laborAiSuggestionRunId",
               "revisionReason",
               "createdByUserId",
               "createdByDisplayName",
