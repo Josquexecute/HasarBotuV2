@@ -1,13 +1,13 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-16
+Son güncelleme: 2026-07-17
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 38 — Production doğruluğu ve case navigasyonu sertleştirme
+- Aşama: Paket 42 — Kanıtlı AI e-posta metin önerisi
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-38-production-truth-navigation` dalı, remote yok
+- Git: Yerel repository, `foundation/package-42-ai-email-drafting` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -98,7 +98,7 @@ Son güncelleme: 2026-07-16
 
 ## UI baseline tarihsel sınırları
 
-- Aşağıdaki maddeler yalnız `v0.1.0-ui-baseline` etiketinin tarihsel kabul kapsamıdır; güncel Paket 38 durumunu anlatmaz.
+- Aşağıdaki maddeler yalnız `v0.1.0-ui-baseline` etiketinin tarihsel kabul kapsamıdır; güncel Paket 42 durumunu anlatmaz.
 - Baseline kabulü yalnız UI-first prototipi kapsıyordu.
 - Baseline anında backend, Electron, PostgreSQL, pCloud, Gmail, gerçek AI ve dosya sistemi entegrasyonları bulunmuyordu.
 - Mock mevzuat yanıtı gerçek hukuki değerlendirme değildir.
