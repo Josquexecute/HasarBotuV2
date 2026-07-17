@@ -139,10 +139,17 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
     async listCases(status = 'open'): Promise<readonly CaseRecord[]> {
       const result: CaseRecord[] = []
       let page = 1
-      const { caseListResponseSchema } = await import('@hasarbotu/contracts')
+      // Oturum 401'i, buyuyen contracts chunk'i yuklenene kadar gecikmesin.
+      // Ilk istek ve runtime sema yuklemesi paralel baslar; Promise.all 401'i
+      // hemen reddederek global "oturum sona erdi" kapisini tetikler.
+      const [{ caseListResponseSchema }, firstPagePayload] = await Promise.all([
+        import('@hasarbotu/contracts'),
+        requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100`),
+      ])
+      let pagePayload = firstPagePayload
       while (true) {
         const parsed = caseListResponseSchema.safeParse(
-          await requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100`),
+          pagePayload,
         )
         if (!parsed.success || parsed.data.pageInfo.page !== page
           || parsed.data.pageInfo.totalPages > MAX_CASE_LIST_PAGES) {
@@ -151,6 +158,7 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
         result.push(...parsed.data.items.map((item) => mapCaseDtoToRecord(item)))
         if (page >= parsed.data.pageInfo.totalPages) return result
         page += 1
+        pagePayload = await requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100`)
       }
     },
 

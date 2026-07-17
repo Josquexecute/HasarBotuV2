@@ -84,6 +84,15 @@ Paket 41 sınırı:
 - Taslak ve düzeltmeler sürümlü iş verisidir; içerik audit/log’a kopyalanmaz.
 - AI taslak iyileştirmesi ileride eklenirse mevcut provider, PII minimizasyonu, bütçe, kaynak ve insan onayı kapılarından geçmek zorundadır.
 
+Paket 42 sınırı:
+
+- AI yalnız Paket 41’in deterministik subject/body önizlemesini iyileştiren bir öneri üretir. Recipient, attachment, save, handoff veya send kararı üretemez.
+- Plan çağrısızdır. External start; ayrı organization email opt-in/allow-list, ortak hard-stop bütçesi, güncel preview hash ve görünür egress onayı olmadan çalışmaz.
+- Provider payload’ı PII-minimize edilir; caseId, office number, plate, recipient, binary, path, File Agent bilgisi, session veya secret gönderilmez. Konu kimliği yalnız server tarafından sonradan eklenir.
+- Prompt-injection/URL/tool talimatı yalnız güvenilmeyen metindir. Tool/cached-content yoktur; sistem sözleşmesini değiştiremez.
+- Öneri PII, placeholder, URL veya filesystem path içerirse fail-closed reddedilir. Ham provider response/prompt audit, log veya DB’ye yazılmaz.
+- Kullanıcının “Öneriyi uygula” eylemi yalnız form state’ini değiştirir ve save onayını sıfırlar. Kalıcı taslak için Paket 41 kontrol/onayı yeniden gerekir.
+
 ## Gerçek AI sağlayıcısı güvenlik kapısı
 
 - AI provider varsayılan kapalıdır. Organization allow-list, per-request/monthly integer bütçe ve açık kullanıcı onayı olmadan dış çağrı yapılmaz; otomatik fallback yoktur.

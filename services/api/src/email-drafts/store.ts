@@ -75,7 +75,8 @@ interface VersionRow {
   readonly subject: string
   readonly body: string
   readonly template_version: string
-  readonly source_type: 'deterministic_template' | 'manual_revision'
+  readonly source_type: 'deterministic_template' | 'ai_assisted' | 'manual_revision'
+  readonly email_ai_suggestion_run_id: string | null
   readonly preview_hash: string
   readonly revision_reason: string | null
   readonly created_by_user_id: string
@@ -128,6 +129,7 @@ export type EmailDraftCommandOutcome<T> =
   | { readonly kind: 'preview_stale' }
   | { readonly kind: 'invalid_recipients'; readonly code: string }
   | { readonly kind: 'invalid_attachment'; readonly field: string }
+  | { readonly kind: 'invalid_ai_suggestion' }
   | { readonly kind: 'idempotency_race' }
 
 function stableHash(value: unknown): string {
@@ -190,7 +192,7 @@ function attachmentOption(
   }
 }
 
-async function buildPreview(
+export async function buildEmailDraftPreview(
   exec: Queryable,
   organizationId: string,
   caseId: string,
@@ -296,7 +298,8 @@ async function loadDrafts(
   const ids = draftRows.map((row) => row.id)
   const versionsResult = await exec.query(
       `SELECT v.id,v.draft_id,v.draft_version,v.previous_version_id,v.subject,v.body,
-              v.template_version,v.source_type,v.preview_hash,v.revision_reason,
+              v.template_version,v.source_type,v.email_ai_suggestion_run_id,
+              v.preview_hash,v.revision_reason,
               v.created_by_user_id,creator.display_name AS created_by_display_name,v.created_at
          FROM email_draft_versions v
          JOIN users creator ON creator.organization_id=v.organization_id AND creator.id=v.created_by_user_id
@@ -354,6 +357,7 @@ async function loadDrafts(
         attachments: attachments.filter((attachment) => attachment.draft_version_id === row.id).map(attachmentDto),
         templateVersion: row.template_version,
         sourceType: row.source_type,
+        emailAiSuggestionRunId: row.email_ai_suggestion_run_id,
         previewHash: row.preview_hash,
         revisionReason: row.revision_reason,
         createdByUserId: row.created_by_user_id,
@@ -395,6 +399,24 @@ function validateSelectedAttachments(
   const allowed = new Set(available.map((item) => `${item.resourceType}:${item.resourceId}`))
   if (keys.some((key) => !allowed.has(key))) return undefined
   return [...selected]
+}
+
+async function validEmailAiSuggestion(
+  exec: Queryable,
+  organizationId: string,
+  caseId: string,
+  runId: string,
+  draftType: EmailDraft['draftType'],
+  previewHash: string,
+): Promise<boolean> {
+  const result = await exec.query(
+    `SELECT 1
+       FROM email_ai_suggestion_runs
+      WHERE organization_id=$1 AND case_id=$2 AND id=$3
+        AND status='review_required' AND draft_type=$4 AND base_preview_hash=$5`,
+    [organizationId, caseId, runId, draftType, previewHash],
+  )
+  return result.rowCount === 1
 }
 
 async function insertRecipients(
@@ -477,7 +499,7 @@ export function createEmailDraftStore(pool: pg.Pool) {
       input: EmailDraftPreviewRequest,
       evaluatedAt: string,
     ): Promise<EmailDraftPreviewResponse | undefined> {
-      return buildPreview(pool, organizationId, caseId, input, evaluatedAt)
+      return buildEmailDraftPreview(pool, organizationId, caseId, input, evaluatedAt)
     },
 
     async readWorkspace(
@@ -522,7 +544,7 @@ export function createEmailDraftStore(pool: pg.Pool) {
           await client.query('ROLLBACK')
           return { kind: 'version_conflict' }
         }
-        const preview = await buildPreview(client, actor.organizationId, caseId, {
+        const preview = await buildEmailDraftPreview(client, actor.organizationId, caseId, {
           draftType: input.draftType,
           instruction: input.instruction,
         }, evaluatedAt, context)
@@ -544,6 +566,22 @@ export function createEmailDraftStore(pool: pg.Pool) {
           await client.query('ROLLBACK')
           return { kind: 'invalid_attachment', field: 'attachments' }
         }
+        const aiRunId = input.emailAiSuggestionRunId
+        const aiAssisted = aiRunId !== null
+        if (
+          aiAssisted
+          && !await validEmailAiSuggestion(
+            client,
+            actor.organizationId,
+            caseId,
+            aiRunId,
+            input.draftType,
+            input.previewHash,
+          )
+        ) {
+          await client.query('ROLLBACK')
+          return { kind: 'invalid_ai_suggestion' }
+        }
 
         const draftId = uuidv7()
         const versionId = uuidv7()
@@ -556,8 +594,9 @@ export function createEmailDraftStore(pool: pg.Pool) {
         await client.query(
           `INSERT INTO email_draft_versions
              (id,organization_id,case_id,draft_id,draft_version,subject,body,
-              template_version,source_type,preview_hash,created_by_user_id)
-           VALUES ($1,$2,$3,$4,1,$5,$6,$7,'deterministic_template',$8,$9)`,
+              template_version,source_type,email_ai_suggestion_run_id,preview_hash,
+              created_by_user_id)
+           VALUES ($1,$2,$3,$4,1,$5,$6,$7,$8,$9,$10,$11)`,
           [
             versionId,
             actor.organizationId,
@@ -566,6 +605,8 @@ export function createEmailDraftStore(pool: pg.Pool) {
             input.subject,
             input.body,
             EMAIL_DRAFT_TEMPLATE_VERSION,
+            aiAssisted ? 'ai_assisted' : 'deterministic_template',
+            aiRunId,
             input.previewHash,
             actor.actorUserId,
           ],
@@ -601,7 +642,8 @@ export function createEmailDraftStore(pool: pg.Pool) {
             recipientCount: recipients.normalizedTo.length + recipients.normalizedCc.length,
             attachmentCount: attachments.length,
             templateVersion: EMAIL_DRAFT_TEMPLATE_VERSION,
-            sourceType: 'deterministic_template',
+            sourceType: aiAssisted ? 'ai_assisted' : 'deterministic_template',
+            emailAiSuggestionRunId: aiRunId,
           },
         })
         await insertIdempotent(client, {

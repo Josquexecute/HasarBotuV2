@@ -26,6 +26,7 @@ const version = {
   attachments: [],
   templateVersion: 'email-draft-template/1.0.0',
   sourceType: 'deterministic_template',
+  emailAiSuggestionRunId: null,
   previewHash: hash,
   revisionReason: null,
   createdByUserId: id,

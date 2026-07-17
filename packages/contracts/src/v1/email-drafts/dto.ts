@@ -68,6 +68,7 @@ export const emailDraftVersionSchema = z.strictObject({
   attachments: z.array(emailDraftAttachmentSchema).max(20),
   templateVersion: z.literal(EMAIL_DRAFT_TEMPLATE_VERSION),
   sourceType: z.enum(EMAIL_DRAFT_SOURCE_TYPES),
+  emailAiSuggestionRunId: idSchema.nullable(),
   previewHash: z.string().regex(/^[a-f0-9]{64}$/),
   revisionReason: z.string().min(1).max(500).nullable(),
   createdByUserId: userIdSchema,

@@ -402,3 +402,13 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Gmail compose handoff yalnız kullanıcı onayıyla hazırlanır. Sonuç her zaman `not_sent` kabul edilir; kullanıcı Gmail’de gönderse dahi provider doğrulaması olmadan uygulama gönderildi sonucu üretmez.
 - Handoff URL’si yalnız normalize recipient, konu ve gövde taşır. Fiziksel ek, relative/absolute path, secret veya session bilgisi taşımaz.
 - Kapalı case salt okunurdur. Preview yazmasızdır; create/revise/handoff komutları idempotent ve optimistic sürüm kontrollüdür.
+
+## AI e-posta önerisi kuralları — Paket 42
+
+- Prompt sürümü `email-ai-draft/1.0.0`, çıktı şeması `email-ai-suggestion/1.0.0`, dış privacy sürümü `email-ai-pii-redaction/1.0.0`’dır.
+- Plan hash; tenant/case/version, draft type, base preview hash, provider/model/pricing/retention ve minimize outbound context’ten deterministik üretilir. Aynı girdide aynıdır; preview/case değişirse start stale olur.
+- External context yalnız template body, bounded instruction, source rule ve requirement kodlarını taşır. Office number/plaka provider’a verilmez; doğrulanmış öneri subject’i server tarafında yeniden oluşturulur.
+- Provider confidence insan onayı değildir. Öneri daima `requiresHumanReview=true`; recipient, attachment, save, handoff veya send sonucu üretemez.
+- Strict output unknown alan, eksik/uzun değer, non-finite confidence, PII, `[PII:*]`, URL, drive/UNC/traversal içerirse fail-closed olur. Ham output saklanmaz.
+- Provider-disabled/budget-blocked çağrısız terminal durumdur. Network sonucu belirsizse otomatik retry yoktur; `outcome_unknown` taslağı değiştirmez.
+- Response-recorded receipt finalize kesintisinde provider ikinci kez çağrılmaz. Exact idempotent replay ikinci run/receipt/usage veya öneri üretmez.

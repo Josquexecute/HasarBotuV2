@@ -255,3 +255,18 @@ export {
   useEmailDrafts,
   type EmailDraftLoadStatus,
 } from './useEmailDrafts'
+export {
+  EmailAiError,
+  createHttpEmailAiAdapter,
+  type EmailAiAdapterOptions,
+  type EmailAiDataPort,
+  type EmailAiErrorKind,
+  type EmailAiPlanInput,
+  type EmailAiPlanRecord,
+  type EmailAiBudgetRecord,
+  type EmailAiPrivacyRecord,
+  type EmailAiProviderIdRecord,
+  type EmailAiRunRecord,
+  type EmailAiRunsRecord,
+  type EmailAiStartInput,
+} from './emailAiPort'

@@ -791,3 +791,22 @@ Etkisi:
 
 - Saf domain şablonları, strict contracts/JSON Schema, migration 0026, tenant/RBAC/idempotency/audit API, gerçek Dosya Detayı e-posta çalışma alanı ve ayrı lazy chunk eklenir.
 - Yeni harici dependency, File Agent işi, IPC veya fiziksel dosya yazma yolu eklenmez.
+
+## 2026-07-16 — HB-2026-048: PII-minimize, bütçe kontrollü AI e-posta önerisi
+
+Karar:
+
+1. AI e-posta katmanı Paket 41’in deterministik önizlemesini değiştirmez; yalnız konu eki ve mesaj gövdesi için ayrı bir öneri üretir. Alıcı, ek, kayıt ve Gmail handoff işlemlerine karar veremez.
+2. Plan salt okunurdur. Provider çağrısı ancak organization `emailEnabled`, ayrı email provider allow-list, integer aylık/istek bütçesi, güncel case/preview hash ve açık harici veri çıkışı onayı birlikte sağlanırsa yapılır.
+3. Dış payload; case/preview kimliği değil, PII-minimize edilmiş template body, bounded kullanıcı talimatı ve gereksinim kodlarıdır. Office number ve plaka provider’a gönderilmez; güvenli konu kimliği yalnız server tarafında doğrulanmış öneriye eklenir.
+4. Belge veya kullanıcı talimatındaki prompt-injection metni güvenilmeyen veri olarak korunur ve provider system contract’ını değiştiremez. URL/tool talimatı yürütülmez; provider’a tool veya cached-content yetkisi verilmez.
+5. Provider çıktısı minimal wire schema sonrası strict server doğrulamasından geçer. Unknown/eksik alan, PII/placeholder, URL, drive/UNC/traversal veya bounded sınır ihlali başarılı öneri sayılmaz; ham provider çıktısı saklanmaz.
+6. Provider çağrısı DB transaction açıkken yapılmaz. Durable receipt önce commit edilir; doğrulanmış canonical çıktı ayrı kaydedilir; run/usage/audit finalize atomiktir. Cevap sonrası finalize kesintisi ikinci provider çağrısı olmadan recover edilir. Network sonucu belirsizse otomatik retry yoktur ve `outcome_unknown` fail-closed kalır.
+7. `ai_usage_ledger`, `usageModule=policy_analysis | email_draft` ile ortak bütçe gerçeğidir. E-posta için ikinci bir bütçe/usage sistemi kurulmaz; aktif receipt rezervasyonları hard-stop hesabına katılır.
+8. UI öneriyi yalnız düzenleme alanlarına uygular ve kayıt onayını sıfırlar. Kullanıcı recipient/subject/body/attachment kontrolünü tekrar yapıp Paket 41’in ayrı save onayını vermeden kalıcı taslak oluşmaz.
+9. Gerçek Gemini adapter mevcut server-only secret/config sınırını kullanır. Organization e-posta opt-in’i varsayılan kapalıdır. Provider kapalı/yapılandırılmamış veya bütçe doluysa core case/e-posta akışı çalışır, mock fallback veya otomatik provider/model fallback yapılmaz.
+
+Etkisi:
+
+- Migration `0027_email_ai_suggestions`; saf email-AI privacy/output doğrulama domain’i; strict contracts/JSON Schema; tenant/RBAC/idempotency/recovery/audit API ve Paket 41 içinde sınırlı AI öneri paneli eklenir.
+- Yeni dependency, Gmail OAuth/API, gelen e-posta sync, File Agent, IPC, fiziksel dosya erişimi veya otomatik gönderim yoktur.

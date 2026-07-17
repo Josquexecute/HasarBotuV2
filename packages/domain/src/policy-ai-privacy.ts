@@ -49,6 +49,11 @@ const RULES: readonly PatternRule[] = [
   { category: 'reference_number', pattern: /\b((?:poliçe|police|hasar\s+dosya|ihbar|müşteri|musteri)\s*(?:no|numarası|numarasi)?\s*[:#-]\s*)([A-Z0-9][A-Z0-9./-]{2,79})/giu, valueGroup: 2 },
   { category: 'vehicle_identity', pattern: /\b((?:şasi|sasi|motor)\s*(?:no|numarası|numarasi)?\s*[:#-]\s*)([A-Z0-9][A-Z0-9./-]{4,79})/giu, valueGroup: 2 },
   { category: 'name', pattern: /\b((?:sigortalı|sigortali|sigorta\s+ettiren|ad\s+soyad|adı\s+soyadı|adi\s+soyadi)\s*:\s*)([^\r\n]{2,120})/giu, valueGroup: 2 },
+  {
+    category: 'name',
+    pattern: /\b((?:sigortalı|sigortali|sigorta\s+ettiren|ad\s+soyad|adı\s+soyadı|adi\s+soyadi)(?!\s*:)\s+)([A-ZÇĞİÖŞÜ][a-zçğıöşü]+(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]+){1,3})(?=[,.;\r\n]|$)/giu,
+    valueGroup: 2,
+  },
   { category: 'address', pattern: /\b((?:adres|ikametgah)\s*:\s*)([^\r\n]{4,240})/giu, valueGroup: 2 },
 ] as const
 

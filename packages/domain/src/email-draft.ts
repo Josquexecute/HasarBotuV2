@@ -16,7 +16,11 @@ export const EMAIL_DRAFT_TYPES = [
 ] as const
 export type EmailDraftType = (typeof EMAIL_DRAFT_TYPES)[number]
 
-export const EMAIL_DRAFT_SOURCE_TYPES = ['deterministic_template', 'manual_revision'] as const
+export const EMAIL_DRAFT_SOURCE_TYPES = [
+  'deterministic_template',
+  'ai_assisted',
+  'manual_revision',
+] as const
 export type EmailDraftSourceType = (typeof EMAIL_DRAFT_SOURCE_TYPES)[number]
 
 export const EMAIL_HANDOFF_PROVIDERS = ['gmail_web'] as const

@@ -296,3 +296,11 @@ Kasko poliçesinin uçtan uca işlenmesi için aşağıdaki kavramlar adaydır (
 - Attachment satırı ya documentVersion ya photo referansı taşır; ikisini birlikte veya boş taşıyamaz. Ready/verified uygunluğunun nihai otoritesi API command transaction’ıdır.
 - Handoff yalnız `gmail_web` ve append-only sequence taşır; sent/delivered/provider message ID semantiği yoktur.
 - Subject/body vaka-kapsamlı iş verisidir; audit’e kopyalanmaz. OAuth tokenı, secret, mutlak/relative filesystem path, binary veya tam dosya içeriği kolonu yoktur.
+
+## Paket 42 uygulanan PostgreSQL modeli
+
+- Migration `0027_email_ai_suggestions`; `ai_provider_policies` üzerine varsayılan kapalı `email_enabled` ve ayrı email provider allow-list ekler.
+- `email_ai_suggestion_runs`; immutable plan/provider/privacy/bütçe fact’leri, terminal suggestion veya güvenli hata kodu ve optimistic version taşır. Recipient, attachment veya gönderim durumu taşımaz.
+- `email_ai_provider_receipts`; dispatch rezervasyonu, request/canonical-output hash, güvenli provider kimlikleri, token/karakter/maliyet ve recovery durumunu taşır. Full prompt/raw output/PII/path/secret kolonu yoktur.
+- `ai_usage_ledger`, `usage_module` ve nullable email run FK ile policy/email ortak append-only bütçe kaynağı olur. Module-shape, tenant FK ve kısmi unique index’ler iki run türünü karıştırmayı engeller.
+- Terminal run/receipt immutable, usage append-only’dir. Migration up/repeat/down/reapply ve tenant/constraint testine dahildir; üretim migration bu pakette çalıştırılmaz.

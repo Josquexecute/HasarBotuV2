@@ -22,6 +22,7 @@ import { registerDashboardRoutes } from './dashboard/index.js'
 import { registerCaseOperationsRoutes } from './case-operations/index.js'
 import { registerFeeRoutes } from './fees/index.js'
 import { registerEmailDraftRoutes } from './email-drafts/index.js'
+import { registerEmailAiRoutes, type EmailAiProviderRegistry } from './email-ai/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -66,6 +67,8 @@ export interface BuildAppOptions {
   readonly auth?: AuthRoutesOptions
   /** Paket 26 provider adapter kaydı. Varsayılan boştur; core AI kapalı çalışır. */
   readonly policyAiProviders?: PolicyAiProviderRegistry
+  /** Paket 42 e-posta AI provider kaydı. Varsayılan boştur; e-posta çekirdeği AI olmadan çalışır. */
+  readonly emailAiProviders?: EmailAiProviderRegistry
 }
 
 /**
@@ -139,6 +142,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerEmailDraftRoutes(app, {
       pool: options.auth.pool,
       clock: options.clock ?? systemClock,
+    })
+    registerEmailAiRoutes(app, {
+      pool: options.auth.pool,
+      clock: options.clock ?? systemClock,
+      providers: options.emailAiProviders ?? { get: () => undefined, list: () => [] },
     })
   }
 

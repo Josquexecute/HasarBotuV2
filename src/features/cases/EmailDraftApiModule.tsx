@@ -9,12 +9,19 @@ import {
   Mail,
   RefreshCw,
   Save,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react'
 import {
+  EmailAiError,
   EmailDraftError,
   buildGmailWebComposeUrl,
+  createHttpEmailAiAdapter,
   useEmailDrafts,
   type DataSourceKind,
+  type EmailAiDataPort,
+  type EmailAiPlanRecord,
+  type EmailAiRunRecord,
   type EmailDraftAttachmentInput,
   type EmailDraftDataPort,
   type EmailDraftRecord,
@@ -27,6 +34,7 @@ interface Props {
   readonly source: DataSourceKind
   readonly onUnauthorized: () => void
   readonly port?: EmailDraftDataPort
+  readonly aiPort?: EmailAiDataPort
   readonly openExternal?: (url: string) => unknown
 }
 
@@ -60,6 +68,14 @@ function formatDateTime(value: string): string {
 }
 
 function safeMessage(error: unknown): string {
+  if (error instanceof EmailAiError) {
+    if (error.kind === 'unauthorized') return 'Oturum süresi doldu. Yeniden giriş yapın.'
+    if (error.kind === 'forbidden') return 'AI e-posta önerisi için yetkiniz bulunmuyor.'
+    if (error.kind === 'not_found') return 'Dosya veya AI önerisi organizasyon kapsamınızda bulunamadı.'
+    if (error.kind === 'validation') return 'AI öneri planı doğrulanamadı.'
+    if (error.kind === 'conflict') return 'Dosya veya önizleme değişti. Yeniden önizleyip planlayın.'
+    return 'AI sağlayıcısına ulaşılamadı; mock öneri gösterilmedi.'
+  }
   if (error instanceof EmailDraftError) {
     if (error.kind === 'unauthorized') return 'Oturum süresi doldu. Yeniden giriş yapın.'
     if (error.kind === 'forbidden') return 'Bu işlem için yetkiniz bulunmuyor.'
@@ -80,9 +96,11 @@ export function EmailDraftApiModule({
   source,
   onUnauthorized,
   port,
+  aiPort,
   openExternal,
 }: Props) {
   const workspace = useEmailDrafts(item.caseId, source, true, port)
+  const resolvedAiPort = useMemo(() => aiPort ?? createHttpEmailAiAdapter(), [aiPort])
   const busyRef = useRef(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -102,6 +120,10 @@ export function EmailDraftApiModule({
   const [revisionConfirmed, setRevisionConfirmed] = useState(false)
   const [handoffConfirmed, setHandoffConfirmed] = useState(false)
   const [lastComposeUrl, setLastComposeUrl] = useState('')
+  const [aiPlan, setAiPlan] = useState<EmailAiPlanRecord | null>(null)
+  const [aiRun, setAiRun] = useState<EmailAiRunRecord | null>(null)
+  const [aiEgressConfirmed, setAiEgressConfirmed] = useState(false)
+  const [appliedAiRunId, setAppliedAiRunId] = useState<string | null>(null)
 
   useEffect(() => {
     if (workspace.data?.drafts.length && selectedDraftId === '') {
@@ -124,7 +146,10 @@ export function EmailDraftApiModule({
       await operation()
     } catch (caught) {
       setError(safeMessage(caught))
-      if (caught instanceof EmailDraftError && caught.kind === 'unauthorized') onUnauthorized()
+      if (
+        (caught instanceof EmailDraftError || caught instanceof EmailAiError)
+        && caught.kind === 'unauthorized'
+      ) onUnauthorized()
     } finally {
       busyRef.current = false
       setBusy('')
@@ -153,8 +178,62 @@ export function EmailDraftApiModule({
         )),
       ))
       setCreateConfirmed(false)
+      setAiPlan(null)
+      setAiRun(null)
+      setAiEgressConfirmed(false)
+      setAppliedAiRunId(null)
       setNotice('Taslak önizlemesi hazırlandı. Alıcı, içerik ve ekleri kullanıcı olarak kontrol edin.')
     })
+  }
+
+  const requestAiPlan = () => {
+    if (preview === null) return
+    void run('ai-plan', async () => {
+      const next = await resolvedAiPort.plan(item.caseId, {
+        draftType: preview.draftType,
+        instruction: instruction.trim() === '' ? null : instruction.trim(),
+        providerId: 'gemini-generate-content',
+      })
+      setAiPlan(next)
+      setAiRun(null)
+      setAiEgressConfirmed(false)
+      setNotice(next.canStart
+        ? 'AI öneri planı hazırlandı. PII minimizasyonu, bütçe ve veri çıkışını kontrol edin.'
+        : 'AI çağrısı yapılmadı. Sağlayıcı ve bütçe durumu aşağıda gösteriliyor.')
+    })
+  }
+
+  const startAiSuggestion = () => {
+    if (aiPlan === null) return
+    if (aiPlan.requiresExplicitEgressConfirmation && !aiEgressConfirmed) {
+      setError('Minimize edilmiş verinin harici sağlayıcıya çıkışını açıkça onaylayın.')
+      return
+    }
+    void run('ai-start', async () => {
+      const next = await resolvedAiPort.start(item.caseId, {
+        expectedCaseVersion: aiPlan.caseVersion,
+        expectedPreviewHash: aiPlan.basePreview.previewHash,
+        planHash: aiPlan.planHash,
+        draftType: aiPlan.draftType,
+        instruction: instruction.trim() === '' ? null : instruction.trim(),
+        providerId: aiPlan.providerId,
+        confirmed: true,
+      })
+      setAiRun(next)
+      setAiEgressConfirmed(false)
+      setNotice(next.status === 'review_required'
+        ? 'AI metin önerisi hazırlandı. Uygulamadan önce kaynak taslakla karşılaştırın.'
+        : 'AI çağrısı güvenli bir kesinleşmemiş durumla tamamlandı; taslak değiştirilmedi.')
+    })
+  }
+
+  const applyAiSuggestion = () => {
+    if (aiRun?.status !== 'review_required' || aiRun.suggestion === null) return
+    setSubject(aiRun.suggestion.subject)
+    setBody(aiRun.suggestion.body)
+    setAppliedAiRunId(aiRun.id)
+    setCreateConfirmed(false)
+    setNotice('AI önerisi yalnız düzenleme alanlarına uygulandı. Taslak henüz kaydedilmedi; alıcı, konu, metin ve ekleri yeniden kontrol edin.')
   }
 
   const toggleAttachment = (key: string) => {
@@ -197,6 +276,7 @@ export function EmailDraftApiModule({
         cc: splitAddresses(ccText),
         subject: subject.trim(),
         body: body.trim(),
+        emailAiSuggestionRunId: appliedAiRunId,
         attachments: selectedAttachmentInputs(),
         confirmed: true,
       })
@@ -307,6 +387,40 @@ export function EmailDraftApiModule({
           {preview !== null && (
             <div className="email-draft-preview">
               <div className="assistant-note"><AlertTriangle size={15} /><span>Alıcı otomatik tahmin edilmedi. Taslak nihai karar değildir ve kullanıcı kontrolü olmadan Gmail’e aktarılmaz.</span></div>
+              <section className="email-ai-panel" aria-label="AI e-posta metin önerisi">
+                <header><div><span className="eyebrow">Kanıtlı ve kullanıcı kontrollü</span><h3>AI Metin Önerisi</h3></div><Sparkles size={17} /></header>
+                <p>AI yalnız konu ve mesaj için öneri üretir; alıcı seçmez, taslağı kaydetmez ve e-posta göndermez.</p>
+                <button className="button button--secondary" type="button" disabled={busy !== ''} onClick={requestAiPlan}>{busy === 'ai-plan' ? <LoaderCircle className="spin" size={15} /> : <ShieldCheck size={15} />} Gizlilik ve Bütçe Planını Göster</button>
+                {aiPlan !== null && (
+                  <div className="email-ai-plan">
+                    <dl>
+                      <div><dt>Sağlayıcı</dt><dd>{aiPlan.budget.providerAvailable ? `${aiPlan.providerId} · ${aiPlan.modelId}` : 'Yapılandırılmamış'}</dd></div>
+                      <div><dt>PII minimizasyonu</dt><dd>{aiPlan.privacy.redactedValueCount} değer · {aiPlan.privacy.redactedCategories.join(', ') || 'PII bulunmadı'}</dd></div>
+                      <div><dt>Retention</dt><dd>{aiPlan.privacy.retentionMode}</dd></div>
+                      <div><dt>Bütçe</dt><dd>{aiPlan.budget.estimatedCostMinor} minor unit · aylık {aiPlan.budget.currentMonthCostMinor}/{aiPlan.budget.monthlyBudgetMinor}</dd></div>
+                    </dl>
+                    {aiPlan.privacy.warnings.length > 0 && <div className="assistant-note"><AlertTriangle size={15} /><span>Belge/talimat içinde güvenilmeyen yönlendirme tespit edildi; sistem talimatını değiştiremez.</span></div>}
+                    {!aiPlan.canStart && <div className="email-ai-blocked" role="status">{aiPlan.budget.reasonCode === 'AI_BUDGET_EXCEEDED' ? 'Bütçe limiti nedeniyle çağrı yapılmadı.' : aiPlan.budget.reasonCode === 'AI_PROVIDER_NOT_CONFIGURED' ? 'AI sağlayıcısı sunucuda yapılandırılmamıştır.' : 'AI sağlayıcısı organizasyon için kapalıdır.'}</div>}
+                    {aiPlan.canStart && (
+                      <>
+                        <label className="email-draft-confirm"><input type="checkbox" checked={aiEgressConfirmed} onChange={(event) => setAiEgressConfirmed(event.target.checked)} /><span>PII ile minimize edilen içerik özetinin {aiPlan.providerId} sağlayıcısına gönderilmesini ve belirtilen retention davranışını onaylıyorum.</span></label>
+                        <button className="button button--primary" type="button" disabled={busy !== '' || !aiEgressConfirmed} onClick={startAiSuggestion}>{busy === 'ai-start' ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} AI Önerisini Oluştur</button>
+                      </>
+                    )}
+                  </div>
+                )}
+                {aiRun !== null && aiRun.status !== 'review_required' && <div className="email-ai-blocked" role="status">{aiRun.status === 'outcome_unknown' ? 'Sağlayıcı çağrısının sonucu kesinleştirilemedi. Otomatik tekrar yapılmadı ve taslak değiştirilmedi.' : aiRun.status === 'failed' ? `AI çıktısı güvenli doğrulamadan geçmedi (${aiRun.safeErrorCode ?? 'AI_PROVIDER_FAILURE'}).` : aiRun.status === 'budget_blocked' ? 'Bütçe limiti nedeniyle çağrı yapılmadı.' : 'AI sağlayıcısı kapalı olduğu için çağrı yapılmadı.'}</div>}
+                {aiRun?.status === 'review_required' && aiRun.suggestion !== null && (
+                  <article className="email-ai-suggestion">
+                    <header><strong>İnsan incelemesi gerekli</strong><span>Güven %{Math.round(aiRun.suggestion.confidence * 100)}</span></header>
+                    <h4>{aiRun.suggestion.subject}</h4>
+                    <pre>{aiRun.suggestion.body}</pre>
+                    <p><strong>Gerekçe:</strong> {aiRun.suggestion.reasoning}</p>
+                    {aiRun.suggestion.warnings.length > 0 && <ul>{aiRun.suggestion.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+                    <button className="button button--secondary" type="button" onClick={applyAiSuggestion}>Öneriyi Düzenleme Alanlarına Uygula</button>
+                  </article>
+                )}
+              </section>
               <div className="email-draft-form__row">
                 <label><span>Alıcılar</span><input type="text" value={toText} onChange={(event) => setToText(event.target.value)} placeholder="hasar@sigorta.example" /></label>
                 <label><span>Bilgi (CC)</span><input type="text" value={ccText} onChange={(event) => setCcText(event.target.value)} placeholder="eksper@example.test" /></label>
@@ -339,7 +453,7 @@ export function EmailDraftApiModule({
           <header><div><span className="eyebrow">Kayıtlı taslak · sürüm {selectedDraft.version}</span><h2>{selectedDraft.currentVersion.subject}</h2></div><span className="status-pill status-pill--review">Gönderilmedi</span></header>
           {!editing ? (
             <>
-              <dl className="email-draft-meta"><div><dt>Alıcı</dt><dd>{selectedDraft.currentVersion.to.join(', ')}</dd></div><div><dt>CC</dt><dd>{selectedDraft.currentVersion.cc.join(', ') || '—'}</dd></div><div><dt>Kaynak</dt><dd>{selectedDraft.currentVersion.sourceType === 'deterministic_template' ? 'Sürümlü şablon' : 'Kullanıcı düzeltmesi'}</dd></div><div><dt>Şablon</dt><dd>{selectedDraft.currentVersion.templateVersion}</dd></div></dl>
+              <dl className="email-draft-meta"><div><dt>Alıcı</dt><dd>{selectedDraft.currentVersion.to.join(', ')}</dd></div><div><dt>CC</dt><dd>{selectedDraft.currentVersion.cc.join(', ') || '—'}</dd></div><div><dt>Kaynak</dt><dd>{selectedDraft.currentVersion.sourceType === 'deterministic_template' ? 'Sürümlü şablon' : selectedDraft.currentVersion.sourceType === 'ai_assisted' ? 'AI destekli · insan kontrollü' : 'Kullanıcı düzeltmesi'}</dd></div><div><dt>Şablon</dt><dd>{selectedDraft.currentVersion.templateVersion}</dd></div></dl>
               <pre className="email-draft-body">{selectedDraft.currentVersion.body}</pre>
               <div className="email-draft-selected-attachments"><strong>Ek olarak önerilen metadata</strong>{selectedDraft.currentVersion.attachments.length === 0 ? <span>Ek seçilmedi.</span> : <ul>{selectedDraft.currentVersion.attachments.map((attachment) => <li key={`${attachment.resourceType}:${attachment.resourceId}`}><FileCheck2 size={14} />{attachment.displayName} · {attachment.mimeType}</li>)}</ul>}<small>Dosya yolu aktarılmaz. Gmail URL ek dosya ekleyemez; kullanıcı ekleri Gmail ekranında manuel seçer.</small></div>
               {canWrite && <div className="email-draft-actions"><button className="button button--secondary" type="button" onClick={() => beginRevision(selectedDraft)}>Yeni Sürüm Düzenle</button></div>}
@@ -366,7 +480,7 @@ export function EmailDraftApiModule({
 
           <div className="email-draft-version-history">
             <h3>Sürüm ve handoff geçmişi</h3>
-            {selectedDraft.versions.map((version) => <article key={version.id}><strong>Sürüm {version.draftVersion}</strong><span>{version.sourceType === 'manual_revision' ? version.revisionReason : 'İlk sürümlü taslak'}</span><small>{version.createdByDisplayName} · {formatDateTime(version.createdAt)}</small></article>)}
+            {selectedDraft.versions.map((version) => <article key={version.id}><strong>Sürüm {version.draftVersion}</strong><span>{version.sourceType === 'manual_revision' ? version.revisionReason : version.sourceType === 'ai_assisted' ? 'AI önerisi uygulandı; insan kontrolüyle kaydedildi.' : 'İlk sürümlü taslak'}</span><small>{version.createdByDisplayName} · {formatDateTime(version.createdAt)}</small></article>)}
             {selectedDraft.handoffs.map((handoff) => <article key={handoff.id}><strong>Gmail handoff hazırlandı</strong><span>Gönderim durumu bilinmiyor; uygulama gönderilmiş saymaz.</span><small>{handoff.preparedByDisplayName} · {formatDateTime(handoff.preparedAt)}</small></article>)}
           </div>
         </section>

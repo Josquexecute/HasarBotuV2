@@ -475,3 +475,12 @@ Chunk server’da lease/Agent ownership, run/job version, extraction page, sourc
 - Create/revise/handoff mevcut PostgreSQL transaction ve merkezi AuditService sınırındadır. Gmail handoff yalnız güvenli compose DTO’su üretir; API sunucusu Google’a ağ çağrısı yapmaz.
 - UI module ve contracts runtime doğrulaması lazy yüklenir. Mock prototip ayrı kalır ve API hatasında fallback olmaz.
 - Gmail OAuth/API, incoming sync, provider message state, AI content generation, IPC, File Agent ve fiziksel ek yazma/okuma sonraki ayrı paketlerin konusudur.
+
+### Paket 42 ek uygulama kaydı — API-owned AI e-posta orchestration
+
+- E-posta AI adapter’ı mevcut API process’i ve Paket 26/28 provider interface ilkeleri içinde bounded çalışır; yeni worker, service, queue, File Agent işi veya IPC yoktur.
+- Gemini email adapter mevcut server-only `GEMINI_API_KEY` config’ini kullanır fakat organization e-posta policy/allow-list’i ayrı ve varsayılan kapalıdır.
+- Provider çağrısı PostgreSQL transaction dışında yapılır. Migration 0027 durable email receipt, immutable suggestion run ve ortak usage ledger module ayrımını ekler.
+- Plan/preview salt okunur; start receipt rezervasyonu ve audit’i commit eder, canonical response’u ayrı kaydeder, finalize/recovery transaction’ı run/usage/audit’i atomik tamamlar.
+- Full prompt/output, PII eşlemesi, recipient, case identity, File Agent/root/path, binary veya secret DB/API/audit/log sınırına girmez.
+- UI mevcut lazy E-posta modülü içinde kalır; yeni eager başlangıç dependency’si veya fiziksel/veritabanı yazma yolu oluşturmaz.

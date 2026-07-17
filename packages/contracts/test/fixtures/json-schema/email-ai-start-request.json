@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "draftType": {
+      "type": "string",
+      "enum": [
+        "repair_approval_request",
+        "missing_document_request",
+        "preliminary_report_notice",
+        "service_change_notice",
+        "deductible_service_part_notice",
+        "portal_deductible_note",
+        "closure_documents_request",
+        "case_status_update",
+        "recourse_documents_request",
+        "pert_evaluation_notice",
+        "custom_instruction"
+      ]
+    },
+    "instruction": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 2000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "providerId": {
+      "type": "string",
+      "enum": [
+        "deterministic-success",
+        "deterministic-invalid-schema",
+        "deterministic-timeout",
+        "deterministic-failure",
+        "gemini-generate-content"
+      ]
+    },
+    "expectedCaseVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "expectedPreviewHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "planHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "draftType",
+    "instruction",
+    "providerId",
+    "expectedCaseVersion",
+    "expectedPreviewHash",
+    "planHash",
+    "confirmed"
+  ],
+  "additionalProperties": false
+}

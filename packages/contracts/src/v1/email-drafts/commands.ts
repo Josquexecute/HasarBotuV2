@@ -34,6 +34,7 @@ export const emailDraftCreateRequestSchema = z.strictObject({
   cc: emailListSchema.default([]),
   subject: normalizedText(MAX_EMAIL_DRAFT_SUBJECT_LENGTH),
   body: normalizedText(MAX_EMAIL_DRAFT_BODY_LENGTH),
+  emailAiSuggestionRunId: idSchema.nullable().default(null),
   attachments: z.array(emailDraftAttachmentReferenceSchema).max(MAX_EMAIL_DRAFT_ATTACHMENTS).default([]),
   confirmed: z.literal(true),
 })

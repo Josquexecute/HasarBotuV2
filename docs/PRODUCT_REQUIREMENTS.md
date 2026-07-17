@@ -274,3 +274,12 @@ formatlarında alınabilir.
 - Gmail açma işlemi ayrıca harici veri çıkışı onayı istemeli; uygulama otomatik e-posta göndermemeli ve handoff’u gönderilmiş saymamalıdır.
 - API modunda ağ/5xx/bozuk response mock taslakla maskelenmemelidir. Mock/demo modu gerçek Gmail veya veri yazma işlemi yapmamalıdır.
 - İlk paket Gmail OAuth/API, gelen e-posta senkronizasyonu, provider teslim durumu ve AI metin üretimi içermez.
+
+### Kanıtlı AI e-posta metin önerisi — Paket 42
+
+- Kullanıcı Paket 41 önizlemesinden sonra konu/metin için AI iyileştirme planını, PII redaksiyon sayısını, retention ve bütçe durumunu çağrı öncesinde görmelidir.
+- Harici çağrı açık egress onayı olmadan başlamamalıdır. Provider/organization policy kapalı, yapılandırılmamış veya bütçe doluysa çağrı/fallback yapılmamalı; temel taslak akışı çalışmalıdır.
+- AI recipient veya ek önermemeli, dosya kimliğini dış payload’a taşımamalı, taslağı kaydetmemeli ve Gmail handoff/send başlatmamalıdır.
+- Provider çıktısı strict schema, PII/placeholder/URL/path ve bounded içerik kontrolünden geçmelidir. Geçmeyen veya sonucu bilinmeyen çağrı taslağı değiştirmemelidir.
+- Kullanıcı öneriyi yalnız form alanlarına uygulayabilmeli; uygulama save onayını sıfırlamalı ve Paket 41’in recipient/subject/body/attachment kontrolü yeniden yapılmalıdır.
+- API modunda provider veya API kesintisi mock AI önerisiyle maskelenmemelidir. Gerçek müşteri verisi ücretsiz Gemini egress’inde kullanılmamalıdır.

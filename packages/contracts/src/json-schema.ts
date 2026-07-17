@@ -127,6 +127,15 @@ import {
   emailDraftResponseSchema,
   emailDraftWorkspaceResponseSchema,
 } from './v1/email-drafts/dto.js'
+import {
+  emailAiPlanRequestSchema,
+  emailAiStartRequestSchema,
+} from './v1/email-ai/commands.js'
+import {
+  emailAiPlanResponseSchema,
+  emailAiRunResponseSchema,
+  emailAiRunsResponseSchema,
+} from './v1/email-ai/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -240,6 +249,11 @@ export const JSON_SCHEMA_TARGETS = {
   'email-draft-response': emailDraftResponseSchema,
   'email-draft-handoff-response': emailDraftHandoffResponseSchema,
   'email-draft-workspace-response': emailDraftWorkspaceResponseSchema,
+  'email-ai-plan-request': emailAiPlanRequestSchema,
+  'email-ai-start-request': emailAiStartRequestSchema,
+  'email-ai-plan-response': emailAiPlanResponseSchema,
+  'email-ai-run-response': emailAiRunResponseSchema,
+  'email-ai-runs-response': emailAiRunsResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

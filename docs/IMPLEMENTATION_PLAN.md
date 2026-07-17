@@ -924,3 +924,17 @@ Kapsam dışı: yeni değer kaybı formülü, Kasko değer kaybı hesabı, dış
 - [x] Yalnız Paket 41 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: Gmail OAuth/API, gelen e-posta senkronizasyonu, provider message durumu, otomatik gönderim, bulut AI metin üretimi, fiziksel ek yükleme, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 42 — Kanıtlı AI e-posta metin önerisi
+
+- [x] Paket 41 preview’ından deterministik, PII-minimize source context ve plan hash üret.
+- [x] Organization email opt-in/allow-list, ortak integer bütçe ve usage ledger sınırını ekle.
+- [x] Deterministik provider’lar ile mevcut Gemini server-secret sınırını ayrı email output contract’ına bağla.
+- [x] Strict provider output, PII/placeholder/URL/path reddi ve server-side konu kimliği eklemesini uygula.
+- [x] Durable receipt, response-recorded recovery, outcome-unknown no-retry ve idempotent replay akışını ekle.
+- [x] Strict contracts/JSON Schema ve migration 0027 tenant/immutability/rollback sınırlarını ekle.
+- [x] Paket 41 UI’ına plan, egress onayı, bütçe/privacy, öneri inceleme ve yerel uygulama panelini ekle.
+- [x] Gerçek PostgreSQL/API, tam root, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 42 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: recipient önerisi, otomatik taslak kaydı, otomatik gönderim, Gmail OAuth/API, gelen e-posta sync, provider secret yönetim UI’ı, File Agent, IPC, fiziksel dosya erişimi ve sonraki paket.

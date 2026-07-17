@@ -17,6 +17,13 @@
       "items": {
         "type": "object",
         "properties": {
+          "module": {
+            "type": "string",
+            "enum": [
+              "policy_analysis",
+              "email_draft"
+            ]
+          },
           "runId": {
             "type": "string",
             "minLength": 1,
@@ -142,6 +149,7 @@
           }
         },
         "required": [
+          "module",
           "runId",
           "caseId",
           "providerId",

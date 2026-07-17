@@ -9,7 +9,11 @@ export {
   REDACTED_LOG_PATHS,
   type BuildAppOptions,
 } from './app.js'
-export { createConfiguredPolicyAiProviderRegistry, startServer } from './server.js'
+export {
+  createConfiguredEmailAiProviderRegistry,
+  createConfiguredPolicyAiProviderRegistry,
+  startServer,
+} from './server.js'
 export {
   ConfigError,
   DEFAULT_HOST,
@@ -58,6 +62,17 @@ export { createCasesStore, registerCasesRoutes, type CasesStore } from './cases/
 export { createDashboardStore, registerDashboardRoutes, type DashboardStore } from './dashboard/index.js'
 export { createFeeStore, registerFeeRoutes, type FeeStore } from './fees/index.js'
 export {createDeterministicPolicyAiProviderRegistry,createGeminiPolicyProvider,createOpenAiPolicyProvider,createPolicyAiProviderRegistry,DEFAULT_GEMINI_API_ORIGIN,GEMINI_FREE_TIER_FALLBACK_MODEL_ID,GEMINI_FREE_TIER_MODEL_ID,GEMINI_UNAVAILABLE_BACKOFF_MS,MAX_GEMINI_API_KEY_LENGTH,normalizeGeminiApiKey,type DeterministicPolicyAiProviderRegistry,type GeminiFreeTierModelId,type GeminiPolicyProviderConfig,type OpenAiPolicyProviderConfig,type PolicyAiProviderAdapter,type PolicyAiProviderRegistry} from './policy-ai/index.js'
+export {
+  createDeterministicEmailAiProviderRegistry,
+  createEmailAiProviderRegistry,
+  createGeminiEmailAiProvider,
+  type DeterministicEmailAiProviderRegistry,
+  type EmailAiProviderAdapter,
+  type EmailAiProviderDescriptor,
+  type EmailAiProviderRequest,
+  type EmailAiProviderResponse,
+  type EmailAiProviderRegistry,
+} from './email-ai/index.js'
 export {
   createTrafficValueLossReportStore,
   createTrafficValueLossStore,

@@ -380,3 +380,12 @@ Bu öneriler yeni kalıcı ürün kararı değildir; ilgili uygulama paketinin k
 - Subject, body, recipient adresleri, revision reason metni, attachment display name, Gmail compose URL, dosya yolu/içeriği, OAuth tokenı, secret, SQL/stack veya ham hata audit’e kopyalanmaz.
 - Draft/version/recipient/attachment veya handoff satırı, idempotency sonucu ve audit aynı transaction içindedir.
 - Preview ve workspace GET audit gürültüsü üretmez. Handoff kaydı gönderim kanıtı değildir ve yedek/restore sonrasında da `not_sent` anlamını korur.
+
+### 6.24 Paket 42 AI e-posta önerisi audit/recovery sınırı
+
+- Olaylar: `email_ai_suggestion.started`, `review_required`, `provider_disabled`, `budget_blocked`, `failed`, `outcome_unknown`.
+- Audit yalnız organization/actor/case/run, draft type, provider/model/prompt/schema/privacy/pricing sürümü, redaksiyon kategori/sayısı, retention, usage/maliyet, status/result code, receipt ve requestId taşır.
+- Template body, kullanıcı talimatı, öneri subject/body/reasoning, recipient, PII placeholder eşlemesi, full prompt/provider output, API key, path, SQL/stack veya ham provider hatası audit/log’a yazılmaz.
+- Plan salt okunur ve audit yazmaz. Receipt audit’in alternatifi değildir; çağrı öncesi durable rezervasyon ve cevap sonrası recovery gerçeğidir.
+- `response_recorded` finalize recovery provider’ı ikinci kez çağırmaz. Network sonucu bilinmiyorsa `outcome_unknown` terminal olur ve otomatik retry/başarı audit’i üretilmez.
+- `ai_usage_ledger` append-only ortak sayaçtır; `usage_module` policy/email ayrımını taşır. Backup/restore sonrasında terminal suggestion/receipt ve usage geçmişi sessizce değiştirilemez.

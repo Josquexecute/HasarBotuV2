@@ -55,7 +55,8 @@ export interface EmailDraftVersionRecord {
   readonly body: string
   readonly attachments: readonly EmailDraftAttachmentRecord[]
   readonly templateVersion: 'email-draft-template/1.0.0'
-  readonly sourceType: 'deterministic_template' | 'manual_revision'
+  readonly sourceType: 'deterministic_template' | 'ai_assisted' | 'manual_revision'
+  readonly emailAiSuggestionRunId: string | null
   readonly previewHash: string
   readonly revisionReason: string | null
   readonly createdByUserId: string
@@ -123,6 +124,7 @@ export interface EmailDraftCreateInput {
   readonly cc: readonly string[]
   readonly subject: string
   readonly body: string
+  readonly emailAiSuggestionRunId?: string | null
   readonly attachments: readonly EmailDraftAttachmentInput[]
   readonly confirmed: true
 }

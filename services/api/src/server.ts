@@ -14,6 +14,12 @@ import {
   type PolicyAiProviderAdapter,
   type PolicyAiProviderRegistry,
 } from './policy-ai/index.js'
+import {
+  createEmailAiProviderRegistry,
+  createGeminiEmailAiProvider,
+  type EmailAiProviderAdapter,
+  type EmailAiProviderRegistry,
+} from './email-ai/index.js'
 
 /** Server environment config'inden secret sızdırmadan provider registry kurar. */
 export function createConfiguredPolicyAiProviderRegistry(
@@ -27,6 +33,17 @@ export function createConfiguredPolicyAiProviderRegistry(
     adapters.push(createGeminiPolicyProvider(config.geminiPolicyProvider))
   }
   return createPolicyAiProviderRegistry(adapters)
+}
+
+/** Aynı server secret/config sınırından e-posta için ayrı output-contract adapter kaydı kurar. */
+export function createConfiguredEmailAiProviderRegistry(
+  config: Pick<ApiConfig, 'geminiPolicyProvider'>,
+): EmailAiProviderRegistry {
+  const adapters: EmailAiProviderAdapter[] = []
+  if (config.geminiPolicyProvider !== undefined) {
+    adapters.push(createGeminiEmailAiProvider(config.geminiPolicyProvider))
+  }
+  return createEmailAiProviderRegistry(adapters)
 }
 
 /**
@@ -66,6 +83,7 @@ export async function startServer(): Promise<void> {
           healthDependencyCheck: async () => (await checkDatabaseHealth(pool)).ok,
           auth: { pool, cookieSecure: config.nodeEnv === 'production' },
           policyAiProviders: createConfiguredPolicyAiProviderRegistry(config),
+          emailAiProviders: createConfiguredEmailAiProviderRegistry(config),
         }
       : {}),
   })

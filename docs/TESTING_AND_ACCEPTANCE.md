@@ -343,3 +343,12 @@ raporlanır.
 - Gerçek Chrome: login, case E-postalar, preview, taslak save, revision, güvenli Gmail URL yakalama, `not_sent`, API kesintisi; 1366×768 açık/koyu ve 1920×1080 koyu overflow/console kontrolü.
 - Gmail web smoke gerçek e-posta göndermez. Gerçek müşteri verisi, gerçek Gmail hesabı, OAuth secret veya fiziksel ek kullanılmaz.
 - Kritik DB/API/UI/tarayıcı veya repository dışı fresh `npm ci` kapısı tamamlanmadan Paket 41 PASS sayılmaz.
+
+### Paket 42 — kanıtlı AI e-posta önerisi kabulü
+
+- Domain/contracts: deterministik plan hash, PII minimizasyonu, iki noktasız sigortalı adı, prompt-injection warning, strict output/PII/placeholder/URL/path reddi ve Zod/JSON Schema eşliği.
+- Gerçek PostgreSQL 0027: up/repeat/down/reapply; email provider policy default/allow-list, tenant composite FK, terminal immutability, receipt state ve ortak usage module constraint.
+- Gerçek API/provider: plan yazmasız; provider-disabled/budget hard-stop no-call; 401/403/404/closed/stale; external redaction; strict output fail-closed; idempotent replay; response-recorded finalize recovery; outcome-unknown no-retry; güvenli audit/receipt/ledger.
+- UI: privacy/bütçe planı, prompt warning, açık egress onayı, provider-disabled/budget durumu, öneri inceleme, yalnız form alanına uygulama, save onayının sıfırlanması ve API no-fallback.
+- Gerçek Chrome: login → E-postalar → preview → AI plan → egress confirm → suggestion → apply → Paket 41 açık save; ayrıca provider-disabled, budget block, no-fallback, 1366×768 açık/koyu ve 1920×1080 koyu overflow/console kontrolü.
+- Kritik DB/API/UI/tarayıcı veya repository dışı fresh `npm ci` kapısı tamamlanmadan Paket 42 PASS sayılmaz. Gerçek müşteri verisi, gerçek e-posta gönderimi veya üretim migration kullanılmaz.

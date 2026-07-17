@@ -459,3 +459,11 @@ Gelecek poliçe analiz uçları için sözleşme ilkeleri (endpoint/şema henüz
 - `POST .../email-drafts/:draftId/handoffs`: expected draft version ve `confirmed=true` ile Gmail web compose payload’ı hazırlar. Response `deliveryStatus=not_sent`; provider message/sent/delivered alanı yoktur.
 - Preview GET/POST’u audit veya snapshot yazmaz. Create/revise/handoff 401/403/404/409, idempotency ve optimistic locking sınırlarını kullanır.
 - Response mutlak path, storage root, file content, OAuth token, provider secret, session, SQL/stack veya ham hata taşımaz. API modunda istemci mock fallback yapmaz.
+
+## 27. Paket 42 AI e-posta önerisi contracts/API
+
+- `POST /api/v1/cases/:caseId/email-ai-suggestions/plan`: provider çağrısı yapmadan Paket 41 base preview, plan hash, privacy/redaction, retention, budget ve provider availability özeti döndürür.
+- `POST /api/v1/cases/:caseId/email-ai-suggestions`: zorunlu Idempotency-Key, expected case version, preview hash, plan hash ve `confirmed=true` ile bounded provider çağrısını başlatır.
+- `GET /api/v1/cases/:caseId/email-ai-suggestions` ve `GET .../:runId`: case erişimli kullanıcılara safe run/suggestion geçmişi verir; plan/start yalnız `admin | expert | case_manager`.
+- Run durumları `provider_disabled | budget_blocked | running | review_required | failed | outcome_unknown`; öneri yalnız `review_required` iken bulunur ve daima `requiresHumanReview=true` taşır.
+- Response recipient, attachment, full prompt/output, PII, secret, path, binary, provider raw error veya sent/delivered semantiği taşımaz. Runtime Zod ve JSON Schema kabul kümeleri aynıdır.

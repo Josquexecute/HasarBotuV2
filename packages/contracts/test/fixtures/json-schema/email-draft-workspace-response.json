@@ -183,7 +183,21 @@
                 "type": "string",
                 "enum": [
                   "deterministic_template",
+                  "ai_assisted",
                   "manual_revision"
+                ]
+              },
+              "emailAiSuggestionRunId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               },
               "previewHash": {
@@ -230,6 +244,7 @@
               "attachments",
               "templateVersion",
               "sourceType",
+              "emailAiSuggestionRunId",
               "previewHash",
               "revisionReason",
               "createdByUserId",
@@ -371,7 +386,21 @@
                   "type": "string",
                   "enum": [
                     "deterministic_template",
+                    "ai_assisted",
                     "manual_revision"
+                  ]
+                },
+                "emailAiSuggestionRunId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                    },
+                    {
+                      "type": "null"
+                    }
                   ]
                 },
                 "previewHash": {
@@ -418,6 +447,7 @@
                 "attachments",
                 "templateVersion",
                 "sourceType",
+                "emailAiSuggestionRunId",
                 "previewHash",
                 "revisionReason",
                 "createdByUserId",

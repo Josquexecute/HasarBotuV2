@@ -87,6 +87,9 @@ function sendOutcomeError(
   if (outcome.kind === 'invalid_recipients') {
     return sendFieldError(reply, requestId, 'to', outcome.code)
   }
+  if (outcome.kind === 'invalid_ai_suggestion') {
+    return sendFieldError(reply, requestId, 'emailAiSuggestionRunId', 'invalid_ai_suggestion')
+  }
   return sendFieldError(reply, requestId, outcome.field, 'unverified_attachment')
 }
 

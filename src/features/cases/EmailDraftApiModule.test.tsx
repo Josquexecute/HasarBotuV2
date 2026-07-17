@@ -2,6 +2,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type {
+  EmailAiDataPort,
+  EmailAiPlanRecord,
+  EmailAiRunRecord,
   EmailDraftDataPort,
   EmailDraftPreviewRecord,
   EmailDraftRecord,
@@ -16,6 +19,77 @@ const USER_ID = '018f3f4c-89ab-7def-8123-456789abcdea'
 const DRAFT_ID = '018f3f4c-89ab-7def-8123-456789abcdeb'
 const VERSION_ID = '018f3f4c-89ab-7def-8123-456789abcdec'
 const HASH = 'a'.repeat(64)
+
+const aiPlan: EmailAiPlanRecord = {
+  caseId: CASE_ID,
+  caseVersion: 3,
+  draftType: 'preliminary_report_notice',
+  providerId: 'gemini-generate-content',
+  providerVersion: 'gemini-generate-content/1.0.0',
+  modelId: 'gemini-2.5-flash',
+  promptTemplateVersion: 'email-ai-draft/1.0.0',
+  outputSchemaVersion: 'email-ai-suggestion/1.0.0',
+  basePreview: {
+    subject: '2026/41 · Ön Rapor Bilgilendirmesi',
+    body: 'Merhaba.\n\nÖn rapor hazırlanmıştır.\n\nİyi çalışmalar.',
+    previewHash: HASH,
+  },
+  planHash: 'b'.repeat(64),
+  privacy: {
+    externalProvider: true,
+    policyVersion: 'email-ai-pii-redaction/1.0.0',
+    outboundPayloadHash: 'c'.repeat(64),
+    outboundInputCharacters: 220,
+    redactedValueCount: 2,
+    redactedCategories: ['email', 'name'],
+    retentionMode: 'free_tier_product_improvement',
+    warnings: ['user-instruction:PROMPT_INJECTION'],
+  },
+  budget: {
+    enabled: true,
+    providerAvailable: true,
+    providerAllowed: true,
+    estimatedCostMinor: 0,
+    currentMonthCostMinor: 0,
+    monthlyBudgetMinor: 100,
+    perRequestBudgetMinor: 10,
+    allowed: true,
+    reasonCode: null,
+  },
+  canStart: true,
+  requiresExplicitEgressConfirmation: true,
+  requiresHumanReview: true,
+}
+
+const aiRun: EmailAiRunRecord = {
+  id: USER_ID,
+  caseId: CASE_ID,
+  draftType: 'preliminary_report_notice',
+  status: 'review_required',
+  providerId: 'gemini-generate-content',
+  providerVersion: 'gemini-generate-content/1.0.0',
+  modelId: 'gemini-2.5-flash',
+  promptTemplateVersion: 'email-ai-draft/1.0.0',
+  outputSchemaVersion: 'email-ai-suggestion/1.0.0',
+  basePreviewHash: HASH,
+  planHash: 'b'.repeat(64),
+  version: 2,
+  privacy: aiPlan.privacy,
+  budget: aiPlan.budget,
+  suggestion: {
+    schemaVersion: 'email-ai-suggestion/1.0.0',
+    subject: '2026/41 · 34 ABC 41 · Kontrollü Ön Rapor',
+    body: 'Merhaba.\n\nÖn rapor kontrollü biçimde hazırlanmıştır.',
+    reasoning: 'Metin sadeleştirildi.',
+    warnings: ['Alıcı kullanıcı tarafından doğrulanmalıdır.'],
+    confidence: 0.84,
+    requiresHumanReview: true,
+  },
+  safeErrorCode: null,
+  createdAt: '2026-07-16T12:00:00.000Z',
+  startedAt: '2026-07-16T12:00:00.000Z',
+  completedAt: '2026-07-16T12:00:01.000Z',
+}
 
 const item: CaseRecord = {
   caseId: CASE_ID,
@@ -89,6 +163,7 @@ function buildDraft(version = 1): EmailDraftRecord {
     }],
     templateVersion: 'email-draft-template/1.0.0' as const,
     sourceType: version === 1 ? 'deterministic_template' as const : 'manual_revision' as const,
+    emailAiSuggestionRunId: null,
     previewHash: HASH,
     revisionReason: version === 1 ? null : 'Kullanıcı düzeltmesi.',
     createdByUserId: USER_ID,
@@ -120,6 +195,100 @@ function workspace(drafts: readonly EmailDraftRecord[]): EmailDraftWorkspaceReco
 }
 
 describe('EmailDraftApiModule', () => {
+  it('AI plan, açık egress onayı, öneri inceleme ve yalnız yerel uygulama akışını tamamlar', async () => {
+    const create = vi.fn(async () => {
+      const draft = buildDraft()
+      const currentVersion = {
+        ...draft.currentVersion,
+        sourceType: 'ai_assisted' as const,
+        emailAiSuggestionRunId: USER_ID,
+        subject: aiRun.suggestion!.subject,
+        body: aiRun.suggestion!.body,
+      }
+      return { ...draft, currentVersion, versions: [currentVersion] }
+    })
+    const port: EmailDraftDataPort = {
+      load: vi.fn(async () => workspace([])),
+      preview: vi.fn(async () => preview),
+      create,
+      revise: vi.fn(),
+      prepareHandoff: vi.fn(),
+    }
+    const aiPort: EmailAiDataPort = {
+      list: vi.fn(),
+      plan: vi.fn(async () => aiPlan),
+      start: vi.fn(async () => aiRun),
+    }
+    const user = userEvent.setup()
+    render(<EmailDraftApiModule item={item} source="api" onUnauthorized={vi.fn()} port={port} aiPort={aiPort} />)
+    await screen.findByText('Henüz gerçek e-posta taslağı yok.')
+    await user.selectOptions(screen.getByLabelText('E-posta türü'), 'preliminary_report_notice')
+    await user.click(screen.getByRole('button', { name: 'Taslağı Önizle' }))
+    await user.click(screen.getByRole('button', { name: 'Gizlilik ve Bütçe Planını Göster' }))
+    await screen.findByText(/2 değer/)
+    expect(screen.getByText(/güvenilmeyen yönlendirme/)).toBeInTheDocument()
+    const egress = screen.getByLabelText(/PII ile minimize edilen içerik özetinin/)
+    expect(screen.getByRole('button', { name: 'AI Önerisini Oluştur' })).toBeDisabled()
+    await user.click(egress)
+    await user.click(screen.getByRole('button', { name: 'AI Önerisini Oluştur' }))
+    await screen.findByText('İnsan incelemesi gerekli')
+    expect(screen.getByText('Güven %84')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Öneriyi Düzenleme Alanlarına Uygula' }))
+    expect(screen.getByLabelText('Konu')).toHaveValue(aiRun.suggestion?.subject)
+    expect(screen.getByLabelText('Mesaj')).toHaveValue(aiRun.suggestion?.body)
+    expect(screen.getByLabelText(/sürümlü taslak olarak kaydedilmesini/)).not.toBeChecked()
+    expect(create).not.toHaveBeenCalled()
+    expect(await screen.findByText(/Taslak henüz kaydedilmedi/)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Alıcılar'), 'hasar@example.test')
+    await user.click(screen.getByLabelText(/sürümlü taslak olarak kaydedilmesini/))
+    await user.click(screen.getByRole('button', { name: 'Taslağı Kaydet' }))
+    await waitFor(() => expect(create).toHaveBeenCalledWith(
+      CASE_ID,
+      expect.objectContaining({
+        emailAiSuggestionRunId: USER_ID,
+        subject: aiRun.suggestion?.subject,
+        body: aiRun.suggestion?.body,
+      }),
+    ))
+  })
+
+  it('provider kapalı planını görünür yapar ve AI çağrısı başlatmaz', async () => {
+    const port: EmailDraftDataPort = {
+      load: vi.fn(async () => workspace([])),
+      preview: vi.fn(async () => preview),
+      create: vi.fn(),
+      revise: vi.fn(),
+      prepareHandoff: vi.fn(),
+    }
+    const start = vi.fn()
+    const aiPort: EmailAiDataPort = {
+      list: vi.fn(),
+      plan: vi.fn(async () => ({
+        ...aiPlan,
+        providerVersion: null,
+        modelId: null,
+        canStart: false,
+        budget: {
+          ...aiPlan.budget,
+          enabled: false,
+          providerAvailable: false,
+          providerAllowed: false,
+          allowed: false,
+          reasonCode: 'AI_PROVIDER_NOT_CONFIGURED' as const,
+        },
+      })),
+      start,
+    }
+    const user = userEvent.setup()
+    render(<EmailDraftApiModule item={item} source="api" onUnauthorized={vi.fn()} port={port} aiPort={aiPort} />)
+    await screen.findByText('Henüz gerçek e-posta taslağı yok.')
+    await user.click(screen.getByRole('button', { name: 'Taslağı Önizle' }))
+    await user.click(screen.getByRole('button', { name: 'Gizlilik ve Bütçe Planını Göster' }))
+    expect(await screen.findByText('AI sağlayıcısı sunucuda yapılandırılmamıştır.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'AI Önerisini Oluştur' })).toBeNull()
+    expect(start).not.toHaveBeenCalled()
+  })
+
   it('preview, açık onay, sürümlü kayıt ve Gmail not-sent handoff akışını tamamlar', async () => {
     let savedDrafts: EmailDraftRecord[] = []
     const create = vi.fn(async () => {
