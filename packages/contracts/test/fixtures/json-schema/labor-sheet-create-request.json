@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "expectedCaseVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "items": {
+      "minItems": 1,
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "partAmountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000
+          },
+          "laborAmountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000
+          }
+        },
+        "required": [
+          "description",
+          "action",
+          "partAmountMinor",
+          "laborAmountMinor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "expectedCaseVersion",
+    "items",
+    "confirmed"
+  ],
+  "additionalProperties": false
+}

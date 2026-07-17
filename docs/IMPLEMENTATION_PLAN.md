@@ -938,3 +938,15 @@ Kapsam dışı: Gmail OAuth/API, gelen e-posta senkronizasyonu, provider message
 - [x] Yalnız Paket 42 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: recipient önerisi, otomatik taslak kaydı, otomatik gönderim, Gmail OAuth/API, gelen e-posta sync, provider secret yönetim UI’ı, File Agent, IPC, fiziksel dosya erişimi ve sonraki paket.
+
+## Paket 43 — Kullanıcı kontrollü İşçilik çekirdeği
+
+- [x] Parça/işçilik satır kalemi doğrulama, toplam hesabı ve sürüm sabitini saf domain’de ekle.
+- [x] Strict contracts/JSON Schema (workspace/create/revise) ve golden fixture’ları ekle.
+- [x] Migration 0028: case başına tek föy aggregate, immutable version/item, sürüm zinciri ve append-only kısıtları.
+- [x] Tenant/RBAC/idempotency/kapalı-case/optimistic version ve güvenli audit ile read/create/revise API.
+- [x] Dosya Detayı İşçilik sekmesini API modunda gerçek föye bağla; kullanıcı kontrollü editör ve sürüm geçmişi.
+- [x] Gerçek PostgreSQL/API, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 43 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: AI işçilik önerisi, Excel şablon profili, güvenli Excel yazımı, öğrenme sözlüğü, tutar dağıtımı, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.

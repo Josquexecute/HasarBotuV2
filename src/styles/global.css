@@ -2099,3 +2099,16 @@ button {
   .email-draft-workspace__grid { grid-template-columns:minmax(0,1fr); }.email-draft-list { position:static; max-height:260px; overflow:auto; }.email-draft-meta { grid-template-columns:repeat(2,minmax(0,1fr)); }.email-draft-version-history article { grid-template-columns:110px minmax(0,1fr); }.email-draft-version-history article small { grid-column:2; }
   .email-ai-plan dl { grid-template-columns:minmax(0,1fr); }
 }
+
+/* İşçilik (Paket 43) */
+.labor-empty { margin: 4px 0; color: var(--text-secondary); font-size: 12px; line-height: 18px; }
+.module-table tfoot td { padding-top: 8px; border-top: 2px solid var(--border-strong); font-weight: 700; }
+.labor-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.labor-editor__table input { width: 100%; min-width: 90px; padding: 5px 7px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); font-size: 12px; }
+.labor-editor__table input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.labor-editor__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.labor-confirm { align-items: flex-start; }
+.labor-side__title { display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; color: var(--text-tertiary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.labor-history { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.labor-history li { display: flex; flex-direction: column; padding: 7px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); font-size: 11px; }
+.labor-history li span { color: var(--text-secondary); font-size: 10px; }

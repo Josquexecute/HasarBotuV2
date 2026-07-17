@@ -810,3 +810,21 @@ Etkisi:
 
 - Migration `0027_email_ai_suggestions`; saf email-AI privacy/output doğrulama domain’i; strict contracts/JSON Schema; tenant/RBAC/idempotency/recovery/audit API ve Paket 41 içinde sınırlı AI öneri paneli eklenir.
 - Yeni dependency, Gmail OAuth/API, gelen e-posta sync, File Agent, IPC, fiziksel dosya erişimi veya otomatik gönderim yoktur.
+
+## 2026-07-17 — HB-2026-049: Kullanıcı kontrollü İşçilik (parça ve işçilik) çekirdeği
+
+Karar:
+
+1. v0.7 İşçilik’in ilk dilimi yalnız kullanıcı kontrollü, deterministik parça/işçilik satır kalemleri çekirdeğidir. Bu paket AI önerisi, Excel şablon profili, güvenli Excel yazımı, öğrenme sözlüğü veya tutar dağıtımı üretmez; bunlar sonraki dilimlere ve kritik işlem modeline bırakılır.
+2. Her case için tek bir İşçilik föyü aggregate’i tutulur. Föy sürümleri immutable ve append-only’dir; düzeltme eski sürümü değiştirmez, append-only yeni sürüm üretir.
+3. Satır kalemi bir onarım işleminin `description` (kalem), `action` (işlem etiketi, bounded serbest metin), `partAmountMinor` ve `laborAmountMinor` alanlarını taşır. İşlem taksonomisi bu dilimde sabit enum değildir; normalize/öğrenme sözlüğü sonraki dilimdedir. Tutarlar TRY minor birimdir (bigint); negatif olamaz ve satır başına parça+işçilikten en az biri pozitif olmalıdır.
+4. Föy en az bir kalem içerir, en çok 200 kalem; alan başına ve föy geneli tutar üst sınırı taşma/abuse sınırıdır, iş kuralı değildir. Toplamlar (parça/işçilik/genel) satır kalemlerinden saf domain fonksiyonuyla türetilir; ayrı denormalize kaynak tutulmaz.
+5. Preview yoktur; veri kullanıcı tarafından girilir. Oluşturma ve düzeltme zorunlu Idempotency-Key, optimistic version (oluşturmada case sürümü, düzeltmede föy sürümü), açık onay ve kapalı-case kilidi kullanır. Yazma rolleri `admin | expert | case_manager | secretary`; diğer case erişimli roller salt okunurdur. Kapalı case föyü salt okunurdur.
+6. Migration 0028 aggregate, immutable version/item ve aynı föy içindeki composite version bağlarını DB seviyesinde zorlar; case başına tek föy unique kısıtı, sürüm zinciri guard’ı ve append-only trigger’ları vardır.
+7. Audit yalnız güvenli metadata taşır: föy/sürüm kimliği, kalem sayısı, parça/işçilik/genel toplam minor, source type, actor ve requestId. Satır açıklaması/işlem metni audit’e kopyalanmaz. Salt-okunur/GET çağrılar audit yazmaz.
+8. UI Dosya Detayı > İşçilik sekmesi API modunda gerçek föye bağlanır; kullanıcı kalemleri girer/düzenler ve açık onayla kaydeder. Mock İşçilik prototipi ayrı korunur ve API hatasında fallback yapılmaz.
+
+Etkisi:
+
+- `labor-sheet/1.0.0` saf domain doğrulama/hesap katmanı, strict contracts/JSON Schema, migration 0028, tenant/RBAC/idempotency/audit API ve gerçek Dosya Detayı İşçilik çalışma alanı eklenir.
+- v0.7 İşçilik AI’nın AI önerisi, Excel şablon profili ve güvenli Excel yazımı ayrı sonraki dilimlerdir; yeni harici dependency, AI/provider çağrısı, Gmail, Excel yazımı, File Agent işi, IPC veya fiziksel dosya yazma yolu eklenmez.

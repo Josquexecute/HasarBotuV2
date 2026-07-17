@@ -64,6 +64,11 @@ const EmailDraftApiModule = lazy(async () => {
   return { default: module.EmailDraftApiModule }
 })
 
+const LaborApiModule = lazy(async () => {
+  const module = await import('./LaborApiModule')
+  return { default: module.LaborApiModule }
+})
+
 const tabs = [
   'Özet',
   'Operasyon',
@@ -426,7 +431,7 @@ export function CaseDetailPage() {
           ) : activeTab === 'Evrak ve Fotoğraf' ? (
             item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
           ) : activeTab === 'İşçilik' ? source === 'api'
-            ? <ApiModuleUnavailable title="İşçilik" guidance="Gerçek işçilik ve parça verisi bağlanana kadar bu sekme salt bilgilendirme durumundadır." />
+            ? <LaborApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
             : <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />
             : activeTab === 'Ağır Hasar' ? source === 'api'
               ? <ApiModuleUnavailable title="Ağır Hasar" guidance="PERT veya ağır hasar sonucu için doğrulanmış gerçek veri kaynağı henüz bağlı değildir." />

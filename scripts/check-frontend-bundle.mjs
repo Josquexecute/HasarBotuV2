@@ -13,6 +13,7 @@ const REQUIRED_LAZY_CHUNKS = [
   'TrafficValueLossApiModule-',
   'CaseOperationsApiModule-',
   'EmailDraftApiModule-',
+  'LaborApiModule-',
 ]
 
 const indexHtml = await readFile(`${DIST_DIR}index.html`, 'utf8')

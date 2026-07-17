@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-17
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 42 — Kanıtlı AI e-posta metin önerisi
+- Aşama: Paket 43 — Kullanıcı kontrollü İşçilik çekirdeği
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-42-ai-email-drafting` dalı, remote yok
+- Git: Yerel repository, `foundation/package-43-labor-core` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -807,3 +807,16 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Gerçek Chrome/CDP smoke (13/13 senaryo): login; provider kapalıyken çağrı yok ve plan state yazmaz; PII-minimize egress (office no/plaka/recipient/PII dışarı çıkmaz, güvenilmeyen talimat ve URL yalnız veri olarak korunur); açık egress onayı; strict öneri; "Öneriyi uygula" yalnız form state'ini değiştirip save onayını sıfırlar; `ai_assisted` provenance (suggestion run + `email_draft` usage ledger) DB'de doğrulandı; bütçe hard-stop çağrıyı engeller; audit sızıntısı yok; API kapatılınca mock fallback yok; console temiz. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yoktu.
 - Build başlangıç JavaScript grafiğini **466.311 baytta** tuttu (Paket 41'e göre +5 bayt); en büyük chunk 299.225 bayt ve E-posta AI paneli dahil **8 lazy modül** ayrı kaldı.
 - Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.223/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
+
+## Paket 43 — Kullanıcı kontrollü İşçilik çekirdeği (2026-07-17)
+
+- v0.7 İşçilik’in ilk dilimi: `labor-sheet/1.0.0` saf domain; parça/işçilik satır kalemlerini (kalem, işlem etiketi, minor-birim parça/işçilik tutarı) deterministik doğrular ve toplamı hesaplar. En az bir kalem, satır başına en az bir pozitif tutar; işlem taksonomisi ve tutar dağıtımı sonraki dilimlere bırakıldı.
+- Migration 0028; case başına tek `labor_sheets` aggregate, immutable `labor_sheet_versions` ve child `labor_sheet_items` ekler. Case-başına-tek-föy unique, sürüm zinciri guard’ı ve append-only trigger’ları DB seviyesinde zorlanır; tutarlar bigint minor birimdir.
+- Read salt okunur ve audit yazmaz. Create/revise; Idempotency-Key, optimistic version (create’de case, revise’da föy sürümü), RBAC (`admin/expert/case_manager/secretary`), kapalı-case kilidi ve merkezi audit ile atomiktir. Audit yalnız kalem sayısı, parça/işçilik/genel toplam minor ve source type taşır; satır açıklaması/işlem metni taşımaz.
+- Dosya Detayı > İşçilik sekmesi API modunda gerçek föye bağlanır: kullanıcı kalemleri girer/düzenler, açık onayla oluşturur/revize eder, immutable sürüm geçmişini görür. Mock İşçilik prototipi ayrı korunur ve API hatasında fallback yapılmaz. AI önerisi ve güvenli Excel yazımı bu pakette yoktur.
+- Yeni dependency, AI/provider çağrısı, Gmail, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Üretim migration çalıştırılmadı.
+- Ana çalışma ağacında typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.257 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 213/6; domain 418; contracts 250; database 55; API 268; file-agent 53 (Paket 42'ye göre +34; DB/API/domain/contracts/file-agent'ta skip yok).
+- Migration 0028 tekil ve 0027→0021 ile kademeli rollback-reapply gerçek PostgreSQL'de geçti. 0028 kısıt testi case-başına-tek-föy unique'ini, her iki tutarı sıfır satırın CHECK reddini, sürüm/satır append-only'sini, yanlış previous ile sürüm zinciri guard reddini ve aggregate silme yasağını doğruladı. Paket 43 gerçek API testi 7/7: 401/tenant-404/salt-okunur/boş föy; create + toplam + idempotent replay; ikinci föy 409; revise + immutable sürüm 1 + version conflict; geçersiz satır alan hatası; kapalı case reddi; audit'te satır metni sızıntısı yok. Kritik DB/API testi skip edilmedi.
+- Gerçek Chrome/CDP smoke (8/8 senaryo): login; boş föy durumu; kullanıcı kontrollü kalem girişi + açık onayla kayıt; DB'de sheet/version/item provenance; düzeltmede immutable sürüm 2; audit yalnız güvenli sayı/toplam metadata; API kapatılınca mock fallback yok; console temiz. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yoktu.
+- Build başlangıç JavaScript grafiğini **469.250 baytta** tuttu; en büyük chunk 299.199 bayt ve İşçilik dahil **9 lazy modül** bundle guard'ında zorunlu kılınarak ayrı kaldı.
+- Repository dışı `.git/node_modules/dist/coverage/tmp` içermeyen kopyada fresh `npm ci` (0 açık; bilinen `glob@11.1.0` deprecation uyarısıyla), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.257/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.

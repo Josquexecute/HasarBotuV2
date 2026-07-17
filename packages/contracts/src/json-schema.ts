@@ -136,6 +136,14 @@ import {
   emailAiRunResponseSchema,
   emailAiRunsResponseSchema,
 } from './v1/email-ai/dto.js'
+import {
+  laborSheetCreateRequestSchema,
+  laborSheetReviseRequestSchema,
+} from './v1/labor/commands.js'
+import {
+  laborSheetResponseSchema,
+  laborSheetWorkspaceResponseSchema,
+} from './v1/labor/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -254,6 +262,10 @@ export const JSON_SCHEMA_TARGETS = {
   'email-ai-plan-response': emailAiPlanResponseSchema,
   'email-ai-run-response': emailAiRunResponseSchema,
   'email-ai-runs-response': emailAiRunsResponseSchema,
+  'labor-sheet-create-request': laborSheetCreateRequestSchema,
+  'labor-sheet-revise-request': laborSheetReviseRequestSchema,
+  'labor-sheet-response': laborSheetResponseSchema,
+  'labor-sheet-workspace-response': laborSheetWorkspaceResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS
