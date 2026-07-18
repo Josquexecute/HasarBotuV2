@@ -53,7 +53,11 @@ export interface LaborAllocationProviderAdapter {
   readonly pricingVersion: string
   readonly maximumInputCharacters: number
   estimateCostMinor(inputCharacters: number): number
-  execute(request: LaborAllocationProviderRequest): Promise<LaborAllocationProviderResponse>
+  /** `signal` bounded timeout içindir; dış sağlayıcı bunu zorunlu kullanır. */
+  execute(
+    request: LaborAllocationProviderRequest,
+    signal: AbortSignal,
+  ): Promise<LaborAllocationProviderResponse>
 }
 
 export interface LaborAllocationProviderRegistry {
@@ -155,19 +159,48 @@ function deterministicAdapter(
   }
 }
 
-/** Yalnız deterministik sağlayıcılar; gerçek egress adaptörü opt-in ile eklenir. */
+/**
+ * Yalnız deterministik sağlayıcılar. Bunlar TEST ve açık geliştirme içindir;
+ * üretim yolunda sessizce devreye girmezler — `createLaborAllocationProviderRegistry`
+ * üretimde deterministik adaptörleri yalnız açık izinle ekler.
+ */
 export function createDeterministicLaborAllocationProviderRegistry(): LaborAllocationProviderRegistry {
-  const adapters = [
+  return registryOf([
     deterministicAdapter('deterministic-success', 'success'),
     deterministicAdapter('deterministic-invalid-schema', 'invalid-schema'),
     deterministicAdapter('deterministic-timeout', 'timeout'),
     deterministicAdapter('deterministic-failure', 'failure'),
-  ]
+  ])
+}
+
+function registryOf(adapters: readonly LaborAllocationProviderAdapter[]): LaborAllocationProviderRegistry {
   const index = new Map(adapters.map((adapter) => [adapter.providerId, adapter]))
   return {
     get: (providerId) => index.get(providerId),
     list: () => adapters,
   }
+}
+
+/**
+ * Üretim kaydı. Gerçek Gemini adaptörü yalnız açık opt-in yapılandırma ile
+ * eklenir; deterministik harness yalnız `allowDeterministic` açıkken görünür.
+ * Böylece üretimde sahte sağlayıcı sessizce devreye giremez.
+ */
+export function createLaborAllocationProviderRegistry(input: {
+  readonly gemini?: LaborAllocationProviderAdapter
+  readonly allowDeterministic?: boolean
+}): LaborAllocationProviderRegistry {
+  const adapters: LaborAllocationProviderAdapter[] = []
+  if (input.gemini !== undefined) adapters.push(input.gemini)
+  if (input.allowDeterministic === true) {
+    adapters.push(
+      deterministicAdapter('deterministic-success', 'success'),
+      deterministicAdapter('deterministic-invalid-schema', 'invalid-schema'),
+      deterministicAdapter('deterministic-timeout', 'timeout'),
+      deterministicAdapter('deterministic-failure', 'failure'),
+    )
+  }
+  return registryOf(adapters)
 }
 
 export const LABOR_ALLOCATION_RULE_VERSION_EXPORT = LABOR_ALLOCATION_RULE_VERSION

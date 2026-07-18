@@ -126,24 +126,36 @@ interface ProviderPolicy {
   readonly allowedProviderIds: readonly string[]
   readonly monthlyBudgetMinor: number
   readonly perRequestBudgetMinor: number
+  readonly requestTimeoutMs: number
 }
 
+/**
+ * Politika YALNIZ organization satırından okunur. Satır yoksa sağlayıcı
+ * kapalıdır: opt-in olmadan hiçbir dış çağrı yapılmaz.
+ */
 async function loadPolicy(pool: pg.Pool, organizationId: string): Promise<ProviderPolicy> {
   const result = await pool.query(
     `SELECT labor_allocation_enabled,labor_allocation_allowed_provider_ids,
-            monthly_budget_minor,per_request_budget_minor
+            monthly_budget_minor,per_request_budget_minor,request_timeout_ms
        FROM ai_provider_policies WHERE organization_id=$1`,
     [organizationId],
   )
   const row = result.rows[0] as Record<string, unknown> | undefined
   if (row === undefined) {
-    return { enabled: false, allowedProviderIds: [], monthlyBudgetMinor: 0, perRequestBudgetMinor: 0 }
+    return {
+      enabled: false,
+      allowedProviderIds: [],
+      monthlyBudgetMinor: 0,
+      perRequestBudgetMinor: 0,
+      requestTimeoutMs: 5_000,
+    }
   }
   return {
     enabled: Boolean(row.labor_allocation_enabled),
     allowedProviderIds: (row.labor_allocation_allowed_provider_ids ?? []) as string[],
     monthlyBudgetMinor: safeNumber(row.monthly_budget_minor),
     perRequestBudgetMinor: safeNumber(row.per_request_budget_minor),
+    requestTimeoutMs: safeNumber(row.request_timeout_ms) || 5_000,
   }
 }
 
@@ -420,6 +432,7 @@ export function createLaborAllocationStore(
       const evidenceHash = buildLaborAllocationEvidenceHash(planContext)
       const planHash = buildLaborAllocationPlanHash(planContext, outbound)
       const budget = await budgetFor(actor.organizationId, outbound.outboundInputCharacters)
+      const requestTimeoutMs = (await loadPolicy(pool, actor.organizationId)).requestTimeoutMs
 
       // Aynı analiz anahtarı için tekrar koruması: BAŞARILI sonuç yeniden
       // hesaplanmaz. Başarısız/engellenmiş çalıştırma yeniden denenebilir.
@@ -483,7 +496,10 @@ export function createLaborAllocationStore(
           [
             uuidv7(), actor.organizationId, caseId, runId, planContext.providerId, planContext.modelId,
             planHash, outbound.outboundInputCharacters, 0, budget.estimatedCostMinor,
-            status === 'review_required' ? budget.estimatedCostMinor : null,
+            // Gerçek maliyet sağlayıcı kullanımından gelir; yoksa tahmin kullanılır.
+            status === 'review_required'
+              ? (providerUsage?.actualCostMinor ?? budget.estimatedCostMinor)
+              : null,
             status === 'review_required' ? 'completed'
               : status === 'budget_blocked' ? 'budget_blocked'
                 : status === 'provider_disabled' ? 'provider_disabled' : 'failed',
@@ -503,25 +519,78 @@ export function createLaborAllocationStore(
         return this.getRun(actor, caseId, runId)
       }
 
+      // Sağlayıcı makbuzu: aynı çağrının mükerrer maliyet üretmesini engeller
+      // ve gerçek model/kullanım verisini dayanıklı biçimde saklar.
+      const receiptId = uuidv7()
+      await pool.query(
+        `INSERT INTO labor_allocation_provider_receipts
+           (id,organization_id,case_id,run_id,request_hash,client_request_id,provider_id,
+            provider_version,model_id,input_characters,estimated_cost_minor,pricing_version,
+            created_by_user_id,request_id)
+         VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [
+          receiptId, actor.organizationId, caseId, runId, planHash,
+          planContext.providerId, planContext.providerVersion, planContext.modelId,
+          outbound.outboundInputCharacters, budget.estimatedCostMinor,
+          planContext.pricingVersion, actor.userId,
+          // `request_id` metindir; run kimliğiyle aynı parametreyi paylaşamaz
+          // (PostgreSQL uuid/text tipini tek parametreden çıkaramaz).
+          String(runId),
+        ],
+      )
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
       let output: unknown
+      let providerUsage: { inputTokens: number | null; outputTokens: number | null; actualCostMinor: number } | null = null
       try {
         const response = await provider.execute({
           accountingInputCharacters: outbound.outboundInputCharacters,
           providerRequestId: runId,
           context: outbound.context,
-        })
+        }, controller.signal)
         output = response.output
+        providerUsage = {
+          inputTokens: response.usage.inputTokens,
+          outputTokens: response.usage.outputTokens,
+          actualCostMinor: response.usage.actualCostMinor,
+        }
+        await pool.query(
+          `UPDATE labor_allocation_provider_receipts
+              SET status='response_recorded',result_kind='success',
+                  output_characters=$2,input_tokens=$3,output_tokens=$4,
+                  actual_cost_minor=$5,response_received_at=now()
+            WHERE id=$1`,
+          [
+            receiptId, response.usage.outputCharacters,
+            response.usage.inputTokens, response.usage.outputTokens, response.usage.actualCostMinor,
+          ],
+        )
       } catch (error) {
         const failure = error instanceof LaborAllocationProviderExecutionError
           ? error
           : new LaborAllocationProviderExecutionError('unknown', 'unknown', 'AI_PROVIDER_FAILED')
+        const safeCode = failure.safeDiagnosticCode ?? 'AI_PROVIDER_FAILED'
+        await pool.query(
+          `UPDATE labor_allocation_provider_receipts
+              SET status=$2,result_kind='failure',safe_error_code=$3,
+                  response_received_at=CASE WHEN $2='response_recorded' THEN now() ELSE NULL END,
+                  finalized_at=CASE WHEN $2='outcome_unknown' THEN now() ELSE NULL END
+            WHERE id=$1`,
+          [
+            receiptId,
+            failure.requestOutcome === 'unknown' ? 'outcome_unknown' : 'response_recorded',
+            failure.requestOutcome === 'unknown' ? 'AI_PROVIDER_OUTCOME_UNKNOWN' : safeCode,
+          ],
+        )
         await finalize(
           failure.requestOutcome === 'unknown' ? 'outcome_unknown' : 'failed',
-          failure.safeDiagnosticCode ?? 'AI_PROVIDER_FAILED',
+          safeCode,
           null,
           null,
         )
         return this.getRun(actor, caseId, runId)
+      } finally {
+        clearTimeout(timeout)
       }
 
       // Domain doğrulamasından geçmeden HİÇBİR satır kaydedilmez.
@@ -558,6 +627,10 @@ export function createLaborAllocationStore(
         )
       }
       await finalize('review_required', null, validation.suggestion.lines.length, controlRequiredCount)
+      await pool.query(
+        "UPDATE labor_allocation_provider_receipts SET status='finalized',finalized_at=now() WHERE id=$1",
+        [receiptId],
+      )
       return this.getRun(actor, caseId, runId)
     },
 

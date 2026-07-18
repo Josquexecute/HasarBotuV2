@@ -1111,4 +1111,20 @@ Dilim 2 — uçtan uca (tamamlandı):
 
 Bu dilimde föy otomatik revize EDİLMEZ: yalnız seçilmiş sonuçlardan açık kullanıcı onayına gidecek önizleme üretilir (`applied: false`).
 
+## Paket 55 — Gerçek Gemini işçilik adaptörü
+
+- [x] Deployment opt-in (`GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED` + `GEMINI_API_KEY`) ekle; anahtarı yalnız ortamdan oku, PostgreSQL'e yazma.
+- [x] Organization `ai_provider_policy` açık değilse dış çağrı yapma; kullanıcı egress onayı olmadan çağırma.
+- [x] Yalnız normalize edilmiş PII-minimize kanıt paketini gönder; credential ve PII'nin gövdeye girmediğini payload testiyle doğrula.
+- [x] Gemini'den strict JSON/structured output iste; dönen çıktıyı yine domain doğrulamasından geçir.
+- [x] Kontrollü retry yalnız 429 ve 5xx'te; kalıcı hata, geçersiz JSON ve timeout'ta fallback üretme.
+- [x] Sağlayıcı makbuzu ve `ai_usage_ledger` ile mükerrer maliyet koruması; model/prompt sürümü ve kullanım miktarını sakla, ham prompt/yanıt saklama.
+- [x] Gerekçe alanlarında PII/URL/dosya yolu taramasını yeniden çalıştır (domain doğrulaması).
+- [x] Deterministik harness'i yalnız açık izne bağla; üretimde config aşamasında reddet.
+- [x] Mock HTTP server ile başarı, malformed JSON, eksik satır, 429, 5xx, timeout ve bağlantı kesilmesi testleri.
+- [x] Gerçek PostgreSQL ile opt-in, tenant, stale, idempotency, budget, ledger ve audit sızıntısı doğrulaması.
+- [x] İsteğe bağlı manuel gerçek Gemini smoke'u ekle; CI ve standart kuşak anahtar istemesin.
+
+Kapsam dışı: Excel yazımı, şablon profilleri, otomatik eksper onayı, kullanıcı onayı olmadan föy revizyonu.
+
 Kapsam dışı: Excel'e yazma, şablon profilleri, otomatik eksper onayı, kullanıcı onayı olmadan föy revizyonu, kendi kendine öğrenme, Gmail/File Agent/fiziksel dosya yazımı.

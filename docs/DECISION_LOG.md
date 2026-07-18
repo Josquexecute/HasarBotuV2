@@ -1041,3 +1041,25 @@ Etkisi:
 
 - Migration 0031, `v1/labor-allocation-ai` sözleşmesi, API store/routes/provider harness ve `LaborAllocationAiModule` eklenir; Paket 54 dilim 1'deki domain modülü artık runtime tarafından tüketilir.
 - Excel yazımı, şablon profilleri, otomatik eksper onayı ve kullanıcı onayı olmadan föy revizyonu kapsam dışıdır.
+
+## 2026-07-18 — HB-2026-062: Gerçek Gemini işçilik dağıtım adaptörü (Paket 55)
+
+Karar:
+
+1. **Üç ayrı kapı zorunludur ve hiçbiri diğerinin yerine geçmez:**
+   - Deployment opt-in: `GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED=true` + `GEMINI_API_KEY`. Poliçe analizi açık diye dağıtım egress'i kendiliğinden açılmaz; ayrı bayraktır.
+   - Organization opt-in: `ai_provider_policies.labor_allocation_enabled` ve izin listesi. Politika satırı yoksa sağlayıcı **hiç çağrılmaz** ve makbuz bile oluşmaz.
+   - Kullanıcı opt-in: dış sağlayıcı seçiliyken `confirmedEgress` olmadan istek 409 döner.
+2. **Credential asla PostgreSQL'e yazılmaz.** Anahtar yalnız süreç ortamından okunur ve yalnız `x-goog-api-key` başlığında taşınır; istek gövdesine, DTO'ya, log'a veya audit'e girmez. Payload testi bunu doğrular.
+3. Dışarı yalnız domain katmanında normalize edilmiş, PII-minimize kanıt paketi çıkar. Plaka, organization/case/sheet kimliği, e-posta ve dosya yolu bu pakette zaten yoktur; test bunu gövde üzerinden ayrıca doğrular.
+4. Gemini'den `responseMimeType: application/json` + `responseJsonSchema` ile yapılandırılmış çıktı istenir. Wire şeması enum ve sayısal sınır taşımaz: dönen veri **yine** domain doğrulamasından (satır kapsaması, tahsis toplamı eşitliği, ekonomik tutarlılık) ve PII/URL/path taramasından geçer. Prompt ve wire şeması bu kontrollerin yerine geçmez.
+5. **Kontrollü retry yalnız geçici hatalarda**: 429 ve 5xx. Kalıcı hata (401/403/400/404/422), geçersiz JSON, eksik kullanım verisi ve timeout retry üretmez. Ağ kesintisi ve timeout `outcome_unknown` olarak işaretlenir; tekrar denenmez.
+6. Mükerrer maliyet koruması: her dış çağrı için `labor_allocation_provider_receipts` kaydı açılır (`client_request_id` organization içinde tekil) ve `ai_usage_ledger` girdisi yazılır. Gerçek model adı/sürümü, prompt sürümü, token kullanımı ve tahmini maliyet saklanır; ham prompt ve ham yanıt saklanmaz.
+7. **Deterministik harness üretimde sessizce devreye giremez.** Yalnız `LABOR_ALLOCATION_ALLOW_DETERMINISTIC_PROVIDERS=true` ile kayda girer ve bu bayrak `NODE_ENV=production` altında config aşamasında reddedilir.
+8. Sistem talimatı sözlüğü ve onaylı örnekleri **kanıt** olarak verir, otomatik doğru olduklarını söylemez. Araç kimliği, parça kodu ve hasar bölgesi bulunmadığı açıkça belirtilir; uydurulmaması ve eksik kanıt kodlarının korunması istenir. Modelin yüksek güven bildirmesi `control_required` zorunluluğunu kaldıramaz — bu sunucu tarafında yeniden hesaplanır (HB-2026-060).
+9. Gerçek Gemini smoke'u **isteğe bağlı ve manueldir**; CI ve standart test kuşağı gerçek API anahtarı istemez.
+
+Etkisi:
+
+- `gemini-provider.ts`, `provider-output-schema.ts`, config opt-in'leri, `createLaborAllocationProviderRegistry` ve mock HTTP test kuşağı eklenir.
+- Bir tip hatası testle yakalandı: sağlayıcı makbuzunda `run_id` (uuid) ve `request_id` (text) aynı parametreyi paylaşınca PostgreSQL tip çıkaramıyordu; ayrı parametreye ayrıldı.

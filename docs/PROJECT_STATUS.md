@@ -5,11 +5,25 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 54 dilim 2 — AI işçilik dağıtımı uçtan uca
+- Aşama: Paket 55 — Gerçek Gemini işçilik dağıtım adaptörü
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-54-labor-allocation-ai` dalı, remote yok
+- Git: Yerel repository, `foundation/package-55-gemini-labor-allocation` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 55 doğrulama sonucu
+
+- Üretim yolu gerçek Gemini adaptörüne bağlandı; deterministik harness korundu ama **yalnız açık izinle** görünür ve `NODE_ENV=production` altında config aşamasında reddedilir.
+- **Üç ayrı opt-in kapısı** doğrulandı: deployment (`GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED` + `GEMINI_API_KEY`), organization (`ai_provider_policies.labor_allocation_enabled` + izin listesi) ve kullanıcı (`confirmedEgress`). Politika satırı yokken sağlayıcı hiç çağrılmıyor ve sağlayıcı makbuzu bile oluşmuyor; egress onayı yokken istek 409 dönüyor.
+- Credential yalnız süreç ortamından okunuyor ve yalnız `x-goog-api-key` başlığında taşınıyor. Payload testi anahtarın, plakanın, organization/case/sheet kimliğinin, e-postanın ve dosya yolunun istek gövdesinde bulunmadığını doğruluyor.
+- Yapılandırılmış çıktı isteniyor (`responseMimeType: application/json` + `responseJsonSchema`, `temperature: 0`); dönen veri yine domain doğrulamasından ve PII/URL/path taramasından geçiyor.
+- Kontrollü retry yalnız 429 ve 5xx'te. Kalıcı hatada (401) retry yapılmadığı, 5xx'te retry tükendiğinde hata verildiği, malformed JSON'da fallback üretilmediği, bağlantı kesilmesi ve timeout'ta sonucun `outcome_unknown` işaretlendiği mock HTTP server testleriyle doğrulandı (12/12).
+- Sağlayıcı makbuzu ve `ai_usage_ledger` ile mükerrer maliyet koruması; gerçek model adı/sürümü, prompt sürümü, token kullanımı ve tahmini maliyet saklanıyor. Ham prompt ve ham yanıt saklanmıyor.
+- Sistem talimatı sözlüğü ve onaylı örnekleri kanıt olarak veriyor, otomatik doğru olduklarını söylemiyor; eksik kanıt kanalları açıkça bildiriliyor ve `control_required` sunucu tarafında zorlanmaya devam ediyor.
+- **Bir tip hatası testle yakalandı ve düzeltildi:** sağlayıcı makbuzunda `run_id` (uuid) ve `request_id` (text) aynı parametreyi paylaşınca PostgreSQL tip çıkaramıyor ve uç 500 dönüyordu; ayrı parametreye ayrıldı.
+- Gerçek Gemini smoke'u isteğe bağlı ve manueldir (`scripts/package55-gemini-manual-smoke.mjs`); opt-in olmadan atlanır, CI ve standart kuşak gerçek API anahtarı istemez.
+- API testleri 31/31 (dağıtım 12 + Gemini mock 12 + opt-in 7). Ana ağaçta typecheck, lint, **1546 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti. Paket 54 Chrome smoke'u regresyonsuz tekrar geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
 
 ## Paket 54 dilim 2 doğrulama sonucu
 

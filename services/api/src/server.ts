@@ -20,6 +20,11 @@ import {
   type EmailAiProviderAdapter,
   type EmailAiProviderRegistry,
 } from './email-ai/index.js'
+import {
+  createGeminiLaborAllocationProvider,
+  createLaborAllocationProviderRegistry,
+  type LaborAllocationProviderRegistry,
+} from './labor-allocation-ai/index.js'
 
 /** Server environment config'inden secret sızdırmadan provider registry kurar. */
 export function createConfiguredPolicyAiProviderRegistry(
@@ -44,6 +49,22 @@ export function createConfiguredEmailAiProviderRegistry(
     adapters.push(createGeminiEmailAiProvider(config.geminiPolicyProvider))
   }
   return createEmailAiProviderRegistry(adapters)
+}
+
+/**
+ * Paket 55: işçilik dağıtımı sağlayıcı kaydı. Gerçek Gemini adaptörü yalnız
+ * kendi opt-in'i ile eklenir; deterministik harness yalnız açık izinle görünür
+ * ve üretimde config aşamasında zaten reddedilir.
+ */
+export function createConfiguredLaborAllocationProviderRegistry(
+  config: Pick<ApiConfig, 'geminiLaborAllocationProvider' | 'laborAllocationAllowDeterministicProviders'>,
+): LaborAllocationProviderRegistry {
+  return createLaborAllocationProviderRegistry({
+    ...(config.geminiLaborAllocationProvider === undefined
+      ? {}
+      : { gemini: createGeminiLaborAllocationProvider(config.geminiLaborAllocationProvider) }),
+    allowDeterministic: config.laborAllocationAllowDeterministicProviders,
+  })
 }
 
 /**

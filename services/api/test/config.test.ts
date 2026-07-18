@@ -18,6 +18,8 @@ describe('parseConfig', () => {
       port: DEFAULT_PORT,
       logLevel: DEFAULT_LOG_LEVEL,
       nodeEnv: DEFAULT_NODE_ENV,
+      // Paket 55: deterministik dağıtım sağlayıcıları varsayılan olarak KAPALI.
+      laborAllocationAllowDeterministicProviders: false,
     })
     expect(DEFAULT_HOST).toBe('127.0.0.1')
     expect(DEFAULT_PORT).toBe(3100)
@@ -38,6 +40,7 @@ describe('parseConfig', () => {
       logLevel: 'debug',
       nodeEnv: 'production',
       databaseUrl: 'postgres://app:pw@127.0.0.1:5432/hasarbotu',
+      laborAllocationAllowDeterministicProviders: false,
     })
     expect(parseConfig({ PORT: '1' }).port).toBe(1)
     expect(parseConfig({ PORT: '65535' }).port).toBe(65_535)

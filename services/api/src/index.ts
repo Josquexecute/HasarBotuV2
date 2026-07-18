@@ -62,9 +62,13 @@ export { createCasesStore, registerCasesRoutes, type CasesStore } from './cases/
 export { createDashboardStore, registerDashboardRoutes, type DashboardStore } from './dashboard/index.js'
 export { createFeeStore, registerFeeRoutes, type FeeStore } from './fees/index.js'
 export {
+  LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA,
+  LABOR_ALLOCATION_RETRY_BACKOFF_MS,
   LaborAllocationError,
   LaborAllocationProviderExecutionError,
   createDeterministicLaborAllocationProviderRegistry,
+  createGeminiLaborAllocationProvider,
+  createLaborAllocationProviderRegistry,
   createLaborAllocationStore,
   registerLaborAllocationRoutes,
   type LaborAllocationProviderAdapter,
