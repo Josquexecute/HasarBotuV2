@@ -997,3 +997,16 @@ Kapsam dışı: yeni tablo/migration, AI çağrısı, otomatik satır ekleme/kay
 - [x] Yalnız Paket 47 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: yeni tablo/migration/endpoint/sözleşme, kullanıcı-servis yazma (CRUD) yolu, Bildirimler ve Mevzuat ekranlarının gerçek veriye bağlanması, yeni dependency ve sonraki paket.
+
+## Paket 48 — API modunda mock karantinası (Bildirimler ve Mevzuat)
+
+- [x] Ortak `BackendUnavailableState` dürüst boş durum bileşenini ekle.
+- [x] Bildirimler'i veri kaynağına göre ayır; API modunda "Bildirim altyapısı henüz etkin değil." göster, örnek bildirim render etme.
+- [x] Mevzuat'ı veri kaynağına göre ayır; API modunda "Mevzuat kaynak kütüphanesi henüz yapılandırılmadı." göster, örnek kaynak ve mock soru–cevap render etme.
+- [x] Mock gövdeleri ayrı bileşenlere alarak API modunda DOM'a hiç girmemesini sağla; yalnız mock veri modunda çalıştır.
+- [x] İki ekran için veri kaynağı ayrımı ve mock sızıntısı testleri ekle.
+- [x] Chrome smoke'ta mock kaynak dosyasından okunan sabit metinlerin API modunda DOM'da bulunmadığını doğrula.
+- [x] Gerçek PostgreSQL/API, tam root, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 48 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: bildirim olay modeli, mevzuat kaynak kütüphanesi modeli, yeni tablo/migration/endpoint/domain modeli/adapter, yeni dependency ve sonraki paket.

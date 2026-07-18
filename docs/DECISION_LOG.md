@@ -897,3 +897,19 @@ Etkisi:
 
 - ManagementPage API modunda gerçek veriye bağlanır, Sidebar kimliği gerçek oturumdan gelir; mock prototip yalnız mock modda korunur ve API hatasında fallback yapılmaz.
 - Yeni tablo/migration/endpoint/sözleşme, dependency, AI çağrısı veya fiziksel dosya erişimi eklenmez.
+
+## 2026-07-18 — HB-2026-054: Backend'i olmayan ekranlarda mock karantinası ve dürüst boş durum
+
+Karar:
+
+1. Gerçek veri kaynağı henüz kurulmamış ekranlar API modunda **mock içeriğe düşmez**. Örnek kayıt göstermek yerine ne olduğunu açıkça söyleyen bir boş durum gösterilir. Bu, HB-2026-053'teki "API modunda mock kayıt gösterilmez" kuralının backend'i bulunmayan ekranlara uygulanmasıdır.
+2. Bildirimler ve Mevzuat ekranları bu kapsamdadır. API modunda gösterilen metinler sabittir: Bildirimler için "Bildirim altyapısı henüz etkin değil.", Mevzuat için "Mevzuat kaynak kütüphanesi henüz yapılandırılmadı."
+3. Mock içerik yalnız açıkça seçilmiş mock veri modunda çalışır. Prototip gövdeleri ayrı bileşenlere alınır ve API modunda hiç render edilmez; böylece örnek kayıtlar DOM'a hiç girmez (yalnız CSS ile gizlenmez).
+4. Bu paket sahte veri kaynağı üretmez: yeni tablo, migration, endpoint, domain modeli veya "boş dönen" sahte adapter eklenmez. Bildirim olay modeli ve mevzuat kaynak kütüphanesi modeli bilinçli olarak kapsam dışıdır ve ayrı ürün kararı bekler.
+5. Menü, sayfa başlığı ve görsel iskelet korunur; ancak yalnız mock veriyle anlamlı olan yüzeyler (okunmamış sayacı, "Tümünü Okundu İşaretle", filtreler, mock soru–cevap paneli, "6 yerel mock kaynak" rozeti) API modunda gösterilmez.
+6. Regresyon koruması iki katmanlıdır: her ekran için veri kaynağı ayrımı ve mock sızıntısı birim testleri; ayrıca Chrome smoke'ta mock kaynak dosyasından okunan sabit metinlerin API modunda DOM'da bulunmadığı doğrulanır.
+
+Etkisi:
+
+- `BackendUnavailableState` ortak bileşeni eklenir; Bildirimler ve Mevzuat sayfaları veri kaynağına göre ayrılır.
+- Yeni tablo/migration/endpoint/domain modeli/adapter, dependency veya AI çağrısı eklenmez; iki ekranın gerçek veri modeli sonraki paketlerin açık kapsamıdır.

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { BellRing, CheckCheck, ChevronDown, CircleAlert, ExternalLink, FileWarning, ShieldAlert } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { initialNotifications, type NotificationType } from '../../mocks/workspaces'
+import { BackendUnavailableState } from '../../components/StateViews'
+import { getConfiguredDataSource, type DataSourceKind } from '../../data'
 
 const notificationIcons: Record<NotificationType, typeof FileWarning> = {
   'Eksik Evrak': FileWarning,
@@ -11,7 +13,12 @@ const notificationIcons: Record<NotificationType, typeof FileWarning> = {
   'Ağır Hasar': ShieldAlert,
 }
 
-export function NotificationsPage() {
+/**
+ * Prototip bildirim listesi. Yalnız açıkça seçilmiş mock veri modunda render
+ * edilir; API modunda bu bileşen hiç çağrılmaz, dolayısıyla örnek kayıtlar
+ * DOM'a hiç girmez.
+ */
+function NotificationsMockContent() {
   const navigate = useNavigate()
   const [items, setItems] = useState(initialNotifications)
   const [type, setType] = useState('Tümü')
@@ -21,7 +28,7 @@ export function NotificationsPage() {
   const unreadCount = items.filter((item) => !item.read).length
 
   return (
-    <main className="page office-page notifications-page">
+    <>
       <section className="page-heading page-heading--compact"><div><h1>Bildirimler <span className="heading-count">{unreadCount} okunmamış</span></h1><p>Operasyon, evrak ve kontrol bildirimleri</p></div><button className="button button--secondary" type="button" onClick={() => setItems((current) => current.map((item) => ({ ...item, read: true })))}><CheckCheck size={15} /> Tümünü Okundu İşaretle</button></section>
       <section className="filterbar" aria-label="Bildirim filtreleri">
         <label className="select-field"><span className="select-field__label">Tür</span><select aria-label="Bildirim türü" value={type} onChange={(event) => setType(event.target.value)}><option>Tümü</option><option>Eksik Evrak</option><option>Geciken Takip</option><option>Onay Bekliyor</option><option>Değer Kaybı</option><option>Ağır Hasar</option></select><ChevronDown size={14} /></label>
@@ -40,6 +47,29 @@ export function NotificationsPage() {
           </article>
         })}
       </div>
+    </>
+  )
+}
+
+export function NotificationsPage() {
+  const [source] = useState<DataSourceKind>(getConfiguredDataSource)
+
+  return (
+    <main className="page office-page notifications-page">
+      {source === 'mock' ? <NotificationsMockContent /> : (
+        <>
+          <section className="page-heading page-heading--compact">
+            <div>
+              <h1>Bildirimler</h1>
+              <p>Operasyon, evrak ve kontrol bildirimleri</p>
+            </div>
+          </section>
+          <BackendUnavailableState
+            title="Bildirim altyapısı henüz etkin değil."
+            detail="Gerçek bildirim kaynağı bağlanana kadar örnek bildirim gösterilmez; mock kayda düşülmez."
+          />
+        </>
+      )}
     </main>
   )
 }

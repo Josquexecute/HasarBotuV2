@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 47 — API modunda kimlik ve yönetim listelerinde mock yasağı
+- Aşama: Paket 48 — API modunda mock karantinası (Bildirimler ve Mevzuat)
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-47-management-real-data` dalı, remote yok
+- Git: Yerel repository, `foundation/package-48-mock-quarantine` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -875,3 +875,14 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Build başlangıç JavaScript grafiğini **476.645 baytta** tuttu; 10 zorunlu lazy modül korundu.
 - Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.339/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
 - Yeni tablo/migration/endpoint/sözleşme, dependency, AI çağrısı, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Bildirimler ve Mevzuat ekranları hâlâ mock prototiptir ve ayrı kapsamdır.
+
+## Paket 48 — API modunda mock karantinası (2026-07-18)
+
+- HB-2026-054: backend'i henüz kurulmamış ekranlar API modunda mock içeriğe düşmez; örnek kayıt yerine ne olduğunu açıkça söyleyen boş durum gösterilir. Bu, Paket 47'deki kuralın backend'i bulunmayan ekranlara uygulanmasıdır.
+- Bildirimler API modunda "Bildirim altyapısı henüz etkin değil.", Mevzuat "Mevzuat kaynak kütüphanesi henüz yapılandırılmadı." gösterir. Ortak `BackendUnavailableState` bileşeni eklendi.
+- Mock gövdeleri ayrı bileşenlere alındı ve API modunda **hiç render edilmez** — örnek kayıtlar DOM'a girmez, yalnız CSS ile gizlenmez. Yalnız mock veriyle anlamlı yüzeyler (okunmamış sayacı, "Tümünü Okundu İşaretle", filtreler, mock soru–cevap, "6 yerel mock kaynak" rozeti) API modunda sunulmaz.
+- **Sahte veri kaynağı üretilmedi**: yeni tablo, migration, endpoint, domain modeli veya boş dönen sahte adapter eklenmedi. Bildirim olay modeli ve mevzuat kaynak kütüphanesi modeli bilinçli olarak kapsam dışıdır ve ayrı ürün kararı bekler.
+- Ana çalışma ağacında typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.345 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 234/6; domain 440; contracts 271; database 59; API 288; file-agent 53 (Paket 47'ye göre +6 UI testi).
+- Gerçek Chrome/CDP smoke (8/8 senaryo): login; iki ekranda dürüst boş durum; mock kaynak dosyasından okunan **32 sabit örnek metnin** hiçbiri API modunda DOM'da yok; mock'a özgü kontrol yüzeyleri yok; API kapatıldıktan sonra da mock sızıntısı yok; console temiz. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yoktu.
+- Build başlangıç JavaScript grafiğini **478.065 baytta** tuttu; 10 zorunlu lazy modül korundu.
+- Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.345/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.

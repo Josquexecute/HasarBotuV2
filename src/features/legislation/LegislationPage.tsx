@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BookOpenText, ChevronDown, ExternalLink, Search, Send, ShieldAlert, X } from 'lucide-react'
 import { legislationSources, type LegislationSource } from '../../mocks/workspaces'
+import { BackendUnavailableState } from '../../components/StateViews'
+import { getConfiguredDataSource, type DataSourceKind } from '../../data'
 
-export function LegislationPage() {
+/**
+ * Prototip mevzuat kütüphanesi ve mock soru–cevap. Yalnız açıkça seçilmiş mock
+ * veri modunda render edilir; API modunda bu bileşen hiç çağrılmaz, dolayısıyla
+ * örnek kaynaklar ve mock yanıt metni DOM'a hiç girmez.
+ */
+function LegislationMockContent() {
   const [query, setQuery] = useState('')
   const [type, setType] = useState('Tümü')
   const [status, setStatus] = useState('Geçerli')
@@ -29,7 +36,7 @@ export function LegislationPage() {
   }
 
   return (
-    <main className="page office-page legislation-page">
+    <>
       <section className="page-heading page-heading--compact"><div><h1>Mevzuat ve AI Yardımcısı</h1><p>Geçerli kaynakları inceleyin ve kaynaklı mock karar desteği alın</p></div><span className="connection-status"><i />6 yerel mock kaynak</span></section>
       <section className="filterbar" aria-label="Mevzuat filtreleri">
         <label className="field field--search office-search"><Search size={15} /><span className="sr-only">Mevzuat kaynağı ara</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Kaynak başlığı veya bölüm ara..." /></label>
@@ -63,6 +70,29 @@ export function LegislationPage() {
           <footer><button className="button button--secondary button--block" type="button" onClick={() => setAnswer(`Seçili kaynak: ${selected.title}. ${selected.summary}`)}><ExternalLink size={15} /> Mock Kaynağı Cevaba Ekle</button></footer>
         </aside>}
       </div>
+    </>
+  )
+}
+
+export function LegislationPage() {
+  const [source] = useState<DataSourceKind>(getConfiguredDataSource)
+
+  return (
+    <main className="page office-page legislation-page">
+      {source === 'mock' ? <LegislationMockContent /> : (
+        <>
+          <section className="page-heading page-heading--compact">
+            <div>
+              <h1>Mevzuat ve AI Yardımcısı</h1>
+              <p>Kaynak kütüphanesi ve kaynaklı karar desteği</p>
+            </div>
+          </section>
+          <BackendUnavailableState
+            title="Mevzuat kaynak kütüphanesi henüz yapılandırılmadı."
+            detail="Gerçek kaynak kütüphanesi bağlanana kadar örnek mevzuat kaydı ve mock karar desteği gösterilmez."
+          />
+        </>
+      )}
     </main>
   )
 }
