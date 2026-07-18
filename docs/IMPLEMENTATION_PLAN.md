@@ -1038,3 +1038,17 @@ Kapsam dışı: kalıcı bildirim olay tablosu, kuyruk/worker, okundu-silindi-er
 - [x] Yalnız Paket 50 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: mevzuat, kalıcı bildirim durumu (okundu/ertelendi/tercih), cache ve performans optimizasyonu, yeni endpoint/tablo/migration ve yeni dependency.
+
+## Paket 51 — Operasyonel uyarı performans ölçümü
+
+- [x] Gerçek PostgreSQL üzerinde 100 / 1.000 / 5.000 açık dosya hacmi oluştur; görev, takip ve evrak durumlarını karışık dağıt.
+- [x] Toplam süre, SQL sorgu sayısı, sorgu süreleri, kural değerlendirme süresi ve dönen kayıt sayısını ölç; üretim koduna enstrümantasyon ekleme.
+- [x] Aynı veriyle tekrarlı koş; ilk (soğuk) ve ısınmış sonuçları ayrı raporla.
+- [x] N+1 veya gereksiz tekrar varsa düzelt; evrak değerlendirmesinde toplu veri çekimi mümkünse uygula.
+- [x] İş kurallarını, sıralamayı, dedupe davranışını ve 200 sınırını değiştirme; cache/materialized view/worker/tablo/migration ekleme.
+- [x] Regresyonu süre eşiğiyle değil sorgu sayısı ve algoritmik sınırlarla koru; testin gerçekten koruduğunu doğrula.
+- [x] Ölçüm sonuçlarını gerçek sayılarla `PERFORMANCE_NOTES.md` içine kaydet.
+- [x] Tam kalite zinciri ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 51 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: cache, materialized view, background worker, yeni kalıcı tablo/migration, iş kuralı ve sıralama değişikliği, süre eşiğine dayalı performans testi.

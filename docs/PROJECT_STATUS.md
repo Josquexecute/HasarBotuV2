@@ -5,11 +5,24 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 50 — Durum Panosu operasyonel uyarı özeti
-- Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-50-dashboard-alert-summary` dalı, remote yok
+- Aşama: Paket 51 — Operasyonel uyarı performans ölçümü
+- Durum: **Uygulama, gerçek PostgreSQL, tam kalite zinciri ve fresh checkout kapıları geçti**
+- Git: Yerel repository, `foundation/package-51-alert-performance` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 51 doğrulama sonucu
+
+- Gerçek PostgreSQL üzerinde 100 / 1.000 / 5.000 açık dosya hacimleri ölçüldü; görev, takip ve evrak durumları deterministik karışık dağıtıldı (5.000 dosyada 3.250 görev, 35.750 belge). Tam sayılar ve yöntem: `PERFORMANCE_NOTES.md`.
+- **N+1 yok:** sorgu sayısı dosya sayısından bağımsız ve sabit (4 sorgu; açık dosya yoksa 1). Ölçüm bunu 100 → 5.000 dosyada doğruladı.
+- Kanıtlanan darboğaz belge sorgusuydu (5.000 dosyada soğuk SQL süresinin ~%76'sı). Sebep sorgu planı değil, binlerce elemanlı `case_id = ANY($2::uuid[])` dizi parametresiydi.
+- Uygulanan optimizasyon: belge ve görev sorgularında dosya kimliği dizisi yerine `cases` tablosuna `lifecycle_status='open'` join'i; yalnız length için tutulan `caseIds` dizisi kaldırıldı. Küme birebir aynıdır.
+- Sonuç: 5.000 açık dosyada ısınmış toplam süre **382 ms → ~180-190 ms (~%51)**, iki bağımsız örnekte tutarlı. 1.000 dosyada ~74 ms → ~40-50 ms.
+- Süreler tek geliştirici makinesinde ölçülmüştür ve koşumlar arası oynaklık gözlenmiştir (1.000 dosyada bir koşumun ısınmış medyanı soğuktan yüksek çıktı). Bu yüzden manşet sayı iki örnekle raporlandı.
+- İş kuralları, sıralama, dedupe davranışı ve 200 sınırı değiştirilmedi; cache, materialized view, background worker, yeni tablo veya migration eklenmedi. Paket 49 davranış testleri 10/10 değişmeden geçti.
+- Regresyon koruması süreye değil algoritmik sınırlara dayanır (`operational-alerts-scaling.test.ts`, 6 test): sorgu sayısı 25 ve 400 dosyada aynı ve 4; en büyük parametre yükü hacimden bağımsız ve 10 elemandan küçük; boş organization tek sorgu; hacim altında 200 sınırı, mükerrerlik yokluğu, sıralama ve tenant sınırı korunur. Testin gerçekten koruduğu doğrulandı: eski sorgu geri konduğunda parametre yükü iddiası 401 ≠ 26 ile düşüyor.
+- Ana ağaçta typecheck, lint, **1407 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
 
 ## Paket 50 doğrulama sonucu
 

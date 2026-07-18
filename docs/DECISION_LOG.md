@@ -948,3 +948,20 @@ Etkisi:
 
 - `DashboardAlertSummary` bileşeni ve veri katmanında `countOperationalAlertsByType` + `DASHBOARD_ALERT_PREVIEW_LIMIT` eklenir.
 - Yeni uç, tablo, migration, kuyruk, dependency veya AI çağrısı eklenmez; kalıcı bildirim durumu ve mevzuat hâlâ kapsam dışıdır.
+
+## 2026-07-18 — HB-2026-057: Operasyonel uyarı performansı — önce ölç, sonra kanıtlanan darboğazı düzelt
+
+Karar:
+
+1. Performans işi **ölçümle başlar**. Gerçek PostgreSQL üzerinde 100 / 1.000 / 5.000 açık dosya hacimleri, karışık görev-takip-evrak dağılımıyla oluşturulur; toplam süre, SQL sorgu sayısı, sorgu süreleri, kural değerlendirme süresi ve dönen kayıt sayısı ölçülür. Soğuk ve ısınmış koşumlar ayrı raporlanır.
+2. Ölçüm altyapısı **üretim koduna enstrümantasyon eklemez**: `pool.query` ölçüm betiğinde sarmalanır, kural süresi toplam − SQL olarak bulunur.
+3. Ölçüm sonucu: N+1 yoktur (sorgu sayısı hacimden bağımsız, 4). Tek kanıtlanan darboğaz belge sorgusudur ve sebebi sorgu planı değil, binlerce elemanlı `case_id = ANY($2::uuid[])` dizi parametresidir.
+4. Yalnız bu darboğaz düzeltilir: belge ve görev sorguları dosya kimliği dizisi yerine `cases` tablosuna `lifecycle_status='open'` join'i kullanır. Küme birebir aynıdır (kimlikler zaten aynı sorgudan geliyordu). İş kuralları, sıralama, dedupe davranışı ve 200 sınırı **değişmez**.
+5. Cache, materialized view, background worker, yeni kalıcı tablo ve migration bu paketin kapsamı dışındadır ve eklenmez.
+6. Performans regresyonu **kararsız süre eşiğine dayandırılmaz**. Koruma algoritmik sınırlarladır: sorgu sayısının hacimden bağımsızlığı, sorgu parametre yükünün hacimden bağımsızlığı, 200 sınırı, mükerrerlik yokluğu, sıralama ve tenant sınırı. Testin gerçekten koruduğu, eski sorgu geri konarak doğrulanır.
+7. Ölçüm sonuçları gerçek sayılarla `PERFORMANCE_NOTES.md` içine yazılır. Süreler makineye bağlıdır ve oynaklık gözlendiyse tek örnek yerine birden çok örnek raporlanır.
+
+Etkisi:
+
+- `scripts/package51-alert-performance.mjs` ölçüm koşumu ve `services/api/test/operational-alerts-scaling.test.ts` regresyon testi eklenir; `PERFORMANCE_NOTES.md` açılır.
+- 5.000 açık dosyada ısınmış süre ~382 ms → ~180-190 ms. Maliyet okuma anındadır ve doğrusal büyür; çok daha büyük hacimler yeniden ölçüm gerektirir.

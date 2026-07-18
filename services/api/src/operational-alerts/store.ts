@@ -92,7 +92,6 @@ export function createOperationalAlertStore(pool: pg.Pool) {
         [organizationId],
       )
       const caseRows = casesResult.rows as AlertCaseRow[]
-      const caseIds = caseRows.map((row) => row.id)
       const caseById = new Map(caseRows.map((row) => [row.id, row]))
 
       const overdueFollowUps: OverdueFollowUpFact[] = caseRows
@@ -107,14 +106,16 @@ export function createOperationalAlertStore(pool: pg.Pool) {
       const overdueTasks: OverdueTaskFact[] = []
       const missingDocuments: MissingDocumentFact[] = []
 
-      if (caseIds.length > 0) {
+      if (caseRows.length > 0) {
         const tasksResult = await pool.query(
-          `SELECT id::text,case_id::text,title,priority,due_date
-             FROM case_tasks
-            WHERE organization_id=$1 AND case_id=ANY($2::uuid[])
-              AND status='open' AND due_date<$3::date
-            ORDER BY due_date,id`,
-          [organizationId, caseIds, asOfDate],
+          `SELECT t.id::text,t.case_id::text,t.title,t.priority,t.due_date
+             FROM case_tasks t
+             JOIN cases c ON c.organization_id=t.organization_id AND c.id=t.case_id
+                         AND c.lifecycle_status='open'
+            WHERE t.organization_id=$1
+              AND t.status='open' AND t.due_date<$2::date
+            ORDER BY t.due_date,t.id`,
+          [organizationId, asOfDate],
         )
         for (const row of tasksResult.rows as TaskRow[]) {
           const caseRow = caseById.get(row.case_id)
@@ -130,13 +131,17 @@ export function createOperationalAlertStore(pool: pg.Pool) {
           })
         }
 
+        // Kapsam `cases` ile join'lenerek daraltılır: aynı küme (bu organization'ın
+        // açık dosyaları), ancak binlerce UUID'lik dizi parametresi taşınmaz.
         const documentsResult = await pool.query(
           `SELECT d.case_id::text,dv.id,d.document_type,dv.status,dv.hash_verified,
                   dv.size_verified,dv.verified_at
              FROM documents d
+             JOIN cases c ON c.organization_id=d.organization_id AND c.id=d.case_id
+                         AND c.lifecycle_status='open'
              JOIN document_versions dv ON dv.id=d.current_version_id
-            WHERE d.organization_id=$1 AND d.case_id=ANY($2::uuid[])`,
-          [organizationId, caseIds],
+            WHERE d.organization_id=$1`,
+          [organizationId],
         )
         const documentsByCase = new Map<string, DocumentRow[]>()
         for (const document of documentsResult.rows as DocumentRow[]) {
