@@ -5,11 +5,23 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 53 — Dosyalar sunucu tarafı sayfalama
-- Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-53-server-side-paging` dalı, remote yok
+- Aşama: Paket 54 dilim 1 — AI işçilik dağıtımı domain sınırı
+- Durum: **Domain dilimi tamamlandı ve tam kalite zinciri geçti; paketin kalan dilimleri açık**
+- Git: Yerel repository, `foundation/package-54-labor-allocation-ai` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 54 dilim 1 doğrulama sonucu
+
+- **Kapsam kararı:** paketin kanıt listesindeki bazı alanlar bu repository'de yok. Migration yazmadan önce şema doğrulandı: araç marka/model/model yılı/şasi prefix/motor alanı hiçbir migration'da yok (`cases` yalnız plaka + tür taşır), `labor_sheet_items` parça/malzeme kodu taşımıyor, yapısal hasar bölgesi alanı yok, ve kodda/dokümanda işçilik maliyet kategorisi seti tanımlı değil. Kategori seti kullanıcıya soruldu ve karara bağlandı (HB-2026-060); diğer eksik kanallar uydurulmadı, eksik kanıt kodlarıyla işaretlenip `controlRequired` zorunlu kılındı.
+- Taksonomi kullanıcı kararına göre **iki ayrı yapı**: kanonik operasyon türleri (`labor-operation-types/1.0.0`, `other` dahil sekiz tür) ve ekonomik karşılaştırma kovaları (altı kova, işçilik kategorisi sayılmaz). Hiçbir sigorta şirketi veya Excel sütunu bağlanmadı.
+- Onarım–değişim karşılaştırması ortak kovalarla modellendi; bildirilen toplamlar `computeEconomicTotals` ile kovalardan deterministik hesaplanıyor, sağlayıcının kendi aritmetiği kabul edilmiyor.
+- `controlRequired` sunucu tarafında yeniden hesaplanıyor: `other` türü, eksik kanıt, çelişki kodu, 0.6 altı güven veya `insufficient_evidence` kanaati kontrolü zorunlu kılıyor.
+- Çıktı doğrulaması strict: satır kapsaması (sessiz boş satır yok), tahsis toplamının satır toplamına eşitliği, tekrarlı operasyon türü reddi, PII placeholder/URL/dosya yolu/PII reddi, şema ve taksonomi sürüm kontrolü.
+- Dış sağlayıcıya organization/case/sheet kimliği ve plaka çıkmadığı testle doğrulandı; PII minimizasyonu ve outbound hash mevcut Paket 44 altyapısını kullanıyor.
+- Domain testleri 23/23. Ana ağaçta typecheck, lint, **1491 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- **Bu dilim runtime davranışını değiştirmez:** tablo, migration, endpoint veya UI eklenmedi. Saf domain modülü henüz hiçbir çağıran tarafından tüketilmiyor.
+- **Kalan dilimler açık** (`IMPLEMENTATION_PLAN.md` Paket 54 dilim 2): sözleşme + fixture, migration 0031, API store/routes/provider harness, UI önizleme ve satır bazlı kabul/ret, gerçek PostgreSQL no-fallback/tenant/stale/audit testleri, Chrome smoke.
 
 ## Paket 53 doğrulama sonucu
 

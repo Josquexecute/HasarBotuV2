@@ -1004,3 +1004,22 @@ Etkisi:
 
 - `CasesDataPort.listCasePage`, `useCasePage`, `casesQuery.ts` ve `CaseReferenceFilters` eklenir; `useCases` isteğe bağlı `enabled` alır.
 - Dosyalar ekranı artık ofis hacmiyle ölçeklenir ve satır uyarı göstergesi tam kapsamlıdır.
+
+## 2026-07-18 — HB-2026-060: AI işçilik dağıtımı taksonomisi ve domain sınırı (Paket 54, dilim 1)
+
+Karar:
+
+1. **Taksonomi iki AYRI yapıdır** (kullanıcı kararı). Hiçbir sigorta şirketi veya Excel sütun adı bu pakete bağlanmaz; şablon profilleri ileride kanonik türleri gerçek sütunlara eşler.
+   - **Kanonik operasyon türleri** (`labor-operation-types/1.0.0`): `repair`, `replace`, `remove_install`, `paint`, `consumable`, `calibration`, `related_operation`, `other`. Satır tutarı bu türlere dağıtılır; bir satır bir veya birden fazla tür taşıyabilir. `other` kullanımı her zaman `controlRequired=true` üretir.
+   - **Ekonomik karşılaştırma kovaları**: `repair_labor`, `new_part_or_ownership`, `remove_install`, `paint_and_consumable`, `calibration`, `related_operations`. Bunlar yalnız onarım–değişim karşılaştırması içindir ve **işçilik kategorisi sayılmaz**.
+2. Onarım–değişim karşılaştırması tek başına parça bedeline bakmaz: `remove_install`, `paint_and_consumable`, `calibration` ve `related_operations` her iki senaryoda da ortaktır; fark `repair_labor` ile `new_part_or_ownership` arasındadır. Bildirilen toplamlar `computeEconomicTotals` ile kovalardan **deterministik hesaplanır**; sağlayıcının kendi aritmetiği kabul edilmez.
+3. **Şemada bulunmayan kanıt kanalları uydurulmaz.** Araç marka/model/model yılı/şasi prefix/motor alanı, parça/malzeme kodu ve yapısal hasar bölgesi alanı bu repository'de YOKTUR (`cases` yalnız plaka + tür taşır; `labor_sheet_items` yalnız açıklama/işlem/parça tutarı/işçilik tutarı). Bu kanallar `EVIDENCE_MISSING_VEHICLE_IDENTITY`, `EVIDENCE_MISSING_PART_CODE`, `EVIDENCE_MISSING_DAMAGE_REGION` kodlarıyla işaretlenir ve ilgili satır `controlRequired=true` olur. Kullanıcı kuralı korunur: satır sessizce boş bırakılmaz, en makul aday üretilir ama kontrol zorunlu kalır.
+4. `controlRequired` **sunucu tarafında yeniden hesaplanır**; sağlayıcının `false` demesi yeterli değildir. Zorunlu kılan durumlar: `other` türü, eksik kanıt kodu, çelişki kodu, `LABOR_ALLOCATION_CONTROL_CONFIDENCE_THRESHOLD` (0.6) altı güven, `insufficient_evidence` kanaati.
+5. Çıktı doğrulaması strict'tir: föydeki her satır tam olarak bir kez kapsanmalı, satır tahsis toplamı satırın parça+işçilik toplamına **eşit** olmalı (aritmetik tutarsızlık belirsizlik değil, geçersiz çıktıdır), aynı operasyon türü bir satırda tekrarlanamaz, PII placeholder/URL/dosya yolu/PII içeren metin reddedilir.
+6. Kanıt snapshot hash'i (`buildLaborAllocationEvidenceHash`) föy sürümünü ve tüm kanıtları kapsar; kaynak değişirse hash değişir ve eski öneri stale sayılır.
+7. Dış sağlayıcıya plaka, ofis numarası, vaka/organization/föy kimliği çıkmaz; serbest metinler PII minimizasyonundan geçer.
+
+Etkisi:
+
+- `packages/domain/src/labor-allocation-ai.ts` eklenir (saf modül, 23 test). Runtime davranışı değişmez; tablo, migration, endpoint veya UI eklenmez.
+- Kalan dilimler açıktır: sözleşme + fixture, migration 0031 (immutable run/line kayıtları + `ai_usage_ledger` modül genişletmesi), API store/routes/provider harness, UI önizleme ve satır bazlı kabul/ret, Chrome smoke.

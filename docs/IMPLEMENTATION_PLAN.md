@@ -1086,3 +1086,27 @@ Kapsam dışı: yeni endpoint/tablo/migration, cache, kalıcı bildirim durumu, 
 - [x] Yalnız Paket 53 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: yeni endpoint/tablo/migration, sonsuz kaydırma, sütun özelleştirme, Kapanan Dosyalar ve Dosya Detayı ekranlarının liste okuma biçimi.
+
+## Paket 54 — Full AI işçilik dağıtım çekirdeği
+
+Dilim 1 — domain sınırı ve taksonomi (tamamlandı):
+
+- [x] Kanonik operasyon türleri (`labor-operation-types/1.0.0`) ve ekonomik karşılaştırma kovalarını AYRI yapılar olarak tanımla.
+- [x] Ekonomik karşılaştırmayı ortak kovalarla modelle; toplamları kovalardan deterministik hesapla.
+- [x] Şemada bulunmayan kanıt kanallarını (araç kimliği, parça kodu, hasar bölgesi) uydurma; eksik kanıt koduyla işaretle ve `controlRequired` zorla.
+- [x] `controlRequired` kuralını sunucu tarafında yeniden hesapla; sağlayıcının `false` demesine güvenme.
+- [x] Çıktı doğrulamasını strict yap: satır kapsaması, tahsis toplamı eşitliği, tekrarlı tür, PII/URL/yol reddi.
+- [x] Kanıt snapshot hash'i ve plan hash'i üret; kaynak değişince stale olsun.
+- [x] Dış sağlayıcıya kimlik ve PII çıkmadığını testle doğrula.
+
+Dilim 2 — kalan (açık):
+
+- [ ] Sözleşme `v1/labor-allocation-ai` + golden JSON Schema fixture.
+- [ ] Migration 0031: immutable `labor_allocation_runs` ve satır önerileri, kanıt snapshot hash'i, `ai_usage_ledger` modül genişletmesi, `ai_provider_policies` opt-in.
+- [ ] API store/routes: plan → start → oku → seçili satırları uygula; idempotency, stale föy reddi, RBAC ve kapalı dosya kilidi.
+- [ ] Kontrollü provider harness (başarı, geçersiz şema, timeout, hata, bütçe) + gerçek sağlayıcı adaptörü; fallback YOK.
+- [ ] UI: tam önizleme, satır bazlı kabul/ret, "kontrol gerekli olanlar hariç tümünü seç", mevcut açık onayla create/revise.
+- [ ] Gerçek PostgreSQL testleri: tenant izolasyonu, stale sürüm, no-fallback, audit sızıntısı, idempotency.
+- [ ] Chrome smoke + fresh checkout + commit.
+
+Kapsam dışı: Excel'e yazma, şablon profilleri, otomatik eksper onayı, kullanıcı onayı olmadan föy revizyonu, kendi kendine öğrenme, Gmail/File Agent/fiziksel dosya yazımı.
