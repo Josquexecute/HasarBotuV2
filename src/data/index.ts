@@ -324,3 +324,12 @@ export {
   usePert,
   type PertLoadStatus,
 } from './usePert'
+export {
+  LaborDictionaryError,
+  createHttpLaborDictionaryAdapter,
+  type LaborDictionaryAdapterOptions,
+  type LaborDictionaryDataPort,
+  type LaborDictionaryEntryRecord,
+  type LaborDictionaryErrorKind,
+  type LaborDictionaryRecord,
+} from './laborDictionaryPort'

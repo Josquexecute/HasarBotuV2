@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 45 — Kullanıcı kontrollü PERT değerlendirme çekirdeği
+- Aşama: Paket 46 — İşçilik öğrenme sözlüğü
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-45-pert-core` dalı, remote yok
+- Git: Yerel repository, `foundation/package-46-labor-dictionary` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -848,3 +848,17 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Build başlangıç JavaScript grafiğini **472.166 baytta** tuttu; en büyük chunk 299.204 bayt ve PERT dahil **10 zorunlu lazy modül** ayrı kaldı.
 - Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.311/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
 - Yeni dependency, AI/provider çağrısı, SBM/dış veri, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Üretim migration çalıştırılmadı.
+
+## Paket 46 — İşçilik öğrenme sözlüğü (2026-07-18)
+
+- v0.7'nin öğrenme sözlüğü dilimi (HB-2026-052): `labor-dictionary/1.0.0` saf domain; Türkçe duyarlı (küçük harf + aksan ayrıştırma) normalize anahtar, alt dize araması ve kullanım sayısı → son kullanım → Türkçe alfabetik deterministik sıralama. AI yoktur.
+- **Yeni tablo/migration yoktur**: sözlük yalnız kullanıcıların açık onayla kaydettiği föylerin güncel sürümlerindeki kalemlerden organization kapsamında türetilen salt okunur read-model'dir; eski sürüm kalemleri sayılmaz.
+- `GET /api/v1/labor-dictionary` oturum zorunlu, tenant kapsamlı, 200 kayıt sınırlı ve audit yazmayan uçtur. Sorgu/limit strict doğrulanır.
+- İşçilik editöründe öneriler yalnız `datalist` olarak sunulur; seçimde işlem ve son tutarlar **yalnız boş alanlara** yazılır, kullanıcının girdiği değer ezilmez, satır otomatik eklenmez ve Paket 43'ün ayrı kayıt onayı olmadan föy oluşmaz. Sözlük yalnız düzenleme açıkken yüklenir; hata halinde liste boş kalır, akış engellenmez ve mock fallback yapılmaz.
+- Ana çalışma ağacında typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.330 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 219/6; domain 440; contracts 271; database 59; API 288; file-agent 53 (Paket 45'e göre +19).
+- Paket 46 gerçek API testi 5/5: 401 + salt okunur çağrının audit yazmaması; kullanım sayısı ve son tutarların türetilmesi; tenant izolasyonu; aksan duyarsız arama + limit + geçersiz limit 400; yalnız güncel föy sürümünün sayılması (revize sonrası eski kalem sözlükten düşer).
+- Gerçek Chrome/CDP smoke (9/9 senaryo): login; onaylı föylerden türetilen datalist; tenant sızıntısı yok; öneri yalnız boş alanları doldurur; kullanıcının yazdığı işlem ezilmez; otomatik kayıt yok; salt okunur uç audit yazmaz; API kapatılınca fallback yok; console temiz. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yoktu.
+- Build başlangıç JavaScript grafiğini **472.166 baytta** tuttu (değişmedi); 10 zorunlu lazy modül korundu.
+- Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.330/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
+- `CaseDetailPage.api.test.tsx` içindeki `waitFor` varsayılan 1 sn'lik ölü hattı 15 sn'ye çıkarıldı: contracts paketi büyüdükçe ilk dinamik import + Zod şema kurulumu bu süreyi aşıyordu. Test hâlâ gerçek yükleme sonucunu doğrular; kapsam daralmadı.
+- Yeni tablo/migration, dependency, AI çağrısı, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Üretim migration çalıştırılmadı.

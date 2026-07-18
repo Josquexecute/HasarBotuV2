@@ -6,6 +6,7 @@ import type {
   LaborAiPlanRecord,
   LaborAiRunRecord,
   LaborDataPort,
+  LaborDictionaryDataPort,
   LaborSheetRecord,
   LaborSheetWorkspaceRecord,
 } from '../../data'
@@ -160,6 +161,22 @@ const aiRun: LaborAiRunRecord = {
   completedAt: '2026-07-17T12:00:01.000Z',
 }
 
+function makeDictionaryPort(): LaborDictionaryDataPort {
+  return {
+    list: vi.fn().mockResolvedValue({
+      schemaVersion: 'labor-dictionary/1.0.0',
+      items: [{
+        description: 'Ön tampon kaplama',
+        action: 'Değişim',
+        usageCount: 4,
+        lastPartAmountMinor: 18_400_00,
+        lastLaborAmountMinor: 2_200_00,
+        lastUsedAt: '2026-07-18T09:00:00.000Z',
+      }],
+    }),
+  }
+}
+
 function makeAiPort(): LaborAiDataPort {
   return {
     list: vi.fn().mockResolvedValue({ caseId: CASE_ID, items: [], permissions: { canStart: true } }),
@@ -263,6 +280,29 @@ describe('LaborApiModule', () => {
       laborAiSuggestionRunId: AI_RUN_ID,
       confirmed: true,
     })))
+  })
+
+  it('sözlük önerisi seçilince boş alanları doldurur; kullanıcı değerini ezmez ve otomatik kaydetmez', async () => {
+    const port = makePort(emptyWorkspace(true))
+    const dictionaryPort = makeDictionaryPort()
+    render(<LaborApiModule item={item} source="api" onUnauthorized={vi.fn()} port={port} dictionaryPort={dictionaryPort} />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'İşçilik Föyü Oluştur' }))
+    expect(await screen.findByText(/1 kalem önerisi/)).toBeInTheDocument()
+
+    // Boş satırda seçim: işlem ve son tutarlar önerilir.
+    await user.type(screen.getByLabelText('Kalem 1'), 'Ön tampon kaplama')
+    await waitFor(() => expect(screen.getByLabelText('İşlem 1')).toHaveValue('Değişim'))
+    expect(screen.getByLabelText('Parça tutarı 1')).toHaveValue('18400')
+    expect(screen.getByLabelText('İşçilik tutarı 1')).toHaveValue('2200')
+    expect(port.create).not.toHaveBeenCalled()
+
+    // Kullanıcının yazdığı işlem korunur.
+    await user.click(screen.getByRole('button', { name: /Satır ekle/ }))
+    await user.type(screen.getByLabelText('İşlem 2'), 'Onarım')
+    await user.type(screen.getByLabelText('Kalem 2'), 'Ön tampon kaplama')
+    expect(screen.getByLabelText('İşlem 2')).toHaveValue('Onarım')
   })
 
   it('salt-okunur/kapalı dosyada düzenleme sunmaz', async () => {

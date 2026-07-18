@@ -975,3 +975,14 @@ Kapsam dışı: benzer dosya taraması/öğrenme sözlüğü, Excel şablon prof
 - [x] Yalnız Paket 45 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: fotoğraf AI, AI PERT önerisi, dış rayiç/SBM entegrasyonu, Excel yazımı, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 46 — İşçilik öğrenme sözlüğü
+
+- [x] Türkçe duyarlı normalize/eşleştirme, deterministik sıralama ve arama kurallarını saf domain'de ekle.
+- [x] Strict contracts/JSON Schema (query/response) ve golden fixture'ları ekle.
+- [x] Güncel onaylı föy sürümlerinden türeten, tenant-kapsamlı, salt okunur ve audit yazmayan endpoint ekle.
+- [x] İşçilik editörüne datalist öneri akışını ekle; yalnız boş alanları doldur, kullanıcı değerini ezme, otomatik kaydetme.
+- [x] Gerçek PostgreSQL/API, tam root, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 46 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: yeni tablo/migration, AI çağrısı, otomatik satır ekleme/kayıt, Excel şablon profili, güvenli Excel yazımı, File Agent, IPC, yeni dependency ve sonraki paket.

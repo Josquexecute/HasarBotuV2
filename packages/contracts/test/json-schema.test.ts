@@ -64,6 +64,8 @@ describe('JSON Schema uretimi', () => {
       'labor-ai-run-response',
       'labor-ai-runs-response',
       'labor-ai-start-request',
+      'labor-dictionary-query',
+      'labor-dictionary-response',
       'labor-sheet-create-request',
       'labor-sheet-response',
       'labor-sheet-revise-request',

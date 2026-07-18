@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "query": {
+      "default": "",
+      "type": "string",
+      "maxLength": 160
+    },
+    "limit": {
+      "default": 200,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    }
+  },
+  "required": [
+    "query",
+    "limit"
+  ],
+  "additionalProperties": false
+}

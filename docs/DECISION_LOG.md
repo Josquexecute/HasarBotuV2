@@ -865,3 +865,19 @@ Etkisi:
 
 - `pert-assessment/1.0.0` saf domain doğrulama/oran katmanı, strict contracts/JSON Schema, migration 0030, tenant/RBAC/idempotency/audit API ve gerçek Dosya Detayı Ağır Hasar çalışma alanı eklenir; API modunda bağlı olmayan son dosya modülü kapanır.
 - Yeni dependency, AI/provider çağrısı, SBM/dış veri kaynağı, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmez; üretim migration çalıştırılmaz.
+
+## 2026-07-18 — HB-2026-052: İşçilik öğrenme sözlüğü türetilmiş read-model sınırı
+
+Karar:
+
+1. Öğrenme sözlüğü yeni bir gerçek kaynağı değildir. Yeni tablo, migration veya yazma yolu kurulmaz; sözlük yalnız kullanıcıların açık onayla kaydettiği föylerin **güncel (current) sürümlerindeki** satır kalemlerinden organization kapsamında türetilir. Eski/superseded sürüm kalemleri sözlüğe girmez.
+2. Sözlük AI değildir ve AI çağrısı yapmaz. Öğrenme, kullanım sayısı ve en son kullanılan tutarların deterministik toplanmasından ibarettir.
+3. Eşleştirme Türkçe duyarlıdır: küçük harf + aksan ayrıştırma ile normalize anahtar üretilir; kullanıcıya her zaman orijinal metin gösterilir. Arama alt dize eşleşmesidir; sıralama kullanım sayısı → son kullanım → Türkçe alfabetik olarak deterministiktir.
+4. Endpoint salt okunurdur, oturum zorunludur, tenant kapsamı oturumdaki organization'dır ve audit yazmaz. Sonuç `MAX_LABOR_DICTIONARY_ENTRIES` (200) ile sınırlıdır.
+5. UI'da öneri yalnız `datalist` olarak sunulur. Kullanıcı bir kalem seçtiğinde işlem ve son tutarlar **yalnız boş alanlara** doldurulur; kullanıcının yazdığı hiçbir değer ezilmez, hiçbir satır otomatik eklenmez ve Paket 43'ün ayrı kayıt onayı olmadan kalıcı föy oluşmaz.
+6. Sözlük yalnız düzenleme açıkken ve API modunda yüklenir. Yükleme hatasında öneri listesi boş kalır; kullanıcı akışı engellenmez ve mock fallback yapılmaz.
+
+Etkisi:
+
+- `labor-dictionary/1.0.0` saf domain normalize/arama katmanı, strict contracts/JSON Schema, salt okunur tenant-kapsamlı endpoint ve İşçilik editöründe öneri datalist'i eklenir. v0.7'nin öğrenme sözlüğü dilimi kapanır.
+- Yeni tablo/migration, dependency, AI çağrısı, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmez.

@@ -47,7 +47,9 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
       </MemoryRouter>,
     )
 
-    await waitFor(() => expect(screen.getByText('34 API 380')).toBeInTheDocument())
+    // Contracts paketi büyüdükçe ilk dinamik import + Zod şema kurulumu 1 sn'lik
+    // varsayılanı aşabiliyor; kapı süreye değil gerçek yükleme sonucuna bakmalı.
+    await waitFor(() => expect(screen.getByText('34 API 380')).toBeInTheDocument(), { timeout: 15_000 })
     expect(screen.getByText('Bu modül henüz gerçek API verisine bağlı değildir; mock kayıt gösterilmez.')).toBeInTheDocument()
     expect(screen.queryByText('Servis görüşmesi notu eklendi')).not.toBeInTheDocument()
     expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-closed-38', expect.anything())

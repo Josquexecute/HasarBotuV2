@@ -492,6 +492,17 @@ export {
   type NormalizedLaborItem,
 } from './labor-sheet.js'
 export {
+  LABOR_DICTIONARY_SCHEMA_VERSION,
+  MAX_LABOR_DICTIONARY_ENTRIES,
+  MAX_LABOR_DICTIONARY_QUERY_LENGTH,
+  laborDictionaryMatchKey,
+  normalizeLaborDictionaryEntry,
+  searchLaborDictionary,
+  sortLaborDictionary,
+  type LaborDictionaryEntry,
+  type LaborDictionaryEntryInput,
+} from './labor-dictionary.js'
+export {
   LABOR_AI_PROMPT_TEMPLATE_VERSION,
   LABOR_AI_OUTPUT_SCHEMA_VERSION,
   LABOR_AI_PRIVACY_POLICY_VERSION,

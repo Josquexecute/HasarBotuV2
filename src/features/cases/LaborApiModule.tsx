@@ -1,16 +1,19 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, History, Plus, RefreshCw, Save, ShieldCheck, Sparkles, Trash2, Wrench } from 'lucide-react'
 import { formatCurrency } from '../../mocks/cases'
 import {
   LaborAiError,
   LaborError,
   createHttpLaborAiAdapter,
+  createHttpLaborDictionaryAdapter,
   useLabor,
   type DataSourceKind,
   type LaborAiDataPort,
   type LaborAiPlanRecord,
   type LaborAiRunRecord,
   type LaborDataPort,
+  type LaborDictionaryDataPort,
+  type LaborDictionaryEntryRecord,
   type LaborItemInputRecord,
   type LaborSheetVersionRecord,
 } from '../../data'
@@ -22,6 +25,7 @@ interface Props {
   readonly onUnauthorized: () => void
   readonly port?: LaborDataPort
   readonly aiPort?: LaborAiDataPort
+  readonly dictionaryPort?: LaborDictionaryDataPort
 }
 
 interface EditableRow {
@@ -85,9 +89,14 @@ function runStatusMessage(run: LaborAiRunRecord): string | null {
   return null
 }
 
-export function LaborApiModule({ item, source, onUnauthorized, port, aiPort }: Props) {
+export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dictionaryPort }: Props) {
   const workspace = useLabor(item.caseId, source, true, port)
   const resolvedAiPort = useMemo(() => aiPort ?? createHttpLaborAiAdapter(), [aiPort])
+  const resolvedDictionaryPort = useMemo(
+    () => dictionaryPort ?? createHttpLaborDictionaryAdapter(),
+    [dictionaryPort],
+  )
+  const [dictionary, setDictionary] = useState<readonly LaborDictionaryEntryRecord[]>([])
   const busyRef = useRef(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -115,6 +124,19 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort }: P
     }
     return { part, labor, grand: part + labor }
   }, [rows])
+
+  // Sözlük yalnız düzenleme açıkken ve API modunda yüklenir; hata sessizce
+  // yutulmaz, öneri listesi boş kalır ve kullanıcı akışı engellenmez.
+  useEffect(() => {
+    if (source !== 'api' || !editing) return
+    let cancelled = false
+    resolvedDictionaryPort.list().then((result) => {
+      if (!cancelled) setDictionary(result.items)
+    }).catch(() => {
+      if (!cancelled) setDictionary([])
+    })
+    return () => { cancelled = true }
+  }, [editing, resolvedDictionaryPort, source])
 
   const run = async (label: string, operation: () => Promise<void>) => {
     if (busyRef.current) return
@@ -214,6 +236,29 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort }: P
 
   const updateRow = (index: number, field: keyof EditableRow, value: string) => {
     setRows((current) => current.map((row, position) => position === index ? { ...row, [field]: value } : row))
+  }
+
+  /**
+   * Sözlükten kalem seçildiğinde işlem ve son tutarlar öneri olarak doldurulur.
+   * Yalnız boş alanlar doldurulur; kullanıcının yazdığı değer ezilmez ve
+   * kaydetme her zaman ayrı açık onay ister.
+   */
+  const applyDictionarySuggestion = (index: number, description: string) => {
+    const match = dictionary.find((entry) => entry.description === description)
+    if (match === undefined) return
+    setRows((current) => current.map((row, position) => {
+      if (position !== index) return row
+      return {
+        description,
+        action: row.action.trim() === '' ? match.action : row.action,
+        part: row.part.trim() === '' && match.lastPartAmountMinor > 0
+          ? String(match.lastPartAmountMinor / 100)
+          : row.part,
+        labor: row.labor.trim() === '' && match.lastLaborAmountMinor > 0
+          ? String(match.lastLaborAmountMinor / 100)
+          : row.labor,
+      }
+    }))
   }
 
   const addRow = () => setRows((current) => [...current, emptyRow()])
@@ -339,14 +384,31 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort }: P
 
         {editing && (
           <div className="labor-editor">
+            {dictionary.length > 0 && (
+              <>
+                <p className="labor-empty">
+                  Önceki onaylı föylerden türetilen {dictionary.length} kalem önerisi yazarken sunulur; seçim ve kayıt kullanıcı kontrolündedir.
+                </p>
+                <datalist id="labor-dictionary-descriptions">
+                  {[...new Set(dictionary.map((entry) => entry.description))].map((description) => (
+                    <option key={description} value={description} />
+                  ))}
+                </datalist>
+                <datalist id="labor-dictionary-actions">
+                  {[...new Set(dictionary.map((entry) => entry.action))].map((action) => (
+                    <option key={action} value={action} />
+                  ))}
+                </datalist>
+              </>
+            )}
             <div className="table-scroll module-table-scroll">
               <table className="data-table module-table labor-editor__table">
                 <thead><tr><th>Kalem</th><th>İşlem</th><th>Parça (₺)</th><th>İşçilik (₺)</th><th aria-label="İşlemler" /></tr></thead>
                 <tbody>
                   {rows.map((row, index) => (
                     <tr key={index}>
-                      <td><input aria-label={`Kalem ${index + 1}`} value={row.description} onChange={(event) => updateRow(index, 'description', event.target.value)} placeholder="Ön tampon" /></td>
-                      <td><input aria-label={`İşlem ${index + 1}`} value={row.action} onChange={(event) => updateRow(index, 'action', event.target.value)} placeholder="Değişim" /></td>
+                      <td><input aria-label={`Kalem ${index + 1}`} list="labor-dictionary-descriptions" value={row.description} onChange={(event) => { updateRow(index, 'description', event.target.value); applyDictionarySuggestion(index, event.target.value) }} placeholder="Ön tampon" /></td>
+                      <td><input aria-label={`İşlem ${index + 1}`} list="labor-dictionary-actions" value={row.action} onChange={(event) => updateRow(index, 'action', event.target.value)} placeholder="Değişim" /></td>
                       <td><input aria-label={`Parça tutarı ${index + 1}`} value={row.part} inputMode="decimal" onChange={(event) => updateRow(index, 'part', event.target.value)} placeholder="0,00" /></td>
                       <td><input aria-label={`İşçilik tutarı ${index + 1}`} value={row.labor} inputMode="decimal" onChange={(event) => updateRow(index, 'labor', event.target.value)} placeholder="0,00" /></td>
                       <td><button className="icon-button" type="button" aria-label={`Satırı sil ${index + 1}`} onClick={() => removeRow(index)} disabled={rows.length <= 1}><Trash2 size={14} /></button></td>

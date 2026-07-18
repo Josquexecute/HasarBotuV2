@@ -161,6 +161,10 @@ import {
   pertAssessmentResponseSchema,
   pertAssessmentWorkspaceResponseSchema,
 } from './v1/pert/dto.js'
+import {
+  laborDictionaryQuerySchema,
+  laborDictionaryResponseSchema,
+} from './v1/labor-dictionary/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -292,6 +296,8 @@ export const JSON_SCHEMA_TARGETS = {
   'pert-assessment-revise-request': pertAssessmentReviseRequestSchema,
   'pert-assessment-response': pertAssessmentResponseSchema,
   'pert-assessment-workspace-response': pertAssessmentWorkspaceResponseSchema,
+  'labor-dictionary-query': laborDictionaryQuerySchema,
+  'labor-dictionary-response': laborDictionaryResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS
