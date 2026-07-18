@@ -1068,3 +1068,21 @@ Kapsam dışı: cache, materialized view, background worker, yeni kalıcı tablo
 - [x] Yalnız Paket 52 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: yeni endpoint/tablo/migration, cache, kalıcı bildirim durumu, ikinci kural motoru, Dosyalar ekranına gerçek sayfalama eklenmesi.
+
+## Paket 53 — Dosyalar sunucu tarafı sayfalama
+
+- [x] Mevcut `GET /api/v1/cases` ucunu kullan; yeni endpoint açma, tablo/migration ekleme.
+- [x] `page`/`pageSize` (üst sınır 100) ve filtreleri sayfalamadan önce sunucuda uygula; sıralamayı `id` ile deterministik yap.
+- [x] Plaka boşluksuz arama ve AND arama davranışını koru; tenant sınırını sonuçlara ve toplam sayıma uygula.
+- [x] Geçersiz sayfa/boyut değerlerini sözleşme seviyesinde reddet.
+- [x] UI'da bütün listeyi çekmeyi bırak; yalnız aktif sayfayı render et.
+- [x] Sayfa değişimi, ileri/geri ve toplam kayıt bilgisini göster.
+- [x] Filtre, arama veya sıralama değişince sayfayı 1'e döndür; geçersiz son sayfada güvenli sayfaya dön.
+- [x] Satır uyarı isteğinde yalnız aktif sayfa kimliklerini gönder; "bilinmiyor" uyarı durumunu ortadan kaldır.
+- [x] Mock prototip davranışını koru; API hatasında eski veya mock kayıt gösterme.
+- [x] Gerçek PostgreSQL tenant/sayım/filtre+sıralama+sayfalama/kayıp-mükerrer/100 sınırı testleri ekle.
+- [x] Chrome smoke'ta aktif sayfa kayıtlarıyla gönderilen uyarı kimliklerinin eşleştiğini doğrula.
+- [x] Tam kalite zinciri ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 53 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: yeni endpoint/tablo/migration, sonsuz kaydırma, sütun özelleştirme, Kapanan Dosyalar ve Dosya Detayı ekranlarının liste okuma biçimi.

@@ -5,8 +5,34 @@ import type { CaseRecord } from '../types/case'
  * MockDataAdapter varsayilan ve guvenli fallback'tir; HttpApiAdapter
  * salt okunur Cases API'sine baglanir. UI davranisi degismez.
  */
+/** Sunucu tarafı sayfalama sorgusu (Paket 53). Alanlar `casesQuerySchema` ile birebirdir. */
+export interface CasePageQuery {
+  readonly status?: 'open' | 'closed'
+  readonly search?: string
+  readonly caseType?: 'traffic' | 'casco'
+  readonly stage?: string
+  readonly responsibleUserId?: string
+  readonly serviceId?: string
+  readonly followUpFrom?: string
+  readonly followUpTo?: string
+  readonly sortBy?: 'updatedAt' | 'followUpDate' | 'officeCaseNumber' | 'plate'
+  readonly sortDirection?: 'asc' | 'desc'
+  readonly page: number
+  readonly pageSize: number
+}
+
+export interface CasePageResult {
+  readonly items: readonly CaseRecord[]
+  readonly page: number
+  readonly pageSize: number
+  readonly totalCount: number
+  readonly totalPages: number
+}
+
 export interface CasesDataPort {
   listCases(status?: 'open' | 'closed'): Promise<readonly CaseRecord[]>
+  /** Yalnız istenen sayfayı okur; istemci tarafında sayfalama yapılmaz. */
+  listCasePage(query: CasePageQuery): Promise<CasePageResult>
   getCase(caseId: string): Promise<CaseRecord>
 }
 

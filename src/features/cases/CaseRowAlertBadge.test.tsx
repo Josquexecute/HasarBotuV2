@@ -5,19 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DATA_SOURCE_STORAGE_KEY,
   OperationalAlertError,
-  useCases,
-  type CasesDataStatus,
+  type CaseReferenceDataPort,
+  type CasesDataPort,
   type OperationalAlertCaseSummaryRecord,
   type OperationalAlertDataPort,
 } from '../../data'
+import type { CaseRecord } from '../../types/case'
 import { CasesPage } from './CasesPage'
-
-vi.mock('../../data', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../data')>()
-  return { ...actual, useCases: vi.fn() }
-})
-
-const mockedUseCases = vi.mocked(useCases)
 
 const CASE_A = '11111111-1111-4111-8111-111111111111'
 const CASE_B = '22222222-2222-4222-8222-222222222222'
@@ -82,11 +76,41 @@ function stubPort(summaries: readonly OperationalAlertCaseSummaryRecord[]) {
   return { port, requestedCaseIds }
 }
 
-function renderPage(port?: OperationalAlertDataPort) {
+/** Sunucu tarafı sayfalama stub'ı: arama filtresi sunucuda uygulanmış gibi davranır. */
+function stubCasesPort(records: readonly CaseRecord[] = CASES as readonly CaseRecord[]): CasesDataPort {
+  return {
+    listCases: async () => { throw new Error('listCases cagrilmamali') },
+    getCase: async () => { throw new Error('getCase cagrilmamali') },
+    listCasePage: async (query) => {
+      const term = (query.search ?? '').trim().toLocaleLowerCase('tr')
+      const filtered = term === ''
+        ? records
+        : records.filter((item) => `${item.plate} ${item.officeNumber} ${item.company}`
+          .toLocaleLowerCase('tr').includes(term))
+      const start = (query.page - 1) * query.pageSize
+      return {
+        items: filtered.slice(start, start + query.pageSize),
+        page: query.page,
+        pageSize: query.pageSize,
+        totalCount: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / query.pageSize)),
+      }
+    },
+  }
+}
+
+const referencePort = {
+  getCaseReferences: async () => ({ users: [], experts: [], services: [], insurers: [] }),
+} as unknown as CaseReferenceDataPort
+
+function renderPage(port?: OperationalAlertDataPort, casesPort: CasesDataPort = stubCasesPort()) {
   return render(
     <MemoryRouter initialEntries={['/dosyalar']}>
       <Routes>
-        <Route path="/dosyalar" element={<CasesPage alertPort={port} />} />
+        <Route
+          path="/dosyalar"
+          element={<CasesPage alertPort={port} casesPort={casesPort} referencePort={referencePort} />}
+        />
         <Route path="/dosyalar/:caseId" element={<div>Gerçek dosya detayı hedefi</div>} />
       </Routes>
     </MemoryRouter>,
@@ -95,12 +119,6 @@ function renderPage(port?: OperationalAlertDataPort) {
 
 beforeEach(() => {
   window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
-  mockedUseCases.mockReturnValue({
-    cases: CASES,
-    source: 'api',
-    status: 'ok' as CasesDataStatus,
-    reload: vi.fn(),
-  } as ReturnType<typeof useCases>)
 })
 
 afterEach(() => {
@@ -184,17 +202,11 @@ describe('Dosya satırı uyarı göstergesi', () => {
 
   it('mock modda gerçek uyarı çağrısı yapılmaz ve sütun gösterilmez', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'mock')
-    mockedUseCases.mockReturnValue({
-      cases: CASES,
-      source: 'mock',
-      status: 'ok' as CasesDataStatus,
-      reload: vi.fn(),
-    } as ReturnType<typeof useCases>)
     const { port, requestedCaseIds } = stubPort([summary(CASE_A, { overdue_task: 1 })])
     renderPage(port)
 
-    // Plaka hem satırda hem hızlı detayda görünür; varlığı yeterlidir.
-    await waitFor(() => expect(screen.getAllByText('34 PT 1').length).toBeGreaterThan(0))
+    // Mock modda prototip listesi (mockCases) render edilir.
+    await waitFor(() => expect(document.querySelectorAll('tbody tr').length).toBeGreaterThan(0))
     expect(requestedCaseIds).toHaveLength(0)
     expect(screen.queryByRole('columnheader', { name: 'Uyarı' })).not.toBeInTheDocument()
   })

@@ -24,11 +24,16 @@ export interface UseCasesResult {
  *   `unavailable`, gercek bos liste `ok`+bos. Sahte veri gercek API hatasini
  *   HICBIR ZAMAN maskelemez; mock'a sessiz dusus yoktur.
  */
-export function useCases(): UseCasesResult {
+export function useCases(options: { readonly enabled?: boolean } = {}): UseCasesResult {
+  // `enabled: false` sunucu tarafı sayfalama kullanan ekranlar içindir (Paket 53):
+  // bütün listeyi çekmemek için api modunda okuma yapılmaz.
+  const enabled = options.enabled ?? true
   const { reportUnauthorized } = useSession()
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
   const [cases, setCases] = useState<readonly CaseRecord[]>(source === 'mock' ? mockCases : [])
-  const [status, setStatus] = useState<CasesDataStatus>(source === 'mock' ? 'ok' : 'loading')
+  const [status, setStatus] = useState<CasesDataStatus>(
+    source === 'mock' || !enabled ? 'ok' : 'loading',
+  )
   const [reloadToken, setReloadToken] = useState(0)
 
   const reload = useCallback(() => {
@@ -38,7 +43,7 @@ export function useCases(): UseCasesResult {
   }, [source])
 
   useEffect(() => {
-    if (source !== 'api') return
+    if (source !== 'api' || !enabled) return
     let cancelled = false
     createHttpCasesAdapter()
       .listCases()
@@ -59,7 +64,7 @@ export function useCases(): UseCasesResult {
     return () => {
       cancelled = true
     }
-  }, [source, reportUnauthorized, reloadToken])
+  }, [enabled, source, reportUnauthorized, reloadToken])
 
   return { cases, source, status, reload }
 }

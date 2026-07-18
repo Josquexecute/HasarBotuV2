@@ -5,11 +5,25 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 52 — Dosya satırı uyarı göstergesi
+- Aşama: Paket 53 — Dosyalar sunucu tarafı sayfalama
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-52-case-row-alerts` dalı, remote yok
+- Git: Yerel repository, `foundation/package-53-server-side-paging` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 53 doğrulama sonucu
+
+- Yeni endpoint, tablo veya migration eklenmedi. Mevcut `GET /api/v1/cases` sözleşmesi `page`, `pageSize` (üst sınır 100), arama, tür, durum, aşama, sorumlu, servis, takip aralığı ve sıralama alanlarını zaten taşıyordu; store da filtreleri sayfalamadan önce uygulayıp `id` ile deterministik sıralıyordu. Bu pakette API tarafında davranış değişmedi, kanıt testleri eklendi.
+- `pageInfo.totalItems` bilinçli olarak `totalCount` diye yeniden adlandırılmadı: alan aynı bilgiyi taşıyor ve kararlı sözleşme ile golden fixture'ları yalnız adlandırma için değiştirmek işlevsel kazanç sağlamıyordu. İstemci portu değeri `totalCount` adıyla dışa veriyor.
+- UI artık API modunda bütün listeyi çekmiyor: `useCases` yalnız mock prototipi besliyor (`enabled: false`), ekran `useCasePage` ile yalnız aktif sayfayı okuyor. Sayfa boyutu 50 ve uyarı `caseIds` sınırının (100) altında.
+- Satır uyarı isteği yalnız aktif sayfa kimliklerini gönderiyor; **Paket 52'de kalan "bilinmiyor" satır sınırı kapandı.** Smoke bunu doğruladı: gönderilen kimlik sayısı render edilen satır sayısına eşit ve `.row-alert--unknown` eleman sayısı 0.
+- Filtre/arama/sıralama değişince sayfa 1'e dönüyor. Son sayfa küçüldüğünde istemci geçerli son sayfaya çekiliyor; kelepçeleme **istenen** sayfa ile yapılıyor — ilk denemede yüklenmiş eski sayfa ile karşılaştırma uçuştaki sayfa değişimini geri alıyordu, UI testleri bunu yakaladı ve düzeltildi.
+- UI durum/takip filtreleri saf `casesQuery.ts` modülünde sunucu alanlarına eşleniyor ("Gecikmiş" → açık + geçmiş takip). API modunda sorumlu/servis filtreleri kimlik bazlı ve gerçek referans uçlarından besleniyor; sunucunun sıralayamadığı sütunlar tıklanabilir sunulmuyor.
+- Gerçek PostgreSQL testi 11/11: toplam sayım, iki yönlü tenant izolasyonu (sonuç + sayım), 3 sayfada kayıp/mükerrer kayıt olmaması, eşit değerlerde deterministik sıralama, filtrenin sayfalamadan önce uygulanması, kapalı dosyanın açık listeye girmemesi, boşluksuz plaka ve AND araması, takip aralığı, `pageSize` 100 sınırı ve geçersiz değerlerin 400 dönmesi, aralık dışı sayfa, oturumsuz 401.
+- UI testleri: `casesQuery` 14/14, sayfalama davranışı 11/11, satır uyarı göstergesi 7/7.
+- Chrome/CDP smoke (`scripts/package53-browser-smoke.mjs`) geçti: 137 kayıttan sayfada yalnız 50 satır render edildi; `pageSize` sözleşme sınırında; toplam sayım sunucudan; uyarı kimlikleri satırlarla birebir eşleşti (sayfa 1, sayfa 2, geri dönüş ve arama sonrası); sayfalar arası mükerrer kayıt yok; arama sunucuda uygulandı; mock plakası DOM'a girmedi; API kapatılınca satır kalmadı. 1920×1080 açık/koyu ve 1366×768 koyu görünümde yatay taşma yok; console warning/error/exception 0.
+- Ana ağaçta typecheck, lint, **1468 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
 
 ## Paket 52 doğrulama sonucu
 

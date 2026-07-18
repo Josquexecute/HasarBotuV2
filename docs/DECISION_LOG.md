@@ -984,3 +984,23 @@ Etkisi:
 - Domain'e `dedupeAndSortOperationalAlerts`, `buildOperationalAlerts`, `deriveOperationalAlerts` ve `summarizeOperationalAlertsByCase` eklenir; `collectOperationalAlerts` davranışı (200 kırpma) birebir korunur.
 - Sözleşmeye `operationalAlertsQuerySchema` ve isteğe bağlı `caseSummaries` eklenir; filtresiz çağrının yanıtı değişmez.
 - UI'da `CaseRowAlertBadge` ve Dosyalar tablosunda "Uyarı" sütunu (yalnız API modunda) eklenir.
+
+## 2026-07-18 — HB-2026-059: Dosyalar ekranında sunucu tarafı sayfalama
+
+Karar:
+
+1. Yeni endpoint açılmaz. Mevcut `GET /api/v1/cases` ucu kullanılır; sözleşmesi zaten `page`, `pageSize` (üst sınır 100), arama, tür, durum, aşama, sorumlu, servis ve takip aralığı filtreleri ile sıralama alanlarını taşımaktadır. Yanıt `items` + `pageInfo{page,pageSize,totalItems,totalPages}` biçimindedir.
+2. **`pageInfo.totalItems` alanı `totalCount` olarak yeniden adlandırılmadı.** Alan zaten istenen bilgiyi taşıyor; kararlı sözleşmeyi ve golden fixture'ları yalnız adlandırma için değiştirmek işlevsel kazanç sağlamazdı. İstemci portu bu değeri `totalCount` adıyla dışa verir.
+3. Filtreleme, sıralama ve sayfalama **sunucuda ve sayfalamadan önce** uygulanır. Sıralama eşit değerlerde `id` ile deterministiktir; plaka araması boşluksuz (`plate_normalized`) eşleşir ve çok terimli arama AND davranışını korur. Tenant sınırı hem sonuçlara hem toplam sayıma aynı `organization_id` koşuluyla uygulanır. Geçersiz `page`/`pageSize` sözleşme seviyesinde 400 döner.
+4. UI, API modunda **bütün listeyi çekmez**. `useCases` yalnız mock prototipi besler (`enabled: false` ile api modunda okuma yapmaz); ekran `useCasePage` ile yalnız aktif sayfayı okur.
+5. Sayfa boyutu `CASES_PAGE_SIZE` = 50'dir ve operasyonel uyarı `caseIds` sınırının (100) altındadır. Satır uyarı isteği yalnız aktif sayfa kimliklerini gönderir; böylece normal kullanımda "bilinmiyor" uyarı durumu kalmaz (Paket 52'deki bilinen sınır kapanır).
+6. Filtre, arama veya sıralama değişince sayfa 1'e döner. Son sayfadaki kayıtlar silinir veya filtre dışı kalırsa istemci geçerli son sayfaya çekilir; kelepçeleme **istenen** sayfa ile yapılır, yüklenmiş eski sayfa ile değil (aksi halde uçuştaki sayfa değişimi geri alınırdı).
+7. UI durum filtresi sunucu alanlarına eşlenir: "Kapalı" → `status=closed`, "Gecikmiş" → `status=open` + `followUpTo=dün`. Takip filtresi tarih aralığına çevrilir. Bu eşleme saf `casesQuery.ts` modülündedir; bileşen iş kuralı taşımaz.
+8. API modunda sorumlu ve servis filtreleri **kimlik bazlıdır** ve seçenekler gerçek referans uçlarından gelir; sayfalanmış listeden türetilemezler. Sunucunun sıralayamadığı sütunlar (şirket, aşama, eksik evrak, sorumlu) API modunda tıklanabilir sunulmaz — tıklama sessizce yutulmaz.
+9. Mock moddaki prototip davranışı (istemci filtresi ve sahte sayfalama) korunur. API hatasında eski sayfa veya mock kayıt gösterilmez.
+10. Yeni tablo veya migration yoktur.
+
+Etkisi:
+
+- `CasesDataPort.listCasePage`, `useCasePage`, `casesQuery.ts` ve `CaseReferenceFilters` eklenir; `useCases` isteğe bağlı `enabled` alır.
+- Dosyalar ekranı artık ofis hacmiyle ölçeklenir ve satır uyarı göstergesi tam kapsamlıdır.

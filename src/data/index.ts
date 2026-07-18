@@ -5,6 +5,8 @@ export {
   type AlternativeDocumentGroupRecord,
   type CaseDocumentsDataPort,
   type CaseDocumentWorkspaceRecord,
+  type CasePageQuery,
+  type CasePageResult,
   type CasesDataPort,
   type CaseReferenceDataPort,
   type CaseReferenceWorkspace,
@@ -70,6 +72,7 @@ export {
   type HttpCasesErrorKind,
 } from './httpAdapter'
 export { useCases, type CasesDataStatus, type UseCasesResult } from './useCases'
+export { useCasePage, type CasePageStatus, type UseCasePageResult } from './useCasePage'
 export { useCase, type CaseDataStatus, type UseCaseResult } from './useCase'
 export {
   useClosedCases,

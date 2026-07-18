@@ -1,6 +1,6 @@
 import type { CaseListItem, CaseStageDto } from '@hasarbotu/contracts'
 import type { CaseRecord, CaseStage, CaseStatus, CaseType } from '../types/case'
-import type { CasesDataPort } from './ports'
+import type { CasePageQuery, CasePageResult, CasesDataPort } from './ports'
 
 /**
  * Cases HTTP siniri:
@@ -159,6 +159,44 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
         if (page >= parsed.data.pageInfo.totalPages) return result
         page += 1
         pagePayload = await requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100`)
+      }
+    },
+
+    /**
+     * Tek sayfa okur (Paket 53). Filtre, sıralama ve sayfalama sunucuda uygulanır;
+     * istemci hiçbir zaman bütün listeyi çekip kendisi sayfalamaz.
+     */
+    async listCasePage(query: CasePageQuery): Promise<CasePageResult> {
+      const search = new URLSearchParams()
+      search.set('page', String(query.page))
+      search.set('pageSize', String(query.pageSize))
+      if (query.status !== undefined) search.set('status', query.status)
+      if (query.search !== undefined && query.search.trim() !== '') {
+        search.set('search', query.search.trim())
+      }
+      if (query.caseType !== undefined) search.set('caseType', query.caseType)
+      if (query.stage !== undefined) search.set('stage', query.stage)
+      if (query.responsibleUserId !== undefined) search.set('responsibleUserId', query.responsibleUserId)
+      if (query.serviceId !== undefined) search.set('serviceId', query.serviceId)
+      if (query.followUpFrom !== undefined) search.set('followUpFrom', query.followUpFrom)
+      if (query.followUpTo !== undefined) search.set('followUpTo', query.followUpTo)
+      if (query.sortBy !== undefined) search.set('sortBy', query.sortBy)
+      if (query.sortDirection !== undefined) search.set('sortDirection', query.sortDirection)
+
+      const [{ caseListResponseSchema }, payload] = await Promise.all([
+        import('@hasarbotu/contracts'),
+        requestJson(`/api/v1/cases?${search.toString()}`),
+      ])
+      const parsed = caseListResponseSchema.safeParse(payload)
+      if (!parsed.success || parsed.data.pageInfo.totalPages > MAX_CASE_LIST_PAGES) {
+        throw new HttpCasesError('unavailable', 'cases API pagination response is invalid')
+      }
+      return {
+        items: parsed.data.items.map((item) => mapCaseDtoToRecord(item)),
+        page: parsed.data.pageInfo.page,
+        pageSize: parsed.data.pageInfo.pageSize,
+        totalCount: parsed.data.pageInfo.totalItems,
+        totalPages: parsed.data.pageInfo.totalPages,
       }
     },
 

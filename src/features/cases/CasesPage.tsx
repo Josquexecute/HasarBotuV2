@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDown,
@@ -24,11 +24,23 @@ import { EmptyState } from '../../components/StateViews'
 import { formatCurrency } from '../../mocks/cases'
 import {
   OPERATIONAL_ALERT_CASE_FILTER_LIMIT,
+  getConfiguredDataSource,
+  useCasePage,
   useCases,
   useOperationalAlerts,
+  type CaseReferenceDataPort,
+  type CasesDataPort,
   type OperationalAlertDataPort,
 } from '../../data'
+import { CaseReferenceFilters } from './CaseReferenceFilters'
 import { CaseRowAlertBadge } from './CaseRowAlertBadge'
+import {
+  buildCasesPageQuery,
+  clampPage,
+  filterIdentity,
+  isServerSortKey,
+  type CasesFilterState,
+} from './casesQuery'
 import { useSession } from '../../app/sessionContext'
 import type { CaseRecord, CaseType, SortKey } from '../../types/case'
 import { matchesSearchQuery } from '../../utils/search'
@@ -180,9 +192,14 @@ function MockNewNoticeModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-/** `alertPort` yalnız testler için enjekte edilir; uygulama gerçek HTTP adaptörünü kullanır. */
-export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort } = {}) {
-  const { cases, source, status: dataStatus } = useCases()
+/** `alertPort` ve `casesPort` yalnız testler için enjekte edilir. */
+export function CasesPage({ alertPort, casesPort, referencePort }: {
+  alertPort?: OperationalAlertDataPort
+  casesPort?: CasesDataPort
+  referencePort?: CaseReferenceDataPort
+} = {}) {
+  // API modunda bütün liste ÇEKİLMEZ; yalnız mock prototipi bu hook'u kullanır.
+  const { cases, source } = useCases({ enabled: getConfiguredDataSource() !== 'api' })
   const session = useSession()
   const location = useLocation()
   const navigate = useNavigate()
@@ -208,7 +225,49 @@ export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort 
     setQuery(queryParam)
   }, [location.key, queryParam])
 
-  const filteredCases = useMemo(() => {
+  // API modunda filtre/sıralama/sayfalama SUNUCUDA uygulanır; istemci yalnız
+  // aktif sayfayı okur. Mock modda prototip davranışı (istemci filtresi ve
+  // sahte sayfalama) olduğu gibi korunur.
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const filterState: CasesFilterState = useMemo(() => ({
+    query,
+    typeFilter,
+    stageFilter: stageFilter as CasesFilterState['stageFilter'],
+    statusFilter: statusFilter as CasesFilterState['statusFilter'],
+    responsibleUserId: assigneeFilter,
+    serviceId: serviceFilter,
+    followUpFilter: followUpFilter as CasesFilterState['followUpFilter'],
+    // Sunucuda sıralanamayan sütunlar API modunda tıklanabilir değildir;
+    // yine de güvenli varsayılana düşülür.
+    sortKey: isServerSortKey(sortKey) ? sortKey : 'lastAction',
+    direction,
+    page: activePage,
+  }), [activePage, assigneeFilter, direction, followUpFilter, query, serviceFilter, sortKey, stageFilter, statusFilter, typeFilter])
+  const serverQuery = useMemo(
+    () => buildCasesPageQuery(filterState, today),
+    [filterState, today],
+  )
+  const { page: casePage, status: pageStatus } = useCasePage(serverQuery, casesPort)
+
+  // Filtre, arama veya sıralama değişince sayfa 1'e döner.
+  const filterKey = filterIdentity(filterState)
+  const previousFilterKey = useRef(filterKey)
+  useEffect(() => {
+    if (previousFilterKey.current === filterKey) return
+    previousFilterKey.current = filterKey
+    setActivePage(1)
+  }, [filterKey])
+
+  // Son sayfadaki kayıtlar silinir veya filtre dışı kalırsa geçerli son sayfaya dön.
+  // Karşılaştırma İSTENEN sayfa ile yapılır: yüklenmiş (eski) sayfa ile
+  // karşılaştırmak, uçuştaki sayfa değişimini geri alırdı.
+  useEffect(() => {
+    if (source !== 'api' || casePage === null || pageStatus !== 'ok') return
+    const safePage = clampPage(activePage, casePage.totalPages)
+    if (safePage !== activePage) setActivePage(safePage)
+  }, [activePage, casePage, pageStatus, source])
+
+  const mockFilteredCases = useMemo(() => {
     const result = cases.filter((item) => {
       const matchesQuery = matchesSearchQuery(query, [
         item.plate,
@@ -245,26 +304,31 @@ export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort 
     })
   }, [assigneeFilter, cases, direction, followUpFilter, query, serviceFilter, sortKey, stageFilter, statusFilter, typeFilter])
 
-  const selectedCase = filteredCases.find((item) => item.caseId === selectedId) ?? filteredCases[0]
+  /** Ekranda render edilen satırlar: API modunda yalnız aktif sayfa. */
+  const visibleCases = useMemo(
+    () => (source === 'api' ? (casePage?.items ?? []) : mockFilteredCases),
+    [casePage, mockFilteredCases, source],
+  )
+  const totalCount = source === 'api' ? (casePage?.totalCount ?? 0) : mockFilteredCases.length
+  const totalPages = source === 'api' ? (casePage?.totalPages ?? 0) : 3
+
+  const selectedCase = visibleCases.find((item) => item.caseId === selectedId) ?? visibleCases[0]
   const hasFilters = query !== '' || typeFilter !== 'Tümü' || stageFilter !== 'Tümü' || statusFilter !== 'Tümü' || assigneeFilter !== 'Tümü' || serviceFilter !== 'Tümü' || followUpFilter !== 'Tümü'
 
-  // Yalnız görünür satırlar için uyarı sorulur. Filtre, sıralama veya sayfalama
-  // değişince liste değiştiği için sorgu anahtarı da değişir ve yeniden yüklenir.
-  // Mock modda hook API çağrısı yapmaz.
+  // Uyarı isteğinde yalnız AKTİF SAYFA kimlikleri gönderilir. Sayfa boyutu
+  // sözleşmedeki `caseIds` sınırının altında olduğu için normal kullanımda
+  // "bilinmiyor" uyarı durumu kalmaz. Mock modda hook API çağrısı yapmaz.
   const alertCaseIds = useMemo(
     () => (source === 'api'
-      ? filteredCases.slice(0, OPERATIONAL_ALERT_CASE_FILTER_LIMIT).map((item) => item.caseId)
+      ? visibleCases.slice(0, OPERATIONAL_ALERT_CASE_FILTER_LIMIT).map((item) => item.caseId)
       : undefined),
-    [filteredCases, source],
+    [source, visibleCases],
   )
   const { alerts: rowAlerts, status: alertStatus } = useOperationalAlerts(alertPort, alertCaseIds)
   const alertSummaryByCase = useMemo(
     () => new Map((rowAlerts?.caseSummaries ?? []).map((summary) => [summary.caseId, summary])),
     [rowAlerts],
   )
-  /** Sözleşme sınırı aşıldığında kalan satırlar "bilinmiyor" gösterilir. */
-  const alertCoverageLimited = source === 'api'
-    && filteredCases.length > OPERATIONAL_ALERT_CASE_FILTER_LIMIT
 
   const resetFilters = () => {
     setQuery('')
@@ -305,10 +369,10 @@ export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort 
     <main className="page cases-page">
       <section className="page-heading page-heading--compact">
         <div>
-          <h1>Tüm Dosyalar <span className="heading-count">{filteredCases.length}</span></h1>
-          {source === 'api' && dataStatus === 'unauthorized' && <p role="alert" className="page-subtitle">Oturum gerekli: gerçek veriye erişmek için API oturumu açın. Sahte veri gösterilmiyor.</p>}
-          {source === 'api' && dataStatus === 'unavailable' && <p role="alert" className="page-subtitle">Servis şu anda kullanılamıyor. Sahte veri gösterilmiyor; bağlantıyı kontrol edin.</p>}
-          {source === 'api' && dataStatus === 'loading' && <p role="status" className="page-subtitle">Gerçek veriler yükleniyor…</p>}
+          <h1>Tüm Dosyalar <span className="heading-count">{totalCount}</span></h1>
+          {source === 'api' && pageStatus === 'unauthorized' && <p role="alert" className="page-subtitle">Oturum gerekli: gerçek veriye erişmek için API oturumu açın. Sahte veri gösterilmiyor.</p>}
+          {source === 'api' && pageStatus === 'unavailable' && <p role="alert" className="page-subtitle">Servis şu anda kullanılamıyor. Sahte veri gösterilmiyor; bağlantıyı kontrol edin.</p>}
+          {source === 'api' && pageStatus === 'loading' && <p role="status" className="page-subtitle">Gerçek veriler yükleniyor…</p>}
           <p>Açık ekspertiz dosyaları · Tek tık hızlı bakış, çift tık tam dosya</p>
         </div>
         <div className="heading-actions">
@@ -334,9 +398,23 @@ export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort 
             {query && <button type="button" onClick={() => setQuery('')} aria-label="Aramayı temizle"><X size={14} /></button>}
           </label>
           <label className="select-field"><span className="select-field__label">Tür</span><select aria-label="Dosya türü" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'Tümü' | CaseType)}><option>Tümü</option><option>Trafik</option><option>Kasko</option></select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Durum</span><select aria-label="Dosya durumu" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.status))).map((status) => <option key={status}>{status}</option>)}</select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Sorumlu</span><select aria-label="Dosya sorumlusu" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.assignee))).map((assignee) => <option key={assignee}>{assignee}</option>)}</select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Servis</span><select aria-label="Dosya servisi" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.service))).map((service) => <option key={service}>{service}</option>)}</select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Durum</span><select aria-label="Dosya durumu" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>{source === 'api'
+            ? <><option>Tümü</option><option>Açık</option><option>Gecikmiş</option><option>Kapalı</option></>
+            : <><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.status))).map((status) => <option key={status}>{status}</option>)}</>}</select><ChevronDown size={14} /></label>
+          {source === 'api' ? (
+            <CaseReferenceFilters
+              responsibleUserId={assigneeFilter}
+              serviceId={serviceFilter}
+              onResponsibleChange={setAssigneeFilter}
+              onServiceChange={setServiceFilter}
+              port={referencePort}
+            />
+          ) : (
+            <>
+              <label className="select-field"><span className="select-field__label">Sorumlu</span><select aria-label="Dosya sorumlusu" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.assignee))).map((assignee) => <option key={assignee}>{assignee}</option>)}</select><ChevronDown size={14} /></label>
+              <label className="select-field"><span className="select-field__label">Servis</span><select aria-label="Dosya servisi" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.service))).map((service) => <option key={service}>{service}</option>)}</select><ChevronDown size={14} /></label>
+            </>
+          )}
           <label className="select-field"><span className="select-field__label">Takip</span><select aria-label="Takip tarihi durumu" value={followUpFilter} onChange={(event) => setFollowUpFilter(event.target.value)}><option value="Tümü">Tümü</option><option value="late">Geciken</option><option value="today">Bugün</option><option value="normal">Planlı</option></select><ChevronDown size={14} /></label>
           <label className="select-field"><span className="select-field__label">Sırala</span><select aria-label="Dosya sıralaması" value={sortKey} onChange={(event) => { setSortKey(event.target.value as SortKey); setDirection(event.target.value === 'lastAction' ? 'desc' : 'asc') }}><option value="lastAction">Son güncelleme</option><option value="followUp">Takip tarihi</option><option value="officeNumber">Dosya numarası</option><option value="plate">Plaka A–Z</option></select><ChevronDown size={14} /></label>
           {hasFilters && <button className="filterbar__clear" type="button" onClick={resetFilters}>Temizle</button>}
@@ -346,7 +424,7 @@ export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort 
       <div className={`cases-workarea${detailOpen ? ' cases-workarea--detail' : ''}`}>
         <section className="case-list-panel">
           <div className="table-scroll">
-            {filteredCases.length === 0 ? <EmptyState onReset={resetFilters} /> : (
+            {visibleCases.length === 0 ? <EmptyState onReset={resetFilters} /> : (
               <table className="case-table">
                 <thead>
                   <tr>
@@ -354,19 +432,20 @@ export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort 
                     <th><button type="button" onClick={() => handleSort('plate')}>Plaka / Dosya No <SortIcon column="plate" sortKey={sortKey} direction={direction} /></button></th>
                     <th>İhbar Föyü No</th>
                     <th>Hasar Dosya No</th>
-                    <th><button type="button" onClick={() => handleSort('company')}>Şirket / Tür <SortIcon column="company" sortKey={sortKey} direction={direction} /></button></th>
+                    {/* Sunucuda sıralanamayan sütunlar API modunda tıklanabilir sunulmaz. */}
+                    <th>{source === 'api' ? 'Şirket / Tür' : <button type="button" onClick={() => handleSort('company')}>Şirket / Tür <SortIcon column="company" sortKey={sortKey} direction={direction} /></button>}</th>
                     <th>Durum</th>
-                    <th><button type="button" onClick={() => handleSort('stage')}>Aşama <SortIcon column="stage" sortKey={sortKey} direction={direction} /></button></th>
-                    <th><button type="button" onClick={() => handleSort('missingDocuments')}>Eksik <SortIcon column="missingDocuments" sortKey={sortKey} direction={direction} /></button></th>
+                    <th>{source === 'api' ? 'Aşama' : <button type="button" onClick={() => handleSort('stage')}>Aşama <SortIcon column="stage" sortKey={sortKey} direction={direction} /></button>}</th>
+                    <th>{source === 'api' ? 'Eksik' : <button type="button" onClick={() => handleSort('missingDocuments')}>Eksik <SortIcon column="missingDocuments" sortKey={sortKey} direction={direction} /></button>}</th>
                     {source === 'api' && <th>Uyarı</th>}
-                    <th><button type="button" onClick={() => handleSort('assignee')}>Sorumlu <SortIcon column="assignee" sortKey={sortKey} direction={direction} /></button></th>
+                    <th>{source === 'api' ? 'Sorumlu' : <button type="button" onClick={() => handleSort('assignee')}>Sorumlu <SortIcon column="assignee" sortKey={sortKey} direction={direction} /></button>}</th>
                     <th>Servis</th>
                     <th><button type="button" onClick={() => handleSort('followUp')}>Takip <SortIcon column="followUp" sortKey={sortKey} direction={direction} /></button></th>
                     <th><button type="button" onClick={() => handleSort('lastAction')}>Son İşlem <SortIcon column="lastAction" sortKey={sortKey} direction={direction} /></button></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCases.map((item) => (
+                  {visibleCases.map((item) => (
                     <tr
                       key={item.caseId}
                       className={selectedCase?.caseId === item.caseId && detailOpen ? 'is-selected' : ''}
@@ -409,7 +488,7 @@ export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort 
             )}
           </div>
           <footer className="table-footer">
-            <span>{filteredCases.length} / {source === 'api' ? cases.length : '1.284'} dosya gösteriliyor</span>
+            <span>{visibleCases.length} / {source === 'api' ? totalCount : '1.284'} dosya gösteriliyor</span>
             <span className="table-footer__hint"><ListFilter size={13} />Sıralama: {sortKey} · {direction === 'asc' ? 'artan' : 'azalan'}</span>
             {source === 'api' && alertStatus === 'loading' && (
               <span className="table-footer__hint">Uyarı göstergesi yükleniyor…</span>
@@ -419,13 +498,24 @@ export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort 
                 <CircleAlert size={13} />Uyarı göstergesi yüklenemedi; satırlar uyarısız sayılmıyor.
               </span>
             )}
-            {source === 'api' && alertStatus === 'ok' && alertCoverageLimited && (
-              <span className="table-footer__hint">
-                Uyarı göstergesi ilk {OPERATIONAL_ALERT_CASE_FILTER_LIMIT} satır için yüklendi
-              </span>
-            )}
             {source === 'api' ? (
-              <span className="table-footer__hint">Sunucudaki tüm açık dosya sayfaları yüklendi</span>
+              <div className="pagination">
+                <span className="table-footer__hint">
+                  Sayfa {casePage?.page ?? activePage} / {Math.max(1, totalPages)}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Önceki sayfa"
+                  disabled={activePage <= 1 || pageStatus === 'loading'}
+                  onClick={() => setActivePage((page) => Math.max(1, page - 1))}
+                >‹</button>
+                <button
+                  type="button"
+                  aria-label="Sonraki sayfa"
+                  disabled={activePage >= totalPages || pageStatus === 'loading'}
+                  onClick={() => setActivePage((page) => Math.min(Math.max(1, totalPages), page + 1))}
+                >›</button>
+              </div>
             ) : <div className="pagination">
               <button type="button" disabled={activePage === 1} onClick={() => setActivePage((page) => Math.max(1, page - 1))}>‹</button>
               {[1, 2, 3].map((page) => <button className={activePage === page ? 'is-active' : ''} type="button" key={page} onClick={() => setActivePage(page)}>{page}</button>)}
