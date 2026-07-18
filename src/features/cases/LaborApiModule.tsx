@@ -23,6 +23,11 @@ interface Props {
   readonly item: CaseRecord
   readonly source: DataSourceKind
   readonly onUnauthorized: () => void
+  /**
+   * Föy kaydedildiğinde tetiklenir. Kaynak föy değiştiği için AI dağıtım
+   * önerisi stale sayılır; tüketici modülü yeniden yükler.
+   */
+  readonly onSheetChanged?: () => void
   readonly port?: LaborDataPort
   readonly aiPort?: LaborAiDataPort
   readonly dictionaryPort?: LaborDictionaryDataPort
@@ -33,6 +38,9 @@ interface EditableRow {
   action: string
   part: string
   labor: string
+  /** Paket 56 kanıt alanları; boş bırakılabilir. */
+  partCode: string
+  damageRegion: string
 }
 
 function formatMinor(minor: number): string {
@@ -59,7 +67,7 @@ function loadMessage(status: string): string | null {
 }
 
 function emptyRow(): EditableRow {
-  return { description: '', action: '', part: '', labor: '' }
+  return { description: '', action: '', part: '', labor: '', partCode: '', damageRegion: '' }
 }
 
 function rowsFromVersion(version: LaborSheetVersionRecord): EditableRow[] {
@@ -68,6 +76,9 @@ function rowsFromVersion(version: LaborSheetVersionRecord): EditableRow[] {
     action: line.action,
     part: line.partAmountMinor === 0 ? '' : String(line.partAmountMinor / 100),
     labor: line.laborAmountMinor === 0 ? '' : String(line.laborAmountMinor / 100),
+    // Paket 56 kanıt alanları; eski sürümlerde boş gelir.
+    partCode: line.partCode ?? '',
+    damageRegion: line.damageRegion ?? '',
   }))
 }
 
@@ -89,7 +100,7 @@ function runStatusMessage(run: LaborAiRunRecord): string | null {
   return null
 }
 
-export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dictionaryPort }: Props) {
+export function LaborApiModule({ item, source, onUnauthorized, onSheetChanged, port, aiPort, dictionaryPort }: Props) {
   const workspace = useLabor(item.caseId, source, true, port)
   const resolvedAiPort = useMemo(() => aiPort ?? createHttpLaborAiAdapter(), [aiPort])
   const resolvedDictionaryPort = useMemo(
@@ -222,12 +233,18 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
   }
 
   const applyAiSuggestion = () => {
-    if (aiRun?.suggestion == null) return
-    setRows(aiRun.suggestion.items.map((line) => ({
+    if (aiRun === null) return
+    const suggestion = aiRun.suggestion
+    if (suggestion == null) return
+    // AI kanıt alanlarını üretmez; mevcut satırdaki parça kodu ve hasar bölgesi
+    // kullanıcı girdisidir ve öneri uygulanırken korunur.
+    setRows((current) => suggestion.items.map((line, index) => ({
       description: line.description,
       action: line.action,
       part: line.partAmountMinor === 0 ? '' : String(line.partAmountMinor / 100),
       labor: line.laborAmountMinor === 0 ? '' : String(line.laborAmountMinor / 100),
+      partCode: current[index]?.partCode ?? '',
+      damageRegion: current[index]?.damageRegion ?? '',
     })))
     setAppliedAiRunId(aiRun.id)
     setConfirmed(false)
@@ -249,6 +266,7 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
     setRows((current) => current.map((row, position) => {
       if (position !== index) return row
       return {
+        ...row,
         description,
         action: row.action.trim() === '' ? match.action : row.action,
         part: row.part.trim() === '' && match.lastPartAmountMinor > 0
@@ -283,7 +301,19 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
         setError('Her satırda parça veya işçilik tutarından en az biri girilmelidir.')
         return null
       }
-      items.push({ description, action, partAmountMinor, laborAmountMinor })
+      // Kullanıcının yazdığı parça kodu her zaman `user_entered` kaynaklıdır;
+      // sözlük önerisi ayrı kaynakla işaretlenir ve otomatik doğru sayılmaz.
+      const partCode = row.partCode.trim()
+      const damageRegion = row.damageRegion.trim()
+      items.push({
+        description,
+        action,
+        partAmountMinor,
+        laborAmountMinor,
+        partCode: partCode === '' ? null : partCode,
+        partCodeSource: partCode === '' ? null : 'user_entered',
+        damageRegion: damageRegion === '' ? null : damageRegion,
+      })
     }
     return items
   }
@@ -323,6 +353,7 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
       setConfirmed(false)
       resetAiState()
       workspace.reload()
+      onSheetChanged?.()
     })
   }
 
@@ -359,7 +390,7 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
             : (
               <div className="table-scroll module-table-scroll">
                 <table className="data-table module-table">
-                  <thead><tr><th>Kalem</th><th>İşlem</th><th>Parça</th><th>İşçilik</th></tr></thead>
+                  <thead><tr><th>Kalem</th><th>İşlem</th><th>Parça</th><th>İşçilik</th><th>Parça kodu</th><th>Hasar bölgesi</th></tr></thead>
                   <tbody>
                     {sheet.currentVersion.items.map((line) => (
                       <tr key={line.ordinal}>
@@ -367,6 +398,12 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
                         <td>{line.action}</td>
                         <td>{formatMinor(line.partAmountMinor)}</td>
                         <td>{formatMinor(line.laborAmountMinor)}</td>
+                        {/* Paket 56 öncesi sürümlerde kanıt alanları boştur. */}
+                        <td className="labor-evidence-cell">
+                          {line.partCode ?? '—'}
+                          {line.partCodeSource === 'dictionary_suggested' && <small> (sözlük)</small>}
+                        </td>
+                        <td className="labor-evidence-cell">{line.damageRegion ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -375,6 +412,7 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
                       <td colSpan={2}>Toplam</td>
                       <td>{formatMinor(sheet.currentVersion.totals.partTotalMinor)}</td>
                       <td>{formatMinor(sheet.currentVersion.totals.laborTotalMinor)}</td>
+                      <td colSpan={2} />
                     </tr>
                   </tfoot>
                 </table>
@@ -403,7 +441,7 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
             )}
             <div className="table-scroll module-table-scroll">
               <table className="data-table module-table labor-editor__table">
-                <thead><tr><th>Kalem</th><th>İşlem</th><th>Parça (₺)</th><th>İşçilik (₺)</th><th aria-label="İşlemler" /></tr></thead>
+                <thead><tr><th>Kalem</th><th>İşlem</th><th>Parça (₺)</th><th>İşçilik (₺)</th><th>Parça kodu</th><th>Hasar bölgesi</th><th aria-label="İşlemler" /></tr></thead>
                 <tbody>
                   {rows.map((row, index) => (
                     <tr key={index}>
@@ -411,6 +449,8 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
                       <td><input aria-label={`İşlem ${index + 1}`} list="labor-dictionary-actions" value={row.action} onChange={(event) => updateRow(index, 'action', event.target.value)} placeholder="Değişim" /></td>
                       <td><input aria-label={`Parça tutarı ${index + 1}`} value={row.part} inputMode="decimal" onChange={(event) => updateRow(index, 'part', event.target.value)} placeholder="0,00" /></td>
                       <td><input aria-label={`İşçilik tutarı ${index + 1}`} value={row.labor} inputMode="decimal" onChange={(event) => updateRow(index, 'labor', event.target.value)} placeholder="0,00" /></td>
+                      <td><input aria-label={`Parça kodu ${index + 1}`} value={row.partCode} onChange={(event) => updateRow(index, 'partCode', event.target.value)} placeholder="Opsiyonel" /></td>
+                      <td><input aria-label={`Hasar bölgesi ${index + 1}`} value={row.damageRegion} onChange={(event) => updateRow(index, 'damageRegion', event.target.value)} placeholder="Ön sol" /></td>
                       <td><button className="icon-button" type="button" aria-label={`Satırı sil ${index + 1}`} onClick={() => removeRow(index)} disabled={rows.length <= 1}><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
@@ -420,7 +460,7 @@ export function LaborApiModule({ item, source, onUnauthorized, port, aiPort, dic
                     <td colSpan={2}>Taslak toplam</td>
                     <td>{formatMinor(totals.part)}</td>
                     <td>{formatMinor(totals.labor)}</td>
-                    <td />
+                    <td colSpan={3} />
                   </tr>
                 </tfoot>
               </table>

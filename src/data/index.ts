@@ -337,6 +337,17 @@ export {
   type LaborDictionaryRecord,
 } from './laborDictionaryPort'
 export {
+  CaseVehicleProfileClientError,
+  createHttpCaseVehicleProfileAdapter,
+  type CaseVehicleProfileDataPort,
+  type CaseVehicleProfileErrorKind,
+  type CaseVehicleProfileFieldsRecord,
+  type CaseVehicleProfileRecord,
+  type CaseVehicleProfileVersionRecord,
+  type VehicleClassRecord,
+  type VehicleEvidenceSourceRecord,
+} from './caseVehicleProfilePort'
+export {
   LaborAllocationClientError,
   createHttpLaborAllocationAdapter,
   type LaborAllocationApplyPreviewRecord,

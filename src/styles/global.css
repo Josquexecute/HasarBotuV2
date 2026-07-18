@@ -788,6 +788,94 @@ button {
   font-size: 12px;
 }
 
+/* İşçilik satırı kanıt hücreleri (Paket 56); eski sürümlerde boş kalır. */
+.labor-evidence-cell {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.labor-evidence-cell small {
+  color: var(--text-tertiary);
+}
+
+/* Dosya araç profili (Paket 56). Yoğun ofis düzeni; 1366x768'de iki sütun,
+   geniş ekranda üç sütun. */
+.vehicle-profile {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.vehicle-profile__head h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.vehicle-profile__head small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.vehicle-profile__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.vehicle-profile__grid .field small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.vehicle-profile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.vehicle-profile__history {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.vehicle-profile__history summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.vehicle-profile__history ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vehicle-profile__history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-block-start: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.vehicle-profile__history li small {
+  color: var(--text-tertiary);
+}
+
 /* Dosya satırı uyarı göstergesi (Paket 52). Uyarısız satırda dikkat çekici
    rozet yoktur; "bilinmiyor" durumu "uyarı yok"tan görsel olarak ayrışır. */
 .row-alert {

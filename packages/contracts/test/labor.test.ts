@@ -17,13 +17,22 @@ const item = {
   laborAmountMinor: 2_200_00,
 }
 
+/** Paket 56 kanıt alanları varsayılan olarak null'dır; eski istemci değişmez. */
+const evidenceDefaults = { partCode: null, partCodeSource: null, damageRegion: null }
+const itemWithEvidence = { ...item, ...evidenceDefaults }
+
 describe('labor sheet contracts', () => {
   it('create komutunu strict doğrular ve fazla anahtarı reddeder', () => {
     expect(laborSheetCreateRequestSchema.parse({
       expectedCaseVersion: 1,
       items: [item],
       confirmed: true,
-    })).toEqual({ expectedCaseVersion: 1, items: [item], laborAiSuggestionRunId: null, confirmed: true })
+    })).toEqual({
+      expectedCaseVersion: 1,
+      items: [itemWithEvidence],
+      laborAiSuggestionRunId: null,
+      confirmed: true,
+    })
 
     expect(() => laborSheetCreateRequestSchema.parse({
       expectedCaseVersion: 1,
@@ -81,7 +90,7 @@ describe('labor sheet contracts', () => {
           id: versionId,
           sheetVersion: 1,
           previousVersionId: null,
-          items: [{ ...item, ordinal: 1 }],
+          items: [{ ...itemWithEvidence, ordinal: 1 }],
           totals: { partTotalMinor: 18_400_00, laborTotalMinor: 2_200_00, grandTotalMinor: 20_600_00 },
           schemaVersion: 'labor-sheet/1.0.0',
           currency: 'TRY',
@@ -96,7 +105,7 @@ describe('labor sheet contracts', () => {
           id: versionId,
           sheetVersion: 1,
           previousVersionId: null,
-          items: [{ ...item, ordinal: 1 }],
+          items: [{ ...itemWithEvidence, ordinal: 1 }],
           totals: { partTotalMinor: 18_400_00, laborTotalMinor: 2_200_00, grandTotalMinor: 20_600_00 },
           schemaVersion: 'labor-sheet/1.0.0',
           currency: 'TRY',

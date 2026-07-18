@@ -52,7 +52,8 @@ const sheet: LaborSheetRecord = {
     id: VERSION_ID,
     sheetVersion: 1,
     previousVersionId: null,
-    items: [{ ordinal: 1, description: 'Ön tampon kaplama', action: 'Değişim', partAmountMinor: 18_400_00, laborAmountMinor: 2_200_00 }],
+    // Paket 56 öncesi sürümler kanıt alanlarını null olarak okur.
+    items: [{ ordinal: 1, description: 'Ön tampon kaplama', action: 'Değişim', partAmountMinor: 18_400_00, laborAmountMinor: 2_200_00, partCode: null, partCodeSource: null, damageRegion: null }],
     totals: { partTotalMinor: 18_400_00, laborTotalMinor: 2_200_00, grandTotalMinor: 20_600_00 },
     schemaVersion: 'labor-sheet/1.0.0',
     currency: 'TRY',
@@ -67,7 +68,8 @@ const sheet: LaborSheetRecord = {
     id: VERSION_ID,
     sheetVersion: 1,
     previousVersionId: null,
-    items: [{ ordinal: 1, description: 'Ön tampon kaplama', action: 'Değişim', partAmountMinor: 18_400_00, laborAmountMinor: 2_200_00 }],
+    // Paket 56 öncesi sürümler kanıt alanlarını null olarak okur.
+    items: [{ ordinal: 1, description: 'Ön tampon kaplama', action: 'Değişim', partAmountMinor: 18_400_00, laborAmountMinor: 2_200_00, partCode: null, partCodeSource: null, damageRegion: null }],
     totals: { partTotalMinor: 18_400_00, laborTotalMinor: 2_200_00, grandTotalMinor: 20_600_00 },
     schemaVersion: 'labor-sheet/1.0.0',
     currency: 'TRY',
@@ -212,10 +214,67 @@ describe('LaborApiModule', () => {
 
     await waitFor(() => expect(port.create).toHaveBeenCalledWith(CASE_ID, {
       expectedCaseVersion: 3,
-      items: [{ description: 'Ön tampon', action: 'Değişim', partAmountMinor: 18_400_00, laborAmountMinor: 2_200_00 }],
+      items: [{
+        description: 'Ön tampon',
+        action: 'Değişim',
+        partAmountMinor: 18_400_00,
+        laborAmountMinor: 2_200_00,
+        // Kanıt alanları boş bırakıldığında null gider; zorunlu değildir.
+        partCode: null,
+        partCodeSource: null,
+        damageRegion: null,
+      }],
       laborAiSuggestionRunId: null,
       confirmed: true,
     }))
+  })
+
+  it('parça kodu ve hasar bölgesi kanıt alanlarını kullanıcı girdisi olarak gönderir', async () => {
+    const port = makePort(emptyWorkspace(true))
+    render(<LaborApiModule item={item} source="api" onUnauthorized={vi.fn()} port={port} />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'İşçilik Föyü Oluştur' }))
+    await user.type(screen.getByLabelText('Kalem 1'), 'Ön tampon')
+    await user.type(screen.getByLabelText('İşlem 1'), 'Değişim')
+    await user.type(screen.getByLabelText('Parça tutarı 1'), '18400')
+    await user.type(screen.getByLabelText('İşçilik tutarı 1'), '2200')
+    await user.type(screen.getByLabelText('Parça kodu 1'), 'TMP-0142')
+    await user.type(screen.getByLabelText('Hasar bölgesi 1'), 'Ön orta')
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: /Föyü Kaydet/ }))
+
+    // Kullanıcının yazdığı kod her zaman `user_entered` kaynağıyla işaretlenir;
+    // sözlük önerisiyle karışmaz.
+    await waitFor(() => expect(port.create).toHaveBeenCalledWith(CASE_ID, expect.objectContaining({
+      items: [expect.objectContaining({
+        partCode: 'TMP-0142',
+        partCodeSource: 'user_entered',
+        damageRegion: 'Ön orta',
+      })],
+    })))
+  })
+
+  it('AI önerisi uygulanınca kullanıcı kanıt alanlarını ezmez', async () => {
+    const port = makePort(emptyWorkspace(true))
+    const ai = makeAiPort()
+    render(<LaborApiModule item={item} source="api" onUnauthorized={vi.fn()} port={port} aiPort={ai} />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'İşçilik Föyü Oluştur' }))
+    await user.type(screen.getByLabelText('Parça kodu 1'), 'TMP-0142')
+    await user.type(screen.getByLabelText('Hasar bölgesi 1'), 'Ön orta')
+    await user.type(screen.getByLabelText('Hasar tarifi (AI için)'), 'Ön tampon hasarlı.')
+    await user.click(screen.getByRole('button', { name: /Gizlilik ve Bütçe Planını Göster/ }))
+    await user.click(await screen.findByLabelText(/harici AI sağlayıcısına gönderilmesini onaylıyorum/))
+    await user.click(screen.getByRole('button', { name: /AI Önerisini Oluştur/ }))
+    await screen.findByText(/İnsan incelemesi gerekli — güven/)
+    await user.click(screen.getByRole('button', { name: 'Öneriyi Düzenleme Alanlarına Uygula' }))
+
+    // AI kanıt alanı üretmez; kullanıcının girdiği değerler korunur.
+    expect(screen.getByLabelText('Parça kodu 1')).toHaveValue('TMP-0142')
+    expect(screen.getByLabelText('Hasar bölgesi 1')).toHaveValue('Ön orta')
+    expect(screen.getByLabelText('Parça kodu 2')).toHaveValue('')
   })
 
   it('her iki tutarı boş satırı istemci tarafında reddeder', async () => {

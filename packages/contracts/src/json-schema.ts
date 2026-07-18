@@ -170,6 +170,10 @@ import {
   operationalAlertsResponseSchema,
 } from './v1/operational-alerts/dto.js'
 import {
+  caseVehicleProfileResponseSchema,
+  caseVehicleProfileSaveRequestSchema,
+} from './v1/case-vehicle-profile/dto.js'
+import {
   laborAllocationAnalyzeRequestSchema,
   laborAllocationApplyPreviewRequestSchema,
   laborAllocationApplyPreviewResponseSchema,
@@ -309,6 +313,8 @@ export const JSON_SCHEMA_TARGETS = {
   'pert-assessment-workspace-response': pertAssessmentWorkspaceResponseSchema,
   'labor-dictionary-query': laborDictionaryQuerySchema,
   'labor-dictionary-response': laborDictionaryResponseSchema,
+  'case-vehicle-profile-response': caseVehicleProfileResponseSchema,
+  'case-vehicle-profile-save-request': caseVehicleProfileSaveRequestSchema,
   'labor-allocation-analyze-request': laborAllocationAnalyzeRequestSchema,
   'labor-allocation-apply-preview-request': laborAllocationApplyPreviewRequestSchema,
   'labor-allocation-apply-preview-response': laborAllocationApplyPreviewResponseSchema,

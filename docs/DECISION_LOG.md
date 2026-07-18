@@ -1063,3 +1063,28 @@ Etkisi:
 
 - `gemini-provider.ts`, `provider-output-schema.ts`, config opt-in'leri, `createLaborAllocationProviderRegistry` ve mock HTTP test kuşağı eklenir.
 - Bir tip hatası testle yakalandı: sağlayıcı makbuzunda `run_id` (uuid) ve `request_id` (text) aynı parametreyi paylaşınca PostgreSQL tip çıkaramıyordu; ayrı parametreye ayrıldı.
+
+## 2026-07-19 — HB-2026-063: AI kanıt zenginleştirme (Paket 56)
+
+Karar:
+
+1. **Üç eksik kanıt kanalı birlikte kapatılır.** Yalnız araç kimliği eklemek yetmez: `detectMissingEvidence` araç, parça kodu ve hasar bölgesi eksikliklerinin her biri için ayrı kod üretir ve `requiresControl` bunların her birini `control_required` sebebi sayar. Tek kanal kapatılsaydı bütün satırlar yine kontrol gerekli kalır, paket ölçülebilir bir sonuç üretmezdi.
+2. `detectMissingEvidence` **sabit kod listesi döndürmeyi bırakır**; kodlar gerçek plan bağlamından türetilir. Böylece kanıt doldukça kod gerçekten düşer ve düşüş ölçülebilir.
+3. **Araç profili dosya düzeyinde, versiyonlu ve kullanıcı kontrollüdür** (`case_vehicle_profiles` + immutable `case_vehicle_profile_versions`). Otomatik belge çıkarımı bu dilimin dışındadır; ilk kayıt gerekçe istemez, sonraki her sürüm gerekçe ister.
+4. **Tam şasi numarası hiçbir katmanda tutulmaz.** Alan yalnız 3–11 karakterlik prefix kabul eder (`MAX_VEHICLE_CHASSIS_PREFIX_LENGTH = 11`); 17 karakterlik VIN'in girilmesi UI, sözleşme ve DB CHECK seviyesinde imkânsızdır. `toOutboundVehicleProfile` ayrıca `evidenceReference` alanını dışarı çıkan pakete koymaz.
+5. **Parça kodu ile hasar bölgesi işçilik satırında nullable alanlardır**; eski föy sürümleri null kalır ve değişmeden okunur. Saf işçilik satırında (`partAmountMinor = 0`) parça kodu zorunlu sayılmaz; `partAmountMinor > 0` olup kod yoksa eksik kanıt üretilir.
+6. **Kullanıcı girdisi ile sözlük önerisi ayrıştırılır**: `part_code_source` yalnız `user_entered` veya `dictionary_suggested` olabilir ve kod ile kaynak DB CHECK'inde birlikte null ya da birlikte dolu zorunludur. AI kanıt alanı üretmez; öneri editöre uygulanırken kullanıcının girdiği kod ve bölge korunur.
+7. Hasar bölgesi **uydurma geniş enum'a bağlanmaz**; sınırlandırılmış ve normalize edilmiş serbest metindir (en çok 80 karakter, kontrol karakteri yok). Şirket Excel kolonlarına bağlanmaz.
+8. Yeni alanlar **kanıt snapshot hash'ine dahildir**: kaynak alanlar değişince hash değişir ve eski öneri stale sayılır. Föy kaydedildiğinde AI dağıtım modülü UI'da yeniden kurulur; kullanıcı revize edilmiş föyün üstünde eski öneriyle çalışmaya devam edemez.
+9. **Kanıt dolması `control_required` zorlamasını kaldırmaz.** Sunucu tarafı yeniden hesaplama (HB-2026-060) korunur; modelin yüksek güven bildirmesi de kaldıramaz.
+
+Ölçülen sonuç (Paket 56 tarayıcı smoke'u, gerçek PostgreSQL + deterministik sağlayıcı):
+
+- Üç kanal boşken satır başına 5 eksik kanıt kodu: `APPROVED_HISTORY`, `DAMAGE_REGION`, `EXPERT_BASELINE`, `PART_CODE`, `VEHICLE_IDENTITY`.
+- Araç profili, parça kodu ve hasar bölgesi kullanıcı tarafından girildikten sonra 2 kod kalır: `APPROVED_HISTORY`, `EXPERT_BASELINE`.
+- `control_required` satır sayısı 1 → 1: kod sayısı düşse de sunucu zorlaması kalkmaz.
+
+Etkisi:
+
+- Migration 0032, `v1/case-vehicle-profile` sözleşmesi, araç profili store/routes, Özet sekmesinde `CaseVehicleProfileModule` ve işçilik editöründe parça kodu / hasar bölgesi sütunları eklenir.
+- Kalan iki kod (`APPROVED_HISTORY`, `EXPERT_BASELINE`) organizasyon içi onaylı geçmiş ve eksper sonucu kanalları doldukça düşer; bu kanallar Paket 56 kapsamında değildir.

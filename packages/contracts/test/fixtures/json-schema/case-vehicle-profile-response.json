@@ -1,0 +1,387 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "caseId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "profileId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "current": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            "profileVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "previousVersionId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "schemaVersion": {
+              "type": "string",
+              "const": "case-vehicle-profile/1.0.0"
+            },
+            "brand": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "modelYear": {
+              "type": "integer",
+              "minimum": 1950,
+              "maximum": 2100
+            },
+            "variant": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "vehicleClass": {
+              "type": "string",
+              "enum": [
+                "passenger_car",
+                "light_commercial",
+                "heavy_commercial",
+                "motorcycle",
+                "trailer",
+                "other"
+              ]
+            },
+            "chassisPrefix": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 11
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "engineCode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 24
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "evidenceSource": {
+              "type": "string",
+              "enum": [
+                "registration_document",
+                "policy_document",
+                "insurer_record",
+                "user_statement",
+                "other"
+              ]
+            },
+            "evidenceReference": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "revisionReason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdByUserId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            "createdAt": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            }
+          },
+          "required": [
+            "id",
+            "profileVersion",
+            "previousVersionId",
+            "schemaVersion",
+            "brand",
+            "model",
+            "modelYear",
+            "variant",
+            "vehicleClass",
+            "chassisPrefix",
+            "engineCode",
+            "evidenceSource",
+            "evidenceReference",
+            "revisionReason",
+            "createdByUserId",
+            "createdAt"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "history": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "profileVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "previousVersionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schemaVersion": {
+            "type": "string",
+            "const": "case-vehicle-profile/1.0.0"
+          },
+          "brand": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "modelYear": {
+            "type": "integer",
+            "minimum": 1950,
+            "maximum": 2100
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vehicleClass": {
+            "type": "string",
+            "enum": [
+              "passenger_car",
+              "light_commercial",
+              "heavy_commercial",
+              "motorcycle",
+              "trailer",
+              "other"
+            ]
+          },
+          "chassisPrefix": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 11
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "engineCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 24
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidenceSource": {
+            "type": "string",
+            "enum": [
+              "registration_document",
+              "policy_document",
+              "insurer_record",
+              "user_statement",
+              "other"
+            ]
+          },
+          "evidenceReference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revisionReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          }
+        },
+        "required": [
+          "id",
+          "profileVersion",
+          "previousVersionId",
+          "schemaVersion",
+          "brand",
+          "model",
+          "modelYear",
+          "variant",
+          "vehicleClass",
+          "chassisPrefix",
+          "engineCode",
+          "evidenceSource",
+          "evidenceReference",
+          "revisionReason",
+          "createdByUserId",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "canEdit"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "caseId",
+    "profileId",
+    "version",
+    "current",
+    "history",
+    "permissions"
+  ],
+  "additionalProperties": false
+}

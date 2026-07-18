@@ -33,13 +33,57 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 10000000000
+          },
+          "partCode": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partCodeSource": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "user_entered",
+                  "dictionary_suggested"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "damageRegion": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "description",
           "action",
           "partAmountMinor",
-          "laborAmountMinor"
+          "laborAmountMinor",
+          "partCode",
+          "partCodeSource",
+          "damageRegion"
         ],
         "additionalProperties": false
       }

@@ -35,6 +35,7 @@ function planContext(overrides: Partial<LaborAllocationPlanContext> = {}): Labor
     sheetVersion: 1,
     damageDescription: 'Ön sol bölgede darbe.',
     lines: SHEET_LINES,
+    vehicleProfile: null,
     dictionary: [],
     approvedHistory: [],
     expertBaseline: null,
@@ -135,8 +136,19 @@ describe('taksonomi', () => {
   })
 })
 
+const VEHICLE_PROFILE = {
+  brand: 'Renault',
+  model: 'Clio',
+  modelYear: 2021,
+  variant: 'Touch',
+  vehicleClass: 'passenger_car' as const,
+  chassisPrefix: 'VF1RJA00',
+  engineCode: 'H4B',
+  evidenceSource: 'registration_document' as const,
+}
+
 describe('detectMissingEvidence', () => {
-  it('şemada bulunmayan kanıt kanallarını işaretler', () => {
+  it('veri yokken üç kanalı da eksik işaretler', () => {
     const codes = detectMissingEvidence(planContext())
     expect(codes).toContain('EVIDENCE_MISSING_VEHICLE_IDENTITY')
     expect(codes).toContain('EVIDENCE_MISSING_PART_CODE')
@@ -146,17 +158,61 @@ describe('detectMissingEvidence', () => {
     expect(codes).toContain('EVIDENCE_MISSING_EXPERT_BASELINE')
   })
 
-  it('kanıt sağlandığında ilgili kod düşer', () => {
+  it('araç profili verilince araç kimliği kodu düşer', () => {
+    expect(detectMissingEvidence(planContext({ vehicleProfile: VEHICLE_PROFILE })))
+      .not.toContain('EVIDENCE_MISSING_VEHICLE_IDENTITY')
+  })
+
+  it('parça kodu yalnız parça bedeli olan satırda zorunludur', () => {
+    // Saf işçilik satırında (parça bedeli 0) kod olmaması eksik kanıt DEĞİLDİR.
+    const pureLabor = detectMissingEvidence(planContext({
+      lines: [{ description: 'Ön tampon', action: 'Onarım', partAmountMinor: 0, laborAmountMinor: 10_000_00 }],
+    }))
+    expect(pureLabor).not.toContain('EVIDENCE_MISSING_PART_CODE')
+
+    // Parça bedeli var ama kod yoksa eksik kanıt üretilir.
+    const missingCode = detectMissingEvidence(planContext({
+      lines: [{ description: 'Çamurluk', action: 'Değişim', partAmountMinor: 18_000_00, laborAmountMinor: 0 }],
+    }))
+    expect(missingCode).toContain('EVIDENCE_MISSING_PART_CODE')
+
+    // Kod verilince düşer.
+    const withCode = detectMissingEvidence(planContext({
+      lines: [{
+        description: 'Çamurluk', action: 'Değişim',
+        partAmountMinor: 18_000_00, laborAmountMinor: 0, partCode: 'RN-7701-AB',
+      }],
+    }))
+    expect(withCode).not.toContain('EVIDENCE_MISSING_PART_CODE')
+  })
+
+  it('hasar bölgesi her satırda gerekir', () => {
+    const partial = detectMissingEvidence(planContext({
+      lines: [
+        { ...SHEET_LINES[0], damageRegion: 'Ön sol' },
+        { ...SHEET_LINES[1], damageRegion: null },
+      ],
+    }))
+    expect(partial).toContain('EVIDENCE_MISSING_DAMAGE_REGION')
+
+    const complete = detectMissingEvidence(planContext({
+      lines: SHEET_LINES.map((line) => ({ ...line, damageRegion: 'Ön sol' })),
+    }))
+    expect(complete).not.toContain('EVIDENCE_MISSING_DAMAGE_REGION')
+  })
+
+  it('üç kanal birlikte kapatılınca kanıt kaynaklı kod kalmaz', () => {
     const codes = detectMissingEvidence(planContext({
+      vehicleProfile: VEHICLE_PROFILE,
+      lines: [
+        { ...SHEET_LINES[0], damageRegion: 'Ön sol' },
+        { ...SHEET_LINES[1], damageRegion: 'Ön sol', partCode: 'RN-7701-AB' },
+      ],
       dictionary: [{ description: 'Ön tampon', action: 'Onarım', usageCount: 3 }],
       approvedHistory: [{ description: 'Ön tampon', action: 'Onarım', operationTypes: ['repair'] }],
       expertBaseline: { sheetVersion: 1, lines: [] },
     }))
-    expect(codes).not.toContain('EVIDENCE_MISSING_DICTIONARY_MATCH')
-    expect(codes).not.toContain('EVIDENCE_MISSING_APPROVED_HISTORY')
-    expect(codes).not.toContain('EVIDENCE_MISSING_EXPERT_BASELINE')
-    // Şema kaynaklı eksikler her zaman kalır.
-    expect(codes).toContain('EVIDENCE_MISSING_VEHICLE_IDENTITY')
+    expect(codes).toEqual([])
   })
 })
 

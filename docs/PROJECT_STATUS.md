@@ -1,15 +1,31 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-18
+Son güncelleme: 2026-07-19
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 55 — Gerçek Gemini işçilik dağıtım adaptörü
+- Aşama: Paket 56 — AI kanıt zenginleştirme
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-55-gemini-labor-allocation` dalı, remote yok
+- Git: Yerel repository, `foundation/package-50-dashboard-alert-summary` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 56 doğrulama sonucu
+
+- **Üç eksik kanıt kanalı birlikte kapatıldı.** Yalnız araç kimliği eklemek yetmezdi: domain her kanal için ayrı `control_required` sebebi üretiyor, tek kanal kapatılsaydı bütün satırlar yine kontrol gerekli kalırdı.
+- `detectMissingEvidence` sabit kod listesi döndürmeyi bıraktı; kodlar gerçek plan bağlamından türetiliyor. Böylece kanıt doldukça kod gerçekten düşüyor.
+- **Ölçülen sonuç (Chrome/CDP smoke, gerçek PostgreSQL):** üç kanal boşken satır başına 5 eksik kanıt kodu (`APPROVED_HISTORY`, `DAMAGE_REGION`, `EXPERT_BASELINE`, `PART_CODE`, `VEHICLE_IDENTITY`); araç profili, parça kodu ve hasar bölgesi girildikten sonra 2 kod kalıyor (`APPROVED_HISTORY`, `EXPERT_BASELINE`). `control_required` satır sayısı 1 → 1: kod sayısı düşse de sunucu zorlaması kalkmıyor.
+- Araç profili dosya düzeyinde, versiyonlu ve kullanıcı kontrollü (`case_vehicle_profiles` + immutable `case_vehicle_profile_versions`); ilk kayıt gerekçe istemiyor, sonraki her sürüm istiyor. Otomatik belge çıkarımı bu dilimde yok.
+- **Tam şasi numarası hiçbir katmanda tutulmuyor**: alan yalnız 3–11 karakterlik prefix kabul ediyor ve sınır UI (`maxLength=11`), sözleşme ve DB CHECK seviyesinde birlikte uygulanıyor. Kanıt referansı yalnız dosyada duruyor; dışarı çıkan pakete konmuyor.
+- Parça kodu ve hasar bölgesi işçilik satırında nullable; eski föy sürümleri null kalıyor ve değişmeden okunuyor. Saf işçilik satırında parça kodu zorunlu değil; `partAmountMinor > 0` olup kod yoksa eksik kanıt üretiliyor. Kullanıcı girdisi ile sözlük önerisi `part_code_source` ile ayrışıyor ve kod/kaynak DB CHECK'inde birlikte null ya da birlikte dolu.
+- **Bir hata testle yakalandı ve düzeltildi:** `validateLaborSheetItems` yeni alanları doğruluyor ama normalize edilmiş sonuca taşımıyordu; parça kodu ve hasar bölgesi hiç kalıcı olmuyor, `EVIDENCE_MISSING_DAMAGE_REGION` da hiç düşmüyordu.
+- **Bir UI boşluğu smoke'ta yakalandı ve kapatıldı:** föy aynı sekmede revize edildiğinde AI dağıtım modülü eski kaynak föy sürümüyle kalıyordu. Föy kaydedildiğinde modül yeniden kuruluyor; kullanıcı revize edilmiş föyün üstünde eski öneriyle çalışamıyor.
+- Gerçek PostgreSQL API testleri 12/12 (`ai-evidence-enrichment.test.ts`), araç profili domain testleri 12/12, migration/DB testleri 63/63.
+- Chrome/CDP smoke (`scripts/package56-browser-smoke.mjs`) geçti: araç profilinin UI'dan kaydedilip sürümlenmesi, şasi prefix sınırı, parça kodu/hasar bölgesinin editörden PostgreSQL'e yazılması, eksik kanıt kodlarının gerçekten düşmesi, `control_required` zorlamasının kalkmaması, kanıt snapshot hash'inin değişmesi, önceki öneri kaydının değişmemesi, plaka ve tam şasinin audit'e sızmaması, API kapandığında sahte profil gösterilmemesi. 1920×1080 açık/koyu ve 1366×768 koyu görünümde yatay taşma yok; console warning/error/exception 0.
+- Ana ağaçta typecheck, lint, **1584 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi (başlangıç 494.639 bayt), `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
+- **Kalan sınır:** `EVIDENCE_MISSING_APPROVED_HISTORY` ve `EVIDENCE_MISSING_EXPERT_BASELINE` kanalları hâlâ açık; bunlar organizasyon içi onaylı geçmiş ve eksper sonucu doldukça düşer ve Paket 56 kapsamında değildir.
 
 ## Paket 55 doğrulama sonucu
 

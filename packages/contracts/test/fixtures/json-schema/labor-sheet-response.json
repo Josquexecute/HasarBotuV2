@@ -80,6 +80,44 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 10000000000
+                  },
+                  "partCode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "partCodeSource": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "user_entered",
+                          "dictionary_suggested"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "damageRegion": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -87,7 +125,10 @@
                   "description",
                   "action",
                   "partAmountMinor",
-                  "laborAmountMinor"
+                  "laborAmountMinor",
+                  "partCode",
+                  "partCodeSource",
+                  "damageRegion"
                 ],
                 "additionalProperties": false
               }
@@ -255,6 +296,44 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 10000000000
+                    },
+                    "partCode": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "partCodeSource": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "user_entered",
+                            "dictionary_suggested"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "damageRegion": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -262,7 +341,10 @@
                     "description",
                     "action",
                     "partAmountMinor",
-                    "laborAmountMinor"
+                    "laborAmountMinor",
+                    "partCode",
+                    "partCodeSource",
+                    "damageRegion"
                   ],
                   "additionalProperties": false
                 }

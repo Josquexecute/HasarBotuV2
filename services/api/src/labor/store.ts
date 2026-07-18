@@ -75,6 +75,9 @@ interface ItemRow {
   readonly action: string
   readonly part_amount_minor: string
   readonly labor_amount_minor: string
+  readonly part_code: string | null
+  readonly part_code_source: 'user_entered' | 'dictionary_suggested' | null
+  readonly damage_region: string | null
 }
 
 export type LaborCommandOutcome<T> =
@@ -137,7 +140,8 @@ async function loadSheet(
   )
   const itemsResult = await exec.query(
     `SELECT sheet_version_id,ordinal,description,action,
-            part_amount_minor::text AS part_amount_minor,labor_amount_minor::text AS labor_amount_minor
+            part_amount_minor::text AS part_amount_minor,labor_amount_minor::text AS labor_amount_minor,
+            part_code,part_code_source,damage_region
        FROM labor_sheet_items
       WHERE organization_id=$1 AND sheet_id=$2
       ORDER BY sheet_version_id,ordinal`,
@@ -154,6 +158,10 @@ async function loadSheet(
         action: item.action,
         partAmountMinor: safeMinor(item.part_amount_minor),
         laborAmountMinor: safeMinor(item.labor_amount_minor),
+        // Paket 56: eski sürümlerde null'dır ve öyle okunur.
+        partCode: item.part_code ?? null,
+        partCodeSource: item.part_code_source ?? null,
+        damageRegion: item.damage_region ?? null,
       }))
     const totals = computeLaborSheetTotals(versionItems)
     return {
@@ -214,8 +222,8 @@ async function insertItems(
     await client.query(
       `INSERT INTO labor_sheet_items
          (id,organization_id,case_id,sheet_id,sheet_version_id,ordinal,description,action,
-          part_amount_minor,labor_amount_minor)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          part_amount_minor,labor_amount_minor,part_code,part_code_source,damage_region)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         uuidv7(),
         actor.organizationId,
@@ -227,6 +235,10 @@ async function insertItems(
         item.action,
         item.partAmountMinor,
         item.laborAmountMinor,
+        // Paket 56 kanıt alanları; verilmezse null kalır.
+        item.partCode ?? null,
+        item.partCodeSource ?? null,
+        item.damageRegion ?? null,
       ],
     )
   }

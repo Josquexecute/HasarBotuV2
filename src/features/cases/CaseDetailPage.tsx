@@ -74,6 +74,11 @@ const LaborAllocationAiModule = lazy(async () => {
   return { default: module.LaborAllocationAiModule }
 })
 
+const CaseVehicleProfileModule = lazy(async () => {
+  const module = await import('./CaseVehicleProfileModule')
+  return { default: module.CaseVehicleProfileModule }
+})
+
 const PertApiModule = lazy(async () => {
   const module = await import('./PertApiModule')
   return { default: module.PertApiModule }
@@ -212,6 +217,8 @@ export function CaseDetailPage() {
     const saved = window.sessionStorage.getItem('hasarbotu-active-case-tab')
     return tabs.includes(saved as Tab) ? saved as Tab : 'Özet'
   })
+  /** İşçilik föyü her kaydedildiğinde artar; AI dağıtım modülünü tazeler. */
+  const [laborSheetEpoch, setLaborSheetEpoch] = useState(0)
   const [closeModalOpen, setCloseModalOpen] = useState(false)
   const [prototypeNotice, setPrototypeNotice] = useState('')
   const [assistantAnswer, setAssistantAnswer] = useState('')
@@ -364,6 +371,12 @@ export function CaseDetailPage() {
                 <p>{source === 'api' ? 'Liste özeti belge tamlığı hakkında varsayım üretmez.' : 'Koşullu evrak kuralları dosya türüne göre gösteriliyor.'}</p>
                 <button className="text-button" type="button" onClick={() => setActiveTab('Evrak ve Fotoğraf')}>Evraklara git <ChevronRight size={14} /></button>
               </section>
+              {/* Paket 56: araç profili yalnız API modunda gerçek uçtan gelir. */}
+              {source === 'api' && (
+                <section className="info-panel overview-grid__wide">
+                  <CaseVehicleProfileModule caseId={item.caseId} />
+                </section>
+              )}
               <section className="info-panel overview-grid__wide">
                 <header><h2>Notlar ve Görevler</h2><History size={16} /></header>
                 {source === 'api'
@@ -443,8 +456,17 @@ export function CaseDetailPage() {
           ) : activeTab === 'İşçilik' ? source === 'api'
             ? (
               <div className="labor-stack">
-                <LaborApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
-                <LaborAllocationAiModule caseId={item.caseId} />
+                <LaborApiModule
+                  item={item}
+                  source={source}
+                  onUnauthorized={session.reportUnauthorized}
+                  onSheetChanged={() => setLaborSheetEpoch((current) => current + 1)}
+                />
+                {/*
+                  Föy kaydedildiğinde AI dağıtım modülü yeniden kurulur: eski
+                  öneri ve kaynak föy sürümü stale kalmaz.
+                */}
+                <LaborAllocationAiModule key={laborSheetEpoch} caseId={item.caseId} />
               </div>
             )
             : <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />

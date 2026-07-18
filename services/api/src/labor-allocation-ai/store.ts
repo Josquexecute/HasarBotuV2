@@ -20,6 +20,7 @@ import {
   validateLaborAllocationSuggestion,
   type LaborAllocationPlanContext,
   type NormalizedLaborItem,
+  type OutboundVehicleProfile,
 } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import {
@@ -102,7 +103,8 @@ async function loadSheet(
   const row = sheet.rows[0] as Record<string, unknown> | undefined
   if (row === undefined) return null
   const items = await pool.query(
-    `SELECT i.description,i.action,i.part_amount_minor::text AS part,i.labor_amount_minor::text AS labor
+    `SELECT i.description,i.action,i.part_amount_minor::text AS part,i.labor_amount_minor::text AS labor,
+            i.part_code,i.part_code_source,i.damage_region
        FROM labor_sheet_items i
        JOIN labor_sheets s ON s.organization_id=i.organization_id AND s.current_version_id=i.sheet_version_id
       WHERE i.organization_id=$1 AND i.case_id=$2
@@ -117,6 +119,11 @@ async function loadSheet(
       action: String(item.action),
       partAmountMinor: safeNumber(item.part),
       laborAmountMinor: safeNumber(item.labor),
+      partCode: item.part_code === null ? null : String(item.part_code),
+      partCodeSource: item.part_code_source === null
+        ? null
+        : String(item.part_code_source) as 'user_entered' | 'dictionary_suggested',
+      damageRegion: item.damage_region === null ? null : String(item.damage_region),
     })),
   }
 }
@@ -397,6 +404,28 @@ export function createLaborAllocationStore(
         [actor.organizationId],
       )
 
+      // Paket 56: dosya düzeyinde araç profili kanıt olarak okunur.
+      const vehicleRow = await pool.query(
+        `SELECT v.brand,v.model,v.model_year,v.variant,v.vehicle_class,
+                v.chassis_prefix,v.engine_code,v.evidence_source
+           FROM case_vehicle_profiles p
+           JOIN case_vehicle_profile_versions v
+             ON v.organization_id=p.organization_id AND v.id=p.current_version_id
+          WHERE p.organization_id=$1 AND p.case_id=$2`,
+        [actor.organizationId, caseId],
+      )
+      const vehicle = vehicleRow.rows[0] as Record<string, unknown> | undefined
+      const vehicleProfile = vehicle === undefined ? null : {
+        brand: String(vehicle.brand),
+        model: String(vehicle.model),
+        modelYear: safeNumber(vehicle.model_year),
+        variant: vehicle.variant === null ? null : String(vehicle.variant),
+        vehicleClass: String(vehicle.vehicle_class) as OutboundVehicleProfile['vehicleClass'],
+        chassisPrefix: vehicle.chassis_prefix === null ? null : String(vehicle.chassis_prefix),
+        engineCode: vehicle.engine_code === null ? null : String(vehicle.engine_code),
+        evidenceSource: String(vehicle.evidence_source) as OutboundVehicleProfile['evidenceSource'],
+      }
+
       const planContext: LaborAllocationPlanContext = {
         organizationId: actor.organizationId,
         caseId,
@@ -406,6 +435,7 @@ export function createLaborAllocationStore(
         sheetVersion: sheet.sheetVersion,
         damageDescription: input.damageDescription,
         lines: sheet.lines,
+        vehicleProfile,
         dictionary: (dictionary.rows as Record<string, unknown>[]).map((row) => ({
           description: String(row.description),
           action: String(row.action),

@@ -26,6 +26,10 @@ export interface LaborItemInput {
   readonly action: string
   readonly partAmountMinor: number
   readonly laborAmountMinor: number
+  /** Paket 56 kanıt alanları; verilmezse null kabul edilir. */
+  readonly partCode?: string | null
+  readonly partCodeSource?: LaborPartCodeSource | null
+  readonly damageRegion?: string | null
 }
 
 export interface NormalizedLaborItem {
@@ -33,6 +37,41 @@ export interface NormalizedLaborItem {
   readonly action: string
   readonly partAmountMinor: number
   readonly laborAmountMinor: number
+  /** Paket 56: parça/malzeme kodu. Saf işçilik satırında null kalabilir. */
+  readonly partCode?: string | null
+  /** Paket 56: normalize edilmiş hasar bölgesi. Şirket kolonlarına bağlı değildir. */
+  readonly damageRegion?: string | null
+  /**
+   * Paket 56: parça kodunun kaynağı. Kullanıcı girdisi ile sözlük önerisi
+   * birbirinden ayrılır; öneri tek başına kullanıcı doğrulaması sayılmaz.
+   */
+  readonly partCodeSource?: LaborPartCodeSource | null
+}
+
+/** Parça kodu kaynağı: kullanıcı girdisi mi, öğrenme sözlüğü önerisi mi. */
+export const LABOR_PART_CODE_SOURCES = ['user_entered', 'dictionary_suggested'] as const
+export type LaborPartCodeSource = (typeof LABOR_PART_CODE_SOURCES)[number]
+
+export const MAX_LABOR_PART_CODE_LENGTH = 40
+export const MAX_LABOR_DAMAGE_REGION_LENGTH = 80
+
+/**
+ * Parça/malzeme kodu: büyük harf, rakam ve sınırlı ayraç. Serbest açıklama
+ * değildir; boşluklar kaldırılır ve kanonik büyük harfe çevrilir.
+ */
+export function normalizeLaborPartCode(value: string): string | null {
+  const normalized = value.trim().toUpperCase().replace(/\s+/gu, '')
+  if (normalized.length === 0 || normalized.length > MAX_LABOR_PART_CODE_LENGTH) return null
+  if (!/^[A-Z0-9._/-]+$/u.test(normalized)) return null
+  return normalized
+}
+
+/**
+ * Hasar bölgesi: sınırlandırılmış ve normalize edilmiş SERBEST metin.
+ * Uydurma geniş bir enum kurulmaz; ofis kendi terimini yazabilir.
+ */
+export function normalizeLaborDamageRegion(value: string): string | null {
+  return normalizeLaborText(value.replace(/\s+/gu, ' '), MAX_LABOR_DAMAGE_REGION_LENGTH)
 }
 
 export interface LaborSheetTotals {
@@ -49,6 +88,8 @@ export type LaborSheetInvalidReason =
   | 'invalid_amount'
   | 'amount_required'
   | 'total_exceeds_limit'
+  | 'invalid_part_code'
+  | 'invalid_damage_region'
 
 export type LaborSheetValidation =
   | { readonly valid: true; readonly items: readonly NormalizedLaborItem[]; readonly totals: LaborSheetTotals }
@@ -123,11 +164,37 @@ export function validateLaborSheetItems(
     if (item.partAmountMinor + item.laborAmountMinor === 0) {
       return { valid: false, reasonCode: 'amount_required', itemOrdinal: ordinal }
     }
+    // Paket 56 kanıt alanları: verilmişse normalize edilir, yoksa null kalır.
+    let partCode: string | null = null
+    if (item.partCode !== undefined && item.partCode !== null) {
+      partCode = normalizeLaborPartCode(item.partCode)
+      if (partCode === null) {
+        return { valid: false, reasonCode: 'invalid_part_code', itemOrdinal: ordinal }
+      }
+    }
+    const partCodeSource = item.partCodeSource ?? null
+    // Kaynak yalnız kod varken anlamlıdır ve tersi de geçerlidir.
+    if ((partCode === null) !== (partCodeSource === null)) {
+      return { valid: false, reasonCode: 'invalid_part_code', itemOrdinal: ordinal }
+    }
+    if (partCodeSource !== null && !(LABOR_PART_CODE_SOURCES as readonly string[]).includes(partCodeSource)) {
+      return { valid: false, reasonCode: 'invalid_part_code', itemOrdinal: ordinal }
+    }
+    let damageRegion: string | null = null
+    if (item.damageRegion !== undefined && item.damageRegion !== null) {
+      damageRegion = normalizeLaborDamageRegion(item.damageRegion)
+      if (damageRegion === null) {
+        return { valid: false, reasonCode: 'invalid_damage_region', itemOrdinal: ordinal }
+      }
+    }
     normalized.push({
       description,
       action,
       partAmountMinor: item.partAmountMinor,
       laborAmountMinor: item.laborAmountMinor,
+      partCode,
+      partCodeSource,
+      damageRegion,
     })
   }
   const totals = computeLaborSheetTotals(normalized)

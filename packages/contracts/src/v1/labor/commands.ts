@@ -1,8 +1,11 @@
 import { z } from 'zod'
 import {
+  LABOR_PART_CODE_SOURCES,
   MAX_LABOR_AMOUNT_MINOR,
+  MAX_LABOR_DAMAGE_REGION_LENGTH,
   MAX_LABOR_ITEM_ACTION_LENGTH,
   MAX_LABOR_ITEM_DESCRIPTION_LENGTH,
+  MAX_LABOR_PART_CODE_LENGTH,
   MAX_LABOR_REVISION_REASON_LENGTH,
   MAX_LABOR_SHEET_ITEMS,
 } from '@hasarbotu/domain'
@@ -16,7 +19,18 @@ export const laborItemInputSchema = z.strictObject({
   action: normalizedText(MAX_LABOR_ITEM_ACTION_LENGTH),
   partAmountMinor: amountMinorSchema,
   laborAmountMinor: amountMinorSchema,
-})
+  /**
+   * Paket 56 kanıt alanları. Nullable ve varsayılan `null`: eski istemciler ve
+   * eski föy sürümleri değişmeden çalışır.
+   */
+  partCode: normalizedText(MAX_LABOR_PART_CODE_LENGTH).nullable().default(null),
+  /** Kullanıcı girdisi ile sözlük önerisi ayrılır; kod yoksa kaynak da yoktur. */
+  partCodeSource: z.enum(LABOR_PART_CODE_SOURCES).nullable().default(null),
+  damageRegion: normalizedText(MAX_LABOR_DAMAGE_REGION_LENGTH).nullable().default(null),
+}).refine(
+  (value) => (value.partCode === null) === (value.partCodeSource === null),
+  { error: 'part_code_source_requires_part_code', path: ['partCodeSource'] },
+)
 
 const laborItemListSchema = z.array(laborItemInputSchema).min(1).max(MAX_LABOR_SHEET_ITEMS)
 

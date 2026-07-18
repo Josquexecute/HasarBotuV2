@@ -3,10 +3,18 @@ export interface LaborItemInputRecord {
   readonly action: string
   readonly partAmountMinor: number
   readonly laborAmountMinor: number
+  /** Paket 56 kanıt alanları; verilmezse null yazılır. */
+  readonly partCode?: string | null
+  readonly partCodeSource?: 'user_entered' | 'dictionary_suggested' | null
+  readonly damageRegion?: string | null
 }
 
 export interface LaborItemRecord extends LaborItemInputRecord {
   readonly ordinal: number
+  /** Okuma tarafında alanlar her zaman bulunur; eski sürümlerde null'dır. */
+  readonly partCode: string | null
+  readonly partCodeSource: 'user_entered' | 'dictionary_suggested' | null
+  readonly damageRegion: string | null
 }
 
 export interface LaborSheetTotalsRecord {

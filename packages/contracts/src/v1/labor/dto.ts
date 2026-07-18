@@ -1,9 +1,12 @@
 import { z } from 'zod'
 import {
+  LABOR_PART_CODE_SOURCES,
   LABOR_SHEET_CURRENCY,
   LABOR_SHEET_SCHEMA_VERSION,
   LABOR_SHEET_SOURCE_TYPES,
   MAX_LABOR_AMOUNT_MINOR,
+  MAX_LABOR_DAMAGE_REGION_LENGTH,
+  MAX_LABOR_PART_CODE_LENGTH,
   MAX_LABOR_ITEM_ACTION_LENGTH,
   MAX_LABOR_ITEM_DESCRIPTION_LENGTH,
   MAX_LABOR_REVISION_REASON_LENGTH,
@@ -32,6 +35,10 @@ export const laborSheetItemSchema = z.strictObject({
   action: z.string().min(1).max(MAX_LABOR_ITEM_ACTION_LENGTH),
   partAmountMinor: amountMinorSchema,
   laborAmountMinor: amountMinorSchema,
+  /** Paket 56: eski sürümlerde null kalır. */
+  partCode: z.string().min(1).max(MAX_LABOR_PART_CODE_LENGTH).nullable(),
+  partCodeSource: z.enum(LABOR_PART_CODE_SOURCES).nullable(),
+  damageRegion: z.string().min(1).max(MAX_LABOR_DAMAGE_REGION_LENGTH).nullable(),
 })
 
 export const laborSheetTotalsSchema = z.strictObject({

@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "fields": {
+      "type": "object",
+      "properties": {
+        "brand": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "modelYear": {
+          "type": "integer",
+          "minimum": 1950,
+          "maximum": 2100
+        },
+        "variant": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vehicleClass": {
+          "type": "string",
+          "enum": [
+            "passenger_car",
+            "light_commercial",
+            "heavy_commercial",
+            "motorcycle",
+            "trailer",
+            "other"
+          ]
+        },
+        "chassisPrefix": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 11
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engineCode": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 24
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidenceSource": {
+          "type": "string",
+          "enum": [
+            "registration_document",
+            "policy_document",
+            "insurer_record",
+            "user_statement",
+            "other"
+          ]
+        },
+        "evidenceReference": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "brand",
+        "model",
+        "modelYear",
+        "variant",
+        "vehicleClass",
+        "chassisPrefix",
+        "engineCode",
+        "evidenceSource",
+        "evidenceReference"
+      ],
+      "additionalProperties": false
+    },
+    "expectedVersion": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reason": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "fields",
+    "expectedVersion",
+    "reason",
+    "confirmed"
+  ],
+  "additionalProperties": false
+}

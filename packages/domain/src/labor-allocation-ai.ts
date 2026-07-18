@@ -2,6 +2,7 @@ import { sha256Text } from './pdf-text-extraction.js'
 import { minimizePolicyAiSources, type PolicyAiPiiCategory } from './policy-ai-privacy.js'
 import { detectPolicyAiPromptInjection } from './policy-ai.js'
 import type { CaseType } from './case-type.js'
+import type { OutboundVehicleProfile } from './case-vehicle-profile.js'
 import {
   MAX_LABOR_SHEET_ITEMS,
   MAX_LABOR_SHEET_TOTAL_MINOR,
@@ -136,6 +137,10 @@ export interface LaborAllocationEvidenceLine {
   readonly action: string
   readonly partAmountMinor: number
   readonly laborAmountMinor: number
+  /** Paket 56: satır düzeyinde parça kodu; saf işçilikte null olabilir. */
+  readonly partCode: string | null
+  /** Paket 56: satır düzeyinde normalize hasar bölgesi. */
+  readonly damageRegion: string | null
 }
 
 export interface LaborAllocationDictionaryEntry {
@@ -165,6 +170,8 @@ export interface LaborAllocationPlanContext {
   readonly sheetVersion: number
   readonly damageDescription: string
   readonly lines: readonly NormalizedLaborItem[]
+  /** Paket 56: dosya düzeyinde araç profili; yoksa null. */
+  readonly vehicleProfile: OutboundVehicleProfile | null
   readonly dictionary: readonly LaborAllocationDictionaryEntry[]
   readonly approvedHistory: readonly LaborAllocationHistoryEntry[]
   readonly expertBaseline: LaborAllocationExpertBaseline | null
@@ -183,6 +190,8 @@ export interface LaborAllocationOutboundContext {
     readonly allowedOperationTypes: readonly LaborOperationType[]
     readonly economicBuckets: readonly LaborEconomicBucket[]
     readonly damageDescription: string
+    /** Normalize araç profili; tam şasi ve plaka içermez. */
+    readonly vehicleProfile: OutboundVehicleProfile | null
     readonly lines: readonly LaborAllocationEvidenceLine[]
     readonly dictionary: readonly LaborAllocationDictionaryEntry[]
     readonly approvedHistory: readonly LaborAllocationHistoryEntry[]
@@ -266,20 +275,26 @@ function canonical(value: unknown): string {
 }
 
 /**
- * Bu repository'de karşılığı olmayan kanıt kanallarını işaretler. Araç kimliği,
- * parça kodu ve yapısal hasar bölgesi alanları şemada YOKTUR; uydurulmaz.
+ * Eksik kanıt kanallarını GERÇEK VERİYE göre hesaplar (Paket 56).
+ *
+ * Paket 54'te bu kanallar şemada bulunmadığı için koşulsuz eksik sayılıyordu.
+ * Artık alanlar mevcut: kod yalnız veri gerçekten yoksa üretilir.
+ * - Araç kimliği: dosya düzeyinde profil yoksa.
+ * - Parça kodu: parça bedeli olan (`partAmountMinor > 0`) bir satırda kod yoksa.
+ *   Saf işçilik satırında parça kodu zorunlu SAYILMAZ.
+ * - Hasar bölgesi: herhangi bir satırda bölge yoksa.
  */
 export function detectMissingEvidence(
   input: LaborAllocationPlanContext,
 ): readonly LaborAllocationMissingEvidenceCode[] {
-  const codes: LaborAllocationMissingEvidenceCode[] = [
-    // Şemada araç marka/model/model yılı/şasi/motor alanı bulunmuyor.
-    'EVIDENCE_MISSING_VEHICLE_IDENTITY',
-    // `labor_sheet_items` parça/malzeme kodu taşımıyor.
-    'EVIDENCE_MISSING_PART_CODE',
-    // Yapısal hasar bölgesi alanı bulunmuyor; yalnız serbest metin tarif var.
-    'EVIDENCE_MISSING_DAMAGE_REGION',
-  ]
+  const codes: LaborAllocationMissingEvidenceCode[] = []
+  if (input.vehicleProfile === null) codes.push('EVIDENCE_MISSING_VEHICLE_IDENTITY')
+  const partCodeMissing = input.lines.some((line) => (
+    line.partAmountMinor > 0 && (line.partCode ?? null) === null
+  ))
+  if (partCodeMissing) codes.push('EVIDENCE_MISSING_PART_CODE')
+  const damageRegionMissing = input.lines.some((line) => (line.damageRegion ?? null) === null)
+  if (damageRegionMissing) codes.push('EVIDENCE_MISSING_DAMAGE_REGION')
   if (input.approvedHistory.length === 0) codes.push('EVIDENCE_MISSING_APPROVED_HISTORY')
   if (input.dictionary.length === 0) codes.push('EVIDENCE_MISSING_DICTIONARY_MATCH')
   if (input.expertBaseline === null) codes.push('EVIDENCE_MISSING_EXPERT_BASELINE')
@@ -293,6 +308,8 @@ function evidenceLines(lines: readonly NormalizedLaborItem[]): readonly LaborAll
     action: line.action,
     partAmountMinor: line.partAmountMinor,
     laborAmountMinor: line.laborAmountMinor,
+    partCode: line.partCode ?? null,
+    damageRegion: line.damageRegion ?? null,
   }))
 }
 
@@ -309,6 +326,9 @@ export function buildLaborAllocationOutboundContext(
     ...lines.flatMap((line) => [
       { sourceAnchorId: `line-${line.ordinal}-description`, text: line.description },
       { sourceAnchorId: `line-${line.ordinal}-action`, text: line.action },
+      ...(line.damageRegion === null
+        ? []
+        : [{ sourceAnchorId: `line-${line.ordinal}-damage-region`, text: line.damageRegion }]),
     ]),
     ...input.dictionary.flatMap((entry, index) => [
       { sourceAnchorId: `dictionary-${index + 1}-description`, text: entry.description },
@@ -330,12 +350,17 @@ export function buildLaborAllocationOutboundContext(
     allowedOperationTypes: LABOR_OPERATION_TYPES,
     economicBuckets: LABOR_ECONOMIC_BUCKETS,
     damageDescription: resolve('damage-description', input.damageDescription),
+    vehicleProfile: input.vehicleProfile,
     lines: lines.map((line) => ({
       ordinal: line.ordinal,
       description: resolve(`line-${line.ordinal}-description`, line.description),
       action: resolve(`line-${line.ordinal}-action`, line.action),
       partAmountMinor: line.partAmountMinor,
       laborAmountMinor: line.laborAmountMinor,
+      partCode: line.partCode,
+      damageRegion: line.damageRegion === null
+        ? null
+        : resolve(`line-${line.ordinal}-damage-region`, line.damageRegion),
     })),
     dictionary: input.dictionary.map((entry, index) => ({
       description: resolve(`dictionary-${index + 1}-description`, entry.description),
@@ -391,6 +416,8 @@ export function buildLaborAllocationEvidenceHash(input: LaborAllocationPlanConte
     sheetId: input.sheetId,
     sheetVersion: input.sheetVersion,
     lines: evidenceLines(input.lines),
+    // Paket 56: araç profili kanıt snapshot'ına dahildir; değişirse öneri stale olur.
+    vehicleProfile: input.vehicleProfile,
     dictionary: input.dictionary,
     approvedHistory: input.approvedHistory,
     expertBaseline: input.expertBaseline,

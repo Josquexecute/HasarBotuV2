@@ -1128,3 +1128,21 @@ Bu dilimde föy otomatik revize EDİLMEZ: yalnız seçilmiş sonuçlardan açık
 Kapsam dışı: Excel yazımı, şablon profilleri, otomatik eksper onayı, kullanıcı onayı olmadan föy revizyonu.
 
 Kapsam dışı: Excel'e yazma, şablon profilleri, otomatik eksper onayı, kullanıcı onayı olmadan föy revizyonu, kendi kendine öğrenme, Gmail/File Agent/fiziksel dosya yazımı.
+
+## Paket 56 — AI kanıt zenginleştirme
+
+- [x] `detectMissingEvidence` sabit kod listesini bırak; kodları gerçek plan bağlamından türet.
+- [x] Domain: `case-vehicle-profile` (marka, model, model yılı, varyant, araç sınıfı, şasi prefix'i, motor kodu, kanıt kaynağı/referansı) ve prefix/motor kodu normalizasyonu.
+- [x] Domain: işçilik satırında `partCode`, `partCodeSource` ve `damageRegion` normalizasyonu; kod/kaynak birlikte null ya da birlikte dolu.
+- [x] Contracts: `v1/case-vehicle-profile` istek/yanıt şemaları ve golden JSON Schema fixture'ları.
+- [x] Migration 0032: `case_vehicle_profiles` + immutable `case_vehicle_profile_versions`; `labor_sheet_items` üzerine nullable kanıt sütunları ve CHECK.
+- [x] API: `GET`/`PUT /api/v1/cases/:caseId/vehicle-profile`; sürüm çakışması, kapalı dosya kilidi ve tenant sınırı.
+- [x] API: işçilik store'u kanıt alanlarını yazıp okusun; dağıtım store'u araç profilini kanıt olarak yüklesin.
+- [x] Kanıt alanlarını outbound bağlama ve kanıt snapshot hash'ine dahil et; kaynak değişince eski öneri stale sayılsın.
+- [x] UI: Özet sekmesinde araç profili bölümü (sürüm geçmişi, gerekçe zorunluluğu, şasi prefix sınırı ve gizlilik notları).
+- [x] UI: işçilik editöründe ve salt-okunur föy görünümünde parça kodu / hasar bölgesi sütunları.
+- [x] UI: föy kaydedildiğinde AI dağıtım modülünü tazele; eski öneri revize edilmiş föyün üstünde kalmasın.
+- [x] Gerçek PostgreSQL testleri: üç kanal kapalıyken kodların düşmesi, `control_required` zorlamasının kalması, eski önerilerin değişmeden okunması, tenant ve sürüm çakışması.
+- [x] Chrome/CDP smoke: kanıt öncesi/sonrası kod sayısını gerçekten ölç; plaka ve tam şasinin sızmadığını doğrula.
+
+Kapsam dışı: otomatik belge çıkarımı, sigorta şirketi Excel kolonlarına eşleme, uydurma hasar bölgesi enum'u, `EVIDENCE_MISSING_APPROVED_HISTORY` ve `EVIDENCE_MISSING_EXPERT_BASELINE` kanalları.
