@@ -931,3 +931,20 @@ Etkisi:
 
 - `operational-alert` domain modülü, `v1/operational-alerts` sözleşmesi ve `GET /api/v1/operational-alerts` salt okunur ucu eklenir; UI'da Bildirimler API modunda gerçek uyarıları gösterir.
 - Yeni tablo, migration, kuyruk, worker, dependency veya AI çağrısı eklenmez; bildirim olay modeli (kalıcı, kullanıcı durumlu bildirim) hâlâ ayrı ürün kararıdır.
+
+## 2026-07-18 — HB-2026-056: Durum Panosu operasyonel uyarı özeti
+
+Karar:
+
+1. Durum Panosu uyarı özeti **aynı** `GET /api/v1/operational-alerts` ucunu kullanır. Yeni endpoint, tablo, migration veya ikinci türetim mantığı eklenmez; pano kendi uyarı kuralını hesaplamaz.
+2. Toplam sayaç yalnız API yanıtındaki `totalCount` alanından okunur. Tür dağılımı (`Geciken görev`, `Geciken takip`, `Eksik zorunlu evrak`) aynı yanıttaki uyarılar sayılarak bulunur; bu bir türetim değil, dönen listenin sayımıdır ve tek yerde (`countOperationalAlertsByType`, veri katmanı) durur.
+3. Pano **ayrıntılı liste render etmez**: yalnız özet ve en kritik ilk `DASHBOARD_ALERT_PREVIEW_LIMIT` (3) uyarı gösterilir. Tam liste Bildirimler ekranındadır; toplam rozeti, tür kartları ve "Tüm uyarıları gör" oraya gider. Önizleme satırı ilgili dosya detayına gider.
+4. Uyarı yoksa **nötr** boş durum gösterilir ("Açık operasyonel uyarı yok."); bu bir hata değildir. Hata halinde **sıfır gösterilmez**: ayrı ve açık hata durumu render edilir ve mock'a düşülmez.
+5. Özet yalnız API modunda render edilir; mock modda hiç çağrılmaz ve gösterilmez (HB-2026-054 mock karantinası korunur).
+6. Aynı veri için ek istek üretilmez: mevcut `useOperationalAlerts` hook'u ve `OperationalAlertDataPort` paylaşılır. React StrictMode geliştirme modunda her effect'i iki kez çalıştırdığı için smoke mutlak istek sayısı yerine mevcut Durum Panosu ucuyla karşılaştırma yapar; uyarı ucu pano ucundan fazla istek üretmemelidir.
+7. Cache, istek birleştirme ve performans optimizasyonu bu paketin kapsamı dışındadır; ekranlar arası geçişte yeniden okuma kabul edilir.
+
+Etkisi:
+
+- `DashboardAlertSummary` bileşeni ve veri katmanında `countOperationalAlertsByType` + `DASHBOARD_ALERT_PREVIEW_LIMIT` eklenir.
+- Yeni uç, tablo, migration, kuyruk, dependency veya AI çağrısı eklenmez; kalıcı bildirim durumu ve mevzuat hâlâ kapsam dışıdır.

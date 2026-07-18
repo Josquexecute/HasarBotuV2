@@ -5,11 +5,24 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 49 — Operasyonel bildirimler ilk dilimi (türetilmiş, salt okunur)
+- Aşama: Paket 50 — Durum Panosu operasyonel uyarı özeti
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-49-operational-alerts` dalı, remote yok
+- Git: Yerel repository, `foundation/package-50-dashboard-alert-summary` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 50 doğrulama sonucu
+
+- Durum Panosu uyarı özeti mevcut `GET /api/v1/operational-alerts` ucunu paylaşılan `useOperationalAlerts` hook'u üzerinden kullanır. Yeni endpoint, tablo, migration veya ikinci türetim mantığı eklenmedi.
+- Toplam sayaç yalnız API `totalCount` alanından okunur; tür dağılımı veri katmanındaki `countOperationalAlertsByType` ile tek yerde sayılır ve bileşene gömülmez.
+- Pano ayrıntılı liste render etmez: özet + en kritik ilk 3 uyarı gösterilir. 200 uyarılı senaryoda önizlemenin 3 satırda kaldığı ve tam listenin render edilmediği UI testiyle doğrulandı.
+- Toplam rozeti ve tür kartları Bildirimler ekranına, önizleme satırı ilgili dosya detayına gider.
+- Uyarı yoksa nötr boş durum gösterilir; hata halinde sıfır yerine açık hata durumu render edilir ve mock'a düşülmez. Özet yalnız API modunda çalışır, mock modda uç hiç çağrılmaz.
+- UI testleri 15/15 geçti (sayaç kaynağı, tür özeti, önizleme sınırı, üç ayrı gezinme yolu, nötr boş durum, hata ve oturum hatası, tek istek, mock modu).
+- Chrome/CDP smoke (`scripts/package50-browser-smoke.mjs`) geçti: DOM sayacı API `totalCount` ile eşit; tür sayıları API dağılımıyla birebir; önizleme 3 satırda; tür kartı ve toplam rozeti Bildirimler'e, önizleme dosya detayına gitti; görevler kapatılıp evrak tamamlanınca nötr boş durum göründü; API kapatıldığında sıfır gösterilmedi ve mock'a düşülmedi. 32 sabit mock metni DOM'da bulunmadı; 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yok; console warning/error/exception 0.
+- İstek mükerrerliği ölçüldü: uyarı ucu 2, Durum Panosu ucu 2 istek. Eşitlik, özetin pano verisinden fazla istek üretmediğini gösterir; 1 yerine 2 olması React StrictMode'un geliştirme modunda effect'leri iki kez çalıştırmasındandır ve mevcut bütün hook'lar için geçerli, üretim build'ini etkilemeyen bir davranıştır.
+- Ana ağaçta typecheck, lint, **1401 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
 
 ## Paket 49 doğrulama sonucu
 

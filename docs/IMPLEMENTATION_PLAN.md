@@ -1024,3 +1024,17 @@ Kapsam dışı: bildirim olay modeli, mevzuat kaynak kütüphanesi modeli, yeni 
 - [x] Yalnız Paket 49 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: kalıcı bildirim olay tablosu, kuyruk/worker, okundu-silindi-ertelendi ve kullanıcı bazlı tercih modeli, mevzuat kaynak kütüphanesi, yeni migration ve yeni dependency.
+
+## Paket 50 — Durum Panosu uyarı özeti
+
+- [x] Durum Panosu'na mevcut `GET /api/v1/operational-alerts` ucunu paylaşan uyarı özeti bileşeni ekle; yeni uç, tablo veya ikinci türetim mantığı ekleme.
+- [x] Toplam sayacı yalnız API `totalCount` alanından oku; tür dağılımını tek yerde (veri katmanı) say.
+- [x] Tür bazında özet göster: geciken görev, geciken takip, eksik zorunlu evrak.
+- [x] Rozet ve tür kartları Bildirimler ekranına, önizleme satırı dosya detayına gitsin.
+- [x] Panoda ayrıntılı liste render etme; yalnız özet ve ilk birkaç kritik uyarı göster.
+- [x] Uyarı yoksa nötr boş durum, hata halinde açık hata durumu göster; sıfır gösterme ve mock'a düşme.
+- [x] Aynı veri için mükerrer/paralel istek oluşmasını önle; mevcut hook ve port paylaşılsın.
+- [x] UI testleri, gerçek PostgreSQL üzerinden Chrome smoke, tam kalite zinciri ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 50 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: mevzuat, kalıcı bildirim durumu (okundu/ertelendi/tercih), cache ve performans optimizasyonu, yeni endpoint/tablo/migration ve yeni dependency.

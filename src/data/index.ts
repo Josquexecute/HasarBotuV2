@@ -334,9 +334,12 @@ export {
   type LaborDictionaryRecord,
 } from './laborDictionaryPort'
 export {
+  DASHBOARD_ALERT_PREVIEW_LIMIT,
   OperationalAlertError,
+  countOperationalAlertsByType,
   createHttpOperationalAlertAdapter,
   type OperationalAlertAdapterOptions,
+  type OperationalAlertTypeCounts,
   type OperationalAlertDataPort,
   type OperationalAlertErrorKind,
   type OperationalAlertRecord,

@@ -22,7 +22,9 @@ import {
   type DashboardAttentionCodeRecord,
   type DashboardCaseRecord,
   type DashboardPriorityRecord,
+  type OperationalAlertDataPort,
 } from '../../data'
+import { DashboardAlertSummary } from './DashboardAlertSummary'
 import { matchesSearchQuery } from '../../utils/search'
 
 type AttentionFilter =
@@ -151,7 +153,8 @@ function WorkflowCard({ item }: { readonly item: DashboardCaseRecord }) {
   )
 }
 
-export function DashboardPage() {
+/** `alertPort` yalnız testler için enjekte edilir; uygulama gerçek HTTP adaptörünü kullanır. */
+export function DashboardPage({ alertPort }: { alertPort?: OperationalAlertDataPort } = {}) {
   const navigate = useNavigate()
   const { dashboard, source, status, reload } = useDashboard()
   const [query, setQuery] = useState('')
@@ -285,6 +288,9 @@ export function DashboardPage() {
           ))}
         </section>
       )}
+
+      {/* Uyarı özeti yalnız API modunda gerçek uçtan gelir; mock modda gösterilmez. */}
+      {source === 'api' && <DashboardAlertSummary port={alertPort} />}
 
       <section className="board-toolbar" aria-label="Durum panosu araçları">
         <div className="segmented-control">

@@ -644,6 +644,124 @@ button {
 .summary-item--warning strong { color: var(--warning); }
 .summary-item--success strong { color: var(--success); }
 
+/* Durum Panosu operasyonel uyarı özeti (Paket 50). Yalnız özet ve öne çıkan
+   ilk birkaç uyarı; tam liste Bildirimler ekranındadır. */
+.alert-summary {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.alert-summary__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.alert-summary__total,
+.alert-summary__type,
+.alert-summary__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.alert-summary__total:hover,
+.alert-summary__type:hover,
+.alert-summary__more:hover,
+.alert-summary__preview button:hover {
+  background: var(--surface-hover);
+}
+
+.alert-summary__total strong {
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 20px;
+}
+
+.alert-summary__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
+.alert-summary__type strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.alert-summary__type--danger strong { color: var(--danger); }
+.alert-summary__type--warning strong { color: var(--warning); }
+
+.alert-summary__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0 12px 8px;
+  list-style: none;
+}
+
+.alert-summary__preview button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.alert-summary__preview button > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-summary__preview small {
+  margin-inline-start: auto;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.alert-summary__more {
+  margin: 0 12px 10px;
+}
+
+.alert-summary__empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.alert-summary__empty > svg {
+  color: var(--success);
+}
+
+.alert-summary__empty .button {
+  margin-inline-start: auto;
+}
+
 .dashboard-page {
   display: flex;
   flex-direction: column;

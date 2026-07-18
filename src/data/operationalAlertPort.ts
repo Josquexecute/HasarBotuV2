@@ -28,6 +28,28 @@ export interface OperationalAlertDataPort {
   list(): Promise<OperationalAlertsRecord>
 }
 
+/** Durum Panosu özetinde gösterilen öne çıkan uyarı sayısı (tam liste Bildirimler'dedir). */
+export const DASHBOARD_ALERT_PREVIEW_LIMIT = 3
+
+export type OperationalAlertTypeCounts = Readonly<Record<OperationalAlertTypeRecord, number>>
+
+/**
+ * Yanıttaki uyarıların tür dağılımı. İkinci bir türetim değildir: yalnız API'nin
+ * döndürdüğü listeyi sayar. Toplam sayaç bu fonksiyondan değil, yanıttaki
+ * `totalCount` alanından okunmalıdır.
+ */
+export function countOperationalAlertsByType(
+  alerts: readonly OperationalAlertRecord[],
+): OperationalAlertTypeCounts {
+  const counts: Record<OperationalAlertTypeRecord, number> = {
+    overdue_task: 0,
+    overdue_follow_up: 0,
+    missing_required_document: 0,
+  }
+  for (const alert of alerts) counts[alert.type] += 1
+  return counts
+}
+
 export type OperationalAlertErrorKind = 'unauthorized' | 'forbidden' | 'unavailable'
 
 export class OperationalAlertError extends Error {
