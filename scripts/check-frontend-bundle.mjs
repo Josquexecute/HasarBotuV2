@@ -14,6 +14,7 @@ const REQUIRED_LAZY_CHUNKS = [
   'CaseOperationsApiModule-',
   'EmailDraftApiModule-',
   'LaborApiModule-',
+  'PertApiModule-',
 ]
 
 const indexHtml = await readFile(`${DIST_DIR}index.html`, 'utf8')

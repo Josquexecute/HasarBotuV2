@@ -963,3 +963,15 @@ Kapsam dışı: AI işçilik önerisi, Excel şablon profili, güvenli Excel yaz
 - [x] Yalnız Paket 44 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: benzer dosya taraması/öğrenme sözlüğü, Excel şablon profili, güvenli Excel yazımı, otomatik föy kaydı, Gmail, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.
+
+## Paket 45 — Kullanıcı kontrollü PERT değerlendirme çekirdeği
+
+- [x] Dokuz durumlu süreç, ekonomik veri doğrulama, türetilmiş oran ve kanaat/merkez tutarlılık kurallarını saf domain’de ekle.
+- [x] Strict contracts/JSON Schema (workspace/create/revise) ve golden fixture’ları ekle.
+- [x] Migration 0030: case başına tek değerlendirme aggregate, immutable version, karar tutarlılığı ve append-only kısıtları.
+- [x] Tenant/RBAC (`admin|expert|case_manager`)/idempotency/kapalı-case ve güvenli audit ile read/create/revise API.
+- [x] Dosya Detayı Ağır Hasar sekmesini API modunda gerçek değerlendirmeye bağla; üç ayrı karar alanı ve sürüm geçmişi.
+- [x] Gerçek PostgreSQL/API, tam root, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 45 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: fotoğraf AI, AI PERT önerisi, dış rayiç/SBM entegrasyonu, Excel yazımı, File Agent, IPC, yeni dependency, üretim migration ve sonraki paket.

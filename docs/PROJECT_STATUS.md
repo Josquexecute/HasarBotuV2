@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 44 — Kanıtlı AI işçilik önerisi
+- Aşama: Paket 45 — Kullanıcı kontrollü PERT değerlendirme çekirdeği
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-44-labor-ai` dalı, remote yok
+- Git: Yerel repository, `foundation/package-45-pert-core` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -834,3 +834,17 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Build başlangıç JavaScript grafiğini **469.250 baytta** tuttu; AI paneli lazy İşçilik chunk'ında kaldı ve **9 zorunlu lazy modül** korundu.
 - Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.286/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
 - Yeni dependency, Excel yazımı, öğrenme sözlüğü, Gmail, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Üretim migration çalıştırılmadı.
+
+## Paket 45 — Kullanıcı kontrollü PERT değerlendirme çekirdeği (2026-07-18)
+
+- v0.8 PERT’in ilk dilimi (HB-2026-051): `pert-assessment/1.0.0` saf domain; DOMAIN_RULES’taki dokuz süreç durumu, minor-birim ekonomik veriler ve türetilmiş hasar/rayiç oranı (eşik/otomatik karar yok). AI önerisi, eksper kanaati ve merkez kararı ayrı alanlardır; kanaat zorunlu gerekçeli, merkez kararı yalnız karar durumlarıyla birebir eşleşir.
+- v0.7’nin kalan güvenli Excel yazımı dilimi bilinçli ertelendi: yeni major dependency, gerçek ofis Excel şablon bilgisi ve ilk fiziksel içerik-yazma yolu kullanıcı onayı ister.
+- Migration 0030; case başına tek `pert_assessments` aggregate ve immutable `pert_assessment_versions` ekler. Karar tutarlılığı, sürüm zinciri ve append-only kısıtları DB seviyesinde zorlanır.
+- Read salt okunur ve audit yazmaz. Create/revise; Idempotency-Key, optimistic version, RBAC (`admin/expert/case_manager` — sekreterlik salt okunur), kapalı-case kilidi ve merkezi audit ile atomiktir. Audit yalnız durum/kanaat/karar kodu, oran ve sürüm taşır; gerekçe/not serbest metni taşımaz.
+- Dosya Detayı > Ağır Hasar sekmesi API modunda gerçek değerlendirmeye bağlandı; API modunda bağlı olmayan son dosya modülü kapandı. Mock prototip ayrı korunur ve API hatasında fallback yapılmaz.
+- Ana çalışma ağacında typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.311 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 218/6; domain 432; contracts 266; database 59; API 283; file-agent 53 (Paket 44'e göre +25; kritik testlerde skip yok).
+- Migration 0030 tekil ve 0029→0021 ile kademeli rollback-reapply gerçek PostgreSQL'de geçti; 0030 kısıt testi case-başına-tek-değerlendirme unique'ini, gerekçesiz kanaat ve tutarsız merkez kararı CHECK reddini, sürüm append-only'sini ve aggregate silme yasağını doğruladı. Paket 45 gerçek API testi 6/6: 401/tenant-404/sekreterlik yazma reddi; create + oran türetme + idempotent replay + ikinci değerlendirme 409; gerekçesiz kanaat ve karar uyuşmazlığı 400; kanaat→merkez kararı ayrı sürümler + immutable geçmiş + stale 409; kapalı case reddi; audit'te serbest metin sızıntısı yok.
+- Gerçek Chrome/CDP smoke (10/10 senaryo): login; boş değerlendirme durumu; kullanıcı kontrollü oluşturma; türetilmiş %77 oran (eşiksiz); ayrı eksper kanaati; ayrı merkez kararı alanı; immutable sürüm 2; audit sızıntısız; API kapatılınca fallback yok; console temiz. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yoktu.
+- Build başlangıç JavaScript grafiğini **472.166 baytta** tuttu; en büyük chunk 299.204 bayt ve PERT dahil **10 zorunlu lazy modül** ayrı kaldı.
+- Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.311/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
+- Yeni dependency, AI/provider çağrısı, SBM/dış veri, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Üretim migration çalıştırılmadı.

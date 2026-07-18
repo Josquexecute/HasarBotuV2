@@ -30,7 +30,7 @@ const CLOSED_CASE = {
 describe('CaseDetailPage gercek API dogruluk siniri', () => {
   it('kapali case listede olmasa bile detail endpointinden acilir ve bagli olmayan modullerde mock gostermez', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
-    window.sessionStorage.setItem('hasarbotu-active-case-tab', 'Ağır Hasar')
+    window.sessionStorage.setItem('hasarbotu-active-case-tab', 'Geçmiş')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
       const url = String(input)
       const body = url.endsWith('/api/v1/cases/case-closed-38')
@@ -49,7 +49,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
 
     await waitFor(() => expect(screen.getByText('34 API 380')).toBeInTheDocument())
     expect(screen.getByText('Bu modül henüz gerçek API verisine bağlı değildir; mock kayıt gösterilmez.')).toBeInTheDocument()
-    expect(screen.queryByText('PERT adayı değil')).not.toBeInTheDocument()
+    expect(screen.queryByText('Servis görüşmesi notu eklendi')).not.toBeInTheDocument()
     expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-closed-38', expect.anything())
   })
 })

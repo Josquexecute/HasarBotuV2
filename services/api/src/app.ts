@@ -25,6 +25,7 @@ import { registerEmailDraftRoutes } from './email-drafts/index.js'
 import { registerEmailAiRoutes, type EmailAiProviderRegistry } from './email-ai/index.js'
 import { registerLaborRoutes } from './labor/index.js'
 import { registerLaborAiRoutes, type LaborAiProviderRegistry } from './labor-ai/index.js'
+import { registerPertRoutes } from './pert/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -159,6 +160,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       pool: options.auth.pool,
       clock: options.clock ?? systemClock,
       providers: options.laborAiProviders ?? { get: () => undefined, list: () => [] },
+    })
+    registerPertRoutes(app, {
+      pool: options.auth.pool,
     })
   }
 

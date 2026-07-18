@@ -153,6 +153,14 @@ import {
   laborAiRunResponseSchema,
   laborAiRunsResponseSchema,
 } from './v1/labor-ai/dto.js'
+import {
+  pertAssessmentCreateRequestSchema,
+  pertAssessmentReviseRequestSchema,
+} from './v1/pert/commands.js'
+import {
+  pertAssessmentResponseSchema,
+  pertAssessmentWorkspaceResponseSchema,
+} from './v1/pert/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -280,6 +288,10 @@ export const JSON_SCHEMA_TARGETS = {
   'labor-ai-plan-response': laborAiPlanResponseSchema,
   'labor-ai-run-response': laborAiRunResponseSchema,
   'labor-ai-runs-response': laborAiRunsResponseSchema,
+  'pert-assessment-create-request': pertAssessmentCreateRequestSchema,
+  'pert-assessment-revise-request': pertAssessmentReviseRequestSchema,
+  'pert-assessment-response': pertAssessmentResponseSchema,
+  'pert-assessment-workspace-response': pertAssessmentWorkspaceResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

@@ -2119,3 +2119,14 @@ button {
 .labor-ai-panel textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); font-size: 12px; resize: vertical; }
 .labor-ai-panel textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .labor-ai-plan, .labor-ai-run { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+/* Ağır Hasar / PERT (Paket 45) */
+.pert-decisions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
+.pert-decisions .decision-card h3 { margin: 6px 0 4px; font-size: 15px; }
+.pert-decisions .decision-card p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 16px; }
+.pert-editor__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pert-editor .form-field select { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); font-size: 12px; }
+.pert-ratio { display: inline-flex; min-height: 30px; align-items: center; font-size: 15px; color: var(--accent); }
+@media (max-width: 1500px) {
+  .pert-decisions { grid-template-columns: minmax(0, 1fr); }
+}

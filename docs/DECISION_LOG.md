@@ -847,3 +847,21 @@ Etkisi:
 
 - Migration `0029_labor_ai_suggestions`; saf labor-AI privacy/çıktı doğrulama domain’i; strict contracts/JSON Schema; tenant/RBAC/idempotency/recovery/audit API ve Paket 43 editöründe sınırlı AI öneri paneli eklenir.
 - Yeni dependency, Excel yazımı, öğrenme sözlüğü, Gmail, File Agent, IPC, fiziksel dosya erişimi veya otomatik kayıt yoktur.
+
+## 2026-07-18 — HB-2026-051: Kullanıcı kontrollü PERT/Ağır Hasar değerlendirme çekirdeği
+
+Karar:
+
+1. v0.8 PERT’in ilk dilimi yalnız kullanıcı kontrollü değerlendirme çekirdeğidir. Fotoğraf AI, AI PERT önerisi, dış rayiç kaynağı ve Excel yazımı bu pakette yoktur; sonraki açık kapsamdır. v0.7’nin kalan güvenli Excel yazımı dilimi, yeni major dependency (xlsx kütüphanesi), gerçek ofis Excel şablon bilgisi ve ilk fiziksel içerik-yazma yolu gerektirdiği için bilinçli olarak ertelendi; üçü de kullanıcı onayı isteyen kararlardır.
+2. Süreç durumu DOMAIN_RULES/PERT’teki dokuz durumun dil bağımsız kodlarıdır: `review_not_started | data_missing | under_review | repair_indicated | pert_candidate | expert_opinion_issued | center_decision_pending | repair_decided | pert_decided`. Durum kullanıcı seçimidir; katı geçiş makinesi belgelenmediği için kodlanmaz.
+3. AI önerisi, eksper kanaati ve merkez kararı ayrı alanlardır. Eşik veya otomatik sonuç sabit kodlanmaz: hasar/rayiç oranı yalnız türetilmiş tam sayı yüzdedir (yarım yukarı yuvarlanır), her iki değer pozitifken hesaplanır ve saklanmaz.
+4. Eksper kanaati `repair | pert` + zorunlu bounded gerekçedir ve yalnız kanaat-sonrası durumlarla kaydedilebilir; kanaat yokken yalnız inceleme durumları geçerlidir. Merkez kararı `repair | pert` kanaatten ayrı kaydedilir, yalnız karar durumlarında bulunur ve durumla birebir eşleşmek zorundadır. Bu tutarlılık kuralları hem domain hem DB CHECK seviyesinde zorlanır.
+5. Her case için tek değerlendirme aggregate’i tutulur; sürümler immutable ve append-only’dir. Oluşturma/düzeltme zorunlu Idempotency-Key, optimistic version, açık onay ve kapalı-case kilidi kullanır.
+6. PERT kanaati eksper/yönetim işidir: yazma rolleri `admin | expert | case_manager`; sekreterlik dahil diğer case erişimli roller salt okunurdur.
+7. Audit yalnız güvenli metadata taşır: durum/kanaat/karar kodları, türetilmiş oran, sürüm ve yapısal not var/yok bilgisi. Gerekçe, yapısal not veya merkez notu serbest metni audit’e kopyalanmaz. Salt-okunur çağrılar audit yazmaz.
+8. UI Dosya Detayı > Ağır Hasar sekmesi API modunda gerçek değerlendirmeye bağlanır; ekonomik görünüm, üç ayrı karar alanı ve sürüm geçmişini gösterir. Mock prototip ayrı korunur ve API hatasında fallback yapılmaz.
+
+Etkisi:
+
+- `pert-assessment/1.0.0` saf domain doğrulama/oran katmanı, strict contracts/JSON Schema, migration 0030, tenant/RBAC/idempotency/audit API ve gerçek Dosya Detayı Ağır Hasar çalışma alanı eklenir; API modunda bağlı olmayan son dosya modülü kapanır.
+- Yeni dependency, AI/provider çağrısı, SBM/dış veri kaynağı, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmez; üretim migration çalıştırılmaz.

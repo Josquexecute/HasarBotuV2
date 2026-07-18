@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "workflowStatus": {
+      "type": "string",
+      "enum": [
+        "review_not_started",
+        "data_missing",
+        "under_review",
+        "repair_indicated",
+        "pert_candidate",
+        "expert_opinion_issued",
+        "center_decision_pending",
+        "repair_decided",
+        "pert_decided"
+      ]
+    },
+    "estimatedDamageMinor": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "marketValueMinor": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "structuralNote": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "expertOpinion": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "repair",
+            "pert"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "expertRationale": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "centerDecision": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "repair",
+            "pert"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "centerNote": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "workflowStatus",
+    "estimatedDamageMinor",
+    "marketValueMinor",
+    "structuralNote",
+    "expertOpinion",
+    "expertRationale",
+    "centerDecision",
+    "centerNote",
+    "expectedVersion",
+    "reason",
+    "confirmed"
+  ],
+  "additionalProperties": false
+}

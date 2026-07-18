@@ -69,6 +69,11 @@ const LaborApiModule = lazy(async () => {
   return { default: module.LaborApiModule }
 })
 
+const PertApiModule = lazy(async () => {
+  const module = await import('./PertApiModule')
+  return { default: module.PertApiModule }
+})
+
 const tabs = [
   'Özet',
   'Operasyon',
@@ -434,7 +439,7 @@ export function CaseDetailPage() {
             ? <LaborApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
             : <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />
             : activeTab === 'Ağır Hasar' ? source === 'api'
-              ? <ApiModuleUnavailable title="Ağır Hasar" guidance="PERT veya ağır hasar sonucu için doğrulanmış gerçek veri kaynağı henüz bağlı değildir." />
+              ? <PertApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
               : <HeavyDamageModule item={item} />
               : activeTab === 'Değer Kaybı' ? source === 'api'
                 ? <TrafficValueLossApiModule item={item} source={source} />
