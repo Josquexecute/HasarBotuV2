@@ -1023,3 +1023,21 @@ Etkisi:
 
 - `packages/domain/src/labor-allocation-ai.ts` eklenir (saf modül, 23 test). Runtime davranışı değişmez; tablo, migration, endpoint veya UI eklenmez.
 - Kalan dilimler açıktır: sözleşme + fixture, migration 0031 (immutable run/line kayıtları + `ai_usage_ledger` modül genişletmesi), API store/routes/provider harness, UI önizleme ve satır bazlı kabul/ret, Chrome smoke.
+
+## 2026-07-18 — HB-2026-061: AI işçilik dağıtımı uçtan uca (Paket 54, dilim 2)
+
+Karar:
+
+1. Öneri **föy sürümünden ayrı aggregate'tir**: `labor_allocation_runs` + `labor_allocation_line_suggestions`. `labor_sheet_versions` bu tablolara bağlanmaz ve öneri föyü kendiliğinden değiştirmez.
+2. **Append-only ve sürüm zinciri DB seviyesinde korunur**: run kimliği immutable, terminal run değiştirilemez/silinemez, satır sonuçları hiç güncellenemez/silinemez, satırlar yalnız `running` run'a eklenebilir ve `review_required` geçişinde bildirilen `line_count` gerçek satır sayısıyla trigger'da doğrulanır.
+3. **Tekrar koruması yalnız BAŞARILI sonuçlara uygulanır** (`review_required` üzerinde kısmi unique indeks). İlk tasarımda kimlik tuple'ı tüm statülerde tekildi; bu, sağlayıcı kapalıyken oluşan bir çalıştırmanın analiz anahtarını kalıcı olarak kilitlemesine ve sağlayıcı sonradan açıldığında yeniden denenememesine yol açıyordu. Gerçek PostgreSQL testi bu hatayı yakaladı ve tasarım düzeltildi.
+4. Sağlayıcı çıktısı **domain doğrulamasından geçmeden hiçbir satır yazılmaz**. Doğrulama başarısızsa run `failed` olur, satır tablosu boş kalır.
+5. **Gizli fallback yoktur**: sağlayıcı hatası `failed`, sonucu bilinmeyen çağrı `outcome_unknown`, bütçe aşımı `budget_blocked`, politika kapalı `provider_disabled` üretir; hiçbirinde kural tabanlı yedek sonuç uydurulmaz. Her sonuç `ai_usage_ledger` üzerinde `labor_allocation` modülüyle kaydedilir.
+6. `apply-preview` ucu **föyü revize etmez**; yanıt sözleşme seviyesinde `applied: false` literalidir. Stale kaynak föy sürümü hem analizde hem önizlemede reddedilir.
+7. Deterministik harness sıfır olmayan sembolik maliyet üretir; aksi halde bütçe kapısı sıfır maliyet yüzünden sessizce atlanır ve hiç sınanmazdı.
+8. UI satır bazlı kabul/ret, `control_required` filtresi, "kontrol gerekli olanlar hariç tümünü seç", gerekçe/güven/kanıt/çelişki kodu görünümü sunar. Tüm satırlar kontrol gerekliyse toplu seçim butonu **devre dışıdır**: kontrol gerekli satır sessizce seçilemez.
+
+Etkisi:
+
+- Migration 0031, `v1/labor-allocation-ai` sözleşmesi, API store/routes/provider harness ve `LaborAllocationAiModule` eklenir; Paket 54 dilim 1'deki domain modülü artık runtime tarafından tüketilir.
+- Excel yazımı, şablon profilleri, otomatik eksper onayı ve kullanıcı onayı olmadan föy revizyonu kapsam dışıdır.

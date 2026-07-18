@@ -644,6 +644,150 @@ button {
 .summary-item--warning strong { color: var(--warning); }
 .summary-item--success strong { color: var(--success); }
 
+/* AI işçilik dağıtımı paneli (Paket 54). Öneri föyü değiştirmez; satır bazında
+   kabul/ret ve control_required görünürlüğü esastır. */
+.labor-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.allocation-panel {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.allocation-panel__head h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.allocation-panel__head small,
+.allocation-panel__notice {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.allocation-panel__controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.allocation-panel__controls .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.allocation-panel__error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.allocation-panel__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.allocation-panel__count {
+  margin-inline-start: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.allocation-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.allocation-line {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-muted);
+}
+
+.allocation-line--control {
+  border-inline-start: 3px solid var(--warning);
+}
+
+.allocation-line__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.allocation-line__body strong {
+  display: block;
+  font-size: 13px;
+}
+
+.allocation-line__allocations,
+.allocation-line__economics,
+.allocation-line__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.allocation-line__reasoning {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.allocation-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  font-size: 10px;
+}
+
+.allocation-code--control {
+  color: var(--warning);
+}
+
+.allocation-panel__apply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.allocation-preview {
+  display: flex;
+  flex-direction: column;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 /* Dosya satırı uyarı göstergesi (Paket 52). Uyarısız satırda dikkat çekici
    rozet yoktur; "bilinmiyor" durumu "uyarı yok"tan görsel olarak ayrışır. */
 .row-alert {

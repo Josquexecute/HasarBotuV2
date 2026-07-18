@@ -1,0 +1,173 @@
+import {
+  LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION,
+  LABOR_ALLOCATION_RULE_VERSION,
+  LABOR_OPERATION_TYPES_VERSION,
+  computeEconomicTotals,
+  type LaborAllocationOutboundContext,
+} from '@hasarbotu/domain'
+
+/**
+ * Paket 54 dilim 2 — kontrollü sağlayıcı harness'i.
+ *
+ * Deterministik sağlayıcılar YALNIZ test/geliştirme içindir ve dış egress
+ * yapmaz. Hiçbir sağlayıcı hata durumunda kural tabanlı gizli fallback
+ * üretmez: hata hatadır, çıktı yoktur.
+ */
+export interface LaborAllocationProviderRequest {
+  readonly accountingInputCharacters: number
+  readonly providerRequestId: string
+  readonly context: LaborAllocationOutboundContext['context']
+}
+
+export interface LaborAllocationProviderUsage {
+  readonly inputCharacters: number
+  readonly outputCharacters: number
+  readonly inputTokens: number | null
+  readonly outputTokens: number | null
+  readonly estimatedCostMinor: number
+  readonly actualCostMinor: number
+}
+
+export interface LaborAllocationProviderResponse {
+  readonly output: unknown
+  readonly usage: LaborAllocationProviderUsage
+}
+
+export class LaborAllocationProviderExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly requestOutcome: 'response_received' | 'unknown',
+    readonly safeDiagnosticCode: string | null = null,
+  ) {
+    super(message)
+    this.name = 'LaborAllocationProviderExecutionError'
+  }
+}
+
+export interface LaborAllocationProviderAdapter {
+  readonly providerId: string
+  readonly providerVersion: string
+  readonly modelId: string
+  readonly externalProvider: boolean
+  readonly retentionMode: 'local_only' | 'store_false' | 'free_tier_product_improvement'
+  readonly pricingVersion: string
+  readonly maximumInputCharacters: number
+  estimateCostMinor(inputCharacters: number): number
+  execute(request: LaborAllocationProviderRequest): Promise<LaborAllocationProviderResponse>
+}
+
+export interface LaborAllocationProviderRegistry {
+  get(providerId: string): LaborAllocationProviderAdapter | undefined
+  list(): readonly LaborAllocationProviderAdapter[]
+}
+
+function usage(inputCharacters: number, outputCharacters: number): LaborAllocationProviderUsage {
+  const cost = Math.max(1, Math.ceil(inputCharacters / 1_000))
+  return {
+    inputCharacters,
+    outputCharacters,
+    inputTokens: null,
+    outputTokens: null,
+    estimatedCostMinor: cost,
+    actualCostMinor: cost,
+  }
+}
+
+/**
+ * Deterministik başarı çıktısı. Satır tutarını tarifteki işleme göre kanonik
+ * operasyon türlerine böler. Bu bir ÜRÜN dağıtıcısı değildir; yalnız gerçek
+ * sağlayıcı olmadan uçtan uca akışı doğrulamak içindir ve bu yüzden her satırı
+ * `controlRequired` bırakır.
+ */
+function deterministicOutput(context: LaborAllocationProviderRequest['context']): unknown {
+  return {
+    schemaVersion: LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION,
+    operationTypesVersion: LABOR_OPERATION_TYPES_VERSION,
+    lines: context.lines.map((line) => {
+      const total = line.partAmountMinor + line.laborAmountMinor
+      const replaceShaped = line.partAmountMinor > line.laborAmountMinor
+      const primaryType = replaceShaped ? 'replace' : 'repair'
+      const installShare = Math.min(line.laborAmountMinor, Math.floor(total / 10))
+      const allocations = installShare > 0
+        ? [
+            { operationType: primaryType, amountMinor: total - installShare },
+            { operationType: 'remove_install', amountMinor: installShare },
+          ]
+        : [{ operationType: primaryType, amountMinor: total }]
+      const bucketValues = {
+        repair_labor: replaceShaped ? 0 : total - installShare,
+        new_part_or_ownership: replaceShaped ? total - installShare : 0,
+        remove_install: installShare,
+        paint_and_consumable: 0,
+        calibration: 0,
+        related_operations: 0,
+      }
+      return {
+        lineOrdinal: line.ordinal,
+        allocations,
+        repairReplaceOpinion: replaceShaped ? 'replace_indicated' : 'repair_indicated',
+        economicComparison: {
+          buckets: bucketValues,
+          ...computeEconomicTotals(bucketValues),
+          note: 'Kanonik operasyon dagilimi uzerinden ekonomik karsilastirma.',
+        },
+        reasoning: 'Kalem tutar dagilimi ve islem tarifi degerlendirildi.',
+        evidenceRefs: [`line-${line.ordinal}-description`, `line-${line.ordinal}-action`],
+        confidence: 0.55,
+        conflictCodes: [],
+        missingEvidenceCodes: [],
+        controlRequired: true,
+      }
+    }),
+    requiresHumanReview: true,
+  }
+}
+
+function deterministicAdapter(
+  providerId: string,
+  behaviour: 'success' | 'invalid-schema' | 'timeout' | 'failure',
+): LaborAllocationProviderAdapter {
+  return {
+    providerId,
+    providerVersion: '1.0.0',
+    modelId: 'deterministic',
+    externalProvider: false,
+    retentionMode: 'local_only',
+    pricingVersion: 'labor-allocation-deterministic/1.0.0',
+    maximumInputCharacters: 400_000,
+    // Sıfır olmayan sembolik maliyet: bütçe kapısı harness'te de gerçekten
+    // değerlendirilir, sıfır maliyet yüzünden sessizce atlanmaz.
+    estimateCostMinor: (inputCharacters) => Math.max(1, Math.ceil(inputCharacters / 1_000)),
+    execute: async (request) => {
+      if (behaviour === 'timeout') {
+        // Sonucun sunucuda bilinmediği durum: retry veya fallback üretilmez.
+        throw new LaborAllocationProviderExecutionError('timeout', 'unknown', 'AI_PROVIDER_TIMEOUT')
+      }
+      if (behaviour === 'failure') {
+        throw new LaborAllocationProviderExecutionError('failure', 'response_received', 'AI_PROVIDER_FAILED')
+      }
+      if (behaviour === 'invalid-schema') {
+        return { output: { schemaVersion: 'wrong', lines: [] }, usage: usage(request.accountingInputCharacters, 32) }
+      }
+      const output = deterministicOutput(request.context)
+      return { output, usage: usage(request.accountingInputCharacters, JSON.stringify(output).length) }
+    },
+  }
+}
+
+/** Yalnız deterministik sağlayıcılar; gerçek egress adaptörü opt-in ile eklenir. */
+export function createDeterministicLaborAllocationProviderRegistry(): LaborAllocationProviderRegistry {
+  const adapters = [
+    deterministicAdapter('deterministic-success', 'success'),
+    deterministicAdapter('deterministic-invalid-schema', 'invalid-schema'),
+    deterministicAdapter('deterministic-timeout', 'timeout'),
+    deterministicAdapter('deterministic-failure', 'failure'),
+  ]
+  const index = new Map(adapters.map((adapter) => [adapter.providerId, adapter]))
+  return {
+    get: (providerId) => index.get(providerId),
+    list: () => adapters,
+  }
+}
+
+export const LABOR_ALLOCATION_RULE_VERSION_EXPORT = LABOR_ALLOCATION_RULE_VERSION

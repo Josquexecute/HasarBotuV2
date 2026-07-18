@@ -337,6 +337,19 @@ export {
   type LaborDictionaryRecord,
 } from './laborDictionaryPort'
 export {
+  LaborAllocationClientError,
+  createHttpLaborAllocationAdapter,
+  type LaborAllocationApplyPreviewRecord,
+  type LaborAllocationDataPort,
+  type LaborAllocationErrorKind,
+  type LaborAllocationLineRecord,
+  type LaborAllocationRunRecord,
+  type LaborAllocationWorkspaceRecord,
+  type LaborEconomicBucketRecord,
+  type LaborOperationTypeRecord,
+  type LaborRepairReplaceOpinionRecord,
+} from './laborAllocationPort'
+export {
   DASHBOARD_ALERT_PREVIEW_LIMIT,
   OPERATIONAL_ALERT_CASE_FILTER_LIMIT,
   OperationalAlertError,

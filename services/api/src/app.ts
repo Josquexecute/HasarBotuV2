@@ -28,6 +28,11 @@ import { registerLaborAiRoutes, type LaborAiProviderRegistry } from './labor-ai/
 import { registerPertRoutes } from './pert/index.js'
 import { registerLaborDictionaryRoutes } from './labor-dictionary/index.js'
 import { registerOperationalAlertRoutes } from './operational-alerts/index.js'
+import {
+  createDeterministicLaborAllocationProviderRegistry,
+  registerLaborAllocationRoutes,
+  type LaborAllocationProviderRegistry,
+} from './labor-allocation-ai/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -76,6 +81,9 @@ export interface BuildAppOptions {
   readonly emailAiProviders?: EmailAiProviderRegistry
   /** Paket 44 işçilik AI provider kaydı. Varsayılan boştur; İşçilik çekirdeği AI olmadan çalışır. */
   readonly laborAiProviders?: LaborAiProviderRegistry
+  /** Paket 54: dağıtım AI sağlayıcı kaydı; testler kontrollü harness enjekte eder. */
+  readonly laborAllocationProviders?: LaborAllocationProviderRegistry
+  readonly laborAllocationProviderId?: string
 }
 
 /**
@@ -172,6 +180,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerOperationalAlertRoutes(app, {
       pool: options.auth.pool,
       clock: options.clock ?? systemClock,
+    })
+    registerLaborAllocationRoutes(app, {
+      pool: options.auth.pool,
+      providers: options.laborAllocationProviders
+        ?? createDeterministicLaborAllocationProviderRegistry(),
+      ...(options.laborAllocationProviderId === undefined
+        ? {}
+        : { providerId: options.laborAllocationProviderId }),
     })
   }
 

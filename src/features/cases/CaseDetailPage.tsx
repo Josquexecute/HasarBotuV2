@@ -69,6 +69,11 @@ const LaborApiModule = lazy(async () => {
   return { default: module.LaborApiModule }
 })
 
+const LaborAllocationAiModule = lazy(async () => {
+  const module = await import('./LaborAllocationAiModule')
+  return { default: module.LaborAllocationAiModule }
+})
+
 const PertApiModule = lazy(async () => {
   const module = await import('./PertApiModule')
   return { default: module.PertApiModule }
@@ -436,7 +441,12 @@ export function CaseDetailPage() {
           ) : activeTab === 'Evrak ve Fotoğraf' ? (
             item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
           ) : activeTab === 'İşçilik' ? source === 'api'
-            ? <LaborApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
+            ? (
+              <div className="labor-stack">
+                <LaborApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
+                <LaborAllocationAiModule caseId={item.caseId} />
+              </div>
+            )
             : <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />
             : activeTab === 'Ağır Hasar' ? source === 'api'
               ? <PertApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />

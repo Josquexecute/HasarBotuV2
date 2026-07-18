@@ -5,11 +5,27 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 54 dilim 1 — AI işçilik dağıtımı domain sınırı
-- Durum: **Domain dilimi tamamlandı ve tam kalite zinciri geçti; paketin kalan dilimleri açık**
+- Aşama: Paket 54 dilim 2 — AI işçilik dağıtımı uçtan uca
+- Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
 - Git: Yerel repository, `foundation/package-54-labor-allocation-ai` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 54 dilim 2 doğrulama sonucu
+
+- Dilim 1'de eklenen domain modülü artık **runtime tarafından tüketiliyor**: sözleşme, migration 0031, API store/routes/provider harness ve `LaborAllocationAiModule` eklendi. Ölü kod durumu kapandı.
+- Öneri föy sürümünden ayrı aggregate'te saklanıyor (`labor_allocation_runs` + `labor_allocation_line_suggestions`); `labor_sheet_versions` bu tablolara bağlanmıyor ve föy kendiliğinden değişmiyor.
+- Append-only ve sürüm zinciri DB seviyesinde: run kimliği immutable, terminal run değiştirilemez/silinemez, satır sonuçları hiç güncellenemez/silinemez, `review_required` geçişinde bildirilen satır sayısı trigger'da gerçek satırlarla doğrulanıyor.
+- **Tasarım hatası testle yakalandı ve düzeltildi:** idempotency kimliği ilk sürümde tüm statülerde tekildi; bu, sağlayıcı kapalıyken oluşan bir çalıştırmanın analiz anahtarını kalıcı kilitlemesine ve sağlayıcı sonradan açıldığında yeniden denenememesine yol açıyordu. Tekrar koruması `review_required` üzerinde kısmi unique indekse çevrildi.
+- Sağlayıcı çıktısı domain doğrulamasından geçmeden hiçbir satır yazılmıyor; doğrulama başarısızsa run `failed` ve satır tablosu boş kalıyor.
+- Gizli fallback yok: hata `failed`, bilinmeyen sonuç `outcome_unknown`, bütçe `budget_blocked`, politika kapalı `provider_disabled`. Hepsi `ai_usage_ledger` üzerinde `labor_allocation` modülüyle kaydediliyor. Deterministik harness'e sıfır olmayan sembolik maliyet verildi; aksi halde bütçe kapısı sıfır maliyet yüzünden hiç sınanmıyordu.
+- `apply-preview` föyü revize etmiyor; `applied: false` sözleşme seviyesinde literal. Stale kaynak föy sürümü hem analizde hem önizlemede 409 ile reddediliyor.
+- Gerçek PostgreSQL API testleri 12/12: workspace taksonomisi, sağlayıcı kapalıyken sahte sonuç üretmeme, tüm satır kapsaması + eksik kanıt → `control_required`, ledger kaydı, idempotency, stale sürüm, üç ayrı sağlayıcı hatasında no-fallback ve sıfır satır, bütçe engeli, tenant izolasyonu, oturumsuz 401, önizlemenin föyü değiştirmemesi, audit/PII sızıntısı yokluğu.
+- Migration/DB testleri 61/61 (0031 up/down/reapply, append-only, immutable satır, satır kapsaması, kısmi idempotency indeksi, ledger modül ayrımı). Domain 23/23, sözleşme testleri dahil contracts 298/298, UI paneli 8/8.
+- Chrome/CDP smoke (`scripts/package54-browser-smoke.mjs`) geçti: gerçek föyden analiz, iki satırın tamamının kapsanması, `control_required` ve eksik kanıt kodlarının görünmesi, kanonik operasyon türleri, tüm satırlar kontrol gerekliyken toplu seçim butonunun devre dışı olması, satır bazlı seçim, önizlemenin föy sürümünü değiştirmemesi, önerinin ayrı aggregate'te saklanması, taksonomi sürümünün kaydedilmesi, usage ledger yazımı, parça açıklamasının audit'e sızmaması ve API kapandığında bayat sonuç kalmaması. 1920×1080 açık/koyu ve 1366×768 koyu görünümde yatay taşma yok; console warning/error/exception 0.
+- Ana ağaçta typecheck, lint, **1527 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Tam kuşağın bir koşumunda `CasesPage.api.test.tsx` bir kez zamanlama nedeniyle düştü (dinamik contracts chunk'ı varsayılan 1 sn `waitFor` eşiğini aştı). Tekrar üretilemedi; kalıcı çözüm olarak o beklemeye açık zaman payı verildi — kapsam değil, zamanlama düzeltmesi.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
 
 ## Paket 54 dilim 1 doğrulama sonucu
 

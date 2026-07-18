@@ -169,6 +169,13 @@ import {
   operationalAlertsQuerySchema,
   operationalAlertsResponseSchema,
 } from './v1/operational-alerts/dto.js'
+import {
+  laborAllocationAnalyzeRequestSchema,
+  laborAllocationApplyPreviewRequestSchema,
+  laborAllocationApplyPreviewResponseSchema,
+  laborAllocationRunResponseSchema,
+  laborAllocationWorkspaceResponseSchema,
+} from './v1/labor-allocation-ai/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -302,6 +309,11 @@ export const JSON_SCHEMA_TARGETS = {
   'pert-assessment-workspace-response': pertAssessmentWorkspaceResponseSchema,
   'labor-dictionary-query': laborDictionaryQuerySchema,
   'labor-dictionary-response': laborDictionaryResponseSchema,
+  'labor-allocation-analyze-request': laborAllocationAnalyzeRequestSchema,
+  'labor-allocation-apply-preview-request': laborAllocationApplyPreviewRequestSchema,
+  'labor-allocation-apply-preview-response': laborAllocationApplyPreviewResponseSchema,
+  'labor-allocation-run-response': laborAllocationRunResponseSchema,
+  'labor-allocation-workspace-response': laborAllocationWorkspaceResponseSchema,
   'operational-alerts-query': operationalAlertsQuerySchema,
   'operational-alerts-response': operationalAlertsResponseSchema,
 } as const

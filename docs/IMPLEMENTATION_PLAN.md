@@ -1099,14 +1099,16 @@ Dilim 1 — domain sınırı ve taksonomi (tamamlandı):
 - [x] Kanıt snapshot hash'i ve plan hash'i üret; kaynak değişince stale olsun.
 - [x] Dış sağlayıcıya kimlik ve PII çıkmadığını testle doğrula.
 
-Dilim 2 — kalan (açık):
+Dilim 2 — uçtan uca (tamamlandı):
 
-- [ ] Sözleşme `v1/labor-allocation-ai` + golden JSON Schema fixture.
-- [ ] Migration 0031: immutable `labor_allocation_runs` ve satır önerileri, kanıt snapshot hash'i, `ai_usage_ledger` modül genişletmesi, `ai_provider_policies` opt-in.
-- [ ] API store/routes: plan → start → oku → seçili satırları uygula; idempotency, stale föy reddi, RBAC ve kapalı dosya kilidi.
-- [ ] Kontrollü provider harness (başarı, geçersiz şema, timeout, hata, bütçe) + gerçek sağlayıcı adaptörü; fallback YOK.
-- [ ] UI: tam önizleme, satır bazlı kabul/ret, "kontrol gerekli olanlar hariç tümünü seç", mevcut açık onayla create/revise.
-- [ ] Gerçek PostgreSQL testleri: tenant izolasyonu, stale sürüm, no-fallback, audit sızıntısı, idempotency.
-- [ ] Chrome smoke + fresh checkout + commit.
+- [x] Sözleşme `v1/labor-allocation-ai` + golden JSON Schema fixture; taksonomi/prompt/şema sürümleri zorunlu alan.
+- [x] Migration 0031: immutable `labor_allocation_runs` ve satır önerileri, kanıt snapshot hash'i, `ai_usage_ledger` modül genişletmesi, `ai_provider_policies` opt-in.
+- [x] API workspace/get/analyze/apply-preview; idempotency, stale föy reddi, RBAC ve kapalı dosya kilidi.
+- [x] Kontrollü provider harness (başarı, geçersiz şema, timeout, hata, bütçe); fallback YOK.
+- [x] UI: tam önizleme, satır bazlı kabul/ret, `control_required` filtresi, "kontrol gerekli olanlar hariç tümünü seç", gerekçe/güven/kanıt/çelişki görünümü.
+- [x] Gerçek PostgreSQL testleri: tenant izolasyonu, stale sürüm, no-fallback, audit sızıntısı, idempotency, tüm satır kapsaması, usage ledger.
+- [x] Chrome smoke + fresh checkout + commit.
+
+Bu dilimde föy otomatik revize EDİLMEZ: yalnız seçilmiş sonuçlardan açık kullanıcı onayına gidecek önizleme üretilir (`applied: false`).
 
 Kapsam dışı: Excel'e yazma, şablon profilleri, otomatik eksper onayı, kullanıcı onayı olmadan föy revizyonu, kendi kendine öğrenme, Gmail/File Agent/fiziksel dosya yazımı.

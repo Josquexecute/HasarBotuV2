@@ -62,6 +62,16 @@ export { createCasesStore, registerCasesRoutes, type CasesStore } from './cases/
 export { createDashboardStore, registerDashboardRoutes, type DashboardStore } from './dashboard/index.js'
 export { createFeeStore, registerFeeRoutes, type FeeStore } from './fees/index.js'
 export {
+  LaborAllocationError,
+  LaborAllocationProviderExecutionError,
+  createDeterministicLaborAllocationProviderRegistry,
+  createLaborAllocationStore,
+  registerLaborAllocationRoutes,
+  type LaborAllocationProviderAdapter,
+  type LaborAllocationProviderRegistry,
+  type LaborAllocationStore,
+} from './labor-allocation-ai/index.js'
+export {
   createOperationalAlertStore,
   registerOperationalAlertRoutes,
   type OperationalAlertStore,
