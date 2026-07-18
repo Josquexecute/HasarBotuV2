@@ -5,11 +5,23 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 48 — API modunda mock karantinası (Bildirimler ve Mevzuat)
+- Aşama: Paket 49 — Operasyonel bildirimler ilk dilimi (türetilmiş, salt okunur)
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-48-mock-quarantine` dalı, remote yok
+- Git: Yerel repository, `foundation/package-49-operational-alerts` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 49 doğrulama sonucu
+
+- `operational-alert` domain modülü uyarıları mevcut kaynak veriden deterministik türetir: gecikme kararı `classifyCaseTaskDueDate`, eksik evrak `evaluateDocumentRequirements` sonucundaki `missing` durumundan gelir. Yeni eşik veya kural tanımlanmadı.
+- Mükerrerlik `dedupeKey` ile kapalıdır (`overdue_task:{caseId}:{taskId}`, `overdue_follow_up:{caseId}`, `missing_required_document:{caseId}:{requirementCode}`); sıralama önem → kaynak tarih → dosya → anahtar ile deterministiktir ve sonuç `MAX_OPERATIONAL_ALERTS`(200) ile sınırlıdır.
+- Evrak etiketleri `email-draft.ts` içindeki özel kopyadan alınıp `DOCUMENT_REQUIREMENT_LABELS` olarak tek kaynağa taşındı; e-posta taslakları aynı haritayı kullanır, ikinci bir etiket seti oluşmadı.
+- `GET /api/v1/operational-alerts` salt okunurdur: yalnız oturumun organization'ındaki `lifecycle_status='open'` dosyaları kapsar, durum değiştirmez ve audit yazmaz. Yeni tablo, migration, kuyruk veya arka plan işçisi eklenmedi.
+- UI'da Bildirimler API modunda gerçek uyarıları gösterir; sayaç yalnız API sonucundan hesaplanır, boş sonuç gerçek boş durum olarak görünür, hata halinde mock'a düşülmez. Okundu/ertelendi/silindi kontrolü sunulmaz. Mevzuat karantinada kaldı.
+- Gerçek PostgreSQL API testi 10/10: 401; audit yazmama; geciken görev/takip ve eksik evrak türetimi; temiz, kapalı ve tamamlanmış kayıtların uyarı üretmemesi; tenant sınırı; mükerrerlik yokluğu; sayaç eşitliği ve determinizm; serbest notun gövdeye ve audit'e sızmaması; boş organization için gerçek boş sonuç.
+- Chrome/CDP smoke (`scripts/package49-browser-smoke.mjs`) geçti: gerçek üç uyarı; DOM sayacının API `totalCount` ile eşitliği; yanıtta mükerrer anahtar yokluğu; okundu-durumu kontrolü bulunmaması; tür filtresi; dosya detayına gidiş; Mevzuat karantinası; serbest notun DOM ve audit'e sızmaması; salt okunur ucun audit yazmaması; API kapatıldıktan sonra mock fallback ve bayat uyarı olmaması. 32 sabit mock metni DOM'da bulunmadı. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yok; console warning/error/exception 0.
+- Ana ağaçta typecheck, lint, **1386 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
 
 ## Paket 18 doğrulama sonucu
 

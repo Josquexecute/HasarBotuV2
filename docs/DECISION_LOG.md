@@ -913,3 +913,21 @@ Etkisi:
 
 - `BackendUnavailableState` ortak bileşeni eklenir; Bildirimler ve Mevzuat sayfaları veri kaynağına göre ayrılır.
 - Yeni tablo/migration/endpoint/domain modeli/adapter, dependency veya AI çağrısı eklenmez; iki ekranın gerçek veri modeli sonraki paketlerin açık kapsamıdır.
+
+## 2026-07-18 — HB-2026-055: Operasyonel bildirimler ilk dilimi (türetilmiş, salt okunur)
+
+Karar:
+
+1. Bildirimler ekranının ilk gerçek modeli **kalıcı mesaj kutusu değildir**. Uyarılar her istekte mevcut kaynak veriden (görev, takip tarihi, evrak kuralı sonucu) deterministik türetilen **salt okunur** bir listedir. Yeni `notification event` tablosu, kuyruk veya arka plan işçisi eklenmez.
+2. İlk sürümde üç uyarı türü vardır: `overdue_task` (süresi geçmiş ve tamamlanmamış görev), `overdue_follow_up` (geçmiş takip tarihi), `missing_required_document` (mevcut belge kurallarına göre eksik zorunlu evrak). Eşik veya kural uydurulmaz: gecikme `classifyCaseTaskDueDate`, eksik evrak `evaluateDocumentRequirements` sonucundaki `missing` durumundan gelir.
+3. Önem seviyesi mevcut veriden eşlenir: görev önceliği (`high|normal|low` → `high|medium|low`), takip gecikmesi `medium`, eksik zorunlu evrak `high`. Sıralama deterministiktir: önem → kaynak tarih (eski önce) → dosya → kararlı anahtar.
+4. Mükerrerlik `dedupeKey` ile engellenir: `overdue_task:{caseId}:{taskId}`, `overdue_follow_up:{caseId}`, `missing_required_document:{caseId}:{requirementCode}`. Aynı dosya ve aynı sebep için tek uyarı üretilir.
+5. Kapsam yalnız oturumun organization'ı ve `lifecycle_status='open'` dosyalardır. Uç salt okunurdur, durum değiştirmez ve **audit yazmaz** (`auth.*` oturum auditleri bu kuralın dışındadır).
+6. Uyarı gövdesi serbest not veya belge içeriği taşımaz; yalnız görev başlığı (tek satıra indirgenmiş ve sınırlanmış) ile sabit evrak etiketleri kullanılır. Evrak etiketleri tek kaynaktan (`DOCUMENT_REQUIREMENT_LABELS`) gelir; e-posta taslakları da aynı kaynağı kullanır, rakip etiket seti oluşturulmaz.
+7. Okundu, silindi, ertelendi ve kullanıcı bazlı tercih modeli bu dilimde **yoktur**; UI bu kontrolleri sunmaz. Sayaç yalnız gerçek API sonucundan hesaplanır, boş sonuç gerçek boş durum olarak gösterilir ve API kapalıyken mock'a düşülmez.
+8. Mevzuat ekranı HB-2026-054 uyarınca karantinada kalmaya devam eder.
+
+Etkisi:
+
+- `operational-alert` domain modülü, `v1/operational-alerts` sözleşmesi ve `GET /api/v1/operational-alerts` salt okunur ucu eklenir; UI'da Bildirimler API modunda gerçek uyarıları gösterir.
+- Yeni tablo, migration, kuyruk, worker, dependency veya AI çağrısı eklenmez; bildirim olay modeli (kalıcı, kullanıcı durumlu bildirim) hâlâ ayrı ürün kararıdır.

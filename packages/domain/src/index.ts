@@ -142,7 +142,7 @@ export {
   type CaseWorkspaceSubdirectory,
 } from './case-workspace.js'
 export {
-  CANONICAL_DOCUMENT_TYPES, DOCUMENT_REQUIREMENT_RULE_SET_ID, DOCUMENT_REQUIREMENT_RULE_VERSION, DOCUMENT_REQUIREMENT_STATUSES,
+  CANONICAL_DOCUMENT_TYPES, DOCUMENT_REQUIREMENT_LABELS, DOCUMENT_REQUIREMENT_RULE_SET_ID, DOCUMENT_REQUIREMENT_RULE_VERSION, DOCUMENT_REQUIREMENT_STATUSES,
   defaultDocumentRequirementRuleSet, evaluateDocumentRequirements,
   type AlternativeDocumentGroupResult, type CanonicalDocumentType, type DocumentMetadataStatus, type DocumentRequirementFact,
   type DocumentRequirementInputDocument, type DocumentRequirementResult, type DocumentRequirementRuleSet, type DocumentRequirementStatus,
@@ -547,3 +547,23 @@ export {
   type PertSourceType,
   type PertWorkflowStatus,
 } from './pert-assessment.js'
+export {
+  MAX_OPERATIONAL_ALERTS,
+  MAX_OPERATIONAL_ALERT_SUMMARY_LENGTH,
+  OPERATIONAL_ALERT_SCHEMA_VERSION,
+  OPERATIONAL_ALERT_SEVERITIES,
+  OPERATIONAL_ALERT_TYPES,
+  buildMissingDocumentAlert,
+  buildOverdueFollowUpAlert,
+  buildOverdueTaskAlert,
+  collectOperationalAlerts,
+  normalizeOperationalAlerts,
+  requirementLabel,
+  type MissingDocumentFact,
+  type OperationalAlert,
+  type OperationalAlertFacts,
+  type OperationalAlertSeverity,
+  type OperationalAlertType,
+  type OverdueFollowUpFact,
+  type OverdueTaskFact,
+} from './operational-alert.js'

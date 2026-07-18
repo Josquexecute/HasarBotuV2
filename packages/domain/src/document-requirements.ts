@@ -124,3 +124,32 @@ export function evaluateDocumentRequirements(facts: DocumentRequirementFact, eva
   }
   return { ruleSet, requirements, alternativeGroups: alternatives }
 }
+
+/**
+ * Evrak gereksinim kodlarının Türkçe kullanıcı etiketleri. Tek kaynaktır;
+ * e-posta taslakları ve operasyonel uyarılar aynı etiketi kullanır, böylece
+ * ekranlar arasında rakip adlandırma oluşmaz.
+ */
+export const DOCUMENT_REQUIREMENT_LABELS: Readonly<Record<string, string>> = {
+  traffic_victim_policy: 'Mağdur trafik poliçesi',
+  traffic_insured_policy: 'Sigortalı trafik poliçesi',
+  sbm_heavy_damage: 'SBM Ağır Hasar sonucu',
+  traffic_victim_registration: 'Mağdur ruhsat',
+  traffic_insured_registration: 'Sigortalı ruhsat',
+  traffic_victim_driver_license: 'Mağdur ehliyet',
+  traffic_insured_driver_license: 'Sigortalı ehliyet',
+  casco_policy: 'Kasko poliçesi',
+  casco_registration: 'Kasko aracı ruhsatı',
+  casco_driver_license: 'Kasko aracı sürücü ehliyeti',
+  accident_report: 'Zabıt',
+  ktt: 'Kaza Tespit Tutanağı',
+  statement: 'Beyan',
+  tramer_result: 'Tramer sonucu',
+  recourse_opposing_registration: 'Karşı araç ruhsatı',
+  recourse_opposing_driver_license: 'Karşı araç sürücü ehliyeti',
+  recourse_opposing_traffic_policy: 'Karşı araç trafik poliçesi',
+  recourse_tramer_result: 'Rücu Tramer sonucu',
+  recourse_fault_ratio: 'Kusur oranı',
+  recourse_ktt: 'Rücu KTT',
+  recourse_accident_report: 'Rücu Zabıt',
+}

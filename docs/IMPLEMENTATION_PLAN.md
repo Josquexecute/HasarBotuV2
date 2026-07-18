@@ -1010,3 +1010,17 @@ Kapsam dışı: yeni tablo/migration/endpoint/sözleşme, kullanıcı-servis yaz
 - [x] Yalnız Paket 48 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: bildirim olay modeli, mevzuat kaynak kütüphanesi modeli, yeni tablo/migration/endpoint/domain modeli/adapter, yeni dependency ve sonraki paket.
+
+## Paket 49 — Operasyonel bildirimler ilk dilimi (türetilmiş, salt okunur)
+
+- [x] `operational-alert` domain modülünü ekle: tür, önem seviyesi, deterministik türetme, `dedupeKey` ile mükerrerlik engeli ve kararlı sıralama.
+- [x] Evrak etiketlerini `email-draft.ts` içinden `DOCUMENT_REQUIREMENT_LABELS` olarak tek kaynağa taşı; rakip etiket seti oluşturma.
+- [x] `v1/operational-alerts` sözleşmesini ve golden JSON Schema fixture'ını ekle; okundu/ertelendi gibi kullanıcı durumu alanı tanımlama.
+- [x] `GET /api/v1/operational-alerts` salt okunur ucunu ekle; yalnız oturumun organization'ındaki açık dosyaları kapsasın, audit yazmasın.
+- [x] Bildirimler ekranını API modunda gerçek uyarılara bağla; sayaç yalnız API sonucundan gelsin, boş sonuç gerçek boş durum olsun, hata halinde mock'a düşülmesin.
+- [x] Gerçek PostgreSQL ile tenant/RBAC, mükerrerlik, determinizm ve serbest not sızıntısı testlerini çalıştır.
+- [x] Chrome smoke'ta gerçek uyarılar, sayaç–API eşitliği, salt okunurluk, Mevzuat karantinası ve API kapalıyken fallback olmaması doğrula.
+- [x] Tam root kalite zinciri ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 49 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: kalıcı bildirim olay tablosu, kuyruk/worker, okundu-silindi-ertelendi ve kullanıcı bazlı tercih modeli, mevzuat kaynak kütüphanesi, yeni migration ve yeni dependency.

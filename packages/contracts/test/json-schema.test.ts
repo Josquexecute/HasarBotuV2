@@ -70,6 +70,7 @@ describe('JSON Schema uretimi', () => {
       'labor-sheet-response',
       'labor-sheet-revise-request',
       'labor-sheet-workspace-response',
+      'operational-alerts-response',
       'pdf-extraction-chunk-request',
       'pdf-text-extraction-cancel-request',
       'pdf-text-extraction-create-request',

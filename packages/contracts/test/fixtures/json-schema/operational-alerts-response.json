@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "operational-alert/1.0.0"
+    },
+    "totalCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 200
+    },
+    "evaluatedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "x-hasarbotu-runtime-validation": "calendar-date-validity"
+    },
+    "alerts": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dedupeKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "overdue_task",
+              "overdue_follow_up",
+              "missing_required_document"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "caseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "plate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "x-hasarbotu-runtime-validation": "plate-number-canonical-form"
+          },
+          "officeNumber": {
+            "type": "string",
+            "pattern": "^[2-9]\\d{3}\\/[1-9]\\d{0,14}$"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "sourceDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          },
+          "caseDetailPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "^\\/dosyalar\\/[A-Za-z0-9._-]{1,128}$"
+          }
+        },
+        "required": [
+          "dedupeKey",
+          "type",
+          "severity",
+          "caseId",
+          "plate",
+          "officeNumber",
+          "summary",
+          "sourceDate",
+          "caseDetailPath"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "totalCount",
+    "evaluatedAt",
+    "alerts"
+  ],
+  "additionalProperties": false
+}

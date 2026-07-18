@@ -165,6 +165,7 @@ import {
   laborDictionaryQuerySchema,
   laborDictionaryResponseSchema,
 } from './v1/labor-dictionary/dto.js'
+import { operationalAlertsResponseSchema } from './v1/operational-alerts/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -298,6 +299,7 @@ export const JSON_SCHEMA_TARGETS = {
   'pert-assessment-workspace-response': pertAssessmentWorkspaceResponseSchema,
   'labor-dictionary-query': laborDictionaryQuerySchema,
   'labor-dictionary-response': laborDictionaryResponseSchema,
+  'operational-alerts-response': operationalAlertsResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS
