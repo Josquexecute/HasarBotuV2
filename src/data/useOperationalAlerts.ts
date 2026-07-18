@@ -22,12 +22,18 @@ export interface UseOperationalAlertsResult {
  * üretmez; mock içerik ayrı ve açıkça seçilmiş prototip bileşenindedir.
  * API hatasında mock'a düşülmez.
  */
-export function useOperationalAlerts(port?: OperationalAlertDataPort): UseOperationalAlertsResult {
+export function useOperationalAlerts(
+  port?: OperationalAlertDataPort,
+  caseIds?: readonly string[],
+): UseOperationalAlertsResult {
   const { reportUnauthorized } = useSession()
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
   const [alerts, setAlerts] = useState<OperationalAlertsRecord | null>(null)
   const [status, setStatus] = useState<OperationalAlertLoadStatus>(source === 'api' ? 'loading' : 'ok')
   const [reloadToken, setReloadToken] = useState(0)
+  // Dizi kimliği her render'da değiştiği için efekt kararlı bir anahtara bağlanır:
+  // yalnız görünür satır kümesi gerçekten değiştiğinde yeniden yüklenir.
+  const caseIdKey = caseIds === undefined ? null : caseIds.join(',')
 
   const reload = useCallback(() => {
     if (source !== 'api') return
@@ -37,9 +43,16 @@ export function useOperationalAlerts(port?: OperationalAlertDataPort): UseOperat
 
   useEffect(() => {
     if (source !== 'api') return
+    // Filtre istenmiş ama görünür satır yoksa çağrı yapılmaz.
+    if (caseIdKey === '') {
+      setAlerts(null)
+      setStatus('ok')
+      return
+    }
     let cancelled = false
+    setStatus('loading')
     const adapter = port ?? createHttpOperationalAlertAdapter()
-    adapter.list()
+    adapter.list(caseIdKey === null ? undefined : caseIdKey.split(','))
       .then((result) => {
         if (cancelled) return
         setAlerts(result)
@@ -55,7 +68,7 @@ export function useOperationalAlerts(port?: OperationalAlertDataPort): UseOperat
     return () => {
       cancelled = true
     }
-  }, [port, reloadToken, reportUnauthorized, source])
+  }, [caseIdKey, port, reloadToken, reportUnauthorized, source])
 
   return { alerts, source, status, reload }
 }

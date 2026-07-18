@@ -24,6 +24,13 @@ export type OperationalAlertSeverity = (typeof OPERATIONAL_ALERT_SEVERITIES)[num
 export const MAX_OPERATIONAL_ALERTS = 200
 export const MAX_OPERATIONAL_ALERT_SUMMARY_LENGTH = 200
 
+/**
+ * Dosya kimliği filtresinin üst sınırı. Genel liste `MAX_OPERATIONAL_ALERTS`
+ * ile kırpıldığı için satır göstergesi doğrudan o listeden okunamaz; filtreli
+ * çağrı kapsamı daraltır ve dosya başına özet kırpmadan önce hesaplanır.
+ */
+export const MAX_OPERATIONAL_ALERT_CASE_FILTER = 100
+
 const SEVERITY_RANK: Readonly<Record<OperationalAlertSeverity, number>> = {
   high: 0,
   medium: 1,
@@ -148,29 +155,75 @@ export function buildMissingDocumentAlert(fact: MissingDocumentFact): Operationa
 }
 
 /**
- * Uyarıları deterministik sıralar: önem (yüksek → düşük), kaynak tarih (eski →
- * yeni), sonra dosya ve kararlı anahtar. Aynı `dedupeKey` yalnız bir kez yer
- * alır ve sonuç `MAX_OPERATIONAL_ALERTS` ile sınırlanır.
+ * Mükerrerliği ayıklar ve deterministik sıralar: önem (yüksek → düşük), kaynak
+ * tarih (eski → yeni), sonra dosya ve kararlı anahtar. **Kırpma yapmaz**; dosya
+ * başına özet bu tam listeden hesaplanır ki 200 sınırı yanlış negatif üretmesin.
  */
-export function normalizeOperationalAlerts(
+export function dedupeAndSortOperationalAlerts(
   alerts: readonly OperationalAlert[],
 ): readonly OperationalAlert[] {
   const unique = new Map<string, OperationalAlert>()
   for (const alert of alerts) {
     if (!unique.has(alert.dedupeKey)) unique.set(alert.dedupeKey, alert)
   }
-  return [...unique.values()]
-    .sort((left, right) => (
-      SEVERITY_RANK[left.severity] - SEVERITY_RANK[right.severity]
-      || left.sourceDate.localeCompare(right.sourceDate)
-      || left.caseId.localeCompare(right.caseId)
-      || left.dedupeKey.localeCompare(right.dedupeKey)
-    ))
-    .slice(0, MAX_OPERATIONAL_ALERTS)
+  return [...unique.values()].sort((left, right) => (
+    SEVERITY_RANK[left.severity] - SEVERITY_RANK[right.severity]
+    || left.sourceDate.localeCompare(right.sourceDate)
+    || left.caseId.localeCompare(right.caseId)
+    || left.dedupeKey.localeCompare(right.dedupeKey)
+  ))
 }
 
-/** Kaynak verilerden uyarı listesini deterministik üretir. */
-export function collectOperationalAlerts(
+/**
+ * Sıralı ve mükerrersiz listeyi `MAX_OPERATIONAL_ALERTS` ile sınırlar.
+ * Davranış Paket 49'daki ile birebir aynıdır.
+ */
+export function normalizeOperationalAlerts(
+  alerts: readonly OperationalAlert[],
+): readonly OperationalAlert[] {
+  return dedupeAndSortOperationalAlerts(alerts).slice(0, MAX_OPERATIONAL_ALERTS)
+}
+
+export interface OperationalAlertCaseSummary {
+  readonly caseId: string
+  readonly totalCount: number
+  readonly byType: Readonly<Record<OperationalAlertType, number>>
+}
+
+/**
+ * Dosya başına uyarı özeti. Girdi KIRPILMAMIŞ liste olmalıdır; istenen ama
+ * uyarısı olmayan dosyalar sıfır sayaçla döner, böylece istemci "uyarı yok" ile
+ * "gösterge yüklenmedi" durumlarını ayırabilir.
+ */
+export function summarizeOperationalAlertsByCase(
+  alerts: readonly OperationalAlert[],
+  caseIds: readonly string[],
+): readonly OperationalAlertCaseSummary[] {
+  const summaries = new Map<string, { totalCount: number; byType: Record<OperationalAlertType, number> }>()
+  for (const caseId of caseIds) {
+    if (!summaries.has(caseId)) {
+      summaries.set(caseId, {
+        totalCount: 0,
+        byType: { overdue_task: 0, overdue_follow_up: 0, missing_required_document: 0 },
+      })
+    }
+  }
+  for (const alert of alerts) {
+    const summary = summaries.get(alert.caseId)
+    if (summary === undefined) continue
+    summary.totalCount += 1
+    summary.byType[alert.type] += 1
+  }
+  return [...summaries.entries()]
+    .map(([caseId, summary]) => ({ caseId, totalCount: summary.totalCount, byType: summary.byType }))
+    .sort((left, right) => left.caseId.localeCompare(right.caseId))
+}
+
+/**
+ * Kaynak verilerden mükerrersiz ve sıralı TAM uyarı listesini üretir.
+ * Kırpma yapmaz; dosya başına özet bu listeden hesaplanmalıdır.
+ */
+export function buildOperationalAlerts(
   facts: OperationalAlertFacts,
   asOfDate: string,
 ): readonly OperationalAlert[] {
@@ -186,5 +239,36 @@ export function collectOperationalAlerts(
   for (const document of facts.missingDocuments) {
     alerts.push(buildMissingDocumentAlert(document))
   }
-  return normalizeOperationalAlerts(alerts)
+  return dedupeAndSortOperationalAlerts(alerts)
+}
+
+/** Kaynak verilerden uyarı listesini deterministik üretir (200 ile sınırlı). */
+export function collectOperationalAlerts(
+  facts: OperationalAlertFacts,
+  asOfDate: string,
+): readonly OperationalAlert[] {
+  return buildOperationalAlerts(facts, asOfDate).slice(0, MAX_OPERATIONAL_ALERTS)
+}
+
+export interface OperationalAlertDerivation {
+  /** `MAX_OPERATIONAL_ALERTS` ile sınırlı liste. */
+  readonly alerts: readonly OperationalAlert[]
+  /** `summaryCaseIds` verildiğinde, KIRPILMAMIŞ listeden hesaplanan dosya özetleri. */
+  readonly caseSummaries?: readonly OperationalAlertCaseSummary[]
+}
+
+/**
+ * Tek geçişte hem kırpılmış listeyi hem de (istenmişse) kırpmadan önce
+ * hesaplanan dosya özetlerini üretir. Kırpma ile özet aynı yerde durur ki
+ * 200 sınırı satır göstergesinde yanlış negatif üretemesin.
+ */
+export function deriveOperationalAlerts(
+  facts: OperationalAlertFacts,
+  asOfDate: string,
+  summaryCaseIds?: readonly string[],
+): OperationalAlertDerivation {
+  const ordered = buildOperationalAlerts(facts, asOfDate)
+  const alerts = ordered.slice(0, MAX_OPERATIONAL_ALERTS)
+  if (summaryCaseIds === undefined) return { alerts }
+  return { alerts, caseSummaries: summarizeOperationalAlertsByCase(ordered, summaryCaseIds) }
 }

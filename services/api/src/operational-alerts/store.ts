@@ -5,7 +5,7 @@ import {
 } from '@hasarbotu/contracts'
 import {
   OPERATIONAL_ALERT_SCHEMA_VERSION,
-  collectOperationalAlerts,
+  deriveOperationalAlerts,
   evaluateDocumentRequirements,
   type CanonicalDocumentType,
   type CaseTaskPriority,
@@ -82,14 +82,24 @@ export function createOperationalAlertStore(pool: pg.Pool) {
       organizationId: string,
       asOfDate: string,
       evaluatedAt: string,
+      caseIdFilter?: readonly string[],
     ): Promise<OperationalAlertsResponse> {
       // Tenant sınırı: yalnız oturumun organization'ındaki açık dosyalar.
+      // İstemciden gelen `caseIdFilter` kapsamı YALNIZ DARALTIR; erişim kararı
+      // her zaman sunucudaki organization koşuluyla verilir.
+      const filtered = caseIdFilter !== undefined
       const casesResult = await pool.query(
-        `SELECT c.id::text,c.case_type,c.office_number,c.plate,c.follow_up_date,c.recourse_status
-           FROM cases c
-          WHERE c.organization_id=$1 AND c.lifecycle_status='open'
-          ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`,
-        [organizationId],
+        filtered
+          ? `SELECT c.id::text,c.case_type,c.office_number,c.plate,c.follow_up_date,c.recourse_status
+               FROM cases c
+              WHERE c.organization_id=$1 AND c.lifecycle_status='open'
+                AND c.id=ANY($2::uuid[])
+              ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`
+          : `SELECT c.id::text,c.case_type,c.office_number,c.plate,c.follow_up_date,c.recourse_status
+               FROM cases c
+              WHERE c.organization_id=$1 AND c.lifecycle_status='open'
+              ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`,
+        filtered ? [organizationId, [...(caseIdFilter as readonly string[])]] : [organizationId],
       )
       const caseRows = casesResult.rows as AlertCaseRow[]
       const caseById = new Map(caseRows.map((row) => [row.id, row]))
@@ -107,15 +117,25 @@ export function createOperationalAlertStore(pool: pg.Pool) {
       const missingDocuments: MissingDocumentFact[] = []
 
       if (caseRows.length > 0) {
+        // Filtresiz çağrıda kapsam `cases` join'iyle daraltılır (Paket 51: hacimle
+        // büyüyen dizi parametresi yok). Filtreli çağrıda kimlik sayısı sözleşme
+        // ile sınırlı olduğundan sunucuda çözülmüş kimlikler doğrudan kullanılır.
+        const scopedCaseIds = caseRows.map((row) => row.id)
         const tasksResult = await pool.query(
-          `SELECT t.id::text,t.case_id::text,t.title,t.priority,t.due_date
-             FROM case_tasks t
-             JOIN cases c ON c.organization_id=t.organization_id AND c.id=t.case_id
-                         AND c.lifecycle_status='open'
-            WHERE t.organization_id=$1
-              AND t.status='open' AND t.due_date<$2::date
-            ORDER BY t.due_date,t.id`,
-          [organizationId, asOfDate],
+          filtered
+            ? `SELECT t.id::text,t.case_id::text,t.title,t.priority,t.due_date
+                 FROM case_tasks t
+                WHERE t.organization_id=$1 AND t.case_id=ANY($3::uuid[])
+                  AND t.status='open' AND t.due_date<$2::date
+                ORDER BY t.due_date,t.id`
+            : `SELECT t.id::text,t.case_id::text,t.title,t.priority,t.due_date
+                 FROM case_tasks t
+                 JOIN cases c ON c.organization_id=t.organization_id AND c.id=t.case_id
+                             AND c.lifecycle_status='open'
+                WHERE t.organization_id=$1
+                  AND t.status='open' AND t.due_date<$2::date
+                ORDER BY t.due_date,t.id`,
+          filtered ? [organizationId, asOfDate, scopedCaseIds] : [organizationId, asOfDate],
         )
         for (const row of tasksResult.rows as TaskRow[]) {
           const caseRow = caseById.get(row.case_id)
@@ -131,17 +151,21 @@ export function createOperationalAlertStore(pool: pg.Pool) {
           })
         }
 
-        // Kapsam `cases` ile join'lenerek daraltılır: aynı küme (bu organization'ın
-        // açık dosyaları), ancak binlerce UUID'lik dizi parametresi taşınmaz.
         const documentsResult = await pool.query(
-          `SELECT d.case_id::text,dv.id,d.document_type,dv.status,dv.hash_verified,
-                  dv.size_verified,dv.verified_at
-             FROM documents d
-             JOIN cases c ON c.organization_id=d.organization_id AND c.id=d.case_id
-                         AND c.lifecycle_status='open'
-             JOIN document_versions dv ON dv.id=d.current_version_id
-            WHERE d.organization_id=$1`,
-          [organizationId],
+          filtered
+            ? `SELECT d.case_id::text,dv.id,d.document_type,dv.status,dv.hash_verified,
+                      dv.size_verified,dv.verified_at
+                 FROM documents d
+                 JOIN document_versions dv ON dv.id=d.current_version_id
+                WHERE d.organization_id=$1 AND d.case_id=ANY($2::uuid[])`
+            : `SELECT d.case_id::text,dv.id,d.document_type,dv.status,dv.hash_verified,
+                      dv.size_verified,dv.verified_at
+                 FROM documents d
+                 JOIN cases c ON c.organization_id=d.organization_id AND c.id=d.case_id
+                             AND c.lifecycle_status='open'
+                 JOIN document_versions dv ON dv.id=d.current_version_id
+                WHERE d.organization_id=$1`,
+          filtered ? [organizationId, scopedCaseIds] : [organizationId],
         )
         const documentsByCase = new Map<string, DocumentRow[]>()
         for (const document of documentsResult.rows as DocumentRow[]) {
@@ -197,12 +221,18 @@ export function createOperationalAlertStore(pool: pg.Pool) {
         }
       }
 
-      const alerts = collectOperationalAlerts(
+      // Dosya başına özet KIRPILMAMIŞ listeden hesaplanır: 200 sınırı görünür
+      // satırlar arasında yanlış negatif üretemez. Erişilemeyen (tenant dışı,
+      // kapalı veya olmayan) kimlik özete hiç girmez; istemci bunu "bilinmiyor"
+      // olarak gösterir, "uyarı yok" olarak değil.
+      const { alerts, caseSummaries } = deriveOperationalAlerts(
         { overdueTasks, overdueFollowUps, missingDocuments },
         asOfDate,
+        filtered ? caseRows.map((row) => row.id) : undefined,
       )
       return operationalAlertsResponseSchema.parse({
         schemaVersion: OPERATIONAL_ALERT_SCHEMA_VERSION,
+        ...(caseSummaries === undefined ? {} : { caseSummaries }),
         totalCount: alerts.length,
         evaluatedAt,
         alerts,

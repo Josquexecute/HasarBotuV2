@@ -1052,3 +1052,19 @@ Kapsam dışı: mevzuat, kalıcı bildirim durumu (okundu/ertelendi/tercih), cac
 - [x] Yalnız Paket 51 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: cache, materialized view, background worker, yeni kalıcı tablo/migration, iş kuralı ve sıralama değişikliği, süre eşiğine dayalı performans testi.
+
+## Paket 52 — Dosya satırı uyarı göstergesi
+
+- [x] Mevcut `GET /api/v1/operational-alerts` ucuna isteğe bağlı, sözleşmeyle sınırlı `caseIds` filtresi ekle; yeni endpoint açma.
+- [x] Dosya başına özeti 200 kırpmasından ÖNCE hesapla; filtreli çağrıda yanlış negatif oluşmasın.
+- [x] Tenant/RBAC sınırını istemciden gelen kimliklere güvenmeden sunucu tarafında uygula.
+- [x] Satırda toplam uyarı sayısı ve tür ayrımı (geciken görev / geciken takip / eksik evrak) göster.
+- [x] Uyarısı olmayan satırda dikkat çekici rozet gösterme; özet dönmeyen satırı "bilinmiyor" göster.
+- [x] Rozet tıklanınca dosya detayına git.
+- [x] Filtre, sıralama veya sayfalama değişince yalnız görünür satırlar için yeniden yükle.
+- [x] Mock modda gerçek uyarı çağrısı yapma; hata halinde tüm satırları "uyarısız" gösterme.
+- [x] Gerçek PostgreSQL tenant/filtre/yanlış-negatif testleri, UI testleri ve Chrome smoke ekle.
+- [x] Tam kalite zinciri ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 52 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: yeni endpoint/tablo/migration, cache, kalıcı bildirim durumu, ikinci kural motoru, Dosyalar ekranına gerçek sayfalama eklenmesi.

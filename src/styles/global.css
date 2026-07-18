@@ -644,6 +644,54 @@ button {
 .summary-item--warning strong { color: var(--warning); }
 .summary-item--success strong { color: var(--success); }
 
+/* Dosya satırı uyarı göstergesi (Paket 52). Uyarısız satırda dikkat çekici
+   rozet yoktur; "bilinmiyor" durumu "uyarı yok"tan görsel olarak ayrışır. */
+.row-alert {
+  display: inline-flex;
+  max-width: 190px;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.row-alert--clear,
+.row-alert--unknown {
+  color: var(--text-tertiary);
+}
+
+.row-alert--active {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.row-alert--active:hover {
+  background: var(--surface-hover);
+}
+
+.row-alert--active strong {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.row-alert--active small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-footer__warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--warning);
+}
+
 /* Durum Panosu operasyonel uyarı özeti (Paket 50). Yalnız özet ve öne çıkan
    ilk birkaç uyarı; tam liste Bildirimler ekranındadır. */
 .alert-summary {

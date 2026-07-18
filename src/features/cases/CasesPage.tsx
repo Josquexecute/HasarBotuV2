@@ -6,6 +6,7 @@ import {
   ArrowUpDown,
   Check,
   ChevronDown,
+  CircleAlert,
   Columns3,
   ExternalLink,
   FilePlus2,
@@ -21,7 +22,13 @@ import {
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { EmptyState } from '../../components/StateViews'
 import { formatCurrency } from '../../mocks/cases'
-import { useCases } from '../../data'
+import {
+  OPERATIONAL_ALERT_CASE_FILTER_LIMIT,
+  useCases,
+  useOperationalAlerts,
+  type OperationalAlertDataPort,
+} from '../../data'
+import { CaseRowAlertBadge } from './CaseRowAlertBadge'
 import { useSession } from '../../app/sessionContext'
 import type { CaseRecord, CaseType, SortKey } from '../../types/case'
 import { matchesSearchQuery } from '../../utils/search'
@@ -173,7 +180,8 @@ function MockNewNoticeModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-export function CasesPage() {
+/** `alertPort` yalnız testler için enjekte edilir; uygulama gerçek HTTP adaptörünü kullanır. */
+export function CasesPage({ alertPort }: { alertPort?: OperationalAlertDataPort } = {}) {
   const { cases, source, status: dataStatus } = useCases()
   const session = useSession()
   const location = useLocation()
@@ -239,6 +247,24 @@ export function CasesPage() {
 
   const selectedCase = filteredCases.find((item) => item.caseId === selectedId) ?? filteredCases[0]
   const hasFilters = query !== '' || typeFilter !== 'Tümü' || stageFilter !== 'Tümü' || statusFilter !== 'Tümü' || assigneeFilter !== 'Tümü' || serviceFilter !== 'Tümü' || followUpFilter !== 'Tümü'
+
+  // Yalnız görünür satırlar için uyarı sorulur. Filtre, sıralama veya sayfalama
+  // değişince liste değiştiği için sorgu anahtarı da değişir ve yeniden yüklenir.
+  // Mock modda hook API çağrısı yapmaz.
+  const alertCaseIds = useMemo(
+    () => (source === 'api'
+      ? filteredCases.slice(0, OPERATIONAL_ALERT_CASE_FILTER_LIMIT).map((item) => item.caseId)
+      : undefined),
+    [filteredCases, source],
+  )
+  const { alerts: rowAlerts, status: alertStatus } = useOperationalAlerts(alertPort, alertCaseIds)
+  const alertSummaryByCase = useMemo(
+    () => new Map((rowAlerts?.caseSummaries ?? []).map((summary) => [summary.caseId, summary])),
+    [rowAlerts],
+  )
+  /** Sözleşme sınırı aşıldığında kalan satırlar "bilinmiyor" gösterilir. */
+  const alertCoverageLimited = source === 'api'
+    && filteredCases.length > OPERATIONAL_ALERT_CASE_FILTER_LIMIT
 
   const resetFilters = () => {
     setQuery('')
@@ -332,6 +358,7 @@ export function CasesPage() {
                     <th>Durum</th>
                     <th><button type="button" onClick={() => handleSort('stage')}>Aşama <SortIcon column="stage" sortKey={sortKey} direction={direction} /></button></th>
                     <th><button type="button" onClick={() => handleSort('missingDocuments')}>Eksik <SortIcon column="missingDocuments" sortKey={sortKey} direction={direction} /></button></th>
+                    {source === 'api' && <th>Uyarı</th>}
                     <th><button type="button" onClick={() => handleSort('assignee')}>Sorumlu <SortIcon column="assignee" sortKey={sortKey} direction={direction} /></button></th>
                     <th>Servis</th>
                     <th><button type="button" onClick={() => handleSort('followUp')}>Takip <SortIcon column="followUp" sortKey={sortKey} direction={direction} /></button></th>
@@ -362,6 +389,15 @@ export function CasesPage() {
                         : item.missingDocuments > 0
                           ? <span className="missing-count">{item.missingDocuments}</span>
                           : <span className="complete-mark"><Check size={14} /></span>}</td>
+                      {source === 'api' && (
+                        <td>
+                          <CaseRowAlertBadge
+                            summary={alertStatus === 'ok' ? alertSummaryByCase.get(item.caseId) : undefined}
+                            plate={item.plate}
+                            onOpen={() => navigate(`/dosyalar/${item.caseId}`)}
+                          />
+                        </td>
+                      )}
                       <td>{item.assignee}</td>
                       <td className="truncate-cell" title={item.service}>{item.service}</td>
                       <td><span className={`follow-up follow-up--${item.followUpTone}`}>{item.followUp}</span></td>
@@ -375,6 +411,19 @@ export function CasesPage() {
           <footer className="table-footer">
             <span>{filteredCases.length} / {source === 'api' ? cases.length : '1.284'} dosya gösteriliyor</span>
             <span className="table-footer__hint"><ListFilter size={13} />Sıralama: {sortKey} · {direction === 'asc' ? 'artan' : 'azalan'}</span>
+            {source === 'api' && alertStatus === 'loading' && (
+              <span className="table-footer__hint">Uyarı göstergesi yükleniyor…</span>
+            )}
+            {source === 'api' && alertStatus !== 'ok' && alertStatus !== 'loading' && (
+              <span className="table-footer__warning" role="status">
+                <CircleAlert size={13} />Uyarı göstergesi yüklenemedi; satırlar uyarısız sayılmıyor.
+              </span>
+            )}
+            {source === 'api' && alertStatus === 'ok' && alertCoverageLimited && (
+              <span className="table-footer__hint">
+                Uyarı göstergesi ilk {OPERATIONAL_ALERT_CASE_FILTER_LIMIT} satır için yüklendi
+              </span>
+            )}
             {source === 'api' ? (
               <span className="table-footer__hint">Sunucudaki tüm açık dosya sayfaları yüklendi</span>
             ) : <div className="pagination">

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { OPERATIONAL_ALERTS_ROUTE, operationalAlertsResponseSchema } from '../src/index.js'
+import {
+  OPERATIONAL_ALERTS_ROUTE,
+  operationalAlertsQuerySchema,
+  operationalAlertsResponseSchema,
+} from '../src/index.js'
+
+const CASE_ID = '11111111-1111-4111-8111-111111111111'
 
 const alert = {
   dedupeKey: 'overdue_task:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222',
@@ -81,6 +87,49 @@ describe('operational alerts contracts', () => {
     }))).toThrow()
     expect(() => operationalAlertsResponseSchema.parse(response({
       alerts: [{ ...alert, sourceDate: '2026-02-31' }],
+    }))).toThrow()
+  })
+
+  it('caseIds filtresi biçim, tekillik ve üst sınır uygular', () => {
+    const id = '11111111-1111-4111-8111-111111111111'
+    expect(operationalAlertsQuerySchema.parse({})).toEqual({})
+    expect(operationalAlertsQuerySchema.parse({ caseIds: [id] }).caseIds).toEqual([id])
+
+    // UUID olmayan kimlik reddedilir (SQL cast hatası yerine 400).
+    expect(() => operationalAlertsQuerySchema.parse({ caseIds: ['abc'] })).toThrow()
+    expect(() => operationalAlertsQuerySchema.parse({ caseIds: ["'; DROP TABLE cases;--"] })).toThrow()
+    // Mükerrer kimlik reddedilir.
+    expect(() => operationalAlertsQuerySchema.parse({ caseIds: [id, id] })).toThrow()
+    // Boş liste ve fazla anahtar reddedilir.
+    expect(() => operationalAlertsQuerySchema.parse({ caseIds: [] })).toThrow()
+    expect(() => operationalAlertsQuerySchema.parse({ extra: 'x' })).toThrow()
+  })
+
+  it('caseIds üst sınırı 100 kimliktir', () => {
+    const build = (count: number) => Array.from(
+      { length: count },
+      (_unused, index) => `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
+    )
+    expect(operationalAlertsQuerySchema.parse({ caseIds: build(100) }).caseIds).toHaveLength(100)
+    expect(() => operationalAlertsQuerySchema.parse({ caseIds: build(101) })).toThrow()
+  })
+
+  it('dosya özeti isteğe bağlıdır ve tür kırılımı taşır', () => {
+    const summary = {
+      caseId: CASE_ID,
+      totalCount: 3,
+      byType: { overdue_task: 2, overdue_follow_up: 1, missing_required_document: 0 },
+    }
+    expect(operationalAlertsResponseSchema.parse(response({ caseSummaries: [summary] })).caseSummaries)
+      .toEqual([summary])
+    // Özet yokken de geçerlidir (filtresiz çağrı).
+    expect(operationalAlertsResponseSchema.parse(response()).caseSummaries).toBeUndefined()
+    // Eksik tür alanı ve negatif sayaç reddedilir.
+    expect(() => operationalAlertsResponseSchema.parse(response({
+      caseSummaries: [{ ...summary, byType: { overdue_task: 1 } }],
+    }))).toThrow()
+    expect(() => operationalAlertsResponseSchema.parse(response({
+      caseSummaries: [{ ...summary, totalCount: -1 }],
     }))).toThrow()
   })
 

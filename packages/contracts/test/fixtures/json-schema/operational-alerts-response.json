@@ -89,6 +89,58 @@
         ],
         "additionalProperties": false
       }
+    },
+    "caseSummaries": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "totalCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "byType": {
+            "type": "object",
+            "properties": {
+              "overdue_task": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "overdue_follow_up": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "missing_required_document": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "overdue_task",
+              "overdue_follow_up",
+              "missing_required_document"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "caseId",
+          "totalCount",
+          "byType"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

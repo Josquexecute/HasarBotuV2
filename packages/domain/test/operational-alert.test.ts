@@ -9,8 +9,10 @@ import {
   buildOverdueFollowUpAlert,
   buildOverdueTaskAlert,
   collectOperationalAlerts,
+  dedupeAndSortOperationalAlerts,
   normalizeOperationalAlerts,
   requirementLabel,
+  summarizeOperationalAlertsByCase,
   type MissingDocumentFact,
   type OperationalAlert,
   type OverdueFollowUpFact,
@@ -180,6 +182,90 @@ describe('normalizeOperationalAlerts', () => {
       dedupeKey: `key-${String(index).padStart(4, '0')}`,
     }))
     expect(normalizeOperationalAlerts(many)).toHaveLength(MAX_OPERATIONAL_ALERTS)
+  })
+})
+
+describe('summarizeOperationalAlertsByCase', () => {
+  it('istenen ama uyarısı olmayan dosya sıfır sayaçla döner', () => {
+    expect(summarizeOperationalAlertsByCase([], ['case-b', 'case-a'])).toEqual([
+      { caseId: 'case-a', totalCount: 0, byType: { overdue_task: 0, overdue_follow_up: 0, missing_required_document: 0 } },
+      { caseId: 'case-b', totalCount: 0, byType: { overdue_task: 0, overdue_follow_up: 0, missing_required_document: 0 } },
+    ])
+  })
+
+  it('tür dağılımını dosya bazında sayar', () => {
+    const alerts = collectOperationalAlerts(
+      {
+        overdueTasks: [taskFact({ taskId: 'task-1' }), taskFact({ taskId: 'task-2' })],
+        overdueFollowUps: [followUpFact()],
+        missingDocuments: [documentFact({ caseId: 'case-b', plate: '34 B 1', officeNumber: '2026/2' })],
+      },
+      AS_OF,
+    )
+    const summaries = summarizeOperationalAlertsByCase(alerts, [
+      '11111111-1111-4111-8111-111111111111',
+      'case-b',
+    ])
+    expect(summaries).toEqual([
+      {
+        caseId: '11111111-1111-4111-8111-111111111111',
+        totalCount: 3,
+        byType: { overdue_task: 2, overdue_follow_up: 1, missing_required_document: 0 },
+      },
+      {
+        caseId: 'case-b',
+        totalCount: 1,
+        byType: { overdue_task: 0, overdue_follow_up: 0, missing_required_document: 1 },
+      },
+    ])
+  })
+
+  it('istenmeyen dosyanın uyarısını özete katmaz', () => {
+    const alerts = collectOperationalAlerts(
+      { overdueTasks: [taskFact({ taskId: 'task-1' })], overdueFollowUps: [], missingDocuments: [] },
+      AS_OF,
+    )
+    expect(summarizeOperationalAlertsByCase(alerts, ['case-z'])).toEqual([
+      { caseId: 'case-z', totalCount: 0, byType: { overdue_task: 0, overdue_follow_up: 0, missing_required_document: 0 } },
+    ])
+  })
+})
+
+describe('dedupeAndSortOperationalAlerts', () => {
+  it('kırpma yapmaz; 200 sınırının ötesindeki uyarılar korunur', () => {
+    const many = Array.from({ length: MAX_OPERATIONAL_ALERTS + 40 }, (_unused, index) => ({
+      dedupeKey: `key-${String(index).padStart(4, '0')}`,
+      type: 'overdue_task' as const,
+      severity: 'medium' as const,
+      caseId: `case-${String(index).padStart(4, '0')}`,
+      plate: '34 A 1',
+      officeNumber: '2026/1',
+      summary: 'x',
+      sourceDate: '2026-07-10',
+      caseDetailPath: '/dosyalar/case',
+    }))
+    expect(dedupeAndSortOperationalAlerts(many)).toHaveLength(MAX_OPERATIONAL_ALERTS + 40)
+    expect(normalizeOperationalAlerts(many)).toHaveLength(MAX_OPERATIONAL_ALERTS)
+  })
+
+  it('kırpmadan hesaplanan özet 200 sınırı yüzünden yanlış negatif üretmez', () => {
+    // 200'den fazla uyarı: son dosya kırpılmış listede yok ama özette görünür.
+    const many = Array.from({ length: MAX_OPERATIONAL_ALERTS + 5 }, (_unused, index) => ({
+      dedupeKey: `key-${String(index).padStart(4, '0')}`,
+      type: 'overdue_task' as const,
+      severity: 'medium' as const,
+      caseId: `case-${String(index).padStart(4, '0')}`,
+      plate: '34 A 1',
+      officeNumber: '2026/1',
+      summary: 'x',
+      sourceDate: '2026-07-10',
+      caseDetailPath: '/dosyalar/case',
+    }))
+    const lastCaseId = `case-${String(MAX_OPERATIONAL_ALERTS + 4).padStart(4, '0')}`
+    expect(normalizeOperationalAlerts(many).some((alert) => alert.caseId === lastCaseId)).toBe(false)
+    expect(summarizeOperationalAlertsByCase(dedupeAndSortOperationalAlerts(many), [lastCaseId])).toEqual([
+      { caseId: lastCaseId, totalCount: 1, byType: { overdue_task: 1, overdue_follow_up: 0, missing_required_document: 0 } },
+    ])
   })
 })
 

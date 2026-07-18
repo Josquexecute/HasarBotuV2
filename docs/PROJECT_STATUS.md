@@ -5,11 +5,25 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 51 — Operasyonel uyarı performans ölçümü
-- Durum: **Uygulama, gerçek PostgreSQL, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-51-alert-performance` dalı, remote yok
+- Aşama: Paket 52 — Dosya satırı uyarı göstergesi
+- Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
+- Git: Yerel repository, `foundation/package-52-case-row-alerts` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 52 doğrulama sonucu
+
+- Yeni endpoint açılmadı: mevcut `GET /api/v1/operational-alerts` ucuna sözleşmeyle sınırlı (`MAX_OPERATIONAL_ALERT_CASE_FILTER` = 100), UUID biçimli, tekil `caseIds` filtresi eklendi. Sınır aşımı, mükerrer ve biçimsiz kimlik 400 döner.
+- **Yanlış negatif kapatıldı:** dosya başına özet 200 kırpmasından önce hesaplanır (`deriveOperationalAlerts` → `summarizeOperationalAlertsByCase`) ve `caseSummaries` alanında döner. Filtresiz çağrının yanıtı ve 200 sınırı davranışı değişmedi.
+- Gerçek PostgreSQL testiyle senaryo kanıtlandı: 55 gürültülü dosya 200 sınırını yüksek önemli uyarılarla doldurunca, yalnız düşük önemli uyarısı olan dosyalar kırpılmış listede **hiç görünmüyor**; filtreli çağrı aynı dosyalar için doğru sayıyı (1) veriyor.
+- Tenant sınırı istemciden gelen kimliklere güvenmiyor: yabancı organization, kapalı ve var olmayan dosya ne uyarı ne özet üretiyor, özete hiç girmiyor. İki yönlü tenant testi geçti.
+- UI'da satır toplam uyarı sayısı ve tür ayrımını (geciken görev / geciken takip / eksik evrak) gösteriyor; uyarısız satırda dikkat çekici rozet yok; özeti dönmeyen satır "bilinmiyor" gösteriliyor, "uyarı yok" değil. Hata halinde tüm satırlar uyarısız gösterilmiyor ve footer'da göstergenin yüklenemediği yazıyor.
+- Yalnız görünür satırlar soruluyor; arama/filtre değişince sorgu anahtarı değişip yeniden yükleniyor. Mock modda uç hiç çağrılmıyor ve "Uyarı" sütunu gösterilmiyor.
+- API tarafı 25/25 (Paket 49 davranış 10, Paket 51 ölçeklenme 6, Paket 52 filtre 9); UI tarafı Dosyalar özelliğinde 83/83.
+- Chrome/CDP smoke (`scripts/package52-browser-smoke.mjs`) geçti: filtresiz çağrı 200 sınırında ve sessiz dosyayı içermiyor; satır rozeti buna rağmen doğru sayıyı gösteriyor; tür kırılımı, temiz satırda rozet yokluğu, rozet–API tutarlılığı, yalnız görünür satır sorgusu, 100 sınırı, filtre değişiminde yeniden yükleme, rozetten dosya detayına gidiş ve API kapalıyken hiçbir satırın "uyarısız" gösterilmemesi doğrulandı. 32 sabit mock metni DOM'da yok; 1920×1080 açık/koyu ve 1366×768 koyu görünümde yatay taşma yok; console warning/error/exception 0.
+- Ana ağaçta typecheck, lint, **1432 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
+- **Bilinen sınır:** Dosyalar ekranında API modunda gerçek sayfalama yoktur. Filtrelenmiş satır sayısı 100'ü aşarsa gösterge ilk 100 satır için yüklenir, kalan satırlar "bilinmiyor" gösterilir ve tablo altında bu durum yazılır. Gerçek sayfalama ayrı bir pakettir.
 
 ## Paket 51 doğrulama sonucu
 

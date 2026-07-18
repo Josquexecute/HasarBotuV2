@@ -965,3 +965,22 @@ Etkisi:
 
 - `scripts/package51-alert-performance.mjs` ölçüm koşumu ve `services/api/test/operational-alerts-scaling.test.ts` regresyon testi eklenir; `PERFORMANCE_NOTES.md` açılır.
 - 5.000 açık dosyada ısınmış süre ~382 ms → ~180-190 ms. Maliyet okuma anındadır ve doğrusal büyür; çok daha büyük hacimler yeniden ölçüm gerektirir.
+
+## 2026-07-18 — HB-2026-058: Dosya satırı uyarı göstergesi ve `caseIds` filtresi
+
+Karar:
+
+1. Satır göstergesi için **yeni endpoint açılmaz**. Mevcut `GET /api/v1/operational-alerts` ucuna isteğe bağlı `caseIds` filtresi eklenir.
+2. **Yanlış negatif yasağı:** genel liste `MAX_OPERATIONAL_ALERTS` (200) ile kırpıldığı için satır göstergesi bu listeden okunamaz. Düşük önemli uyarısı olan dosyalar kırpılmış listede hiç görünmez ve satır yanlışlıkla "uyarı yok" derdi. Bu yüzden filtreli çağrı, dosya başına özeti **kırpmadan önce** hesaplar (`deriveOperationalAlerts` + `summarizeOperationalAlertsByCase`) ve `caseSummaries` alanında döndürür.
+3. Filtre yalnız Dosyalar ekranındaki görünür satır kimliklerini taşır. Üst sınır sözleşme seviyesinde `MAX_OPERATIONAL_ALERT_CASE_FILTER` = 100'dür; kimlikler UUID biçiminde, tekil ve en az bir tane olmalıdır. Sınır aşımı, mükerrer veya biçimsiz kimlik 400 döner.
+4. **Tenant ve RBAC istemciden gelen kimliklere güvenmez.** Filtre kapsamı yalnız daraltır; erişim kararı her zaman sunucudaki `organization_id` + `lifecycle_status='open'` koşuluyla verilir. Yabancı, kapalı veya var olmayan kimlik ne uyarı ne özet üretir — özete hiç girmez.
+5. İstemci "özet yok" durumunu **"uyarı yok" olarak yorumlamaz**: özeti dönmeyen satır "bilinmiyor" gösterilir. Uyarısı olmayan satırda dikkat çekici rozet yerine sessiz işaret kullanılır. Hata halinde tüm satırlar uyarısız gösterilmez; göstergenin yüklenemediği açıkça yazılır.
+6. Yalnız görünür satırlar sorulur ve liste filtresi, sıralaması veya sayfalaması değiştiğinde yeniden yüklenir. Mock modda gerçek uyarı çağrısı yapılmaz.
+7. Dosyalar ekranında API modunda gerçek sayfalama henüz yoktur; filtrelenmiş satır sayısı 100'ü aşarsa gösterge ilk 100 satır için yüklenir ve kalan satırlar "bilinmiyor" gösterilir. Bu durum tabloda açıkça belirtilir.
+8. Yeni tablo, migration, cache, kalıcı bildirim durumu veya ikinci kural motoru eklenmez.
+
+Etkisi:
+
+- Domain'e `dedupeAndSortOperationalAlerts`, `buildOperationalAlerts`, `deriveOperationalAlerts` ve `summarizeOperationalAlertsByCase` eklenir; `collectOperationalAlerts` davranışı (200 kırpma) birebir korunur.
+- Sözleşmeye `operationalAlertsQuerySchema` ve isteğe bağlı `caseSummaries` eklenir; filtresiz çağrının yanıtı değişmez.
+- UI'da `CaseRowAlertBadge` ve Dosyalar tablosunda "Uyarı" sütunu (yalnız API modunda) eklenir.

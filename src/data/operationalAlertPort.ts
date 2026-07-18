@@ -17,16 +17,28 @@ export interface OperationalAlertRecord {
   readonly caseDetailPath: string
 }
 
+export interface OperationalAlertCaseSummaryRecord {
+  readonly caseId: string
+  readonly totalCount: number
+  readonly byType: Readonly<Record<OperationalAlertTypeRecord, number>>
+}
+
 export interface OperationalAlertsRecord {
   readonly schemaVersion: 'operational-alert/1.0.0'
   readonly totalCount: number
   readonly evaluatedAt: string
   readonly alerts: readonly OperationalAlertRecord[]
+  /** Yalnız `caseIds` filtresiyle çağrıldığında döner. */
+  readonly caseSummaries?: readonly OperationalAlertCaseSummaryRecord[]
 }
 
 export interface OperationalAlertDataPort {
-  list(): Promise<OperationalAlertsRecord>
+  /** `caseIds` verilirse yanıt dosya başına özet taşır (200 kırpmasından bağımsız). */
+  list(caseIds?: readonly string[]): Promise<OperationalAlertsRecord>
 }
+
+/** Sözleşme sınırı; Dosyalar ekranı tek çağrıda bu kadar satır sorabilir. */
+export const OPERATIONAL_ALERT_CASE_FILTER_LIMIT = 100
 
 /** Durum Panosu özetinde gösterilen öne çıkan uyarı sayısı (tam liste Bildirimler'dedir). */
 export const DASHBOARD_ALERT_PREVIEW_LIMIT = 3
@@ -86,10 +98,13 @@ export function createHttpOperationalAlertAdapter(
   const headers = options.headers ?? {}
 
   return {
-    async list() {
+    async list(caseIds) {
+      const suffix = caseIds === undefined || caseIds.length === 0
+        ? ''
+        : `?caseIds=${caseIds.map((value) => encodeURIComponent(value)).join(',')}`
       let response: Response
       try {
-        response = await fetchImpl(`${baseUrl}/api/v1/operational-alerts`, {
+        response = await fetchImpl(`${baseUrl}/api/v1/operational-alerts${suffix}`, {
           method: 'GET',
           credentials: 'include',
           headers: { accept: 'application/json', ...headers },
