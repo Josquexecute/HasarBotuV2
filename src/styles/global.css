@@ -2120,6 +2120,11 @@ button {
 .labor-ai-panel textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .labor-ai-plan, .labor-ai-run { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 
+/* Yönetim gerçek referans verisi (Paket 47) */
+.management-state { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px; }
+.management-state p { margin: 0; color: var(--text-secondary); font-size: 12px; }
+.management-empty { margin: 10px 16px 14px; color: var(--text-secondary); font-size: 11px; }
+
 /* Ağır Hasar / PERT (Paket 45) */
 .pert-decisions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
 .pert-decisions .decision-card h3 { margin: 6px 0 4px; font-size: 15px; }

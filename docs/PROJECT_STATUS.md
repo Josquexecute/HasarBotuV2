@@ -5,9 +5,9 @@ Son güncelleme: 2026-07-18
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 46 — İşçilik öğrenme sözlüğü
+- Aşama: Paket 47 — API modunda kimlik ve yönetim listelerinde mock yasağı
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-46-labor-dictionary` dalı, remote yok
+- Git: Yerel repository, `foundation/package-47-management-real-data` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
 
@@ -862,3 +862,16 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.330/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
 - `CaseDetailPage.api.test.tsx` içindeki `waitFor` varsayılan 1 sn'lik ölü hattı 15 sn'ye çıkarıldı: contracts paketi büyüdükçe ilk dinamik import + Zod şema kurulumu bu süreyi aşıyordu. Test hâlâ gerçek yükleme sonucunu doğrular; kapsam daralmadı.
 - Yeni tablo/migration, dependency, AI çağrısı, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Üretim migration çalıştırılmadı.
+
+## Paket 47 — API modunda kimlik ve yönetim listelerinde mock yasağı (2026-07-18)
+
+- Denetimde iki gerçek ihlal bulundu ve kapatıldı (HB-2026-053): (1) Yönetim ekranı API modunda da mock kullanıcı/servis listesi gösteriyordu; (2) sol menü kullanıcı kartı gerçek oturumda bile sabit kodlu prototip kimliği ("Ömer Faruk Kaya · Eksper") gösteriyordu. İkincisi kimin oturum açtığını yanlış gösterdiği için daha ağırdı.
+- Yönetim'in Kullanıcılar/Servisler sekmeleri API modunda yalnız **mevcut** referans uçlarından beslenir; yeni tablo, migration, endpoint veya sözleşme eklenmedi.
+- Gerçek referans sözleşmesinde karşılığı olmayan mock sütunları (telefon, atanmış dosya, açık dosya) gösterilmez — uydurulmuş sütun veya sahte sayı eklenmedi. Eksper rolü `experts` referansından türetilir; servis türü/anlaşma/aktiflik sürümlü değerlendirmeden gelir.
+- Sol menü kimliği gerçek oturumdan gelir (`displayName` + rol kodlarının Türkçe etiketleri, baş harf avatarı). API modunda oturum yoksa "Oturum bekleniyor / Kimlik doğrulanmadı" gösterilir; prototip kimliği yalnız mock modda kalır. API modunda mock "Yeni Kayıt" butonu gizlenir (gerçek yazma yolu yoktur).
+- Belge Kuralları ve Erişim ve Yetki sekmeleri mock kayıt değil kilitli proje kurallarının statik özetidir; her iki modda korunur.
+- Ana çalışma ağacında typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **1.339 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle, moderate audit (0 açık) ve diff-check geçti. Dağılım: UI 228/6; domain 440; contracts 271; database 59; API 288; file-agent 53 (Paket 46'ya göre +9 UI testi).
+- Gerçek Chrome/CDP smoke (11/11 senaryo): login; API modunda gerçek kullanıcı/servis; mock kullanıcı ve servis sızıntısı yok; eksper rolü türetildi; tenant izolasyonu; uydurulmuş sütun yok; salt okunur görünüm audit yazmaz (yalnız beklenen `auth.*`); API kapatılınca fallback yok; console temiz. 1366×768 açık/koyu ve 1920×1080 koyu görünümde yatay taşma yoktu.
+- Build başlangıç JavaScript grafiğini **476.645 baytta** tuttu; 10 zorunlu lazy modül korundu.
+- Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile **1.339/6** test ve build/bundle yeniden geçti; geçici kopya kaldırıldı.
+- Yeni tablo/migration/endpoint/sözleşme, dependency, AI çağrısı, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmedi. Bildirimler ve Mevzuat ekranları hâlâ mock prototiptir ve ayrı kapsamdır.

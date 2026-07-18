@@ -881,3 +881,19 @@ Etkisi:
 
 - `labor-dictionary/1.0.0` saf domain normalize/arama katmanı, strict contracts/JSON Schema, salt okunur tenant-kapsamlı endpoint ve İşçilik editöründe öneri datalist'i eklenir. v0.7'nin öğrenme sözlüğü dilimi kapanır.
 - Yeni tablo/migration, dependency, AI çağrısı, Excel yazımı, File Agent, IPC veya fiziksel dosya erişimi eklenmez.
+
+## 2026-07-18 — HB-2026-053: API modunda kimlik ve yönetim listelerinde mock yasağı
+
+Karar:
+
+1. "API modunda mock kayıt gösterilmez" kuralı yalnız dosya modüllerini değil, **uygulama kabuğunu ve ana ekranları** da bağlar. Denetimde iki ihlal bulundu ve kapatıldı: Yönetim ekranı API modunda mock kullanıcı/servis listesi gösteriyordu ve sol menü kullanıcı kartı gerçek oturumda bile sabit kodlu prototip kimliği ("Ömer Faruk Kaya · Eksper") gösteriyordu.
+2. Yönetim'in Kullanıcılar ve Servisler sekmeleri API modunda yalnız mevcut referans uçlarından (`/references/users|experts|services|insurers`) beslenir. Yeni tablo, migration, endpoint veya sözleşme eklenmez.
+3. Gerçek referans sözleşmesinde karşılığı olmayan mock sütunları (telefon, atanmış dosya sayısı, açık dosya sayısı) **gösterilmez**; uydurulmuş sütun veya türetilmiş sahte sayı eklenmez. Eksper rolü ayrı `experts` referansından türetilir.
+4. Sol menü kimliği yalnız gerçek oturumdan gelir: `displayName` ve rol kodlarının Türkçe etiketleri. Oturum yoksa API modunda "Oturum bekleniyor / Kimlik doğrulanmadı" gösterilir; prototip kimliği yalnız mock modda kalır.
+5. Yönetim'in Belge Kuralları ve Erişim ve Yetki sekmeleri mock kayıt değil, kilitli proje kurallarının statik özetidir; her iki modda korunur. "Yeni Kayıt" mock butonu API modunda gösterilmez (gerçek yazma yolu yoktur).
+6. Referans görünümü salt okunurdur ve audit yazmaz; oturum açma auditleri (`auth.*`) bu kuralın dışındadır.
+
+Etkisi:
+
+- ManagementPage API modunda gerçek veriye bağlanır, Sidebar kimliği gerçek oturumdan gelir; mock prototip yalnız mock modda korunur ve API hatasında fallback yapılmaz.
+- Yeni tablo/migration/endpoint/sözleşme, dependency, AI çağrısı veya fiziksel dosya erişimi eklenmez.

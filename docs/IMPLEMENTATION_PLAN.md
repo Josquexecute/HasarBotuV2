@@ -986,3 +986,14 @@ Kapsam dışı: fotoğraf AI, AI PERT önerisi, dış rayiç/SBM entegrasyonu, E
 - [x] Yalnız Paket 46 dosyalarını path bazlı stage edip atomik commit oluştur.
 
 Kapsam dışı: yeni tablo/migration, AI çağrısı, otomatik satır ekleme/kayıt, Excel şablon profili, güvenli Excel yazımı, File Agent, IPC, yeni dependency ve sonraki paket.
+
+## Paket 47 — API modunda kimlik ve yönetim listelerinde mock yasağı
+
+- [x] Yönetim'in Kullanıcılar/Servisler sekmelerini API modunda mevcut referans uçlarına bağla; mock listeleri yalnız mock modda bırak.
+- [x] Gerçek sözleşmede karşılığı olmayan sütunları (telefon, atanmış/açık dosya) kaldır; eksper rolünü `experts` referansından türet.
+- [x] Sol menü kullanıcı kartındaki sabit kodlu prototip kimliğini gerçek oturum verisiyle değiştir; oturum yoksa mock kimlik gösterme.
+- [x] Referans görünümünün salt okunur kaldığını ve audit yazmadığını doğrula.
+- [x] Gerçek PostgreSQL/API, tam root, gerçek Chrome/CDP ve repository dışı fresh checkout kapılarını tamamla.
+- [x] Yalnız Paket 47 dosyalarını path bazlı stage edip atomik commit oluştur.
+
+Kapsam dışı: yeni tablo/migration/endpoint/sözleşme, kullanıcı-servis yazma (CRUD) yolu, Bildirimler ve Mevzuat ekranlarının gerçek veriye bağlanması, yeni dependency ve sonraki paket.

@@ -13,10 +13,32 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useSession } from '../app/sessionContext'
 
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
+}
+
+const ROLE_LABELS: Readonly<Record<string, string>> = {
+  admin: 'Yönetici',
+  expert: 'Eksper',
+  case_manager: 'Dosya Sorumlusu',
+  secretary: 'Sekreter',
+  accounting: 'Muhasebe',
+  read_only: 'Salt Okunur',
+}
+
+/** Ad-soyaddan en çok iki harfli baş harf; boş adda güvenli sabit döner. */
+function initialsOf(displayName: string): string {
+  const parts = displayName.trim().split(/\s+/u).filter((part) => part.length > 0)
+  if (parts.length === 0) return 'HB'
+  return parts.slice(0, 2).map((part) => part[0]?.toLocaleUpperCase('tr-TR') ?? '').join('')
+}
+
+function roleLabelOf(roles: readonly string[]): string {
+  const known = roles.map((role) => ROLE_LABELS[role]).filter((label): label is string => label !== undefined)
+  return known.length > 0 ? known.join(' · ') : 'Kullanıcı'
 }
 
 const navigation: readonly {
@@ -37,6 +59,13 @@ const navigation: readonly {
 ]
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  // Kimlik yalnız gerçek oturumdan gelir; mock modda prototip kimliği korunur.
+  const { mode, user } = useSession()
+  const displayName = user?.displayName ?? (mode === 'mock' ? 'Ömer Faruk Kaya' : 'Oturum bekleniyor')
+  const roleLabel = user === null
+    ? (mode === 'mock' ? 'Eksper' : 'Kimlik doğrulanmadı')
+    : roleLabelOf(user.roles)
+
   return (
     <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`}>
       <div className="brand">
@@ -68,12 +97,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       <div className="sidebar__footer">
-        <div className="user-card" title={collapsed ? 'Ömer Faruk Kaya · Eksper' : undefined}>
-          <span className="avatar" aria-hidden="true">ÖF</span>
+        <div className="user-card" title={collapsed ? `${displayName} · ${roleLabel}` : undefined}>
+          <span className="avatar" aria-hidden="true">{initialsOf(displayName)}</span>
           {!collapsed && (
             <span className="user-card__copy">
-              <strong>Ömer Faruk Kaya</strong>
-              <small>Eksper</small>
+              <strong>{displayName}</strong>
+              <small>{roleLabel}</small>
             </span>
           )}
         </div>
