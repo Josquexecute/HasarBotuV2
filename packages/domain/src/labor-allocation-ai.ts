@@ -10,6 +10,13 @@ import {
   normalizeLaborText,
   type NormalizedLaborItem,
 } from './labor-sheet.js'
+import {
+  compareBaselineAllocation,
+  hasCompleteBaselineMatch,
+  matchBaselineLines,
+  type LaborBaselineComparison,
+  type LaborBaselineLineMatch,
+} from './labor-baseline.js'
 
 /**
  * Paket 54 — kanıtlı AI işçilik DAĞITIM çekirdeği (HB-2026-060).
@@ -232,6 +239,12 @@ export interface LaborAllocationLineSuggestion {
   readonly conflictCodes: readonly LaborAllocationConflictCode[]
   readonly missingEvidenceCodes: readonly LaborAllocationMissingEvidenceCode[]
   readonly controlRequired: boolean
+  /**
+   * Paket 57: eşleşen baseline ile ekonomik şekil karşılaştırması. Baseline
+   * yoksa veya satır belirsiz eşleştiyse null kalır. Sağlayıcı bu alanı
+   * üretmez; sunucu hesaplar.
+   */
+  readonly baselineComparison?: LaborBaselineComparison | null
 }
 
 export interface LaborAllocationSuggestionInput {
@@ -297,8 +310,25 @@ export function detectMissingEvidence(
   if (damageRegionMissing) codes.push('EVIDENCE_MISSING_DAMAGE_REGION')
   if (input.approvedHistory.length === 0) codes.push('EVIDENCE_MISSING_APPROVED_HISTORY')
   if (input.dictionary.length === 0) codes.push('EVIDENCE_MISSING_DICTIONARY_MATCH')
-  if (input.expertBaseline === null) codes.push('EVIDENCE_MISSING_EXPERT_BASELINE')
+  // Paket 57: baseline'ın var olması yetmez; her satırın belirsizlik olmadan
+  // eşleşmesi gerekir. Eşleşmeyen satır varken kodu kaldırmak, o satır için
+  // baseline varmış gibi davranmak olurdu.
+  if (!hasCompleteBaselineMatch(baselineMatches(input))) {
+    codes.push('EVIDENCE_MISSING_EXPERT_BASELINE')
+  }
   return codes
+}
+
+/** Güncel föy satırlarının baseline karşılıkları; baseline yoksa hepsi boştur. */
+export function baselineMatches(
+  input: LaborAllocationPlanContext,
+): readonly LaborBaselineLineMatch[] {
+  if (input.expertBaseline === null) {
+    return evidenceLines(input.lines).map((line) => ({
+      ordinal: line.ordinal, baseline: null, reason: 'no_candidate' as const,
+    }))
+  }
+  return matchBaselineLines(evidenceLines(input.lines), input.expertBaseline.lines)
 }
 
 function evidenceLines(lines: readonly NormalizedLaborItem[]): readonly LaborAllocationEvidenceLine[] {
@@ -567,6 +597,11 @@ export function validateLaborAllocationSuggestion(
   value: unknown,
   sheetLines: readonly NormalizedLaborItem[],
   missingEvidenceCodes: readonly LaborAllocationMissingEvidenceCode[] = [],
+  /**
+   * Paket 57: satır sırasına göre eşleşmiş baseline. Çelişki kodu SUNUCUDA
+   * hesaplanır; modelin kendi beyanına bırakılmaz.
+   */
+  baselineByOrdinal: ReadonlyMap<number, LaborAllocationEvidenceLine> = new Map(),
 ): LaborAllocationValidation {
   if (!isValidSuggestionShape(value)) return { allowed: false, code: 'AI_OUTPUT_SCHEMA_INVALID' }
   if (value.lines.length !== sheetLines.length) {
@@ -631,6 +666,22 @@ export function validateLaborAllocationSuggestion(
     }
 
     const mergedMissing = [...new Set([...line.missingEvidenceCodes, ...missingEvidenceCodes])].sort()
+
+    // Baseline ile karşılaştırma: eşleşen satırda ekonomik şekil belirgin
+    // sapıyorsa çelişki kodu zorlanır ve satır kontrol gerekli olur. Model
+    // çelişkiyi bildirmese de bu kod düşmez.
+    const matchedBaseline = baselineByOrdinal.get(line.lineOrdinal) ?? null
+    const baselineComparison = matchedBaseline === null ? null : compareBaselineAllocation(
+      matchedBaseline,
+      {
+        partLikeMinor: economic.buckets.new_part_or_ownership,
+        laborLikeMinor: expectedTotals.repairTotalMinor,
+      },
+    )
+    const mergedConflicts = baselineComparison?.conflicts === true
+      ? [...new Set([...line.conflictCodes, 'CONFLICT_EXPERT_BASELINE_DISAGREEMENT' as const])]
+      : [...line.conflictCodes]
+
     const candidate: LaborAllocationLineSuggestion = {
       lineOrdinal: line.lineOrdinal,
       allocations: line.allocations.map((allocation) => ({ ...allocation })),
@@ -646,9 +697,10 @@ export function validateLaborAllocationSuggestion(
       reasoning,
       evidenceRefs: [...line.evidenceRefs],
       confidence: line.confidence,
-      conflictCodes: [...line.conflictCodes].sort(),
+      conflictCodes: mergedConflicts.sort(),
       missingEvidenceCodes: mergedMissing as LaborAllocationMissingEvidenceCode[],
       controlRequired: line.controlRequired,
+      baselineComparison,
     }
     normalizedLines.push({ ...candidate, controlRequired: requiresControl(candidate) })
   }

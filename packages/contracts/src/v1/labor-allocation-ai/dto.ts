@@ -2,6 +2,8 @@ import { z } from 'zod'
 import {
   LABOR_ALLOCATION_CONFLICT_CODES,
   LABOR_ALLOCATION_LOCAL_PRIVACY_POLICY_VERSION,
+  LABOR_BASELINE_COMPARISON_VERSION,
+  LABOR_BASELINE_MATCH_VERSION,
   LABOR_ALLOCATION_MAX_ALLOCATIONS_PER_LINE,
   LABOR_ALLOCATION_MAX_EVIDENCE_REFS,
   LABOR_ALLOCATION_MAX_REASONING_LENGTH,
@@ -79,6 +81,21 @@ export const laborAllocationEconomicSchema = z.strictObject({
   note: z.string().min(1).max(LABOR_ALLOCATION_MAX_REASONING_LENGTH),
 })
 
+/**
+ * Paket 57 — eşleşen eksper baseline ile ekonomik şekil karşılaştırması.
+ * Sağlayıcı üretmez; sunucu hesaplar ve öneriyle birlikte immutable saklar.
+ */
+export const laborAllocationBaselineSchema = z.strictObject({
+  comparisonVersion: z.literal(LABOR_BASELINE_COMPARISON_VERSION),
+  baselineSheetVersion: entityVersionSchema,
+  baselinePartAmountMinor: amountMinorSchema,
+  baselineLaborAmountMinor: amountMinorSchema,
+  baselinePartRatio: z.number().min(0).max(1),
+  suggestedPartRatio: z.number().min(0).max(1),
+  deltaRatio: z.number().min(0).max(1),
+  conflicts: z.boolean(),
+})
+
 export const laborAllocationLineSchema = z.strictObject({
   lineOrdinal: lineOrdinalSchema,
   /** Kaynak föy satırının okunabilir özeti; öneri satırıyla eşleştirme içindir. */
@@ -96,6 +113,8 @@ export const laborAllocationLineSchema = z.strictObject({
   missingEvidenceCodes: z.array(z.enum(LABOR_ALLOCATION_MISSING_EVIDENCE_CODES))
     .max(LABOR_ALLOCATION_MISSING_EVIDENCE_CODES.length),
   controlRequired: z.boolean(),
+  /** Baseline yoksa veya satır belirsiz eşleştiyse null kalır. */
+  baseline: laborAllocationBaselineSchema.nullable(),
 })
 
 export const laborAllocationSuggestionSchema = z.strictObject({
@@ -149,6 +168,13 @@ export const laborAllocationRunSchema = z.strictObject({
   ruleVersion: z.literal(LABOR_ALLOCATION_RULE_VERSION),
   sourceSheetId: idSchema,
   sourceSheetVersion: entityVersionSchema,
+  /**
+   * Paket 57: kanıt olarak kullanılan önceki onaylı föy sürümü. Baseline
+   * bulunamadıysa null; bu durumda hiçbir satırda karşılaştırma olmaz.
+   */
+  baselineSheetVersion: entityVersionSchema.nullable(),
+  baselineMatchVersion: z.literal(LABOR_BASELINE_MATCH_VERSION).nullable(),
+  baselineMatchedLineCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
   evidenceHash: hashSchema,
   planHash: hashSchema,
   version: entityVersionSchema,
@@ -224,6 +250,7 @@ export const laborAllocationApplyPreviewResponseSchema = z.strictObject({
 export type LaborAllocationAnalyzeRequest = z.infer<typeof laborAllocationAnalyzeRequestSchema>
 export type LaborAllocationAmountDto = z.infer<typeof laborAllocationAmountSchema>
 export type LaborAllocationEconomicDto = z.infer<typeof laborAllocationEconomicSchema>
+export type LaborAllocationBaselineDto = z.infer<typeof laborAllocationBaselineSchema>
 export type LaborAllocationLineDto = z.infer<typeof laborAllocationLineSchema>
 export type LaborAllocationSuggestionDto = z.infer<typeof laborAllocationSuggestionSchema>
 export type LaborAllocationPrivacyDto = z.infer<typeof laborAllocationPrivacySchema>

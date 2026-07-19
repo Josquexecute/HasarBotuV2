@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCheck, ShieldAlert, Sparkles } from 'lucide-react'
+import { AlertTriangle, CheckCheck, GitCompareArrows, ShieldAlert, Sparkles } from 'lucide-react'
 import { LoadingState } from '../../components/StateViews'
 import {
   LaborAllocationClientError,
@@ -191,6 +191,19 @@ export function LaborAllocationAiModule({ caseId, port }: {
         </p>
       )}
 
+      {/*
+        Paket 57: baseline'ın varlığı ve kaç satırın güvenle eşleştiği açıkça
+        gösterilir. "Kısmen eşleşti" durumu gizlenmez; belirsiz eşleşen satırda
+        baseline varmış gibi davranılmaz.
+      */}
+      {run !== null && run.status === 'review_required' && (
+        <p className="allocation-panel__baseline">
+          {run.baselineSheetVersion === null
+            ? 'Eksper baseline yok: bu dosyada karşılaştırılabilir önceki onaylı föy sürümü bulunmuyor.'
+            : `Eksper baseline mevcut (Sürüm ${run.baselineSheetVersion}) · ${run.baselineMatchedLineCount}/${lines.length} satır eşleşti`}
+        </p>
+      )}
+
       {lines.length > 0 && (
         <>
           <div className="allocation-panel__toolbar">
@@ -248,6 +261,37 @@ export function LaborAllocationAiModule({ caseId, port }: {
                     <span>Değişim {formatMinor(line.economicComparison.replaceTotalMinor)}</span>
                     <small>{line.economicComparison.note}</small>
                   </div>
+                  {/*
+                    Paket 57: eksper baseline karşılaştırması. Baseline otomatik
+                    doğru sayılmaz; fark yalnız gösterilir, otomatik kabul yok.
+                  */}
+                  {line.baseline !== null && (
+                    <div
+                      className={line.baseline.conflicts
+                        ? 'allocation-baseline allocation-baseline--conflict'
+                        : 'allocation-baseline'}
+                    >
+                      <strong>
+                        <GitCompareArrows size={12} aria-hidden="true" />
+                        {' '}Eksper baseline (Sürüm {line.baseline.baselineSheetVersion})
+                      </strong>
+                      <span>
+                        Onaylı: parça {formatMinor(line.baseline.baselinePartAmountMinor)}
+                        {' · '}işçilik {formatMinor(line.baseline.baselineLaborAmountMinor)}
+                        {' · '}parça payı %{(line.baseline.baselinePartRatio * 100).toFixed(0)}
+                      </span>
+                      <span>
+                        Öneri: parça payı %{(line.baseline.suggestedPartRatio * 100).toFixed(0)}
+                        {' · '}fark %{(line.baseline.deltaRatio * 100).toFixed(0)}
+                      </span>
+                      {line.baseline.conflicts && (
+                        <small>
+                          Öneri, eksperin onayladığı dağılımdan belirgin ayrışıyor; hangisinin
+                          doğru olduğu otomatik belirlenmez, satır kontrol gerektirir.
+                        </small>
+                      )}
+                    </div>
+                  )}
                   <div className="allocation-line__meta">
                     <span>Güven {(line.confidence * 100).toFixed(0)}%</span>
                     {line.evidenceRefs.length > 0 && <span>Kanıt: {line.evidenceRefs.join(', ')}</span>}

@@ -29,6 +29,20 @@ export interface LaborAllocationLineRecord {
   readonly conflictCodes: readonly string[]
   readonly missingEvidenceCodes: readonly string[]
   readonly controlRequired: boolean
+  /**
+   * Paket 57: eşleşen eksper baseline karşılaştırması. Baseline yoksa veya
+   * satır belirsiz eşleştiyse null; bu durumda karşılaştırma gösterilmez.
+   */
+  readonly baseline: {
+    readonly comparisonVersion: string
+    readonly baselineSheetVersion: number
+    readonly baselinePartAmountMinor: number
+    readonly baselineLaborAmountMinor: number
+    readonly baselinePartRatio: number
+    readonly suggestedPartRatio: number
+    readonly deltaRatio: number
+    readonly conflicts: boolean
+  } | null
 }
 
 export interface LaborAllocationRunRecord {
@@ -45,6 +59,10 @@ export interface LaborAllocationRunRecord {
   readonly ruleVersion: string
   readonly sourceSheetId: string
   readonly sourceSheetVersion: number
+  /** Kanıt olarak kullanılan önceki onaylı föy sürümü; yoksa null. */
+  readonly baselineSheetVersion: number | null
+  readonly baselineMatchVersion: string | null
+  readonly baselineMatchedLineCount: number
   readonly evidenceHash: string
   readonly suggestion: {
     readonly lines: readonly LaborAllocationLineRecord[]

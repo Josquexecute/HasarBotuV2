@@ -1146,3 +1146,24 @@ Kapsam dışı: Excel'e yazma, şablon profilleri, otomatik eksper onayı, kulla
 - [x] Chrome/CDP smoke: kanıt öncesi/sonrası kod sayısını gerçekten ölç; plaka ve tam şasinin sızmadığını doğrula.
 
 Kapsam dışı: otomatik belge çıkarımı, sigorta şirketi Excel kolonlarına eşleme, uydurma hasar bölgesi enum'u, `EVIDENCE_MISSING_APPROVED_HISTORY` ve `EVIDENCE_MISSING_EXPERT_BASELINE` kanalları.
+
+## Paket 57 — Eksper baseline entegrasyonu
+
+- [x] Domain: `labor-baseline` modülü — normalize eşleştirme metni (tr yereli), aday kümesi ve karşılıklı teklik kuralı.
+- [x] Domain: eşleşme yalnız açıklamaya dayanmasın; parça kodu ve hasar bölgesi iki tarafta da doluyken ayırt edici olsun.
+- [x] Domain: belirsiz eşleşmede baseline yokmuş gibi davran; `hasCompleteBaselineMatch` ile tam kapsama şartı.
+- [x] Domain: sürümlü ekonomik şekil karşılaştırması ve `LABOR_BASELINE_PART_RATIO_TOLERANCE` eşiği.
+- [x] Domain: `detectMissingEvidence` baseline kodunu yalnız tam eşleşmede düşürsün.
+- [x] Domain: `validateLaborAllocationSuggestion` çelişki kodunu SUNUCUDA birleştirsin; `requiresControl` öncesinde uygulansın.
+- [x] Contracts: run düzeyinde `baselineSheetVersion` / `baselineMatchVersion` / `baselineMatchedLineCount`, satır düzeyinde `baseline` karşılaştırması; golden fixture'lar.
+- [x] Migration 0033: run ve satır üzerinde baseline sütunları, tutarlılık CHECK'leri, run kimliği trigger'ına baseline seçiminin eklenmesi.
+- [x] API: baseline yalnız önceki onaylı föy sürümünden yüklensin; tenant sınırı sorguda uygulansın.
+- [x] API: baseline seçimi ve satır karşılaştırması immutable saklansın; okuma yolunda geri dönsün.
+- [x] API provenance düzeltmesi: `approvedHistory` onaylanmamış AI çıktısını kanıt olarak beslemeyi bıraksın.
+- [x] UI: "Eksper baseline mevcut/yok" ve kaç satırın eşleştiği görünsün.
+- [x] UI: satır bazında onaylı dağılım ile öneri karşılaştırılsın, fark açıkça gösterilsin, otomatik kabul olmasın.
+- [x] Gerçek PostgreSQL testleri: tenant izolasyonu, yalnız onaylı sonuç, AI önerisinin baseline sayılmaması, belirsiz eşleşme reddi, baseline değişiminde stale, audit/PII sızıntısı, kodun yalnız doğru koşulda düşmesi.
+- [x] Chrome/CDP smoke: kanıt öncesi/sonrası kod sayısını gerçekten ölç; çelişki zorlamasını doğrula.
+- [ ] Gerçek Gemini manuel smoke'u: yerel anahtar hazır olduğunda çalıştır ve `responseJsonSchema` kabulü, satır kapsaması, gerçek `control_required` / doğrulama hata oranı sonuçlarını kaydet.
+
+Kapsam dışı: `EVIDENCE_MISSING_APPROVED_HISTORY` kanalının açılması (gerçek "onaylanmış dağıtım" kaydı gerekir), Excel yazımı, şablon profilleri, otomatik eksper onayı.

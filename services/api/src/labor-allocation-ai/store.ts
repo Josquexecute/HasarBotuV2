@@ -11,13 +11,19 @@ import {
   LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION,
   LABOR_ALLOCATION_PROMPT_TEMPLATE_VERSION,
   LABOR_ALLOCATION_RULE_VERSION,
+  LABOR_BASELINE_COMPARISON_VERSION,
+  LABOR_BASELINE_MATCH_VERSION,
   LABOR_ECONOMIC_BUCKETS,
   LABOR_OPERATION_TYPES,
   LABOR_OPERATION_TYPES_VERSION,
+  baselineMatches,
   buildLaborAllocationEvidenceHash,
   buildLaborAllocationOutboundContext,
   buildLaborAllocationPlanHash,
   validateLaborAllocationSuggestion,
+  type LaborAllocationEvidenceLine,
+  type LaborAllocationExpertBaseline,
+  type LaborAllocationHistoryEntry,
   type LaborAllocationPlanContext,
   type NormalizedLaborItem,
   type OutboundVehicleProfile,
@@ -128,6 +134,55 @@ async function loadSheet(
   }
 }
 
+/**
+ * Eksper baseline: aynı dosyanın bir önceki onaylı föy sürümü.
+ *
+ * Kaynak yalnız `labor_sheet_versions`tir. Bu tablodaki her sürüm açık
+ * kullanıcı onayıyla (`confirmed: true`) oluşur ve immutable'dır; AI önerileri
+ * `labor_allocation_*` aggregate'inde durur ve buraya asla giremez.
+ *
+ * Tenant sınırı sorgunun kendisinde uygulanır: organization dışındaki hiçbir
+ * dosyanın sonucu okunmaz.
+ */
+async function loadExpertBaseline(
+  pool: pg.Pool,
+  organizationId: string,
+  caseId: string,
+  currentSheetVersion: number,
+): Promise<LaborAllocationExpertBaseline | null> {
+  if (currentSheetVersion <= 1) return null
+  const version = await pool.query(
+    `SELECT v.id::text AS version_id, v.sheet_version
+       FROM labor_sheet_versions v
+      WHERE v.organization_id=$1 AND v.case_id=$2 AND v.sheet_version=$3`,
+    [organizationId, caseId, currentSheetVersion - 1],
+  )
+  const row = version.rows[0] as Record<string, unknown> | undefined
+  if (row === undefined) return null
+  const items = await pool.query(
+    `SELECT i.ordinal,i.description,i.action,
+            i.part_amount_minor::text AS part,i.labor_amount_minor::text AS labor,
+            i.part_code,i.damage_region
+       FROM labor_sheet_items i
+      WHERE i.organization_id=$1 AND i.case_id=$2 AND i.sheet_version_id=$3
+      ORDER BY i.ordinal`,
+    [organizationId, caseId, String(row.version_id)],
+  )
+  if (items.rows.length === 0) return null
+  return {
+    sheetVersion: safeNumber(row.sheet_version),
+    lines: (items.rows as Record<string, unknown>[]).map((item) => ({
+      ordinal: safeNumber(item.ordinal),
+      description: String(item.description),
+      action: String(item.action),
+      partAmountMinor: safeNumber(item.part),
+      laborAmountMinor: safeNumber(item.labor),
+      partCode: item.part_code === null ? null : String(item.part_code),
+      damageRegion: item.damage_region === null ? null : String(item.damage_region),
+    })),
+  }
+}
+
 interface ProviderPolicy {
   readonly enabled: boolean
   readonly allowedProviderIds: readonly string[]
@@ -225,7 +280,10 @@ async function mapRun(
               economic_repair_total_minor::text AS repair_total,
               economic_replace_total_minor::text AS replace_total,
               economic_note,reasoning,evidence_refs,confidence,
-              conflict_codes,missing_evidence_codes,control_required
+              conflict_codes,missing_evidence_codes,control_required,
+              baseline_part_amount_minor::text AS baseline_part,
+              baseline_labor_amount_minor::text AS baseline_labor,
+              baseline_part_ratio,baseline_suggested_part_ratio,baseline_conflict
          FROM labor_allocation_line_suggestions
         WHERE organization_id=$1 AND run_id=$2
         ORDER BY line_ordinal`,
@@ -257,6 +315,21 @@ async function mapRun(
         conflictCodes: (line.conflict_codes ?? []) as never,
         missingEvidenceCodes: (line.missing_evidence_codes ?? []) as never,
         controlRequired: Boolean(line.control_required),
+        // Baseline eşleşmemişse tüm alanlar birlikte null'dır (DB CHECK).
+        // Not: sütun `baseline_part` olarak takma adlandırıldı; ham sütun adı
+        // burada undefined olur ve kontrolü sessizce bozar.
+        baseline: line.baseline_part === null ? null : {
+          comparisonVersion: LABOR_BASELINE_COMPARISON_VERSION,
+          baselineSheetVersion: safeNumber(row.baseline_sheet_version),
+          baselinePartAmountMinor: safeNumber(line.baseline_part),
+          baselineLaborAmountMinor: safeNumber(line.baseline_labor),
+          baselinePartRatio: Number(line.baseline_part_ratio),
+          suggestedPartRatio: Number(line.baseline_suggested_part_ratio),
+          deltaRatio: Math.abs(
+            Number(line.baseline_part_ratio) - Number(line.baseline_suggested_part_ratio),
+          ),
+          conflicts: Boolean(line.baseline_conflict),
+        },
       })),
     }
   }
@@ -271,6 +344,13 @@ async function mapRun(
     outputSchemaVersion: LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION,
     operationTypesVersion: LABOR_OPERATION_TYPES_VERSION,
     ruleVersion: LABOR_ALLOCATION_RULE_VERSION,
+    baselineSheetVersion: row.baseline_sheet_version === null
+      ? null
+      : safeNumber(row.baseline_sheet_version),
+    baselineMatchVersion: row.baseline_match_version === null
+      ? null
+      : LABOR_BASELINE_MATCH_VERSION,
+    baselineMatchedLineCount: safeNumber(row.baseline_matched_line_count),
     sourceSheetId: String(row.source_sheet_id),
     sourceSheetVersion: safeNumber(row.source_sheet_version),
     evidenceHash: String(row.evidence_hash),
@@ -300,7 +380,8 @@ async function mapRun(
 const RUN_COLUMNS = `id::text,case_id::text,source_sheet_id::text,source_sheet_version,evidence_hash,
   plan_hash,provider_id,provider_version,model_id,status,external_provider,privacy_policy_version,
   outbound_payload_hash,outbound_input_characters,redacted_value_count,redacted_categories,
-  privacy_warnings,provider_retention_mode,safe_error_code,version,created_at,started_at,completed_at`
+  privacy_warnings,provider_retention_mode,safe_error_code,version,created_at,started_at,completed_at,
+  baseline_sheet_version,baseline_match_version,baseline_matched_line_count`
 
 export function createLaborAllocationStore(
   pool: pg.Pool,
@@ -393,15 +474,28 @@ export function createLaborAllocationStore(
           GROUP BY i.description,i.action ORDER BY count(*) DESC LIMIT 50`,
         [actor.organizationId],
       )
-      // Geçmiş dağıtımlar YALNIZ aynı organization içinden okunur.
-      const history = await pool.query(
-        `SELECT l.source_description AS description,l.source_action AS action,l.allocations
-           FROM labor_allocation_line_suggestions l
-           JOIN labor_allocation_runs r
-             ON r.organization_id=l.organization_id AND r.id=l.run_id AND r.status='review_required'
-          WHERE l.organization_id=$1 AND l.control_required=false
-          ORDER BY l.created_at DESC LIMIT 50`,
-        [actor.organizationId],
+      /*
+       * Paket 57 provenance düzeltmesi.
+       *
+       * Bu sorgu daha önce `labor_allocation_line_suggestions` üzerinden
+       * okuyordu; yani yalnız `control_required=false` işaretlenmiş HAM AI
+       * çıktısını "kullanıcı onaylı geçmiş" diye geri besliyordu. Kimse o
+       * satırları onaylamamıştı ve bu, modelin kendi çıktısını kanıt olarak
+       * görmesine yol açan bir kendi kendini pekiştirme döngüsüydü.
+       *
+       * Dağıtım önerilerinin föye uygulandığını gösteren bir bağ şemada
+       * bulunmadığı için (Paket 54 bilinçli olarak `applied: false` bıraktı)
+       * bu kanalın gerçek bir onaylı kaynağı henüz YOKTUR. Uydurmak yerine
+       * boş bırakılır: `EVIDENCE_MISSING_APPROVED_HISTORY` dürüst biçimde
+       * üretilmeye devam eder ve kanal gerçek onay kaydı eklendiğinde açılır.
+       */
+      const approvedHistory: readonly LaborAllocationHistoryEntry[] = []
+
+      // Paket 57: eksper baseline = aynı dosyanın ÖNCEKİ onaylı föy sürümü.
+      // Föy sürümleri yalnız açık kullanıcı onayıyla oluşur ve immutable'dır;
+      // AI önerileri ayrı aggregate'te durduğu için buraya karışamaz.
+      const expertBaseline = await loadExpertBaseline(
+        pool, actor.organizationId, caseId, sheet.sheetVersion,
       )
 
       // Paket 56: dosya düzeyinde araç profili kanıt olarak okunur.
@@ -441,13 +535,8 @@ export function createLaborAllocationStore(
           action: String(row.action),
           usageCount: safeNumber(row.usage_count),
         })),
-        approvedHistory: (history.rows as Record<string, unknown>[]).map((row) => ({
-          description: String(row.description),
-          action: String(row.action),
-          operationTypes: ((row.allocations ?? []) as { operationType: string }[])
-            .map((allocation) => allocation.operationType) as never,
-        })),
-        expertBaseline: null,
+        approvedHistory,
+        expertBaseline,
         providerId: provider?.providerId ?? 'deterministic-success',
         providerVersion: provider?.providerVersion ?? '1.0.0',
         modelId: provider?.modelId ?? 'deterministic',
@@ -459,6 +548,15 @@ export function createLaborAllocationStore(
       if (outbound.privacyPolicyVersion !== 'labor-allocation-pii/local-only' && !input.confirmedEgress) {
         throw new LaborAllocationError('EGRESS_CONFIRMATION_REQUIRED', 409)
       }
+      // Baseline eşleşmeleri sağlayıcı çağrısından ÖNCE hesaplanır: hangi
+      // baseline'ın kullanıldığı run kimliğinin parçasıdır ve sonradan
+      // değiştirilemez.
+      const matched = new Map(
+        baselineMatches(planContext)
+          .filter((match) => match.baseline !== null)
+          .map((match) => [match.ordinal, match.baseline as LaborAllocationEvidenceLine]),
+      )
+      const baselineMatchedCount = matched.size
       const evidenceHash = buildLaborAllocationEvidenceHash(planContext)
       const planHash = buildLaborAllocationPlanHash(planContext, outbound)
       const budget = await budgetFor(actor.organizationId, outbound.outboundInputCharacters)
@@ -490,8 +588,10 @@ export function createLaborAllocationStore(
             operation_types_version,rule_version,external_provider,privacy_policy_version,
             outbound_payload_hash,outbound_input_characters,redacted_value_count,redacted_categories,
             privacy_warnings,provider_retention_mode,pricing_version,estimated_cost_minor,
-            created_by_user_id,started_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,now())`,
+            created_by_user_id,baseline_sheet_version,baseline_match_version,
+            baseline_matched_line_count,started_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+                 $26,$27,$28,now())`,
         [
           runId, actor.organizationId, caseId, sheet.sheetId, sheet.sheetVersion, evidenceHash, planHash,
           planContext.providerId, planContext.providerVersion, planContext.modelId,
@@ -501,6 +601,9 @@ export function createLaborAllocationStore(
           outbound.outboundInputCharacters, outbound.redactedValueCount, outbound.redactedCategories,
           outbound.warnings, planContext.retentionMode, planContext.pricingVersion,
           budget.estimatedCostMinor, actor.userId,
+          expertBaseline?.sheetVersion ?? null,
+          expertBaseline === null ? null : LABOR_BASELINE_MATCH_VERSION,
+          baselineMatchedCount,
         ],
       )
 
@@ -628,6 +731,7 @@ export function createLaborAllocationStore(
         output,
         sheet.lines,
         outbound.missingEvidenceCodes,
+        matched,
       )
       if (!validation.allowed) {
         await finalize('failed', validation.code, null, null)
@@ -637,14 +741,18 @@ export function createLaborAllocationStore(
       let controlRequiredCount = 0
       for (const line of validation.suggestion.lines) {
         const sheetLine = sheet.lines[line.lineOrdinal - 1] as NormalizedLaborItem
+        const baselineLine = matched.get(line.lineOrdinal) ?? null
         if (line.controlRequired) controlRequiredCount += 1
         await pool.query(
           `INSERT INTO labor_allocation_line_suggestions
              (id,organization_id,case_id,run_id,line_ordinal,source_description,source_action,
               source_part_amount_minor,source_labor_amount_minor,allocations,repair_replace_opinion,
               economic_buckets,economic_repair_total_minor,economic_replace_total_minor,economic_note,
-              reasoning,evidence_refs,confidence,conflict_codes,missing_evidence_codes,control_required)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+              reasoning,evidence_refs,confidence,conflict_codes,missing_evidence_codes,control_required,
+              baseline_part_amount_minor,baseline_labor_amount_minor,
+              baseline_part_ratio,baseline_suggested_part_ratio,baseline_conflict)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+                   $22,$23,$24,$25,$26)`,
           [
             uuidv7(), actor.organizationId, caseId, runId, line.lineOrdinal,
             sheetLine.description, sheetLine.action, sheetLine.partAmountMinor, sheetLine.laborAmountMinor,
@@ -653,6 +761,10 @@ export function createLaborAllocationStore(
             line.economicComparison.repairTotalMinor, line.economicComparison.replaceTotalMinor,
             line.economicComparison.note, line.reasoning, line.evidenceRefs, line.confidence,
             line.conflictCodes, line.missingEvidenceCodes, line.controlRequired,
+            baselineLine?.partAmountMinor ?? null, baselineLine?.laborAmountMinor ?? null,
+            line.baselineComparison?.baselinePartRatio ?? null,
+            line.baselineComparison?.suggestedPartRatio ?? null,
+            line.baselineComparison?.conflicts ?? false,
           ],
         )
       }

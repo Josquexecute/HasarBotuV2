@@ -231,6 +231,34 @@
             "minimum": 1,
             "maximum": 9007199254740991
           },
+          "baselineSheetVersion": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baselineMatchVersion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "labor-baseline-match/1.0.0"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baselineMatchedLineCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
           "evidenceHash": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$"
@@ -604,6 +632,66 @@
                         },
                         "controlRequired": {
                           "type": "boolean"
+                        },
+                        "baseline": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "comparisonVersion": {
+                                  "type": "string",
+                                  "const": "labor-baseline-comparison/1.0.0"
+                                },
+                                "baselineSheetVersion": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "baselinePartAmountMinor": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10000000000
+                                },
+                                "baselineLaborAmountMinor": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10000000000
+                                },
+                                "baselinePartRatio": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "suggestedPartRatio": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "deltaRatio": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "conflicts": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "comparisonVersion",
+                                "baselineSheetVersion",
+                                "baselinePartAmountMinor",
+                                "baselineLaborAmountMinor",
+                                "baselinePartRatio",
+                                "suggestedPartRatio",
+                                "deltaRatio",
+                                "conflicts"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -620,7 +708,8 @@
                         "confidence",
                         "conflictCodes",
                         "missingEvidenceCodes",
-                        "controlRequired"
+                        "controlRequired",
+                        "baseline"
                       ],
                       "additionalProperties": false
                     }
@@ -701,6 +790,9 @@
           "ruleVersion",
           "sourceSheetId",
           "sourceSheetVersion",
+          "baselineSheetVersion",
+          "baselineMatchVersion",
+          "baselineMatchedLineCount",
           "evidenceHash",
           "planHash",
           "version",

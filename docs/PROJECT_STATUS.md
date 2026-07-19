@@ -5,11 +5,27 @@ Son güncelleme: 2026-07-19
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 56 — AI kanıt zenginleştirme
+- Aşama: Paket 57 — Eksper baseline entegrasyonu
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
-- Git: Yerel repository, `foundation/package-50-dashboard-alert-summary` dalı, remote yok
+- Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 57 doğrulama sonucu
+
+- **Baseline kaynağı yalnız önceki onaylı föy sürümüdür.** Yeni kaynak tablo açılmadı; `labor_sheet_versions` zaten immutable ve yalnız açık kullanıcı onayıyla oluşuyor. AI önerileri ayrı aggregate'te durduğu için baseline'a karışmaları yapısal olarak imkânsız — smoke bunu ayrıca doğruluyor.
+- Satır eşleştirmesi açıklama + işlem üzerine kurulur; parça kodu ve hasar bölgesi yalnız iki tarafta da doluyken ayırt edici sayılır. Eşleşme **karşılıklı tek** olduğunda kabul edilir; belirsizlikte baseline yokmuş gibi davranılır.
+- `EVIDENCE_MISSING_EXPERT_BASELINE` yalnız her satır belirsizlik olmadan eşleştiğinde düşer. Gerçek PostgreSQL testi, iki özdeş satırın bulunduğu dosyada baseline sürümünün bulunmasına rağmen `baselineMatchedLineCount = 0` kaldığını ve kodun düşmediğini doğruluyor.
+- **Çelişki sunucuda hesaplanır ve model bildirmese de düşmez.** Karşılaştırma tutar büyüklüğüne değil parça payı oranına bakar (eşik `labor-baseline-comparison/1.0.0` kuralında sürümlü); kullanıcının föyü meşru revizyonu çelişki üretmez, ekonomik şekil sapması üretir.
+- Baseline seçimi run kimliğinin parçası ve trigger ile immutable; satır karşılaştırması öneriyle birlikte saklanıyor ve DB CHECK'i "baseline yok ama çelişki var" kaydını imkânsız kılıyor.
+- **Ölçülen sonuç (Chrome/CDP smoke, gerçek PostgreSQL):** tek föy sürümünde satır başına 5 eksik kanıt kodu; sürüm 1 baseline olduğunda 4 kod kalıyor — **yalnız** `EVIDENCE_MISSING_EXPERT_BASELINE` düşüyor, diğer dört kanal bağımsız kalıyor. Çelişkili satır kontrol gerekli kalıyor ve toplu seçim devre dışı.
+- **Provenance düzeltmesi:** `approvedHistory` kanalı `labor_allocation_line_suggestions` üzerinden okuyor, yani yalnız `control_required=false` işaretlenmiş ham AI çıktısını "kullanıcı onaylı geçmiş" diye geri besliyordu — modelin kendi çıktısını kanıt olarak gördüğü bir döngü. Dağıtım önerilerinin föye uygulandığını gösteren bağ şemada bulunmadığı için kanal uydurma kaynak yerine boş bırakıldı; `EVIDENCE_MISSING_APPROVED_HISTORY` dürüst biçimde üretilmeye devam ediyor. Daraltıcı değişikliktir, kanıt genişletmez.
+- Gerçek PostgreSQL API testleri 12/12 (`expert-baseline-evidence.test.ts`), baseline domain testleri 16/16, migration/DB testleri 65/65, AI paneli UI testleri 11/11.
+- Chrome/CDP smoke (`scripts/package57-browser-smoke.mjs`) geçti: ilk sürümde baseline yokluğunun açıkça söylenmesi, AI önerisinin baseline'a dönüşmemesi, revizyondan sonra sürüm 1'in baseline olması, yalnız baseline kodunun düşmesi, satır bazlı karşılaştırmanın görünmesi, çelişkinin sunucuda zorlanması, kanıt hash'inin değişmesi, plakanın audit'e sızmaması ve API kapandığında bayat karşılaştırma kalmaması. 1920×1080 açık/koyu ve 1366×768 koyu görünümde yatay taşma yok; console warning/error/exception 0.
+- **Bir test kusuru tam kuşakta yakalandı ve düzeltildi:** baseline değiştirilemezlik testi `LIMIT 1` ile sırasız satır seçiyordu; tek dosyada geçip tam kuşakta düşüyordu çünkü seçilen run'ın satırlarında baseline dolu olabiliyordu. Hedef satır deterministik seçilecek biçimde yeniden yazıldı ve iddia gerçekten sınanır hale getirildi.
+- Ana ağaçta typecheck, lint, **1617 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi (başlangıç 494.639 bayt), `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
+- **Gerçek Gemini smoke'u ÇALIŞTIRILMADI.** Yerel ortamda `GEMINI_API_KEY` bulunmuyor ve `%USERPROFILE%\.hasarbotu\` altında yalnız PostgreSQL parola dosyaları var. `scripts/package55-gemini-manual-smoke.mjs` opt-in olmadan temiz biçimde atlanıyor (`{"skipped":true}`, çıkış kodu 0), yani CI ve standart kuşak anahtar istemiyor. Üretimde sağlayıcı açılmadan önceki zorunlu release kapısı **hâlâ açıktır**.
 
 ## Paket 56 doğrulama sonucu
 

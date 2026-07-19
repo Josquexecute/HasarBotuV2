@@ -788,6 +788,46 @@ button {
   font-size: 12px;
 }
 
+/* Eksper baseline karşılaştırması (Paket 57). Çelişki vurgulanır ama otomatik
+   kabul yoktur; karar kullanıcıdadır. */
+.allocation-panel__baseline {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.allocation-baseline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.allocation-baseline strong {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.allocation-baseline small {
+  color: var(--text-tertiary);
+}
+
+.allocation-baseline--conflict {
+  border-color: var(--warning);
+}
+
+.allocation-baseline--conflict small {
+  color: var(--danger);
+}
+
 /* İşçilik satırı kanıt hücreleri (Paket 56); eski sürümlerde boş kalır. */
 .labor-evidence-cell {
   color: var(--text-secondary);

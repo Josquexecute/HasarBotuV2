@@ -210,9 +210,31 @@ describe('detectMissingEvidence', () => {
       ],
       dictionary: [{ description: 'Ön tampon', action: 'Onarım', usageCount: 3 }],
       approvedHistory: [{ description: 'Ön tampon', action: 'Onarım', operationTypes: ['repair'] }],
-      expertBaseline: { sheetVersion: 1, lines: [] },
+      // Paket 57: baseline'ın var olması yetmez, satırların eşleşmesi gerekir.
+      expertBaseline: {
+        sheetVersion: 1,
+        lines: [
+          {
+            ordinal: 1, description: 'Ön tampon', action: 'Onarım + boya',
+            partAmountMinor: 0, laborAmountMinor: 9_000_00, partCode: null, damageRegion: null,
+          },
+          {
+            ordinal: 2, description: 'Sol ön çamurluk', action: 'Değişim',
+            partAmountMinor: 17_000_00, laborAmountMinor: 2_000_00,
+            partCode: null, damageRegion: null,
+          },
+        ],
+      },
     }))
     expect(codes).toEqual([])
+  })
+
+  it('baseline nesnesi var ama satırlar eşleşmiyorsa kanıt eksik sayılır', () => {
+    // Paket 57 sıkılaştırması: boş veya ilgisiz baseline "mevcut" sayılmaz.
+    const codes = detectMissingEvidence(planContext({
+      expertBaseline: { sheetVersion: 1, lines: [] },
+    }))
+    expect(codes).toContain('EVIDENCE_MISSING_EXPERT_BASELINE')
   })
 })
 

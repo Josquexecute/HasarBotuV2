@@ -546,6 +546,7 @@ export {
   LABOR_OPERATION_TYPES_VERSION,
   LABOR_REPAIR_REPLACE_OPINIONS,
   MAX_LABOR_ALLOCATION_DAMAGE_DESCRIPTION_LENGTH,
+  baselineMatches,
   buildLaborAllocationEvidenceHash,
   buildLaborAllocationOutboundContext,
   buildLaborAllocationPlanHash,
@@ -572,6 +573,18 @@ export {
   type LaborOperationType,
   type LaborRepairReplaceOpinion,
 } from './labor-allocation-ai.js'
+export {
+  LABOR_BASELINE_COMPARISON_VERSION,
+  LABOR_BASELINE_MATCH_VERSION,
+  LABOR_BASELINE_PART_RATIO_TOLERANCE,
+  compareBaselineAllocation,
+  hasCompleteBaselineMatch,
+  matchBaselineLines,
+  normalizeBaselineMatchText,
+  type LaborBaselineComparison,
+  type LaborBaselineLineMatch,
+  type LaborBaselineMatchReason,
+} from './labor-baseline.js'
 export {
   LABOR_AI_PROMPT_TEMPLATE_VERSION,
   LABOR_AI_OUTPUT_SCHEMA_VERSION,

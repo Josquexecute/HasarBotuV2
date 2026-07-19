@@ -46,6 +46,8 @@ function line(overrides: Record<string, unknown> = {}) {
     conflictCodes: [],
     missingEvidenceCodes: ['EVIDENCE_MISSING_PART_CODE'],
     controlRequired: true,
+    // Paket 57: baseline eşleşmediğinde null; sağlayıcı bu alanı üretmez.
+    baseline: null,
     ...overrides,
   }
 }

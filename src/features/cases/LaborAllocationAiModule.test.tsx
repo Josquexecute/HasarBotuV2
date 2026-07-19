@@ -43,11 +43,15 @@ function line(overrides: Partial<LaborAllocationLineRecord> = {}): LaborAllocati
     conflictCodes: [],
     missingEvidenceCodes: [],
     controlRequired: false,
+    baseline: null,
     ...overrides,
   }
 }
 
-function run(lines: readonly LaborAllocationLineRecord[]): LaborAllocationRunRecord {
+function run(
+  lines: readonly LaborAllocationLineRecord[],
+  overrides: Partial<LaborAllocationRunRecord> = {},
+): LaborAllocationRunRecord {
   return {
     id: 'run-1',
     caseId: CASE_ID,
@@ -60,11 +64,15 @@ function run(lines: readonly LaborAllocationLineRecord[]): LaborAllocationRunRec
     ruleVersion: 'labor-allocation-rules/1.0.0',
     sourceSheetId: 'sheet-1',
     sourceSheetVersion: 1,
+    baselineSheetVersion: null,
+    baselineMatchVersion: null,
+    baselineMatchedLineCount: 0,
     evidenceHash: 'a'.repeat(64),
     suggestion: { lines },
     safeErrorCode: null,
     stale: false,
     createdAt: '2026-07-18T10:30:00.000Z',
+    ...overrides,
   }
 }
 
@@ -129,6 +137,74 @@ describe('AI işçilik dağıtımı paneli', () => {
     // Kanonik operasyon türleri ve ekonomik karşılaştırma birlikte görünür.
     expect(screen.getAllByText(/Sökme-takma/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Onarım 10\.000,00/).length).toBeGreaterThan(0)
+  })
+
+  it('baseline yoksa bunu açıkça söyler ve satırda karşılaştırma göstermez', async () => {
+    const { port } = stubPort()
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    expect(await screen.findByText(/Eksper baseline yok/)).toBeInTheDocument()
+    expect(screen.queryByText(/Eksper baseline \(Sürüm/)).not.toBeInTheDocument()
+  })
+
+  it('baseline mevcutken kaç satırın eşleştiğini ve satır farkını gösterir', async () => {
+    const baseline = {
+      comparisonVersion: 'labor-baseline-comparison/1.0.0',
+      baselineSheetVersion: 1,
+      baselinePartAmountMinor: 0,
+      baselineLaborAmountMinor: 10_000_00,
+      baselinePartRatio: 0,
+      suggestedPartRatio: 0,
+      deltaRatio: 0,
+      conflicts: false,
+    }
+    const { port } = stubPort({
+      workspace: async () => workspace([run([line({ baseline })], {
+        baselineSheetVersion: 1,
+        baselineMatchVersion: 'labor-baseline-match/1.0.0',
+        baselineMatchedLineCount: 1,
+      })]),
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    expect(await screen.findByText(/Eksper baseline mevcut \(Sürüm 1\)/)).toBeInTheDocument()
+    expect(screen.getByText(/1\/1 satır eşleşti/)).toBeInTheDocument()
+    expect(screen.getByText(/Eksper baseline \(Sürüm 1\)/)).toBeInTheDocument()
+    // Onaylı dağılım ve öneri ayrı ayrı görünür; kullanıcı ikisini karşılaştırır.
+    expect(screen.getByText(/Onaylı: parça 0,00/)).toBeInTheDocument()
+    expect(screen.getByText(/Öneri: parça payı %0 · fark %0/)).toBeInTheDocument()
+  })
+
+  it('baseline çelişkisini vurgular ama otomatik kabul etmez', async () => {
+    const baseline = {
+      comparisonVersion: 'labor-baseline-comparison/1.0.0',
+      baselineSheetVersion: 2,
+      baselinePartAmountMinor: 9_000_00,
+      baselineLaborAmountMinor: 1_000_00,
+      baselinePartRatio: 0.9,
+      suggestedPartRatio: 0.1,
+      deltaRatio: 0.8,
+      conflicts: true,
+    }
+    const { port } = stubPort({
+      workspace: async () => workspace([run([line({
+        baseline,
+        conflictCodes: ['CONFLICT_EXPERT_BASELINE_DISAGREEMENT'],
+        controlRequired: true,
+      })], {
+        baselineSheetVersion: 2,
+        baselineMatchVersion: 'labor-baseline-match/1.0.0',
+        baselineMatchedLineCount: 1,
+      })]),
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    await screen.findByText(/Eksper baseline mevcut \(Sürüm 2\)/)
+    expect(screen.getByText('CONFLICT_EXPERT_BASELINE_DISAGREEMENT')).toBeInTheDocument()
+    expect(screen.getByText(/fark %80/)).toBeInTheDocument()
+    expect(screen.getByText(/hangisinin\s+doğru olduğu otomatik belirlenmez/)).toBeInTheDocument()
+    // Çelişkili satır kontrol gerekli kalır; toplu seçim onu seçemez.
+    expect(screen.getByRole('button', { name: /hariç tümünü seç/ })).toBeDisabled()
   })
 
   it('control_required filtresi yalnız kontrol gerekli satırları gösterir', async () => {

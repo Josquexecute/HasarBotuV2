@@ -1088,3 +1088,30 @@ Etkisi:
 
 - Migration 0032, `v1/case-vehicle-profile` sözleşmesi, araç profili store/routes, Özet sekmesinde `CaseVehicleProfileModule` ve işçilik editöründe parça kodu / hasar bölgesi sütunları eklenir.
 - Kalan iki kod (`APPROVED_HISTORY`, `EXPERT_BASELINE`) organizasyon içi onaylı geçmiş ve eksper sonucu kanalları doldukça düşer; bu kanallar Paket 56 kapsamında değildir.
+
+## 2026-07-19 — HB-2026-064: Eksper baseline entegrasyonu (Paket 57)
+
+Karar:
+
+1. **Baseline = aynı dosyanın önceki onaylı föy sürümüdür.** Yeni kaynak tablo açılmaz; `labor_sheet_versions` zaten immutable ve yalnız açık kullanıcı onayıyla (`confirmed: true`) oluşur. AI önerileri ayrı aggregate'te (`labor_allocation_*`) durduğu için baseline'a karışmaları yapısal olarak imkânsızdır.
+2. **Satır eşleştirmesi yalnız açıklamaya dayanmaz.** Açıklama ve işlem birlikte aday kümesini kurar; parça kodu ve hasar bölgesi YALNIZ iki tarafta da doluysa ayırt edici sayılır (eski sürümlerde bu alanlar null'dır ve tek taraflı değer eşleşmeyi bozmamalıdır).
+3. **Eşleşme yalnız KARŞILIKLI TEK olduğunda kabul edilir.** Bir güncel satırın tek adayı varsa ve o baseline satırının da tek adayı o satırsa eşleşir; aksi halde `ambiguous` sayılır ve baseline yokmuş gibi davranılır. Belirsiz eşleşme sessizce "en yakın" satıra bağlanmaz.
+4. **`EVIDENCE_MISSING_EXPERT_BASELINE` yalnız HER satır belirsizlik olmadan eşleştiğinde düşer.** Eksik kanıt kodları plan bazlıdır ve bütün satırlara taşınır; bir satırın baseline'ı yokken kodu kaldırmak o satır için baseline varmış gibi davranmak olurdu. Bu, `EVIDENCE_MISSING_PART_CODE` kanalındaki mevcut "herhangi bir satırda eksikse kod vardır" kuralıyla tutarlıdır.
+5. **Çelişki SUNUCUDA hesaplanır.** Karşılaştırma tutar büyüklüğüne değil parça payı ORANINA bakar: kullanıcı föyü meşru biçimde revize edip tutarları değiştirebilir, ama eksperin onayladığı parça/işçilik dengesinden belirgin sapma kontrol gerektirir. Eşik `LABOR_BASELINE_PART_RATIO_TOLERANCE = 0.2` olarak `labor-baseline-comparison/1.0.0` kuralına bağlıdır ve sabit koda gömülmez. Model çelişkiyi bildirmese de `CONFLICT_EXPERT_BASELINE_DISAGREEMENT` düşmez.
+6. **Baseline otomatik doğru sayılmaz.** Karşılaştırma hangi tarafın haklı olduğunu söylemez, yalnız farkı ölçüp insana taşır. UI farkı gösterir, otomatik kabul yoktur.
+7. Baseline seçimi run kimliğinin parçasıdır ve trigger ile immutable'dır; sonradan değiştirilebilseydi saklanan öneri başka bir kanıta aitmiş gibi gösterilebilirdi. Satır karşılaştırması da öneriyle birlikte immutable saklanır ve alanlar DB CHECK'inde ya tamamen dolu ya tamamen boştur ("baseline yok ama çelişki var" kaydı imkânsızdır).
+8. Baseline kanıt snapshot hash'ine dahildir (mevcut `buildLaborAllocationEvidenceHash` zaten `expertBaseline` alanını hash'ler); baseline değişince eski öneri stale sayılır.
+9. Tenant sınırı sorgunun kendisinde uygulanır; organization dışındaki onaylı sonuçlar hiçbir koşulda okunmaz.
+
+**Provenance düzeltmesi (kapsam dışı ama aynı sınıf hata):** `approvedHistory` kanalı `labor_allocation_line_suggestions` üzerinden okuyordu; yani yalnız `control_required=false` işaretlenmiş HAM AI çıktısını "kullanıcı onaylı geçmiş" diye geri besliyordu. Kimse o satırları onaylamamıştı ve bu, modelin kendi çıktısını kanıt olarak gördüğü bir kendi kendini pekiştirme döngüsüydü. Dağıtım önerilerinin föye uygulandığını gösteren bir bağ şemada bulunmadığı için (Paket 54 bilinçli olarak `applied: false` bıraktı) bu kanalın gerçek onaylı kaynağı henüz yoktur; uydurmak yerine boş bırakıldı. `EVIDENCE_MISSING_APPROVED_HISTORY` dürüst biçimde üretilmeye devam eder. Bu **daraltıcı** bir değişikliktir: kanıt genişletmez, uydurma kanıtı kaldırır.
+
+Ölçülen sonuç (Paket 57 tarayıcı smoke'u, gerçek PostgreSQL + deterministik sağlayıcı):
+
+- Tek föy sürümü varken satır başına 5 eksik kanıt kodu; baseline kanalı açık.
+- Föy revize edilip sürüm 1 baseline olduğunda 4 kod kalır: **yalnız** `EVIDENCE_MISSING_EXPERT_BASELINE` düşer, `VEHICLE_IDENTITY`, `PART_CODE`, `DAMAGE_REGION` ve `APPROVED_HISTORY` bağımsız kalır.
+- Ekonomik şekil belirgin saptığı senaryoda `CONFLICT_EXPERT_BASELINE_DISAGREEMENT` sunucuda zorlanır, satır kontrol gerekli kalır ve toplu seçim butonu devre dışıdır.
+
+Etkisi:
+
+- Migration 0033, `labor-baseline` domain modülü, baseline yükleyici, run/satır düzeyinde baseline sözleşme alanları ve AI önizlemesinde karşılaştırma görünümü eklenir.
+- `EVIDENCE_MISSING_APPROVED_HISTORY` kanalı hâlâ açıktır ve gerçek bir "onaylanmış dağıtım" kaydı eklenene kadar açık kalacaktır.
