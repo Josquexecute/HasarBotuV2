@@ -1,20 +1,46 @@
+import {
+  LABOR_ALLOCATION_CONFLICT_CODES,
+  LABOR_ALLOCATION_MISSING_EVIDENCE_CODES,
+  LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION,
+  LABOR_ECONOMIC_BUCKETS,
+  LABOR_OPERATION_TYPES,
+  LABOR_OPERATION_TYPES_VERSION,
+  LABOR_REPAIR_REPLACE_OPINIONS,
+} from '@hasarbotu/domain'
+
 /**
- * Gemini GenerateContent için kanıtlanmış minimal wire alt kümesi (Paket 55).
+ * Gemini GenerateContent wire şeması (Paket 55, Paket 59'da sıkılaştırıldı).
  *
- * Enum, sayısal sınır ve dizi uzunluğu provider şemasına BIRAKILMAZ: dönen veri
- * domain katmanındaki strict doğrulamadan (satır kapsaması, tahsis toplamı
- * eşitliği, ekonomik tutarlılık) ve PII/URL/path kontrollerinden geçer. Prompt
- * ve wire şeması bu kontrollerin yerine geçmez.
+ * Paket 55 şemayı bilinçli olarak gevşek bırakmıştı (enum yok, sayısal sınır
+ * yok). Gerçek modelle ilk koşu bunun ölümcül boşluğunu gösterdi: literal
+ * sürüm dizgileri, kanaat sözlüğü ve çelişki/eksik kanıt kodlarının kapalı
+ * kümeleri modele HİÇBİR kanaldan verilmiyordu — model bilemeyeceği değeri
+ * uydurdu ve domain doğrulaması (doğru şekilde) reddetti.
+ *
+ * Düzeltme domain'i gevşetmek DEĞİL, sözleşmeyi modele bildirmektir: kapalı
+ * kümeler tek değerli/çok değerli enum olarak, parasal alanlar integer olarak
+ * şemada taşınır. Dönen veri YİNE domain katmanındaki strict doğrulamadan
+ * (satır kapsaması, tahsis toplamı eşitliği, ekonomik tutarlılık, kod
+ * sözlükleri) ve PII/URL/path kontrollerinden geçer; şema bu kontrollerin
+ * yerine geçmez, yalnız uyum oranını yükseltir.
+ *
+ * Yalnız Gemini'nin `responseJsonSchema` alt kümesinde KANITLI anahtarlar
+ * kullanılır: type, enum, properties, required, items, minimum, maximum,
+ * minItems. (maxLength/additionalProperties gibi riskli anahtarlar bilinçli
+ * olarak dışarıda bırakılmıştır.)
  */
+const MINOR_AMOUNT = { type: 'integer', minimum: 0 } as const
+
 export const LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA = {
   type: 'object',
   required: ['schemaVersion', 'operationTypesVersion', 'lines', 'requiresHumanReview'],
   properties: {
-    schemaVersion: { type: 'string' },
-    operationTypesVersion: { type: 'string' },
+    schemaVersion: { type: 'string', enum: [LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION] },
+    operationTypesVersion: { type: 'string', enum: [LABOR_OPERATION_TYPES_VERSION] },
     requiresHumanReview: { type: 'boolean' },
     lines: {
       type: 'array',
+      minItems: 1,
       items: {
         type: 'object',
         required: [
@@ -30,52 +56,53 @@ export const LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA = {
           'controlRequired',
         ],
         properties: {
-          lineOrdinal: { type: 'number' },
+          lineOrdinal: { type: 'integer', minimum: 1 },
           allocations: {
             type: 'array',
+            minItems: 1,
             items: {
               type: 'object',
               required: ['operationType', 'amountMinor'],
               properties: {
-                operationType: { type: 'string' },
-                amountMinor: { type: 'number' },
+                operationType: { type: 'string', enum: [...LABOR_OPERATION_TYPES] },
+                amountMinor: MINOR_AMOUNT,
               },
             },
           },
-          repairReplaceOpinion: { type: 'string' },
+          repairReplaceOpinion: { type: 'string', enum: [...LABOR_REPAIR_REPLACE_OPINIONS] },
+          /*
+           * Onarım/değişim toplamları wire sözleşmesinde YOKTUR (Paket 59).
+           * Domain kuralı toplamları kovalardan deterministik türetir ve
+           * sağlayıcının kendi aritmetiğini kabul etmez; ilk gerçek koşuda
+           * model önermediği senaryonun toplamına formül yerine 0 yazdı.
+           * Türetilebilir sayıyı modelden istemek yalnız hata modu ekler:
+           * adaptör toplamları modelin KENDİ kovalarından hesaplar.
+           */
           economicComparison: {
             type: 'object',
-            required: ['buckets', 'repairTotalMinor', 'replaceTotalMinor', 'note'],
+            required: ['buckets', 'note'],
             properties: {
               buckets: {
                 type: 'object',
-                required: [
-                  'repair_labor',
-                  'new_part_or_ownership',
-                  'remove_install',
-                  'paint_and_consumable',
-                  'calibration',
-                  'related_operations',
-                ],
-                properties: {
-                  repair_labor: { type: 'number' },
-                  new_part_or_ownership: { type: 'number' },
-                  remove_install: { type: 'number' },
-                  paint_and_consumable: { type: 'number' },
-                  calibration: { type: 'number' },
-                  related_operations: { type: 'number' },
-                },
+                required: [...LABOR_ECONOMIC_BUCKETS],
+                properties: Object.fromEntries(
+                  LABOR_ECONOMIC_BUCKETS.map((bucket) => [bucket, MINOR_AMOUNT]),
+                ),
               },
-              repairTotalMinor: { type: 'number' },
-              replaceTotalMinor: { type: 'number' },
               note: { type: 'string' },
             },
           },
           reasoning: { type: 'string' },
           evidenceRefs: { type: 'array', items: { type: 'string' } },
-          confidence: { type: 'number' },
-          conflictCodes: { type: 'array', items: { type: 'string' } },
-          missingEvidenceCodes: { type: 'array', items: { type: 'string' } },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
+          conflictCodes: {
+            type: 'array',
+            items: { type: 'string', enum: [...LABOR_ALLOCATION_CONFLICT_CODES] },
+          },
+          missingEvidenceCodes: {
+            type: 'array',
+            items: { type: 'string', enum: [...LABOR_ALLOCATION_MISSING_EVIDENCE_CODES] },
+          },
           controlRequired: { type: 'boolean' },
         },
       },

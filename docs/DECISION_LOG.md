@@ -1146,3 +1146,29 @@ Etkisi:
 - Migration 0034, `labor-allocation-apply` domain modülü, `POST .../apply` ve `GET .../labor-allocation-applications` uçları, uygulama provenance görünümü eklenir.
 - Paket 54'te bilinçli bırakılan `applied: false` boşluğu kapanır; `apply-preview` ucu önizleme olarak korunur.
 - Gerçek Gemini smoke'u üretimde sağlayıcı açılmadan önce zorunlu release kapısı olarak AÇIK kalmaya devam eder.
+
+## 2026-07-19 — HB-2026-066: Gerçek Gemini release kapısı KAPANDI (Paket 59)
+
+Karar ve sonuç:
+
+HB-2026-062'de tanımlanan zorunlu release kapısı, gerçek API anahtarıyla ve P56–P58 sonrası GERÇEK akış (policy opt-in → bütçe → egress onayı → analyze → immutable kayıt → ledger/makbuz) üzerinden ölçüldü ve **kapandı**. Üç kapı ölçümü, iki senaryo (çıplak kanıt / zengin kanıt) ve iki modelde (birincil `gemini-3.5-flash`, fallback `gemini-2.5-flash`):
+
+1. **`responseJsonSchema` gerçek API tarafından kabul edildi mi?** Evet — dört koşunun dördünde HTTP 200.
+2. **Tüm satırlar eksiksiz döndü mü?** Evet — 2/2 satır, doğru sıra, dört koşuda da.
+3. **`control_required` ve doğrulama hata oranı:** doğrulama hatası **0/2** (her modelde), kontrol oranı **4/4**. Model her satırda 0.9 güven bildirdi; sunucu zorlaması (HB-2026-060) güvene bakmadan kontrolü korudu.
+
+Ek doğrulama: P56–P58 kanıt kanalları gerçek modelle uçtan uca çalışıyor — çıplak senaryoda satır başına 5 eksik kanıt kodu, zengin senaryoda (araç profili + parça kodu + hasar bölgesi + baseline) yalnız `EVIDENCE_MISSING_APPROVED_HISTORY`. Makbuzlar gerçek token kullanımıyla `finalized`, ledger'da koşu başına bir satır.
+
+İlk gerçek temasın bulduğu üç kusur ve düzeltmeleri (domain güvenlik kuralları DEĞİŞMEDİ):
+
+1. **Kapalı küme boşluğu → `AI_OUTPUT_SCHEMA_INVALID`.** Wire şeması literal sürümleri, kanaat sözlüğünü ve çelişki/eksik kanıt kodlarını `type: string` bırakıyordu; model bilemeyeceği değeri uyduruyordu. HB-2026-062'nin "wire şeması enum taşımaz" tercihi revize edildi: kapalı kümeler artık şemada enum, parasal alanlar `integer`. Domain doğrulaması aynen yerinde; şema yalnız uyum oranını yükseltir, kontrolün yerine geçmez.
+2. **Dinamik düşünme bütçesi → 30 sn policy tavanında `AI_PROVIDER_TIMEOUT`.** Görev şemaya bağlı mekanik dağıtımdır; `thinkingConfig: { thinkingBudget: 0 }` eklendi (izinli model kümesi flash ailesi; ikisi de 0'ı destekliyor). Policy tavanı (0018, 30 sn) GEVŞETİLMEDİ.
+3. **Türetilebilir toplamlar → `AI_OUTPUT_ECONOMIC_INVALID`.** Model önermediği senaryonun toplamına formül yerine 0 yazıyordu. Domain kuralı toplamları zaten kovalardan türetip sağlayıcı aritmetiğini reddettiği için, türetilebilir sayıyı modelden istemek yalnız hata modu ekliyordu: `repairTotalMinor`/`replaceTotalMinor` wire sözleşmesinden çıkarıldı, adaptör bunları modelin KENDİ kovalarından `computeEconomicTotals` ile hesaplar. Bu fallback değildir: içerik uydurulmaz, kova geçersizse dokunulmaz ve domain reddeder.
+
+Sürümleme sınırı netleştirildi: `LABOR_ALLOCATION_PROMPT_TEMPLATE_VERSION` dışarı çıkan kanıt bağlamının YAPISINI, sağlayıcı sürümü ise sağlayıcıya özgü wire sözleşmesini (JSON şeması + sistem talimatı) sürümler. Bağlam yapısı değişmediği için domain sürümleri sabit kaldı (DB pinleri geçerli, migration yok); sağlayıcı sürümü `gemini-generate-content/1.1.0` oldu ve run kimliğine girer. Sistem talimatı P56 sonrası gerçeğe uyarlandı: kanıt kanalları "yok" değil "olmayabilir"; eksik kanıt uydurulmaz.
+
+Windows `UV_HANDLE_CLOSING` çökmesi: yakalanmamış hata Node'u zorla çıkışa götürüp kapanan libuv async handle'larıyla yarışıyordu. Manuel smoke betiği artık hataları yakalayıp sınıflandırılmış raporlar, undici global dispatcher'ını kapatır ve `process.exit` yerine doğal çıkış kullanır.
+
+Güvenlik: anahtar yalnız `.env.local`tan süreç ortamına okunur (dosya `.gitignore`'da üç desenle ignore, takip edilmiyor); hiçbir log/commit/DB kaydına girmez. Ham model çıktısı log'a yazılmaz; teşhis yalnız YAPISAL rapor üretir (anahtar adları, kapalı küme değerleri, uzunluklar). Fresh checkout kopyası `.env*` dosyalarını dışlar. Opt-in olmadan betik atlanır; CI anahtar istemez.
+
+Etkisi: üretimde `GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED` açılmadan önceki zorunlu ölçüm tamamlandı. Kapı, wire sözleşmesi değişirse (provider sürüm artışı) yeniden koşulmalıdır.

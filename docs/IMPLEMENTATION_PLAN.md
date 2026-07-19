@@ -1164,7 +1164,7 @@ Kapsam dışı: otomatik belge çıkarımı, sigorta şirketi Excel kolonlarına
 - [x] UI: satır bazında onaylı dağılım ile öneri karşılaştırılsın, fark açıkça gösterilsin, otomatik kabul olmasın.
 - [x] Gerçek PostgreSQL testleri: tenant izolasyonu, yalnız onaylı sonuç, AI önerisinin baseline sayılmaması, belirsiz eşleşme reddi, baseline değişiminde stale, audit/PII sızıntısı, kodun yalnız doğru koşulda düşmesi.
 - [x] Chrome/CDP smoke: kanıt öncesi/sonrası kod sayısını gerçekten ölç; çelişki zorlamasını doğrula.
-- [ ] Gerçek Gemini manuel smoke'u: yerel anahtar hazır olduğunda çalıştır ve `responseJsonSchema` kabulü, satır kapsaması, gerçek `control_required` / doğrulama hata oranı sonuçlarını kaydet.
+- [x] Gerçek Gemini manuel smoke'u (Paket 59'da kapandı; sonuçlar HB-2026-066).
 
 Kapsam dışı: `EVIDENCE_MISSING_APPROVED_HISTORY` kanalının açılması (gerçek "onaylanmış dağıtım" kaydı gerekir), Excel yazımı, şablon profilleri, otomatik eksper onayı.
 
@@ -1184,6 +1184,21 @@ Kapsam dışı: `EVIDENCE_MISSING_APPROVED_HISTORY` kanalının açılması (ger
 - [x] UI: başarıdan sonra yeni föy sürümüne geçilsin ve uygulama provenance'ı görüntülenebilsin.
 - [x] Gerçek PostgreSQL testleri: atomiklik, tenant, stale, idempotency, çift uygulama, kısmi seçim, kullanıcı değişikliği, audit sızıntısı, yalnız completed provenance.
 - [x] Chrome/CDP smoke: onaylı geçmiş yok → uygulama tamamlandı → yeni analizde yalnız ilgili kod kalktı.
-- [ ] Gerçek Gemini manuel smoke'u: yerel anahtar hazır olduğunda çalıştır ve üç sonucu kaydet.
+- [x] Gerçek Gemini manuel smoke'u (Paket 59'da kapandı; sonuçlar HB-2026-066).
 
 Kapsam dışı: Excel yazımı, şablon profilleri, otomatik eksper onayı, operasyon türlerinin kullanıcı tarafından yeniden yazılması.
+
+## Paket 59 — Gerçek Gemini release kapısı
+
+- [x] .env.local'ın ignore edildiğini doğrula; anahtarı yalnız süreç ortamına oku, log'a yazma.
+- [x] Wire şemasına kapalı küme enum ları ve integer tutarlar; domain doğrulaması değişmeden.
+- [x] Sistem talimatını P56 sonrası kanıt kanallarına göre koşullu hale getir.
+- [x] thinkingBudget 0: dinamik düşünme 30 sn policy tavanını aşıyordu; tavan gevşetilmedi.
+- [x] Onarım/değişim toplamlarını wire dan çıkar; adaptör modelin kendi kovalarından türetsin.
+- [x] Sağlayıcı sürümünü gemini-generate-content/1.1.0 yap; sürümleme sınırını belgele.
+- [x] Manuel smoke u P56–P58 sonrası gerçek akışa taşı: policy/bütçe/egress/ledger dahil, iki senaryo.
+- [x] Windows UV_HANDLE_CLOSING: hatayı yakala, dispatcher kapat, doğal çıkış.
+- [x] Üç kapı ölçümünü iki modelde kaydet: şema kabulü 4/4, satır kapsaması 4/4, doğrulama hatası 0/2, kontrol 4/4.
+- [x] Opt-in siz atlama ve fresh checkout ta .env dışlama doğrulandı; CI anahtar istemez.
+
+Kapsam dışı: Excel şablon profilleri, üretim ortamında sağlayıcıyı fiilen açmak (deployment kararı).

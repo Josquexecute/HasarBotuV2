@@ -5,11 +5,26 @@ Son güncelleme: 2026-07-19
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 58 — Onaylı AI dağıtımını föye uygulama
-- Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
+- Aşama: Paket 59 — Gerçek Gemini release kapısı
+- Durum: **Release kapısı gerçek API ile ölçüldü ve KAPANDI; tüm kalite kapıları geçti**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 59 doğrulama sonucu — GERÇEK GEMINI RELEASE KAPISI KAPANDI
+
+- **Ölçüm gerçek API anahtarıyla ve P56–P58 sonrası GERÇEK akış üzerinden yapıldı**: policy opt-in → bütçe → egress onayı → `analyze` ucu → immutable kayıt → ledger/makbuz. Anahtar yalnız `.env.local`tan süreç ortamına okundu; `.gitignore` üç desenle ignore ediyor, dosya takip edilmiyor, hiçbir log/commit'e girmedi.
+- **Üç kapı ölçümü (2 senaryo × 2 model: birincil `gemini-3.5-flash`, fallback `gemini-2.5-flash`):**
+  1. `responseJsonSchema` kabulü: **4/4 koşuda HTTP 200** — enum'lu sıkılaştırılmış şema gerçek API'ce kabul ediliyor.
+  2. Satır kapsaması: **4/4 koşuda 2/2 satır**, doğru sırayla.
+  3. Doğrulama hata oranı **0/2 (her modelde)**; `control_required` oranı **4/4**. Model her satırda 0.9 güven bildirdi; sunucu zorlaması güvene bakmadan kontrolü korudu.
+- **P56–P58 kanalları gerçek modelle doğrulandı**: çıplak senaryoda satır başına 5 eksik kanıt kodu; zengin senaryoda (araç profili + parça kodu + hasar bölgesi + baseline) yalnız `EVIDENCE_MISSING_APPROVED_HISTORY`. Makbuzlar gerçek token kullanımıyla `finalized` (ör. 615/780, 788/716).
+- İlk gerçek temasın bulduğu üç kusur düzeltildi, **domain güvenlik kuralları değişmedi** (ayrıntı: HB-2026-066): kapalı kümeler wire şemasına enum olarak eklendi; `thinkingBudget: 0` ile dinamik düşünme kapatıldı (30 sn policy tavanı gevşetilmedi); türetilebilir onarım/değişim toplamları wire'dan çıkarılıp adaptörde modelin kendi kovalarından hesaplanır oldu (fallback değil — kova geçersizse dokunulmaz, domain reddeder).
+- Sağlayıcı sürümü `gemini-generate-content/1.1.0` (wire sözleşmesi = şema + talimat bu sürümle izlenir; domain prompt/şema sürümleri ve DB pinleri değişmedi, migration yok).
+- **Windows `UV_HANDLE_CLOSING` çökmesi giderildi**: manuel smoke hataları yakalayıp sınıflandırılmış raporlar, undici global dispatcher'ını kapatır ve doğal çıkış kullanır. Betik artık `ok:false` durumunda ham metin içermeyen YAPISAL teşhis raporu üretir.
+- Manuel smoke opt-in olmadan atlanmaya devam ediyor (`{"skipped":true}`, exit 0) — fresh checkout'ta doğrulandı; CI ve standart kuşak anahtar istemiyor. Fresh checkout kopyası `.env*` dosyalarını dışlar.
+- Ana ağaçta typecheck, lint, **1658 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit` (0 açık), `git diff --check` ve Paket 58 Chrome smoke'u regresyonsuz geçti. Repository dışı temiz kopyada tam kapı zinciri geçti; kopya kaldırıldı.
+- **Kapı durumu: KAPALI.** Üretimde `GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED` açılmadan önceki zorunlu ölçüm tamam. Wire sözleşmesi değişirse (provider sürüm artışı) kapı yeniden koşulmalıdır.
 
 ## Paket 58 doğrulama sonucu
 
