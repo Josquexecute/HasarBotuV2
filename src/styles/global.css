@@ -693,6 +693,36 @@ button {
   font-size: 12px;
 }
 
+/* Paket 62 — gerçek analiz ilerlemesi; yüzde çubuğu yoktur çünkü
+   tahmini kalan süre üretilmez. */
+.allocation-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  font-size: 12px;
+}
+
+.allocation-progress strong {
+  font-size: 13px;
+}
+
+.allocation-progress span {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.allocation-progress small {
+  flex-basis: 100%;
+  color: var(--text-tertiary);
+}
+
 .allocation-panel__toolbar {
   display: flex;
   flex-wrap: wrap;

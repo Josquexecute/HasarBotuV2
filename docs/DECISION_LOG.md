@@ -1242,3 +1242,20 @@ Yan bulgular ve düzeltmeleri:
 - Gerçek sağlayıcıyla teyit koşusu **sağlayıcı kotasına takıldı** (429). Bu ortamsaldır; kontrollü retry (2 deneme) ve no-fallback davranışı doğru çalıştı, run temiz biçimde `failed` oldu ve hiçbir satır kaydedilmedi. Chunking değişmezleri kotadan bağımsız olarak deterministik sağlayıcıyla CI kuşağında korunuyor.
 
 Etkisi: `labor-allocation-chunking` domain modülü, chunk döngüsü, teşhis alanları ve yük ölçüm betiği eklendi. Migration YOKTUR; domain doğrulaması ve tam satır kapsaması şartı gevşetilmedi.
+
+## 2026-07-20 — HB-2026-069: AI analiz ilerlemesi ve dayanıklılık (Paket 62)
+
+Bağlam: Paket 61 chunking'i getirdi ve 100 satırlık föy 5 alt çağrıda ~85 saniye sürüyor. Analiz senkron çalıştığı için istek boyunca UI donuk kalıyordu; kullanıcı ne kadar ilerlendiğini göremiyor, sayfadan ayrılırsa sonucu kaybediyordu.
+
+Karar:
+
+1. **Analiz asenkron koşar.** `POST .../labor-allocation-ai` koşuyu `queued` durumunda yaratıp hemen döner; yürütme sunucuda devam eder. Kullanıcı sayfadan ayrılabilir; döndüğünde aktif koşu bulunur ve ilerleme kaldığı yerden görünür.
+2. **İlerleme MEVCUT kayıtlardan türetilir.** İkinci paralel ilerleme sistemi kurulmadı: tamamlanan grup sayısı sağlayıcı makbuzlarından (`result_kind='success'`) sayılır, işlenen satır sayısı chunk planından çarpılır. Migration 0036 yalnız türetilemeyen alanları ekler: toplam satır/grup sayısı, grup boyutu, iptal isteği ve ilerleme zaman damgası.
+3. **Sahte yüzde ve tahmini kalan süre YOKTUR.** UI yalnız `3/5 grup`, `60/100 satır` ve gerçekten geçen süreyi gösterir. İlerleme çubuğu bilerek eklenmedi; tamamlanmamış grubun içindeki durum bilinmediği için doldurulacak yüzde uydurma olurdu.
+4. **Aynı föy sürümü için çift başlatma engellenir.** Aktif koşu varken yeni istek `ANALYSIS_ALREADY_RUNNING` (409) alır.
+5. **İptal denenir, başarı iddia edilmez.** `cancel_requested` ara durumdur; koşu ancak gerçekten durdurulduğunda `cancelled` olur. Sağlayıcı çağrısı dönüş yolundayken kesinlik yoksa durum uydurulmaz.
+6. **Başarısız ve iptal edilmiş koşular kısmi öneri sızdırmaz.** Migration 0036 trigger'ı başarısız/iptal durumundaki koşunun öneri satırı taşımasını veritabanı seviyesinde yasaklar; ayrıca `cancel_requested`'tan geriye dönüş ve terminal koşunun mutasyonu engellenir.
+7. **Yeniden deneme yeni ve izlenebilir koşudur.** Önceki koşu kaydı değişmez; makbuz kimlikleri artık plan hash'i yerine `runId`'den türetilir (aynı föy için ikinci denemenin makbuz çakışmasına düşmesi böyle giderildi).
+8. **Son koşu gizlenmez.** Aktif koşu yoksa EN SON koşu gösterilir; başarısız son deneme sessizce saklanıp yerine eski bir öneri tazeymiş gibi sunulmaz.
+
+Etkisi: Migration 0036, asenkron yürütme ve iptal kaydı, `readRun`/`cancel` uçları, ilerleme paneli. Domain doğrulaması, PII sınırı, bütçe kapısı ve tam satır kapsaması şartı gevşetilmedi.

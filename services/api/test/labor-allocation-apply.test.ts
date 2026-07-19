@@ -15,6 +15,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
+import { waitForRunTerminal } from './helpers/labor-allocation-run.js'
 import {
   buildApp,
   createDeterministicLaborAllocationProviderRegistry,
@@ -78,7 +79,7 @@ describeDb('Paket 58 AI dağıtımının uygulanması', () => {
   }
 
   async function analyze(sessionCookie: string, caseId: string, sheetVersion: number) {
-    const response = await app.inject({
+    const response = await waitForRunTerminal(app, sessionCookie, caseId, await app.inject({
       method: 'POST', url: `/api/v1/cases/${caseId}/labor-allocation-ai/analyze`,
       headers: { cookie: sessionCookie },
       payload: {
@@ -86,7 +87,7 @@ describeDb('Paket 58 AI dağıtımının uygulanması', () => {
         damageDescription: 'Ön sol darbe.',
         confirmedEgress: false,
       },
-    })
+    }))
     expect(response.statusCode).toBe(200)
     return laborAllocationRunResponseSchema.parse(response.json()).run
   }

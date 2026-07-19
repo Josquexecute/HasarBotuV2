@@ -45,13 +45,30 @@ const amountMinorSchema = z.number().int().min(0).max(MAX_LABOR_AMOUNT_MINOR)
 const safeIntegerSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const lineOrdinalSchema = z.number().int().min(1).max(MAX_LABOR_SHEET_ITEMS)
 
+/**
+ * Paket 62: `queued`, `cancel_requested` ve `cancelled` eklendi.
+ *
+ * `cancel_requested` bilinçli olarak ayrı bir durumdur: iptal isteği alınmış
+ * ama çağrının gerçekten durduğu HENÜZ doğrulanmamıştır. Sonuç belirsizken
+ * kullanıcıya "iptal edildi" denmez.
+ */
 export const LABOR_ALLOCATION_RUN_STATUSES = [
   'provider_disabled',
   'budget_blocked',
+  'queued',
   'running',
   'review_required',
   'failed',
   'outcome_unknown',
+  'cancel_requested',
+  'cancelled',
+] as const
+
+/** Kullanıcı için hâlâ devam eden durumlar. */
+export const LABOR_ALLOCATION_ACTIVE_RUN_STATUSES = [
+  'queued',
+  'running',
+  'cancel_requested',
 ] as const
 
 export const laborAllocationCaseParamsSchema = z.strictObject({ caseId: caseIdSchema })
@@ -178,6 +195,19 @@ export const laborAllocationRunSchema = z.strictObject({
   baselineSheetVersion: entityVersionSchema.nullable(),
   baselineMatchVersion: z.literal(LABOR_BASELINE_MATCH_VERSION).nullable(),
   baselineMatchedLineCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+  /**
+   * Paket 62 — GERÇEK ilerleme. Sahte yüzde veya uydurma kalan süre yoktur;
+   * tamamlanan chunk sayısı mevcut sağlayıcı makbuzlarından türetilir.
+   */
+  progress: z.strictObject({
+    totalLineCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+    processedLineCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+    totalChunkCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+    completedChunkCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+    startedAt: utcDateTimeSchema.nullable(),
+    updatedAt: utcDateTimeSchema.nullable(),
+    cancelRequestedAt: utcDateTimeSchema.nullable(),
+  }),
   evidenceHash: hashSchema,
   planHash: hashSchema,
   version: entityVersionSchema,

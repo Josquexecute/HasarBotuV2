@@ -5,6 +5,7 @@ import {
   CASE_LABOR_ALLOCATION_APPLICATIONS_ROUTE,
   CASE_LABOR_ALLOCATION_APPLY_PREVIEW_ROUTE,
   CASE_LABOR_ALLOCATION_APPLY_ROUTE,
+  CASE_LABOR_ALLOCATION_CANCEL_ROUTE,
   CASE_LABOR_ALLOCATION_RUN_ROUTE,
   CASE_LABOR_ALLOCATION_WORKSPACE_ROUTE,
   IDEMPOTENCY_KEY_HEADER,
@@ -57,6 +58,9 @@ export function registerLaborAllocationRoutes(
     RUN_ALREADY_APPLIED: 'conflict',
     APPLY_LINES_INVALID: 'validation_error',
     IDEMPOTENCY_CONFLICT: 'idempotency_conflict',
+    // Paket 62: ilerleme ve iptal.
+    ANALYSIS_ALREADY_RUNNING: 'conflict',
+    RUN_NOT_CANCELLABLE: 'conflict',
   } as const
 
   const handle = (reply: import('fastify').FastifyReply, requestId: string, error: unknown) => {
@@ -165,6 +169,33 @@ export function registerLaborAllocationRoutes(
         body.data,
         key.data,
       )
+    } catch (error) {
+      return handle(reply, requestId, error)
+    }
+  })
+
+  /**
+   * Paket 62 — aktif analizi iptal etmeyi DENER.
+   *
+   * Yanıt her zaman güncel run durumudur: süreç içi abort denenemiyorsa durum
+   * `cancel_requested` kalır ve kullanıcıya "iptal edildi" denmez.
+   */
+  app.post(CASE_LABOR_ALLOCATION_CANCEL_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireAnyRole(auth, request, reply, WRITE_ROLES)
+    if (session === undefined) return
+    const params = laborAllocationRunParamsSchema.safeParse(request.params)
+    if (!params.success) {
+      return reply.code(400).send(failureEnvelopeSchema.parse({
+        ok: false, error: zodErrorToApiError(params.error, requestId),
+      }))
+    }
+    try {
+      return { run: await store.cancel(
+        { organizationId: session.user.organizationId, userId: session.user.id },
+        params.data.caseId,
+        params.data.runId,
+      ) }
     } catch (error) {
       return handle(reply, requestId, error)
     }

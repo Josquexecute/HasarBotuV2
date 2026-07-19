@@ -14,6 +14,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
+import { waitForRunTerminal } from './helpers/labor-allocation-run.js'
 import {
   buildApp,
   createDeterministicLaborAllocationProviderRegistry,
@@ -84,7 +85,7 @@ describeDb('Paket 57 eksper baseline kanıtı', () => {
   }
 
   async function analyze(sessionCookie: string, targetCaseId: string, sheetVersion: number) {
-    return app.inject({
+    return waitForRunTerminal(app, sessionCookie, targetCaseId, await app.inject({
       method: 'POST', url: `/api/v1/cases/${targetCaseId}/labor-allocation-ai/analyze`,
       headers: { cookie: sessionCookie },
       payload: {
@@ -92,7 +93,7 @@ describeDb('Paket 57 eksper baseline kanıtı', () => {
         damageDescription: 'Ön sol darbe.',
         confirmedEgress: false,
       },
-    })
+    }))
   }
 
   function run(response: { json: () => unknown }) {

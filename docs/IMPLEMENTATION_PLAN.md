@@ -1233,3 +1233,19 @@ Kapsam dışı: xlsx dependency, fiziksel Excel yazımı, hardcode edilmiş şir
 - [x] Kabul ölçütü: 50+ satırda tam kapsama, sıfır doğrulama hatası, çağrı başına timeout politikası içinde, doğru ledger, gizli fallback yok.
 
 Kapsam dışı: timeout tavanının yükseltilmesi, domain doğrulamasının gevşetilmesi, Excel dosyasına yazma.
+## Paket 62 — AI analiz ilerlemesi ve dayanıklılığı
+
+- [x] Migration 0036: durum kümesini genişlet; toplam satır/grup, grup boyutu, iptal ve ilerleme zaman damgaları.
+- [x] Trigger: başarısız/iptal edilmiş koşu öneri satırı taşıyamasın; `cancel_requested`'tan geri dönülmesin.
+- [x] API: analiz asenkron koşsun; istek koşuyu `queued` yaratıp hemen dönsün.
+- [x] İlerleme mevcut makbuzlardan türetilsin; ikinci paralel kayıt sistemi kurulmasın.
+- [x] Aynı föy sürümü için çift başlatma `ANALYSIS_ALREADY_RUNNING` (409) ile engellensin.
+- [x] İptal ucu: abort denensin, belirsizken "iptal edildi" denmesin; `cancel_requested` ara durum olsun.
+- [x] Makbuz kimlikleri `runId`'den türetilsin ki yeniden deneme çakışmasın.
+- [x] UI: `3/5 grup`, `60/100 satır` ve gerçek geçen süre; sahte yüzde veya kalan süre yok.
+- [x] UI: analiz sürerken buton kilitli; sayfadan dönünce ilerleme sürsün; tamamlanınca otomatik inceleme ekranı.
+- [x] UI: iptal ve yeniden deneme açık kullanıcı eylemi; başarısızlıkta yedek sonuç gösterilmesin.
+- [x] Aktif koşu yoksa EN SON koşu gösterilsin; başarısız son deneme gizlenmesin.
+- [x] Kablo seviyesi regresyon testi: gövdesiz POST'un boş JSON gövde hatası üretmesi bir daha kaçmasın.
+
+Kapsam dışı: ilerleme yüzdesi/kalan süre tahmini, çok süreçli koşu devralma, Excel dosyasına yazma.

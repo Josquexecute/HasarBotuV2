@@ -71,6 +71,15 @@ function run(
     suggestion: { lines },
     safeErrorCode: null,
     stale: false,
+    progress: {
+      totalLineCount: lines.length,
+      processedLineCount: lines.length,
+      totalChunkCount: 1,
+      completedChunkCount: 1,
+      startedAt: '2026-07-18T10:30:00.000Z',
+      updatedAt: '2026-07-18T10:30:04.000Z',
+      cancelRequestedAt: null,
+    },
     createdAt: '2026-07-18T10:30:00.000Z',
     ...overrides,
   }
@@ -137,6 +146,8 @@ function stubPort(overrides: Partial<LaborAllocationDataPort> = {}) {
       }
     },
     listApplications: async () => [],
+    readRun: async () => run([line()]),
+    cancel: async () => run([], { status: 'cancelled', suggestion: null }),
     ...overrides,
   }
   return { port, calls }
@@ -371,5 +382,112 @@ describe('AI işçilik dağıtımı paneli', () => {
     expect(await screen.findByText(/yeniden analiz gerekir/)).toBeInTheDocument()
     await userEvent.click(screen.getByLabelText('1. satırı seç'))
     expect(screen.getByRole('button', { name: /önizleme hazırla/ })).toBeDisabled()
+  })
+})
+
+/**
+ * Paket 62 — analiz sürerken görünen ilerleme.
+ *
+ * Buradaki sayılar sunucudan gelen gerçek sayımlardır; test hiçbir yerde
+ * tahmini yüzde veya kalan süre beklemez çünkü UI bunları üretmez.
+ */
+describe('AI analiz ilerlemesi', () => {
+  /** Yarısı bitmiş, hâlâ çalışan bir koşu. */
+  function runningRun(overrides: Partial<LaborAllocationRunRecord> = {}) {
+    return run([], {
+      status: 'running',
+      suggestion: null,
+      progress: {
+        totalLineCount: 100,
+        processedLineCount: 60,
+        totalChunkCount: 5,
+        completedChunkCount: 3,
+        startedAt: new Date(Date.now() - 12_000).toISOString(),
+        updatedAt: new Date().toISOString(),
+        cancelRequestedAt: null,
+      },
+      ...overrides,
+    })
+  }
+
+  it('grup, satır ve geçen süreyi gösterir; analiz sürerken butonu kilitler', async () => {
+    const { port } = stubPort({ workspace: async () => workspace([runningRun()]) })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    expect(await screen.findByText(/3\/5 grup/)).toBeInTheDocument()
+    expect(screen.getByText(/60\/100 satır/)).toBeInTheDocument()
+    // Geçen süre gerçek ölçümdür; en az 12 saniye görünmelidir.
+    expect(screen.getByText(/1[2-9] sn/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /analiz sürüyor/i })).toBeDisabled()
+  })
+
+  it('sayfaya dönüldüğünde aktif koşuyu seçer ve ilerlemeyi sürdürür', async () => {
+    // Workspace hem eski tamamlanmış hem de yeni aktif koşuyu döner.
+    const { port } = stubPort({
+      workspace: async () => workspace([runningRun({ id: 'run-2' }), run([line()])]),
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    expect(await screen.findByText(/3\/5 grup/)).toBeInTheDocument()
+    // Aktif koşu seçildiği için eski koşunun satırları gösterilmez.
+    expect(screen.queryByText('1. Ön tampon')).not.toBeInTheDocument()
+  })
+
+  it('tamamlanınca yoklama sonucuyla inceleme ekranına otomatik geçer', async () => {
+    const { port } = stubPort({
+      workspace: async () => workspace([runningRun()]),
+      readRun: async () => run([line()]),
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    expect(await screen.findByText(/3\/5 grup/)).toBeInTheDocument()
+    // Yoklama 1,5 saniyede bir çalışır; sonuç gelince panel yerini
+    // mevcut inceleme ekranına bırakır.
+    expect(await screen.findByText('1. Ön tampon', {}, { timeout: 4_000 })).toBeInTheDocument()
+    expect(screen.queryByText(/3\/5 grup/)).not.toBeInTheDocument()
+  })
+
+  it('iptal açık kullanıcı eylemidir ve kısmi sonuç sızdırmaz', async () => {
+    let cancelled = 0
+    const { port } = stubPort({
+      workspace: async () => workspace([runningRun()]),
+      // Yoklama iptal edilene kadar koşuyu çalışır gösterir.
+      readRun: async () => (cancelled === 0 ? runningRun() : run([], {
+        status: 'cancelled',
+        suggestion: null,
+      })),
+      cancel: async () => {
+        cancelled += 1
+        return run([], { status: 'cancelled', suggestion: null })
+      },
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    // Türkçe 'İ' JS'de küçültülünce birleşik noktaya dönüşür; bu yüzden
+    // erişilebilir ad tam metinle aranır, /i bayrağıyla değil.
+    await userEvent.click(await screen.findByRole('button', { name: 'Analizi İptal Et' }))
+
+    expect(await screen.findByText(/iptal edildi; kısmi sonuç kaydedilmedi/)).toBeInTheDocument()
+    expect(cancelled).toBe(1)
+    expect(screen.queryByText('1. Ön tampon')).not.toBeInTheDocument()
+    // İptalden sonra buton kilidi kalkar; yeniden deneme açık eylemdir.
+    expect(screen.getByRole('button', { name: 'Analiz Et' })).toBeInTheDocument()
+  })
+
+  it('başarısız koşuda güvenli hata kodunu gösterir, yedek sonuç üretmez', async () => {
+    const { port } = stubPort({
+      workspace: async () => workspace([run([], {
+        status: 'failed',
+        suggestion: null,
+        safeErrorCode: 'AI_PROVIDER_RATE_LIMITED',
+      })]),
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    expect(await screen.findByText(/AI_PROVIDER_RATE_LIMITED/)).toBeInTheDocument()
+    expect(screen.getByText(/yedek sonuç yoktur/)).toBeInTheDocument()
+    // Yeniden deneme yeni bir koşudur; hasar tarifi girilince açılır.
+    await userEvent.type(screen.getByPlaceholderText(/Hasar bölgesi/), 'Ön tampon ezik')
+    expect(screen.getByRole('button', { name: 'Analiz Et' })).toBeEnabled()
   })
 })

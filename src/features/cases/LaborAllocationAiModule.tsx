@@ -86,7 +86,14 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
       ])
       setWorkspace(result)
       setApplications(history)
-      const latest = result.runs.find((item) => item.status === 'review_required') ?? null
+      // Paket 62: önce aktif koşu — sayfadan ayrılıp dönen kullanıcı
+      // ilerlemeyi kaldığı yerden görür. Aktif koşu yoksa EN SON koşu
+      // gösterilir; başarısız veya iptal edilmiş son deneme sessizce
+      // gizlenip yerine eski bir öneri tazeymiş gibi sunulmaz.
+      const active = result.runs.find((item) => (
+        ['queued', 'running', 'cancel_requested'].includes(item.status)
+      )) ?? null
+      const latest = active ?? result.runs.at(0) ?? null
       setRun(latest)
       setStatus('ok')
     } catch (error) {
@@ -98,6 +105,42 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
 
   useEffect(() => { void load() }, [load])
 
+  /**
+   * Paket 62 — analiz arka planda çalışır; aktif run için durum yoklanır.
+   *
+   * Sayfadan ayrılıp dönüldüğünde de çalışır: `load` mevcut aktif run'ı
+   * getirir ve bu efekt oradan devam eder. Tamamlanınca yoklama durur ve
+   * mevcut AI inceleme ekranı kendiliğinden görünür.
+   */
+  useEffect(() => {
+    const active = run !== null
+      && ['queued', 'running', 'cancel_requested'].includes(run.status)
+    if (!active || run === null) return undefined
+    let cancelled = false
+    const timer = setInterval(() => {
+      void adapter.readRun(caseId, run.id)
+        .then((next) => { if (!cancelled) setRun(next) })
+        .catch(() => undefined)
+    }, 1_500)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [adapter, caseId, run])
+
+  /** Aktif analizde geçen süre; tahmin değil, gerçek ölçüm. */
+  const [elapsedMs, setElapsedMs] = useState(0)
+  useEffect(() => {
+    const startedAt = run?.progress.startedAt
+    const active = run !== null
+      && ['queued', 'running', 'cancel_requested'].includes(run.status)
+    if (!active || startedAt === null || startedAt === undefined) return undefined
+    const started = new Date(startedAt).getTime()
+    setElapsedMs(Date.now() - started)
+    const timer = setInterval(() => setElapsedMs(Date.now() - started), 1_000)
+    return () => clearInterval(timer)
+  }, [run])
+
+  /** Analiz hâlâ sürüyor mu; buton kilidi ve ilerleme paneli buna bakar. */
+  const analysisActive = run !== null
+    && ['queued', 'running', 'cancel_requested'].includes(run.status)
   const lines = useMemo(() => run?.suggestion?.lines ?? [], [run])
   const visibleLines = onlyControlRequired ? lines.filter((line) => line.controlRequired) : lines
   const selectableOrdinals = useMemo(
@@ -117,6 +160,20 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
       })
       setRun(result)
       setSelected([])
+      setErrorKind(null)
+    } catch (error) {
+      setErrorKind(error instanceof LaborAllocationClientError ? error.kind : 'unavailable')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Aktif analizi iptal etmeyi DENER; açık kullanıcı eylemidir. */
+  const cancelRun = async () => {
+    if (run === null) return
+    setBusy(true)
+    try {
+      setRun(await adapter.cancel(caseId, run.id))
       setErrorKind(null)
     } catch (error) {
       setErrorKind(error instanceof LaborAllocationClientError ? error.kind : 'unavailable')
@@ -288,10 +345,46 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
           <button
             className="button button--primary"
             type="button"
-            disabled={busy || damageDescription.trim() === '' || !workspace.permissions.canAnalyze}
+            disabled={
+              busy || analysisActive
+              || damageDescription.trim() === '' || !workspace.permissions.canAnalyze
+            }
             onClick={() => void analyze()}
           >
-            {busy ? 'Çalışıyor…' : 'Analiz Et'}
+            {analysisActive ? 'Analiz sürüyor…' : (busy ? 'Çalışıyor…' : 'Analiz Et')}
+          </button>
+        </div>
+      )}
+
+      {/*
+        Paket 62 — GERÇEK ilerleme. Sahte yüzde veya tahmini kalan süre yoktur;
+        yalnız tamamlanan grup, işlenen satır ve gerçekten geçen süre gösterilir.
+      */}
+      {analysisActive && run !== null && (
+        <div className="allocation-progress" role="status" aria-live="polite">
+          <strong>
+            {run.status === 'cancel_requested'
+              ? 'İptal isteği gönderildi; sonuç doğrulanıyor…'
+              : 'AI dağıtımı hesaplanıyor…'}
+          </strong>
+          <span>
+            {run.progress.completedChunkCount}/{run.progress.totalChunkCount} grup
+            {' · '}
+            {run.progress.processedLineCount}/{run.progress.totalLineCount} satır
+            {' · '}
+            {Math.floor(elapsedMs / 1000)} sn
+          </span>
+          <small>
+            Sayfadan ayrılabilirsiniz; analiz sunucuda devam eder ve
+            döndüğünüzde kaldığı yerden görünür.
+          </small>
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={busy || run.status === 'cancel_requested'}
+            onClick={() => void cancelRun()}
+          >
+            Analizi İptal Et
           </button>
         </div>
       )}
@@ -302,9 +395,11 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
         </p>
       )}
 
-      {run !== null && run.status !== 'review_required' && (
+      {run !== null && !analysisActive && run.status !== 'review_required' && (
         <p className="allocation-panel__error" role="alert">
-          Analiz sonuç üretmedi: {run.safeErrorCode ?? run.status}. Kural tabanlı yedek sonuç yoktur.
+          {run.status === 'cancelled'
+            ? 'Analiz iptal edildi; kısmi sonuç kaydedilmedi.'
+            : `Analiz sonuç üretmedi: ${run.safeErrorCode ?? run.status}. Kural tabanlı yedek sonuç yoktur.`}
         </p>
       )}
 

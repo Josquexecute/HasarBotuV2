@@ -25,6 +25,7 @@ import {
   baselineMatches,
   mergeLaborAllocationChunks,
   planLaborAllocationChunks,
+  LABOR_ALLOCATION_CHUNK_SIZE,
   sha256Text,
   buildLaborAllocationEvidenceHash,
   buildLaborAllocationOutboundContext,
@@ -74,6 +75,9 @@ export type LaborAllocationErrorCode =
   | 'RUN_ALREADY_APPLIED'
   | 'APPLY_LINES_INVALID'
   | 'IDEMPOTENCY_CONFLICT'
+  // Paket 62: ilerleme ve iptal.
+  | 'ANALYSIS_ALREADY_RUNNING'
+  | 'RUN_NOT_CANCELLABLE'
 
 export class LaborAllocationError extends Error {
   constructor(readonly code: LaborAllocationErrorCode, readonly status: number) {
@@ -363,6 +367,39 @@ function budgetView(
 
 type RunRow = Record<string, unknown>
 
+/**
+ * İlerlemeyi mevcut kayıtlardan TÜRETİR (Paket 62).
+ *
+ * Sahte yüzde veya tahmini kalan süre üretilmez. Tamamlanan chunk sayısı
+ * sağlayıcı makbuzlarından sayılır; chunk'lar sırayla işlendiği ve yalnız son
+ * chunk kısmi olabildiği için `tamamlanan × boyut` işlenen satırı tam verir
+ * (toplam satırla sınırlanır).
+ */
+function buildProgress(row: RunRow) {
+  const totalLineCount = row.total_line_count === null ? 0 : safeNumber(row.total_line_count)
+  const totalChunkCount = row.total_chunk_count === null ? 0 : safeNumber(row.total_chunk_count)
+  const chunkSize = row.chunk_size === null ? 0 : safeNumber(row.chunk_size)
+  const completedChunkCount = Math.min(safeNumber(row.completed_chunk_count), totalChunkCount)
+  const status = String(row.status)
+  // Tamamlanmış run'da ilerleme sonucu yansıtır; makbuz sayımına bağlı kalmaz.
+  const processedLineCount = status === 'review_required'
+    ? totalLineCount
+    : Math.min(completedChunkCount * chunkSize, totalLineCount)
+  return {
+    totalLineCount,
+    processedLineCount,
+    totalChunkCount,
+    completedChunkCount,
+    startedAt: row.started_at === null ? null : (row.started_at as Date).toISOString(),
+    updatedAt: row.progress_updated_at === null
+      ? null
+      : (row.progress_updated_at as Date).toISOString(),
+    cancelRequestedAt: row.cancel_requested_at === null
+      ? null
+      : (row.cancel_requested_at as Date).toISOString(),
+  }
+}
+
 async function mapRun(
   pool: pg.Pool,
   organizationId: string,
@@ -452,6 +489,7 @@ async function mapRun(
       ? null
       : LABOR_BASELINE_MATCH_VERSION,
     baselineMatchedLineCount: safeNumber(row.baseline_matched_line_count),
+    progress: buildProgress(row),
     sourceSheetId: String(row.source_sheet_id),
     sourceSheetVersion: safeNumber(row.source_sheet_version),
     evidenceHash: String(row.evidence_hash),
@@ -482,7 +520,20 @@ const RUN_COLUMNS = `id::text,case_id::text,source_sheet_id::text,source_sheet_v
   plan_hash,provider_id,provider_version,model_id,status,external_provider,privacy_policy_version,
   outbound_payload_hash,outbound_input_characters,redacted_value_count,redacted_categories,
   privacy_warnings,provider_retention_mode,safe_error_code,version,created_at,started_at,completed_at,
-  baseline_sheet_version,baseline_match_version,baseline_matched_line_count`
+  baseline_sheet_version,baseline_match_version,baseline_matched_line_count,
+  total_line_count,total_chunk_count,chunk_size,cancel_requested_at,progress_updated_at,
+  /*
+   * Paket 62: ilerleme İKİNCİ BİR KAYIT SİSTEMİNDEN değil, mevcut sağlayıcı
+   * makbuzlarından türetilir. Chunk'lar sırayla işlendiği için tamamlanmış
+   * chunk sayısı × chunk boyutu işlenen satırı verir (son chunk hariç hepsi
+   * tam boyuttur; toplam satırla sınırlanır).
+   */
+  (SELECT count(*)::int FROM labor_allocation_provider_receipts r
+     WHERE r.run_id=labor_allocation_runs.id
+       -- Yalnız BAŞARILI alt çağrılar tamamlanmış sayılır; başarısız bir
+       -- grubun makbuzu da 'response_recorded' olur ve sayılsaydı ilerleme
+       -- olduğundan fazla görünürdü.
+       AND r.result_kind='success') AS completed_chunk_count`
 
 export function createLaborAllocationStore(
   pool: pg.Pool,
@@ -491,6 +542,12 @@ export function createLaborAllocationStore(
 ) {
   const adapter = () => registry.get(providerId)
   const audit = createAuditService()
+  /**
+   * Süreç içi aktif analizler. İptal isteği buradan abort edilir.
+   * Kayıt yoksa (ör. run başka bir süreçte) iptal BAŞARILI SAYILMAZ;
+   * run  durumunda kalır.
+   */
+  const activeRuns = new Map<string, AbortController>()
 
   async function budgetFor(organizationId: string, inputCharacters: number) {
     const policy = await loadPolicy(pool, organizationId)
@@ -719,6 +776,23 @@ export function createLaborAllocationStore(
         return mapRun(pool, actor.organizationId, existing.rows[0] as RunRow, sheet.sheetVersion, budget)
       }
 
+      /*
+       * Paket 62: aynı föy sürümü için ikinci analiz başlatılamaz. Kullanıcı
+       * yanlışlıkla tekrar tetiklerse mevcut aktif run döner; ikinci maliyet
+       * ve ikinci ilerleme akışı oluşmaz.
+       */
+      const active = await pool.query(
+        `SELECT ${RUN_COLUMNS} FROM labor_allocation_runs
+          WHERE organization_id=$1 AND case_id=$2 AND source_sheet_version=$3
+            AND status IN ('queued','running','cancel_requested')
+          ORDER BY created_at DESC LIMIT 1`,
+        [actor.organizationId, caseId, sheet.sheetVersion],
+      )
+      if (active.rows.length > 0) {
+        throw new LaborAllocationError('ANALYSIS_ALREADY_RUNNING', 409)
+      }
+
+      const chunkPlan = planLaborAllocationChunks(sheet.lines.length)
       const runId = uuidv7()
       await pool.query(
         `INSERT INTO labor_allocation_runs
@@ -728,9 +802,10 @@ export function createLaborAllocationStore(
             outbound_payload_hash,outbound_input_characters,redacted_value_count,redacted_categories,
             privacy_warnings,provider_retention_mode,pricing_version,estimated_cost_minor,
             created_by_user_id,baseline_sheet_version,baseline_match_version,
-            baseline_matched_line_count,started_at)
+            baseline_matched_line_count,status,
+            total_line_count,total_chunk_count,chunk_size,progress_updated_at,started_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
-                 $26,$27,$28,now())`,
+                 $26,$27,$28,'queued',$29,$30,$31,now(),now())`,
         [
           runId, actor.organizationId, caseId, sheet.sheetId, sheet.sheetVersion, evidenceHash, planHash,
           planContext.providerId, planContext.providerVersion, planContext.modelId,
@@ -743,9 +818,21 @@ export function createLaborAllocationStore(
           expertBaseline?.sheetVersion ?? null,
           expertBaseline === null ? null : LABOR_BASELINE_MATCH_VERSION,
           baselineMatchedCount,
+          sheet.lines.length,
+          chunkPlan.length,
+          LABOR_ALLOCATION_CHUNK_SIZE,
         ],
       )
 
+      /*
+       * Paket 62 — analiz ARKA PLANDA çalışır.
+       *
+       * Uç, run kimliğini ve `queued` durumunu hemen döndürür; kullanıcı
+       * sayfadan ayrılsa bile iş devam eder ve geri döndüğünde mevcut durum
+       * okunabilir. Bu, 100 satırlık föyde ~85 sn boyunca donmuş görünen
+       * ekranı ortadan kaldırır.
+       */
+      const executeRun = async (): Promise<void> => {
       /*
        * Sağlayıcı kullanımı `finalize` closure'ından okunduğu için bildirim
        * closure'dan ÖNCE yapılır. Aksi halde sağlayıcı çağrılmadan sonlanan
@@ -814,11 +901,11 @@ export function createLaborAllocationStore(
       if (!budget.allowed) {
         const status = budget.reasonCode === 'AI_BUDGET_EXCEEDED' ? 'budget_blocked' : 'provider_disabled'
         await finalize(status, budget.reasonCode ?? 'AI_PROVIDER_DISABLED', null, null)
-        return this.getRun(actor, caseId, runId)
+        return
       }
       if (provider === undefined) {
         await finalize('provider_disabled', 'AI_PROVIDER_NOT_CONFIGURED', null, null)
-        return this.getRun(actor, caseId, runId)
+        return
       }
 
       /*
@@ -833,6 +920,18 @@ export function createLaborAllocationStore(
        * Sonuçlar sunucuda birleşir; tek bir eksik/tekrarlı satır bile TÜM run'ı
        * başarısız kılar. Gizli tek-çağrı fallback YOKTUR.
        */
+      // Satır önerileri yalnız `running` run'a eklenebilir (0036 guard).
+      await pool.query(
+        `UPDATE labor_allocation_runs
+            SET status='running',progress_updated_at=now(),version=version+1
+          WHERE id=$1 AND status='queued'`,
+        [runId],
+      )
+      const cancelled = async (): Promise<boolean> => {
+        const state = await pool.query('SELECT status FROM labor_allocation_runs WHERE id=$1', [runId])
+        return String((state.rows[0] as Record<string, unknown>).status) === 'cancel_requested'
+      }
+
       const chunks = planLaborAllocationChunks(sheet.lines.length)
       const chunkResults: (readonly LaborAllocationLineSuggestion[] | null)[] = []
       let usageInputTokens: number | null = null
@@ -841,6 +940,11 @@ export function createLaborAllocationStore(
       let usageActualCostMinor = 0
 
       for (const chunk of chunks) {
+        // Her grup öncesi iptal kontrolü: iptal edilen run yeni maliyet üretmez.
+        if (await cancelled()) {
+          await finalize('cancelled', 'AI_RUN_CANCELLED', null, null)
+          return
+        }
         const chunkLines = sheet.lines.slice(
           chunk.startOrdinal - 1,
           chunk.startOrdinal - 1 + chunk.lineCount,
@@ -860,9 +964,16 @@ export function createLaborAllocationStore(
          * kısıtlar gevşetilmez ve aynı analiz anahtarı aynı chunk kimliklerini
          * üretmeye devam eder. Tek gruplu föyde davranış değişmez.
          */
-        const chunkHash = chunks.length === 1
-          ? planHash
-          : sha256Text(`${planHash}:chunk:${chunk.index}`)
+        /*
+         * Paket 62: kimlik RUN'dan türetilir, plan hash'inden değil.
+         *
+         * Plan hash'i kullanıldığında başarısız bir run'dan sonra YENİDEN
+         * DENEME aynı makbuz kimliğine çarpıp yeni run'ı da düşürüyordu.
+         * Mükerrer maliyet koruması run seviyesindeki idempotency indeksinde
+         * (yalnız `review_required`) durur; makbuz kimliği ise bir run
+         * içindeki alt çağrıları ayırır.
+         */
+        const chunkHash = sha256Text(`${runId}:chunk:${chunk.index}`)
         await pool.query(
           `INSERT INTO labor_allocation_provider_receipts
              (id,organization_id,case_id,run_id,request_hash,client_request_id,provider_id,
@@ -882,6 +993,8 @@ export function createLaborAllocationStore(
         )
 
         const controller = new AbortController()
+        // İptal isteği aktif çağrıyı abort edebilsin diye kayda alınır.
+        activeRuns.set(runId, controller)
         const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
         let chunkOutput: unknown
         try {
@@ -915,6 +1028,8 @@ export function createLaborAllocationStore(
             ? error
             : new LaborAllocationProviderExecutionError('unknown', 'unknown', 'AI_PROVIDER_FAILED')
           const safeCode = failure.safeDiagnosticCode ?? 'AI_PROVIDER_FAILED'
+          // İptal nedeniyle abort edildiyse hata değil iptal olarak sonlanır.
+          const cancelRequested = await cancelled()
           await pool.query(
             `UPDATE labor_allocation_provider_receipts
                 SET status=$2,result_kind='failure',safe_error_code=$3,
@@ -935,15 +1050,26 @@ export function createLaborAllocationStore(
           }
           // Bir grup düşerse TÜM run düşer; kısmi sonuç kaydedilmez.
           await finalize(
-            failure.requestOutcome === 'unknown' ? 'outcome_unknown' : 'failed',
-            safeCode,
+            cancelRequested
+              ? 'cancelled'
+              : (failure.requestOutcome === 'unknown' ? 'outcome_unknown' : 'failed'),
+            cancelRequested ? 'AI_RUN_CANCELLED' : safeCode,
             null,
             null,
           )
-          return this.getRun(actor, caseId, runId)
+          return
         } finally {
           clearTimeout(timeout)
+          activeRuns.delete(runId)
         }
+
+        // Grup tamamlandı: ilerleme zaman damgası tazelenir. Tamamlanan chunk
+        // sayısı makbuzlardan sayıldığı için ayrı sayaç tutulmaz.
+        await pool.query(
+          `UPDATE labor_allocation_runs SET progress_updated_at=now(),version=version+1
+            WHERE id=$1 AND status IN ('running','cancel_requested')`,
+          [runId],
+        )
 
         // Her grup domain doğrulamasından AYRI geçer.
         const chunkValidation = validateLaborAllocationSuggestion(
@@ -969,7 +1095,7 @@ export function createLaborAllocationStore(
             actualCostMinor: usageActualCostMinor,
           }
           await finalize('failed', chunkValidation.code, null, null)
-          return this.getRun(actor, caseId, runId)
+          return
         }
         chunkResults.push(chunkValidation.suggestion.lines)
       }
@@ -985,7 +1111,7 @@ export function createLaborAllocationStore(
       const mergeResult = mergeLaborAllocationChunks(chunks, chunkResults, sheet.lines.length)
       if (!mergeResult.merged) {
         await finalize('failed', `AI_OUTPUT_${mergeResult.code}`, null, null)
-        return this.getRun(actor, caseId, runId)
+        return
       }
       const validation = { suggestion: { lines: mergeResult.lines } }
 
@@ -1027,6 +1153,56 @@ export function createLaborAllocationStore(
           WHERE run_id=$1 AND status='response_recorded'`,
         [runId],
       )
+      }
+
+      /*
+       * Fire-and-forget: hata sessizce yutulmaz, run'a `failed` olarak yazılır.
+       * Çağıran beklemez; durum `getRun` üzerinden okunur.
+       */
+      void executeRun().catch(async () => {
+        await pool.query(
+          `UPDATE labor_allocation_runs
+              SET status='failed',safe_error_code='AI_RUN_UNEXPECTED_FAILURE',
+                  completed_at=now(),progress_updated_at=now(),version=version+1
+            WHERE id=$1 AND status IN ('queued','running','cancel_requested')`,
+          [runId],
+        ).catch(() => undefined)
+        activeRuns.delete(runId)
+      })
+
+      return this.getRun(actor, caseId, runId)
+    },
+
+    /**
+     * Aktif analizi iptal etmeyi DENER (Paket 62).
+     *
+     * İptal isteği kaydedilir ve süreç içi çağrı abort edilir. Abort
+     * denenemiyorsa (ör. run başka bir süreçte) durum `cancel_requested`
+     * kalır: sonuç belirsizken kullanıcıya "iptal edildi" DENMEZ.
+     */
+    async cancel(actor: Actor, caseId: string, runId: string): Promise<LaborAllocationRunDto> {
+      const existing = await pool.query(
+        `SELECT status FROM labor_allocation_runs
+          WHERE organization_id=$1 AND case_id=$2 AND id=$3`,
+        [actor.organizationId, caseId, runId],
+      )
+      const row = existing.rows[0] as Record<string, unknown> | undefined
+      if (row === undefined) throw new LaborAllocationError('RUN_NOT_FOUND', 404)
+      const status = String(row.status)
+      if (!['queued', 'running', 'cancel_requested'].includes(status)) {
+        throw new LaborAllocationError('RUN_NOT_CANCELLABLE', 409)
+      }
+      if (status !== 'cancel_requested') {
+        await pool.query(
+          `UPDATE labor_allocation_runs
+              SET status='cancel_requested',cancel_requested_at=now(),
+                  progress_updated_at=now(),version=version+1
+            WHERE id=$1 AND status IN ('queued','running')`,
+          [runId],
+        )
+      }
+      // Süreç içi çağrıyı abort etmeyi dene; başarısı garanti edilmez.
+      activeRuns.get(runId)?.abort()
       return this.getRun(actor, caseId, runId)
     },
 

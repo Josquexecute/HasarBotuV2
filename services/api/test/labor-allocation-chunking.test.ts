@@ -20,6 +20,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
+import { waitForRunTerminal } from './helpers/labor-allocation-run.js'
 import {
   LaborAllocationProviderExecutionError,
   buildApp,
@@ -182,11 +183,12 @@ describeDb('Paket 61 büyük föy chunking', () => {
     return caseId
   }
 
-  const analyze = (app: FastifyInstance, cookie: string, caseId: string) => app.inject({
-    method: 'POST', url: `/api/v1/cases/${caseId}/labor-allocation-ai/analyze`,
-    headers: { cookie },
-    payload: { expectedSheetVersion: 1, damageDescription: 'Coklu bolge darbe.', confirmedEgress: true },
-  })
+  const analyze = async (app: FastifyInstance, cookie: string, caseId: string) =>
+    waitForRunTerminal(app, cookie, caseId, await app.inject({
+      method: 'POST', url: `/api/v1/cases/${caseId}/labor-allocation-ai/analyze`,
+      headers: { cookie },
+      payload: { expectedSheetVersion: 1, damageDescription: 'Coklu bolge darbe.', confirmedEgress: true },
+    }))
 
   beforeAll(async () => {
     config = assertTestDatabaseUrl(TEST_URL as string)

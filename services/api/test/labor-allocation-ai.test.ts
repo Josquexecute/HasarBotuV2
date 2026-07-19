@@ -16,6 +16,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
+import { waitForRunTerminal } from './helpers/labor-allocation-run.js'
 import {
   buildApp,
   createDeterministicLaborAllocationProviderRegistry,
@@ -105,11 +106,11 @@ describeDb('Paket 54 AI işçilik dağıtımı', () => {
     targetCaseId: string,
     sheetVersion = 1,
   ) {
-    return instance.inject({
+    return waitForRunTerminal(instance, cookie, targetCaseId, await instance.inject({
       method: 'POST', url: `/api/v1/cases/${targetCaseId}/labor-allocation-ai/analyze`,
       headers: { cookie },
       payload: { expectedSheetVersion: sheetVersion, damageDescription: 'Ön sol darbe.', confirmedEgress: false },
-    })
+    }))
   }
 
   beforeAll(async () => {
@@ -244,7 +245,7 @@ describeDb('Paket 54 AI işçilik dağıtımı', () => {
     const cookie = await login(instance, 'p54-manager@test.local')
     const response = await analyze(instance, cookie, caseId, 99)
     expect(response.statusCode).toBe(409)
-    expect(response.json().error.code).toBe('version_conflict')
+    expect((response.json() as { error: { code: string } }).error.code).toBe('version_conflict')
     await instance.close()
   })
 

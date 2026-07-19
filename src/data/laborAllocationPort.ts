@@ -49,8 +49,19 @@ export interface LaborAllocationRunRecord {
   readonly id: string
   readonly caseId: string
   readonly status:
-    | 'provider_disabled' | 'budget_blocked' | 'running'
+    | 'provider_disabled' | 'budget_blocked' | 'queued' | 'running'
     | 'review_required' | 'failed' | 'outcome_unknown'
+    | 'cancel_requested' | 'cancelled'
+  /** Paket 62: gerçek ilerleme; sahte yüzde veya kalan süre yoktur. */
+  readonly progress: {
+    readonly totalLineCount: number
+    readonly processedLineCount: number
+    readonly totalChunkCount: number
+    readonly completedChunkCount: number
+    readonly startedAt: string | null
+    readonly updatedAt: string | null
+    readonly cancelRequestedAt: string | null
+  }
   readonly providerId: string
   readonly modelId: string
   readonly promptTemplateVersion: string
@@ -153,6 +164,10 @@ export interface LaborAllocationDataPort {
     damageDescription: string
     confirmedEgress: boolean
   }): Promise<LaborAllocationRunRecord>
+  /** Paket 62: tek run durumunu okur (ilerleme takibi). */
+  readRun(caseId: string, runId: string): Promise<LaborAllocationRunRecord>
+  /** Aktif analizi iptal etmeyi DENER; sonuç belirsizse başarı denmez. */
+  cancel(caseId: string, runId: string): Promise<LaborAllocationRunRecord>
   applyPreview(caseId: string, runId: string, input: {
     expectedSheetVersion: number
     selectedLineOrdinals: readonly number[]
@@ -244,6 +259,31 @@ export function createHttpLaborAllocationAdapter(
         }),
       )
       if (!parsed.success) throw new LaborAllocationClientError('unavailable', 'run response invalid')
+      return parsed.data.run as unknown as LaborAllocationRunRecord
+    },
+    async readRun(caseId, runId) {
+      const { laborAllocationRunResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = laborAllocationRunResponseSchema.safeParse(
+        await request(
+          `/api/v1/cases/${encodeURIComponent(caseId)}/labor-allocation-ai/${encodeURIComponent(runId)}`,
+        ),
+      )
+      if (!parsed.success) throw new LaborAllocationClientError('unavailable', 'run response invalid')
+      return parsed.data.run as unknown as LaborAllocationRunRecord
+    },
+    async cancel(caseId, runId) {
+      const { laborAllocationRunResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = laborAllocationRunResponseSchema.safeParse(
+        await request(
+          `/api/v1/cases/${encodeURIComponent(caseId)}/labor-allocation-ai`
+          + `/${encodeURIComponent(runId)}/cancel`,
+          // Gövde taşımayan istek de `content-type: application/json` ile
+          // gider; boş gövde sunucuda ayrıştırma hatası üretir. Uç gövdeyi
+          // okumaz, bu yüzden boş nesne gönderilir.
+          { method: 'POST', body: '{}' },
+        ),
+      )
+      if (!parsed.success) throw new LaborAllocationClientError('unavailable', 'cancel response invalid')
       return parsed.data.run as unknown as LaborAllocationRunRecord
     },
     async applyPreview(caseId, runId, input) {

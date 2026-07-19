@@ -1,15 +1,28 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-19
+Son güncelleme: 2026-07-20
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 61 — Büyük föy Gemini yük doğrulaması ve chunking
-- Durum: **Ölçüldü, chunking geliştirildi, tüm kalite kapıları geçti**
+- Aşama: Paket 62 — AI analiz ilerlemesi ve dayanıklılığı
+- Durum: **Asenkron analiz, gerçek ilerleme ve iptal çalışıyor; tüm kalite kapıları geçti**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 62 doğrulama sonucu — İLERLEME GERÇEK, İPTAL DÜRÜST
+
+- **Analiz asenkron koşuyor.** İstek koşuyu `queued` yaratıp hemen dönüyor; yürütme sunucuda sürüyor. Kullanıcı sayfadan ayrılıp dönünce aktif koşu bulunuyor ve ilerleme kaldığı yerden görünüyor.
+- **İlerleme mevcut kayıtlardan türetiliyor** — ikinci paralel ilerleme sistemi kurulmadı. Tamamlanan grup sayısı `result_kind='success'` makbuzlarından sayılıyor. Migration 0036 yalnız türetilemeyen alanları ekliyor.
+- **Sahte yüzde ve tahmini kalan süre yok.** UI yalnız `3/5 grup`, `60/100 satır` ve gerçekten geçen süreyi gösteriyor; yüzde çubuğu bilinçli olarak eklenmedi.
+- Aynı föy sürümü için çift başlatma `ANALYSIS_ALREADY_RUNNING` (409) ile engelleniyor. İptal `cancel_requested` ara durumundan geçiyor; koşu ancak gerçekten durunca `cancelled` oluyor. Migration 0036 trigger'ı başarısız/iptal koşusunun öneri satırı taşımasını DB seviyesinde yasaklıyor.
+- **Smoke, kendi teşhis kodumun ürettiği sahte yeşili ortaya çıkardı.** Ölçüm sırasında eklediğim teşhis, iptal ucuna kendisi POST atıyor ve UI adına iptali gerçekleştiriyordu; smoke bu yüzden geçiyor görünüyordu. Teşhis kaldırılınca hata 3/3 tekrarlandı.
+- **Bulunan gerçek kusur:** `cancel` gövdesiz POST gönderiyordu ama istek yine `content-type: application/json` taşıdığı için sunucu boş gövdeyi ayrıştıramıyor ve **400** dönüyordu — iptal düğmesi gerçek API'ye karşı hiç çalışmamıştı. Bileşen testi stub port kullandığından göremezdi; düzeltme sonrası kablo seviyesinde regresyon testi eklendi (`src/data/laborAllocationPort.test.ts`). `authPort.logout` aynı desende ama content-type göndermediği için etkilenmiyor.
+- Ana ağaçta typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **domain 563 + contracts/UI 628 (+6 skip) + database 71 + API 416**, build + bundle bütçesi (495.584 bayt), `npm audit` (0 açık) ve `git diff --check` geçti.
+- Gerçek Chrome/CDP smoke (14/14 senaryo, düzeltme sonrası 3/3 ardışık): 45 satır → 3 grup ilerlemesi, buton kilidi, 409 çift başlatma, navigasyon sonrası ilerlemenin sürmesi, tamamlanınca otomatik geçiş, grup başına makbuz, iptalin kısmi öneri sızdırmaması, önceki koşunun değişmemesi, audit'te PII olmaması, temiz console. 1920×1080 açık/koyu ve 1366×768 koyu görünümde yatay taşma yok.
+- **Yanlış alarm kapatıldı:** doğrulama sırasında `services/file-agent` PDF/OCR kuşağında 11 test düşüyordu. Kaynak kodu değil, **bayat `services/file-agent/dist/pdf-parser-worker.js`** çıktısıydı; izole worker derlenmiş `.js` dosyasını tercih ettiği için eski sürüm çalışıyordu. `npm run build` sonrası ana ağaçta da **53/53** geçiyor ve repository dışı temiz kopyada zaten geçiyordu.
+- Repository dışı temiz kopyada fresh `npm ci` (0 açık), typecheck, lint, aynı gerçek `_test` PostgreSQL ile tüm kuşaklar ve build + bundle bütçesi yeniden geçti; geçici kopya kaldırıldı.
 
 ## Paket 61 doğrulama sonucu — ÖLÇÜLDÜ, CHUNKING GELİŞTİRİLDİ
 
