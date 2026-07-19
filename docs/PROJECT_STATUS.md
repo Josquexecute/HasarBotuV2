@@ -5,11 +5,23 @@ Son güncelleme: 2026-07-19
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 60 — Excel şablon profilleri
-- Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
+- Aşama: Paket 61 — Büyük föy Gemini yük doğrulaması ve chunking
+- Durum: **Ölçüldü, chunking geliştirildi, tüm kalite kapıları geçti**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 61 doğrulama sonucu — ÖLÇÜLDÜ, CHUNKING GELİŞTİRİLDİ
+
+- **Önce ölçüldü.** Gerçek Gemini + gerçek `analyze` akışı + sentetik föyler. Tek çağrıyla: 10 satır 9,7 sn ✔, 25 satır 20,3 sn ✔, **50 ve 100 satır 30,0 sn'de `AI_PROVIDER_TIMEOUT`** ✘. Ölçülen doğrusal davranış: satır başına ~0,81 sn ve ~307 çıktı token'ı. Çıktı kesilmesi gözlenmedi; darboğaz süredir.
+- Karar kuralı gereği (timeout + eksik satır ölçüldü) **kontrollü chunking** geliştirildi. **30 sn'lik politika tavanı yükseltilmedi** — tavan çağrı başınadır, iş bölündü. Chunk boyutu 20, ölçüme dayalı ve sürümlü (`labor-allocation-chunking/1.0.0`).
+- **Chunking sonrası tüm boyutlar geçti:** 10 satır 1 çağrı, 25 satır 2 çağrı, 50 satır 3 çağrı (43,9 sn), 100 satır 5 çağrı (84,6 sn) — hepsinde **tam satır kapsaması ve sıfır doğrulama hatası**. Ledger alt çağrıların gerçek toplamını taşıyor (100 satır: 12.275/31.138 token = 5 makbuzun toplamı).
+- 11 sağlayıcı çağrısının hiçbirinde timeout, retry veya çıktı kesilmesi yok (`finishReason` hepsinde STOP) — her çağrının **çağrı başına** 30 sn tavana uyduğunun doğrudan kanıtı. Toplam duvar saati chunk'lı run'da meşru biçimde tavanı aşar; ilk ölçüm betiğim bu ikisini karıştırıyordu, kontrol doğru semantiğe çekildi.
+- Değişmezler: gruplar deterministik/çakışmasız, dosya bağlamı her gruba taşınır, her grup domain doğrulamasından ayrı geçer, birleştirme sunucuda, **eksik/tekrarlı tek satır bile tüm run'ı düşürür**, gizli tek-çağrı fallback yok, her alt çağrı kendi makbuzunu üretir.
+- **Üç yan kusur bulundu ve düzeltildi:** (1) `finishReason` görünmüyordu — çıktı kesilmesi timeout'tan ayırt edilemiyordu, artık ayrı `AI_PROVIDER_RESPONSE_TRUNCATED` kodu var; (2) ledger gerçek kullanımı taşımıyordu — `output_characters` sabit 0, token sütunları hiç dolmuyordu; (3) `finalize` closure'ında gizli TDZ hatası — eski kod yalnız ternary kısa devresi sayesinde kazara kaçınıyordu.
+- Gerçek sağlayıcıyla **teyit koşusu kotaya takıldı** (429, ortamsal). Kontrollü retry (2 deneme) ve no-fallback doğru çalıştı; run temiz `failed` oldu, hiçbir satır kaydedilmedi. Chunking değişmezleri kotadan bağımsız olarak deterministik sağlayıcıyla CI kuşağında korunuyor (4/4 test).
+- Ana ağaçta typecheck, lint, **1716 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit` (0 açık), `git diff --check` ve Paket 60 Chrome smoke'u regresyonsuz geçti. Repository dışı temiz kopyada tam zincir geçti; yük ölçümü opt-in'siz temiz atlandı.
+- **Migration yoktur**; domain doğrulaması ve tam satır kapsaması şartı gevşetilmedi.
 
 ## Paket 60 doğrulama sonucu
 

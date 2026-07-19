@@ -106,6 +106,20 @@ function safeInteger(value: unknown): number | undefined {
   return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined
 }
 
+/**
+ * Yanıttaki `finishReason`'ı okur (Paket 61).
+ *
+ * Kapalı bir enum'dur ve içerik taşımaz; teşhis için güvenle raporlanabilir.
+ * Beklenmedik bir değer gelirse serbest metin sızmasın diye budanır ve
+ * karakter kümesi daraltılır.
+ */
+function readFinishReason(body: Record<string, unknown>): string | null {
+  if (!Array.isArray(body.candidates) || body.candidates.length < 1) return null
+  const candidate = body.candidates[0]
+  if (!record(candidate) || typeof candidate.finishReason !== 'string') return null
+  return candidate.finishReason.slice(0, 32).replace(/[^A-Z_]/g, '')
+}
+
 /** Geçici sayılan durumlar; bunlar dışında retry YOKTUR. */
 function isRetryableStatus(status: number): boolean {
   return status === 429 || status >= 500
@@ -234,6 +248,7 @@ export function createGeminiLaborAllocationProvider(
       }
 
       let response: Response | undefined
+      let retryCount = 0
       for (let attempt = 0; attempt <= LABOR_ALLOCATION_RETRY_BACKOFF_MS.length; attempt += 1) {
         try {
           response = await fetchImplementation(endpoint(config), requestInit)
@@ -243,6 +258,7 @@ export function createGeminiLaborAllocationProvider(
             'network failure',
             'unknown',
             signal.aborted ? 'AI_PROVIDER_TIMEOUT' : 'AI_PROVIDER_NETWORK_FAILURE',
+            { finishReason: null, retryCount },
           )
         }
         if (!isRetryableStatus(response.status)) break
@@ -250,13 +266,16 @@ export function createGeminiLaborAllocationProvider(
         if (attempt === LABOR_ALLOCATION_RETRY_BACKOFF_MS.length) {
           throw new LaborAllocationProviderExecutionError(
             'retry exhausted', 'response_received', safeErrorCode(response.status),
+            { finishReason: null, retryCount },
           )
         }
         try {
           await waitImplementation(LABOR_ALLOCATION_RETRY_BACKOFF_MS[attempt] as number, signal)
+          retryCount += 1
         } catch {
           throw new LaborAllocationProviderExecutionError(
             'timeout during backoff', 'response_received', 'AI_PROVIDER_TIMEOUT',
+            { finishReason: null, retryCount },
           )
         }
       }
@@ -298,10 +317,22 @@ export function createGeminiLaborAllocationProvider(
           'invalid body', 'response_received', 'AI_PROVIDER_RESPONSE_INVALID',
         )
       }
+      const finishReason = readFinishReason(body)
       const structured = geminiStructuredOutputText(body)
-      if (!structured.ok || structured.text.length > config.maximumOutputSize) {
+      const oversized = structured.ok && structured.text.length > config.maximumOutputSize
+      if (!structured.ok || oversized) {
+        /*
+         * Paket 61: çıktı KESİLMESİ ayrı kodla raporlanır. Daha önce her
+         * eksik çıktı tek bir generic koda düşüyordu ve yük ölçümünde
+         * "model token sınırına çarptı" ile "yanıt başka nedenle bozuk"
+         * ayırt edilemiyordu. Bu ayrım chunking kararının girdisidir.
+         */
+        const truncated = finishReason === 'MAX_TOKENS' || oversized
         throw new LaborAllocationProviderExecutionError(
-          'incomplete output', 'response_received', 'AI_PROVIDER_RESPONSE_INCOMPLETE',
+          'incomplete output',
+          'response_received',
+          truncated ? 'AI_PROVIDER_RESPONSE_TRUNCATED' : 'AI_PROVIDER_RESPONSE_INCOMPLETE',
+          { finishReason, retryCount },
         )
       }
       let output: unknown
@@ -334,6 +365,7 @@ export function createGeminiLaborAllocationProvider(
           estimatedCostMinor: 0,
           actualCostMinor: 0,
         },
+        diagnostics: { finishReason, retryCount },
       }
     },
   }

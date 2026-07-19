@@ -1219,3 +1219,17 @@ Kapsam dışı: Excel şablon profilleri, üretim ortamında sağlayıcıyı fii
 - [x] Chrome/CDP smoke: profil tanımla → uygula → projeksiyon; değiştirilen satırda sayı üretilmediğini doğrula.
 
 Kapsam dışı: xlsx dependency, fiziksel Excel yazımı, hardcode edilmiş şirket kolonları.
+
+## Paket 61 — Büyük föy Gemini yük doğrulaması
+
+- [x] finishReason'ı yakala; çıktı kesilmesine ayrı safe kod ver; retry sayısını yapısal teşhise ekle.
+- [x] Ledger gerçek çıktı karakteri ve token sayılarını taşısın.
+- [x] 10/25/50/100 satır sentetik föyle gerçek analyze akışında ölç; anahtar/ham içerik/PII rapora girmesin.
+- [x] Ölçüm: 50 ve 100 satırda tek çağrı 30 sn tavanına çarpıyor; chunking gerekli.
+- [x] Domain: deterministik gruplama ve sunucu tarafı birleştirme; eksik/tekrarlı satırda tüm run düşsün.
+- [x] API: chunk döngüsü, grup başına makbuz ve ayrı domain doğrulaması, ledger toplamı.
+- [x] Chunk makbuz kimlikleri plan hash'inden deterministik türetilsin; 64-hex kısıtı gevşetilmesin.
+- [x] Chunking değişmezlerini deterministik sağlayıcıyla CI kuşağında koru (kotadan bağımsız).
+- [x] Kabul ölçütü: 50+ satırda tam kapsama, sıfır doğrulama hatası, çağrı başına timeout politikası içinde, doğru ledger, gizli fallback yok.
+
+Kapsam dışı: timeout tavanının yükseltilmesi, domain doğrulamasının gevşetilmesi, Excel dosyasına yazma.

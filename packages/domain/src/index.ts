@@ -574,6 +574,15 @@ export {
   type LaborRepairReplaceOpinion,
 } from './labor-allocation-ai.js'
 export {
+  LABOR_ALLOCATION_CHUNK_SIZE,
+  LABOR_ALLOCATION_CHUNK_STRATEGY_VERSION,
+  mergeLaborAllocationChunks,
+  planLaborAllocationChunks,
+  type LaborAllocationChunk,
+  type LaborAllocationMergeFailure,
+  type LaborAllocationMergeResult,
+} from './labor-allocation-chunking.js'
+export {
   LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
   MAX_LABOR_EXCEL_COLUMNS,
   MAX_LABOR_EXCEL_COLUMN_KEY_LENGTH,

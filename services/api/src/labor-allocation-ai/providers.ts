@@ -28,9 +28,22 @@ export interface LaborAllocationProviderUsage {
   readonly actualCostMinor: number
 }
 
+/**
+ * Paket 61: sağlayıcıya özgü YAPISAL teşhis. Yalnız kapalı küme değerleri ve
+ * sayaçlar taşınır; içerik, ham yanıt veya PII taşımaz. Yük ölçümünde çıktı
+ * kesilmesini timeout'tan ayırmak için gereklidir.
+ */
+export interface LaborAllocationProviderDiagnostics {
+  /** Gemini kapalı enum'u (STOP, MAX_TOKENS, SAFETY, ...); içerik değildir. */
+  readonly finishReason: string | null
+  /** Kaç kez geçici hata nedeniyle yeniden denendi. */
+  readonly retryCount: number
+}
+
 export interface LaborAllocationProviderResponse {
   readonly output: unknown
   readonly usage: LaborAllocationProviderUsage
+  readonly diagnostics?: LaborAllocationProviderDiagnostics
 }
 
 export class LaborAllocationProviderExecutionError extends Error {
@@ -38,6 +51,7 @@ export class LaborAllocationProviderExecutionError extends Error {
     message: string,
     readonly requestOutcome: 'response_received' | 'unknown',
     readonly safeDiagnosticCode: string | null = null,
+    readonly diagnostics: LaborAllocationProviderDiagnostics | null = null,
   ) {
     super(message)
     this.name = 'LaborAllocationProviderExecutionError'

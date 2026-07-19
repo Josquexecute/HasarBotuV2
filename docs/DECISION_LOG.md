@@ -1198,3 +1198,47 @@ Etkisi:
 - Migration 0035, `v1/labor-excel-profile` sözleşmesi, profil CRUD + projeksiyon uçları, Yönetim'de "Excel Şablonları" sekmesi ve İşçilik'te projeksiyon önizlemesi eklenir.
 - Yeni modül **lazy** yüklenir: doğrudan import başlangıç JavaScript grafiğini 504.045 bayta çıkarıp bütçe kapısını düşürmüştü. Bütçe yükseltilmedi; projedeki lazy kalıbı uygulandı (495.584 bayt).
 - v0.7'nin kalan son dilimi **güvenli Excel yazımıdır** ve xlsx dependency + gerçek ofis şablonu + fiziksel yazma kararı gerektirir.
+
+## 2026-07-19 — HB-2026-068: Büyük föy yük ölçümü ve deterministik chunking (Paket 61)
+
+Önce ölçüldü, sonra karar verildi. Gerçek Gemini (`gemini-3.5-flash`), gerçek `analyze` akışı, sentetik föyler:
+
+| Satır | Süre | Sağlayıcı çağrısı | Kapsama | Doğrulama |
+|---|---|---|---|---|
+| 10 | 9,7 sn | 1 | 10/10 | geçti |
+| 25 | 20,3 sn | 1 | 25/25 | geçti |
+| 50 | 30,0 sn | 1 | **0/50** | **AI_PROVIDER_TIMEOUT** |
+| 100 | 30,0 sn | 1 | **0/100** | **AI_PROVIDER_TIMEOUT** |
+
+Ölçülen doğrusal davranış: satır başına ~0,81 sn ve ~307 çıktı token'ı. Çıktı KESİLMESİ gözlenmedi (`finishReason` hep STOP veya çağrı hiç tamamlanmadı); darboğaz süredir.
+
+Karar kuralı gereği (timeout ve eksik satır ölçüldü) aynı pakette **kontrollü chunking** geliştirildi:
+
+1. **30 sn'lik politika tavanı YÜKSELTİLMEDİ.** Tavan çağrı başınadır; iş bölündü.
+2. `LABOR_ALLOCATION_CHUNK_SIZE = 20` ölçüme dayanır: 25 satır tavanın %68'ini kullandı; 20 satır ~16 sn (%55) ve model yavaşladığında marj bırakır. Sabit sürümlüdür (`labor-allocation-chunking/1.0.0`).
+3. Gruplar deterministiktir: satır sırasına göre, içerikten bağımsız, çakışmasız ve boşluksuz. Her satır yalnız bir gruptadır.
+4. **Dosya bağlamı her gruba taşınır** (araç profili, baseline, sözlük, onaylı geçmiş, hasar tarifi); yalnız satır alt kümesi değişir.
+5. Her grup **domain doğrulamasından AYRI** geçer. Baseline ve geçmiş eşlemeleri grup yerel sırasına çevrilir.
+6. Birleştirme sunucuda ve deterministiktir: grup içi 1..k sırası global sıraya eşlenir. **Eksik, tekrarlı veya kapsama dışı tek satır bile TÜM run'ı düşürür**; kısmi sonuç kaydedilmez.
+7. **Gizli tek-çağrı fallback YOKTUR.** Bir grup düşerse sonraki gruplara geçilmez ve hiçbir satır kaydedilmez.
+8. Her alt çağrı kendi sağlayıcı makbuzunu üretir; makbuz kimlikleri plan hash'inden deterministik türetilir (sözleşmedeki 64-hex kısıtı gevşetilmedi). **Ledger bütün alt çağrıların gerçek toplamını taşır.**
+
+Chunking sonrası ölçüm — tüm boyutlar tam kapsama ve sıfır doğrulama hatası:
+
+| Satır | Süre | Çağrı | Kapsama | Doğrulama | Ledger (giriş/çıkış token) |
+|---|---|---|---|---|---|
+| 10 | 10,4 sn | 1 | 10/10 | geçti | 1.162 / 3.322 |
+| 25 | 22,5 sn | 2 | 25/25 | geçti | 3.178 / 7.928 |
+| 50 | 43,9 sn | 3 | 50/50 | geçti | 6.884 / 15.872 |
+| 100 | 84,6 sn | 5 | 100/100 | geçti | 12.275 / 31.138 |
+
+11 sağlayıcı çağrısının hiçbirinde timeout, retry veya çıktı kesilmesi olmadı (`finishReason` hepsinde STOP) — bu, her çağrının 30 sn'lik **çağrı başına** tavana uyduğunun doğrudan kanıtıdır. Toplam duvar saati (43,9 / 84,6 sn) chunk'lı run'da meşru biçimde tavanı aşar; politika tek çağrıyı sınırlar, toplam süreyi değil. İlk ölçüm betiği bu ikisini karıştırıyordu ve kontrol doğru semantiğe çekildi.
+
+Yan bulgular ve düzeltmeleri:
+
+- **`finishReason` görünmüyordu.** Her eksik çıktı tek bir generic koda düşüyor, "model token sınırına çarptı" ile "yanıt başka nedenle bozuk" ayırt edilemiyordu. `finishReason` kapalı enum olarak yakalandı (içerik değildir) ve çıktı kesilmesi ayrı `AI_PROVIDER_RESPONSE_TRUNCATED` koduyla raporlanıyor. Retry sayısı da yapısal teşhise eklendi.
+- **Ledger gerçek kullanımı taşımıyordu:** `output_characters` sabit 0 geçiliyor, token sütunları hiç doldurulmuyordu. Artık gerçek çıktı karakteri ve token sayıları yazılıyor (DB kısıtı gereği token alanları birlikte null ya da birlikte dolu).
+- **Gizli bir TDZ hatası bulundu:** `finalize` closure'ı `providerUsage`'ı kendisinden sonra tanımlanan `let` üzerinden okuyordu; eski kod bundan yalnız ternary kısa devresi sayesinde kazara kaçınıyordu. Bildirim closure'dan öncesine taşındı.
+- Gerçek sağlayıcıyla teyit koşusu **sağlayıcı kotasına takıldı** (429). Bu ortamsaldır; kontrollü retry (2 deneme) ve no-fallback davranışı doğru çalıştı, run temiz biçimde `failed` oldu ve hiçbir satır kaydedilmedi. Chunking değişmezleri kotadan bağımsız olarak deterministik sağlayıcıyla CI kuşağında korunuyor.
+
+Etkisi: `labor-allocation-chunking` domain modülü, chunk döngüsü, teşhis alanları ve yük ölçüm betiği eklendi. Migration YOKTUR; domain doğrulaması ve tam satır kapsaması şartı gevşetilmedi.

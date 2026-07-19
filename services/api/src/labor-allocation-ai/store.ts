@@ -23,6 +23,9 @@ import {
   LABOR_OPERATION_TYPES,
   LABOR_OPERATION_TYPES_VERSION,
   baselineMatches,
+  mergeLaborAllocationChunks,
+  planLaborAllocationChunks,
+  sha256Text,
   buildLaborAllocationEvidenceHash,
   buildLaborAllocationOutboundContext,
   buildLaborAllocationPlanHash,
@@ -34,6 +37,7 @@ import {
   type LaborAllocationApprovedRecord,
   type LaborAllocationEvidenceLine,
   type LaborAllocationExpertBaseline,
+  type LaborAllocationLineSuggestion,
   type LaborAllocationSuggestedLine,
   type LaborAllocationPlanContext,
   type NormalizedLaborItem,
@@ -742,6 +746,20 @@ export function createLaborAllocationStore(
         ],
       )
 
+      /*
+       * Sağlayıcı kullanımı `finalize` closure'ından okunduğu için bildirim
+       * closure'dan ÖNCE yapılır. Aksi halde sağlayıcı çağrılmadan sonlanan
+       * yollarda (provider_disabled, budget_blocked) temporal dead zone
+       * hatası oluşur; eski kod bundan yalnız ternary kısa devresi sayesinde
+       * kazara kaçınıyordu.
+       */
+      let providerUsage: {
+        inputTokens: number | null
+        outputTokens: number | null
+        outputCharacters: number
+        actualCostMinor: number
+      } | null = null
+
       const finalize = async (
         status: string,
         safeErrorCode: string | null,
@@ -756,14 +774,25 @@ export function createLaborAllocationStore(
           [runId, status, safeErrorCode, lineCount, controlRequiredCount],
         )
         await pool.query(
+          /*
+           * Paket 61: gerçekleşen çıktı karakteri ve TOKEN sayıları da ledger'a
+           * yazılır. Önceden yalnız karakter/maliyet vardı ve `output_characters`
+           * sabit 0 geçiliyordu; yük ölçümünde ledger gerçek kullanımı
+           * taşımadığı için maliyet takibi eksik kalıyordu.
+           *
+           * Token alanları DB kısıtı gereği birlikte null ya da birlikte dolu
+           * olmalıdır; sağlayıcı kullanım bildirmediyse ikisi de null kalır.
+           */
           `INSERT INTO ai_usage_ledger
              (id,organization_id,case_id,usage_module,labor_allocation_run_id,provider_id,model_id,
               request_hash,input_characters,output_characters,estimated_cost_minor,actual_cost_minor,
-              status,safe_error_code,started_at,completed_at)
-           VALUES ($1,$2,$3,'labor_allocation',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now(),now())`,
+              status,safe_error_code,input_tokens,output_tokens,started_at,completed_at)
+           VALUES ($1,$2,$3,'labor_allocation',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now(),now())`,
           [
             uuidv7(), actor.organizationId, caseId, runId, planContext.providerId, planContext.modelId,
-            planHash, outbound.outboundInputCharacters, 0, budget.estimatedCostMinor,
+            planHash, outbound.outboundInputCharacters,
+            providerUsage?.outputCharacters ?? 0,
+            budget.estimatedCostMinor,
             // Gerçek maliyet sağlayıcı kullanımından gelir; yoksa tahmin kullanılır.
             status === 'review_required'
               ? (providerUsage?.actualCostMinor ?? budget.estimatedCostMinor)
@@ -772,6 +801,11 @@ export function createLaborAllocationStore(
               : status === 'budget_blocked' ? 'budget_blocked'
                 : status === 'provider_disabled' ? 'provider_disabled' : 'failed',
             safeErrorCode,
+            // DB kısıtı: ikisi birlikte null ya da birlikte dolu.
+            providerUsage?.inputTokens ?? null,
+            providerUsage?.inputTokens === null || providerUsage?.inputTokens === undefined
+              ? null
+              : (providerUsage.outputTokens ?? null),
           ],
         )
       }
@@ -787,92 +821,173 @@ export function createLaborAllocationStore(
         return this.getRun(actor, caseId, runId)
       }
 
-      // Sağlayıcı makbuzu: aynı çağrının mükerrer maliyet üretmesini engeller
-      // ve gerçek model/kullanım verisini dayanıklı biçimde saklar.
-      const receiptId = uuidv7()
-      await pool.query(
-        `INSERT INTO labor_allocation_provider_receipts
-           (id,organization_id,case_id,run_id,request_hash,client_request_id,provider_id,
-            provider_version,model_id,input_characters,estimated_cost_minor,pricing_version,
-            created_by_user_id,request_id)
-         VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [
-          receiptId, actor.organizationId, caseId, runId, planHash,
-          planContext.providerId, planContext.providerVersion, planContext.modelId,
-          outbound.outboundInputCharacters, budget.estimatedCostMinor,
-          planContext.pricingVersion, actor.userId,
-          // `request_id` metindir; run kimliğiyle aynı parametreyi paylaşamaz
-          // (PostgreSQL uuid/text tipini tek parametreden çıkaramaz).
-          String(runId),
-        ],
-      )
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
-      let output: unknown
-      let providerUsage: { inputTokens: number | null; outputTokens: number | null; actualCostMinor: number } | null = null
-      try {
-        const response = await provider.execute({
-          accountingInputCharacters: outbound.outboundInputCharacters,
-          providerRequestId: runId,
-          context: outbound.context,
-        }, controller.signal)
-        output = response.output
-        providerUsage = {
-          inputTokens: response.usage.inputTokens,
-          outputTokens: response.usage.outputTokens,
-          actualCostMinor: response.usage.actualCostMinor,
+      /*
+       * Paket 61 — büyük föylerde deterministik chunking (HB-2026-068).
+       *
+       * Gerçek Gemini yük ölçümü (2026-07-19) tek çağrının 50+ satırda 30 sn'lik
+       * politika tavanına çarptığını gösterdi. Tavan YÜKSELTİLMEDİ; iş sabit ve
+       * sürümlü gruplara bölünüyor. Her grup:
+       *  - dosya bağlamını (araç profili, baseline, sözlük, hasar tarifi) taşır,
+       *  - kendi sağlayıcı makbuzunu ve kendi timeout'unu alır,
+       *  - domain doğrulamasından AYRI geçer.
+       * Sonuçlar sunucuda birleşir; tek bir eksik/tekrarlı satır bile TÜM run'ı
+       * başarısız kılar. Gizli tek-çağrı fallback YOKTUR.
+       */
+      const chunks = planLaborAllocationChunks(sheet.lines.length)
+      const chunkResults: (readonly LaborAllocationLineSuggestion[] | null)[] = []
+      let usageInputTokens: number | null = null
+      let usageOutputTokens: number | null = null
+      let usageOutputCharacters = 0
+      let usageActualCostMinor = 0
+
+      for (const chunk of chunks) {
+        const chunkLines = sheet.lines.slice(
+          chunk.startOrdinal - 1,
+          chunk.startOrdinal - 1 + chunk.lineCount,
+        )
+        // Dosya bağlamı korunur; yalnız satır alt kümesi değişir.
+        const chunkOutbound = buildLaborAllocationOutboundContext({
+          ...planContext,
+          lines: chunkLines,
+        })
+
+        const receiptId = uuidv7()
+        /*
+         * Makbuz kimlikleri sözleşme gereği 64 hex karakterdir (0031 CHECK) ve
+         * `(organization_id, run_id, request_hash)` ile `(organization_id,
+         * client_request_id)` üzerinde tekildir. Chunk başına ayrı makbuz
+         * gerektiği için ikisi de plan hash'inden DETERMİNİSTİK türetilir;
+         * kısıtlar gevşetilmez ve aynı analiz anahtarı aynı chunk kimliklerini
+         * üretmeye devam eder. Tek gruplu föyde davranış değişmez.
+         */
+        const chunkHash = chunks.length === 1
+          ? planHash
+          : sha256Text(`${planHash}:chunk:${chunk.index}`)
+        await pool.query(
+          `INSERT INTO labor_allocation_provider_receipts
+             (id,organization_id,case_id,run_id,request_hash,client_request_id,provider_id,
+              provider_version,model_id,input_characters,estimated_cost_minor,pricing_version,
+              created_by_user_id,request_id)
+           VALUES ($1,$2,$3,$4,$5,$14,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [
+            receiptId, actor.organizationId, caseId, runId, chunkHash,
+            planContext.providerId, planContext.providerVersion, planContext.modelId,
+            chunkOutbound.outboundInputCharacters, budget.estimatedCostMinor,
+            planContext.pricingVersion, actor.userId,
+            // `request_id` metindir; run kimliğiyle aynı parametreyi paylaşamaz
+            // (PostgreSQL uuid/text tipini tek parametreden çıkaramaz).
+            String(runId),
+            chunkHash,
+          ],
+        )
+
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
+        let chunkOutput: unknown
+        try {
+          const response = await provider.execute({
+            accountingInputCharacters: chunkOutbound.outboundInputCharacters,
+            providerRequestId: `${runId}:${chunk.index}`,
+            context: chunkOutbound.context,
+          }, controller.signal)
+          chunkOutput = response.output
+          // Ledger bütün alt çağrıların GERÇEK toplamını taşır.
+          if (response.usage.inputTokens !== null) {
+            usageInputTokens = (usageInputTokens ?? 0) + response.usage.inputTokens
+            usageOutputTokens = (usageOutputTokens ?? 0) + (response.usage.outputTokens ?? 0)
+          }
+          usageOutputCharacters += response.usage.outputCharacters
+          usageActualCostMinor += response.usage.actualCostMinor
+          await pool.query(
+            `UPDATE labor_allocation_provider_receipts
+                SET status='response_recorded',result_kind='success',
+                    output_characters=$2,input_tokens=$3,output_tokens=$4,
+                    actual_cost_minor=$5,response_received_at=now()
+              WHERE id=$1`,
+            [
+              receiptId, response.usage.outputCharacters,
+              response.usage.inputTokens, response.usage.outputTokens,
+              response.usage.actualCostMinor,
+            ],
+          )
+        } catch (error) {
+          const failure = error instanceof LaborAllocationProviderExecutionError
+            ? error
+            : new LaborAllocationProviderExecutionError('unknown', 'unknown', 'AI_PROVIDER_FAILED')
+          const safeCode = failure.safeDiagnosticCode ?? 'AI_PROVIDER_FAILED'
+          await pool.query(
+            `UPDATE labor_allocation_provider_receipts
+                SET status=$2,result_kind='failure',safe_error_code=$3,
+                    response_received_at=CASE WHEN $2='response_recorded' THEN now() ELSE NULL END,
+                    finalized_at=CASE WHEN $2='outcome_unknown' THEN now() ELSE NULL END
+              WHERE id=$1`,
+            [
+              receiptId,
+              failure.requestOutcome === 'unknown' ? 'outcome_unknown' : 'response_recorded',
+              failure.requestOutcome === 'unknown' ? 'AI_PROVIDER_OUTCOME_UNKNOWN' : safeCode,
+            ],
+          )
+          providerUsage = {
+            inputTokens: usageInputTokens,
+            outputTokens: usageOutputTokens,
+            outputCharacters: usageOutputCharacters,
+            actualCostMinor: usageActualCostMinor,
+          }
+          // Bir grup düşerse TÜM run düşer; kısmi sonuç kaydedilmez.
+          await finalize(
+            failure.requestOutcome === 'unknown' ? 'outcome_unknown' : 'failed',
+            safeCode,
+            null,
+            null,
+          )
+          return this.getRun(actor, caseId, runId)
+        } finally {
+          clearTimeout(timeout)
         }
-        await pool.query(
-          `UPDATE labor_allocation_provider_receipts
-              SET status='response_recorded',result_kind='success',
-                  output_characters=$2,input_tokens=$3,output_tokens=$4,
-                  actual_cost_minor=$5,response_received_at=now()
-            WHERE id=$1`,
-          [
-            receiptId, response.usage.outputCharacters,
-            response.usage.inputTokens, response.usage.outputTokens, response.usage.actualCostMinor,
-          ],
+
+        // Her grup domain doğrulamasından AYRI geçer.
+        const chunkValidation = validateLaborAllocationSuggestion(
+          chunkOutput,
+          chunkLines,
+          chunkOutbound.missingEvidenceCodes,
+          // Baseline ve geçmiş eşlemeleri global sıradadır; grup yerel sırasına
+          // çevrilir ki doğrulama doğru satırla karşılaştırsın.
+          new Map([...matched]
+            .filter(([ordinal]) => ordinal >= chunk.startOrdinal
+              && ordinal < chunk.startOrdinal + chunk.lineCount)
+            .map(([ordinal, value]) => [ordinal - chunk.startOrdinal + 1, value])),
+          new Map([...history.byOrdinal]
+            .filter(([ordinal]) => ordinal >= chunk.startOrdinal
+              && ordinal < chunk.startOrdinal + chunk.lineCount)
+            .map(([ordinal, entry]) => [ordinal - chunk.startOrdinal + 1, entry.operationTypes])),
         )
-      } catch (error) {
-        const failure = error instanceof LaborAllocationProviderExecutionError
-          ? error
-          : new LaborAllocationProviderExecutionError('unknown', 'unknown', 'AI_PROVIDER_FAILED')
-        const safeCode = failure.safeDiagnosticCode ?? 'AI_PROVIDER_FAILED'
-        await pool.query(
-          `UPDATE labor_allocation_provider_receipts
-              SET status=$2,result_kind='failure',safe_error_code=$3,
-                  response_received_at=CASE WHEN $2='response_recorded' THEN now() ELSE NULL END,
-                  finalized_at=CASE WHEN $2='outcome_unknown' THEN now() ELSE NULL END
-            WHERE id=$1`,
-          [
-            receiptId,
-            failure.requestOutcome === 'unknown' ? 'outcome_unknown' : 'response_recorded',
-            failure.requestOutcome === 'unknown' ? 'AI_PROVIDER_OUTCOME_UNKNOWN' : safeCode,
-          ],
-        )
-        await finalize(
-          failure.requestOutcome === 'unknown' ? 'outcome_unknown' : 'failed',
-          safeCode,
-          null,
-          null,
-        )
-        return this.getRun(actor, caseId, runId)
-      } finally {
-        clearTimeout(timeout)
+        if (!chunkValidation.allowed) {
+          providerUsage = {
+            inputTokens: usageInputTokens,
+            outputTokens: usageOutputTokens,
+            outputCharacters: usageOutputCharacters,
+            actualCostMinor: usageActualCostMinor,
+          }
+          await finalize('failed', chunkValidation.code, null, null)
+          return this.getRun(actor, caseId, runId)
+        }
+        chunkResults.push(chunkValidation.suggestion.lines)
       }
 
-      // Domain doğrulamasından geçmeden HİÇBİR satır kaydedilmez.
-      const validation = validateLaborAllocationSuggestion(
-        output,
-        sheet.lines,
-        outbound.missingEvidenceCodes,
-        matched,
-        new Map([...history.byOrdinal].map(([ordinal, entry]) => [ordinal, entry.operationTypes])),
-      )
-      if (!validation.allowed) {
-        await finalize('failed', validation.code, null, null)
+      providerUsage = {
+        inputTokens: usageInputTokens,
+        outputTokens: usageOutputTokens,
+        outputCharacters: usageOutputCharacters,
+        actualCostMinor: usageActualCostMinor,
+      }
+
+      // Sunucuda deterministik birleştirme; eksik/tekrarlı satırda run düşer.
+      const mergeResult = mergeLaborAllocationChunks(chunks, chunkResults, sheet.lines.length)
+      if (!mergeResult.merged) {
+        await finalize('failed', `AI_OUTPUT_${mergeResult.code}`, null, null)
         return this.getRun(actor, caseId, runId)
       }
+      const validation = { suggestion: { lines: mergeResult.lines } }
 
       let controlRequiredCount = 0
       for (const line of validation.suggestion.lines) {
@@ -905,9 +1020,12 @@ export function createLaborAllocationStore(
         )
       }
       await finalize('review_required', null, validation.suggestion.lines.length, controlRequiredCount)
+      // Chunking'de run başına birden çok makbuz vardır; başarıyla yanıt veren
+      // TÜM alt çağrılar kesinleştirilir.
       await pool.query(
-        "UPDATE labor_allocation_provider_receipts SET status='finalized',finalized_at=now() WHERE id=$1",
-        [receiptId],
+        `UPDATE labor_allocation_provider_receipts SET status='finalized',finalized_at=now()
+          WHERE run_id=$1 AND status='response_recorded'`,
+        [runId],
       )
       return this.getRun(actor, caseId, runId)
     },
