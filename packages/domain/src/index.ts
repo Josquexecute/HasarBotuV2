@@ -574,6 +574,21 @@ export {
   type LaborRepairReplaceOpinion,
 } from './labor-allocation-ai.js'
 export {
+  LABOR_ALLOCATION_APPLICATION_STATUSES,
+  LABOR_ALLOCATION_APPLY_SCHEMA_VERSION,
+  deriveApprovedHistory,
+  mergeAppliedLinesIntoSheet,
+  validateLaborAllocationApply,
+  type LaborAllocationAppliedLine,
+  type LaborAllocationAppliedLineInput,
+  type LaborAllocationApplicationStatus,
+  type LaborAllocationApplyRejection,
+  type LaborAllocationApplyValidation,
+  type LaborAllocationApprovedHistoryEntry,
+  type LaborAllocationApprovedRecord,
+  type LaborAllocationSuggestedLine,
+} from './labor-allocation-apply.js'
+export {
   LABOR_BASELINE_COMPARISON_VERSION,
   LABOR_BASELINE_MATCH_VERSION,
   LABOR_BASELINE_PART_RATIO_TOLERANCE,

@@ -466,7 +466,11 @@ export function CaseDetailPage() {
                   Föy kaydedildiğinde AI dağıtım modülü yeniden kurulur: eski
                   öneri ve kaynak föy sürümü stale kalmaz.
                 */}
-                <LaborAllocationAiModule key={laborSheetEpoch} caseId={item.caseId} />
+                <LaborAllocationAiModule
+                  key={laborSheetEpoch}
+                  caseId={item.caseId}
+                  onSheetApplied={() => setLaborSheetEpoch((current) => current + 1)}
+                />
               </div>
             )
             : <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />

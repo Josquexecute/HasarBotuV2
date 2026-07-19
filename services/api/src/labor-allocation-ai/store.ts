@@ -1,9 +1,14 @@
 import type pg from 'pg'
 import {
+  laborAllocationApplicationsResponseSchema,
   laborAllocationApplyPreviewResponseSchema,
+  laborAllocationApplyResponseSchema,
   laborAllocationRunSchema,
   laborAllocationWorkspaceResponseSchema,
+  type LaborAllocationApplicationsResponse,
   type LaborAllocationApplyPreviewResponse,
+  type LaborAllocationApplyRequest,
+  type LaborAllocationApplyResponse,
   type LaborAllocationRunDto,
   type LaborAllocationWorkspaceResponse,
 } from '@hasarbotu/contracts'
@@ -11,6 +16,7 @@ import {
   LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION,
   LABOR_ALLOCATION_PROMPT_TEMPLATE_VERSION,
   LABOR_ALLOCATION_RULE_VERSION,
+  LABOR_ALLOCATION_APPLY_SCHEMA_VERSION,
   LABOR_BASELINE_COMPARISON_VERSION,
   LABOR_BASELINE_MATCH_VERSION,
   LABOR_ECONOMIC_BUCKETS,
@@ -20,15 +26,24 @@ import {
   buildLaborAllocationEvidenceHash,
   buildLaborAllocationOutboundContext,
   buildLaborAllocationPlanHash,
+  deriveApprovedHistory,
+  mergeAppliedLinesIntoSheet,
+  validateLaborAllocationApply,
   validateLaborAllocationSuggestion,
+  validateLaborSheetItems,
+  type LaborAllocationApprovedRecord,
   type LaborAllocationEvidenceLine,
   type LaborAllocationExpertBaseline,
-  type LaborAllocationHistoryEntry,
+  type LaborAllocationSuggestedLine,
   type LaborAllocationPlanContext,
   type NormalizedLaborItem,
   type OutboundVehicleProfile,
 } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
+import { createAuditService } from '../audit/service.js'
+import { createLaborSheetVersion } from '../labor/sheet-version.js'
+import { loadSheet as loadLaborSheetDto } from '../labor/store.js'
+import type { Queryable } from '../db/executor.js'
 import {
   LaborAllocationProviderExecutionError,
   type LaborAllocationProviderRegistry,
@@ -51,6 +66,10 @@ export type LaborAllocationErrorCode =
   | 'RUN_STALE'
   | 'LINE_SELECTION_INVALID'
   | 'EGRESS_CONFIRMATION_REQUIRED'
+  // Paket 58: uygulama yolu.
+  | 'RUN_ALREADY_APPLIED'
+  | 'APPLY_LINES_INVALID'
+  | 'IDEMPOTENCY_CONFLICT'
 
 export class LaborAllocationError extends Error {
   constructor(readonly code: LaborAllocationErrorCode, readonly status: number) {
@@ -62,6 +81,8 @@ export class LaborAllocationError extends Error {
 interface Actor {
   readonly organizationId: string
   readonly userId: string
+  /** Audit kaydı için istek kimliği; yalnız yazma yollarında gerekir. */
+  readonly requestId?: string
 }
 
 function safeNumber(value: unknown): number {
@@ -76,7 +97,7 @@ interface SheetSnapshot {
 }
 
 async function loadCase(
-  pool: pg.Pool,
+  pool: Queryable,
   organizationId: string,
   caseId: string,
 ): Promise<{ caseType: 'traffic' | 'casco'; version: number; closed: boolean }> {
@@ -95,7 +116,7 @@ async function loadCase(
 }
 
 async function loadSheet(
-  pool: pg.Pool,
+  pool: Queryable,
   organizationId: string,
   caseId: string,
 ): Promise<SheetSnapshot | null> {
@@ -181,6 +202,82 @@ async function loadExpertBaseline(
       damageRegion: item.damage_region === null ? null : String(item.damage_region),
     })),
   }
+}
+
+/** Uygulama kaydını satır snapshot'larıyla birlikte okur. */
+async function readApplication(
+  executor: Queryable,
+  organizationId: string,
+  caseId: string,
+  applicationId: string,
+): Promise<LaborAllocationApplyResponse> {
+  const row = await executor.query(
+    `SELECT a.id::text,a.case_id::text,a.run_id::text,a.apply_schema_version,a.status,
+            a.source_sheet_version,a.target_sheet_version,a.selected_line_count,
+            a.rejected_line_count,a.modified_line_count,a.control_required_line_count,
+            a.created_at,a.completed_at,u.display_name
+       FROM labor_allocation_applications a
+       JOIN users u ON u.id=a.applied_by_user_id
+      WHERE a.organization_id=$1 AND a.case_id=$2 AND a.id=$3`,
+    [organizationId, caseId, applicationId],
+  )
+  const application = row.rows[0] as Record<string, unknown> | undefined
+  if (application === undefined) throw new LaborAllocationError('RUN_NOT_FOUND', 404)
+  const lines = await executor.query(
+    `SELECT line_ordinal,suggestion_line_ordinal,target_line_ordinal,
+            suggested_description,suggested_action,
+            suggested_part_amount_minor::text AS suggested_part,
+            suggested_labor_amount_minor::text AS suggested_labor,
+            suggested_operation_types,applied_description,applied_action,
+            applied_part_amount_minor::text AS applied_part,
+            applied_labor_amount_minor::text AS applied_labor,
+            modified,control_required
+       FROM labor_allocation_applied_lines
+      WHERE organization_id=$1 AND application_id=$2
+      ORDER BY line_ordinal`,
+    [organizationId, applicationId],
+  )
+  const sheet = await loadLaborSheetDto(executor, organizationId, caseId)
+  if (sheet === undefined) throw new LaborAllocationError('LABOR_SHEET_NOT_FOUND', 404)
+  return laborAllocationApplyResponseSchema.parse({
+    application: {
+      id: String(application.id),
+      caseId: String(application.case_id),
+      runId: String(application.run_id),
+      applySchemaVersion: LABOR_ALLOCATION_APPLY_SCHEMA_VERSION,
+      status: String(application.status),
+      sourceSheetVersion: safeNumber(application.source_sheet_version),
+      targetSheetVersion: application.target_sheet_version === null
+        ? null
+        : safeNumber(application.target_sheet_version),
+      selectedLineCount: safeNumber(application.selected_line_count),
+      rejectedLineCount: safeNumber(application.rejected_line_count),
+      modifiedLineCount: safeNumber(application.modified_line_count),
+      controlRequiredLineCount: safeNumber(application.control_required_line_count),
+      appliedByDisplayName: String(application.display_name),
+      createdAt: new Date(String(application.created_at)).toISOString(),
+      completedAt: application.completed_at === null
+        ? null
+        : new Date(String(application.completed_at)).toISOString(),
+      lines: (lines.rows as Record<string, unknown>[]).map((line) => ({
+        lineOrdinal: safeNumber(line.line_ordinal),
+        suggestionLineOrdinal: safeNumber(line.suggestion_line_ordinal),
+        targetLineOrdinal: safeNumber(line.target_line_ordinal),
+        suggestedDescription: String(line.suggested_description),
+        suggestedAction: String(line.suggested_action),
+        suggestedPartAmountMinor: safeNumber(line.suggested_part),
+        suggestedLaborAmountMinor: safeNumber(line.suggested_labor),
+        suggestedOperationTypes: (line.suggested_operation_types ?? []) as never,
+        appliedDescription: String(line.applied_description),
+        appliedAction: String(line.applied_action),
+        appliedPartAmountMinor: safeNumber(line.applied_part),
+        appliedLaborAmountMinor: safeNumber(line.applied_labor),
+        modified: Boolean(line.modified),
+        controlRequired: Boolean(line.control_required),
+      })),
+    },
+    sheet,
+  })
 }
 
 interface ProviderPolicy {
@@ -389,6 +486,7 @@ export function createLaborAllocationStore(
   providerId = 'deterministic-success',
 ) {
   const adapter = () => registry.get(providerId)
+  const audit = createAuditService()
 
   async function budgetFor(organizationId: string, inputCharacters: number) {
     const policy = await loadPolicy(pool, organizationId)
@@ -475,21 +573,53 @@ export function createLaborAllocationStore(
         [actor.organizationId],
       )
       /*
-       * Paket 57 provenance düzeltmesi.
+       * Paket 58: onaylı geçmiş artık GERÇEK provenance'tan beslenir.
        *
-       * Bu sorgu daha önce `labor_allocation_line_suggestions` üzerinden
-       * okuyordu; yani yalnız `control_required=false` işaretlenmiş HAM AI
-       * çıktısını "kullanıcı onaylı geçmiş" diye geri besliyordu. Kimse o
-       * satırları onaylamamıştı ve bu, modelin kendi çıktısını kanıt olarak
-       * görmesine yol açan bir kendi kendini pekiştirme döngüsüydü.
+       * Yalnız `completed` uygulama kayıtları okunur: ham öneri, önizleme ve
+       * reddedilen satırlar kanıt değildir. Kullanıcı öneriyi değiştirerek
+       * uyguladıysa öğrenme örneği UYGULANAN değerdir, AI'nin ilk önerisi
+       * değil — bu yüzden `applied_*` sütunları okunur.
        *
-       * Dağıtım önerilerinin föye uygulandığını gösteren bir bağ şemada
-       * bulunmadığı için (Paket 54 bilinçli olarak `applied: false` bıraktı)
-       * bu kanalın gerçek bir onaylı kaynağı henüz YOKTUR. Uydurmak yerine
-       * boş bırakılır: `EVIDENCE_MISSING_APPROVED_HISTORY` dürüst biçimde
-       * üretilmeye devam eder ve kanal gerçek onay kaydı eklendiğinde açılır.
+       * Organization sınırı sorguda uygulanır; mevcut run domain tarafında
+       * ayrıca dışlanır (kendi çıktısı kendi girdisine geçmiş olamaz).
        */
-      const approvedHistory: readonly LaborAllocationHistoryEntry[] = []
+      const approvedRows = await pool.query(
+        `SELECT a.run_id::text AS run_id,l.applied_description AS description,
+                l.applied_action AS action,
+                l.applied_part_amount_minor::text AS part,
+                l.applied_labor_amount_minor::text AS labor,
+                l.suggested_operation_types AS operation_types
+           FROM labor_allocation_applied_lines l
+           JOIN labor_allocation_applications a
+             ON a.id=l.application_id AND a.organization_id=l.organization_id
+          WHERE l.organization_id=$1 AND a.status='completed'
+          ORDER BY a.completed_at DESC LIMIT 200`,
+        [actor.organizationId],
+      )
+      const approvedRecords: readonly LaborAllocationApprovedRecord[] =
+        (approvedRows.rows as Record<string, unknown>[]).map((row) => ({
+          runId: String(row.run_id),
+          description: String(row.description),
+          action: String(row.action),
+          partAmountMinor: safeNumber(row.part),
+          laborAmountMinor: safeNumber(row.labor),
+          partCode: null,
+          damageRegion: null,
+          operationTypes: (row.operation_types ?? []) as never,
+        }))
+      const history = deriveApprovedHistory(
+        sheet.lines.map((line, index) => ({
+          ordinal: index + 1,
+          description: line.description,
+          action: line.action,
+          partAmountMinor: line.partAmountMinor,
+          laborAmountMinor: line.laborAmountMinor,
+          partCode: line.partCode ?? null,
+          damageRegion: line.damageRegion ?? null,
+        })),
+        approvedRecords,
+        null,
+      )
 
       // Paket 57: eksper baseline = aynı dosyanın ÖNCEKİ onaylı föy sürümü.
       // Föy sürümleri yalnız açık kullanıcı onayıyla oluşur ve immutable'dır;
@@ -535,7 +665,12 @@ export function createLaborAllocationStore(
           action: String(row.action),
           usageCount: safeNumber(row.usage_count),
         })),
-        approvedHistory,
+        approvedHistory: history.entries.map((entry) => ({
+          description: entry.description,
+          action: entry.action,
+          operationTypes: entry.operationTypes,
+        })),
+        approvedHistoryComplete: history.complete,
         expertBaseline,
         providerId: provider?.providerId ?? 'deterministic-success',
         providerVersion: provider?.providerVersion ?? '1.0.0',
@@ -732,6 +867,7 @@ export function createLaborAllocationStore(
         sheet.lines,
         outbound.missingEvidenceCodes,
         matched,
+        new Map([...history.byOrdinal].map(([ordinal, entry]) => [ordinal, entry.operationTypes])),
       )
       if (!validation.allowed) {
         await finalize('failed', validation.code, null, null)
@@ -840,6 +976,228 @@ export function createLaborAllocationStore(
         applied: false,
         requiresHumanReview: true,
       })
+    },
+
+    /**
+     * Paket 58 — seçilen satırları TEK transaction içinde föye uygular.
+     *
+     * Yeni föy sürümü ve provenance kaydı birlikte kesinleşir; herhangi bir
+     * adım başarısızsa hiçbiri uygulanmış sayılmaz. AI önerisi bu ucun dışında
+     * föyü değiştiremez.
+     */
+    async apply(
+      actor: Actor,
+      caseId: string,
+      runId: string,
+      input: LaborAllocationApplyRequest,
+      idempotencyKey: string,
+    ): Promise<LaborAllocationApplyResponse> {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+
+        // Aynı anahtar aynı sonucu döndürür; ikinci uygulama üretmez.
+        const replay = await client.query(
+          `SELECT id::text,run_id::text FROM labor_allocation_applications
+            WHERE organization_id=$1 AND idempotency_key=$2`,
+          [actor.organizationId, idempotencyKey],
+        )
+        const replayRow = replay.rows[0] as Record<string, unknown> | undefined
+        if (replayRow !== undefined) {
+          if (String(replayRow.run_id) !== runId) {
+            await client.query('ROLLBACK')
+            throw new LaborAllocationError('IDEMPOTENCY_CONFLICT', 409)
+          }
+          const response = await readApplication(client, actor.organizationId, caseId, String(replayRow.id))
+          await client.query('COMMIT')
+          return response
+        }
+
+        const caseRow = await loadCase(client, actor.organizationId, caseId)
+        if (caseRow.closed) throw new LaborAllocationError('CASE_CLOSED', 409)
+
+        // Föyü kilitle: eşzamanlı revizyon sürüm zincirini bozamaz.
+        const sheetRow = await client.query(
+          `SELECT id::text,version,current_version_id::text
+             FROM labor_sheets WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`,
+          [actor.organizationId, caseId],
+        )
+        const sheetHeader = sheetRow.rows[0] as Record<string, unknown> | undefined
+        if (sheetHeader === undefined) throw new LaborAllocationError('LABOR_SHEET_NOT_FOUND', 404)
+        const sheet = await loadSheet(client, actor.organizationId, caseId)
+        if (sheet === null) throw new LaborAllocationError('LABOR_SHEET_NOT_FOUND', 404)
+        if (sheet.sheetVersion !== input.expectedSheetVersion) {
+          throw new LaborAllocationError('SHEET_VERSION_STALE', 409)
+        }
+
+        const run = await client.query(
+          `SELECT status,source_sheet_id::text,source_sheet_version
+             FROM labor_allocation_runs
+            WHERE organization_id=$1 AND case_id=$2 AND id=$3`,
+          [actor.organizationId, caseId, runId],
+        )
+        const runRow = run.rows[0] as Record<string, unknown> | undefined
+        if (runRow === undefined) throw new LaborAllocationError('RUN_NOT_FOUND', 404)
+        if (runRow.status !== 'review_required') throw new LaborAllocationError('RUN_NOT_REVIEWABLE', 409)
+        if (safeNumber(runRow.source_sheet_version) !== sheet.sheetVersion) {
+          throw new LaborAllocationError('RUN_STALE', 409)
+        }
+
+        // Aynı run ikinci kez uygulanamaz.
+        const alreadyApplied = await client.query(
+          `SELECT 1 FROM labor_allocation_applications
+            WHERE organization_id=$1 AND run_id=$2 AND status='completed'`,
+          [actor.organizationId, runId],
+        )
+        if (alreadyApplied.rowCount !== null && alreadyApplied.rowCount > 0) {
+          throw new LaborAllocationError('RUN_ALREADY_APPLIED', 409)
+        }
+
+        const suggestionRows = await client.query(
+          `SELECT line_ordinal,source_description,source_action,
+                  source_part_amount_minor::text AS part,source_labor_amount_minor::text AS labor,
+                  allocations,control_required
+             FROM labor_allocation_line_suggestions
+            WHERE organization_id=$1 AND run_id=$2
+            ORDER BY line_ordinal`,
+          [actor.organizationId, runId],
+        )
+        const suggestedLines: LaborAllocationSuggestedLine[] =
+          (suggestionRows.rows as Record<string, unknown>[]).map((line) => ({
+            lineOrdinal: safeNumber(line.line_ordinal),
+            description: String(line.source_description),
+            action: String(line.source_action),
+            partAmountMinor: safeNumber(line.part),
+            laborAmountMinor: safeNumber(line.labor),
+            operationTypes: [...new Set(
+              ((line.allocations ?? []) as { operationType: string }[])
+                .map((allocation) => allocation.operationType),
+            )] as LaborAllocationSuggestedLine['operationTypes'],
+            controlRequired: Boolean(line.control_required),
+          }))
+
+        const validation = validateLaborAllocationApply(suggestedLines, input.lines)
+        if (!validation.allowed) throw new LaborAllocationError('APPLY_LINES_INVALID', 400)
+
+        const applicationId = uuidv7()
+        await client.query(
+          `INSERT INTO labor_allocation_applications
+             (id,organization_id,case_id,run_id,source_sheet_id,source_sheet_version,
+              apply_schema_version,status,selected_line_count,rejected_line_count,
+              modified_line_count,control_required_line_count,idempotency_key,applied_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'running',$8,$9,$10,$11,$12,$13)`,
+          [
+            applicationId, actor.organizationId, caseId, runId,
+            String(runRow.source_sheet_id), sheet.sheetVersion,
+            LABOR_ALLOCATION_APPLY_SCHEMA_VERSION,
+            validation.lines.length,
+            suggestedLines.length - validation.lines.length,
+            validation.modifiedCount,
+            validation.controlRequiredCount,
+            idempotencyKey, actor.userId,
+          ],
+        )
+
+        // Seçilmeyen satırlar föyde olduğu gibi korunur.
+        const mergedItems = mergeAppliedLinesIntoSheet(sheet.lines, validation.lines)
+        const itemValidation = validateLaborSheetItems(mergedItems)
+        if (!itemValidation.valid) throw new LaborAllocationError('APPLY_LINES_INVALID', 400)
+
+        const nextVersion = sheet.sheetVersion + 1
+        const targetVersionId = await createLaborSheetVersion(client, {
+          organizationId: actor.organizationId,
+          actorUserId: actor.userId,
+          caseId,
+          sheetId: String(sheetHeader.id),
+          sheetVersion: nextVersion,
+          previousVersionId: String(sheetHeader.current_version_id),
+          sourceType: 'ai_allocation_applied',
+          laborAiSuggestionRunId: null,
+          revisionReason: input.reason,
+          items: itemValidation.items,
+        })
+        await client.query(
+          'UPDATE labor_sheets SET current_version_id=$1,version=$2,updated_at=now() WHERE id=$3',
+          [targetVersionId, nextVersion, String(sheetHeader.id)],
+        )
+
+        for (const line of validation.lines) {
+          await client.query(
+            `INSERT INTO labor_allocation_applied_lines
+               (id,organization_id,application_id,line_ordinal,suggestion_line_ordinal,target_line_ordinal,
+                suggested_description,suggested_action,suggested_part_amount_minor,
+                suggested_labor_amount_minor,suggested_operation_types,
+                applied_description,applied_action,applied_part_amount_minor,
+                applied_labor_amount_minor,modified,control_required)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+            [
+              uuidv7(), actor.organizationId, applicationId, line.lineOrdinal,
+              line.suggested.lineOrdinal, line.lineOrdinal,
+              line.suggested.description, line.suggested.action,
+              line.suggested.partAmountMinor, line.suggested.laborAmountMinor,
+              line.suggested.operationTypes,
+              line.applied.description.trim(), line.applied.action.trim(),
+              line.applied.partAmountMinor, line.applied.laborAmountMinor,
+              line.modified, line.suggested.controlRequired,
+            ],
+          )
+        }
+
+        await client.query(
+          `UPDATE labor_allocation_applications
+              SET status='completed',target_sheet_version_id=$2,target_sheet_version=$3,
+                  completed_at=now()
+            WHERE id=$1`,
+          [applicationId, targetVersionId, nextVersion],
+        )
+
+        // Audit: ham kalem açıklaması ve tutar YAZILMAZ; yalnız sayımlar.
+        await audit.record(client, {
+          organizationId: actor.organizationId,
+          actorUserId: actor.userId,
+          requestId: actor.requestId ?? applicationId,
+          action: 'labor_allocation.applied',
+          entityType: 'labor_allocation_application',
+          entityId: applicationId,
+          details: {
+            caseId,
+            runId,
+            sourceSheetVersion: sheet.sheetVersion,
+            targetSheetVersion: nextVersion,
+            selectedLineCount: validation.lines.length,
+            rejectedLineCount: suggestedLines.length - validation.lines.length,
+            modifiedLineCount: validation.modifiedCount,
+            controlRequiredLineCount: validation.controlRequiredCount,
+          },
+        })
+
+        const response = await readApplication(client, actor.organizationId, caseId, applicationId)
+        await client.query('COMMIT')
+        return response
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined)
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
+    async listApplications(
+      actor: Actor,
+      caseId: string,
+    ): Promise<LaborAllocationApplicationsResponse> {
+      await loadCase(pool, actor.organizationId, caseId)
+      const rows = await pool.query(
+        `SELECT id::text FROM labor_allocation_applications
+          WHERE organization_id=$1 AND case_id=$2 ORDER BY created_at DESC LIMIT 200`,
+        [actor.organizationId, caseId],
+      )
+      const applications = []
+      for (const row of rows.rows as Record<string, unknown>[]) {
+        const detail = await readApplication(pool, actor.organizationId, caseId, String(row.id))
+        applications.push(detail.application)
+      }
+      return laborAllocationApplicationsResponseSchema.parse({ caseId, applications })
     },
   }
 }

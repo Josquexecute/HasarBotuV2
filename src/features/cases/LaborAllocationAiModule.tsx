@@ -4,6 +4,7 @@ import { LoadingState } from '../../components/StateViews'
 import {
   LaborAllocationClientError,
   createHttpLaborAllocationAdapter,
+  type LaborAllocationApplicationRecord,
   type LaborAllocationApplyPreviewRecord,
   type LaborAllocationDataPort,
   type LaborAllocationLineRecord,
@@ -40,9 +41,11 @@ function formatMinor(value: number): string {
   return `${(value / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`
 }
 
-export function LaborAllocationAiModule({ caseId, port }: {
+export function LaborAllocationAiModule({ caseId, port, onSheetApplied }: {
   readonly caseId: string
   readonly port?: LaborAllocationDataPort
+  /** Föy uygulandığında tetiklenir; üst modül yeni sürüme geçer. */
+  readonly onSheetApplied?: () => void
 }) {
   const adapter = useMemo(() => port ?? createHttpLaborAllocationAdapter(), [port])
   const [workspace, setWorkspace] = useState<LaborAllocationWorkspaceRecord | null>(null)
@@ -54,12 +57,24 @@ export function LaborAllocationAiModule({ caseId, port }: {
   const [onlyControlRequired, setOnlyControlRequired] = useState(false)
   const [preview, setPreview] = useState<LaborAllocationApplyPreviewRecord | null>(null)
   const [busy, setBusy] = useState(false)
+  /**
+   * Paket 58 uygulama durumu. `draft` kullanıcının düzenlediği nihai değerdir;
+   * AI önerisi ayrı durur ve yan yana gösterilir.
+   */
+  const [draft, setDraft] = useState<Record<number, { part: string; labor: string }>>({})
+  const [reason, setReason] = useState('')
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [applications, setApplications] = useState<readonly LaborAllocationApplicationRecord[]>([])
 
   const load = useCallback(async () => {
     setStatus('loading')
     try {
-      const result = await adapter.workspace(caseId)
+      const [result, history] = await Promise.all([
+        adapter.workspace(caseId),
+        adapter.listApplications(caseId),
+      ])
       setWorkspace(result)
+      setApplications(history)
       const latest = result.runs.find((item) => item.status === 'review_required') ?? null
       setRun(latest)
       setStatus('ok')
@@ -120,6 +135,80 @@ export function LaborAllocationAiModule({ caseId, port }: {
     setSelected((current) => current.includes(ordinal)
       ? current.filter((item) => item !== ordinal)
       : [...current, ordinal].sort((left, right) => left - right))
+  }
+
+  /** Düzenlenmemiş satır AI'nin önerdiği kaynak tutarı taşır. */
+  const draftValue = (line: LaborAllocationLineRecord, field: 'part' | 'labor'): string => {
+    const entry = draft[line.lineOrdinal]
+    if (entry !== undefined) return entry[field]
+    const minor = field === 'part' ? line.sourcePartAmountMinor : line.sourceLaborAmountMinor
+    return minor === 0 ? '' : String(minor / 100)
+  }
+
+  const parseMinor = (value: string): number | null => {
+    const trimmed = value.trim()
+    if (trimmed === '') return 0
+    const parsed = Number(trimmed.replace(',', '.'))
+    if (!Number.isFinite(parsed) || parsed < 0) return null
+    return Math.round(parsed * 100)
+  }
+
+  const appliedLines = useMemo(() => selected.map((ordinal) => {
+    const line = lines.find((item) => item.lineOrdinal === ordinal)
+    if (line === undefined) return null
+    const entry = draft[ordinal]
+    const part = entry === undefined
+      ? line.sourcePartAmountMinor
+      : parseMinor(entry.part)
+    const labor = entry === undefined
+      ? line.sourceLaborAmountMinor
+      : parseMinor(entry.labor)
+    if (part === null || labor === null) return null
+    return {
+      lineOrdinal: ordinal,
+      description: line.sourceDescription,
+      action: line.sourceAction,
+      partAmountMinor: part,
+      laborAmountMinor: labor,
+      modified: part !== line.sourcePartAmountMinor || labor !== line.sourceLaborAmountMinor,
+    }
+  }).filter((item) => item !== null), [selected, lines, draft])
+
+  const applyBlocked = appliedLines.length !== selected.length
+    || appliedLines.some((line) => line.partAmountMinor + line.laborAmountMinor <= 0)
+    || reason.trim() === ''
+
+  const applyNow = async () => {
+    if (run === null || workspace?.sourceSheetVersion === null || workspace === null) return
+    setBusy(true)
+    try {
+      await adapter.apply(caseId, run.id, {
+        expectedSheetVersion: workspace.sourceSheetVersion as number,
+        reason: reason.trim(),
+        confirmed: true,
+        lines: appliedLines.map((line) => ({
+          lineOrdinal: line.lineOrdinal,
+          description: line.description,
+          action: line.action,
+          partAmountMinor: line.partAmountMinor,
+          laborAmountMinor: line.laborAmountMinor,
+        })),
+      })
+      setConfirmOpen(false)
+      setErrorKind(null)
+      setSelected([])
+      setDraft({})
+      setReason('')
+      setPreview(null)
+      // Föy değişti: çalışma alanı ve provenance yeniden okunur, üst modül
+      // yeni sürüme geçer.
+      await load()
+      onSheetApplied?.()
+    } catch (error) {
+      setErrorKind(error instanceof LaborAllocationClientError ? error.kind : 'unavailable')
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (status === 'loading') return <LoadingState label="AI dağıtım çalışma alanı yükleniyor" />
@@ -265,6 +354,53 @@ export function LaborAllocationAiModule({ caseId, port }: {
                     Paket 57: eksper baseline karşılaştırması. Baseline otomatik
                     doğru sayılmaz; fark yalnız gösterilir, otomatik kabul yok.
                   */}
+                  {/*
+                    Paket 58: satır seçilince AI önerisi ile uygulanacak nihai
+                    değer YAN YANA gösterilir ve kullanıcı değeri düzenleyebilir.
+                  */}
+                  {selected.includes(line.lineOrdinal) && (
+                    <div className="allocation-apply-line">
+                      <span className="allocation-apply-line__suggested">
+                        AI önerisi: parça {formatMinor(line.sourcePartAmountMinor)}
+                        {' · '}işçilik {formatMinor(line.sourceLaborAmountMinor)}
+                      </span>
+                      <label className="allocation-apply-line__field">
+                        <span>Uygulanacak parça (₺)</span>
+                        <input
+                          aria-label={`Uygulanacak parça ${line.lineOrdinal}`}
+                          inputMode="decimal"
+                          value={draftValue(line, 'part')}
+                          onChange={(event) => setDraft((current) => ({
+                            ...current,
+                            [line.lineOrdinal]: {
+                              part: event.target.value,
+                              labor: draftValue(line, 'labor'),
+                            },
+                          }))}
+                        />
+                      </label>
+                      <label className="allocation-apply-line__field">
+                        <span>Uygulanacak işçilik (₺)</span>
+                        <input
+                          aria-label={`Uygulanacak işçilik ${line.lineOrdinal}`}
+                          inputMode="decimal"
+                          value={draftValue(line, 'labor')}
+                          onChange={(event) => setDraft((current) => ({
+                            ...current,
+                            [line.lineOrdinal]: {
+                              part: draftValue(line, 'part'),
+                              labor: event.target.value,
+                            },
+                          }))}
+                        />
+                      </label>
+                      {appliedLines.find((item) => item.lineOrdinal === line.lineOrdinal)?.modified && (
+                        <strong className="allocation-apply-line__modified">
+                          Kullanıcı tarafından değiştirildi
+                        </strong>
+                      )}
+                    </div>
+                  )}
                   {line.baseline !== null && (
                     <div
                       className={line.baseline.conflicts
@@ -331,7 +467,101 @@ export function LaborAllocationAiModule({ caseId, port }: {
               </div>
             )}
           </div>
+
+          {/* Paket 58: gerçek uygulama. Föyü değiştiren TEK yol budur. */}
+          <div className="allocation-panel__apply">
+            <label className="field allocation-panel__reason">
+              <span>Sürüm gerekçesi</span>
+              <input
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="AI dağıtımı incelendi ve onaylandı"
+              />
+            </label>
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={busy || selected.length === 0 || applyBlocked || run?.stale === true}
+              onClick={() => setConfirmOpen(true)}
+            >
+              Seçilenleri Föye Uygula
+            </button>
+            {appliedLines.filter((line) => line.modified).length > 0 && (
+              <span className="allocation-panel__count">
+                {appliedLines.filter((line) => line.modified).length} satır değiştirildi
+              </span>
+            )}
+          </div>
+
+          {confirmOpen && (
+            <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Uygulama onayı">
+              <div className="modal modal--small">
+                <header className="modal__header"><h2>AI Dağıtımını Föye Uygula</h2></header>
+                <div className="modal__body">
+                <p>
+                  Bu işlem yeni ve değiştirilemez bir işçilik föyü sürümü oluşturur.
+                  Uygulanan dağılım kalıcı olarak kaydedilir.
+                </p>
+                <dl className="allocation-confirm">
+                  <div><dt>Kaynak analiz</dt><dd>{run?.id}</dd></div>
+                  <div><dt>Kaynak föy sürümü</dt><dd>Sürüm {workspace.sourceSheetVersion}</dd></div>
+                  <div>
+                    <dt>Hedef föy sürümü</dt>
+                    <dd>Sürüm {(workspace.sourceSheetVersion ?? 0) + 1}</dd>
+                  </div>
+                  <div><dt>Uygulanacak satır</dt><dd>{appliedLines.length}</dd></div>
+                  <div>
+                    <dt>Değiştirilen satır</dt>
+                    <dd>{appliedLines.filter((line) => line.modified).length}</dd>
+                  </div>
+                  <div>
+                    <dt>Kontrol gerekli satır</dt>
+                    <dd>
+                      {appliedLines.filter((line) => (
+                        lines.find((item) => item.lineOrdinal === line.lineOrdinal)?.controlRequired === true
+                      )).length}
+                    </dd>
+                  </div>
+                </dl>
+                </div>
+                <footer className="modal__footer">
+                  <button className="button button--secondary" type="button" onClick={() => setConfirmOpen(false)}>
+                    Vazgeç
+                  </button>
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void applyNow()}
+                  >
+                    Onaylıyorum, Uygula
+                  </button>
+                </footer>
+              </div>
+            </div>
+          )}
         </>
+      )}
+
+      {applications.length > 0 && (
+        <details className="allocation-applications">
+          <summary>Uygulama geçmişi ({applications.length})</summary>
+          <ul>
+            {applications.map((application) => (
+              <li key={application.id}>
+                <strong>
+                  Sürüm {application.sourceSheetVersion} → {application.targetSheetVersion ?? '—'}
+                </strong>
+                <span>
+                  {application.selectedLineCount} uygulandı
+                  {' · '}{application.rejectedLineCount} reddedildi
+                  {' · '}{application.modifiedLineCount} değiştirildi
+                </span>
+                <small>{application.appliedByDisplayName}</small>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </section>
   )

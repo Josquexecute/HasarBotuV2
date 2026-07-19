@@ -788,6 +788,96 @@ button {
   font-size: 12px;
 }
 
+/* AI dağıtımının uygulanması (Paket 58). Öneri ile uygulanacak nihai değer
+   yan yana durur; değiştirilen satır açıkça işaretlenir. */
+.allocation-apply-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.allocation-apply-line__suggested {
+  color: var(--text-tertiary);
+}
+
+.allocation-apply-line__field {
+  display: flex;
+  min-width: 130px;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.allocation-apply-line__field span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.allocation-apply-line__modified {
+  color: var(--warning);
+}
+
+.allocation-panel__reason {
+  min-width: 240px;
+  flex: 1;
+}
+
+.allocation-confirm {
+  display: grid;
+  margin: 12px 0 0;
+  gap: 6px;
+}
+
+.allocation-confirm > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.allocation-confirm dt {
+  color: var(--text-secondary);
+}
+
+.allocation-confirm dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.allocation-applications {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.allocation-applications summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.allocation-applications ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.allocation-applications li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-block-start: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
 /* Eksper baseline karşılaştırması (Paket 57). Çelişki vurgulanır ama otomatik
    kabul yoktur; karar kullanıcıdadır. */
 .allocation-panel__baseline {

@@ -90,7 +90,7 @@ function workspace(runs: readonly LaborAllocationRunRecord[]): LaborAllocationWo
 }
 
 function stubPort(overrides: Partial<LaborAllocationDataPort> = {}) {
-  const calls = { analyze: 0, preview: [] as number[][] }
+  const calls = { analyze: 0, preview: [] as number[][], applied: 0 }
   const port: LaborAllocationDataPort = {
     workspace: async () => workspace([run([line(), line({
       lineOrdinal: 2,
@@ -117,6 +117,26 @@ function stubPort(overrides: Partial<LaborAllocationDataPort> = {}) {
         })),
       }
     },
+    apply: async () => {
+      calls.applied += 1
+      return {
+        id: 'application-1',
+        caseId: CASE_ID,
+        runId: 'run-1',
+        status: 'completed' as const,
+        sourceSheetVersion: 1,
+        targetSheetVersion: 2,
+        selectedLineCount: 1,
+        rejectedLineCount: 0,
+        modifiedLineCount: 0,
+        controlRequiredLineCount: 0,
+        lines: [],
+        appliedByDisplayName: 'P58 Yetkili',
+        createdAt: '2026-07-19T12:00:00.000Z',
+        completedAt: '2026-07-19T12:00:01.000Z',
+      }
+    },
+    listApplications: async () => [],
     ...overrides,
   }
   return { port, calls }
@@ -205,6 +225,70 @@ describe('AI işçilik dağıtımı paneli', () => {
     expect(screen.getByText(/hangisinin\s+doğru olduğu otomatik belirlenmez/)).toBeInTheDocument()
     // Çelişkili satır kontrol gerekli kalır; toplu seçim onu seçemez.
     expect(screen.getByRole('button', { name: /hariç tümünü seç/ })).toBeDisabled()
+  })
+
+  it('kontrol gerekli satırlar varsayılan olarak seçili gelmez', async () => {
+    const { port } = stubPort()
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    await screen.findByText('1. Ön tampon')
+    // Hiçbir satır otomatik seçilmez; uygulama düğmesi kapalıdır.
+    expect(screen.getByText('0 satır seçili')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Seçilenleri Föye Uygula/ })).toBeDisabled()
+    for (const box of screen.getAllByRole('checkbox')) expect(box).not.toBeChecked()
+  })
+
+  it('seçilen satırda AI önerisi ile uygulanacak değeri yan yana gösterir', async () => {
+    const { port } = stubPort()
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    await screen.findByText('1. Ön tampon')
+    await userEvent.click(screen.getAllByRole('checkbox')[1] as HTMLElement)
+    expect(screen.getByText(/AI önerisi: parça/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Uygulanacak parça 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Uygulanacak işçilik 1')).toBeInTheDocument()
+  })
+
+  it('kullanıcı değeri değiştirince satırı işaretler', async () => {
+    const { port } = stubPort()
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    await screen.findByText('1. Ön tampon')
+    await userEvent.click(screen.getAllByRole('checkbox')[1] as HTMLElement)
+    const field = screen.getByLabelText('Uygulanacak parça 1')
+    await userEvent.clear(field)
+    await userEvent.type(field, '500')
+    expect(await screen.findByText('Kullanıcı tarafından değiştirildi')).toBeInTheDocument()
+    expect(screen.getByText(/1 satır değiştirildi/)).toBeInTheDocument()
+  })
+
+  it('onay modalında kaynak run, kaynak ve hedef sürüm gösterilir', async () => {
+    const { port, calls } = stubPort()
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    await screen.findByText('1. Ön tampon')
+    await userEvent.click(screen.getAllByRole('checkbox')[1] as HTMLElement)
+    await userEvent.type(screen.getByLabelText('Sürüm gerekçesi'), 'AI dağıtımı onaylandı')
+    await userEvent.click(screen.getByRole('button', { name: /Seçilenleri Föye Uygula/ }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('run-1')
+    expect(dialog).toHaveTextContent('Sürüm 1')
+    expect(dialog).toHaveTextContent('Sürüm 2')
+    // Modal açılmak uygulama yapmaz; ayrıca açık onay gerekir.
+    expect(calls.applied).toBe(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Onaylıyorum, Uygula' }))
+    await waitFor(() => expect(calls.applied).toBe(1))
+  })
+
+  it('gerekçe olmadan uygulama yapılamaz', async () => {
+    const { port } = stubPort()
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+
+    await screen.findByText('1. Ön tampon')
+    await userEvent.click(screen.getAllByRole('checkbox')[1] as HTMLElement)
+    expect(screen.getByRole('button', { name: /Seçilenleri Föye Uygula/ })).toBeDisabled()
   })
 
   it('control_required filtresi yalnız kontrol gerekli satırları gösterir', async () => {

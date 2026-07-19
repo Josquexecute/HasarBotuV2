@@ -31,7 +31,7 @@ export interface LaborSheetVersionRecord {
   readonly totals: LaborSheetTotalsRecord
   readonly schemaVersion: 'labor-sheet/1.0.0'
   readonly currency: 'TRY'
-  readonly sourceType: 'user_entered' | 'ai_assisted' | 'manual_revision'
+  readonly sourceType: 'user_entered' | 'ai_assisted' | 'manual_revision' | 'ai_allocation_applied'
   readonly laborAiSuggestionRunId: string | null
   readonly revisionReason: string | null
   readonly createdByUserId: string

@@ -350,6 +350,9 @@ export {
 export {
   LaborAllocationClientError,
   createHttpLaborAllocationAdapter,
+  type LaborAllocationAppliedLineRecord,
+  type LaborAllocationApplicationRecord,
+  type LaborAllocationApplyInput,
   type LaborAllocationApplyPreviewRecord,
   type LaborAllocationDataPort,
   type LaborAllocationErrorKind,

@@ -192,7 +192,8 @@
                   "enum": [
                     "user_entered",
                     "ai_assisted",
-                    "manual_revision"
+                    "manual_revision",
+                    "ai_allocation_applied"
                   ]
                 },
                 "laborAiSuggestionRunId": {
@@ -408,7 +409,8 @@
                     "enum": [
                       "user_entered",
                       "ai_assisted",
-                      "manual_revision"
+                      "manual_revision",
+                      "ai_allocation_applied"
                     ]
                   },
                   "laborAiSuggestionRunId": {

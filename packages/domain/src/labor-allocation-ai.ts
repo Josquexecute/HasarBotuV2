@@ -182,6 +182,11 @@ export interface LaborAllocationPlanContext {
   readonly dictionary: readonly LaborAllocationDictionaryEntry[]
   readonly approvedHistory: readonly LaborAllocationHistoryEntry[]
   readonly expertBaseline: LaborAllocationExpertBaseline | null
+  /**
+   * Paket 58: onaylı geçmişin HER satır için belirsizlik olmadan eşleşip
+   * eşleşmediği. Yalnız tam eşleşmede kanıt "mevcut" sayılır.
+   */
+  readonly approvedHistoryComplete: boolean
   readonly providerId: string
   readonly providerVersion: string
   readonly modelId: string
@@ -308,7 +313,12 @@ export function detectMissingEvidence(
   if (partCodeMissing) codes.push('EVIDENCE_MISSING_PART_CODE')
   const damageRegionMissing = input.lines.some((line) => (line.damageRegion ?? null) === null)
   if (damageRegionMissing) codes.push('EVIDENCE_MISSING_DAMAGE_REGION')
-  if (input.approvedHistory.length === 0) codes.push('EVIDENCE_MISSING_APPROVED_HISTORY')
+  // Paket 58: onaylı geçmiş yalnız gerçekten föye uygulanmış kayıtlardan
+  // türetilir ve baseline ile aynı karşılıklı-tek eşleşme kuralına tabidir.
+  // Belirsiz geçmiş "var" sayılmaz.
+  if (input.approvedHistory.length === 0 || !input.approvedHistoryComplete) {
+    codes.push('EVIDENCE_MISSING_APPROVED_HISTORY')
+  }
   if (input.dictionary.length === 0) codes.push('EVIDENCE_MISSING_DICTIONARY_MATCH')
   // Paket 57: baseline'ın var olması yetmez; her satırın belirsizlik olmadan
   // eşleşmesi gerekir. Eşleşmeyen satır varken kodu kaldırmak, o satır için
@@ -602,6 +612,12 @@ export function validateLaborAllocationSuggestion(
    * hesaplanır; modelin kendi beyanına bırakılmaz.
    */
   baselineByOrdinal: ReadonlyMap<number, LaborAllocationEvidenceLine> = new Map(),
+  /**
+   * Paket 58: satır sırasına göre onaylanmış geçmiş operasyon türleri. Öneri
+   * geçmişten ayrışıyorsa çelişki kodu SUNUCUDA zorlanır; geçmiş otomatik
+   * doğru kabul edilmez, fark yalnız insana taşınır.
+   */
+  historyOperationTypesByOrdinal: ReadonlyMap<number, readonly LaborOperationType[]> = new Map(),
 ): LaborAllocationValidation {
   if (!isValidSuggestionShape(value)) return { allowed: false, code: 'AI_OUTPUT_SCHEMA_INVALID' }
   if (value.lines.length !== sheetLines.length) {
@@ -678,9 +694,17 @@ export function validateLaborAllocationSuggestion(
         laborLikeMinor: expectedTotals.repairTotalMinor,
       },
     )
-    const mergedConflicts = baselineComparison?.conflicts === true
-      ? [...new Set([...line.conflictCodes, 'CONFLICT_EXPERT_BASELINE_DISAGREEMENT' as const])]
-      : [...line.conflictCodes]
+    const conflictCodes = new Set<LaborAllocationConflictCode>(line.conflictCodes)
+    if (baselineComparison?.conflicts === true) {
+      conflictCodes.add('CONFLICT_EXPERT_BASELINE_DISAGREEMENT')
+    }
+    const historyTypes = historyOperationTypesByOrdinal.get(line.lineOrdinal)
+    if (historyTypes !== undefined) {
+      const signature = (types: readonly LaborOperationType[]) => [...new Set(types)].sort().join('|')
+      const proposed = signature(line.allocations.map((allocation) => allocation.operationType))
+      if (proposed !== signature(historyTypes)) conflictCodes.add('CONFLICT_HISTORY_DISAGREEMENT')
+    }
+    const mergedConflicts = [...conflictCodes]
 
     const candidate: LaborAllocationLineSuggestion = {
       lineOrdinal: line.lineOrdinal,

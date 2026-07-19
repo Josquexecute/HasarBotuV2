@@ -1167,3 +1167,23 @@ Kapsam dışı: otomatik belge çıkarımı, sigorta şirketi Excel kolonlarına
 - [ ] Gerçek Gemini manuel smoke'u: yerel anahtar hazır olduğunda çalıştır ve `responseJsonSchema` kabulü, satır kapsaması, gerçek `control_required` / doğrulama hata oranı sonuçlarını kaydet.
 
 Kapsam dışı: `EVIDENCE_MISSING_APPROVED_HISTORY` kanalının açılması (gerçek "onaylanmış dağıtım" kaydı gerekir), Excel yazımı, şablon profilleri, otomatik eksper onayı.
+
+## Paket 58 — Onaylı AI dağıtımını föye uygulama
+
+- [x] Föy sürümü oluşturmayı tek uygulamaya indir (`labor/sheet-version.ts`); revizyon ve AI uygulaması aynı yardımcıyı kullansın.
+- [x] Domain: apply doğrulaması, değiştirilmiş satır tespiti, kısmi seçimde föy birleştirme.
+- [x] Domain: onaylı geçmiş türetimi havuz semantiğiyle; çelişen geçmiş kullanılmasın, mevcut run dışlansın.
+- [x] Contracts: apply istek/yanıt, uygulama ve satır snapshot şemaları, golden fixture'lar.
+- [x] Migration 0034: uygulama aggregate'i, tek-hedef-sürüm ve tek-başarılı-uygulama indeksleri, `completed` şartı, immutability trigger'ları.
+- [x] Migration 0034: `ai_allocation_applied` kaynak türü ve provenance'sız sürümü engelleyen deferred constraint trigger.
+- [x] API: tek transaction içinde föy sürümü + provenance; stale, RBAC, kapalı dosya, çift uygulama ve idempotency korumaları.
+- [x] API: `approvedHistory` yalnız tamamlanmış provenance'tan; uygulanan değer öğrenme örneği olsun.
+- [x] API: geçmiş çelişkisinde `CONFLICT_HISTORY_DISAGREEMENT` sunucuda zorlansın.
+- [x] UI: seçilen satırda AI önerisi ile uygulanacak değer yan yana, düzenlenebilir; değiştirilen satır işaretlensin.
+- [x] UI: kontrol gerekli satırlar varsayılan seçili gelmesin; onay modalında kaynak run ve kaynak/hedef sürüm gösterilsin.
+- [x] UI: başarıdan sonra yeni föy sürümüne geçilsin ve uygulama provenance'ı görüntülenebilsin.
+- [x] Gerçek PostgreSQL testleri: atomiklik, tenant, stale, idempotency, çift uygulama, kısmi seçim, kullanıcı değişikliği, audit sızıntısı, yalnız completed provenance.
+- [x] Chrome/CDP smoke: onaylı geçmiş yok → uygulama tamamlandı → yeni analizde yalnız ilgili kod kalktı.
+- [ ] Gerçek Gemini manuel smoke'u: yerel anahtar hazır olduğunda çalıştır ve üç sonucu kaydet.
+
+Kapsam dışı: Excel yazımı, şablon profilleri, otomatik eksper onayı, operasyon türlerinin kullanıcı tarafından yeniden yazılması.

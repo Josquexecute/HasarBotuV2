@@ -1115,3 +1115,34 @@ Etkisi:
 
 - Migration 0033, `labor-baseline` domain modülü, baseline yükleyici, run/satır düzeyinde baseline sözleşme alanları ve AI önizlemesinde karşılaştırma görünümü eklenir.
 - `EVIDENCE_MISSING_APPROVED_HISTORY` kanalı hâlâ açıktır ve gerçek bir "onaylanmış dağıtım" kaydı eklenene kadar açık kalacaktır.
+
+## 2026-07-19 — HB-2026-065: Onaylı AI dağıtımını föye uygulama (Paket 58)
+
+Karar:
+
+1. **Uygulama AYRI bir aggregate'tir**: `labor_allocation_applications` + immutable `labor_allocation_applied_lines`. Öneri aggregate'i (`labor_allocation_*`) ile föy aggregate'i (`labor_sheet_*`) birbirine doğrudan bağlanmaz; provenance ikisinin arasında durur.
+2. **Tek transaction**: föy sürümü, satır snapshot'ları ve provenance birlikte kesinleşir. Herhangi bir adım başarısızsa hiçbiri uygulanmış sayılmaz. Gerçek PostgreSQL testleri geçersiz satır ve stale sürüm senaryolarında geriye ne uygulama ne föy sürümü kaldığını doğruluyor.
+3. **Değişmezler DB seviyesinde**: bir hedef föy sürümü yalnız bir uygulamaya (partial unique index), bir run yalnız bir BAŞARILI uygulamaya (partial unique index) bağlanabilir; `completed` durumu hedef sürüm olmadan CHECK ile imkânsız; tamamlanmış uygulama ve satır snapshot'ları trigger ile değiştirilemez.
+4. **Ters yön deferred constraint trigger ile kapatıldı**: `ai_allocation_applied` etiketli bir föy sürümü, commit anında tamamlanmış bir uygulama kaydına bağlı olmak ZORUNDADIR. Böylece "AI uygulandı" etiketi provenance'sız kalamaz.
+5. **Yeni kaynak türü `ai_allocation_applied`**. Uygulanan sürümü `manual_revision` diye etiketlemek Paket 57'de kapatılan provenance yalanının aynısı olurdu.
+6. **Föy sürümü oluşturmanın tek uygulaması** `labor/sheet-version.ts`e çıkarıldı; kullanıcı revizyonu ve AI uygulaması aynı yardımcıyı kullanır. İkinci kopya bırakılsaydı sürüm zinciri ve kanıt alanı kuralları zamanla ayrışırdı.
+7. **Kısmi seçim föyü budamaz**: seçilmeyen satırlar mevcut hallerini korur ve "reddedildi" sayılır. Kanıt alanları (parça kodu, hasar bölgesi) kullanıcının föydeki girdisidir; AI uygulaması bunları değiştirmez.
+8. **Kullanıcı öneriyi düzenleyebilir**; önerilen ve uygulanan değerler AYRI snapshot'lanır ve `modified` bayrağı DB CHECK'inde snapshot'larla tutarlı olmak zorundadır ("değişmedi" deyip farklı değer saklanamaz).
+9. **`approvedHistory` artık gerçek provenance'tan beslenir.** Yalnız `completed` uygulama kayıtları okunur; ham öneri, önizleme ve reddedilen satırlar kanıt değildir. Öğrenme örneği **uygulanan** değerdir (`applied_*` sütunları), AI'nin ilk önerisi değil.
+10. **Geçmiş için eşleştirme kuralı baseline'dan FARKLIDIR.** Baseline tek bir föydür ve karşılıklı-tek eşleşme gerektirir. Geçmiş ise bir HAVUZDUR: aynı kalemin defalarca onaylanmış olması belirsizlik değil, tutarlı kanıttır. Belirsizlik, eşleşen kayıtların BİRBİRİYLE ÇELİŞMESİDİR — aynı kalem/işlem için farklı operasyon türü kümeleri onaylanmışsa tek doğru cevap yoktur ve geçmiş kullanılmaz. İlk uygulamada karşılıklı-tek kuralı denendi ve kanalın ikinci uygulamadan sonra kalıcı olarak kapanmasına yol açtığı testle görüldü; kural havuz semantiğine düzeltildi.
+11. **Geçmiş otomatik doğru kabul edilmez**: öneri geçmişten ayrışıyorsa `CONFLICT_HISTORY_DISAGREEMENT` SUNUCUDA zorlanır (model bildirmese de düşmez) ve satır kontrol gerekli olur.
+12. **Mevcut run kendi girdisine geçmiş olamaz**; domain tarafında ayrıca dışlanır.
+13. UI: kontrol gerekli satırlar varsayılan olarak seçili gelmez, AI önerisi ile uygulanacak nihai değer yan yana durur, değiştirilen satır işaretlenir, onay modalı kaynak run ile kaynak/hedef sürümü gösterir ve modal açılması föyü değiştirmez.
+14. Audit kaydına ham kalem açıklaması ve tutar yazılmaz; yalnız sayımlar ve sürüm numaraları.
+
+Ölçülen sonuç (Paket 58 tarayıcı smoke'u, gerçek PostgreSQL + deterministik sağlayıcı):
+
+- Uygulama öncesi satır başına 5 eksik kanıt kodu; `EVIDENCE_MISSING_APPROVED_HISTORY` dahil.
+- Kullanıcı satırı seçip açıkça onayladıktan sonra BAŞKA bir dosyada yapılan yeni analizde 4 kod kalır: **yalnız** `EVIDENCE_MISSING_APPROVED_HISTORY` düşer; `VEHICLE_IDENTITY`, `PART_CODE`, `DAMAGE_REGION` ve `EXPERT_BASELINE` bağımsız kalır.
+- Onay modalı açıkken föy sürümü sayısı değişmez; yalnız açık onaydan sonra sürüm 2 oluşur ve `ai_allocation_applied` olarak etiketlenir.
+
+Etkisi:
+
+- Migration 0034, `labor-allocation-apply` domain modülü, `POST .../apply` ve `GET .../labor-allocation-applications` uçları, uygulama provenance görünümü eklenir.
+- Paket 54'te bilinçli bırakılan `applied: false` boşluğu kapanır; `apply-preview` ucu önizleme olarak korunur.
+- Gerçek Gemini smoke'u üretimde sağlayıcı açılmadan önce zorunlu release kapısı olarak AÇIK kalmaya devam eder.

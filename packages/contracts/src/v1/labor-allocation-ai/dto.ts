@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import {
+  LABOR_ALLOCATION_APPLICATION_STATUSES,
+  LABOR_ALLOCATION_APPLY_SCHEMA_VERSION,
   LABOR_ALLOCATION_CONFLICT_CODES,
   LABOR_ALLOCATION_LOCAL_PRIVACY_POLICY_VERSION,
   LABOR_BASELINE_COMPARISON_VERSION,
@@ -29,6 +31,7 @@ import {
   idSchema,
   utcDateTimeSchema,
 } from '../../common/primitives.js'
+import { laborSheetSchema } from '../labor/dto.js'
 
 /**
  * Paket 54 dilim 2 — AI işçilik dağıtımı sözleşmesi.
@@ -232,6 +235,79 @@ export const laborAllocationApplyPreviewLineSchema = z.strictObject({
   controlRequired: z.boolean(),
 })
 
+/**
+ * Paket 58 — seçilen satırların föye UYGULANMASI.
+ *
+ * Önizlemeden farkı: bu istek gerçekten yeni bir immutable föy sürümü üretir.
+ * Kullanıcı satır değerlerini düzenleyebilir; provenance hem öneriyi hem
+ * uygulanan değeri saklar.
+ */
+export const laborAllocationApplyLineSchema = z.strictObject({
+  lineOrdinal: lineOrdinalSchema,
+  description: z.string().min(1).max(MAX_LABOR_ITEM_DESCRIPTION_LENGTH),
+  action: z.string().min(1).max(MAX_LABOR_ITEM_ACTION_LENGTH),
+  partAmountMinor: amountMinorSchema,
+  laborAmountMinor: amountMinorSchema,
+})
+
+export const laborAllocationApplyRequestSchema = z.strictObject({
+  expectedSheetVersion: entityVersionSchema,
+  reason: z.string().min(1).max(500),
+  lines: z.array(laborAllocationApplyLineSchema).min(1).max(MAX_LABOR_SHEET_ITEMS)
+    .refine(
+      (value) => new Set(value.map((line) => line.lineOrdinal)).size === value.length,
+      { error: 'duplicate_line_ordinal' },
+    ),
+  /** Uygulama açık kullanıcı onayı olmadan yapılmaz. */
+  confirmed: z.literal(true),
+})
+
+export const laborAllocationAppliedLineSchema = z.strictObject({
+  lineOrdinal: lineOrdinalSchema,
+  suggestionLineOrdinal: lineOrdinalSchema,
+  targetLineOrdinal: lineOrdinalSchema,
+  suggestedDescription: z.string().min(1).max(MAX_LABOR_ITEM_DESCRIPTION_LENGTH),
+  suggestedAction: z.string().min(1).max(MAX_LABOR_ITEM_ACTION_LENGTH),
+  suggestedPartAmountMinor: amountMinorSchema,
+  suggestedLaborAmountMinor: amountMinorSchema,
+  suggestedOperationTypes: z.array(z.enum(LABOR_OPERATION_TYPES)).min(1),
+  appliedDescription: z.string().min(1).max(MAX_LABOR_ITEM_DESCRIPTION_LENGTH),
+  appliedAction: z.string().min(1).max(MAX_LABOR_ITEM_ACTION_LENGTH),
+  appliedPartAmountMinor: amountMinorSchema,
+  appliedLaborAmountMinor: amountMinorSchema,
+  modified: z.boolean(),
+  controlRequired: z.boolean(),
+})
+
+export const laborAllocationApplicationSchema = z.strictObject({
+  id: idSchema,
+  caseId: caseIdSchema,
+  runId: idSchema,
+  applySchemaVersion: z.literal(LABOR_ALLOCATION_APPLY_SCHEMA_VERSION),
+  status: z.enum(LABOR_ALLOCATION_APPLICATION_STATUSES),
+  sourceSheetVersion: entityVersionSchema,
+  targetSheetVersion: entityVersionSchema.nullable(),
+  selectedLineCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+  rejectedLineCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+  modifiedLineCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+  controlRequiredLineCount: z.number().int().min(0).max(MAX_LABOR_SHEET_ITEMS),
+  lines: z.array(laborAllocationAppliedLineSchema).max(MAX_LABOR_SHEET_ITEMS),
+  appliedByDisplayName: z.string().min(1).max(200),
+  createdAt: utcDateTimeSchema,
+  completedAt: utcDateTimeSchema.nullable(),
+})
+
+export const laborAllocationApplyResponseSchema = z.strictObject({
+  application: laborAllocationApplicationSchema,
+  /** Uygulama sonrası föyün yeni hali; istemci bu sürüme geçer. */
+  sheet: laborSheetSchema,
+})
+
+export const laborAllocationApplicationsResponseSchema = z.strictObject({
+  caseId: caseIdSchema,
+  applications: z.array(laborAllocationApplicationSchema).max(200),
+})
+
 export const laborAllocationApplyPreviewResponseSchema = z.strictObject({
   runId: idSchema,
   caseId: caseIdSchema,
@@ -258,5 +334,11 @@ export type LaborAllocationBudgetDto = z.infer<typeof laborAllocationBudgetSchem
 export type LaborAllocationRunDto = z.infer<typeof laborAllocationRunSchema>
 export type LaborAllocationRunResponse = z.infer<typeof laborAllocationRunResponseSchema>
 export type LaborAllocationWorkspaceResponse = z.infer<typeof laborAllocationWorkspaceResponseSchema>
+export type LaborAllocationApplyRequest = z.infer<typeof laborAllocationApplyRequestSchema>
+export type LaborAllocationApplyResponse = z.infer<typeof laborAllocationApplyResponseSchema>
+export type LaborAllocationApplicationDto = z.infer<typeof laborAllocationApplicationSchema>
+export type LaborAllocationAppliedLineDto = z.infer<typeof laborAllocationAppliedLineSchema>
+export type LaborAllocationApplicationsResponse =
+  z.infer<typeof laborAllocationApplicationsResponseSchema>
 export type LaborAllocationApplyPreviewRequest = z.infer<typeof laborAllocationApplyPreviewRequestSchema>
 export type LaborAllocationApplyPreviewResponse = z.infer<typeof laborAllocationApplyPreviewResponseSchema>

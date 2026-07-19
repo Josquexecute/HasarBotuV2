@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "caseId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "applications": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "caseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "applySchemaVersion": {
+            "type": "string",
+            "const": "labor-allocation-apply/1.0.0"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ]
+          },
+          "sourceSheetVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "targetSheetVersion": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selectedLineCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "rejectedLineCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "modifiedLineCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "controlRequiredLineCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "lines": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "lineOrdinal": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 200
+                },
+                "suggestionLineOrdinal": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 200
+                },
+                "targetLineOrdinal": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 200
+                },
+                "suggestedDescription": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "suggestedAction": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "suggestedPartAmountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000000000
+                },
+                "suggestedLaborAmountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000000000
+                },
+                "suggestedOperationTypes": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "repair",
+                      "replace",
+                      "remove_install",
+                      "paint",
+                      "consumable",
+                      "calibration",
+                      "related_operation",
+                      "other"
+                    ]
+                  }
+                },
+                "appliedDescription": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "appliedAction": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "appliedPartAmountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000000000
+                },
+                "appliedLaborAmountMinor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000000000
+                },
+                "modified": {
+                  "type": "boolean"
+                },
+                "controlRequired": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "lineOrdinal",
+                "suggestionLineOrdinal",
+                "targetLineOrdinal",
+                "suggestedDescription",
+                "suggestedAction",
+                "suggestedPartAmountMinor",
+                "suggestedLaborAmountMinor",
+                "suggestedOperationTypes",
+                "appliedDescription",
+                "appliedAction",
+                "appliedPartAmountMinor",
+                "appliedLaborAmountMinor",
+                "modified",
+                "controlRequired"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "appliedByDisplayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "createdAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+            "x-hasarbotu-runtime-validation": "calendar-date-validity"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "caseId",
+          "runId",
+          "applySchemaVersion",
+          "status",
+          "sourceSheetVersion",
+          "targetSheetVersion",
+          "selectedLineCount",
+          "rejectedLineCount",
+          "modifiedLineCount",
+          "controlRequiredLineCount",
+          "lines",
+          "appliedByDisplayName",
+          "createdAt",
+          "completedAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "caseId",
+    "applications"
+  ],
+  "additionalProperties": false
+}

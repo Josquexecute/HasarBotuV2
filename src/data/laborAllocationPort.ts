@@ -100,6 +100,52 @@ export interface LaborAllocationApplyPreviewRecord {
   }[]
 }
 
+/** Paket 58: gerçekten uygulanmış dağıtımın provenance kaydı. */
+export interface LaborAllocationAppliedLineRecord {
+  readonly lineOrdinal: number
+  readonly suggestedDescription: string
+  readonly suggestedAction: string
+  readonly suggestedPartAmountMinor: number
+  readonly suggestedLaborAmountMinor: number
+  readonly suggestedOperationTypes: readonly LaborOperationTypeRecord[]
+  readonly appliedDescription: string
+  readonly appliedAction: string
+  readonly appliedPartAmountMinor: number
+  readonly appliedLaborAmountMinor: number
+  readonly modified: boolean
+  readonly controlRequired: boolean
+}
+
+export interface LaborAllocationApplicationRecord {
+  readonly id: string
+  readonly caseId: string
+  readonly runId: string
+  readonly status: 'running' | 'completed' | 'failed'
+  readonly sourceSheetVersion: number
+  readonly targetSheetVersion: number | null
+  readonly selectedLineCount: number
+  readonly rejectedLineCount: number
+  readonly modifiedLineCount: number
+  readonly controlRequiredLineCount: number
+  readonly lines: readonly LaborAllocationAppliedLineRecord[]
+  readonly appliedByDisplayName: string
+  readonly createdAt: string
+  readonly completedAt: string | null
+}
+
+export interface LaborAllocationApplyInput {
+  readonly expectedSheetVersion: number
+  readonly reason: string
+  readonly confirmed: true
+  readonly lines: readonly {
+    readonly lineOrdinal: number
+    readonly description: string
+    readonly action: string
+    readonly partAmountMinor: number
+    readonly laborAmountMinor: number
+  }[]
+}
+
 export interface LaborAllocationDataPort {
   workspace(caseId: string): Promise<LaborAllocationWorkspaceRecord>
   analyze(caseId: string, input: {
@@ -111,6 +157,14 @@ export interface LaborAllocationDataPort {
     expectedSheetVersion: number
     selectedLineOrdinals: readonly number[]
   }): Promise<LaborAllocationApplyPreviewRecord>
+  /** Föyü gerçekten değiştirir; açık kullanıcı onayı zorunludur. */
+  apply(
+    caseId: string,
+    runId: string,
+    input: LaborAllocationApplyInput,
+    idempotencyKey?: string,
+  ): Promise<LaborAllocationApplicationRecord>
+  listApplications(caseId: string): Promise<readonly LaborAllocationApplicationRecord[]>
 }
 
 export type LaborAllocationErrorKind =
@@ -152,8 +206,14 @@ export function createHttpLaborAllocationAdapter(
     try {
       response = await fetchImpl(`${baseUrl}${path}`, {
         credentials: 'include',
-        headers: { accept: 'application/json', 'content-type': 'application/json' },
         ...init,
+        // Başlıklar BİRLEŞTİRİLİR; init'in kendi başlığı varsayılanları
+        // (accept/content-type) düşürmemelidir.
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          ...(init?.headers as Record<string, string> | undefined),
+        },
       })
     } catch {
       throw new LaborAllocationClientError('unavailable', 'labor allocation endpoint unreachable')
@@ -196,6 +256,31 @@ export function createHttpLaborAllocationAdapter(
       )
       if (!parsed.success) throw new LaborAllocationClientError('unavailable', 'preview response invalid')
       return parsed.data as unknown as LaborAllocationApplyPreviewRecord
+    },
+    async apply(caseId, runId, input, idempotencyKey) {
+      const key = idempotencyKey ?? globalThis.crypto?.randomUUID?.()
+      if (key === undefined) {
+        throw new LaborAllocationClientError('unavailable', 'secure idempotency unavailable')
+      }
+      const { laborAllocationApplyResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = laborAllocationApplyResponseSchema.safeParse(
+        await request(
+          `/api/v1/cases/${encodeURIComponent(caseId)}/labor-allocation-ai/${encodeURIComponent(runId)}/apply`,
+          { method: 'POST', body: JSON.stringify(input), headers: { 'idempotency-key': key } },
+        ),
+      )
+      if (!parsed.success) throw new LaborAllocationClientError('unavailable', 'apply response invalid')
+      return parsed.data.application as unknown as LaborAllocationApplicationRecord
+    },
+    async listApplications(caseId) {
+      const { laborAllocationApplicationsResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = laborAllocationApplicationsResponseSchema.safeParse(
+        await request(`/api/v1/cases/${encodeURIComponent(caseId)}/labor-allocation-applications`),
+      )
+      if (!parsed.success) {
+        throw new LaborAllocationClientError('unavailable', 'applications response invalid')
+      }
+      return parsed.data.applications as unknown as readonly LaborAllocationApplicationRecord[]
     },
   }
 }

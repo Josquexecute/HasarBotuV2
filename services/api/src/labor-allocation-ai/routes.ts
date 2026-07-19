@@ -2,12 +2,17 @@ import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
   CASE_LABOR_ALLOCATION_ANALYZE_ROUTE,
+  CASE_LABOR_ALLOCATION_APPLICATIONS_ROUTE,
   CASE_LABOR_ALLOCATION_APPLY_PREVIEW_ROUTE,
+  CASE_LABOR_ALLOCATION_APPLY_ROUTE,
   CASE_LABOR_ALLOCATION_RUN_ROUTE,
   CASE_LABOR_ALLOCATION_WORKSPACE_ROUTE,
+  IDEMPOTENCY_KEY_HEADER,
   failureEnvelopeSchema,
+  idempotencyKeySchema,
   laborAllocationAnalyzeRequestSchema,
   laborAllocationApplyPreviewRequestSchema,
+  laborAllocationApplyRequestSchema,
   laborAllocationCaseParamsSchema,
   laborAllocationRunParamsSchema,
   zodErrorToApiError,
@@ -49,6 +54,9 @@ export function registerLaborAllocationRoutes(
     RUN_STALE: 'version_conflict',
     LINE_SELECTION_INVALID: 'validation_error',
     EGRESS_CONFIRMATION_REQUIRED: 'conflict',
+    RUN_ALREADY_APPLIED: 'conflict',
+    APPLY_LINES_INVALID: 'validation_error',
+    IDEMPOTENCY_CONFLICT: 'idempotency_conflict',
   } as const
 
   const handle = (reply: import('fastify').FastifyReply, requestId: string, error: unknown) => {
@@ -121,6 +129,62 @@ export function registerLaborAllocationRoutes(
         params.data.caseId,
         body.data,
       ) }
+    } catch (error) {
+      return handle(reply, requestId, error)
+    }
+  })
+
+  /**
+   * Paket 58 — seçilen satırları föye uygular.
+   *
+   * Bu, AI çıktısının föyü gerçekten değiştirdiği TEK uçtur ve açık kullanıcı
+   * onayı (`confirmed: true`) ile idempotency anahtarı zorunludur.
+   */
+  app.post(CASE_LABOR_ALLOCATION_APPLY_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireAnyRole(auth, request, reply, WRITE_ROLES)
+    if (session === undefined) return
+    const params = laborAllocationRunParamsSchema.safeParse(request.params)
+    const body = laborAllocationApplyRequestSchema.safeParse(request.body)
+    const key = idempotencyKeySchema.safeParse(request.headers[IDEMPOTENCY_KEY_HEADER])
+    if (!params.success || !body.success || !key.success) {
+      const error = params.success ? (body.success ? key.error : body.error) : params.error
+      return reply.code(400).send(failureEnvelopeSchema.parse({
+        ok: false, error: zodErrorToApiError(error as never, requestId),
+      }))
+    }
+    try {
+      return await store.apply(
+        {
+          organizationId: session.user.organizationId,
+          userId: session.user.id,
+          requestId,
+        },
+        params.data.caseId,
+        params.data.runId,
+        body.data,
+        key.data,
+      )
+    } catch (error) {
+      return handle(reply, requestId, error)
+    }
+  })
+
+  app.get(CASE_LABOR_ALLOCATION_APPLICATIONS_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireAnyRole(auth, request, reply, READ_ROLES)
+    if (session === undefined) return
+    const params = laborAllocationCaseParamsSchema.safeParse(request.params)
+    if (!params.success) {
+      return reply.code(400).send(failureEnvelopeSchema.parse({
+        ok: false, error: zodErrorToApiError(params.error, requestId),
+      }))
+    }
+    try {
+      return await store.listApplications(
+        { organizationId: session.user.organizationId, userId: session.user.id },
+        params.data.caseId,
+      )
     } catch (error) {
       return handle(reply, requestId, error)
     }

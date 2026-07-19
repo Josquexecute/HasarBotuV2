@@ -5,11 +5,27 @@ Son güncelleme: 2026-07-19
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 57 — Eksper baseline entegrasyonu
+- Aşama: Paket 58 — Onaylı AI dağıtımını föye uygulama
 - Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 58 doğrulama sonucu
+
+- **Paket 54'te bilinçli bırakılan `applied: false` boşluğu kapandı.** AI dağıtımı artık kullanıcının açık onayıyla föye uygulanabiliyor; `apply-preview` önizleme olarak korunuyor.
+- **Tek transaction**: föy sürümü, satır snapshot'ları ve provenance birlikte kesinleşiyor. Geçersiz satır ve stale sürüm senaryolarında geriye ne uygulama ne föy sürümü kalıyor — gerçek PostgreSQL testleriyle doğrulandı.
+- **Değişmezler DB seviyesinde**: bir hedef föy sürümü yalnız bir uygulamaya, bir run yalnız bir başarılı uygulamaya bağlanabiliyor; `completed` hedef sürüm olmadan imkânsız; tamamlanmış kayıtlar trigger ile değiştirilemiyor. Ters yön deferred constraint trigger ile kapatıldı: `ai_allocation_applied` etiketli sürüm provenance'sız commit edilemiyor.
+- Föy sürümü oluşturmanın **tek uygulaması** `labor/sheet-version.ts`e çıkarıldı; kullanıcı revizyonu ve AI uygulaması aynı yardımcıyı kullanıyor. Çıkarma işlemi mevcut 42 testle davranış-koruyucu olarak doğrulandı.
+- Kısmi seçim föyü budamıyor: seçilmeyen satırlar korunuyor ve "reddedildi" sayılıyor. Kullanıcı öneriyi düzenleyebiliyor; önerilen ve uygulanan değerler ayrı snapshot'lanıyor ve `modified` bayrağı DB CHECK'inde snapshot'larla tutarlı olmak zorunda.
+- **`approvedHistory` gerçek provenance'tan besleniyor**: yalnız `completed` uygulama kayıtları, yalnız `applied_*` sütunları. Ham öneri, önizleme ve reddedilen satırlar kanıt değil.
+- **Bir kural hatası testle yakalandı ve düzeltildi:** geçmiş eşleştirmesi ilk sürümde baseline'ın karşılıklı-tek kuralını kullanıyordu. Geçmiş bir havuz olduğu için bu, ikinci uygulamadan sonra kanalı kalıcı olarak kapatıyordu. Kural havuz semantiğine çevrildi: aynı cevabı veren birden çok kayıt tutarlı kanıttır, belirsizlik ancak kayıtlar birbiriyle çelişirse oluşur.
+- Öneri geçmişten ayrışıyorsa `CONFLICT_HISTORY_DISAGREEMENT` sunucuda zorlanıyor; geçmiş otomatik doğru sayılmıyor.
+- **Ölçülen sonuç (Chrome/CDP smoke, gerçek PostgreSQL):** uygulama öncesi 5 eksik kanıt kodu; kullanıcı açıkça onayladıktan sonra BAŞKA bir dosyadaki yeni analizde 4 kod kalıyor — **yalnız** `EVIDENCE_MISSING_APPROVED_HISTORY` düşüyor. Onay modalı açıkken föy sürümü sayısı değişmiyor; yalnız açık onaydan sonra sürüm 2 oluşuyor ve `ai_allocation_applied` etiketleniyor.
+- Gerçek PostgreSQL API testleri 13/13 (`labor-allocation-apply.test.ts`), apply domain testleri 18/18, migration/DB testleri 67/67, AI paneli UI testleri 16/16.
+- Ana ağaçta typecheck, lint, **1658 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi (başlangıç 494.639 bayt), `npm audit --audit-level=moderate` (0 açık) ve `git diff --check` geçti.
+- Repository dışındaki temiz kopyada fresh `npm ci` + typecheck + lint + tam test + build geçti; geçici kopya kaldırıldı.
+- **Gerçek Gemini smoke'u yine ÇALIŞTIRILMADI**: yerel ortamda `GEMINI_API_KEY` yok. Manuel betik opt-in olmadan temiz atlıyor; üretimde sağlayıcı açılmadan önceki zorunlu release kapısı hâlâ AÇIK.
 
 ## Paket 57 doğrulama sonucu
 

@@ -9,7 +9,16 @@
 export const LABOR_SHEET_SCHEMA_VERSION = 'labor-sheet/1.0.0' as const
 export const LABOR_SHEET_CURRENCY = 'TRY' as const
 
-export const LABOR_SHEET_SOURCE_TYPES = ['user_entered', 'ai_assisted', 'manual_revision'] as const
+/**
+ * `ai_allocation_applied` (Paket 58): kullanıcının onaylayarak uyguladığı AI
+ * dağıtımı. `manual_revision` diye etiketlenseydi provenance yanlış olurdu.
+ */
+export const LABOR_SHEET_SOURCE_TYPES = [
+  'user_entered',
+  'ai_assisted',
+  'manual_revision',
+  'ai_allocation_applied',
+] as const
 export type LaborSheetSourceType = (typeof LABOR_SHEET_SOURCE_TYPES)[number]
 
 export const MAX_LABOR_SHEET_ITEMS = 200

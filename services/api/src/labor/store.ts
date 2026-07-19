@@ -9,15 +9,14 @@ import {
   type LaborSheetWorkspaceResponse,
 } from '@hasarbotu/contracts'
 import {
-  LABOR_SHEET_CURRENCY,
   LABOR_SHEET_SCHEMA_VERSION,
   computeLaborSheetTotals,
   validateLaborSheetItems,
   type LaborSheetInvalidReason,
-  type NormalizedLaborItem,
 } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
+import { createLaborSheetVersion } from './sheet-version.js'
 import type { Queryable } from '../db/executor.js'
 import {
   findIdempotent,
@@ -111,7 +110,8 @@ async function readCaseContext(
   return result.rows[0] as CaseContextRow | undefined
 }
 
-async function loadSheet(
+/** Paket 58: uygulama yolu da aynı okuma uygulamasını kullanır. */
+export async function loadSheet(
   exec: Queryable,
   organizationId: string,
   caseId: string,
@@ -209,41 +209,6 @@ async function validLaborAiSuggestion(
   return result.rowCount === 1
 }
 
-async function insertItems(
-  client: pg.PoolClient,
-  actor: ActorContext,
-  caseId: string,
-  sheetId: string,
-  versionId: string,
-  items: readonly NormalizedLaborItem[],
-): Promise<void> {
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index] as NormalizedLaborItem
-    await client.query(
-      `INSERT INTO labor_sheet_items
-         (id,organization_id,case_id,sheet_id,sheet_version_id,ordinal,description,action,
-          part_amount_minor,labor_amount_minor,part_code,part_code_source,damage_region)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [
-        uuidv7(),
-        actor.organizationId,
-        caseId,
-        sheetId,
-        versionId,
-        index + 1,
-        item.description,
-        item.action,
-        item.partAmountMinor,
-        item.laborAmountMinor,
-        // Paket 56 kanıt alanları; verilmezse null kalır.
-        item.partCode ?? null,
-        item.partCodeSource ?? null,
-        item.damageRegion ?? null,
-      ],
-    )
-  }
-}
-
 export function createLaborStore(pool: pg.Pool) {
   const audit = createAuditService()
 
@@ -311,19 +276,22 @@ export function createLaborStore(pool: pg.Pool) {
         }
         const sourceType = aiRunId === null ? 'user_entered' : 'ai_assisted'
         const sheetId = uuidv7()
-        const versionId = uuidv7()
         await client.query(
           'INSERT INTO labor_sheets (id,organization_id,case_id,created_by_user_id) VALUES ($1,$2,$3,$4)',
           [sheetId, actor.organizationId, caseId, actor.actorUserId],
         )
-        await client.query(
-          `INSERT INTO labor_sheet_versions
-             (id,organization_id,case_id,sheet_id,sheet_version,source_type,currency,
-              labor_ai_suggestion_run_id,created_by_user_id)
-           VALUES ($1,$2,$3,$4,1,$5,$6,$7,$8)`,
-          [versionId, actor.organizationId, caseId, sheetId, sourceType, LABOR_SHEET_CURRENCY, aiRunId, actor.actorUserId],
-        )
-        await insertItems(client, actor, caseId, sheetId, versionId, validation.items)
+        const versionId = await createLaborSheetVersion(client, {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          caseId,
+          sheetId,
+          sheetVersion: 1,
+          previousVersionId: null,
+          sourceType,
+          laborAiSuggestionRunId: aiRunId,
+          revisionReason: null,
+          items: validation.items,
+        })
         await client.query(
           'UPDATE labor_sheets SET current_version_id=$1,updated_at=now() WHERE id=$2',
           [versionId, sheetId],
@@ -413,27 +381,18 @@ export function createLaborStore(pool: pg.Pool) {
         }
         const sourceType = aiRunId === null ? 'manual_revision' : 'ai_assisted'
         const nextVersion = sheet.version + 1
-        const versionId = uuidv7()
-        await client.query(
-          `INSERT INTO labor_sheet_versions
-             (id,organization_id,case_id,sheet_id,sheet_version,previous_version_id,source_type,
-              currency,labor_ai_suggestion_run_id,revision_reason,created_by_user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [
-            versionId,
-            actor.organizationId,
-            caseId,
-            sheet.id,
-            nextVersion,
-            sheet.current_version_id,
-            sourceType,
-            LABOR_SHEET_CURRENCY,
-            aiRunId,
-            input.reason,
-            actor.actorUserId,
-          ],
-        )
-        await insertItems(client, actor, caseId, sheet.id, versionId, validation.items)
+        const versionId = await createLaborSheetVersion(client, {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          caseId,
+          sheetId: sheet.id,
+          sheetVersion: nextVersion,
+          previousVersionId: sheet.current_version_id,
+          sourceType,
+          laborAiSuggestionRunId: aiRunId,
+          revisionReason: input.reason,
+          items: validation.items,
+        })
         await client.query(
           'UPDATE labor_sheets SET current_version_id=$1,version=$2,updated_at=now() WHERE id=$3',
           [versionId, nextVersion, sheet.id],

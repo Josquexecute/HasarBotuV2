@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "expectedSheetVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "lines": {
+      "minItems": 1,
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lineOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "partAmountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000
+          },
+          "laborAmountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000
+          }
+        },
+        "required": [
+          "lineOrdinal",
+          "description",
+          "action",
+          "partAmountMinor",
+          "laborAmountMinor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "confirmed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "expectedSheetVersion",
+    "reason",
+    "lines",
+    "confirmed"
+  ],
+  "additionalProperties": false
+}

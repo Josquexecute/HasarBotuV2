@@ -175,8 +175,11 @@ import {
 } from './v1/case-vehicle-profile/dto.js'
 import {
   laborAllocationAnalyzeRequestSchema,
+  laborAllocationApplicationsResponseSchema,
   laborAllocationApplyPreviewRequestSchema,
   laborAllocationApplyPreviewResponseSchema,
+  laborAllocationApplyRequestSchema,
+  laborAllocationApplyResponseSchema,
   laborAllocationRunResponseSchema,
   laborAllocationWorkspaceResponseSchema,
 } from './v1/labor-allocation-ai/dto.js'
@@ -316,8 +319,11 @@ export const JSON_SCHEMA_TARGETS = {
   'case-vehicle-profile-response': caseVehicleProfileResponseSchema,
   'case-vehicle-profile-save-request': caseVehicleProfileSaveRequestSchema,
   'labor-allocation-analyze-request': laborAllocationAnalyzeRequestSchema,
+  'labor-allocation-applications-response': laborAllocationApplicationsResponseSchema,
   'labor-allocation-apply-preview-request': laborAllocationApplyPreviewRequestSchema,
   'labor-allocation-apply-preview-response': laborAllocationApplyPreviewResponseSchema,
+  'labor-allocation-apply-request': laborAllocationApplyRequestSchema,
+  'labor-allocation-apply-response': laborAllocationApplyResponseSchema,
   'labor-allocation-run-response': laborAllocationRunResponseSchema,
   'labor-allocation-workspace-response': laborAllocationWorkspaceResponseSchema,
   'operational-alerts-query': operationalAlertsQuerySchema,

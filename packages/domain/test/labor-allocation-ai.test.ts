@@ -38,6 +38,7 @@ function planContext(overrides: Partial<LaborAllocationPlanContext> = {}): Labor
     vehicleProfile: null,
     dictionary: [],
     approvedHistory: [],
+    approvedHistoryComplete: false,
     expertBaseline: null,
     providerId: 'deterministic-success',
     providerVersion: '1.0.0',
@@ -210,6 +211,9 @@ describe('detectMissingEvidence', () => {
       ],
       dictionary: [{ description: 'Ön tampon', action: 'Onarım', usageCount: 3 }],
       approvedHistory: [{ description: 'Ön tampon', action: 'Onarım', operationTypes: ['repair'] }],
+      // Paket 58: geçmişin var olması yetmez, her satırın belirsizlik olmadan
+      // eşleşmesi gerekir.
+      approvedHistoryComplete: true,
       // Paket 57: baseline'ın var olması yetmez, satırların eşleşmesi gerekir.
       expertBaseline: {
         sheetVersion: 1,
