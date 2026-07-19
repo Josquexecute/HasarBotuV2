@@ -348,6 +348,19 @@ export {
   type VehicleEvidenceSourceRecord,
 } from './caseVehicleProfilePort'
 export {
+  LaborExcelProfileClientError,
+  createHttpLaborExcelProfileAdapter,
+  type LaborExcelColumnRecord,
+  type LaborExcelMappingRecord,
+  type LaborExcelProfileDataPort,
+  type LaborExcelProfileErrorKind,
+  type LaborExcelProfileFieldsRecord,
+  type LaborExcelProfileRecord,
+  type LaborExcelProfileVersionRecord,
+  type LaborExcelProjectionLineRecord,
+  type LaborExcelProjectionRecord,
+} from './laborExcelProfilePort'
+export {
   LaborAllocationClientError,
   createHttpLaborAllocationAdapter,
   type LaborAllocationAppliedLineRecord,

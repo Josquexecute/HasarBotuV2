@@ -1,0 +1,206 @@
+import { describe, expect, it } from 'vitest'
+import {
+  LABOR_OPERATION_TYPES,
+  normalizeLaborExcelColumnKey,
+  projectLaborAllocationToExcel,
+  validateLaborExcelProfileInput,
+  type LaborExcelProjectionLineInput,
+} from '../src/index.js'
+
+const COLUMNS = [
+  { key: 'ISCILIK', label: 'İşçilik Bedeli' },
+  { key: 'PARCA', label: 'Parça Bedeli' },
+  { key: 'BOYA', label: 'Boya ve Sarf' },
+]
+
+/** Sentetik eşleme; hiçbir gerçek sigorta şirketi kolonu ürüne gömülmez. */
+function mapping(overrides: Partial<Record<string, string | null>> = {}) {
+  return {
+    repair: 'ISCILIK',
+    replace: 'PARCA',
+    remove_install: 'ISCILIK',
+    paint: 'BOYA',
+    consumable: 'BOYA',
+    calibration: null,
+    related_operation: null,
+    other: null,
+    ...overrides,
+  }
+}
+
+function profile(mappingOverrides: Partial<Record<string, string | null>> = {}) {
+  const validation = validateLaborExcelProfileInput({
+    name: 'Sentetik Şablon',
+    columns: COLUMNS,
+    mapping: mapping(mappingOverrides),
+  })
+  if (!validation.valid) throw new Error(`profile_invalid_${validation.reason}`)
+  return { columns: validation.columns, mapping: validation.mapping }
+}
+
+function line(overrides: Partial<LaborExcelProjectionLineInput> = {}): LaborExcelProjectionLineInput {
+  return {
+    lineOrdinal: 1,
+    description: 'Ön tampon',
+    appliedPartAmountMinor: 0,
+    appliedLaborAmountMinor: 1_000_000,
+    modified: false,
+    controlRequired: false,
+    allocations: [
+      { operationType: 'repair', amountMinor: 800_000 },
+      { operationType: 'paint', amountMinor: 200_000 },
+    ],
+    ...overrides,
+  }
+}
+
+describe('normalizeLaborExcelColumnKey', () => {
+  it('boşlukları alt çizgiye çevirir ve büyük harfe alır', () => {
+    expect(normalizeLaborExcelColumnKey(' iscilik bedeli ')).toBe('ISCILIK_BEDELI')
+  })
+
+  it('geçersiz karakteri reddeder', () => {
+    expect(normalizeLaborExcelColumnKey('parça')).toBeNull()
+    expect(normalizeLaborExcelColumnKey('')).toBeNull()
+  })
+})
+
+describe('validateLaborExcelProfileInput', () => {
+  it('geçerli profili normalize eder', () => {
+    const result = validateLaborExcelProfileInput({
+      name: '  Sentetik Şablon ',
+      columns: [{ key: ' iscilik ', label: ' İşçilik ' }],
+      mapping: mapping({
+        replace: null, paint: null, consumable: null, remove_install: null, repair: 'iscilik',
+      }),
+    })
+    expect(result.valid).toBe(true)
+    if (!result.valid) return
+    expect(result.name).toBe('Sentetik Şablon')
+    expect(result.columns[0]?.key).toBe('ISCILIK')
+    expect(result.mapping.repair).toBe('ISCILIK')
+    expect(result.mapping.other).toBeNull()
+  })
+
+  it('eşleme HER kanonik türü içermelidir', () => {
+    const partial = { ...mapping() }
+    delete (partial as Record<string, unknown>).other
+    const result = validateLaborExcelProfileInput({ name: 'X', columns: COLUMNS, mapping: partial })
+    expect(result).toEqual({ valid: false, reason: 'invalid_mapping_keys' })
+  })
+
+  it('bilinmeyen türü reddeder', () => {
+    const result = validateLaborExcelProfileInput({
+      name: 'X', columns: COLUMNS, mapping: { ...mapping(), welding: 'ISCILIK' },
+    })
+    expect(result).toEqual({ valid: false, reason: 'invalid_mapping_keys' })
+  })
+
+  it('tanımsız sütuna eşlemeyi reddeder', () => {
+    const result = validateLaborExcelProfileInput({
+      name: 'X', columns: COLUMNS, mapping: mapping({ repair: 'YOK_BOYLE' }),
+    })
+    expect(result).toEqual({ valid: false, reason: 'unknown_mapping_target' })
+  })
+
+  it('mükerrer sütun anahtarını reddeder', () => {
+    const result = validateLaborExcelProfileInput({
+      name: 'X',
+      columns: [{ key: 'A', label: 'A' }, { key: ' a ', label: 'B' }],
+      mapping: mapping({ repair: 'A', replace: null, remove_install: null, paint: null, consumable: null }),
+    })
+    expect(result).toEqual({ valid: false, reason: 'duplicate_column_key' })
+  })
+
+  it('hiç eşlenmemiş profil anlamsızdır', () => {
+    const empty = Object.fromEntries(LABOR_OPERATION_TYPES.map((type) => [type, null]))
+    const result = validateLaborExcelProfileInput({ name: 'X', columns: COLUMNS, mapping: empty })
+    expect(result).toEqual({ valid: false, reason: 'no_mapped_operation_type' })
+  })
+
+  it('boş ad ve sütunsuz profil reddedilir', () => {
+    expect(validateLaborExcelProfileInput({ name: '   ', columns: COLUMNS, mapping: mapping() }))
+      .toEqual({ valid: false, reason: 'invalid_name' })
+    expect(validateLaborExcelProfileInput({ name: 'X', columns: [], mapping: mapping() }))
+      .toEqual({ valid: false, reason: 'invalid_columns' })
+  })
+})
+
+describe('projectLaborAllocationToExcel', () => {
+  it('değiştirilmemiş satırı sütunlara dağıtır', () => {
+    const result = projectLaborAllocationToExcel(profile(), [line()])
+    expect(result.projectedLineCount).toBe(1)
+    expect(result.manualEntryLineCount).toBe(0)
+    const projected = result.lines[0]
+    expect(projected?.status).toBe('projected')
+    expect(projected?.cells.ISCILIK).toBe(800_000)
+    expect(projected?.cells.BOYA).toBe(200_000)
+    expect(projected?.cells.PARCA).toBe(0)
+    expect(result.columnTotals.ISCILIK).toBe(800_000)
+  })
+
+  it('aynı sütuna eşlenen türleri toplar', () => {
+    const result = projectLaborAllocationToExcel(profile(), [line({
+      allocations: [
+        { operationType: 'repair', amountMinor: 700_000 },
+        { operationType: 'remove_install', amountMinor: 300_000 },
+      ],
+    })])
+    // repair ve remove_install ikisi de ISCILIK sütununa eşlidir.
+    expect(result.lines[0]?.cells.ISCILIK).toBe(1_000_000)
+  })
+
+  it('kullanıcı tutarı değiştirdiyse SAYI UYDURMAZ', () => {
+    // P58 dürüstlük kuralı: modified satırda tür bazlı dağılım doğrulanmış
+    // değildir; hücre tutarı üretilemez.
+    const result = projectLaborAllocationToExcel(profile(), [line({ modified: true })])
+    const projected = result.lines[0]
+    expect(projected?.status).toBe('manual_entry_required')
+    expect(projected?.reviewRequired).toBe(true)
+    expect(projected?.cells.ISCILIK).toBe(0)
+    expect(projected?.cells.BOYA).toBe(0)
+    // Uygulanan TOPLAM referans olarak korunur; o kullanıcının kendi verisidir.
+    expect(projected?.totalMinor).toBe(1_000_000)
+    expect(result.manualEntryLineCount).toBe(1)
+    expect(result.columnTotals.ISCILIK).toBe(0)
+  })
+
+  it('dağılım toplamı uygulanan toplamı tutmuyorsa sessizce düzeltmez', () => {
+    const result = projectLaborAllocationToExcel(profile(), [line({
+      allocations: [{ operationType: 'repair', amountMinor: 999_999 }],
+    })])
+    expect(result.lines[0]?.status).toBe('manual_entry_required')
+    expect(result.projectedLineCount).toBe(0)
+  })
+
+  it('eşlenmemiş türe düşen tutar sütuna yazılmaz ve incelemeye düşer', () => {
+    const result = projectLaborAllocationToExcel(profile(), [line({
+      allocations: [
+        { operationType: 'repair', amountMinor: 600_000 },
+        { operationType: 'calibration', amountMinor: 400_000 },
+      ],
+    })])
+    const projected = result.lines[0]
+    expect(projected?.status).toBe('projected')
+    expect(projected?.cells.ISCILIK).toBe(600_000)
+    expect(projected?.unmappedAmountMinor).toBe(400_000)
+    expect(projected?.reviewRequired).toBe(true)
+    expect(result.unmappedTotalMinor).toBe(400_000)
+    // Eşlenmemiş tutar hiçbir sütun toplamına karışmaz.
+    const columnSum = Object.values(result.columnTotals).reduce((sum, value) => sum + value, 0)
+    expect(columnSum).toBe(600_000)
+  })
+
+  it('control_required satır projekte edilse de incelemeye düşer', () => {
+    const result = projectLaborAllocationToExcel(profile(), [line({ controlRequired: true })])
+    expect(result.lines[0]?.status).toBe('projected')
+    expect(result.lines[0]?.reviewRequired).toBe(true)
+    expect(result.reviewRequiredLineCount).toBe(1)
+  })
+
+  it('boş satır listesinde sıfır toplam üretir', () => {
+    const result = projectLaborAllocationToExcel(profile(), [])
+    expect(result.lines).toHaveLength(0)
+    expect(result.columnTotals).toEqual({ ISCILIK: 0, PARCA: 0, BOYA: 0 })
+  })
+})

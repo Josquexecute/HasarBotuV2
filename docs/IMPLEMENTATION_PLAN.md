@@ -1202,3 +1202,20 @@ Kapsam dışı: Excel yazımı, şablon profilleri, otomatik eksper onayı, oper
 - [x] Opt-in siz atlama ve fresh checkout ta .env dışlama doğrulandı; CI anahtar istemez.
 
 Kapsam dışı: Excel şablon profilleri, üretim ortamında sağlayıcıyı fiilen açmak (deployment kararı).
+
+## Paket 60 — Excel şablon profilleri
+
+- [x] Domain: sürümlü profil doğrulaması; eşleme kanonik tür kümesini tam kapsasın, `null` bilerek-eşlenmedi olsun.
+- [x] Domain: projeksiyon — değiştirilmiş satırda sayı uydurma, `manual_entry_required` işaretle.
+- [x] Domain: dağılım toplamı tutmayan satırı sessizce düzeltme; eşlenmemiş türü sütuna yazma.
+- [x] Contracts: `v1/labor-excel-profile` şemaları, `written: false` literali, golden fixture'lar.
+- [x] Migration 0035: sürümlü immutable profil aggregate'i, eşleme tamlığı CHECK'i, insurer composite FK.
+- [x] API: profil CRUD (tenant + sürüm çakışması + gerekçe zorunluluğu) ve salt okunur projeksiyon ucu.
+- [x] API: projeksiyon yalnız tamamlanmış uygulama provenance'ından beslensin.
+- [x] UI: Yönetim'de "Excel Şablonları" sekmesi; sütun ve eşleme kullanıcı tanımlı, sürüm geçmişli.
+- [x] UI: İşçilik'te uygulama geçmişinden projeksiyon önizlemesi; dosyaya yazılmadığı açıkça belirtilsin.
+- [x] UI: yeni modül lazy yüklensin; başlangıç bundle bütçesi korunsun.
+- [x] Gerçek PostgreSQL testleri: tenant, sürüm, eksik/geçersiz eşleme, yabancı insurer, RBAC, projeksiyon dürüstlüğü.
+- [x] Chrome/CDP smoke: profil tanımla → uygula → projeksiyon; değiştirilen satırda sayı üretilmediğini doğrula.
+
+Kapsam dışı: xlsx dependency, fiziksel Excel yazımı, hardcode edilmiş şirket kolonları.

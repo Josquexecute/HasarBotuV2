@@ -29,6 +29,7 @@ import { registerPertRoutes } from './pert/index.js'
 import { registerLaborDictionaryRoutes } from './labor-dictionary/index.js'
 import { registerOperationalAlertRoutes } from './operational-alerts/index.js'
 import { registerCaseVehicleProfileRoutes } from './case-vehicle-profile/index.js'
+import { registerLaborExcelProfileRoutes } from './labor-excel-profile/index.js'
 import {
   createDeterministicLaborAllocationProviderRegistry,
   registerLaborAllocationRoutes,
@@ -183,6 +184,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       clock: options.clock ?? systemClock,
     })
     registerCaseVehicleProfileRoutes(app, { pool: options.auth.pool })
+    registerLaborExcelProfileRoutes(app, { pool: options.auth.pool })
     registerLaborAllocationRoutes(app, {
       pool: options.auth.pool,
       providers: options.laborAllocationProviders

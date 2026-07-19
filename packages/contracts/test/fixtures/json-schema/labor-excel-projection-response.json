@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "caseId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "applicationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "profileId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "profileVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "schemaVersion": {
+      "type": "string",
+      "const": "labor-excel-profile/1.0.0"
+    },
+    "columns": {
+      "minItems": 1,
+      "maxItems": 24,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "lines": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lineOrdinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "projected",
+              "manual_entry_required"
+            ]
+          },
+          "reviewRequired": {
+            "type": "boolean"
+          },
+          "cells": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "unmappedAmountMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "totalMinor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "lineOrdinal",
+          "description",
+          "status",
+          "reviewRequired",
+          "cells",
+          "unmappedAmountMinor",
+          "totalMinor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "columnTotals": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      }
+    },
+    "projectedLineCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 200
+    },
+    "manualEntryLineCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 200
+    },
+    "reviewRequiredLineCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 200
+    },
+    "unmappedTotalMinor": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "written": {
+      "type": "boolean",
+      "const": false
+    }
+  },
+  "required": [
+    "caseId",
+    "applicationId",
+    "profileId",
+    "profileVersion",
+    "schemaVersion",
+    "columns",
+    "lines",
+    "columnTotals",
+    "projectedLineCount",
+    "manualEntryLineCount",
+    "reviewRequiredLineCount",
+    "unmappedTotalMinor",
+    "written"
+  ],
+  "additionalProperties": false
+}

@@ -5,11 +5,25 @@ Son güncelleme: 2026-07-19
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 59 — Gerçek Gemini release kapısı
-- Durum: **Release kapısı gerçek API ile ölçüldü ve KAPANDI; tüm kalite kapıları geçti**
+- Aşama: Paket 60 — Excel şablon profilleri
+- Durum: **Uygulama, gerçek PostgreSQL/Chrome, tam kalite zinciri ve fresh checkout kapıları geçti**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 60 doğrulama sonucu
+
+- **Hiçbir sigorta şirketi kolonu ürüne gömülmedi.** Sütunlar ve eşleme tamamen kullanıcı verisidir; sabit olan tek şey kanonik operasyon türü kümesidir. Testler ve smoke yalnız sentetik sütun adları kullanır.
+- Profiller organizasyon düzeyinde, **sürümlü ve immutable** (0032 araç profili kalıbı). İlk kayıt gerekçe istemez, sonraki her sürüm ister; sigorta şirketi bağlantısı composite FK ile aynı organizasyona kilitli.
+- Eşleme kanonik tür kümesini **tam kapsamak zorunda**; eksik/fazla anahtar hem sözleşme hem DB CHECK seviyesinde reddediliyor. CHECK içinde subquery kullanılamadığı için fazla-anahtar kuralı jsonb anahtar çıkarma ile ifade edildi.
+- **Projeksiyon salt okunur ve dosyaya yazmıyor**; yanıt `written: false` literalini taşıyor. xlsx dependency ve fiziksel yazım bu pakette yok.
+- **Dürüstlük kuralı doğrulandı:** Paket 58'de kullanıcı tutarı değiştirerek uyguladıysa tür bazlı dağılım artık doğrulanmış değil; o satır için sütun tutarı üretilmiyor, `manual_entry_required` işaretleniyor ve yalnız uygulanan toplam referans olarak korunuyor. Değiştirilmemiş satırda bile dağılım toplamı tutmuyorsa satır projekte edilmiyor — sessiz düzeltme yok.
+- Eşlenmemiş türe düşen tutar hiçbir sütuna yazılmıyor, sütun toplamlarına karışmıyor ve satır incelemeye düşüyor.
+- **Ölçülen sonuç (Chrome/CDP smoke, gerçek PostgreSQL):** profil yokken sahte profil gösterilmiyor; kullanıcı kendi sütunlarını ve 8 türden 3'ünün eşlemesini tanımlıyor; değiştirilmemiş satır sütunlara düşüyor, **değiştirilen satır `—` gösterip "Manuel giriş gerekli" işaretleniyor**; projeksiyon föy sürümü sayısını değiştirmiyor.
+- Gerçek PostgreSQL API testleri 13/13, domain testleri 16/16, migration/DB testleri 69/69, Yönetim UI testleri 7/7.
+- **Bundle bütçesi bir kez düştü ve doğru şekilde düzeltildi:** doğrudan import başlangıç grafiğini 504.045 bayta çıkarmıştı (sınır 500.000). Bütçe yükseltilmedi; projedeki lazy kalıbı uygulandı → 495.584 bayt.
+- Ana ağaçta typecheck, lint, **1699 test** (+6 ortam-kapılı UI skip), build + bundle bütçesi, `npm audit` (0 açık) ve `git diff --check` geçti. Repository dışı temiz kopyada tam kapı zinciri geçti; kopya kaldırıldı.
+- **Kalan sınır:** v0.7'nin son dilimi güvenli Excel yazımıdır ve xlsx dependency + gerçek ofis şablonu + fiziksel yazma kararı gerektirir.
 
 ## Paket 59 doğrulama sonucu — GERÇEK GEMINI RELEASE KAPISI KAPANDI
 

@@ -574,6 +574,24 @@ export {
   type LaborRepairReplaceOpinion,
 } from './labor-allocation-ai.js'
 export {
+  LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
+  MAX_LABOR_EXCEL_COLUMNS,
+  MAX_LABOR_EXCEL_COLUMN_KEY_LENGTH,
+  MAX_LABOR_EXCEL_COLUMN_LABEL_LENGTH,
+  MAX_LABOR_EXCEL_PROFILE_NAME_LENGTH,
+  normalizeLaborExcelColumnKey,
+  projectLaborAllocationToExcel,
+  validateLaborExcelProfileInput,
+  type LaborExcelColumn,
+  type LaborExcelMapping,
+  type LaborExcelProfileInvalidReason,
+  type LaborExcelProfileValidation,
+  type LaborExcelProjection,
+  type LaborExcelProjectionLine,
+  type LaborExcelProjectionLineInput,
+  type LaborExcelProjectionLineStatus,
+} from './labor-excel-profile.js'
+export {
   LABOR_ALLOCATION_APPLICATION_STATUSES,
   LABOR_ALLOCATION_APPLY_SCHEMA_VERSION,
   deriveApprovedHistory,

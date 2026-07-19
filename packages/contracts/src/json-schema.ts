@@ -174,6 +174,11 @@ import {
   caseVehicleProfileSaveRequestSchema,
 } from './v1/case-vehicle-profile/dto.js'
 import {
+  laborExcelProfileSaveRequestSchema,
+  laborExcelProfilesResponseSchema,
+  laborExcelProjectionResponseSchema,
+} from './v1/labor-excel-profile/dto.js'
+import {
   laborAllocationAnalyzeRequestSchema,
   laborAllocationApplicationsResponseSchema,
   laborAllocationApplyPreviewRequestSchema,
@@ -314,6 +319,9 @@ export const JSON_SCHEMA_TARGETS = {
   'pert-assessment-revise-request': pertAssessmentReviseRequestSchema,
   'pert-assessment-response': pertAssessmentResponseSchema,
   'pert-assessment-workspace-response': pertAssessmentWorkspaceResponseSchema,
+  'labor-excel-profile-save-request': laborExcelProfileSaveRequestSchema,
+  'labor-excel-profiles-response': laborExcelProfilesResponseSchema,
+  'labor-excel-projection-response': laborExcelProjectionResponseSchema,
   'labor-dictionary-query': laborDictionaryQuerySchema,
   'labor-dictionary-response': laborDictionaryResponseSchema,
   'case-vehicle-profile-response': caseVehicleProfileResponseSchema,

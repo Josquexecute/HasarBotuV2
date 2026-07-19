@@ -4,8 +4,11 @@ import { LoadingState } from '../../components/StateViews'
 import {
   LaborAllocationClientError,
   createHttpLaborAllocationAdapter,
+  createHttpLaborExcelProfileAdapter,
   type LaborAllocationApplicationRecord,
   type LaborAllocationApplyPreviewRecord,
+  type LaborExcelProfileDataPort,
+  type LaborExcelProjectionRecord,
   type LaborAllocationDataPort,
   type LaborAllocationLineRecord,
   type LaborAllocationRunRecord,
@@ -41,13 +44,19 @@ function formatMinor(value: number): string {
   return `${(value / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`
 }
 
-export function LaborAllocationAiModule({ caseId, port, onSheetApplied }: {
+export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplied }: {
   readonly caseId: string
   readonly port?: LaborAllocationDataPort
+  /** Paket 60: salt okunur Excel projeksiyonu portu. */
+  readonly excelPort?: LaborExcelProfileDataPort
   /** Föy uygulandığında tetiklenir; üst modül yeni sürüme geçer. */
   readonly onSheetApplied?: () => void
 }) {
   const adapter = useMemo(() => port ?? createHttpLaborAllocationAdapter(), [port])
+  const excelAdapter = useMemo(
+    () => excelPort ?? createHttpLaborExcelProfileAdapter(),
+    [excelPort],
+  )
   const [workspace, setWorkspace] = useState<LaborAllocationWorkspaceRecord | null>(null)
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
   const [errorKind, setErrorKind] = useState<string | null>(null)
@@ -65,6 +74,8 @@ export function LaborAllocationAiModule({ caseId, port, onSheetApplied }: {
   const [reason, setReason] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [applications, setApplications] = useState<readonly LaborAllocationApplicationRecord[]>([])
+  /** Paket 60: salt okunur Excel projeksiyonu; dosyaya yazmaz. */
+  const [projection, setProjection] = useState<LaborExcelProjectionRecord | null>(null)
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -125,6 +136,29 @@ export function LaborAllocationAiModule({ caseId, port, onSheetApplied }: {
       setErrorKind(null)
     } catch (error) {
       setPreview(null)
+      setErrorKind(error instanceof LaborAllocationClientError ? error.kind : 'unavailable')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * İlk tanımlı şablon profiliyle projeksiyon açar. Profil yoksa kullanıcı
+   * Yönetim'den tanımlamalıdır; sahte sütun üretilmez.
+   */
+  const openProjection = async (applicationId: string) => {
+    setBusy(true)
+    try {
+      const { profiles } = await excelAdapter.list()
+      const profile = profiles[0]
+      if (profile === undefined) {
+        setErrorKind('excel_profile_missing')
+        return
+      }
+      setProjection(await excelAdapter.project(caseId, applicationId, profile.id))
+      setErrorKind(null)
+    } catch (error) {
+      setProjection(null)
       setErrorKind(error instanceof LaborAllocationClientError ? error.kind : 'unavailable')
     } finally {
       setBusy(false)
@@ -558,10 +592,94 @@ export function LaborAllocationAiModule({ caseId, port, onSheetApplied }: {
                   {' · '}{application.modifiedLineCount} değiştirildi
                 </span>
                 <small>{application.appliedByDisplayName}</small>
+                {/*
+                  Paket 60: uygulanmış dağıtımın Excel sütunlarına projeksiyonu.
+                  SALT OKUNUR — dosyaya yazmaz.
+                */}
+                {application.status === 'completed' && (
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => void openProjection(application.id)}
+                  >
+                    Excel projeksiyonu
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         </details>
+      )}
+
+      {projection !== null && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Excel projeksiyonu">
+          <div className="modal">
+            <header className="modal__header"><h2>Excel Projeksiyonu</h2></header>
+            <div className="modal__body">
+              <p className="allocation-panel__notice">
+                Bu görünüm hiçbir Excel dosyasına YAZMAZ. Uygulanmış dağıtımın seçilen
+                şablonun sütunlarına nasıl düşeceğini gösterir.
+              </p>
+              <div className="table-scroll">
+                <table className="data-table module-table">
+                  <thead>
+                    <tr>
+                      <th>Kalem</th>
+                      {projection.columns.map((column) => <th key={column.key}>{column.label}</th>)}
+                      <th>Durum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projection.lines.map((projectionLine) => (
+                      <tr key={projectionLine.lineOrdinal}>
+                        <td>{projectionLine.lineOrdinal}. {projectionLine.description}</td>
+                        {projection.columns.map((column) => (
+                          <td key={column.key}>
+                            {projectionLine.status === 'manual_entry_required'
+                              ? '—'
+                              : formatMinor(projectionLine.cells[column.key] ?? 0)}
+                          </td>
+                        ))}
+                        <td>
+                          {projectionLine.status === 'manual_entry_required'
+                            ? 'Manuel giriş gerekli'
+                            : (projectionLine.reviewRequired ? 'Kontrol gerekli' : 'Hazır')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td>Toplam</td>
+                      {projection.columns.map((column) => (
+                        <td key={column.key}>{formatMinor(projection.columnTotals[column.key] ?? 0)}</td>
+                      ))}
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              {projection.manualEntryLineCount > 0 && (
+                <p className="allocation-panel__error">
+                  {projection.manualEntryLineCount} satırda kullanıcı tutarı değiştirdiği için
+                  tür bazlı dağılım doğrulanmış değil; bu satırlarda sütun tutarı üretilmez ve
+                  manuel giriş gerekir.
+                </p>
+              )}
+              {projection.unmappedTotalMinor > 0 && (
+                <p className="allocation-panel__notice">
+                  Eşlenmemiş operasyon türlerine {formatMinor(projection.unmappedTotalMinor)} düşüyor;
+                  bu tutar hiçbir sütuna yazılmaz.
+                </p>
+              )}
+            </div>
+            <footer className="modal__footer">
+              <button className="button button--secondary" type="button" onClick={() => setProjection(null)}>
+                Kapat
+              </button>
+            </footer>
+          </div>
+        </div>
       )}
     </section>
   )

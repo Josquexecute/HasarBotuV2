@@ -1172,3 +1172,29 @@ Windows `UV_HANDLE_CLOSING` çökmesi: yakalanmamış hata Node'u zorla çıkı�
 Güvenlik: anahtar yalnız `.env.local`tan süreç ortamına okunur (dosya `.gitignore`'da üç desenle ignore, takip edilmiyor); hiçbir log/commit/DB kaydına girmez. Ham model çıktısı log'a yazılmaz; teşhis yalnız YAPISAL rapor üretir (anahtar adları, kapalı küme değerleri, uzunluklar). Fresh checkout kopyası `.env*` dosyalarını dışlar. Opt-in olmadan betik atlanır; CI anahtar istemez.
 
 Etkisi: üretimde `GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED` açılmadan önceki zorunlu ölçüm tamamlandı. Kapı, wire sözleşmesi değişirse (provider sürüm artışı) yeniden koşulmalıdır.
+
+## 2026-07-19 — HB-2026-067: Excel şablon profilleri (Paket 60)
+
+Karar:
+
+1. **Hiçbir sigorta şirketinin kolon seti ürüne gömülmez.** Sütunlar ve eşleme tamamen kullanıcı verisidir; şemanın sabitlediği tek şey kanonik operasyon türü kümesidir (HB-2026-060). Testlerde yalnız sentetik sütun adları kullanılır.
+2. **Profiller organizasyon düzeyinde, sürümlü ve immutable'dır** (0032 araç profili kalıbı): aggregate + append-only sürüm zinciri. İlk kayıt gerekçe istemez, sonraki her sürüm ister. Sigorta şirketi bağlantısı composite FK ile AYNI organizasyona kilitlenir.
+3. **Eşleme kanonik tür kümesini TAM kapsamak zorundadır**; `null` "bilerek eşlenmedi" demektir. Eksik veya fazla anahtar hem sözleşme hem DB CHECK seviyesinde reddedilir. CHECK içinde subquery kullanılamadığı için fazla-anahtar kuralı `(mapping - ARRAY[...]) = '{}'::jsonb` ile ifade edildi.
+4. **Projeksiyon SALT OKUNURDUR ve dosyaya yazmaz.** Yanıt `written: false` literalini taşır: sözleşme seviyesinde "Excel'e yazıldı" iddiası imkânsızdır. xlsx dependency ve fiziksel yazım bu pakette YOKTUR ve ayrı deployment/ürün kararıdır.
+5. **Kaynak yalnız TAMAMLANMIŞ uygulama provenance'ıdır** (HB-2026-065). Ham AI önerisi ve önizleme projekte edilmez.
+6. **Dürüstlük kuralı — sayı uydurulmaz.** Paket 58'de kullanıcı tutarı değiştirerek uyguladıysa (`modified`) tür bazlı dağılım artık doğrulanmış değildir; bu satır için sütun tutarı ÜRETİLMEZ, satır `manual_entry_required` işaretlenir ve yalnız uygulanan toplam referans olarak korunur. Değiştirilmemiş satırda dahi dağılım toplamı uygulanan toplamı tutmuyorsa satır projekte edilmez; sessiz düzeltme yapılmaz.
+7. **Eşlenmemiş türe düşen tutar hiçbir sütuna yazılmaz** ve satır incelemeye düşer; sütun toplamlarına karışmaz.
+8. Yazma yetkisi yalnız `admin` rolündedir (şablon profili yapılandırmadır); okuma tüm rollere açıktır.
+
+Ölçülen sonuç (Paket 60 tarayıcı smoke'u, gerçek PostgreSQL):
+
+- Profil tanımlanmadan önce ekran sahte profil göstermiyor ve "önceden gömülü değildir" notunu veriyor.
+- Kullanıcı kendi sütunlarını (`ISCILIK`, `PARCA`) ve 8 türden 3'ünün eşlemesini tanımlıyor; eşlenmeyenler `null` olarak saklanıyor.
+- Değiştirilmemiş satır kullanıcının sütunlarına düşüyor; **değiştirilen satır `—` gösteriyor ve "Manuel giriş gerekli" olarak işaretleniyor** — hücrede uydurma tutar yok.
+- Projeksiyon föy sürümü sayısını değiştirmiyor (salt okunur doğrulandı).
+
+Etkisi:
+
+- Migration 0035, `v1/labor-excel-profile` sözleşmesi, profil CRUD + projeksiyon uçları, Yönetim'de "Excel Şablonları" sekmesi ve İşçilik'te projeksiyon önizlemesi eklenir.
+- Yeni modül **lazy** yüklenir: doğrudan import başlangıç JavaScript grafiğini 504.045 bayta çıkarıp bütçe kapısını düşürmüştü. Bütçe yükseltilmedi; projedeki lazy kalıbı uygulandı (495.584 bayt).
+- v0.7'nin kalan son dilimi **güvenli Excel yazımıdır** ve xlsx dependency + gerçek ofis şablonu + fiziksel yazma kararı gerektirir.
