@@ -714,10 +714,17 @@ export {
 } from './operational-alert.js'
 export {
   CASE_FOLDER_PATH_VERSION,
+  lookupCaseFolder,
   matchFolderName,
   normalizePlateFolderName,
   resolveCaseFolderCandidates,
   validateInsurerFolderName,
+  type CaseFolderLayout,
+  type CaseFolderLister,
+  type CaseFolderLocation,
+  type CaseFolderLookup,
+  type CaseFolderLookupFailure,
+  type CaseFolderMatch,
   type CaseFolderPathCandidates,
   type CaseFolderPathFailure,
   type CaseFolderPathResolution,

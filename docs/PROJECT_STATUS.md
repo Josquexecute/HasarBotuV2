@@ -1,6 +1,6 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-20
+Son güncelleme: 2026-07-21
 
 ## Mevcut sürüm ve aşama
 
@@ -31,6 +31,12 @@ Son güncelleme: 2026-07-20
 - **Gerçek şablona karşı doğrulama:** imza doğrulandı, hedef hücreler yamalandı, formüllü Toplam sütunu `cell_has_formula` ile reddedildi ve **11 OOXML part içeriğinin 9'u byte-birebir aynı kaldı** (tüm ZIP dosyasının binary olarak aynı kaldığı iddia edilmez).
 - Ana ağaçta typecheck, lint, gerçek PostgreSQL ile **domain 600 + contracts 308 + UI 632 (+6 skip) + database 71 + API 430 + file-agent 53**, build + bundle (495.584 bayt), `npm audit` (0 açık, kilit dosyası dahil) ve `git diff --check` geçti.
 - **Fiziksel yazım hattı, geometri migration'ı, sözleşme/API/UI ve Chrome smoke bu dilimde YOK**; 2. dilimdedir.
+
+## Klasör düzeni düzeltmesi (2026-07-21)
+
+- Fiziksel yapı sadeleşti: güncel dosyalar `<yıl><Ay YYYY><PLAKA>` düzeninde, sigorta şirketi klasörü olmadan duruyor. Arşiv yıllarında eski `<yıl><Sigorta Klasörü><Ay YYYY><PLAKA>` düzeni bulunabilir.
+- `case-folder-path` çözümleyicisi `2.0.0` sürümüne alındı: iki düzeni de tarar, sigorta seviyesini zorunlu tutmaz, kapalı klasörü ay klasörünün içinde arar ve birden fazla konum eşleşirse `case_folder_ambiguous` verip tahmin etmez.
+- Çalışan uygulamada kırılma OLMADI: `buildCaseWorkspaceBasePath` zaten yalın düzeni üretiyordu ve çözümleyicinin henüz tüketicisi yoktu.
 
 ## Paket 64 — İŞÇİLİK DAĞITIM KATEGORİSİ TAMAMLANDI (2026-07-20)
 

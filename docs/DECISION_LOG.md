@@ -1483,3 +1483,35 @@ Etki: `labor-allocation-categories/1.0.0`, `labor-category-allocation/1.0.0`,
 - **File Agent OOXML güvenli yazım hattı sonraki pakettir.**
 - **Gerçek workbook yoksa OLUŞTURULMAZ; hata verilir.** Şablon uydurmak,
   sigorta şirketinin beklediği biçimi tahmin etmek olurdu.
+
+## 2026-07-21 — HB-2026-081: Sürücüde iki klasör düzeni bir arada desteklenir
+
+Bağlam: fiziksel klasör yapısı sadeleştirildi. Güncel dosyalar sigorta şirketi
+klasörü olmadan duruyor:
+
+- Yalın: `<kök>\<yıl>\<Ay YYYY>\<PLAKA>` — örn. `2026\Temmuz 2026\47ACA535`
+- Eski/arşiv: `<kök>\<yıl>\<Sigorta Klasörü>\<Ay YYYY>\<PLAKA>`
+
+Karar:
+
+1. **Sigorta klasörü seviyesi ZORUNLU DEĞİLDİR.** Çözümleyici iki düzeni de
+   arar; yokluğu hata sayılmaz.
+2. **Kapanan dosyalar ay klasörünün İÇİNDEKİ `KAPALI <AY> <YIL>` klasöründedir**
+   ve bu her iki düzende geçerlidir.
+3. **Klasör adı üretilip birebir denenmez; mevcut dizinler listelenip Türkçe
+   harf duyarsız eşleştirilir.** Aynı ay için sürücüde hem `TEMMUZ 2026` hem
+   `Temmuz 2026` görüldüğü için üretim tabanlı eşleştirme yanlış negatif verirdi.
+4. **Birden fazla fiziksel konum eşleşirse otomatik seçim YAPILMAZ.** İki düzende
+   birden ya da hem aktif hem kapalı konumda bulunursa `case_folder_ambiguous`
+   döner ve bulunan TÜM konumlar raporlanır. Yanlış klasöre yazmak, bulamamaktan
+   pahalıdır.
+5. **Hangi fiziksel yolun seçildiği açıkça raporlanır** — sürücüde okunan gerçek
+   adlarla, üretilmiş adlarla değil. Fiziksel sigorta klasörü adının ekrandaki
+   şirket adıyla aynı olduğu VARSAYILMAZ; okunur.
+6. Aynı plakanın ` - 2`, ` - 3` ekli kardeşleri AYRI vakalardır ve kendi klasör
+   adlarıyla çözümlenir; plakadan tahmin edilmez.
+
+Etki: `case-folder-path/2.0.0` (`lookupCaseFolder`). Bu modülün henüz tüketicisi
+yoktur; File Agent OOXML yazım hattı paketinde kullanılacaktır. Halihazırda
+çalışan `buildCaseWorkspaceBasePath` zaten yalın düzeni üretiyordu ve
+değiştirilmedi.
