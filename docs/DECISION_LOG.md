@@ -1436,3 +1436,50 @@ Migration 0040:
 Geriye dönük uyumluluk: alanlar NULL kabul eder, eski kayıtlar okunabilir kalır ve sessizce "kategori dağılımı varmış" gibi yeniden yorumlanmaz. Gerçek kategori provenance'ı olmayan kayıtlar fiziksel Excel yazımına uygun sayılmayacak.
 
 **Bu parça UI'ı İÇERMEZ.** Kategori inceleme/düzeltme ekranı, approved category history okuması ve profil 2.0.0 projeksiyonunun applied kategorilere bağlanması sonraki dilimdedir. Paket tamamlanmış DEĞİLDİR.
+
+## 2026-07-20 — HB-2026-080: Kategori dağıtımı paketi kapanış kararları (Paket 64)
+
+Karar:
+
+1. **Excel sütunları operasyon türü değil işçilik dağıtım kategorisi (branş)
+   eksenindedir.** İki eksen farklı soruları cevaplar: "iş neydi" ile "işi hangi
+   branş yaptı". İlk tasarım bunları aynı sayıyordu; düzeltildi.
+2. **Kategori tutarları yalnız AI'nin ürettiği öneriden veya kullanıcının
+   onayladığı applied provenance'tan gelir; operasyon türünden TÜRETİLMEZ.**
+   Türetme, kimsenin onaylamadığı bir dağılımı Excel'e yazmak olurdu.
+3. **Kullanıcının düzelttiği applied dağılım güvenilir NİHAİ kaynaktır.** Satır
+   düzeltildi diye projeksiyondan düşmez; düzeltme, dağılımı güvenilir kılan
+   şeydir.
+4. **İşçilik tutarı değişip kategori dağılımı yeniden girilmezse provenance
+   BİLİNMİYOR kalır.** Otomatik ölçekleme yapılmaz; satır manuel girişe düşer.
+5. **Projeksiyon yalnız completed applied kategori provenance'ı ve yazılabilir
+   profil 2.0.0 ile üretilir.** Ham öneri, apply-preview, reddedilen satır,
+   başarısız/iptal uygulama, eski profil ve bayat önizleme kaynak olamaz.
+6. **Null, kısmi veya uyuşmayan kategori verisi YARIM Excel satırı üretmez.**
+   Eşlenen kısmı yazıp gerisini bırakmak, Excel'de eksik satırı tam satır gibi
+   gösterirdi; satır bütün olarak manuel girişe düşer.
+7. **Çelişki karşılaştırması mutlak tutar değil kategori PAYI üzerindendir.**
+   Fiyat revizyonu meşrudur; anlamlı olan işin branşlar arasında kaymasıdır.
+   Tolerans `LABOR_CATEGORY_SHARE_TOLERANCE = 0.2`.
+8. **History ve baseline çelişki kodlarını SUNUCU zorlar.** Model kodu üretmese
+   bile gerçek karşılaştırma ayrışma gösteriyorsa kod basılır; modelin
+   bildirdiği kodlar korunur, biri diğerini ezmez ve tekrarlanmaz. Çelişki tek
+   başına `control_required` yapar.
+
+Gerekçe: paket boyunca tekrar eden tek risk, eksik veriyi makul görünen bir
+sayıyla doldurma eğilimiydi. Yukarıdaki kararların hepsi aynı ilkeyi farklı
+noktalarda uygular: bilinmeyen bilinmiyor kalır.
+
+Etki: `labor-allocation-categories/1.0.0`, `labor-category-allocation/1.0.0`,
+`labor-excel-profile/2.0.0`, migration 0040–0041, `gemini-generate-content/1.3.0`.
+
+**Açık kapılar (paket kapandı ama bunlar kapanmadı):**
+
+- **Gemini 5/5 latency release kapısı AÇIK.** Kontrollü ölçüm 21.07.2026 10:15
+  görevindedir; o zamana kadar yeni gerçek Gemini çağrısı yapılmaz.
+- **Production Gemini provider açılışı KAPALI.** Release kapısı geçmeden
+  açılmaz.
+- **Fiziksel `.xlsx` yazımı HENÜZ UYGULANMADI.** Projeksiyon salt okunurdur.
+- **File Agent OOXML güvenli yazım hattı sonraki pakettir.**
+- **Gerçek workbook yoksa OLUŞTURULMAZ; hata verilir.** Şablon uydurmak,
+  sigorta şirketinin beklediği biçimi tahmin etmek olurdu.

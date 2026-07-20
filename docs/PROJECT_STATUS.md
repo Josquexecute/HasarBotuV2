@@ -5,8 +5,8 @@ Son güncelleme: 2026-07-20
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 64 — semantik eksen düzeltmesi (dilim 1.5)
-- Durum: **Dağıtım kategorisi ekseni kuruldu; fiziksel yazım HENÜZ YAPILMADI**
+- Aşama: Paket 64 — işçilik dağıtım kategorisi (TAMAMLANDI)
+- Durum: **Kategori ekseni uçtan uca çalışıyor; fiziksel `.xlsx` yazımı HENÜZ YOK**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
@@ -31,6 +31,67 @@ Son güncelleme: 2026-07-20
 - **Gerçek şablona karşı doğrulama:** imza doğrulandı, hedef hücreler yamalandı, formüllü Toplam sütunu `cell_has_formula` ile reddedildi ve **11 OOXML part içeriğinin 9'u byte-birebir aynı kaldı** (tüm ZIP dosyasının binary olarak aynı kaldığı iddia edilmez).
 - Ana ağaçta typecheck, lint, gerçek PostgreSQL ile **domain 600 + contracts 308 + UI 632 (+6 skip) + database 71 + API 430 + file-agent 53**, build + bundle (495.584 bayt), `npm audit` (0 açık, kilit dosyası dahil) ve `git diff --check` geçti.
 - **Fiziksel yazım hattı, geometri migration'ı, sözleşme/API/UI ve Chrome smoke bu dilimde YOK**; 2. dilimdedir.
+
+## Paket 64 — İŞÇİLİK DAĞITIM KATEGORİSİ TAMAMLANDI (2026-07-20)
+
+Paket kapatıldı. Zincirin tamamı gerçek PostgreSQL ve gerçek tarayıcı üzerinde
+doğrulandı; aşağıdaki maddelerin hiçbiri "yazıldı ama çalıştırılmadı" değildir.
+
+### Üç eksen ayrı tutuluyor
+
+- **Operasyon türü** (`labor-operation-types/1.0.0`): işin NE olduğu — onarım,
+  değişim, sökme/takma, boya, sarf, kalibrasyon, ilişkili işlem, diğer.
+- **İşçilik dağıtım kategorisi** (`labor-allocation-categories/1.0.0`): işi HANGİ
+  BRANŞIN yaptığı — kaporta, mekanik, elektrik, döşeme/kilit, cam, kalibrasyon,
+  onarım, boya. **Excel sütunları bu eksendedir.**
+- **Ekonomik karşılaştırma kovaları**: yalnız onarım/değişim kıyası içindir.
+
+Bu ayrım paketin merkezindeki düzeltmedir: ilk tasarım Excel sütunlarını
+operasyon türüne bağlıyordu ve iki ekseni aynı şey sanıyordu.
+
+### Uçtan uca çalışan zincir
+
+- **Gemini kategori wire sürümü `gemini-generate-content/1.3.0`**: model satır
+  bazında sekiz kategori tutarını KENDİSİ üretir; kural tabanlı dağıtıcı yoktur.
+- **Önerilen ve uygulanan kategori kalıcılığı** (migration 0040): iki dağılım
+  AYRI saklanır; sekiz anahtar tamlığı ve toplam eşitliği veritabanı CHECK'inde
+  durur.
+- **Kullanıcı düzeltmesi ve immutable provenance**: uzman sekiz tutarı
+  düzeltebilir; modelin ilk değeri kaybolmaz, `category_modified` gerçeği söyler
+  ve satırlar append-only kalır.
+- **Onaylı kategori geçmişi**: yalnız tamamlanmış uygulamaların provenance'ı
+  dolu satırlarından; operasyon türü ekseninden BAĞIMSIZ hesaplanır; çelişen
+  geçmiş otomatik doğru kabul edilmez.
+- **Baseline/history çelişkisi sunucuda zorlanır** (migration 0041): kıyas
+  vektörleri kodla birlikte immutable saklanır. Karşılaştırma mutlak tutar
+  değil kategori PAYI üzerinden yapılır.
+- **UI sekiz kategori inceleme ve düzeltme**: tutarlar, işçilik/kategori
+  toplamı, ortak gerekçe, güven, kanıt referansları, sunucu çelişki kodları,
+  baseline/geçmiş payları. Geçersiz toplam uygulamayı kilitler; fark hiçbir
+  kategoriye otomatik dağıtılmaz.
+- **Profil `labor-excel-profile/2.0.0`**: eşleme kategori eksenindedir; eski
+  1.0.0 profilleri okunabilir ama `writable=false`.
+- **Projeksiyon yalnız completed applied provenance'tan üretilir**: eksik
+  provenance, toplam uyuşmazlığı veya eşlenmemiş sütun satırı manuel girişe
+  düşürür; kısmen eşlenen satır tamamen düşer.
+
+### Doğrulama
+
+- Tam test zinciri gerçek `hasarbotu_test` PostgreSQL ile geçti; kategori
+  ekseni için domain, contracts, API ve UI testleri eklendi.
+- **P63 Chrome smoke** (profil seçimi, 15 senaryo) ve **P64 Chrome smoke**
+  (kategori zinciri, 16 iddia) gerçek Chrome/CDP ile geçti.
+- Üç föy sürümlü baseline çelişkisi ve tutarlı-ama-ayrışan geçmiş çelişkisi
+  gerçek PostgreSQL'de doğal API akışıyla kanıtlandı.
+- İddiaların dişi kasıtlı kırılmalarla ölçüldü: pay karşılaştırması, UI toplam
+  kilidi, sunucu toplam kapısı, bayatlık hesabı, applied/proposed karışması,
+  baseline zorlaması ve kod ezme senaryosu — her biri doğru testi düşürdü.
+
+### Bu pakette YAPILMAYAN
+
+- **Fiziksel `.xlsx` yazımı yoktur.** Projeksiyon salt okunurdur ve sözleşme
+  seviyesinde `written: false` taşır.
+- Production Gemini provider açılmadı; üretim migration çalıştırılmadı.
 
 ## Paket 63 doğrulama sonucu — SEÇİM SUNUCUDA ZORLANIYOR
 

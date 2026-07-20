@@ -437,3 +437,53 @@ describe('kategori çelişki kodlarının sunucuda kesinleştirilmesi', () => {
     expect(codes.filter((code) => code === 'CATEGORY_BASELINE_CONFLICT')).toHaveLength(1)
   })
 })
+
+describe('iki kaynak birden ayrışırsa kodlar BİRLİKTE korunur', () => {
+  const split = (bodywork: number, paint: number): readonly LaborCategoryAmount[] =>
+    LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+      category,
+      amountMinor: category === 'bodywork' ? bodywork : category === 'paint' ? paint : 0,
+    }))
+
+  /** Öneri kaporta; baseline ve geçmiş boya — her iki eksen de ayrışıyor. */
+  const bothDisagree = {
+    proposed: split(10_000, 0),
+    baseline: split(0, 10_000),
+    history: split(0, 10_000),
+  }
+
+  it('baseline ve history kodları aynı satırda birlikte durur', () => {
+    const codes = forceCategoryConflictCodes({ ...bothDisagree, reportedCodes: [] })
+    expect(codes).toContain('CATEGORY_BASELINE_CONFLICT')
+    expect(codes).toContain('CATEGORY_HISTORY_CONFLICT')
+    // Biri diğerini EZMEZ: iki ayrı kaynak, iki ayrı bilgi.
+    expect(codes).toHaveLength(2)
+  })
+
+  it('modelin bildirdiği kodlar da korunur; sunucu bilgi silmez', () => {
+    const codes = forceCategoryConflictCodes({
+      ...bothDisagree,
+      reportedCodes: ['CATEGORY_EVIDENCE_INSUFFICIENT', 'CATEGORY_MULTI_TRADE_LINE'],
+    })
+    expect(codes).toContain('CATEGORY_EVIDENCE_INSUFFICIENT')
+    expect(codes).toContain('CATEGORY_MULTI_TRADE_LINE')
+    expect(codes).toContain('CATEGORY_BASELINE_CONFLICT')
+    expect(codes).toContain('CATEGORY_HISTORY_CONFLICT')
+    expect(codes).toHaveLength(4)
+  })
+
+  it('model zaten bildirmişse kod ikinci kez eklenmez', () => {
+    const codes = forceCategoryConflictCodes({
+      ...bothDisagree,
+      reportedCodes: ['CATEGORY_BASELINE_CONFLICT', 'CATEGORY_HISTORY_CONFLICT'],
+    })
+    expect(new Set(codes).size).toBe(codes.length)
+    expect(codes).toHaveLength(2)
+  })
+
+  it('iki kaynak birden ayrışan satır kontrole düşer', () => {
+    const codes = forceCategoryConflictCodes({ ...bothDisagree, reportedCodes: [] })
+    // Güven yüksek olsa bile otomatik kabul yoktur.
+    expect(categoryControlRequired({ confidence: 0.99, conflictCodes: codes })).toBe(true)
+  })
+})
