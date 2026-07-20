@@ -1416,3 +1416,23 @@ Kota tükendiği için latency kapısı ölçülemiyor. Bu parça gerçek çağr
 Doğrulandı: korumalı koşu ilk 429'da durdu, planlanan 5 çağrı yerine **1 çağrı** harcadı ve `ok: false` döndü.
 
 Kapı durumu değişmedi: küçültülmüş wire (`gemini-generate-content/1.3.0`) ölçülemedi, A/B yapılmadı, 2 satırlık tekrarlanabilir kapı AÇIK. Kota yenilendiğinde ilk ve tek iş: 2 satır × en fazla 5 çağrı, ilk timeout/429'da dur.
+
+## 2026-07-20 — HB-2026-078: Kategori dağılımı kalıcılaştırma (Paket 64 ara dilim, 6. parça)
+
+Gemini latency kapısı AÇIK kalmaya devam ediyor; bu parça onu kapanmış saymaz. Şema geçerliliği zaten kanıtlanmıştı (gerçek API HTTP 200 ile kabul etti, domain doğrulaması geçti), açık olan yalnız gecikmedir ve gecikme veri modelini etkilemez. Bu yüzden persistence kapıyı beklemeden yapıldı.
+
+Migration 0040:
+
+1. `labor_allocation_line_suggestions`: `proposed_category_amounts`, `category_schema_version`, `category_confidence`, `category_conflict_codes`.
+2. `labor_allocation_applied_lines`: `proposed_category_amounts`, `applied_category_amounts`, `category_modified`, `category_schema_version`.
+3. **Sekiz anahtar tamlığı, fazla anahtar yasağı, negatif olmayan tam sayı ve TOPLAM EŞİTLİĞİ veritabanı CHECK'inde durur.** Önerilen toplam öneri satırının, uygulanan toplam UYGULANAN satırın işçilik tutarına eşit olmalıdır. Uygulama katmanı atlansa bile tutarsız dağılım yazılamaz.
+4. `category_modified` bayrağı GERÇEĞİ söylemek zorundadır: CHECK, bayrağı `proposed <> applied` ile karşılaştırır.
+5. Alanlar birlikte null veya birlikte dolu olmak zorundadır; yarım provenance imkânsızdır.
+
+**Uydurma yasağı — ölçülen davranış:** kullanıcı işçilik tutarını değiştirdiyse önerilen dağılım artık o satırı açıklamıyordur. Sayıları ölçekleyip "uygulanan dağılım buymuş" gibi sunmak uydurma olurdu; bunun yerine kategori provenance'ı BİLİNMİYOR bırakılır (dört alan da null) ve satır ileride manuel girişe düşer. Test bunu doğruluyor.
+
+**Append-only gerçeği:** ilk yazdığım CHECK testleri UPDATE kullanıyordu ve başarısız oldu — çünkü her iki tablo da immutable ve guard trigger CHECK'ten ÖNCE devreye giriyor (`23001`). Testler gerçeğe uyarlandı; CHECK ayrıca doğrudan INSERT ile sınandı. Bu, kısıtın zayıf değil FAZLADAN korumalı olduğunu gösteriyor.
+
+Geriye dönük uyumluluk: alanlar NULL kabul eder, eski kayıtlar okunabilir kalır ve sessizce "kategori dağılımı varmış" gibi yeniden yorumlanmaz. Gerçek kategori provenance'ı olmayan kayıtlar fiziksel Excel yazımına uygun sayılmayacak.
+
+**Bu parça UI'ı İÇERMEZ.** Kategori inceleme/düzeltme ekranı, approved category history okuması ve profil 2.0.0 projeksiyonunun applied kategorilere bağlanması sonraki dilimdedir. Paket tamamlanmış DEĞİLDİR.

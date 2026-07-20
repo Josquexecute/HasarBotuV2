@@ -43,6 +43,9 @@ import {
   type LaborAllocationPlanContext,
   type NormalizedLaborItem,
   type OutboundVehicleProfile,
+  LABOR_ALLOCATION_CATEGORIES,
+  LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+  type LaborCategoryAmount,
 } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
@@ -96,6 +99,38 @@ interface Actor {
 function safeNumber(value: unknown): number {
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) ? parsed : 0
+}
+
+/**
+ * Paket 64 — kategori tutarlarını DB'nin beklediği sekiz anahtarlı nesneye
+ * çevirir.
+ *
+ * Kategori provenance'ı YOKSA `null` döner ve satır kategorisiz yazılır. Eski
+ * kayıtlar bu durumdadır; sessizce sıfır dağılım UYDURULMAZ çünkü "hepsi 0"
+ * ile "bilinmiyor" aynı şey değildir ve fiziksel Excel yazımında bu ayrım
+ * kritiktir.
+ */
+function categoryAmountsJson(
+  amounts: readonly LaborCategoryAmount[] | undefined,
+): string | null {
+  if (amounts === undefined) return null
+  const byCategory = new Map(amounts.map((item) => [item.category, item.amountMinor]))
+  return JSON.stringify(Object.fromEntries(
+    LABOR_ALLOCATION_CATEGORIES.map((category) => [category, byCategory.get(category) ?? 0]),
+  ))
+}
+
+/** Sekiz anahtarlı DB nesnesini domain listesine çevirir; eksikse null. */
+function readCategoryAmounts(value: unknown): readonly LaborCategoryAmount[] | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const amounts: LaborCategoryAmount[] = []
+  for (const category of LABOR_ALLOCATION_CATEGORIES) {
+    const amount = record[category]
+    if (typeof amount !== 'number' || !Number.isSafeInteger(amount)) return null
+    amounts.push({ category, amountMinor: amount })
+  }
+  return amounts
 }
 
 interface SheetSnapshot {
@@ -1127,9 +1162,11 @@ export function createLaborAllocationStore(
               economic_buckets,economic_repair_total_minor,economic_replace_total_minor,economic_note,
               reasoning,evidence_refs,confidence,conflict_codes,missing_evidence_codes,control_required,
               baseline_part_amount_minor,baseline_labor_amount_minor,
-              baseline_part_ratio,baseline_suggested_part_ratio,baseline_conflict)
+              baseline_part_ratio,baseline_suggested_part_ratio,baseline_conflict,
+              proposed_category_amounts,category_schema_version,category_confidence,
+              category_conflict_codes)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-                   $22,$23,$24,$25,$26)`,
+                   $22,$23,$24,$25,$26,$27::jsonb,$28,$29,$30)`,
           [
             uuidv7(), actor.organizationId, caseId, runId, line.lineOrdinal,
             sheetLine.description, sheetLine.action, sheetLine.partAmountMinor, sheetLine.laborAmountMinor,
@@ -1142,6 +1179,15 @@ export function createLaborAllocationStore(
             line.baselineComparison?.baselinePartRatio ?? null,
             line.baselineComparison?.suggestedPartRatio ?? null,
             line.baselineComparison?.conflicts ?? false,
+            /*
+             * P64: ÖNERİLEN kategori dağılımı. Domain doğrulamasını geçmiş
+             * olsa da sekiz anahtar ve toplam eşitliği DB CHECK ile de
+             * zorlanır; uygulama katmanı atlansa bile tutarsız satır yazılamaz.
+             */
+            categoryAmountsJson(line.categoryAllocation?.amounts),
+            line.categoryAllocation?.schemaVersion ?? null,
+            line.categoryAllocation?.confidence ?? null,
+            line.categoryAllocation?.conflictCodes ?? [],
           ],
         )
       }
@@ -1350,7 +1396,7 @@ export function createLaborAllocationStore(
         const suggestionRows = await client.query(
           `SELECT line_ordinal,source_description,source_action,
                   source_part_amount_minor::text AS part,source_labor_amount_minor::text AS labor,
-                  allocations,control_required
+                  allocations,control_required,proposed_category_amounts
              FROM labor_allocation_line_suggestions
             WHERE organization_id=$1 AND run_id=$2
             ORDER BY line_ordinal`,
@@ -1372,6 +1418,23 @@ export function createLaborAllocationStore(
 
         const validation = validateLaborAllocationApply(suggestedLines, input.lines)
         if (!validation.allowed) throw new LaborAllocationError('APPLY_LINES_INVALID', 400)
+
+        /*
+         * P64 — kategori provenance'ının uygulanan satıra taşınması.
+         *
+         * Önerilen kategori toplamı ÖNERİLEN işçilik tutarına eşittir. Kullanıcı
+         * işçilik tutarını değiştirdiyse bu dağılım artık o satırı açıklamıyor
+         * demektir; sayıları ölçekleyip "uygulanan dağılım buymuş" gibi
+         * sunmak UYDURMA olur. Bu durumda kategori provenance'ı BİLİNMİYOR
+         * olarak bırakılır ve satır ileride manuel girişe düşer.
+         */
+        const proposedCategoriesByOrdinal = new Map<number, readonly LaborCategoryAmount[]>()
+        for (const row of suggestionRows.rows as Record<string, unknown>[]) {
+          const amounts = readCategoryAmounts(row.proposed_category_amounts)
+          if (amounts !== null) {
+            proposedCategoriesByOrdinal.set(safeNumber(row.line_ordinal), amounts)
+          }
+        }
 
         const applicationId = uuidv7()
         await client.query(
@@ -1422,8 +1485,11 @@ export function createLaborAllocationStore(
                 suggested_description,suggested_action,suggested_part_amount_minor,
                 suggested_labor_amount_minor,suggested_operation_types,
                 applied_description,applied_action,applied_part_amount_minor,
-                applied_labor_amount_minor,modified,control_required)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+                applied_labor_amount_minor,modified,control_required,
+                proposed_category_amounts,applied_category_amounts,category_modified,
+                category_schema_version)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+                     $18::jsonb,$19::jsonb,$20,$21)`,
             [
               uuidv7(), actor.organizationId, applicationId, line.lineOrdinal,
               line.suggested.lineOrdinal, line.lineOrdinal,
@@ -1433,6 +1499,30 @@ export function createLaborAllocationStore(
               line.applied.description.trim(), line.applied.action.trim(),
               line.applied.partAmountMinor, line.applied.laborAmountMinor,
               line.modified, line.suggested.controlRequired,
+              /*
+               * P64 — proposed ve applied kategori dağılımı AYRI saklanır.
+               *
+               * Kullanıcı bir kategori tutarını değiştirdiyse modelin ilk
+               * değeri kaybolmaz; approved history yalnız UYGULANAN değeri
+               * öğrenme örneği sayar. Kategori provenance'ı yoksa dördü de
+               * null kalır ve DB CHECK bunu tutarlı biçimde zorlar.
+               */
+              ...(() => {
+                const proposed = proposedCategoriesByOrdinal.get(line.suggested.lineOrdinal)
+                // İşçilik tutarı değiştiyse önerilen dağılım bu satırı artık
+                // açıklamıyor; ölçekleyip uydurmak yerine BİLİNMİYOR bırakılır.
+                const laborUnchanged =
+                  line.applied.laborAmountMinor === line.suggested.laborAmountMinor
+                if (proposed === undefined || !laborUnchanged) {
+                  return [null, null, null, null]
+                }
+                return [
+                  categoryAmountsJson(proposed),
+                  categoryAmountsJson(proposed),
+                  false,
+                  LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+                ]
+              })(),
             ],
           )
         }
