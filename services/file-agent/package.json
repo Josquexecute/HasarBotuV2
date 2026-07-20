@@ -32,6 +32,7 @@
     "@napi-rs/canvas": "1.0.2",
     "@tesseract.js-data/eng": "1.0.0",
     "@tesseract.js-data/tur": "1.0.0",
+    "fflate": "0.8.3",
     "pdfjs-dist": "6.1.200",
     "tesseract.js": "7.0.0"
   },

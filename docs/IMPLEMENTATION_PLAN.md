@@ -1266,3 +1266,27 @@ Kapsam dışı: ilerleme yüzdesi/kalan süre tahmini, çok süreçli koşu devr
 - [x] Smoke kasıtlı kırılmayla sınandı; teşhis kodu ürünün işini yapmıyor.
 
 Kapsam dışı: gerçek Excel dosyası okuma, hücre koordinatı modelleme, dosyaya yazma.
+
+## Paket 64 — Gerçek şablon keşfi ve güvenli .xlsx yazımı
+
+1. dilim (tamamlandı):
+
+- [x] Gerçek sürücüyü SALT OKUNUR tara; hiçbir dosyayı değiştirme.
+- [x] Klasör düzeni sapmalarını ölç ve raporla (ay harf yazımı, KAPALI seviyesi).
+- [x] Şablonu dosya adıyla değil İÇERİK imzasıyla ayır.
+- [x] Bağımlılık seç ve gerekçelendir; kilit dosyasıyla audit et.
+- [x] Yol çözümleyici: aday üret, harf duyarsız eşleştir, kök dışına çıkışı engelle.
+- [x] Workbook geometrisi: imza doğrulama, yazılabilir hücre sınırları, cerrahi yamalama.
+- [x] Formüllü hücreye yazmayı reddet; `fullCalcOnLoad` ile yeniden hesaplama iste.
+- [x] Domain kodunu GERÇEK şablona karşı salt okunur doğrula (kaynak hash değişmedi).
+
+2. dilim (kapsam dışı, sıradaki):
+
+- [ ] Geometri profil sürümü + migration (hedef sheet, imza, sınırlar, fingerprint).
+- [ ] Sözleşme + API: keşif, doğrulama ve hücre değişiklik preview'u.
+- [ ] File Agent yazım hattı: hash kontrolü, yedek, geçici dosya, doğrulama, güvenli replace, rollback.
+- [ ] İdempotency, quarantine, lease/retry.
+- [ ] UI: keşif durumu, preview, nihai onay, File Agent işlem durumu.
+- [ ] Kopyalanmış gerçek dosyada pilot smoke; Chrome/CDP smoke.
+
+Kapsam dışı (bu pakette): eksik workbook oluşturma (ürün kararı: yalnız doldur, yoksa hata).

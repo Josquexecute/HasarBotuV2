@@ -5,11 +5,22 @@ Son güncelleme: 2026-07-20
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 63 — Çoklu Excel profil seçimi
-- Durum: **Profil seçimi sunucuda zorlanıyor; tüm kalite kapıları geçti**
+- Aşama: Paket 64 — Gerçek şablon keşfi ve güvenli .xlsx yazımı (1. dilim)
+- Durum: **Keşif tamamlandı, yamalama temeli gerçek şablonda doğrulandı; fiziksel yazım HENÜZ YAPILMADI**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 64 (1. dilim) doğrulama sonucu — KEŞİF GERÇEK, YAZIM HENÜZ YOK
+
+- **Salt okunur keşif yapıldı; P: üzerinde hiçbir dosya değiştirilmedi** (kaynak SHA256 önce/sonra aynı).
+- **Klasör düzeni spesifikasyondan iki noktada ayrıldı:** ay klasörü aynı ay için bir şirkette `TEMMUZ 2026`, diğerinde `Temmuz 2026`; ayrıca kapanan dosyalar için belgelenmemiş bir `KAPALI <AY> <YIL>` seviyesi var. Çözümleyici ad üretmek yerine mevcut dizinlerle Türkçe harf duyarsız eşleşiyor; eşleşme yoksa açık hata veriyor ve eski düzene sessiz fallback yapmıyor.
+- **Örnek vakada (`47ACA535`) hiç `.xlsx` yok.** Ürün kararı alındı: eksik workbook OLUŞTURULMAZ, yazım açık hatayla bloklanır.
+- **Şablon dosya adıyla değil içerik imzasıyla ayrıldı:** 20 workbook / 26 sheet tarandı, imza eşleşmesi tam olarak 1. `İŞÇİLİK.xlsx` adlı iki dosya aslında parça listesiydi — ada güvenen bir seçim tam olarak yanlış dosyaları seçerdi.
+- **Bağımlılık `fflate` seçildi** (0 bağımlılık, MIT, saf JS, native binary yok). `exceljs` reddedildi: 9 doğrudan bağımlılık ve workbook'u yeniden üretirken modellemediği özellikleri (grafik, pivot, koşullu biçimlendirme) sessizce düşürmesi.
+- **Gerçek şablona karşı doğrulama:** imza doğrulandı, hedef hücreler yamalandı, formüllü Toplam sütunu `cell_has_formula` ile reddedildi ve **11 ZIP girdisinin 9'u byte-birebir aynı kaldı**.
+- Ana ağaçta typecheck, lint, gerçek PostgreSQL ile **domain 600 + contracts 308 + UI 632 (+6 skip) + database 71 + API 430 + file-agent 53**, build + bundle (495.584 bayt), `npm audit` (0 açık, kilit dosyası dahil) ve `git diff --check` geçti.
+- **Fiziksel yazım hattı, geometri migration'ı, sözleşme/API/UI ve Chrome smoke bu dilimde YOK**; 2. dilimdedir.
 
 ## Paket 63 doğrulama sonucu — SEÇİM SUNUCUDA ZORLANIYOR
 

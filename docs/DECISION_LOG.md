@@ -1276,3 +1276,27 @@ Karar:
 8. **Smoke'un diş taşıdığı ölçüldü.** Paket 62'de teşhis kodunun kendisi ürünün işini yaparak sahte yeşil ürettiği için, bu paketin smoke'u kasıtlı bir kırılmayla sınandı: aktiflik filtresi devre dışı bırakıldığında smoke `AFTER_DEACTIVATION_COUNT_2` ile düştü. Betikteki hiçbir teşhis kodu tıklama veya seçim yapmaz; yalnız okur.
 
 Etkisi: Migration 0037, aday ve durum uçları, projeksiyon sıkılaştırması, profil seçim paneli. Hâlâ hiçbir Excel dosyası okunmaz veya yazılmaz.
+
+## 2026-07-20 — HB-2026-071: Gerçek şablon keşfi ve workbook yamalama temeli (Paket 64, 1. dilim)
+
+Bağlam: Fiziksel `.xlsx` yazımına geçmeden önce gerçek sürücü salt okunur tarandı. Keşif, varsayılan klasör düzenini ve "İŞÇİLİK.xlsx şablondur" beklentisini çürüttü.
+
+Ölçülen keşif sonucu (hiçbir dosya değiştirilmedi):
+
+1. **Ay klasörü büyük/küçük harf tutarlı DEĞİL.** Aynı ay için `REFERANS SİGORTA\TEMMUZ 2026` (büyük) ve `TÜRKİYE SİGORTA\Temmuz 2026` (baş harf) birlikte var. Bu yüzden ay klasörü adı ÜRETİLMEZ; mevcut dizinler arasında Türkçe harf duyarsız eşleşme aranır. Eşleşme yoksa açık hata; eski düzene sessiz fallback yok.
+2. **Belgelenmemiş bir seviye var:** kapanan dosyalar `<Ay Yıl>\KAPALI <AY> <YIL>\<PLAKA>` altında duruyor. Plaka klasörü hem doğrudan hem bu seviyede aranır.
+3. **Örnek vakada (`47ACA535`) hiç `.xlsx` yok.** Yazılacak workbook mevcut değil.
+4. **Tüm sürücüde gerçek işçilik şablonu TEK örnek:** 20 workbook / 26 sheet tarandı, imza eşleşmesi tam olarak 1 (`41-17855116 İşçilik Dağılımı.xlsx`, sheet `Main sheet`, A1:N6, F–M operasyon sütunları, N formüllü toplam).
+5. **`İŞÇİLİK.xlsx` adlı iki dosya şablon DEĞİL** — ad-hoc parça listeleri (operasyon başlığı yok). Dosya adına güvenen bir seçim tam olarak yanlış dosyaları seçerdi; ayırt edici olan İÇERİK imzasıdır.
+6. Boş şablon dosyası hiçbir yerde yok; mevcut tek örnek doldurulmuş ve adı vakaya özel.
+
+Kararlar:
+
+1. **Eksik workbook oluşturulmaz.** Kullanıcı kararı: yalnız var olan dosya doldurulur, yoksa yazım açık hatayla bloklanır. HasarBotu müşteri klasöründe kendiliğinden dosya yaratmaz.
+2. **Bağımlılık: `fflate` (0 bağımlılık, MIT, saf JS) + kendi cerrahi OOXML yamalayıcımız.** `exceljs` reddedildi: 9 doğrudan bağımlılık (üç ayrı zip yığını) ve nesne modeli kurup workbook'u YENİDEN üretmesi, modellemediği özellikleri (grafik, pivot, koşullu biçimlendirme, veri doğrulama) sessizce düşürür. Yamalama yaklaşımında dokunulmayan her ZIP girdisi **byte-birebir** korunur ve bu doğrulanabilir.
+3. **Formüllü hücreye YAZILMAZ.** Toplam sütunu formüllüdür; sabit sayıya çevrilmez, plan `cell_has_formula` ile reddedilir. Yamalanan hücreler yüzünden bayat kalan formül sonucu için sahte toplam yazmak yerine workbook'a `fullCalcOnLoad` bayrağı konur.
+4. **Sınır dışı tek hücre tüm planı düşürür**; kısmi yazım yoktur.
+
+Gerçek şablona karşı salt okunur doğrulama (dosya diske yazılmadı, kaynak SHA256 değişmedi): imza doğrulandı, F2/M2/L3 yamalandı, N2 (formül) reddedildi, **11 ZIP girdisinin 9'u byte-birebir aynı kaldı** — yalnız hedef sheet ve recalc bayrağı değişti.
+
+Bu dilimin kapsamı: bağımlılık, yol çözümleyici ve workbook geometrisi/yamalama temeli. Fiziksel yazım hattı (File Agent, yedek, geçici dosya, güvenli replace), geometri profil migration'ı, sözleşme/API/UI ve Chrome smoke bir sonraki dilimdedir. **Hiçbir fiziksel yazım yapılmadı.**
