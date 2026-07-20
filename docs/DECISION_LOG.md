@@ -1336,3 +1336,22 @@ Bu parça, her şeyin üzerine oturacağı doğrulama çekirdeğini kurar:
 5. **Modelin yüksek güveni sunucu zorlamasını KALDIRAMAZ:** `categoryControlRequired` çelişki kodu varsa 0.99 güvende bile `true` döner; eşik altı güven de kontrolü zorlar.
 
 Kapsam: yalnız domain doğrulama çekirdeği ve testleri. Wire şeması, prompt, provider sürüm artışı, migration, apply transaction, UI ve **gerçek Gemini smoke bu parçada YOKTUR**; sıradaki parçadadır. Paket, gerçek 2 satırlı Gemini schema smoke geçmeden tamamlanmış sayılmayacak.
+
+## 2026-07-20 — HB-2026-074: Kategori dağılımı wire şeması, prompt ve sürüm artışı (Paket 64 ara dilim, 2. parça)
+
+Kapsam: wire şeması, sistem talimatı, sürüm artışları ve gerçek Gemini kapısı. Migration/persistence, apply transaction, UI ve Chrome smoke bu parçada YOKTUR.
+
+1. **Wire şemasına `categoryAllocation` eklendi.** Sekiz kategori de `required`; kullanılmayan kategori 0 taşır. **Toplam alanı bilerek İSTENMEZ** — sunucu toplamı sekiz kategoriden kendisi hesaplar ve satırın YALNIZ işçilik tutarıyla karşılaştırır.
+2. **Talimat iki ekseni açıkça ayırır:** `allocations` işin ne olduğunu, `categoryAllocation` hangi branşın yaptığını söyler. Modele bunların dönüştürülemez olduğu, `remove_install` işinin parçaya göre kaporta veya mekanik olabileceği ve parça bedelinin kategori toplamına girmemesi gerektiği açıkça söylenir. Gizli kural tabanlı fallback eklenmedi.
+3. **Sürümler yükseldi:** `labor-allocation-ai/2.0.0`, `labor-allocation-suggestion/2.0.0`, `gemini-generate-content/1.2.0`.
+4. **Migration 0039** çalışma zamanı hatasını çözdü: 0031/0036 talimat ve çıktı sürümünü TEK literale sabitliyordu, yeni koşular yazılamıyordu. Kısıt gevşetilip serbest metne çevrilmedi; YALNIZ iki sürüme açıldı. Eski koşular 1.0.0 ile okunmaya devam eder.
+5. **Döngüsel bağımlılık önlendi:** `labor-allocation-categories` artık `labor-allocation-ai`'den yalnız TİP alır; `AMBIGUOUS_OPERATION_TYPES` operasyon türleriyle aynı dosyaya taşındı. Aksi halde P57'deki çalışma zamanı döngüsü tekrarlanırdı.
+6. Deterministik test harness'ı da sözleşmeye uyan kategori çıktısı üretir. Bu bir kural tabanlı dağıtıcı DEĞİLDİR ve üretim yolunda kullanılmaz.
+
+**Gerçek Gemini kapısı — ölçülen sonuç:**
+
+- İlk koşuda kapı GEÇTİ: `responseJsonSchema` HTTP 200 ile kabul edildi, istenen/dönen satır sayısı eşit, domain doğrulama hatası 0/2, `control_required` 4/4 (sunucu zorlaması korunuyor), PII/URL/path taraması temiz.
+- Aynı koşuda iki kusur bulunup düzeltildi: (a) smoke betiği P62'den beri asenkron olan analizi beklemiyordu; (b) `isValidLineShape` yeni `categoryAllocation` anahtarını fazladan anahtar sayıp reddediyordu.
+- **Sonraki iki teyit koşusu `AI_PROVIDER_TIMEOUT` verdi.** Kategori ekseni yanıtı büyüttüğü için çağrı süresi 30 sn'lik ÇAĞRI BAŞINA tavanın sınırına geldi. Tavan ÖLÇÜLMEDEN yükseltilmedi (HB-2026-068 kuralı). Bu, paketin tamamlanmasından önce ölçülmesi gereken açık risktir.
+
+Paket bu nedenle TAMAMLANMIŞ SAYILMIYOR: kararlı geçen 2 satırlık kapı, migration/persistence, apply transaction, UI ve Chrome smoke kalan işlerdir.

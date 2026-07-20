@@ -135,6 +135,30 @@ function deterministicOutput(context: LaborAllocationProviderRequest['context'])
         conflictCodes: [],
         missingEvidenceCodes: [],
         controlRequired: true,
+        /*
+         * P64 ara dilim — sentetik kategori dağılımı.
+         *
+         * Bu bir KURAL TABANLI DAĞITICI DEĞİLDİR ve üretimde kullanılmaz;
+         * yalnız deterministik test harness'ının sözleşmeye uyan bir çıktı
+         * üretmesi içindir. Tutarın tamamı tek kategoriye konur ki toplam
+         * eşitliği testlerde sabit kalsın.
+         */
+        categoryAllocation: {
+          amounts: {
+            bodywork: line.laborAmountMinor,
+            mechanical: 0,
+            electrical: 0,
+            upholstery_lock: 0,
+            glass: 0,
+            calibration: 0,
+            repair: 0,
+            paint: 0,
+          },
+          reasoning: 'Sentetik harness kategori dagilimi.',
+          confidence: 0.55,
+          evidenceRefs: [`line-${line.ordinal}-description`],
+          conflictCodes: [],
+        },
       }
     }),
     requiresHumanReview: true,

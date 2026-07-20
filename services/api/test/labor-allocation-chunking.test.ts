@@ -71,6 +71,23 @@ function chunkOutput(context: { lines: readonly { ordinal: number; partAmountMin
         conflictCodes: [],
         missingEvidenceCodes: [],
         controlRequired: true,
+        // P64: kategori toplamı YALNIZ işçilik tutarına eşit olmalıdır.
+        categoryAllocation: {
+          amounts: {
+            bodywork: line.laborAmountMinor,
+            mechanical: 0,
+            electrical: 0,
+            upholstery_lock: 0,
+            glass: 0,
+            calibration: 0,
+            repair: 0,
+            paint: 0,
+          },
+          reasoning: 'Sentetik kategori dagilimi.',
+          confidence: 0.55,
+          evidenceRefs: [],
+          conflictCodes: [],
+        },
       }
     }),
     requiresHumanReview: true,

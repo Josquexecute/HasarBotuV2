@@ -31,7 +31,7 @@
     },
     "outputSchemaVersion": {
       "type": "string",
-      "const": "labor-allocation-suggestion/1.0.0"
+      "const": "labor-allocation-suggestion/2.0.0"
     },
     "lines": {
       "minItems": 1,

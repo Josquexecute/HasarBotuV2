@@ -1,5 +1,7 @@
 import {
+  LABOR_ALLOCATION_CATEGORIES,
   LABOR_ALLOCATION_CONFLICT_CODES,
+  LABOR_CATEGORY_CONFLICT_CODES,
   LABOR_ALLOCATION_MISSING_EVIDENCE_CODES,
   LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION,
   LABOR_ECONOMIC_BUCKETS,
@@ -54,6 +56,7 @@ export const LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA = {
           'conflictCodes',
           'missingEvidenceCodes',
           'controlRequired',
+          'categoryAllocation',
         ],
         properties: {
           lineOrdinal: { type: 'integer', minimum: 1 },
@@ -104,6 +107,39 @@ export const LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA = {
             items: { type: 'string', enum: [...LABOR_ALLOCATION_MISSING_EVIDENCE_CODES] },
           },
           controlRequired: { type: 'boolean' },
+          /*
+           * Paket 64 ara dilim — satır bazlı İŞÇİLİK DAĞITIM KATEGORİSİ.
+           *
+           * Bu, `allocations` ile AYNI EKSEN DEĞİLDİR: `allocations` işlemin
+           * ne olduğunu (onarım/değişim/sökme-takma), `categoryAllocation`
+           * işi hangi branşın yaptığını söyler. Model ikisini de üretir;
+           * sunucu birinden diğerini TÜRETMEZ.
+           *
+           * Sekiz kategori de zorunludur ve kullanılmayan kategori 0 taşır;
+           * böylece "sessiz eksik anahtar" diye bir durum oluşamaz. Toplam
+           * alanı bilerek İSTENMEZ: sunucu toplamı sekiz kategoriden kendisi
+           * hesaplar ve satırın işçilik tutarıyla karşılaştırır.
+           */
+          categoryAllocation: {
+            type: 'object',
+            required: ['amounts', 'reasoning', 'confidence', 'evidenceRefs', 'conflictCodes'],
+            properties: {
+              amounts: {
+                type: 'object',
+                required: [...LABOR_ALLOCATION_CATEGORIES],
+                properties: Object.fromEntries(
+                  LABOR_ALLOCATION_CATEGORIES.map((category) => [category, MINOR_AMOUNT]),
+                ),
+              },
+              reasoning: { type: 'string' },
+              confidence: { type: 'number', minimum: 0, maximum: 1 },
+              evidenceRefs: { type: 'array', items: { type: 'string' } },
+              conflictCodes: {
+                type: 'array',
+                items: { type: 'string', enum: [...LABOR_CATEGORY_CONFLICT_CODES] },
+              },
+            },
+          },
         },
       },
     },

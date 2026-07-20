@@ -54,7 +54,7 @@ function line(overrides: Record<string, unknown> = {}) {
 
 function suggestion(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 'labor-allocation-suggestion/1.0.0',
+    schemaVersion: 'labor-allocation-suggestion/2.0.0',
     operationTypesVersion: 'labor-operation-types/1.0.0',
     ruleVersion: 'labor-allocation-rules/1.0.0',
     lines: [line()],
@@ -166,7 +166,7 @@ describe('apply-preview sözleşmesi', () => {
       sourceSheetId: 'sheet-1',
       sourceSheetVersion: 2,
       operationTypesVersion: 'labor-operation-types/1.0.0',
-      outputSchemaVersion: 'labor-allocation-suggestion/1.0.0',
+      outputSchemaVersion: 'labor-allocation-suggestion/2.0.0',
       lines: [{
         lineOrdinal: 1,
         description: 'Ön tampon',

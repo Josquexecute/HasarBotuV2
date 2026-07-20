@@ -104,7 +104,41 @@ function shapeReport(output, expectedLines) {
         0,
       )
       const buckets = line?.economicComparison?.buckets
+      // Paket 64 ara dilim — kategori dağılımı ölçümü. Tutar DEĞERLERİ
+      // raporlanmaz; yalnız yapısal uygunluk ve toplam eşitliği ölçülür.
+      const CATEGORIES = [
+        'bodywork', 'mechanical', 'electrical', 'upholstery_lock',
+        'glass', 'calibration', 'repair', 'paint',
+      ]
+      const categoryAmounts = line?.categoryAllocation?.amounts
+      const categoryKeys = categoryAmounts === null || typeof categoryAmounts !== 'object'
+        ? []
+        : Object.keys(categoryAmounts)
+      const categorySum = categoryKeys.length === 0
+        ? Number.NaN
+        : CATEGORIES.reduce(
+          (sum, key) => sum + (Number.isSafeInteger(categoryAmounts?.[key])
+            ? categoryAmounts[key]
+            : Number.NaN),
+          0,
+        )
       return {
+        categoryKeysComplete: CATEGORIES.every((key) => categoryKeys.includes(key)),
+        categoryKeyCount: categoryKeys.length,
+        categoryAmountsAllSafeIntegers: CATEGORIES
+          .every((key) => Number.isSafeInteger(categoryAmounts?.[key])),
+        categorySum,
+        expectedLaborMinor: source?.laborAmountMinor ?? null,
+        // Kritik kural: kategori toplamı YALNIZ işçilik tutarına eşit olmalı;
+        // parça bedeli karışmamalı.
+        categorySumMatchesLabor: source !== undefined && categorySum === source.laborAmountMinor,
+        categorySumWronglyIncludesPart: source !== undefined
+          && categorySum === source.partAmountMinor + source.laborAmountMinor
+          && source.partAmountMinor > 0,
+        categoryConfidence: line?.categoryAllocation?.confidence,
+        categoryConflictCodes: Array.isArray(line?.categoryAllocation?.conflictCodes)
+          ? line.categoryAllocation.conflictCodes.map(sanitizeToken)
+          : [],
         keys: line === null || typeof line !== 'object' ? [] : Object.keys(line).map(sanitizeToken),
         lineOrdinal: line?.lineOrdinal,
         opinion: sanitizeToken(line?.repairReplaceOpinion),
@@ -271,7 +305,23 @@ try {
       confirmedEgress: true,
     })
     if (response.statusCode !== 200) throw new Error(`ANALYZE_HTTP_${response.statusCode}`)
-    return response.json().run
+    /*
+     * Paket 62'den beri analiz ASENKRONDUR: bu uç koşuyu `queued` yaratıp
+     * hemen döner. Betik P62'de güncellenmemişti ve koşuyu beklemeden
+     * durumunu okuyup "review_required değil" diye hata veriyordu. Gerçek
+     * uçtaki asenkron davranış korunur; yalnız ölçüm sonucu bekler.
+     */
+    const started = response.json().run
+    const deadline = Date.now() + 120_000
+    let current = started
+    while (['queued', 'running', 'cancel_requested'].includes(current.status)) {
+      if (Date.now() > deadline) throw new Error(`RUN_DID_NOT_SETTLE_${current.status}`)
+      await new Promise((resolve) => { setTimeout(resolve, 250) })
+      const polled = await inject('GET', `/api/v1/cases/${caseId}/labor-allocation-ai/${started.id}`)
+      if (polled.statusCode !== 200) throw new Error(`RUN_READ_HTTP_${polled.statusCode}`)
+      current = polled.json().run
+    }
+    return current
   }
 
   const scenarios = []

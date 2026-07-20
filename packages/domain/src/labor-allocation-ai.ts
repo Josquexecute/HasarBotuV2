@@ -11,6 +11,15 @@ import {
   type NormalizedLaborItem,
 } from './labor-sheet.js'
 import {
+  LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+  categoryControlRequired,
+  deriveCategoryFromOperation,
+  validateLaborCategoryAllocation,
+  type LaborCategoryAllocationInput,
+  type LaborCategoryAmount,
+  type LaborCategoryConflictCode,
+} from './labor-allocation-categories.js'
+import {
   compareBaselineAllocation,
   hasCompleteBaselineMatch,
   matchBaselineLines,
@@ -34,8 +43,13 @@ import {
  * profilleri ileride bu kanonik türleri gerçek sütunlara eşler.
  */
 export const LABOR_OPERATION_TYPES_VERSION = 'labor-operation-types/1.0.0' as const
-export const LABOR_ALLOCATION_PROMPT_TEMPLATE_VERSION = 'labor-allocation-ai/1.0.0' as const
-export const LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION = 'labor-allocation-suggestion/1.0.0' as const
+/**
+ * Paket 64 ara dilim: talimat ve çıktı şeması satır bazlı KATEGORİ dağılımını
+ * içerdiği için ikisi de 2.0.0'a yükseldi. Eski kayıtlar kendi sürümleriyle
+ * okunmaya devam eder.
+ */
+export const LABOR_ALLOCATION_PROMPT_TEMPLATE_VERSION = 'labor-allocation-ai/2.0.0' as const
+export const LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION = 'labor-allocation-suggestion/2.0.0' as const
 export const LABOR_ALLOCATION_RULE_VERSION = 'labor-allocation-rules/1.0.0' as const
 export const LABOR_ALLOCATION_PRIVACY_POLICY_VERSION = 'labor-allocation-pii-redaction/1.0.0' as const
 export const LABOR_ALLOCATION_LOCAL_PRIVACY_POLICY_VERSION = 'labor-allocation-pii/local-only' as const
@@ -250,6 +264,19 @@ export interface LaborAllocationLineSuggestion {
    * üretmez; sunucu hesaplar.
    */
   readonly baselineComparison?: LaborBaselineComparison | null
+  /**
+   * Paket 64 ara dilim: satır bazlı işçilik dağıtım kategorisi. Modelin kendi
+   * çıktısıdır; operasyon türünden türetilmez. Toplam sunucuda hesaplanır.
+   */
+  readonly categoryAllocation?: {
+    readonly schemaVersion: typeof LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION
+    readonly amounts: readonly LaborCategoryAmount[]
+    readonly reasoning: string
+    readonly confidence: number
+    readonly evidenceRefs: readonly string[]
+    readonly conflictCodes: readonly LaborCategoryConflictCode[]
+    readonly totalMinor: number
+  }
 }
 
 export interface LaborAllocationSuggestionInput {
@@ -269,6 +296,8 @@ export type LaborAllocationValidation =
         | 'AI_OUTPUT_ALLOCATION_INVALID'
         | 'AI_OUTPUT_ALLOCATION_SUM_INVALID'
         | 'AI_OUTPUT_ECONOMIC_INVALID'
+        /** P64: kategori dağılımı eksik, toplamı tutmuyor veya geçersiz. */
+        | 'AI_OUTPUT_CATEGORY_INVALID'
         | 'AI_OUTPUT_PII_UNSAFE'
         | 'AI_OUTPUT_PLACEHOLDER_UNSAFE'
         | 'AI_OUTPUT_EXTERNAL_REFERENCE_UNSAFE'
@@ -535,6 +564,9 @@ function isValidLineShape(value: unknown): value is LaborAllocationLineSuggestio
     'conflictCodes',
     'missingEvidenceCodes',
     'controlRequired',
+    // P64 ara dilim: satır bazlı kategori dağılımı. İçeriği burada değil,
+    // `validateLaborCategoryAllocation` içinde strict doğrulanır.
+    'categoryAllocation',
   ].includes(key))) return false
   return typeof item.lineOrdinal === 'number'
     && Number.isSafeInteger(item.lineOrdinal)
@@ -706,6 +738,30 @@ export function validateLaborAllocationSuggestion(
     }
     const mergedConflicts = [...conflictCodes]
 
+    /*
+     * Paket 64 ara dilim — satır bazlı KATEGORİ dağılımı.
+     *
+     * Toplam SUNUCUDA sekiz kategoriden yeniden hesaplanır ve satırın YALNIZ
+     * işçilik tutarıyla karşılaştırılır; parça bedeli bu toplama girmez.
+     * Kategori operasyon türünden TÜRETİLMEZ ve eksik kategori sessizce
+     * sıfırlanmaz — doğrulama reddeder.
+     */
+    // Sağlayıcı alanı hiç göndermediyse de reddedilir; sessizce sıfır
+    // dağılım UYDURULMAZ.
+    if (line.categoryAllocation === undefined || line.categoryAllocation === null) {
+      return { allowed: false, code: 'AI_OUTPUT_CATEGORY_INVALID' }
+    }
+    const categoryValidation = validateLaborCategoryAllocation(
+      line.categoryAllocation as unknown as LaborCategoryAllocationInput,
+      sheetLine.laborAmountMinor,
+    )
+    if (!categoryValidation.ok) {
+      return { allowed: false, code: 'AI_OUTPUT_CATEGORY_INVALID' }
+    }
+    // Kategori çelişkisi de satırı kontrole düşürür; modelin yüksek güveni
+    // bu zorlamayı kaldıramaz.
+    const categoryControl = categoryControlRequired(categoryValidation)
+
     const candidate: LaborAllocationLineSuggestion = {
       lineOrdinal: line.lineOrdinal,
       allocations: line.allocations.map((allocation) => ({ ...allocation })),
@@ -723,10 +779,22 @@ export function validateLaborAllocationSuggestion(
       confidence: line.confidence,
       conflictCodes: mergedConflicts.sort(),
       missingEvidenceCodes: mergedMissing as LaborAllocationMissingEvidenceCode[],
-      controlRequired: line.controlRequired,
+      controlRequired: line.controlRequired || categoryControl,
       baselineComparison,
+      categoryAllocation: {
+        schemaVersion: LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+        amounts: categoryValidation.amounts,
+        reasoning: categoryValidation.reasoning,
+        confidence: categoryValidation.confidence,
+        evidenceRefs: categoryValidation.evidenceRefs,
+        conflictCodes: categoryValidation.conflictCodes,
+        totalMinor: categoryValidation.totalMinor,
+      },
     }
-    normalizedLines.push({ ...candidate, controlRequired: requiresControl(candidate) })
+    normalizedLines.push({
+      ...candidate,
+      controlRequired: requiresControl(candidate) || categoryControl,
+    })
   }
   if (sheetTotalMinor > MAX_LABOR_SHEET_TOTAL_MINOR) {
     return { allowed: false, code: 'AI_OUTPUT_ALLOCATION_SUM_INVALID' }
@@ -773,3 +841,13 @@ export function isValidAllocationDamageDescription(value: string): boolean {
   const normalized = normalizeLaborText(value, MAX_LABOR_ALLOCATION_DAMAGE_DESCRIPTION_LENGTH)
   return normalized !== null
 }
+
+/**
+ * Kategorisi tek anlamlı türetilemeyen operasyon türleri.
+ *
+ * Bu liste operasyon türlerinin YANINDA durur çünkü `LABOR_OPERATION_TYPES`
+ * burada tanımlıdır; kategori modülüne koymak çalışma zamanında döngüsel
+ * bağımlılık yaratırdı.
+ */
+export const AMBIGUOUS_OPERATION_TYPES: readonly LaborOperationType[] = LABOR_OPERATION_TYPES
+  .filter((type) => deriveCategoryFromOperation(type) === null)

@@ -42,7 +42,7 @@ let behaviour: (request: Recorded) => {
   delayMs?: number
 } = () => ({ status: 200, body: JSON.stringify(successBody()) })
 
-function suggestionLine(ordinal: number, total: number) {
+function suggestionLine(ordinal: number, total: number, laborMinor = total) {
   const buckets = {
     repair_labor: total,
     new_part_or_ownership: 0,
@@ -62,6 +62,23 @@ function suggestionLine(ordinal: number, total: number) {
     conflictCodes: [],
     missingEvidenceCodes: [],
     controlRequired: false,
+    // P64: kategori toplamı YALNIZ işçilik tutarına eşittir.
+    categoryAllocation: {
+      amounts: {
+        bodywork: laborMinor,
+        mechanical: 0,
+        electrical: 0,
+        upholstery_lock: 0,
+        glass: 0,
+        calibration: 0,
+        repair: 0,
+        paint: 0,
+      },
+      reasoning: 'Kaporta isciligi.',
+      confidence: 0.9,
+      evidenceRefs: [`line-${ordinal}-description`],
+      conflictCodes: [],
+    },
   }
 }
 
@@ -72,6 +89,8 @@ function suggestionPayload(lineCount = 2) {
     lines: SHEET_LINES.slice(0, lineCount).map((line, index) => suggestionLine(
       index + 1,
       line.partAmountMinor + line.laborAmountMinor,
+      // Kategori toplamı parça bedelini İÇERMEZ.
+      line.laborAmountMinor,
     )),
     requiresHumanReview: true,
   }
@@ -200,7 +219,7 @@ describe('Gemini işçilik dağıtım adaptörü', () => {
     // Paket 59: kapalı kümeler wire şemasında enum olarak taşınır; model
     // literal sürümleri ve kod sözlüklerini artık şemadan görür.
     const schema = JSON.stringify(sent.generationConfig.responseJsonSchema)
-    expect(schema).toContain('labor-allocation-suggestion/1.0.0')
+    expect(schema).toContain('labor-allocation-suggestion/2.0.0')
     expect(schema).toContain('labor-operation-types/1.0.0')
     expect(schema).toContain('repair_indicated')
     expect(schema).toContain('CONFLICT_EXPERT_BASELINE_DISAGREEMENT')

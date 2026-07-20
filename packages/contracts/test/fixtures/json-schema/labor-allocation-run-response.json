@@ -48,11 +48,11 @@
         },
         "promptTemplateVersion": {
           "type": "string",
-          "const": "labor-allocation-ai/1.0.0"
+          "const": "labor-allocation-ai/2.0.0"
         },
         "outputSchemaVersion": {
           "type": "string",
-          "const": "labor-allocation-suggestion/1.0.0"
+          "const": "labor-allocation-suggestion/2.0.0"
         },
         "operationTypesVersion": {
           "type": "string",
@@ -339,7 +339,7 @@
               "properties": {
                 "schemaVersion": {
                   "type": "string",
-                  "const": "labor-allocation-suggestion/1.0.0"
+                  "const": "labor-allocation-suggestion/2.0.0"
                 },
                 "operationTypesVersion": {
                   "type": "string",

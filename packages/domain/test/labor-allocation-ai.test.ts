@@ -14,7 +14,6 @@ import {
   detectMissingEvidence,
   selectableLineOrdinals,
   validateLaborAllocationSuggestion,
-  type LaborAllocationLineSuggestion,
   type LaborAllocationPlanContext,
   type LaborEconomicBucket,
 } from '../src/labor-allocation-ai.js'
@@ -62,7 +61,8 @@ function buckets(overrides: Partial<Record<LaborEconomicBucket, number>> = {}) {
   }
 }
 
-function line(overrides: Partial<LaborAllocationLineSuggestion> = {}): LaborAllocationLineSuggestion {
+/** HAM sağlayıcı yükü; normalize edilmiş öneri DEĞİL (kategori ham nesnedir). */
+function line(overrides: Record<string, unknown> = {}) {
   const bucketValues = buckets({ repair_labor: 8_000_00, remove_install: 2_000_00 })
   const totals = computeEconomicTotals(bucketValues)
   return {
@@ -79,11 +79,27 @@ function line(overrides: Partial<LaborAllocationLineSuggestion> = {}): LaborAllo
     conflictCodes: [],
     missingEvidenceCodes: [],
     controlRequired: false,
+    categoryAllocation: {
+      amounts: {
+        bodywork: 10_000_00,
+        mechanical: 0,
+        electrical: 0,
+        upholstery_lock: 0,
+        glass: 0,
+        calibration: 0,
+        repair: 0,
+        paint: 0,
+      },
+      reasoning: 'Kaporta isciligi.',
+      confidence: 0.8,
+      evidenceRefs: ['line-1-description'],
+      conflictCodes: [],
+    },
     ...overrides,
   }
 }
 
-function secondLine(overrides: Partial<LaborAllocationLineSuggestion> = {}): LaborAllocationLineSuggestion {
+function secondLine(overrides: Record<string, unknown> = {}) {
   const bucketValues = buckets({ new_part_or_ownership: 18_000_00, remove_install: 2_000_00 })
   const totals = computeEconomicTotals(bucketValues)
   return line({
@@ -94,11 +110,28 @@ function secondLine(overrides: Partial<LaborAllocationLineSuggestion> = {}): Lab
     ],
     repairReplaceOpinion: 'replace_indicated',
     economicComparison: { buckets: bucketValues, ...totals, note: 'Parça bedeli baskın.' },
+    // Kategori toplamı YALNIZ işçilik tutarına eşittir; parça karışmaz.
+    categoryAllocation: {
+      amounts: {
+        bodywork: 2_000_00,
+        mechanical: 0,
+        electrical: 0,
+        upholstery_lock: 0,
+        glass: 0,
+        calibration: 0,
+        repair: 0,
+        paint: 0,
+      },
+      reasoning: 'Kaporta montaj isciligi.',
+      confidence: 0.8,
+      evidenceRefs: ['line-2-description'],
+      conflictCodes: [],
+    },
     ...overrides,
   })
 }
 
-function suggestion(lines: readonly LaborAllocationLineSuggestion[] = [line(), secondLine()]) {
+function suggestion(lines: readonly unknown[] = [line(), secondLine()]) {
   return {
     schemaVersion: LABOR_ALLOCATION_OUTPUT_SCHEMA_VERSION,
     operationTypesVersion: LABOR_OPERATION_TYPES_VERSION,
@@ -403,7 +436,8 @@ describe('controlRequired sunucuda yeniden hesaplanır', () => {
   })
 
   it('eksik kanıt, çelişki ve düşük güven kontrolü zorunlu kılar', () => {
-    const cases: LaborAllocationLineSuggestion[] = [
+    // Ham sağlayıcı yükleri; normalize edilmiş öneri tipini taşımazlar.
+    const cases = [
       line({ missingEvidenceCodes: ['EVIDENCE_MISSING_PART_CODE'], controlRequired: false }),
       line({ conflictCodes: ['CONFLICT_ACTION_VS_OPERATION'], controlRequired: false }),
       line({ confidence: LABOR_ALLOCATION_CONTROL_CONFIDENCE_THRESHOLD - 0.01, controlRequired: false }),

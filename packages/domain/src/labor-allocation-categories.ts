@@ -1,4 +1,4 @@
-import { LABOR_OPERATION_TYPES, type LaborOperationType } from './labor-allocation-ai.js'
+import type { LaborOperationType } from './labor-allocation-ai.js'
 
 /**
  * Paket 64 — işçilik DAĞITIM KATEGORİLERİ (HB-2026-072).
@@ -61,10 +61,6 @@ export function deriveCategoryFromOperation(
     default: return null
   }
 }
-
-/** Kategorisi tek anlamlı türetilemeyen operasyon türleri. */
-export const AMBIGUOUS_OPERATION_TYPES: readonly LaborOperationType[] = LABOR_OPERATION_TYPES
-  .filter((type) => deriveCategoryFromOperation(type) === null)
 
 export interface LaborCategoryAmount {
   readonly category: LaborAllocationCategory

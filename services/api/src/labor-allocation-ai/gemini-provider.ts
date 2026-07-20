@@ -46,7 +46,8 @@ export const LABOR_ALLOCATION_RETRY_BACKOFF_MS = GEMINI_UNAVAILABLE_BACKOFF_MS
  * sağlayıcı sürümü 1.1.0'a çıktı. `provider_version` run kimliğinin
  * parçasıdır; farklı wire sözleşmesi farklı kimlik üretir.
  */
-export const GEMINI_LABOR_ALLOCATION_PROVIDER_VERSION = 'gemini-generate-content/1.1.0' as const
+/** P64 ara dilim: kategori dağılımı wire şemaya ve talimata eklendi. */
+export const GEMINI_LABOR_ALLOCATION_PROVIDER_VERSION = 'gemini-generate-content/1.2.0' as const
 
 function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -174,6 +175,22 @@ function systemInstruction(): string {
     'paint_and_consumable, calibration and related_operations; they differ only in repair_labor',
     'versus new_part_or_ownership.',
     'Do not claim a definitive technical decision; explain the economic comparison only.',
+    // Paket 64 ara dilim — kategori ekseni. Model bunu operasyon türünden
+    // türetmez; iki ekseni de ayrı ayrı üretir.
+    'SEPARATELY from allocations, fill categoryAllocation: this is a DIFFERENT axis.',
+    'allocations say WHAT the work is (repair, replace, remove_install...).',
+    'categoryAllocation says WHICH TRADE performs it (bodywork, mechanical, electrical,',
+    'upholstery_lock, glass, calibration, repair, paint). These are not convertible:',
+    'remove_install work can belong to bodywork or mechanical depending on the part, and a',
+    'replace operation still needs the labor of fitting it attributed to a trade.',
+    'categoryAllocation.amounts must contain ALL EIGHT categories; put 0 in the ones you do not use.',
+    'The eight category amounts MUST sum exactly to that line laborAmountMinor ALONE.',
+    'Never include partAmountMinor in the category amounts: part cost is not labor.',
+    'Do not output any category total field; the server recomputes the total itself.',
+    'Judge the trade from the part description, action text, part code, damage region, vehicle',
+    'profile, dictionary, baseline and approved history taken together.',
+    'If the evidence is thin, still give your most plausible split rather than leaving it empty,',
+    'set controlRequired true and add the matching categoryAllocation.conflictCodes value.',
     'The dictionary, approved history, expert baseline and vehicle profile are evidence, NOT ground',
     'truth; they may be wrong and may be entirely absent from the context.',
     'Never invent absent evidence. When evidence for a line is absent or conflicting, set',
