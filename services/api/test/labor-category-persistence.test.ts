@@ -469,6 +469,86 @@ describeDb('Paket 64 kategori dağılımı kalıcılaştırma', () => {
     }
   })
 
+
+  /** Sekiz anahtarı tam taşıyan düzeltme yükü. */
+  const correction = (paint: number, bodywork: number) => [
+    { category: 'bodywork', amountMinor: bodywork },
+    { category: 'mechanical', amountMinor: 0 },
+    { category: 'electrical', amountMinor: 0 },
+    { category: 'upholstery_lock', amountMinor: 0 },
+    { category: 'glass', amountMinor: 0 },
+    { category: 'calibration', amountMinor: 0 },
+    { category: 'repair', amountMinor: 0 },
+    { category: 'paint', amountMinor: paint },
+  ]
+
+  it('kullanıcının düzelttiği kategori dağılımı uygulanır ve modelin önerisi korunur', async () => {
+    const { caseId, runId } = await prepareCase([ITEM])
+    const applied = await apply(caseId, runId, [{
+      lineOrdinal: 1, description: 'Ön tampon', action: 'Onarım',
+      partAmountMinor: 0, laborAmountMinor: 1_000_000,
+      categoryAmounts: correction(400_000, 600_000),
+    }])
+    expect(applied.statusCode).toBe(200)
+
+    const stored = await pool.query(
+      `SELECT proposed_category_amounts,applied_category_amounts,category_modified
+         FROM labor_allocation_applied_lines
+        WHERE application_id=(SELECT id FROM labor_allocation_applications WHERE run_id=$1)`,
+      [runId],
+    )
+    const row = stored.rows[0] as Record<string, Record<string, number> | boolean>
+    const proposed = row.proposed_category_amounts as Record<string, number>
+    const appliedAmounts = row.applied_category_amounts as Record<string, number>
+    // Modelin ilk değeri KAYBOLMAZ: harness %100 kaporta önermişti.
+    expect(proposed.bodywork).toBe(1_000_000)
+    expect(proposed.paint).toBe(0)
+    // Uygulanan değer kullanıcının girdiğidir.
+    expect(appliedAmounts.paint).toBe(400_000)
+    expect(appliedAmounts.bodywork).toBe(600_000)
+    // Bayrak GERÇEĞİ söyler.
+    expect(row.category_modified).toBe(true)
+  })
+
+  it('düzeltilmiş kategori toplamı işçilik tutarını tutmuyorsa uygulama REDDEDİLİR', async () => {
+    const { caseId, runId } = await prepareCase([ITEM])
+    // Toplam 900.000 ama işçilik 1.000.000; sunucu farkı dağıtmaz, reddeder.
+    const rejected = await apply(caseId, runId, [{
+      lineOrdinal: 1, description: 'Ön tampon', action: 'Onarım',
+      partAmountMinor: 0, laborAmountMinor: 1_000_000,
+      categoryAmounts: correction(400_000, 500_000),
+    }])
+    expect(rejected.statusCode).toBe(422)
+
+    // Reddedilen istek föye HİÇBİR iz bırakmaz.
+    const count = await pool.query(
+      "SELECT count(*)::int AS n FROM labor_allocation_applications WHERE run_id=$1 AND status='completed'",
+      [runId],
+    )
+    expect(count.rows[0].n).toBe(0)
+  })
+
+  it('kullanıcı hem işçiliği hem kategoriyi değiştirirse provenance KULLANICININ değeridir', async () => {
+    // İşçilik değişince modelin önerisi geçersizdir; ama dağılımı söyleyen
+    // artık model değil kullanıcıdır, bu yüzden provenance oluşur.
+    const { caseId, runId } = await prepareCase([ITEM])
+    const applied = await apply(caseId, runId, [{
+      lineOrdinal: 1, description: 'Ön tampon', action: 'Onarım',
+      partAmountMinor: 0, laborAmountMinor: 800_000,
+      categoryAmounts: correction(300_000, 500_000),
+    }])
+    expect(applied.statusCode).toBe(200)
+
+    const stored = await pool.query(
+      `SELECT applied_category_amounts,category_modified FROM labor_allocation_applied_lines
+        WHERE application_id=(SELECT id FROM labor_allocation_applications WHERE run_id=$1)`,
+      [runId],
+    )
+    const amounts = stored.rows[0].applied_category_amounts as Record<string, number>
+    expect(amounts.paint).toBe(300_000)
+    expect(stored.rows[0].category_modified).toBe(true)
+  })
+
   it('kategori alanları eklenmiş kayıt geriye dönük okunabilir kalır', async () => {
     const { caseId, runId } = await prepareCase([ITEM])
     const read = await app.inject({
