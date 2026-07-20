@@ -176,6 +176,8 @@ import {
 import {
   laborExcelProfileSaveRequestSchema,
   laborExcelProfilesResponseSchema,
+  laborExcelProfileStatusRequestSchema,
+  laborExcelProfileCandidatesResponseSchema,
   laborExcelProjectionResponseSchema,
 } from './v1/labor-excel-profile/dto.js'
 import {
@@ -321,6 +323,8 @@ export const JSON_SCHEMA_TARGETS = {
   'pert-assessment-workspace-response': pertAssessmentWorkspaceResponseSchema,
   'labor-excel-profile-save-request': laborExcelProfileSaveRequestSchema,
   'labor-excel-profiles-response': laborExcelProfilesResponseSchema,
+  'labor-excel-profile-status-request': laborExcelProfileStatusRequestSchema,
+  'labor-excel-profile-candidates-response': laborExcelProfileCandidatesResponseSchema,
   'labor-excel-projection-response': laborExcelProjectionResponseSchema,
   'labor-dictionary-query': laborDictionaryQuerySchema,
   'labor-dictionary-response': laborDictionaryResponseSchema,

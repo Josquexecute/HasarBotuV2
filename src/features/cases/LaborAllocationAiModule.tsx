@@ -3,10 +3,12 @@ import { AlertTriangle, CheckCheck, GitCompareArrows, ShieldAlert, Sparkles } fr
 import { LoadingState } from '../../components/StateViews'
 import {
   LaborAllocationClientError,
+  LaborExcelProfileClientError,
   createHttpLaborAllocationAdapter,
   createHttpLaborExcelProfileAdapter,
   type LaborAllocationApplicationRecord,
   type LaborAllocationApplyPreviewRecord,
+  type LaborExcelProfileCandidatesRecord,
   type LaborExcelProfileDataPort,
   type LaborExcelProjectionRecord,
   type LaborAllocationDataPort,
@@ -76,6 +78,10 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
   const [applications, setApplications] = useState<readonly LaborAllocationApplicationRecord[]>([])
   /** Paket 60: salt okunur Excel projeksiyonu; dosyaya yazmaz. */
   const [projection, setProjection] = useState<LaborExcelProjectionRecord | null>(null)
+  /** Paket 63: aday profiller, seçim ve projeksiyonun bağlı olduğu uygulama. */
+  const [candidates, setCandidates] = useState<LaborExcelProfileCandidatesRecord | null>(null)
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  const [projectionApplicationId, setProjectionApplicationId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -200,27 +206,70 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
   }
 
   /**
-   * İlk tanımlı şablon profiliyle projeksiyon açar. Profil yoksa kullanıcı
-   * Yönetim'den tanımlamalıdır; sahte sütun üretilmez.
+   * Paket 63 — dosyanın sigorta şirketine ait aday profilleri getirir.
+   *
+   * Paket 60'taki "listedeki ilk profili al" davranışı kaldırıldı: o davranış
+   * başka bir şirketin şablonunu sessizce seçebiliyordu. Artık aday kümesi
+   * sunucuda süzülür ve seçim kullanıcınındır.
    */
   const openProjection = async (applicationId: string) => {
     setBusy(true)
     try {
-      const { profiles } = await excelAdapter.list()
-      const profile = profiles[0]
-      if (profile === undefined) {
-        setErrorKind('excel_profile_missing')
-        return
-      }
-      setProjection(await excelAdapter.project(caseId, applicationId, profile.id))
+      const result = await excelAdapter.candidates(caseId)
+      setCandidates(result)
+      setProjectionApplicationId(applicationId)
+      setProjection(null)
+      // Öneri varsa ön-seçili gelir ama KESİNLEŞMEZ; kullanıcı onaylamalıdır.
+      setSelectedProfileId(result.suggestedProfileId)
       setErrorKind(null)
     } catch (error) {
+      setCandidates(null)
       setProjection(null)
       setErrorKind(error instanceof LaborAllocationClientError ? error.kind : 'unavailable')
     } finally {
       setBusy(false)
     }
   }
+
+  /** Seçilen profille projeksiyonu hesaplar; açık kullanıcı eylemidir. */
+  const runProjection = async (profileId: string) => {
+    if (projectionApplicationId === null) return
+    setBusy(true)
+    try {
+      setProjection(await excelAdapter.project(caseId, projectionApplicationId, profileId))
+      setErrorKind(null)
+    } catch (error) {
+      setProjection(null)
+      setErrorKind(error instanceof LaborExcelProfileClientError ? error.kind : 'unavailable')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Profil değişince eski projeksiyon geçersizdir; bayat sayı gösterilmez.
+   * Profil sürümü değişmiş veya profil pasifleşmişse de aynı kural geçerlidir
+   * (aday listesi yeniden okunduğunda fark edilir).
+   */
+  const chooseProfile = (profileId: string) => {
+    setSelectedProfileId(profileId)
+    setProjection(null)
+  }
+
+  /** Seçili profilin aday kaydı; eşleşme önizlemesi bundan beslenir. */
+  const selectedCandidate = candidates?.candidates.find(
+    (item) => item.profileId === selectedProfileId,
+  ) ?? null
+
+  /**
+   * Projeksiyon bayat mı? Hesaplandıktan sonra profil sürümü değişmiş veya
+   * profil aday olmaktan çıkmışsa (pasifleşme) sayılar artık güvenilmez.
+   */
+  const projectionStale = projection !== null && (
+    selectedCandidate === null
+    || selectedCandidate.profileId !== projection.profileId
+    || selectedCandidate.profileVersion !== projection.profileVersion
+  )
 
   const toggle = (ordinal: number) => {
     setSelected((current) => current.includes(ordinal)
@@ -706,6 +755,123 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
         </details>
       )}
 
+      {/*
+        Paket 63 — profil seçimi. Otomatik öneri gerçek şablon eşleşmesi
+        DEĞİLDİR: Excel dosyası okunmadan yalnız "profil önerisi" denir.
+      */}
+      {candidates !== null && projection === null && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Excel şablon profili seçimi">
+          <div className="modal">
+            <header className="modal__header"><h2>Excel Şablon Profili Seç</h2></header>
+            <div className="modal__body">
+              <p className="allocation-panel__notice">
+                Gerçek Excel dosyası HENÜZ okunmadı; aşağıdaki yalnız
+                <strong> profil önerisidir</strong>, şablon eşleşmesi değildir.
+                Sigorta şirketi: {candidates.insurerName ?? 'tanımsız'}.
+              </p>
+
+              {candidates.candidates.length === 0 && (
+                <p className="allocation-panel__error" role="alert">
+                  {candidates.reason === 'insurer_unknown'
+                    ? 'Dosyada sigorta şirketi tanımlı değil ve genel şablon profili yok.'
+                    : 'Bu sigorta şirketi için tanımlı aktif şablon profili yok.'}
+                  {' '}Yönetim ekranından profil tanımlayın; sahte sütun üretilmez.
+                </p>
+              )}
+
+              {candidates.candidates.length > 0 && (
+                <>
+                  <p className="allocation-panel__hint">
+                    {candidates.reason === 'single_insurer_profile'
+                      ? 'Bu şirket için tek aktif profil bulundu ve önerildi; onaylamadan kesinleşmez.'
+                      : 'Birden fazla aday var; profili siz seçmelisiniz.'}
+                  </p>
+                  <ul className="profile-choice">
+                    {candidates.candidates.map((candidate) => (
+                      <li key={candidate.profileId}>
+                        <label>
+                          <input
+                            type="radio"
+                            name="excel-profile"
+                            checked={selectedProfileId === candidate.profileId}
+                            onChange={() => chooseProfile(candidate.profileId)}
+                          />
+                          <span>
+                            {candidate.name} · Sürüm {candidate.profileVersion}
+                            {candidate.scope === 'generic'
+                              ? ' · Genel şablon'
+                              : ` · ${candidate.insurerName ?? 'Şirkete bağlı'}`}
+                            {candidates.suggestedProfileId === candidate.profileId && ' · Önerilen'}
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {selectedCandidate !== null && (
+                <section className="profile-preview" aria-label="Profil eşleşme önizlemesi">
+                  <h3>Profil Önizlemesi</h3>
+                  <dl>
+                    <dt>Hedef sayfa</dt>
+                    <dd>{selectedCandidate.targetSheet ?? 'Tanımlanmadı'}</dd>
+                    <dt>Kimlik doğrulaması</dt>
+                    <dd>
+                      {[
+                        selectedCandidate.identityChecks.plate ? 'Plaka' : null,
+                        selectedCandidate.identityChecks.officeNumber ? 'Dosya numarası' : null,
+                      ].filter((item) => item !== null).join(', ') || 'Kural tanımlanmadı'}
+                    </dd>
+                  </dl>
+                  <table className="data-table module-table">
+                    <thead>
+                      <tr><th>Operasyon türü</th><th>Excel sütunu</th></tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(selectedCandidate.mapping).map(([type, column]) => (
+                        <tr key={type}>
+                          <td>{OPERATION_LABELS[type] ?? type}</td>
+                          <td>
+                            {column === null
+                              ? <span className="allocation-code">Eşlenmedi</span>
+                              : (selectedCandidate.columns.find((item) => item.key === column)?.label
+                                ?? column)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {selectedCandidate.unmappedOperationTypes.length > 0 && (
+                    <p className="allocation-panel__hint">
+                      {selectedCandidate.unmappedOperationTypes.length} operasyon türü hiçbir
+                      sütuna eşlenmemiş; bu türlere düşen tutar hiçbir sütuna yazılamaz.
+                    </p>
+                  )}
+                </section>
+              )}
+            </div>
+            <footer className="modal__footer">
+              <button
+                className="button"
+                type="button"
+                onClick={() => { setCandidates(null); setSelectedProfileId(null) }}
+              >
+                Kapat
+              </button>
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={busy || selectedProfileId === null}
+                onClick={() => { if (selectedProfileId !== null) void runProjection(selectedProfileId) }}
+              >
+                Bu Profille Önizle
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
       {projection !== null && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Excel projeksiyonu">
           <div className="modal">
@@ -714,7 +880,19 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
               <p className="allocation-panel__notice">
                 Bu görünüm hiçbir Excel dosyasına YAZMAZ. Uygulanmış dağıtımın seçilen
                 şablonun sütunlarına nasıl düşeceğini gösterir.
+                {selectedCandidate !== null && (
+                  <> Profil: {selectedCandidate.name} · Sürüm {projection.profileVersion}
+                    {' · Hedef sayfa: '}{selectedCandidate.targetSheet ?? 'tanımlanmadı'}
+                  </>
+                )}
               </p>
+
+              {projectionStale && (
+                <p className="allocation-panel__error" role="alert">
+                  Profil bu önizleme hesaplandıktan sonra değişti veya pasifleştirildi.
+                  Gösterilen sayılar bayattır; profili yeniden seçip önizlemeyi tazeleyin.
+                </p>
+              )}
               <div className="table-scroll">
                 <table className="data-table module-table">
                   <thead>

@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "caseId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+    },
+    "insurerId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "insurerName": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "candidates": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+          },
+          "profileVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "insurer",
+              "generic"
+            ]
+          },
+          "insurerId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insurerName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetSheet": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 31
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identityChecks": {
+            "type": "object",
+            "properties": {
+              "plate": {
+                "type": "boolean"
+              },
+              "officeNumber": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "plate",
+              "officeNumber"
+            ],
+            "additionalProperties": false
+          },
+          "columns": {
+            "minItems": 1,
+            "maxItems": 24,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                }
+              },
+              "required": [
+                "key",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "mapping": {
+            "type": "object",
+            "properties": {
+              "repair": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "replace": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "remove_install": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "paint": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "consumable": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "calibration": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "related_operation": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "other": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "repair",
+              "replace",
+              "remove_install",
+              "paint",
+              "consumable",
+              "calibration",
+              "related_operation",
+              "other"
+            ],
+            "additionalProperties": false
+          },
+          "unmappedOperationTypes": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "repair",
+                "replace",
+                "remove_install",
+                "paint",
+                "consumable",
+                "calibration",
+                "related_operation",
+                "other"
+              ]
+            }
+          }
+        },
+        "required": [
+          "profileId",
+          "profileVersion",
+          "name",
+          "scope",
+          "insurerId",
+          "insurerName",
+          "targetSheet",
+          "identityChecks",
+          "columns",
+          "mapping",
+          "unmappedOperationTypes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "suggestedProfileId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "single_insurer_profile",
+        "selection_required",
+        "no_candidates",
+        "insurer_unknown"
+      ]
+    },
+    "templateVerified": {
+      "type": "boolean",
+      "const": false
+    }
+  },
+  "required": [
+    "caseId",
+    "insurerId",
+    "insurerName",
+    "candidates",
+    "suggestedProfileId",
+    "reason",
+    "templateVerified"
+  ],
+  "additionalProperties": false
+}

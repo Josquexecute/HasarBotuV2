@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   LABOR_OPERATION_TYPES,
   normalizeLaborExcelColumnKey,
+  normalizeLaborExcelTargetSheet,
+  selectLaborExcelProfileCandidates,
   projectLaborAllocationToExcel,
   validateLaborExcelProfileInput,
   type LaborExcelProjectionLineInput,
@@ -202,5 +204,129 @@ describe('projectLaborAllocationToExcel', () => {
     const result = projectLaborAllocationToExcel(profile(), [])
     expect(result.lines).toHaveLength(0)
     expect(result.columnTotals).toEqual({ ISCILIK: 0, PARCA: 0, BOYA: 0 })
+  })
+})
+
+describe('Paket 63 — profil adayı seçimi', () => {
+  const INSURER_A = 'insurer-a'
+  const INSURER_B = 'insurer-b'
+
+  function candidate(
+    profileId: string,
+    insurerId: string | null,
+    status: 'active' | 'inactive' = 'active',
+  ) {
+    return { profileId, insurerId, status }
+  }
+
+  it('dosyanın şirketine ait tek aktif profili önerir', () => {
+    const result = selectLaborExcelProfileCandidates(INSURER_A, [
+      candidate('p1', INSURER_A),
+    ])
+    expect(result.suggestedProfileId).toBe('p1')
+    expect(result.reason).toBe('single_insurer_profile')
+    expect(result.candidates).toEqual([{ profileId: 'p1', scope: 'insurer' }])
+  })
+
+  it('birden fazla adayda öneri yapmaz; seçim kullanıcıya kalır', () => {
+    const result = selectLaborExcelProfileCandidates(INSURER_A, [
+      candidate('p1', INSURER_A),
+      candidate('p2', INSURER_A),
+    ])
+    expect(result.suggestedProfileId).toBeNull()
+    expect(result.reason).toBe('selection_required')
+    expect(result.candidates).toHaveLength(2)
+  })
+
+  it('başka sigorta şirketinin profilini aday yapmaz', () => {
+    const result = selectLaborExcelProfileCandidates(INSURER_A, [
+      candidate('yabanci', INSURER_B),
+    ])
+    expect(result.candidates).toHaveLength(0)
+    expect(result.reason).toBe('no_candidates')
+    expect(result.suggestedProfileId).toBeNull()
+  })
+
+  it('pasif profil aday değildir', () => {
+    const result = selectLaborExcelProfileCandidates(INSURER_A, [
+      candidate('pasif', INSURER_A, 'inactive'),
+    ])
+    expect(result.candidates).toHaveLength(0)
+    expect(result.reason).toBe('no_candidates')
+  })
+
+  it('pasifleşen tek profil öneriyi düşürür', () => {
+    const active = selectLaborExcelProfileCandidates(INSURER_A, [candidate('p1', INSURER_A)])
+    expect(active.suggestedProfileId).toBe('p1')
+    const after = selectLaborExcelProfileCandidates(INSURER_A, [
+      candidate('p1', INSURER_A, 'inactive'),
+    ])
+    expect(after.suggestedProfileId).toBeNull()
+  })
+
+  it('genel profil adaydır ama ASLA otomatik önerilmez', () => {
+    const result = selectLaborExcelProfileCandidates(INSURER_A, [candidate('genel', null)])
+    expect(result.candidates).toEqual([{ profileId: 'genel', scope: 'generic' }])
+    expect(result.suggestedProfileId).toBeNull()
+    expect(result.reason).toBe('selection_required')
+  })
+
+  it('genel profil şirkete bağlı tek profilin önerisini engellemez', () => {
+    const result = selectLaborExcelProfileCandidates(INSURER_A, [
+      candidate('genel', null),
+      candidate('p1', INSURER_A),
+    ])
+    expect(result.suggestedProfileId).toBe('p1')
+    expect(result.candidates).toHaveLength(2)
+  })
+
+  it('dosyada sigorta şirketi yoksa yalnız genel profiller aday olur', () => {
+    const bos = selectLaborExcelProfileCandidates(null, [candidate('p1', INSURER_A)])
+    expect(bos.candidates).toHaveLength(0)
+    expect(bos.reason).toBe('insurer_unknown')
+
+    const genel = selectLaborExcelProfileCandidates(null, [candidate('genel', null)])
+    expect(genel.candidates).toEqual([{ profileId: 'genel', scope: 'generic' }])
+    expect(genel.suggestedProfileId).toBeNull()
+  })
+})
+
+describe('Paket 63 — hedef sayfa ve kimlik doğrulama kuralları', () => {
+  it('hedef sayfa adını normalize eder', () => {
+    expect(normalizeLaborExcelTargetSheet('  Isçilik   Föyü ')).toBe('Isçilik Föyü')
+  })
+
+  it('Excel sayfa adında yasak karakterleri ve uzunluğu reddeder', () => {
+    for (const invalid of ['a:b', 'a/b', 'a\b', 'a?b', 'a*b', 'a[b', 'a]b', '', '   ']) {
+      expect(normalizeLaborExcelTargetSheet(invalid)).toBeNull()
+    }
+    expect(normalizeLaborExcelTargetSheet('x'.repeat(32))).toBeNull()
+    expect(normalizeLaborExcelTargetSheet('x'.repeat(31))).toBe('x'.repeat(31))
+  })
+
+  it('hedef sayfa verilmezse null kalır ama geçersizse profil reddedilir', () => {
+    const bos = validateLaborExcelProfileInput({
+      name: 'Profil', columns: COLUMNS, mapping: mapping(),
+    })
+    expect(bos.valid && bos.targetSheet).toBeNull()
+    expect(bos.valid && bos.identityChecks).toEqual({ plate: false, officeNumber: false })
+
+    const gecersiz = validateLaborExcelProfileInput({
+      name: 'Profil', columns: COLUMNS, mapping: mapping(), targetSheet: 'Sayfa:1',
+    })
+    expect(gecersiz.valid).toBe(false)
+    expect(!gecersiz.valid && gecersiz.reason).toBe('invalid_target_sheet')
+  })
+
+  it('kimlik doğrulama kurallarını olduğu gibi taşır', () => {
+    const result = validateLaborExcelProfileInput({
+      name: 'Profil',
+      columns: COLUMNS,
+      mapping: mapping(),
+      targetSheet: 'Föy',
+      identityChecks: { plate: true, officeNumber: false },
+    })
+    expect(result.valid && result.targetSheet).toBe('Föy')
+    expect(result.valid && result.identityChecks).toEqual({ plate: true, officeNumber: false })
   })
 })

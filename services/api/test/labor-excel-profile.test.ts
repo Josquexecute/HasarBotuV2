@@ -17,6 +17,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
+import { waitForRunTerminal } from './helpers/labor-allocation-run.js'
 import {
   buildApp,
   createDeterministicLaborAllocationProviderRegistry,
@@ -294,7 +295,9 @@ describeDb('Paket 60 Excel şablon profilleri', () => {
         headers: { cookie },
         payload: { expectedSheetVersion: 1, damageDescription: 'Ön sol darbe.', confirmedEgress: false },
       })
-      const run = laborAllocationRunResponseSchema.parse(analyzed.json()).run
+      // P62'den beri analiz ASENKRONDUR; koşu sonlanmadan uygulama yapılamaz.
+      const settled = await waitForRunTerminal(app, cookie, caseId, analyzed)
+      const run = laborAllocationRunResponseSchema.parse(settled.json()).run
 
       // 1. satır önerildiği gibi, 2. satır KULLANICI TARAFINDAN DEĞİŞTİRİLEREK
       // uygulanır; projeksiyon ikincisi için sayı üretmemelidir.

@@ -14,11 +14,16 @@ const profile: LaborExcelProfileRecord = {
   id: PROFILE_ID,
   schemaVersion: 'labor-excel-profile/1.0.0',
   version: 1,
+  status: 'active',
+  deactivatedAt: null,
+  statusReason: null,
   current: {
     id: '018f3f4c-89ab-7def-8123-456789abcd61',
     profileVersion: 1,
     name: 'Sentetik Şablon',
     insurerId: null,
+    targetSheet: 'İşçilik',
+    identityChecks: { plate: true, officeNumber: false },
     columns: [
       { key: 'ISCILIK', label: 'İşçilik Bedeli' },
       { key: 'PARCA', label: 'Parça Bedeli' },
@@ -47,6 +52,8 @@ function makePort(overrides: Partial<LaborExcelProfileDataPort> = {}, canWrite =
   const port: LaborExcelProfileDataPort = {
     list: vi.fn().mockResolvedValue({ profiles: [profile], permissions: { canWrite } }),
     save: vi.fn().mockImplementation(async (input) => { saved.push(input); return profile }),
+    setStatus: vi.fn().mockResolvedValue(profile),
+    candidates: vi.fn(),
     project: vi.fn(),
     ...overrides,
   }

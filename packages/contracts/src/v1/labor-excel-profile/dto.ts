@@ -6,6 +6,8 @@ import {
   MAX_LABOR_EXCEL_COLUMN_KEY_LENGTH,
   MAX_LABOR_EXCEL_COLUMN_LABEL_LENGTH,
   MAX_LABOR_EXCEL_PROFILE_NAME_LENGTH,
+  MAX_LABOR_EXCEL_TARGET_SHEET_LENGTH,
+  LABOR_EXCEL_PROFILE_STATUSES,
   MAX_LABOR_ITEM_DESCRIPTION_LENGTH,
   MAX_LABOR_REVISION_REASON_LENGTH,
   MAX_LABOR_SHEET_ITEMS,
@@ -46,10 +48,25 @@ export const laborExcelMappingSchema = z.strictObject(
   ) as Record<(typeof LABOR_OPERATION_TYPES)[number], z.ZodNullable<typeof columnKeySchema>>,
 )
 
+/**
+ * Paket 63 — yazımdan ÖNCE hangi kimliklerin dosyada doğrulanacağı.
+ * Bilerek yalnız "ne" tutulur, "nerede" değil; hücre koordinatı gerçek
+ * şablon okunmadan uydurulmaz.
+ */
+export const laborExcelIdentityChecksSchema = z.strictObject({
+  plate: z.boolean(),
+  officeNumber: z.boolean(),
+})
+
 export const laborExcelProfileFieldsSchema = z.strictObject({
   name: z.string().trim().min(1).max(MAX_LABOR_EXCEL_PROFILE_NAME_LENGTH),
   /** Profil bir sigorta şirketine bağlanabilir; bağlanmazsa genel şablondur. */
   insurerId: idSchema.nullable().default(null),
+  /** Hedef Excel sayfası; tanımlanmadıysa null (yazım öncesi zorunlu olacak). */
+  targetSheet: z.string().trim().min(1).max(MAX_LABOR_EXCEL_TARGET_SHEET_LENGTH)
+    .nullable().default(null),
+  identityChecks: laborExcelIdentityChecksSchema
+    .default({ plate: false, officeNumber: false }),
   columns: z.array(laborExcelColumnSchema).min(1).max(MAX_LABOR_EXCEL_COLUMNS),
   mapping: laborExcelMappingSchema,
 })
@@ -73,11 +90,23 @@ export const laborExcelProfileSchema = z.strictObject({
   id: idSchema,
   schemaVersion: z.literal(LABOR_EXCEL_PROFILE_SCHEMA_VERSION),
   version: entityVersionSchema,
+  /** P63: pasif profil YENİ projeksiyonda seçilemez, eski kayıtta okunur. */
+  status: z.enum(LABOR_EXCEL_PROFILE_STATUSES),
+  deactivatedAt: utcDateTimeSchema.nullable(),
+  statusReason: z.string().min(1).max(MAX_LABOR_REVISION_REASON_LENGTH).nullable(),
   current: laborExcelProfileVersionSchema,
   history: z.array(laborExcelProfileVersionSchema).max(100),
   createdByDisplayName: z.string().min(1).max(200),
   createdAt: utcDateTimeSchema,
   updatedAt: utcDateTimeSchema,
+})
+
+/** Profili pasifleştirme/yeniden etkinleştirme; açık kullanıcı eylemidir. */
+export const laborExcelProfileStatusRequestSchema = z.strictObject({
+  status: z.enum(LABOR_EXCEL_PROFILE_STATUSES),
+  expectedVersion: entityVersionSchema,
+  reason: z.string().trim().min(1).max(MAX_LABOR_REVISION_REASON_LENGTH).nullable(),
+  confirmed: z.literal(true),
 })
 
 export const laborExcelProfileResponseSchema = z.strictObject({
@@ -87,6 +116,48 @@ export const laborExcelProfileResponseSchema = z.strictObject({
 export const laborExcelProfilesResponseSchema = z.strictObject({
   profiles: z.array(laborExcelProfileSchema).max(200),
   permissions: z.strictObject({ canWrite: z.boolean() }),
+})
+
+/**
+ * Paket 63 — dosya için seçilebilir profiller.
+ *
+ * Bu yanıt bir PROFİL ÖNERİSİDİR; gerçek şablon dosyası okunmadığı için
+ * "şablon eşleşmesi" DEĞİLDİR. `templateVerified` literal `false` bu iddiayı
+ * sözleşme seviyesinde imkânsız kılar.
+ */
+export const laborExcelProfileCandidateSchema = z.strictObject({
+  profileId: idSchema,
+  profileVersion: entityVersionSchema,
+  name: z.string().min(1).max(MAX_LABOR_EXCEL_PROFILE_NAME_LENGTH),
+  scope: z.enum(['insurer', 'generic']),
+  insurerId: idSchema.nullable(),
+  insurerName: z.string().min(1).max(200).nullable(),
+  targetSheet: z.string().min(1).max(MAX_LABOR_EXCEL_TARGET_SHEET_LENGTH).nullable(),
+  identityChecks: laborExcelIdentityChecksSchema,
+  columns: z.array(laborExcelColumnSchema).min(1).max(MAX_LABOR_EXCEL_COLUMNS),
+  mapping: laborExcelMappingSchema,
+  /** Hiçbir sütuna eşlenmemiş kanonik türler; tutarları sütuna yazılamaz. */
+  unmappedOperationTypes: z.array(z.enum(LABOR_OPERATION_TYPES)).max(LABOR_OPERATION_TYPES.length),
+})
+
+export const laborExcelProfileCandidatesResponseSchema = z.strictObject({
+  caseId: caseIdSchema,
+  insurerId: idSchema.nullable(),
+  insurerName: z.string().min(1).max(200).nullable(),
+  candidates: z.array(laborExcelProfileCandidateSchema).max(200),
+  /** Yalnız ÖNERİ; kullanıcı seçmeden hiçbir projeksiyon kesinleşmez. */
+  suggestedProfileId: idSchema.nullable(),
+  reason: z.enum([
+    'single_insurer_profile',
+    'selection_required',
+    'no_candidates',
+    'insurer_unknown',
+  ]),
+  /**
+   * Gerçek Excel dosyası HENÜZ okunmadı. Literal `false`, otomatik profil
+   * önerisinin "şablon doğrulandı" diye sunulmasını imkânsız kılar.
+   */
+  templateVerified: z.literal(false),
 })
 
 export const laborExcelProjectionLineSchema = z.strictObject({
@@ -120,9 +191,14 @@ export const laborExcelProjectionResponseSchema = z.strictObject({
 })
 
 export type LaborExcelColumnDto = z.infer<typeof laborExcelColumnSchema>
+export type LaborExcelIdentityChecksDto = z.infer<typeof laborExcelIdentityChecksSchema>
 export type LaborExcelProfileFields = z.infer<typeof laborExcelProfileFieldsSchema>
 export type LaborExcelProfileSaveRequest = z.infer<typeof laborExcelProfileSaveRequestSchema>
+export type LaborExcelProfileStatusRequest = z.infer<typeof laborExcelProfileStatusRequestSchema>
 export type LaborExcelProfileDto = z.infer<typeof laborExcelProfileSchema>
 export type LaborExcelProfileResponse = z.infer<typeof laborExcelProfileResponseSchema>
 export type LaborExcelProfilesResponse = z.infer<typeof laborExcelProfilesResponseSchema>
+export type LaborExcelProfileCandidateDto = z.infer<typeof laborExcelProfileCandidateSchema>
+export type LaborExcelProfileCandidatesResponse =
+  z.infer<typeof laborExcelProfileCandidatesResponseSchema>
 export type LaborExcelProjectionResponse = z.infer<typeof laborExcelProjectionResponseSchema>

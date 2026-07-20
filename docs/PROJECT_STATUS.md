@@ -5,11 +5,24 @@ Son güncelleme: 2026-07-20
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 62 — AI analiz ilerlemesi ve dayanıklılığı
-- Durum: **Asenkron analiz, gerçek ilerleme ve iptal çalışıyor; tüm kalite kapıları geçti**
+- Aşama: Paket 63 — Çoklu Excel profil seçimi
+- Durum: **Profil seçimi sunucuda zorlanıyor; tüm kalite kapıları geçti**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 63 doğrulama sonucu — SEÇİM SUNUCUDA ZORLANIYOR
+
+- **Kapatılan gerçek açık:** Paket 60'ta dosya ekranı `profiles[0]` ile listedeki İLK profili körü körüne seçiyordu; bu, başka bir sigorta şirketinin şablonunu sessizce kullanabilirdi. Artık aday kümesi sunucuda süzülür ve seçim kullanıcınındır.
+- **Sınır sunucudadır.** Projeksiyon ucu pasif profili `PROFILE_INACTIVE`, yabancı şirket profilini `PROFILE_INSURER_MISMATCH` ile **409** döner; smoke bu iki durumu UI'ı atlayıp ham `fetch` ile de doğrular.
+- **Öneri seçim yerine geçmez.** Şirkete bağlı tek aktif profil ön-seçili gelir ama onaylanmadan projeksiyon üretilmez; birden fazla adayda hiçbir şey ön-seçili olmaz ve önizleme düğmesi kilitlidir.
+- **Genel profil adaydır ama asla otomatik önerilmez** — P60'ın şirkete bağlı olmayan profil tasarımı korunur, öneri yalnız şirkete bağlı tek aktif profille yapılır.
+- **Pasifleştirme silme değildir.** Migration 0037 durumu aggregate'te tutar; pasif profil yeni projeksiyonda seçilemez, kaydı okunabilir kalır. Gerekçe zorunludur ve DB CHECK tutarsız durumu imkânsız kılar.
+- **Otomatik öneri gerçek şablon eşleşmesi olarak sunulmaz:** yanıt `templateVerified: false` literalini taşır, UI açıkça "profil önerisidir" der. Hedef sayfa ve kimlik doğrulama kuralı modele girdi; **hücre koordinatı bilerek girmedi** — gerçek şablon okunmadan konum uydurmak yanlış güven yaratır.
+- **Smoke'un diş taşıdığı ölçüldü.** Paket 62'de teşhis kodum sahte yeşil ürettiği için bu kez smoke kasıtlı kırılmayla sınandı: aktiflik filtresi devre dışı bırakılınca `AFTER_DEACTIVATION_COUNT_2` ile düştü, geri alınınca 2/2 geçti.
+- Ana ağaçta typecheck, lint, gerçek `hasarbotu_test` PostgreSQL ile **domain 575 + contracts 308 + UI 632 (+6 skip) + database 71 + API 430 + file-agent 53**, build + bundle bütçesi (495.584 bayt), `npm audit` (0 açık) ve `git diff --check` geçti.
+- Gerçek Chrome/CDP smoke **15/15 senaryo**; 1920×1080 açık/koyu ve 1366×768 koyu görünümde yatay taşma yok.
+- Yan düzeltme: Paket 62'de asenkron analize geçerken `labor-excel-profile` testinde kalan yarış (`analyze` sonucu beklenmeden `apply`) `waitForRunTerminal` ile kapatıldı.
 
 ## Paket 62 doğrulama sonucu — İLERLEME GERÇEK, İPTAL DÜRÜST
 

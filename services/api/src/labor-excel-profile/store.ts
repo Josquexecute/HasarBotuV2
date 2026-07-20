@@ -1,8 +1,10 @@
 import type pg from 'pg'
 import {
+  laborExcelProfileCandidatesResponseSchema,
   laborExcelProfileResponseSchema,
   laborExcelProfilesResponseSchema,
   laborExcelProjectionResponseSchema,
+  type LaborExcelProfileCandidatesResponse,
   type LaborExcelProfileFields,
   type LaborExcelProfileResponse,
   type LaborExcelProfilesResponse,
@@ -10,10 +12,13 @@ import {
 } from '@hasarbotu/contracts'
 import {
   LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
+  LABOR_OPERATION_TYPES,
   projectLaborAllocationToExcel,
+  selectLaborExcelProfileCandidates,
   validateLaborExcelProfileInput,
   type LaborAllocationAmount,
   type LaborExcelColumn,
+  type LaborExcelIdentityChecks,
   type LaborExcelMapping,
 } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
@@ -32,6 +37,11 @@ export type LaborExcelProfileErrorCode =
   | 'PROFILE_REASON_REQUIRED'
   | 'INSURER_NOT_FOUND'
   | 'APPLICATION_NOT_FOUND'
+  | 'CASE_NOT_FOUND'
+  /** P63: pasif profil YENİ projeksiyonda seçilemez. */
+  | 'PROFILE_INACTIVE'
+  /** P63: profil dosyanın sigorta şirketine ait değil. */
+  | 'PROFILE_INSURER_MISMATCH'
 
 export class LaborExcelProfileError extends Error {
   constructor(
@@ -55,7 +65,8 @@ function safeNumber(value: unknown): number {
 }
 
 const VERSION_COLUMNS = `v.id::text AS version_id,v.profile_version,v.name,
-  v.insurer_id::text AS insurer_id,v.columns,v.mapping,v.revision_reason,v.created_at`
+  v.insurer_id::text AS insurer_id,v.target_sheet,v.identity_checks,
+  v.columns,v.mapping,v.revision_reason,v.created_at`
 
 function versionDto(row: Record<string, unknown>) {
   return {
@@ -63,6 +74,8 @@ function versionDto(row: Record<string, unknown>) {
     profileVersion: safeNumber(row.profile_version),
     name: String(row.name),
     insurerId: row.insurer_id === null ? null : String(row.insurer_id),
+    targetSheet: row.target_sheet === null ? null : String(row.target_sheet),
+    identityChecks: row.identity_checks as LaborExcelIdentityChecks,
     columns: row.columns as LaborExcelColumn[],
     mapping: row.mapping as LaborExcelMapping,
     revisionReason: row.revision_reason === null ? null : String(row.revision_reason),
@@ -76,7 +89,8 @@ async function readProfile(
   profileId: string,
 ): Promise<LaborExcelProfileResponse> {
   const header = await pool.query(
-    `SELECT p.id::text,p.version,p.created_at,p.updated_at,u.display_name
+    `SELECT p.id::text,p.version,p.status,p.deactivated_at,p.status_reason,
+            p.created_at,p.updated_at,u.display_name
        FROM labor_excel_profiles p
        JOIN users u ON u.id=p.created_by_user_id
       WHERE p.organization_id=$1 AND p.id=$2`,
@@ -98,6 +112,11 @@ async function readProfile(
       id: String(profile.id),
       schemaVersion: LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
       version: safeNumber(profile.version),
+      status: String(profile.status),
+      deactivatedAt: profile.deactivated_at === null
+        ? null
+        : (profile.deactivated_at as Date).toISOString(),
+      statusReason: profile.status_reason === null ? null : String(profile.status_reason),
       current,
       history,
       createdByDisplayName: String(profile.display_name),
@@ -140,6 +159,8 @@ export function createLaborExcelProfileStore(pool: pg.Pool) {
         name: input.fields.name,
         columns: input.fields.columns,
         mapping: input.fields.mapping,
+        targetSheet: input.fields.targetSheet,
+        identityChecks: input.fields.identityChecks,
       })
       if (!validation.valid) {
         throw new LaborExcelProfileError('PROFILE_FIELDS_INVALID', 400, validation.reason)
@@ -193,11 +214,13 @@ export function createLaborExcelProfileStore(pool: pg.Pool) {
         await client.query(
           `INSERT INTO labor_excel_profile_versions
              (id,organization_id,profile_id,profile_version,previous_version_id,schema_version,
-              name,insurer_id,columns,mapping,revision_reason,created_by_user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12)`,
+              name,insurer_id,target_sheet,identity_checks,columns,mapping,
+              revision_reason,created_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14)`,
           [
             versionId, actor.organizationId, targetProfileId, nextVersion, previousVersionId,
             LABOR_EXCEL_PROFILE_SCHEMA_VERSION, validation.name, input.fields.insurerId,
+            validation.targetSheet, JSON.stringify(validation.identityChecks),
             JSON.stringify(validation.columns), JSON.stringify(validation.mapping),
             nextVersion === 1 ? null : (input.reason as string).trim(), actor.userId,
           ],
@@ -218,6 +241,131 @@ export function createLaborExcelProfileStore(pool: pg.Pool) {
     },
 
     /**
+     * Paket 63 — profili pasifleştirir veya yeniden etkinleştirir.
+     *
+     * Profil SİLİNMEZ: pasif profil yeni projeksiyonda seçilemez ama eski
+     * kayıtlarda okunabilir kalır. Gerekçe pasifleştirmede zorunludur.
+     */
+    async setStatus(
+      actor: Actor,
+      profileId: string,
+      input: { status: 'active' | 'inactive'; expectedVersion: number; reason: string | null },
+    ): Promise<LaborExcelProfileResponse> {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const existing = await client.query(
+          `SELECT version,status FROM labor_excel_profiles
+            WHERE organization_id=$1 AND id=$2 FOR UPDATE`,
+          [actor.organizationId, profileId],
+        )
+        const row = existing.rows[0] as Record<string, unknown> | undefined
+        if (row === undefined) throw new LaborExcelProfileError('PROFILE_NOT_FOUND', 404)
+        if (safeNumber(row.version) !== input.expectedVersion) {
+          throw new LaborExcelProfileError('PROFILE_VERSION_CONFLICT', 409)
+        }
+        const reason = input.reason === null ? null : input.reason.trim()
+        if (input.status === 'inactive' && (reason === null || reason.length === 0)) {
+          throw new LaborExcelProfileError('PROFILE_REASON_REQUIRED', 400)
+        }
+        // Durum değişikliği profil SÜRÜMÜ üretmez: içerik değişmiyor, yalnız
+        // kullanılabilirlik değişiyor. Aggregate sürümü yine de artar ki
+        // eşzamanlı düzenleme çakışması yakalansın.
+        await client.query(
+          `UPDATE labor_excel_profiles
+              SET status=$2,
+                  deactivated_at=CASE WHEN $2='inactive' THEN now() ELSE NULL END,
+                  deactivated_by_user_id=CASE WHEN $2='inactive' THEN $3::uuid ELSE NULL END,
+                  status_reason=CASE WHEN $2='inactive' THEN $4 ELSE NULL END,
+                  version=version+1,updated_at=now()
+            WHERE id=$1`,
+          [profileId, input.status, actor.userId, reason],
+        )
+        await client.query('COMMIT')
+        return readProfile(pool, actor.organizationId, profileId)
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined)
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
+    /**
+     * Paket 63 — dosya için seçilebilir profiller ve öneri.
+     *
+     * Gerçek Excel dosyası OKUNMAZ; bu yalnız PROFİL ÖNERİSİDİR ve yanıt
+     * `templateVerified: false` literalini taşır. Organizasyon sınırı sorguda,
+     * sigorta şirketi ve aktiflik kuralı domain fonksiyonunda uygulanır.
+     */
+    async listCandidates(
+      actor: Actor,
+      caseId: string,
+    ): Promise<LaborExcelProfileCandidatesResponse> {
+      const caseRow = await pool.query(
+        `SELECT c.insurer_id::text AS insurer_id,i.name AS insurer_name
+           FROM cases c
+           LEFT JOIN insurers i ON i.id=c.insurer_id AND i.organization_id=c.organization_id
+          WHERE c.organization_id=$1 AND c.id=$2`,
+        [actor.organizationId, caseId],
+      )
+      const found = caseRow.rows[0] as Record<string, unknown> | undefined
+      if (found === undefined) throw new LaborExcelProfileError('CASE_NOT_FOUND', 404)
+      const insurerId = found.insurer_id === null ? null : String(found.insurer_id)
+
+      const rows = await pool.query(
+        `SELECT p.id::text AS profile_id,p.version,p.status,
+                ${VERSION_COLUMNS},i.name AS insurer_name
+           FROM labor_excel_profiles p
+           JOIN labor_excel_profile_versions v ON v.id=p.current_version_id
+           LEFT JOIN insurers i ON i.id=v.insurer_id AND i.organization_id=p.organization_id
+          WHERE p.organization_id=$1
+          ORDER BY v.name LIMIT 200`,
+        [actor.organizationId],
+      )
+      const byId = new Map<string, Record<string, unknown>>()
+      const inputs = (rows.rows as Record<string, unknown>[]).map((row) => {
+        byId.set(String(row.profile_id), row)
+        return {
+          profileId: String(row.profile_id),
+          insurerId: row.insurer_id === null ? null : String(row.insurer_id),
+          status: String(row.status) as 'active' | 'inactive',
+        }
+      })
+
+      const selection = selectLaborExcelProfileCandidates(insurerId, inputs)
+      const candidates = selection.candidates.map((candidate) => {
+        const row = byId.get(candidate.profileId) as Record<string, unknown>
+        const version = versionDto(row)
+        const mapping = version.mapping as Record<string, string | null>
+        return {
+          profileId: candidate.profileId,
+          profileVersion: safeNumber(row.version),
+          name: version.name,
+          scope: candidate.scope,
+          insurerId: version.insurerId,
+          insurerName: row.insurer_name === null ? null : String(row.insurer_name),
+          targetSheet: version.targetSheet,
+          identityChecks: version.identityChecks,
+          columns: version.columns,
+          mapping: version.mapping,
+          // Hiçbir sütuna eşlenmemiş türler: tutarları sütuna YAZILAMAZ.
+          unmappedOperationTypes: LABOR_OPERATION_TYPES.filter((type) => mapping[type] === null),
+        }
+      })
+
+      return laborExcelProfileCandidatesResponseSchema.parse({
+        caseId,
+        insurerId,
+        insurerName: found.insurer_name === null ? null : String(found.insurer_name),
+        candidates,
+        suggestedProfileId: selection.suggestedProfileId,
+        reason: selection.reason,
+        templateVerified: false,
+      })
+    },
+
+    /**
      * Uygulanmış dağıtımı profil sütunlarına projekte eder. Hiçbir dosyaya
      * yazmaz; yanıt `written: false` literalini taşır.
      *
@@ -232,6 +380,24 @@ export function createLaborExcelProfileStore(pool: pg.Pool) {
     ): Promise<LaborExcelProjectionResponse> {
       const profileResponse = await readProfile(pool, actor.organizationId, profileId)
       const current = profileResponse.profile.current
+
+      // P63 — seçilebilirlik SUNUCUDA zorlanır; istemcinin gönderdiği
+      // profileId'ye güvenilmez.
+      if (profileResponse.profile.status !== 'active') {
+        throw new LaborExcelProfileError('PROFILE_INACTIVE', 409)
+      }
+      const caseRow = await pool.query(
+        'SELECT insurer_id::text AS insurer_id FROM cases WHERE organization_id=$1 AND id=$2',
+        [actor.organizationId, caseId],
+      )
+      const foundCase = caseRow.rows[0] as Record<string, unknown> | undefined
+      if (foundCase === undefined) throw new LaborExcelProfileError('CASE_NOT_FOUND', 404)
+      const caseInsurerId = foundCase.insurer_id === null ? null : String(foundCase.insurer_id)
+      // Genel profil (insurerId=null) her dosyada kullanılabilir; şirkete bağlı
+      // profil YALNIZ o şirketin dosyasında kullanılabilir.
+      if (current.insurerId !== null && current.insurerId !== caseInsurerId) {
+        throw new LaborExcelProfileError('PROFILE_INSURER_MISMATCH', 409)
+      }
 
       const application = await pool.query(
         `SELECT id::text FROM labor_allocation_applications

@@ -23,12 +23,136 @@ export const MAX_LABOR_EXCEL_COLUMNS = 24
 export const MAX_LABOR_EXCEL_COLUMN_KEY_LENGTH = 40
 export const MAX_LABOR_EXCEL_COLUMN_LABEL_LENGTH = 80
 export const MAX_LABOR_EXCEL_PROFILE_NAME_LENGTH = 80
+export const MAX_LABOR_EXCEL_TARGET_SHEET_LENGTH = 31
+
+/**
+ * Paket 63 — profil durumu. Pasif profil YENİ projeksiyonda seçilemez ama
+ * eski kayıtlarda okunabilir kalır; bu yüzden silme değil durum kullanılır.
+ */
+export const LABOR_EXCEL_PROFILE_STATUSES = ['active', 'inactive'] as const
+export type LaborExcelProfileStatus = (typeof LABOR_EXCEL_PROFILE_STATUSES)[number]
+
+/**
+ * Yazmadan ÖNCE hangi kimliklerin dosyada doğrulanması gerektiği.
+ *
+ * Bilerek yalnız "ne doğrulanacak" tutulur, "nerede bulunacak" değil: gerçek
+ * şablon dosyası okunmadan hücre koordinatı uydurmak yanlış güven yaratır.
+ * Geometri, şablon ilk kez okunduğunda modele girer.
+ */
+export interface LaborExcelIdentityChecks {
+  readonly plate: boolean
+  readonly officeNumber: boolean
+}
+
+export const EMPTY_LABOR_EXCEL_IDENTITY_CHECKS: LaborExcelIdentityChecks = {
+  plate: false,
+  officeNumber: false,
+}
+
+/**
+ * Hedef sayfa adı. Excel sayfa adı 31 karakterle sınırlıdır ve
+ * `: \ / ? * [ ]` karakterlerini taşıyamaz.
+ */
+export function normalizeLaborExcelTargetSheet(value: string): string | null {
+  const normalized = value.trim().replace(/\s+/g, ' ')
+  if (normalized.length < 1 || normalized.length > MAX_LABOR_EXCEL_TARGET_SHEET_LENGTH) return null
+  if (/[:\\/?*[\]]/.test(normalized)) return null
+  for (const character of normalized) {
+    const code = character.codePointAt(0) ?? 0
+    if (code < 0x20 || code === 0x7f) return null
+  }
+  return normalized
+}
 
 export interface LaborExcelColumn {
   /** Normalize anahtar: A-Z, 0-9 ve alt çizgi; profil içinde tekildir. */
   readonly key: string
   /** Kullanıcının şablondaki gerçek sütun başlığı. */
   readonly label: string
+}
+
+/** Aday seçiminde profilin karar için gereken asgari bilgisi. */
+export interface LaborExcelProfileCandidateInput {
+  readonly profileId: string
+  readonly insurerId: string | null
+  readonly status: LaborExcelProfileStatus
+}
+
+export type LaborExcelProfileCandidateScope = 'insurer' | 'generic'
+
+export interface LaborExcelProfileCandidate {
+  readonly profileId: string
+  /**
+   * `insurer`: profil dosyanın sigorta şirketine bağlıdır.
+   * `generic`: profil hiçbir şirkete bağlı değildir (P60'ta modellendi).
+   */
+  readonly scope: LaborExcelProfileCandidateScope
+}
+
+export type LaborExcelProfileSuggestionReason =
+  /** Dosyanın sigorta şirketine bağlı TEK aktif profil var. */
+  | 'single_insurer_profile'
+  /**
+   * Aday var ama otomatik öneri yapılamaz; seçim kullanıcıya aittir.
+   * Birden fazla aday olduğunda da, tek aday genel profil olduğunda da budur.
+   */
+  | 'selection_required'
+  /** Hiç aday yok. */
+  | 'no_candidates'
+  /** Dosyada sigorta şirketi yok; yalnız genel profiller aday olabilir. */
+  | 'insurer_unknown'
+
+export interface LaborExcelProfileSelection {
+  readonly candidates: readonly LaborExcelProfileCandidate[]
+  /** Yalnız ÖNERİDİR; kullanıcı seçmeden hiçbir şey kesinleşmez. */
+  readonly suggestedProfileId: string | null
+  readonly reason: LaborExcelProfileSuggestionReason
+}
+
+/**
+ * Paket 63 — dosya için seçilebilir profilleri ve öneriyi belirler.
+ *
+ * Kurallar:
+ * - Girdi ZATEN organizasyona göre süzülmüş olmalıdır; bu fonksiyon
+ *   organizasyon sınırını tekrar uygulayamaz çünkü o bilgi burada yoktur.
+ *   Sınır sunucuda sorgu seviyesinde uygulanır.
+ * - BAŞKA bir sigorta şirketine bağlı profil aday DEĞİLDİR.
+ * - Hiçbir şirkete bağlı olmayan (genel) profil adaydır ama ASLA otomatik
+ *   önerilmez: öneri yalnız dosyanın şirketine ait tek aktif profille olur.
+ * - Pasif profil aday değildir.
+ * - Öneri seçim yerine geçmez; kullanıcı onayı olmadan kesinleşmez.
+ */
+export function selectLaborExcelProfileCandidates(
+  caseInsurerId: string | null,
+  profiles: readonly LaborExcelProfileCandidateInput[],
+): LaborExcelProfileSelection {
+  const candidates: LaborExcelProfileCandidate[] = []
+  const insurerBound: string[] = []
+  for (const profile of profiles) {
+    if (profile.status !== 'active') continue
+    if (profile.insurerId === null) {
+      candidates.push({ profileId: profile.profileId, scope: 'generic' })
+      continue
+    }
+    if (caseInsurerId === null || profile.insurerId !== caseInsurerId) continue
+    candidates.push({ profileId: profile.profileId, scope: 'insurer' })
+    insurerBound.push(profile.profileId)
+  }
+
+  if (candidates.length === 0) {
+    return {
+      candidates,
+      suggestedProfileId: null,
+      reason: caseInsurerId === null ? 'insurer_unknown' : 'no_candidates',
+    }
+  }
+  // Öneri yalnız şirkete bağlı TEK aktif profille yapılır; genel profil
+  // veya birden fazla aday varsa seçim kullanıcıya bırakılır.
+  const suggested = insurerBound.length === 1 ? insurerBound[0] : undefined
+  if (suggested === undefined) {
+    return { candidates, suggestedProfileId: null, reason: 'selection_required' }
+  }
+  return { candidates, suggestedProfileId: suggested, reason: 'single_insurer_profile' }
 }
 
 /** Her kanonik tür ya bir sütuna eşlenir ya da açıkça eşlenmemiş bırakılır. */
@@ -50,6 +174,7 @@ export type LaborExcelProfileInvalidReason =
   | 'invalid_mapping_keys'
   | 'unknown_mapping_target'
   | 'no_mapped_operation_type'
+  | 'invalid_target_sheet'
 
 export type LaborExcelProfileValidation =
   | { readonly valid: false; readonly reason: LaborExcelProfileInvalidReason }
@@ -58,6 +183,9 @@ export type LaborExcelProfileValidation =
     readonly name: string
     readonly columns: readonly LaborExcelColumn[]
     readonly mapping: LaborExcelMapping
+    /** P63: hedef sayfa; tanımlanmamışsa null (yazım öncesi zorunlu olacak). */
+    readonly targetSheet: string | null
+    readonly identityChecks: LaborExcelIdentityChecks
   }
 
 /**
@@ -71,6 +199,8 @@ export function validateLaborExcelProfileInput(input: {
   readonly name: string
   readonly columns: readonly { readonly key: string; readonly label: string }[]
   readonly mapping: Readonly<Record<string, string | null>>
+  readonly targetSheet?: string | null
+  readonly identityChecks?: LaborExcelIdentityChecks
 }): LaborExcelProfileValidation {
   const name = normalizeLaborText(input.name, MAX_LABOR_EXCEL_PROFILE_NAME_LENGTH)
   if (name === null) return { valid: false, reason: 'invalid_name' }
@@ -110,7 +240,22 @@ export function validateLaborExcelProfileInput(input: {
   }
   if (mappedCount === 0) return { valid: false, reason: 'no_mapped_operation_type' }
 
-  return { valid: true, name, columns, mapping: mapping as LaborExcelMapping }
+  // Hedef sayfa isteğe bağlıdır ama VERİLDİYSE geçerli olmalıdır; boş string
+  // "tanımlanmadı" ile aynı değildir ve sessizce null'a çevrilmez.
+  let targetSheet: string | null = null
+  if (input.targetSheet !== undefined && input.targetSheet !== null) {
+    targetSheet = normalizeLaborExcelTargetSheet(input.targetSheet)
+    if (targetSheet === null) return { valid: false, reason: 'invalid_target_sheet' }
+  }
+
+  return {
+    valid: true,
+    name,
+    columns,
+    mapping: mapping as LaborExcelMapping,
+    targetSheet,
+    identityChecks: input.identityChecks ?? EMPTY_LABOR_EXCEL_IDENTITY_CHECKS,
+  }
 }
 
 export type LaborExcelProjectionLineStatus = 'projected' | 'manual_entry_required'

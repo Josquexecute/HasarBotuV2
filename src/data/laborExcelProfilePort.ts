@@ -13,9 +13,18 @@ export interface LaborExcelColumnRecord {
 
 export type LaborExcelMappingRecord = Readonly<Record<LaborOperationTypeRecord, string | null>>
 
+/** P63: yazımdan önce doğrulanacak kimlikler; hücre konumu DEĞİL. */
+export interface LaborExcelIdentityChecksRecord {
+  readonly plate: boolean
+  readonly officeNumber: boolean
+}
+
 export interface LaborExcelProfileFieldsRecord {
   readonly name: string
   readonly insurerId: string | null
+  /** P63: hedef Excel sayfası; tanımlanmadıysa null. */
+  readonly targetSheet: string | null
+  readonly identityChecks: LaborExcelIdentityChecksRecord
   readonly columns: readonly LaborExcelColumnRecord[]
   readonly mapping: LaborExcelMappingRecord
 }
@@ -31,6 +40,10 @@ export interface LaborExcelProfileRecord {
   readonly id: string
   readonly schemaVersion: string
   readonly version: number
+  /** P63: pasif profil YENİ projeksiyonda seçilemez, eski kayıtta okunur. */
+  readonly status: 'active' | 'inactive'
+  readonly deactivatedAt: string | null
+  readonly statusReason: string | null
   readonly current: LaborExcelProfileVersionRecord
   readonly history: readonly LaborExcelProfileVersionRecord[]
   readonly createdByDisplayName: string
@@ -64,6 +77,43 @@ export interface LaborExcelProjectionRecord {
   readonly written: false
 }
 
+/**
+ * P63 — dosya için seçilebilir profil.
+ *
+ * Bu bir PROFİL ÖNERİSİDİR; gerçek Excel dosyası okunmadığı için şablon
+ * eşleşmesi DEĞİLDİR (`templateVerified: false`).
+ */
+export interface LaborExcelProfileCandidateRecord {
+  readonly profileId: string
+  readonly profileVersion: number
+  readonly name: string
+  readonly scope: 'insurer' | 'generic'
+  readonly insurerId: string | null
+  readonly insurerName: string | null
+  readonly targetSheet: string | null
+  readonly identityChecks: LaborExcelIdentityChecksRecord
+  readonly columns: readonly LaborExcelColumnRecord[]
+  readonly mapping: LaborExcelMappingRecord
+  readonly unmappedOperationTypes: readonly LaborOperationTypeRecord[]
+}
+
+export type LaborExcelProfileSuggestionReasonRecord =
+  | 'single_insurer_profile'
+  | 'selection_required'
+  | 'no_candidates'
+  | 'insurer_unknown'
+
+export interface LaborExcelProfileCandidatesRecord {
+  readonly caseId: string
+  readonly insurerId: string | null
+  readonly insurerName: string | null
+  readonly candidates: readonly LaborExcelProfileCandidateRecord[]
+  readonly suggestedProfileId: string | null
+  readonly reason: LaborExcelProfileSuggestionReasonRecord
+  /** Sözleşme literali: gerçek şablon dosyası okunmadı. */
+  readonly templateVerified: false
+}
+
 export interface LaborExcelProfileDataPort {
   list(): Promise<{
     readonly profiles: readonly LaborExcelProfileRecord[]
@@ -75,6 +125,15 @@ export interface LaborExcelProfileDataPort {
     readonly expectedVersion: number | null
     readonly reason: string | null
   }): Promise<LaborExcelProfileRecord>
+  /** P63: profili pasifleştirir/yeniden etkinleştirir. */
+  setStatus(input: {
+    readonly profileId: string
+    readonly status: 'active' | 'inactive'
+    readonly expectedVersion: number
+    readonly reason: string | null
+  }): Promise<LaborExcelProfileRecord>
+  /** P63: dosya için seçilebilir profiller ve öneri. */
+  candidates(caseId: string): Promise<LaborExcelProfileCandidatesRecord>
   project(
     caseId: string,
     applicationId: string,
@@ -162,6 +221,35 @@ export function createHttpLaborExcelProfileAdapter(options: {
         throw new LaborExcelProfileClientError('unavailable', 'profile response invalid')
       }
       return parsed.data.profile as unknown as LaborExcelProfileRecord
+    },
+    async setStatus(input) {
+      const { laborExcelProfileResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = laborExcelProfileResponseSchema.safeParse(await request(
+        `/api/v1/labor-excel-profiles/${encodeURIComponent(input.profileId)}/status`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            status: input.status,
+            expectedVersion: input.expectedVersion,
+            reason: input.reason,
+            confirmed: true,
+          }),
+        },
+      ))
+      if (!parsed.success) {
+        throw new LaborExcelProfileClientError('unavailable', 'status response invalid')
+      }
+      return parsed.data.profile as unknown as LaborExcelProfileRecord
+    },
+    async candidates(caseId) {
+      const { laborExcelProfileCandidatesResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = laborExcelProfileCandidatesResponseSchema.safeParse(await request(
+        `/api/v1/cases/${encodeURIComponent(caseId)}/labor-excel-profile-candidates`,
+      ))
+      if (!parsed.success) {
+        throw new LaborExcelProfileClientError('unavailable', 'candidates response invalid')
+      }
+      return parsed.data as unknown as LaborExcelProfileCandidatesRecord
     },
     async project(caseId, applicationId, profileId) {
       const { laborExcelProjectionResponseSchema } = await import('@hasarbotu/contracts')

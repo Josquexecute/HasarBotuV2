@@ -3,11 +3,14 @@ import type pg from 'pg'
 import { z } from 'zod'
 import {
   LABOR_EXCEL_PROFILES_ROUTE,
+  LABOR_EXCEL_PROFILE_CANDIDATES_ROUTE,
   LABOR_EXCEL_PROFILE_ROUTE,
+  LABOR_EXCEL_PROFILE_STATUS_ROUTE,
   LABOR_EXCEL_PROJECTION_ROUTE,
   failureEnvelopeSchema,
   laborExcelProfileParamsSchema,
   laborExcelProfileSaveRequestSchema,
+  laborExcelProfileStatusRequestSchema,
   laborExcelProjectionParamsSchema,
   zodErrorToApiError,
 } from '@hasarbotu/contracts'
@@ -31,10 +34,17 @@ const FAILURE_CODES = {
   PROFILE_REASON_REQUIRED: 'validation_error',
   INSURER_NOT_FOUND: 'not_found',
   APPLICATION_NOT_FOUND: 'not_found',
+  CASE_NOT_FOUND: 'not_found',
+  PROFILE_INACTIVE: 'conflict',
+  PROFILE_INSURER_MISMATCH: 'conflict',
 } as const
 
 const projectionQuerySchema = z.strictObject({
   profileId: z.string().uuid(),
+})
+
+const candidatesParamsSchema = z.strictObject({
+  caseId: z.string().uuid(),
 })
 
 export function registerLaborExcelProfileRoutes(
@@ -111,6 +121,57 @@ export function registerLaborExcelProfileRoutes(
         { organizationId: session.user.organizationId, userId: session.user.id },
         params.data.profileId,
         body.data,
+      )
+    } catch (error) {
+      return handle(reply, requestId, error)
+    }
+  })
+
+  /**
+   * P63 — profili pasifleştirir/yeniden etkinleştirir. Profil silinmez;
+   * pasif profil eski kayıtlarda okunabilir kalır.
+   */
+  app.post(LABOR_EXCEL_PROFILE_STATUS_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireAnyRole(auth, request, reply, WRITE_ROLES)
+    if (session === undefined) return
+    const params = laborExcelProfileParamsSchema.safeParse(request.params)
+    const body = laborExcelProfileStatusRequestSchema.safeParse(request.body)
+    if (!params.success || !body.success) {
+      const error = params.success ? body.error : params.error
+      return reply.code(400).send(failureEnvelopeSchema.parse({
+        ok: false, error: zodErrorToApiError(error as never, requestId),
+      }))
+    }
+    try {
+      return await store.setStatus(
+        { organizationId: session.user.organizationId, userId: session.user.id },
+        params.data.profileId,
+        body.data,
+      )
+    } catch (error) {
+      return handle(reply, requestId, error)
+    }
+  })
+
+  /**
+   * P63 — dosya için seçilebilir profiller ve öneri. Gerçek Excel dosyası
+   * OKUNMAZ; yanıt `templateVerified: false` taşır.
+   */
+  app.get(LABOR_EXCEL_PROFILE_CANDIDATES_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireAnyRole(auth, request, reply, READ_ROLES)
+    if (session === undefined) return
+    const params = candidatesParamsSchema.safeParse(request.params)
+    if (!params.success) {
+      return reply.code(400).send(failureEnvelopeSchema.parse({
+        ok: false, error: zodErrorToApiError(params.error, requestId),
+      }))
+    }
+    try {
+      return await store.listCandidates(
+        { organizationId: session.user.organizationId, userId: session.user.id },
+        params.data.caseId,
       )
     } catch (error) {
       return handle(reply, requestId, error)

@@ -58,6 +58,10 @@ export function LaborExcelProfilesModule({ port }: {
   const [columnsText, setColumnsText] = useState('')
   const [mapping, setMapping] = useState<Record<string, string>>(emptyMapping)
   const [reason, setReason] = useState('')
+  /** P63: hedef sayfa ve yazım öncesi kimlik doğrulama kuralları. */
+  const [targetSheet, setTargetSheet] = useState('')
+  const [checkPlate, setCheckPlate] = useState(false)
+  const [checkOfficeNumber, setCheckOfficeNumber] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -100,6 +104,9 @@ export function LaborExcelProfilesModule({ port }: {
     setColumnsText('ISCILIK = İşçilik Bedeli\nPARCA = Parça Bedeli')
     setMapping(emptyMapping())
     setReason('')
+    setTargetSheet('')
+    setCheckPlate(false)
+    setCheckOfficeNumber(false)
     setErrorKind(null)
   }
 
@@ -111,7 +118,37 @@ export function LaborExcelProfilesModule({ port }: {
       OPERATION_TYPES.map((type) => [type, profile.current.mapping[type] ?? UNMAPPED]),
     ))
     setReason('')
+    setTargetSheet(profile.current.targetSheet ?? '')
+    setCheckPlate(profile.current.identityChecks.plate)
+    setCheckOfficeNumber(profile.current.identityChecks.officeNumber)
     setErrorKind(null)
+  }
+
+  /**
+   * P63 — profili pasifleştirir/etkinleştirir. Pasifleştirme gerekçe ister
+   * çünkü seçilebilirliği kaldıran bir karardır; profil silinmez.
+   */
+  const toggleStatus = async (profile: LaborExcelProfileRecord) => {
+    const next = profile.status === 'active' ? 'inactive' : 'active'
+    const statusReason = next === 'inactive'
+      ? window.prompt('Pasifleştirme gerekçesi:')
+      : null
+    if (next === 'inactive' && (statusReason === null || statusReason.trim() === '')) return
+    setBusy(true)
+    try {
+      await adapter.setStatus({
+        profileId: profile.id,
+        status: next,
+        expectedVersion: profile.version,
+        reason: statusReason,
+      })
+      await load()
+      setErrorKind(null)
+    } catch (error) {
+      setErrorKind(error instanceof LaborExcelProfileClientError ? error.kind : 'unavailable')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const target = profiles.find((profile) => profile.id === editing) ?? null
@@ -130,6 +167,8 @@ export function LaborExcelProfilesModule({ port }: {
         fields: {
           name: name.trim(),
           insurerId: null,
+          targetSheet: targetSheet.trim() === '' ? null : targetSheet.trim(),
+          identityChecks: { plate: checkPlate, officeNumber: checkOfficeNumber },
           columns: parsedColumns.map((column, index) => ({
             key: columnKeys[index] as string,
             label: column.label,
@@ -206,6 +245,41 @@ export function LaborExcelProfilesModule({ port }: {
             <small>{parsedColumns.length} sütun tanımlandı.</small>
           </label>
 
+          {/*
+            P63 — yazım hedefi ve güvenlik kuralı. Hücre koordinatı BİLEREK
+            istenmez: gerçek şablon okunmadan konum uydurmak yanlış güven
+            yaratır; geometri şablon okunduğunda modele girer.
+          */}
+          <label className="field">
+            <span>Hedef Excel sayfası</span>
+            <input
+              aria-label="Hedef Excel sayfası"
+              value={targetSheet}
+              onChange={(event) => setTargetSheet(event.target.value)}
+              placeholder="Örn. İşçilik"
+            />
+            <small>Boş bırakılabilir; fiziksel yazım öncesinde zorunlu olacaktır.</small>
+          </label>
+          <fieldset className="excel-profile__checks">
+            <legend>Yazım öncesi kimlik doğrulaması</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={checkPlate}
+                onChange={(event) => setCheckPlate(event.target.checked)}
+              />
+              <span>Plaka dosyada doğrulansın</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={checkOfficeNumber}
+                onChange={(event) => setCheckOfficeNumber(event.target.checked)}
+              />
+              <span>Dosya numarası doğrulansın</span>
+            </label>
+          </fieldset>
+
           <div className="excel-profile__mapping">
             <strong>Operasyon türü → sütun eşlemesi</strong>
             {OPERATION_TYPES.map((type) => (
@@ -266,7 +340,7 @@ export function LaborExcelProfilesModule({ port }: {
             <thead>
               <tr>
                 <th>Profil</th><th>Sürüm</th><th>Sütun</th><th>Eşlenen tür</th>
-                <th>Oluşturan</th><th aria-label="İşlemler" />
+                <th>Durum</th><th>Oluşturan</th><th aria-label="İşlemler" />
               </tr>
             </thead>
             <tbody>
@@ -280,12 +354,27 @@ export function LaborExcelProfilesModule({ port }: {
                     <td>Sürüm {profile.version}</td>
                     <td>{profile.current.columns.length}</td>
                     <td>{mapped}/{OPERATION_TYPES.length}</td>
+                    {/* P63: pasif profil silinmez; yeni seçimde kullanılamaz. */}
+                    <td>
+                      {profile.status === 'active'
+                        ? 'Aktif'
+                        : `Pasif${profile.statusReason === null ? '' : ` · ${profile.statusReason}`}`}
+                    </td>
                     <td>{profile.createdByDisplayName}</td>
                     <td>
                       {canWrite && (
-                        <button className="text-button" type="button" onClick={() => startEdit(profile)}>
-                          Düzenle
-                        </button>
+                        <>
+                          <button className="text-button" type="button" onClick={() => startEdit(profile)}>
+                            Düzenle
+                          </button>
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={() => void toggleStatus(profile)}
+                          >
+                            {profile.status === 'active' ? 'Pasifleştir' : 'Etkinleştir'}
+                          </button>
+                        </>
                       )}
                     </td>
                   </tr>

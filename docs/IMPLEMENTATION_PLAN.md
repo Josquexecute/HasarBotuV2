@@ -1249,3 +1249,20 @@ Kapsam dışı: timeout tavanının yükseltilmesi, domain doğrulamasının gev
 - [x] Kablo seviyesi regresyon testi: gövdesiz POST'un boş JSON gövde hatası üretmesi bir daha kaçmasın.
 
 Kapsam dışı: ilerleme yüzdesi/kalan süre tahmini, çok süreçli koşu devralma, Excel dosyasına yazma.
+
+## Paket 63 — Çoklu Excel profil seçimi
+
+- [x] Domain: `selectLaborExcelProfileCandidates` — organizasyon/şirket kapsamı, aktiflik, tek profilde öneri.
+- [x] Domain: profil durumu, hedef sayfa ve kimlik doğrulama kuralı tipleri.
+- [x] Migration 0037: aggregate durumu + pasifleştirme kaydı; sürüme hedef sayfa ve kimlik kuralları.
+- [x] Sözleşme: aday listesi (`templateVerified: false`) ve durum değiştirme isteği.
+- [x] API: dosyaya göre aday ucu; profil durum ucu.
+- [x] API: projeksiyon ucu pasif profili ve şirket uyuşmazlığını 409 ile reddetsin.
+- [x] UI: `profiles[0]` körü körüne seçimi kaldırıldı; öneri/seçim akışı kuruldu.
+- [x] UI: profil önerisi ile gerçek şablon eşleşmesi ayrı sunulsun.
+- [x] UI: eşleşme önizlemesi — ad, sürüm, şirket, hedef sayfa, eşleme, eşlenmemiş türler, kimlik kuralları.
+- [x] UI: profil değişince projeksiyon temizlensin; sürüm değişimi/pasifleşme bayat olarak işaretlensin.
+- [x] Yönetim: hedef sayfa, kimlik kuralları ve pasifleştirme/etkinleştirme.
+- [x] Smoke kasıtlı kırılmayla sınandı; teşhis kodu ürünün işini yapmıyor.
+
+Kapsam dışı: gerçek Excel dosyası okuma, hücre koordinatı modelleme, dosyaya yazma.

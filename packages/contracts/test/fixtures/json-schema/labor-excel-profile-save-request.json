@@ -24,6 +24,39 @@
             }
           ]
         },
+        "targetSheet": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 31
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identityChecks": {
+          "default": {
+            "plate": false,
+            "officeNumber": false
+          },
+          "type": "object",
+          "properties": {
+            "plate": {
+              "type": "boolean"
+            },
+            "officeNumber": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "plate",
+            "officeNumber"
+          ],
+          "additionalProperties": false
+        },
         "columns": {
           "minItems": 1,
           "maxItems": 24,
@@ -165,6 +198,8 @@
       "required": [
         "name",
         "insurerId",
+        "targetSheet",
+        "identityChecks",
         "columns",
         "mapping"
       ],

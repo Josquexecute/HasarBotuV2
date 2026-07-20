@@ -1259,3 +1259,20 @@ Karar:
 8. **Son koşu gizlenmez.** Aktif koşu yoksa EN SON koşu gösterilir; başarısız son deneme sessizce saklanıp yerine eski bir öneri tazeymiş gibi sunulmaz.
 
 Etkisi: Migration 0036, asenkron yürütme ve iptal kaydı, `readRun`/`cancel` uçları, ilerleme paneli. Domain doğrulaması, PII sınırı, bütçe kapısı ve tam satır kapsaması şartı gevşetilmedi.
+
+## 2026-07-20 — HB-2026-070: Çoklu Excel profil seçimi (Paket 63)
+
+Bağlam: Paket 60 profil altyapısını kurdu ama dosya ekranı `profiles[0]` ile listedeki İLK profili körü körüne seçiyordu. Bu, başka bir sigorta şirketinin şablonunu sessizce kullanabilecek bir seçim hatasıydı ve fiziksel yazıma geçmeden kapatılması gerekiyordu.
+
+Karar:
+
+1. **Aday kümesi sunucuda süzülür.** Organizasyon sınırı sorguda, sigorta şirketi ve aktiflik kuralı domain fonksiyonunda (`selectLaborExcelProfileCandidates`) uygulanır. İstemcinin gönderdiği `profileId` doğrulanmadan kullanılmaz: projeksiyon ucu pasif profili `PROFILE_INACTIVE`, yabancı şirket profilini `PROFILE_INSURER_MISMATCH` ile 409 döner.
+2. **Öneri seçim yerine geçmez.** Dosyanın şirketine bağlı TEK aktif profil varsa ön-seçili gelir ama kullanıcı onaylamadan projeksiyon üretilmez. Birden fazla aday varsa hiçbir şey ön-seçili olmaz ve önizleme düğmesi kilitlidir.
+3. **Genel profil adaydır ama ASLA otomatik önerilmez.** P60 hiçbir şirkete bağlı olmayan profili modellemişti; onu aday dışı bırakmak o tasarımı işlevsiz kılardı. Ancak öneri yalnız şirkete bağlı tek aktif profille yapılır — genel profil seçimi her zaman kullanıcıya bırakılır.
+4. **Pasifleştirme silme değildir.** Migration 0037 aggregate üzerinde durum tutar; pasif profil yeni projeksiyonda seçilemez ama kaydı okunabilir kalır. Durum değişikliği profil SÜRÜMÜ üretmez (içerik değişmiyor) ama aggregate sürümünü artırır ki eşzamanlı düzenleme çakışması yakalansın. Pasifleştirme gerekçe ister; DB CHECK "pasif ama kim/ne zaman bilinmiyor" durumunu imkânsız kılar.
+5. **Otomatik profil önerisi ile gerçek şablon eşleşmesi AYRI şeylerdir.** Aday yanıtı `templateVerified: false` literalini taşır ve UI açıkça "profil önerisidir, şablon eşleşmesi değildir" der. Gerçek Excel dosyası okunana kadar başka bir iddiada bulunulmaz.
+6. **Hedef sayfa ve kimlik doğrulama kuralı modele girdi; hücre koordinatı GİRMEDİ.** Yazımdan önce hangi kimliklerin (plaka, dosya numarası) doğrulanacağı sürümlü profil bilgisidir. "Nerede bulunacağı" bilerek modellenmedi: gerçek şablon okunmadan hücre konumu uydurmak yanlış güven yaratır. Geometri, şablon ilk kez okunduğunda modele girecek.
+7. **Profil değişince eski projeksiyon gösterilmez.** Profil seçimi değişirse projeksiyon temizlenir; profil sürümü değişmiş veya profil aday olmaktan çıkmışsa mevcut projeksiyon bayat olarak işaretlenir ve sayıların güvenilmez olduğu söylenir.
+8. **Smoke'un diş taşıdığı ölçüldü.** Paket 62'de teşhis kodunun kendisi ürünün işini yaparak sahte yeşil ürettiği için, bu paketin smoke'u kasıtlı bir kırılmayla sınandı: aktiflik filtresi devre dışı bırakıldığında smoke `AFTER_DEACTIVATION_COUNT_2` ile düştü. Betikteki hiçbir teşhis kodu tıklama veya seçim yapmaz; yalnız okur.
+
+Etkisi: Migration 0037, aday ve durum uçları, projeksiyon sıkılaştırması, profil seçim paneli. Hâlâ hiçbir Excel dosyası okunmaz veya yazılmaz.
