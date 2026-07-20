@@ -39,18 +39,19 @@ function candidate(
     identityChecks: { plate: true, officeNumber: false },
     columns: COLUMNS,
     mapping: {
-      repair: 'ISCILIK',
-      replace: 'PARCA',
-      remove_install: null,
-      paint: null,
-      consumable: null,
+      bodywork: 'ISCILIK',
+      mechanical: null,
+      electrical: null,
+      upholstery_lock: null,
+      glass: null,
       calibration: null,
-      related_operation: null,
-      other: null,
+      repair: 'ISCILIK',
+      paint: 'PARCA',
     },
-    unmappedOperationTypes: [
-      'remove_install', 'paint', 'consumable', 'calibration', 'related_operation', 'other',
+    unmappedCategories: [
+      'mechanical', 'electrical', 'upholstery_lock', 'glass', 'calibration',
     ],
+    writable: true,
     ...overrides,
   }
 }
@@ -184,13 +185,13 @@ describe('Paket 63 Excel profil seçimi', () => {
       .toHaveBeenCalledWith(CASE_ID, APPLICATION_ID, 'profile-1'))
   })
 
-  it('eşleşme önizlemesinde hedef sayfa, kimlik kuralı ve eşlenmemiş türler görünür', async () => {
+  it('eşleşme önizlemesinde hedef sayfa, kimlik kuralı ve eşlenmemiş kategoriler görünür', async () => {
     await openSelection(excelPort())
 
     expect(await screen.findByText('İşçilik')).toBeInTheDocument()
     expect(screen.getByText('Plaka')).toBeInTheDocument()
-    expect(screen.getByText(/6 operasyon türü hiçbir/)).toBeInTheDocument()
-    expect(screen.getAllByText('Eşlenmedi').length).toBe(6)
+    expect(screen.getByText(/5 dağıtım kategorisi hiçbir/)).toBeInTheDocument()
+    expect(screen.getAllByText('Eşlenmedi').length).toBe(5)
   })
 
   it('birden fazla adayda öneri yapılmaz ve önizleme düğmesi kilitli kalır', async () => {

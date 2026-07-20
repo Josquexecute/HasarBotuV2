@@ -17,32 +17,37 @@ import {
  *
  * Bu ekran hiçbir Excel dosyası yazmaz; yalnız eşlemeyi tanımlar.
  */
-const OPERATION_TYPES = [
-  'repair',
-  'replace',
-  'remove_install',
-  'paint',
-  'consumable',
+/**
+ * P64: eşleme DAĞITIM KATEGORİSİ eksenindedir. Excel işçilik sütunları
+ * branştır (kaporta, mekanik...); operasyon türü değildir.
+ */
+const CATEGORIES = [
+  'bodywork',
+  'mechanical',
+  'electrical',
+  'upholstery_lock',
+  'glass',
   'calibration',
-  'related_operation',
-  'other',
+  'repair',
+  'paint',
 ] as const
 
-const OPERATION_LABELS: Record<string, string> = {
+/** Türkçe etiketler UI katmanında durur; domain kodları dil bağımsızdır. */
+const CATEGORY_LABELS: Record<string, string> = {
+  bodywork: 'Kaporta',
+  mechanical: 'Mekanik',
+  electrical: 'Elektrik',
+  upholstery_lock: 'Döşeme/Kilit',
+  glass: 'Cam',
+  calibration: 'Kalibrasyon',
   repair: 'Onarım',
-  replace: 'Değişim',
-  remove_install: 'Sökme-takma',
   paint: 'Boya',
-  consumable: 'Sarf',
-  calibration: 'Ayar/kalibrasyon',
-  related_operation: 'İlişkili operasyon',
-  other: 'Diğer',
 }
 
 const UNMAPPED = ''
 
 function emptyMapping(): Record<string, string> {
-  return Object.fromEntries(OPERATION_TYPES.map((type) => [type, UNMAPPED]))
+  return Object.fromEntries(CATEGORIES.map((type) => [type, UNMAPPED]))
 }
 
 export function LaborExcelProfilesModule({ port }: {
@@ -115,7 +120,7 @@ export function LaborExcelProfilesModule({ port }: {
     setName(profile.current.name)
     setColumnsText(profile.current.columns.map((column) => `${column.key} = ${column.label}`).join('\n'))
     setMapping(Object.fromEntries(
-      OPERATION_TYPES.map((type) => [type, profile.current.mapping[type] ?? UNMAPPED]),
+      CATEGORIES.map((type) => [type, profile.current.mapping[type] ?? UNMAPPED]),
     ))
     setReason('')
     setTargetSheet(profile.current.targetSheet ?? '')
@@ -153,7 +158,7 @@ export function LaborExcelProfilesModule({ port }: {
 
   const target = profiles.find((profile) => profile.id === editing) ?? null
   const isRevision = editing !== null && editing !== 'new'
-  const mappedCount = OPERATION_TYPES.filter((type) => mapping[type] !== UNMAPPED).length
+  const mappedCount = CATEGORIES.filter((type) => mapping[type] !== UNMAPPED).length
   const canSubmit = name.trim() !== ''
     && parsedColumns.length > 0
     && mappedCount > 0
@@ -173,7 +178,7 @@ export function LaborExcelProfilesModule({ port }: {
             key: columnKeys[index] as string,
             label: column.label,
           })),
-          mapping: Object.fromEntries(OPERATION_TYPES.map((type) => [
+          mapping: Object.fromEntries(CATEGORIES.map((type) => [
             type,
             mapping[type] === UNMAPPED ? null : (mapping[type] as string),
           ])) as never,
@@ -282,11 +287,11 @@ export function LaborExcelProfilesModule({ port }: {
 
           <div className="excel-profile__mapping">
             <strong>Operasyon türü → sütun eşlemesi</strong>
-            {OPERATION_TYPES.map((type) => (
+            {CATEGORIES.map((type) => (
               <label className="select-field" key={type}>
-                <span className="select-field__label">{OPERATION_LABELS[type] ?? type}</span>
+                <span className="select-field__label">{CATEGORY_LABELS[type] ?? type}</span>
                 <select
-                  aria-label={`${OPERATION_LABELS[type] ?? type} sütunu`}
+                  aria-label={`${CATEGORY_LABELS[type] ?? type} sütunu`}
                   value={mapping[type] ?? UNMAPPED}
                   onChange={(event) => setMapping((current) => ({
                     ...current, [type]: event.target.value,
@@ -345,7 +350,7 @@ export function LaborExcelProfilesModule({ port }: {
             </thead>
             <tbody>
               {profiles.map((profile) => {
-                const mapped = OPERATION_TYPES.filter(
+                const mapped = CATEGORIES.filter(
                   (type) => profile.current.mapping[type] !== null,
                 ).length
                 return (
@@ -353,7 +358,7 @@ export function LaborExcelProfilesModule({ port }: {
                     <td><strong>{profile.current.name}</strong></td>
                     <td>Sürüm {profile.version}</td>
                     <td>{profile.current.columns.length}</td>
-                    <td>{mapped}/{OPERATION_TYPES.length}</td>
+                    <td>{mapped}/{CATEGORIES.length}</td>
                     {/* P63: pasif profil silinmez; yeni seçimde kullanılamaz. */}
                     <td>
                       {profile.status === 'active'

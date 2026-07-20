@@ -40,14 +40,14 @@ const NOW = '2026-07-20T10:00:00.000Z'
 
 const COLUMNS = [{ key: 'ISCILIK', label: 'İşçilik' }, { key: 'PARCA', label: 'Parça' }]
 const MAPPING = {
-  repair: 'ISCILIK',
-  replace: 'PARCA',
-  remove_install: null,
-  paint: null,
-  consumable: null,
+  bodywork: 'ISCILIK',
+  mechanical: null,
+  electrical: null,
+  upholstery_lock: null,
+  glass: null,
   calibration: null,
-  related_operation: null,
-  other: null,
+  repair: 'PARCA',
+  paint: null,
 }
 
 describeDb('Paket 63 çoklu Excel profil seçimi', () => {
@@ -189,9 +189,11 @@ describeDb('Paket 63 çoklu Excel profil seçimi', () => {
     expect(candidate?.targetSheet).toBe('Föy')
     expect(candidate?.identityChecks).toEqual({ plate: true, officeNumber: false })
     // Eşlenmemiş türler açıkça listelenir; tutarları hiçbir sütuna yazılamaz.
-    expect(candidate?.unmappedOperationTypes).toEqual(
-      ['remove_install', 'paint', 'consumable', 'calibration', 'related_operation', 'other'],
+    // P64: eşleme kategori eksenindedir; eşlenmemiş KATEGORİLER listelenir.
+    expect(candidate?.unmappedCategories).toEqual(
+      ['mechanical', 'electrical', 'upholstery_lock', 'glass', 'calibration', 'paint'],
     )
+    expect(candidate?.writable).toBe(true)
   })
 
   it('başka sigorta şirketinin profili aday değildir', async () => {

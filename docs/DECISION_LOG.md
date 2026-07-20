@@ -1300,3 +1300,25 @@ Kararlar:
 Gerçek şablona karşı salt okunur doğrulama (dosya diske yazılmadı, kaynak SHA256 değişmedi): imza doğrulandı, F2/M2/L3 yamalandı, N2 (formül) reddedildi, **11 ZIP girdisinin 9'u byte-birebir aynı kaldı** — yalnız hedef sheet ve recalc bayrağı değişti.
 
 Bu dilimin kapsamı: bağımlılık, yol çözümleyici ve workbook geometrisi/yamalama temeli. Fiziksel yazım hattı (File Agent, yedek, geçici dosya, güvenli replace), geometri profil migration'ı, sözleşme/API/UI ve Chrome smoke bir sonraki dilimdedir. **Hiçbir fiziksel yazım yapılmadı.**
+
+## 2026-07-20 — HB-2026-072: İşçilik dağıtım kategorisi ekseni (Paket 64 semantik düzeltme)
+
+Bağlam: Paket 64 keşfi gerçek şablonun F–M sütunlarını ortaya çıkardı: Kaporta, Mekanik, Elektrik, Döş/Kilit, Cam, Kalibrasyon, Onarım, Boya. Paket 60–63 profil modeli bu sütunları kanonik OPERASYON TÜRÜNE eşliyordu. Bu yanlış eksendi.
+
+Tespit:
+
+1. **Operasyon türü ile Excel işçilik sütunu aynı eksen değildir.** Operasyon türü işlemin NE OLDUĞUNU söyler (onarım/değişim/sökme-takma). Excel sütunu işi HANGİ BRANŞIN yaptığını söyler. `remove_install` hem kaporta hem mekanik altında olabilir; `replace` bir işçilik sütunu değildir, parça bedelidir.
+2. `calibration`, `repair` ve `paint` adlarının iki sette de geçmesi ayrımı gizliyordu — hata tam olarak buradan doğmuştu.
+
+Karar:
+
+1. `labor-operation-types/1.0.0` AI gerekçelendirmesi ve onarım/değişim karşılaştırması için KORUNDU; ekonomik kovalar da ayrı kaldı.
+2. Yeni sürümlü sınır: `labor-allocation-categories/1.0.0` — bodywork, mechanical, electrical, upholstery_lock, glass, calibration, repair, paint. Kodlar kararlı ve dil bağımsız; Türkçe etiketler UI katmanında.
+3. Profil eşlemesi kategori eksenine taşındı ve şema `labor-excel-profile/2.0.0` oldu. **Eski 1.0.0 kayıtları sessizce yeniden yorumlanmadı**: migration 0038'in CHECK kısıtı sürüme göre dallanır, 1.0.0 satırları operasyon türü anahtarlarıyla olduğu gibi kalır ve okunabilir. Fiziksel yazım yalnız 2.0.0 ile yapılır; kural `isProfileWritable` ile tek noktadan zorlanır ve sözleşme `writable` alanını taşır.
+4. **Kategori operasyon türünden UYDURULMAZ.** `deriveCategoryFromOperation` yalnız tek anlamlı türleri eşler (paint, calibration, repair); geri kalanlar `null` döner. Sıfır olmayan tek bir belirsiz tutar TÜM satırı düşürür ve satır `manual_entry_required` olur.
+5. **Ölçülen dürüst sonuç:** mevcut AI çıktısı `remove_install` gibi branş bilgisi taşımayan türler ürettiği için şu anda hiçbir satır otomatik projekte EDİLEMİYOR (projeksiyon 0, manuel 2). Bu bir gerileme değil, önceki davranışın yanlış eksende tutar üretmiş olduğunun kanıtı. Excel'e otomatik aktarım, satır bazında kategori dağıtımı eklenene kadar açılmayacak.
+6. Migration geri alma, 2.0.0 satırı varsa sessiz veri kaybı yerine açık hata verir.
+
+Dosya numarası kapsamı kontrol edildi: `office_number` yalnız `(organization_id, office_number)` kapsamında tekil, `insurer_claim_number` üzerinde hiç unique kısıt yok. **Global tekillik hatası bulunmadı ve eklenmedi.**
+
+Ayrıca `fflate` koruma iddiası doğru adlandırıldı: dokunulmayan OOXML part içerikleri byte-birebir korunur; tüm ZIP dosyasının binary olarak aynı kaldığı İDDİA EDİLMEZ.

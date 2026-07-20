@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import {
+  LABOR_ALLOCATION_CATEGORIES,
   LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
-  LABOR_OPERATION_TYPES,
+  LABOR_EXCEL_PROFILE_SCHEMA_VERSIONS,
   MAX_LABOR_EXCEL_COLUMNS,
   MAX_LABOR_EXCEL_COLUMN_KEY_LENGTH,
   MAX_LABOR_EXCEL_COLUMN_LABEL_LENGTH,
@@ -23,8 +24,9 @@ import {
  * Paket 60 — Excel şablon profili sözleşmesi.
  *
  * Hiçbir sigorta şirketinin kolon seti sözleşmeye GÖMÜLMEZ: sütunlar ve
- * eşleme kullanıcı verisidir. Sabit olan tek şey kanonik operasyon türü
- * kümesidir; eşleme bu kümenin TAMAMINI kapsamak zorundadır.
+ * eşleme kullanıcı verisidir. Sabit olan tek şey kanonik DAĞITIM KATEGORİSİ
+ * kümesidir; eşleme bu kümenin TAMAMINI kapsamak zorundadır (P64: eksen
+ * operasyon türünden kategoriye taşındı).
  */
 const columnKeySchema = z.string().trim().min(1).max(MAX_LABOR_EXCEL_COLUMN_KEY_LENGTH)
 const amountMinorSchema = z.number().int().min(0)
@@ -41,11 +43,15 @@ export const laborExcelColumnSchema = z.strictObject({
   label: z.string().trim().min(1).max(MAX_LABOR_EXCEL_COLUMN_LABEL_LENGTH),
 })
 
-/** Her kanonik tür zorunlu anahtardır; `null` "bilerek eşlenmedi" demektir. */
+/**
+ * P64: eşleme DAĞITIM KATEGORİSİ eksenindedir; operasyon türü doğrudan Excel
+ * sütununa eşlenmez. Her kategori zorunlu anahtardır; `null` "bilerek
+ * eşlenmedi" demektir.
+ */
 export const laborExcelMappingSchema = z.strictObject(
   Object.fromEntries(
-    LABOR_OPERATION_TYPES.map((type) => [type, columnKeySchema.nullable()]),
-  ) as Record<(typeof LABOR_OPERATION_TYPES)[number], z.ZodNullable<typeof columnKeySchema>>,
+    LABOR_ALLOCATION_CATEGORIES.map((category) => [category, columnKeySchema.nullable()]),
+  ) as Record<(typeof LABOR_ALLOCATION_CATEGORIES)[number], z.ZodNullable<typeof columnKeySchema>>,
 )
 
 /**
@@ -88,7 +94,10 @@ export const laborExcelProfileVersionSchema = laborExcelProfileFieldsSchema.exte
 
 export const laborExcelProfileSchema = z.strictObject({
   id: idSchema,
-  schemaVersion: z.literal(LABOR_EXCEL_PROFILE_SCHEMA_VERSION),
+  /** P64: eski (1.0.0) profiller OKUNABİLİR; yalnız yazıma uygun değildir. */
+  schemaVersion: z.enum(LABOR_EXCEL_PROFILE_SCHEMA_VERSIONS),
+  /** Fiziksel Excel yazımına uygun mu; yalnız kategori eksenli profiller. */
+  writable: z.boolean(),
   version: entityVersionSchema,
   /** P63: pasif profil YENİ projeksiyonda seçilemez, eski kayıtta okunur. */
   status: z.enum(LABOR_EXCEL_PROFILE_STATUSES),
@@ -136,8 +145,11 @@ export const laborExcelProfileCandidateSchema = z.strictObject({
   identityChecks: laborExcelIdentityChecksSchema,
   columns: z.array(laborExcelColumnSchema).min(1).max(MAX_LABOR_EXCEL_COLUMNS),
   mapping: laborExcelMappingSchema,
-  /** Hiçbir sütuna eşlenmemiş kanonik türler; tutarları sütuna yazılamaz. */
-  unmappedOperationTypes: z.array(z.enum(LABOR_OPERATION_TYPES)).max(LABOR_OPERATION_TYPES.length),
+  /** Hiçbir sütuna eşlenmemiş kategoriler; tutarları sütuna yazılamaz. */
+  unmappedCategories: z.array(z.enum(LABOR_ALLOCATION_CATEGORIES))
+    .max(LABOR_ALLOCATION_CATEGORIES.length),
+  /** Profil fiziksel yazıma uygun mu (yalnız kategori eksenli profiller). */
+  writable: z.boolean(),
 })
 
 export const laborExcelProfileCandidatesResponseSchema = z.strictObject({

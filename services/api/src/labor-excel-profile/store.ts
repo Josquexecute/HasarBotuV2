@@ -11,8 +11,9 @@ import {
   type LaborExcelProjectionResponse,
 } from '@hasarbotu/contracts'
 import {
+  LABOR_ALLOCATION_CATEGORIES,
   LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
-  LABOR_OPERATION_TYPES,
+  isProfileWritable,
   projectLaborAllocationToExcel,
   selectLaborExcelProfileCandidates,
   validateLaborExcelProfileInput,
@@ -65,7 +66,7 @@ function safeNumber(value: unknown): number {
 }
 
 const VERSION_COLUMNS = `v.id::text AS version_id,v.profile_version,v.name,
-  v.insurer_id::text AS insurer_id,v.target_sheet,v.identity_checks,
+  v.schema_version,v.insurer_id::text AS insurer_id,v.target_sheet,v.identity_checks,
   v.columns,v.mapping,v.revision_reason,v.created_at`
 
 function versionDto(row: Record<string, unknown>) {
@@ -107,10 +108,16 @@ async function readProfile(
   const history = (versions.rows as Record<string, unknown>[]).map(versionDto)
   const current = history[0]
   if (current === undefined) throw new LaborExcelProfileError('PROFILE_NOT_FOUND', 404)
+  // P64: şema sürümü SATIRDAN gelir; eski profiller okunabilir kalır ve
+  // yazılabilirlik tek noktadan türetilir.
+  const currentSchemaVersion = String(
+    (versions.rows[0] as Record<string, unknown>).schema_version,
+  )
   return laborExcelProfileResponseSchema.parse({
     profile: {
       id: String(profile.id),
-      schemaVersion: LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
+      schemaVersion: currentSchemaVersion,
+      writable: isProfileWritable(currentSchemaVersion),
       version: safeNumber(profile.version),
       status: String(profile.status),
       deactivatedAt: profile.deactivated_at === null
@@ -350,7 +357,10 @@ export function createLaborExcelProfileStore(pool: pg.Pool) {
           columns: version.columns,
           mapping: version.mapping,
           // Hiçbir sütuna eşlenmemiş türler: tutarları sütuna YAZILAMAZ.
-          unmappedOperationTypes: LABOR_OPERATION_TYPES.filter((type) => mapping[type] === null),
+          unmappedCategories: LABOR_ALLOCATION_CATEGORIES.filter(
+            (category) => mapping[category] === null,
+          ),
+          writable: isProfileWritable(String(row.schema_version)),
         }
       })
 

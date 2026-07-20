@@ -14,6 +14,7 @@ const profile: LaborExcelProfileRecord = {
   id: PROFILE_ID,
   schemaVersion: 'labor-excel-profile/1.0.0',
   version: 1,
+  writable: true,
   status: 'active',
   deactivatedAt: null,
   statusReason: null,
@@ -28,16 +29,16 @@ const profile: LaborExcelProfileRecord = {
       { key: 'ISCILIK', label: 'İşçilik Bedeli' },
       { key: 'PARCA', label: 'Parça Bedeli' },
     ],
-    mapping: {
-      repair: 'ISCILIK',
-      replace: 'PARCA',
-      remove_install: 'ISCILIK',
-      paint: null,
-      consumable: null,
-      calibration: null,
-      related_operation: null,
-      other: null,
-    },
+      mapping: {
+        bodywork: 'ISCILIK',
+        mechanical: null,
+        electrical: null,
+        upholstery_lock: null,
+        glass: null,
+        calibration: null,
+        repair: 'ISCILIK',
+        paint: 'PARCA',
+      },
     revisionReason: null,
     createdAt: '2026-07-19T18:00:00.000Z',
   },
@@ -67,7 +68,7 @@ describe('LaborExcelProfilesModule', () => {
 
     expect(await screen.findByText('Sentetik Şablon')).toBeInTheDocument()
     expect(screen.getByText('Sürüm 1')).toBeInTheDocument()
-    // 8 kanonik türün 3'ü eşlenmiş.
+    // 8 dağıtım kategorisinin 3'ü eşlenmiş.
     expect(screen.getByText('3/8')).toBeInTheDocument()
     expect(screen.getByText(/Bu ekran Excel dosyası yazmaz/)).toBeInTheDocument()
   })
@@ -112,8 +113,8 @@ describe('LaborExcelProfilesModule', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Düzenle' }))
     expect(screen.getByText(/Eşlenmeyen tür projeksiyonda sütuna yazılmaz/)).toBeInTheDocument()
-    // Her kanonik tür için bir seçim alanı bulunur.
-    expect(screen.getByLabelText('Diğer sütunu')).toHaveValue('')
+    // Her dağıtım kategorisi için bir seçim alanı bulunur.
+    expect(screen.getByLabelText('Cam sütunu')).toHaveValue('')
   })
 
   it('yazma yetkisi olmayan kullanıcıya düzenleme sunmaz', async () => {

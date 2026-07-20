@@ -1,4 +1,7 @@
-import type { LaborOperationTypeRecord } from './laborAllocationPort'
+/** P64: eşleme dağıtım kategorisi eksenindedir. */
+export type LaborAllocationCategoryRecord =
+  | 'bodywork' | 'mechanical' | 'electrical' | 'upholstery_lock'
+  | 'glass' | 'calibration' | 'repair' | 'paint'
 
 /**
  * Paket 60 — Excel şablon profili portu.
@@ -11,7 +14,8 @@ export interface LaborExcelColumnRecord {
   readonly label: string
 }
 
-export type LaborExcelMappingRecord = Readonly<Record<LaborOperationTypeRecord, string | null>>
+export type LaborExcelMappingRecord =
+  Readonly<Record<LaborAllocationCategoryRecord, string | null>>
 
 /** P63: yazımdan önce doğrulanacak kimlikler; hücre konumu DEĞİL. */
 export interface LaborExcelIdentityChecksRecord {
@@ -40,6 +44,8 @@ export interface LaborExcelProfileRecord {
   readonly id: string
   readonly schemaVersion: string
   readonly version: number
+  /** P64: eski (1.0.0) profil okunur ama fiziksel yazıma uygun değildir. */
+  readonly writable: boolean
   /** P63: pasif profil YENİ projeksiyonda seçilemez, eski kayıtta okunur. */
   readonly status: 'active' | 'inactive'
   readonly deactivatedAt: string | null
@@ -94,7 +100,8 @@ export interface LaborExcelProfileCandidateRecord {
   readonly identityChecks: LaborExcelIdentityChecksRecord
   readonly columns: readonly LaborExcelColumnRecord[]
   readonly mapping: LaborExcelMappingRecord
-  readonly unmappedOperationTypes: readonly LaborOperationTypeRecord[]
+  readonly unmappedCategories: readonly LaborAllocationCategoryRecord[]
+  readonly writable: boolean
 }
 
 export type LaborExcelProfileSuggestionReasonRecord =

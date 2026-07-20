@@ -842,9 +842,9 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
                       ))}
                     </tbody>
                   </table>
-                  {selectedCandidate.unmappedOperationTypes.length > 0 && (
+                  {selectedCandidate.unmappedCategories.length > 0 && (
                     <p className="allocation-panel__hint">
-                      {selectedCandidate.unmappedOperationTypes.length} operasyon türü hiçbir
+                      {selectedCandidate.unmappedCategories.length} dağıtım kategorisi hiçbir
                       sütuna eşlenmemiş; bu türlere düşen tutar hiçbir sütuna yazılamaz.
                     </p>
                   )}

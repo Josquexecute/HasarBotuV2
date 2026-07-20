@@ -744,3 +744,22 @@ export {
   type WorkbookSignatureFailure,
   type WorkbookSignatureResult,
 } from './labor-excel-workbook.js'
+export {
+  AMBIGUOUS_OPERATION_TYPES,
+  LABOR_ALLOCATION_CATEGORIES,
+  LABOR_ALLOCATION_CATEGORIES_VERSION,
+  deriveCategoryAmounts,
+  deriveCategoryFromOperation,
+  isLaborAllocationCategory,
+  type CategoryDerivation,
+  type CategoryDerivationFailure,
+  type LaborAllocationCategory,
+  type LaborCategoryAmount,
+  type LaborCategoryMapping,
+} from './labor-allocation-categories.js'
+export {
+  LABOR_EXCEL_PROFILE_LEGACY_SCHEMA_VERSION,
+  LABOR_EXCEL_PROFILE_SCHEMA_VERSIONS,
+  isProfileWritable,
+  type LaborExcelProfileSchemaVersion,
+} from './labor-excel-profile.js'

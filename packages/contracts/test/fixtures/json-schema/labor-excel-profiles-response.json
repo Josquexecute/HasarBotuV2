@@ -16,7 +16,13 @@
           },
           "schemaVersion": {
             "type": "string",
-            "const": "labor-excel-profile/1.0.0"
+            "enum": [
+              "labor-excel-profile/1.0.0",
+              "labor-excel-profile/2.0.0"
+            ]
+          },
+          "writable": {
+            "type": "boolean"
           },
           "version": {
             "type": "integer",
@@ -137,7 +143,7 @@
               "mapping": {
                 "type": "object",
                 "properties": {
-                  "repair": {
+                  "bodywork": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -149,7 +155,7 @@
                       }
                     ]
                   },
-                  "replace": {
+                  "mechanical": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -161,7 +167,7 @@
                       }
                     ]
                   },
-                  "remove_install": {
+                  "electrical": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -173,7 +179,7 @@
                       }
                     ]
                   },
-                  "paint": {
+                  "upholstery_lock": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -185,7 +191,7 @@
                       }
                     ]
                   },
-                  "consumable": {
+                  "glass": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -209,7 +215,7 @@
                       }
                     ]
                   },
-                  "related_operation": {
+                  "repair": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -221,7 +227,7 @@
                       }
                     ]
                   },
-                  "other": {
+                  "paint": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -235,14 +241,14 @@
                   }
                 },
                 "required": [
-                  "repair",
-                  "replace",
-                  "remove_install",
-                  "paint",
-                  "consumable",
+                  "bodywork",
+                  "mechanical",
+                  "electrical",
+                  "upholstery_lock",
+                  "glass",
                   "calibration",
-                  "related_operation",
-                  "other"
+                  "repair",
+                  "paint"
                 ],
                 "additionalProperties": false
               },
@@ -375,7 +381,7 @@
                 "mapping": {
                   "type": "object",
                   "properties": {
-                    "repair": {
+                    "bodywork": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -387,7 +393,7 @@
                         }
                       ]
                     },
-                    "replace": {
+                    "mechanical": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -399,7 +405,7 @@
                         }
                       ]
                     },
-                    "remove_install": {
+                    "electrical": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -411,7 +417,7 @@
                         }
                       ]
                     },
-                    "paint": {
+                    "upholstery_lock": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -423,7 +429,7 @@
                         }
                       ]
                     },
-                    "consumable": {
+                    "glass": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -447,7 +453,7 @@
                         }
                       ]
                     },
-                    "related_operation": {
+                    "repair": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -459,7 +465,7 @@
                         }
                       ]
                     },
-                    "other": {
+                    "paint": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -473,14 +479,14 @@
                     }
                   },
                   "required": [
-                    "repair",
-                    "replace",
-                    "remove_install",
-                    "paint",
-                    "consumable",
+                    "bodywork",
+                    "mechanical",
+                    "electrical",
+                    "upholstery_lock",
+                    "glass",
                     "calibration",
-                    "related_operation",
-                    "other"
+                    "repair",
+                    "paint"
                   ],
                   "additionalProperties": false
                 },
@@ -547,6 +553,7 @@
         "required": [
           "id",
           "schemaVersion",
+          "writable",
           "version",
           "status",
           "deactivatedAt",

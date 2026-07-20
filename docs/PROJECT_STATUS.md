@@ -5,11 +5,21 @@ Son güncelleme: 2026-07-20
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 64 — Gerçek şablon keşfi ve güvenli .xlsx yazımı (1. dilim)
-- Durum: **Keşif tamamlandı, yamalama temeli gerçek şablonda doğrulandı; fiziksel yazım HENÜZ YAPILMADI**
+- Aşama: Paket 64 — semantik eksen düzeltmesi (dilim 1.5)
+- Durum: **Dağıtım kategorisi ekseni kuruldu; fiziksel yazım HENÜZ YAPILMADI**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 64 semantik düzeltme sonucu — EKSEN DÜZELTİLDİ
+
+- **Bulunan model hatası:** Paket 60-63 profil modeli Excel işçilik sütunlarını kanonik OPERASYON TÜRÜNE eşliyordu. Gerçek şablonun sütunları işçilik BRANŞIDIR. `remove_install` hem kaporta hem mekanik olabilir; `replace` işçilik sütunu değil parça bedelidir.
+- **Yeni sınır:** `labor-allocation-categories/1.0.0` (bodywork, mechanical, electrical, upholstery_lock, glass, calibration, repair, paint). Kodlar dil bağımsız; Türkçe etiketler UI katmanında.
+- **Eski kayıtlar sessizce yeniden yorumlanmadı:** migration 0038 CHECK kısıtı sürüme göre dallanır; `labor-excel-profile/1.0.0` satırları olduğu gibi okunur ama `writable: false` olur. Yazım yalnız 2.0.0 ile.
+- **Kategori uydurulmuyor:** yalnız tek anlamlı türler (paint, calibration, repair) eşlenir. Belirsiz tek tutar TÜM satırı manuel girişe düşürür.
+- **Ölçülen dürüst sonuç:** mevcut AI çıktısı belirsiz türler ürettiği için şu anda hiçbir satır otomatik projekte edilemiyor (projeksiyon 0, manuel 2). Bu gerileme değil; önceki davranışın yanlış eksende tutar ürettiğinin kanıtı.
+- Dosya numarası kapsamı denetlendi: global unique kısıt YOK ve eklenmedi (`office_number` yalnız organization kapsamında tekil).
+- Ana ağaçta typecheck, lint, gerçek PostgreSQL ile **domain 626 + contracts 308 + UI 632 (+6 skip) + database 71 + API 430 + file-agent 53**, build + bundle (495.584 bayt), audit (0 açık) ve diff-check geçti.
 
 ## Paket 64 (1. dilim) doğrulama sonucu — KEŞİF GERÇEK, YAZIM HENÜZ YOK
 
@@ -18,7 +28,7 @@ Son güncelleme: 2026-07-20
 - **Örnek vakada (`47ACA535`) hiç `.xlsx` yok.** Ürün kararı alındı: eksik workbook OLUŞTURULMAZ, yazım açık hatayla bloklanır.
 - **Şablon dosya adıyla değil içerik imzasıyla ayrıldı:** 20 workbook / 26 sheet tarandı, imza eşleşmesi tam olarak 1. `İŞÇİLİK.xlsx` adlı iki dosya aslında parça listesiydi — ada güvenen bir seçim tam olarak yanlış dosyaları seçerdi.
 - **Bağımlılık `fflate` seçildi** (0 bağımlılık, MIT, saf JS, native binary yok). `exceljs` reddedildi: 9 doğrudan bağımlılık ve workbook'u yeniden üretirken modellemediği özellikleri (grafik, pivot, koşullu biçimlendirme) sessizce düşürmesi.
-- **Gerçek şablona karşı doğrulama:** imza doğrulandı, hedef hücreler yamalandı, formüllü Toplam sütunu `cell_has_formula` ile reddedildi ve **11 ZIP girdisinin 9'u byte-birebir aynı kaldı**.
+- **Gerçek şablona karşı doğrulama:** imza doğrulandı, hedef hücreler yamalandı, formüllü Toplam sütunu `cell_has_formula` ile reddedildi ve **11 OOXML part içeriğinin 9'u byte-birebir aynı kaldı** (tüm ZIP dosyasının binary olarak aynı kaldığı iddia edilmez).
 - Ana ağaçta typecheck, lint, gerçek PostgreSQL ile **domain 600 + contracts 308 + UI 632 (+6 skip) + database 71 + API 430 + file-agent 53**, build + bundle (495.584 bayt), `npm audit` (0 açık, kilit dosyası dahil) ve `git diff --check` geçti.
 - **Fiziksel yazım hattı, geometri migration'ı, sözleşme/API/UI ve Chrome smoke bu dilimde YOK**; 2. dilimdedir.
 

@@ -42,14 +42,14 @@ const COLUMNS = [
   { key: 'PARCA', label: 'Parça Bedeli' },
 ]
 const MAPPING = {
-  repair: 'ISCILIK',
-  replace: 'PARCA',
-  remove_install: 'ISCILIK',
-  paint: null,
-  consumable: null,
+  bodywork: 'ISCILIK',
+  mechanical: 'ISCILIK',
+  electrical: null,
+  upholstery_lock: null,
+  glass: null,
   calibration: null,
-  related_operation: null,
-  other: null,
+  repair: 'ISCILIK',
+  paint: 'PARCA',
 }
 
 describeDb('Paket 60 Excel şablon profilleri', () => {
@@ -202,7 +202,7 @@ describeDb('Paket 60 Excel şablon profilleri', () => {
 
   it('eksik eşleme sözleşme seviyesinde reddedilir', async () => {
     const partial: Record<string, unknown> = { ...MAPPING }
-    delete partial.other
+    delete partial.glass
     const response = await saveProfile(cookie, {
       fields: fields({ mapping: partial }), expectedVersion: null, reason: null, confirmed: true,
     })
@@ -337,7 +337,7 @@ describeDb('Paket 60 Excel şablon profilleri', () => {
       headers: { cookie: sessionCookie },
     })
 
-    it('değiştirilmemiş satırı sütunlara dağıtır, değiştirileni manuel bırakır', async () => {
+    it('kategori türetilemeyen satırları manuel bırakır; tutar uydurmaz', async () => {
       const response = await project(cookie)
       expect(response.statusCode).toBe(200)
       const body = laborExcelProjectionResponseSchema.parse(response.json())
@@ -345,12 +345,17 @@ describeDb('Paket 60 Excel şablon profilleri', () => {
       // Dosyaya yazılmadığı sözleşme seviyesinde garanti.
       expect(body.written).toBe(false)
       expect(body.lines).toHaveLength(2)
-      expect(body.projectedLineCount).toBe(1)
-      expect(body.manualEntryLineCount).toBe(1)
+      // P64 dürüstlük sonucu: mevcut AI çıktısı `remove_install` gibi branş
+      // bilgisi TAŞIMAYAN türler üretiyor. Bu türler tek anlamlı bir işçilik
+      // kategorisine çevrilemediği için hücre tutarı ÜRETİLMEZ ve satır
+      // manuel girişe düşer. Kategori bazlı dağıtım eklenene kadar bu
+      // beklenen ve doğru davranıştır.
+      expect(body.projectedLineCount).toBe(0)
+      expect(body.manualEntryLineCount).toBe(2)
 
       const first = body.lines.find((line) => line.lineOrdinal === 1)
-      expect(first?.status).toBe('projected')
-      expect(first?.cells.ISCILIK).toBeGreaterThan(0)
+      expect(first?.status).toBe('manual_entry_required')
+      expect(first?.cells.ISCILIK).toBe(0)
 
       const second = body.lines.find((line) => line.lineOrdinal === 2)
       expect(second?.status).toBe('manual_entry_required')

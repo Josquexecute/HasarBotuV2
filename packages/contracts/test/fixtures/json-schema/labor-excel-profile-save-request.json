@@ -85,7 +85,7 @@
         "mapping": {
           "type": "object",
           "properties": {
-            "repair": {
+            "bodywork": {
               "anyOf": [
                 {
                   "type": "string",
@@ -97,7 +97,7 @@
                 }
               ]
             },
-            "replace": {
+            "mechanical": {
               "anyOf": [
                 {
                   "type": "string",
@@ -109,7 +109,7 @@
                 }
               ]
             },
-            "remove_install": {
+            "electrical": {
               "anyOf": [
                 {
                   "type": "string",
@@ -121,7 +121,7 @@
                 }
               ]
             },
-            "paint": {
+            "upholstery_lock": {
               "anyOf": [
                 {
                   "type": "string",
@@ -133,7 +133,7 @@
                 }
               ]
             },
-            "consumable": {
+            "glass": {
               "anyOf": [
                 {
                   "type": "string",
@@ -157,7 +157,7 @@
                 }
               ]
             },
-            "related_operation": {
+            "repair": {
               "anyOf": [
                 {
                   "type": "string",
@@ -169,7 +169,7 @@
                 }
               ]
             },
-            "other": {
+            "paint": {
               "anyOf": [
                 {
                   "type": "string",
@@ -183,14 +183,14 @@
             }
           },
           "required": [
-            "repair",
-            "replace",
-            "remove_install",
-            "paint",
-            "consumable",
+            "bodywork",
+            "mechanical",
+            "electrical",
+            "upholstery_lock",
+            "glass",
             "calibration",
-            "related_operation",
-            "other"
+            "repair",
+            "paint"
           ],
           "additionalProperties": false
         }

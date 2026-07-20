@@ -27,7 +27,7 @@
     },
     "schemaVersion": {
       "type": "string",
-      "const": "labor-excel-profile/1.0.0"
+      "const": "labor-excel-profile/2.0.0"
     },
     "columns": {
       "minItems": 1,

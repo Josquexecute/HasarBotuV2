@@ -1,8 +1,10 @@
 import {
-  LABOR_OPERATION_TYPES,
-  type LaborAllocationAmount,
-  type LaborOperationType,
-} from './labor-allocation-ai.js'
+  LABOR_ALLOCATION_CATEGORIES,
+  deriveCategoryAmounts,
+  type LaborAllocationCategory,
+  type LaborCategoryAmount,
+} from './labor-allocation-categories.js'
+import { type LaborAllocationAmount } from './labor-allocation-ai.js'
 import { normalizeLaborText } from './labor-sheet.js'
 
 /**
@@ -18,7 +20,37 @@ import { normalizeLaborText } from './labor-sheet.js'
  * artık doğrulanmış değildir; bu satır için sütun tutarı UYDURULMAZ, satır
  * "manuel sütun girişi gerekli" olarak işaretlenir.
  */
-export const LABOR_EXCEL_PROFILE_SCHEMA_VERSION = 'labor-excel-profile/1.0.0' as const
+/**
+ * Paket 64 — şema sürümü 2.0.0.
+ *
+ * 1.0.0 profilleri kanonik OPERASYON TÜRÜNÜ Excel sütununa eşliyordu. Gerçek
+ * şablon keşfi bunun yanlış eksen olduğunu gösterdi: sütunlar işçilik BRANŞI
+ * (kaporta, mekanik, elektrik...), operasyon türü ise işlemin ne olduğudur.
+ *
+ * Eski kayıtlar SESSİZCE YENİDEN YORUMLANMAZ. 1.0.0 profilleri okunabilir
+ * kalır ama fiziksel yazıma UYGUN DEĞİLDİR; yazım yalnız 2.0.0 kategori
+ * eşlemesiyle yapılır.
+ */
+export const LABOR_EXCEL_PROFILE_SCHEMA_VERSION = 'labor-excel-profile/2.0.0' as const
+export const LABOR_EXCEL_PROFILE_LEGACY_SCHEMA_VERSION = 'labor-excel-profile/1.0.0' as const
+export const LABOR_EXCEL_PROFILE_SCHEMA_VERSIONS = [
+  LABOR_EXCEL_PROFILE_LEGACY_SCHEMA_VERSION,
+  LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
+] as const
+
+export type LaborExcelProfileSchemaVersion =
+  (typeof LABOR_EXCEL_PROFILE_SCHEMA_VERSIONS)[number]
+
+/**
+ * Profil fiziksel yazıma uygun mu?
+ *
+ * Yalnız kategori eksenli 2.0.0 profilleri yazabilir. Bu kontrol tek yerde
+ * durur ki "eski profil de yazar" varsayımı hiçbir çağrı yolunda oluşmasın.
+ */
+export function isProfileWritable(schemaVersion: string): boolean {
+  return schemaVersion === LABOR_EXCEL_PROFILE_SCHEMA_VERSION
+}
+
 export const MAX_LABOR_EXCEL_COLUMNS = 24
 export const MAX_LABOR_EXCEL_COLUMN_KEY_LENGTH = 40
 export const MAX_LABOR_EXCEL_COLUMN_LABEL_LENGTH = 80
@@ -155,8 +187,12 @@ export function selectLaborExcelProfileCandidates(
   return { candidates, suggestedProfileId: suggested, reason: 'single_insurer_profile' }
 }
 
-/** Her kanonik tür ya bir sütuna eşlenir ya da açıkça eşlenmemiş bırakılır. */
-export type LaborExcelMapping = Readonly<Record<LaborOperationType, string | null>>
+/**
+ * Her DAĞITIM KATEGORİSİ ya bir sütuna eşlenir ya da açıkça eşlenmemiş
+ * bırakılır. P64'ten önce bu eşleme operasyon türü eksenindeydi; keşif o
+ * eksenin yanlış olduğunu gösterdi (bkz. `labor-allocation-categories`).
+ */
+export type LaborExcelMapping = Readonly<Record<LaborAllocationCategory, string | null>>
 
 export function normalizeLaborExcelColumnKey(value: string): string | null {
   const normalized = value.trim().toUpperCase().replace(/\s+/g, '_')
@@ -220,22 +256,24 @@ export function validateLaborExcelProfileInput(input: {
     columns.push({ key, label })
   }
 
+  // P64: eşleme artık DAĞITIM KATEGORİSİ eksenindedir; operasyon türü
+  // doğrudan Excel sütununa eşlenmez.
   const mappingKeys = Object.keys(input.mapping)
-  if (mappingKeys.length !== LABOR_OPERATION_TYPES.length
-    || !LABOR_OPERATION_TYPES.every((type) => mappingKeys.includes(type))) {
+  if (mappingKeys.length !== LABOR_ALLOCATION_CATEGORIES.length
+    || !LABOR_ALLOCATION_CATEGORIES.every((category) => mappingKeys.includes(category))) {
     return { valid: false, reason: 'invalid_mapping_keys' }
   }
-  const mapping: Partial<Record<LaborOperationType, string | null>> = {}
+  const mapping: Partial<Record<LaborAllocationCategory, string | null>> = {}
   let mappedCount = 0
-  for (const type of LABOR_OPERATION_TYPES) {
-    const raw = input.mapping[type]
+  for (const category of LABOR_ALLOCATION_CATEGORIES) {
+    const raw = input.mapping[category]
     if (raw === null || raw === undefined) {
-      mapping[type] = null
+      mapping[category] = null
       continue
     }
     const key = normalizeLaborExcelColumnKey(raw)
     if (key === null || !seenKeys.has(key)) return { valid: false, reason: 'unknown_mapping_target' }
-    mapping[type] = key
+    mapping[category] = key
     mappedCount += 1
   }
   if (mappedCount === 0) return { valid: false, reason: 'no_mapped_operation_type' }
@@ -325,7 +363,11 @@ export function projectLaborAllocationToExcel(
   for (const line of lines) {
     const totalMinor = line.appliedPartAmountMinor + line.appliedLaborAmountMinor
     const allocationSum = line.allocations.reduce((sum, item) => sum + item.amountMinor, 0)
-    const projectable = !line.modified && allocationSum === totalMinor
+    // P64: Excel sütunları KATEGORİ eksenindedir. Satırın operasyon bazlı
+    // dağılımı tek anlamlı biçimde kategoriye çevrilemiyorsa hücre tutarı
+    // ÜRETİLMEZ; satır manuel girişe düşer. Kategori uydurulmaz.
+    const derived = deriveCategoryAmounts(line.allocations)
+    const projectable = !line.modified && allocationSum === totalMinor && derived.ok
 
     if (!projectable) {
       manualEntryLineCount += 1
@@ -344,13 +386,13 @@ export function projectLaborAllocationToExcel(
 
     const cells = emptyCells()
     let unmappedAmountMinor = 0
-    for (const allocation of line.allocations) {
-      const target = profile.mapping[allocation.operationType]
-      if (target === null) {
-        unmappedAmountMinor += allocation.amountMinor
+    for (const amount of (derived as { ok: true; amounts: readonly LaborCategoryAmount[] }).amounts) {
+      const target = profile.mapping[amount.category]
+      if (target === null || target === undefined) {
+        unmappedAmountMinor += amount.amountMinor
         continue
       }
-      cells[target] = (cells[target] ?? 0) + allocation.amountMinor
+      cells[target] = (cells[target] ?? 0) + amount.amountMinor
     }
     for (const column of profile.columns) {
       columnTotals[column.key] = (columnTotals[column.key] ?? 0) + (cells[column.key] ?? 0)

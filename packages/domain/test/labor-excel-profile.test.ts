@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LABOR_OPERATION_TYPES,
+  LABOR_ALLOCATION_CATEGORIES,
   normalizeLaborExcelColumnKey,
   normalizeLaborExcelTargetSheet,
   selectLaborExcelProfileCandidates,
@@ -15,17 +15,22 @@ const COLUMNS = [
   { key: 'BOYA', label: 'Boya ve Sarf' },
 ]
 
-/** Sentetik eşleme; hiçbir gerçek sigorta şirketi kolonu ürüne gömülmez. */
+/**
+ * Sentetik eşleme; hiçbir gerçek sigorta şirketi kolonu ürüne gömülmez.
+ *
+ * P64: eşleme artık DAĞITIM KATEGORİSİ eksenindedir. `replace` burada yoktur
+ * çünkü parça bedeli bir işçilik sütunu değildir.
+ */
 function mapping(overrides: Partial<Record<string, string | null>> = {}) {
   return {
-    repair: 'ISCILIK',
-    replace: 'PARCA',
-    remove_install: 'ISCILIK',
-    paint: 'BOYA',
-    consumable: 'BOYA',
+    bodywork: 'ISCILIK',
+    mechanical: 'ISCILIK',
+    electrical: null,
+    upholstery_lock: null,
+    glass: null,
     calibration: null,
-    related_operation: null,
-    other: null,
+    repair: 'ISCILIK',
+    paint: 'BOYA',
     ...overrides,
   }
 }
@@ -73,7 +78,7 @@ describe('validateLaborExcelProfileInput', () => {
       name: '  Sentetik Şablon ',
       columns: [{ key: ' iscilik ', label: ' İşçilik ' }],
       mapping: mapping({
-        replace: null, paint: null, consumable: null, remove_install: null, repair: 'iscilik',
+        bodywork: null, mechanical: null, paint: null, repair: 'iscilik',
       }),
     })
     expect(result.valid).toBe(true)
@@ -81,12 +86,12 @@ describe('validateLaborExcelProfileInput', () => {
     expect(result.name).toBe('Sentetik Şablon')
     expect(result.columns[0]?.key).toBe('ISCILIK')
     expect(result.mapping.repair).toBe('ISCILIK')
-    expect(result.mapping.other).toBeNull()
+    expect(result.mapping.glass).toBeNull()
   })
 
   it('eşleme HER kanonik türü içermelidir', () => {
     const partial = { ...mapping() }
-    delete (partial as Record<string, unknown>).other
+    delete (partial as Record<string, unknown>).glass
     const result = validateLaborExcelProfileInput({ name: 'X', columns: COLUMNS, mapping: partial })
     expect(result).toEqual({ valid: false, reason: 'invalid_mapping_keys' })
   })
@@ -109,13 +114,13 @@ describe('validateLaborExcelProfileInput', () => {
     const result = validateLaborExcelProfileInput({
       name: 'X',
       columns: [{ key: 'A', label: 'A' }, { key: ' a ', label: 'B' }],
-      mapping: mapping({ repair: 'A', replace: null, remove_install: null, paint: null, consumable: null }),
+      mapping: mapping({ repair: 'A', bodywork: null, mechanical: null, paint: null }),
     })
     expect(result).toEqual({ valid: false, reason: 'duplicate_column_key' })
   })
 
   it('hiç eşlenmemiş profil anlamsızdır', () => {
-    const empty = Object.fromEntries(LABOR_OPERATION_TYPES.map((type) => [type, null]))
+    const empty = Object.fromEntries(LABOR_ALLOCATION_CATEGORIES.map((category) => [category, null]))
     const result = validateLaborExcelProfileInput({ name: 'X', columns: COLUMNS, mapping: empty })
     expect(result).toEqual({ valid: false, reason: 'no_mapped_operation_type' })
   })
@@ -141,14 +146,14 @@ describe('projectLaborAllocationToExcel', () => {
     expect(result.columnTotals.ISCILIK).toBe(800_000)
   })
 
-  it('aynı sütuna eşlenen türleri toplar', () => {
-    const result = projectLaborAllocationToExcel(profile(), [line({
+  it('aynı sütuna eşlenen kategorileri toplar', () => {
+    // Bu profilde hem onarım hem kalibrasyon aynı sütuna eşlenmiştir.
+    const result = projectLaborAllocationToExcel(profile({ calibration: 'ISCILIK' }), [line({
       allocations: [
         { operationType: 'repair', amountMinor: 700_000 },
-        { operationType: 'remove_install', amountMinor: 300_000 },
+        { operationType: 'calibration', amountMinor: 300_000 },
       ],
     })])
-    // repair ve remove_install ikisi de ISCILIK sütununa eşlidir.
     expect(result.lines[0]?.cells.ISCILIK).toBe(1_000_000)
   })
 
