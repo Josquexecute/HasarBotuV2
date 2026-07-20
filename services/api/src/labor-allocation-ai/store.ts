@@ -1242,12 +1242,17 @@ export function createLaborAllocationStore(
         const proposed = line.categoryAllocation?.amounts
         if (proposed === undefined) continue
         const baselineOrdinal = matched.get(line.lineOrdinal)?.ordinal ?? null
+        const baseline = baselineOrdinal === null
+          ? null
+          : baselineCategories.get(baselineOrdinal) ?? null
+        const historyAmounts = history.categoryByOrdinal.get(line.lineOrdinal) ?? null
+        // Kodun dayandığı vektörler kodla BİRLİKTE saklanır; ikisi ayrılırsa
+        // ekranda gösterilen kıyas kodun gerekçesi olmaktan çıkar.
+        comparisonByOrdinal.set(line.lineOrdinal, { baseline, history: historyAmounts })
         forcedCategoryCodes.set(line.lineOrdinal, forceCategoryConflictCodes({
           proposed,
-          baseline: baselineOrdinal === null
-            ? null
-            : baselineCategories.get(baselineOrdinal) ?? null,
-          history: history.categoryByOrdinal.get(line.lineOrdinal) ?? null,
+          baseline,
+          history: historyAmounts,
           reportedCodes: line.categoryAllocation?.conflictCodes ?? [],
         }))
       }

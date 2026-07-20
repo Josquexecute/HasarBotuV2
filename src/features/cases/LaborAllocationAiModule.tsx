@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCheck, GitCompareArrows, ShieldAlert, Sparkles } fr
 import { LoadingState } from '../../components/StateViews'
 import { LaborCategoryReview } from './LaborCategoryReview.js'
 import {
+  CATEGORY_LABELS,
   effectiveCategoryAmounts,
   type CategoryDraftEntry,
 } from './laborCategoryRules.js'
@@ -878,12 +879,17 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
                   </dl>
                   <table className="data-table module-table">
                     <thead>
-                      <tr><th>Operasyon türü</th><th>Excel sütunu</th></tr>
+                      {/*
+                        P64: profil eşlemesi KATEGORİ (branş) eksenindedir.
+                        Başlığı 'operasyon türü' bırakmak, kullanıcıya iki
+                        ekseni aynı şeymiş gibi gösterirdi.
+                      */}
+                      <tr><th>İşçilik kategorisi</th><th>Excel sütunu</th></tr>
                     </thead>
                     <tbody>
                       {Object.entries(selectedCandidate.mapping).map(([type, column]) => (
                         <tr key={type}>
-                          <td>{OPERATION_LABELS[type] ?? type}</td>
+                          <td>{CATEGORY_LABELS[type] ?? type}</td>
                           <td>
                             {column === null
                               ? <span className="allocation-code">Eşlenmedi</span>

@@ -306,7 +306,17 @@ try {
   }
 
   // Profiller: A şirketi, B şirketi (yasak) ve genel.
-  const createProfile = async (name, insurerId, targetSheet) => evaluate(`(async () => {
+  /*
+   * P64: profil eşlemesi KATEGORİ (branş) eksenindedir. Operasyon türü
+   * anahtarları artık geçersizdir ve sunucu 400 döner — bu doğrudur:
+   * "iş neydi" ile "işi hangi branş yaptı" farklı sorulardır.
+   */
+  const CATEGORY_MAPPING = {
+    bodywork: 'ISCILIK', mechanical: 'ISCILIK', electrical: null, upholstery_lock: null,
+    glass: null, calibration: null, repair: 'ISCILIK', paint: 'PARCA',
+  }
+
+  const createProfile = async (name, insurerId, targetSheet, mapping = CATEGORY_MAPPING) => evaluate(`(async () => {
     const response = await fetch('/api/v1/labor-excel-profiles', {
       method: 'POST', credentials: 'include',
       headers: { 'content-type': 'application/json' },
@@ -320,20 +330,40 @@ try {
             { key: 'ISCILIK', label: 'İşçilik Bedeli' },
             { key: 'PARCA', label: 'Parça Bedeli' },
           ],
-          mapping: {
-            repair: 'ISCILIK', replace: 'PARCA', remove_install: null, paint: null,
-            consumable: null, calibration: null, related_operation: null, other: null,
-          },
+          mapping: ${JSON.stringify(mapping)},
         },
         expectedVersion: null, reason: null, confirmed: true,
       }),
     });
     const body = await response.json();
-    return { status: response.status, id: body?.profile?.id ?? null, version: body?.profile?.version ?? null };
+    return {
+      status: response.status,
+      id: body?.profile?.id ?? null,
+      version: body?.profile?.version ?? null,
+      schemaVersion: body?.profile?.schemaVersion ?? null,
+      writable: body?.profile?.writable ?? null,
+    };
   })()`)
 
   const profileA = await createProfile('A Sigorta Şablonu', seeded.insurerId, 'İşçilik')
   if (profileA.status !== 201) throw new Error(`PROFILE_A_FAILED_${profileA.status}`)
+  // Kategori eksenli profil GÜNCEL şemadadır ve yazılabilir.
+  if (profileA.schemaVersion !== 'labor-excel-profile/2.0.0') {
+    throw new Error(`PROFILE_SCHEMA_VERSION_${profileA.schemaVersion}`)
+  }
+  if (profileA.writable !== true) throw new Error('CURRENT_SCHEMA_PROFILE_NOT_WRITABLE')
+
+  // Operasyon türü anahtarları Excel sütununa DOĞRUDAN eşlenemez.
+  const operationAxisProfile = await createProfile(
+    'Operasyon Ekseni Şablonu', seeded.insurerId, 'İşçilik',
+    {
+      repair: 'ISCILIK', replace: 'PARCA', remove_install: null, paint: null,
+      consumable: null, calibration: null, related_operation: null, other: null,
+    },
+  )
+  if (operationAxisProfile.status !== 400) {
+    throw new Error(`OPERATION_AXIS_MAPPING_ACCEPTED_${operationAxisProfile.status}`)
+  }
   const profileB = await createProfile('B Sigorta Şablonu', seeded.otherInsurerId, 'Föy')
   if (profileB.status !== 201) throw new Error(`PROFILE_B_FAILED_${profileB.status}`)
 
@@ -385,7 +415,13 @@ try {
   const previewText = await evaluate(`document.querySelector('.profile-preview')?.textContent ?? ''`)
   if (!previewText.includes('İşçilik')) throw new Error('TARGET_SHEET_NOT_SHOWN')
   if (!previewText.includes('Plaka')) throw new Error('IDENTITY_CHECK_NOT_SHOWN')
-  if (!previewText.includes('Eşlenmedi')) throw new Error('UNMAPPED_TYPES_NOT_SHOWN')
+  if (!previewText.includes('Eşlenmedi')) throw new Error('UNMAPPED_CATEGORIES_NOT_SHOWN')
+  // Eşleme tablosu KATEGORİ eksenini gösterir; operasyon türü başlığı hatadır.
+  if (!previewText.includes('İşçilik kategorisi')) throw new Error('MAPPING_AXIS_LABEL_WRONG')
+  if (previewText.includes('Operasyon türü')) throw new Error('OPERATION_AXIS_LABEL_IN_MAPPING')
+  for (const label of ['Kaporta', 'Mekanik', 'Boya', 'Cam']) {
+    if (!previewText.includes(label)) throw new Error(`CATEGORY_LABEL_MISSING_${label}`)
+  }
 
   // ── ADIM 2: kullanıcı onaylayınca projeksiyon üretilir.
   await clickExact('Bu Profille Önizle')
