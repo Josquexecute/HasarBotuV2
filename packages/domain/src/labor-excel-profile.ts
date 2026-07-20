@@ -1,10 +1,8 @@
 import {
   LABOR_ALLOCATION_CATEGORIES,
-  deriveCategoryAmounts,
   type LaborAllocationCategory,
   type LaborCategoryAmount,
 } from './labor-allocation-categories.js'
-import { type LaborAllocationAmount } from './labor-allocation-ai.js'
 import { normalizeLaborText } from './labor-sheet.js'
 
 /**
@@ -306,9 +304,23 @@ export interface LaborExcelProjectionLineInput {
   /** P58: kullanıcı öneriyi değiştirerek uyguladıysa true. */
   readonly modified: boolean
   readonly controlRequired: boolean
-  /** Kaynak öneri satırının tür bazlı dağılımı (yalnız değiştirilmemişse geçerli). */
-  readonly allocations: readonly LaborAllocationAmount[]
+  /**
+   * P64 — UYGULANAN kategori dağılımı; projeksiyonun TEK kaynağıdır.
+   *
+   * `null` provenance'ın olmadığını söyler. Operasyon türlerinden kategori
+   * TÜRETİLMEZ: bu iki eksen farklı soruları cevaplar ve birini diğerinden
+   * uydurmak, kullanıcının onaylamadığı bir dağılımı Excel'e yazmak olurdu.
+   */
+  readonly categoryAmounts: readonly LaborCategoryAmount[] | null
 }
+
+/** Satırın neden elle girilmesi gerektiği; serbest metin değildir. */
+export const LABOR_EXCEL_MANUAL_ENTRY_REASONS = [
+  'category_provenance_missing',
+  'category_total_mismatch',
+  'category_column_unmapped',
+] as const
+export type LaborExcelManualEntryReason = (typeof LABOR_EXCEL_MANUAL_ENTRY_REASONS)[number]
 
 export interface LaborExcelProjectionLine {
   readonly lineOrdinal: number
@@ -317,9 +329,11 @@ export interface LaborExcelProjectionLine {
   readonly reviewRequired: boolean
   /** Profil sütun anahtarına göre tutar; manuel satırda tüm hücreler 0'dır. */
   readonly cells: Readonly<Record<string, number>>
-  /** Eşlenmemiş türlere düşen toplam; sütuna yazılamaz, incelemeye düşer. */
+  /** Eşlenmemiş kategorilere düşen toplam; sütuna yazılamaz, incelemeye düşer. */
   readonly unmappedAmountMinor: number
   readonly totalMinor: number
+  /** Manuel giriş gerekiyorsa nedenleri; projekte edilen satırda boştur. */
+  readonly manualEntryReasons: readonly LaborExcelManualEntryReason[]
 }
 
 export interface LaborExcelProjection {
@@ -362,14 +376,24 @@ export function projectLaborAllocationToExcel(
 
   for (const line of lines) {
     const totalMinor = line.appliedPartAmountMinor + line.appliedLaborAmountMinor
-    const allocationSum = line.allocations.reduce((sum, item) => sum + item.amountMinor, 0)
-    // P64: Excel sütunları KATEGORİ eksenindedir. Satırın operasyon bazlı
-    // dağılımı tek anlamlı biçimde kategoriye çevrilemiyorsa hücre tutarı
-    // ÜRETİLMEZ; satır manuel girişe düşer. Kategori uydurulmaz.
-    const derived = deriveCategoryAmounts(line.allocations)
-    const projectable = !line.modified && allocationSum === totalMinor && derived.ok
+    const reasons: LaborExcelManualEntryReason[] = []
 
-    if (!projectable) {
+    /*
+     * P64 — projeksiyonun kaynağı YALNIZ uygulanan kategori provenance'ıdır.
+     *
+     * Provenance yoksa hiçbir hücre üretilmez. Kullanıcının değiştirdiği satır
+     * artık engel DEĞİLDİR: dağılımı söyleyen kullanıcının kendisidir ve
+     * onayladığı tutarlar tam olarak Excel'e gitmelidir.
+     */
+    if (line.categoryAmounts === null) {
+      reasons.push('category_provenance_missing')
+    } else {
+      const categorySum = line.categoryAmounts.reduce((sum, item) => sum + item.amountMinor, 0)
+      // Kategori toplamı YALNIZ işçilik tutarını açıklar; parça bedeli girmez.
+      if (categorySum !== line.appliedLaborAmountMinor) reasons.push('category_total_mismatch')
+    }
+
+    if (reasons.length > 0) {
       manualEntryLineCount += 1
       reviewRequiredLineCount += 1
       projectedLines.push({
@@ -380,25 +404,50 @@ export function projectLaborAllocationToExcel(
         cells: emptyCells(),
         unmappedAmountMinor: 0,
         totalMinor,
+        manualEntryReasons: reasons,
       })
       continue
     }
 
     const cells = emptyCells()
     let unmappedAmountMinor = 0
-    for (const amount of (derived as { ok: true; amounts: readonly LaborCategoryAmount[] }).amounts) {
+    for (const amount of line.categoryAmounts as readonly LaborCategoryAmount[]) {
       const target = profile.mapping[amount.category]
       if (target === null || target === undefined) {
-        unmappedAmountMinor += amount.amountMinor
+        // Sıfır tutarlı kategorinin eşlenmemiş olması sorun değildir; yazılacak
+        // bir şey yoktur. Pozitif tutar ise elle girilmek zorundadır.
+        if (amount.amountMinor > 0) {
+          unmappedAmountMinor += amount.amountMinor
+          reasons.push('category_column_unmapped')
+        }
         continue
       }
+      // Birden çok kategori aynı sütuna eşlenebilir; toplam deterministiktir
+      // çünkü kategori sırası sabittir.
       cells[target] = (cells[target] ?? 0) + amount.amountMinor
     }
+
+    if (reasons.length > 0) {
+      manualEntryLineCount += 1
+      reviewRequiredLineCount += 1
+      unmappedTotalMinor += unmappedAmountMinor
+      projectedLines.push({
+        lineOrdinal: line.lineOrdinal,
+        description: line.description,
+        status: 'manual_entry_required',
+        reviewRequired: true,
+        cells: emptyCells(),
+        unmappedAmountMinor,
+        totalMinor,
+        manualEntryReasons: [...new Set(reasons)],
+      })
+      continue
+    }
+
     for (const column of profile.columns) {
       columnTotals[column.key] = (columnTotals[column.key] ?? 0) + (cells[column.key] ?? 0)
     }
-    unmappedTotalMinor += unmappedAmountMinor
-    const reviewRequired = line.controlRequired || unmappedAmountMinor > 0
+    const reviewRequired = line.controlRequired
     if (reviewRequired) reviewRequiredLineCount += 1
     projectedLineCount += 1
     projectedLines.push({
@@ -409,6 +458,7 @@ export function projectLaborAllocationToExcel(
       cells,
       unmappedAmountMinor,
       totalMinor,
+      manualEntryReasons: [],
     })
   }
 

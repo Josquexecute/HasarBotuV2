@@ -337,7 +337,7 @@ describeDb('Paket 60 Excel şablon profilleri', () => {
       headers: { cookie: sessionCookie },
     })
 
-    it('kategori türetilemeyen satırları manuel bırakır; tutar uydurmaz', async () => {
+    it('uygulanan kategori provenance\'ı olan satırı doğru sütuna projekte eder', async () => {
       const response = await project(cookie)
       expect(response.statusCode).toBe(200)
       const body = laborExcelProjectionResponseSchema.parse(response.json())
@@ -345,26 +345,65 @@ describeDb('Paket 60 Excel şablon profilleri', () => {
       // Dosyaya yazılmadığı sözleşme seviyesinde garanti.
       expect(body.written).toBe(false)
       expect(body.lines).toHaveLength(2)
-      // P64 dürüstlük sonucu: mevcut AI çıktısı `remove_install` gibi branş
-      // bilgisi TAŞIMAYAN türler üretiyor. Bu türler tek anlamlı bir işçilik
-      // kategorisine çevrilemediği için hücre tutarı ÜRETİLMEZ ve satır
-      // manuel girişe düşer. Kategori bazlı dağıtım eklenene kadar bu
-      // beklenen ve doğru davranıştır.
-      expect(body.projectedLineCount).toBe(0)
-      expect(body.manualEntryLineCount).toBe(2)
 
+      /*
+       * P64 — 1. satır önerildiği gibi uygulandı ve kategori provenance'ı
+       * doludur; harness dağılımı %100 kaporta, profil kaportayı ISCILIK
+       * sütununa eşliyor. Bu satır artık gerçekten projekte edilir.
+       */
       const first = body.lines.find((line) => line.lineOrdinal === 1)
-      expect(first?.status).toBe('manual_entry_required')
-      expect(first?.cells.ISCILIK).toBe(0)
+      expect(first?.status).toBe('projected')
+      expect(first?.cells.ISCILIK).toBe(1_000_000)
+      expect(first?.manualEntryReasons).toEqual([])
 
+      /*
+       * 2. satırda kullanıcı işçilik tutarını değiştirdi ve kategori
+       * düzeltmesi göndermedi; provenance BİLİNMİYOR. Eski öneriyi
+       * ölçeklemek yerine satır manuel girişe düşer.
+       */
       const second = body.lines.find((line) => line.lineOrdinal === 2)
       expect(second?.status).toBe('manual_entry_required')
-      expect(second?.reviewRequired).toBe(true)
-      // Kullanıcı tutarı değiştirdiği için hücre tutarı UYDURULMAZ.
-      expect(second?.cells.PARCA).toBe(0)
+      expect(second?.manualEntryReasons).toEqual(['category_provenance_missing'])
       expect(second?.cells.ISCILIK).toBe(0)
+      expect(second?.cells.PARCA).toBe(0)
       // Uygulanan toplam referans olarak korunur.
       expect(second?.totalMinor).toBe(2_000_000)
+
+      expect(body.projectedLineCount).toBe(1)
+      expect(body.manualEntryLineCount).toBe(1)
+      // Yalnız projekte edilen satır sütun toplamına girer.
+      expect(body.columnTotals.ISCILIK).toBe(1_000_000)
+    })
+
+    it('güncel şema sürümündeki profil ve bayat olmayan önizleme yazılabilir', async () => {
+      const body = laborExcelProjectionResponseSchema.parse((await project(cookie)).json())
+      expect(body.writable).toBe(true)
+      expect(body.stale).toBe(false)
+      expect(body.applicationTargetSheetVersion).toBe(body.currentSheetVersion)
+    })
+
+    it('föy tekrar sürümlenirse önizleme BAYAT olur ve yazılabilir sayılmaz', async () => {
+      // Föyü elle revize etmek yeni bir sürüm üretir; uygulamanın hedef
+      // sürümü artık yürürlükteki föy değildir.
+      const revised = await app.inject({
+        method: 'POST', url: `/api/v1/cases/${caseId}/labor-sheet/versions`,
+        headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+        payload: {
+          // Uygulama föyü 2. sürüme taşımıştı; revizyon 3. sürümü üretir.
+          expectedVersion: 2, confirmed: true,
+          reason: 'Föy elle revize edildi',
+          items: [
+            { description: 'Ön tampon', action: 'Onarım', partAmountMinor: 0, laborAmountMinor: 1_100_000 },
+          ],
+        },
+      })
+      expect(revised.statusCode).toBe(200)
+
+      const body = laborExcelProjectionResponseSchema.parse((await project(cookie)).json())
+      expect(body.stale).toBe(true)
+      // Bayat önizleme fiziksel yazıma uygun sayılamaz.
+      expect(body.writable).toBe(false)
+      expect(body.currentSheetVersion).toBeGreaterThan(body.applicationTargetSheetVersion)
     })
 
     it('yabancı organization projeksiyonu okuyamaz', async () => {

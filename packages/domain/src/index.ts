@@ -774,6 +774,8 @@ export {
 export {
   LABOR_EXCEL_PROFILE_LEGACY_SCHEMA_VERSION,
   LABOR_EXCEL_PROFILE_SCHEMA_VERSIONS,
+  LABOR_EXCEL_MANUAL_ENTRY_REASONS,
   isProfileWritable,
+  type LaborExcelManualEntryReason,
   type LaborExcelProfileSchemaVersion,
 } from './labor-excel-profile.js'

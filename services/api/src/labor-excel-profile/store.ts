@@ -14,10 +14,10 @@ import {
   LABOR_ALLOCATION_CATEGORIES,
   LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
   isProfileWritable,
+  type LaborCategoryAmount,
   projectLaborAllocationToExcel,
   selectLaborExcelProfileCandidates,
   validateLaborExcelProfileInput,
-  type LaborAllocationAmount,
   type LaborExcelColumn,
   type LaborExcelIdentityChecks,
   type LaborExcelMapping,
@@ -131,6 +131,22 @@ async function readProfile(
       updatedAt: (profile.updated_at as Date).toISOString(),
     },
   })
+}
+
+/**
+ * jsonb kategori dağılımını okur. Eksik/bozuk kayıt `null` döner ve
+ * ASLA sıfır dağılıma çevrilmez: provenance yokluğu bir dağılım değildir.
+ */
+function readCategoryAmounts(value: unknown): readonly LaborCategoryAmount[] | null {
+  if (value === null || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const amounts: LaborCategoryAmount[] = []
+  for (const category of LABOR_ALLOCATION_CATEGORIES) {
+    const amount = record[category]
+    if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) return null
+    amounts.push({ category, amountMinor: amount })
+  }
+  return amounts
 }
 
 export function createLaborExcelProfileStore(pool: pg.Pool) {
@@ -409,28 +425,48 @@ export function createLaborExcelProfileStore(pool: pg.Pool) {
         throw new LaborExcelProfileError('PROFILE_INSURER_MISMATCH', 409)
       }
 
+      /*
+       * P64 — projeksiyon kaynağı YALNIZ tamamlanmış uygulamadır.
+       *
+       * `status='completed'` filtresi çalışan/başarısız/iptal edilmiş
+       * uygulamaları ve apply-preview'i dışarıda bırakır: onlar kullanıcının
+       * onayladığı bir sonuç DEĞİLDİR ve Excel'e aday olamazlar.
+       */
       const application = await pool.query(
-        `SELECT id::text FROM labor_allocation_applications
-          WHERE organization_id=$1 AND case_id=$2 AND id=$3 AND status='completed'`,
+        `SELECT a.id::text,a.target_sheet_version,s.sheet_version AS current_sheet_version
+           FROM labor_allocation_applications a
+           LEFT JOIN labor_sheets sh
+             ON sh.organization_id=a.organization_id AND sh.case_id=a.case_id
+           LEFT JOIN labor_sheet_versions s
+             ON s.organization_id=sh.organization_id AND s.id=sh.current_version_id
+          WHERE a.organization_id=$1 AND a.case_id=$2 AND a.id=$3 AND a.status='completed'`,
         [actor.organizationId, caseId, applicationId],
       )
-      if (application.rowCount === 0) {
+      const applicationRow = application.rows[0] as Record<string, unknown> | undefined
+      if (applicationRow === undefined) {
         throw new LaborExcelProfileError('APPLICATION_NOT_FOUND', 404)
       }
 
-      // Tür bazlı dağılım öneri satırından okunur; uygulanan tutar ve
-      // `modified` bayrağı provenance'tan gelir.
+      /*
+       * Bayatlık: föy bu uygulamadan sonra tekrar sürümlendiyse projeksiyon
+       * artık yürürlükteki föyü anlatmıyordur. Bayat önizleme fiziksel yazıma
+       * uygun SAYILMAZ; sessizce güncel gibi sunmak yanlış veriyi Excel'e
+       * taşırdı.
+       */
+      const targetSheetVersion = safeNumber(applicationRow.target_sheet_version)
+      const currentSheetVersion = applicationRow.current_sheet_version === null
+        ? targetSheetVersion
+        : safeNumber(applicationRow.current_sheet_version)
+      const stale = currentSheetVersion !== targetSheetVersion
+
+      // Uygulanan kategori dağılımı provenance'tan gelir; öneri satırından
+      // veya operasyon türlerinden TÜRETİLMEZ.
       const lines = await pool.query(
         `SELECT l.line_ordinal,l.applied_description,
                 l.applied_part_amount_minor::text AS applied_part,
                 l.applied_labor_amount_minor::text AS applied_labor,
-                l.modified,l.control_required,s.allocations
+                l.modified,l.control_required,l.applied_category_amounts
            FROM labor_allocation_applied_lines l
-           JOIN labor_allocation_applications a
-             ON a.id=l.application_id AND a.organization_id=l.organization_id
-           LEFT JOIN labor_allocation_line_suggestions s
-             ON s.organization_id=a.organization_id AND s.run_id=a.run_id
-            AND s.line_ordinal=l.suggestion_line_ordinal
           WHERE l.organization_id=$1 AND l.application_id=$2
           ORDER BY l.line_ordinal`,
         [actor.organizationId, applicationId],
@@ -445,13 +481,23 @@ export function createLaborExcelProfileStore(pool: pg.Pool) {
           appliedLaborAmountMinor: safeNumber(row.applied_labor),
           modified: Boolean(row.modified),
           controlRequired: Boolean(row.control_required),
-          allocations: (row.allocations ?? []) as LaborAllocationAmount[],
+          // null = provenance yok. Sıfır dağılım gibi okunmaz.
+          categoryAmounts: readCategoryAmounts(row.applied_category_amounts),
         })),
       )
 
       return laborExcelProjectionResponseSchema.parse({
         caseId,
         applicationId,
+        applicationTargetSheetVersion: targetSheetVersion,
+        currentSheetVersion,
+        stale,
+        /*
+         * Eski profil sürümleri OKUNABİLİR kalır ama yazılabilir değildir:
+         * 1.0.0 sütunları operasyon türü eksenindeydi ve kategori tutarlarını
+         * doğru sütuna koyduğu garanti edilemez.
+         */
+        writable: isProfileWritable(profileResponse.profile.schemaVersion) && !stale,
         profileId,
         profileVersion: profileResponse.profile.version,
         schemaVersion: LABOR_EXCEL_PROFILE_SCHEMA_VERSION,

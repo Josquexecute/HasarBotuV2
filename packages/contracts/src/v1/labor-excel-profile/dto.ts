@@ -3,6 +3,7 @@ import {
   LABOR_ALLOCATION_CATEGORIES,
   LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
   LABOR_EXCEL_PROFILE_SCHEMA_VERSIONS,
+  LABOR_EXCEL_MANUAL_ENTRY_REASONS,
   MAX_LABOR_EXCEL_COLUMNS,
   MAX_LABOR_EXCEL_COLUMN_KEY_LENGTH,
   MAX_LABOR_EXCEL_COLUMN_LABEL_LENGTH,
@@ -180,11 +181,31 @@ export const laborExcelProjectionLineSchema = z.strictObject({
   cells: z.record(columnKeySchema, amountMinorSchema),
   unmappedAmountMinor: amountMinorSchema,
   totalMinor: amountMinorSchema,
+  /**
+   * Paket 64 — satırın neden elle girilmesi gerektiği. Kapalı kümedir:
+   * serbest metin, kullanıcıya "neden yazılamadı" sorusunu cevaplayamaz ve
+   * makine tarafından da denetlenemezdi.
+   */
+  manualEntryReasons: z.array(z.enum(LABOR_EXCEL_MANUAL_ENTRY_REASONS))
+    .max(LABOR_EXCEL_MANUAL_ENTRY_REASONS.length),
 })
 
 export const laborExcelProjectionResponseSchema = z.strictObject({
   caseId: caseIdSchema,
   applicationId: idSchema,
+  /** Projeksiyonun dayandığı föy sürümü ve dosyanın YÜRÜRLÜKTEKİ sürümü. */
+  applicationTargetSheetVersion: entityVersionSchema,
+  currentSheetVersion: entityVersionSchema,
+  /**
+   * Föy bu uygulamadan sonra tekrar sürümlendiyse önizleme bayattır ve
+   * fiziksel yazıma uygun sayılmaz.
+   */
+  stale: z.boolean(),
+  /**
+   * Yazılabilirlik: yalnız güncel şema sürümündeki profil ve bayat olmayan
+   * önizleme. Eski profiller OKUNABİLİR kalır ama yazılamaz.
+   */
+  writable: z.boolean(),
   profileId: idSchema,
   profileVersion: entityVersionSchema,
   schemaVersion: z.literal(LABOR_EXCEL_PROFILE_SCHEMA_VERSION),

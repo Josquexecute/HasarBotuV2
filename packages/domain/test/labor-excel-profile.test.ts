@@ -53,10 +53,11 @@ function line(overrides: Partial<LaborExcelProjectionLineInput> = {}): LaborExce
     appliedLaborAmountMinor: 1_000_000,
     modified: false,
     controlRequired: false,
-    allocations: [
-      { operationType: 'repair', amountMinor: 800_000 },
-      { operationType: 'paint', amountMinor: 200_000 },
-    ],
+    // P64: projeksiyonun kaynağı UYGULANAN kategori dağılımıdır.
+    categoryAmounts: LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+      category,
+      amountMinor: category === 'repair' ? 800_000 : category === 'paint' ? 200_000 : 0,
+    })),
     ...overrides,
   }
 }
@@ -146,23 +147,24 @@ describe('projectLaborAllocationToExcel', () => {
     expect(result.columnTotals.ISCILIK).toBe(800_000)
   })
 
-  it('aynı sütuna eşlenen kategorileri toplar', () => {
+  it('aynı sütuna eşlenen kategorileri deterministik toplar', () => {
     // Bu profilde hem onarım hem kalibrasyon aynı sütuna eşlenmiştir.
     const result = projectLaborAllocationToExcel(profile({ calibration: 'ISCILIK' }), [line({
-      allocations: [
-        { operationType: 'repair', amountMinor: 700_000 },
-        { operationType: 'calibration', amountMinor: 300_000 },
-      ],
+      categoryAmounts: LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+        category,
+        amountMinor: category === 'repair' ? 700_000 : category === 'calibration' ? 300_000 : 0,
+      })),
     })])
     expect(result.lines[0]?.cells.ISCILIK).toBe(1_000_000)
   })
 
-  it('kullanıcı tutarı değiştirdiyse SAYI UYDURMAZ', () => {
-    // P58 dürüstlük kuralı: modified satırda tür bazlı dağılım doğrulanmış
-    // değildir; hücre tutarı üretilemez.
-    const result = projectLaborAllocationToExcel(profile(), [line({ modified: true })])
+  it('provenance yoksa SAYI UYDURMAZ', () => {
+    // P64: kaynak artık uygulanan kategori dağılımıdır. Dağılım yoksa hücre
+    // üretilemez; eski öneriyi ölçeklemek uydurma olurdu.
+    const result = projectLaborAllocationToExcel(profile(), [line({ categoryAmounts: null })])
     const projected = result.lines[0]
     expect(projected?.status).toBe('manual_entry_required')
+    expect(projected?.manualEntryReasons).toEqual(['category_provenance_missing'])
     expect(projected?.reviewRequired).toBe(true)
     expect(projected?.cells.ISCILIK).toBe(0)
     expect(projected?.cells.BOYA).toBe(0)
@@ -172,30 +174,49 @@ describe('projectLaborAllocationToExcel', () => {
     expect(result.columnTotals.ISCILIK).toBe(0)
   })
 
-  it('dağılım toplamı uygulanan toplamı tutmuyorsa sessizce düzeltmez', () => {
+  it('kullanıcı değiştirdiyse UYGULANAN kategori tutarları yazılır', () => {
+    // P58'de `modified` satır düşerdi; artık dağılımı kullanıcı söylüyor.
     const result = projectLaborAllocationToExcel(profile(), [line({
-      allocations: [{ operationType: 'repair', amountMinor: 999_999 }],
+      modified: true,
+      categoryAmounts: LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+        category,
+        amountMinor: category === 'repair' ? 1_000_000 : 0,
+      })),
+    })])
+    expect(result.lines[0]?.status).toBe('projected')
+    expect(result.lines[0]?.cells.ISCILIK).toBe(1_000_000)
+  })
+
+  it('kategori toplamı işçilik tutarını tutmuyorsa sessizce düzeltmez', () => {
+    const result = projectLaborAllocationToExcel(profile(), [line({
+      categoryAmounts: LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+        category,
+        amountMinor: category === 'repair' ? 999_999 : 0,
+      })),
     })])
     expect(result.lines[0]?.status).toBe('manual_entry_required')
+    expect(result.lines[0]?.manualEntryReasons).toEqual(['category_total_mismatch'])
     expect(result.projectedLineCount).toBe(0)
   })
 
-  it('eşlenmemiş türe düşen tutar sütuna yazılmaz ve incelemeye düşer', () => {
+  it('eşlenmemiş kategoriye düşen POZİTİF tutar satırı manuel girişe indirir', () => {
     const result = projectLaborAllocationToExcel(profile(), [line({
-      allocations: [
-        { operationType: 'repair', amountMinor: 600_000 },
-        { operationType: 'calibration', amountMinor: 400_000 },
-      ],
+      categoryAmounts: LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+        category,
+        amountMinor: category === 'repair' ? 600_000 : category === 'calibration' ? 400_000 : 0,
+      })),
     })])
     const projected = result.lines[0]
-    expect(projected?.status).toBe('projected')
-    expect(projected?.cells.ISCILIK).toBe(600_000)
+    expect(projected?.status).toBe('manual_entry_required')
+    expect(projected?.manualEntryReasons).toEqual(['category_column_unmapped'])
+    // Yarım satır yazmak Excel'de yanıltıcı olurdu: eşlenen kısım da düşer.
+    expect(projected?.cells.ISCILIK).toBe(0)
     expect(projected?.unmappedAmountMinor).toBe(400_000)
     expect(projected?.reviewRequired).toBe(true)
     expect(result.unmappedTotalMinor).toBe(400_000)
-    // Eşlenmemiş tutar hiçbir sütun toplamına karışmaz.
+    // Satır tamamen düştüğü için HİÇBİR sütun toplamına katkı vermez.
     const columnSum = Object.values(result.columnTotals).reduce((sum, value) => sum + value, 0)
-    expect(columnSum).toBe(600_000)
+    expect(columnSum).toBe(0)
   })
 
   it('control_required satır projekte edilse de incelemeye düşer', () => {

@@ -57,7 +57,11 @@ function line(overrides: Record<string, unknown> = {}) {
     appliedLaborAmountMinor: 100_000,
     modified: false,
     controlRequired: false,
-    allocations: [{ operationType: 'repair' as const, amountMinor: 100_000 }],
+    // P64: projeksiyon artık UYGULANAN kategori dağılımını okur.
+    categoryAmounts: LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+      category,
+      amountMinor: category === 'bodywork' ? 100_000 : 0,
+    })),
     ...overrides,
   }
 }
@@ -129,44 +133,72 @@ describe('Paket 64 — kategori ekseni operasyon türünden ayrıdır', () => {
   })
 })
 
-describe('Paket 64 — projeksiyon kategori eksenine bağlı', () => {
-  it('tek anlamlı satırı doğru sütuna projekte eder', () => {
-    const result = projectLaborAllocationToExcel(PROFILE, [line()])
+describe('Paket 64 — projeksiyon UYGULANAN kategori provenance\'ına bağlı', () => {
+  const withCategories = (bodywork: number, paint: number) => line({
+    categoryAmounts: ['bodywork','mechanical','electrical','upholstery_lock','glass','calibration','repair','paint'].map((category) => ({
+      category,
+      amountMinor: category === 'bodywork' ? bodywork : category === 'paint' ? paint : 0,
+    })),
+  })
+
+  it('uygulanan kategori tutarlarını doğru sütuna koyar', () => {
+    const result = projectLaborAllocationToExcel(PROFILE, [withCategories(100_000, 0)])
     expect(result.lines[0]?.status).toBe('projected')
     expect(result.lines[0]?.cells).toEqual({ KAPORTA: 100_000, BOYA: 0, KALIBRASYON: 0 })
   })
 
-  it('belirsiz kategorili satırı manuel girişe düşürür; tutar uydurmaz', () => {
-    const result = projectLaborAllocationToExcel(PROFILE, [line({
-      allocations: [{ operationType: 'remove_install', amountMinor: 100_000 }],
-    })])
+  it('provenance yoksa hiçbir hücre üretmez ve nedenini söyler', () => {
+    const result = projectLaborAllocationToExcel(PROFILE, [line({ categoryAmounts: null })])
     expect(result.lines[0]?.status).toBe('manual_entry_required')
+    expect(result.lines[0]?.manualEntryReasons).toEqual(['category_provenance_missing'])
     expect(result.lines[0]?.cells).toEqual({ KAPORTA: 0, BOYA: 0, KALIBRASYON: 0 })
-    expect(result.manualEntryLineCount).toBe(1)
-    // Toplam yine de referans olarak görünür; o kullanıcının kendi verisidir.
+    // Uygulanan toplam yine görünür; o kullanıcının kendi verisidir.
     expect(result.lines[0]?.totalMinor).toBe(100_000)
   })
 
-  it('kullanıcı değiştirdiyse yine manuel girişte kalır', () => {
-    const result = projectLaborAllocationToExcel(PROFILE, [line({ modified: true })])
-    expect(result.lines[0]?.status).toBe('manual_entry_required')
-  })
-
-  it('eşlenmemiş kategoriye düşen tutarı hiçbir sütuna yazmaz', () => {
-    const profile = { columns: COLUMNS, mapping: categoryMapping({ paint: null }) as never }
-    const result = projectLaborAllocationToExcel(profile, [line({
-      allocations: [
-        { operationType: 'repair', amountMinor: 60_000 },
-        { operationType: 'paint', amountMinor: 40_000 },
-      ],
+  it('kullanıcı dağılımı değiştirdiyse UYGULANAN tutarlar yazılır', () => {
+    // P58'de `modified` satır projeksiyondan düşerdi. Artık dağılımı söyleyen
+    // kullanıcının kendisidir ve onayladığı tutar Excel'e gitmelidir.
+    const result = projectLaborAllocationToExcel(PROFILE, [line({
+      modified: true,
+      categoryAmounts: ['bodywork','mechanical','electrical','upholstery_lock','glass','calibration','repair','paint'].map((category) => ({
+        category,
+        amountMinor: category === 'paint' ? 100_000 : 0,
+      })),
     })])
     expect(result.lines[0]?.status).toBe('projected')
+    expect(result.lines[0]?.cells.BOYA).toBe(100_000)
+  })
+
+  it('kategori toplamı işçilik tutarını tutmuyorsa hücre üretmez', () => {
+    const result = projectLaborAllocationToExcel(PROFILE, [withCategories(60_000, 0)])
+    expect(result.lines[0]?.status).toBe('manual_entry_required')
+    expect(result.lines[0]?.manualEntryReasons).toEqual(['category_total_mismatch'])
+  })
+
+  it('POZİTİF tutar eşlenmemiş sütuna düşerse satır manuel girişe iner', () => {
+    const profile = { columns: COLUMNS, mapping: categoryMapping({ paint: null }) as never }
+    const result = projectLaborAllocationToExcel(profile, [withCategories(60_000, 40_000)])
+    expect(result.lines[0]?.status).toBe('manual_entry_required')
+    expect(result.lines[0]?.manualEntryReasons).toEqual(['category_column_unmapped'])
     expect(result.lines[0]?.unmappedAmountMinor).toBe(40_000)
-    expect(result.lines[0]?.cells.BOYA).toBe(0)
-    expect(result.lines[0]?.reviewRequired).toBe(true)
+    // Eşlenen kısım da yazılmaz: yarım satır Excel'de yanıltıcı olurdu.
+    expect(result.lines[0]?.cells).toEqual({ KAPORTA: 0, BOYA: 0, KALIBRASYON: 0 })
+  })
+
+  it('SIFIR tutarlı kategori eşlenmemiş olsa bile satırı bozmaz', () => {
+    const profile = { columns: COLUMNS, mapping: categoryMapping({ paint: null }) as never }
+    const result = projectLaborAllocationToExcel(profile, [withCategories(100_000, 0)])
+    expect(result.lines[0]?.status).toBe('projected')
+    expect(result.lines[0]?.unmappedAmountMinor).toBe(0)
+  })
+
+  it('aynı sütuna eşlenen iki kategori deterministik toplanır', () => {
+    const profile = { columns: COLUMNS, mapping: categoryMapping({ paint: 'KAPORTA' }) as never }
+    const result = projectLaborAllocationToExcel(profile, [withCategories(60_000, 40_000)])
+    expect(result.lines[0]?.cells.KAPORTA).toBe(100_000)
   })
 })
-
 describe('Paket 64 — profil şema sürümü', () => {
   it('yalnız kategori eksenli 2.0.0 fiziksel yazıma uygundur', () => {
     expect(LABOR_EXCEL_PROFILE_SCHEMA_VERSION).toBe('labor-excel-profile/2.0.0')
