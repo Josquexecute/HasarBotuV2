@@ -118,3 +118,156 @@ export function deriveCategoryAmounts(
 
 /** Her kategori ya bir Excel sütununa eşlenir ya da açıkça eşlenmemiş bırakılır. */
 export type LaborCategoryMapping = Readonly<Record<LaborAllocationCategory, string | null>>
+
+/**
+ * Paket 64 ara dilim — AI'nin ÜRETTİĞİ satır bazlı kategori dağılımı.
+ *
+ * Kategori tutarı operasyon türünden TÜRETİLMEZ; modelin kendi çıktısıdır.
+ * `deriveCategoryAmounts` yalnız eski kayıtların okunmasına hizmet eder ve
+ * yeni akışta kullanılmaz.
+ */
+export const LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION =
+  'labor-category-allocation/1.0.0' as const
+
+/** Kategori dağılımına özgü belirsizlik/çelişki kodları. */
+export const LABOR_CATEGORY_CONFLICT_CODES = [
+  'CATEGORY_EVIDENCE_INSUFFICIENT',
+  'CATEGORY_DESCRIPTION_AMBIGUOUS',
+  'CATEGORY_HISTORY_CONFLICT',
+  'CATEGORY_BASELINE_CONFLICT',
+  'CATEGORY_MULTI_TRADE_LINE',
+] as const
+
+export type LaborCategoryConflictCode = (typeof LABOR_CATEGORY_CONFLICT_CODES)[number]
+
+export interface LaborCategoryAllocationInput {
+  /** Sekiz kategorinin TAMAMI; kullanılmayan kategori 0 taşır. */
+  readonly amounts: Readonly<Record<string, unknown>>
+  readonly reasoning: string
+  readonly confidence: number
+  readonly evidenceRefs: readonly string[]
+  readonly conflictCodes: readonly string[]
+}
+
+export type LaborCategoryAllocationFailure =
+  | 'category_keys_incomplete'
+  | 'category_keys_unknown'
+  | 'category_amount_not_integer'
+  | 'category_amount_negative'
+  | 'category_total_mismatch'
+  | 'category_reasoning_missing'
+  | 'category_confidence_invalid'
+  | 'category_conflict_code_unknown'
+
+export type LaborCategoryAllocationValidation =
+  | {
+    readonly ok: false
+    readonly reason: LaborCategoryAllocationFailure
+    readonly detail: string | null
+  }
+  | {
+    readonly ok: true
+    readonly amounts: readonly LaborCategoryAmount[]
+    readonly reasoning: string
+    readonly confidence: number
+    readonly evidenceRefs: readonly string[]
+    readonly conflictCodes: readonly LaborCategoryConflictCode[]
+    readonly totalMinor: number
+  }
+
+/**
+ * Modelin ürettiği kategori dağılımını doğrular.
+ *
+ * Kurallar:
+ * - Sekiz kategori EKSİKSİZ gelmeli; sessiz eksik anahtar kabul edilmez.
+ * - Bilinmeyen anahtar reddedilir.
+ * - Tutarlar tam sayı (minor birim) ve negatif olmayan olmalıdır; küsurat
+ *   reddedilir çünkü kuruş altı birim yoktur.
+ * - Toplam, satırın İŞÇİLİK tutarına TAM eşit olmalıdır. Parça tutarı bu
+ *   toplama girmez.
+ * - Toplam SUNUCUDA yeniden hesaplanır; sağlayıcının kendi toplamına
+ *   güvenilmez (zaten wire'da böyle bir alan taşınmaz).
+ */
+export function validateLaborCategoryAllocation(
+  input: LaborCategoryAllocationInput,
+  laborAmountMinor: number,
+): LaborCategoryAllocationValidation {
+  const keys = Object.keys(input.amounts)
+  for (const key of keys) {
+    if (!isLaborAllocationCategory(key)) {
+      return { ok: false, reason: 'category_keys_unknown', detail: key }
+    }
+  }
+  for (const category of LABOR_ALLOCATION_CATEGORIES) {
+    if (!keys.includes(category)) {
+      return { ok: false, reason: 'category_keys_incomplete', detail: category }
+    }
+  }
+  // Tekrarlı anahtar JS nesnesinde zaten imkânsızdır; sayı eşitliği fazladan
+  // anahtar kalmadığını garantiler.
+  if (keys.length !== LABOR_ALLOCATION_CATEGORIES.length) {
+    return { ok: false, reason: 'category_keys_unknown', detail: null }
+  }
+
+  const amounts: LaborCategoryAmount[] = []
+  let totalMinor = 0
+  for (const category of LABOR_ALLOCATION_CATEGORIES) {
+    const raw = input.amounts[category]
+    if (typeof raw !== 'number' || !Number.isInteger(raw)) {
+      return { ok: false, reason: 'category_amount_not_integer', detail: category }
+    }
+    if (raw < 0) {
+      return { ok: false, reason: 'category_amount_negative', detail: category }
+    }
+    totalMinor += raw
+    amounts.push({ category, amountMinor: raw })
+  }
+
+  // Sunucu toplamı KENDİ hesaplar ve işçilik tutarıyla karşılaştırır.
+  if (totalMinor !== laborAmountMinor) {
+    return {
+      ok: false,
+      reason: 'category_total_mismatch',
+      detail: `${totalMinor}!=${laborAmountMinor}`,
+    }
+  }
+
+  const reasoning = input.reasoning.trim()
+  if (reasoning.length === 0) {
+    return { ok: false, reason: 'category_reasoning_missing', detail: null }
+  }
+  if (!Number.isFinite(input.confidence) || input.confidence < 0 || input.confidence > 1) {
+    return { ok: false, reason: 'category_confidence_invalid', detail: null }
+  }
+  for (const code of input.conflictCodes) {
+    if (!(LABOR_CATEGORY_CONFLICT_CODES as readonly string[]).includes(code)) {
+      return { ok: false, reason: 'category_conflict_code_unknown', detail: code }
+    }
+  }
+
+  return {
+    ok: true,
+    amounts,
+    reasoning,
+    confidence: input.confidence,
+    evidenceRefs: input.evidenceRefs,
+    conflictCodes: input.conflictCodes as readonly LaborCategoryConflictCode[],
+    totalMinor,
+  }
+}
+
+/**
+ * Kategori dağılımı insan kontrolü gerektiriyor mu?
+ *
+ * Modelin yüksek güven bildirmesi sunucu zorlamasını KALDIRAMAZ: çelişki kodu
+ * varsa veya güven eşiğin altındaysa kontrol zorunludur.
+ */
+export const LABOR_CATEGORY_CONTROL_CONFIDENCE_THRESHOLD = 0.75
+
+export function categoryControlRequired(validated: {
+  readonly confidence: number
+  readonly conflictCodes: readonly LaborCategoryConflictCode[]
+}): boolean {
+  if (validated.conflictCodes.length > 0) return true
+  return validated.confidence < LABOR_CATEGORY_CONTROL_CONFIDENCE_THRESHOLD
+}

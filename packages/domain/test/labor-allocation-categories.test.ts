@@ -5,10 +5,12 @@ import {
   LABOR_EXCEL_PROFILE_LEGACY_SCHEMA_VERSION,
   LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
   LABOR_OPERATION_TYPES,
+  categoryControlRequired,
   deriveCategoryAmounts,
   deriveCategoryFromOperation,
   isProfileWritable,
   projectLaborAllocationToExcel,
+  validateLaborCategoryAllocation,
   validateLaborExcelProfileInput,
 } from '../src/index.js'
 
@@ -188,5 +190,126 @@ describe('Paket 64 — profil şema sürümü', () => {
     })
     expect(legacy.valid).toBe(false)
     expect(!legacy.valid && legacy.reason).toBe('invalid_mapping_keys')
+  })
+})
+
+describe('Paket 64 ara dilim — AI kategori dağılımı doğrulaması', () => {
+  const LABOR = 100_000
+
+  function amounts(overrides: Record<string, unknown> = {}) {
+    return {
+      bodywork: 60_000,
+      mechanical: 0,
+      electrical: 0,
+      upholstery_lock: 0,
+      glass: 0,
+      calibration: 0,
+      repair: 0,
+      paint: 40_000,
+      ...overrides,
+    }
+  }
+
+  function input(overrides: Record<string, unknown> = {}) {
+    return {
+      amounts: amounts(),
+      reasoning: 'Kaporta ve boya işçiliği ayrıldı.',
+      confidence: 0.8,
+      evidenceRefs: ['line-1-description'],
+      conflictCodes: [],
+      ...overrides,
+    }
+  }
+
+  it('eksiksiz ve toplamı tutan dağılımı kabul eder', () => {
+    const result = validateLaborCategoryAllocation(input(), LABOR)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.totalMinor).toBe(LABOR)
+    // Kullanılmayan kategoriler 0 taşır ama listede bulunur.
+    expect(result.amounts).toHaveLength(8)
+    expect(result.amounts.find((item) => item.category === 'bodywork')?.amountMinor).toBe(60_000)
+  })
+
+  it('sekiz kategoriden biri eksikse reddeder; sessiz eksik anahtar yok', () => {
+    const partial = amounts()
+    delete (partial as Record<string, unknown>).glass
+    const result = validateLaborCategoryAllocation(input({ amounts: partial }), LABOR)
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.reason).toBe('category_keys_incomplete')
+    expect(!result.ok && result.detail).toBe('glass')
+  })
+
+  it('bilinmeyen kategori anahtarını reddeder', () => {
+    const result = validateLaborCategoryAllocation(
+      input({ amounts: { ...amounts(), welding: 0 } }), LABOR,
+    )
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.reason).toBe('category_keys_unknown')
+  })
+
+  it('toplam işçilik tutarına eşit değilse reddeder', () => {
+    const fazla = validateLaborCategoryAllocation(input({ amounts: amounts({ paint: 40_001 }) }), LABOR)
+    expect(fazla.ok).toBe(false)
+    expect(!fazla.ok && fazla.reason).toBe('category_total_mismatch')
+
+    const eksik = validateLaborCategoryAllocation(input({ amounts: amounts({ paint: 39_999 }) }), LABOR)
+    expect(eksik.ok).toBe(false)
+  })
+
+  it('parça tutarı kategori toplamına dahil edilmez', () => {
+    // İşçilik 100.000 iken parça 900.000 olsa bile toplam yalnız işçiliğe
+    // eşit olmalıdır; parçayı ekleyen bir model çıktısı reddedilir.
+    const result = validateLaborCategoryAllocation(
+      input({ amounts: amounts({ bodywork: 960_000 }) }), LABOR,
+    )
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.reason).toBe('category_total_mismatch')
+  })
+
+  it('negatif tutarı ve küsuratı reddeder', () => {
+    const negatif = validateLaborCategoryAllocation(
+      input({ amounts: amounts({ bodywork: -10, paint: 100_010 }) }), LABOR,
+    )
+    expect(negatif.ok).toBe(false)
+    expect(!negatif.ok && negatif.reason).toBe('category_amount_negative')
+
+    const kusurat = validateLaborCategoryAllocation(
+      input({ amounts: amounts({ bodywork: 60_000.5, paint: 39_999.5 }) }), LABOR,
+    )
+    expect(kusurat.ok).toBe(false)
+    expect(!kusurat.ok && kusurat.reason).toBe('category_amount_not_integer')
+  })
+
+  it('gerekçesiz veya geçersiz güvenli dağılımı reddeder', () => {
+    expect(validateLaborCategoryAllocation(input({ reasoning: '   ' }), LABOR).ok).toBe(false)
+    expect(validateLaborCategoryAllocation(input({ confidence: 1.5 }), LABOR).ok).toBe(false)
+    expect(validateLaborCategoryAllocation(input({ confidence: -0.1 }), LABOR).ok).toBe(false)
+  })
+
+  it('bilinmeyen çelişki kodunu reddeder', () => {
+    const result = validateLaborCategoryAllocation(
+      input({ conflictCodes: ['UYDURMA_KOD'] }), LABOR,
+    )
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.reason).toBe('category_conflict_code_unknown')
+  })
+
+  it('sıfır işçilikte tüm kategoriler sıfır olmalıdır', () => {
+    const sifir = validateLaborCategoryAllocation(
+      input({ amounts: amounts({ bodywork: 0, paint: 0 }) }), 0,
+    )
+    expect(sifir.ok).toBe(true)
+  })
+
+  it('yüksek güven sunucu kontrol zorlamasını KALDIRAMAZ', () => {
+    // Model 0.99 güven bildirse de çelişki kodu varsa kontrol zorunludur.
+    expect(categoryControlRequired({
+      confidence: 0.99,
+      conflictCodes: ['CATEGORY_EVIDENCE_INSUFFICIENT'],
+    })).toBe(true)
+    // Eşiğin altındaki güven de kontrolü zorlar.
+    expect(categoryControlRequired({ confidence: 0.5, conflictCodes: [] })).toBe(true)
+    expect(categoryControlRequired({ confidence: 0.9, conflictCodes: [] })).toBe(false)
   })
 })

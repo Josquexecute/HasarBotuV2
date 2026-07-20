@@ -747,6 +747,11 @@ export {
 export {
   AMBIGUOUS_OPERATION_TYPES,
   LABOR_ALLOCATION_CATEGORIES,
+  LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+  LABOR_CATEGORY_CONFLICT_CODES,
+  LABOR_CATEGORY_CONTROL_CONFIDENCE_THRESHOLD,
+  categoryControlRequired,
+  validateLaborCategoryAllocation,
   LABOR_ALLOCATION_CATEGORIES_VERSION,
   deriveCategoryAmounts,
   deriveCategoryFromOperation,
@@ -754,7 +759,11 @@ export {
   type CategoryDerivation,
   type CategoryDerivationFailure,
   type LaborAllocationCategory,
+  type LaborCategoryAllocationFailure,
+  type LaborCategoryAllocationInput,
+  type LaborCategoryAllocationValidation,
   type LaborCategoryAmount,
+  type LaborCategoryConflictCode,
   type LaborCategoryMapping,
 } from './labor-allocation-categories.js'
 export {

@@ -1322,3 +1322,17 @@ Karar:
 Dosya numarası kapsamı kontrol edildi: `office_number` yalnız `(organization_id, office_number)` kapsamında tekil, `insurer_claim_number` üzerinde hiç unique kısıt yok. **Global tekillik hatası bulunmadı ve eklenmedi.**
 
 Ayrıca `fflate` koruma iddiası doğru adlandırıldı: dokunulmayan OOXML part içerikleri byte-birebir korunur; tüm ZIP dosyasının binary olarak aynı kaldığı İDDİA EDİLMEZ.
+
+## 2026-07-20 — HB-2026-073: AI kategori dağılımı doğrulama çekirdeği (Paket 64 ara dilim, 1. parça)
+
+Ürün kararı alındı: **AI satır bazında işçilik dağıtım kategorilerini ve tutarlarını KENDİSİ üretecek.** Kullanıcı seçimi ana yöntem değil, yalnız inceleme ve düzeltme yoludur. Kural tabanlı dağıtıcıya dönülmeyecek.
+
+Bu parça, her şeyin üzerine oturacağı doğrulama çekirdeğini kurar:
+
+1. `labor-category-allocation/1.0.0` sürümlü sınırı eklendi. Kategori tutarı operasyon türünden TÜRETİLMEZ; modelin kendi çıktısıdır. Mevcut `deriveCategoryAmounts` yalnız eski kayıtların okunmasına hizmet eder ve yeni akışta kullanılmaz.
+2. **Sekiz kategori eksiksiz gelmeli.** Sessiz eksik anahtar `category_keys_incomplete` ile reddedilir; bilinmeyen anahtar `category_keys_unknown` ile reddedilir. Kullanılmayan kategori `0` taşır.
+3. **Toplam sunucuda yeniden hesaplanır** ve satırın İŞÇİLİK tutarına tam eşit olmalıdır. Sağlayıcının kendi toplam alanı wire'da hiç taşınmaz. Parça tutarı toplama dahil edilmez — parçayı ekleyen model çıktısı `category_total_mismatch` ile düşer.
+4. Negatif tutar, küsurat, gerekçesizlik, aralık dışı güven ve bilinmeyen çelişki kodu ayrı kodlarla reddedilir.
+5. **Modelin yüksek güveni sunucu zorlamasını KALDIRAMAZ:** `categoryControlRequired` çelişki kodu varsa 0.99 güvende bile `true` döner; eşik altı güven de kontrolü zorlar.
+
+Kapsam: yalnız domain doğrulama çekirdeği ve testleri. Wire şeması, prompt, provider sürüm artışı, migration, apply transaction, UI ve **gerçek Gemini smoke bu parçada YOKTUR**; sıradaki parçadadır. Paket, gerçek 2 satırlı Gemini schema smoke geçmeden tamamlanmış sayılmayacak.
