@@ -1,3 +1,7 @@
+import {
+  selectConsistentCategoryHistory,
+  type LaborCategoryAmount,
+} from './labor-allocation-categories.js'
 import type { LaborOperationType } from './labor-allocation-ai.js'
 import type { LaborAllocationEvidenceLine } from './labor-allocation-ai.js'
 import type { NormalizedLaborItem } from './labor-sheet.js'
@@ -149,6 +153,12 @@ export interface LaborAllocationApprovedRecord {
   readonly partCode: string | null
   readonly damageRegion: string | null
   readonly operationTypes: readonly LaborOperationType[]
+  /**
+   * P64 — uygulanan kategori dağılımı. Provenance yoksa `null` gelir ve o
+   * satır kategori geçmişi SAYILMAZ; eksikliği sıfır dağılım gibi okumak
+   * uydurma olurdu.
+   */
+  readonly categoryAmounts?: readonly LaborCategoryAmount[] | null
 }
 
 export interface LaborAllocationApprovedHistoryEntry {
@@ -157,6 +167,11 @@ export interface LaborAllocationApprovedHistoryEntry {
   readonly operationTypes: readonly LaborOperationType[]
   readonly partAmountMinor: number
   readonly laborAmountMinor: number
+  /**
+   * P64 — bu satır için tutarlı onaylanmış kategori dağılımı. Çelişen ya da
+   * provenance'ı olmayan geçmişte `null` kalır.
+   */
+  readonly categoryAmounts: readonly LaborCategoryAmount[] | null
 }
 
 function operationSignature(types: readonly LaborOperationType[]): string {
@@ -209,15 +224,39 @@ export function deriveApprovedHistory(
   readonly entries: readonly LaborAllocationApprovedHistoryEntry[]
   /** Satır sırasına göre eşleşen geçmiş; çelişkili veya yoksa yer almaz. */
   readonly byOrdinal: ReadonlyMap<number, LaborAllocationApprovedHistoryEntry>
+  /**
+   * P64 — kategori geçmişi AYRI eksendir ve operasyon türü kapısına
+   * bağlanmaz. Operasyon türleri çelişse bile branş dağılımı tutarlı
+   * olabilir; tersi de mümkündür. İki ekseni tek kapıya bağlamak, birinin
+   * belirsizliğini diğerinin kanıtını silmek için kullanmak olurdu.
+   */
+  readonly categoryByOrdinal: ReadonlyMap<number, readonly LaborCategoryAmount[]>
   readonly complete: boolean
 } {
   const usable = approvedRecords.filter((record) => record.runId !== currentRunId)
   const byOrdinal = new Map<number, LaborAllocationApprovedHistoryEntry>()
+  const categoryByOrdinal = new Map<number, readonly LaborCategoryAmount[]>()
   const entries: LaborAllocationApprovedHistoryEntry[] = []
 
   for (const line of currentLines) {
     const candidates = usable.filter((record) => matchesRecord(line, record))
     if (candidates.length === 0) continue
+
+    /*
+     * Kategori havuzu: YALNIZ provenance'ı dolu kayıtlar. Kullanıcının
+     * işçilik tutarını değiştirip dağılımı bilinmiyor bıraktığı satırlar
+     * havuza girmez; eksikliği kanıt saymak uydurma olurdu. Tutarlılık
+     * paylar üzerinden ölçülür, çünkü fiyat revizyonu meşrudur.
+     */
+    const categorySamples = candidates
+      .map((record) => record.categoryAmounts)
+      .filter((amounts): amounts is readonly LaborCategoryAmount[] =>
+        amounts !== undefined && amounts !== null)
+    const consistentCategories = selectConsistentCategoryHistory(categorySamples)
+    if (consistentCategories !== null) {
+      categoryByOrdinal.set(line.ordinal, consistentCategories)
+    }
+
     const signatures = new Set(candidates.map((record) => operationSignature(record.operationTypes)))
     // Çelişkili geçmiş kanıt sayılmaz: tek bir onaylanmış cevap yoktur.
     if (signatures.size !== 1) continue
@@ -228,6 +267,7 @@ export function deriveApprovedHistory(
       operationTypes: newest.operationTypes,
       partAmountMinor: newest.partAmountMinor,
       laborAmountMinor: newest.laborAmountMinor,
+      categoryAmounts: consistentCategories,
     }
     byOrdinal.set(line.ordinal, entry)
     entries.push(entry)
@@ -236,6 +276,7 @@ export function deriveApprovedHistory(
   return {
     entries,
     byOrdinal,
+    categoryByOrdinal,
     complete: currentLines.length > 0 && byOrdinal.size === currentLines.length,
   }
 }

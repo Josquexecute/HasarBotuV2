@@ -267,3 +267,86 @@ export function categoryControlRequired(validated: {
   if (validated.conflictCodes.length > 0) return true
   return validated.confidence < LABOR_CATEGORY_CONTROL_CONFIDENCE_THRESHOLD
 }
+
+/**
+ * Paket 64 — kategori PAYI karşılaştırması.
+ *
+ * Mutlak tutar farkı tek başına çelişki DEĞİLDİR: fiyat revizyonu meşrudur ve
+ * aynı iş bugün daha pahalıya yapılabilir. Anlamlı olan işin BRANŞLAR ARASI
+ * dağılımının değişip değişmediğidir, o yüzden paylar karşılaştırılır.
+ */
+export const LABOR_CATEGORY_SHARE_TOLERANCE = 0.2
+
+/** Sekiz kategoriyi toplama oranlayarak pay vektörü üretir. */
+export function categoryShares(
+  amounts: readonly LaborCategoryAmount[],
+): Readonly<Record<LaborAllocationCategory, number>> {
+  const total = amounts.reduce((sum, item) => sum + item.amountMinor, 0)
+  const byCategory = new Map(amounts.map((item) => [item.category, item.amountMinor]))
+  return Object.fromEntries(LABOR_ALLOCATION_CATEGORIES.map((category) => [
+    category,
+    total === 0 ? 0 : (byCategory.get(category) ?? 0) / total,
+  ])) as Record<LaborAllocationCategory, number>
+}
+
+/**
+ * İki kategori dağılımı belirgin biçimde ayrışıyor mu?
+ *
+ * Herhangi bir kategorinin payı toleransı aşarsa çelişki vardır. Referans
+ * (baseline/history) OTOMATİK DOĞRU sayılmaz; fark yalnız insana taşınır.
+ */
+export function categorySharesDisagree(
+  left: readonly LaborCategoryAmount[],
+  right: readonly LaborCategoryAmount[],
+  tolerance: number = LABOR_CATEGORY_SHARE_TOLERANCE,
+): boolean {
+  const leftShares = categoryShares(left)
+  const rightShares = categoryShares(right)
+  return LABOR_ALLOCATION_CATEGORIES.some(
+    (category) => Math.abs(leftShares[category] - rightShares[category]) > tolerance,
+  )
+}
+
+/**
+ * Aynı satıra ait geçmiş kategori örneklerinden TUTARLI olanı seçer.
+ *
+ * Havuz semantiği (HB-2026-065 ile aynı): aynı cevabı veren kayıtlar tutarlı
+ * kanıttır. Örnekler birbiriyle çelişiyorsa geçmiş güvenilir DEĞİLDİR ve
+ * `null` döner — çelişkili geçmiş otomatik doğru kabul edilmez.
+ */
+export function selectConsistentCategoryHistory(
+  samples: readonly (readonly LaborCategoryAmount[])[],
+  tolerance: number = LABOR_CATEGORY_SHARE_TOLERANCE,
+): readonly LaborCategoryAmount[] | null {
+  const usable = samples.filter((sample) => sample.length === LABOR_ALLOCATION_CATEGORIES.length)
+  const first = usable[0]
+  if (first === undefined) return null
+  const consistent = usable.every((sample) => !categorySharesDisagree(first, sample, tolerance))
+  return consistent ? first : null
+}
+
+/**
+ * Kategori çelişki kodlarını SUNUCU tarafında kesinleştirir.
+ *
+ * Model bu kodları üretmeyi atlayabilir veya yanlış üretebilir; kod listesi
+ * modelin beyanı değil, GERÇEK karşılaştırmanın sonucudur. Modelin bildirdiği
+ * kodlar korunur (bilgi kaybı olmaz), gerçek ayrışma varsa kod eklenir.
+ *
+ * Referans yoksa (baseline/history null) kod üretilmez: kanıt yokluğu çelişki
+ * değildir.
+ */
+export function forceCategoryConflictCodes(input: {
+  readonly proposed: readonly LaborCategoryAmount[]
+  readonly baseline: readonly LaborCategoryAmount[] | null
+  readonly history: readonly LaborCategoryAmount[] | null
+  readonly reportedCodes: readonly LaborCategoryConflictCode[]
+}): readonly LaborCategoryConflictCode[] {
+  const codes = new Set<LaborCategoryConflictCode>(input.reportedCodes)
+  if (input.baseline !== null && categorySharesDisagree(input.proposed, input.baseline)) {
+    codes.add('CATEGORY_BASELINE_CONFLICT')
+  }
+  if (input.history !== null && categorySharesDisagree(input.proposed, input.history)) {
+    codes.add('CATEGORY_HISTORY_CONFLICT')
+  }
+  return [...codes]
+}

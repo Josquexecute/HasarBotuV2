@@ -6,12 +6,16 @@ import {
   LABOR_EXCEL_PROFILE_SCHEMA_VERSION,
   LABOR_OPERATION_TYPES,
   categoryControlRequired,
+  categorySharesDisagree,
+  selectConsistentCategoryHistory,
   deriveCategoryAmounts,
+  forceCategoryConflictCodes,
   deriveCategoryFromOperation,
   isProfileWritable,
   projectLaborAllocationToExcel,
   validateLaborCategoryAllocation,
   validateLaborExcelProfileInput,
+  type LaborCategoryAmount,
 } from '../src/index.js'
 
 /**
@@ -311,5 +315,93 @@ describe('Paket 64 ara dilim — AI kategori dağılımı doğrulaması', () => 
     // Eşiğin altındaki güven de kontrolü zorlar.
     expect(categoryControlRequired({ confidence: 0.5, conflictCodes: [] })).toBe(true)
     expect(categoryControlRequired({ confidence: 0.9, conflictCodes: [] })).toBe(false)
+  })
+})
+
+describe('kategori pay karşılaştırması', () => {
+  const split = (bodywork: number, paint: number): readonly LaborCategoryAmount[] =>
+    LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+      category,
+      amountMinor: category === 'bodywork' ? bodywork : category === 'paint' ? paint : 0,
+    }))
+
+  it('fiyat revizyonu çelişki SAYILMAZ: paylar aynıysa tutar iki katına çıksa bile', () => {
+    // Aynı iş, iki kat fiyat. Branş dağılımı değişmediği için insan bakmasına
+    // gerek yoktur; mutlak farkı çelişki saymak her zam sonrası yanlış alarm üretirdi.
+    expect(categorySharesDisagree(split(6_000, 4_000), split(12_000, 8_000))).toBe(false)
+  })
+
+  it('branşlar arası dağılım kaydıysa çelişki üretir', () => {
+    // Toplam aynı ama iş boyadan kaportaya kaymış: gerçek bir anlaşmazlık.
+    expect(categorySharesDisagree(split(6_000, 4_000), split(2_000, 8_000))).toBe(true)
+  })
+
+  it('tolerans sınırındaki küçük kayma çelişki sayılmaz', () => {
+    expect(categorySharesDisagree(split(5_500, 4_500), split(6_000, 4_000))).toBe(false)
+  })
+
+  it('tutarlı geçmiş örnekleri havuz olur', () => {
+    const selected = selectConsistentCategoryHistory([split(6_000, 4_000), split(12_000, 8_000)])
+    expect(selected).not.toBeNull()
+  })
+
+  it('çelişen geçmiş örnekleri otomatik doğru kabul EDİLMEZ', () => {
+    // İki farklı onaylanmış cevap varsa tek doğru yoktur; geçmiş susar.
+    expect(selectConsistentCategoryHistory([split(6_000, 4_000), split(1_000, 9_000)])).toBeNull()
+  })
+
+  it('örnek yoksa null döner; boşluk sıfır dağılım gibi okunmaz', () => {
+    expect(selectConsistentCategoryHistory([])).toBeNull()
+  })
+})
+
+describe('kategori çelişki kodlarının sunucuda kesinleştirilmesi', () => {
+  const split = (bodywork: number, paint: number): readonly LaborCategoryAmount[] =>
+    LABOR_ALLOCATION_CATEGORIES.map((category) => ({
+      category,
+      amountMinor: category === 'bodywork' ? bodywork : category === 'paint' ? paint : 0,
+    }))
+
+  it('model kod üretmese bile gerçek ayrışma kodu zorlar', () => {
+    const codes = forceCategoryConflictCodes({
+      proposed: split(10_000, 0),
+      baseline: split(0, 10_000),
+      history: split(0, 10_000),
+      reportedCodes: [],
+    })
+    expect(codes).toContain('CATEGORY_BASELINE_CONFLICT')
+    expect(codes).toContain('CATEGORY_HISTORY_CONFLICT')
+  })
+
+  it('referans yoksa kod üretilmez: kanıt yokluğu çelişki değildir', () => {
+    expect(forceCategoryConflictCodes({
+      proposed: split(10_000, 0), baseline: null, history: null, reportedCodes: [],
+    })).toEqual([])
+  })
+
+  it('paylar aynıysa fiyat farkı kod üretmez', () => {
+    expect(forceCategoryConflictCodes({
+      proposed: split(10_000, 0), baseline: split(25_000, 0), history: null, reportedCodes: [],
+    })).toEqual([])
+  })
+
+  it('modelin bildirdiği kod korunur; sunucu bilgi silmez', () => {
+    const codes = forceCategoryConflictCodes({
+      proposed: split(10_000, 0),
+      baseline: null,
+      history: null,
+      reportedCodes: ['CATEGORY_EVIDENCE_INSUFFICIENT'],
+    })
+    expect(codes).toEqual(['CATEGORY_EVIDENCE_INSUFFICIENT'])
+  })
+
+  it('aynı kod iki kez eklenmez', () => {
+    const codes = forceCategoryConflictCodes({
+      proposed: split(10_000, 0),
+      baseline: split(0, 10_000),
+      history: null,
+      reportedCodes: ['CATEGORY_BASELINE_CONFLICT'],
+    })
+    expect(codes.filter((code) => code === 'CATEGORY_BASELINE_CONFLICT')).toHaveLength(1)
   })
 })

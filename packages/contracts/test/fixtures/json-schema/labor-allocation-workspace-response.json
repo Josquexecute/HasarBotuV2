@@ -766,6 +766,81 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "categoryAllocation": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "schemaVersion": {
+                                  "type": "string",
+                                  "const": "labor-category-allocation/1.0.0"
+                                },
+                                "amounts": {
+                                  "minItems": 8,
+                                  "maxItems": 8,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "category": {
+                                        "type": "string",
+                                        "enum": [
+                                          "bodywork",
+                                          "mechanical",
+                                          "electrical",
+                                          "upholstery_lock",
+                                          "glass",
+                                          "calibration",
+                                          "repair",
+                                          "paint"
+                                        ]
+                                      },
+                                      "amountMinor": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 10000000000
+                                      }
+                                    },
+                                    "required": [
+                                      "category",
+                                      "amountMinor"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "conflictCodes": {
+                                  "maxItems": 5,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "CATEGORY_EVIDENCE_INSUFFICIENT",
+                                      "CATEGORY_DESCRIPTION_AMBIGUOUS",
+                                      "CATEGORY_HISTORY_CONFLICT",
+                                      "CATEGORY_BASELINE_CONFLICT",
+                                      "CATEGORY_MULTI_TRADE_LINE"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "schemaVersion",
+                                "amounts",
+                                "confidence",
+                                "conflictCodes"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -783,7 +858,8 @@
                         "conflictCodes",
                         "missingEvidenceCodes",
                         "controlRequired",
-                        "baseline"
+                        "baseline",
+                        "categoryAllocation"
                       ],
                       "additionalProperties": false
                     }

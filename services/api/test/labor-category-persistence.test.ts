@@ -291,6 +291,92 @@ describeDb('Paket 64 kategori dağılımı kalıcılaştırma', () => {
     expect(leak.rows[0].n).toBe(0)
   })
 
+
+  it('kategori dağılımı çalıştırma okuma yolunda görünür', async () => {
+    const { caseId, runId } = await prepareCase([ITEM])
+    const read = await app.inject({
+      method: 'GET', url: `/api/v1/cases/${caseId}/labor-allocation-ai/${runId}`,
+      headers: { cookie },
+    })
+    const line = laborAllocationRunResponseSchema.parse(read.json()).run.suggestion?.lines[0]
+    expect(line?.categoryAllocation).not.toBeNull()
+    // Sekiz anahtarın TAMAMI taşınır; eksik anahtar sıfır varsayılmaz.
+    expect(line?.categoryAllocation?.amounts).toHaveLength(8)
+    const total = (line?.categoryAllocation?.amounts ?? [])
+      .reduce((sum, item) => sum + item.amountMinor, 0)
+    expect(total).toBe(1_000_000)
+  })
+
+  it('tutarlı geçmiş YANLIŞ ALARM üretmez: aynı dağılım çelişki sayılmaz', async () => {
+    // Birinci dosya onaylanır; ikinci dosyada aynı kalem analiz edilir.
+    // Geçmiş ile öneri aynı branş dağılımını taşıdığı için kod basılmamalıdır.
+    const first = await prepareCase([ITEM])
+    expect((await apply(first.caseId, first.runId, [{
+      lineOrdinal: 1, description: 'Ön tampon', action: 'Onarım',
+      partAmountMinor: 0, laborAmountMinor: 1_000_000,
+    }])).statusCode).toBe(200)
+
+    const second = await prepareCase([ITEM])
+    const stored = await pool.query(
+      `SELECT run_id::text AS run,category_conflict_codes,control_required
+         FROM labor_allocation_line_suggestions WHERE run_id=ANY($1::uuid[])`,
+      [[first.runId, second.runId]],
+    )
+    const before = stored.rows.find((row) => row.run === first.runId)
+    const after = stored.rows.find((row) => row.run === second.runId)
+    expect(after.category_conflict_codes).toEqual([])
+    /*
+     * `control_required` çok eksenlidir; model güveni gibi başka nedenlerle de
+     * true olabilir. Burada iddia edilen tek şey KATEGORİ ekseninin kararı
+     * değiştirmediğidir: tutarlı geçmiş kontrol gereksinimi EKLEMEZ.
+     */
+    expect(after.control_required).toBe(before.control_required)
+  })
+
+  it('provenance\'ı olmayan uygulanmış satır kategori geçmişine GİRMEZ', async () => {
+    // Kullanıcı işçilik tutarını değiştirince kategori dağılımı bilinmiyor
+    // kalır. Bu satır sonraki analizde kanıt sayılmamalıdır.
+    const first = await prepareCase([ITEM])
+    expect((await apply(first.caseId, first.runId, [{
+      lineOrdinal: 1, description: 'Ön tampon', action: 'Onarım',
+      partAmountMinor: 0, laborAmountMinor: 750_000,
+    }])).statusCode).toBe(200)
+
+    const nulled = await pool.query(
+      `SELECT applied_category_amounts FROM labor_allocation_applied_lines
+         WHERE application_id=(SELECT id FROM labor_allocation_applications WHERE run_id=$1)`,
+      [first.runId],
+    )
+    expect(nulled.rows[0].applied_category_amounts).toBeNull()
+
+    // Geçmişte kullanılabilir kategori örneği olmadığı için ikinci analizde
+    // çelişki kodu da üretilmez; boşluk sessizce dağılım gibi okunmaz.
+    const second = await prepareCase([ITEM])
+    const stored = await pool.query(
+      `SELECT category_conflict_codes
+         FROM labor_allocation_line_suggestions WHERE run_id=$1`,
+      [second.runId],
+    )
+    expect(stored.rows[0].category_conflict_codes).toEqual([])
+  })
+
+  it('baseline kategori kaynağı yoksa çelişki uydurulmaz', async () => {
+    // Föy sürüm 1 hiçbir zaman kategori dağıtılmadan oluşur; sürüm 2'nin
+    // baseline'ı olan sürüm 1 için kategori provenance'ı YOKTUR.
+    const first = await prepareCase([ITEM])
+    expect((await apply(first.caseId, first.runId, [{
+      lineOrdinal: 1, description: 'Ön tampon', action: 'Onarım',
+      partAmountMinor: 0, laborAmountMinor: 1_000_000,
+    }])).statusCode).toBe(200)
+
+    const baselineRows = await pool.query(
+      `SELECT count(*)::int AS n FROM labor_allocation_applications
+        WHERE case_id=$1 AND status='completed' AND target_sheet_version=1`,
+      [first.caseId],
+    )
+    expect(baselineRows.rows[0].n).toBe(0)
+  })
+
   it('kategori alanları eklenmiş kayıt geriye dönük okunabilir kalır', async () => {
     const { caseId, runId } = await prepareCase([ITEM])
     const read = await app.inject({

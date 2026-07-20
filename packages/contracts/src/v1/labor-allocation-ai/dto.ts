@@ -2,7 +2,10 @@ import { z } from 'zod'
 import {
   LABOR_ALLOCATION_APPLICATION_STATUSES,
   LABOR_ALLOCATION_APPLY_SCHEMA_VERSION,
+  LABOR_ALLOCATION_CATEGORIES,
   LABOR_ALLOCATION_CONFLICT_CODES,
+  LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+  LABOR_CATEGORY_CONFLICT_CODES,
   LABOR_ALLOCATION_LOCAL_PRIVACY_POLICY_VERSION,
   LABOR_BASELINE_COMPARISON_VERSION,
   LABOR_BASELINE_MATCH_VERSION,
@@ -116,6 +119,24 @@ export const laborAllocationBaselineSchema = z.strictObject({
   conflicts: z.boolean(),
 })
 
+/**
+ * Paket 64 — kategori dağılımı sekiz anahtarın TAMAMINI taşır.
+ *
+ * Eksik anahtarı sıfır varsaymak, modelin o branşı hiç değerlendirmediği ile
+ * sıfır ayırdığını aynı şeye çevirirdi. Toplam işçilik tutarına eşitliği
+ * domain ve veritabanı CHECK'i ayrıca doğrular.
+ */
+export const laborCategoryAllocationSchema = z.strictObject({
+  schemaVersion: z.literal(LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION),
+  amounts: z.array(z.strictObject({
+    category: z.enum(LABOR_ALLOCATION_CATEGORIES),
+    amountMinor: amountMinorSchema,
+  })).length(LABOR_ALLOCATION_CATEGORIES.length),
+  confidence: z.number().min(0).max(1),
+  conflictCodes: z.array(z.enum(LABOR_CATEGORY_CONFLICT_CODES))
+    .max(LABOR_CATEGORY_CONFLICT_CODES.length),
+})
+
 export const laborAllocationLineSchema = z.strictObject({
   lineOrdinal: lineOrdinalSchema,
   /** Kaynak föy satırının okunabilir özeti; öneri satırıyla eşleştirme içindir. */
@@ -135,6 +156,14 @@ export const laborAllocationLineSchema = z.strictObject({
   controlRequired: z.boolean(),
   /** Baseline yoksa veya satır belirsiz eşleştiyse null kalır. */
   baseline: laborAllocationBaselineSchema.nullable(),
+  /**
+   * Paket 64 — işçilik DAĞITIM KATEGORİSİ ekseni (branş).
+   *
+   * Operasyon türünden ve ekonomik karşılaştırmadan AYRI eksendir. Eski
+   * çalıştırmalarda gerçek kategori provenance'ı yoktur ve null kalır;
+   * bu satırlar için kategori girişi manuel yapılır.
+   */
+  categoryAllocation: laborCategoryAllocationSchema.nullable(),
 })
 
 export const laborAllocationSuggestionSchema = z.strictObject({

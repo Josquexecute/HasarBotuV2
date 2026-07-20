@@ -45,6 +45,7 @@ import {
   type OutboundVehicleProfile,
   LABOR_ALLOCATION_CATEGORIES,
   LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+  forceCategoryConflictCodes,
   type LaborCategoryAmount,
 } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
@@ -245,6 +246,41 @@ async function loadExpertBaseline(
       damageRegion: item.damage_region === null ? null : String(item.damage_region),
     })),
   }
+}
+
+/**
+ * P64 — baseline'ın KATEGORİ ekseni.
+ *
+ * Eksper baseline'ı `labor_sheet_items`'tan gelir ve orada kategori dağılımı
+ * YOKTUR; föy satırı yalnız parça/işçilik tutarı taşır. Baseline'ın kategori
+ * karşılığı, aynı dosyanın o föy sürümünü üreten TAMAMLANMIŞ uygulamasında
+ * kullanıcının onayladığı dağılımdır. Başka bir kaynak yoktur ve kategori
+ * dağılımı föy tutarlarından türetilmez.
+ *
+ * Provenance'ı olmayan satırlar haritada yer almaz: eksik dağılımı sıfır
+ * kabul edip çelişki üretmek uydurma olurdu.
+ */
+async function loadBaselineCategoryAmounts(
+  pool: pg.Pool,
+  organizationId: string,
+  caseId: string,
+  baselineSheetVersion: number,
+): Promise<ReadonlyMap<number, readonly LaborCategoryAmount[]>> {
+  const rows = await pool.query(
+    `SELECT l.line_ordinal,l.applied_category_amounts
+       FROM labor_allocation_applied_lines l
+       JOIN labor_allocation_applications a
+         ON a.id=l.application_id AND a.organization_id=l.organization_id
+      WHERE l.organization_id=$1 AND a.case_id=$2 AND a.status='completed'
+        AND a.target_sheet_version=$3 AND l.applied_category_amounts IS NOT NULL`,
+    [organizationId, caseId, baselineSheetVersion],
+  )
+  const byOrdinal = new Map<number, readonly LaborCategoryAmount[]>()
+  for (const row of rows.rows as Record<string, unknown>[]) {
+    const amounts = readCategoryAmounts(row.applied_category_amounts)
+    if (amounts !== null) byOrdinal.set(safeNumber(row.line_ordinal), amounts)
+  }
+  return byOrdinal
 }
 
 /** Uygulama kaydını satır snapshot'larıyla birlikte okur. */
@@ -456,7 +492,8 @@ async function mapRun(
               conflict_codes,missing_evidence_codes,control_required,
               baseline_part_amount_minor::text AS baseline_part,
               baseline_labor_amount_minor::text AS baseline_labor,
-              baseline_part_ratio,baseline_suggested_part_ratio,baseline_conflict
+              baseline_part_ratio,baseline_suggested_part_ratio,baseline_conflict,
+              proposed_category_amounts,category_confidence,category_conflict_codes
          FROM labor_allocation_line_suggestions
         WHERE organization_id=$1 AND run_id=$2
         ORDER BY line_ordinal`,
@@ -502,6 +539,17 @@ async function mapRun(
             Number(line.baseline_part_ratio) - Number(line.baseline_suggested_part_ratio),
           ),
           conflicts: Boolean(line.baseline_conflict),
+        },
+        /*
+         * P64: kategori provenance yoksa null kalır. Eski çalıştırmalarda
+         * gerçek dağılım YOKTUR; eksik dağılımı sıfırlarla doldurup varmış
+         * gibi göstermek uydurma olurdu ve UI manuel giriş isteyemezdi.
+         */
+        categoryAllocation: readCategoryAmounts(line.proposed_category_amounts) === null ? null : {
+          schemaVersion: LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+          amounts: readCategoryAmounts(line.proposed_category_amounts) as never,
+          confidence: Number(line.category_confidence),
+          conflictCodes: (line.category_conflict_codes ?? []) as never,
         },
       })),
     }
@@ -684,7 +732,8 @@ export function createLaborAllocationStore(
                 l.applied_action AS action,
                 l.applied_part_amount_minor::text AS part,
                 l.applied_labor_amount_minor::text AS labor,
-                l.suggested_operation_types AS operation_types
+                l.suggested_operation_types AS operation_types,
+                l.applied_category_amounts
            FROM labor_allocation_applied_lines l
            JOIN labor_allocation_applications a
              ON a.id=l.application_id AND a.organization_id=l.organization_id
@@ -702,6 +751,15 @@ export function createLaborAllocationStore(
           partCode: null,
           damageRegion: null,
           operationTypes: (row.operation_types ?? []) as never,
+          /*
+           * P64 — kategori geçmişi YALNIZ provenance'ı dolu satırlardan gelir.
+           *
+           * Kullanıcının işçilik tutarını değiştirip kategori dağılımını
+           * bilinmiyor bıraktığı satırlarda bu alan null'dır ve o satır
+           * kategori geçmişi SAYILMAZ. Eksik provenance'ı sıfır dağılım gibi
+           * okumak uydurma olurdu.
+           */
+          categoryAmounts: readCategoryAmounts(row.applied_category_amounts),
         }))
       const history = deriveApprovedHistory(
         sheet.lines.map((line, index) => ({
@@ -1150,11 +1208,48 @@ export function createLaborAllocationStore(
       }
       const validation = { suggestion: { lines: mergeResult.lines } }
 
+      /*
+       * P64 — kategori çelişkisini SUNUCU belirler.
+       *
+       * Model bu kodları üretmeyi atlayabilir; gerçek karşılaştırma çelişki
+       * gösteriyorsa kod yine de basılır ve satır kontrole düşer. Kıyas
+       * PAYLAR üzerinden yapılır: mutlak tutar farkı tek başına çelişki
+       * değildir, çünkü fiyat revizyonu meşrudur. Değişen şey işin branşlar
+       * arası dağılımıysa insan bakmalıdır.
+       *
+       * Referans (baseline/history) OTOMATİK DOĞRU sayılmaz; kod yalnız
+       * "iki kaynak ayrışıyor" der, hangisinin doğru olduğunu söylemez.
+       */
+      const baselineCategories = expertBaseline === null
+        ? new Map<number, readonly LaborCategoryAmount[]>()
+        : await loadBaselineCategoryAmounts(
+          pool, actor.organizationId, caseId, expertBaseline.sheetVersion,
+        )
+      const forcedCategoryCodes = new Map<number, readonly string[]>()
+      for (const line of validation.suggestion.lines) {
+        const proposed = line.categoryAllocation?.amounts
+        if (proposed === undefined) continue
+        const baselineOrdinal = matched.get(line.lineOrdinal)?.ordinal ?? null
+        forcedCategoryCodes.set(line.lineOrdinal, forceCategoryConflictCodes({
+          proposed,
+          baseline: baselineOrdinal === null
+            ? null
+            : baselineCategories.get(baselineOrdinal) ?? null,
+          history: history.categoryByOrdinal.get(line.lineOrdinal) ?? null,
+          reportedCodes: line.categoryAllocation?.conflictCodes ?? [],
+        }))
+      }
+
       let controlRequiredCount = 0
       for (const line of validation.suggestion.lines) {
         const sheetLine = sheet.lines[line.lineOrdinal - 1] as NormalizedLaborItem
         const baselineLine = matched.get(line.lineOrdinal) ?? null
-        if (line.controlRequired) controlRequiredCount += 1
+        const categoryCodes = forcedCategoryCodes.get(line.lineOrdinal)
+          ?? line.categoryAllocation?.conflictCodes ?? []
+        // Kategori çelişkisi tek başına satırı kontrole düşürür; modelin
+        // güveni yüksek olsa bile iki kaynak ayrışıyorsa otomatik kabul yok.
+        const controlRequired = line.controlRequired || categoryCodes.length > 0
+        if (controlRequired) controlRequiredCount += 1
         await pool.query(
           `INSERT INTO labor_allocation_line_suggestions
              (id,organization_id,case_id,run_id,line_ordinal,source_description,source_action,
@@ -1174,7 +1269,7 @@ export function createLaborAllocationStore(
             JSON.stringify(line.economicComparison.buckets),
             line.economicComparison.repairTotalMinor, line.economicComparison.replaceTotalMinor,
             line.economicComparison.note, line.reasoning, line.evidenceRefs, line.confidence,
-            line.conflictCodes, line.missingEvidenceCodes, line.controlRequired,
+            line.conflictCodes, line.missingEvidenceCodes, controlRequired,
             baselineLine?.partAmountMinor ?? null, baselineLine?.laborAmountMinor ?? null,
             line.baselineComparison?.baselinePartRatio ?? null,
             line.baselineComparison?.suggestedPartRatio ?? null,
@@ -1187,7 +1282,7 @@ export function createLaborAllocationStore(
             categoryAmountsJson(line.categoryAllocation?.amounts),
             line.categoryAllocation?.schemaVersion ?? null,
             line.categoryAllocation?.confidence ?? null,
-            line.categoryAllocation?.conflictCodes ?? [],
+            categoryCodes,
           ],
         )
       }

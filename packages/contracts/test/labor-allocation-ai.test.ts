@@ -48,6 +48,7 @@ function line(overrides: Record<string, unknown> = {}) {
     controlRequired: true,
     // Paket 57: baseline eşleşmediğinde null; sağlayıcı bu alanı üretmez.
     baseline: null,
+    categoryAllocation: null,
     ...overrides,
   }
 }
