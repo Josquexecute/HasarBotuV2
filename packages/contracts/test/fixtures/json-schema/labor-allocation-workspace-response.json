@@ -827,13 +827,95 @@
                                       "CATEGORY_MULTI_TRADE_LINE"
                                     ]
                                   }
+                                },
+                                "baselineAmounts": {
+                                  "anyOf": [
+                                    {
+                                      "minItems": 8,
+                                      "maxItems": 8,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "category": {
+                                            "type": "string",
+                                            "enum": [
+                                              "bodywork",
+                                              "mechanical",
+                                              "electrical",
+                                              "upholstery_lock",
+                                              "glass",
+                                              "calibration",
+                                              "repair",
+                                              "paint"
+                                            ]
+                                          },
+                                          "amountMinor": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 10000000000
+                                          }
+                                        },
+                                        "required": [
+                                          "category",
+                                          "amountMinor"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "historyAmounts": {
+                                  "anyOf": [
+                                    {
+                                      "minItems": 8,
+                                      "maxItems": 8,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "category": {
+                                            "type": "string",
+                                            "enum": [
+                                              "bodywork",
+                                              "mechanical",
+                                              "electrical",
+                                              "upholstery_lock",
+                                              "glass",
+                                              "calibration",
+                                              "repair",
+                                              "paint"
+                                            ]
+                                          },
+                                          "amountMinor": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 10000000000
+                                          }
+                                        },
+                                        "required": [
+                                          "category",
+                                          "amountMinor"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
                                 "schemaVersion",
                                 "amounts",
                                 "confidence",
-                                "conflictCodes"
+                                "conflictCodes",
+                                "baselineAmounts",
+                                "historyAmounts"
                               ],
                               "additionalProperties": false
                             },

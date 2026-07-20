@@ -82,6 +82,8 @@ export type LaborAllocationErrorCode =
   // Paket 62: ilerleme ve iptal.
   | 'ANALYSIS_ALREADY_RUNNING'
   | 'RUN_NOT_CANCELLABLE'
+  // Paket 64: kullanıcının düzelttiği kategori toplamı işçilik tutarını tutmuyor.
+  | 'APPLY_CATEGORY_TOTAL_MISMATCH'
 
 export class LaborAllocationError extends Error {
   constructor(readonly code: LaborAllocationErrorCode, readonly status: number) {
@@ -493,7 +495,8 @@ async function mapRun(
               baseline_part_amount_minor::text AS baseline_part,
               baseline_labor_amount_minor::text AS baseline_labor,
               baseline_part_ratio,baseline_suggested_part_ratio,baseline_conflict,
-              proposed_category_amounts,category_confidence,category_conflict_codes
+              proposed_category_amounts,category_confidence,category_conflict_codes,
+              baseline_category_amounts,history_category_amounts
          FROM labor_allocation_line_suggestions
         WHERE organization_id=$1 AND run_id=$2
         ORDER BY line_ordinal`,
@@ -545,12 +548,15 @@ async function mapRun(
          * gerçek dağılım YOKTUR; eksik dağılımı sıfırlarla doldurup varmış
          * gibi göstermek uydurma olurdu ve UI manuel giriş isteyemezdi.
          */
-        categoryAllocation: readCategoryAmounts(line.proposed_category_amounts) === null ? null : {
+        categoryAllocation: (readCategoryAmounts(line.proposed_category_amounts) === null ? null : {
           schemaVersion: LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
-          amounts: readCategoryAmounts(line.proposed_category_amounts) as never,
+          amounts: readCategoryAmounts(line.proposed_category_amounts),
           confidence: Number(line.category_confidence),
-          conflictCodes: (line.category_conflict_codes ?? []) as never,
-        },
+          conflictCodes: line.category_conflict_codes ?? [],
+          // null = karşılaştırılacak referans YOKTU; sıfır dağılım değildir.
+          baselineAmounts: readCategoryAmounts(line.baseline_category_amounts),
+          historyAmounts: readCategoryAmounts(line.history_category_amounts),
+        }) as never,
       })),
     }
   }
@@ -1226,6 +1232,12 @@ export function createLaborAllocationStore(
           pool, actor.organizationId, caseId, expertBaseline.sheetVersion,
         )
       const forcedCategoryCodes = new Map<number, readonly string[]>()
+      // Kod hangi vektörlere dayandıysa O vektörler saklanır; sonradan yeniden
+      // hesaplamak, ekrandaki kıyası kodun dayanağından ayırırdı.
+      const comparisonByOrdinal = new Map<number, {
+        readonly baseline: readonly LaborCategoryAmount[] | null
+        readonly history: readonly LaborCategoryAmount[] | null
+      }>()
       for (const line of validation.suggestion.lines) {
         const proposed = line.categoryAllocation?.amounts
         if (proposed === undefined) continue
@@ -1259,9 +1271,9 @@ export function createLaborAllocationStore(
               baseline_part_amount_minor,baseline_labor_amount_minor,
               baseline_part_ratio,baseline_suggested_part_ratio,baseline_conflict,
               proposed_category_amounts,category_schema_version,category_confidence,
-              category_conflict_codes)
+              category_conflict_codes,baseline_category_amounts,history_category_amounts)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-                   $22,$23,$24,$25,$26,$27::jsonb,$28,$29,$30)`,
+                   $22,$23,$24,$25,$26,$27::jsonb,$28,$29,$30,$31::jsonb,$32::jsonb)`,
           [
             uuidv7(), actor.organizationId, caseId, runId, line.lineOrdinal,
             sheetLine.description, sheetLine.action, sheetLine.partAmountMinor, sheetLine.laborAmountMinor,
@@ -1283,6 +1295,13 @@ export function createLaborAllocationStore(
             line.categoryAllocation?.schemaVersion ?? null,
             line.categoryAllocation?.confidence ?? null,
             categoryCodes,
+            /*
+             * Kodun dayandığı kıyas vektörleri. Referans yoksa null kalır:
+             * "karşılaştırılacak kaynak yoktu" ile "sıfır dağılım onaylandı"
+             * aynı şey değildir ve UI ikincisini çizmemelidir.
+             */
+            categoryAmountsJson(comparisonByOrdinal.get(line.lineOrdinal)?.baseline ?? undefined),
+            categoryAmountsJson(comparisonByOrdinal.get(line.lineOrdinal)?.history ?? undefined),
           ],
         )
       }
@@ -1531,6 +1550,23 @@ export function createLaborAllocationStore(
           }
         }
 
+        /*
+         * Kullanıcının düzelttiği dağılımlar. Toplam eşitliği burada ZORUNLU
+         * kapıdır: uymayan satır reddedilir ve fark hiçbir kategoriye
+         * dağıtılmaz. Kullanıcı düzeltirse işçilik tutarı değişmiş olsa bile
+         * provenance oluşur, çünkü dağılımı söyleyen artık modelin eski
+         * önerisi değil kullanıcının kendisidir.
+         */
+        const correctedCategoriesByOrdinal = new Map<number, readonly LaborCategoryAmount[]>()
+        for (const line of input.lines) {
+          if (line.categoryAmounts === undefined) continue
+          const total = line.categoryAmounts.reduce((sum, item) => sum + item.amountMinor, 0)
+          if (total !== line.laborAmountMinor) {
+            throw new LaborAllocationError('APPLY_CATEGORY_TOTAL_MISMATCH', 422)
+          }
+          correctedCategoriesByOrdinal.set(line.lineOrdinal, line.categoryAmounts)
+        }
+
         const applicationId = uuidv7()
         await client.query(
           `INSERT INTO labor_allocation_applications
@@ -1604,13 +1640,26 @@ export function createLaborAllocationStore(
                */
               ...(() => {
                 const proposed = proposedCategoriesByOrdinal.get(line.suggested.lineOrdinal)
+                if (proposed === undefined) return [null, null, null, null]
+                const corrected = correctedCategoriesByOrdinal.get(line.lineOrdinal)
+                if (corrected !== undefined) {
+                  /*
+                   * Kullanıcı dağılımı düzeltti. Toplam eşitliği rota
+                   * katmanında zaten reddedilir; burada modelin ilk değeri
+                   * korunur ve `category_modified` GERÇEĞİ söyler.
+                   */
+                  return [
+                    categoryAmountsJson(proposed),
+                    categoryAmountsJson(corrected),
+                    categoryAmountsJson(proposed) !== categoryAmountsJson(corrected),
+                    LABOR_CATEGORY_ALLOCATION_SCHEMA_VERSION,
+                  ]
+                }
                 // İşçilik tutarı değiştiyse önerilen dağılım bu satırı artık
                 // açıklamıyor; ölçekleyip uydurmak yerine BİLİNMİYOR bırakılır.
                 const laborUnchanged =
                   line.applied.laborAmountMinor === line.suggested.laborAmountMinor
-                if (proposed === undefined || !laborUnchanged) {
-                  return [null, null, null, null]
-                }
+                if (!laborUnchanged) return [null, null, null, null]
                 return [
                   categoryAmountsJson(proposed),
                   categoryAmountsJson(proposed),

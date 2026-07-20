@@ -61,6 +61,7 @@ export function registerLaborAllocationRoutes(
     // Paket 62: ilerleme ve iptal.
     ANALYSIS_ALREADY_RUNNING: 'conflict',
     RUN_NOT_CANCELLABLE: 'conflict',
+    APPLY_CATEGORY_TOTAL_MISMATCH: 'validation_error',
   } as const
 
   const handle = (reply: import('fastify').FastifyReply, requestId: string, error: unknown) => {

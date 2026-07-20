@@ -58,6 +58,8 @@ export type LaborAllocationApplyRejection =
   | 'APPLY_LINE_DUPLICATED'
   | 'APPLY_LINE_AMOUNT_INVALID'
   | 'APPLY_LINE_TEXT_INVALID'
+  /** P64: kullanıcının düzelttiği kategori toplamı işçilik tutarını tutmuyor. */
+  | 'APPLY_CATEGORY_TOTAL_MISMATCH'
 
 export type LaborAllocationApplyValidation =
   | { readonly allowed: false; readonly code: LaborAllocationApplyRejection }

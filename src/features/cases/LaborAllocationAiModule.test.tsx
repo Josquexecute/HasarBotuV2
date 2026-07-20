@@ -44,6 +44,8 @@ function line(overrides: Partial<LaborAllocationLineRecord> = {}): LaborAllocati
     missingEvidenceCodes: [],
     controlRequired: false,
     baseline: null,
+    // Varsayılan: kategori provenance YOK; testler gerektiğinde doldurur.
+    categoryAllocation: null,
     ...overrides,
   }
 }
@@ -472,6 +474,75 @@ describe('AI analiz ilerlemesi', () => {
     expect(screen.queryByText('1. Ön tampon')).not.toBeInTheDocument()
     // İptalden sonra buton kilidi kalkar; yeniden deneme açık eylemdir.
     expect(screen.getByRole('button', { name: 'Analiz Et' })).toBeInTheDocument()
+  })
+
+
+  /** Paket 64 — sekiz kategoriyi taşıyan satır kurar. */
+  const withCategories = (bodywork: number, paint: number) => line({
+    categoryAllocation: {
+      schemaVersion: 'labor-category-allocation/1.0.0',
+      amounts: ['bodywork','mechanical','electrical','upholstery_lock','glass','calibration','repair','paint'].map((category) => ({
+        category,
+        amountMinor: category === 'bodywork' ? bodywork : category === 'paint' ? paint : 0,
+      })),
+      confidence: 0.8,
+      conflictCodes: ['CATEGORY_HISTORY_CONFLICT'],
+      baselineAmounts: null,
+      historyAmounts: ['bodywork','mechanical','electrical','upholstery_lock','glass','calibration','repair','paint'].map((category) => ({
+        category,
+        amountMinor: category === 'paint' ? 100_000 : 0,
+      })),
+    },
+  })
+
+  it('seçilen satırda sekiz kategoriyi ve sunucu çelişki kodunu gösterir', async () => {
+    const { port } = stubPort({
+      workspace: async () => workspace([run([withCategories(70_000, 30_000)])]),
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+    await screen.findByText('1. Ön tampon')
+    await userEvent.click(screen.getAllByRole('checkbox')[1] as HTMLElement)
+
+    expect(screen.getByLabelText(/Kaporta kategorisi satır 1/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Boya kategorisi satır 1/)).toBeInTheDocument()
+    // Sunucunun kararı gösterilir; UI kendi çelişki hesabını yapmaz.
+    expect(screen.getByText(/CATEGORY_HISTORY_CONFLICT/)).toBeInTheDocument()
+    // Kıyas PAY olarak sunulur; mutlak tutar farkı çelişki değildir.
+    expect(screen.getByText(/Boya %100/)).toBeInTheDocument()
+    // Baseline yoksa "yok" yazar; sıfır dağılım çizilmez.
+    expect(screen.getByText(/Baseline:/).parentElement?.textContent).toContain('yok')
+  })
+
+  it('kategori toplamı işçilik tutarını tutmuyorsa uygulama engellenir', async () => {
+    const { port } = stubPort({
+      workspace: async () => workspace([run([withCategories(70_000, 30_000)])]),
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+    await screen.findByText('1. Ön tampon')
+    await userEvent.click(screen.getAllByRole('checkbox')[1] as HTMLElement)
+
+    const paint = screen.getByLabelText(/Boya kategorisi satır 1/)
+    await userEvent.clear(paint)
+    await userEvent.type(paint, '100.00')
+
+    expect(screen.getByText(/Toplam eşleşmiyor/)).toBeInTheDocument()
+    await userEvent.type(
+      screen.getByPlaceholderText(/AI dağıtımı incelendi/),
+      'Kategori düzeltmesi',
+    )
+    expect(screen.getByRole('button', { name: /Föye Uygula/ })).toBeDisabled()
+  })
+
+  it('kategori provenance yoksa manuel giriş ister; dağılım uydurmaz', async () => {
+    const { port } = stubPort({
+      workspace: async () => workspace([run([line({ categoryAllocation: null })])]),
+    })
+    render(<LaborAllocationAiModule caseId={CASE_ID} port={port} />)
+    await screen.findByText('1. Ön tampon')
+    await userEvent.click(screen.getAllByRole('checkbox')[1] as HTMLElement)
+
+    expect(screen.getByText(/Manuel kategori girişi gerekli/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Kaporta kategorisi/)).not.toBeInTheDocument()
   })
 
   it('başarısız koşuda güvenli hata kodunu gösterir, yedek sonuç üretmez', async () => {

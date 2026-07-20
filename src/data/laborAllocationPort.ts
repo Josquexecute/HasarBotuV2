@@ -43,6 +43,23 @@ export interface LaborAllocationLineRecord {
     readonly deltaRatio: number
     readonly conflicts: boolean
   } | null
+  /**
+   * Paket 64: işçilik DAĞITIM KATEGORİSİ (branş) ekseni.
+   *
+   * Kategori provenance yoksa null olur; bu satırda dağılım uydurulmaz ve
+   * manuel giriş istenir. `baselineAmounts`/`historyAmounts` null ise
+   * karşılaştırılacak referans YOKTU — sıfır dağılım onaylandı demek değildir.
+   */
+  readonly categoryAllocation: {
+    readonly schemaVersion: string
+    readonly amounts: readonly { readonly category: string; readonly amountMinor: number }[]
+    readonly confidence: number
+    readonly conflictCodes: readonly string[]
+    readonly baselineAmounts:
+      readonly { readonly category: string; readonly amountMinor: number }[] | null
+    readonly historyAmounts:
+      readonly { readonly category: string; readonly amountMinor: number }[] | null
+  } | null
 }
 
 export interface LaborAllocationRunRecord {

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCheck, GitCompareArrows, ShieldAlert, Sparkles } from 'lucide-react'
 import { LoadingState } from '../../components/StateViews'
+import { LaborCategoryReview } from './LaborCategoryReview.js'
+import {
+  effectiveCategoryAmounts,
+  type CategoryDraftEntry,
+} from './laborCategoryRules.js'
 import {
   LaborAllocationClientError,
   LaborExcelProfileClientError,
@@ -65,6 +70,8 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
   const [run, setRun] = useState<LaborAllocationRunRecord | null>(null)
   const [damageDescription, setDamageDescription] = useState('')
   const [selected, setSelected] = useState<readonly number[]>([])
+  /** Satır sırası -> kategori -> ham kullanıcı girdisi. */
+  const [categoryDraft, setCategoryDraft] = useState<Record<number, CategoryDraftEntry>>({})
   const [onlyControlRequired, setOnlyControlRequired] = useState(false)
   const [preview, setPreview] = useState<LaborAllocationApplyPreviewRecord | null>(null)
   const [busy, setBusy] = useState(false)
@@ -304,6 +311,19 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
       ? line.sourceLaborAmountMinor
       : parseMinor(entry.labor)
     if (part === null || labor === null) return null
+    /*
+     * P64 — kullanıcının düzelttiği kategori dağılımı yalnız GEÇERLİYSE
+     * gönderilir. Toplam işçilik tutarını tutmuyorsa satır uygulanabilir
+     * sayılmaz; sistem farkı hiçbir kategoriye aktarmaz.
+     */
+    const categoryEdited = categoryDraft[ordinal] !== undefined
+    const categoryAmounts = categoryEdited
+      ? effectiveCategoryAmounts(line, categoryDraft[ordinal])
+      : null
+    const categoryTotal = categoryAmounts === null
+      ? null
+      : categoryAmounts.reduce((sum, item) => sum + item.amountMinor, 0)
+    const categoryValid = !categoryEdited || categoryTotal === labor
     return {
       lineOrdinal: ordinal,
       description: line.sourceDescription,
@@ -311,11 +331,17 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
       partAmountMinor: part,
       laborAmountMinor: labor,
       modified: part !== line.sourcePartAmountMinor || labor !== line.sourceLaborAmountMinor,
+      categoryAmounts: categoryEdited && categoryValid && categoryAmounts !== null
+        ? categoryAmounts
+        : undefined,
+      categoryValid,
     }
-  }).filter((item) => item !== null), [selected, lines, draft])
+  }).filter((item) => item !== null), [selected, lines, draft, categoryDraft])
 
   const applyBlocked = appliedLines.length !== selected.length
     || appliedLines.some((line) => line.partAmountMinor + line.laborAmountMinor <= 0)
+    // Kategori toplamı işçilik tutarını tutmuyorsa uygulama açılmaz.
+    || appliedLines.some((line) => !line.categoryValid)
     || reason.trim() === ''
 
   const applyNow = async () => {
@@ -332,6 +358,11 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
           action: line.action,
           partAmountMinor: line.partAmountMinor,
           laborAmountMinor: line.laborAmountMinor,
+          // Kullanıcı dağılımı düzeltmediyse alan hiç gönderilmez; sunucu
+          // öneriyi olduğu gibi uygular ve UI dağılım uydurmuş olmaz.
+          ...(line.categoryAmounts === undefined
+            ? {}
+            : { categoryAmounts: line.categoryAmounts }),
         })),
       })
       setConfirmOpen(false)
@@ -578,6 +609,27 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
                         </strong>
                       )}
                     </div>
+                  )}
+                  {selected.includes(line.lineOrdinal) && (
+                    <LaborCategoryReview
+                      line={line}
+                      appliedLaborAmountMinor={
+                        appliedLines.find((item) => item.lineOrdinal === line.lineOrdinal)
+                          ?.laborAmountMinor ?? line.sourceLaborAmountMinor
+                      }
+                      draft={categoryDraft[line.lineOrdinal]}
+                      onChange={(category, value) => setCategoryDraft((current) => {
+                        // İlk düzenlemede taslak AI önerisinden doldurulur ki
+                        // dokunulmayan kategoriler sıfıra düşmesin.
+                        const existing = current[line.lineOrdinal]
+                          ?? Object.fromEntries((line.categoryAllocation?.amounts ?? [])
+                            .map((item) => [item.category, (item.amountMinor / 100).toFixed(2)]))
+                        return {
+                          ...current,
+                          [line.lineOrdinal]: { ...existing, [category]: value },
+                        }
+                      })}
+                    />
                   )}
                   {line.baseline !== null && (
                     <div

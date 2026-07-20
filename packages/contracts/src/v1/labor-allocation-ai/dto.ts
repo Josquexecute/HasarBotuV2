@@ -135,6 +135,20 @@ export const laborCategoryAllocationSchema = z.strictObject({
   confidence: z.number().min(0).max(1),
   conflictCodes: z.array(z.enum(LABOR_CATEGORY_CONFLICT_CODES))
     .max(LABOR_CATEGORY_CONFLICT_CODES.length),
+  /**
+   * Çelişki kodunun dayandığı kıyas vektörleri. `null` referansın YOK
+   * olduğunu söyler; sıfır dağılım anlamına gelmez ve UI bunu boş çizmez.
+   * Sonradan yeniden hesaplanmaz: geçmiş havuzu ve baseline zamanla değişir,
+   * ekrandaki kıyas ile kodun dayanağı ayrışırdı.
+   */
+  baselineAmounts: z.array(z.strictObject({
+    category: z.enum(LABOR_ALLOCATION_CATEGORIES),
+    amountMinor: amountMinorSchema,
+  })).length(LABOR_ALLOCATION_CATEGORIES.length).nullable(),
+  historyAmounts: z.array(z.strictObject({
+    category: z.enum(LABOR_ALLOCATION_CATEGORIES),
+    amountMinor: amountMinorSchema,
+  })).length(LABOR_ALLOCATION_CATEGORIES.length).nullable(),
 })
 
 export const laborAllocationLineSchema = z.strictObject({
@@ -307,6 +321,17 @@ export const laborAllocationApplyLineSchema = z.strictObject({
   action: z.string().min(1).max(MAX_LABOR_ITEM_ACTION_LENGTH),
   partAmountMinor: amountMinorSchema,
   laborAmountMinor: amountMinorSchema,
+  /**
+   * Paket 64 — kullanıcının DÜZELTTİĞİ kategori dağılımı.
+   *
+   * Gönderilmezse sunucu öneriyi olduğu gibi uygular. Gönderilirse sekiz
+   * anahtarın tamamı zorunludur ve toplam `laborAmountMinor` ile eşleşmek
+   * zorundadır; sunucu kalan farkı hiçbir kategoriye dağıtmaz.
+   */
+  categoryAmounts: z.array(z.strictObject({
+    category: z.enum(LABOR_ALLOCATION_CATEGORIES),
+    amountMinor: amountMinorSchema,
+  })).length(LABOR_ALLOCATION_CATEGORIES.length).optional(),
 })
 
 export const laborAllocationApplyRequestSchema = z.strictObject({

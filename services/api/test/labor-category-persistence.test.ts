@@ -18,6 +18,8 @@ import { waitForRunTerminal } from './helpers/labor-allocation-run.js'
 import {
   buildApp,
   createDeterministicLaborAllocationProviderRegistry,
+  type LaborAllocationProviderAdapter,
+  type LaborAllocationProviderRegistry,
   fixedClock,
   hashPassword,
 } from '../src/index.js'
@@ -44,7 +46,7 @@ describeDb('Paket 64 kategori dağılımı kalıcılaştırma', () => {
   let sequence = 6400
 
   /** Föy + analiz + (isteğe bağlı) uygulama zinciri kuran yardımcı. */
-  async function prepareCase(items: readonly Record<string, unknown>[]) {
+  async function prepareCase(items: readonly Record<string, unknown>[], instance = app) {
     const caseId = uuidv7()
     sequence += 1
     await pool.query(
@@ -57,19 +59,19 @@ describeDb('Paket 64 kategori dağılımı kalıcılaştırma', () => {
         `34 KT ${sequence}`, `34KT${sequence}`, userId,
       ],
     )
-    const sheet = await app.inject({
+    const sheet = await instance.inject({
       method: 'POST', url: `/api/v1/cases/${caseId}/labor-sheet`,
       headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
       payload: { expectedCaseVersion: 1, confirmed: true, items },
     })
     expect(sheet.statusCode).toBe(201)
 
-    const analyzed = await app.inject({
+    const analyzed = await instance.inject({
       method: 'POST', url: `/api/v1/cases/${caseId}/labor-allocation-ai/analyze`,
       headers: { cookie },
       payload: { expectedSheetVersion: 1, damageDescription: 'Ön darbe.', confirmedEgress: false },
     })
-    const settled = await waitForRunTerminal(app, cookie, caseId, analyzed)
+    const settled = await waitForRunTerminal(instance, cookie, caseId, analyzed)
     const run = laborAllocationRunResponseSchema.parse(settled.json()).run
     expect(run.status).toBe('review_required')
     return { caseId, runId: run.id }
@@ -80,7 +82,8 @@ describeDb('Paket 64 kategori dağılımı kalıcılaştırma', () => {
     runId: string,
     lines: readonly Record<string, unknown>[],
     key = uuidv7(),
-  ) => app.inject({
+    instance = app,
+  ) => instance.inject({
     method: 'POST', url: `/api/v1/cases/${caseId}/labor-allocation-ai/${runId}/apply`,
     headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: key },
     payload: { expectedSheetVersion: 1, reason: 'Kategori testi', confirmed: true, lines },
@@ -375,6 +378,95 @@ describeDb('Paket 64 kategori dağılımı kalıcılaştırma', () => {
       [first.caseId],
     )
     expect(baselineRows.rows[0].n).toBe(0)
+  })
+
+
+  /*
+   * Pozitif conflict senaryosu.
+   *
+   * Deterministik harness her satırda aynı %100 kaporta dağılımını üretir, bu
+   * yüzden onunla gerçek bir ayrışma kurulamaz. Burada YALNIZ TEST için,
+   * mevcut deterministik adaptör sarılıp kategori dağılımı boyaya çevrilir.
+   * Üretim davranışına gizli mod eklenmez: sağlayıcı kimliği değişmez, DB
+   * allowlist'i genişletilmez ve bu sarmalayıcı yalnız test dosyasında yaşar.
+   */
+  function paintProviders(): LaborAllocationProviderRegistry {
+    const base = createDeterministicLaborAllocationProviderRegistry()
+    const inner = base.get('deterministic-success') as LaborAllocationProviderAdapter
+    const wrapped: LaborAllocationProviderAdapter = {
+      ...inner,
+      execute: async (request, signal) => {
+        const response = await inner.execute(request, signal)
+        const output = response.output as { lines: Record<string, unknown>[] }
+        return {
+          ...response,
+          output: {
+            ...output,
+            lines: output.lines.map((line) => {
+              const allocation = line.categoryAllocation as {
+                amounts: Record<string, number>
+              }
+              const total = Object.values(allocation.amounts)
+                .reduce((sum, value) => sum + value, 0)
+              return {
+                ...line,
+                categoryAllocation: {
+                  ...allocation,
+                  // Tamamı boyaya; toplam korunur ki sözleşme ve CHECK geçsin.
+                  amounts: { ...allocation.amounts, bodywork: 0, paint: total },
+                },
+              }
+            }),
+          },
+        }
+      },
+    }
+    return { get: (id) => (id === 'deterministic-success' ? wrapped : base.get(id)), list: () => [wrapped] }
+  }
+
+  it('tutarlı ama AYRIŞAN geçmiş sunucuda conflict kodu zorlar', async () => {
+    // Boya üreten sağlayıcıyla ayrı bir uygulama örneği; aynı veritabanı.
+    const paintApp = buildApp({
+      clock: fixedClock(NOW),
+      loggerEnabled: false,
+      auth: { pool, cookieSecure: false, loginRateLimit: { limit: 500, windowMs: 60_000 } },
+      laborAllocationProviders: paintProviders(),
+      laborAllocationProviderId: 'deterministic-success',
+    })
+    await paintApp.ready()
+    try {
+      const PAINT_ITEM = {
+        description: 'Sağ ön çamurluk', action: 'Boya',
+        partAmountMinor: 0, laborAmountMinor: 1_000_000,
+      }
+      const paintCase = await prepareCase([PAINT_ITEM], paintApp)
+      const applied = await apply(paintCase.caseId, paintCase.runId, [{
+        lineOrdinal: 1, description: 'Sağ ön çamurluk', action: 'Boya',
+        partAmountMinor: 0, laborAmountMinor: 1_000_000,
+      }], uuidv7(), paintApp)
+      expect(applied.statusCode).toBe(200)
+
+      const historyRow = await pool.query(
+        `SELECT applied_category_amounts FROM labor_allocation_applied_lines
+           WHERE application_id=(SELECT id FROM labor_allocation_applications WHERE run_id=$1)`,
+        [paintCase.runId],
+      )
+      // Geçmiş gerçekten boya ağırlıklı; kurgu doğru kuruldu.
+      expect(historyRow.rows[0].applied_category_amounts.paint).toBe(1_000_000)
+
+      // Kaporta öneren normal sağlayıcıyla yeni analiz: geçmiş tutarlı ama ayrışıyor.
+      const conflicting = await prepareCase([PAINT_ITEM])
+      const stored = await pool.query(
+        `SELECT category_conflict_codes,control_required
+           FROM labor_allocation_line_suggestions WHERE run_id=$1`,
+        [conflicting.runId],
+      )
+      expect(stored.rows[0].category_conflict_codes).toContain('CATEGORY_HISTORY_CONFLICT')
+      // Çelişki tek başına satırı insana taşır.
+      expect(stored.rows[0].control_required).toBe(true)
+    } finally {
+      await paintApp.close()
+    }
   })
 
   it('kategori alanları eklenmiş kayıt geriye dönük okunabilir kalır', async () => {
