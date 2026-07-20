@@ -132,6 +132,20 @@ function instrument(adapter, sink) {
   }
 }
 
+/**
+ * KOTA KORUMASI (P64 ara dilim).
+ *
+ * Ücretsiz katman kotası bir 5'li seriyi zor kaldırıyor. Bu koruma gerçek
+ * çağrı HARCAMADAN uygulanır ve üretim davranışını DEĞİŞTİRMEZ; yalnız ölçüm
+ * betiğinin gereksiz çağrı yakmasını engeller.
+ *
+ * - `GEMINI_LOAD_MAX_CALLS`: tek koşumda izin verilen toplam sağlayıcı çağrısı.
+ * - İlk `AI_PROVIDER_RATE_LIMITED` sonucunda kalan tekrarlar ÇALIŞTIRILMAZ.
+ * - `Retry-After` sağlayıcı tarafından güvenli biçimde yüzeye çıkarılmıyor;
+ *   bu yüzden TAHMİN ÜRETİLMEZ, yokluğu açıkça raporlanır.
+ */
+const MAX_PROVIDER_CALLS = Math.max(1, Number(process.env.GEMINI_LOAD_MAX_CALLS ?? '12') || 12)
+
 /** Aynı boyut için ardışık gerçek tekrar; kapı 5 ardışık başarı ister. */
 const REPEATS = Math.max(1, Number(process.env.GEMINI_LOAD_REPEATS ?? '1') || 1)
 
@@ -197,7 +211,13 @@ try {
   const scenarios = []
   // Her boyut REPEATS kez ardışık ölçülür; kapı 5 ardışık başarı ister.
   const runPlan = LINE_COUNTS.flatMap((count) => Array.from({ length: REPEATS }, () => count))
+  let stoppedReason = null
   for (const [index, lineCount] of runPlan.entries()) {
+    if (stoppedReason !== null) break
+    if (providerCalls.length >= MAX_PROVIDER_CALLS) {
+      stoppedReason = `MAX_PROVIDER_CALLS_${MAX_PROVIDER_CALLS}`
+      break
+    }
     const caseId = uuidv7()
     await pool.query(
       `INSERT INTO cases
@@ -278,6 +298,11 @@ try {
       [organizationId, caseId],
     )
 
+    // İlk kota reddinde kalan tekrarlar harcanmaz; kapı yine BAŞARISIZ sayılır.
+    if (run.safeErrorCode === 'AI_PROVIDER_RATE_LIMITED') {
+      stoppedReason = 'RATE_LIMITED'
+    }
+
     scenarios.push({
       requestedLineCount: lineCount,
       returnedLineCount: lines.length,
@@ -336,6 +361,15 @@ try {
   // + mevcut timeout politikası içinde + doğru ledger + gizli fallback yok.
   const POLICY_TIMEOUT_MS = 30_000
   const failures = []
+  /*
+   * Erken durdurma BAŞARI DEĞİLDİR. Kota koruması devreye girdiyse planlanan
+   * tekrarların tamamı çalışmadı; kapı kapanmış sayılamaz ve bu açıkça bir
+   * başarısızlık olarak raporlanır.
+   */
+  if (stoppedReason !== null) failures.push(`RUN_STOPPED_${stoppedReason}`)
+  if (scenarios.length < LINE_COUNTS.length * REPEATS) {
+    failures.push(`INCOMPLETE_PLAN_${scenarios.length}/${LINE_COUNTS.length * REPEATS}`)
+  }
   for (const scenario of scenarios) {
     if (scenario.requestedLineCount < 50) continue
     if (!scenario.fullLineCoverage) failures.push(`${scenario.requestedLineCount}:LINE_COVERAGE`)
@@ -374,6 +408,20 @@ try {
     modelId: baseProvider.modelId,
     providerVersion: baseProvider.providerVersion,
     policyTimeoutMs: POLICY_TIMEOUT_MS,
+    /*
+     * Kota koruması sonucu. `stoppedReason` doluysa PLANLANAN tüm tekrarlar
+     * çalışmadı; bu bir başarı DEĞİL, erken durdurmadır ve kapı kapanmamış
+     * sayılır. `Retry-After` sağlayıcı tarafından güvenli biçimde yüzeye
+     * çıkarılmadığı için TAHMİN ÜRETİLMEZ.
+     */
+    quotaGuard: {
+      plannedRuns: LINE_COUNTS.length * REPEATS,
+      completedRuns: scenarios.length,
+      providerCallsUsed: providerCalls.length,
+      maxProviderCalls: MAX_PROVIDER_CALLS,
+      stoppedReason,
+      retryAfterAvailable: false,
+    },
     scenarios,
     failures,
     /** Chunking kararının girdisi: üçü de false ise chunking GEREKMEZ. */

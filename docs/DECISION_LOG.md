@@ -1402,3 +1402,17 @@ Bu nedenle:
 - Model karşılaştırmasına geçilmedi; sıra önce küçültmenin ölçülmesinde.
 
 Kota yenilendiğinde sıra: (a) küçültülmüş wire ile 2 satır × 5 tekrar, (b) A/B karşılaştırması, (c) kapı kapanırsa yeni güvenli chunk boyutu ölçümü. P61'deki 20 satır kararı geçersiz sayılmaya devam ediyor.
+
+## 2026-07-20 — HB-2026-077: Ölçüm betiğine kota koruması (Paket 64 ara dilim, 5. parça)
+
+Kota tükendiği için latency kapısı ölçülemiyor. Bu parça gerçek çağrı HARCAMADAN uygulanabilen tek işi yapar: ölçüm betiğinin boşa çağrı yakmasını engeller.
+
+1. `GEMINI_LOAD_MAX_CALLS` (varsayılan 12) tek koşumda izin verilen toplam sağlayıcı çağrısını sınırlar.
+2. İlk `AI_PROVIDER_RATE_LIMITED` sonucunda kalan tekrarlar ÇALIŞTIRILMAZ.
+3. **Erken durdurma başarı sayılmaz:** `RUN_STOPPED_*` ve `INCOMPLETE_PLAN_n/m` açık başarısızlık olarak raporlanır. Aksi halde "kota bitti ama ok:true" gibi sahte bir yeşil üretilebilirdi.
+4. `Retry-After` sağlayıcı tarafından güvenli biçimde yüzeye çıkarılmıyor; **tahmin ÜRETİLMEZ**, yokluğu `retryAfterAvailable: false` ile açıkça raporlanır.
+5. Üretim davranışı değişmedi; koruma yalnız ölçüm betiğindedir.
+
+Doğrulandı: korumalı koşu ilk 429'da durdu, planlanan 5 çağrı yerine **1 çağrı** harcadı ve `ok: false` döndü.
+
+Kapı durumu değişmedi: küçültülmüş wire (`gemini-generate-content/1.3.0`) ölçülemedi, A/B yapılmadı, 2 satırlık tekrarlanabilir kapı AÇIK. Kota yenilendiğinde ilk ve tek iş: 2 satır × en fazla 5 çağrı, ilk timeout/429'da dur.
