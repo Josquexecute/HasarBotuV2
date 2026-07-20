@@ -1355,3 +1355,27 @@ Kapsam: wire şeması, sistem talimatı, sürüm artışları ve gerçek Gemini 
 - **Sonraki iki teyit koşusu `AI_PROVIDER_TIMEOUT` verdi.** Kategori ekseni yanıtı büyüttüğü için çağrı süresi 30 sn'lik ÇAĞRI BAŞINA tavanın sınırına geldi. Tavan ÖLÇÜLMEDEN yükseltilmedi (HB-2026-068 kuralı). Bu, paketin tamamlanmasından önce ölçülmesi gereken açık risktir.
 
 Paket bu nedenle TAMAMLANMIŞ SAYILMIYOR: kararlı geçen 2 satırlık kapı, migration/persistence, apply transaction, UI ve Chrome smoke kalan işlerdir.
+
+## 2026-07-20 — HB-2026-075: Kategori dağılımı latency ölçümü (Paket 64 ara dilim, 3. parça)
+
+Açık release kapısı artık şema uyumluluğu DEĞİL, 30 sn'lik çağrı tavanı altında tekrarlanabilir gecikmedir. Önce ölçüldü.
+
+Ölçüm düzeneği genişletildi: aynı boyut için ardışık tekrar (`GEMINI_LOAD_REPEATS`), varsayılan ölçek `1,2,5,10,20`, çağrı başına süre/retry/finishReason/token/karakter ve kategori yapısı. Ham prompt, ham yanıt, plaka, dosya kimliği, yol ve anahtar KAYDEDİLMEZ. Ölçüm betiği de P62'den beri asenkron olan analizi beklemiyordu; bu düzeltildi.
+
+**Gerçek Gemini, 2 satır, 5 ardışık tekrar:**
+
+| # | Kapsama | Doğrulama | En uzun çağrı | Çıktı token | Çıktı karakter |
+|---|---|---|---|---|---|
+| 1 | tam | geçti | 17.755 ms | 965 | 3.201 |
+| 2 | tam | geçti | 23.535 ms | 997 | 3.315 |
+| 3 | — | `AI_PROVIDER_TIMEOUT` | 30.015 ms | — | — |
+| 4 | — | `AI_PROVIDER_TIMEOUT` | 30.011 ms | — | — |
+| 5 | — | `AI_PROVIDER_TIMEOUT` | 30.009 ms | — | — |
+
+**Kapı KAPANMADI: 2/5 başarı, 3 timeout.** Ölçütler 5 ardışık başarı ve hiçbir başarılı çağrının 25 sn'yi aşmaması istiyordu; ikisi de sağlanmadı. Başarılı çağrılar bile 17–23 sn ile tavana bitişik.
+
+Kanıtlanan darboğaz: **iki satır için ~1.000 çıktı token ve ~3.300 karakter.** Çıktı hacmi süreyi domine ediyor; girdi 841 token ile sabit ve küçük.
+
+Ölçümün bilinen sınırı dürüstçe kaydedilir: `categoryCompleteLineCount` başarılı koşularda da 0 okundu çünkü kategori alanı henüz API yanıt DTO'sunda taşınmıyor. Domain doğrulaması geçtiği için kategori verisi geçerliydi; metrik yanlış yerden okuyordu. Kategori persistence'ı eklendiğinde bu metrik gerçek değeri gösterecek.
+
+Tavan ÖLÇÜLMEDEN yükseltilmedi ve timeout sonrası gizli adaptif chunk küçültme EKLENMEDİ. Sıradaki iş, kanıtlanan darboğazı hedefleyen çıktı şeması küçültmesidir: satır düzeyinde tek gerekçe/güven/kanıt/kod listesi, gerekçelere açık `maxLength`, sıfır tutarlı kategoriler için ayrı metin istenmemesi.

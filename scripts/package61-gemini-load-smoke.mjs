@@ -46,7 +46,7 @@ if (DATABASE_URL === undefined || DATABASE_URL.length === 0) {
   throw new Error('TEST_DATABASE_URL_REQUIRED_FOR_LOAD_SMOKE')
 }
 
-const LINE_COUNTS = (process.env.GEMINI_LOAD_LINE_COUNTS ?? '10,25,50,100')
+const LINE_COUNTS = (process.env.GEMINI_LOAD_LINE_COUNTS ?? '1,2,5,10,20')
   .split(',')
   .map((value) => Number(value.trim()))
   .filter((value) => Number.isSafeInteger(value) && value > 0)
@@ -132,6 +132,9 @@ function instrument(adapter, sink) {
   }
 }
 
+/** Aynı boyut için ardışık gerçek tekrar; kapı 5 ardışık başarı ister. */
+const REPEATS = Math.max(1, Number(process.env.GEMINI_LOAD_REPEATS ?? '1') || 1)
+
 const config = assertTestDatabaseUrl(DATABASE_URL)
 const pool = createDatabasePool({ config })
 const PASSWORD = 'p61-load-smoke-sentetik-parola'
@@ -192,7 +195,9 @@ try {
   const cookie = String(login.headers['set-cookie']).split(';')[0]
 
   const scenarios = []
-  for (const [index, lineCount] of LINE_COUNTS.entries()) {
+  // Her boyut REPEATS kez ardışık ölçülür; kapı 5 ardışık başarı ister.
+  const runPlan = LINE_COUNTS.flatMap((count) => Array.from({ length: REPEATS }, () => count))
+  for (const [index, lineCount] of runPlan.entries()) {
     const caseId = uuidv7()
     await pool.query(
       `INSERT INTO cases
@@ -225,7 +230,23 @@ try {
     })
     const totalMs = Date.now() - startedAt
     if (analyzed.statusCode !== 200) throw new Error(`ANALYZE_HTTP_${lineCount}_${analyzed.statusCode}`)
-    const run = analyzed.json().run
+    /*
+     * Paket 62 den beri analiz ASENKRONDUR. Bu betik P61 de yazıldığı için
+     * koşuyu beklemiyordu; ölçüm sonucu bekler, gerçek uçtaki asenkron
+     * davranış korunur.
+     */
+    let run = analyzed.json().run
+    const settleDeadline = Date.now() + 300_000
+    while (['queued', 'running', 'cancel_requested'].includes(run.status)) {
+      if (Date.now() > settleDeadline) throw new Error(`RUN_DID_NOT_SETTLE_${run.status}`)
+      await new Promise((resolve) => { setTimeout(resolve, 250) })
+      const polled = await app.inject({
+        method: 'GET', url: `/api/v1/cases/${caseId}/labor-allocation-ai/${run.id}`,
+        headers: { cookie },
+      })
+      if (polled.statusCode !== 200) throw new Error(`RUN_READ_${polled.statusCode}`)
+      run = polled.json().run
+    }
     const calls = providerCalls.slice(callsBefore)
     const lines = run.suggestion?.lines ?? []
 
@@ -285,6 +306,15 @@ try {
       outputTokens: calls.reduce((sum, call) => sum + (call.outputTokens ?? 0), 0),
       outputCharacters: calls.reduce((sum, call) => sum + (call.outputCharacters ?? 0), 0),
       controlRequiredCount: lines.filter((line) => line.controlRequired).length,
+      // P64: kategori yapısı; tutar DEĞERLERİ raporlanmaz.
+      categoryCompleteLineCount: lines.filter(
+        (line) => (line.categoryAllocation?.amounts?.length ?? 0) === 8,
+      ).length,
+      categorySumMatchesLaborLineCount: lines.filter((line, position) => {
+        const sum = (line.categoryAllocation?.amounts ?? [])
+          .reduce((total, item) => total + item.amountMinor, 0)
+        return sum === items[position]?.laborAmountMinor
+      }).length,
       missingEvidenceHistogram: missingHistogram,
       conflictHistogram,
       receipts: receipts.rows.map((row) => ({
