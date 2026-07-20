@@ -3,8 +3,29 @@
 Bu politika, oturumlar arası hafıza kullanılan **her** durumda geçerlidir;
 claude-mem kurulu olmasa da bağlayıcıdır.
 
-**Kapsam notu:** claude-mem kullanıcı düzeyinde (user-scope) bir eklentidir ve
-HasarBotu repository'sine vendor edilmez. Kurulum durumu ayrıca raporlanır.
+## Durum: claude-mem REDDEDİLDİ (2026-07-21)
+
+claude-mem güvenlik incelemesinde **reddedildi** ve HasarBotu için
+etkinleştirilmeyecek. Kaldırıldı.
+
+Gerekçeler:
+
+1. **Project-only izolasyon yok.** Plugin registry kaydı `"scope": "user"`;
+   etkinleştirilirse tüm projelerin içeriğini kapsardı.
+2. **`install --help` yardım yazdırmak yerine gerçek kurulumu çalıştırdı** —
+   salt okunur sanılan bir komut yan etki üretti.
+3. **Kurulum `curl … | bash` boruları çalıştırdı**; Bun ve uv kullanıcı
+   dizinine indirildi ve kalıcı PATH değiştirildi.
+4. **Sorulmadan kullanıcının e-posta adresi toplandı** ve "online signup" için
+   yerel kuyruğa yazıldı.
+5. **Devre dışı bırakıldıktan sonra kendini yeniden etkinleştirdi**; marketplace
+   kaydında `autoUpdate: true` vardı ve worker yeniden başladı.
+
+Yeniden değerlendirme **açık kullanıcı kararı ve yeni bir güvenlik incelemesi**
+gerektirir.
+
+**Bu politikanın geri kalanı yürürlüktedir**: hangi hafıza mekanizması
+kullanılırsa kullanılsın aşağıdaki kurallar bağlayıcıdır.
 
 ---
 
