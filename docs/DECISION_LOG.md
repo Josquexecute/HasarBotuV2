@@ -1379,3 +1379,26 @@ Kanıtlanan darboğaz: **iki satır için ~1.000 çıktı token ve ~3.300 karakt
 Ölçümün bilinen sınırı dürüstçe kaydedilir: `categoryCompleteLineCount` başarılı koşularda da 0 okundu çünkü kategori alanı henüz API yanıt DTO'sunda taşınmıyor. Domain doğrulaması geçtiği için kategori verisi geçerliydi; metrik yanlış yerden okuyordu. Kategori persistence'ı eklendiğinde bu metrik gerçek değeri gösterecek.
 
 Tavan ÖLÇÜLMEDEN yükseltilmedi ve timeout sonrası gizli adaptif chunk küçültme EKLENMEDİ. Sıradaki iş, kanıtlanan darboğazı hedefleyen çıktı şeması küçültmesidir: satır düzeyinde tek gerekçe/güven/kanıt/kod listesi, gerekçelere açık `maxLength`, sıfır tutarlı kategoriler için ayrı metin istenmemesi.
+
+## 2026-07-20 — HB-2026-076: Wire çıktısı küçültüldü; A/B ölçümü kota nedeniyle yapılamadı (Paket 64 ara dilim, 4. parça)
+
+Önceki parçada "çıktı hacmi süreyi domine ediyor" ifadesi fazla kesin yazılmıştı. Bu bir HİPOTEZDİR; sağlayıcı değişkenliğinden ayırmak A/B ölçümü gerektirir ve o ölçüm bu parçada TAMAMLANAMADI.
+
+Yapılan küçültme (yalnız sağlayıcı WIRE katmanı; domain ve kalıcı sözleşme şeması bozulmadı):
+
+1. `categoryAllocation` nesnesi `categoryAmounts`'a indirildi: yalnız sekiz tam sayı. Kategori ekseni için AYRI `reasoning`, `confidence`, `evidenceRefs` ve `conflictCodes` artık İSTENMİYOR.
+2. Satırın tek `reasoning`, `confidence` ve `evidenceRefs` alanı her iki ekseni de kapsıyor. Adaptör bunları domain modelindeki kategori alanına taşıyor — **uydurma yok**, taşınan değerler modelin kendi ürettiği satır düzeyi değerleri.
+3. Çelişki kodları tek listede toplandı; adaptör `CATEGORY_` ön ekine göre iki eksene AYRIŞTIRIYOR ve hiçbir kod kaybolmuyor.
+4. Talimattaki kategori bölümü tekrarları kaldırıldı; gerekçe 160, not 120 karakterle ve kanıt listesi 3 öğeyle sınırlandı. `maxLength` wire şemasına EKLENMEDİ: P59 ölçümü bu anahtarın Gemini `responseJsonSchema` alt kümesinde riskli olduğunu kaydetmişti, o bulgu korundu.
+5. Sağlayıcı sürümü `gemini-generate-content/1.3.0`.
+
+**Ölçüm sonucu: yapılamadı.** Küçültme sonrası 2 satır × 5 tekrar koşusunun tamamı `AI_PROVIDER_RATE_LIMITED` (429) döndü; ücretsiz katman kotası önceki ölçümlerle tükenmişti. Çağrılar ~2,7 sn'de temiz düştü, kontrollü retry ve **no-fallback davranışı doğru çalıştı**, hiçbir uydurma sonuç üretilmedi ve run temiz biçimde `failed` oldu.
+
+Bu nedenle:
+
+- Küçültmenin gecikmeye etkisi ÖLÇÜLMEDİ ve iyileşme İDDİA EDİLMİYOR.
+- A/B (eski wire / kategori wire / küçültülmüş wire) karşılaştırması yapılmadı.
+- 2 satırlık tekrarlanabilir kapı KAPANMADI.
+- Model karşılaştırmasına geçilmedi; sıra önce küçültmenin ölçülmesinde.
+
+Kota yenilendiğinde sıra: (a) küçültülmüş wire ile 2 satır × 5 tekrar, (b) A/B karşılaştırması, (c) kapı kapanırsa yeni güvenli chunk boyutu ölçümü. P61'deki 20 satır kararı geçersiz sayılmaya devam ediyor.

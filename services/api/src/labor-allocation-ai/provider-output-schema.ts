@@ -56,7 +56,7 @@ export const LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA = {
           'conflictCodes',
           'missingEvidenceCodes',
           'controlRequired',
-          'categoryAllocation',
+          'categoryAmounts',
         ],
         properties: {
           lineOrdinal: { type: 'integer', minimum: 1 },
@@ -98,9 +98,13 @@ export const LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA = {
           reasoning: { type: 'string' },
           evidenceRefs: { type: 'array', items: { type: 'string' } },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
+          // Tek liste iki ekseni de kapsar; kategori kodları da buradadır.
           conflictCodes: {
             type: 'array',
-            items: { type: 'string', enum: [...LABOR_ALLOCATION_CONFLICT_CODES] },
+            items: {
+              type: 'string',
+              enum: [...LABOR_ALLOCATION_CONFLICT_CODES, ...LABOR_CATEGORY_CONFLICT_CODES],
+            },
           },
           missingEvidenceCodes: {
             type: 'array',
@@ -120,26 +124,23 @@ export const LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA = {
            * alanı bilerek İSTENMEZ: sunucu toplamı sekiz kategoriden kendisi
            * hesaplar ve satırın işçilik tutarıyla karşılaştırır.
            */
-          categoryAllocation: {
+          categoryAmounts: {
             type: 'object',
-            required: ['amounts', 'reasoning', 'confidence', 'evidenceRefs', 'conflictCodes'],
-            properties: {
-              amounts: {
-                type: 'object',
-                required: [...LABOR_ALLOCATION_CATEGORIES],
-                properties: Object.fromEntries(
-                  LABOR_ALLOCATION_CATEGORIES.map((category) => [category, MINOR_AMOUNT]),
-                ),
-              },
-              reasoning: { type: 'string' },
-              confidence: { type: 'number', minimum: 0, maximum: 1 },
-              evidenceRefs: { type: 'array', items: { type: 'string' } },
-              conflictCodes: {
-                type: 'array',
-                items: { type: 'string', enum: [...LABOR_CATEGORY_CONFLICT_CODES] },
-              },
-            },
+            required: [...LABOR_ALLOCATION_CATEGORIES],
+            properties: Object.fromEntries(
+              LABOR_ALLOCATION_CATEGORIES.map((category) => [category, MINOR_AMOUNT]),
+            ),
           },
+          /*
+           * Kategori ekseni için AYRI gerekçe/güven/kanıt/kod İSTENMEZ
+           * (ölçüm sonrası küçültme). Satır düzeyindeki tek `reasoning`,
+           * `confidence` ve `evidenceRefs` her iki ekseni de kapsar; adaptör
+           * bunları domain modelindeki kategori alanına taşır. Böylece model
+           * aynı satır için iki uzun metin üretmez.
+           *
+           * Kategoriye özgü çelişki kodları modelden istenir ama AYRI liste
+           * olarak değil, satırın tek kod listesinde taşınır.
+           */
         },
       },
     },

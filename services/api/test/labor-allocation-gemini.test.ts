@@ -62,9 +62,8 @@ function suggestionLine(ordinal: number, total: number, laborMinor = total) {
     conflictCodes: [],
     missingEvidenceCodes: [],
     controlRequired: false,
-    // P64: kategori toplamı YALNIZ işçilik tutarına eşittir.
-    categoryAllocation: {
-      amounts: {
+    // P64: kompakt wire; kategori toplamı YALNIZ işçilik tutarına eşittir.
+    categoryAmounts: {
         bodywork: laborMinor,
         mechanical: 0,
         electrical: 0,
@@ -73,11 +72,6 @@ function suggestionLine(ordinal: number, total: number, laborMinor = total) {
         calibration: 0,
         repair: 0,
         paint: 0,
-      },
-      reasoning: 'Kaporta isciligi.',
-      confidence: 0.9,
-      evidenceRefs: [`line-${ordinal}-description`],
-      conflictCodes: [],
     },
   }
 }
