@@ -1515,3 +1515,32 @@ Etki: `case-folder-path/2.0.0` (`lookupCaseFolder`). Bu modülün henüz tüketi
 yoktur; File Agent OOXML yazım hattı paketinde kullanılacaktır. Halihazırda
 çalışan `buildCaseWorkspaceBasePath` zaten yalın düzeni üretiyordu ve
 değiştirilmedi.
+
+## 2026-07-21 — HB-2026-082: Gemini gecikme release kapısı GEÇTİ (kapatıldı)
+
+Kontrollü ölçüm 21.07.2026 10:15 sonrası çalıştırıldı ve **5/5 geçti**. Açık
+kapılardan biri (HB-2026-080) kapandı.
+
+Ölçüm koşulu: `GEMINI_LOAD_LINE_COUNTS=2`, `GEMINI_LOAD_REPEATS=5`,
+`GEMINI_LOAD_MAX_CALLS=5`, `scripts/package61-gemini-load-smoke.mjs`.
+
+Sonuç:
+
+- Model: `gemini-3.5-flash`
+- Provider: `gemini-generate-content/1.3.0`
+- 5/5 başarılı çağrı; 429/timeout **0**
+- En yüksek çağrı süresi **3534 ms** (25 sn eşiğinin ~7× altında)
+- Her çağrıda 2/2 satır kapsaması
+- Her satırda sekiz kategori tam; kategori toplamı = işçilik tutarı
+- Domain doğrulama hatası **0**
+- Usage metadata ve ledger tutarlı; receipt `finalized`
+- PII / URL / fiziksel yol sızıntısı **0**
+- Chunking sinyalleri (truncation/timeout/coverage-gap) hepsi false
+
+**Bu sonuç production provider'ı OTOMATİK AÇMAZ.** Production enablement ayrı bir
+deployment kararıdır ve şunlara bağlı kalır: deployment flag + organization
+policy (`ai_provider_policies.labor_allocation_allowed_provider_ids`). Ölçüm,
+gerçek sağlayıcının doğru çalıştığını kanıtlar; onu üretimde açmaz.
+
+**Hâlâ açık:** production Gemini provider açılışı (deployment kararı) ve
+**fiziksel `.xlsx` yazımı** (henüz uygulanmadı; Paket 65A/65B kapsamı).

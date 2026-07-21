@@ -32,6 +32,13 @@ Son güncelleme: 2026-07-21
 - Ana ağaçta typecheck, lint, gerçek PostgreSQL ile **domain 600 + contracts 308 + UI 632 (+6 skip) + database 71 + API 430 + file-agent 53**, build + bundle (495.584 bayt), `npm audit` (0 açık, kilit dosyası dahil) ve `git diff --check` geçti.
 - **Fiziksel yazım hattı, geometri migration'ı, sözleşme/API/UI ve Chrome smoke bu dilimde YOK**; 2. dilimdedir.
 
+## Gemini gecikme release kapısı GEÇTİ (2026-07-21)
+
+- Kontrollü ölçüm 10:15 sonrası çalıştırıldı: **5/5 başarılı**. `gemini-3.5-flash`, provider `gemini-generate-content/1.3.0`.
+- En yüksek çağrı süresi **3534 ms** (25 sn eşiğinin altında); 429/timeout **0**; 2/2 satır; 8/8 kategori tam; kategori toplamı = işçilik tutarı; domain doğrulama hatası **0**; usage/ledger tutarlı; PII/URL/yol sızıntısı **0**.
+- Kapı kapandı. **Ancak production provider otomatik açılmadı**: production enablement ayrı deployment kararıdır ve deployment flag + organization policy (`ai_provider_policies`) ile kontrol edilir.
+- **Fiziksel `.xlsx` yazımı hâlâ uygulanmadı** — Paket 65A (preflight + immutable plan) ve 65B (yazım) kapsamı. Ayrıntı: `DECISION_LOG` HB-2026-082.
+
 ## Klasör düzeni düzeltmesi (2026-07-21)
 
 - Fiziksel yapı sadeleşti: güncel dosyalar `<yıl><Ay YYYY><PLAKA>` düzeninde, sigorta şirketi klasörü olmadan duruyor. Arşiv yıllarında eski `<yıl><Sigorta Klasörü><Ay YYYY><PLAKA>` düzeni bulunabilir.
