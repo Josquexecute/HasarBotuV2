@@ -808,3 +808,19 @@ export {
   type ZipEntryMeta,
   type ZipStructureResult,
 } from './labor-workbook-preflight.js'
+export {
+  CASE_INVENTORY_COLUMNS,
+  CASE_INVENTORY_MISSING_MARKER,
+  CASE_INVENTORY_MULTI_VALUE_SEPARATOR,
+  CASE_INVENTORY_VERSION,
+  buildInventoryCells,
+  buildInventoryExportFilename,
+  caseTypeLabel,
+  escapeExcelCellValue,
+  formatInventoryDate,
+  joinOwners,
+  normalizePhoneForExport,
+  type CaseInventoryRow,
+  type InventoryCellType,
+  type InventoryColumn,
+} from './case-inventory.js'
