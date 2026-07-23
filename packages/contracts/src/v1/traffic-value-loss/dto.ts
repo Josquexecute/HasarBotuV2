@@ -20,7 +20,7 @@ import {
   TRAFFIC_VALUE_LOSS_UNCERTAINTY_CODES,
   VALUE_LOSS_SOURCE_WORKBOOK_SHA256,
 } from '@hasarbotu/domain'
-import { caseIdSchema, idSchema, localDateSchema, utcDateTimeSchema, userIdSchema } from '../../common/primitives.js'
+import { localDateSchema, utcDateTimeSchema } from '../../common/primitives.js'
 import {
   trafficValueLossBasisPointsSchema,
   trafficValueLossCodeSchema,
@@ -28,10 +28,14 @@ import {
   trafficValueLossExternalReferenceSchema,
   trafficValueLossMoneyMinorSchema,
   trafficValueLossRealMarketInputSchema,
+  trafficValueLossUuidSchema,
 } from './commands.js'
 
-export const trafficValueLossParamsSchema = z.strictObject({ caseId: caseIdSchema })
-export const trafficValueLossVersionParamsSchema = z.strictObject({ caseId: caseIdSchema, versionId: idSchema })
+export const trafficValueLossParamsSchema = z.strictObject({ caseId: trafficValueLossUuidSchema })
+export const trafficValueLossVersionParamsSchema = z.strictObject({
+  caseId: trafficValueLossUuidSchema,
+  versionId: trafficValueLossUuidSchema,
+})
 export const trafficValueLossPartCatalogQuerySchema = z.strictObject({
   vehicleGroupCode: z.enum(['A', 'B', 'C', 'Ç', 'D', 'E', 'F']),
 })
@@ -170,11 +174,11 @@ export const trafficValueLossEvaluationSchema = z.union([
 ])
 
 export const trafficValueLossEvidenceSchema = z.strictObject({
-  id: idSchema,
+  id: trafficValueLossUuidSchema,
   evidenceKey: trafficValueLossCodeSchema,
   sourceType: z.enum(TRAFFIC_VALUE_LOSS_EVIDENCE_SOURCE_TYPES),
-  documentId: idSchema.nullable(),
-  documentVersionId: idSchema.nullable(),
+  documentId: trafficValueLossUuidSchema.nullable(),
+  documentVersionId: trafficValueLossUuidSchema.nullable(),
   externalReference: trafficValueLossExternalReferenceSchema.nullable(),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   observedAt: localDateSchema.nullable(),
@@ -186,13 +190,13 @@ export const trafficValueLossEvidenceSchema = z.strictObject({
 })
 
 export const trafficValueLossComparableSchema = z.strictObject({
-  id: idSchema,
+  id: trafficValueLossUuidSchema,
   comparableKey: trafficValueLossCodeSchema,
   side: z.enum(['pre_accident', 'post_repair']),
   amountMinor: trafficValueLossMoneyMinorSchema,
   mileage: z.number().int().min(0).max(10_000_000).nullable(),
   observedAt: localDateSchema,
-  evidenceId: idSchema,
+  evidenceId: trafficValueLossUuidSchema,
   excluded: z.boolean(),
   exclusionReason: z.string().min(1).max(500).nullable(),
 })
@@ -220,23 +224,23 @@ export const trafficValueLossInputSnapshotSchema = z.strictObject({
     originalValue: z.union([z.string(), z.number(), z.boolean()]).nullable(),
     newValue: z.union([z.string(), z.number(), z.boolean()]).nullable(),
     reason: z.string().min(1).max(500),
-    changedBy: userIdSchema,
+    changedBy: trafficValueLossUuidSchema,
     changedAt: utcDateTimeSchema,
   })).max(100).default([]),
   ruleOverride: z.strictObject({
     ruleIdentity: z.string().min(1).max(200),
     reason: z.string().min(1).max(500),
-    authorizedBy: userIdSchema,
+    authorizedBy: trafficValueLossUuidSchema,
     authorizedAt: utcDateTimeSchema,
   }).nullable().default(null),
 })
 
 export const trafficValueLossVersionSchema = z.strictObject({
-  id: idSchema,
-  organizationId: idSchema,
-  caseId: caseIdSchema,
-  calculationId: idSchema,
-  revisionId: idSchema,
+  id: trafficValueLossUuidSchema,
+  organizationId: trafficValueLossUuidSchema,
+  caseId: trafficValueLossUuidSchema,
+  calculationId: trafficValueLossUuidSchema,
+  revisionId: trafficValueLossUuidSchema,
   assessmentVersion: z.number().int().min(1),
   status: z.enum(TRAFFIC_VALUE_LOSS_STATUSES),
   ruleSetId: z.enum([TRAFFIC_VALUE_LOSS_RULE_SET_ID, REAL_MARKET_VALUE_LOSS_RULE_SET_ID]),
@@ -247,16 +251,16 @@ export const trafficValueLossVersionSchema = z.strictObject({
   evidence: z.array(trafficValueLossEvidenceSchema),
   comparables: z.array(trafficValueLossComparableSchema),
   humanApprovalStatus: z.enum(['pending', 'approved', 'rejected']),
-  approvedBy: userIdSchema.nullable(),
+  approvedBy: trafficValueLossUuidSchema.nullable(),
   approvedAt: utcDateTimeSchema.nullable(),
   approvalReason: z.string().min(1).max(500).nullable(),
-  createdBy: userIdSchema,
+  createdBy: trafficValueLossUuidSchema,
   createdAt: utcDateTimeSchema,
 })
 
 export const trafficValueLossAssessmentSchema = z.strictObject({
-  id: idSchema,
-  caseId: caseIdSchema,
+  id: trafficValueLossUuidSchema,
+  caseId: trafficValueLossUuidSchema,
   currentVersion: trafficValueLossVersionSchema,
   version: z.number().int().min(1),
   createdAt: utcDateTimeSchema,

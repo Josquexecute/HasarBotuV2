@@ -68,6 +68,7 @@ export const REAL_MARKET_VALUE_LOSS_REASON_CODES = [
   'PART_OPERATION_CONFLICT',
   'REPAIR_PART_PRICE_INVALID',
   'REPAIR_LABOR_MISSING',
+  'RESULT_OUT_OF_SAFE_RANGE',
   'REQUIRED_EVIDENCE_MISSING',
   'SOURCE_CONFLICT',
   'INSUFFICIENT_COMPARABLES',
@@ -487,6 +488,23 @@ function selectedPartCoefficient(
   return decimal(rule.coefficients.paint[input.paintMode])
 }
 
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function partInputKey(input: RealMarketValueLossPartInput): string {
+  return [
+    input.stableRuleId,
+    input.operation,
+    input.paintMode ?? '',
+    input.newPartPriceMinor ?? '',
+    input.repairLaborMinor ?? '',
+    input.partPriceAvailability,
+    input.priorPartState,
+    input.treatment,
+  ].join('\u0000')
+}
+
 function source(): RealMarketValueLossSource {
   return {
     code: 'PACKAGE66-NORMALIZED-SNAPSHOT',
@@ -521,6 +539,8 @@ export function evaluateRealMarketValueLoss(
     throw new Error('REAL_MARKET_RULE_SNAPSHOT_IDENTITY_INVALID')
   }
   const reasons: RealMarketValueLossReason[] = []
+  const orderedParts = [...input.parts]
+    .sort((left, right) => compareText(partInputKey(left), partInputKey(right)))
   if (input.caseType !== 'traffic') {
     reasons.push(reason('WRONG_CASE_TYPE', 'caseType', 'Bu hesaplama yalnız Trafik dosyası içindir.', 'blocked'))
   }
@@ -604,7 +624,7 @@ export function evaluateRealMarketValueLoss(
   if (input.vehicleGroupCode !== null) {
     const operationsByRule = new Map<string, Set<RealMarketValueLossPartOperation>>()
     const uniqueOperations = new Set<string>()
-    for (const item of input.parts) {
+    for (const item of orderedParts) {
       const operationKey = `${item.stableRuleId}:${item.operation}`
       if (uniqueOperations.has(operationKey)) {
         reasons.push(reason('PART_OPERATION_CONFLICT', 'parts', `${item.stableRuleId} için aynı işlem birden fazla kez seçilemez.`))
@@ -619,7 +639,7 @@ export function evaluateRealMarketValueLoss(
         reasons.push(reason('PART_OPERATION_CONFLICT', 'parts', `${stableRuleId} için değişim ve onarım birlikte seçilemez.`))
       }
     }
-    for (const item of input.parts) {
+    for (const item of orderedParts) {
       const rule = findPartRule(snapshot, item.stableRuleId, input.vehicleGroupCode)
       if (rule === null) {
         reasons.push(reason('PART_RULE_INVALID', 'parts.stableRuleId', 'Parça kuralı seçilen araç grubuna ait değildir.'))
@@ -749,7 +769,15 @@ export function evaluateRealMarketValueLoss(
         capped.numerator + (capped.denominator * unit) - 1n
       ) / (capped.denominator * unit)
       const rounded = roundedUnits * unit
-      finalResultMinor = rounded <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(rounded) : null
+      if (rounded <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        finalResultMinor = Number(rounded)
+      } else {
+        reasons.push(reason(
+          'RESULT_OUT_OF_SAFE_RANGE',
+          'finalResultMinor',
+          'Nihai tutar güvenli minor-unit aralığını aşıyor.',
+        ))
+      }
     }
   }
 

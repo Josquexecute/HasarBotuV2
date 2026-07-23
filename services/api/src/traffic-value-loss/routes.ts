@@ -73,6 +73,8 @@ function keyRequired(reply: FastifyReply, requestId: string) {
 function storeError(reply: FastifyReply, requestId: string, error: TrafficValueLossStoreError) {
   if (error.code === 'not_found') return reply.code(404).send(failureBody('not_found', 'Traffic value loss assessment not found.', requestId))
   if (error.code === 'wrong_case_type' || error.code === 'invalid_source') return reply.code(400).send(failureBody('traffic_value_loss_source_invalid', 'Case or evidence is not eligible for traffic value loss.', requestId))
+  if (error.code === 'rule_selection_required') return reply.code(409).send(failureBody('traffic_value_loss_rule_selection_required', 'Accident date is required to select a traffic value loss rule.', requestId))
+  if (error.code === 'rule_input_required') return reply.code(409).send(failureBody('traffic_value_loss_rule_input_required', 'Required rule inputs are missing or invalid.', requestId))
   if (error.code === 'version_conflict') return reply.code(409).send(failureBody('traffic_value_loss_stale', 'Traffic value loss version changed.', requestId))
   if (error.code === 'approval_blocked') return reply.code(409).send(failureBody('traffic_value_loss_approval_blocked', 'Uncertainties block submission or approval.', requestId))
   if (error.code === 'preview_mismatch') return reply.code(409).send(failureBody('traffic_value_loss_preview_stale', 'Calculation preview changed and must be reviewed again.', requestId))

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type pg from 'pg'
 import { uuidv7 } from '@hasarbotu/database'
 import {
+  canonicalValueLossJson,
   evaluateRealMarketValueLoss,
   evaluateTrafficValueLoss,
   listRealMarketPartRules,
@@ -106,6 +107,52 @@ function domainDate(value: string) {
   const parsed = parseLocalDate(value)
   if (!parsed.ok) throw new TrafficValueLossStoreError('state_conflict')
   return parsed.value
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function orderedByCanonicalValue<T>(items: readonly T[]): T[] {
+  return [...items].sort((left, right) =>
+    compareText(canonicalValueLossJson(left), canonicalValueLossJson(right)),
+  )
+}
+
+function canonicalPreviewInput(input: TrafficValueLossVersionCreateRequest): unknown {
+  return {
+    ...input,
+    confirmedPreviewHash: null,
+    damageParts: orderedByCanonicalValue(input.damageParts),
+    comparables: orderedByCanonicalValue(input.comparables),
+    evidence: orderedByCanonicalValue(input.evidence.map((item) => ({
+      ...item,
+      supports: [...item.supports].sort(compareText),
+    }))),
+    realMarket: input.realMarket === null
+      ? null
+      : {
+          ...input.realMarket,
+          parts: orderedByCanonicalValue(input.realMarket.parts),
+          prefillProvenance: orderedByCanonicalValue(input.realMarket.prefillProvenance),
+        },
+  }
+}
+
+export function createTrafficValueLossPreviewHash(input: {
+  readonly organizationId: string
+  readonly caseId: string
+  readonly request: TrafficValueLossVersionCreateRequest
+  readonly evaluation: unknown
+}): string {
+  return createHash('sha256').update(canonicalValueLossJson({
+    organizationId: input.organizationId,
+    caseId: input.caseId,
+    ruleSetId: (input.evaluation as { readonly ruleSetId?: unknown }).ruleSetId,
+    ruleVersion: (input.evaluation as { readonly ruleVersion?: unknown }).ruleVersion,
+    input: canonicalPreviewInput(input.request),
+    evaluation: input.evaluation,
+  })).digest('hex')
 }
 
 export async function loadTrafficValueLossVersion(exec: Queryable, organizationId: string, caseId: string, versionId: string): Promise<TrafficValueLossVersionDto | undefined> {
@@ -365,14 +412,12 @@ async function evaluateVersionInput(
           authorizedAt: changedAt,
         },
   })
-  const previewInput = { ...input, confirmedPreviewHash: null }
-  const previewHash = createHash('sha256').update(JSON.stringify({
+  const previewHash = createTrafficValueLossPreviewHash({
+    organizationId: actor.organizationId,
     caseId,
-    ruleSetId: evaluation.ruleSetId,
-    ruleVersion: evaluation.ruleVersion,
-    input: previewInput,
+    request: input,
     evaluation,
-  })).digest('hex')
+  })
   return { evidenceIds, evaluation, inputSnapshot, previewHash }
 }
 

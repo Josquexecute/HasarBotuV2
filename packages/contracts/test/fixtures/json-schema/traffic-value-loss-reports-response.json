@@ -808,6 +808,7 @@
                             "PART_OPERATION_CONFLICT",
                             "REPAIR_PART_PRICE_INVALID",
                             "REPAIR_LABOR_MISSING",
+                            "RESULT_OUT_OF_SAFE_RANGE",
                             "REQUIRED_EVIDENCE_MISSING",
                             "SOURCE_CONFLICT",
                             "INSUFFICIENT_COMPARABLES",

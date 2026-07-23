@@ -19,8 +19,7 @@ function deepFreeze<T>(value: T): T {
   return value
 }
 
-function loadSnapshot(): ValueLossRuleSnapshot {
-  const parsed = JSON.parse(readFileSync(SNAPSHOT_URL, 'utf8')) as unknown
+export function assertRealMarketValueLossRuleSnapshot(parsed: unknown): ValueLossRuleSnapshot {
   const snapshot = parsed as ValueLossRuleSnapshot
   const validation = validateValueLossRuleSnapshot(snapshot)
   if (!validation.ok) {
@@ -30,6 +29,11 @@ function loadSnapshot(): ValueLossRuleSnapshot {
     throw new Error('VALUE_LOSS_RULE_SNAPSHOT_HASH_MISMATCH')
   }
   return deepFreeze(snapshot)
+}
+
+function loadSnapshot(): ValueLossRuleSnapshot {
+  const parsed = JSON.parse(readFileSync(SNAPSHOT_URL, 'utf8')) as unknown
+  return assertRealMarketValueLossRuleSnapshot(parsed)
 }
 
 export const realMarketValueLossRuleSnapshot = loadSnapshot()

@@ -11,7 +11,7 @@ import { ClosedCasesPage } from './closed/ClosedCasesPage'
 import { ReportsPage } from './reports/ReportsPage'
 
 const CLOSED_CASE = {
-  id: 'case-real-closed',
+  id: '019fa300-0000-7000-8000-000000003899',
   caseType: 'traffic',
   officeCaseNumber: '2026/3899',
   notificationFormNumber: null,

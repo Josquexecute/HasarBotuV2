@@ -24,6 +24,17 @@ export function up(pgm) {
           AND effective_from=DATE '2026-07-01'
         )
       );
+    ALTER TABLE traffic_value_loss_reports
+      DROP CONSTRAINT traffic_value_loss_reports_versions_valid;
+    ALTER TABLE traffic_value_loss_reports
+      ADD CONSTRAINT traffic_value_loss_reports_versions_valid CHECK (
+        schema_version='traffic-value-loss-final-report/1.0.0'
+        AND template_version='traffic-value-loss-final-report-tr/1.0.0'
+        AND rule_version IN (
+          '2026.07.01.1',
+          'real-market-analysis/2026-07-01/1.0.0'
+        )
+      );
   `)
 }
 
@@ -40,6 +51,14 @@ export function down(pgm) {
           USING ERRCODE='restrict_violation';
       END IF;
     END $$;
+    ALTER TABLE traffic_value_loss_reports
+      DROP CONSTRAINT traffic_value_loss_reports_versions_valid;
+    ALTER TABLE traffic_value_loss_reports
+      ADD CONSTRAINT traffic_value_loss_reports_versions_valid CHECK (
+        schema_version='traffic-value-loss-final-report/1.0.0'
+        AND template_version='traffic-value-loss-final-report-tr/1.0.0'
+        AND rule_version='2026.07.01.1'
+      );
     ALTER TABLE traffic_value_loss_versions
       DROP CONSTRAINT traffic_value_loss_versions_rule_locked;
     ALTER TABLE traffic_value_loss_versions

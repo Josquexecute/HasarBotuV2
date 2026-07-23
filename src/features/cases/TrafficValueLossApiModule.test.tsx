@@ -294,6 +294,27 @@ function versionFrom(
   }
 }
 
+function minimalInput(): TrafficValueLossDraftInput {
+  return {
+    evaluatedOn: '2026-07-16',
+    heavyOrTotalDamage: null,
+    vehicle: {
+      make: null,
+      model: null,
+      variant: null,
+      modelYear: null,
+      mileage: null,
+      usageType: null,
+    },
+    faultRateBasisPoints: null,
+    preAccidentMarketValueMinor: null,
+    postRepairMarketValueMinor: null,
+    damageParts: [],
+    comparables: [],
+    evidence: [],
+  }
+}
+
 function mutablePort() {
   let assessment: TrafficValueLossAssessmentRecord | null = null
   let currentApproved: TrafficValueLossVersionRecord | null = null
@@ -474,18 +495,77 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     expect(unavailable.load).toHaveBeenCalledTimes(1)
   })
 
-  it('bloklayan belirsizlikleri görünür tutar ve submit işlemini kapalı bırakır', async () => {
-    const input: TrafficValueLossDraftInput = {
-      evaluatedOn: '2026-07-16',
-      heavyOrTotalDamage: null,
-      vehicle: { make: null, model: null, variant: null, modelYear: null, mileage: null, usageType: null },
-      faultRateBasisPoints: null,
-      preAccidentMarketValueMinor: null,
-      postRepairMarketValueMinor: null,
-      damageParts: [],
-      comparables: [],
-      evidence: [],
+  it('uzun revision geçmişini kaydırılabilir tutar ve yeni draft varken eski onaylı sonucu korur', async () => {
+    const currentDraft = {
+      ...versionFrom(minimalInput(), 'draft'),
+      id: '019fa000-0000-7000-8000-000000000021',
+      revisionId: '019fa000-0000-7000-8000-000000000021',
+      assessmentVersion: 21,
     }
+    const currentApproved = {
+      ...versionFrom(minimalInput(), 'approved', 'approved'),
+      id: '019fa000-0000-7000-8000-000000000001',
+      revisionId: '019fa000-0000-7000-8000-000000000001',
+      assessmentVersion: 1,
+    }
+    const versions = Array.from({ length: 21 }, (_, index) => {
+      const assessmentVersion = 21 - index
+      if (assessmentVersion === 21) return currentDraft
+      if (assessmentVersion === 1) return currentApproved
+      const suffix = String(assessmentVersion).padStart(12, '0')
+      return {
+        ...versionFrom(minimalInput(), 'rejected', 'rejected'),
+        id: `019fa000-0000-7000-8000-${suffix}`,
+        revisionId: `019fa000-0000-7000-8000-${suffix}`,
+        assessmentVersion,
+      }
+    })
+    const assessment: TrafficValueLossAssessmentRecord = {
+      id: currentDraft.calculationId,
+      caseId: CASE_ID,
+      currentVersion: currentDraft,
+      version: 21,
+      createdAt: '2026-07-16T08:00:00.000Z',
+      updatedAt: '2026-07-16T09:00:00.000Z',
+    }
+    const port: TrafficValueLossDataPort = {
+      load: vi.fn().mockResolvedValue({ assessment, versions, currentApproved }),
+      createVersion: vi.fn(),
+      submit: vi.fn(),
+      approve: vi.fn(),
+      reject: vi.fn(),
+    }
+    const view = renderModule(port)
+
+    expect(await screen.findByText('Hesap v21')).toBeInTheDocument()
+    expect(screen.getByText('Hesap v1')).toBeInTheDocument()
+    expect(screen.getByText(/Mevcut onaylı revision v1 salt okunur tutuluyor/)).toBeInTheDocument()
+    expect(view.container.querySelectorAll('.value-loss-history li')).toHaveLength(21)
+    expect(view.container.querySelector('.value-loss-history ol')).not.toBeNull()
+  })
+
+  it('optimistic conflict durumunda mock fallback açmaz ve açık kullanıcı eylemiyle yeniden yükler', async () => {
+    const port: TrafficValueLossDataPort = {
+      load: vi.fn()
+        .mockRejectedValueOnce(new TrafficValueLossError('conflict', 'stale'))
+        .mockResolvedValueOnce({ assessment: null, versions: [], currentApproved: null }),
+      createVersion: vi.fn(),
+      submit: vi.fn(),
+      approve: vi.fn(),
+      reject: vi.fn(),
+    }
+    const user = userEvent.setup()
+    renderModule(port)
+
+    expect(await screen.findByText('Sürüm çakışması')).toBeInTheDocument()
+    expect(screen.queryByText('İnsan onaylı sonuç')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Güncel Veriyi Yükle' }))
+    await waitFor(() => expect(port.load).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Henüz sürüm yok.')).toBeInTheDocument()
+  })
+
+  it('bloklayan belirsizlikleri görünür tutar ve submit işlemini kapalı bırakır', async () => {
+    const input = minimalInput()
     const baseVersion = versionFrom(input, 'control_required')
     const controlVersion: TrafficValueLossVersionRecord = {
       ...baseVersion,

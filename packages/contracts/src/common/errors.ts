@@ -42,6 +42,8 @@ export const API_ERROR_CODES = [
   'ai_candidate_promotion_blocked',
   'ai_candidate_promotion_stale',
   'traffic_value_loss_conflict',
+  'traffic_value_loss_rule_selection_required',
+  'traffic_value_loss_rule_input_required',
   'traffic_value_loss_stale',
   'traffic_value_loss_source_invalid',
   'traffic_value_loss_approval_blocked',

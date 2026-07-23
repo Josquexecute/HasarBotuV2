@@ -210,6 +210,13 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
        WHERE conname='traffic_value_loss_versions_rule_locked'`,
     )
     expect(String(definition.rows[0].def)).toContain('real-market-analysis/2026-07-01/1.0.0')
+    const reportDefinition = await pool.query(
+      `SELECT pg_get_constraintdef(oid) AS def
+       FROM pg_constraint
+       WHERE conname='traffic_value_loss_reports_versions_valid'`,
+    )
+    expect(String(reportDefinition.rows[0].def))
+      .toContain('real-market-analysis/2026-07-01/1.0.0')
 
     const rolledBack = await runMigrations({
       databaseUrl: config.url,
@@ -225,10 +232,24 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
        WHERE conname='traffic_value_loss_versions_rule_locked'`,
     )
     expect(String(oldDefinition.rows[0].def)).not.toContain('real-market-analysis/2026-07-01/1.0.0')
+    const oldReportDefinition = await pool.query(
+      `SELECT pg_get_constraintdef(oid) AS def
+       FROM pg_constraint
+       WHERE conname='traffic_value_loss_reports_versions_valid'`,
+    )
+    expect(String(oldReportDefinition.rows[0].def))
+      .not.toContain('real-market-analysis/2026-07-01/1.0.0')
 
     const reapplied = await runMigrations({ databaseUrl: config.url, quiet: true })
     expect(reapplied.map((migration) => migration.name))
       .toEqual(['0043_traffic_value_loss_real_market_revision'])
+    const reappliedReportDefinition = await pool.query(
+      `SELECT pg_get_constraintdef(oid) AS def
+       FROM pg_constraint
+       WHERE conname='traffic_value_loss_reports_versions_valid'`,
+    )
+    expect(String(reappliedReportDefinition.rows[0].def))
+      .toContain('real-market-analysis/2026-07-01/1.0.0')
   })
 
   it('0036 geri alınabilir ve yeniden ileri uygulanabilir', async () => {

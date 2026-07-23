@@ -6,8 +6,9 @@ import {
   TRAFFIC_VALUE_LOSS_EVIDENCE_FIELDS,
   TRAFFIC_VALUE_LOSS_EVIDENCE_SOURCE_TYPES,
 } from '@hasarbotu/domain'
-import { idSchema, localDateSchema } from '../../common/primitives.js'
+import { localDateSchema } from '../../common/primitives.js'
 
+export const trafficValueLossUuidSchema = z.string().uuid()
 export const trafficValueLossCodeSchema = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._-]+$/)
 export const trafficValueLossMoneyMinorSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 export const trafficValueLossBasisPointsSchema = z.number().int().min(0).max(10_000)
@@ -23,8 +24,8 @@ export const trafficValueLossExternalReferenceSchema = z.union([
 export const trafficValueLossEvidenceInputSchema = z.strictObject({
   evidenceKey: trafficValueLossCodeSchema,
   sourceType: z.enum(TRAFFIC_VALUE_LOSS_EVIDENCE_SOURCE_TYPES),
-  documentId: idSchema.nullable().default(null),
-  documentVersionId: idSchema.nullable().default(null),
+  documentId: trafficValueLossUuidSchema.nullable().default(null),
+  documentVersionId: trafficValueLossUuidSchema.nullable().default(null),
   externalReference: trafficValueLossExternalReferenceSchema.nullable().default(null),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   observedAt: localDateSchema.nullable().default(null),
@@ -113,7 +114,7 @@ export const trafficValueLossPrefillProvenanceInputSchema = z.strictObject({
     'other_evidence',
     'user_input',
   ]),
-  sourceRevisionId: idSchema.nullable(),
+  sourceRevisionId: trafficValueLossUuidSchema.nullable(),
   originalValue: z.union([z.string(), z.number(), z.boolean()]).nullable(),
   newValue: z.union([z.string(), z.number(), z.boolean()]).nullable(),
   overrideReason: z.string().trim().min(1).max(500).nullable(),
