@@ -9,6 +9,31 @@ Bu plan, UI-first prototip aşamasını küçük, test edilebilir ve geri bildir
 - `[x]` Tamamlandı ve doğrulandı
 - `[!]` Engelli veya kullanıcı kararı gerekiyor
 
+## Paket 66 — 01.07.2026 Değer Kaybı kaynak snapshot'ı
+
+### Commit #1 — `feat: add 2026-07-01 value loss rule snapshot`
+
+- [x] Kaynak workbook SHA-256 değerini çıkarım öncesi fail-closed doğrula.
+- [x] Generic salt-okunur ve relationship tabanlı OOXML extractor ekle.
+- [x] Sheet ad/state, sharedStrings, merged cell, hidden row/column, validation,
+  formula ve cached value görünümünü çıkar.
+- [x] `real-market-analysis/2026-07-01/1.0.0` normalize snapshot, JSON Schema ve
+  redacted manifest üret.
+- [x] 3 `source_workbook` ve 11 `product_decision` mapping'i ayrı provenance ile
+  sakla; `source_vehicle_name_column_incomplete` anomalisi zorunlu olsun.
+- [x] Altı aktif parça tablosunu programatik çıkar; placeholder, sigortacı,
+  dormant ve excluded kaynakların aktif kurala sızmasını engelle.
+- [x] Stable ID içinde araç grubu, kaynak tablo, kaynak satır, normalize etiket
+  ve işlem capability bileşenlerini zorunlu tut.
+- [x] Canonical JSON/snapshot hash determinismi ile beş kasıtlı mutation
+  regresyonunu doğrula.
+- [x] Tam kalite zincirini ve workbook'suz repository-dışı fresh checkout'u çalıştır.
+- [x] Yalnız path-based staging yap ve Commit #1'i oluştur.
+
+Kapsam dışı: hesap motoru, Paket 65A/65B, Dosya Envanteri, API/UI, persistence,
+migration, fiziksel Excel yazımı, Gemini, remote/push ve sonraki Paket 66
+commitleri.
+
 ## Aktif geliştirme paketi — UI-first prototip temel kabulü
 
 ### Aşama 0 — Yönetişim ve takip altyapısı

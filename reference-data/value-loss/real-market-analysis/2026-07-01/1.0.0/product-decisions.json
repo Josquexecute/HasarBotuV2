@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "value-loss-product-decisions/1.0.0",
+  "snapshotIdentity": "real-market-analysis/2026-07-01/1.0.0",
+  "decisionRecordId": "package66-split-provenance/1.0.0",
+  "decisionDate": "2026-07-23",
+  "basis": "product_owner_approved_split_provenance",
+  "decisions": [
+    {
+      "decisionId": "vehicle-mapping-01-automobile",
+      "ordinal": 1,
+      "vehicleType": "OTOMOBİL",
+      "vehicleGroupCode": "A",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-05-pickup",
+      "ordinal": 5,
+      "vehicleType": "KAMYONET",
+      "vehicleGroupCode": "C",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-06-truck",
+      "ordinal": 6,
+      "vehicleType": "KAMYON",
+      "vehicleGroupCode": "C",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-07-tractor-unit",
+      "ordinal": 7,
+      "vehicleType": "ÇEKİCİ",
+      "vehicleGroupCode": "C",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-08-construction-machine",
+      "ordinal": 8,
+      "vehicleType": "İŞ MAKİNESİ",
+      "vehicleGroupCode": "D",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-09-tractor",
+      "ordinal": 9,
+      "vehicleType": "TRAKTÖR",
+      "vehicleGroupCode": "D",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-10-agricultural-machine",
+      "ordinal": 10,
+      "vehicleType": "TARIM MAKİNESİ",
+      "vehicleGroupCode": "D",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-11-special-purpose",
+      "ordinal": 11,
+      "vehicleType": "ÖZEL AMAÇLI ARAÇ",
+      "vehicleGroupCode": "Ç",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-12-trailer",
+      "ordinal": 12,
+      "vehicleType": "RÖMORK",
+      "vehicleGroupCode": "E",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-13-motorcycle",
+      "ordinal": 13,
+      "vehicleType": "MOTORSİKLET",
+      "vehicleGroupCode": "F",
+      "provenance": "product_decision"
+    },
+    {
+      "decisionId": "vehicle-mapping-14-tanker",
+      "ordinal": 14,
+      "vehicleType": "TANKER",
+      "vehicleGroupCode": "Ç",
+      "provenance": "product_decision"
+    }
+  ]
+}

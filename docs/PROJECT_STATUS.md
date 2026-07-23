@@ -1,15 +1,41 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-21
+Son güncelleme: 2026-07-23
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 64 — işçilik dağıtım kategorisi (TAMAMLANDI)
-- Durum: **Kategori ekseni uçtan uca çalışıyor; fiziksel `.xlsx` yazımı HENÜZ YOK**
+- Aşama: Paket 66 Commit #1 — 01.07.2026 Değer Kaybı kaynak snapshot'ı
+- Durum: **Kaynak snapshot tamamlandı; runtime hesap motoru entegrasyonu HENÜZ YOK**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 66 Commit #1 — KAYNAK SNAPSHOT TAMAMLANDI
+
+- Kaynak workbook SHA-256 başlangıç ve bitişte
+  `81d3ae870cd5569b13371ec8b4de081a9a4e3e15098f7454f5d0cdcd3708c424`.
+- Snapshot identity `real-market-analysis/2026-07-01/1.0.0`; canonical snapshot
+  SHA-256 `e4fc8087ddbc1ff92e3255546e053c6956e20bd1dca269533113b727f728b940`.
+- Generic salt-okunur extractor package/workbook relationship'leri üzerinden
+  sheet ve sharedStrings part'larını çözüyor; merged cell, hidden state,
+  hidden row/column, validation, formula ve cached value görünümünü koruyor.
+- Mapping provenance bölündü: 3 `source_workbook`, 11 ayrı ve denetlenebilir
+  `product_decision`. Görev DOCX'i ve orphan sharedStrings mapping kaynağı değil.
+- Altı aktif parça tablosu workbook'tan programatik çıkarıldı; kaynak satır
+  sayıları A=32, B=46, C/Ç=28, D=13, E=7, F=4.
+- `source_vehicle_name_column_incomplete` dahil 15 forensic anomaly, dormant ve
+  excluded bölümler snapshot/manifestte korundu.
+- Bu commit mevcut Paket 32 domain hesaplamasını, API, UI, persistence,
+  migration, IPC/dependency veya fiziksel Excel yazım yolunu değiştirmiyor.
+- Ana ağaçta lint, typecheck, tam test ve build geçti. Tam test: UI 347 (+6
+  ortam-koşullu skip), domain 724, contracts 308, database 16 (+55 skip), API
+  102 (+355 skip), File Agent 59. Repository-dışı fresh kopyada workbook/DOCX/
+  `.env` sayısı 0; `npm ci`, aynı kalite zinciri ve build geçti.
+- `npm audit` mevcut `fast-uri` zinciri için 1 yüksek seviye bulgu veriyor;
+  Paket 66 dependency veya lock dosyasını değiştirmedi ve kapsam dışı otomatik
+  dependency güncellemesi yapılmadı.
+- Ayrıntı: `VALUE_LOSS_RULE_SNAPSHOT_2026-07-01.md`; karar: HB-2026-083.
 
 ## Paket 64 semantik düzeltme sonucu — EKSEN DÜZELTİLDİ
 

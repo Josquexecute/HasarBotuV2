@@ -1544,3 +1544,42 @@ gerçek sağlayıcının doğru çalıştığını kanıtlar; onu üretimde açm
 
 **Hâlâ açık:** production Gemini provider açılışı (deployment kararı) ve
 **fiziksel `.xlsx` yazımı** (henüz uygulanmadı; Paket 65A/65B kapsamı).
+
+## 2026-07-23 — HB-2026-083: Paket 66 Commit #1 bölünmüş provenance ve kaynak snapshot sınırı
+
+Karar:
+
+1. Snapshot identity `real-market-analysis/2026-07-01/1.0.0`; kaynak workbook
+   SHA-256
+   `81d3ae870cd5569b13371ec8b4de081a9a4e3e15098f7454f5d0cdcd3708c424`.
+2. Workbook'un kanıtladığı `Tablolar!C3:C16` grup kodu sırası
+   `A,A,B,B,C,C,C,D,D,D,Ç,E,F,Ç` olarak `source_workbook` provenance'ıyla
+   korunur.
+3. Araç adı → grup mapping provenance'ı BÖLÜNMÜŞTÜR. Yalnız TAKSİ→A,
+   MİNİBÜS→B ve OTOBÜS→B `source_workbook` sayılır. Kalan 11 eşleşme
+   `product-decisions.json` içinde açık `product_decision` kaydıdır.
+4. Ürün kararı kayıtları workbook hücresi gibi sunulamaz ve
+   `source_workbook` olarak yeniden etiketlenemez. Görev DOCX'i
+   `source_workbook` değildir; orphan sharedStrings araç mapping'i üretmez.
+5. `source_vehicle_name_column_incomplete` zorunlu anomalidir. F12/Z2
+   validasyon listeleri, cached `#NAME?`/`#DIV/0!`, ters yaş tablosu, satır
+   27/79 artığı, gizli Sheet1, kullanılmayan sigortacı ve piyasa katsayı
+   tabloları, `YEAR(C13)`, M18/M19, unwired J11 ve SONRADAN EKLENENLER
+   anomalileri kaybolmaz.
+6. Altı aktif parça tablosu yalnız workbook'tan programatik çıkarılır.
+   Placeholder ve sigortacı satırları dışlanır. SONRADAN EKLENENLER global
+   aktif kural değildir.
+7. Canonical snapshot dinamik timestamp taşımaz. Harici tam dosya yolu,
+   workbook/DOCX/ham XML/scratch dosyası repository artefaktına girmez.
+8. Commit #1 yalnız extractor/schema/snapshot/manifest/test/dokümantasyondur.
+   Mevcut Paket 32 hesap davranışı, API, UI, persistence, migration ve
+   fiziksel Excel yazımı AKTİVE EDİLMEZ; sonraki commit/paketlere geçilmez.
+
+Gerekçe: Workbook gerçeğiyle ürün sahibinin tamamlayıcı kararını aynı provenance
+etiketinde birleştirmek, kaynak kanıtını olduğundan daha güçlü gösterirdi.
+Bölünmüş kayıt; eksikliği, kararı ve kaynağı ayrı ayrı denetlenebilir tutar.
+
+Etki: `ooxml-readonly-extractor/1.0.0`,
+`value-loss-rule-snapshot/1.0.0`,
+`value-loss-product-decisions/1.0.0`,
+`value-loss-rule-manifest/1.0.0`.

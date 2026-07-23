@@ -30,6 +30,22 @@ export {
 } from './file-operation-executor.js'
 export { extractPdfText, type PdfTextExtractionResult, type PdfTextExtractorHooks } from './pdf-text-extractor.js'
 export { extractPolicyOcr, type PolicyOcrExtractionResult, type PolicyOcrExtractorHooks } from './policy-ocr-extractor.js'
+export {
+  OOXML_READONLY_EXTRACTOR_VERSION,
+  OoxmlExtractorError,
+  assertWorkbookHashUnchanged,
+  assertWorkbookSha256,
+  extractOoxmlWorkbook,
+  getOoxmlCell,
+  getOoxmlSheet,
+  resolveOoxmlRelationshipTarget,
+  sha256WorkbookBytes,
+  type OoxmlCell,
+  type OoxmlDataValidation,
+  type OoxmlHiddenColumn,
+  type OoxmlWorkbook,
+  type OoxmlWorksheet,
+} from './ooxml-readonly-extractor.js'
 
 /**
  * Import edildiğinde döngü BAŞLAMAZ. Yalnız gerçek entrypoint doğrudan
