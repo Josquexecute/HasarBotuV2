@@ -1583,3 +1583,34 @@ Etki: `ooxml-readonly-extractor/1.0.0`,
 `value-loss-rule-snapshot/1.0.0`,
 `value-loss-product-decisions/1.0.0`,
 `value-loss-rule-manifest/1.0.0`.
+
+## 2026-07-23 — HB-2026-084: Paket 65A salt-okunur File Agent workbook preflight
+
+Karar:
+
+1. Paket 65A fiziksel Excel yazmaz. Daha önceki saf OOXML/immutable plan source
+   çekirdeğini gerçek File Agent salt-okunur preflight'ına bağlar.
+2. ZIP merkezi dizini arşiv açılmadan okunur. Entry count, compressed ve
+   uncompressed toplam, compression ratio, şifreleme, duplicate ve zip-slip
+   kapıları geçmeden `unzipSync` çalışmaz. ZIP64 normal ofis `.xlsx` girdisi
+   için gerekli değildir ve fail-closed reddedilir.
+3. Hedef worksheet part adı tahmin edilmez; package/workbook relationship
+   zincirinden çözülür. Sheet görünür değilse veya header/identity içerik
+   imzası uyuşmazsa plan kaynağı üretilemez.
+4. Makro/VBA, dijital imza, embedded object ve external link yalnız part adına
+   bakılarak değil relationship XML'leri de incelenerek reddedilir.
+5. Mutlak storage root Agent process'inden çıkmaz. Kaynak güvenli göreli yolla
+   çözülür, symlink/root escape reddedilir ve çözülmüş güvenli gerçek yol
+   üzerinden okunur.
+6. Kaynak iki kez okunur; hash veya boyut değişirse preflight başarısızdır.
+   Expected hash/size verildiyse uyuşmazlık sessizce güncel kabul edilmez.
+7. Paket 65B; job kuyruğu, migration, contracts/API/UI, explicit approval,
+   backup, temp, verify, atomik replace, rollback ve gerçek kopya smoke'unu
+   ayrı kritik işlem olarak uygular. Paket 65A bunların hiçbirini aktive etmez.
+
+Gerekçe: File Agent'ın gerçek arşivi doğrudan açması, saf domain limitlerinin
+zip-bomb öncesi uygulanmadığı anlamına gelirdi. Preflight'ın yazımdan ayrı ve
+salt-okunur kalması plan/onay/uygula sınırını korur.
+
+Etki: `labor-workbook-preflight/1.0.0`,
+`labor-workbook-agent-preflight/1.0.0`.

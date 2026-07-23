@@ -86,6 +86,15 @@ describe('ZIP yapısı doğrulaması (zip-bomb)', () => {
     expect(validateZipStructure([{ ...clean, encrypted: true }]).codes).toContain('WORKBOOK_ENCRYPTED')
   })
 
+  it('negatif, kesirli ve sıfıra sıkışmış ZIP metadata değerlerini reddeder', () => {
+    const result = validateZipStructure([
+      { name: 'xl/negative.xml', compressedSize: -1, uncompressedSize: 20 },
+      { name: 'xl/fraction.xml', compressedSize: 10.5, uncompressedSize: 20 },
+      { name: 'xl/zero.xml', compressedSize: 0, uncompressedSize: 20 },
+    ])
+    expect(result.codes).toContain('WORKBOOK_ZIP_METADATA_INVALID')
+  })
+
   it('tüm ihlalleri toplar, ilkinde durmaz', () => {
     const result = validateZipStructure([
       { name: '/abs.xml', compressedSize: 1, uncompressedSize: 1000 },
@@ -122,6 +131,18 @@ describe('yasaklı OOXML parçaları', () => {
     })
     expect(codes).toContain('WORKBOOK_EXTERNAL_LINK')
     expect(codes).toContain('WORKBOOK_UNSUPPORTED_OBJECT')
+  })
+
+  it('part adı olmasa da external relationship hedefini yakalar', () => {
+    const codes = detectForbiddenOoxmlParts({
+      entryNames: ['xl/workbook.xml', 'xl/_rels/workbook.xml.rels'],
+      contentTypesXml: ct,
+      relationshipXmls: [
+        '<Relationships><Relationship Id="r1" Type="x/hyperlink" '
+        + 'Target="https://example.invalid/" TargetMode="External"/></Relationships>',
+      ],
+    })
+    expect(codes).toContain('WORKBOOK_EXTERNAL_LINK')
   })
 
   it('temiz workbook parçaları hiçbir kod üretmez', () => {

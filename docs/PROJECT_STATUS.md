@@ -5,11 +5,48 @@ Son güncelleme: 2026-07-23
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 66 Commit #1 — 01.07.2026 Değer Kaybı kaynak snapshot'ı
-- Durum: **Kaynak snapshot tamamlandı; runtime hesap motoru entegrasyonu HENÜZ YOK**
+- Aşama: Paket 65A — İşçilik workbook salt-okunur File Agent preflight
+- Durum: **Paket 66 kabul edildi; Paket 65A preflight tamamlandı, fiziksel yazım HENÜZ YOK**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Paket 65A — SALT-OKUNUR WORKBOOK PREFLIGHT TAMAMLANDI
+
+- Daha önce eklenen saf ZIP/OOXML güvenlik ve immutable write-plan source
+  guard'ı gerçek File Agent salt-okunur preflight yoluna bağlandı.
+- Workbook yolu yalnız Agent'ın yerel root eşlemesinden ve güvenli göreli yoldan
+  çözülür; mutlak root sonuçta, API'de veya audit'te taşınmaz.
+- ZIP merkezi dizini arşiv açılmadan okunur. Entry count, compressed/
+  uncompressed toplam, compression ratio, şifreleme, duplicate/zip-slip,
+  makro/VBA, dijital imza, embedded object ve external relationship kapıları
+  `unzipSync` öncesinde veya hemen sonrasında fail-closed çalışır.
+- Hedef worksheet dosya adına göre tahmin edilmez; package/workbook
+  relationship zincirinden çözülür. Gizli sheet ve içerik imzası uyuşmazlığı
+  plan kaynağı üretmez.
+- Kaynak iki kez okunup SHA-256/size karşılaştırılır; preflight dosyayı
+  değiştirmez. Sentetik workbook testinde başlangıç/bitiş hash'i aynıdır.
+- Gerçek kusur düzeltmesi: negatif/kesirli/sıfır-compressed ZIP metadata'sı
+  artık geçerli kabul edilmez; part adı olmasa bile external relationship
+  yakalanır.
+- Ana ağaç ve repository-dışı fresh kopyada gerçek geçici PostgreSQL 17 ile
+  **2.017 başarılı / 6 mevcut ortam-koşullu UI skip** geçti: UI 349/6,
+  domain 738, contracts 321, database 72, API 473, File Agent 64. Typecheck,
+  lint, build ve bundle kapısı iki ortamda da geçti; başlangıç grafiği 498.514
+  bayt ve 10 lazy modüldür.
+- Bu dilim migration, API/UI, job kuyruğu, fiziksel `.xlsx` yazımı, backup,
+  replace veya production migration EKLEMEZ. Bunlar Paket 65B kapsamıdır.
+
+## Paket 66 — ÜÇ COMMIT İLE TAMAMLANDI VE KABUL EDİLDİ
+
+- Commit #1 kaynak snapshot: `e19870e9a6bd1696e9fa894e8fc09d4dd45e0ecd`.
+- Commit #2 sürümlü runtime revision entegrasyonu:
+  `1858052f8d335a0562cb856006da698bb6344190`.
+- Commit #3 test sertleştirme:
+  `120105fc378cd873ad6d08d20de1d6dc9a483b19`.
+- Canonical identity/hash, provenance sayıları, 158 aktif kural, 15 anomali,
+  immutable revision, explicit approval ve Paket 40 current-approved sınırı
+  korunur.
 
 ## Paket 66 Commit #1 — KAYNAK SNAPSHOT TAMAMLANDI
 

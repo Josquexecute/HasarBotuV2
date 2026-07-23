@@ -9,7 +9,30 @@ Bu plan, UI-first prototip aşamasını küçük, test edilebilir ve geri bildir
 - `[x]` Tamamlandı ve doğrulandı
 - `[!]` Engelli veya kullanıcı kararı gerekiyor
 
-## Paket 66 — 01.07.2026 Değer Kaybı kaynak snapshot'ı
+## Paket 65A — İşçilik workbook preflight ve immutable plan kaynağı
+
+- [x] ZIP/OOXML güvenlik limitlerini ve kapalı hata kodlarını saf domain
+  fonksiyonlarında uygula.
+- [x] Uygulanan kategori provenance'ı dışında plan kaynağı üretme; operasyon
+  türünden kategori dağılımı türetme.
+- [x] File Agent'ta göreli yol + yerel root sınırıyla salt-okunur workbook
+  preflight uygula.
+- [x] ZIP merkezi dizinini açmadan önce entry count/boyut/oran/şifreleme ve
+  zip-slip kapılarını çalıştır.
+- [x] Makro, VBA, dijital imza, embedded object ve external relationship'i
+  fail-closed reddet.
+- [x] Hedef worksheet part'ını OOXML relationship zincirinden çöz; dosya adı
+  veya `sheetN.xml` tahmini yapma.
+- [x] Görünür sheet, header/identity içerik imzası, beklenen hash/size ve
+  başlangıç/bitiş hash eşitliğini doğrula.
+- [x] Sentetik `.xlsx` testleriyle kaynak byte'larının değişmediğini ve temp
+  alanın temizlendiğini doğrula.
+
+Kapsam dışı: File Agent job kuyruğu, migration, contracts/API/UI, backup,
+geçici yazım, atomik replace ve fiziksel `.xlsx` değişikliği. Bunlar açık
+kullanıcı onaylı kritik işlem modeliyle Paket 65B'dedir.
+
+## Paket 66 — 01.07.2026 Değer Kaybı — TAMAMLANDI VE KABUL EDİLDİ
 
 ### Commit #1 — `feat: add 2026-07-01 value loss rule snapshot`
 
@@ -33,6 +56,18 @@ Bu plan, UI-first prototip aşamasını küçük, test edilebilir ve geri bildir
 Kapsam dışı: hesap motoru, Paket 65A/65B, Dosya Envanteri, API/UI, persistence,
 migration, fiziksel Excel yazımı, Gemini, remote/push ve sonraki Paket 66
 commitleri.
+
+### Commit #2 — `feat: integrate new value loss calculation revision`
+
+- [x] Sürüm seçimli runtime motoru, immutable revision, contracts,
+  persistence/API/UI ve Paket 40 current-approved entegrasyonunu tamamla.
+- [x] Migration 0043 forward/rollback/reapply davranışını doğrula.
+
+### Commit #3 — `test: harden value loss revision integration`
+
+- [x] Domain/contract/persistence/API/UI/Paket 40 sınır, güvenlik ve regresyon
+  matrisini tamamla.
+- [x] Paket 66 invariantlarını ve fresh-checkout kalite zincirini doğrula.
 
 ## Aktif geliştirme paketi — UI-first prototip temel kabulü
 

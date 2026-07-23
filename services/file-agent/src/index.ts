@@ -46,6 +46,15 @@ export {
   type OoxmlWorkbook,
   type OoxmlWorksheet,
 } from './ooxml-readonly-extractor.js'
+export {
+  LABOR_WORKBOOK_AGENT_PREFLIGHT_CODES,
+  LABOR_WORKBOOK_AGENT_PREFLIGHT_VERSION,
+  preflightLaborWorkbook,
+  readZipCentralDirectory,
+  type LaborWorkbookAgentPreflightCode,
+  type LaborWorkbookAgentPreflightInput,
+  type LaborWorkbookAgentPreflightResult,
+} from './labor-workbook-preflight.js'
 
 /**
  * Import edildiğinde döngü BAŞLAMAZ. Yalnız gerçek entrypoint doğrudan

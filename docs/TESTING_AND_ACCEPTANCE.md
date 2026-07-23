@@ -352,3 +352,22 @@ raporlanır.
 - UI: privacy/bütçe planı, prompt warning, açık egress onayı, provider-disabled/budget durumu, öneri inceleme, yalnız form alanına uygulama, save onayının sıfırlanması ve API no-fallback.
 - Gerçek Chrome: login → E-postalar → preview → AI plan → egress confirm → suggestion → apply → Paket 41 açık save; ayrıca provider-disabled, budget block, no-fallback, 1366×768 açık/koyu ve 1920×1080 koyu overflow/console kontrolü.
 - Kritik DB/API/UI/tarayıcı veya repository dışı fresh `npm ci` kapısı tamamlanmadan Paket 42 PASS sayılmaz. Gerçek müşteri verisi, gerçek e-posta gönderimi veya üretim migration kullanılmaz.
+
+### Paket 65A — salt-okunur workbook preflight kabulü
+
+- Domain: unsafe/negative ZIP metadata, zip-slip, duplicate, count/boyut/oran,
+  şifreleme, makro/VBA, imza, embedded object ve external relationship kapıları
+  fail-closed test edilir.
+- File Agent: yalnız sentetik geçici root ve sentetik `.xlsx` kullanır; güvenli
+  göreli yol, root containment, beklenen hash/size, görünür hedef sheet ve
+  header/identity içerik imzası doğrulanır.
+- Worksheet part adı relationship zincirinden çözülür; `sheet1.xml` veya dosya
+  adı tahminine dayalı test kabul edilmez.
+- Preflight öncesi/sonrası kaynak SHA-256 eşit olmalı ve temp test alanı
+  temizlenmelidir.
+- Migration, PostgreSQL, API, UI ve browser testi bu salt-okunur dilimde yoktur;
+  fiziksel yazımın Paket 65B kapılarıdır. Bu ayrım açıkça raporlanmalıdır.
+- Gerçek sonuç: ana ağaç ve workbook/DOCX/`.env.local` içermeyen repository-dışı
+  fresh kopyada PostgreSQL 17 ile UI 349 (+6 mevcut koşullu skip), domain 738,
+  contracts 321, database 72, API 473 ve File Agent 64; toplam 2.017 başarılı
+  test. Typecheck, lint, build ve bundle iki ortamda da geçti.

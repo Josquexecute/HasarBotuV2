@@ -43,6 +43,7 @@ export const LABOR_WORKBOOK_PREFLIGHT_CODES = [
   'WORKBOOK_ABSOLUTE_ENTRY',
   'WORKBOOK_PARENT_TRAVERSAL',
   'WORKBOOK_ENTRY_NAME_INVALID',
+  'WORKBOOK_ZIP_METADATA_INVALID',
   'WORKBOOK_DUPLICATE_ENTRY',
   'WORKBOOK_TOO_MANY_ENTRIES',
   'WORKBOOK_UNCOMPRESSED_TOO_LARGE',
@@ -125,8 +126,17 @@ export function validateZipStructure(entries: readonly ZipEntryMeta[]): ZipStruc
     if (seen.has(normalized)) codes.add('WORKBOOK_DUPLICATE_ENTRY')
     seen.add(normalized)
 
-    totalUncompressed += Math.max(0, entry.uncompressedSize)
-    totalCompressed += Math.max(0, entry.compressedSize)
+    if (!Number.isSafeInteger(entry.compressedSize)
+      || !Number.isSafeInteger(entry.uncompressedSize)
+      || entry.compressedSize < 0
+      || entry.uncompressedSize < 0
+      || (entry.compressedSize === 0 && entry.uncompressedSize > 0)) {
+      codes.add('WORKBOOK_ZIP_METADATA_INVALID')
+      continue
+    }
+
+    totalUncompressed += entry.uncompressedSize
+    totalCompressed += entry.compressedSize
 
     // Giriş başına açılma oranı: dizin veya boş girişte oran hesaplanmaz.
     if (entry.compressedSize > 0 && entry.uncompressedSize > 0) {
@@ -153,10 +163,12 @@ export function validateZipStructure(entries: readonly ZipEntryMeta[]): ZipStruc
 export function detectForbiddenOoxmlParts(input: {
   readonly entryNames: readonly string[]
   readonly contentTypesXml: string
+  readonly relationshipXmls?: readonly string[]
 }): readonly LaborWorkbookPreflightCode[] {
   const codes = new Set<LaborWorkbookPreflightCode>()
   const paths = input.entryNames.map((name) => normalizeZipEntryName(name))
   const types = input.contentTypesXml.toLowerCase()
+  const relationships = (input.relationshipXmls ?? []).join('\n')
 
   if (paths.some((p) => p === 'xl/vbaproject.bin')) codes.add('WORKBOOK_VBA_PROJECT')
   if (types.includes('ms-office.vbaproject') || types.includes('macroenabled')) {
@@ -166,6 +178,10 @@ export function detectForbiddenOoxmlParts(input: {
     codes.add('WORKBOOK_DIGITAL_SIGNATURE')
   }
   if (paths.some((p) => p.startsWith('xl/externallinks/'))) codes.add('WORKBOOK_EXTERNAL_LINK')
+  if (/\bTargetMode\s*=\s*["']External["']/i.test(relationships)
+    || /\bType\s*=\s*["'][^"']*\/externalLink["']/i.test(relationships)) {
+    codes.add('WORKBOOK_EXTERNAL_LINK')
+  }
   if (paths.some((p) => p.startsWith('xl/embeddings/') || p.includes('oleobject'))) {
     codes.add('WORKBOOK_UNSUPPORTED_OBJECT')
   }
