@@ -32,6 +32,37 @@ Kapsam dışı: File Agent job kuyruğu, migration, contracts/API/UI, backup,
 geçici yazım, atomik replace ve fiziksel `.xlsx` değişikliği. Bunlar açık
 kullanıcı onaylı kritik işlem modeliyle Paket 65B'dedir.
 
+## Paket 65B — güvenli İşçilik workbook fiziksel yazım katmanı
+
+- [x] Fiziksel yazımdan önce 65A preflight'ını çalıştır; onay anında aynı hash,
+  boyut, mtime, worksheet relationship'i ve içerik imzasını yeniden doğrula.
+- [x] Salt-okunur değişiklik önizlemesi ve deterministik plan hash'i üret;
+  önizlenen planla birebir eşleşen açık kullanıcı onayı olmadan yazma.
+- [x] Yalnız doğrulanmış hedef worksheet üzerindeki `D2:D1048576` hücrelerini
+  kabul et; başlık/kimlik/formül hücresini, `H–N` ve diğer bütün sütunları
+  fail-closed reddet.
+- [x] Kaynak yanında zaman damgalı ve `COPYFILE_EXCL` korumalı `.bak.xlsx`
+  oluştur; backup byte'larını kaynakla birebir doğrula.
+- [x] Aynı dizindeki geçici `.xlsx` dosyasına yaz, fsync et, 65A preflight ve
+  OOXML part karşılaştırmasıyla doğrula, sonra aynı volume üzerinde atomik
+  replace uygula.
+- [x] Replace öncesi kaynak değişimini yeniden kontrol et; replace sonrası veya
+  audit kesinleştirmesi başarısızsa backup'tan atomik rollback ile başlangıç
+  byte'larını geri getir.
+- [x] Workbook yanında exclusive lock ile aynı kaynağa eşzamanlı ikinci yazımı
+  engelle; temp/lock kalıntısını kontrollü temizle.
+- [x] Audit callback'inde başlangıç/sonuç SHA-256, plan hash, hücre adresleri,
+  backup dosya adı ve güvenli hata kodunu taşı; hücre değeri veya mutlak yol
+  taşıma.
+- [x] Yalnız sentetik `.xlsx` kullanan File Agent testlerinde başarılı yazım,
+  onaysız/stale/yanlış plaka/makro/external link, `H–N` korunumu, eşzamanlı lock,
+  replace hatası ve rollback davranışını doğrula.
+
+Kapsam dışı: D hücre değerlerini üreten iş kuralı/satır eşlemesi, PostgreSQL
+operation kaydı, File Agent job payload'ı, contracts/API/UI ve gerçek müşteri
+workbook'u. Mevcut modelde bu değer kaynağı tanımlı olmadığı için tahmin
+edilmedi; runtime entegrasyonu bu güvenli çekirdeği ayrıca çağıracaktır.
+
 ## Paket 66 — 01.07.2026 Değer Kaybı — TAMAMLANDI VE KABUL EDİLDİ
 
 ### Commit #1 — `feat: add 2026-07-01 value loss rule snapshot`

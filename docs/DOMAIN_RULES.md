@@ -412,3 +412,26 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
 - Strict output unknown alan, eksik/uzun değer, non-finite confidence, PII, `[PII:*]`, URL, drive/UNC/traversal içerirse fail-closed olur. Ham output saklanmaz.
 - Provider-disabled/budget-blocked çağrısız terminal durumdur. Network sonucu belirsizse otomatik retry yoktur; `outcome_unknown` taslağı değiştirmez.
 - Response-recorded receipt finalize kesintisinde provider ikinci kez çağrılmaz. Exact idempotent replay ikinci run/receipt/usage veya öneri üretmez.
+
+## İşçilik workbook fiziksel yazım kuralları — Paket 65B
+
+- Fiziksel yazım yalnız Paket 65A preflight'ı başarılı ve uygulama anında aynı
+  kaynak hash/boyut/mtime, hedef worksheet relationship'i ve içerik imzası
+  yeniden doğrulanmışsa başlayabilir.
+- Değişiklik önizlemesi immutable plan hash'i taşır. Kullanıcının açık onayı
+  aynı plan hash'ine bağlı değilse veya kaynak/plan bayatsa yazım yapılmaz.
+- İlk fiziksel kapsam yalnız doğrulanmış hedef çalışma sayfasındaki veri
+  satırlarının `D` hücreleridir. `H–N`, başlık/kimlik/formül hücreleri ve diğer
+  bütün hücreler yazım kapsamı dışıdır; tek ihlal tüm işlemi düşürür.
+- Kaynağın yanında zaman damgalı `.bak.xlsx` oluşturulup başlangıç byte'larıyla
+  doğrulanmadan geçici workbook hazırlanmaz. Geçici dosya aynı dizinde yazılır,
+  fsync edilir, OOXML kapsamı ve 65A preflight'ı yeniden doğrulanır.
+- Kaynak replace öncesi bir kez daha byte-for-byte kontrol edilir. Yalnız aynı
+  volume atomik replace kullanılır; replace sonrası doğrulama veya audit
+  kesinleştirmesi başarısızsa backup'tan atomik rollback zorunludur.
+- Aynı workbook'a eşzamanlı ikinci yazım exclusive lock ile fail-closed
+  engellenir. Başlangıç ve sonuç SHA-256, plan hash, hücre adresleri, backup
+  dosya adı ve güvenli sonuç kodu audit'e girer; hücre değerleri, mutlak root,
+  ham hata ve müşteri belgesi içeriği audit'e girmez.
+- Makro/VBA, dijital imza, embedded object, external relationship, yanlış
+  vaka/plaka imzası veya preflight conflict fiziksel yazımı engeller.

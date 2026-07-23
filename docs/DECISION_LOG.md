@@ -1614,3 +1614,39 @@ salt-okunur kalması plan/onay/uygula sınırını korur.
 
 Etki: `labor-workbook-preflight/1.0.0`,
 `labor-workbook-agent-preflight/1.0.0`.
+
+## 2026-07-23 — HB-2026-085: Paket 65B güvenli workbook fiziksel yazım çekirdeği
+
+Karar:
+
+1. Fiziksel yazım File Agent içinde iki ayrı çağrıdır: salt-okunur preview
+   immutable plan hash'i üretir; apply yalnız aynı hash'e bağlı açık kullanıcı
+   onayıyla ilerler. Apply, 65A preflight'ını lock altında yeniden çalıştırır.
+2. Bu dilimdeki tek izinli fiziksel hedef doğrulanmış worksheet üzerindeki
+   `D2:D1048576` hücreleridir. `H–N`, diğer sütunlar, imza hücreleri ve formüllü
+   hücreler fail-closed reddedilir. Değer inline string yazılır; sharedStrings,
+   formül cache'i ve diğer OOXML part'ları değiştirilmez.
+3. Kaynak yanında zaman damgalı `.bak.xlsx` `COPYFILE_EXCL` ile oluşturulur ve
+   byte-for-byte doğrulanır. Geçici `.xlsx` aynı dizinde yazılıp fsync edilir;
+   yalnız hedef worksheet part'ının beklenen D hücre yamalarıyla değiştiği ve
+   diğer bütün part'ların byte içeriğinin korunduğu doğrulanır.
+4. Temp workbook 65A preflight'ından tekrar geçmeden replace yapılmaz. Kaynak
+   replace öncesi yeniden okunur; aynı-workbook exclusive lock ikinci Agent
+   yazımını engeller. Replace aynı volume atomik rename ile yapılır.
+5. Replace sonrası doğrulama veya completed audit kaydı başarısızsa backup'tan
+   aynı dizindeki recovery temp üzerinden atomik rollback yapılır. Başarısız
+   sonuç başlangıç byte'larının korunup korunmadığını açıkça taşır.
+6. Audit olayı plan hash, göreli workbook yolu, hedef sheet, D hücre adresleri,
+   kullanıcı/onay zamanı, başlangıç/sonuç SHA-256, backup basename ve kapalı
+   güvenli hata kodu taşır. Mutlak yol, hücre değerleri ve ham hata taşımaz.
+7. Mevcut model D hücre değerlerini ve satır eşlemesini üretmediği için bunlar
+   uydurulmadı. PostgreSQL operation/job, contracts/API/UI entegrasyonu ayrı
+   runtime dilimidir; bu karar yalnız çağrılabilir fiziksel çekirdeği açar.
+
+Gerekçe: Tam workbook nesne modeliyle yeniden üretim hedef dışı hücre ve
+özellikleri sessizce değiştirebilir. Cerrahi OOXML yamalama + part karşılaştırma,
+backup, temp doğrulama, atomik replace ve rollback zinciri hedef dışı içeriğin
+korunduğunu ölçülebilir kılar.
+
+Etki: `labor-workbook-write-plan/2.0.0`,
+`labor-workbook-write/1.0.0`.

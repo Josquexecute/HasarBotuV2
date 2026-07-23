@@ -5,8 +5,8 @@ Son güncelleme: 2026-07-23
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 65A — İşçilik workbook salt-okunur File Agent preflight
-- Durum: **Paket 66 kabul edildi; Paket 65A preflight tamamlandı, fiziksel yazım HENÜZ YOK**
+- Aşama: Paket 65B — İşçilik workbook güvenli fiziksel yazım çekirdeği
+- Durum: **Paket 66 ve 65A kabul edildi; 65B File Agent çekirdeği tamamlandı, runtime API/UI job entegrasyonu bekliyor**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
@@ -36,6 +36,36 @@ Son güncelleme: 2026-07-23
   bayt ve 10 lazy modüldür.
 - Bu dilim migration, API/UI, job kuyruğu, fiziksel `.xlsx` yazımı, backup,
   replace veya production migration EKLEMEZ. Bunlar Paket 65B kapsamıdır.
+
+## Paket 65B — GÜVENLİ FİZİKSEL YAZIM ÇEKİRDEĞİ TAMAMLANDI
+
+- File Agent salt-okunur preview çağrısı yalnız doğrulanmış hedef worksheet
+  üzerindeki `D` hücresi değişikliklerini eski/yeni değerle gösterir ve
+  deterministik `labor-workbook-write-plan/2.0.0` hash'i üretir.
+- Apply; aynı plan hash'ine bağlı açık kullanıcı onayı, yeniden 65A preflight,
+  kaynak hash/boyut/mtime ve worksheet relationship/imza eşitliği olmadan
+  hiçbir backup/temp/yazım yapmaz.
+- Tek fiziksel yazım kapsamı `D2:D1048576`'dır. `H–N`, diğer sütunlar, imza ve
+  formül hücreleri fail-closed reddedilir.
+- Kaynak yanında zaman damgalı `.bak.xlsx`, aynı dizinde fsync edilmiş temp,
+  OOXML part kapsam doğrulaması, ikinci preflight ve atomik replace zinciri
+  kuruldu. Replace sonrası doğrulama veya audit hatasında backup'tan atomik
+  rollback başlangıç byte'larını geri getirir.
+- Aynı workbook için exclusive lock ikinci eşzamanlı yazımı engeller. Audit
+  başlangıç/sonuç hash'i ve güvenli metadata taşır; hücre değeri, mutlak yol ve
+  ham hata taşımaz.
+- Sentetik testler; preview'in salt okunurluğu, D-only kapsam, yanlış plaka,
+  makro/external relationship blokajı, açık onay, backup/temp/replace, `H–N`
+  korunumu, hata rollback'i, audit rollback'i, lock ve stale kaynak durumlarını
+  kapsar. Gerçek müşteri workbook'u veya gerçek `P:\` kullanılmadı.
+- Kök typecheck, lint ve build/bundle geçti; başlangıç grafiği 498.514 bayt,
+  en büyük chunk 318.291 bayt ve 10 lazy modül korundu. Varsayılan tam test
+  zinciri 1.609 başarılı / 423 ortam-koşullu skip verdi; yeni 65B testleri 9/9,
+  File Agent bütünü 73/73 ve skip yoktur. PostgreSQL/API testleri bu ortamda
+  koşullu skip kaldığı için PASS sayılmadı.
+- D hücre değer kaynağı/satır eşlemesi mevcut domain modelinde tanımlı değildir;
+  tahmin edilmedi. Migration, job payload, contracts/API/UI ve gerçek runtime
+  kullanımı sonraki entegrasyon dilimidir.
 
 ## Paket 66 — ÜÇ COMMIT İLE TAMAMLANDI VE KABUL EDİLDİ
 

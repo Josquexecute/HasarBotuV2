@@ -371,3 +371,33 @@ raporlanır.
   fresh kopyada PostgreSQL 17 ile UI 349 (+6 mevcut koşullu skip), domain 738,
   contracts 321, database 72, API 473 ve File Agent 64; toplam 2.017 başarılı
   test. Typecheck, lint, build ve bundle iki ortamda da geçti.
+
+### Paket 65B — güvenli workbook fiziksel yazım çekirdeği kabulü
+
+- Preview kaynak workbook'u değiştirmez; hedef worksheet relationship ile
+  çözülür, yanlış plaka/dosya içerik imzası plan üretmez ve önizleme eski/yeni D
+  hücresi değerlerini açıkça gösterir.
+- Apply aynı immutable plan hash'ine bağlı açık onay yoksa, plan/source bayatsa
+  veya 65A preflight yeniden geçmezse backup/temp/yazım yapmaz.
+- Yalnız `D2:D1048576` kabul edilir. `H–N`, diğer sütun, başlık/kimlik/formül
+  hücresi veya tek bir geçersiz değişiklik bütün planı fail-closed düşürür.
+- Başlangıç backup'ı kaynakla byte-for-byte eşittir. Temp aynı dizinde fsync
+  edilir; hedef worksheet dışında bütün OOXML part byte içerikleri aynı kalır;
+  hedef sheet yalnız planlanan D hücre farklarını taşır.
+- Replace öncesi source byte'ları yeniden doğrulanır. Atomik replace sonrası
+  kaynak result hash'ine eşittir. Replace sonrası doğrulama veya completed audit
+  hatasında rollback başlangıç byte'larını geri getirir.
+- Aynı workbook'a eşzamanlı ikinci apply lock ile reddedilir. Başarılı audit
+  started/completed; başarısız write started/failed zincirini, başlangıç/sonuç
+  hashlerini ve backup basename'i taşır; değer/mutlak yol/ham hata taşımaz.
+- Makro/VBA, imza, external relationship ve preflight conflict testleri
+  fail-closed kalır. Test fixture'ları yalnız sentetik temp `.xlsx` kullanır;
+  workbook/DOCX veya gerçek müşteri verisi repository'ye girmez.
+- PostgreSQL migration, job kuyruğu, contracts/API/UI ve gerçek `P:\` smoke'u bu
+  fiziksel çekirdek diliminde yoktur; çalıştırılmadan PASS sayılmaz ve sonraki
+  runtime entegrasyon kabulünün konusudur.
+- Uygulama sonucu: yeni Paket 65B sentetik testleri 9/9, File Agent bütünü 73/73
+  ve skip olmadan geçti. Kök typecheck, lint, build ve bundle geçti; varsayılan
+  tam test zinciri 1.609 başarılı / 423 ortam-koşullu skip verdi. Skip dağılımı
+  UI 6, database 56, API 361'dir; PostgreSQL/API kapıları çalışmadığı için bu
+  katmanlar PASS olarak raporlanmaz.
