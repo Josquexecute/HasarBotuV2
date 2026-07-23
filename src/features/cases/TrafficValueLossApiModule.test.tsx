@@ -208,10 +208,14 @@ function versionFrom(
   const evidenceByKey = new Map(evidence.map((entry) => [entry.evidenceKey, entry.id]))
   return {
     id: '019fa000-0000-7000-8000-000000000006',
+    organizationId: '019fa000-0000-7000-8000-000000000005',
+    caseId: CASE_ID,
+    calculationId: '019fa000-0000-7000-8000-000000000007',
+    revisionId: '019fa000-0000-7000-8000-000000000006',
     assessmentVersion: 1,
     status,
-    ruleSetId: 'traffic-value-loss-market-difference',
-    ruleVersion: '2026.07.01.1',
+    ruleSetId: 'real-market-analysis',
+    ruleVersion: 'real-market-analysis/2026-07-01/1.0.0',
     effectiveFrom: '2026-07-01',
     input: {
       lossDate: item.lossDate ?? null,
@@ -223,13 +227,16 @@ function versionFrom(
       preAccidentMarketValueMinor: input.preAccidentMarketValueMinor,
       postRepairMarketValueMinor: input.postRepairMarketValueMinor,
       damageParts: input.damageParts,
+      realMarket: input.realMarket ?? null,
+      inputOverrides: [],
+      ruleOverride: null,
     },
     evaluation: {
-      ruleSetId: 'traffic-value-loss-market-difference',
-      ruleVersion: '2026.07.01.1',
+      ruleSetId: 'real-market-analysis',
+      ruleVersion: 'real-market-analysis/2026-07-01/1.0.0',
       effectiveFrom: '2026-07-01',
-      calculationMethod: 'market_value_difference',
-      roundingRule: 'half_up_minor_unit',
+      calculationMethod: 'real_market_analysis',
+      roundingRule: 'ceil_500_try',
       ruleSources: [
         {
           code: 'RG-2026',
@@ -259,6 +266,12 @@ function versionFrom(
       reasoning: ['Altı doğrulanmış emsal ve doğrulanmış belge metadata kanıtı değerlendirildi.'],
       humanApprovalRequired: true,
       canSubmitForApproval: true,
+      eligibility: 'eligible',
+      rawResultMinor: { decimal: '7500000' },
+      capMinor: { decimal: '30000000' },
+      cappedResultMinor: { decimal: '7500000' },
+      roundingResultMinor: 7_500_000,
+      finalResultMinor: 7_500_000,
     },
     evidence,
     comparables: input.comparables.map((comparable, index) => ({
@@ -283,6 +296,7 @@ function versionFrom(
 
 function mutablePort() {
   let assessment: TrafficValueLossAssessmentRecord | null = null
+  let currentApproved: TrafficValueLossVersionRecord | null = null
   let versions: readonly TrafficValueLossVersionRecord[] = []
   const store = (currentVersion: TrafficValueLossVersionRecord, version: number) => {
     assessment = {
@@ -297,7 +311,27 @@ function mutablePort() {
     return assessment
   }
   const port: TrafficValueLossDataPort = {
-    load: vi.fn(async () => ({ assessment, versions })),
+    load: vi.fn(async () => ({ assessment, versions, currentApproved })),
+    preview: vi.fn(async (_caseId, _expectedVersion, input) => ({
+      previewHash: 'b'.repeat(64),
+      ruleSetId: 'real-market-analysis',
+      ruleVersion: 'real-market-analysis/2026-07-01/1.0.0',
+      evaluation: versionFrom(input, 'draft').evaluation,
+    })),
+    partCatalog: vi.fn(async () => ({
+      ruleIdentity: 'real-market-analysis/2026-07-01/1.0.0',
+      vehicleGroupCode: 'A' as const,
+      parts: [{
+        stableRuleId: 'value-loss-part|vehicle-group=A|source-table=group-a|source-row=36|label=camurluk|operations=paint%2Brepair%2Breplacement',
+        label: 'SOL ÇAMURLUK',
+        supportedOperations: ['replacement', 'repair', 'paint'] as const,
+        coefficients: {
+          replacement: '1',
+          repair: { light: '0.5', medium: '0.75', heavy: '1' },
+          paint: { full: '1', local: '0.5' },
+        },
+      }],
+    })),
     createVersion: vi.fn(async (_caseId, _expectedVersion, input) => store(versionFrom(input, 'draft'), 1)),
     submit: vi.fn(async () => {
       if (assessment === null) throw new Error('assessment missing')
@@ -305,14 +339,15 @@ function mutablePort() {
     }),
     approve: vi.fn(async () => {
       if (assessment === null) throw new Error('assessment missing')
-      return store({
+      currentApproved = {
         ...assessment.currentVersion,
         status: 'approved',
         humanApprovalStatus: 'approved',
         approvedBy: USER_ID,
         approvedAt: '2026-07-16T09:00:00.000Z',
         approvalReason: 'Kanıtlar insan tarafından kontrol edildi.',
-      }, assessment.version + 1)
+      }
+      return store(currentApproved, assessment.version + 1)
     }),
     reject: vi.fn(async () => {
       if (assessment === null) throw new Error('assessment missing')
@@ -354,7 +389,13 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     await user.type(screen.getByLabelText('Kilometre'), '50000')
     await user.type(screen.getByLabelText('Kullanım şekli'), 'Hususi')
     await user.type(screen.getByLabelText('Kaza öncesi piyasa değeri'), '1000000')
+    await user.type(screen.getByLabelText('Rayiç giriş gerekçesi'), 'Onaylı rayiç analizi referansı kontrol edildi.')
     await user.type(screen.getByLabelText('Onarım sonrası piyasa değeri'), '900000')
+    await user.selectOptions(screen.getByLabelText('Antika / koleksiyon araç'), 'no')
+    await user.selectOptions(screen.getByLabelText('Önceki ağır hasar'), 'no')
+    await user.type(screen.getByPlaceholderText('Parça ara…'), 'SOL ÇAMURLUK')
+    await user.selectOptions(screen.getByLabelText('Katalog işlemi'), 'paint')
+    await user.click(screen.getByRole('button', { name: /Katalogdan Ekle/ }))
     await user.type(screen.getByLabelText('Parça kodu'), 'SOL_CAMURLUK')
     await user.type(screen.getByLabelText('Parça adı'), 'Sol çamurluk')
     await user.selectOptions(screen.getByLabelText('Önceki hasar'), 'no')
@@ -374,10 +415,13 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
       await user.click(verified[index])
     }
 
-    await user.click(screen.getByRole('button', { name: /Taslağı Hesapla ve Sürümle/ }))
+    await user.click(screen.getByRole('button', { name: /Önizleme Oluştur/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /önizleme girdilerini/i }))
+    await user.click(screen.getByRole('button', { name: /Onaylanan Önizlemeyi Sürümle/ }))
     await waitFor(() => expect(port.createVersion).toHaveBeenCalledTimes(1))
     const input = vi.mocked(port.createVersion).mock.calls[0][2]
     expect(input.comparables).toHaveLength(6)
+    expect(input.realMarket?.parts[0]).toMatchObject({ operation: 'paint', paintMode: 'full' })
     expect(input.evidence.some((entry) => entry.documentVersionId === DOCUMENT_VERSION_ID && entry.sourceHash === 'a'.repeat(64))).toBe(true)
     expect(await screen.findByText('Yeni hesaplama taslağı ve sürümü oluşturuldu.')).toBeInTheDocument()
 
@@ -396,7 +440,7 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     await user.click(screen.getByRole('button', { name: 'Nihai Raporu Önizle' }))
     await waitFor(() => expect(reportPort.preview).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('Trafik Değer Kaybı Nihai Raporu')).toBeInTheDocument()
-    expect(screen.getAllByText('2026.07.01.1').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('real-market-analysis/2026-07-01/1.0.0').length).toBeGreaterThanOrEqual(2)
     await user.click(screen.getByRole('checkbox', { name: /bu önizlemeden nihai PDF/ }))
     await user.click(screen.getByRole('button', { name: 'Onayla ve Nihai PDF Oluştur' }))
     await waitFor(() => expect(reportPort.generate).toHaveBeenCalledTimes(1))

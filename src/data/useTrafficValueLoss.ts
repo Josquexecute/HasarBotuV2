@@ -7,6 +7,9 @@ import {
   type TrafficValueLossAssessmentRecord,
   type TrafficValueLossDataPort,
   type TrafficValueLossDraftInput,
+  type TrafficValueLossPartCatalogRecord,
+  type TrafficValueLossPreviewRecord,
+  type TrafficValueLossRealMarketInput,
   type TrafficValueLossVersionRecord,
 } from './trafficValueLossPort'
 
@@ -23,11 +26,16 @@ export type TrafficValueLossLoadStatus =
 
 export interface UseTrafficValueLossResult {
   readonly assessment: TrafficValueLossAssessmentRecord | null
+  readonly currentApproved: TrafficValueLossVersionRecord | null
   readonly versions: readonly TrafficValueLossVersionRecord[]
+  readonly previewResult: TrafficValueLossPreviewRecord | null
+  readonly catalog: TrafficValueLossPartCatalogRecord | null
   readonly status: TrafficValueLossLoadStatus
   readonly busy: boolean
   readonly errorMessage: string | null
   retry(): void
+  preview(input: TrafficValueLossDraftInput): Promise<void>
+  loadCatalog(vehicleGroupCode: NonNullable<TrafficValueLossRealMarketInput['vehicleGroupCode']>): Promise<void>
   createVersion(input: TrafficValueLossDraftInput, idempotencyKey: string): Promise<void>
   submit(idempotencyKey: string): Promise<void>
   approve(reason: string | null, idempotencyKey: string): Promise<void>
@@ -56,6 +64,9 @@ export function useTrafficValueLoss(
   const port = useMemo(() => suppliedPort ?? createHttpTrafficValueLossAdapter(), [suppliedPort])
   const [assessment, setAssessment] = useState<TrafficValueLossAssessmentRecord | null>(null)
   const [versions, setVersions] = useState<readonly TrafficValueLossVersionRecord[]>([])
+  const [currentApproved, setCurrentApproved] = useState<TrafficValueLossVersionRecord | null>(null)
+  const [previewResult, setPreviewResult] = useState<TrafficValueLossPreviewRecord | null>(null)
+  const [catalog, setCatalog] = useState<TrafficValueLossPartCatalogRecord | null>(null)
   const [status, setStatus] = useState<TrafficValueLossLoadStatus>('idle')
   const [busy, setBusy] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -70,6 +81,7 @@ export function useTrafficValueLoss(
     const workspace = await port.load(caseId)
     setAssessment(workspace.assessment)
     setVersions(workspace.versions)
+    setCurrentApproved(workspace.currentApproved ?? null)
     setStatus(workspace.assessment === null ? 'empty' : 'ok')
   }, [caseId, port])
 
@@ -77,6 +89,9 @@ export function useTrafficValueLoss(
     if (source !== 'api' || !enabled) {
       setAssessment(null)
       setVersions([])
+      setCurrentApproved(null)
+      setPreviewResult(null)
+      setCatalog(null)
       setStatus('idle')
       return
     }
@@ -88,6 +103,7 @@ export function useTrafficValueLoss(
         if (cancelled) return
         setAssessment(workspace.assessment)
         setVersions(workspace.versions)
+        setCurrentApproved(workspace.currentApproved ?? null)
         setStatus(workspace.assessment === null ? 'empty' : 'ok')
       })
       .catch((error: unknown) => {
@@ -116,14 +132,38 @@ export function useTrafficValueLoss(
       setBusy(false)
     }
   }, [load, reportUnauthorized])
+  const preview = useCallback(async (input: TrafficValueLossDraftInput) => {
+    setBusy(true)
+    setErrorMessage(null)
+    try {
+      if (port.preview === undefined) throw new TrafficValueLossError('unavailable', 'preview endpoint unavailable')
+      setPreviewResult(await port.preview(caseId, assessment?.version ?? 0, input))
+    } catch (error) {
+      setErrorMessage(safeMessage(error))
+      throw error
+    } finally {
+      setBusy(false)
+    }
+  }, [assessment?.version, caseId, port])
+  const loadCatalog = useCallback(async (
+    vehicleGroupCode: NonNullable<TrafficValueLossRealMarketInput['vehicleGroupCode']>,
+  ) => {
+    if (port.partCatalog === undefined) throw new TrafficValueLossError('unavailable', 'part catalog endpoint unavailable')
+    setCatalog(await port.partCatalog(caseId, vehicleGroupCode))
+  }, [caseId, port])
 
   return {
     assessment,
+    currentApproved,
     versions,
+    previewResult,
+    catalog,
     status,
     busy,
     errorMessage,
     retry,
+    preview,
+    loadCatalog,
     createVersion: (input, key) => command(() => port.createVersion(caseId, assessment?.version ?? 0, input, key)),
     submit: (key) => {
       if (assessment === null) return Promise.reject(new TrafficValueLossError('not_found', 'assessment missing'))

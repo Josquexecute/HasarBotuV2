@@ -45,6 +45,7 @@ export const API_ERROR_CODES = [
   'traffic_value_loss_stale',
   'traffic_value_loss_source_invalid',
   'traffic_value_loss_approval_blocked',
+  'traffic_value_loss_preview_stale',
   'traffic_value_loss_report_not_approved',
   'traffic_value_loss_report_preview_stale',
   'traffic_value_loss_report_exists',

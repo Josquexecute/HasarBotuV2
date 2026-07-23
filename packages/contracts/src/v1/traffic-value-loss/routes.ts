@@ -1,6 +1,9 @@
 import { API_V1_BASE } from '../../common/routes.js'
 
 export const TRAFFIC_VALUE_LOSS_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss` as const
+export const TRAFFIC_VALUE_LOSS_CURRENT_APPROVED_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/current-approved` as const
+export const TRAFFIC_VALUE_LOSS_PREVIEW_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/preview` as const
+export const TRAFFIC_VALUE_LOSS_PART_CATALOG_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/part-catalog` as const
 export const TRAFFIC_VALUE_LOSS_VERSIONS_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/versions` as const
 export const TRAFFIC_VALUE_LOSS_SUBMIT_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/versions/:versionId/submit` as const
 export const TRAFFIC_VALUE_LOSS_APPROVE_ROUTE = `${API_V1_BASE}/cases/:caseId/traffic-value-loss/versions/:versionId/approve` as const

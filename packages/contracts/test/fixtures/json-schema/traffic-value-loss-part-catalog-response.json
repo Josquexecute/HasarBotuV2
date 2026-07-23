@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ruleIdentity": {
+      "type": "string",
+      "const": "real-market-analysis/2026-07-01/1.0.0"
+    },
+    "vehicleGroupCode": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "Ç",
+        "D",
+        "E",
+        "F"
+      ]
+    },
+    "parts": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "stableRuleId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "sourceTable": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "sourceRow": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "supportedOperations": {
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "replacement",
+                "repair",
+                "paint"
+              ]
+            }
+          },
+          "coefficients": {
+            "type": "object",
+            "properties": {
+              "replacement": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "repair": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "light": {
+                        "type": "string"
+                      },
+                      "medium": {
+                        "type": "string"
+                      },
+                      "heavy": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "light",
+                      "medium",
+                      "heavy"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "paint": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "full": {
+                        "type": "string"
+                      },
+                      "local": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "full",
+                      "local"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "replacement",
+              "repair",
+              "paint"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "stableRuleId",
+          "label",
+          "sourceTable",
+          "sourceRow",
+          "supportedOperations",
+          "coefficients"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "ruleIdentity",
+    "vehicleGroupCode",
+    "parts"
+  ],
+  "additionalProperties": false
+}

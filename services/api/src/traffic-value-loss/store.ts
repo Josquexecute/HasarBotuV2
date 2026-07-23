@@ -1,18 +1,28 @@
+import { createHash } from 'node:crypto'
 import type pg from 'pg'
 import { uuidv7 } from '@hasarbotu/database'
 import {
+  evaluateRealMarketValueLoss,
   evaluateTrafficValueLoss,
+  listRealMarketPartRules,
   parseLocalDate,
+  selectTrafficValueLossRule,
+  type RealMarketValueLossInput,
   type TrafficValueLossEvidenceFact,
   type TrafficValueLossInput,
+  type ValueLossVehicleGroupCode,
 } from '@hasarbotu/domain'
 import {
   trafficValueLossAssessmentSchema,
   trafficValueLossEvaluationSchema,
   trafficValueLossInputSnapshotSchema,
+  trafficValueLossPartCatalogResponseSchema,
+  trafficValueLossPreviewResponseSchema,
   trafficValueLossVersionSchema,
   type TrafficValueLossApproveRequest,
   type TrafficValueLossAssessmentDto,
+  type TrafficValueLossPartCatalogResponse,
+  type TrafficValueLossPreviewResponse,
   type TrafficValueLossRejectRequest,
   type TrafficValueLossSubmitRequest,
   type TrafficValueLossVersionCreateRequest,
@@ -21,6 +31,7 @@ import {
 import { createAuditService } from '../audit/service.js'
 import { findIdempotent, insertIdempotent } from '../db/idempotency.js'
 import { withTransaction, type Queryable } from '../db/executor.js'
+import { realMarketValueLossRuleSnapshot } from './rule-source.js'
 
 interface Actor { readonly organizationId: string; readonly actorUserId: string; readonly requestId: string }
 interface Idempotency { readonly scope: string; readonly key: string; readonly requestHash: string }
@@ -28,7 +39,18 @@ interface Result<T> { readonly replay: boolean; readonly status: number; readonl
 
 export interface TrafficValueLossStore {
   find(organizationId: string, caseId: string): Promise<TrafficValueLossAssessmentDto | undefined>
+  currentApproved(organizationId: string, caseId: string): Promise<TrafficValueLossVersionDto | undefined>
   versions(organizationId: string, caseId: string): Promise<readonly TrafficValueLossVersionDto[] | undefined>
+  preview(
+    actor: Actor,
+    caseId: string,
+    input: TrafficValueLossVersionCreateRequest,
+  ): Promise<TrafficValueLossPreviewResponse>
+  partCatalog(
+    organizationId: string,
+    caseId: string,
+    vehicleGroupCode: ValueLossVehicleGroupCode,
+  ): Promise<TrafficValueLossPartCatalogResponse | undefined>
   createVersion(
     actor: Actor,
     caseId: string,
@@ -65,6 +87,9 @@ export type TrafficValueLossStoreErrorCode =
   | 'version_conflict'
   | 'state_conflict'
   | 'approval_blocked'
+  | 'rule_selection_required'
+  | 'rule_input_required'
+  | 'preview_mismatch'
   | 'idempotency_conflict'
 
 export class TrafficValueLossStoreError extends Error {
@@ -109,6 +134,10 @@ export async function loadTrafficValueLossVersion(exec: Queryable, organizationI
   }))
   return trafficValueLossVersionSchema.parse({
     id: row.id,
+    organizationId: row.organization_id,
+    caseId: row.case_id,
+    calculationId: row.assessment_id,
+    revisionId: row.id,
     assessmentVersion: row.assessment_version,
     status: row.status,
     ruleSetId: row.rule_set_id,
@@ -190,7 +219,7 @@ async function idempotentWrite<T>(
 }
 
 async function validateEvidence(
-  client: pg.PoolClient,
+  client: Queryable,
   organizationId: string,
   caseId: string,
   input: TrafficValueLossVersionCreateRequest,
@@ -215,6 +244,138 @@ async function validateEvidence(
   return ids
 }
 
+interface CaseRuleFacts {
+  readonly case_type: 'traffic' | 'casco'
+  readonly loss_date: Date | string | null
+  readonly notification_date: Date | string | null
+}
+
+async function evaluateVersionInput(
+  client: Queryable,
+  actor: Actor,
+  caseId: string,
+  caseRow: CaseRuleFacts,
+  input: TrafficValueLossVersionCreateRequest,
+) {
+  const evidenceIds = await validateEvidence(client, actor.organizationId, caseId, input)
+  const lossDate = date(caseRow.loss_date)
+  const notificationDate = date(caseRow.notification_date)
+  const selected = selectTrafficValueLossRule(
+    lossDate === null ? null : domainDate(lossDate),
+    input.ruleOverride,
+  )
+  if (selected.status !== 'selected') {
+    throw new TrafficValueLossStoreError('rule_selection_required')
+  }
+  for (const provenance of input.realMarket?.prefillProvenance ?? []) {
+    if (provenance.source === 'case') {
+      if (provenance.field !== 'accidentDate'
+        || provenance.sourceRevisionId !== null
+        || provenance.originalValue !== lossDate
+        || provenance.newValue !== lossDate) {
+        throw new TrafficValueLossStoreError('invalid_source')
+      }
+      continue
+    }
+    if (provenance.source !== 'user_input' || provenance.sourceRevisionId !== null) {
+      // Henüz bu akışa bağlanmış onaylı upstream revision tablosu yoktur.
+      // İstemcinin "approved_*" etiketiyle kanıt uydurmasına izin verilmez.
+      throw new TrafficValueLossStoreError('invalid_source')
+    }
+  }
+  const domainEvidence: TrafficValueLossEvidenceFact[] = input.evidence.map((item) => ({
+    evidenceKey: item.evidenceKey,
+    sourceType: item.sourceType,
+    sourceHash: item.sourceHash,
+    supports: item.supports,
+    verificationStatus: item.verificationStatus,
+    conflict: item.conflict,
+  }))
+  const domainComparables = input.comparables.map((item) => ({
+    ...item,
+    observedAt: domainDate(item.observedAt),
+  }))
+  const evaluation = selected.kind === 'legacy'
+    ? trafficValueLossEvaluationSchema.parse(evaluateTrafficValueLoss({
+        caseType: 'traffic',
+        // Legacy evaluator kendi dönem kapısını taşır; selector önceki sürümü seçtiği
+        // için değerlendirme bu sürümün sabit effective date'iyle çalıştırılır.
+        lossDate: selected.effectiveFrom,
+        evaluatedOn: domainDate(input.evaluatedOn),
+        heavyOrTotalDamage: input.heavyOrTotalDamage,
+        vehicle: input.vehicle,
+        faultRateBasisPoints: input.faultRateBasisPoints,
+        preAccidentMarketValueMinor: input.preAccidentMarketValueMinor,
+        postRepairMarketValueMinor: input.postRepairMarketValueMinor,
+        damageParts: input.damageParts,
+        comparables: domainComparables,
+        evidence: domainEvidence,
+      } satisfies TrafficValueLossInput))
+    : (() => {
+        if (input.realMarket === null) throw new TrafficValueLossStoreError('rule_input_required')
+        const realMarketInput: RealMarketValueLossInput = {
+          caseType: 'traffic',
+          accidentDate: lossDate === null ? null : domainDate(lossDate),
+          evaluatedOn: domainDate(input.evaluatedOn),
+          vehicleType: input.realMarket.vehicleType,
+          vehicleGroupCode: input.realMarket.vehicleGroupCode,
+          modelYear: input.vehicle.modelYear,
+          usageMetric: input.realMarket.usageMetric,
+          usageValue: input.realMarket.usageValue,
+          commercialOrRental: input.realMarket.commercialOrRental,
+          previousDamageCount: input.realMarket.previousDamageCount,
+          marketValueMinor: input.realMarket.marketValueMinor,
+          damageAmountMinor: input.realMarket.damageAmountMinor,
+          parts: input.realMarket.parts,
+          eligibilityFacts: input.realMarket.eligibilityFacts,
+          comparables: domainComparables,
+          evidence: domainEvidence,
+        }
+        return trafficValueLossEvaluationSchema.parse(
+          evaluateRealMarketValueLoss(realMarketValueLossRuleSnapshot, realMarketInput),
+        )
+      })()
+  const changedAt = new Date().toISOString()
+  const inputSnapshot = trafficValueLossInputSnapshotSchema.parse({
+    lossDate,
+    notificationDate,
+    evaluatedOn: input.evaluatedOn,
+    heavyOrTotalDamage: input.heavyOrTotalDamage,
+    vehicle: input.vehicle,
+    faultRateBasisPoints: input.faultRateBasisPoints,
+    preAccidentMarketValueMinor: input.preAccidentMarketValueMinor,
+    postRepairMarketValueMinor: input.postRepairMarketValueMinor,
+    damageParts: input.damageParts,
+    realMarket: input.realMarket,
+    inputOverrides: input.realMarket?.prefillProvenance
+      .filter((item) => item.source === 'user_input' && item.overrideReason !== null)
+      .map((item) => ({
+        field: item.field,
+        originalValue: item.originalValue,
+        newValue: item.newValue,
+        reason: item.overrideReason ?? '',
+        changedBy: actor.actorUserId,
+        changedAt,
+      })) ?? [],
+    ruleOverride: input.ruleOverride === null
+      ? null
+      : {
+          ...input.ruleOverride,
+          authorizedBy: actor.actorUserId,
+          authorizedAt: changedAt,
+        },
+  })
+  const previewInput = { ...input, confirmedPreviewHash: null }
+  const previewHash = createHash('sha256').update(JSON.stringify({
+    caseId,
+    ruleSetId: evaluation.ruleSetId,
+    ruleVersion: evaluation.ruleVersion,
+    input: previewInput,
+    evaluation,
+  })).digest('hex')
+  return { evidenceIds, evaluation, inputSnapshot, previewHash }
+}
+
 export function createTrafficValueLossStore(pool: pg.Pool): TrafficValueLossStore {
   const audit = createAuditService()
   return {
@@ -222,6 +383,19 @@ export function createTrafficValueLossStore(pool: pg.Pool): TrafficValueLossStor
       const exists = await pool.query('SELECT 1 FROM cases WHERE organization_id=$1 AND id=$2', [organizationId, caseId])
       if ((exists.rowCount ?? 0) === 0) return undefined
       return loadAssessment(pool, organizationId, caseId)
+    },
+    async currentApproved(organizationId: string, caseId: string) {
+      const result = await pool.query(
+        `SELECT id FROM traffic_value_loss_versions
+         WHERE organization_id=$1 AND case_id=$2
+           AND status='approved' AND human_approval_status='approved' AND is_active=true
+         ORDER BY assessment_version DESC LIMIT 1`,
+        [organizationId, caseId],
+      )
+      const row = result.rows[0] as { id: string } | undefined
+      return row === undefined
+        ? undefined
+        : loadTrafficValueLossVersion(pool, organizationId, caseId, row.id)
     },
     async versions(organizationId: string, caseId: string) {
       const assessment = await pool.query('SELECT id FROM traffic_value_loss_assessments WHERE organization_id=$1 AND case_id=$2', [organizationId, caseId])
@@ -235,13 +409,63 @@ export function createTrafficValueLossStore(pool: pg.Pool): TrafficValueLossStor
       }
       return versions
     },
+    async preview(actor: Actor, caseId: string, input: TrafficValueLossVersionCreateRequest) {
+      const caseResult = await pool.query(
+        'SELECT case_type,loss_date,notification_date FROM cases WHERE organization_id=$1 AND id=$2',
+        [actor.organizationId, caseId],
+      )
+      const caseRow = caseResult.rows[0] as CaseRuleFacts | undefined
+      if (caseRow === undefined) throw new TrafficValueLossStoreError('not_found')
+      if (caseRow.case_type !== 'traffic') throw new TrafficValueLossStoreError('wrong_case_type')
+      const assessment = await pool.query(
+        'SELECT version FROM traffic_value_loss_assessments WHERE organization_id=$1 AND case_id=$2',
+        [actor.organizationId, caseId],
+      )
+      const assessmentVersion = (assessment.rows[0] as { version: number } | undefined)?.version ?? 0
+      if (assessmentVersion !== input.expectedVersion) {
+        throw new TrafficValueLossStoreError('version_conflict')
+      }
+      const { evaluation, inputSnapshot, previewHash } = await evaluateVersionInput(
+        pool,
+        actor,
+        caseId,
+        caseRow,
+        input,
+      )
+      return trafficValueLossPreviewResponseSchema.parse({
+        previewHash,
+        ruleSetId: evaluation.ruleSetId,
+        ruleVersion: evaluation.ruleVersion,
+        input: inputSnapshot,
+        evaluation,
+      })
+    },
+    async partCatalog(organizationId: string, caseId: string, vehicleGroupCode: ValueLossVehicleGroupCode) {
+      const exists = await pool.query(
+        "SELECT 1 FROM cases WHERE organization_id=$1 AND id=$2 AND case_type='traffic'",
+        [organizationId, caseId],
+      )
+      if ((exists.rowCount ?? 0) === 0) return undefined
+      return trafficValueLossPartCatalogResponseSchema.parse({
+        ruleIdentity: realMarketValueLossRuleSnapshot.identity,
+        vehicleGroupCode,
+        parts: listRealMarketPartRules(realMarketValueLossRuleSnapshot, vehicleGroupCode).map((item) => ({
+          stableRuleId: item.stableId,
+          label: item.sourceLabel,
+          sourceTable: item.sourceTable,
+          sourceRow: item.sourceRow,
+          supportedOperations: item.operationCapabilities,
+          coefficients: item.coefficients,
+        })),
+      })
+    },
     async createVersion(actor: Actor, caseId: string, input: TrafficValueLossVersionCreateRequest, idem: Idempotency) {
       return idempotentWrite(pool, actor, caseId, idem, 201, async (client) => {
         const caseResult = await client.query(
           'SELECT case_type,loss_date,notification_date FROM cases WHERE organization_id=$1 AND id=$2 FOR UPDATE',
           [actor.organizationId, caseId],
         )
-        const caseRow = caseResult.rows[0] as { case_type: 'traffic' | 'casco'; loss_date: Date | string | null; notification_date: Date | string | null } | undefined
+        const caseRow = caseResult.rows[0] as CaseRuleFacts | undefined
         if (caseRow === undefined) throw new TrafficValueLossStoreError('not_found')
         if (caseRow.case_type !== 'traffic') throw new TrafficValueLossStoreError('wrong_case_type')
 
@@ -265,48 +489,16 @@ export function createTrafficValueLossStore(pool: pg.Pool): TrafficValueLossStor
           throw new TrafficValueLossStoreError('version_conflict')
         }
 
-        const evidenceIds = await validateEvidence(client, actor.organizationId, caseId, input)
-        const lossDate = date(caseRow.loss_date)
-        const notificationDate = date(caseRow.notification_date)
-        const domainEvidence: TrafficValueLossEvidenceFact[] = input.evidence.map((item) => ({
-          evidenceKey: item.evidenceKey,
-          sourceType: item.sourceType,
-          sourceHash: item.sourceHash,
-          supports: item.supports,
-          verificationStatus: item.verificationStatus,
-          conflict: item.conflict,
-        }))
-        const domainInput: TrafficValueLossInput = {
-          caseType: 'traffic',
-          lossDate: lossDate === null ? null : domainDate(lossDate),
-          evaluatedOn: domainDate(input.evaluatedOn),
-          heavyOrTotalDamage: input.heavyOrTotalDamage,
-          vehicle: input.vehicle,
-          faultRateBasisPoints: input.faultRateBasisPoints,
-          preAccidentMarketValueMinor: input.preAccidentMarketValueMinor,
-          postRepairMarketValueMinor: input.postRepairMarketValueMinor,
-          damageParts: input.damageParts,
-          comparables: input.comparables.map((item) => ({ ...item, observedAt: domainDate(item.observedAt) })),
-          evidence: domainEvidence,
-        }
-        const evaluation = trafficValueLossEvaluationSchema.parse(evaluateTrafficValueLoss(domainInput))
-        const inputSnapshot = trafficValueLossInputSnapshotSchema.parse({
-          lossDate,
-          notificationDate,
-          evaluatedOn: input.evaluatedOn,
-          heavyOrTotalDamage: input.heavyOrTotalDamage,
-          vehicle: input.vehicle,
-          faultRateBasisPoints: input.faultRateBasisPoints,
-          preAccidentMarketValueMinor: input.preAccidentMarketValueMinor,
-          postRepairMarketValueMinor: input.postRepairMarketValueMinor,
-          damageParts: input.damageParts,
-        })
-
-        if (assessment.current_version_id !== null) {
-          await client.query(
-            "UPDATE traffic_value_loss_versions SET status='superseded',is_active=false WHERE id=$1",
-            [assessment.current_version_id],
-          )
+        const { evidenceIds, evaluation, inputSnapshot, previewHash } = await evaluateVersionInput(
+          client,
+          actor,
+          caseId,
+          caseRow,
+          input,
+        )
+        if (evaluation.ruleSetId === 'real-market-analysis'
+          && input.confirmedPreviewHash !== previewHash) {
+          throw new TrafficValueLossStoreError('preview_mismatch')
         }
         const nextResult = await client.query(
           'SELECT coalesce(max(assessment_version),0)::int+1 AS n FROM traffic_value_loss_versions WHERE assessment_id=$1',
@@ -369,6 +561,20 @@ export function createTrafficValueLossStore(pool: pg.Pool): TrafficValueLossStor
             comparableCount: input.comparables.length,
           },
         })
+        if (input.ruleOverride !== null) await audit.record(client, {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          action: 'traffic_value_loss.rule_overridden',
+          entityType: 'traffic_value_loss_assessment',
+          entityId: assessment.id,
+          requestId: actor.requestId,
+          details: {
+            caseId,
+            assessmentVersion: next,
+            selectedRuleIdentity: input.ruleOverride.ruleIdentity,
+            reason: input.ruleOverride.reason,
+          },
+        })
         if (status === 'control_required') await audit.record(client, {
           organizationId: actor.organizationId,
           actorUserId: actor.actorUserId,
@@ -418,6 +624,12 @@ export function createTrafficValueLossStore(pool: pg.Pool): TrafficValueLossStor
         const current = await client.query('SELECT status,created_by_user_id FROM traffic_value_loss_versions WHERE id=$1 FOR UPDATE', [versionId])
         const version = current.rows[0] as { status: string; created_by_user_id: string } | undefined
         if (version === undefined || version.status !== 'awaiting_approval') throw new TrafficValueLossStoreError('state_conflict')
+        await client.query(
+          `UPDATE traffic_value_loss_versions
+           SET status='superseded',is_active=false
+           WHERE organization_id=$1 AND case_id=$2 AND status='approved' AND is_active=true AND id<>$3`,
+          [actor.organizationId, caseId, versionId],
+        )
         await client.query(
           `UPDATE traffic_value_loss_versions SET status='approved',human_approval_status='approved',
             approved_by_user_id=$1,approved_at=now(),approval_reason=$2,is_active=true WHERE id=$3`,

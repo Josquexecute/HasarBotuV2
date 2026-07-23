@@ -8,6 +8,19 @@ import type {
   TrafficValueLossStatus,
   TrafficValueLossUncertainty,
 } from './traffic-value-loss.js'
+import type {
+  RealMarketValueLossReasonCode,
+  RealMarketValueLossSource,
+} from './traffic-value-loss-real-market.js'
+
+type TrafficValueLossReportRuleSource = TrafficValueLossRuleSource | RealMarketValueLossSource
+type TrafficValueLossReportUncertainty = TrafficValueLossUncertainty | {
+  readonly code: RealMarketValueLossReasonCode
+  readonly field: string
+  readonly reason: string
+  readonly blocking: true
+  readonly requiresHumanReview: true
+}
 
 export const TRAFFIC_VALUE_LOSS_REPORT_SCHEMA_VERSION = 'traffic-value-loss-final-report/1.0.0' as const
 export const TRAFFIC_VALUE_LOSS_REPORT_TEMPLATE_VERSION = 'traffic-value-loss-final-report-tr/1.0.0' as const
@@ -76,8 +89,8 @@ export interface TrafficValueLossReportContent {
   readonly damageParts: readonly TrafficValueLossDamagePart[]
   readonly calculation: {
     readonly eligibilityStatus: TrafficValueLossEligibilityStatus
-    readonly calculationMethod: 'market_value_difference'
-    readonly roundingRule: 'half_up_minor_unit'
+    readonly calculationMethod: 'market_value_difference' | 'real_market_analysis'
+    readonly roundingRule: 'half_up_minor_unit' | 'ceil_500_try'
     readonly preAccidentMarketValueMinor: number | null
     readonly postRepairMarketValueMinor: number | null
     readonly grossValueLossMinor: number | null
@@ -89,12 +102,12 @@ export interface TrafficValueLossReportContent {
   }
   readonly evidence: readonly TrafficValueLossReportEvidence[]
   readonly comparables: readonly TrafficValueLossReportComparable[]
-  readonly uncertainties: readonly TrafficValueLossUncertainty[]
+  readonly uncertainties: readonly TrafficValueLossReportUncertainty[]
   readonly rule: {
     readonly ruleSetId: string
     readonly ruleVersion: string
     readonly effectiveFrom: LocalDate
-    readonly sources: readonly TrafficValueLossRuleSource[]
+    readonly sources: readonly TrafficValueLossReportRuleSource[]
   }
   readonly reportNote: string | null
 }
@@ -119,18 +132,18 @@ export interface TrafficValueLossReportSource {
     }
     readonly evaluation: {
       readonly eligibilityStatus: TrafficValueLossEligibilityStatus
-      readonly calculationMethod: 'market_value_difference'
-      readonly roundingRule: 'half_up_minor_unit'
+      readonly calculationMethod: 'market_value_difference' | 'real_market_analysis'
+      readonly roundingRule: 'half_up_minor_unit' | 'ceil_500_try'
       readonly grossValueLossMinor: number | null
       readonly faultAdjustedValueLossMinor: number | null
       readonly qualifyingPreComparableCount: number
       readonly qualifyingPostComparableCount: number
       readonly reasoning: readonly string[]
-      readonly uncertainties: readonly TrafficValueLossUncertainty[]
+      readonly uncertainties: readonly TrafficValueLossReportUncertainty[]
       readonly ruleSetId: string
       readonly ruleVersion: string
       readonly effectiveFrom: LocalDate
-      readonly ruleSources: readonly TrafficValueLossRuleSource[]
+      readonly ruleSources: readonly TrafficValueLossReportRuleSource[]
     }
     readonly evidence: readonly TrafficValueLossReportEvidence[]
     readonly comparables: readonly Omit<TrafficValueLossReportComparable, 'evidenceKey' | 'sourceReference'>[]

@@ -138,7 +138,7 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
     await pool.query(
       `INSERT INTO cases
        (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,loss_date,notification_date)
-       VALUES ($1,$3,2026,3201,'2026/3201','traffic','new_notification','34 P 3201','34P3201','2026-07-02','2026-07-03'),
+       VALUES ($1,$3,2026,3201,'2026/3201','traffic','new_notification','34 P 3201','34P3201','2026-06-30','2026-07-03'),
               ($2,$3,2026,3202,'2026/3202','casco','new_notification','34 P 3202','34P3202','2026-07-02','2026-07-03')`,
       [trafficCaseId, cascoCaseId, organizationId],
     )
@@ -251,7 +251,7 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
     expect(blocked.statusCode).toBe(409)
   })
 
-  it('yeni sürümü oluşturur, önceki onaylı sürümü superseded ve append-only korur', async () => {
+  it('yeni taslak sürümü oluşturur, önceki onaylı sürümü yeni onaya kadar aktif ve append-only korur', async () => {
     const current = trafficValueLossResponseSchema.parse((await app.inject({
       method: 'GET', url: `/api/v1/cases/${trafficCaseId}/traffic-value-loss`, headers: { cookie: managerCookie },
     })).json()).assessment
@@ -265,7 +265,7 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
     })
     const items = (versions.json() as { versions: Array<{ assessmentVersion: number; status: string }> }).versions
     expect(items.length).toBeGreaterThanOrEqual(3)
-    expect(items).toEqual(expect.arrayContaining([expect.objectContaining({ assessmentVersion: 1, status: 'superseded' })]))
+    expect(items).toEqual(expect.arrayContaining([expect.objectContaining({ assessmentVersion: 1, status: 'approved' })]))
     await expect(pool.query('DELETE FROM traffic_value_loss_evidence WHERE version_id=(SELECT id FROM traffic_value_loss_versions WHERE assessment_id=(SELECT id FROM traffic_value_loss_assessments WHERE case_id=$1) ORDER BY assessment_version LIMIT 1)', [trafficCaseId])).rejects.toMatchObject({ code: '23001' })
   })
 
@@ -292,6 +292,157 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
     await expect(pool.query("UPDATE traffic_value_loss_approval_events SET reason='degistir' WHERE action='rejected' AND version_id=$1", [current.currentVersion.id])).rejects.toMatchObject({ code: '23001' })
   })
 
+  it('yeni real-market sürümünü preview, create, approve ve current-approved akışıyla izole eder', async () => {
+    const caseId = uuidv7()
+    await pool.query(
+      `INSERT INTO cases
+       (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,loss_date,notification_date)
+       VALUES ($1,$2,2026,3661,'2026/3661','traffic','new_notification','34 P 3661','34P3661','2026-07-01','2026-07-02')`,
+      [caseId, organizationId],
+    )
+    const source = await seedDocument(caseId, 'ready')
+    const catalog = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/part-catalog?vehicleGroupCode=A`,
+      headers: { cookie: managerCookie },
+    })
+    expect(catalog.statusCode).toBe(200)
+    const stableRuleId = String((catalog.json() as { parts: Array<{ stableRuleId: string }> }).parts[0]?.stableRuleId)
+    const base = payload(0, {
+      realMarket: {
+        vehicleType: 'OTOMOBİL',
+        vehicleGroupCode: 'A',
+        usageMetric: 'mileage',
+        usageValue: 50_000,
+        commercialOrRental: false,
+        previousDamageCount: 0,
+        marketValueMinor: 100_000_000,
+        damageAmountMinor: 10_000_000,
+        parts: [{
+          stableRuleId,
+          operation: 'replacement',
+          paintMode: null,
+          newPartPriceMinor: null,
+          repairLaborMinor: null,
+          partPriceAvailability: 'unavailable',
+          priorPartState: 'none',
+          treatment: 'standard',
+        }],
+        eligibilityFacts: {
+          antiqueOrCollector: false,
+          priorHeavyDamage: false,
+          currentHeavyOrTotalDamage: false,
+          foreignPlate: false,
+          foreignMarketEvidenceVerified: false,
+        },
+        prefillProvenance: [{
+          field: 'accidentDate',
+          source: 'case',
+          sourceRevisionId: null,
+          originalValue: '2026-07-01',
+          newValue: '2026-07-01',
+          overrideReason: null,
+        }],
+      },
+      ruleOverride: null,
+      confirmedPreviewHash: null,
+    }, source)
+    const preview = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/preview`,
+      headers: { cookie: managerCookie },
+      payload: base,
+    })
+    expect(preview.statusCode, preview.payload).toBe(200)
+    expect(preview.json()).toMatchObject({
+      ruleVersion: 'real-market-analysis/2026-07-01/1.0.0',
+      evaluation: {
+        calculationMethod: 'real_market_analysis',
+        normalizedSnapshotSha256: 'e4fc8087ddbc1ff92e3255546e053c6956e20bd1dca269533113b727f728b940',
+      },
+    })
+    expect((await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/versions`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: base,
+    })).statusCode).toBe(409)
+    const overridden = {
+      ...base,
+      ruleOverride: {
+        ruleIdentity: 'real-market-analysis/2026-07-01/1.0.0',
+        reason: 'Kural sürümü yönetici tarafından dosya tarihiyle doğrulandı.',
+      },
+    }
+    expect((await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/preview`,
+      headers: { cookie: managerCookie },
+      payload: overridden,
+    })).statusCode).toBe(403)
+    const overridePreview = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/preview`,
+      headers: { cookie: adminCookie },
+      payload: overridden,
+    })
+    expect(overridePreview.statusCode, overridePreview.payload).toBe(200)
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/versions`,
+      headers: { cookie: adminCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: {
+        ...overridden,
+        confirmedPreviewHash: String((overridePreview.json() as { previewHash: string }).previewHash),
+      },
+    })
+    expect(created.statusCode, created.payload).toBe(201)
+    const createdAssessment = trafficValueLossResponseSchema.parse(created.json()).assessment
+    const overrideAudit = await pool.query(
+      "SELECT details FROM audit_events WHERE organization_id=$1 AND action='traffic_value_loss.rule_overridden' AND resource_id=$2",
+      [organizationId, createdAssessment.id],
+    )
+    expect(overrideAudit.rows[0]?.details).toMatchObject({
+      selectedRuleIdentity: 'real-market-analysis/2026-07-01/1.0.0',
+      reason: 'Kural sürümü yönetici tarafından dosya tarihiyle doğrulandı.',
+    })
+    const submitted = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/versions/${createdAssessment.currentVersion.id}/submit`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { expectedVersion: createdAssessment.version },
+    })
+    expect(submitted.statusCode).toBe(200)
+    const submittedAssessment = trafficValueLossResponseSchema.parse(submitted.json()).assessment
+    expect((await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/versions/${createdAssessment.currentVersion.id}/approve`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { expectedVersion: submittedAssessment.version, reason: 'Yetkisiz onay.' },
+    })).statusCode).toBe(403)
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/versions/${createdAssessment.currentVersion.id}/approve`,
+      headers: { cookie: adminCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { expectedVersion: submittedAssessment.version, reason: 'Yeni motor kanıtları incelendi.' },
+    })
+    expect(approved.statusCode).toBe(200)
+    expect((await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/current-approved`,
+      headers: { cookie: managerCookie },
+    })).json()).toMatchObject({ version: { id: createdAssessment.currentVersion.id, status: 'approved' } })
+    expect((await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${caseId}/traffic-value-loss/current-approved`,
+      headers: { cookie: otherCookie },
+    })).statusCode).toBe(404)
+    await expect(pool.query(
+      "UPDATE traffic_value_loss_versions SET result_snapshot=jsonb_set(result_snapshot,'{finalResultMinor}','0') WHERE id=$1",
+      [createdAssessment.currentVersion.id],
+    )).rejects.toMatchObject({ code: '23001' })
+  })
+
   it('tenant izolasyonu ve audit/response sızıntı sınırını uygular', async () => {
     expect((await app.inject({
       method: 'GET', url: `/api/v1/cases/${trafficCaseId}/traffic-value-loss`, headers: { cookie: otherCookie },
@@ -310,7 +461,7 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
     await pool.query(
       `INSERT INTO cases
        (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,loss_date,notification_date)
-       VALUES ($1,$2,2026,3401,'2026/3401','traffic','reporting','34 P 3401','34P3401','2026-07-02','2026-07-03')`,
+       VALUES ($1,$2,2026,3401,'2026/3401','traffic','reporting','34 P 3401','34P3401','2026-06-30','2026-07-03')`,
       [reportCaseId, organizationId],
     )
     const reportSource = await seedDocument(reportCaseId, 'ready')
@@ -489,7 +640,7 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
     await pool.query(
       `INSERT INTO cases
        (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,loss_date,notification_date)
-       VALUES ($1,$2,2026,3203,'2026/3203','traffic','new_notification','34 P 3203','34P3203','2026-07-02','2026-07-03')`,
+       VALUES ($1,$2,2026,3203,'2026/3203','traffic','new_notification','34 P 3203','34P3203','2026-06-30','2026-07-03')`,
       [liveCaseId, organizationId],
     )
     const liveSource = await seedDocument(liveCaseId, 'ready')

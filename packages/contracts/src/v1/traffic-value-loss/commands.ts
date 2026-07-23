@@ -1,5 +1,8 @@
 import { z } from 'zod'
 import {
+  REAL_MARKET_VALUE_LOSS_PART_OPERATIONS,
+  REAL_MARKET_VALUE_LOSS_RULE_VERSION,
+  REAL_MARKET_VALUE_LOSS_VEHICLE_TYPES,
   TRAFFIC_VALUE_LOSS_EVIDENCE_FIELDS,
   TRAFFIC_VALUE_LOSS_EVIDENCE_SOURCE_TYPES,
 } from '@hasarbotu/domain'
@@ -65,6 +68,93 @@ export const trafficValueLossDamagePartInputSchema = z.strictObject({
   priorDamage: z.enum(['yes', 'no', 'unknown']),
 })
 
+export const trafficValueLossRealMarketPartInputSchema = z.strictObject({
+  stableRuleId: z.string().min(1).max(500),
+  operation: z.enum(REAL_MARKET_VALUE_LOSS_PART_OPERATIONS),
+  paintMode: z.enum(['full', 'local']).nullable(),
+  newPartPriceMinor: trafficValueLossMoneyMinorSchema.nullable(),
+  repairLaborMinor: trafficValueLossMoneyMinorSchema.nullable(),
+  partPriceAvailability: z.enum(['available', 'unavailable']),
+  priorPartState: z.enum([
+    'none',
+    'previously_damaged',
+    'previously_repaired_detachable',
+    'previously_repaired_welded',
+  ]),
+  treatment: z.enum([
+    'standard',
+    'accessory',
+    'paintless_repair',
+    'plastic_or_unpainted',
+    'superstructure',
+  ]),
+})
+
+export const trafficValueLossPrefillProvenanceInputSchema = z.strictObject({
+  field: z.enum([
+    'accidentDate',
+    'vehicleType',
+    'vehicleGroupCode',
+    'modelYear',
+    'usageValue',
+    'commercialOrRental',
+    'marketValueMinor',
+    'damageAmountMinor',
+    'parts',
+    'previousDamageCount',
+  ]),
+  source: z.enum([
+    'case',
+    'approved_market_value',
+    'approved_damage',
+    'finalized_parts',
+    'finalized_paint',
+    'sbm_evidence',
+    'other_evidence',
+    'user_input',
+  ]),
+  sourceRevisionId: idSchema.nullable(),
+  originalValue: z.union([z.string(), z.number(), z.boolean()]).nullable(),
+  newValue: z.union([z.string(), z.number(), z.boolean()]).nullable(),
+  overrideReason: z.string().trim().min(1).max(500).nullable(),
+}).superRefine((value, context) => {
+  if (value.source !== 'user_input' && value.overrideReason !== null) {
+    context.addIssue({ code: 'custom', path: ['overrideReason'], message: 'override_reason_unexpected' })
+  }
+  if (value.source === 'user_input' && value.originalValue !== value.newValue
+    && value.overrideReason === null) {
+    context.addIssue({ code: 'custom', path: ['overrideReason'], message: 'override_reason_required' })
+  }
+})
+
+export const trafficValueLossRealMarketInputSchema = z.strictObject({
+  vehicleType: z.enum(REAL_MARKET_VALUE_LOSS_VEHICLE_TYPES).nullable(),
+  vehicleGroupCode: z.enum(['A', 'B', 'C', 'Ç', 'D', 'E', 'F']).nullable(),
+  usageMetric: z.enum(['mileage', 'working_hours']).nullable(),
+  usageValue: z.number().int().min(0).max(10_000_000).nullable(),
+  commercialOrRental: z.boolean(),
+  previousDamageCount: z.number().int().min(0).max(100).nullable(),
+  marketValueMinor: trafficValueLossMoneyMinorSchema.nullable(),
+  damageAmountMinor: trafficValueLossMoneyMinorSchema.nullable(),
+  parts: z.array(trafficValueLossRealMarketPartInputSchema).max(500),
+  eligibilityFacts: z.strictObject({
+    antiqueOrCollector: z.boolean().nullable(),
+    priorHeavyDamage: z.boolean().nullable(),
+    currentHeavyOrTotalDamage: z.boolean().nullable(),
+    foreignPlate: z.boolean(),
+    foreignMarketEvidenceVerified: z.boolean(),
+  }),
+  prefillProvenance: z.array(trafficValueLossPrefillProvenanceInputSchema).max(100),
+})
+
+export const trafficValueLossRuleOverrideSchema = z.strictObject({
+  ruleIdentity: z.enum([
+    REAL_MARKET_VALUE_LOSS_RULE_VERSION,
+    'traffic-value-loss-market-difference/2026.07.01.1',
+  ]),
+  reason: z.string().trim().min(1).max(500),
+})
+
 export const trafficValueLossVersionCreateRequestSchema = z.strictObject({
   expectedVersion: z.number().int().min(0),
   evaluatedOn: localDateSchema,
@@ -83,6 +173,9 @@ export const trafficValueLossVersionCreateRequestSchema = z.strictObject({
   damageParts: z.array(trafficValueLossDamagePartInputSchema).max(500),
   comparables: z.array(trafficValueLossComparableInputSchema).max(100),
   evidence: z.array(trafficValueLossEvidenceInputSchema).min(1).max(200),
+  realMarket: trafficValueLossRealMarketInputSchema.nullable().default(null),
+  ruleOverride: trafficValueLossRuleOverrideSchema.nullable().default(null),
+  confirmedPreviewHash: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
 }).superRefine((value, context) => {
   const evidenceKeys = new Set<string>()
   value.evidence.forEach((item, index) => {
@@ -109,7 +202,11 @@ export const trafficValueLossRejectRequestSchema = z.strictObject({
   reason: z.string().trim().min(1).max(500),
 })
 
+export const trafficValueLossPreviewRequestSchema = trafficValueLossVersionCreateRequestSchema
+
 export type TrafficValueLossVersionCreateRequest = z.infer<typeof trafficValueLossVersionCreateRequestSchema>
+export type TrafficValueLossPreviewRequest = z.infer<typeof trafficValueLossPreviewRequestSchema>
+export type TrafficValueLossRealMarketInput = z.infer<typeof trafficValueLossRealMarketInputSchema>
 export type TrafficValueLossSubmitRequest = z.infer<typeof trafficValueLossSubmitRequestSchema>
 export type TrafficValueLossApproveRequest = z.infer<typeof trafficValueLossApproveRequestSchema>
 export type TrafficValueLossRejectRequest = z.infer<typeof trafficValueLossRejectRequestSchema>

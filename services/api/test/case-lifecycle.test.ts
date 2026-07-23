@@ -254,6 +254,28 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
 
   it('normal close ve reopen ayni case/ofis numarasini koruyarak gercek Agent move ile tamamlanir', async () => {
     const seeded = await seedCase('34 PAK 021', true)
+    const approvedRows = await pool.query(
+      `SELECT assessment_id FROM traffic_value_loss_versions
+       WHERE organization_id=$1 AND case_id=$2 AND status='approved' AND is_active=true`,
+      [organizationId, seeded.caseId],
+    )
+    const assessmentId = String((approvedRows.rows[0] as { assessment_id: string }).assessment_id)
+    const draftId = uuidv7()
+    await pool.query(
+      `INSERT INTO traffic_value_loss_versions
+       (id,organization_id,case_id,assessment_id,assessment_version,status,rule_set_id,rule_version,
+        effective_from,evaluated_on,input_snapshot,result_snapshot,result_code,created_by_user_id)
+       VALUES ($1,$2,$3,$4,2,'draft','traffic-value-loss-market-difference','2026.07.01.1',
+               '2026-07-01','2026-07-15','{}'::jsonb,$5::jsonb,'calculable',$6)`,
+      [draftId, organizationId, seeded.caseId, assessmentId, JSON.stringify({
+        faultAdjustedValueLossMinor: 999_999,
+        canSubmitForApproval: true,
+      }), adminUserId],
+    )
+    await pool.query(
+      'UPDATE traffic_value_loss_assessments SET current_version_id=$1 WHERE id=$2',
+      [draftId, assessmentId],
+    )
     const closeKey = uuidv7()
     const plannedResponse = await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' }, adminCookie, closeKey)
     expect(plannedResponse.statusCode).toBe(201)

@@ -355,11 +355,17 @@
                   },
                   "calculationMethod": {
                     "type": "string",
-                    "const": "market_value_difference"
+                    "enum": [
+                      "market_value_difference",
+                      "real_market_analysis"
+                    ]
                   },
                   "roundingRule": {
                     "type": "string",
-                    "const": "half_up_minor_unit"
+                    "enum": [
+                      "half_up_minor_unit",
+                      "ceil_500_try"
+                    ]
                   },
                   "preAccidentMarketValueMinor": {
                     "anyOf": [
@@ -727,56 +733,119 @@
                 "maxItems": 100,
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "WRONG_CASE_TYPE",
-                        "LOSS_DATE_MISSING",
-                        "RULE_PERIOD_NOT_APPLICABLE",
-                        "HEAVY_DAMAGE_STATUS_UNKNOWN",
-                        "HEAVY_DAMAGE_EVIDENCE_MISSING",
-                        "VEHICLE_IDENTITY_INCOMPLETE",
-                        "MILEAGE_MISSING",
-                        "USAGE_TYPE_MISSING",
-                        "DAMAGE_PARTS_MISSING",
-                        "PRIOR_DAMAGE_UNKNOWN",
-                        "FAULT_RATE_MISSING",
-                        "MARKET_VALUES_MISSING",
-                        "PRE_VALUE_EVIDENCE_MISSING",
-                        "POST_VALUE_EVIDENCE_MISSING",
-                        "INSUFFICIENT_PRE_COMPARABLES",
-                        "INSUFFICIENT_POST_COMPARABLES",
-                        "SOURCE_CONFLICT"
-                      ]
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "WRONG_CASE_TYPE",
+                            "LOSS_DATE_MISSING",
+                            "RULE_PERIOD_NOT_APPLICABLE",
+                            "HEAVY_DAMAGE_STATUS_UNKNOWN",
+                            "HEAVY_DAMAGE_EVIDENCE_MISSING",
+                            "VEHICLE_IDENTITY_INCOMPLETE",
+                            "MILEAGE_MISSING",
+                            "USAGE_TYPE_MISSING",
+                            "DAMAGE_PARTS_MISSING",
+                            "PRIOR_DAMAGE_UNKNOWN",
+                            "FAULT_RATE_MISSING",
+                            "MARKET_VALUES_MISSING",
+                            "PRE_VALUE_EVIDENCE_MISSING",
+                            "POST_VALUE_EVIDENCE_MISSING",
+                            "INSUFFICIENT_PRE_COMPARABLES",
+                            "INSUFFICIENT_POST_COMPARABLES",
+                            "SOURCE_CONFLICT"
+                          ]
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "blocking": {
+                          "type": "boolean"
+                        },
+                        "requiresHumanReview": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "field",
+                        "reason",
+                        "blocking",
+                        "requiresHumanReview"
+                      ],
+                      "additionalProperties": false
                     },
-                    "field": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 200
-                    },
-                    "reason": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 500
-                    },
-                    "blocking": {
-                      "type": "boolean"
-                    },
-                    "requiresHumanReview": {
-                      "type": "boolean",
-                      "const": true
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "WRONG_CASE_TYPE",
+                            "LOSS_DATE_MISSING",
+                            "MODEL_YEAR_MISSING",
+                            "MODEL_YEAR_AFTER_ACCIDENT",
+                            "VEHICLE_TYPE_MISSING",
+                            "VEHICLE_GROUP_MISMATCH",
+                            "USAGE_VALUE_MISSING",
+                            "USAGE_METRIC_MISMATCH",
+                            "MARKET_VALUE_INVALID",
+                            "DAMAGE_AMOUNT_INVALID",
+                            "PARTS_MISSING",
+                            "PART_RULE_INVALID",
+                            "PART_OPERATION_UNSUPPORTED",
+                            "PART_OPERATION_CONFLICT",
+                            "REPAIR_PART_PRICE_INVALID",
+                            "REPAIR_LABOR_MISSING",
+                            "REQUIRED_EVIDENCE_MISSING",
+                            "SOURCE_CONFLICT",
+                            "INSUFFICIENT_COMPARABLES",
+                            "FOREIGN_MARKET_EVIDENCE_MISSING",
+                            "ANTIQUE_OR_COLLECTOR",
+                            "PRIOR_HEAVY_DAMAGE",
+                            "CURRENT_HEAVY_OR_TOTAL_DAMAGE"
+                          ]
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "blocking": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "requiresHumanReview": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "field",
+                        "reason",
+                        "blocking",
+                        "requiresHumanReview"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "code",
-                    "field",
-                    "reason",
-                    "blocking",
-                    "requiresHumanReview"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               },
               "rule": {
@@ -798,59 +867,107 @@
                     "x-hasarbotu-runtime-validation": "calendar-date-validity"
                   },
                   "sources": {
-                    "minItems": 2,
+                    "minItems": 1,
                     "maxItems": 20,
                     "type": "array",
                     "items": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 100
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300
+                            },
+                            "sourceType": {
+                              "type": "string",
+                              "enum": [
+                                "official_gazette",
+                                "seddk_circular"
+                              ]
+                            },
+                            "publishedAt": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                            },
+                            "effectiveFrom": {
+                              "type": "string",
+                              "const": "2026-07-01"
+                            },
+                            "locator": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300
+                            },
+                            "url": {
+                              "type": "string",
+                              "maxLength": 500,
+                              "format": "uri"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "title",
+                            "sourceType",
+                            "publishedAt",
+                            "effectiveFrom",
+                            "locator",
+                            "url"
+                          ],
+                          "additionalProperties": false
                         },
-                        "title": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 300
-                        },
-                        "sourceType": {
-                          "type": "string",
-                          "enum": [
-                            "official_gazette",
-                            "seddk_circular"
-                          ]
-                        },
-                        "publishedAt": {
-                          "type": "string",
-                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                          "x-hasarbotu-runtime-validation": "calendar-date-validity"
-                        },
-                        "effectiveFrom": {
-                          "type": "string",
-                          "const": "2026-07-01"
-                        },
-                        "locator": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 300
-                        },
-                        "url": {
-                          "type": "string",
-                          "maxLength": 500,
-                          "format": "uri"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "PACKAGE66-NORMALIZED-SNAPSHOT"
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300
+                            },
+                            "sourceType": {
+                              "type": "string",
+                              "const": "normalized_rule_snapshot"
+                            },
+                            "effectiveFrom": {
+                              "type": "string",
+                              "const": "2026-07-01"
+                            },
+                            "locator": {
+                              "type": "string",
+                              "const": "real-market-analysis/2026-07-01/1.0.0"
+                            },
+                            "sourceWorkbookSha256": {
+                              "type": "string",
+                              "const": "81d3ae870cd5569b13371ec8b4de081a9a4e3e15098f7454f5d0cdcd3708c424"
+                            },
+                            "normalizedSnapshotSha256": {
+                              "type": "string",
+                              "const": "e4fc8087ddbc1ff92e3255546e053c6956e20bd1dca269533113b727f728b940"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "title",
+                            "sourceType",
+                            "effectiveFrom",
+                            "locator",
+                            "sourceWorkbookSha256",
+                            "normalizedSnapshotSha256"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "code",
-                        "title",
-                        "sourceType",
-                        "publishedAt",
-                        "effectiveFrom",
-                        "locator",
-                        "url"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   }
                 },

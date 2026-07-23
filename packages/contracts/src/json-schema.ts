@@ -78,10 +78,14 @@ import {policyAiCandidateReviewResponseSchema,policyAiCandidatesResponseSchema,p
 import {
   trafficValueLossApproveRequestSchema,
   trafficValueLossRejectRequestSchema,
+  trafficValueLossPreviewRequestSchema,
   trafficValueLossSubmitRequestSchema,
   trafficValueLossVersionCreateRequestSchema,
 } from './v1/traffic-value-loss/commands.js'
 import {
+  trafficValueLossCurrentApprovedResponseSchema,
+  trafficValueLossPartCatalogResponseSchema,
+  trafficValueLossPreviewResponseSchema,
   trafficValueLossResponseSchema,
   trafficValueLossVersionsResponseSchema,
 } from './v1/traffic-value-loss/dto.js'
@@ -270,6 +274,10 @@ export const JSON_SCHEMA_TARGETS = {
   'policy-ai-candidates-response': policyAiCandidatesResponseSchema,
   'policy-ai-usage-response': policyAiUsageResponseSchema,
   'traffic-value-loss-version-create-request': trafficValueLossVersionCreateRequestSchema,
+  'traffic-value-loss-preview-request': trafficValueLossPreviewRequestSchema,
+  'traffic-value-loss-preview-response': trafficValueLossPreviewResponseSchema,
+  'traffic-value-loss-current-approved-response': trafficValueLossCurrentApprovedResponseSchema,
+  'traffic-value-loss-part-catalog-response': trafficValueLossPartCatalogResponseSchema,
   'traffic-value-loss-submit-request': trafficValueLossSubmitRequestSchema,
   'traffic-value-loss-approve-request': trafficValueLossApproveRequestSchema,
   'traffic-value-loss-reject-request': trafficValueLossRejectRequestSchema,

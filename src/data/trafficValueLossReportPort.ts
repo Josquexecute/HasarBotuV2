@@ -66,8 +66,8 @@ export interface TrafficValueLossReportContentRecord {
   readonly damageParts: readonly TrafficValueLossDamagePartInput[]
   readonly calculation: {
     readonly eligibilityStatus: TrafficValueLossEligibilityStatus
-    readonly calculationMethod: 'market_value_difference'
-    readonly roundingRule: 'half_up_minor_unit'
+    readonly calculationMethod: 'market_value_difference' | 'real_market_analysis'
+    readonly roundingRule: 'half_up_minor_unit' | 'ceil_500_try'
     readonly preAccidentMarketValueMinor: number | null
     readonly postRepairMarketValueMinor: number | null
     readonly grossValueLossMinor: number | null
@@ -93,11 +93,11 @@ export interface TrafficValueLossReportContentRecord {
     readonly sources: readonly {
       readonly code: string
       readonly title: string
-      readonly sourceType: 'official_gazette' | 'seddk_circular'
-      readonly publishedAt: string
+      readonly sourceType: 'official_gazette' | 'seddk_circular' | 'normalized_rule_snapshot'
+      readonly publishedAt?: string
       readonly effectiveFrom: string
       readonly locator: string
-      readonly url: string
+      readonly url?: string
     }[]
   }
   readonly reportNote: string | null
@@ -186,8 +186,9 @@ function parseContent(value: unknown): TrafficValueLossReportContentRecord {
     || !['approved', 'superseded'].includes(String(value.assessment.status))
     || value.assessment.humanApprovalStatus !== 'approved'
     || !record(value.vehicle) || !Array.isArray(value.damageParts)
-    || !record(value.calculation) || value.calculation.calculationMethod !== 'market_value_difference'
-    || value.calculation.roundingRule !== 'half_up_minor_unit'
+    || !record(value.calculation)
+    || !['market_value_difference', 'real_market_analysis'].includes(String(value.calculation.calculationMethod))
+    || !['half_up_minor_unit', 'ceil_500_try'].includes(String(value.calculation.roundingRule))
     || !Array.isArray(value.calculation.reasoning) || !Array.isArray(value.evidence)
     || !Array.isArray(value.comparables) || !Array.isArray(value.uncertainties)
     || !record(value.rule) || typeof value.rule.ruleVersion !== 'string' || !Array.isArray(value.rule.sources)) {

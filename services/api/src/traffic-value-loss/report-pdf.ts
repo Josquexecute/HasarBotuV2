@@ -343,8 +343,10 @@ export function renderTrafficValueLossReportPdf(input: {
   section(writer, input.reportId, 'Kural ve Mevzuat Kaynakları', `${content.rule.ruleSetId} · ${content.rule.ruleVersion}`)
   content.rule.sources.forEach((item) => listItem(writer, input.reportId, item.title, [
     `${item.code} · ${item.locator}`,
-    `Yayın: ${item.publishedAt} · Yürürlük: ${item.effectiveFrom}`,
-    item.url,
+    'publishedAt' in item
+      ? `Yayın: ${item.publishedAt} · Yürürlük: ${item.effectiveFrom}`
+      : `Yürürlük: ${item.effectiveFrom} · Normalize snapshot: ${item.normalizedSnapshotSha256}`,
+    'url' in item ? item.url : `Kaynak workbook SHA-256: ${item.sourceWorkbookSha256}`,
   ]))
 
   section(writer, input.reportId, 'İnsan Onayı ve Nihai Not')

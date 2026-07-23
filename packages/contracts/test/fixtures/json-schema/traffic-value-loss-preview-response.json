@@ -1,0 +1,1948 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "previewHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "ruleSetId": {
+      "type": "string",
+      "enum": [
+        "traffic-value-loss-market-difference",
+        "real-market-analysis"
+      ]
+    },
+    "ruleVersion": {
+      "type": "string",
+      "enum": [
+        "2026.07.01.1",
+        "real-market-analysis/2026-07-01/1.0.0"
+      ]
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "lossDate": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notificationDate": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evaluatedOn": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        "heavyOrTotalDamage": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vehicle": {
+          "type": "object",
+          "properties": {
+            "make": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "variant": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 150
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "modelYear": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1900,
+                  "maximum": 2200
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "mileage": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usageType": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "make",
+            "model",
+            "variant",
+            "modelYear",
+            "mileage",
+            "usageType"
+          ],
+          "additionalProperties": false
+        },
+        "faultRateBasisPoints": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "preAccidentMarketValueMinor": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "postRepairMarketValueMinor": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "damageParts": {
+          "maxItems": 500,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "partCode": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[A-Za-z0-9._-]+$"
+              },
+              "partName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "repairAction": {
+                "type": "string",
+                "enum": [
+                  "repair_paint",
+                  "replace_paint",
+                  "paint",
+                  "replace",
+                  "paintless_repair"
+                ]
+              },
+              "priorDamage": {
+                "type": "string",
+                "enum": [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "partCode",
+              "partName",
+              "repairAction",
+              "priorDamage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "realMarket": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "vehicleType": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "OTOMOBİL",
+                        "TAKSİ",
+                        "MİNİBÜS",
+                        "OTOBÜS",
+                        "KAMYONET",
+                        "KAMYON",
+                        "ÇEKİCİ",
+                        "İŞ MAKİNESİ",
+                        "TRAKTÖR",
+                        "TARIM MAKİNESİ",
+                        "ÖZEL AMAÇLI ARAÇ",
+                        "RÖMORK",
+                        "MOTORSİKLET",
+                        "TANKER"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "vehicleGroupCode": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "A",
+                        "B",
+                        "C",
+                        "Ç",
+                        "D",
+                        "E",
+                        "F"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "usageMetric": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "mileage",
+                        "working_hours"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "usageValue": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10000000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "commercialOrRental": {
+                  "type": "boolean"
+                },
+                "previousDamageCount": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "marketValueMinor": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "damageAmountMinor": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "parts": {
+                  "maxItems": 500,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "stableRuleId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "operation": {
+                        "type": "string",
+                        "enum": [
+                          "replacement",
+                          "repair",
+                          "paint"
+                        ]
+                      },
+                      "paintMode": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "local"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "newPartPriceMinor": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "repairLaborMinor": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "partPriceAvailability": {
+                        "type": "string",
+                        "enum": [
+                          "available",
+                          "unavailable"
+                        ]
+                      },
+                      "priorPartState": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "previously_damaged",
+                          "previously_repaired_detachable",
+                          "previously_repaired_welded"
+                        ]
+                      },
+                      "treatment": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "accessory",
+                          "paintless_repair",
+                          "plastic_or_unpainted",
+                          "superstructure"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "stableRuleId",
+                      "operation",
+                      "paintMode",
+                      "newPartPriceMinor",
+                      "repairLaborMinor",
+                      "partPriceAvailability",
+                      "priorPartState",
+                      "treatment"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "eligibilityFacts": {
+                  "type": "object",
+                  "properties": {
+                    "antiqueOrCollector": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "priorHeavyDamage": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "currentHeavyOrTotalDamage": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "foreignPlate": {
+                      "type": "boolean"
+                    },
+                    "foreignMarketEvidenceVerified": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "antiqueOrCollector",
+                    "priorHeavyDamage",
+                    "currentHeavyOrTotalDamage",
+                    "foreignPlate",
+                    "foreignMarketEvidenceVerified"
+                  ],
+                  "additionalProperties": false
+                },
+                "prefillProvenance": {
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "enum": [
+                          "accidentDate",
+                          "vehicleType",
+                          "vehicleGroupCode",
+                          "modelYear",
+                          "usageValue",
+                          "commercialOrRental",
+                          "marketValueMinor",
+                          "damageAmountMinor",
+                          "parts",
+                          "previousDamageCount"
+                        ]
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "case",
+                          "approved_market_value",
+                          "approved_damage",
+                          "finalized_parts",
+                          "finalized_paint",
+                          "sbm_evidence",
+                          "other_evidence",
+                          "user_input"
+                        ]
+                      },
+                      "sourceRevisionId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "originalValue": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "newValue": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "overrideReason": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "source",
+                      "sourceRevisionId",
+                      "originalValue",
+                      "newValue",
+                      "overrideReason"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "vehicleType",
+                "vehicleGroupCode",
+                "usageMetric",
+                "usageValue",
+                "commercialOrRental",
+                "previousDamageCount",
+                "marketValueMinor",
+                "damageAmountMinor",
+                "parts",
+                "eligibilityFacts",
+                "prefillProvenance"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputOverrides": {
+          "default": [],
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "originalValue": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "newValue": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "changedBy": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+              },
+              "changedAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                "x-hasarbotu-runtime-validation": "calendar-date-validity"
+              }
+            },
+            "required": [
+              "field",
+              "originalValue",
+              "newValue",
+              "reason",
+              "changedBy",
+              "changedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "ruleOverride": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "ruleIdentity": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "authorizedBy": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                },
+                "authorizedAt": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+                  "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                }
+              },
+              "required": [
+                "ruleIdentity",
+                "reason",
+                "authorizedBy",
+                "authorizedAt"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "lossDate",
+        "notificationDate",
+        "evaluatedOn",
+        "heavyOrTotalDamage",
+        "vehicle",
+        "faultRateBasisPoints",
+        "preAccidentMarketValueMinor",
+        "postRepairMarketValueMinor",
+        "damageParts",
+        "realMarket",
+        "inputOverrides",
+        "ruleOverride"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ruleSetId": {
+              "type": "string",
+              "const": "traffic-value-loss-market-difference"
+            },
+            "ruleVersion": {
+              "type": "string",
+              "const": "2026.07.01.1"
+            },
+            "effectiveFrom": {
+              "type": "string",
+              "const": "2026-07-01"
+            },
+            "calculationMethod": {
+              "type": "string",
+              "const": "market_value_difference"
+            },
+            "roundingRule": {
+              "type": "string",
+              "const": "half_up_minor_unit"
+            },
+            "ruleSources": {
+              "minItems": 2,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "sourceType": {
+                        "type": "string",
+                        "enum": [
+                          "official_gazette",
+                          "seddk_circular"
+                        ]
+                      },
+                      "publishedAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                      },
+                      "effectiveFrom": {
+                        "type": "string",
+                        "const": "2026-07-01"
+                      },
+                      "locator": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "url": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "format": "uri"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "title",
+                      "sourceType",
+                      "publishedAt",
+                      "effectiveFrom",
+                      "locator",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "const": "PACKAGE66-NORMALIZED-SNAPSHOT"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "sourceType": {
+                        "type": "string",
+                        "const": "normalized_rule_snapshot"
+                      },
+                      "effectiveFrom": {
+                        "type": "string",
+                        "const": "2026-07-01"
+                      },
+                      "locator": {
+                        "type": "string",
+                        "const": "real-market-analysis/2026-07-01/1.0.0"
+                      },
+                      "sourceWorkbookSha256": {
+                        "type": "string",
+                        "const": "81d3ae870cd5569b13371ec8b4de081a9a4e3e15098f7454f5d0cdcd3708c424"
+                      },
+                      "normalizedSnapshotSha256": {
+                        "type": "string",
+                        "const": "e4fc8087ddbc1ff92e3255546e053c6956e20bd1dca269533113b727f728b940"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "title",
+                      "sourceType",
+                      "effectiveFrom",
+                      "locator",
+                      "sourceWorkbookSha256",
+                      "normalizedSnapshotSha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "eligibilityStatus": {
+              "type": "string",
+              "enum": [
+                "calculable",
+                "no_value_loss",
+                "not_applicable",
+                "control_required"
+              ]
+            },
+            "grossValueLossMinor": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "faultAdjustedValueLossMinor": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "qualifyingPreComparableCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "qualifyingPostComparableCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "uncertainties": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "WRONG_CASE_TYPE",
+                      "LOSS_DATE_MISSING",
+                      "RULE_PERIOD_NOT_APPLICABLE",
+                      "HEAVY_DAMAGE_STATUS_UNKNOWN",
+                      "HEAVY_DAMAGE_EVIDENCE_MISSING",
+                      "VEHICLE_IDENTITY_INCOMPLETE",
+                      "MILEAGE_MISSING",
+                      "USAGE_TYPE_MISSING",
+                      "DAMAGE_PARTS_MISSING",
+                      "PRIOR_DAMAGE_UNKNOWN",
+                      "FAULT_RATE_MISSING",
+                      "MARKET_VALUES_MISSING",
+                      "PRE_VALUE_EVIDENCE_MISSING",
+                      "POST_VALUE_EVIDENCE_MISSING",
+                      "INSUFFICIENT_PRE_COMPARABLES",
+                      "INSUFFICIENT_POST_COMPARABLES",
+                      "SOURCE_CONFLICT"
+                    ]
+                  },
+                  "field": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "blocking": {
+                    "type": "boolean"
+                  },
+                  "requiresHumanReview": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "code",
+                  "field",
+                  "reason",
+                  "blocking",
+                  "requiresHumanReview"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "reasoning": {
+              "minItems": 1,
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "humanApprovalRequired": {
+              "type": "boolean",
+              "const": true
+            },
+            "canSubmitForApproval": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ruleSetId",
+            "ruleVersion",
+            "effectiveFrom",
+            "calculationMethod",
+            "roundingRule",
+            "ruleSources",
+            "eligibilityStatus",
+            "grossValueLossMinor",
+            "faultAdjustedValueLossMinor",
+            "qualifyingPreComparableCount",
+            "qualifyingPostComparableCount",
+            "uncertainties",
+            "reasoning",
+            "humanApprovalRequired",
+            "canSubmitForApproval"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ruleSetId": {
+              "type": "string",
+              "const": "real-market-analysis"
+            },
+            "ruleVersion": {
+              "type": "string",
+              "const": "real-market-analysis/2026-07-01/1.0.0"
+            },
+            "ruleIdentity": {
+              "type": "string",
+              "const": "real-market-analysis/2026-07-01/1.0.0"
+            },
+            "effectiveFrom": {
+              "type": "string",
+              "const": "2026-07-01"
+            },
+            "sourceWorkbookSha256": {
+              "type": "string",
+              "const": "81d3ae870cd5569b13371ec8b4de081a9a4e3e15098f7454f5d0cdcd3708c424"
+            },
+            "normalizedSnapshotSha256": {
+              "type": "string",
+              "const": "e4fc8087ddbc1ff92e3255546e053c6956e20bd1dca269533113b727f728b940"
+            },
+            "calculationMethod": {
+              "type": "string",
+              "const": "real_market_analysis"
+            },
+            "roundingRule": {
+              "type": "string",
+              "const": "ceil_500_try"
+            },
+            "ruleSources": {
+              "minItems": 1,
+              "maxItems": 1,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "sourceType": {
+                        "type": "string",
+                        "enum": [
+                          "official_gazette",
+                          "seddk_circular"
+                        ]
+                      },
+                      "publishedAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "x-hasarbotu-runtime-validation": "calendar-date-validity"
+                      },
+                      "effectiveFrom": {
+                        "type": "string",
+                        "const": "2026-07-01"
+                      },
+                      "locator": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "url": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "format": "uri"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "title",
+                      "sourceType",
+                      "publishedAt",
+                      "effectiveFrom",
+                      "locator",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "const": "PACKAGE66-NORMALIZED-SNAPSHOT"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "sourceType": {
+                        "type": "string",
+                        "const": "normalized_rule_snapshot"
+                      },
+                      "effectiveFrom": {
+                        "type": "string",
+                        "const": "2026-07-01"
+                      },
+                      "locator": {
+                        "type": "string",
+                        "const": "real-market-analysis/2026-07-01/1.0.0"
+                      },
+                      "sourceWorkbookSha256": {
+                        "type": "string",
+                        "const": "81d3ae870cd5569b13371ec8b4de081a9a4e3e15098f7454f5d0cdcd3708c424"
+                      },
+                      "normalizedSnapshotSha256": {
+                        "type": "string",
+                        "const": "e4fc8087ddbc1ff92e3255546e053c6956e20bd1dca269533113b727f728b940"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "title",
+                      "sourceType",
+                      "effectiveFrom",
+                      "locator",
+                      "sourceWorkbookSha256",
+                      "normalizedSnapshotSha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "eligibility": {
+              "type": "string",
+              "enum": [
+                "eligible",
+                "blocked",
+                "control_required"
+              ]
+            },
+            "reasonCodes": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "WRONG_CASE_TYPE",
+                  "LOSS_DATE_MISSING",
+                  "MODEL_YEAR_MISSING",
+                  "MODEL_YEAR_AFTER_ACCIDENT",
+                  "VEHICLE_TYPE_MISSING",
+                  "VEHICLE_GROUP_MISMATCH",
+                  "USAGE_VALUE_MISSING",
+                  "USAGE_METRIC_MISMATCH",
+                  "MARKET_VALUE_INVALID",
+                  "DAMAGE_AMOUNT_INVALID",
+                  "PARTS_MISSING",
+                  "PART_RULE_INVALID",
+                  "PART_OPERATION_UNSUPPORTED",
+                  "PART_OPERATION_CONFLICT",
+                  "REPAIR_PART_PRICE_INVALID",
+                  "REPAIR_LABOR_MISSING",
+                  "REQUIRED_EVIDENCE_MISSING",
+                  "SOURCE_CONFLICT",
+                  "INSUFFICIENT_COMPARABLES",
+                  "FOREIGN_MARKET_EVIDENCE_MISSING",
+                  "ANTIQUE_OR_COLLECTOR",
+                  "PRIOR_HEAVY_DAMAGE",
+                  "CURRENT_HEAVY_OR_TOTAL_DAMAGE"
+                ]
+              }
+            },
+            "reasons": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "WRONG_CASE_TYPE",
+                      "LOSS_DATE_MISSING",
+                      "MODEL_YEAR_MISSING",
+                      "MODEL_YEAR_AFTER_ACCIDENT",
+                      "VEHICLE_TYPE_MISSING",
+                      "VEHICLE_GROUP_MISMATCH",
+                      "USAGE_VALUE_MISSING",
+                      "USAGE_METRIC_MISMATCH",
+                      "MARKET_VALUE_INVALID",
+                      "DAMAGE_AMOUNT_INVALID",
+                      "PARTS_MISSING",
+                      "PART_RULE_INVALID",
+                      "PART_OPERATION_UNSUPPORTED",
+                      "PART_OPERATION_CONFLICT",
+                      "REPAIR_PART_PRICE_INVALID",
+                      "REPAIR_LABOR_MISSING",
+                      "REQUIRED_EVIDENCE_MISSING",
+                      "SOURCE_CONFLICT",
+                      "INSUFFICIENT_COMPARABLES",
+                      "FOREIGN_MARKET_EVIDENCE_MISSING",
+                      "ANTIQUE_OR_COLLECTOR",
+                      "PRIOR_HEAVY_DAMAGE",
+                      "CURRENT_HEAVY_OR_TOTAL_DAMAGE"
+                    ]
+                  },
+                  "field": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "blocked",
+                      "control_required"
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "field",
+                  "message",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "eligibilityStatus": {
+              "type": "string",
+              "enum": [
+                "calculable",
+                "not_applicable",
+                "control_required"
+              ]
+            },
+            "ageCoefficient": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usageCoefficient": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "generalModifiers": {
+              "type": "object",
+              "properties": {
+                "commercialOrRental": {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                "previousDamage": {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                "lowerBandProximity": {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                "multiplier": {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "commercialOrRental",
+                "previousDamage",
+                "lowerBandProximity",
+                "multiplier"
+              ],
+              "additionalProperties": false
+            },
+            "partBreakdown": {
+              "maxItems": 500,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "stableRuleId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "sourceTable": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "sourceRow": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "sourceLabel": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "replacement",
+                      "repair",
+                      "paint"
+                    ]
+                  },
+                  "repairClass": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "light",
+                          "medium",
+                          "heavy"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "coefficient": {
+                    "type": "object",
+                    "properties": {
+                      "numerator": {
+                        "type": "string",
+                        "pattern": "^-?\\d+$"
+                      },
+                      "denominator": {
+                        "type": "string",
+                        "pattern": "^[1-9]\\d*$"
+                      },
+                      "decimal": {
+                        "type": "string",
+                        "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                      }
+                    },
+                    "required": [
+                      "numerator",
+                      "denominator",
+                      "decimal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "included": {
+                    "type": "boolean"
+                  },
+                  "exclusionReason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "stableRuleId",
+                  "sourceTable",
+                  "sourceRow",
+                  "sourceLabel",
+                  "operation",
+                  "repairClass",
+                  "coefficient",
+                  "included",
+                  "exclusionReason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "partCoefficientPercentagePoints": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "damageAmountContribution": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "damageCoefficient": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "vehicleMultiplier": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rawResultMinor": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "capMinor": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cappedResultMinor": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "numerator": {
+                      "type": "string",
+                      "pattern": "^-?\\d+$"
+                    },
+                    "denominator": {
+                      "type": "string",
+                      "pattern": "^[1-9]\\d*$"
+                    },
+                    "decimal": {
+                      "type": "string",
+                      "pattern": "^-?\\d+(?:\\.\\d+)?$"
+                    }
+                  },
+                  "required": [
+                    "numerator",
+                    "denominator",
+                    "decimal"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "capApplied": {
+              "type": "boolean"
+            },
+            "roundingUnitMinor": {
+              "type": "number",
+              "const": 50000
+            },
+            "roundingResultMinor": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "finalResultMinor": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "grossValueLossMinor": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "faultAdjustedValueLossMinor": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "qualifyingPreComparableCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "qualifyingPostComparableCount": {
+              "type": "number",
+              "const": 0
+            },
+            "uncertainties": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "WRONG_CASE_TYPE",
+                      "LOSS_DATE_MISSING",
+                      "MODEL_YEAR_MISSING",
+                      "MODEL_YEAR_AFTER_ACCIDENT",
+                      "VEHICLE_TYPE_MISSING",
+                      "VEHICLE_GROUP_MISMATCH",
+                      "USAGE_VALUE_MISSING",
+                      "USAGE_METRIC_MISMATCH",
+                      "MARKET_VALUE_INVALID",
+                      "DAMAGE_AMOUNT_INVALID",
+                      "PARTS_MISSING",
+                      "PART_RULE_INVALID",
+                      "PART_OPERATION_UNSUPPORTED",
+                      "PART_OPERATION_CONFLICT",
+                      "REPAIR_PART_PRICE_INVALID",
+                      "REPAIR_LABOR_MISSING",
+                      "REQUIRED_EVIDENCE_MISSING",
+                      "SOURCE_CONFLICT",
+                      "INSUFFICIENT_COMPARABLES",
+                      "FOREIGN_MARKET_EVIDENCE_MISSING",
+                      "ANTIQUE_OR_COLLECTOR",
+                      "PRIOR_HEAVY_DAMAGE",
+                      "CURRENT_HEAVY_OR_TOTAL_DAMAGE"
+                    ]
+                  },
+                  "field": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "blocking": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "requiresHumanReview": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "code",
+                  "field",
+                  "reason",
+                  "blocking",
+                  "requiresHumanReview"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "reasoning": {
+              "minItems": 1,
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "humanApprovalRequired": {
+              "type": "boolean",
+              "const": true
+            },
+            "canSubmitForApproval": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ruleSetId",
+            "ruleVersion",
+            "ruleIdentity",
+            "effectiveFrom",
+            "sourceWorkbookSha256",
+            "normalizedSnapshotSha256",
+            "calculationMethod",
+            "roundingRule",
+            "ruleSources",
+            "eligibility",
+            "reasonCodes",
+            "reasons",
+            "eligibilityStatus",
+            "ageCoefficient",
+            "usageCoefficient",
+            "generalModifiers",
+            "partBreakdown",
+            "partCoefficientPercentagePoints",
+            "damageAmountContribution",
+            "damageCoefficient",
+            "vehicleMultiplier",
+            "rawResultMinor",
+            "capMinor",
+            "cappedResultMinor",
+            "capApplied",
+            "roundingUnitMinor",
+            "roundingResultMinor",
+            "finalResultMinor",
+            "grossValueLossMinor",
+            "faultAdjustedValueLossMinor",
+            "qualifyingPreComparableCount",
+            "qualifyingPostComparableCount",
+            "uncertainties",
+            "reasoning",
+            "humanApprovalRequired",
+            "canSubmitForApproval"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "previewHash",
+    "ruleSetId",
+    "ruleVersion",
+    "input",
+    "evaluation"
+  ],
+  "additionalProperties": false
+}

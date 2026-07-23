@@ -120,8 +120,8 @@ export const trafficValueLossReportContentSchema = z.strictObject({
   damageParts: z.array(trafficValueLossReportDamagePartSchema).max(500),
   calculation: z.strictObject({
     eligibilityStatus: z.enum(['calculable', 'no_value_loss', 'not_applicable', 'control_required']),
-    calculationMethod: z.literal('market_value_difference'),
-    roundingRule: z.literal('half_up_minor_unit'),
+    calculationMethod: z.enum(['market_value_difference', 'real_market_analysis']),
+    roundingRule: z.enum(['half_up_minor_unit', 'ceil_500_try']),
     preAccidentMarketValueMinor: trafficValueLossMoneyMinorSchema.nullable(),
     postRepairMarketValueMinor: trafficValueLossMoneyMinorSchema.nullable(),
     grossValueLossMinor: trafficValueLossMoneyMinorSchema.nullable(),
@@ -138,7 +138,7 @@ export const trafficValueLossReportContentSchema = z.strictObject({
     ruleSetId: z.string().min(1).max(120),
     ruleVersion: z.string().min(1).max(80),
     effectiveFrom: localDateSchema,
-    sources: z.array(trafficValueLossRuleSourceSchema).min(2).max(20),
+    sources: z.array(trafficValueLossRuleSourceSchema).min(1).max(20),
   }),
   reportNote: z.string().min(1).max(MAX_TRAFFIC_VALUE_LOSS_REPORT_NOTE_LENGTH).nullable(),
 })

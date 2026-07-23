@@ -55,6 +55,44 @@ export interface TrafficValueLossDamagePartInput {
   readonly priorDamage: 'yes' | 'no' | 'unknown'
 }
 
+export interface TrafficValueLossRealMarketPartInput {
+  readonly stableRuleId: string
+  readonly operation: 'replacement' | 'repair' | 'paint'
+  readonly paintMode: 'full' | 'local' | null
+  readonly newPartPriceMinor: number | null
+  readonly repairLaborMinor: number | null
+  readonly partPriceAvailability: 'available' | 'unavailable'
+  readonly priorPartState: 'none' | 'previously_damaged' | 'previously_repaired_detachable' | 'previously_repaired_welded'
+  readonly treatment: 'standard' | 'accessory' | 'paintless_repair' | 'plastic_or_unpainted' | 'superstructure'
+}
+
+export interface TrafficValueLossRealMarketInput {
+  readonly vehicleType: string | null
+  readonly vehicleGroupCode: 'A' | 'B' | 'C' | 'Ç' | 'D' | 'E' | 'F' | null
+  readonly usageMetric: 'mileage' | 'working_hours' | null
+  readonly usageValue: number | null
+  readonly commercialOrRental: boolean
+  readonly previousDamageCount: number | null
+  readonly marketValueMinor: number | null
+  readonly damageAmountMinor: number | null
+  readonly parts: readonly TrafficValueLossRealMarketPartInput[]
+  readonly eligibilityFacts: {
+    readonly antiqueOrCollector: boolean | null
+    readonly priorHeavyDamage: boolean | null
+    readonly currentHeavyOrTotalDamage: boolean | null
+    readonly foreignPlate: boolean
+    readonly foreignMarketEvidenceVerified: boolean
+  }
+  readonly prefillProvenance: readonly {
+    readonly field: string
+    readonly source: string
+    readonly sourceRevisionId: string | null
+    readonly originalValue: string | number | boolean | null
+    readonly newValue: string | number | boolean | null
+    readonly overrideReason: string | null
+  }[]
+}
+
 export interface TrafficValueLossDraftInput {
   readonly evaluatedOn: string
   readonly heavyOrTotalDamage: boolean | null
@@ -72,6 +110,9 @@ export interface TrafficValueLossDraftInput {
   readonly damageParts: readonly TrafficValueLossDamagePartInput[]
   readonly comparables: readonly TrafficValueLossComparableInput[]
   readonly evidence: readonly TrafficValueLossEvidenceInput[]
+  readonly realMarket?: TrafficValueLossRealMarketInput | null
+  readonly ruleOverride?: null
+  readonly confirmedPreviewHash?: string | null
 }
 
 export interface TrafficValueLossEvidenceRecord extends TrafficValueLossEvidenceInput {
@@ -93,6 +134,10 @@ export interface TrafficValueLossComparableRecord {
 
 export interface TrafficValueLossVersionRecord {
   readonly id: string
+  readonly organizationId: string
+  readonly caseId: string
+  readonly calculationId: string
+  readonly revisionId: string
   readonly assessmentVersion: number
   readonly status: TrafficValueLossStatus
   readonly ruleSetId: string
@@ -108,21 +153,24 @@ export interface TrafficValueLossVersionRecord {
     readonly preAccidentMarketValueMinor: number | null
     readonly postRepairMarketValueMinor: number | null
     readonly damageParts: readonly TrafficValueLossDamagePartInput[]
+    readonly realMarket?: TrafficValueLossRealMarketInput | null
+    readonly inputOverrides?: readonly unknown[]
+    readonly ruleOverride?: unknown | null
   }
   readonly evaluation: {
     readonly ruleSetId: string
     readonly ruleVersion: string
     readonly effectiveFrom: string
-    readonly calculationMethod: 'market_value_difference'
-    readonly roundingRule: 'half_up_minor_unit'
+    readonly calculationMethod: 'market_value_difference' | 'real_market_analysis'
+    readonly roundingRule: 'half_up_minor_unit' | 'ceil_500_try'
     readonly ruleSources: readonly {
       readonly code: string
       readonly title: string
-      readonly sourceType: 'official_gazette' | 'seddk_circular'
-      readonly publishedAt: string
+      readonly sourceType: 'official_gazette' | 'seddk_circular' | 'normalized_rule_snapshot'
+      readonly publishedAt?: string
       readonly effectiveFrom: string
       readonly locator: string
-      readonly url: string
+      readonly url?: string
     }[]
     readonly eligibilityStatus: TrafficValueLossEligibilityStatus
     readonly grossValueLossMinor: number | null
@@ -139,6 +187,20 @@ export interface TrafficValueLossVersionRecord {
     readonly reasoning: readonly string[]
     readonly humanApprovalRequired: true
     readonly canSubmitForApproval: boolean
+    readonly eligibility?: 'eligible' | 'blocked' | 'control_required'
+    readonly finalResultMinor?: number | null
+    readonly rawResultMinor?: { readonly decimal: string } | null
+    readonly capMinor?: { readonly decimal: string } | null
+    readonly cappedResultMinor?: { readonly decimal: string } | null
+    readonly roundingResultMinor?: number | null
+    readonly partBreakdown?: readonly {
+      readonly stableRuleId: string
+      readonly sourceLabel: string
+      readonly operation: 'replacement' | 'repair' | 'paint'
+      readonly repairClass: 'light' | 'medium' | 'heavy' | null
+      readonly coefficient: { readonly decimal: string }
+      readonly included: boolean
+    }[]
   }
   readonly evidence: readonly TrafficValueLossEvidenceRecord[]
   readonly comparables: readonly TrafficValueLossComparableRecord[]
@@ -162,6 +224,29 @@ export interface TrafficValueLossAssessmentRecord {
 export interface TrafficValueLossWorkspaceRecord {
   readonly assessment: TrafficValueLossAssessmentRecord | null
   readonly versions: readonly TrafficValueLossVersionRecord[]
+  readonly currentApproved?: TrafficValueLossVersionRecord | null
+}
+
+export interface TrafficValueLossPreviewRecord {
+  readonly previewHash: string
+  readonly ruleSetId: string
+  readonly ruleVersion: string
+  readonly evaluation: TrafficValueLossVersionRecord['evaluation']
+}
+
+export interface TrafficValueLossPartCatalogRecord {
+  readonly ruleIdentity: string
+  readonly vehicleGroupCode: 'A' | 'B' | 'C' | 'Ç' | 'D' | 'E' | 'F'
+  readonly parts: readonly {
+    readonly stableRuleId: string
+    readonly label: string
+    readonly supportedOperations: readonly ('replacement' | 'repair' | 'paint')[]
+    readonly coefficients: {
+      readonly replacement: string | null
+      readonly repair: { readonly light: string; readonly medium: string; readonly heavy: string } | null
+      readonly paint: { readonly full: string; readonly local: string } | null
+    }
+  }[]
 }
 
 export type TrafficValueLossErrorKind =
@@ -181,6 +266,8 @@ export class TrafficValueLossError extends Error {
 
 export interface TrafficValueLossDataPort {
   load(caseId: string): Promise<TrafficValueLossWorkspaceRecord>
+  preview?(caseId: string, expectedVersion: number, input: TrafficValueLossDraftInput): Promise<TrafficValueLossPreviewRecord>
+  partCatalog?(caseId: string, vehicleGroupCode: NonNullable<TrafficValueLossRealMarketInput['vehicleGroupCode']>): Promise<TrafficValueLossPartCatalogRecord>
   createVersion(caseId: string, expectedVersion: number, input: TrafficValueLossDraftInput, idempotencyKey?: string): Promise<TrafficValueLossAssessmentRecord>
   submit(caseId: string, versionId: string, expectedVersion: number, idempotencyKey?: string): Promise<TrafficValueLossAssessmentRecord>
   approve(caseId: string, versionId: string, expectedVersion: number, reason: string | null, idempotencyKey?: string): Promise<TrafficValueLossAssessmentRecord>
@@ -228,7 +315,8 @@ function parseVersion(value: unknown): TrafficValueLossVersionRecord {
   }
   const evaluation = value.evaluation
   if (!ELIGIBILITY_STATUSES.includes(evaluation.eligibilityStatus as TrafficValueLossEligibilityStatus)
-    || evaluation.calculationMethod !== 'market_value_difference' || evaluation.roundingRule !== 'half_up_minor_unit'
+    || !['market_value_difference', 'real_market_analysis'].includes(String(evaluation.calculationMethod))
+    || !['half_up_minor_unit', 'ceil_500_try'].includes(String(evaluation.roundingRule))
     || !isSafeIntegerOrNull(evaluation.grossValueLossMinor) || !isSafeIntegerOrNull(evaluation.faultAdjustedValueLossMinor)
     || !Array.isArray(evaluation.uncertainties) || !Array.isArray(evaluation.reasoning)
     || !Array.isArray(evaluation.ruleSources) || typeof evaluation.canSubmitForApproval !== 'boolean'
@@ -328,12 +416,38 @@ export function createHttpTrafficValueLossAdapter(options: TrafficValueLossAdapt
     async load(caseId) {
       const encodedCaseId = encodeURIComponent(caseId)
       const current = await raw(`/api/v1/cases/${encodedCaseId}/traffic-value-loss`)
-      if (current.response.status === 404) return { assessment: null, versions: [] }
+      if (current.response.status === 404) return { assessment: null, versions: [], currentApproved: null }
       if (!current.response.ok) throw errorFor(current.response.status)
       const assessment = parseAssessmentEnvelope(current.body)
       const history = await raw(`/api/v1/cases/${encodedCaseId}/traffic-value-loss/versions`)
       if (!history.response.ok) throw errorFor(history.response.status)
-      return { assessment, versions: parseVersionsEnvelope(history.body) }
+      const approved = await raw(`/api/v1/cases/${encodedCaseId}/traffic-value-loss/current-approved`)
+      if (!approved.response.ok && approved.response.status !== 404) throw errorFor(approved.response.status)
+      const approvedVersion = approved.response.status === 404
+        ? null
+        : (await import('@hasarbotu/contracts'))
+            .trafficValueLossCurrentApprovedResponseSchema.parse(approved.body).version
+      return {
+        assessment,
+        versions: parseVersionsEnvelope(history.body),
+        currentApproved: approvedVersion as TrafficValueLossVersionRecord | null,
+      }
+    },
+    async preview(caseId, expectedVersion, input) {
+      const result = await raw(`/api/v1/cases/${encodeURIComponent(caseId)}/traffic-value-loss/preview`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ expectedVersion, ...input }),
+      })
+      if (!result.response.ok) throw errorFor(result.response.status)
+      const { trafficValueLossPreviewResponseSchema } = await import('@hasarbotu/contracts')
+      return trafficValueLossPreviewResponseSchema.parse(result.body) as TrafficValueLossPreviewRecord
+    },
+    async partCatalog(caseId, vehicleGroupCode) {
+      const result = await raw(`/api/v1/cases/${encodeURIComponent(caseId)}/traffic-value-loss/part-catalog?vehicleGroupCode=${encodeURIComponent(vehicleGroupCode)}`)
+      if (!result.response.ok) throw errorFor(result.response.status)
+      const { trafficValueLossPartCatalogResponseSchema } = await import('@hasarbotu/contracts')
+      return trafficValueLossPartCatalogResponseSchema.parse(result.body) as TrafficValueLossPartCatalogRecord
     },
     createVersion(caseId, expectedVersion, input, idempotencyKey) {
       return command(`/api/v1/cases/${encodeURIComponent(caseId)}/traffic-value-loss/versions`,

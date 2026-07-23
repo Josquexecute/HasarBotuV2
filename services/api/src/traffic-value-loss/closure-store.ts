@@ -27,7 +27,7 @@ interface ClosureFactRow {
   human_approval_status: TrafficValueLossClosureAssessmentFact['humanApprovalStatus']
   calculation_rule_version: string
   result_code: TrafficValueLossClosureAssessmentFact['resultCode']
-  result_snapshot: { faultAdjustedValueLossMinor?: unknown }
+  result_snapshot: { finalResultMinor?: unknown; faultAdjustedValueLossMinor?: unknown }
   report_id: string | null
   report_assessment_version_id: string | null
   report_rule_version: string | null
@@ -54,7 +54,13 @@ export async function loadTrafficValueLossClosureSummaries(
             report.id AS report_id,report.assessment_version_id AS report_assessment_version_id,
             report.rule_version AS report_rule_version,report.generated_at AS report_generated_at
      FROM traffic_value_loss_assessments a
-     JOIN traffic_value_loss_versions v ON v.id=a.current_version_id
+     JOIN traffic_value_loss_versions v
+       ON v.assessment_id=a.id
+      AND v.organization_id=a.organization_id
+      AND v.case_id=a.case_id
+      AND v.status='approved'
+      AND v.human_approval_status='approved'
+      AND v.is_active=true
      LEFT JOIN traffic_value_loss_reports report ON report.assessment_version_id=v.id
      WHERE a.organization_id=$1 AND a.case_id=ANY($2::uuid[])`,
     [organizationId, ids],
@@ -71,7 +77,9 @@ export async function loadTrafficValueLossClosureSummaries(
       humanApprovalStatus: row.human_approval_status,
       calculationRuleVersion: row.calculation_rule_version,
       resultCode: row.result_code,
-      amountMinor: amountMinor(row.result_snapshot.faultAdjustedValueLossMinor),
+      amountMinor: amountMinor(
+        row.result_snapshot.finalResultMinor ?? row.result_snapshot.faultAdjustedValueLossMinor,
+      ),
     }
     const report: TrafficValueLossClosureReportFact | null =
       row?.report_id === null || row?.report_id === undefined

@@ -13,6 +13,10 @@ const EVIDENCE_ID = '019f9000-0000-7000-8000-000000000005'
 
 const version = {
   id: VERSION_ID,
+  organizationId: '019f9000-0000-7000-8000-000000000007',
+  caseId: CASE_ID,
+  calculationId: ASSESSMENT_ID,
+  revisionId: VERSION_ID,
   assessmentVersion: 1,
   status: 'draft',
   ruleSetId: 'traffic-value-loss-market-difference',
@@ -38,6 +42,9 @@ const version = {
     ruleSources: [{
       code: 'RG', title: 'Resmî Gazete', sourceType: 'official_gazette', publishedAt: '2026-06-12',
       effectiveFrom: '2026-07-01', locator: 'Madde 2', url: 'https://www.resmigazete.gov.tr/test',
+    }, {
+      code: 'SEDDK', title: 'SEDDK Genelgesi', sourceType: 'seddk_circular', publishedAt: '2026-06-15',
+      effectiveFrom: '2026-07-01', locator: 'Bölüm 3', url: 'https://www.seddk.gov.tr/test',
     }],
     eligibilityStatus: 'calculable',
     grossValueLossMinor: 10_000_000,
@@ -125,6 +132,7 @@ describe('TrafficValueLoss HttpApiAdapter', () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(response(200, { assessment }))
       .mockResolvedValueOnce(response(200, { versions: [version] }))
+      .mockResolvedValueOnce(response(200, { version }))
       .mockImplementation(async () => response(200, { assessment }))
     const adapter = createHttpTrafficValueLossAdapter({ fetchImpl, idempotencyKeyFactory: () => 'stable-key' })
     const loaded = await adapter.load(CASE_ID)
@@ -133,15 +141,15 @@ describe('TrafficValueLoss HttpApiAdapter', () => {
     await adapter.createVersion(CASE_ID, 1, draft)
     await adapter.submit(CASE_ID, VERSION_ID, 1)
     await adapter.approve(CASE_ID, VERSION_ID, 2, 'Kontrol edildi.')
-    for (const call of fetchImpl.mock.calls.slice(2)) {
+    for (const call of fetchImpl.mock.calls.slice(3)) {
       expect((call[1]?.headers as Record<string, string>)['Idempotency-Key']).toBe('stable-key')
     }
-    expect(JSON.parse(String(fetchImpl.mock.calls[2]?.[1]?.body))).toMatchObject({ expectedVersion: 1, evaluatedOn: '2026-07-16' })
+    expect(JSON.parse(String(fetchImpl.mock.calls[3]?.[1]?.body))).toMatchObject({ expectedVersion: 1, evaluatedOn: '2026-07-16' })
   })
 
   it('assessment 404 durumunu gerçek boş başlangıç olarak korur', async () => {
     const adapter = createHttpTrafficValueLossAdapter({ fetchImpl: vi.fn().mockResolvedValue(response(404, {})) as unknown as typeof fetch })
-    await expect(adapter.load(CASE_ID)).resolves.toEqual({ assessment: null, versions: [] })
+    await expect(adapter.load(CASE_ID)).resolves.toEqual({ assessment: null, versions: [], currentApproved: null })
   })
 
   it.each([[401, 'unauthorized'], [403, 'forbidden'], [409, 'conflict'], [503, 'unavailable']] as const)(

@@ -7,6 +7,7 @@ import {
   trafficValueLossClosureListResponseSchema,
   trafficValueLossReportGenerateRequestSchema,
   trafficValueLossReportPreviewRequestSchema,
+  trafficValueLossPreviewRequestSchema,
   trafficValueLossVersionCreateRequestSchema,
 } from '../src/index.js'
 
@@ -14,6 +15,70 @@ const id = '019f7000-0000-7000-8000-000000000001'
 const hash = 'a'.repeat(64)
 
 describe('Trafik değer kaybı contracts', () => {
+  it('yeni real-market revision girdisini strict enum ve stable ID sınırlarıyla doğrular', () => {
+    const result = trafficValueLossPreviewRequestSchema.safeParse({
+      expectedVersion: 0,
+      evaluatedOn: '2026-07-16',
+      heavyOrTotalDamage: false,
+      vehicle: { make: 'Sentetik', model: 'Model', variant: null, modelYear: 2026, mileage: 0, usageType: 'hususi' },
+      faultRateBasisPoints: null,
+      preAccidentMarketValueMinor: null,
+      postRepairMarketValueMinor: null,
+      damageParts: [],
+      comparables: [],
+      evidence: [{
+        evidenceKey: 'expert',
+        sourceType: 'expert_observation',
+        externalReference: 'ref:expert',
+        sourceHash: hash,
+        supports: ['vehicle_identity'],
+        verificationStatus: 'verified',
+      }],
+      realMarket: {
+        vehicleType: 'OTOMOBİL',
+        vehicleGroupCode: 'A',
+        usageMetric: 'mileage',
+        usageValue: 0,
+        commercialOrRental: false,
+        previousDamageCount: 0,
+        marketValueMinor: 2_000_000,
+        damageAmountMinor: 0,
+        parts: [{
+          stableRuleId: 'value-loss-part|vehicle-group=A|source-table=group-a|source-row=34|label=tavan|operations=paint%2Brepair%2Breplacement',
+          operation: 'replacement',
+          paintMode: null,
+          newPartPriceMinor: null,
+          repairLaborMinor: null,
+          partPriceAvailability: 'unavailable',
+          priorPartState: 'none',
+          treatment: 'standard',
+        }],
+        eligibilityFacts: {
+          antiqueOrCollector: false,
+          priorHeavyDamage: false,
+          currentHeavyOrTotalDamage: false,
+          foreignPlate: false,
+          foreignMarketEvidenceVerified: false,
+        },
+        prefillProvenance: [],
+      },
+      ruleOverride: null,
+      confirmedPreviewHash: null,
+    })
+    expect(result.success).toBe(true)
+    if (!result.success || result.data.realMarket === null) return
+    expect(trafficValueLossPreviewRequestSchema.safeParse({
+      ...result.data,
+      realMarket: { ...result.data.realMarket, vehicleGroupCode: 'Z' },
+    }).success).toBe(false)
+    expect(trafficValueLossPreviewRequestSchema.safeParse({
+      ...result.data,
+      realMarket: {
+        ...result.data.realMarket,
+        parts: [{ ...result.data.realMarket.parts[0], operation: 'guess' }],
+      },
+    }).success).toBe(false)
+  })
   it('kapanış özet listesini strict kimlik ve minor-unit alanlarıyla doğrular', () => {
     expect(trafficValueLossClosureListResponseSchema.safeParse({
       items: [{
@@ -48,7 +113,7 @@ describe('Trafik değer kaybı contracts', () => {
     expect(TRAFFIC_VALUE_LOSS_ROUTE).toContain('/traffic-value-loss')
     expect(TRAFFIC_VALUE_LOSS_APPROVE_ROUTE).toContain('/approve')
     expect(TRAFFIC_VALUE_LOSS_REPORT_PREVIEW_ROUTE).toContain('/report-preview')
-    expect(trafficValueLossEvaluationSchema.shape.ruleVersion.value).toBe('2026.07.01.1')
+    expect(trafficValueLossEvaluationSchema.options[0].shape.ruleVersion.value).toBe('2026.07.01.1')
   })
 
   it('rapor önizleme ve kesin çıktı onayını strict biçimde doğrular', () => {

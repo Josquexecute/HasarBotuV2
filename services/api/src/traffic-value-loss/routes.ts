@@ -3,10 +3,13 @@ import type pg from 'pg'
 import {
   IDEMPOTENCY_KEY_HEADER,
   TRAFFIC_VALUE_LOSS_APPROVE_ROUTE,
+  TRAFFIC_VALUE_LOSS_CURRENT_APPROVED_ROUTE,
   TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE,
   TRAFFIC_VALUE_LOSS_APPROVE_SCOPE,
   TRAFFIC_VALUE_LOSS_REJECT_ROUTE,
   TRAFFIC_VALUE_LOSS_REJECT_SCOPE,
+  TRAFFIC_VALUE_LOSS_PART_CATALOG_ROUTE,
+  TRAFFIC_VALUE_LOSS_PREVIEW_ROUTE,
   TRAFFIC_VALUE_LOSS_REPORT_GENERATE_SCOPE,
   TRAFFIC_VALUE_LOSS_REPORT_PDF_ROUTE,
   TRAFFIC_VALUE_LOSS_REPORT_PREVIEW_ROUTE,
@@ -22,7 +25,12 @@ import {
   idempotencyKeySchema,
   trafficValueLossApproveRequestSchema,
   trafficValueLossClosureListResponseSchema,
+  trafficValueLossCurrentApprovedResponseSchema,
+  trafficValueLossPartCatalogQuerySchema,
+  trafficValueLossPartCatalogResponseSchema,
   trafficValueLossParamsSchema,
+  trafficValueLossPreviewRequestSchema,
+  trafficValueLossPreviewResponseSchema,
   trafficValueLossRejectRequestSchema,
   trafficValueLossReportGenerateRequestSchema,
   trafficValueLossReportParamsSchema,
@@ -67,6 +75,7 @@ function storeError(reply: FastifyReply, requestId: string, error: TrafficValueL
   if (error.code === 'wrong_case_type' || error.code === 'invalid_source') return reply.code(400).send(failureBody('traffic_value_loss_source_invalid', 'Case or evidence is not eligible for traffic value loss.', requestId))
   if (error.code === 'version_conflict') return reply.code(409).send(failureBody('traffic_value_loss_stale', 'Traffic value loss version changed.', requestId))
   if (error.code === 'approval_blocked') return reply.code(409).send(failureBody('traffic_value_loss_approval_blocked', 'Uncertainties block submission or approval.', requestId))
+  if (error.code === 'preview_mismatch') return reply.code(409).send(failureBody('traffic_value_loss_preview_stale', 'Calculation preview changed and must be reviewed again.', requestId))
   if (error.code === 'idempotency_conflict') return reply.code(409).send(failureBody('idempotency_conflict', 'Idempotency key was used with a different request.', requestId))
   return reply.code(409).send(failureBody('traffic_value_loss_conflict', 'Traffic value loss state does not permit this operation.', requestId))
 }
@@ -110,6 +119,55 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
     const assessment = await store.find(session.user.organizationId, params.data.caseId)
     if (assessment === undefined) return reply.code(404).send(failureBody('not_found', 'Traffic value loss assessment not found.', requestId))
     return trafficValueLossResponseSchema.parse({ assessment })
+  })
+
+  app.get(TRAFFIC_VALUE_LOSS_CURRENT_APPROVED_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireSession(auth, request, reply)
+    if (session === undefined) return
+    const params = trafficValueLossParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(params.error,requestId) }))
+    const version = await store.currentApproved(session.user.organizationId, params.data.caseId)
+    if (version === undefined) return reply.code(404).send(failureBody('not_found', 'Approved traffic value loss revision not found.', requestId))
+    return trafficValueLossCurrentApprovedResponseSchema.parse({ version })
+  })
+
+  app.get(TRAFFIC_VALUE_LOSS_PART_CATALOG_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireSession(auth, request, reply)
+    if (session === undefined) return
+    const params = trafficValueLossParamsSchema.safeParse(request.params)
+    const query = trafficValueLossPartCatalogQuerySchema.safeParse(request.query)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(params.error,requestId) }))
+    if (!query.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(query.error,requestId) }))
+    const catalog = await store.partCatalog(
+      session.user.organizationId,
+      params.data.caseId,
+      query.data.vehicleGroupCode,
+    )
+    if (catalog === undefined) return reply.code(404).send(failureBody('not_found', 'Traffic case not found.', requestId))
+    return trafficValueLossPartCatalogResponseSchema.parse(catalog)
+  })
+
+  app.post(TRAFFIC_VALUE_LOSS_PREVIEW_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireAnyRole(auth, request, reply, WRITE_ROLES)
+    if (session === undefined) return
+    const params = trafficValueLossParamsSchema.safeParse(request.params)
+    const body = trafficValueLossPreviewRequestSchema.safeParse(request.body)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(params.error,requestId) }))
+    if (!body.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(body.error,requestId) }))
+    if (body.data.ruleOverride !== null && !session.user.roles.includes('admin')) {
+      return reply.code(403).send(failureBody('forbidden', 'Rule override requires admin role.', requestId))
+    }
+    try {
+      return trafficValueLossPreviewResponseSchema.parse(
+        await store.preview(actor(session, request), params.data.caseId, body.data),
+      )
+    } catch (error) {
+      if (error instanceof TrafficValueLossStoreError) return storeError(reply, requestId, error)
+      throw error
+    }
   })
 
   app.get(TRAFFIC_VALUE_LOSS_VERSIONS_ROUTE, async (request, reply) => {
@@ -204,6 +262,11 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
           : trafficValueLossRejectRequestSchema
     const body = schema.safeParse(request.body)
     if (!body.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok:false,error:zodErrorToApiError(body.error,requestId) }))
+    if (kind === 'version'
+      && (body.data as { ruleOverride?: unknown }).ruleOverride !== null
+      && !session.user.roles.includes('admin')) {
+      return reply.code(403).send(failureBody('forbidden', 'Rule override requires admin role.', requestId))
+    }
     const scope = kind === 'version' ? TRAFFIC_VALUE_LOSS_VERSION_SCOPE
       : kind === 'submit' ? TRAFFIC_VALUE_LOSS_SUBMIT_SCOPE
         : kind === 'approve' ? TRAFFIC_VALUE_LOSS_APPROVE_SCOPE
