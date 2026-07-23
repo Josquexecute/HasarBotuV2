@@ -45,6 +45,8 @@ export const JOB_TYPES = [
   'cleanup_moved_workspace',
   'extract_pdf_text',
   'ocr_policy_pages',
+  'preview_labor_workbook_apply',
+  'apply_labor_workbook',
 ] as const
 export type JobType = (typeof JOB_TYPES)[number]
 export const jobTypeSchema = z.enum(JOB_TYPES)
@@ -53,12 +55,12 @@ export const JOB_STATUSES = ['pending', 'leased', 'succeeded', 'failed', 'dead_l
 export type JobStatus = (typeof JOB_STATUSES)[number]
 export const jobStatusSchema = z.enum(JOB_STATUSES)
 
-export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning', 'file_operation', 'document_text_extraction', 'document_ocr_run'] as const
+export const JOB_TARGET_TYPES = ['document_version', 'photo', 'case_location', 'workspace_provisioning', 'file_operation', 'document_text_extraction', 'document_ocr_run', 'labor_workbook_apply'] as const
 export type JobTargetType = (typeof JOB_TARGET_TYPES)[number]
 export const jobTargetTypeSchema = z.enum(JOB_TARGET_TYPES)
 
 /** Doğrulama hedefi: dosya (hash+size) veya dizin (yalnız varlık). */
-export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace', 'file_operation', 'file_operation_cleanup', 'pdf_text_extraction', 'policy_ocr'] as const
+export const JOB_PAYLOAD_KINDS = ['file', 'directory', 'workspace', 'file_operation', 'file_operation_cleanup', 'pdf_text_extraction', 'policy_ocr', 'labor_workbook_preview', 'labor_workbook_apply'] as const
 export const jobPayloadKindSchema = z.enum(JOB_PAYLOAD_KINDS)
 
 /** Agent'a verilen güvenli payload. Mutlak yol yoktur. */
@@ -154,6 +156,70 @@ export const policyOcrJobPayloadSchema = z.strictObject({
   timeoutMs: z.number().int().min(1_000).max(600_000),
   workerMemoryMb: z.number().int().min(128).max(1_024),
 })
+
+const workbookSignatureExpectationSchema = z.strictObject({
+  cell: z.string().regex(/^[A-Z]{1,3}[1-9]\d{0,6}$/),
+  text: z.string().min(1).max(240),
+})
+const laborWorkbookSignatureSchema = z.strictObject({
+  sheetName: z.string().min(1).max(120),
+  headers: z.array(workbookSignatureExpectationSchema).min(1).max(20),
+  identityCells: z.array(workbookSignatureExpectationSchema).min(1).max(10),
+})
+const laborWorkbookRequestedChangeSchema = z.strictObject({
+  cell: z.string().regex(/^D(?:[2-9]|[1-9]\d{1,5}|10[0-3]\d{4}|104[0-7]\d{3}|1048[0-4]\d{2}|10485[0-6]\d|104857[0-6])$/),
+  newValue: z.string().min(1).max(240),
+})
+const laborWorkbookPreviewChangeSchema = laborWorkbookRequestedChangeSchema.extend({
+  previousValue: z.string().max(240).nullable(),
+  sourceRowHash: sha256HexSchema,
+})
+const laborWorkbookPreviewPlanSchema = z.strictObject({
+  version: z.literal('labor-workbook-write-plan/2.0.0'),
+  planHash: sha256HexSchema,
+  createdAt: utcDateTimeSchema,
+  relativeWorkbookPath: relativePathSchema,
+  sourceSha256: sha256HexSchema,
+  sourceSize: byteSizeSchema,
+  sourceModifiedIso: utcDateTimeSchema,
+  targetSheetName: z.string().min(1).max(120),
+  targetWorksheetPart: relativePathSchema,
+  observations: z.array(laborWorkbookPreviewChangeSchema).min(1).max(5_000),
+  changes: z.array(laborWorkbookPreviewChangeSchema).min(1).max(5_000),
+})
+
+export const laborWorkbookPreviewJobPayloadSchema = z.strictObject({
+  kind: z.literal('labor_workbook_preview'),
+  operationId: idSchema,
+  operationVersion: z.number().int().min(1),
+  storageRootKey: storageRootKeySchema,
+  relativePath: relativePathSchema,
+  expectedSourceSha256: sha256HexSchema.nullable(),
+  signature: laborWorkbookSignatureSchema,
+  changes: z.array(laborWorkbookRequestedChangeSchema).min(1).max(5_000),
+})
+
+export const laborWorkbookApplyJobPayloadSchema = z.strictObject({
+  kind: z.literal('labor_workbook_apply'),
+  operationId: idSchema,
+  operationVersion: z.number().int().min(1),
+  storageRootKey: storageRootKeySchema,
+  relativePath: relativePathSchema,
+  expectedSourceSha256: sha256HexSchema,
+  signature: laborWorkbookSignatureSchema,
+  changes: z.array(laborWorkbookRequestedChangeSchema).min(1).max(5_000),
+  preview: laborWorkbookPreviewPlanSchema,
+  approval: z.strictObject({
+    confirmed: z.literal(true),
+    planHash: sha256HexSchema,
+    approvedByUserId: idSchema,
+    approvedAt: utcDateTimeSchema,
+  }),
+})
+export type LaborWorkbookPreviewJobPayload =
+  z.infer<typeof laborWorkbookPreviewJobPayloadSchema>
+export type LaborWorkbookApplyJobPayload =
+  z.infer<typeof laborWorkbookApplyJobPayloadSchema>
 export const jobPayloadSchema = z.discriminatedUnion('kind', [
   verificationJobPayloadSchema,
   workspaceJobPayloadSchema,
@@ -161,6 +227,8 @@ export const jobPayloadSchema = z.discriminatedUnion('kind', [
   fileOperationCleanupJobPayloadSchema,
   pdfTextExtractionJobPayloadSchema,
   policyOcrJobPayloadSchema,
+  laborWorkbookPreviewJobPayloadSchema,
+  laborWorkbookApplyJobPayloadSchema,
 ])
 export type JobPayload = z.infer<typeof jobPayloadSchema>
 

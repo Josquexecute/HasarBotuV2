@@ -7,6 +7,10 @@ import { provisionCaseWorkspace } from './workspace-provisioner.js'
 import { executeFileOperation } from './file-operation-executor.js'
 import { extractPdfText, type PdfTextExtractionResult } from './pdf-text-extractor.js'
 import { extractPolicyOcr, type PolicyOcrExtractionResult } from './policy-ocr-extractor.js'
+import {
+  executeLaborWorkbookApply,
+  executeLaborWorkbookPreview,
+} from './labor-workbook-executor.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -28,7 +32,24 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
 
   let result
   try {
-    if (job.payload.kind === 'policy_ocr') {
+    if (job.payload.kind === 'labor_workbook_preview'
+      || job.payload.kind === 'labor_workbook_apply') {
+      const rootAbsolute = config.roots[job.payload.storageRootKey]
+      if (rootAbsolute === undefined) {
+        result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
+      } else if (job.payload.kind === 'labor_workbook_preview') {
+        result = await executeLaborWorkbookPreview(rootAbsolute, job.payload)
+      } else {
+        await client.heartbeat(job.id, 'applying')
+        result = await executeLaborWorkbookApply(
+          rootAbsolute,
+          job.payload,
+          config.agentId,
+          client,
+          job.id,
+        )
+      }
+    } else if (job.payload.kind === 'policy_ocr') {
       const rootAbsolute = config.roots[job.payload.storageRootKey]
       if (rootAbsolute === undefined) result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
       else {
@@ -70,12 +91,21 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
 
   const reportInput: JobResultRequestInput = {
     outcome: result.outcome,
-    ...(result.observedHash !== undefined ? { observedHash: result.observedHash } : {}),
-    ...(result.observedSize !== undefined ? { observedSize: result.observedSize } : {}),
-    ...(result.errorCode !== undefined ? { errorCode: result.errorCode } : {}),
+    ...('observedHash' in result && result.observedHash !== undefined
+      ? { observedHash: result.observedHash }
+      : {}),
+    ...('observedSize' in result && result.observedSize !== undefined
+      ? { observedSize: result.observedSize }
+      : {}),
+    ...('errorCode' in result && result.errorCode !== undefined
+      ? { errorCode: result.errorCode }
+      : {}),
     ...('fileOperation' in result && result.fileOperation !== undefined ? { fileOperation: result.fileOperation } : {}),
     ...((result as PdfTextExtractionResult).pdfExtraction !== undefined ? { pdfExtraction: (result as PdfTextExtractionResult).pdfExtraction } : {}),
     ...((result as PolicyOcrExtractionResult).policyOcr !== undefined ? { policyOcr: (result as PolicyOcrExtractionResult).policyOcr } : {}),
+    ...('laborWorkbook' in result
+      ? { laborWorkbook: result.laborWorkbook }
+      : {}),
   }
   const reported = await client.reportResult(job.id, reportInput)
   return { kind: 'reported', jobId: job.id, outcome: result.outcome, reported }

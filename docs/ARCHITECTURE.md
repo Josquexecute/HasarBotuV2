@@ -79,6 +79,19 @@ Koruma:
 - Optimistic concurrency
 - `updatedAt` veya row version
 - Excel işlem kilidi
+
+### İşçilik workbook apply sınırı
+
+- Renderer yalnız preview/read/approve API'lerini çağırır; API immutable
+  operation ve job üretir, filesystem'e yazmaz.
+- Preview/apply mevcut `jobs` queue, agent lease ve tenant bağlamını kullanır.
+  File Agent yerel `storageRootKey` eşlemesinden göreli workbook yolunu çözer ve
+  fiziksel writer'ın tek çağırıcısıdır.
+- `labor_workbook_apply_operations` request snapshot'ı, revision/profile/workbook
+  kimliği, plan hash, onay, job, backup basename ve başlangıç/sonuç hashlerini
+  ilişkilendirir. Mutlak root ve hücre değerleri audit payload'ında tutulmaz.
+- Stale lock otomatik zaman aşımıyla silinmez. Recovery UI/contract'ı tanımlanana
+  kadar teknik ve kontrollü hata olarak fail-closed döner.
 - Klasör işlem kilidi
 - Idempotent kritik komutlar
 

@@ -435,3 +435,15 @@ Kesin aylık toplama yalnız kullanıcı onaylı veya kullanıcı tarafından d�
   ham hata ve müşteri belgesi içeriği audit'e girmez.
 - Makro/VBA, dijital imza, embedded object, external relationship, yanlış
   vaka/plaka imzası veya preflight conflict fiziksel yazımı engeller.
+- Yazım kaynağı yalnız current İşçilik revision'ına bağlı tamamlanmış uygulamanın
+  approved/final değeridir. AI proposed değeri doğrudan yazılamaz; kullanıcı
+  düzeltmesinde proposed ve final ayrı korunur.
+- Satır eşleme exact source-row referansıdır. Part code ve kaynağı ile operation
+  type doğrulama kanıtıdır; yalnız normalize ada dayalı veya fuzzy başka satıra
+  geçiş yoktur. Row hash, workbook/sheet identity ya da plan hash değişirse
+  bütün işlem fail-closed olur.
+- AI `control_required` satırı kullanıcı tarafından nihai değer/kategoriyle
+  açıkça düzeltilmemişse apply edilemez. Açık düzeltme çözüm sinyalidir; önceki
+  AI önerisi ve manuel değişiklik işareti silinmez.
+- Lock yaşı tek başına silme yetkisi değildir. Aktif lease/job ve başlangıç hash'i
+  kontrollü recovery sözleşmesi olmadan lock otomatik kaldırılamaz.

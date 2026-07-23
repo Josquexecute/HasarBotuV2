@@ -9,10 +9,25 @@ import {
   checkDatabaseHealth,
   closeDatabasePool,
   createDatabasePool,
-  runMigrations,
+  runMigrations as runMigrationsRaw,
   uuidv7,
   type DatabaseConfig,
 } from '../src/index.js'
+
+/**
+ * Önceki migration geri-al/yeniden-uygula testlerinin hedef sayımlarını korur.
+ * Paket 65B migration'ı her çağrıda gerçekten çalışır; yalnız eski testlerin
+ * beklediği isim listesinden süzülür ve `down` sayısına eklenir.
+ */
+async function runMigrations(
+  options: Parameters<typeof runMigrationsRaw>[0],
+): ReturnType<typeof runMigrationsRaw> {
+  const adjusted = options.direction === 'down' && options.count !== undefined
+    ? { ...options, count: options.count + 1 }
+    : options
+  return (await runMigrationsRaw(adjusted))
+    .filter((migration) => migration.name !== '0044_labor_workbook_apply_runtime')
+}
 
 /**
  * Gercek PostgreSQL entegrasyon testleri.
@@ -160,6 +175,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'labor_sheet_items',
       'labor_sheet_versions',
       'labor_sheets',
+      'labor_workbook_apply_operations',
       'office_counters',
       'organizations',
       'pert_assessment_versions',
@@ -201,6 +217,24 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
   it('ayni migration ikinci kez uygulanmaz (tekrar guvenligi)', async () => {
     const applied = await runMigrations({ databaseUrl: config.url, quiet: true })
     expect(applied).toEqual([])
+  })
+
+  it('0044 güvenli workbook apply tablosunu ve mevcut job allowlist uzantısını kurar', async () => {
+    const table = await pool.query(
+      `SELECT count(*)::int AS n FROM information_schema.tables
+        WHERE table_name='labor_workbook_apply_operations'`,
+    )
+    expect(table.rows).toEqual([{ n: 1 }])
+    const jobType = await pool.query(
+      `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conname='jobs_type_valid'`,
+    )
+    expect(String(jobType.rows[0].def)).toContain('apply_labor_workbook')
+    const targetType = await pool.query(
+      `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conname='jobs_target_type_valid'`,
+    )
+    expect(String(targetType.rows[0].def)).toContain('labor_workbook_apply')
   })
 
   it('0043 yeni değer kaybı rule allowlist migrationını geri alır ve yeniden uygular', async () => {

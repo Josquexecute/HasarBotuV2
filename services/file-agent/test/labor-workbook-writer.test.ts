@@ -462,4 +462,155 @@ describe('Paket 65B — güvenli İşçilik workbook fiziksel yazım katmanı', 
     expect(await readFile(input.absolutePath)).toEqual(Buffer.from(changed))
     expect((await readdir(input.root)).filter((name) => name.endsWith('.bak.xlsx'))).toEqual([])
   })
+
+  it('aynı değer, eksik satır, tekrarlı hücre ve aşırı değeri fiziksel yazımdan önce reddeder', async () => {
+    const input = await fixture()
+    const before = await readFile(input.absolutePath)
+    await expect(previewLaborWorkbookWrite({
+      rootAbsolute: input.root,
+      relativeWorkbookPath: input.relativePath,
+      signature,
+      changes: [{ cell: 'D2', newValue: 'ESKİ' }],
+    })).resolves.toMatchObject({ ok: false, code: 'WORKBOOK_WRITE_NO_CHANGES' })
+    await expect(previewLaborWorkbookWrite({
+      rootAbsolute: input.root,
+      relativeWorkbookPath: input.relativePath,
+      signature,
+      changes: [{ cell: 'D4', newValue: '1.00' }],
+    })).resolves.toMatchObject({ ok: false, code: 'WORKBOOK_WRITE_SOURCE_ROW_MISSING' })
+    await expect(previewLaborWorkbookWrite({
+      rootAbsolute: input.root,
+      relativeWorkbookPath: input.relativePath,
+      signature,
+      changes: [
+        { cell: 'D2', newValue: '1.00' },
+        { cell: 'D2', newValue: '2.00' },
+      ],
+    })).resolves.toMatchObject({ ok: false, code: 'WORKBOOK_WRITE_DUPLICATE_CELL' })
+    await expect(previewLaborWorkbookWrite({
+      rootAbsolute: input.root,
+      relativeWorkbookPath: input.relativePath,
+      signature,
+      changes: [{ cell: 'D2', newValue: '1'.repeat(241) }],
+    })).resolves.toMatchObject({ ok: false, code: 'WORKBOOK_WRITE_VALUE_INVALID' })
+    expect(await readFile(input.absolutePath)).toEqual(before)
+    expect(await readdir(input.root)).toEqual([input.relativePath])
+  })
+
+  it('temp doğrulama hatasında kaynak korunur ve temp temizlenir', async () => {
+    const input = await fixture()
+    const before = await readFile(input.absolutePath)
+    const plan = await preview(input)
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+    const result = await applyLaborWorkbookWrite({
+      rootAbsolute: input.root,
+      relativeWorkbookPath: input.relativePath,
+      signature,
+      changes: plan.changes.map(({ cell, newValue }) => ({ cell, newValue })),
+      preview: plan,
+      approval: approval(plan.planHash),
+      hooks: {
+        recordAudit: async () => undefined,
+        beforeTempVerification: async () => { throw new Error('temp-invalid') },
+      },
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'WORKBOOK_WRITE_VERIFICATION_FAILED',
+      sourcePreserved: true,
+    })
+    expect(await readFile(input.absolutePath)).toEqual(before)
+    expect((await readdir(input.root)).some((name) => name.includes('.tmp.xlsx'))).toBe(false)
+  })
+
+  it('rollback başarısızlığını kritik ve kaynak korunmadı olarak raporlar', async () => {
+    const input = await fixture()
+    const plan = await preview(input)
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+    const result = await applyLaborWorkbookWrite({
+      rootAbsolute: input.root,
+      relativeWorkbookPath: input.relativePath,
+      signature,
+      changes: plan.changes.map(({ cell, newValue }) => ({ cell, newValue })),
+      preview: plan,
+      approval: approval(plan.planHash),
+      hooks: {
+        recordAudit: async () => undefined,
+        afterAtomicReplace: async () => { throw new Error('post-replace') },
+        beforeRollback: async () => { throw new Error('rollback-blocked') },
+      },
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'WORKBOOK_WRITE_ROLLBACK_FAILED',
+      sourcePreserved: false,
+      backupFileName: expect.stringMatching(/[.]bak[.]xlsx$/),
+    })
+  })
+
+  it('stale lock dosyasını süreye bakarak silmez ve fail-closed kalır', async () => {
+    const input = await fixture()
+    const before = await readFile(input.absolutePath)
+    const plan = await preview(input)
+    expect(plan.ok).toBe(true)
+    if (!plan.ok) return
+    const lockPath = `${input.absolutePath}.hasarbotu-write.lock`
+    const lock = JSON.stringify({
+      version: 'labor-workbook-write/1.0.0',
+      planHash: plan.planHash,
+      startSha256: plan.sourceSha256,
+      jobId: 'job-stale',
+      agentId: 'agent-stale',
+      createdAt: '2020-01-01T00:00:00.000Z',
+    })
+    await writeFile(lockPath, lock)
+    const result = await applyLaborWorkbookWrite({
+      rootAbsolute: input.root,
+      relativeWorkbookPath: input.relativePath,
+      signature,
+      changes: plan.changes.map(({ cell, newValue }) => ({ cell, newValue })),
+      preview: plan,
+      approval: approval(plan.planHash),
+      hooks: { recordAudit: async () => undefined },
+      lockMetadata: {
+        jobId: 'job-current',
+        agentId: 'agent-current',
+        createdAt: '2026-07-24T00:00:00.000Z',
+      },
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'WORKBOOK_WRITE_LOCKED',
+      sourcePreserved: true,
+    })
+    expect(await readFile(lockPath, 'utf8')).toBe(lock)
+    expect(await readFile(input.absolutePath)).toEqual(before)
+  })
+
+  it('değişmeyen satırı yazmaz fakat exact row hash ile plan gözleminde tutar', async () => {
+    const input = await fixture()
+    const result = await previewLaborWorkbookWrite({
+      rootAbsolute: input.root,
+      relativeWorkbookPath: input.relativePath,
+      signature,
+      changes: [
+        { cell: 'D2', newValue: 'ESKİ' },
+        { cell: 'D3', newValue: '125.50' },
+      ],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.observations).toHaveLength(2)
+    expect(result.observations[0]).toMatchObject({
+      cell: 'D2',
+      previousValue: 'ESKİ',
+      newValue: 'ESKİ',
+    })
+    expect(result.observations[0]?.sourceRowHash).toMatch(/^[a-f0-9]{64}$/u)
+    expect(result.changes).toEqual([
+      expect.objectContaining({ cell: 'D3', newValue: '125.50' }),
+    ])
+  })
 })

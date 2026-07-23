@@ -89,6 +89,19 @@ Paket 42 sınırı:
 - AI yalnız Paket 41’in deterministik subject/body önizlemesini iyileştiren bir öneri üretir. Recipient, attachment, save, handoff veya send kararı üretemez.
 - Plan çağrısızdır. External start; ayrı organization email opt-in/allow-list, ortak hard-stop bütçesi, güncel preview hash ve görünür egress onayı olmadan çalışmaz.
 - Provider payload’ı PII-minimize edilir; caseId, office number, plate, recipient, binary, path, File Agent bilgisi, session veya secret gönderilmez. Konu kimliği yalnız server tarafından sonradan eklenir.
+
+### İşçilik workbook yazma güvenliği
+
+- AI önerisi, draft veya yalnız proposed değer workbook'a yazılamaz. Current
+  revision, immutable approved/final snapshot, conflict-free exact row reference
+  ve aynı plan hash'ine açık kullanıcı onayı zorunludur.
+- Fiziksel yazım yalnız File Agent'tadır. API, renderer veya başka servis
+  workbook byte'ına dokunamaz.
+- Audit ve genel loglar hücre değerini, mutlak yerel root'u, workbook binary'sini
+  veya gerçek müşteri belgesini taşımaz; göreli referans, hücre adresi, kapalı
+  sonuç kodu ve SHA-256 metadata'sı yeterlidir.
+- Lock otomatik eskimiş sayılıp silinmez. Yetkili recovery sözleşmesi yokken
+  `locked` sonucu fail-closed korunur.
 - Prompt-injection/URL/tool talimatı yalnız güvenilmeyen metindir. Tool/cached-content yoktur; sistem sözleşmesini değiştiremez.
 - Öneri PII, placeholder, URL veya filesystem path içerirse fail-closed reddedilir. Ham provider response/prompt audit, log veya DB’ye yazılmaz.
 - Kullanıcının “Öneriyi uygula” eylemi yalnız form state’ini değiştirir ve save onayını sıfırlar. Kalıcı taslak için Paket 41 kontrol/onayı yeniden gerekir.

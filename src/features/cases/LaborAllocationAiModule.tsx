@@ -19,9 +19,11 @@ import {
   type LaborExcelProjectionRecord,
   type LaborAllocationDataPort,
   type LaborAllocationLineRecord,
+  type LaborWorkbookApplyDataPort,
   type LaborAllocationRunRecord,
   type LaborAllocationWorkspaceRecord,
 } from '../../data'
+import { LaborWorkbookApplyPanel } from './LaborWorkbookApplyPanel.js'
 
 /**
  * Paket 54 dilim 2 — AI işçilik dağıtımı önizleme paneli.
@@ -52,11 +54,12 @@ function formatMinor(value: number): string {
   return `${(value / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`
 }
 
-export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplied }: {
+export function LaborAllocationAiModule({ caseId, port, excelPort, workbookPort, onSheetApplied }: {
   readonly caseId: string
   readonly port?: LaborAllocationDataPort
   /** Paket 60: salt okunur Excel projeksiyonu portu. */
   readonly excelPort?: LaborExcelProfileDataPort
+  readonly workbookPort?: LaborWorkbookApplyDataPort
   /** Föy uygulandığında tetiklenir; üst modül yeni sürüme geçer. */
   readonly onSheetApplied?: () => void
 }) {
@@ -1002,6 +1005,17 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, onSheetApplie
                   Eşlenmemiş operasyon türlerine {formatMinor(projection.unmappedTotalMinor)} düşüyor;
                   bu tutar hiçbir sütuna yazılmaz.
                 </p>
+              )}
+              {selectedCandidate !== null
+                && projectionApplicationId !== null
+                && !projectionStale && (
+                <LaborWorkbookApplyPanel
+                  caseId={caseId}
+                  applicationId={projectionApplicationId}
+                  profile={selectedCandidate}
+                  projection={projection}
+                  port={workbookPort}
+                />
               )}
             </div>
             <footer className="modal__footer">

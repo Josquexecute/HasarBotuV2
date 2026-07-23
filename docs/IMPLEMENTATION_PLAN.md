@@ -58,10 +58,26 @@ kullanıcı onaylı kritik işlem modeliyle Paket 65B'dedir.
   onaysız/stale/yanlış plaka/makro/external link, `H–N` korunumu, eşzamanlı lock,
   replace hatası ve rollback davranışını doğrula.
 
-Kapsam dışı: D hücre değerlerini üreten iş kuralı/satır eşlemesi, PostgreSQL
-operation kaydı, File Agent job payload'ı, contracts/API/UI ve gerçek müşteri
-workbook'u. Mevcut modelde bu değer kaynağı tanımlı olmadığı için tahmin
-edilmedi; runtime entegrasyonu bu güvenli çekirdeği ayrıca çağıracaktır.
+### Paket 65B runtime entegrasyonu
+
+- [x] Yalnız current ve tamamlanmış İşçilik uygulamasının approved/final
+  değerlerinden immutable apply snapshot üret; proposed değer ve manuel değişiklik
+  provenance'ını koru.
+- [x] Exact source-row referansı, part code/source ve operation type olmadan
+  fuzzy eşleme yapma; belirsizliği `control_required` ile kapat.
+- [x] Versioned contracts, migration ve tenant-kapsamlı preview/read/approve
+  API'lerini ekle.
+- [x] Preview ve apply işlerini mevcut File Agent job queue/lease/idempotency
+  altyapısına bağla; API'den doğrudan filesystem yazımını imkânsız bırak.
+- [x] Satır eski/yeni değerleri, toplamlar, conflict/provenance, açık onay,
+  progress, backup ve güvenli sonucu mevcut İşçilik UI'ında göster.
+- [x] Lock metadata'yı job/agent/zaman/başlangıç hash'iyle zenginleştir; süreye
+  bakarak otomatik stale-lock silme ekleme.
+- [x] Gerçek PostgreSQL 17 ve sentetik workbook ile runtime zincirini doğrula.
+
+Kapsam dışı: gerçek müşteri workbook'u veya `P:\` üzerinde test, otomatik
+stale-lock kaldırma, genel İşçilik AI algoritması, yeni queue mimarisi ve D
+dışındaki hücrelere yazım.
 
 ## Paket 66 — 01.07.2026 Değer Kaybı — TAMAMLANDI VE KABUL EDİLDİ
 

@@ -401,3 +401,32 @@ raporlanır.
   tam test zinciri 1.609 başarılı / 423 ortam-koşullu skip verdi. Skip dağılımı
   UI 6, database 56, API 361'dir; PostgreSQL/API kapıları çalışmadığı için bu
   katmanlar PASS olarak raporlanmaz.
+
+### Paket 65B — runtime entegrasyonu kabulü
+
+- Domain: yalnız approved/current/final snapshot; proposed/final ayrımı, manuel
+  düzeltme, exact source-row, part code/source, operation type, kategori
+  provenance/toplamı ve bütün `control_required` nedenleri test edilir.
+- Contracts: preview/read/approve, File Agent preview/apply job payload'ı,
+  result ve audit şemaları strict ve golden JSON Schema ile doğrulanır.
+- Database: migration `0044` forward/rollback/reapply; operation identity ve
+  terminal durum immutability; tenant composite FK, relative path ve job type
+  constraint'leri gerçek PostgreSQL 17 üzerinde test edilir.
+- API/job: preview, açık RBAC onayı, claim/lease, writer sonucu, idempotent replay,
+  tenant görünmezliği, plan/hash conflict, başarı/başarısızlık persistence ve
+  audit test edilir. API'nin filesystem'e doğrudan yazmadığı korunur.
+- File Agent: tüm requested row gözlemleri plan hash'ine bağlanır; yalnız değişen
+  D hücreleri yamalanır. Backup byte eşitliği, diğer OOXML part'ları ve `H–N`
+  hücreleri sentetik fixture üzerinde doğrulanır.
+- UI: eski/yeni değer, toplam, değişen/değişmeyen/control-required satır,
+  provenance, manuel değişiklik, açık onay, progress, success/backup/conflict/
+  stale/lock/rollback durumları ve API no-fallback sınırı test edilir.
+- Gerçek müşteri workbook'u, `P:\`, workbook/DOCX fixture veya secret repository'ye
+  alınmaz. Test workbook'u yalnız geçici dizinde sentetik üretilir ve temizlenir.
+- Gerçek sonuç: PostgreSQL 17 ile kök `npm test` UI 352 (+6 mevcut skip), domain
+  749, contracts 324, database 73, API 474 ve File Agent 78; toplam 2.050 başarılı
+  testtir. Typecheck/lint/build/bundle geçmiştir.
+- Audit PASS değildir: transitive `fast-uri` ve HTTP/2'ye özgü transitive
+  `find-my-way` bulguları nedeniyle iki high döner. Package 65B dependency veya
+  lockfile değiştirmez; HTTP/2 yapılandırması bulunmaması risk değerlendirmesidir,
+  audit sonucunu yeşil saymaz.

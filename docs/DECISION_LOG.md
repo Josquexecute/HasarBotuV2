@@ -1650,3 +1650,38 @@ korunduğunu ölçülebilir kılar.
 
 Etki: `labor-workbook-write-plan/2.0.0`,
 `labor-workbook-write/1.0.0`.
+
+## 2026-07-24 — HB-2026-086: Paket 65B approved runtime apply zinciri
+
+Karar:
+
+1. Workbook'a yazılabilen tek değer current İşçilik revision'ına bağlı,
+   tamamlanmış uygulamanın approved/final minor-unit değeridir. AI proposed değer
+   yazılmaz; kullanıcı düzeltmesinde proposed/final ve manuel değişiklik bilgisi
+   ayrı korunur.
+2. Satır eşleme fuzzy değildir. Kullanıcının preview isteğindeki immutable
+   source-row referansı D hücresine çevrilir; part code/source ve operation type
+   zorunlu kanıttır. File Agent exact row XML hash'ini plan gözlemine bağlar.
+3. Düzeltilmemiş AI `control_required`/eksik-evidence satırı job üretmeden
+   bloklanır. Kullanıcının açık final değer/kategori düzeltmesi workbook apply
+   snapshot'ı için çözüm sinyalidir; eski öneri provenance'ı silinmez.
+4. API yalnız immutable operation ve mevcut `jobs` queue kaydı üretir. Fiziksel
+   preview/apply yalnız File Agent'ta, tenant kapsamlı lease altında çalışır.
+5. Approval; operation version, plan hash, approved snapshot hash, current
+   revision/profile/application durumuna bağlıdır. Replay tek apply job döndürür.
+6. Lock job/agent/zaman/start hash metadata'sı taşır. Yaşına bakılarak otomatik
+   silinmez; yetkili recovery ürün sözleşmesi bulunmadığından fail-closed kalır.
+7. UI mevcut İşçilik çalışma alanında satır eski/yeni, toplam, provenance,
+   manuel değişiklik, conflict, açık onay, job, backup ve sonuç durumunu gösterir;
+   API modunda mock fallback yoktur.
+8. Audit hücre değerini veya mutlak yolu taşımaz; organization/case/revision/job,
+   actor, göreli referans, plan/start/result hash, hücre adresi ve backup basename
+   taşır.
+
+Gerekçe: Writer çekirdeğinin güvenliği ancak değer kaynağı, exact satır kimliği,
+onay ve job sonucu aynı immutable zincirde doğrulanırsa runtime'da korunabilir.
+Parça adına dayalı tahmin veya API'den doğrudan filesystem yazımı bu zinciri
+kırardı.
+
+Etki: `labor-workbook-apply/1.0.0`, migration `0044`,
+`preview_labor_workbook_apply`, `apply_labor_workbook`.

@@ -194,6 +194,13 @@ import {
   laborAllocationRunResponseSchema,
   laborAllocationWorkspaceResponseSchema,
 } from './v1/labor-allocation-ai/dto.js'
+import {
+  laborWorkbookApplyApproveRequestSchema,
+  laborWorkbookApplyPreviewRequestSchema,
+} from './v1/labor-workbook-apply/commands.js'
+import {
+  laborWorkbookApplyResponseSchema,
+} from './v1/labor-workbook-apply/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -346,6 +353,9 @@ export const JSON_SCHEMA_TARGETS = {
   'labor-allocation-apply-response': laborAllocationApplyResponseSchema,
   'labor-allocation-run-response': laborAllocationRunResponseSchema,
   'labor-allocation-workspace-response': laborAllocationWorkspaceResponseSchema,
+  'labor-workbook-apply-preview-request': laborWorkbookApplyPreviewRequestSchema,
+  'labor-workbook-apply-approve-request': laborWorkbookApplyApproveRequestSchema,
+  'labor-workbook-apply-response': laborWorkbookApplyResponseSchema,
   'operational-alerts-query': operationalAlertsQuerySchema,
   'operational-alerts-response': operationalAlertsResponseSchema,
 } as const

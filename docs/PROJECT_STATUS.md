@@ -1,12 +1,12 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-23
+Son güncelleme: 2026-07-24
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 65B — İşçilik workbook güvenli fiziksel yazım çekirdeği
-- Durum: **Paket 66 ve 65A kabul edildi; 65B File Agent çekirdeği tamamlandı, runtime API/UI job entegrasyonu bekliyor**
+- Aşama: Paket 65B — güvenli İşçilik workbook runtime entegrasyonu
+- Durum: **Paket 65B çekirdeği ve onaylı runtime zinciri tamamlandı; test/build kapıları geçti, audit kapısında iki mevcut transitive high bulgu açık**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
@@ -63,9 +63,40 @@ Son güncelleme: 2026-07-23
   zinciri 1.609 başarılı / 423 ortam-koşullu skip verdi; yeni 65B testleri 9/9,
   File Agent bütünü 73/73 ve skip yoktur. PostgreSQL/API testleri bu ortamda
   koşullu skip kaldığı için PASS sayılmadı.
-- D hücre değer kaynağı/satır eşlemesi mevcut domain modelinde tanımlı değildir;
-  tahmin edilmedi. Migration, job payload, contracts/API/UI ve gerçek runtime
-  kullanımı sonraki entegrasyon dilimidir.
+- D hücre değer kaynağı/satır eşlemesi runtime entegrasyonunda tamamlandı:
+  yalnız current, tamamlanmış uygulamanın approved/final değeri kullanılır;
+  önerilen değer provenance'ta korunur ve exact source-row referansı dışında
+  fuzzy eşleme yapılmaz.
+
+## Paket 65B — ONAYLI RUNTIME ENTEGRASYONU TAMAMLANDI
+
+- `labor_workbook_apply_operations` immutable request/snapshot, preview/approval,
+  File Agent job/result ve başlangıç/sonuç hashlerini mevcut job queue/lease
+  altyapısına bağlar. API fiziksel workbook yazmaz.
+- Preview; current revision, writable profil, doğrulanmış case location,
+  workbook/sheet identity, part code/source, operation type, kategori toplamı ve
+  exact source-row referansını fail-closed doğrular. Belirsiz satır job üretmeden
+  `control_required` olur.
+- Kullanıcının açıkça düzelttiği nihai değer çözüm sinyalidir; AI proposed değer
+  ve manuel değişiklik bilgisi korunur. Düzeltilmemiş eksik-evidence satırı
+  fiziksel apply'a geçemez.
+- UI, mevcut İşçilik çalışma alanında satır eski/yeni değeri, toplamlar,
+  provenance, manuel değişiklik, conflict, açık onay, job durumu, backup ve
+  güvenli hata sonucunu gösterir; API modunda mock fallback yoktur.
+- Lock metadata job/agent/oluşturulma zamanı/başlangıç hash'i taşır. Süre geçti
+  diye lock otomatik silinmez; recovery ürünü bulunmadığından fail-closed kalır.
+- Gerçek PostgreSQL 17 + sentetik workbook uçtan uca testi preview → approval →
+  claim/lease → File Agent write → audit → persistence zincirini; tenant/RBAC,
+  plan mismatch, idempotency, byte-eş backup ve `H–N` korunumu ile doğrular.
+- Gerçek PostgreSQL 17 ile tam zincir **2.050 başarılı / 6 mevcut UI skip**
+  verdi: UI 352/6, domain 749, contracts 324, database 73, API 474, File Agent
+  78. Typecheck, lint, build ve bundle geçti; başlangıç grafiği 498.632 bayt,
+  en büyük chunk 318.368 bayt ve 10 lazy modüldür.
+- `npm audit --audit-level=high` **başarısızdır**: önceden kayıtlı transitive
+  `fast-uri` yanında 23 Temmuz 2026'da yayımlanan transitive `find-my-way`
+  HTTP/2 DDoS duyurusu da high raporlanır. Mevcut API yapılandırmasında HTTP/2
+  kullanılmıyor ve Package 65B dependency/lockfile değiştirmedi; bulgu gizlenmedi
+  veya `npm audit fix` ile kapsam dışı değişiklik yapılmadı.
 
 ## Paket 66 — ÜÇ COMMIT İLE TAMAMLANDI VE KABUL EDİLDİ
 

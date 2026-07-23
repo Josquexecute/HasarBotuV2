@@ -385,6 +385,14 @@ export {
   type LaborRepairReplaceOpinionRecord,
 } from './laborAllocationPort'
 export {
+  LaborWorkbookApplyClientError,
+  createHttpLaborWorkbookApplyAdapter,
+  type LaborWorkbookApplyDataPort,
+  type LaborWorkbookApplyRecord,
+  type LaborWorkbookApplyResponseRecord,
+  type LaborWorkbookApplyRowRecord,
+} from './laborWorkbookApplyPort'
+export {
   DASHBOARD_ALERT_PREVIEW_LIMIT,
   OPERATIONAL_ALERT_CASE_FILTER_LIMIT,
   OperationalAlertError,

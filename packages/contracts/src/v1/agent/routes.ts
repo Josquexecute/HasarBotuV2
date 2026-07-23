@@ -6,6 +6,8 @@ export const AGENT_JOB_HEARTBEAT_ROUTE = `${API_V1_BASE}/agent/jobs/:jobId/heart
 export const AGENT_JOB_RESULT_ROUTE = `${API_V1_BASE}/agent/jobs/:jobId/result` as const
 export const AGENT_JOB_EXTRACTION_CHUNKS_ROUTE = `${API_V1_BASE}/agent/jobs/:jobId/extraction-chunks` as const
 export const AGENT_JOB_OCR_CHUNKS_ROUTE = `${API_V1_BASE}/agent/jobs/:jobId/ocr-chunks` as const
+export const AGENT_JOB_LABOR_WORKBOOK_AUDIT_ROUTE =
+  `${API_V1_BASE}/agent/jobs/:jobId/labor-workbook-audit` as const
 
 /** Agent yönetimi (yalnız yönetici). */
 export const AGENTS_ROUTE = `${API_V1_BASE}/agents` as const

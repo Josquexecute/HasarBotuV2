@@ -69,10 +69,16 @@ export {
   type LaborWorkbookWriteApproval,
   type LaborWorkbookWriteAuditEvent,
   type LaborWorkbookWriteCode,
+  type LaborWorkbookLockMetadata,
   type LaborWorkbookWritePreviewInput,
   type LaborWorkbookWritePreviewResult,
   type LaborWorkbookWriterHooks,
 } from './labor-workbook-writer.js'
+export {
+  executeLaborWorkbookApply,
+  executeLaborWorkbookPreview,
+  type LaborWorkbookExecutionResult,
+} from './labor-workbook-executor.js'
 
 /**
  * Import edildiğinde döngü BAŞLAMAZ. Yalnız gerçek entrypoint doğrudan

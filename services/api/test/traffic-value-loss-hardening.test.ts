@@ -725,7 +725,8 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
     await expect(runMigrations({
       databaseUrl: config.url,
       direction: 'down',
-      count: 1,
+      // 0044 Paket 65B en yeni migration'dır; 0043 rollback guard'ına ulaş.
+      count: 2,
       quiet: true,
     })).rejects.toThrow('real market value loss revisions must be removed before rollback')
     const migrationState = await pool.query(
@@ -737,6 +738,9 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
       'SELECT count(*) AS n FROM traffic_value_loss_reports WHERE id=$1',
       [finalReportId],
     )).rows[0].n)).toBe(1)
+    const restored = await runMigrations({ databaseUrl: config.url, quiet: true })
+    expect(restored.map((migration) => migration.name))
+      .toEqual(['0044_labor_workbook_apply_runtime'])
   }, 40_000)
 
   it('JSONB snapshot/provenance/minor-unit değerlerini veri kaybı olmadan saklar ve rollback atomiktir', async () => {

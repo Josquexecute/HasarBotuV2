@@ -21,6 +21,7 @@ import {
   markPolicyOcrFailure,
   markPolicyOcrStarted,
 } from '../policy-ocr/store.js'
+import { createLaborWorkbookApplyStore } from '../labor-workbook-apply/store.js'
 
 /**
  * File Agent kontrol katmanı veri erişimi (Paket 14). Agent kimliği + iş
@@ -102,6 +103,7 @@ interface ApplyContext {
 
 export function createAgentStore(pool: pg.Pool) {
   const audit = createAuditService()
+  const laborWorkbook = createLaborWorkbookApplyStore(pool)
 
   async function recordJobAudit(
     ctx: ApplyContext,
@@ -232,6 +234,15 @@ export function createAgentStore(pool: pg.Pool) {
               requestId: `job-${job.id}`,
             }, { id:job.id, target_id:job.target_id, attempt_count:job.max_attempts, max_attempts:job.max_attempts }, 'attempts_exhausted', true)
           }
+          if (job.target_type === 'labor_workbook_apply') {
+            await laborWorkbook.markAttemptsExhausted(
+              client,
+              agent.organizationId,
+              agent.id,
+              job.target_id,
+              job.id,
+            )
+          }
           return null
         }
 
@@ -305,6 +316,16 @@ export function createAgentStore(pool: pg.Pool) {
         }
         if (claimed.target_type === 'document_ocr_run') {
           await markPolicyOcrStarted(client, agent.organizationId, claimed.target_id, claimed.id, agent.id)
+        }
+        if (claimed.target_type === 'labor_workbook_apply') {
+          await laborWorkbook.markClaimed(
+            client,
+            agent.organizationId,
+            agent.id,
+            claimed.id,
+            claimed.target_id,
+            claimed.type,
+          )
         }
         return claimedJobToDto(claimed)
       })
@@ -433,6 +454,16 @@ export function createAgentStore(pool: pg.Pool) {
               return { kind: 'ok', status: 'dead_letter', lastErrorCode: errorCode }
             }
           }
+          if (job.target_type === 'labor_workbook_apply'
+            && job.attempt_count >= job.max_attempts) {
+            await laborWorkbook.finalizeAgentResult(
+              client,
+              agent.organizationId,
+              agent.id,
+              job,
+              result,
+            )
+          }
           if (job.type === 'provision_case_workspace') {
             const failedPlan = await client.query(
               `UPDATE case_workspace_provisionings SET status='failed', last_error_code=$3, updated_at=now()
@@ -544,7 +575,7 @@ export function createAgentStore(pool: pg.Pool) {
         }
 
         // ---- definitive sonuç: verified / missing ----
-        const applied = await applyVerification(ctx, job, result)
+        const applied = await applyVerification(ctx, job, result, laborWorkbook)
         await client.query('UPDATE jobs SET status = $2, last_error_code = $3, updated_at = now() WHERE id = $1', [
           job.id,
           applied.jobStatus,
@@ -557,6 +588,20 @@ export function createAgentStore(pool: pg.Pool) {
         })
         return { kind: 'ok', status: applied.jobStatus, lastErrorCode: applied.errorCode }
       })
+    },
+
+    async recordLaborWorkbookAudit(
+      agent: { id: string; organizationId: string },
+      jobId: string,
+      event: import('@hasarbotu/contracts').LaborWorkbookAuditEventRequest,
+    ): Promise<boolean> {
+      return withTransaction(pool, (client) => laborWorkbook.recordAgentAudit(
+        client,
+        agent.organizationId,
+        agent.id,
+        jobId,
+        event,
+      ))
     },
   }
 }
@@ -579,6 +624,7 @@ async function applyVerification(
   ctx: ApplyContext,
   job: JobRow & { last_error_code: string | null },
   result: JobResultRequest,
+  laborWorkbook: ReturnType<typeof createLaborWorkbookApplyStore>,
 ): Promise<AppliedResult> {
   const { client } = ctx
   if (job.target_type === 'file_operation') {
@@ -597,6 +643,44 @@ async function applyVerification(
       await markPolicyOcrFailure(ctx.client, ctx, job, applied.errorCode ?? 'ocr_finalize_failed', true)
     }
     return applied
+  }
+  if (job.target_type === 'labor_workbook_apply') {
+    if (result.outcome !== 'verified' || result.laborWorkbook === undefined) {
+      await laborWorkbook.finalizeAgentResult(
+        ctx.client,
+        ctx.organizationId,
+        ctx.agentId,
+        job,
+        result,
+      )
+      return {
+        metadataResult: 'failed',
+        errorCode: result.errorCode ?? 'labor_workbook_result_invalid',
+        auditAction: 'job.verification_failed',
+        jobStatus: 'failed',
+      }
+    }
+    const finalized = await laborWorkbook.finalizeAgentResult(
+      ctx.client,
+      ctx.organizationId,
+      ctx.agentId,
+      job,
+      result,
+    )
+    if (!finalized.success) {
+      return {
+        metadataResult: 'failed',
+        errorCode: finalized.errorCode ?? 'labor_workbook_finalize_failed',
+        auditAction: 'job.verification_failed',
+        jobStatus: 'failed',
+      }
+    }
+    return {
+      metadataResult: result.laborWorkbook.kind,
+      errorCode: null,
+      auditAction: 'job.verified',
+      jobStatus: 'succeeded',
+    }
   }
   if (job.target_type === 'workspace_provisioning') {
     const audit = createAuditService()

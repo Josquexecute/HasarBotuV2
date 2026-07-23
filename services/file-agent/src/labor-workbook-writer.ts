@@ -38,6 +38,7 @@ export const LABOR_WORKBOOK_WRITE_CODES = [
   'WORKBOOK_WRITE_ROW_FORBIDDEN',
   'WORKBOOK_WRITE_DUPLICATE_CELL',
   'WORKBOOK_WRITE_VALUE_INVALID',
+  'WORKBOOK_WRITE_SOURCE_ROW_MISSING',
   'WORKBOOK_WRITE_SIGNATURE_CELL_FORBIDDEN',
   'WORKBOOK_WRITE_CELL_FORMULA',
   'WORKBOOK_WRITE_NO_CHANGES',
@@ -81,6 +82,8 @@ export interface LaborWorkbookPreviewChange {
   readonly cell: string
   readonly previousValue: string | null
   readonly newValue: string
+  /** Hedef satırın preview anındaki exact XML hash'i; apply'da planla doğrulanır. */
+  readonly sourceRowHash: string
 }
 
 export type LaborWorkbookWritePreviewResult =
@@ -100,6 +103,7 @@ export type LaborWorkbookWritePreviewResult =
     readonly sourceModifiedIso: string
     readonly targetSheetName: string
     readonly targetWorksheetPart: string
+    readonly observations: readonly LaborWorkbookPreviewChange[]
     readonly changes: readonly LaborWorkbookPreviewChange[]
   }
 
@@ -159,14 +163,23 @@ export type LaborWorkbookWriteAuditEvent =
 
 export interface LaborWorkbookWriterHooks {
   readonly recordAudit: (event: LaborWorkbookWriteAuditEvent) => Promise<void>
+  readonly beforeTempVerification?: () => Promise<void>
   readonly beforeAtomicReplace?: () => Promise<void>
   readonly afterAtomicReplace?: () => Promise<void>
+  readonly beforeRollback?: () => Promise<void>
+}
+
+export interface LaborWorkbookLockMetadata {
+  readonly jobId: string
+  readonly agentId: string
+  readonly createdAt: string
 }
 
 export interface LaborWorkbookWriteApplyInput extends LaborWorkbookWritePreviewInput {
   readonly preview: Extract<LaborWorkbookWritePreviewResult, { readonly ok: true }>
   readonly approval: LaborWorkbookWriteApproval
   readonly hooks: LaborWorkbookWriterHooks
+  readonly lockMetadata?: LaborWorkbookLockMetadata
 }
 
 export type LaborWorkbookWriteApplyResult =
@@ -221,7 +234,7 @@ function canonicalPlanHash(input: {
   readonly targetSheetName: string
   readonly targetWorksheetPart: string
   readonly signature: WorkbookSignatureCheck
-  readonly changes: readonly LaborWorkbookPreviewChange[]
+  readonly observations: readonly LaborWorkbookPreviewChange[]
 }): string {
   const signature = {
     sheetName: input.signature.sheetName,
@@ -237,9 +250,15 @@ function canonicalPlanHash(input: {
     targetSheetName: input.targetSheetName,
     targetWorksheetPart: input.targetWorksheetPart,
     signature,
-    changes: input.changes,
+    observations: input.observations,
   })
   return createHash('sha256').update(canonical).digest('hex')
+}
+
+function sourceRowHash(sheetXml: string, row: number): string | null {
+  const rowPattern = new RegExp(`<row[^>]*\\sr="${row}"[^>]*(?:/>|>[\\s\\S]*?</row>)`)
+  const rowXml = rowPattern.exec(sheetXml)?.[0]
+  return rowXml === undefined ? null : sha256(strToU8(rowXml))
 }
 
 function containsControlCharacter(value: string): boolean {
@@ -525,13 +544,26 @@ export async function previewLaborWorkbookWrite(
     if (sheet.partName !== preflight.targetWorksheetPart || sheet.state !== 'visible') {
       return failPreview('WORKBOOK_WRITE_SOURCE_CHANGED')
     }
+    const archive = unzipSync(bytes)
+    const sheetBytes = archive[preflight.targetWorksheetPart]
+    if (sheetBytes === undefined) return failPreview('WORKBOOK_WRITE_SOURCE_CHANGED')
+    const sheetXml = strFromU8(sheetBytes)
     const current = new Map(sheet.cells.map((cell) => [cell.address, cell.value] as const))
-    const changes = validated.changes
-      .map((change): LaborWorkbookPreviewChange => ({
+    const changesWithRows: LaborWorkbookPreviewChange[] = []
+    for (const change of validated.changes) {
+      const rowHash = sourceRowHash(sheetXml, change.row)
+      if (rowHash === null) {
+        return failPreview('WORKBOOK_WRITE_SOURCE_ROW_MISSING', change.cell)
+      }
+      changesWithRows.push({
         cell: change.cell,
         previousValue: current.get(change.cell) ?? null,
         newValue: change.newValue,
-      }))
+        sourceRowHash: rowHash,
+      })
+    }
+    const observations = changesWithRows
+    const changes = observations
       .filter((change) => change.previousValue !== change.newValue)
     if (changes.length === 0) return failPreview('WORKBOOK_WRITE_NO_CHANGES')
 
@@ -550,7 +582,7 @@ export async function previewLaborWorkbookWrite(
       targetSheetName: preflight.targetSheetName,
       targetWorksheetPart: preflight.targetWorksheetPart,
       signature: input.signature,
-      changes,
+      observations,
     })
     return {
       ok: true,
@@ -563,6 +595,7 @@ export async function previewLaborWorkbookWrite(
       sourceModifiedIso: preflight.modifiedIso,
       targetSheetName: preflight.targetSheetName,
       targetWorksheetPart: preflight.targetWorksheetPart,
+      observations,
       changes,
     }
   } catch {
@@ -644,7 +677,14 @@ export async function applyLaborWorkbookWrite(
   try {
     try {
       lockHandle = await open(lockPath, 'wx')
-      await lockHandle.writeFile(`${input.preview.planHash}\n`, 'utf8')
+      await lockHandle.writeFile(JSON.stringify({
+        version: LABOR_WORKBOOK_WRITE_VERSION,
+        planHash: input.preview.planHash,
+        startSha256: input.preview.sourceSha256,
+        jobId: input.lockMetadata?.jobId ?? null,
+        agentId: input.lockMetadata?.agentId ?? null,
+        createdAt: input.lockMetadata?.createdAt ?? now().toISOString(),
+      }), 'utf8')
       await lockHandle.sync()
     } catch {
       return {
@@ -787,6 +827,11 @@ export async function applyLaborWorkbookWrite(
     }
 
     const resultHash = sha256(resultBytes)
+    try {
+      await input.hooks.beforeTempVerification?.()
+    } catch {
+      return await failAfterStarted('WORKBOOK_WRITE_VERIFICATION_FAILED')
+    }
     if (!verifyArchiveScope({
       sourceBytes,
       resultBytes,
@@ -832,12 +877,21 @@ export async function applyLaborWorkbookWrite(
       }
     } catch {
       if (replaced && backupPath !== null) {
-        const restored = await restoreSourceFromBackup({
-          sourcePath,
-          backupPath,
-          expectedSource: sourceBytes,
-          token,
-        })
+        const safeBackupPath = backupPath
+        const restored = await input.hooks.beforeRollback?.()
+          .then(async () => await restoreSourceFromBackup({
+            sourcePath,
+            backupPath: safeBackupPath,
+            expectedSource: sourceBytes as Uint8Array,
+            token,
+          }))
+          .catch(() => false)
+          ?? await restoreSourceFromBackup({
+            sourcePath,
+            backupPath: safeBackupPath,
+            expectedSource: sourceBytes,
+            token,
+          })
         if (!restored) {
           await input.hooks.recordAudit({
             ...startedEvent,
@@ -875,12 +929,22 @@ export async function applyLaborWorkbookWrite(
     try {
       await input.hooks.recordAudit(completedEvent)
     } catch {
-      const restored = backupPath !== null && await restoreSourceFromBackup({
-        sourcePath,
-        backupPath,
-        expectedSource: sourceBytes,
-        token,
-      })
+      const restored = backupPath !== null && (
+        await input.hooks.beforeRollback?.()
+          .then(async () => await restoreSourceFromBackup({
+            sourcePath,
+            backupPath: backupPath as string,
+            expectedSource: sourceBytes as Uint8Array,
+            token,
+          }))
+          .catch(() => false)
+        ?? await restoreSourceFromBackup({
+          sourcePath,
+          backupPath,
+          expectedSource: sourceBytes,
+          token,
+        })
+      )
       if (!restored) {
         return {
           ok: false,

@@ -2850,6 +2850,42 @@ button {
   background: var(--surface-muted);
 }
 
+.workbook-apply {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.workbook-apply header h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+
+.workbook-apply header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.workbook-apply__fields {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) repeat(4, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.workbook-apply__result {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 .allocation-category--manual {
   border-color: var(--warning-border);
   background: var(--warning-surface);

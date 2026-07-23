@@ -17,12 +17,13 @@ export interface EnqueueVerifyJobInput {
   readonly payload: JobPayload
 }
 
-export async function enqueueVerifyJob(exec: Queryable, input: EnqueueVerifyJobInput): Promise<void> {
+export async function enqueueVerifyJob(exec: Queryable, input: EnqueueVerifyJobInput): Promise<string> {
+  const jobId = uuidv7()
   await exec.query(
     `INSERT INTO jobs (id, organization_id, type, target_type, target_id, target_version, payload)
      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
     [
-      uuidv7(),
+      jobId,
       input.organizationId,
       input.type,
       input.targetType,
@@ -31,4 +32,5 @@ export async function enqueueVerifyJob(exec: Queryable, input: EnqueueVerifyJobI
       JSON.stringify(input.payload),
     ],
   )
+  return jobId
 }

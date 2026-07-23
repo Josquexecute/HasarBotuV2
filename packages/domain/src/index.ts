@@ -844,6 +844,21 @@ export {
   type ZipStructureResult,
 } from './labor-workbook-preflight.js'
 export {
+  LABOR_WORKBOOK_APPLY_CONFLICT_CODES,
+  LABOR_WORKBOOK_APPLY_RULE_VERSION,
+  buildLaborWorkbookApplySnapshot,
+  formatLaborWorkbookMinorValue,
+  parseLaborWorkbookMinorValue,
+  type LaborWorkbookApplyConflictCode,
+  type LaborWorkbookApplyRowSnapshot,
+  type LaborWorkbookApplySnapshot,
+  type LaborWorkbookApplySnapshotInput,
+  type LaborWorkbookApprovalStatus,
+  type LaborWorkbookApprovedCategoryAmount,
+  type LaborWorkbookApprovedLine,
+  type LaborWorkbookSourceRowSelection,
+} from './labor-workbook-apply.js'
+export {
   CASE_INVENTORY_COLUMNS,
   CASE_INVENTORY_MISSING_MARKER,
   CASE_INVENTORY_MULTI_VALUE_SEPARATOR,
