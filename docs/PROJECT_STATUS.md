@@ -6,7 +6,7 @@ Son güncelleme: 2026-07-25
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dependency güvenlik bakımı (Paket 65B kabul kapısı)
-- Durum: **Paket 65B'yi bloke eden `fast-uri` ve `find-my-way` high bulguları giderildi; audit kapısında yalnız major yükseltme gerektiren iki yeni küme (`eslint`/`brace-expansion@1`, `react-router`) kullanıcı kararı bekliyor**
+- Durum: **Paket 65B'yi bloke eden `fast-uri` ve `find-my-way` high bulguları giderildi; audit kapısında kalan iki küme (`eslint`/`brace-expansion@1`, `react-router`) kullanıcı kararıyla ayrı paketlere alındı ve gate `7 high / 0 critical` ile açık kaldı**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
@@ -37,7 +37,8 @@ Son güncelleme: 2026-07-25
   10 lazy modül.
 - `npm audit --audit-level=high` **hâlâ başarısızdır (7 high, 0 critical)**.
   Kalan iki küme yalnız semver-major yükseltmeyle çözülebildiği için otonom
-  kapsam dışıdır ve kullanıcı kararı bekler:
+  kapsam dışıdır; kullanıcı kararıyla (2026-07-25) her ikisi de ayrı pakete
+  alınmıştır ve o paketler kapanana kadar açık bulgu sayılır:
   - `brace-expansion@1.1.16` ← `minimatch@3.1.5` ← `eslint@9.39.4`
     (`@eslint/config-array`, `@eslint/eslintrc` dahil 5 bulgu, yalnız dev).
     `minimatch@3` `^1.1.7` ister; advisory `<=5.0.7` olduğundan yamalı 1.x

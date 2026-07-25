@@ -26,10 +26,11 @@ Bu plan, UI-first prototip aşamasını küçük, test edilebilir ve geri bildir
 - [x] Repository dışı fresh `npm ci` kopyasında aynı kapıları çalıştır.
 - [!] `eslint@9.39.4` → `brace-expansion@1.1.16` kümesi (5 high, dev): yamalı
   1.x sürüm yok; düzeltme `eslint@10.8.0` semver-major yükseltmesidir.
-  Kullanıcı kararı bekliyor.
+  Kullanıcı kararıyla (2026-07-25) ayrı "eslint 10 yükseltmesi" paketine alındı.
 - [!] `react-router@7.18.1` kümesi (2 high, üretim UI): yamalı tek sürüm
   `react-router@8.3.0`; `react-router-dom@8.x` yok. Düzeltme v8 major geçişi ve
-  22 dosyada import taşıması gerektirir. Kullanıcı kararı bekliyor.
+  22 dosyada import taşıması gerektirir. Kullanıcı kararıyla (2026-07-25) ayrı
+  "react-router v8 geçişi" paketine alındı; gerçek tarayıcı smoke'u zorunludur.
 
 Kapsam dışı: yeni ürün özelliği, yeni dependency, major yükseltme ve Paket 65B
 davranış değişikliği.

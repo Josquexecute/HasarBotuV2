@@ -1704,7 +1704,8 @@ Karar:
 4. Advisory bastırma, ignore listesi veya audit seviyesini düşürme kabul edilmez;
    vulnerable sürüm dependency ağacından gerçekten kalkmalıdır.
 5. Semver-major yükseltme gerektiren advisory otonom kapatılmaz. Kalan iki küme
-   açık kullanıcı kararına bırakılmıştır:
+   kullanıcıya sorulmuş ve **2026-07-25'te her ikisi de ayrı pakete
+   alınmıştır**; dependency bakım commit'i kapsamında yükseltilmezler:
    - `eslint@9.39.4` → `minimatch@3.1.5` → `brace-expansion@1.1.16` (5 high,
      yalnız dev). `minimatch@3` `^1.1.7` ister ve advisory `<=5.0.7` olduğundan
      yamalı 1.x yayımlanmamıştır. Bildirilen düzeltme `eslint@10.8.0`'dır.
@@ -1726,3 +1727,10 @@ ve ayrı kullanıcı kararı gerektirir.
 
 Etki: yalnız `package-lock.json`. Kod, şema, migration, API sözleşmesi ve UI
 davranışı değişmedi; Paket 65B ve Paket 66 invariantları korunur.
+
+Kullanıcı kararı (2026-07-25): `react-router` v8 geçişi ve `eslint` 10
+yükseltmesi ayrı paketlere alınmıştır. Her ikisi de kendi tam regresyonuyla
+yürütülecektir; `react-router` paketi ayrıca gerçek tarayıcı smoke'u gerektirir.
+Bu iki high bulgu o paketler kapanana kadar bilinen ve kapsamı belgelenmiş açık
+bulgu olarak kalır. Audit kapısı bu nedenle `7 high / 0 critical` ile açıktır ve
+bu durum PASS sayılmaz.
