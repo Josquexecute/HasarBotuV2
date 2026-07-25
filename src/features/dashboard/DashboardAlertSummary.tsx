@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, FileWarning } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { LoadingState } from '../../components/StateViews'
 import {
   DASHBOARD_ALERT_PREVIEW_LIMIT,

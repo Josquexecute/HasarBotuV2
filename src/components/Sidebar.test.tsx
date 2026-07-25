@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionContext, type SessionContextValue } from '../app/sessionContext'
 import { Sidebar } from './Sidebar'

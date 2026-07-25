@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { ArrowRight, Construction } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 
 interface PlaceholderPageProps {
   title: string

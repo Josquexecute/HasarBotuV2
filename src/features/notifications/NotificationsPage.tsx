@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { BellRing, CheckCheck, ChevronDown, CircleAlert, ExternalLink, FileWarning, ShieldAlert } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { initialNotifications, type NotificationType } from '../../mocks/workspaces'
 import { BackendUnavailableState, LoadingState } from '../../components/StateViews'
 import {

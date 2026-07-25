@@ -14,7 +14,7 @@ import {
   ShieldAlert,
   UserRoundCheck,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { EmptyState, LoadingState } from '../../components/StateViews'
 import { caseStages } from '../../mocks/cases'
 import {

@@ -5,8 +5,44 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Dependency güvenlik bakımı (Paket 65B kabul kapısı)
-- Durum: **Paket 65B'yi bloke eden `fast-uri` ve `find-my-way` high bulguları giderildi; audit kapısında kalan iki küme (`eslint`/`brace-expansion@1`, `react-router`) kullanıcı kararıyla ayrı paketlere alındı ve gate `7 high / 0 critical` ile açık kaldı**
+- Aşama: React Router v8 güvenlik geçişi tamamlandı
+- Durum: **Üretim UI advisory'si kapandı; `react-router-dom@7` bağımlılık ağacından kaldırıldı ve `react-router@8.3.0`'a geçildi. Audit kapısında yalnız dev-only `eslint`/`brace-expansion@1` kümesi kaldı (`5 high / 0 critical`)**
+
+## React Router v8 güvenlik geçişi (2026-07-25)
+
+- Kalan üretim advisory'si (GHSA-qwww-vcr4-c8h2) **gerçek dependency
+  değişikliğiyle** kapatıldı; ignore veya kabul edilmiş risk yolu kullanılmadı.
+- `react-router-dom@^7.1.1` kaldırıldı, `react-router@^8.3.0` eklendi. Ağaçta
+  tek kopya `react-router@8.3.0` vardır; `react-router-dom` hiçbir sürümde
+  bulunmaz (`npm explain react-router-dom` → eşleşme yok).
+- Kaynak değişikliği yalnız import belirtecidir: 22 dosyada
+  `from 'react-router-dom'` → `from 'react-router'`. Dosya başına tek satır;
+  toplam 23 dosya (22 kaynak + `package.json`), 23 ekleme / 23 silme.
+- Kullanılan API yüzeyi v8'de aynıdır: `BrowserRouter`, `MemoryRouter`, `Routes`,
+  `Route`, `NavLink`, `useNavigate`, `useLocation`, `useParams`,
+  `useSearchParams`. `RouterProvider` (`react-router/dom`), data router, loader/
+  action, `meta`/`useMatches` ve Framework-mode özellikleri kullanılmadığından v8
+  breaking change'lerinin hiçbiri bu repository'yi etkilemez. RSC/SSR eklenmedi.
+- Route yolları, URL sözleşmesi, catch-all davranışı ve dosya içi sekme yapısı
+  değişmedi. Sekmeler zaten route değil bileşen durumudur; nested route/`Outlet`
+  kullanılmıyor.
+- Ana ağaçta ve repository dışı fresh `npm ci` kopyasında gerçek PostgreSQL 17.10
+  ile **2.050 başarılı / 6 mevcut ortam-koşullu UI skip** tekrarlandı: UI 352/6,
+  domain 749, contracts 324, database 73, API 474, File Agent 78. Paket 65B,
+  Paket 66 ve Paket 40 sayıları değişmedi.
+- Gerçek Chrome/CDP router smoke'u (`scripts/router-v8-browser-smoke.mjs`) gerçek
+  API + gerçek PostgreSQL üzerinde geçti: oturumsuz derin link login'e düşer,
+  8 ana route, NavLink active durumu, `/dosyalar/:caseId` route parametresi,
+  8 dosya içi sekme, `?q=` query korunumu, tarayıcı geri/ileri, yenileme sonrası
+  route korunumu, bilinmeyen route placeholder'ı ve logout sonrası korumalı route
+  reddi doğrulandı. 1920×1080 açık ve 1366×768 koyu temada yatay taşma, boş ekran
+  ve console error yoktu.
+- Build/bundle bütçesi geçti. Başlangıç grafiği 498.632 → **497.015 bayt**
+  (bütçe 500.000; headroom arttı), en büyük chunk 318.368 → **337.825 bayt**,
+  10 lazy modül korundu.
+- `npm audit --audit-level=high`: **5 high / 0 critical**. Kalan tek küme dev-only
+  `eslint@9.39.4` → `minimatch@3.1.5` → `brace-expansion@1.1.16` zinciridir ve
+  ayrı "eslint 10 yükseltmesi" paketine aittir. Yeni high/critical bulgu çıkmadı.
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`

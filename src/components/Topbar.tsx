@@ -1,5 +1,5 @@
 import { Bell, Grid2X2, LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router'
 import { getSearchTokens } from '../utils/search'
 import { useSession } from '../app/sessionContext'
 

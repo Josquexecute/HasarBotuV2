@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, CheckCircle2, FilePlus2, LoaderCircle, X } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import {
   CaseCommandError,
   createHttpCaseCommandAdapter,

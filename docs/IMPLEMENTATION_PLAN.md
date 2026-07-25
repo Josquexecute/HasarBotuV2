@@ -27,10 +27,30 @@ Bu plan, UI-first prototip aşamasını küçük, test edilebilir ve geri bildir
 - [!] `eslint@9.39.4` → `brace-expansion@1.1.16` kümesi (5 high, dev): yamalı
   1.x sürüm yok; düzeltme `eslint@10.8.0` semver-major yükseltmesidir.
   Kullanıcı kararıyla (2026-07-25) ayrı "eslint 10 yükseltmesi" paketine alındı.
-- [!] `react-router@7.18.1` kümesi (2 high, üretim UI): yamalı tek sürüm
-  `react-router@8.3.0`; `react-router-dom@8.x` yok. Düzeltme v8 major geçişi ve
-  22 dosyada import taşıması gerektirir. Kullanıcı kararıyla (2026-07-25) ayrı
-  "react-router v8 geçişi" paketine alındı; gerçek tarayıcı smoke'u zorunludur.
+- [x] `react-router@7.18.1` kümesi (2 high, üretim UI): ayrı "react-router v8
+  geçişi" paketinde kapatıldı. Bkz. aşağıdaki bölüm.
+
+## React Router v8 güvenlik geçişi
+
+- [x] Mevcut `react-router-dom` kullanımını ve API yüzeyini çıkar; deep import
+  veya server/RSC kullanımı olmadığını doğrula.
+- [x] Resmî v8 upgrade belgesine göre en küçük geçişi belirle:
+  `react-router-dom` kaldırılır, importlar `react-router`'a taşınır.
+- [x] `package.json`'da `react-router-dom@^7.1.1` → `react-router@^8.3.0`;
+  başka dependency ekleme veya kaldırma yapma.
+- [x] 22 dosyada yalnız import belirtecini değiştir; route tanımı, URL, bileşen
+  veya hook kullanımını değiştirme.
+- [x] `react-router-dom` ve `react-router@7.x` kopyalarının dependency ağacından
+  gerçekten kalktığını doğrula.
+- [x] Tam UI/router testlerini, gerçek PostgreSQL API/database regresyonlarını ve
+  Paket 65B/66/40 hedef testlerini regresyonsuz tekrarla.
+- [x] Gerçek Chrome/CDP router smoke'u ile route sözleşmesi, NavLink active
+  durumu, derin link, geri/ileri, yenileme, bilinmeyen route ve korumalı route
+  davranışını iki çözünürlük ve iki temada doğrula.
+- [x] Repository dışı fresh `npm ci` kopyasında aynı kapıları çalıştır.
+
+Kapsam dışı: route yeniden tasarımı, yeni route/URL, data router/loader/action,
+RSC/SSR, genel React refactor ve ESLint 10 yükseltmesi.
 
 Kapsam dışı: yeni ürün özelliği, yeni dependency, major yükseltme ve Paket 65B
 davranış değişikliği.

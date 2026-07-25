@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, CalendarRange, CheckCircle2, ChevronDown, FileDown, Printer, RefreshCw, X } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import {
   getConfiguredDataSource,
   useCaseSummaryReport,

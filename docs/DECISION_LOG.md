@@ -1733,4 +1733,43 @@ yükseltmesi ayrı paketlere alınmıştır. Her ikisi de kendi tam regresyonuyl
 yürütülecektir; `react-router` paketi ayrıca gerçek tarayıcı smoke'u gerektirir.
 Bu iki high bulgu o paketler kapanana kadar bilinen ve kapsamı belgelenmiş açık
 bulgu olarak kalır. Audit kapısı bu nedenle `7 high / 0 critical` ile açıktır ve
-bu durum PASS sayılmaz.
+bu durum PASS sayılmaz. `react-router` kümesi HB-2026-088 ile kapatılmıştır.
+
+## 2026-07-25 — HB-2026-088: UI yönlendirmesi React Router v8'e taşındı
+
+Karar:
+
+1. Üretim UI advisory'si (GHSA-qwww-vcr4-c8h2) gerçek dependency değişikliğiyle
+   kapatılır. `react-router-dom` kaldırılır ve doğrudan dependency olarak
+   `react-router@^8.3.0` kullanılır. Advisory ignore edilmez, audit seviyesi
+   düşürülmez ve kabul edilmiş risk olarak kapatılmaz.
+2. Geçiş yalnız import belirteci düzeyindedir. 22 dosyada
+   `from 'react-router-dom'` → `from 'react-router'` değişir; route tanımları,
+   URL sözleşmesi, bileşen ve hook kullanımı aynı kalır.
+3. Kullanılan API yüzeyi (`BrowserRouter`, `MemoryRouter`, `Routes`, `Route`,
+   `NavLink`, `useNavigate`, `useLocation`, `useParams`, `useSearchParams`) v8'de
+   değişmemiştir. `RouterProvider` v8'de `react-router/dom`'a taşınmıştır ancak
+   bu repository declarative router kullandığından etkilenmez.
+4. v8 breaking change'lerinin tamamı Framework mode, data router, `meta`/
+   `useMatches` ve Cloudflare eklentisi kapsamındadır; HasarBotu Vite SPA'sı
+   bunların hiçbirini kullanmaz. RSC, SSR veya server runtime eklenmez.
+5. Route yolları ve URL sözleşmesi korunur: `/`, `/dosyalar`,
+   `/dosyalar/:caseId`, `/kapanan-dosyalar`, `/raporlar-ve-ucretler`,
+   `/mevzuat-ve-ai`, `/bildirimler`, `/yonetim`, `/ayarlar` ve `*` catch-all.
+   Dosya içi sekmeler route değil bileşen durumudur; nested route ve `Outlet`
+   kullanılmaz.
+6. Sürüm aralığı `^8.3.0`'dır. Yamalı ilk sürüm 8.3.0 olduğundan alt sınır
+   advisory sınırının üstündedir. Kurulu `react`/`react-dom` 19.2.7, v8'in
+   `>=19.2.7` peer koşulunu karşılar; React sürümü bu pakette değiştirilmez.
+7. Geçiş `scripts/router-v8-browser-smoke.mjs` ile gerçek Chrome/CDP, gerçek API
+   ve gerçek PostgreSQL üzerinde doğrulanır. Smoke yeni E2E dependency'si
+   eklemez; mevcut CDP altyapısını kullanır.
+
+Gerekçe: Advisory yalnız v8'de yamalıdır ve `react-router-dom@7` v7'yi tam sürüm
+pinlediğinden aralık içinde çözüm yoktur. Uyumsuz override yerleştirmek yerine
+upstream'in öngördüğü paket birleşmesi uygulanmıştır; kullanılan API yüzeyi
+değişmediği için geçiş davranış riski taşımaz.
+
+Etki: `package.json`, `package-lock.json`, 22 UI dosyasının import satırı ve yeni
+`scripts/router-v8-browser-smoke.mjs`. Route/URL sözleşmesi, Paket 65B, Paket 66
+ve Paket 40 davranışları değişmedi. Audit `7 high` → `5 high / 0 critical`.

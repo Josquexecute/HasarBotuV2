@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes } from 'react-router'
 import { AppShell } from '../components/AppShell'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { LoadingState } from '../components/StateViews'
