@@ -1,15 +1,57 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-24
+Son güncelleme: 2026-07-25
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Paket 65B — güvenli İşçilik workbook runtime entegrasyonu
-- Durum: **Paket 65B çekirdeği ve onaylı runtime zinciri tamamlandı; test/build kapıları geçti, audit kapısında iki mevcut transitive high bulgu açık**
+- Aşama: Dependency güvenlik bakımı (Paket 65B kabul kapısı)
+- Durum: **Paket 65B'yi bloke eden `fast-uri` ve `find-my-way` high bulguları giderildi; audit kapısında yalnız major yükseltme gerektiren iki yeni küme (`eslint`/`brace-expansion@1`, `react-router`) kullanıcı kararı bekliyor**
 - Git: Yerel repository, `foundation/package-56-ai-evidence-enrichment` dalı, remote yok
 - Baseline commit mesajı: `chore: freeze accepted UI prototype baseline`
 - Baseline tag: `v0.1.0-ui-baseline`
+
+## Dependency güvenlik bakımı (2026-07-25)
+
+- Paket 65B'nin güvenlik kabulini bloke eden iki bulgu **kapandı**. Yalnız
+  lockfile içi, semver aralığında patch yenilemesi yapıldı: `package.json`
+  değişmedi, `overrides` eklenmedi, `npm audit fix` çalıştırılmadı ve yeni
+  dependency alınmadı.
+- Üretim zinciri: `fast-uri` 3.1.3 → **3.1.4** (3 konum) ve 4.1.0 → **4.1.1**
+  (`fastify@5.10.0` → `@fastify/ajv-compiler`/`fast-json-stringify`/`ajv`);
+  `find-my-way` 9.6.0 → **9.7.0** (`fastify@5.10.0`, aralık `^9.6.0`).
+  Fastify `5.10.0` sabit kaldı; major yükseltme gerekmedi.
+- Aynı yenilemede kapanan diğer bulgular: `postcss` 8.5.16 → **8.5.23**
+  (`vite@8.1.4`, dev) ve `brace-expansion` 5.0.7 → **5.0.8** (üretimde
+  `node-pg-migrate` → `glob` → `minimatch@10`, dev tarafta
+  `@typescript-eslint/typescript-estree`). `nanoid` 3.3.15 → 3.3.16 aynı
+  aralıkta yan güncellemedir.
+- Dependency ağacında bu paketlerin vulnerable kopyası kalmadı; advisory
+  bastırılmadı.
+- Ana ağaçta ve repository dışı fresh `npm ci` kopyasında gerçek PostgreSQL 17.10
+  ile **2.050 başarılı / 6 mevcut ortam-koşullu UI skip** tekrarlandı: UI 352/6,
+  domain 749, contracts 324, database 73, API 474, File Agent 78. Paket 65B ve
+  Paket 66 sayıları değişmedi.
+- Typecheck, lint ve build iki ortamda da geçti. Bundle çıktısı bayt-özdeştir:
+  başlangıç 498.632 bayt, en büyük chunk `index-DmSaOjdc.js` 318.368 bayt,
+  10 lazy modül.
+- `npm audit --audit-level=high` **hâlâ başarısızdır (7 high, 0 critical)**.
+  Kalan iki küme yalnız semver-major yükseltmeyle çözülebildiği için otonom
+  kapsam dışıdır ve kullanıcı kararı bekler:
+  - `brace-expansion@1.1.16` ← `minimatch@3.1.5` ← `eslint@9.39.4`
+    (`@eslint/config-array`, `@eslint/eslintrc` dahil 5 bulgu, yalnız dev).
+    `minimatch@3` `^1.1.7` ister; advisory `<=5.0.7` olduğundan yamalı 1.x
+    sürüm yayımlanmamıştır. npm'in bildirdiği düzeltme `eslint@10.8.0`
+    (semver-major). 1.x CJS `main`, 5.x ise `exports` haritalı dual paket
+    olduğundan override ile 5.0.8 zorlanması uyumsuz yerleştirme olurdu.
+  - `react-router@7.18.1` ← `react-router-dom@7.18.1` (tam sürüm pin) ← kök
+    `^7.1.1` (2 bulgu, üretim UI). Advisory aralığı `7.12.0 - 8.2.0`; yamalı tek
+    sürüm **`react-router@8.3.0`** olup 7.x yaması ve `react-router-dom@8.x`
+    yoktur. Çözüm `react-router-dom`'u bırakıp 22 kaynak dosyanın import'unu
+    `react-router@8`'e taşımayı gerektirir. Kurulu `react@19.2.7`,
+    `react-router@8.3.0` peer koşulunu (`>=19.2.7`) karşılar. Bulgu RSC modu
+    kapsamlıdır; repository Vite SPA'sıdır, RSC ve react-router sunucu runtime'ı
+    kullanmaz.
 
 ## Paket 65A — SALT-OKUNUR WORKBOOK PREFLIGHT TAMAMLANDI
 

@@ -9,6 +9,31 @@ Bu plan, UI-first prototip aşamasını küçük, test edilebilir ve geri bildir
 - `[x]` Tamamlandı ve doğrulandı
 - `[!]` Engelli veya kullanıcı kararı gerekiyor
 
+## Dependency güvenlik bakımı — Paket 65B audit kabul kapısı
+
+- [x] `fast-uri` ve `find-my-way` high bulgularının gerçek zincirlerini
+  `npm explain` ve lockfile üzerinden ayrı ayrı çıkar.
+- [x] Yalnız semver aralığı içinde lockfile yenilemesiyle en küçük güvenli
+  sürüm kombinasyonunu uygula; `package.json`, `overrides` ve `npm audit fix`
+  kullanma.
+- [x] `fastify@5.10.0` sabit kalarak `fast-uri` 3.1.4/4.1.1 ve `find-my-way`
+  9.7.0'a geç; ek olarak `postcss` 8.5.23 ve `brace-expansion` 5.0.8 bulgularını
+  kapat.
+- [x] Vulnerable kopyanın dependency ağacında kalmadığını doğrula; advisory
+  bastırma.
+- [x] Gerçek PostgreSQL 17 ile API/Fastify, route çözümleme, Paket 65B writer,
+  migration 0043/0044 ve tam test/build zincirini regresyonsuz tekrarla.
+- [x] Repository dışı fresh `npm ci` kopyasında aynı kapıları çalıştır.
+- [!] `eslint@9.39.4` → `brace-expansion@1.1.16` kümesi (5 high, dev): yamalı
+  1.x sürüm yok; düzeltme `eslint@10.8.0` semver-major yükseltmesidir.
+  Kullanıcı kararı bekliyor.
+- [!] `react-router@7.18.1` kümesi (2 high, üretim UI): yamalı tek sürüm
+  `react-router@8.3.0`; `react-router-dom@8.x` yok. Düzeltme v8 major geçişi ve
+  22 dosyada import taşıması gerektirir. Kullanıcı kararı bekliyor.
+
+Kapsam dışı: yeni ürün özelliği, yeni dependency, major yükseltme ve Paket 65B
+davranış değişikliği.
+
 ## Paket 65A — İşçilik workbook preflight ve immutable plan kaynağı
 
 - [x] ZIP/OOXML güvenlik limitlerini ve kapalı hata kodlarını saf domain

@@ -1685,3 +1685,44 @@ kırardı.
 
 Etki: `labor-workbook-apply/1.0.0`, migration `0044`,
 `preview_labor_workbook_apply`, `apply_labor_workbook`.
+
+## 2026-07-25 — HB-2026-087: Üretim dependency advisory'lerinin lockfile içinde çözülmesi
+
+Karar:
+
+1. Dependency advisory'leri yalnız mevcut semver aralığı içinde lockfile
+   yenilemesiyle çözülür. `package.json` değiştirilmez, `overrides` eklenmez,
+   `npm audit fix` / `--force` çalıştırılmaz ve yeni dependency alınmaz.
+2. Paket 65B'yi bloke eden iki bulgu bu yolla kapatıldı: `fast-uri`
+   3.1.3 → 3.1.4 ve 4.1.0 → 4.1.1; `find-my-way` 9.6.0 → 9.7.0. Her ikisi de
+   `fastify@5.10.0` transitive zincirindedir ve `fastify` sürümü sabit kalmıştır;
+   Fastify major yükseltmesi gerekmedi.
+3. Aynı yenileme `postcss` 8.5.16 → 8.5.23 (dev, `vite@8.1.4`) ve
+   `brace-expansion` 5.0.7 → 5.0.8 (üretimde `node-pg-migrate` → `glob` →
+   `minimatch@10`) bulgularını da kapatır. `nanoid` 3.3.15 → 3.3.16 aynı aralıkta
+   yan güncellemedir.
+4. Advisory bastırma, ignore listesi veya audit seviyesini düşürme kabul edilmez;
+   vulnerable sürüm dependency ağacından gerçekten kalkmalıdır.
+5. Semver-major yükseltme gerektiren advisory otonom kapatılmaz. Kalan iki küme
+   açık kullanıcı kararına bırakılmıştır:
+   - `eslint@9.39.4` → `minimatch@3.1.5` → `brace-expansion@1.1.16` (5 high,
+     yalnız dev). `minimatch@3` `^1.1.7` ister ve advisory `<=5.0.7` olduğundan
+     yamalı 1.x yayımlanmamıştır. Bildirilen düzeltme `eslint@10.8.0`'dır.
+     `brace-expansion@1` CJS `main`, `@5` ise `exports` haritalı dual paket
+     olduğundan override ile zorlanması uyumsuz yerleştirme sayılır.
+   - `react-router@7.18.1` ← `react-router-dom@7.18.1` (tam pin) ← kök `^7.1.1`
+     (2 high, üretim UI). Advisory `7.12.0 - 8.2.0`; yamalı tek sürüm
+     `react-router@8.3.0`, `react-router-dom@8.x` yok. Düzeltme v8 major geçişi
+     ve 22 kaynak dosyada import taşıması demektir.
+6. Kalan bulguların kapsamı belgelenir: `brace-expansion@1` yalnız lint
+   araç zincirinde, `react-router` bulgusu ise RSC modunda geçerlidir. Repository
+   Vite SPA'sıdır; RSC ve react-router sunucu runtime'ı kullanılmaz. Bu kapsam
+   notu bulguyu kapatmaz, yalnız aciliyetini sınıflandırır.
+
+Gerekçe: Güvenlik kapısı gerçek dependency değişikliğiyle kapanmalıdır; ancak
+major yükseltme lint kuralları veya üretim yönlendirme davranışı gibi kabul
+edilmiş davranışları değiştirebileceğinden dependency bakımının kapsamı dışındadır
+ve ayrı kullanıcı kararı gerektirir.
+
+Etki: yalnız `package-lock.json`. Kod, şema, migration, API sözleşmesi ve UI
+davranışı değişmedi; Paket 65B ve Paket 66 invariantları korunur.
