@@ -50,7 +50,7 @@ export function usePolicyOcr(caseId: string) {
     () => ({ key: requestKey, value: 'loading' }),
   )
   const status = loadStatus.key === requestKey ? loadStatus.value : 'loading'
-  const setStatus = useCallback((value: PolicyOcrLoadStatus) => { setLoadStatus({ key: requestKey, value }) }, [requestKey])
+  const setStatus = useCallback((value: PolicyOcrLoadStatus) => setLoadStatus({ key: requestKey, value }), [requestKey])
 
   const fail = useCallback((error: unknown) => {
     const kind = error instanceof HttpPolicyOcrError || error instanceof HttpPolicyPdfTextError ? error.kind : 'unavailable'

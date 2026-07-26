@@ -54,6 +54,11 @@ function safeMessage(error: unknown): string {
   }
 }
 
+/** Boş yükleme durumu modül düzeyindedir; render başına yeniden kurulmaz. */
+function blankState(key: string, status: TrafficValueLossLoadStatus): TrafficValueLossLoadState {
+  return { key, assessment: null, versions: [], currentApproved: null, previewResult: null, catalog: null, status, errorMessage: null }
+}
+
 /** Yükleme kapsamındaki bütün dilimler ait oldukları istek anahtarıyla taşınır. */
 interface TrafficValueLossLoadState {
   readonly key: string
@@ -84,20 +89,15 @@ export function useTrafficValueLoss(
   // verisi hiçbir frame'de görünmez. Bütün yazıcılar anahtar korumalıdır;
   // geç dönen bir yükleme veya komut sonucu yeni anahtarın state'ini ezemez.
   const requestKey = `${caseId}#${requestVersion}`
-  const blank = useCallback((key: string, status: TrafficValueLossLoadStatus): TrafficValueLossLoadState => ({
-    key,
-    assessment: null,
-    versions: [],
-    currentApproved: null,
-    previewResult: null,
-    catalog: null,
-    status,
-    errorMessage: null,
-  }), [])
-  const [loaded, setLoaded] = useState<TrafficValueLossLoadState>(() => blank(requestKey, 'loading'))
-  const current = loaded.key === requestKey ? loaded : blank(requestKey, 'loading')
-  const view = active ? current : blank(requestKey, 'idle')
+  const [loaded, setLoaded] = useState<TrafficValueLossLoadState>(() => blankState(requestKey, 'loading'))
+  const current = loaded.key === requestKey ? loaded : blankState(requestKey, 'loading')
+  const view = active ? current : blankState(requestKey, 'idle')
   const { assessment, versions, currentApproved, previewResult, catalog, status, errorMessage } = view
+
+  /** Yalniz gecerli anahtarin state'ini gunceller; bayat yazim yok sayilir. */
+  const patch = useCallback((changes: Partial<TrafficValueLossLoadState>) => {
+    setLoaded((prev) => prev.key === requestKey ? { ...prev, ...changes } : prev)
+  }, [requestKey])
 
   const retry = useCallback(() => {
     setRequestVersion((value) => value + 1)
@@ -105,14 +105,13 @@ export function useTrafficValueLoss(
 
   const load = useCallback(async () => {
     const workspace = await port.load(caseId)
-    setLoaded((prev) => prev.key !== requestKey ? prev : {
-      ...prev,
+    patch({
       assessment: workspace.assessment,
       versions: workspace.versions,
       currentApproved: workspace.currentApproved ?? null,
       status: workspace.assessment === null ? 'empty' : 'ok',
     })
-  }, [caseId, port, requestKey])
+  }, [caseId, patch, port])
 
   useEffect(() => {
     if (!active) return undefined
@@ -121,7 +120,7 @@ export function useTrafficValueLoss(
       .then((workspace) => {
         if (cancelled) return
         setLoaded((prev) => ({
-          ...(prev.key === requestKey ? prev : blank(requestKey, 'loading')),
+          ...(prev.key === requestKey ? prev : blankState(requestKey, 'loading')),
           assessment: workspace.assessment,
           versions: workspace.versions,
           currentApproved: workspace.currentApproved ?? null,
@@ -132,34 +131,30 @@ export function useTrafficValueLoss(
         if (cancelled) return
         const kind = error instanceof TrafficValueLossError ? error.kind : 'unavailable'
         setLoaded((prev) => ({
-          ...(prev.key === requestKey ? prev : blank(requestKey, 'loading')),
+          ...(prev.key === requestKey ? prev : blankState(requestKey, 'loading')),
           status: kind === 'validation' ? 'unavailable' : kind,
           errorMessage: safeMessage(error),
         }))
         if (kind === 'unauthorized') reportUnauthorized()
       })
     return () => { cancelled = true }
-  }, [active, blank, caseId, port, reportUnauthorized, requestKey])
+  }, [active, caseId, port, reportUnauthorized, requestKey])
 
   const command = useCallback(async (run: () => Promise<TrafficValueLossAssessmentRecord>) => {
     setBusy(true)
-    setLoaded((prev) => prev.key === requestKey ? { ...prev, errorMessage: null } : prev)
+    patch({ errorMessage: null })
     try {
       await run()
       await load()
     } catch (error) {
       const kind = error instanceof TrafficValueLossError ? error.kind : 'unavailable'
-      setLoaded((prev) => prev.key !== requestKey ? prev : {
-        ...prev,
-        ...(kind === 'validation' ? {} : { status: kind }),
-        errorMessage: safeMessage(error),
-      })
+      patch({ ...(kind === 'validation' ? {} : { status: kind }), errorMessage: safeMessage(error) })
       if (kind === 'unauthorized') reportUnauthorized()
       throw error
     } finally {
       setBusy(false)
     }
-  }, [load, reportUnauthorized, requestKey])
+  }, [load, patch, reportUnauthorized])
   // React Compiler `assessment?.version` bağımlılığını `assessment` olarak
   // çıkarımladığı için manuel memoization'ı koruyamıyor ve bileşenin tamamını
   // optimizasyon dışı bırakıyordu. Sürüm önce primitife indirgenince çıkarımlanan
@@ -167,25 +162,23 @@ export function useTrafficValueLoss(
   const assessmentVersion = assessment?.version ?? 0
   const preview = useCallback(async (input: TrafficValueLossDraftInput) => {
     setBusy(true)
-    setLoaded((prev) => prev.key === requestKey ? { ...prev, errorMessage: null } : prev)
+    patch({ errorMessage: null })
     try {
       if (port.preview === undefined) throw new TrafficValueLossError('unavailable', 'preview endpoint unavailable')
-      const result = await port.preview(caseId, assessmentVersion, input)
-      setLoaded((prev) => prev.key === requestKey ? { ...prev, previewResult: result } : prev)
+      patch({ previewResult: await port.preview(caseId, assessmentVersion, input) })
     } catch (error) {
-      setLoaded((prev) => prev.key === requestKey ? { ...prev, errorMessage: safeMessage(error) } : prev)
+      patch({ errorMessage: safeMessage(error) })
       throw error
     } finally {
       setBusy(false)
     }
-  }, [assessmentVersion, caseId, port, requestKey])
+  }, [assessmentVersion, caseId, patch, port])
   const loadCatalog = useCallback(async (
     vehicleGroupCode: NonNullable<TrafficValueLossRealMarketInput['vehicleGroupCode']>,
   ) => {
     if (port.partCatalog === undefined) throw new TrafficValueLossError('unavailable', 'part catalog endpoint unavailable')
-    const result = await port.partCatalog(caseId, vehicleGroupCode)
-    setLoaded((prev) => prev.key === requestKey ? { ...prev, catalog: result } : prev)
-  }, [caseId, port, requestKey])
+    patch({ catalog: await port.partCatalog(caseId, vehicleGroupCode) })
+  }, [caseId, patch, port])
 
   return {
     assessment,

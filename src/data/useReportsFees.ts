@@ -17,6 +17,9 @@ function usePort(supplied?: ReportsFeesDataPort) {
   return useMemo(() => supplied ?? createHttpReportsFeesAdapter(), [supplied])
 }
 
+const NO_CLOSURE_FEES: readonly ClosureFeeListItemRecord[] = []
+const NO_VALUE_LOSS_CLOSURES: readonly TrafficValueLossClosureListItemRecord[] = []
+
 export function useCaseFee(
   caseId: string,
   enabled: boolean,
@@ -44,7 +47,7 @@ export function useCaseFee(
     }).catch((error: unknown) => {
       if (cancelled) return
       const kind = error instanceof ReportsFeesError ? error.kind : 'unavailable'
-      setLoaded((prev) => prev.key === requestKey ? { ...prev, status: kind } : { key: requestKey, workspace: null, status: kind })
+      setLoaded({ key: requestKey, workspace: null, status: kind })
       if (kind === 'unauthorized') reportUnauthorized()
     })
     return () => { cancelled = true }
@@ -140,7 +143,7 @@ export function useClosureFeeList(
     return () => { cancelled = true }
   }, [enabled, port, reportUnauthorized])
 
-  if (!enabled) return { items: [] as readonly ClosureFeeListItemRecord[], status: 'idle' as ReportsFeesLoadStatus }
+  if (!enabled) return { items: NO_CLOSURE_FEES, status: 'idle' as ReportsFeesLoadStatus }
   return { items, status }
 }
 
@@ -175,8 +178,7 @@ export function useValueLossClosureList(
     return () => { cancelled = true }
   }, [enabled, port, reportUnauthorized])
 
-  const empty = [] as readonly TrafficValueLossClosureListItemRecord[]
-  if (!enabled) return { items: empty, status: 'idle' as ReportsFeesLoadStatus }
-  if (!supported) return { items: empty, status: 'unavailable' as ReportsFeesLoadStatus }
+  if (!enabled) return { items: NO_VALUE_LOSS_CLOSURES, status: 'idle' as ReportsFeesLoadStatus }
+  if (!supported) return { items: NO_VALUE_LOSS_CLOSURES, status: 'unavailable' as ReportsFeesLoadStatus }
   return { items, status }
 }
