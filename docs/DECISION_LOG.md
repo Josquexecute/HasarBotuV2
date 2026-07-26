@@ -1926,3 +1926,44 @@ bayat veri ve yaris durumu korumasi zayiflamaz, aksine guclenir.
 
 Etki: 7 hook dosyasi. Route/URL sozlesmesi, Paket 65B, Paket 66 ve Paket 40
 davranislari degismedi. `set-state-in-effect` 33 -> 26.
+
+## 2026-07-25 — HB-2026-093: Orta karmasiklikta veri hooklarinda anahtarli turetme (2. dilim)
+
+Karar:
+
+1. HB-2026-092 deseni dort orta karmasiklikta hook'a uygulanir:
+   `useOperationalAlerts`, `usePolicyAnalysis`, `usePolicyAi`,
+   `useTrafficValueLossReports`. Her biri ayri incelenip ayri dogrulanmistir.
+2. Istek anahtarlari acikca tanimlanmistir: sirasiyla
+   `caseIdKey#reloadToken`, `caseId#requestVersion#refreshToken`,
+   `caseId#version` ve `caseId#requestVersion`.
+3. Yalniz yukleme degil, ayni veriye yazan BUTUN yollar anahtar korumali hale
+   gelir. `usePolicyAi`'de `plan`, `start`, `review`, `promote` ve `fail`;
+   `useTrafficValueLossReports`'ta `load`, `run`, `clearPreview`,
+   `previewReport` ve `generateReport`; `usePolicyAnalysis`'te `evaluate` hata
+   yolu. Boylece gec donen bir mutasyon sonucu daha yeni bir istegin state'ini
+   ezemez.
+4. `usePolicyAi`'de `plan` ve `start` iyimser sonucu, hemen ardindan gelen surum
+   artisinin anahtarina yazar. Bu, Paket 23 akisindaki iyimser frame'i birebir
+   korur; aksi halde iyimser sonuc hic gorunmeden `loading`'e duserdi.
+5. `useOperationalAlerts`'te filtre istenip gorunur satir olmadigi durum
+   (`caseIdKey === ''`) cagri yapilmadan `ok`/bos donmeye devam eder.
+6. `useTrafficValueLossReports`'ta rapor onizlemesi de anahtarli state icinde
+   tasinir. Teorik olarak hook devre disi birakilip ayni anahtarla yeniden
+   etkinlestirilirse onceki onizleme yeniden gorunebilir; bu yol iki kez
+   kapalidir: Paket 66 immutable revision nedeniyle onay durumu degisimi yeni
+   version id uretir ve panel `version?.id` degisiminde onizlemeyi temizler;
+   ayrica sunucu `report-store.ts:235` uretilen icerigin hash'i `previewHash`
+   ile uyusmazsa `preview_mismatch` ile reddeder.
+7. Bu dilimde `eslint-disable`, kural istisnasi veya `eslint.config.js`
+   degisikligi yapilmaz. Kapsam disi birakilan `usePolicyOcr`, `useReportsFees`,
+   `usePolicyPdfText`, `useTrafficValueLoss`, `LaborAllocationAiModule` ve
+   `CasesPage` dosyalarina dokunulmaz.
+
+Gerekce: Orta karmasikliktaki hooklarda anahtar tek ve acikca tanimlanabilir
+oldugundan desen guvenle uygulanabilir. Cok durumlu dort hookta anahtar tek
+istek degil birbirine bagli kaynak zinciri oldugundan ayri dilime birakilmistir.
+
+Etki: 4 hook dosyasi. Loading, error, retry, empty ve fail-closed davranislari
+degismedi. Paket 23, Paket 65B, Paket 66 ve Paket 40 davranislari korunur.
+`set-state-in-effect` 26 -> 22.

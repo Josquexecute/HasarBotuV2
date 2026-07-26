@@ -5,8 +5,42 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Veri katmanı yükleme durumu türetmesi — 1. dilim
-- Durum: **7 veri hook'u anahtarlı türetmeye geçirildi; `set-state-in-effect` uyarısı 33 → 26. Kalan 26 bulgu ayrı dilimlere ait; 2 tanesi kural çakışması nedeniyle giderilemez**
+- Aşama: Veri katmanı yükleme durumu türetmesi — 2. dilim
+- Durum: **11 veri hook'u anahtarlı türetmeye geçirildi; `set-state-in-effect` uyarısı 33 → 22. `src/data` içinde yalnız çok durumlu 4 hook kaldı**
+
+## Veri katmanı yükleme durumu türetmesi — 2. dilim (2026-07-25)
+
+- Dönüştürülen 4 hook (her biri ayrı incelendi, ayrı doğrulandı):
+  `useOperationalAlerts`, `usePolicyAnalysis`, `usePolicyAi`,
+  `useTrafficValueLossReports`. `src/data` uyarıları 12 → 8'e indi; kalan 8
+  bulgu yalnız kapsam dışı bırakılan dört çok durumlu hook'a aittir.
+- `useOperationalAlerts`: anahtar `caseIdKey#reloadToken`. Filtre istenip görünür
+  satır olmadığında (`caseIdKey === ''`) çağrı yapılmadan `ok`/boş dönen
+  fail-closed dal aynen korundu.
+- `usePolicyAnalysis`: anahtar `caseId#requestVersion#refreshToken`. Senaryo
+  değerlendirmesi de aynı anahtarı taşır. `evaluate()` hata yolunda `status`'ü
+  dışarıdan yazdığı için anahtar korumalı fonksiyonel güncellemeye çevrildi;
+  bayat bir değerlendirme daha yeni bir yüklemenin durumunu ezemez.
+- `usePolicyAi`: anahtar `caseId#version`. `plan`, `start`, `review`, `promote`
+  ve `fail` yazıcılarının **tamamı** anahtar korumalı hale getirildi. `plan` ve
+  `start` iyimser sonucu hemen ardından gelen sürüm artışının anahtarına yazar;
+  böylece Paket 23 akışındaki iyimser frame birebir korunur.
+- `useTrafficValueLossReports`: anahtar `caseId#requestVersion`. Liste, rapor
+  önizlemesi ve hata mesajı aynı anahtarlı nesnede taşınır; `load()`, `run()`,
+  `clearPreview`, `previewReport` ve `generateReport` yazıcıları anahtar
+  korumalıdır. Önizleme anahtar değişiminde kendiliğinden düşer.
+- Bayat önizleme riski sunucuda kapalıdır: `report-store.ts:235` üretilen
+  içeriğin hash'i `previewHash` ile uyuşmazsa `preview_mismatch` ile reddeder.
+  Aynı şekilde Paket 23 promotion `review-store.ts:381`'de hash'e bağlıdır.
+- `eslint-disable` veya kural istisnası eklenmedi; `eslint.config.js` bu dilimde
+  hiç değişmedi. Kapsam dışı bırakılan `usePolicyOcr`, `useReportsFees`,
+  `usePolicyPdfText`, `useTrafficValueLoss`, `LaborAllocationAiModule` ve
+  `CasesPage` dosyalarına dokunulmadı.
+- Doğrulama: typecheck, lint (0 error / 22 warning), gerçek PostgreSQL 17.10 ile
+  **2.050 başarılı / 6 ortam-koşullu UI skip**, build/bundle (başlangıç 498.882
+  bayt, en büyük chunk 337.825 bayt, 10 lazy modül), `npm audit` 0 bulgu.
+  Gerçek Chrome/CDP: Paket 66 değer kaybı smoke'u 12/12 ve React Router smoke'u
+  13/13, iki çözünürlük ve iki temada, console error yok.
 
 ## Veri katmanı yükleme durumu türetmesi — 1. dilim (2026-07-25)
 

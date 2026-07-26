@@ -28,47 +28,46 @@ export function useOperationalAlerts(
 ): UseOperationalAlertsResult {
   const { reportUnauthorized } = useSession()
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
-  const [alerts, setAlerts] = useState<OperationalAlertsRecord | null>(null)
-  const [status, setStatus] = useState<OperationalAlertLoadStatus>(source === 'api' ? 'loading' : 'ok')
   const [reloadToken, setReloadToken] = useState(0)
   // Dizi kimliği her render'da değiştiği için efekt kararlı bir anahtara bağlanır:
   // yalnız görünür satır kümesi gerçekten değiştiğinde yeniden yüklenir.
   const caseIdKey = caseIds === undefined ? null : caseIds.join(',')
+  // Filtre istenmiş ama görünür satır yoksa çağrı yapılmaz.
+  const active = source === 'api' && caseIdKey !== ''
+  // Yükleme durumu efektte senkron sıfırlanmaz; istek anahtarı değişince RENDER
+  // sırasında türetilir. Önceki filtrenin uyarıları hiçbir frame'de görünmez ve
+  // anahtarı tutmayan geç yanıt yok sayılır.
+  const requestKey = `${caseIdKey ?? '*'}#${reloadToken}`
+  const [loaded, setLoaded] = useState<{ key: string; alerts: OperationalAlertsRecord | null; status: OperationalAlertLoadStatus }>(
+    () => ({ key: requestKey, alerts: null, status: 'loading' }),
+  )
+  const current = loaded.key === requestKey ? loaded : { key: requestKey, alerts: null, status: 'loading' as const }
 
   const reload = useCallback(() => {
     if (source !== 'api') return
-    setStatus('loading')
     setReloadToken((value) => value + 1)
   }, [source])
 
   useEffect(() => {
-    if (source !== 'api') return
-    // Filtre istenmiş ama görünür satır yoksa çağrı yapılmaz.
-    if (caseIdKey === '') {
-      setAlerts(null)
-      setStatus('ok')
-      return
-    }
+    if (!active) return undefined
     let cancelled = false
-    setStatus('loading')
     const adapter = port ?? createHttpOperationalAlertAdapter()
     adapter.list(caseIdKey === null ? undefined : caseIdKey.split(','))
       .then((result) => {
         if (cancelled) return
-        setAlerts(result)
-        setStatus('ok')
+        setLoaded({ key: requestKey, alerts: result, status: 'ok' })
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setAlerts(null)
         const kind = error instanceof OperationalAlertError ? error.kind : 'unavailable'
-        setStatus(kind)
+        setLoaded({ key: requestKey, alerts: null, status: kind })
         if (kind === 'unauthorized') reportUnauthorized()
       })
     return () => {
       cancelled = true
     }
-  }, [caseIdKey, port, reloadToken, reportUnauthorized, source])
+  }, [active, caseIdKey, port, reportUnauthorized, requestKey])
 
-  return { alerts, source, status, reload }
+  if (!active) return { alerts: null, source, status: 'ok', reload }
+  return { alerts: current.alerts, source, status: current.status, reload }
 }

@@ -22,18 +22,28 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
   const startAttempt = useRef<IdempotencyAttempt | null>(null)
   const reviewAttempt = useRef<IdempotencyAttempt | null>(null)
   const promoteAttempt = useRef<IdempotencyAttempt | null>(null)
-  const [workspace, setWorkspace] = useState<PolicyAiWorkspaceRecord | null>(null)
-  const [status, setStatus] = useState<PolicyAiLoadStatus>('idle')
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
   const [busyCandidateId, setBusyCandidateId] = useState<string | null>(null)
   const [filter, setFilter] = useState<PolicyAiCandidateCategory | 'all'>('all')
   const [version, setVersion] = useState(0)
+  const active = source === 'api'
+  // Yükleme durumu efektte senkron sıfırlanmaz; istek anahtarı değişince RENDER
+  // sırasında türetilir. Başka case'in workspace'i hiçbir frame'de görünmez.
+  // Bütün yazımlar anahtar korumalıdır: geç dönen yükleme veya mutasyon sonucu
+  // daha yeni bir isteğin state'ini ezemez.
+  const requestKey = `${caseId}#${version}`
+  const [loaded, setLoaded] = useState<{ key: string; workspace: PolicyAiWorkspaceRecord | null; status: PolicyAiLoadStatus }>(
+    () => ({ key: requestKey, workspace: null, status: 'loading' }),
+  )
+  const current = loaded.key === requestKey ? loaded : { key: requestKey, workspace: null, status: 'loading' as const }
+  const workspace = active ? current.workspace : null
+  const status: PolicyAiLoadStatus = active ? current.status : 'idle'
 
   const fail = useCallback((error: unknown) => {
     const kind = error instanceof HttpPolicyAiError ? error.kind : 'unavailable'
-    setStatus(kind)
+    setLoaded((prev) => prev.key === requestKey ? { ...prev, status: kind } : prev)
     if (kind === 'unauthorized') reportUnauthorized()
-  }, [reportUnauthorized])
+  }, [reportUnauthorized, requestKey])
 
   useEffect(() => {
     planAttempt.current = null
@@ -43,23 +53,16 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
   }, [caseId, source])
 
   useEffect(() => {
-    if (source !== 'api') {
-      setStatus('idle')
-      setWorkspace(null)
-      return
-    }
+    if (!active) return undefined
     let cancelled = false
-    setStatus('loading')
-    setWorkspace(null)
     void adapter.current.load(caseId).then((value) => {
       if (cancelled) return
-      setWorkspace(value)
-      setStatus('ok')
+      setLoaded({ key: requestKey, workspace: value, status: 'ok' })
     }).catch((error: unknown) => {
       if (!cancelled) fail(error)
     })
     return () => { cancelled = true }
-  }, [caseId, fail, source, version])
+  }, [active, caseId, fail, requestKey])
 
   const plan = useCallback(async (providerId: PolicyAiProviderId, selectedSources: readonly PolicyAiSourceSelectionRecord[]) => {
     if (workspace === null || selectedSources.length === 0 || busyAction !== null) return
@@ -80,15 +83,16 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
       const planned = await adapter.current.plan(caseId, providerId, selectedSources, planAttempt.current.key)
       planAttempt.current = null
       startAttempt.current = null
-      setWorkspace({ ...workspace, run: planned, candidates: [], conflicts: [], promotionPreview: null, promotion: null })
-      setStatus('ok')
+      // İyimser sonuç hemen ardından gelen sürüm artışının anahtarına yazılır;
+      // böylece yeniden okuma başlayana kadar planlanan run görünür kalır.
+      setLoaded({ key: `${caseId}#${version + 1}`, workspace: { ...workspace, run: planned, candidates: [], conflicts: [], promotionPreview: null, promotion: null }, status: 'ok' })
       setVersion((value) => value + 1)
     } catch (error) {
       fail(error)
     } finally {
       setBusyAction(null)
     }
-  }, [busyAction, caseId, fail, workspace])
+  }, [busyAction, caseId, fail, version, workspace])
 
   const start = useCallback(async () => {
     if (workspace?.run === null || workspace === null || busyAction !== null) return
@@ -98,15 +102,15 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
     try {
       const started = await adapter.current.start(caseId, workspace.run, startAttempt.current.key)
       startAttempt.current = null
-      setWorkspace({ ...workspace, run: started, promotionPreview: null, promotion: null })
-      setStatus('ok')
+      // İyimser sonuç sürüm artışının anahtarına yazılır (bkz. plan).
+      setLoaded({ key: `${caseId}#${version + 1}`, workspace: { ...workspace, run: started, promotionPreview: null, promotion: null }, status: 'ok' })
       setVersion((value) => value + 1)
     } catch (error) {
       fail(error)
     } finally {
       setBusyAction(null)
     }
-  }, [busyAction, caseId, fail, workspace])
+  }, [busyAction, caseId, fail, version, workspace])
 
   const review = useCallback(async (candidateId: string, input: PolicyAiCandidateReviewInput) => {
     if (workspace?.run === null || workspace === null || busyAction !== null) return
@@ -119,15 +123,16 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
       const preview = await adapter.current.previewPromotion(caseId, workspace.run.id)
       reviewAttempt.current = null
       promoteAttempt.current = null
-      setWorkspace({ ...workspace, candidates: workspace.candidates.map((item) => item.candidateId === candidateId ? { ...item, review: reviewed } : item), promotionPreview: preview, promotion: null })
-      setStatus('ok')
+      setLoaded((prev) => prev.key === requestKey
+        ? { key: requestKey, workspace: { ...workspace, candidates: workspace.candidates.map((item) => item.candidateId === candidateId ? { ...item, review: reviewed } : item), promotionPreview: preview, promotion: null }, status: 'ok' }
+        : prev)
     } catch (error) {
       fail(error)
     } finally {
       setBusyCandidateId(null)
       setBusyAction(null)
     }
-  }, [busyAction, caseId, fail, workspace])
+  }, [busyAction, caseId, fail, requestKey, workspace])
 
   const promote = useCallback(async (): Promise<PolicyAiPromotionRecord | null> => {
     if (workspace === null) return null
@@ -139,8 +144,9 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
     try {
       const promoted = await adapter.current.promote(caseId, preview, promoteAttempt.current.key)
       promoteAttempt.current = null
-      setWorkspace({ ...workspace, promotion: promoted })
-      setStatus('ok')
+      setLoaded((prev) => prev.key === requestKey
+        ? { key: requestKey, workspace: { ...workspace, promotion: promoted }, status: 'ok' }
+        : prev)
       return promoted
     } catch (error) {
       fail(error)
@@ -148,10 +154,9 @@ export function usePolicyAi(caseId: string, source: DataSourceKind) {
     } finally {
       setBusyAction(null)
     }
-  }, [busyAction, caseId, fail, workspace])
+  }, [busyAction, caseId, fail, requestKey, workspace])
 
   const retry = useCallback(() => {
-    setStatus('loading')
     setVersion((value) => value + 1)
   }, [])
 

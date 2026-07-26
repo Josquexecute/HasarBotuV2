@@ -84,16 +84,26 @@ lint kapsamı temizliği.
 - [x] Tam UI testleri, gerçek PostgreSQL zinciri ve iki gerçek tarayıcı
   smoke'u ile doğrula.
 
-### 2. dilim — kalan `src/data` hook'ları
+### 2. dilim — orta karmaşıklıktaki `src/data` hook'ları — tamamlandı
 
-- [ ] `useOperationalAlerts`, `usePolicyAnalysis`, `useTrafficValueLossReports`
-  (orta karmaşıklık) ve `usePolicyAi` hook'larını dönüştür.
-- [ ] Çok state dilimli hook'ları ayrı ele al: `usePolicyOcr` (16 `useState`,
-  3 efekt), `useReportsFees` (12, 4 efekt), `usePolicyPdfText` (11, 2 efekt),
-  `useTrafficValueLoss` (10). Bunlarda anahtar tek bir istek değil, birbirine
-  bağlı birkaç kaynak zinciridir; toplu dönüştürme yapma.
+- [x] `useOperationalAlerts`: `caseIdKey#reloadToken` anahtarı; boş filtre
+  fail-closed dalı korundu.
+- [x] `usePolicyAnalysis`: `caseId#requestVersion#refreshToken` anahtarı; senaryo
+  değerlendirmesi aynı anahtarda; `evaluate()` hata yolu anahtar korumalı.
+- [x] `usePolicyAi`: `caseId#version` anahtarı; `plan`/`start`/`review`/`promote`/
+  `fail` yazıcılarının tamamı anahtar korumalı; iyimser frame korundu.
+- [x] `useTrafficValueLossReports`: `caseId#requestVersion` anahtarı; liste,
+  önizleme ve hata mesajı aynı nesnede; bütün yazıcılar anahtar korumalı.
+- [x] `eslint-disable` veya kural istisnası eklenmedi.
 
-### 3. dilim — modül seviyesi bulgular
+### 3. dilim — çok durumlu `src/data` hook'ları
+
+- [ ] `usePolicyOcr` (16 `useState`, 3 efekt), `useReportsFees` (12, 4 efekt),
+  `usePolicyPdfText` (11, 2 efekt), `useTrafficValueLoss` (10). Bunlarda anahtar
+  tek bir istek değil, birbirine bağlı birkaç kaynak zinciridir (kaynak →
+  extraction → sayfa/segment). Toplu dönüştürme yapma; her zinciri ayrı ele al.
+
+### 4. dilim — modül seviyesi bulgular
 
 - [ ] `load()` deseni kullanan modüller: `CaseVehicleProfileModule`,
   `LaborAllocationAiModule`, `WorkspaceProvisioningPanel`,

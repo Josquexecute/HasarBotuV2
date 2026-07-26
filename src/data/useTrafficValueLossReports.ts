@@ -31,6 +31,15 @@ function message(error: unknown): string {
   }
 }
 
+/** Liste, önizleme ve hata mesajı ait oldukları istek anahtarıyla taşınır. */
+interface TrafficValueLossReportsLoadState {
+  readonly key: string
+  readonly reports: readonly TrafficValueLossReportRecord[]
+  readonly preview: TrafficValueLossReportPreviewRecord | null
+  readonly status: TrafficValueLossReportLoadStatus
+  readonly errorMessage: string | null
+}
+
 export function useTrafficValueLossReports(
   caseId: string,
   source: DataSourceKind,
@@ -39,76 +48,81 @@ export function useTrafficValueLossReports(
 ) {
   const { reportUnauthorized } = useSession()
   const port = useMemo(() => suppliedPort ?? createHttpTrafficValueLossReportAdapter(), [suppliedPort])
-  const [reports, setReports] = useState<readonly TrafficValueLossReportRecord[]>([])
-  const [preview, setPreview] = useState<TrafficValueLossReportPreviewRecord | null>(null)
-  const [status, setStatus] = useState<TrafficValueLossReportLoadStatus>('idle')
   const [busy, setBusy] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [requestVersion, setRequestVersion] = useState(0)
+  const active = source === 'api' && enabled
+  // Yükleme durumu efektte senkron sıfırlanmaz; istek anahtarı değişince RENDER
+  // sırasında türetilir. Rapor önizlemesi de aynı anahtarı taşır: anahtar
+  // değişince (case değişimi veya retry) önizleme kendiliğinden düşer ve
+  // anahtarı tutmayan geç yanıt yeni state'i ezemez.
+  const requestKey = `${caseId}#${requestVersion}`
+  const [loaded, setLoaded] = useState<TrafficValueLossReportsLoadState>(
+    () => ({ key: requestKey, reports: [], preview: null, status: 'loading', errorMessage: null }),
+  )
+  const empty: TrafficValueLossReportsLoadState = { key: requestKey, reports: [], preview: null, status: 'loading', errorMessage: null }
+  const current: TrafficValueLossReportsLoadState = loaded.key === requestKey ? loaded : empty
+  const errorMessage = active ? current.errorMessage : null
 
   const retry = useCallback(() => {
-    setPreview(null)
-    setErrorMessage(null)
     setRequestVersion((value) => value + 1)
   }, [])
   const load = useCallback(async () => {
     const items = await port.list(caseId)
-    setReports(items)
-    setStatus('ok')
-  }, [caseId, port])
+    setLoaded((prev) => prev.key === requestKey ? { ...prev, reports: items, status: 'ok' } : prev)
+  }, [caseId, port, requestKey])
 
   useEffect(() => {
-    if (source !== 'api' || !enabled) {
-      setReports([])
-      setPreview(null)
-      setStatus('idle')
-      return
-    }
+    if (!active) return undefined
     let cancelled = false
-    setStatus('loading')
-    setErrorMessage(null)
+    /** Sonuç yalnız kendi anahtarına yazılır; başka anahtarın state'i taşınmaz. */
+    const base = (prev: TrafficValueLossReportsLoadState): TrafficValueLossReportsLoadState => prev.key === requestKey
+      ? prev
+      : { key: requestKey, reports: [], preview: null, status: 'loading', errorMessage: null }
     port.list(caseId).then((items) => {
       if (cancelled) return
-      setReports(items)
-      setStatus('ok')
+      setLoaded((prev) => ({ ...base(prev), reports: items, status: 'ok' }))
     }).catch((error: unknown) => {
       if (cancelled) return
       const kind = error instanceof TrafficValueLossReportError ? error.kind : 'unavailable'
-      setStatus(kind === 'validation' ? 'unavailable' : kind)
-      setErrorMessage(message(error))
+      setLoaded((prev) => ({
+        ...base(prev),
+        status: kind === 'validation' ? 'unavailable' : kind,
+        errorMessage: message(error),
+      }))
       if (kind === 'unauthorized') reportUnauthorized()
     })
     return () => { cancelled = true }
-  }, [caseId, enabled, port, reportUnauthorized, requestVersion, source])
+  }, [active, caseId, port, reportUnauthorized, requestKey])
 
   const run = useCallback(async <T,>(operation: () => Promise<T>): Promise<T> => {
     setBusy(true)
-    setErrorMessage(null)
+    setLoaded((prev) => prev.key === requestKey ? { ...prev, errorMessage: null } : prev)
     try {
       return await operation()
     } catch (error) {
       const kind = error instanceof TrafficValueLossReportError ? error.kind : 'unavailable'
-      setStatus(kind === 'validation' ? 'ok' : kind)
-      setErrorMessage(message(error))
+      setLoaded((prev) => prev.key === requestKey
+        ? { ...prev, status: kind === 'validation' ? 'ok' : kind, errorMessage: message(error) }
+        : prev)
       if (kind === 'unauthorized') reportUnauthorized()
       throw error
     } finally {
       setBusy(false)
     }
-  }, [reportUnauthorized])
+  }, [reportUnauthorized, requestKey])
 
   return {
-    reports,
-    preview,
-    status,
+    reports: active ? current.reports : [],
+    preview: active ? current.preview : null,
+    status: active ? current.status : 'idle',
     busy,
     errorMessage,
     retry,
-    clearPreview: () => setPreview(null),
+    clearPreview: () => setLoaded((prev) => prev.key === requestKey ? { ...prev, preview: null } : prev),
     previewReport: (versionId: string, expectedAssessmentVersion: number, reportNote: string | null) =>
       run(async () => {
         const next = await port.preview(caseId, versionId, expectedAssessmentVersion, reportNote)
-        setPreview(next)
+        setLoaded((prev) => prev.key === requestKey ? { ...prev, preview: next } : prev)
         return next
       }),
     generateReport: (
@@ -126,7 +140,7 @@ export function useTrafficValueLossReports(
         previewHash,
         idempotencyKey,
       )
-      setPreview(null)
+      setLoaded((prev) => prev.key === requestKey ? { ...prev, preview: null } : prev)
       await load()
       return report
     }),
