@@ -5,8 +5,43 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Veri katmanı yükleme durumu türetmesi — 2. dilim
-- Durum: **11 veri hook'u anahtarlı türetmeye geçirildi; `set-state-in-effect` uyarısı 33 → 22. `src/data` içinde yalnız çok durumlu 4 hook kaldı**
+- Aşama: Veri katmanı yükleme durumu türetmesi — 3. dilim
+- Durum: **`src/data` tamamen temiz (0 uyarı); `set-state-in-effect` 33 → 14. Kalan 14 bulgunun tamamı modül seviyesindedir (4. dilim). Bundle bütçesi 499.997/500.000 ile sadece 3 bayt boşlukla geçiyor**
+
+## Veri katmanı yükleme durumu türetmesi — 3. dilim (2026-07-25)
+
+- Çok durumlu dört hook, dört ayrı atomik commit ile dönüştürüldü. Toplu
+  değişiklik yapılmadı; her hook ayrı incelendi, ayrı doğrulandı.
+- `usePolicyPdfText` (`581df32`): yalnız yükleme durumu `caseId#version`
+  anahtarına bağlandı. Kaynak/extraction/sayfa dilimleri **kasıtlı olarak**
+  anahtarlanmadı; orijinalde de yükleme süresince önceki değerlerini koruyorlar
+  ve yarış koruması `cancelled` ile sağlanıyor.
+- `useReportsFees` (`81602df`): dosya dört bağımsız hook içeriyor.
+  `useCaseFee` → `caseId#revision`; `useCaseSummaryReport` →
+  `period|responsibleUserId|serviceId#revision`. Liste hook'larının değişen
+  anahtarı yok; devre dışı ve desteklenmeyen sonuçlar render sırasında
+  türetiliyor. `useValueLossClosureList` port desteklemiyorsa fail-closed
+  `unavailable` dönmeye devam ediyor.
+- `usePolicyOcr` (`5457e08`): iki ayrı senkron sıfırlama vardı. Yükleme durumu
+  `caseId#version`'a, PDF sayfa listesi seçili extraction id'sine bağlandı;
+  önceki extraction'ın sayfaları artık hiçbir frame'de görünmüyor.
+- `useTrafficValueLoss` (`933e1d6`): Paket 66 açısından en kritik olduğu için
+  sona bırakıldı. Yükleme kapsamındaki **bütün** dilimler (assessment,
+  versions, currentApproved, previewResult, catalog, status, errorMessage) tek
+  anahtarlı nesnede taşınıyor; `load`, yükleme efekti, `command`, `preview` ve
+  `loadCatalog` yazıcılarının hepsi anahtar korumalı. `command`'ın hata yolunda
+  `validation` dışında status yazma davranışı aynen korundu.
+- **Bundle bütçesi kapısı gerçekten kırıldı ve düzeltildi** (`4e2dd7d`).
+  Eklenen anahtarlı state kodu başlangıç grafiğini 498.882 → 500.125 bayta
+  çıkarıp 500.000 sınırını 125 bayt aştı. Bütçe **yükseltilmedi**; kodun runtime
+  maliyeti düşürüldü (modül düzeyi fabrika/sabitler, tekrar eden anahtar
+  korumalı kapanışların tek `patch` yardımcısında toplanması). Sonuç 499.997
+  bayt.
+- Doğrulama: typecheck, lint (0 error / 14 warning), gerçek PostgreSQL 17.10 ile
+  **2.050 başarılı / 6 ortam-koşullu UI skip**, build/bundle (499.997 bayt, en
+  büyük chunk 337.825 bayt, 10 lazy modül), `npm audit` 0 bulgu. Gerçek
+  Chrome/CDP: Paket 66 değer kaybı smoke'u 12/12 ve React Router smoke'u 13/13,
+  iki çözünürlük ve iki temada, console error yok.
 
 ## Veri katmanı yükleme durumu türetmesi — 2. dilim (2026-07-25)
 

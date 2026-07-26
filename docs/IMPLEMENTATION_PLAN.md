@@ -96,12 +96,21 @@ lint kapsamı temizliği.
   önizleme ve hata mesajı aynı nesnede; bütün yazıcılar anahtar korumalı.
 - [x] `eslint-disable` veya kural istisnası eklenmedi.
 
-### 3. dilim — çok durumlu `src/data` hook'ları
+### 3. dilim — çok durumlu `src/data` hook'ları — tamamlandı
 
-- [ ] `usePolicyOcr` (16 `useState`, 3 efekt), `useReportsFees` (12, 4 efekt),
-  `usePolicyPdfText` (11, 2 efekt), `useTrafficValueLoss` (10). Bunlarda anahtar
-  tek bir istek değil, birbirine bağlı birkaç kaynak zinciridir (kaynak →
-  extraction → sayfa/segment). Toplu dönüştürme yapma; her zinciri ayrı ele al.
+Dört ayrı atomik commit; toplu değişiklik yapılmadı.
+
+- [x] `usePolicyPdfText`: yalnız yükleme durumu anahtarlandı; kaynak/extraction/
+  sayfa dilimleri kasıtlı olarak `cancelled` korumasında bırakıldı.
+- [x] `useReportsFees`: dosyadaki dört bağımsız hook ayrı ele alındı; iki
+  liste hook'unda değişen anahtar olmadığı için kapılar render'da türetildi.
+- [x] `usePolicyOcr`: yükleme durumu ve PDF sayfa listesi ayrı anahtarlara
+  bağlandı.
+- [x] `useTrafficValueLoss`: yükleme kapsamındaki bütün dilimler tek anahtarlı
+  nesnede; bütün yazıcılar anahtar korumalı. Paket 66 smoke'u ile doğrulandı.
+- [x] Bundle bütçesi kırılınca bütçe yükseltilmedi, kod boyutu düşürüldü.
+
+Sonuç: `src/data` içinde `set-state-in-effect` uyarısı kalmadı.
 
 ### 4. dilim — modül seviyesi bulgular
 

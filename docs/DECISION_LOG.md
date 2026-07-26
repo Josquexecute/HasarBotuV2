@@ -1967,3 +1967,51 @@ istek degil birbirine bagli kaynak zinciri oldugundan ayri dilime birakilmistir.
 Etki: 4 hook dosyasi. Loading, error, retry, empty ve fail-closed davranislari
 degismedi. Paket 23, Paket 65B, Paket 66 ve Paket 40 davranislari korunur.
 `set-state-in-effect` 26 -> 22.
+
+## 2026-07-25 — HB-2026-094: Cok durumlu veri hooklarinda anahtarli turetme (3. dilim)
+
+Karar:
+
+1. Dort cok durumlu hook toplu degil, dort ayri atomik commit ile donusturulur:
+   `usePolicyPdfText`, `useReportsFees`, `usePolicyOcr`, `useTrafficValueLoss`.
+   Paket 66 acisindan en kritik olan `useTrafficValueLoss` sona birakilir.
+2. Anahtarlama hook basina gerektigi kadar yapilir, mekanik olarak tum dilimlere
+   uygulanmaz:
+   - `usePolicyPdfText` ve `usePolicyOcr`'da yalniz yukleme durumu (ve OCR'da
+     ayrica secili extraction'a bagli PDF sayfa listesi) anahtarlanir.
+     Kaynak/extraction/run/element dilimleri orijinalde de yukleme suresince
+     onceki degerlerini korur; anahtarlanmalari davranis degisikligi olurdu.
+     Yaris korumasi her anahtar degisiminde yeniden calisan efektin `cancelled`
+     bayragiyla saglanir.
+   - `useReportsFees` dort bagimsiz hook icerir. Iki liste hook'unun degisen
+     istek anahtari yoktur; yalniz `enabled` ve port yetenegi kapisi vardir ve
+     bunlar render sirasinda turetilir.
+   - `useTrafficValueLoss`'ta yukleme kapsamindaki butun dilimler tek anahtarli
+     nesnede tasinir ve butun yazicilar anahtar korumalidir.
+3. `useReportsFees` liste hooklarinin baslangic durumu 'idle' yerine 'loading'
+   olur; ilk okumadan onceki kisa 'idle' frame'i kalkar. Devre disiyken donen
+   deger yine 'idle'dir.
+4. Bundle butce kapisi bu dilimde gercekten kirildi (500.125 bayt / 500.000).
+   Butce YUKSELTILMEZ. Cozum, eklenen kodun runtime maliyetini dusurmektir:
+   modul duzeyi bos-durum fabrikasi ve sabitleri, tekrar eden anahtar korumali
+   kapanislarin tek `patch` yardimcisinda toplanmasi, ifade govdeli sarmalayici.
+   Sonuc 499.997 bayttir.
+5. `eslint-disable`, kural istisnasi veya `eslint.config.js` degisikligi yoktur.
+   Kapsam disi birakilan `LaborAllocationAiModule` ve `CasesPage` dosyalarina
+   dokunulmaz.
+
+Gerekce: Bu hooklarda anahtar tek istek degil birbirine bagli kaynak zinciridir.
+Butun dilimleri mekanik olarak anahtarlamak, orijinalde kasitli olarak korunan
+ara verileri silerdi. Anahtarlama yalnizca yukleme durumunun turetilebilmesi
+icin gereken en dar kapsamda uygulanmistir.
+
+Etki: dort hook dosyasi ve bir bundle boyut duzeltmesi. Loading, error, retry,
+empty ve fail-closed davranislari degismedi. Paket 23, Paket 40, Paket 65B ve
+Paket 66 davranislari korunur. `src/data` icinde `set-state-in-effect` kalmadi;
+toplam 22 -> 14.
+
+Kalan risk: baslangic JavaScript grafigi 500.000 baytlik butcenin 3 bayt
+altindadir. `src/data` barrel'i butun veri hooklarini baslangic grafigine
+cektigi icin, bu hooklarin cogu yalniz lazy `CaseDetailPage` icinde kullanilsa
+da butceye yazilmaktadir. Sonraki her ekleme bu kapiyi kirabilir; barrel
+bolunmesi ayri bir teknik temizlik konusudur.
