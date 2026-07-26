@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, LoaderCircle, RefreshCw, Save, X } from 'lucide-react'
-import {
-  CaseCommandError,
-  createHttpCaseCommandAdapter,
-  type CaseCommandPort,
-  type CaseReferenceDataPort,
-  type CaseUpdateInput,
-  type SessionUser,
-  useCaseReferences,
-} from '../../data'
+import type { SessionUser } from '../../data/authPort'
+import { CaseCommandError, createHttpCaseCommandAdapter, type CaseCommandPort, type CaseUpdateInput } from '../../data/commandPort'
+import type { CaseReferenceDataPort } from '../../data/ports'
+import { useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseRecord, CaseStageCode } from '../../types/case'
 import {
   CASE_STAGE_OPTIONS,

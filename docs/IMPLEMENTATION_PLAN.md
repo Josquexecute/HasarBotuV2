@@ -112,6 +112,17 @@ Dört ayrı atomik commit; toplu değişiklik yapılmadı.
 
 Sonuç: `src/data` içinde `set-state-in-effect` uyarısı kalmadı.
 
+## `src/data` barrel bölünmesi ve başlangıç bundle temizliği
+
+- [x] Barrel'in neden paylaşılan chunk ürettiğini ölç: başlangıç ve lazy
+  tüketiciler aynı `src/data/index.ts`'ten import ediyordu.
+- [x] 66 barrel importunu 66 dosyada doğrudan dosya importuna çevir; tip-only
+  importları koru.
+- [x] Referansı kalmayan `src/data/index.ts`'i sil.
+- [x] `vi.mock` çağrılarını gerçek modüle yönlendir; stub davranışını koruma.
+- [x] Circular dependency oluşmadığını ve tree-shaking/lazy dağılımını ölç.
+- [x] Bütçeyi yükseltmeden anlamlı headroom üret: 3 bayt → 87.434 bayt.
+
 ### 4. dilim — modül seviyesi bulgular
 
 - [ ] `load()` deseni kullanan modüller: `CaseVehicleProfileModule`,

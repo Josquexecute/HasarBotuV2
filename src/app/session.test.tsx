@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SessionProvider } from './session'
 import { useSession } from './sessionContext'
-import { DATA_SOURCE_STORAGE_KEY } from '../data'
+import { DATA_SOURCE_STORAGE_KEY } from '../data/ports'
 import { HttpAuthError, type AuthPort, type SessionUser } from '../data/authPort'
 
 const USER: SessionUser = {

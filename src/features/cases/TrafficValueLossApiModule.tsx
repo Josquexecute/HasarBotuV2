@@ -12,21 +12,11 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  useCaseDocuments,
-  useTrafficValueLoss,
-  type CaseDocumentsDataPort,
-  type DataSourceKind,
-  type TrafficValueLossComparableInput,
-  type TrafficValueLossDamagePartInput,
-  type TrafficValueLossDataPort,
-  type TrafficValueLossDraftInput,
-  type TrafficValueLossEvidenceField,
-  type TrafficValueLossEvidenceInput,
-  type TrafficValueLossRealMarketPartInput,
-  type TrafficValueLossReportDataPort,
-  type TrafficValueLossVersionRecord,
-} from '../../data'
+import type { CaseDocumentsDataPort, DataSourceKind } from '../../data/ports'
+import type { TrafficValueLossComparableInput, TrafficValueLossDamagePartInput, TrafficValueLossDataPort, TrafficValueLossDraftInput, TrafficValueLossEvidenceField, TrafficValueLossEvidenceInput, TrafficValueLossRealMarketPartInput, TrafficValueLossVersionRecord } from '../../data/trafficValueLossPort'
+import type { TrafficValueLossReportDataPort } from '../../data/trafficValueLossReportPort'
+import { useCaseDocuments } from '../../data/useCaseDocuments'
+import { useTrafficValueLoss } from '../../data/useTrafficValueLoss'
 import { useSession } from '../../app/sessionContext'
 import type { CaseRecord } from '../../types/case'
 import { TrafficValueLossReportPanel } from './TrafficValueLossReportPanel'

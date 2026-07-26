@@ -2,17 +2,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
-import type {
-  CaseDocumentsDataPort,
-  TrafficValueLossAssessmentRecord,
-  TrafficValueLossDataPort,
-  TrafficValueLossDraftInput,
-  TrafficValueLossReportContentRecord,
-  TrafficValueLossReportDataPort,
-  TrafficValueLossReportRecord,
-  TrafficValueLossVersionRecord,
-} from '../../data'
-import { TrafficValueLossError, TrafficValueLossReportError } from '../../data'
+import type { CaseDocumentsDataPort } from '../../data/ports'
+import type { TrafficValueLossAssessmentRecord, TrafficValueLossDataPort, TrafficValueLossDraftInput, TrafficValueLossVersionRecord } from '../../data/trafficValueLossPort'
+import type { TrafficValueLossReportContentRecord, TrafficValueLossReportDataPort, TrafficValueLossReportRecord } from '../../data/trafficValueLossReportPort'
+import { TrafficValueLossError } from '../../data/trafficValueLossPort'
+import { TrafficValueLossReportError } from '../../data/trafficValueLossReportPort'
 import type { CaseRecord } from '../../types/case'
 import { TrafficValueLossApiModule } from './TrafficValueLossApiModule'
 

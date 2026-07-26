@@ -5,8 +5,39 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Veri katmanı yükleme durumu türetmesi — 3. dilim
-- Durum: **`src/data` tamamen temiz (0 uyarı); `set-state-in-effect` 33 → 14. Kalan 14 bulgunun tamamı modül seviyesindedir (4. dilim). Bundle bütçesi 499.997/500.000 ile sadece 3 bayt boşlukla geçiyor**
+- Aşama: `src/data` barrel bölünmesi ve başlangıç bundle temizliği
+- Durum: **Başlangıç JS grafiği 499.997 → 412.566 bayt (−87.431, %17,5); bütçe boşluğu 3 bayttan 87.434 bayta çıktı. `set-state-in-effect` 14 uyarı (hepsi modül seviyesi, 4. dilim)**
+
+## `src/data` barrel bölünmesi (2026-07-25)
+
+- **Kök neden.** `src/data/index.ts` bütün veri katmanını tek noktadan
+  re-export ediyordu. Hem başlangıç grafiğindeki sayfalar (Durum Panosu,
+  Dosyalar, Raporlar, Kapanan Dosyalar, Bildirimler, Yönetim, Mevzuat) hem de
+  lazy `CaseDetailPage` alt ağacı bu barrel'den import ettiği için bundler
+  birleşik bir **paylaşılan chunk** üretiyordu: 129.686 baytlık `data-*.js`
+  başlangıç grafiğine giriyor ve yalnız lazy sayfalarda kullanılan hook'lar da
+  oraya yazılıyordu.
+- **Çözüm.** Barrel'den gelen **66 import ifadesi** 66 dosyada doğrudan dosya
+  importuna çevrildi (`../../data` → `../../data/<modül>`). Sembol → modül
+  eşlemesi barrel'in kendisinden üretildi; tip-only importlar `import type`
+  olarak korundu. Referansı kalmayan `src/data/index.ts` silindi.
+- İki test dosyasındaki `vi.mock('../../data', …)` çağrıları gerçek modüle
+  (`../../data/useDashboard`) yönlendirildi; stub davranışı aynı kaldı.
+- **Ölçüm.** Başlangıç grafiği 16 asset / 499.997 bayttan **2 asset / 412.566
+  bayta** indi (`index-*.js` 403.109 + `jsx-runtime` 9.457). Paylaşılan
+  `data-*.js` chunk'ı başlangıç grafiğinden tamamen kalktı.
+- Lazy dağılım gerçekleşti: 28 lazy chunk / 648.512 bayt. Büyükler:
+  `PolicyAnalysisWorkspace` 76.111, `TrafficValueLossApiModule` 66.249,
+  `CaseDetailPage` 64.511, `LaborAllocationAiModule` 40.846,
+  `EmailDraftApiModule` 28.463, `LaborApiModule` 25.209. Route seviyesi lazy
+  modül sayısı 10'da sabit kaldı.
+- Bütçe **yükseltilmedi** (500.000). Boşluk 3 bayttan **87.434 bayta** çıktı.
+- Runtime davranışı, route yapısı, API sözleşmeleri ve hook imzaları değişmedi;
+  yeni dependency eklenmedi. Circular dependency uyarısı oluşmadı.
+- Doğrulama: typecheck, lint (0 error / 14 warning), gerçek PostgreSQL 17.10 ile
+  **2.050 başarılı / 6 ortam-koşullu UI skip**, `npm audit` 0 bulgu. Gerçek
+  Chrome/CDP: Paket 66 smoke 12/12 ve React Router smoke 13/13, iki çözünürlük
+  ve iki temada, console error yok.
 
 ## Veri katmanı yükleme durumu türetmesi — 3. dilim (2026-07-25)
 

@@ -7,22 +7,9 @@ import {
   effectiveCategoryAmounts,
   type CategoryDraftEntry,
 } from './laborCategoryRules.js'
-import {
-  LaborAllocationClientError,
-  LaborExcelProfileClientError,
-  createHttpLaborAllocationAdapter,
-  createHttpLaborExcelProfileAdapter,
-  type LaborAllocationApplicationRecord,
-  type LaborAllocationApplyPreviewRecord,
-  type LaborExcelProfileCandidatesRecord,
-  type LaborExcelProfileDataPort,
-  type LaborExcelProjectionRecord,
-  type LaborAllocationDataPort,
-  type LaborAllocationLineRecord,
-  type LaborWorkbookApplyDataPort,
-  type LaborAllocationRunRecord,
-  type LaborAllocationWorkspaceRecord,
-} from '../../data'
+import { LaborAllocationClientError, createHttpLaborAllocationAdapter, type LaborAllocationApplicationRecord, type LaborAllocationApplyPreviewRecord, type LaborAllocationDataPort, type LaborAllocationLineRecord, type LaborAllocationRunRecord, type LaborAllocationWorkspaceRecord } from '../../data/laborAllocationPort'
+import { LaborExcelProfileClientError, createHttpLaborExcelProfileAdapter, type LaborExcelProfileCandidatesRecord, type LaborExcelProfileDataPort, type LaborExcelProjectionRecord } from '../../data/laborExcelProfilePort'
+import type { LaborWorkbookApplyDataPort } from '../../data/laborWorkbookApplyPort'
 import { LaborWorkbookApplyPanel } from './LaborWorkbookApplyPanel.js'
 
 /**

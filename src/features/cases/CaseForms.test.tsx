@@ -2,14 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
-import {
-  CaseCommandError,
-  type CaseCommandPort,
-  type CaseReferenceDataPort,
-  type CaseCreateInput,
-  type CaseUpdateInput,
-  type SessionUser,
-} from '../../data'
+import type { SessionUser } from '../../data/authPort'
+import { CaseCommandError, type CaseCommandPort, type CaseCreateInput, type CaseUpdateInput } from '../../data/commandPort'
+import type { CaseReferenceDataPort } from '../../data/ports'
 import type { CaseRecord } from '../../types/case'
 import { CaseCreateModal } from './CaseCreateModal'
 import { CaseEditModal } from './CaseEditModal'

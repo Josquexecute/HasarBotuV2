@@ -1,15 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  LaborAiDataPort,
-  LaborAiPlanRecord,
-  LaborAiRunRecord,
-  LaborDataPort,
-  LaborDictionaryDataPort,
-  LaborSheetRecord,
-  LaborSheetWorkspaceRecord,
-} from '../../data'
+import type { LaborAiDataPort, LaborAiPlanRecord, LaborAiRunRecord } from '../../data/laborAiPort'
+import type { LaborDictionaryDataPort } from '../../data/laborDictionaryPort'
+import type { LaborDataPort, LaborSheetRecord, LaborSheetWorkspaceRecord } from '../../data/laborPort'
 import type { CaseRecord } from '../../types/case'
 import { LaborApiModule } from './LaborApiModule'
 

@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react'
-import { useCaseReferences, type CaseReferenceDataPort } from '../../data'
-
+import type { CaseReferenceDataPort } from '../../data/ports'
+import { useCaseReferences } from '../../data/useCaseReferences'
 /**
  * API modunda sorumlu ve servis filtreleri (Paket 53).
  *

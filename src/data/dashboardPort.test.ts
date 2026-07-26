@@ -1,12 +1,8 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  buildMockDashboard,
-  createHttpDashboardAdapter,
-  DashboardError,
-  DATA_SOURCE_STORAGE_KEY,
-  useDashboard,
-} from './index'
+import { buildMockDashboard, createHttpDashboardAdapter, DashboardError } from './dashboardPort'
+import { DATA_SOURCE_STORAGE_KEY } from './ports'
+import { useDashboard } from './useDashboard'
 
 const stageCounts = [
   'new_notification',

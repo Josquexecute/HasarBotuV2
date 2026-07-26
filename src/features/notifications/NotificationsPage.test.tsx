@@ -1,13 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  DATA_SOURCE_STORAGE_KEY,
-  OperationalAlertError,
-  type OperationalAlertDataPort,
-  type OperationalAlertRecord,
-  type OperationalAlertsRecord,
-} from '../../data'
+import { OperationalAlertError, type OperationalAlertDataPort, type OperationalAlertRecord, type OperationalAlertsRecord } from '../../data/operationalAlertPort'
+import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
 import { initialNotifications } from '../../mocks/workspaces'
 import { NotificationsPage } from './NotificationsPage'
 

@@ -1,13 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import {
-  LaborAllocationClientError,
-  type LaborAllocationDataPort,
-  type LaborAllocationLineRecord,
-  type LaborAllocationRunRecord,
-  type LaborAllocationWorkspaceRecord,
-} from '../../data'
+import { LaborAllocationClientError, type LaborAllocationDataPort, type LaborAllocationLineRecord, type LaborAllocationRunRecord, type LaborAllocationWorkspaceRecord } from '../../data/laborAllocationPort'
 import { LaborAllocationAiModule } from './LaborAllocationAiModule'
 
 const CASE_ID = '11111111-1111-4111-8111-111111111111'

@@ -1,13 +1,6 @@
 import { AlertTriangle, CheckCircle2, CircleSlash2, FileQuestion, RefreshCw, ShieldAlert } from 'lucide-react'
-import { useCaseDocuments } from '../../data'
-import type {
-  CaseDocumentWorkspaceRecord,
-  DataSourceKind,
-  DocumentPhysicalStatus,
-  DocumentRequirementRecord,
-  DocumentRequirementStatus,
-} from '../../data'
-
+import { useCaseDocuments } from '../../data/useCaseDocuments'
+import type { CaseDocumentWorkspaceRecord, DataSourceKind, DocumentPhysicalStatus, DocumentRequirementRecord, DocumentRequirementStatus } from '../../data/ports'
 const DOCUMENT_LABELS: Readonly<Record<string, string>> = {
   victim_traffic_policy: 'Mağdur trafik poliçesi',
   insured_traffic_policy: 'Sigortalı trafik poliçesi',

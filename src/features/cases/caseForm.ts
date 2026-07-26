@@ -1,4 +1,5 @@
-import { CaseCommandError, type CaseCommandFieldError, type ServiceReferenceRecord } from '../../data'
+import { CaseCommandError, type CaseCommandFieldError } from '../../data/commandPort'
+import type { ServiceReferenceRecord } from '../../data/ports'
 import type { CaseStage, CaseStageCode } from '../../types/case'
 
 export const CASE_STAGE_OPTIONS: readonly { value: CaseStageCode; label: CaseStage }[] = [

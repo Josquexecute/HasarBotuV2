@@ -1,6 +1,6 @@
 import { CheckCircle2, FileSearch, ListChecks, PlayCircle, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
-import type { DataSourceKind, PolicyAiPromotionRecord } from '../../data'
+import type { DataSourceKind, PolicyAiPromotionRecord } from '../../data/ports'
 import { PolicyAiCandidatesModule, type PolicyAnalysisWorkflowPhase } from './PolicyAiCandidatesModule'
 import { PolicyAnalysisApiModule } from './PolicyAnalysisApiModule'
 

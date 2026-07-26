@@ -2,13 +2,8 @@ import { Suspense, lazy, useState } from 'react'
 import { CheckCircle2, FileCog, Plus, RefreshCw, ShieldCheck, Store, UserRoundCog, UsersRound, X } from 'lucide-react'
 import { managementServices, managementUsers } from '../../mocks/workspaces'
 import { LoadingState } from '../../components/StateViews'
-import {
-  getConfiguredDataSource,
-  useCaseReferences,
-  type CaseReferenceDataPort,
-  type CaseReferenceWorkspace,
-  type DataSourceKind,
-} from '../../data'
+import { getConfiguredDataSource, type CaseReferenceDataPort, type CaseReferenceWorkspace, type DataSourceKind } from '../../data/ports'
+import { useCaseReferences } from '../../data/useCaseReferences'
 const LaborExcelProfilesModule = lazy(async () => {
   const module = await import('./LaborExcelProfilesModule')
   return { default: module.LaborExcelProfilesModule }

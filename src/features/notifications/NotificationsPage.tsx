@@ -3,15 +3,9 @@ import { BellRing, CheckCheck, ChevronDown, CircleAlert, ExternalLink, FileWarni
 import { useNavigate } from 'react-router'
 import { initialNotifications, type NotificationType } from '../../mocks/workspaces'
 import { BackendUnavailableState, LoadingState } from '../../components/StateViews'
-import {
-  getConfiguredDataSource,
-  useOperationalAlerts,
-  type DataSourceKind,
-  type OperationalAlertDataPort,
-  type OperationalAlertSeverityRecord,
-  type OperationalAlertTypeRecord,
-} from '../../data'
-
+import type { OperationalAlertDataPort, OperationalAlertSeverityRecord, OperationalAlertTypeRecord } from '../../data/operationalAlertPort'
+import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
+import { useOperationalAlerts } from '../../data/useOperationalAlerts'
 const notificationIcons: Record<NotificationType, typeof FileWarning> = {
   'Eksik Evrak': FileWarning,
   'Geciken Takip': CircleAlert,

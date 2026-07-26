@@ -2,8 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { CasesPage } from './CasesPage'
-import { DATA_SOURCE_STORAGE_KEY } from '../../data'
-
+import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
 /**
  * HB-2026-014: api modunda gercek API hatasi UI'da ACIKCA gosterilir;
  * mock verisi hatayi hicbir zaman maskelemez.

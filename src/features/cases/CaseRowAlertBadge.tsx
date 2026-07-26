@@ -1,6 +1,5 @@
 import { CircleAlert, FileWarning, HelpCircle } from 'lucide-react'
-import type { OperationalAlertCaseSummaryRecord } from '../../data'
-
+import type { OperationalAlertCaseSummaryRecord } from '../../data/operationalAlertPort'
 /**
  * Dosya satırı operasyonel uyarı göstergesi (Paket 52).
  *

@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, CalendarRange, CheckCircle2, ChevronDown, FileDown, Printer, RefreshCw, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
-import {
-  getConfiguredDataSource,
-  useCaseSummaryReport,
-  type ReportsFeesDataPort,
-} from '../../data'
+import { getConfiguredDataSource } from '../../data/ports'
+import type { ReportsFeesDataPort } from '../../data/reportsFeesPort'
+import { useCaseSummaryReport } from '../../data/useReportsFees'
 import { formatCurrency, mockCases } from '../../mocks/cases'
 import { closedCases, pendingClosedFees } from '../../mocks/workspaces'
 

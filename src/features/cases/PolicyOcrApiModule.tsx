@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle2, Cpu, RefreshCw, ScanText, ShieldAlert } from 'lucide-react'
-import { usePolicyOcr, type DataSourceKind, type PolicyOcrRunStatus } from '../../data'
-
+import type { DataSourceKind, PolicyOcrRunStatus } from '../../data/ports'
+import { usePolicyOcr } from '../../data/usePolicyOcr'
 const ACTIVE_STATUSES: PolicyOcrRunStatus[] = ['queued', 'rendering', 'preprocessing', 'recognizing', 'normalizing', 'validating']
 const STATUS_LABELS: Record<PolicyOcrRunStatus, string> = {
   queued: 'Kuyrukta', rendering: 'Sayfa hazırlanıyor', preprocessing: 'Görüntü işleniyor', recognizing: 'Metin tanınıyor',

@@ -1,12 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  CaseCommandPort,
-  CaseOperationsPort,
-  CaseReferenceDataPort,
-} from '../../data'
-import { CaseOperationsError } from '../../data'
+import type { CaseOperationsPort } from '../../data/caseOperationsPort'
+import type { CaseCommandPort } from '../../data/commandPort'
+import type { CaseReferenceDataPort } from '../../data/ports'
+import { CaseOperationsError } from '../../data/caseOperationsPort'
 import { mockCases } from '../../mocks/cases'
 import { CaseOperationsApiModule } from './CaseOperationsApiModule'
 

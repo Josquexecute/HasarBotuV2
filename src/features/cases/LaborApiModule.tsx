@@ -1,22 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, History, Plus, RefreshCw, Save, ShieldCheck, Sparkles, Trash2, Wrench } from 'lucide-react'
 import { formatCurrency } from '../../mocks/cases'
-import {
-  LaborAiError,
-  LaborError,
-  createHttpLaborAiAdapter,
-  createHttpLaborDictionaryAdapter,
-  useLabor,
-  type DataSourceKind,
-  type LaborAiDataPort,
-  type LaborAiPlanRecord,
-  type LaborAiRunRecord,
-  type LaborDataPort,
-  type LaborDictionaryDataPort,
-  type LaborDictionaryEntryRecord,
-  type LaborItemInputRecord,
-  type LaborSheetVersionRecord,
-} from '../../data'
+import { LaborAiError, createHttpLaborAiAdapter, type LaborAiDataPort, type LaborAiPlanRecord, type LaborAiRunRecord } from '../../data/laborAiPort'
+import { createHttpLaborDictionaryAdapter, type LaborDictionaryDataPort, type LaborDictionaryEntryRecord } from '../../data/laborDictionaryPort'
+import { LaborError, type LaborDataPort, type LaborItemInputRecord, type LaborSheetVersionRecord } from '../../data/laborPort'
+import type { DataSourceKind } from '../../data/ports'
+import { useLabor } from '../../data/useLabor'
 import type { CaseRecord } from '../../types/case'
 
 interface Props {

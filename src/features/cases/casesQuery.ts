@@ -1,4 +1,4 @@
-import type { CasePageQuery } from '../../data'
+import type { CasePageQuery } from '../../data/ports'
 import type { CaseStage, CaseType } from '../../types/case'
 
 /**

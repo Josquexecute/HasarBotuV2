@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, LockKeyhole } from 'lucide-react'
-import {
-  LaborWorkbookApplyClientError,
-  createHttpLaborWorkbookApplyAdapter,
-  type LaborExcelProfileCandidateRecord,
-  type LaborExcelProjectionRecord,
-  type LaborWorkbookApplyDataPort,
-  type LaborWorkbookApplyResponseRecord,
-} from '../../data'
-
+import type { LaborExcelProfileCandidateRecord, LaborExcelProjectionRecord } from '../../data/laborExcelProfilePort'
+import { LaborWorkbookApplyClientError, createHttpLaborWorkbookApplyAdapter, type LaborWorkbookApplyDataPort, type LaborWorkbookApplyResponseRecord } from '../../data/laborWorkbookApplyPort'
 function newKey(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
 }

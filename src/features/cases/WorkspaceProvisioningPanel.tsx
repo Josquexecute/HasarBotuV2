@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, FolderCog, LoaderCircle, RefreshCw } from 'lucide-react'
-import {
-  WorkspaceCommandError,
-  createHttpWorkspaceCommandAdapter,
-  type WorkspaceCommandPort,
-  type WorkspaceProvisioningRecord,
-  type WorkspaceRootRecord,
-} from '../../data'
-
+import { WorkspaceCommandError, createHttpWorkspaceCommandAdapter, type WorkspaceCommandPort, type WorkspaceProvisioningRecord, type WorkspaceRootRecord } from '../../data/workspacePort'
 interface WorkspaceProvisioningPanelProps {
   readonly caseId: string
   readonly notificationDate: string | null

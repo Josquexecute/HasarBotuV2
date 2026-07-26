@@ -2,11 +2,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
-import {
-  DATA_SOURCE_STORAGE_KEY,
-  createHttpCasesAdapter,
-  createHttpReportsFeesAdapter,
-} from '../data'
+import { createHttpCasesAdapter } from '../data/httpAdapter'
+import { DATA_SOURCE_STORAGE_KEY } from '../data/ports'
+import { createHttpReportsFeesAdapter } from '../data/reportsFeesPort'
 import { ClosedCasesPage } from './closed/ClosedCasesPage'
 import { ReportsPage } from './reports/ReportsPage'
 

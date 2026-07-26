@@ -22,16 +22,11 @@ import {
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { EmptyState } from '../../components/StateViews'
 import { formatCurrency } from '../../mocks/cases'
-import {
-  OPERATIONAL_ALERT_CASE_FILTER_LIMIT,
-  getConfiguredDataSource,
-  useCasePage,
-  useCases,
-  useOperationalAlerts,
-  type CaseReferenceDataPort,
-  type CasesDataPort,
-  type OperationalAlertDataPort,
-} from '../../data'
+import { OPERATIONAL_ALERT_CASE_FILTER_LIMIT, type OperationalAlertDataPort } from '../../data/operationalAlertPort'
+import { getConfiguredDataSource, type CaseReferenceDataPort, type CasesDataPort } from '../../data/ports'
+import { useCasePage } from '../../data/useCasePage'
+import { useCases } from '../../data/useCases'
+import { useOperationalAlerts } from '../../data/useOperationalAlerts'
 import { CaseReferenceFilters } from './CaseReferenceFilters'
 import { CaseRowAlertBadge } from './CaseRowAlertBadge'
 import {

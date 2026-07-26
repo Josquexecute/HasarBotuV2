@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BookOpenText, ChevronDown, ExternalLink, Search, Send, ShieldAlert, X } from 'lucide-react'
 import { legislationSources, type LegislationSource } from '../../mocks/workspaces'
 import { BackendUnavailableState } from '../../components/StateViews'
-import { getConfiguredDataSource, type DataSourceKind } from '../../data'
-
+import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
 /**
  * Prototip mevzuat kütüphanesi ve mock soru–cevap. Yalnız açıkça seçilmiş mock
  * veri modunda render edilir; API modunda bu bileşen hiç çağrılmaz, dolayısıyla

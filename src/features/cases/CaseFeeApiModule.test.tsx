@@ -1,11 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  CaseDocumentsDataPort,
-  CaseDocumentWorkspaceRecord,
-  CaseClosureFeeWorkspaceRecord,
-  ReportsFeesDataPort,
-} from '../../data'
+import type { CaseDocumentsDataPort, CaseDocumentWorkspaceRecord } from '../../data/ports'
+import type { CaseClosureFeeWorkspaceRecord, ReportsFeesDataPort } from '../../data/reportsFeesPort'
 import type { CaseRecord } from '../../types/case'
 import { CaseFeeApiModule } from './CaseFeeApiModule'
 

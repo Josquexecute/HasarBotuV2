@@ -2,8 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from './App'
-import { DATA_SOURCE_STORAGE_KEY } from '../data'
-
+import { DATA_SOURCE_STORAGE_KEY } from '../data/ports'
 /**
  * Uctan uca oturum kapisi (Paket 10): gercek SessionProvider + HttpAuthAdapter
  * + LoginPage + Topbar, fetch yonlendirici mock'u ile surulur. `api` mod.

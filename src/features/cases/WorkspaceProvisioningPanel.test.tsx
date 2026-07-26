@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { WorkspaceCommandPort, WorkspaceProvisioningRecord } from '../../data'
+import type { WorkspaceCommandPort, WorkspaceProvisioningRecord } from '../../data/workspacePort'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
 
 const planned: WorkspaceProvisioningRecord = {

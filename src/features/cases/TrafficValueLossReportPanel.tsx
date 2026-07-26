@@ -1,11 +1,9 @@
 import { AlertTriangle, CheckCircle2, Download, Eye, FileText, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import {
-  useTrafficValueLossReports,
-  type DataSourceKind,
-  type TrafficValueLossReportDataPort,
-  type TrafficValueLossVersionRecord,
-} from '../../data'
+import type { DataSourceKind } from '../../data/ports'
+import type { TrafficValueLossVersionRecord } from '../../data/trafficValueLossPort'
+import type { TrafficValueLossReportDataPort } from '../../data/trafficValueLossReportPort'
+import { useTrafficValueLossReports } from '../../data/useTrafficValueLossReports'
 import { useSession } from '../../app/sessionContext'
 
 function money(value: number | null): string {

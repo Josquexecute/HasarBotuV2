@@ -2,14 +2,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  DATA_SOURCE_STORAGE_KEY,
-  OperationalAlertError,
-  type CaseReferenceDataPort,
-  type CasesDataPort,
-  type OperationalAlertCaseSummaryRecord,
-  type OperationalAlertDataPort,
-} from '../../data'
+import { OperationalAlertError, type OperationalAlertCaseSummaryRecord, type OperationalAlertDataPort } from '../../data/operationalAlertPort'
+import { DATA_SOURCE_STORAGE_KEY, type CaseReferenceDataPort, type CasesDataPort } from '../../data/ports'
 import type { CaseRecord } from '../../types/case'
 import { CasesPage } from './CasesPage'
 

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
-import { DATA_SOURCE_STORAGE_KEY } from '../../data'
+import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
 import { CaseDetailPage } from './CaseDetailPage'
 
 const CLOSED_CASE = {

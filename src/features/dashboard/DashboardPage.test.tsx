@@ -1,11 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildMockDashboard, useDashboard } from '../../data'
+import { buildMockDashboard } from '../../data/dashboardPort'
+import { useDashboard } from '../../data/useDashboard'
 import { DashboardPage } from './DashboardPage'
 
-vi.mock('../../data', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../data')>()
+vi.mock('../../data/useDashboard', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../data/useDashboard')>()
   return {
     ...actual,
     useDashboard: vi.fn(),

@@ -1,7 +1,7 @@
 import { AlertTriangle, BookOpenCheck, CheckCircle2, RefreshCw, Scale, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
-import { usePolicyAnalysis, type DataSourceKind, type PolicyScenarioType, type PolicySourceReferenceRecord } from '../../data'
-
+import type { DataSourceKind, PolicyScenarioType, PolicySourceReferenceRecord } from '../../data/ports'
+import { usePolicyAnalysis } from '../../data/usePolicyAnalysis'
 const STATUS: Record<string, string> = { draft:'Taslak',extracted:'Çıkarıldı',control_required:'Kontrol gerekli',conflict_detected:'Çelişki bulundu',awaiting_approval:'Onay bekliyor',approved:'Onaylı',superseded:'Eski sürüm',rejected:'Reddedildi',failed:'Başarısız',included:'Dahil',excluded:'Hariç',conditional:'Koşullu',unknown:'Bilinmiyor',covered:'Kapsamda' }
 const SCENARIOS: readonly { value: PolicyScenarioType; label: string }[] = [
   {value:'coverage',label:'Hasar teminat kapsamında mı?'},{value:'deductible',label:'Muafiyet / tenzil var mı?'},{value:'uncontracted_service',label:'Anlaşmasız servis kesintisi'},{value:'authorized_service',label:'Yetkili servis şartı'},{value:'glass_service',label:'Cam servisi şartı'},{value:'mini_repair',label:'Mini onarım uygunluğu'},{value:'mobile_repair',label:'Mobil onarım uygunluğu'},{value:'replacement_vehicle',label:'İkame araç'},{value:'roadside_assistance',label:'Çekici / yol yardım'},{value:'part_type',label:'Parça tipi şartı'},{value:'betterment',label:'Değer artışı kesintisi'},{value:'previous_total_loss',label:'Önceki tam hasar şartı'},

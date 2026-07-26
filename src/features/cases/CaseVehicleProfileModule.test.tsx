@@ -1,11 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  CaseVehicleProfileDataPort,
-  CaseVehicleProfileRecord,
-} from '../../data'
-import { CaseVehicleProfileClientError } from '../../data'
+import type { CaseVehicleProfileDataPort, CaseVehicleProfileRecord } from '../../data/caseVehicleProfilePort'
+import { CaseVehicleProfileClientError } from '../../data/caseVehicleProfilePort'
 import { CaseVehicleProfileModule } from './CaseVehicleProfileModule'
 
 const CASE_ID = '018f3f4c-89ab-7def-8123-456789abcdef'

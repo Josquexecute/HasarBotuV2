@@ -1,13 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  LaborAllocationDataPort,
-  LaborExcelProfileCandidateRecord,
-  LaborExcelProfileCandidatesRecord,
-  LaborExcelProfileDataPort,
-  LaborExcelProjectionRecord,
-} from '../../data'
+import type { LaborAllocationDataPort } from '../../data/laborAllocationPort'
+import type { LaborExcelProfileCandidateRecord, LaborExcelProfileCandidatesRecord, LaborExcelProfileDataPort, LaborExcelProjectionRecord } from '../../data/laborExcelProfilePort'
 import { LaborAllocationAiModule } from './LaborAllocationAiModule'
 
 /**

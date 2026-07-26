@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { PertAssessmentRecord, PertDataPort, PertWorkspaceRecord } from '../../data'
+import type { PertAssessmentRecord, PertDataPort, PertWorkspaceRecord } from '../../data/pertPort'
 import type { CaseRecord } from '../../types/case'
 import { PertApiModule } from './PertApiModule'
 

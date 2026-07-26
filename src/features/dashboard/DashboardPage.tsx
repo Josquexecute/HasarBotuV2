@@ -17,13 +17,9 @@ import {
 import { useNavigate } from 'react-router'
 import { EmptyState, LoadingState } from '../../components/StateViews'
 import { caseStages } from '../../mocks/cases'
-import {
-  useDashboard,
-  type DashboardAttentionCodeRecord,
-  type DashboardCaseRecord,
-  type DashboardPriorityRecord,
-  type OperationalAlertDataPort,
-} from '../../data'
+import type { DashboardAttentionCodeRecord, DashboardCaseRecord, DashboardPriorityRecord } from '../../data/dashboardPort'
+import type { OperationalAlertDataPort } from '../../data/operationalAlertPort'
+import { useDashboard } from '../../data/useDashboard'
 import { DashboardAlertSummary } from './DashboardAlertSummary'
 import { matchesSearchQuery } from '../../utils/search'
 

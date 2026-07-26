@@ -1,12 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  LaborExcelProfileCandidateRecord,
-  LaborExcelProjectionRecord,
-  LaborWorkbookApplyDataPort,
-  LaborWorkbookApplyResponseRecord,
-} from '../../data'
+import type { LaborExcelProfileCandidateRecord, LaborExcelProjectionRecord } from '../../data/laborExcelProfilePort'
+import type { LaborWorkbookApplyDataPort, LaborWorkbookApplyResponseRecord } from '../../data/laborWorkbookApplyPort'
 import { LaborWorkbookApplyPanel } from './LaborWorkbookApplyPanel'
 
 const profile: LaborExcelProfileCandidateRecord = {

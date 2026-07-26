@@ -10,18 +10,11 @@ import {
   Save,
   XCircle,
 } from 'lucide-react'
-import {
-  CaseCommandError,
-  CaseOperationsError,
-  createHttpCaseCommandAdapter,
-  type CaseCommandPort,
-  type CaseOperationsPort,
-  type CaseReferenceDataPort,
-  type CaseTaskRecord,
-  type DataSourceKind,
-  useCaseOperations,
-  useCaseReferences,
-} from '../../data'
+import { CaseOperationsError, type CaseOperationsPort, type CaseTaskRecord } from '../../data/caseOperationsPort'
+import { CaseCommandError, createHttpCaseCommandAdapter, type CaseCommandPort } from '../../data/commandPort'
+import type { CaseReferenceDataPort, DataSourceKind } from '../../data/ports'
+import { useCaseOperations } from '../../data/useCaseOperations'
+import { useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseRecord } from '../../types/case'
 
 interface Props {

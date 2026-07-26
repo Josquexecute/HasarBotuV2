@@ -12,21 +12,10 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
-import {
-  EmailAiError,
-  EmailDraftError,
-  buildGmailWebComposeUrl,
-  createHttpEmailAiAdapter,
-  useEmailDrafts,
-  type DataSourceKind,
-  type EmailAiDataPort,
-  type EmailAiPlanRecord,
-  type EmailAiRunRecord,
-  type EmailDraftAttachmentInput,
-  type EmailDraftDataPort,
-  type EmailDraftRecord,
-  type EmailDraftTypeRecord,
-} from '../../data'
+import { EmailAiError, createHttpEmailAiAdapter, type EmailAiDataPort, type EmailAiPlanRecord, type EmailAiRunRecord } from '../../data/emailAiPort'
+import { EmailDraftError, buildGmailWebComposeUrl, type EmailDraftAttachmentInput, type EmailDraftDataPort, type EmailDraftRecord, type EmailDraftTypeRecord } from '../../data/emailDraftPort'
+import type { DataSourceKind } from '../../data/ports'
+import { useEmailDrafts } from '../../data/useEmailDrafts'
 import type { CaseRecord } from '../../types/case'
 
 interface Props {

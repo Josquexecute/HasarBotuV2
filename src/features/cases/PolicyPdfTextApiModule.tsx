@@ -1,8 +1,8 @@
 import { AlertTriangle, CheckCircle2, FileSearch, RefreshCw, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
-import { usePolicyPdfText, type DataSourceKind } from '../../data'
-import type { PdfTextExtractionStatus } from '../../data'
-
+import type { DataSourceKind } from '../../data/ports'
+import { usePolicyPdfText } from '../../data/usePolicyPdfText'
+import type { PdfTextExtractionStatus } from '../../data/ports'
 const STATUS_LABELS: Record<PdfTextExtractionStatus, string> = {
   queued: 'Kuyrukta',
   processing: 'İşleniyor',

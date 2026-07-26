@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DATA_SOURCE_STORAGE_KEY } from '../../data'
+import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
 import { legislationSources } from '../../mocks/workspaces'
 import { LegislationPage } from './LegislationPage'
 

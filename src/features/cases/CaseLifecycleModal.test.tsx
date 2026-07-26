@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { CaseLifecycleCommandPort, LifecycleOperationRecord } from '../../data'
+import type { CaseLifecycleCommandPort, LifecycleOperationRecord } from '../../data/caseLifecyclePort'
 import type { CaseRecord } from '../../types/case'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
 

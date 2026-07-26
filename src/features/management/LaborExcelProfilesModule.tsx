@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, FileSpreadsheet, History, Plus } from 'lucide-react'
 import { LoadingState } from '../../components/StateViews'
-import {
-  LaborExcelProfileClientError,
-  createHttpLaborExcelProfileAdapter,
-  type LaborExcelProfileDataPort,
-  type LaborExcelProfileRecord,
-} from '../../data'
-
+import { LaborExcelProfileClientError, createHttpLaborExcelProfileAdapter, type LaborExcelProfileDataPort, type LaborExcelProfileRecord } from '../../data/laborExcelProfilePort'
 /**
  * Paket 60 — Excel şablon profilleri yönetimi.
  *

@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArchiveRestore, CheckCircle2, ChevronDown, Search, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
-import {
-  useClosedCases,
-  useClosureFeeList,
-  useValueLossClosureList,
-  type CasesDataPort,
-  type ClosureFeeStatusRecord,
-  type ReportsFeesDataPort,
-  type TrafficValueLossClosureSummaryRecord,
-} from '../../data'
+import type { CasesDataPort } from '../../data/ports'
+import type { ClosureFeeStatusRecord, ReportsFeesDataPort, TrafficValueLossClosureSummaryRecord } from '../../data/reportsFeesPort'
+import { useClosedCases } from '../../data/useClosedCases'
+import { useClosureFeeList, useValueLossClosureList } from '../../data/useReportsFees'
 import { formatCurrency } from '../../mocks/cases'
 import { closedCases } from '../../mocks/workspaces'
 import type { CaseType } from '../../types/case'

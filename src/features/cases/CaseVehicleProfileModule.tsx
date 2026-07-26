@@ -1,16 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, Car, History } from 'lucide-react'
 import { LoadingState } from '../../components/StateViews'
-import {
-  CaseVehicleProfileClientError,
-  createHttpCaseVehicleProfileAdapter,
-  type CaseVehicleProfileDataPort,
-  type CaseVehicleProfileFieldsRecord,
-  type CaseVehicleProfileRecord,
-  type VehicleClassRecord,
-  type VehicleEvidenceSourceRecord,
-} from '../../data'
-
+import { CaseVehicleProfileClientError, createHttpCaseVehicleProfileAdapter, type CaseVehicleProfileDataPort, type CaseVehicleProfileFieldsRecord, type CaseVehicleProfileRecord, type VehicleClassRecord, type VehicleEvidenceSourceRecord } from '../../data/caseVehicleProfilePort'
 /**
  * Paket 56 — dosya araç profili bölümü.
  *

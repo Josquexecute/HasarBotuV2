@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DATA_SOURCE_STORAGE_KEY, ReferenceDataError, type CaseReferenceDataPort } from '../../data'
+import { DATA_SOURCE_STORAGE_KEY, type CaseReferenceDataPort } from '../../data/ports'
+import { ReferenceDataError } from '../../data/referenceHttpAdapter'
 import { ManagementPage } from './ManagementPage'
 
 const references = {

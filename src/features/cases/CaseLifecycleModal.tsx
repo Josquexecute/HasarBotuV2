@@ -1,11 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw, X } from 'lucide-react'
-import {
-  LifecycleCommandError,
-  createHttpCaseLifecycleCommandAdapter,
-  type CaseLifecycleCommandPort,
-  type LifecycleOperationRecord,
-} from '../../data'
+import { LifecycleCommandError, createHttpCaseLifecycleCommandAdapter, type CaseLifecycleCommandPort, type LifecycleOperationRecord } from '../../data/caseLifecyclePort'
 import type { CaseRecord, CaseStageCode } from '../../types/case'
 import { CASE_STAGE_OPTIONS } from './caseForm'
 

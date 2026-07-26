@@ -2015,3 +2015,32 @@ altindadir. `src/data` barrel'i butun veri hooklarini baslangic grafigine
 cektigi icin, bu hooklarin cogu yalniz lazy `CaseDetailPage` icinde kullanilsa
 da butceye yazilmaktadir. Sonraki her ekleme bu kapiyi kirabilir; barrel
 bolunmesi ayri bir teknik temizlik konusudur.
+
+## 2026-07-25 — HB-2026-095: src/data barrel'i kaldirildi, dogrudan modul importuna gecildi
+
+Karar:
+
+1. `src/data/index.ts` barrel'i kaldirilir ve butun tuketiciler dogrudan modul
+   importu kullanir (`../../data/<modul>`).
+2. Gerekce olcumle tespit edilmistir: barrel'den hem baslangic grafigindeki
+   sayfalar hem de lazy `CaseDetailPage` alt agaci import ettigi icin bundler
+   birlesik bir paylasilan chunk uretiyordu. 129.686 baytlik `data-*.js`
+   baslangic grafigine giriyor ve yalniz lazy sayfalarda kullanilan hooklar da
+   oraya yaziliyordu.
+3. Donusum mekanik degil dogrulanabilir yapildi: sembol -> modul eslemesi
+   barrel'in kendisinden uretildi, tip-only importlar `import type` olarak
+   korundu, sonuc typecheck ile dogrulandi. 66 dosyada 66 import ifadesi
+   degisti.
+4. Iki test dosyasindaki `vi.mock('../../data', ...)` cagrisi gercek modul
+   `../../data/useDashboard` hedefine cevrildi; stub davranisi aynidir.
+5. Bundle butcesi YUKSELTILMEZ (500.000). Baslangic grafigi 499.997 -> 412.566
+   bayt; boslugu 3 bayttan 87.434 bayta cikti. Baslangic asset sayisi 16 -> 2.
+6. Runtime davranisi, route yapisi, API sozlesmeleri ve hook imzalari
+   degismez. Yeni dependency eklenmez. Circular dependency uyarisi olusmadi.
+
+Gerekce: Her seyi re-export eden bir barrel, lazy sinirlarini bundler acisindan
+gorunmez kilar. Dogrudan modul importu, lazy bolunmeyi gercekten etkili hale
+getirir ve baslangic grafigini yalnizca gercekten gereken kodla sinirlar.
+
+Etki: 66 kaynak dosyasinda import satirlari, silinen `src/data/index.ts` ve iki
+test mock hedefi. `set-state-in-effect` sayisi degismedi (14).

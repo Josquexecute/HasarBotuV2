@@ -2,18 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { caseListItemSchema } from '@hasarbotu/contracts'
 import { mockCases } from '../mocks/cases'
-import {
-  createHttpCasesAdapter,
-  createMockCasesAdapter,
-  DATA_SOURCE_STORAGE_KEY,
-  deriveFollowUp,
-  deriveStatus,
-  HttpCasesError,
-  mapCaseDtoToRecord,
-  resolveConfiguredDataSource,
-  useCase,
-  useCases,
-} from './index'
+import { createHttpCasesAdapter, deriveFollowUp, deriveStatus, HttpCasesError, mapCaseDtoToRecord } from './httpAdapter'
+import { createMockCasesAdapter } from './mockAdapter'
+import { DATA_SOURCE_STORAGE_KEY, resolveConfiguredDataSource } from './ports'
+import { useCase } from './useCase'
+import { useCases } from './useCases'
 
 const TODAY = new Date(2026, 6, 12) // 12 Temmuz 2026 (yerel)
 

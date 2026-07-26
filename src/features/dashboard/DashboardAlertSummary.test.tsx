@@ -2,18 +2,14 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  DATA_SOURCE_STORAGE_KEY,
-  OperationalAlertError,
-  buildMockDashboard,
-  useDashboard,
-  type OperationalAlertDataPort,
-  type OperationalAlertRecord,
-} from '../../data'
+import { buildMockDashboard } from '../../data/dashboardPort'
+import { OperationalAlertError, type OperationalAlertDataPort, type OperationalAlertRecord } from '../../data/operationalAlertPort'
+import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
+import { useDashboard } from '../../data/useDashboard'
 import { DashboardPage } from './DashboardPage'
 
-vi.mock('../../data', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../data')>()
+vi.mock('../../data/useDashboard', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../data/useDashboard')>()
   return { ...actual, useDashboard: vi.fn() }
 })
 

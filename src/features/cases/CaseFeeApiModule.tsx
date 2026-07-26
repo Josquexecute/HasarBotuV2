@@ -1,13 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, History, ReceiptText, RefreshCw } from 'lucide-react'
 import { formatCurrency } from '../../mocks/cases'
-import {
-  useCaseDocuments,
-  useCaseFee,
-  type CaseDocumentsDataPort,
-  type DataSourceKind,
-  type ReportsFeesDataPort,
-} from '../../data'
+import type { CaseDocumentsDataPort, DataSourceKind } from '../../data/ports'
+import type { ReportsFeesDataPort } from '../../data/reportsFeesPort'
+import { useCaseDocuments } from '../../data/useCaseDocuments'
+import { useCaseFee } from '../../data/useReportsFees'
 import type { CaseRecord } from '../../types/case'
 
 function formatMinor(minor: number | null): string {

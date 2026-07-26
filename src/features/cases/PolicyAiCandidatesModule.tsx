@@ -1,21 +1,7 @@
 import { AlertTriangle, BrainCircuit, CheckCircle2, Eye, FileSearch, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
-import {
-  usePolicyAi,
-  type DataSourceKind,
-  type PolicyAiCandidateCategory,
-  type PolicyAiCandidateRecord,
-  type PolicyAiCandidateReviewInput,
-  type PolicyAiPromotionRecord,
-  type PolicyAiProviderAvailabilityRecord,
-  type PolicyAiProviderId,
-  type PolicyAiReviewAction,
-  type PolicyAiRunRecord,
-  type PolicyAiSourceItemRecord,
-  type PolicyAiSourceOverviewRecord,
-  type PolicyAiSourceSelectionRecord,
-} from '../../data'
-
+import type { DataSourceKind, PolicyAiCandidateCategory, PolicyAiCandidateRecord, PolicyAiCandidateReviewInput, PolicyAiPromotionRecord, PolicyAiProviderAvailabilityRecord, PolicyAiProviderId, PolicyAiReviewAction, PolicyAiRunRecord, PolicyAiSourceItemRecord, PolicyAiSourceOverviewRecord, PolicyAiSourceSelectionRecord } from '../../data/ports'
+import { usePolicyAi } from '../../data/usePolicyAi'
 const RUN_LABELS: Record<string, string> = { planned: 'Planlandı', provider_disabled: 'Sağlayıcı kapalı', budget_blocked: 'Bütçe engeli', running: 'Çalışıyor', validating: 'Doğrulanıyor', review_required: 'İnsan incelemesi gerekli', failed: 'Başarısız', stale: 'Geçersiz kaynak', cancelled: 'İptal edildi', superseded: 'Eski sürüm' }
 const CATEGORY_LABELS: Record<PolicyAiCandidateCategory, string> = { policy_identity: 'Poliçe kimliği', coverage: 'Teminat', deductible: 'Muafiyet', service_rule: 'Servis kuralı', part_rule: 'Parça kuralı', replacement_vehicle: 'İkame araç', assistance: 'Yardım', valuation: 'Değerleme', exclusion: 'İstisna', required_document: 'Gerekli belge', special_condition: 'Özel şart' }
 const QUALITY_LABELS: Record<string, string> = { high: 'Yüksek', medium: 'Orta', low: 'Düşük', control_required: 'İnsan kontrolü gerekli' }

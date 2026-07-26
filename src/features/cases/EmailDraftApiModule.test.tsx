@@ -1,16 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  EmailAiDataPort,
-  EmailAiPlanRecord,
-  EmailAiRunRecord,
-  EmailDraftDataPort,
-  EmailDraftPreviewRecord,
-  EmailDraftRecord,
-  EmailDraftWorkspaceRecord,
-} from '../../data'
-import { EmailDraftError } from '../../data'
+import type { EmailAiDataPort, EmailAiPlanRecord, EmailAiRunRecord } from '../../data/emailAiPort'
+import type { EmailDraftDataPort, EmailDraftPreviewRecord, EmailDraftRecord, EmailDraftWorkspaceRecord } from '../../data/emailDraftPort'
+import { EmailDraftError } from '../../data/emailDraftPort'
 import type { CaseRecord } from '../../types/case'
 import { EmailDraftApiModule } from './EmailDraftApiModule'
 

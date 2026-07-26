@@ -2,14 +2,8 @@ import { useMemo } from 'react'
 import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, CircleAlert, FileWarning } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { LoadingState } from '../../components/StateViews'
-import {
-  DASHBOARD_ALERT_PREVIEW_LIMIT,
-  countOperationalAlertsByType,
-  useOperationalAlerts,
-  type OperationalAlertDataPort,
-  type OperationalAlertTypeRecord,
-} from '../../data'
-
+import { DASHBOARD_ALERT_PREVIEW_LIMIT, countOperationalAlertsByType, type OperationalAlertDataPort, type OperationalAlertTypeRecord } from '../../data/operationalAlertPort'
+import { useOperationalAlerts } from '../../data/useOperationalAlerts'
 /**
  * Durum Panosu operasyonel uyarı özeti (Paket 50).
  *

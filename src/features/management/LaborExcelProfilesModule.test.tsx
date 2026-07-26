@@ -1,11 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  LaborExcelProfileClientError,
-  type LaborExcelProfileDataPort,
-  type LaborExcelProfileRecord,
-} from '../../data'
+import { LaborExcelProfileClientError, type LaborExcelProfileDataPort, type LaborExcelProfileRecord } from '../../data/laborExcelProfilePort'
 import { LaborExcelProfilesModule } from './LaborExcelProfilesModule'
 
 const PROFILE_ID = '018f3f4c-89ab-7def-8123-456789abcd60'
