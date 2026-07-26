@@ -5,8 +5,56 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Dependency güvenlik kapısı kapandı (ESLint 10 yükseltmesi tamamlandı)
-- Durum: **`npm audit` her seviyede 0 bulgu veriyor (0 high / 0 critical / 0 toplam). Kalan dev-only `eslint@9` → `brace-expansion@1` zinciri ESLint 10 ile ortadan kalktı**
+- Aşama: React Compiler kural adaptasyonu tamamlandı
+- Durum: **`npm audit` her seviyede 0 bulgu. React Compiler kurallarının 13'ü upstream `recommended` seviyesinde ihlalsiz çalışıyor; yalnız `set-state-in-effect` kanıtlı gerekçeyle `warn` seviyesinde**
+
+## React Compiler kural adaptasyonu (2026-07-25)
+
+- ESLint 10 paketinden devreden 34 uyarının **tamamı tek tek incelendi**. Toplu
+  veya mekanik düzeltme yapılmadı; her hook'un veri akışı ayrı değerlendirildi.
+- **Gerçek kusur (1 adet) düzeltildi:** `useTrafficValueLoss.preview`
+  `useCallback`'i `assessment?.version` bağımlılığı bildiriyordu; React Compiler
+  bunu `assessment` olarak çıkarımladığı için manuel memoization'ı koruyamıyor ve
+  **bileşenin tamamını optimizasyon dışı bırakıyordu** ("Compilation Skipped").
+  Sürüm çağrı öncesinde `assessmentVersion` primitifine indirgendi; çıkarımlanan
+  ve bildirilen bağımlılık artık birebir eşleşiyor. Çağrıya giden değer aynı
+  (`assessment?.version ?? 0`), davranış değişmedi.
+- **Kural seviyeleri (aşamalı yükseltme).** 14 yeni Compiler kuralının **13'ü**
+  artık override edilmiyor ve upstream `recommended` seviyesinde çalışıyor:
+  11 kural `error` (`config`, `error-boundaries`, `gating`, `globals`,
+  `immutability`, `preserve-manual-memoization`, `purity`, `refs`,
+  `set-state-in-render`, `static-components`, `use-memo`), 2 kural
+  (`incompatible-library`, `unsupported-syntax`) upstream'in kasıtlı tercihiyle
+  `warn`. Bu 13 kuralda **ihlal yoktur**. Paket öncesi sözleşme korunuyor:
+  `rules-of-hooks` error, `exhaustive-deps` warn.
+- **`set-state-in-effect` `warn` kalıyor** ve kapatılmıyor. 33 bulgunun tamamı
+  incelendi; hiçbiri davranışsal kusur değil:
+  - **23 bulgu — async yükleme öncesi durum sıfırlama** (`src/data/*` hook'ları ve
+    modül `load()` efektleri). Senkron sıfırlama kaldırılırsa yeni anahtar için
+    ESKİ veri gösterilir; bu daha kötü bir kusurdur. Doğrulandı: bütün adapter
+    kimlikleri `useMemo`/`useState` ile kararlı (**sonsuz yeniden istek yok**) ve
+    her fetch `cancelled` muhafazası taşıyor (**yarış durumu yok**).
+  - **5 bulgu — anahtar değişiminde fail-closed sıfırlama**: onay bayrakları,
+    form durumu ve yerel override geçersizleştirme. Kasıtlı güvenlik davranışı.
+    `approvedIdentity` ayrıca render sırasında kimlik karşılaştırmasıyla
+    hesaplanıyor (`approved = approvalIdentity !== null && approvedIdentity ===
+    approvalIdentity`), bu yüzden bayat onay frame'i **oluşmuyor**.
+    `promotionApproved` ise sunucuda hash'e bağlı: `review-store.ts:381`
+    `reviewSetHash` uyuşmazlığını reddediyor ve istemci idempotency kimliği aynı
+    hash'i içeriyor — fail-closed.
+  - **3 bulgu — seçim mutabakatı**: yeni gelen seçenek listesine karşı seçimi
+    yakınsayan fonksiyonel güncelleme.
+  - **2 bulgu — saat okuması ve fetch sonrası sayfa kelepçelemesi**.
+    `Date.now()` render'a taşınamaz; taşınırsa `react-hooks/purity` ihlal edilir.
+    Sayfa kelepçelemesi `totalPages`'i ancak fetch sonrası bilebilir ve yakınsar.
+- Bu 33 bulgunun render sırasında türetilmesi veri katmanının state şeklinin
+  yeniden kurulmasını gerektirir; kullanıcı kararıyla ayrı paket konusudur.
+- Doğrulama: ana ağaçta ve repository dışı fresh `npm ci` kopyasında gerçek
+  PostgreSQL 17.10 ile **2.050 başarılı / 6 mevcut ortam-koşullu UI skip**.
+  Lint **0 error / 33 warning** (önce 0/34). Gerçek Chrome/CDP ile iki smoke
+  geçti: Paket 66 değer kaybı zinciri (12 kontrol, değişen `preview` yolunu
+  kapsar) ve React Router v8 smoke'u (13 kontrol). Build/bundle: başlangıç
+  497.013 bayt, en büyük chunk 337.825 bayt, 10 lazy modül. `npm audit` 0 bulgu.
 
 ## ESLint 10 yükseltmesi (2026-07-25)
 

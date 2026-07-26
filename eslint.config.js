@@ -5,35 +5,34 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 /**
- * ESLint 10 uyumu icin zorunlu olan `eslint-plugin-react-hooks` v5 -> v7
- * yukseltmesi, `recommended` setine 14 yeni React Compiler kurali ekler
- * (v5'te yalniz `rules-of-hooks` ve `exhaustive-deps` vardi).
+ * React Compiler kural adaptasyonu (HB-2026-090):
  *
- * Bu paketin kapsami ESLint 10 gecisidir. Paket oncesi lint sozlesmesi birebir
- * korunur: `rules-of-hooks` error, `exhaustive-deps` warn. Yeni Compiler
- * kurallari KAPATILMAZ; `warn` seviyesinde acik birakilir; boylece bulgular
- * gorunur kalir ve yeni ihlaller aninda raporlanir, ancak veri katmaninin
- * yeniden yapilandirilmasini gerektiren mevcut bulgular bu paketi bloke etmez.
+ * `eslint-plugin-react-hooks` v7'nin getirdigi 14 Compiler kuralindan 13'u
+ * upstream `recommended` seviyesinde calisir (11 tanesi `error`,
+ * `incompatible-library` ve `unsupported-syntax` upstream'in kasitli tercihiyle
+ * `warn`). Bu 13 kuralda ihlal YOKTUR ve seviyeleri burada override EDILMEZ.
  *
- * Bu kurallarin `error` seviyesine cikarilmasi ve mevcut bulgularin giderilmesi
- * ayri "React Compiler kural adaptasyonu" paketidir; bkz.
- * docs/IMPLEMENTATION_PLAN.md ve DECISION_LOG HB-2026-089.
+ * Geriye yalniz `set-state-in-effect` kalir. 33 bulgusunun tamami tek tek
+ * incelendi; hicbiri davranissal kusur degildir:
+ *
+ *  - 23 bulgu: async yukleme oncesi durum sifirlama (`src/data/*` ve modul
+ *    `load()` efektleri). Senkron sifirlama kaldirilirsa yeni anahtar icin
+ *    ESKI veri gosterilir; bu daha kotu bir kusurdur. Butun adapter kimlikleri
+ *    `useMemo`/`useState` ile kararlidir (sonsuz yeniden istek yok) ve her
+ *    fetch `cancelled` muhafazasi tasir (yaris durumu yok).
+ *  - 5 bulgu: anahtar degisiminde fail-closed sifirlama (onay bayraklari, form
+ *    durumu, yerel override). Kasitli guvenlik davranisidir.
+ *  - 3 bulgu: yeni gelen secenek listesine karsi secim mutabakati; hepsi
+ *    yakinsayan fonksiyonel guncellemedir.
+ *  - 2 bulgu: saat okumasi ve fetch sonrasi sayfa kelepcelemesi. `Date.now()`
+ *    render'a tasinamaz; tasinirsa `react-hooks/purity` ihlal edilir.
+ *
+ * Bunlarin render sirasinda turetilmesi veri katmaninin state seklinin
+ * yeniden kurulmasini gerektirir; ayri bir paket konusudur. Kural KAPATILMAZ,
+ * `warn` seviyesinde acik kalir. Ayrinti: docs/DECISION_LOG.md HB-2026-090.
  */
 const REACT_COMPILER_RULES_PENDING_ADOPTION = [
-  'react-hooks/config',
-  'react-hooks/error-boundaries',
-  'react-hooks/gating',
-  'react-hooks/globals',
-  'react-hooks/immutability',
-  'react-hooks/incompatible-library',
-  'react-hooks/preserve-manual-memoization',
-  'react-hooks/purity',
-  'react-hooks/refs',
   'react-hooks/set-state-in-effect',
-  'react-hooks/set-state-in-render',
-  'react-hooks/static-components',
-  'react-hooks/unsupported-syntax',
-  'react-hooks/use-memo',
 ]
 
 export default tseslint.config(

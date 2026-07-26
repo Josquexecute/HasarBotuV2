@@ -50,15 +50,40 @@ Kapsam dışı: React Compiler kurallarının `error` seviyesine çıkarılması
 katmanı yeniden yapılandırması, lint kapsamının değiştirilmesi ve `dist`
 klasörlerinin lint dışına alınması.
 
-## React Compiler kural adaptasyonu (sonraki aday)
+## React Compiler kural adaptasyonu
 
-- [ ] `eslint-plugin-react-hooks` v7'nin 14 yeni Compiler kuralını `warn`'dan
-  `error` seviyesine çıkar.
-- [ ] Mevcut 34 uyarıyı gider: 33 × `set-state-in-effect` (ağırlıklı `src/data`
-  veri çekme hook'ları) ve 1 × `preserve-manual-memoization`.
-- [ ] Yükleme durumu ve veri akışı kullanıcıya görünür olduğundan tam UI testi ve
-  gerçek tarayıcı smoke'u ile doğrula; kabul edilmiş UI baseline'ını koru.
-- [ ] Paket 65B İşçilik ve Paket 66 Değer Kaybı panellerinin davranışını değiştirme.
+- [x] 34 uyarının tamamını tek tek incele; toplu/mekanik düzeltme yapma.
+- [x] `preserve-manual-memoization` bulgusunu gider: `assessment?.version` yerine
+  primitif `assessmentVersion`; çıkarımlanan ve bildirilen bağımlılık eşleşir.
+- [x] 13 Compiler kuralının override'ını kaldır; upstream `recommended`
+  seviyesinde çalıştır (11 `error`, 2 upstream-`warn`) ve ihlalsizliği doğrula.
+- [x] `set-state-in-effect` bulgularını kategori bazında kanıtla: adapter
+  kimliklerinin kararlılığı (sonsuz istek yok), `cancelled` muhafazaları (yarış
+  yok), render sırasındaki kimlik karşılaştırması ve sunucu tarafı hash
+  reddi (fail-closed).
+- [x] Tam UI testleri, gerçek PostgreSQL zinciri ve iki gerçek tarayıcı smoke'u
+  (Paket 66 değer kaybı + React Router) ile doğrula.
+- [!] `set-state-in-effect` `warn` seviyesinde kalır. Kalan 33 bulgunun render
+  sırasında türetilmesi veri katmanının state şeklinin yeniden kurulmasını
+  gerektirir; ayrı paket konusudur.
+
+Kapsam dışı: veri katmanı state şekli refactor'ü, genel React refactor, `dist`
+lint kapsamı temizliği.
+
+## Veri katmanı yükleme durumu türetmesi (sonraki aday)
+
+- [ ] `src/data/*` hook'larında istek anahtarını state'e taşıyarak yükleme
+  durumunu render sırasında türet; senkron `setState` ihtiyacını kaldır.
+- [ ] Her hook'u ayrı ele al; bayat veri gösterimi, yarış durumu ve sonsuz
+  istek regresyonu oluşturma.
+- [ ] Tamamlandığında `set-state-in-effect` kuralını `error` seviyesine çıkar.
+- [ ] Paket 65B İşçilik ve Paket 66 Değer Kaybı panellerinin davranışını koru.
+
+## `dist` lint kapsamı temizliği (sonraki aday)
+
+- [ ] Kök `ignores: ['dist', 'coverage']` yalnız kök dizini kapsıyor; workspace
+  `dist` klasörlerindeki 670 üretilmiş dosya lint ediliyor. `**/dist` ile
+  daralt ve lint dosya sayısındaki değişimi ölçerek raporla.
 - [x] `react-router@7.18.1` kümesi (2 high, üretim UI): ayrı "react-router v8
   geçişi" paketinde kapatıldı. Bkz. aşağıdaki bölüm.
 

@@ -1818,3 +1818,50 @@ düzeltmesi (`services/api/src/policy-ai/store.ts`,
 `services/api/src/workspace/store.ts`,
 `services/file-agent/test/pdf-text-extractor.test.ts`). Runtime davranışı,
 şema, API sözleşmesi ve UI değişmedi. Audit `5 high` → **0 bulgu (her seviyede)**.
+
+## 2026-07-25 — HB-2026-090: React Compiler kurallarının aşamalı benimsenmesi
+
+Karar:
+
+1. `eslint-plugin-react-hooks` v7'nin getirdiği 14 Compiler kuralından **13'ü**
+   override edilmez ve upstream `recommended` seviyesinde çalışır: 11 kural
+   `error` (`config`, `error-boundaries`, `gating`, `globals`, `immutability`,
+   `preserve-manual-memoization`, `purity`, `refs`, `set-state-in-render`,
+   `static-components`, `use-memo`), 2 kural (`incompatible-library`,
+   `unsupported-syntax`) upstream'in kasıtlı tercihiyle `warn`. Bu 13 kuralda
+   ihlal yoktur. Upstream'in `warn` tercihi `error`'a zorlanmaz.
+2. Paket öncesi lint sözleşmesi korunur: `rules-of-hooks` error,
+   `exhaustive-deps` warn.
+3. `preserve-manual-memoization` bulgusu gerçek kusurdur ve giderilmiştir.
+   `useTrafficValueLoss.preview` `useCallback`'i `assessment?.version`
+   bildiriyordu; React Compiler bunu `assessment` olarak çıkarımladığı için
+   memoization'ı koruyamıyor ve bileşenin tamamını optimizasyon dışı bırakıyordu.
+   Sürüm `assessmentVersion` primitifine indirgendi. Çağrıya giden değer
+   (`assessment?.version ?? 0`) aynıdır; davranış değişmemiştir.
+4. `set-state-in-effect` **kapatılmaz**, `warn` seviyesinde açık kalır. 33
+   bulgunun tamamı tek tek incelenmiştir ve hiçbiri davranışsal kusur değildir:
+   - 23 bulgu async yükleme öncesi durum sıfırlamasıdır. Senkron sıfırlama
+     kaldırılırsa yeni anahtar için eski veri gösterilir. Bütün adapter
+     kimlikleri `useMemo`/`useState` ile kararlıdır (sonsuz yeniden istek yok);
+     her fetch `cancelled` muhafazası taşır (yarış durumu yok).
+   - 5 bulgu anahtar değişiminde fail-closed sıfırlamadır. `approvedIdentity`
+     render sırasında kimlik karşılaştırmasıyla hesaplandığından bayat onay
+     frame'i oluşmaz; `promotionApproved` ise sunucuda `reviewSetHash` ile
+     bağlıdır (`services/api/src/policy-ai/review-store.ts:381` uyuşmazlığı
+     reddeder) ve istemci idempotency kimliği aynı hash'i içerir.
+   - 3 bulgu yeni seçenek listesine karşı yakınsayan seçim mutabakatıdır.
+   - 2 bulgu saat okuması ve fetch sonrası sayfa kelepçelemesidir. `Date.now()`
+     render'a taşınırsa `react-hooks/purity` ihlal edilir.
+5. Bu 33 bulgunun render sırasında türetilmesi `src/data` hook'larının state
+   şeklinin yeniden kurulmasını gerektirir. Bu, dependency/lint paketlerinin
+   kapsamı dışıdır ve ayrı "veri katmanı yükleme durumu türetmesi" paketine
+   bırakılmıştır. O paket tamamlandığında kural `error` seviyesine çıkarılır.
+
+Gerekçe: Kuralları toplu biçimde `error` yapmak, gerçek bir kusur bulunmadığı
+halde veri katmanını yeniden yazmayı zorunlu kılardı; toplu biçimde kapatmak ise
+13 kuralın gerçek koruma değerini kaybettirirdi. Kural bazında kanıta dayalı
+ayrım, korumayı en yüksek seviyede tutarken davranış riskini sıfırda bırakır.
+
+Etki: `eslint.config.js` ve `src/data/useTrafficValueLoss.ts`. Runtime davranışı,
+route/URL sözleşmesi, Paket 65B, Paket 66 ve Paket 40 davranışları değişmedi.
+Lint `0 error / 34 warning` → `0 error / 33 warning`.

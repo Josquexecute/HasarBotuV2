@@ -132,19 +132,24 @@ export function useTrafficValueLoss(
       setBusy(false)
     }
   }, [load, reportUnauthorized])
+  // React Compiler `assessment?.version` bağımlılığını `assessment` olarak
+  // çıkarımladığı için manuel memoization'ı koruyamıyor ve bileşenin tamamını
+  // optimizasyon dışı bırakıyordu. Sürüm önce primitife indirgenince çıkarımlanan
+  // ve bildirilen bağımlılık birebir eşleşir; çağrıya giden değer aynı kalır.
+  const assessmentVersion = assessment?.version ?? 0
   const preview = useCallback(async (input: TrafficValueLossDraftInput) => {
     setBusy(true)
     setErrorMessage(null)
     try {
       if (port.preview === undefined) throw new TrafficValueLossError('unavailable', 'preview endpoint unavailable')
-      setPreviewResult(await port.preview(caseId, assessment?.version ?? 0, input))
+      setPreviewResult(await port.preview(caseId, assessmentVersion, input))
     } catch (error) {
       setErrorMessage(safeMessage(error))
       throw error
     } finally {
       setBusy(false)
     }
-  }, [assessment?.version, caseId, port])
+  }, [assessmentVersion, caseId, port])
   const loadCatalog = useCallback(async (
     vehicleGroupCode: NonNullable<TrafficValueLossRealMarketInput['vehicleGroupCode']>,
   ) => {
