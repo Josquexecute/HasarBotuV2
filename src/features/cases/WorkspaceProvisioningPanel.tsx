@@ -35,12 +35,16 @@ export function WorkspaceProvisioningPanel({ caseId, notificationDate, onUnautho
   const [roots, setRoots] = useState<readonly WorkspaceRootRecord[]>([])
   const [rootKey, setRootKey] = useState('')
   const [provisioning, setProvisioning] = useState<WorkspaceProvisioningRecord | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [actionBusy, setActionBusy] = useState(false)
   const [error, setError] = useState('')
+  // Ilk okumanin mesguliyeti efektte senkron yazilmaz: hangi case icin
+  // tamamlandigi state'te tutulur ve RENDER sirasinda turetilir. Kullanici
+  // eylemlerinin mesguliyeti ayri bayraktir; gorunur `busy` ikisinin birlesimi.
+  const [settledCaseId, setSettledCaseId] = useState<string | null>(null)
+  const busy = settledCaseId !== caseId || actionBusy
 
   useEffect(() => {
     let cancelled = false
-    setBusy(true)
     Promise.all([adapter.listActiveRoots(), adapter.readCurrentPlan(caseId)]).then(([items, current]) => {
       if (cancelled) return
       setRoots(items)
@@ -51,7 +55,7 @@ export function WorkspaceProvisioningPanel({ caseId, notificationDate, onUnautho
       if (cancelled) return
       if (reason instanceof WorkspaceCommandError && reason.kind === 'unauthorized') onUnauthorized()
       setError(safeMessage(reason))
-    }).finally(() => { if (!cancelled) setBusy(false) })
+    }).finally(() => { if (!cancelled) setSettledCaseId(caseId) })
     return () => { cancelled = true }
   }, [adapter, caseId, onUnauthorized])
 
@@ -68,7 +72,7 @@ export function WorkspaceProvisioningPanel({ caseId, notificationDate, onUnautho
 
   async function run(action: () => Promise<WorkspaceProvisioningRecord>): Promise<void> {
     if (busy) return
-    setBusy(true)
+    setActionBusy(true)
     setError('')
     try {
       setProvisioning(await action())
@@ -76,7 +80,7 @@ export function WorkspaceProvisioningPanel({ caseId, notificationDate, onUnautho
       if (reason instanceof WorkspaceCommandError && reason.kind === 'unauthorized') onUnauthorized()
       setError(safeMessage(reason))
     } finally {
-      setBusy(false)
+      setActionBusy(false)
     }
   }
 

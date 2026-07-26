@@ -63,21 +63,32 @@ export function LaborExcelProfilesModule({ port }: {
   const [checkOfficeNumber, setCheckOfficeNumber] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  const applyList = useCallback((result: Awaited<ReturnType<LaborExcelProfileDataPort['list']>>) => {
+    setProfiles(result.profiles)
+    setCanWrite(result.permissions.canWrite)
+    setStatus('ok')
+  }, [])
+  const applyError = useCallback((error: unknown) => {
+    setProfiles([])
+    setErrorKind(error instanceof LaborExcelProfileClientError ? error.kind : 'unavailable')
+    setStatus('error')
+  }, [])
+
+  /** Mutasyon sonrasi elle yenileme; kullanici eylemi oldugu icin 'loading' yazar. */
   const load = useCallback(async () => {
     setStatus('loading')
-    try {
-      const result = await adapter.list()
-      setProfiles(result.profiles)
-      setCanWrite(result.permissions.canWrite)
-      setStatus('ok')
-    } catch (error) {
-      setProfiles([])
-      setErrorKind(error instanceof LaborExcelProfileClientError ? error.kind : 'unavailable')
-      setStatus('error')
-    }
-  }, [adapter])
+    try { applyList(await adapter.list()) } catch (error) { applyError(error) }
+  }, [adapter, applyError, applyList])
 
-  useEffect(() => { void load() }, [load])
+  // Ilk okuma efekt icinde yapilir ve durum yalniz async geri cagrilarda yazilir.
+  // Baslangic durumu zaten 'loading'dir. `cancelled` muhafazasi eklendi.
+  useEffect(() => {
+    let cancelled = false
+    adapter.list()
+      .then((result) => { if (!cancelled) applyList(result) })
+      .catch((error: unknown) => { if (!cancelled) applyError(error) })
+    return () => { cancelled = true }
+  }, [adapter, applyError, applyList])
 
   /** Sütunlar satır başına "ANAHTAR = Başlık" biçiminde girilir. */
   const parsedColumns = useMemo(() => columnsText

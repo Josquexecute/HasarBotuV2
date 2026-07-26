@@ -45,16 +45,26 @@ export function CaseVehicleProfileModule({ caseId, port }: {
     () => port ?? createHttpCaseVehicleProfileAdapter(),
   )
   const [record, setRecord] = useState<CaseVehicleProfileRecord | null>(null)
-  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  // Yukleme durumu `caseId` istek anahtarina baglidir; anahtar degisince RENDER
+  // sirasinda 'loading' turetilir ve efektte senkron sifirlama gerekmez.
+  // `load` yalniz bu efektten cagrilir, baska cagiran yoktur.
+  const [loadStatus, setLoadStatus] = useState<{ key: string; value: 'loading' | 'ok' | 'error' }>(
+    () => ({ key: caseId, value: 'loading' }),
+  )
+  const status = loadStatus.key === caseId ? loadStatus.value : 'loading'
+  const setStatus = useCallback((value: 'loading' | 'ok' | 'error') => setLoadStatus({ key: caseId, value }), [caseId])
   const [errorKind, setErrorKind] = useState<string | null>(null)
   const [fields, setFields] = useState<CaseVehicleProfileFieldsRecord>(EMPTY)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    setStatus('loading')
-    try {
-      const result = await adapter.read(caseId)
+  // Okuma efekt icinde yapilir ve durum yalniz async geri cagrilarda yazilir.
+  // `cancelled` muhafazasi eklendi: case degisiminde ucustaki yanit artik
+  // yeni case'in alanlarini ezemez.
+  useEffect(() => {
+    let cancelled = false
+    adapter.read(caseId).then((result) => {
+      if (cancelled) return
       setRecord(result)
       if (result.current !== null) {
         setFields({
@@ -70,14 +80,14 @@ export function CaseVehicleProfileModule({ caseId, port }: {
         })
       }
       setStatus('ok')
-    } catch (error) {
+    }).catch((error: unknown) => {
+      if (cancelled) return
       setRecord(null)
       setErrorKind(error instanceof CaseVehicleProfileClientError ? error.kind : 'unavailable')
       setStatus('error')
-    }
-  }, [adapter, caseId])
-
-  useEffect(() => { void load() }, [load])
+    })
+    return () => { cancelled = true }
+  }, [adapter, caseId, setStatus])
 
   const save = async () => {
     if (record === null) return
