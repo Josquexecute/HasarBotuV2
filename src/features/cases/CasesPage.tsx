@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDown,
@@ -200,7 +200,12 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryParam = searchParams.get('q') ?? ''
-  const [query, setQuery] = useState(queryParam)
+  // Arama kutusu URL'deki `q` ile senkronizedir. Senkronizasyon efektte
+  // yazilmaz: girdi, ait oldugu navigasyon kimligiyle birlikte tutulur ve
+  // anahtar degisince RENDER sirasinda URL degerine doner. Boylece global
+  // aramadan gelen sorgu ayni render'da kutuda gorunur; onceden bir frame
+  // boyunca onceki sorgu kaliyordu.
+  const [queryInput, setQueryInput] = useState<{ key: string; value: string }>({ key: '', value: queryParam })
   const [typeFilter, setTypeFilter] = useState<'Tümü' | CaseType>('Tümü')
   const [stageFilter, setStageFilter] = useState('Tümü')
   const [statusFilter, setStatusFilter] = useState('Tümü')
@@ -215,10 +220,10 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
   const [activePage, setActivePage] = useState(1)
   const [prototypeNotice, setPrototypeNotice] = useState('')
   const showNewModal = searchParams.get('yeni') === 'true'
+  const queryKey = `${location.key}#${queryParam}`
+  const query = queryInput.key === queryKey ? queryInput.value : queryParam
+  const setQuery = useCallback((value: string) => setQueryInput({ key: queryKey, value }), [queryKey])
 
-  useEffect(() => {
-    setQuery(queryParam)
-  }, [location.key, queryParam])
 
   // API modunda filtre/sıralama/sayfalama SUNUCUDA uygulanır; istemci yalnız
   // aktif sayfayı okur. Mock modda prototip davranışı (istemci filtresi ve
