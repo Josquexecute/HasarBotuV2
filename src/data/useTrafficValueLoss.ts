@@ -54,6 +54,18 @@ function safeMessage(error: unknown): string {
   }
 }
 
+/** Yükleme kapsamındaki bütün dilimler ait oldukları istek anahtarıyla taşınır. */
+interface TrafficValueLossLoadState {
+  readonly key: string
+  readonly assessment: TrafficValueLossAssessmentRecord | null
+  readonly versions: readonly TrafficValueLossVersionRecord[]
+  readonly currentApproved: TrafficValueLossVersionRecord | null
+  readonly previewResult: TrafficValueLossPreviewRecord | null
+  readonly catalog: TrafficValueLossPartCatalogRecord | null
+  readonly status: TrafficValueLossLoadStatus
+  readonly errorMessage: string | null
+}
+
 export function useTrafficValueLoss(
   caseId: string,
   source: DataSourceKind,
@@ -62,76 +74,92 @@ export function useTrafficValueLoss(
 ): UseTrafficValueLossResult {
   const { reportUnauthorized } = useSession()
   const port = useMemo(() => suppliedPort ?? createHttpTrafficValueLossAdapter(), [suppliedPort])
-  const [assessment, setAssessment] = useState<TrafficValueLossAssessmentRecord | null>(null)
-  const [versions, setVersions] = useState<readonly TrafficValueLossVersionRecord[]>([])
-  const [currentApproved, setCurrentApproved] = useState<TrafficValueLossVersionRecord | null>(null)
-  const [previewResult, setPreviewResult] = useState<TrafficValueLossPreviewRecord | null>(null)
-  const [catalog, setCatalog] = useState<TrafficValueLossPartCatalogRecord | null>(null)
-  const [status, setStatus] = useState<TrafficValueLossLoadStatus>('idle')
   const [busy, setBusy] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [requestVersion, setRequestVersion] = useState(0)
+  const active = source === 'api' && enabled
+  // Yükleme kapsamındaki bütün dilimler (assessment, sürümler, current-approved,
+  // önizleme, katalog, durum, hata mesajı) tek bir anahtarlı nesnede taşınır.
+  // Efektte senkron sıfırlama yapılmaz: anahtar değişince RENDER sırasında boş
+  // türetilir, böylece başka bir case'in veya eski bir retry'ın değer kaybı
+  // verisi hiçbir frame'de görünmez. Bütün yazıcılar anahtar korumalıdır;
+  // geç dönen bir yükleme veya komut sonucu yeni anahtarın state'ini ezemez.
+  const requestKey = `${caseId}#${requestVersion}`
+  const blank = useCallback((key: string, status: TrafficValueLossLoadStatus): TrafficValueLossLoadState => ({
+    key,
+    assessment: null,
+    versions: [],
+    currentApproved: null,
+    previewResult: null,
+    catalog: null,
+    status,
+    errorMessage: null,
+  }), [])
+  const [loaded, setLoaded] = useState<TrafficValueLossLoadState>(() => blank(requestKey, 'loading'))
+  const current = loaded.key === requestKey ? loaded : blank(requestKey, 'loading')
+  const view = active ? current : blank(requestKey, 'idle')
+  const { assessment, versions, currentApproved, previewResult, catalog, status, errorMessage } = view
 
   const retry = useCallback(() => {
-    setErrorMessage(null)
     setRequestVersion((value) => value + 1)
   }, [])
 
   const load = useCallback(async () => {
     const workspace = await port.load(caseId)
-    setAssessment(workspace.assessment)
-    setVersions(workspace.versions)
-    setCurrentApproved(workspace.currentApproved ?? null)
-    setStatus(workspace.assessment === null ? 'empty' : 'ok')
-  }, [caseId, port])
+    setLoaded((prev) => prev.key !== requestKey ? prev : {
+      ...prev,
+      assessment: workspace.assessment,
+      versions: workspace.versions,
+      currentApproved: workspace.currentApproved ?? null,
+      status: workspace.assessment === null ? 'empty' : 'ok',
+    })
+  }, [caseId, port, requestKey])
 
   useEffect(() => {
-    if (source !== 'api' || !enabled) {
-      setAssessment(null)
-      setVersions([])
-      setCurrentApproved(null)
-      setPreviewResult(null)
-      setCatalog(null)
-      setStatus('idle')
-      return
-    }
+    if (!active) return undefined
     let cancelled = false
-    setStatus('loading')
-    setErrorMessage(null)
     port.load(caseId)
       .then((workspace) => {
         if (cancelled) return
-        setAssessment(workspace.assessment)
-        setVersions(workspace.versions)
-        setCurrentApproved(workspace.currentApproved ?? null)
-        setStatus(workspace.assessment === null ? 'empty' : 'ok')
+        setLoaded((prev) => ({
+          ...(prev.key === requestKey ? prev : blank(requestKey, 'loading')),
+          assessment: workspace.assessment,
+          versions: workspace.versions,
+          currentApproved: workspace.currentApproved ?? null,
+          status: workspace.assessment === null ? 'empty' : 'ok',
+        }))
       })
       .catch((error: unknown) => {
         if (cancelled) return
         const kind = error instanceof TrafficValueLossError ? error.kind : 'unavailable'
-        setStatus(kind === 'validation' ? 'unavailable' : kind)
-        setErrorMessage(safeMessage(error))
+        setLoaded((prev) => ({
+          ...(prev.key === requestKey ? prev : blank(requestKey, 'loading')),
+          status: kind === 'validation' ? 'unavailable' : kind,
+          errorMessage: safeMessage(error),
+        }))
         if (kind === 'unauthorized') reportUnauthorized()
       })
     return () => { cancelled = true }
-  }, [caseId, enabled, port, reportUnauthorized, requestVersion, source])
+  }, [active, blank, caseId, port, reportUnauthorized, requestKey])
 
   const command = useCallback(async (run: () => Promise<TrafficValueLossAssessmentRecord>) => {
     setBusy(true)
-    setErrorMessage(null)
+    setLoaded((prev) => prev.key === requestKey ? { ...prev, errorMessage: null } : prev)
     try {
       await run()
       await load()
     } catch (error) {
       const kind = error instanceof TrafficValueLossError ? error.kind : 'unavailable'
-      if (kind !== 'validation') setStatus(kind)
-      setErrorMessage(safeMessage(error))
+      setLoaded((prev) => prev.key !== requestKey ? prev : {
+        ...prev,
+        ...(kind === 'validation' ? {} : { status: kind }),
+        errorMessage: safeMessage(error),
+      })
       if (kind === 'unauthorized') reportUnauthorized()
       throw error
     } finally {
       setBusy(false)
     }
-  }, [load, reportUnauthorized])
+  }, [load, reportUnauthorized, requestKey])
   // React Compiler `assessment?.version` bağımlılığını `assessment` olarak
   // çıkarımladığı için manuel memoization'ı koruyamıyor ve bileşenin tamamını
   // optimizasyon dışı bırakıyordu. Sürüm önce primitife indirgenince çıkarımlanan
@@ -139,23 +167,25 @@ export function useTrafficValueLoss(
   const assessmentVersion = assessment?.version ?? 0
   const preview = useCallback(async (input: TrafficValueLossDraftInput) => {
     setBusy(true)
-    setErrorMessage(null)
+    setLoaded((prev) => prev.key === requestKey ? { ...prev, errorMessage: null } : prev)
     try {
       if (port.preview === undefined) throw new TrafficValueLossError('unavailable', 'preview endpoint unavailable')
-      setPreviewResult(await port.preview(caseId, assessmentVersion, input))
+      const result = await port.preview(caseId, assessmentVersion, input)
+      setLoaded((prev) => prev.key === requestKey ? { ...prev, previewResult: result } : prev)
     } catch (error) {
-      setErrorMessage(safeMessage(error))
+      setLoaded((prev) => prev.key === requestKey ? { ...prev, errorMessage: safeMessage(error) } : prev)
       throw error
     } finally {
       setBusy(false)
     }
-  }, [assessmentVersion, caseId, port])
+  }, [assessmentVersion, caseId, port, requestKey])
   const loadCatalog = useCallback(async (
     vehicleGroupCode: NonNullable<TrafficValueLossRealMarketInput['vehicleGroupCode']>,
   ) => {
     if (port.partCatalog === undefined) throw new TrafficValueLossError('unavailable', 'part catalog endpoint unavailable')
-    setCatalog(await port.partCatalog(caseId, vehicleGroupCode))
-  }, [caseId, port])
+    const result = await port.partCatalog(caseId, vehicleGroupCode)
+    setLoaded((prev) => prev.key === requestKey ? { ...prev, catalog: result } : prev)
+  }, [caseId, port, requestKey])
 
   return {
     assessment,
