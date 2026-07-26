@@ -2188,3 +2188,52 @@ Uretim kodu degismedi (component dosyasinda sifir net diff). Ana agacta
 typecheck, lint (0 error / 2 warning, degismedi), gercek `hasarbotu_test`
 PostgreSQL ile 2.053 basarili / 6 ortam-kosullu UI skip (+1), build/bundle
 412.643 bayt (degismedi), `npm audit` 0 bulgu.
+
+## 2026-07-27 — HB-2026-100: TrafficValueLossReportPanel anahtarli form state icin dogrudan regresyon testi; kusur bulunamadi
+
+Karar:
+
+1. HB-2026-096'nin 2. grubunun son ogesi `TrafficValueLossReportPanel`in
+   `ReportFormState` (`note`/`confirmed`/`message`, anahtar `version?.id`)
+   turetmesiydi; kalici testte hic vakasi yoktu (bileşenin hicbir test
+   dosyasi da yoktu).
+2. Turetme once yapisal olarak incelendi:
+   `form.key === formKey ? form : blank` (okuma) ve
+   `patchForm` icinde `prev.key === formKey ? prev : blank` (yazma).
+   PolicyAiCandidatesModule'daki "mevcutlari koru, yoksa tumunu sec" tarzi
+   bir mutabakat/fallback mantigi YOKTUR; CaseDetailPage'in override
+   deseniyle ayni yapidadir (anahtar-korumali oku/yaz).
+3. Stale-async-yazma senaryosu (bir surumde baslatilan preview, baska
+   surume gecildikten SONRA tamamlanip eski anahtarla yazması) ayrica
+   degerlendirildi: yazma `prev.key === (yazmanin baglandigi ESKI
+   formKey)` kontrolunu YAPAR ve eski anahtarla eslesirse yazar, ancak
+   GORUNTULEME anindaki GUNCEL formKey ile eslesmedigi surece EKRANDA
+   GORUNMEZ (ayni CaseDetailPage/EmailDraftApiModule'de kabul edilen risk
+   sinifi: yalniz kullanici AYNI anahtara GERI donerse gorunur olabilir,
+   bu da PolicyAiCandidatesModule'daki "ayni kimlik = ayni onay, dogrudur"
+   gerekcesiyle tutarlidir). Bu, mevcut kalibin kabul edilen davranisidir;
+   yeni/farkli bir kusur degildir.
+4. Gercek bir kusur KANITLANAMADI; uretim kodu DEGISTIRILMEDI.
+5. Sifirdan `TrafficValueLossReportPanel.test.tsx` eklendi (bileşenin ilk
+   testi), iki vaka: (a) surum degisince not/onay/mesajin ayni render'da
+   bosa dondugu, (b) surum ayni kalirken (yeni prop referansi, ayni
+   `version.id`) ilgisiz bir render'in girilen notu ve onay kutusunu
+   SIFIRLAMADIGI.
+6. Testlerin gercekten kusur yakaladigi iki AYRI bozulmayla kanitlandi:
+   once okuma anahtar kontrolu devre disi birakildi (yalniz vaka (a)
+   kirildi), sonra `patchForm`in `prev`i koruma kontrolu devre disi
+   birakildi (HER IKI vaka da kirildi — art arda `setNote`/`setConfirmed`
+   cagrilari birbirini ezdi). Her ikisinde de satir aynen geri getirilip
+   (component dosyasinda net diff yok) yeniden yesile donuldu.
+
+Gerekce: HB-2026-098/099 ile ayni: yapisal degerlendirme kalici testin
+yerini tutmaz. Bu kapaniyla HB-2026-096 2. grubundaki dort turetmenin
+(PolicyAiCandidatesModule x2, EmailDraftApiModule, CaseDetailPage,
+TrafficValueLossReportPanel) tamami kalici, dogrudan regresyon testine
+sahip oldu.
+
+Etki: Yalniz yeni `src/features/cases/TrafficValueLossReportPanel.test.tsx`
+(+2 vaka). Uretim kodu degismedi (component dosyasinda sifir net diff). Ana
+agacta typecheck, lint (0 error / 2 warning, degismedi), gercek
+`hasarbotu_test` PostgreSQL ile 2.055 basarili / 6 ortam-kosullu UI skip
+(+2), build/bundle 412.643 bayt (degismedi), `npm audit` 0 bulgu.

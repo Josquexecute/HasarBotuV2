@@ -90,6 +90,31 @@ Son güncelleme: 2026-07-27
     `hasarbotu_test` PostgreSQL ile **2.053 başarılı / 6 ortam-koşullu UI
     skip** (+2 yeni test), build/bundle **412.643 bayt** (değişmedi),
     `npm audit` 0 bulgu geçti.
+- **4. dilim kapanışı — son türetme: `TrafficValueLossReportPanel`
+  (2026-07-27):** 2. grubun son "anahtarlı not/onay/mesaj" türetmesi için de
+  kalıcı vaka eklendi; önce gerçek kusur arandı (`ReportFormState` ile
+  aynı yapı, ancak PolicyAiCandidatesModule'daki fallback-mutabakat mantığı
+  yoktur), **bulunamadı** — üretim kodu değişmedi (bkz. HB-2026-100). Bu
+  bileşenin daha önce hiç test dosyası yoktu; yeni
+  `TrafficValueLossReportPanel.test.tsx` sıfırdan eklendi:
+  - Sürüm değişince not/onay/mesajın **aynı render'da** boşa döndüğünü
+    doğrulayan vaka.
+  - Sürüm aynı kalırken ilgisiz bir yeniden render'ın (yeni prop referansı,
+    aynı `version.id`) girilen notu ve onay kutusunu SIFIRLAMADIĞINI
+    doğrulayan vaka.
+  - İki vakanın da gerçekten kusur yakaladığı ayrı ayrı kanıtlandı: önce
+    anahtar kontrolü (`form.key === formKey`) devre dışı bırakıldı (1. vaka
+    kırıldı), sonra `patchForm`'un `prev`'i koruma kontrolü devre dışı
+    bırakıldı (her iki vaka da kırıldı — art arda `setNote`/`setConfirmed`
+    çağrıları birbirini eziyordu), her ikisinde de satır aynen geri
+    getirilip (component dosyasında net diff yok) yeniden yeşile dönüldü.
+  - Böylece HB-2026-096'nın 2. grubundaki dört türetmenin (PolicyAiCandidatesModule ×2,
+    EmailDraftApiModule, CaseDetailPage, TrafficValueLossReportPanel)
+    TAMAMI artık kalıcı, doğrudan regresyon testine sahip.
+  - Ana ağaçta typecheck, lint (**0 error / 2 warning**, değişmedi), gerçek
+    `hasarbotu_test` PostgreSQL ile **2.055 başarılı / 6 ortam-koşullu UI
+    skip** (+2 yeni test), build/bundle **412.643 bayt** (değişmedi),
+    `npm audit` 0 bulgu geçti.
 
 ## `src/data` barrel bölünmesi (2026-07-25)
 
