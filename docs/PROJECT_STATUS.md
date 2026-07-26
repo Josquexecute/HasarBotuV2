@@ -5,8 +5,53 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: React Router v8 güvenlik geçişi tamamlandı
-- Durum: **Üretim UI advisory'si kapandı; `react-router-dom@7` bağımlılık ağacından kaldırıldı ve `react-router@8.3.0`'a geçildi. Audit kapısında yalnız dev-only `eslint`/`brace-expansion@1` kümesi kaldı (`5 high / 0 critical`)**
+- Aşama: Dependency güvenlik kapısı kapandı (ESLint 10 yükseltmesi tamamlandı)
+- Durum: **`npm audit` her seviyede 0 bulgu veriyor (0 high / 0 critical / 0 toplam). Kalan dev-only `eslint@9` → `brace-expansion@1` zinciri ESLint 10 ile ortadan kalktı**
+
+## ESLint 10 yükseltmesi (2026-07-25)
+
+- Son 5 high bulgu (`eslint@9.39.4` → `minimatch@3.1.5` → `brace-expansion@1.1.16`
+  ve bağlı `@eslint/config-array` / `@eslint/eslintrc` / `minimatch`) kapatıldı.
+  `eslint@10.8.0` doğrudan `minimatch@^10.2.5`'e bağlıdır; ağaçta artık tek
+  `minimatch@10.2.5` ve tek `brace-expansion@5.0.8` vardır. Vulnerable sürümler
+  gerçekten kalktı; ignore veya audit seviyesi düşürme kullanılmadı.
+- Sürüm değişiklikleri: `eslint` 9.39.4 → **10.8.0**, `@eslint/js` 9.39.4 →
+  **10.0.1**, `eslint-plugin-react-hooks` 5.2.0 → **7.1.1**,
+  `eslint-plugin-react-refresh` 0.4.26 → **0.5.3**. `typescript-eslint` 8.63.0
+  değişmedi (peer'i zaten `^10.0.0` içeriyordu); `globals` da değişmedi.
+  `eslint-plugin-react-hooks@7.1.1`, ESLint 10 peer'i taşıyan **ilk** sürümdür;
+  6.x ve 7.0.0 taşımadığı için bu jump zorunludur.
+- Flat config korundu; `.eslintrc` zaten kullanılmıyordu. `eslint-env` yorumu
+  yoktur. Node koşulu (`^20.19.0 || ^22.13.0 || >=24`) mevcut `>=24 <25` engine
+  ile uyumludur.
+- **Lint kapsamı birebir aynıdır.** ESLint 9.39.4 (önceki commit) ve ESLint 10.8.0
+  ölçüldü: her ikisinde de **1.407 dosya** lint edildi, aynı 670 workspace `dist`
+  dosyası dahil, `node_modules` 0. ESLint 10'un config arama değişikliği tek kök
+  `eslint.config.js` bulunduğu için kapsamı etkilemedi. Workspace düzeyinde
+  `npm run lint --workspace @hasarbotu/api` kök config'i çözmeye devam ediyor.
+- ESLint 10'un `eslint:recommended` setine eklediği üç kural **gerçek kusur
+  buldu ve kod düzeltilerek giderildi** (kural devre dışı bırakılmadı):
+  - `no-useless-assignment` ×2: `policy-ai/store.ts`'te ölü `-1` başlangıç
+    ataması, `workspace/store.ts`'te hiç okunmayan `jobId` başlangıç ataması.
+  - `preserve-caught-error` ×1: `pdf-text-extractor.test.ts` yakalanan hatayı
+    `cause` olmadan yeniden fırlatıyordu.
+- `eslint-plugin-react-hooks` v7'nin `recommended` seti v5'teki 2 kuraldan
+  (`rules-of-hooks` error, `exhaustive-deps` warn) **16 kurala** çıkar; 14 yeni
+  React Compiler kuralı gelir. Paket öncesi lint sözleşmesi birebir korundu:
+  bu iki kural aynı seviyede duruyor. 14 yeni kural **kapatılmadı**, açıkça
+  `warn` seviyesinde bırakıldı ve `eslint.config.js` içinde adlarıyla listelendi.
+- Sonuç: `npm run lint` **0 error / 34 warning** ile geçiyor (önce 0/0). 34 uyarı
+  yeni Compiler kurallarındandır: 33 × `set-state-in-effect`, 1 ×
+  `preserve-manual-memoization`; 27 dosyada, ağırlıklı olarak `src/data` veri
+  çekme hook'larında. Bunların `error` seviyesine çıkarılması veri katmanının
+  yeniden yapılandırılmasını gerektirdiğinden ayrı "React Compiler kural
+  adaptasyonu" paketidir.
+- Ana ağaçta ve repository dışı fresh `npm ci` kopyasında gerçek PostgreSQL 17.10
+  ile **2.050 başarılı / 6 mevcut ortam-koşullu UI skip** tekrarlandı: UI 352/6,
+  domain 749, contracts 324, database 73, API 474, File Agent 78. Değişen iki API
+  modülünün hedefli testi 25/25 geçti. Build/bundle değişmedi: başlangıç 497.015
+  bayt, en büyük chunk 337.825 bayt, 10 lazy modül.
+- `npm audit`: **0 bulgu (her seviyede)**. `--audit-level=high` exit 0.
 
 ## React Router v8 güvenlik geçişi (2026-07-25)
 

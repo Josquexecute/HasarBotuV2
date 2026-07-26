@@ -24,9 +24,41 @@ Bu plan, UI-first prototip aşamasını küçük, test edilebilir ve geri bildir
 - [x] Gerçek PostgreSQL 17 ile API/Fastify, route çözümleme, Paket 65B writer,
   migration 0043/0044 ve tam test/build zincirini regresyonsuz tekrarla.
 - [x] Repository dışı fresh `npm ci` kopyasında aynı kapıları çalıştır.
-- [!] `eslint@9.39.4` → `brace-expansion@1.1.16` kümesi (5 high, dev): yamalı
-  1.x sürüm yok; düzeltme `eslint@10.8.0` semver-major yükseltmesidir.
-  Kullanıcı kararıyla (2026-07-25) ayrı "eslint 10 yükseltmesi" paketine alındı.
+- [x] `eslint@9.39.4` → `brace-expansion@1.1.16` kümesi (5 high, dev): ayrı
+  "ESLint 10 yükseltmesi" paketinde kapatıldı. Bkz. aşağıdaki bölüm.
+
+## ESLint 10 yükseltmesi
+
+- [x] ESLint 10 breaking change listesini ve Node koşulunu doğrula.
+- [x] Plugin uyumluluğunu peer aralıklarıyla tespit et: `typescript-eslint`
+  8.63.0 zaten `^10.0.0` destekler; `eslint-plugin-react-hooks` yalnız 7.1.1'den
+  itibaren destekler; `eslint-plugin-react-refresh` 0.5.3 `^9 || ^10` taşır.
+- [x] `eslint@^10.8.0`, `@eslint/js@^10.0.1`, `eslint-plugin-react-hooks@^7.1.1`,
+  `eslint-plugin-react-refresh@^0.5.3`'e geç; başka dependency ekleme.
+- [x] Flat config yapısını koru; `.eslintrc` veya `eslint-env` kullanımı olmadığını
+  doğrula.
+- [x] Lint kapsamının değişmediğini ESLint 9 ve 10 altında dosya sayısıyla ölç.
+- [x] `eslint:recommended`'a eklenen üç kuralın bulduğu gerçek kusurları kodda
+  düzelt; kuralı devre dışı bırakma.
+- [x] `react-hooks` v7'nin getirdiği 14 yeni React Compiler kuralını kapatmadan
+  `warn` seviyesinde ve adlarıyla listelenmiş biçimde aç; v5 lint sözleşmesini
+  (`rules-of-hooks` error, `exhaustive-deps` warn) birebir koru.
+- [x] Tam test, build, fresh checkout ve `npm audit` zincirini çalıştır;
+  0 high / 0 critical doğrula.
+
+Kapsam dışı: React Compiler kurallarının `error` seviyesine çıkarılması, veri
+katmanı yeniden yapılandırması, lint kapsamının değiştirilmesi ve `dist`
+klasörlerinin lint dışına alınması.
+
+## React Compiler kural adaptasyonu (sonraki aday)
+
+- [ ] `eslint-plugin-react-hooks` v7'nin 14 yeni Compiler kuralını `warn`'dan
+  `error` seviyesine çıkar.
+- [ ] Mevcut 34 uyarıyı gider: 33 × `set-state-in-effect` (ağırlıklı `src/data`
+  veri çekme hook'ları) ve 1 × `preserve-manual-memoization`.
+- [ ] Yükleme durumu ve veri akışı kullanıcıya görünür olduğundan tam UI testi ve
+  gerçek tarayıcı smoke'u ile doğrula; kabul edilmiş UI baseline'ını koru.
+- [ ] Paket 65B İşçilik ve Paket 66 Değer Kaybı panellerinin davranışını değiştirme.
 - [x] `react-router@7.18.1` kümesi (2 high, üretim UI): ayrı "react-router v8
   geçişi" paketinde kapatıldı. Bkz. aşağıdaki bölüm.
 

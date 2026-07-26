@@ -125,7 +125,7 @@ describe('güvenli PDF metin çıkarıcı', () => {
     try {
       await symlink(targetDirectory, join(root, 'EVRAK'), 'junction')
     } catch (error) {
-      throw new Error(`sentetik symlink oluşturulamadı: ${(error as NodeJS.ErrnoException).code ?? 'unknown'}`)
+      throw new Error(`sentetik symlink oluşturulamadı: ${(error as NodeJS.ErrnoException).code ?? 'unknown'}`, { cause: error })
     }
     const result = await extractPdfText(root, payload(pdf), { onChunk: async () => undefined })
     expect(result).toEqual({ outcome: 'failed', errorCode: 'reparse_point_rejected' })

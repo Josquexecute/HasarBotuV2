@@ -129,7 +129,7 @@ type StoredProviderResult=
   | {readonly kind:'failure';readonly code:string;readonly usage:PolicyAiProviderResponse['usage']|undefined;readonly providerResponseId:string|null;readonly providerRequestId:string|null}
 
 function validateProviderResponseForReceipt(row:Record<string,unknown>,adapter:PolicyAiProviderAdapter,maximumCandidates:number,sources:readonly PolicyAiProviderSource[],response:PolicyAiProviderResponse):StoredProviderResult{
-  let serializedOutputLength=-1
+  let serializedOutputLength:number
   try{serializedOutputLength=JSON.stringify(response.output).length}catch{serializedOutputLength=-1}
   const estimate=safeNumber(row.estimated_cost_minor),usageValues=[response.usage.inputCharacters,response.usage.outputCharacters,response.usage.estimatedCostMinor,response.usage.actualCostMinor]
   const tokenPairValid=(response.usage.inputTokens===null&&response.usage.outputTokens===null)||(Number.isSafeInteger(response.usage.inputTokens)&&Number(response.usage.inputTokens)>=0&&Number.isSafeInteger(response.usage.outputTokens)&&Number(response.usage.outputTokens)>=0)

@@ -221,14 +221,13 @@ export function createWorkspaceStore(pool: pg.Pool) {
         if (row === undefined) return { kind: 'not_found' }
         if (row.status === 'stale' || row.status === 'cancelled') return { kind: 'stale' }
 
-        let jobId = row.active_job_id
         if (!['queued', 'applying', 'verifying', 'ready'].includes(row.status)) {
           const active = await client.query(
             `SELECT id FROM jobs WHERE organization_id=$1 AND target_type='workspace_provisioning'
              AND target_id=$2 AND status IN ('pending','leased') ORDER BY created_at DESC LIMIT 1`,
             [actor.organizationId, planId],
           )
-          jobId = (active.rows[0] as { id: string } | undefined)?.id ?? uuidv7()
+          const jobId = (active.rows[0] as { id: string } | undefined)?.id ?? uuidv7()
           if (active.rowCount === 0) {
             await client.query(
               `INSERT INTO jobs

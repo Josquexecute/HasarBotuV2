@@ -1773,3 +1773,48 @@ değişmediği için geçiş davranış riski taşımaz.
 Etki: `package.json`, `package-lock.json`, 22 UI dosyasının import satırı ve yeni
 `scripts/router-v8-browser-smoke.mjs`. Route/URL sözleşmesi, Paket 65B, Paket 66
 ve Paket 40 davranışları değişmedi. Audit `7 high` → `5 high / 0 critical`.
+
+## 2026-07-25 — HB-2026-089: ESLint 10 yükseltmesi ve React Compiler kurallarının kapsamı
+
+Karar:
+
+1. Kalan dev-only advisory kümesi `eslint@10.8.0` yükseltmesiyle kapatılır.
+   `eslint@10` doğrudan `minimatch@^10.2.5`'e bağlı olduğundan `minimatch@3.1.5`
+   ve yamalı sürümü bulunmayan `brace-expansion@1.1.16` ağaçtan tamamen kalkar.
+   Advisory ignore edilmez, audit seviyesi düşürülmez.
+2. Yükseltme kümesi: `eslint@^10.8.0`, `@eslint/js@^10.0.1`,
+   `eslint-plugin-react-hooks@^7.1.1`, `eslint-plugin-react-refresh@^0.5.3`.
+   `typescript-eslint` ve `globals` değişmez. `eslint-plugin-react-hooks@7.1.1`
+   ESLint 10 peer'ini taşıyan ilk sürüm olduğundan v5 → v7 sıçraması zorunludur.
+3. Flat config korunur. `.eslintrc` ve `eslint-env` kullanılmadığından ESLint
+   10'un bunlara ilişkin breaking change'leri etkisizdir.
+4. **Lint kapsamı değiştirilmez.** ESLint 9.39.4 ve 10.8.0 altında ölçülen dosya
+   sayısı aynıdır (1.407 dosya, 670 workspace `dist` dosyası dahil). Workspace
+   `dist` klasörlerinin lint edilmesi bu paketten önce de mevcuttur ve kapsam
+   değişikliği sayılacağı için bu pakette düzeltilmez.
+5. `eslint:recommended`'a eklenen kuralların bulduğu üç gerçek kusur
+   (`no-useless-assignment` ×2, `preserve-caught-error` ×1) **kod düzeltilerek**
+   giderilir; kural devre dışı bırakılmaz veya seviyesi düşürülmez.
+6. `eslint-plugin-react-hooks` v7'nin `recommended` seti 2 kuraldan 16 kurala
+   çıkar. Paket öncesi lint sözleşmesi birebir korunur: `rules-of-hooks` error,
+   `exhaustive-deps` warn. Yeni 14 React Compiler kuralı **kapatılmaz**;
+   `eslint.config.js` içinde `REACT_COMPILER_RULES_PENDING_ADOPTION` listesiyle
+   adlarıyla sayılarak `warn` seviyesinde açık bırakılır. Böylece bulgular
+   görünür kalır, yeni ihlaller anında raporlanır ve kapı bloke olmaz.
+7. Bu kuralların `error` seviyesine çıkarılması ve mevcut 34 uyarının giderilmesi
+   ayrı "React Compiler kural adaptasyonu" paketidir. Uyarıların çoğu
+   `src/data` veri çekme hook'larındaki `set-state-in-effect` desenidir; yükleme
+   durumu kullanıcıya görünür olduğundan tam UI testi ve gerçek tarayıcı smoke'u
+   gerektirir.
+
+Gerekçe: Advisory'nin tek gerçek çözümü ESLint 10'dur ve bu, uyumluluk zinciri
+nedeniyle react-hooks v7'yi de zorunlu kılar. v7'nin getirdiği yeni kural setini
+sessizce kapatmak lint sözleşmesini gizlice gevşetir; hepsini `error` yapmak ise
+dependency güvenlik paketini veri katmanı refactor'üne dönüştürürdü. `warn`
+seviyesi ikisinin de tuzağına düşmeden bulguyu görünür ve izlenebilir tutar.
+
+Etki: `package.json`, `package-lock.json`, `eslint.config.js` ve üç gerçek kusur
+düzeltmesi (`services/api/src/policy-ai/store.ts`,
+`services/api/src/workspace/store.ts`,
+`services/file-agent/test/pdf-text-extractor.test.ts`). Runtime davranışı,
+şema, API sözleşmesi ve UI değişmedi. Audit `5 high` → **0 bulgu (her seviyede)**.
