@@ -70,14 +70,48 @@ klasörlerinin lint dışına alınması.
 Kapsam dışı: veri katmanı state şekli refactor'ü, genel React refactor, `dist`
 lint kapsamı temizliği.
 
-## Veri katmanı yükleme durumu türetmesi (sonraki aday)
+## Veri katmanı yükleme durumu türetmesi
 
-- [ ] `src/data/*` hook'larında istek anahtarını state'e taşıyarak yükleme
-  durumunu render sırasında türet; senkron `setState` ihtiyacını kaldır.
-- [ ] Her hook'u ayrı ele al; bayat veri gösterimi, yarış durumu ve sonsuz
-  istek regresyonu oluşturma.
-- [ ] Tamamlandığında `set-state-in-effect` kuralını `error` seviyesine çıkar.
-- [ ] Paket 65B İşçilik ve Paket 66 Değer Kaybı panellerinin davranışını koru.
+### 1. dilim — tamamlandı
+
+- [x] Anahtarlı türetme desenini kur: yüklenen veri istek anahtarıyla birlikte
+  taşınır, yükleme durumu render sırasında türetilir.
+- [x] `useCase`, `useCaseDocuments`, `useCaseOperations`, `useEmailDrafts`,
+  `useLabor`, `usePert`, `useCasePage` hook'larını ayrı ayrı dönüştür ve
+  ayrı ayrı doğrula.
+- [x] Bayat veri frame'inin kalktığını ve geç yanıtın anahtar uyuşmazlığıyla
+  yok sayıldığını koru.
+- [x] Tam UI testleri, gerçek PostgreSQL zinciri ve iki gerçek tarayıcı
+  smoke'u ile doğrula.
+
+### 2. dilim — kalan `src/data` hook'ları
+
+- [ ] `useOperationalAlerts`, `usePolicyAnalysis`, `useTrafficValueLossReports`
+  (orta karmaşıklık) ve `usePolicyAi` hook'larını dönüştür.
+- [ ] Çok state dilimli hook'ları ayrı ele al: `usePolicyOcr` (16 `useState`,
+  3 efekt), `useReportsFees` (12, 4 efekt), `usePolicyPdfText` (11, 2 efekt),
+  `useTrafficValueLoss` (10). Bunlarda anahtar tek bir istek değil, birbirine
+  bağlı birkaç kaynak zinciridir; toplu dönüştürme yapma.
+
+### 3. dilim — modül seviyesi bulgular
+
+- [ ] `load()` deseni kullanan modüller: `CaseVehicleProfileModule`,
+  `LaborAllocationAiModule`, `WorkspaceProvisioningPanel`,
+  `LaborExcelProfilesModule`.
+- [ ] Fail-closed sıfırlamalar (`CaseDetailPage`, `CasesPage` sorgu senkronu,
+  `PolicyAiCandidatesModule` onay bayrakları, `TrafficValueLossReportPanel`).
+  Bunların render sırasına taşınması `set-state-in-render` kuralını tetikler;
+  her biri için ayrı karar gerekir.
+- [ ] Seçim mutabakatları (`PolicyAiCandidatesModule` ×2, `EmailDraftApiModule`).
+
+### Kalıcı istisna adayları
+
+- [!] `LaborAllocationAiModule` geçen süre sayacı: `Date.now()` render'a
+  taşınırsa `react-hooks/purity` ihlal edilir.
+- [!] `CasesPage` fetch sonrası sayfa kelepçelemesi: `totalPages` ancak yanıt
+  geldikten sonra bilinir.
+- [ ] `set-state-in-effect` kuralı `error` seviyesine ancak bu iki nokta için
+  dosya bazlı istisna tanımlandıktan sonra çıkarılabilir.
 
 ## `dist` lint kapsamı temizliği
 

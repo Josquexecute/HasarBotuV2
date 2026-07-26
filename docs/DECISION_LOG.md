@@ -1891,3 +1891,38 @@ bastan amaclanan davranisin dogru ifade edilmesidir.
 Etki: yalniz `eslint.config.js`. Lint edilen dosya 1.407 -> 737, sure
 14.373 ms -> 11.257 ms. Kaynak kapsami, kural seviyeleri, runtime davranisi ve
 bulgu sayisi degismedi.
+
+## 2026-07-25 — HB-2026-092: Veri hooklarinda anahtarli yukleme durumu turetmesi
+
+Karar:
+
+1. Veri cekme hooklarinda yuklenen veri, ait oldugu ISTEK ANAHTARI ile birlikte
+   tek bir state nesnesinde tasinir. Anahtar degisince yukleme durumu RENDER
+   sirasinda turetilir; efekt icinde senkron `setState` kullanilmaz.
+2. Bu yalniz lint uyarisini kaldirmaz; iki gercek iyilestirme saglar:
+   - Bayat veri frame'i ortadan kalkar. Onceden anahtar degistiginde bir render
+     eski veriyi yeni anahtarla gosteriyordu.
+   - Yaris durumuna karsi ikinci savunma olusur: yanit kendi anahtariyla yazilir,
+     gec donen onceki istek anahtari tutmadigi icin yok sayilir.
+3. Donusum toplu yapilmaz. 1. dilimde 7 hook ayri ayri incelenip donusturuldu:
+   `useCase`, `useCaseDocuments`, `useCaseOperations`, `useEmailDrafts`,
+   `useLabor`, `usePert`, `useCasePage`.
+4. Kasitli ve belgelenmis davranis farki: ayni anahtar icin onceden yuklenmis
+   veri, hook yeniden etkinlestiginde `loading` flash'i olmadan gorunur ve efekt
+   yine de yeniden okur. Baska bir case'in verisi hicbir kosulda gosterilmez.
+5. Cok state dilimli hooklar (`usePolicyOcr` 16, `useReportsFees` 12,
+   `usePolicyPdfText` 11, `useTrafficValueLoss` 10) sonraki dilime birakilir;
+   bunlarda anahtar tek istek degil birbirine bagli kaynak zinciridir.
+6. Iki bulgu bu kuralla GIDERILEMEZ ve kalici istisna adayidir:
+   `LaborAllocationAiModule` saat okumasi (`Date.now()` render'a tasinirsa
+   `react-hooks/purity` ihlal edilir) ve `CasesPage` fetch sonrasi sayfa
+   kelepcelemesi (`totalPages` ancak yanittan sonra bilinir). Bu nedenle
+   `set-state-in-effect` kurali `error` seviyesine ancak dosya bazli istisna
+   tanimlandiktan sonra cikarilabilir.
+
+Gerekce: Anahtari state icinde tasimak, yukleme durumunu turetilebilir kilar ve
+senkron sifirlamayi gereksizlestirir. Boylece kural ihlali ortadan kalkarken
+bayat veri ve yaris durumu korumasi zayiflamaz, aksine guclenir.
+
+Etki: 7 hook dosyasi. Route/URL sozlesmesi, Paket 65B, Paket 66 ve Paket 40
+davranislari degismedi. `set-state-in-effect` 33 -> 26.

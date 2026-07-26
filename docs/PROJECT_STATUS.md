@@ -5,8 +5,39 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: `dist` lint kapsamı temizliği tamamlandı
-- Durum: **`npm audit` her seviyede 0 bulgu. Lint artık yalnız 737 kaynak dosyayı işliyor (önce 1.407); kaynak kapsamı ve bulgu sayısı değişmedi**
+- Aşama: Veri katmanı yükleme durumu türetmesi — 1. dilim
+- Durum: **7 veri hook'u anahtarlı türetmeye geçirildi; `set-state-in-effect` uyarısı 33 → 26. Kalan 26 bulgu ayrı dilimlere ait; 2 tanesi kural çakışması nedeniyle giderilemez**
+
+## Veri katmanı yükleme durumu türetmesi — 1. dilim (2026-07-25)
+
+- Uygulanan desen: yüklenen veri, ait olduğu **istek anahtarıyla birlikte** tek
+  bir state nesnesinde taşınır. Anahtar değişince yükleme durumu **render
+  sırasında türetilir**; efekt içinde senkron `setState` kalmaz.
+- Bu yalnız lint uyarısını kaldırmaz, iki gerçek iyileştirme sağlar:
+  - **Bayat veri frame'i ortadan kalkar.** Önceden anahtar değiştiğinde bir
+    render eski veriyi yeni anahtarla gösteriyor, sıfırlama ancak efekt
+    çalışınca geliyordu. Artık aynı render'da `loading` türetilir.
+  - **Yarış durumuna karşı ikinci savunma.** Yanıt, kendi istek anahtarıyla
+    yazılır; geç dönen bir önceki isteğin sonucu anahtarı tutmadığı için
+    `cancelled` bayrağından bağımsız olarak yok sayılır.
+- Dönüştürülen 7 hook: `useCase`, `useCaseDocuments`, `useCaseOperations`,
+  `useEmailDrafts`, `useLabor`, `usePert`, `useCasePage`. Her biri ayrı
+  incelendi, ayrı doğrulandı; toplu değiştirme yapılmadı.
+- Davranış farkı (kasıtlı, belgelenmiş): sekme kapatılıp aynı case'e geri
+  dönüldüğünde aynı anahtar için önceden yüklenmiş veri `loading` flash'ı
+  olmadan görünür ve efekt yine de yeniden okur. Başka bir case'in verisi
+  hiçbir koşulda gösterilmez.
+- Doğrulama: typecheck, lint (0 error / 26 warning), gerçek PostgreSQL 17.10 ile
+  **2.050 başarılı / 6 ortam-koşullu UI skip**, build/bundle (başlangıç 497.853
+  bayt, en büyük chunk 337.825 bayt, 10 lazy modül), `npm audit` 0 bulgu.
+  Gerçek Chrome/CDP: Paket 66 değer kaybı smoke'u 12/12 ve React Router
+  smoke'u 13/13, iki çözünürlük ve iki temada, console error yok.
+- **Kalan 26 bulgunun 2'si bu kuralla giderilemez** ve kalıcı istisnadır:
+  `LaborAllocationAiModule` saat okuması (`Date.now()` render'a taşınırsa
+  `react-hooks/purity` ihlal edilir) ve `CasesPage` fetch sonrası sayfa
+  kelepçelemesi (`totalPages` ancak yanıt geldikten sonra bilinir). Bu nedenle
+  `set-state-in-effect` kuralının `error` seviyesine çıkarılması, bu iki nokta
+  için dosya bazlı istisna gerektirecektir.
 
 ## `dist` lint kapsamı temizliği (2026-07-25)
 

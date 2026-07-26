@@ -11,6 +11,13 @@ export interface UseCaseDocumentsResult {
   retry(): void
 }
 
+/** Yüklenen veri, hangi istek anahtarına ait olduğuyla birlikte taşınır. */
+interface CaseDocumentsLoadState {
+  readonly key: string
+  readonly data: CaseDocumentWorkspaceRecord | null
+  readonly status: CaseDocumentsStatus
+}
+
 export function useCaseDocuments(
   caseId: string,
   source: DataSourceKind,
@@ -19,37 +26,41 @@ export function useCaseDocuments(
 ): UseCaseDocumentsResult {
   const { reportUnauthorized } = useSession()
   const port = useMemo(() => suppliedPort ?? createHttpDocumentWorkspaceAdapter(), [suppliedPort])
-  const [data, setData] = useState<CaseDocumentWorkspaceRecord | null>(null)
-  const [status, setStatus] = useState<CaseDocumentsStatus>('idle')
   const [requestVersion, setRequestVersion] = useState(0)
   const retry = useCallback(() => setRequestVersion((value) => value + 1), [])
+  const active = source === 'api' && enabled
+  // Yükleme durumu efektte senkron sıfırlanmaz; istek anahtarı değişince RENDER
+  // sırasında türetilir. Başka bir case'in verisi hiçbir frame'de görünmez ve
+  // anahtarı tutmayan geç yanıt yok sayılır.
+  const requestKey = `${caseId}#${requestVersion}`
+  const [loaded, setLoaded] = useState<CaseDocumentsLoadState>(() => ({ key: requestKey, data: null, status: 'loading' }))
+  const current: CaseDocumentsLoadState = loaded.key === requestKey
+    ? loaded
+    : { key: requestKey, data: null, status: 'loading' }
 
   useEffect(() => {
-    if (source !== 'api' || !enabled) {
-      setData(null)
-      setStatus('idle')
-      return
-    }
+    if (!active) return undefined
     let cancelled = false
-    setData(null)
-    setStatus('loading')
     port.getCaseDocumentWorkspace(caseId)
       .then((workspace) => {
         if (cancelled) return
-        setData(workspace)
-        setStatus(workspace.requirements.length === 0 && workspace.documents.length === 0 && workspace.photos.length === 0 ? 'empty' : 'ok')
+        setLoaded({
+          key: requestKey,
+          data: workspace,
+          status: workspace.requirements.length === 0 && workspace.documents.length === 0 && workspace.photos.length === 0 ? 'empty' : 'ok',
+        })
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setData(null)
         const nextStatus = error instanceof HttpDocumentWorkspaceError ? error.kind : 'unavailable'
-        setStatus(nextStatus)
+        setLoaded({ key: requestKey, data: null, status: nextStatus })
         if (nextStatus === 'unauthorized') reportUnauthorized()
       })
     return () => {
       cancelled = true
     }
-  }, [caseId, enabled, port, reportUnauthorized, requestVersion, source])
+  }, [active, caseId, port, reportUnauthorized, requestKey])
 
-  return { data, status, retry }
+  if (!active) return { data: null, status: 'idle', retry }
+  return { data: current.data, status: current.status, retry }
 }
