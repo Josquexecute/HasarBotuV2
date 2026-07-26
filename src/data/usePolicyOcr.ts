@@ -26,7 +26,12 @@ export function usePolicyOcr(caseId: string) {
   const [source, setSource] = useState<PdfPolicySourceRecord | null>(null)
   const [extractions, setExtractions] = useState<readonly PdfTextExtractionRecord[]>([])
   const [selectedExtraction, setSelectedExtraction] = useState<PdfTextExtractionRecord | null>(null)
-  const [pdfPages, setPdfPages] = useState<readonly PdfTextPageRecord[]>([])
+  // PDF sayfalari secili extraction'a baglidir; secim degisince liste efektte
+  // senkron temizlenmez, RENDER sirasinda bos turetilir. Onceki extraction'in
+  // sayfalari hicbir frame'de gorunmez.
+  const [pdfPageState, setPdfPageState] = useState<{ key: string; items: readonly PdfTextPageRecord[] }>({ key: '', items: [] })
+  const pdfPageKey = selectedExtraction?.id ?? ''
+  const pdfPages = pdfPageState.key === pdfPageKey ? pdfPageState.items : []
   const [runs, setRuns] = useState<readonly PolicyOcrRunRecord[]>([])
   const [current, setCurrent] = useState<PolicyOcrRunRecord | null>(null)
   const [pages, setPages] = useState<readonly PolicyOcrPageRecord[]>([])
@@ -35,15 +40,23 @@ export function usePolicyOcr(caseId: string) {
   const [reference, setReference] = useState<PolicyOcrSourceReferenceRecord | null>(null)
   const [language, setLanguage] = useState<PolicyOcrLanguageMode>('tur+eng')
   const [renderProfile, setRenderProfile] = useState<PolicyOcrRenderProfile>('standard')
-  const [status, setStatus] = useState<PolicyOcrLoadStatus>('loading')
   const [busy, setBusy] = useState(false)
   const [version, setVersion] = useState(0)
+  // Yukleme durumu efektte senkron sifirlanmaz; istek anahtari degisince RENDER
+  // sirasinda 'loading' turetilir ve butun durum yazicilari anahtarli oldugundan
+  // gec donen bir yanit yeni anahtarin durumunu ezemez.
+  const requestKey = `${caseId}#${version}`
+  const [loadStatus, setLoadStatus] = useState<{ key: string; value: PolicyOcrLoadStatus }>(
+    () => ({ key: requestKey, value: 'loading' }),
+  )
+  const status = loadStatus.key === requestKey ? loadStatus.value : 'loading'
+  const setStatus = useCallback((value: PolicyOcrLoadStatus) => { setLoadStatus({ key: requestKey, value }) }, [requestKey])
 
   const fail = useCallback((error: unknown) => {
     const kind = error instanceof HttpPolicyOcrError || error instanceof HttpPolicyPdfTextError ? error.kind : 'unavailable'
     setStatus(kind)
     if (kind === 'unauthorized') reportUnauthorized()
-  }, [reportUnauthorized])
+  }, [reportUnauthorized, setStatus])
 
   const loadRun = useCallback(async (value: PolicyOcrRunRecord | null) => {
     setCurrent(value)
@@ -60,7 +73,6 @@ export function usePolicyOcr(caseId: string) {
 
   useEffect(() => {
     let cancelled = false
-    setStatus('loading')
     void pdfRef.current.listSources(caseId).then(async (sources) => {
       if (cancelled) return
       const selected = sources[0] ?? null
@@ -78,18 +90,16 @@ export function usePolicyOcr(caseId: string) {
       if (!cancelled) setStatus('ok')
     }).catch((error) => { if (!cancelled) fail(error) })
     return () => { cancelled = true }
-  }, [caseId, fail, loadRun, version])
+  }, [caseId, fail, loadRun, setStatus, version])
 
   useEffect(() => {
+    if (selectedExtraction === null) return undefined
     let cancelled = false
-    setPdfPages([])
-    if (selectedExtraction !== null) {
-      void pdfRef.current.listPages(caseId, selectedExtraction.id).then((items) => {
-        if (!cancelled) setPdfPages(items)
-      }).catch((error) => { if (!cancelled) fail(error) })
-    }
+    void pdfRef.current.listPages(caseId, selectedExtraction.id).then((items) => {
+      if (!cancelled) setPdfPageState({ key: pdfPageKey, items })
+    }).catch((error) => { if (!cancelled) fail(error) })
     return () => { cancelled = true }
-  }, [caseId, fail, selectedExtraction])
+  }, [caseId, fail, pdfPageKey, selectedExtraction])
 
   useEffect(() => {
     if (current === null || !activeStatuses.includes(current.status)) return
@@ -114,7 +124,7 @@ export function usePolicyOcr(caseId: string) {
       await loadRun(value)
       setStatus('ok')
     } catch (error) { fail(error) } finally { setBusy(false) }
-  }, [busy, caseId, fail, language, loadRun, renderProfile, selectedExtraction, source])
+  }, [busy, caseId, fail, language, loadRun, renderProfile, selectedExtraction, setStatus, source])
 
   const retryRun = useCallback(async () => {
     if (current === null || busy) return
