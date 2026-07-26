@@ -13,6 +13,7 @@ const VERSION = '019f7000-0000-7000-8000-000000000030'
 const EXTRACTION = '019f7000-0000-7000-8000-000000000031'
 const PAGE = '019f7000-0000-7000-8000-000000000032'
 const SEGMENT = '019f7000-0000-7000-8000-000000000033'
+const SEGMENT_TWO = '019f7000-0000-7000-8000-000000000034'
 const ANCHOR = 'a'.repeat(64)
 
 const budget = { enabled: true, providerAvailable: true, providerAllowed: true, estimatedCostMinor: 1, currentMonthCostMinor: 0, monthlyBudgetMinor: 100, perRequestBudgetMinor: 10, allowed: true, reasonCode: null }
@@ -227,6 +228,52 @@ describe('AI alan adayları görünümü', () => {
     expect(startKey).toMatch(/^[0-9a-f-]{36}$/)
     expect(startKey).not.toBe(planKey)
     expect(planBody).toMatchObject({ providerId: 'deterministic-success', sources: [{ sourceType: 'pdf_text', extractionId: EXTRACTION, segmentId: SEGMENT }] })
+  })
+
+  it('sıfıra indirilen kaynak seçimi, aynı kaynak kimliğiyle yeniden yüklemede mutabakatla geri dönmez', async () => {
+    // Regresyon: eski efekt tabanlı mutabakat kuralı `data.workspace?.availableSources`
+    // dizi referansını bağımlılık sayıyordu; kimlik değişmese bile her yeniden
+    // yükleme (ör. "Kaynakları Yenile") kullanıcının sıfıra indirdiği seçimi
+    // tamamını-seç varsayılanına geri döndürüyor ve plan butonunu yanlışlıkla
+    // etkinleştiriyordu. Düzeltme sonrası mutabakat yalnız kimlik
+    // (availableSourceIdentity) değiştiğinde uygulanır.
+    let discoveryCalls = 0
+    const extraction = { id: EXTRACTION, documentId: DOCUMENT, documentVersionId: VERSION, extractionVersion: 3, status: 'ready', parserName: 'pdfjs-dist', parserVersion: '6.1.200', normalizationVersion: 'pdf-text-normalization/1.0.0', offsetUnit: 'unicode_code_point', pageCount: 1, textPageCount: 1, imageOnlyPageCount: 0, emptyPageCount: 0, failedPageCount: 0, segmentCount: 2, rawCharacterCount: 80, normalizedCharacterCount: 80, outputHash: 'e'.repeat(64), failureCode: null, version: 2, createdAt: '2026-07-15T08:00:00.000Z', startedAt: null, completedAt: '2026-07-15T08:00:01.000Z' }
+    const page = { id: PAGE, extractionId: EXTRACTION, pageNumber: 1, status: 'text', rawText: 'Kasko teminat metni', normalizedText: 'Kasko teminat metni', rawTextHash: 'e'.repeat(64), normalizedTextHash: 'e'.repeat(64), segmentCount: 2 }
+    const segmentOne = { id: SEGMENT, extractionId: EXTRACTION, pageId: PAGE, pageNumber: 1, segmentIndex: 0, type: 'clause', startOffset: 0, endOffset: 20, text: 'Kasko teminat metni', textHash: 'e'.repeat(64) }
+    const segmentTwo = { id: SEGMENT_TWO, extractionId: EXTRACTION, pageId: PAGE, pageNumber: 1, segmentIndex: 1, type: 'clause', startOffset: 20, endOffset: 40, text: 'İkinci madde metni', textHash: 'f'.repeat(64) }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/ai/providers')) return response(200, providerAvailability)
+      if (url.includes('/documents?')) { discoveryCalls += 1; return response(200, { items: [{ id: DOCUMENT, documentType: 'casco_policy' }] }) }
+      if (url.includes(`/api/v1/documents/${DOCUMENT}`)) return response(200, { document: { versions: [{ id: VERSION, versionNumber: 2, displayName: 'Sentetik Kasko Poliçesi.pdf', byteSize: 2048, mimeType: 'application/pdf', extension: 'pdf', status: 'ready', hashVerified: true, sizeVerified: true, verifiedAt: '2026-07-15T08:00:00.000Z' }] } })
+      if (url.includes('/text-extractions') && url.endsWith('/text-extractions')) return response(200, { items: [extraction] })
+      if (url.includes('/ocr-runs')) return response(200, { items: [] })
+      if (url.includes('/segments?')) return response(200, { items: [segmentOne, segmentTwo] })
+      if (url.includes('/pages?')) return response(200, { items: [page] })
+      if (url.endsWith('/policy-ai-extractions')) return response(200, { items: [] })
+      return response(404, {})
+    }) as never)
+    const user = userEvent.setup()
+    render(<PolicyAiCandidatesModule caseId={CASE} source="api" />)
+    const planButton = await screen.findByRole('button', { name: 'Analiz Planı Oluştur' })
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(2))
+    const initialCheckboxes = screen.getAllByRole('checkbox')
+    initialCheckboxes.forEach((checkbox) => expect(checkbox).toBeChecked())
+    expect(planButton).toBeEnabled()
+
+    await user.click(initialCheckboxes[0]!)
+    await user.click(initialCheckboxes[1]!)
+    expect(planButton).toBeDisabled()
+
+    const callsBeforeRetry = discoveryCalls
+    await user.click(screen.getByRole('button', { name: /Kaynakları Yenile/ }))
+    await waitFor(() => expect(discoveryCalls).toBeGreaterThan(callsBeforeRetry))
+
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(2))
+    const reloadedCheckboxes = screen.getAllByRole('checkbox')
+    reloadedCheckboxes.forEach((checkbox) => expect(checkbox).not.toBeChecked())
+    expect(screen.getByRole('button', { name: 'Analiz Planı Oluştur' })).toBeDisabled()
   })
 
   it('malformed run/bundle response için fail-closed unavailable gösterir', async () => {

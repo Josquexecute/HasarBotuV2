@@ -1,6 +1,6 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-25
+Son güncelleme: 2026-07-26
 
 ## Mevcut sürüm ve aşama
 
@@ -53,6 +53,19 @@ Son güncelleme: 2026-07-25
   ile **2.050 başarılı / 6 ortam-koşullu UI skip**, build/bundle 412.643 bayt
   (bütçe 500.000), `npm audit` 0 bulgu. Gerçek Chrome/CDP: Paket 66 smoke 12/12
   ve React Router smoke 13/13, iki çözünürlük ve iki temada, console error yok.
+- **4. dilim kapanışı — doğrudan regresyon testi eklendi (2026-07-26):** 2.
+  grubun bulduğu kaynak-seçimi kusuru (bkz. yukarı) o sırada hedefli bir testle
+  yakalanmıştı, ancak kalıcı test dosyasına ayrı bir vaka olarak girmemişti.
+  `PolicyAiCandidatesModule.test.tsx`'e >=2 kaynaklı, sıfıra indirilen seçimin
+  kimlik-korumalı bir yeniden yüklemede (`Kaynakları Yenile`) mutabakatla geri
+  dönmediğini doğrudan doğrulayan bir vaka eklendi. Testin gerçekten kusuru
+  yakaladığı, düzeltmeyi (`ApiPanel` içindeki kimlik kısayolu) geçici olarak
+  devre dışı bırakıp testin kırıldığı, sonra düzeltmeyi aynen geri getirip
+  (component dosyasında net diff yok) yeniden yeşile döndüğü doğrulandı.
+  Ana ağaçta typecheck, lint (**0 error / 2 warning**, değişmedi), gerçek
+  `hasarbotu_test` PostgreSQL ile **2.051 başarılı / 6 ortam-koşullu UI skip**
+  (+1 yeni test, mevcut hiçbir test bozulmadı), build/bundle **412.643 bayt**
+  (değişmedi, yalnız test dosyası eklendi), `npm audit` 0 bulgu geçti.
 
 ## `src/data` barrel bölünmesi (2026-07-25)
 

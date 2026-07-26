@@ -2091,3 +2091,30 @@ Etki: 10 modul dosyasi ve `eslint.config.js`. Runtime davranisi degismedi;
 pagination, onay akislari, Paket 62 kosu secimi, Paket 23 promotion ve Paket 66
 deger kaybi davranislari korundu. `set-state-in-effect` 14 -> 2 (ikisi de
 kanitli istisna, 0 error).
+
+## 2026-07-26 — HB-2026-097: HB-2026-096 kaynak secimi kusuru icin dogrudan regresyon testi
+
+Karar:
+
+1. HB-2026-096 madde 6'daki kaynak-secimi kusuru (mutabakat kuralinin her
+   render'da uygulanip kullanicinin sifira indirdigi secimi geri almasi) o
+   sirada hedefli bir testle yakalanip duzeltilmisti, ancak kalici test
+   dosyasina ayri, adlandirilmis bir vaka olarak girmemisti.
+2. `PolicyAiCandidatesModule.test.tsx`'e dogrudan regresyon vakasi eklendi:
+   >=2 kaynakli bir workspace'te secim sifira indirilir, sonra kimlik
+   degismeden ("Kaynaklari Yenile") yeniden yuklenir; secimin bos kalmasi ve
+   plan butonunun devre disi kalmasi dogrulanir.
+3. Testin kusuru gercekten yakaladigi kanitlandi: `ApiPanel` icindeki kimlik
+   kisayolu (`sourceSelection.key === availableSourceIdentity`) gecici olarak
+   `false` ile degistirildi, yeni test (ve mevcut bir baska test) kirmizi
+   oldu; kisayol aynen geri getirilip (component dosyasinda net diff yok)
+   yeniden yesile donuldu.
+
+Gerekce: Bir kez elle yakalanip duzeltilen bir kusurun kalici koruyucusu
+olmadan tekrar surunmesi riski vardir; regresyon testi bu riski kapatir.
+
+Etki: Yalniz `src/features/cases/PolicyAiCandidatesModule.test.tsx` (+1 vaka,
+47 satir). Uretim kodu degismedi. Ana agacta typecheck, lint (0 error / 2
+warning, degismedi), gercek `hasarbotu_test` PostgreSQL ile 2.051 basarili / 6
+ortam-kosullu UI skip (+1), build/bundle 412.643 bayt (degismedi), `npm audit`
+0 bulgu.
