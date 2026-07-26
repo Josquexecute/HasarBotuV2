@@ -81,33 +81,54 @@ export function LaborAllocationAiModule({ caseId, port, excelPort, workbookPort,
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [projectionApplicationId, setProjectionApplicationId] = useState<string | null>(null)
 
+  const applyWorkspace = useCallback((
+    result: LaborAllocationWorkspaceRecord,
+    history: readonly LaborAllocationApplicationRecord[],
+  ) => {
+    setWorkspace(result)
+    setApplications(history)
+    // Paket 62: önce aktif koşu — sayfadan ayrılıp dönen kullanıcı
+    // ilerlemeyi kaldığı yerden görür. Aktif koşu yoksa EN SON koşu
+    // gösterilir; başarısız veya iptal edilmiş son deneme sessizce
+    // gizlenip yerine eski bir öneri tazeymiş gibi sunulmaz.
+    const active = result.runs.find((item) => (
+      ['queued', 'running', 'cancel_requested'].includes(item.status)
+    )) ?? null
+    setRun(active ?? result.runs.at(0) ?? null)
+    setStatus('ok')
+  }, [])
+  const applyLoadError = useCallback((error: unknown) => {
+    setWorkspace(null)
+    setErrorKind(error instanceof LaborAllocationClientError ? error.kind : 'unavailable')
+    setStatus('error')
+  }, [])
+  const read = useCallback(() => Promise.all([
+    adapter.workspace(caseId),
+    adapter.listApplications(caseId),
+  ]), [adapter, caseId])
+
+  /** Mutasyon sonrasi elle yenileme; kullanici eylemi oldugu icin 'loading' yazar. */
   const load = useCallback(async () => {
     setStatus('loading')
     try {
-      const [result, history] = await Promise.all([
-        adapter.workspace(caseId),
-        adapter.listApplications(caseId),
-      ])
-      setWorkspace(result)
-      setApplications(history)
-      // Paket 62: önce aktif koşu — sayfadan ayrılıp dönen kullanıcı
-      // ilerlemeyi kaldığı yerden görür. Aktif koşu yoksa EN SON koşu
-      // gösterilir; başarısız veya iptal edilmiş son deneme sessizce
-      // gizlenip yerine eski bir öneri tazeymiş gibi sunulmaz.
-      const active = result.runs.find((item) => (
-        ['queued', 'running', 'cancel_requested'].includes(item.status)
-      )) ?? null
-      const latest = active ?? result.runs.at(0) ?? null
-      setRun(latest)
-      setStatus('ok')
+      const [result, history] = await read()
+      applyWorkspace(result, history)
     } catch (error) {
-      setWorkspace(null)
-      setErrorKind(error instanceof LaborAllocationClientError ? error.kind : 'unavailable')
-      setStatus('error')
+      applyLoadError(error)
     }
-  }, [adapter, caseId])
+  }, [applyLoadError, applyWorkspace, read])
 
-  useEffect(() => { void load() }, [load])
+  // Ilk okuma efekt icinde yapilir ve durum yalniz async geri cagrilarda
+  // yazilir. Baslangic durumu zaten 'loading'dir. `cancelled` muhafazasi
+  // EKLENDI; onceden yoktu, yani case degisiminde ucustaki yanit yeni case'in
+  // workspace'ini ezebiliyordu.
+  useEffect(() => {
+    let cancelled = false
+    read()
+      .then(([result, history]) => { if (!cancelled) applyWorkspace(result, history) })
+      .catch((error: unknown) => { if (!cancelled) applyLoadError(error) })
+    return () => { cancelled = true }
+  }, [applyLoadError, applyWorkspace, read])
 
   /**
    * Paket 62 — analiz arka planda çalışır; aktif run için durum yoklanır.
