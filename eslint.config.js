@@ -5,34 +5,29 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 /**
- * React Compiler kural adaptasyonu (HB-2026-090):
+ * React Compiler kurallari (HB-2026-090, HB-2026-096):
  *
- * `eslint-plugin-react-hooks` v7'nin getirdigi 14 Compiler kuralindan 13'u
- * upstream `recommended` seviyesinde calisir (11 tanesi `error`,
- * `incompatible-library` ve `unsupported-syntax` upstream'in kasitli tercihiyle
- * `warn`). Bu 13 kuralda ihlal YOKTUR ve seviyeleri burada override EDILMEZ.
+ * `eslint-plugin-react-hooks` v7'nin getirdigi 14 Compiler kuralinin TAMAMI
+ * artik upstream `recommended` seviyesinde calisir; hicbiri global olarak
+ * override EDILMEZ. `set-state-in-effect` de dahil olmak uzere kurallar
+ * `error` seviyesindedir (`incompatible-library` ve `unsupported-syntax`
+ * upstream'in kasitli tercihiyle `warn`).
  *
- * Geriye yalniz `set-state-in-effect` kalir. 33 bulgusunun tamami tek tek
- * incelendi; hicbiri davranissal kusur degildir:
- *
- *  - 23 bulgu: async yukleme oncesi durum sifirlama (`src/data/*` ve modul
- *    `load()` efektleri). Senkron sifirlama kaldirilirsa yeni anahtar icin
- *    ESKI veri gosterilir; bu daha kotu bir kusurdur. Butun adapter kimlikleri
- *    `useMemo`/`useState` ile kararlidir (sonsuz yeniden istek yok) ve her
- *    fetch `cancelled` muhafazasi tasir (yaris durumu yok).
- *  - 5 bulgu: anahtar degisiminde fail-closed sifirlama (onay bayraklari, form
- *    durumu, yerel override). Kasitli guvenlik davranisidir.
- *  - 3 bulgu: yeni gelen secenek listesine karsi secim mutabakati; hepsi
- *    yakinsayan fonksiyonel guncellemedir.
- *  - 2 bulgu: saat okumasi ve fetch sonrasi sayfa kelepcelemesi. `Date.now()`
- *    render'a tasinamaz; tasinirsa `react-hooks/purity` ihlal edilir.
- *
- * Bunlarin render sirasinda turetilmesi veri katmaninin state seklinin
- * yeniden kurulmasini gerektirir; ayri bir paket konusudur. Kural KAPATILMAZ,
- * `warn` seviyesinde acik kalir. Ayrinti: docs/DECISION_LOG.md HB-2026-090.
+ * Asagidaki iki dosya, tek tek kanitlanmis ve baska turlu cozulemeyen iki
+ * bulgu icin `warn` seviyesinde birakilir. Bunlar kural gevsetmesi degil,
+ * kapsami dosya ve gerekce ile sinirlanmis istisnalardir; kodda
+ * `eslint-disable` yorumu kullanilmaz.
  */
-const REACT_COMPILER_RULES_PENDING_ADOPTION = [
-  'react-hooks/set-state-in-effect',
+const SET_STATE_IN_EFFECT_EXCEPTIONS = [
+  // LaborAllocationAiModule: gecen sure sayaci. Deger `Date.now()` ile olculur;
+  // render'a tasinirsa `react-hooks/purity` ihlal edilir. Ilk olcum efektte
+  // senkron yazilmazsa sayac bir saniye boyunca yanlis deger gosterir.
+  'src/features/cases/LaborAllocationAiModule.tsx',
+  // CasesPage: fetch sonrasi sayfa kelepcelemesi. `totalPages` ancak yanit
+  // geldikten sonra bilinir. Render'da turetmek, istenen sayfayi kalici olarak
+  // duzeltmedigi icin toplam sayfa sayisi yeniden buyudugunde kullaniciyi
+  // beklenmedik bir sayfaya siciratirdi; pagination davranisi korunur.
+  'src/features/cases/CasesPage.tsx',
 ]
 
 export default tseslint.config(
@@ -54,8 +49,11 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      ...Object.fromEntries(REACT_COMPILER_RULES_PENDING_ADOPTION.map((rule) => [rule, 'warn'])),
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
+  },
+  {
+    files: SET_STATE_IN_EFFECT_EXCEPTIONS,
+    rules: { 'react-hooks/set-state-in-effect': 'warn' },
   },
 )

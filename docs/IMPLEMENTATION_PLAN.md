@@ -123,7 +123,20 @@ Sonuç: `src/data` içinde `set-state-in-effect` uyarısı kalmadı.
 - [x] Circular dependency oluşmadığını ve tree-shaking/lazy dağılımını ölç.
 - [x] Bütçeyi yükseltmeden anlamlı headroom üret: 3 bayt → 87.434 bayt.
 
-### 4. dilim — modül seviyesi bulgular
+### 4. dilim — modül seviyesi bulgular — tamamlandı
+
+- [x] 1. grup: güvenli `load()` modülleri (3 uyarı) — `cancelled` muhafazası eklendi.
+- [x] 2. grup: fail-closed onay ve seçim sıfırlamaları (7 uyarı) — bayat onay
+  frame'i kalktı; kaynak seçimi mutabakatındaki gerçek kusur düzeltildi.
+- [x] 3. grup: `LaborAllocationAiModule` ilk okuması (1 uyarı).
+- [x] 4. grup: `CasesPage` arama kutusu URL senkronu (1 uyarı).
+- [x] `set-state-in-effect` kuralı `error` seviyesine çıkarıldı; 14 Compiler
+  kuralının tamamı upstream seviyesinde, global override yok.
+- [!] İki kanıtlı istisna dosya kapsamında `warn` kaldı: `LaborAllocationAiModule`
+  geçen süre sayacı (`Date.now()` render'a taşınamaz) ve `CasesPage` fetch
+  sonrası sayfa kelepçelemesi (`totalPages` yanıt öncesi bilinemez).
+
+### 4. dilim — ilk plan kaydı
 
 - [ ] `load()` deseni kullanan modüller: `CaseVehicleProfileModule`,
   `LaborAllocationAiModule`, `WorkspaceProvisioningPanel`,

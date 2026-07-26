@@ -2044,3 +2044,50 @@ getirir ve baslangic grafigini yalnizca gercekten gereken kodla sinirlar.
 
 Etki: 66 kaynak dosyasinda import satirlari, silinen `src/data/index.ts` ve iki
 test mock hedefi. `set-state-in-effect` sayisi degismedi (14).
+
+## 2026-07-25 — HB-2026-096: set-state-in-effect error seviyesine cikarildi, iki kanitli istisna
+
+Karar:
+
+1. `eslint-plugin-react-hooks` v7'nin 14 Compiler kuralinin TAMAMI upstream
+   `recommended` seviyesinde calisir. `set-state-in-effect` dahil hicbiri global
+   olarak override EDILMEZ; kural `error` seviyesindedir.
+2. Modul seviyesindeki 14 bulgunun 12'si giderildi. Donusum toplu degil, dort
+   mantiksal grupta dort ayri commit ile yapildi ve her modul ayri test edildi.
+3. Kuralin gercek kapsami olculdu: efektten dogrudan cagrilan bir fonksiyonun
+   icindeki setState'ler de -- await konumundan bagimsiz olarak -- ihlal
+   sayiliyor. Bu nedenle `useEffect(() => { void load() })` deseni yalniz
+   `setStatus('loading')` kaldirilarak cozulmuyor; ilk okuma efekt icine
+   alinmali ve durum yalniz async geri cagrilarda yazilmalidir.
+4. Uc modulde (`CaseVehicleProfileModule`, `LaborExcelProfilesModule`,
+   `LaborAllocationAiModule`) donusum sirasinda `cancelled` muhafazasi EKLENDI;
+   onceden yoktu ve case degisiminde ucustaki yanit yeni case'in verisini
+   ezebiliyordu.
+5. Onay bayraklari artik kimlik degistiginde AYNI render'da duser. Onceden
+   sifirlama efekte bagli oldugu icin bir frame boyunca bayat onay
+   gorunebiliyordu; bu fail-closed acidan istenmeyen bir aralikti.
+6. Kaynak secimi mutabakatinda gercek kusur bulundu ve duzeltildi: kural her
+   render'da uygulandiginda kullanicinin son kaynagi kaldirmasi geri aliniyor ve
+   plan butonu yanlislikla etkin kaliyordu. Mutabakat artik yalniz kaynak
+   listesi kimligi degistiginde uygulanir.
+7. Iki bulgu baska turlu cozulemez ve dosya kapsamli istisna olarak `warn`
+   birakilir. Kodda `eslint-disable` yorumu KULLANILMAZ; istisna yalniz
+   `eslint.config.js` icinde dosya listesi ve gerekcesiyle tanimlanir:
+   - `src/features/cases/LaborAllocationAiModule.tsx`: gecen sure sayaci.
+     Deger `Date.now()` ile olculur; render'a tasinirsa `react-hooks/purity`
+     ihlal edilir. Ilk olcum efektte senkron yazilmazsa sayac bir saniye boyunca
+     yanlis deger gosterir.
+   - `src/features/cases/CasesPage.tsx`: fetch sonrasi sayfa kelepcelemesi.
+     `totalPages` ancak yanit geldikten sonra bilinir. Render'da turetmek
+     istenen sayfayi kalici olarak duzeltmedigi icin toplam sayfa sayisi yeniden
+     buyudugunde kullaniciyi beklenmedik bir sayfaya siciratir; pagination
+     davranisi korunmalidir.
+
+Gerekce: Kuralin koruma degeri ancak `error` seviyesinde gercek olur. Kalan iki
+bulgu icin genel gevsetme yerine kapsami dosya ve gerekce ile sinirlanmis
+istisna secildi; boylece yeni ihlaller repo genelinde derhal hata olarak duser.
+
+Etki: 10 modul dosyasi ve `eslint.config.js`. Runtime davranisi degismedi;
+pagination, onay akislari, Paket 62 kosu secimi, Paket 23 promotion ve Paket 66
+deger kaybi davranislari korundu. `set-state-in-effect` 14 -> 2 (ikisi de
+kanitli istisna, 0 error).

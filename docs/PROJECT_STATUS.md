@@ -5,8 +5,54 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: `src/data` barrel bölünmesi ve başlangıç bundle temizliği
-- Durum: **Başlangıç JS grafiği 499.997 → 412.566 bayt (−87.431, %17,5); bütçe boşluğu 3 bayttan 87.434 bayta çıktı. `set-state-in-effect` 14 uyarı (hepsi modül seviyesi, 4. dilim)**
+- Aşama: Modül seviyesi `set-state-in-effect` temizliği (4. dilim) tamamlandı
+- Durum: **`set-state-in-effect` kuralı artık `error` seviyesinde. 33 bulgudan 31'i giderildi; kalan 2 bulgu kanıtlı, dosya kapsamlı istisnadır ve `warn` seviyesindedir. Lint 0 error / 2 warning**
+
+## Modül seviyesi `set-state-in-effect` temizliği — 4. dilim (2026-07-25)
+
+- 14 uyarı dört mantıksal grupta, dört ayrı commit ile ele alındı. Toplu
+  refactor yapılmadı; her modül ayrı incelendi ve ayrı test edildi.
+- **Kuralın gerçek kapsamı ölçüldü:** `react-hooks/set-state-in-effect`,
+  efektten doğrudan çağrılan bir fonksiyonun içindeki `setState`'leri de —
+  `await` konumundan bağımsız olarak — ihlal sayıyor. Bu yüzden
+  `useEffect(() => { void load() })` deseni yalnız `setStatus('loading')`
+  kaldırılarak çözülmüyor; ilk okumanın efekt içine alınması ve durumun yalnız
+  async geri çağrılarda yazılması gerekiyor.
+- **1. grup (`2593b3b`)** — güvenli `load()` modülleri:
+  `CaseVehicleProfileModule`, `LaborExcelProfilesModule`,
+  `WorkspaceProvisioningPanel`. Üçünde de ilk okuma efekt içine alındı ve
+  **`cancelled` muhafazası eklendi** (önceden yoktu; case değişiminde uçuştaki
+  yanıt yeni case'in verisini ezebiliyordu).
+- **2. grup (`6165f36`)** — fail-closed onay ve seçim sıfırlamaları:
+  `PolicyAiCandidatesModule` (4), `CaseDetailPage`, `EmailDraftApiModule`,
+  `TrafficValueLossReportPanel`. Onay bayrakları artık kimlik değiştiğinde
+  **aynı render'da** düşüyor; önceden sıfırlama efekte bağlı olduğu için bir
+  frame boyunca bayat onay görünebiliyordu.
+  - **Gerçek kusur bulundu ve düzeltildi:** ilk denemede kaynak seçimi mutabakat
+    kuralı her render'da uygulanıyordu; bu, kullanıcının son kaynağı
+    kaldırmasını geri alıyor ve plan butonunu yanlışlıkla etkin bırakıyordu.
+    Hedefli test yakaladı. Kural artık yalnız kaynak listesi kimliği
+    değiştiğinde uygulanıyor.
+- **3. grup (`3097664`)** — `LaborAllocationAiModule` ilk okuması; Paket 62 koşu
+  seçim kuralı ve iptal davranışı korunarak efekt içine alındı.
+- **4. grup (`236161f`)** — `CasesPage` arama kutusu URL senkronu; girdi
+  navigasyon kimliğiyle tutulup render'da türetiliyor.
+- **Kural `error` seviyesine çıkarıldı (`eslint.config.js`).** 14 React Compiler
+  kuralının tamamı artık upstream `recommended` seviyesinde; hiçbiri global
+  olarak override edilmiyor.
+- **Kalan 2 kanıtlı istisna** (dosya kapsamlı, `warn`; kodda `eslint-disable`
+  YOK):
+  - `src/features/cases/LaborAllocationAiModule.tsx` — geçen süre sayacı.
+    `Date.now()` render'a taşınırsa `react-hooks/purity` ihlal edilir; ilk ölçüm
+    efektte yazılmazsa sayaç bir saniye boyunca yanlış değer gösterir.
+  - `src/features/cases/CasesPage.tsx` — fetch sonrası sayfa kelepçelemesi.
+    `totalPages` ancak yanıt geldikten sonra bilinir; render'da türetmek istenen
+    sayfayı kalıcı düzeltmediği için toplam sayfa sayısı yeniden büyüdüğünde
+    kullanıcıyı beklenmedik bir sayfaya sıçratırdı.
+- Doğrulama: typecheck, lint (**0 error / 2 warning**), gerçek PostgreSQL 17.10
+  ile **2.050 başarılı / 6 ortam-koşullu UI skip**, build/bundle 412.643 bayt
+  (bütçe 500.000), `npm audit` 0 bulgu. Gerçek Chrome/CDP: Paket 66 smoke 12/12
+  ve React Router smoke 13/13, iki çözünürlük ve iki temada, console error yok.
 
 ## `src/data` barrel bölünmesi (2026-07-25)
 
