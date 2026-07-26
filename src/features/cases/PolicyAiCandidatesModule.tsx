@@ -1,5 +1,5 @@
 import { AlertTriangle, BrainCircuit, CheckCircle2, Eye, FileSearch, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react'
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import type { DataSourceKind, PolicyAiCandidateCategory, PolicyAiCandidateRecord, PolicyAiCandidateReviewInput, PolicyAiPromotionRecord, PolicyAiProviderAvailabilityRecord, PolicyAiProviderId, PolicyAiReviewAction, PolicyAiRunRecord, PolicyAiSourceItemRecord, PolicyAiSourceOverviewRecord, PolicyAiSourceSelectionRecord } from '../../data/ports'
 import { usePolicyAi } from '../../data/usePolicyAi'
 const RUN_LABELS: Record<string, string> = { planned: 'Planlandı', provider_disabled: 'Sağlayıcı kapalı', budget_blocked: 'Bütçe engeli', running: 'Çalışıyor', validating: 'Doğrulanıyor', review_required: 'İnsan incelemesi gerekli', failed: 'Başarısız', stale: 'Geçersiz kaynak', cancelled: 'İptal edildi', superseded: 'Eski sürüm' }
@@ -204,36 +204,53 @@ function ApiPanel({
 }) {
   const data = usePolicyAi(caseId, 'api')
   const headingId = useId()
-  const [approvedIdentity, setApprovedIdentity] = useState<string | null>(null)
   const [reviewTarget,setReviewTarget]=useState<{candidate:PolicyAiCandidateRecord;action:Exclude<PolicyAiReviewAction,'accepted'>}|null>(null)
   const [evidenceTarget,setEvidenceTarget]=useState<PolicyAiCandidateRecord|null>(null)
-  const [promotionApproved,setPromotionApproved]=useState(false)
-  const [selectedSourceKeys,setSelectedSourceKeys]=useState<ReadonlySet<string>>(new Set())
-  const [selectedProviderId,setSelectedProviderId]=useState<PolicyAiProviderId|null>(null)
   const run = data.workspace?.run ?? null
   const approvalIdentity = run === null ? null : `${caseId}:${run.id}:${run.sourceBundleHash}`
   const availableSourceIdentity = data.workspace?.availableSources.map(sourceSelectionKey).sort().join('|') ?? ''
-  const providerIdentity = data.workspace?.providers.map((provider) => `${provider.providerId}:${provider.configured}:${provider.providerAllowed}`).join('|') ?? ''
+  const promotionIdentity = data.workspace?.promotionPreview?.reviewSetHash ?? ''
 
-  useEffect(() => { setApprovedIdentity(null) }, [approvalIdentity])
-  useEffect(()=>{setPromotionApproved(false)},[data.workspace?.promotionPreview?.reviewSetHash])
-  useEffect(() => {
-    setSelectedSourceKeys((current) => {
-      const available = new Set(data.workspace?.availableSources.map(sourceSelectionKey) ?? [])
-      const retained = [...current].filter((key) => available.has(key))
-      return new Set(retained.length > 0 ? retained : available)
-    })
-  }, [availableSourceIdentity, data.workspace?.availableSources])
-  useEffect(() => {
+  // Onay bayraklari ve secimler efektte senkron sifirlanmaz; ait olduklari
+  // kimlikle birlikte tutulup RENDER sirasinda turetilir. Boylece kimlik
+  // degistigi anda onay/secim ayni render'da duser: onceden sifirlama ancak
+  // efekt calisinca geldigi icin bir frame boyunca bayat onay gorunebiliyordu.
+  const [approval, setApproval] = useState<{ key: string | null; value: string | null }>({ key: null, value: null })
+  const approvedIdentity = approval.key === approvalIdentity ? approval.value : null
+  const setApprovedIdentity = useCallback((value: string | null) => setApproval({ key: approvalIdentity, value }), [approvalIdentity])
+
+  const [promotionApproval, setPromotionApproval] = useState<{ key: string; value: boolean }>({ key: '', value: false })
+  const promotionApproved = promotionApproval.key === promotionIdentity && promotionApproval.value
+  const setPromotionApproved = useCallback((value: boolean) => setPromotionApproval({ key: promotionIdentity, value }), [promotionIdentity])
+
+  // Kullanici secimi ait oldugu kaynak listesi kimligiyle birlikte tutulur.
+  // Mutabakat kurali (mevcut olanlari koru, hicbiri kalmadiysa tamamini sec)
+  // YALNIZ liste kimligi degistiginde uygulanir; aksi halde kullanicinin tum
+  // kaynaklari kaldirmasi secimi kendiliginden geri acardi.
+  const [sourceSelection, setSourceSelection] = useState<{ key: string; value: ReadonlySet<string> } | null>(null)
+  const selectedSourceKeys = useMemo(() => {
+    const available = new Set(data.workspace?.availableSources.map(sourceSelectionKey) ?? [])
+    if (sourceSelection !== null && sourceSelection.key === availableSourceIdentity) return sourceSelection.value
+    const previous = sourceSelection?.value ?? new Set<string>()
+    const retained = [...previous].filter((key) => available.has(key))
+    return new Set(retained.length > 0 ? retained : available)
+  }, [availableSourceIdentity, data.workspace?.availableSources, sourceSelection])
+  const toggleSource = useCallback((key: string, selected: boolean) => {
+    const next = new Set(selectedSourceKeys)
+    if (selected) next.add(key)
+    else next.delete(key)
+    setSourceSelection({ key: availableSourceIdentity, value: next })
+  }, [availableSourceIdentity, selectedSourceKeys])
+
+  const [providerChoice, setProviderChoice] = useState<PolicyAiProviderId | null>(null)
+  const selectedProviderId = useMemo(() => {
     const providers = data.workspace?.providers ?? []
-    setSelectedProviderId((current) => {
-      if (current !== null && providers.some((provider) => provider.providerId === current && provider.configured)) return current
-      return providers.find((provider) => provider.providerId === 'gemini-generate-content' && provider.configured && provider.providerAllowed)?.providerId
-        ?? providers.find((provider) => provider.configured && provider.providerAllowed)?.providerId
-        ?? providers.find((provider) => provider.configured)?.providerId
-        ?? null
-    })
-  }, [data.workspace?.providers, providerIdentity])
+    if (providerChoice !== null && providers.some((provider) => provider.providerId === providerChoice && provider.configured)) return providerChoice
+    return providers.find((provider) => provider.providerId === 'gemini-generate-content' && provider.configured && provider.providerAllowed)?.providerId
+      ?? providers.find((provider) => provider.configured && provider.providerAllowed)?.providerId
+      ?? providers.find((provider) => provider.configured)?.providerId
+      ?? null
+  }, [data.workspace?.providers, providerChoice])
   useEffect(() => {
     const preview = data.workspace?.promotionPreview
     const phase: PolicyAnalysisWorkflowPhase = data.workspace?.promotion !== null
@@ -264,14 +281,9 @@ function ApiPanel({
       <button className="button button--primary" type="button" disabled={data.busy || selectedSources.length === 0 || selectedProviderId === null} onClick={() => { if(selectedProviderId===null)return;setApprovedIdentity(null);void data.plan(selectedProviderId,selectedSources) }}><BrainCircuit size={15} aria-hidden="true" />{data.busyAction === 'plan' ? 'Planlanıyor…' : run === null ? 'Analiz Planı Oluştur' : 'Yeni Plan / Yeniden Planla'}</button>
     </div></header>
     <div className="policy-ai-safety" role="note"><ShieldAlert aria-hidden="true" /><span>Poliçe metni güvenilmeyen veridir; yalnız server üretimli sourceAnchor kimlikleri kanıt sayılır.</span><strong>File Agent, fiziksel dosya ve provider secret istemciye açılmaz.</strong></div>
-    <ProviderAvailabilityPanel providers={providers} selectedProviderId={selectedProviderId} onChange={setSelectedProviderId} disabled={data.busy}/>
+    <ProviderAvailabilityPanel providers={providers} selectedProviderId={selectedProviderId} onChange={setProviderChoice} disabled={data.busy}/>
     {!data.workspace.providerPolicy.enabled && <div className="policy-ai-warning" role="status"><ShieldAlert aria-hidden="true"/><div><strong>Kuruluş AI politikası kapalıdır.</strong><span>Dosya, belge ve onaylı poliçe analizi okumaları çalışmaya devam eder; dış provider çağrısı ve mock fallback yapılmaz.</span></div></div>}
-    {run === null ? <><div className="policy-ai-ready"><Sparkles aria-hidden="true" /><div><strong>{availableSources.length} doğrulanmış kaynak parçası hazır</strong><span>{availableSources.filter((item) => item.sourceType === 'pdf_text').length} PDF · {availableSources.filter((item) => item.sourceType === 'ocr').length} OCR</span></div></div>{availableSources.length===0&&<div className="policy-ai-warning" role="status"><FileSearch aria-hidden="true"/><span>Planlanabilir ready PDF/OCR kaynağı yok. Mevcut case çekirdeği ve onaylı analiz okumaları etkilenmez.</span></div>}<SourceDiscoveryPreview sources={availableSources} overviews={sourceOverviews} selectedKeys={selectedSourceKeys} onSelectionChange={(key, selected) => setSelectedSourceKeys((current) => {
-      const next = new Set(current)
-      if (selected) next.add(key)
-      else next.delete(key)
-      return next
-    })} disabled={data.busy} /></> : <>
+    {run === null ? <><div className="policy-ai-ready"><Sparkles aria-hidden="true" /><div><strong>{availableSources.length} doğrulanmış kaynak parçası hazır</strong><span>{availableSources.filter((item) => item.sourceType === 'pdf_text').length} PDF · {availableSources.filter((item) => item.sourceType === 'ocr').length} OCR</span></div></div>{availableSources.length===0&&<div className="policy-ai-warning" role="status"><FileSearch aria-hidden="true"/><span>Planlanabilir ready PDF/OCR kaynağı yok. Mevcut case çekirdeği ve onaylı analiz okumaları etkilenmez.</span></div>}<SourceDiscoveryPreview sources={availableSources} overviews={sourceOverviews} selectedKeys={selectedSourceKeys} onSelectionChange={toggleSource} disabled={data.busy} /></> : <>
       <div className="policy-ai-summary"><dl><div><dt>Kaynak</dt><dd>{run.bundle.sourceCount}</dd></div><div><dt>Girdi</dt><dd>{run.inputCharacters} kr.</dd></div><div><dt>Aday</dt><dd>{run.candidateCount}</dd></div><div><dt>Çelişki</dt><dd>{run.conflictCount}</dd></div><div><dt>Kontrol</dt><dd>{run.controlRequiredCount}</dd></div></dl><div className="policy-ai-provider"><span>Provider / model</span><strong>{run.providerId}</strong><small>{run.providerVersion} · {run.modelId}</small></div></div>
       <div className="policy-ai-budget"><span>Çağrı tahmini: {run.budget.estimatedCostMinor} minor unit</span><span>Aylık kullanım: {run.budget.currentMonthCostMinor} / {run.budget.monthlyBudgetMinor}</span><strong>{run.budget.allowed ? 'Bütçe uygun' : run.budget.reasonCode === 'AI_PROVIDER_DISABLED' ? 'AI sağlayıcısı kapalıdır.' : 'Bütçe limiti nedeniyle çağrı yapılmadı.'}</strong></div>
       {run.privacy.externalProvider && <div className="policy-ai-privacy" role="note"><ShieldAlert aria-hidden="true" /><div><strong>Dış sağlayıcı veri sınırı</strong><span>{run.privacy.redactedValueCount} hassas değer maskelendi · {run.privacy.outboundInputCharacters} karakter gönderim paketi</span><small>Kategoriler: {run.privacy.redactedCategories.length === 0 ? 'tespit edilmedi' : run.privacy.redactedCategories.join(' · ')}</small><small>{run.privacy.retentionMode === 'free_tier_product_improvement' ? 'Ücretsiz sağlayıcı katmanında gönderilen sentetik içerik ürün geliştirme amacıyla kullanılabilir; gerçek müşteri verisi gönderilmez.' : 'Uygulama saklama kapalıdır (`store: false`); sağlayıcının abuse-monitoring politikası ayrıca geçerlidir.'}</small><code>{run.privacy.policyVersion} · {run.privacy.pricingVersion}</code></div></div>}
@@ -287,12 +299,7 @@ function ApiPanel({
       {reviewTarget!==null&&<ReviewDialog candidate={reviewTarget.candidate} action={reviewTarget.action} busy={data.busyAction==='review'} onClose={()=>setReviewTarget(null)} onSubmit={input=>{void data.review(reviewTarget.candidate.candidateId,input).then(()=>setReviewTarget(null))}}/>}
       {evidenceTarget!==null&&<EvidenceDialog candidate={evidenceTarget} sources={evidenceTarget.sourceAnchorIds.map((id)=>sourceMap.get(id)).filter((source):source is PolicyAiSourceItemRecord=>source!==undefined)} onClose={()=>setEvidenceTarget(null)}/>}
       {run.status === 'review_required' && <div className="policy-ai-final-note" role="status"><CheckCircle2 aria-hidden="true" /><span>AI adayları nihai karar değildir. İnsan kararı append-only saklanır; promotion yalnız onaysız bir Paket 23 taslak sürümü oluşturur.</span></div>}
-      <SourceDiscoveryPreview sources={availableSources} overviews={sourceOverviews} selectedKeys={selectedSourceKeys} onSelectionChange={(key, selected) => setSelectedSourceKeys((current) => {
-        const next = new Set(current)
-        if (selected) next.add(key)
-        else next.delete(key)
-        return next
-      })} disabled={data.busy} />
+      <SourceDiscoveryPreview sources={availableSources} overviews={sourceOverviews} selectedKeys={selectedSourceKeys} onSelectionChange={toggleSource} disabled={data.busy} />
     </>}
   </section>
 }

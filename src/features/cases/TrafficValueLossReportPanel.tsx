@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Download, Eye, FileText, LoaderCircle, ShieldCheck } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DataSourceKind } from '../../data/ports'
 import type { TrafficValueLossVersionRecord } from '../../data/trafficValueLossPort'
 import type { TrafficValueLossReportDataPort } from '../../data/trafficValueLossReportPort'
@@ -14,6 +14,14 @@ function money(value: number | null): string {
 function size(value: number): string {
   if (value < 1024) return `${value} B`
   return `${(value / 1024).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} KB`
+}
+
+/** Form durumu ait oldugu deger kaybi surumuyle birlikte tasinir. */
+interface ReportFormState {
+  readonly key: string
+  readonly note: string
+  readonly confirmed: boolean
+  readonly message: string | null
 }
 
 export function TrafficValueLossReportPanel({
@@ -34,17 +42,24 @@ export function TrafficValueLossReportPanel({
     && version.humanApprovalStatus === 'approved'
     && ['approved', 'superseded'].includes(version.status)
   const state = useTrafficValueLossReports(caseId, source, approved, port)
-  const [note, setNote] = useState('')
-  const [confirmed, setConfirmed] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  // Form durumu ait oldugu deger kaybi surumuyle birlikte tutulur; surum
+  // degisince RENDER sirasinda bos turetilir. Onceden sifirlama efekte bagli
+  // oldugundan bir frame boyunca onceki surumun notu ve ONAY KUTUSU
+  // gorunebiliyordu; bu fail-closed acidan istenmeyen bir aralikti.
+  const formKey = version?.id ?? ''
+  const [form, setForm] = useState<ReportFormState>({ key: formKey, note: '', confirmed: false, message: null })
+  const { note, confirmed, message } = form.key === formKey ? form : { note: '', confirmed: false, message: null }
+  const patchForm = useCallback((changes: Partial<Omit<ReportFormState, 'key'>>) => {
+    setForm((prev) => ({ ...(prev.key === formKey ? prev : { key: formKey, note: '', confirmed: false, message: null }), ...changes }))
+  }, [formKey])
+  const setNote = useCallback((value: string) => patchForm({ note: value }), [patchForm])
+  const setConfirmed = useCallback((value: boolean) => patchForm({ confirmed: value }), [patchForm])
+  const setMessage = useCallback((value: string | null) => patchForm({ message: value }), [patchForm])
   const generateKey = useRef<string | null>(null)
   const canGenerate = session.user?.roles.some((role) => ['admin', 'expert', 'case_manager'].includes(role)) === true
   const existing = version === null ? undefined : state.reports.find((report) => report.assessmentVersionId === version.id)
 
   useEffect(() => {
-    setNote('')
-    setConfirmed(false)
-    setMessage(null)
     generateKey.current = null
     state.clearPreview()
     // clearPreview kararlı bir state setter'dır; sürüm değişimi rapor önizlemesini geçersiz kılar.

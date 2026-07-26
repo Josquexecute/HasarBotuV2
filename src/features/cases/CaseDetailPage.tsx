@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -226,10 +226,16 @@ export function CaseDetailPage() {
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [photoMode, setPhotoMode] = useState<'normal' | 'stress'>('normal')
   const [editModalOpen, setEditModalOpen] = useState(false)
-  const [caseOverride, setCaseOverride] = useState<CaseRecord | null>(null)
+  // Yerel override, ait oldugu case ve temel kayit surumuyle birlikte tutulur.
+  // Anahtar degisince RENDER sirasinda dusuruluyor; onceden sifirlama efekte
+  // baglioldugundan bir frame boyunca eski override gorunebiliyordu.
+  const [override, setOverride] = useState<{ key: string; value: CaseRecord | null }>({ key: '', value: null })
   const baseItem = source === 'api'
     ? detailItem
     : cases.find((candidate) => candidate.caseId === caseId) ?? null
+  const overrideKey = `${caseId}#${baseItem?.version ?? ''}`
+  const caseOverride = override.key === overrideKey ? override.value : null
+  const setCaseOverride = useCallback((value: CaseRecord | null) => setOverride({ key: overrideKey, value }), [overrideKey])
   const item = caseOverride?.caseId === caseId ? caseOverride : baseItem
   const canChangeLifecycle = session.user?.roles.some((role) => ['admin', 'expert', 'case_manager'].includes(role)) === true
   const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
@@ -251,10 +257,6 @@ export function CaseDetailPage() {
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
   }, [assistantOpen, closeModalOpen, editModalOpen])
-
-  useEffect(() => {
-    setCaseOverride(null)
-  }, [caseId, baseItem?.version])
 
   if (source === 'api' && dataStatus !== 'ok' && dataStatus !== 'not_found') {
     const message = dataStatus === 'loading'

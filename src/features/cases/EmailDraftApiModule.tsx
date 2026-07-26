@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -103,7 +103,10 @@ export function EmailDraftApiModule({
   const [body, setBody] = useState('')
   const [selectedAttachments, setSelectedAttachments] = useState<Set<string>>(new Set())
   const [createConfirmed, setCreateConfirmed] = useState(false)
-  const [selectedDraftId, setSelectedDraftId] = useState('')
+  // Acik secim bos oldugu surece ilk taslak secili sayilir; bu turetme efektte
+  // yazilmaz, RENDER sirasinda hesaplanir. Kullanici veya bir mutasyon acik
+  // secim yaptiginda o secim gecerlidir.
+  const [explicitDraftId, setSelectedDraftId] = useState('')
   const [editing, setEditing] = useState(false)
   const [revisionReason, setRevisionReason] = useState('')
   const [revisionConfirmed, setRevisionConfirmed] = useState(false)
@@ -114,11 +117,7 @@ export function EmailDraftApiModule({
   const [aiEgressConfirmed, setAiEgressConfirmed] = useState(false)
   const [appliedAiRunId, setAppliedAiRunId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (workspace.data?.drafts.length && selectedDraftId === '') {
-      setSelectedDraftId(workspace.data.drafts[0]!.id)
-    }
-  }, [selectedDraftId, workspace.data])
+  const selectedDraftId = explicitDraftId !== '' ? explicitDraftId : (workspace.data?.drafts[0]?.id ?? '')
 
   const selectedDraft = useMemo(
     () => workspace.data?.drafts.find((draft) => draft.id === selectedDraftId) ?? null,
