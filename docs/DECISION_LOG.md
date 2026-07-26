@@ -1865,3 +1865,29 @@ ayrım, korumayı en yüksek seviyede tutarken davranış riskini sıfırda bır
 Etki: `eslint.config.js` ve `src/data/useTrafficValueLoss.ts`. Runtime davranışı,
 route/URL sözleşmesi, Paket 65B, Paket 66 ve Paket 40 davranışları değişmedi.
 Lint `0 error / 34 warning` → `0 error / 33 warning`.
+
+## 2026-07-25 — HB-2026-091: Lint kapsami uretilmis ciktiyi disliyor
+
+Karar:
+
+1. Flat config global ignore deseni `['dist', 'coverage']` yerine
+   `['**/dist/**', '**/coverage/**']` olur. Yalin `dist`
+   deseni config dosyasinin dizinine gore cozuldugu icin yalniz kok `dist/`i
+   disliyor, workspace `dist` klasorlerini disarida birakmiyordu.
+2. Kaynak lint kapsami DEGISMEZ. Degisiklik oncesi ve sonrasi lint edilen kaynak
+   dosya listesi cikarilip karsilastirilmistir: her ikisi de 737 dosyadir ve
+   listeler birebir aynidir.
+3. Kural seviyeleri bu pakette degistirilmez. Bulgu sayisinin sabit kalmasi
+   (0 error / 33 warning) `dist` icinde saklanan bir bulgu olmadigini ve kural
+   gevsetmesi yapilmadigini kanitlar.
+4. Kapsam disi kalan 670 uretilmis dosya: `services/api/dist` 270,
+   `packages/contracts/dist` 250, `packages/domain/dist` 100,
+   `services/file-agent/dist` 36, `packages/database/dist` 14.
+
+Gerekce: Build ciktisi kaynak kod degildir; lint edilmesi sure ve gurultu
+maliyeti disinda deger uretmez. Desen duzeltmesi kapsam daraltmasi degil, en
+bastan amaclanan davranisin dogru ifade edilmesidir.
+
+Etki: yalniz `eslint.config.js`. Lint edilen dosya 1.407 -> 737, sure
+14.373 ms -> 11.257 ms. Kaynak kapsami, kural seviyeleri, runtime davranisi ve
+bulgu sayisi degismedi.

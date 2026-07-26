@@ -36,7 +36,11 @@ const REACT_COMPILER_RULES_PENDING_ADOPTION = [
 ]
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage'] },
+  // Flat config'de global ignore deseni config dosyasinin dizinine goredir:
+  // yalin `dist` YALNIZ kok `dist/`i disliyor, workspace `dist` klasorlerini
+  // disarida birakmiyordu. `**/dist/**` her seviyedeki uretilmis ciktiyi kapsar.
+  // Kaynak dosya kapsami degismez; yalniz build ciktisi lint disi kalir.
+  { ignores: ['**/dist/**', '**/coverage/**'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

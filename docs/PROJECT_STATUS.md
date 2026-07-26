@@ -5,8 +5,27 @@ Son güncelleme: 2026-07-25
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: React Compiler kural adaptasyonu tamamlandı
-- Durum: **`npm audit` her seviyede 0 bulgu. React Compiler kurallarının 13'ü upstream `recommended` seviyesinde ihlalsiz çalışıyor; yalnız `set-state-in-effect` kanıtlı gerekçeyle `warn` seviyesinde**
+- Aşama: `dist` lint kapsamı temizliği tamamlandı
+- Durum: **`npm audit` her seviyede 0 bulgu. Lint artık yalnız 737 kaynak dosyayı işliyor (önce 1.407); kaynak kapsamı ve bulgu sayısı değişmedi**
+
+## `dist` lint kapsamı temizliği (2026-07-25)
+
+- Flat config'de global ignore deseni config dosyasının dizinine görecelidir.
+  Yalın `dist` deseni **yalnız kök `dist/`** dizinini dışlıyordu (43 dosya);
+  workspace `dist` klasörleri lint kapsamındaydı. Desen `**/dist/**` ve
+  `**/coverage/**` olarak genişletildi.
+- Kapsamdan çıkan 670 üretilmiş dosyanın dağılımı: `services/api/dist` 270,
+  `packages/contracts/dist` 250, `packages/domain/dist` 100,
+  `services/file-agent/dist` 36, `packages/database/dist` 14.
+- **Kaynak lint kapsamı değişmedi.** Değişiklik öncesi ve sonrası lint edilen
+  kaynak dosya listesi çıkarılıp karşılaştırıldı: her ikisi de **737 dosya** ve
+  listeler **birebir aynı** (`diff` farksız).
+- Bulgu sayısı da değişmedi: **0 error / 33 warning**. Bu, `dist` içinde saklı
+  bir bulgu olmadığını ve hiçbir kuralın gevşetilmediğini kanıtlar. Kural
+  seviyeleri bu pakette hiç değiştirilmedi.
+- Lint süresi **14.373 ms → 11.257 ms** (yaklaşık %22 kısalma).
+- Workspace düzeyinde `npm run lint` (`@hasarbotu/api`, `@hasarbotu/database`,
+  `@hasarbotu/file-agent`) kök config'i çözmeye devam ediyor; üçü de exit 0.
 
 ## React Compiler kural adaptasyonu (2026-07-25)
 

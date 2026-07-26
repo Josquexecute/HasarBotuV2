@@ -79,11 +79,19 @@ lint kapsamı temizliği.
 - [ ] Tamamlandığında `set-state-in-effect` kuralını `error` seviyesine çıkar.
 - [ ] Paket 65B İşçilik ve Paket 66 Değer Kaybı panellerinin davranışını koru.
 
-## `dist` lint kapsamı temizliği (sonraki aday)
+## `dist` lint kapsamı temizliği
 
-- [ ] Kök `ignores: ['dist', 'coverage']` yalnız kök dizini kapsıyor; workspace
-  `dist` klasörlerindeki 670 üretilmiş dosya lint ediliyor. `**/dist` ile
-  daralt ve lint dosya sayısındaki değişimi ölçerek raporla.
+- [x] Mevcut flat config davranışını ölç: kök `dist` dışlanıyor, workspace
+  `dist` klasörlerindeki 670 üretilmiş dosya lint ediliyor.
+- [x] Deseni `['**/dist/**', '**/coverage/**']` olarak genişlet.
+- [x] Kaynak dosya kapsamının değişmediğini önce/sonra dosya listesi
+  karşılaştırmasıyla kanıtla (737 = 737, liste birebir aynı).
+- [x] Bulgu sayısının değişmediğini doğrula (0 error / 33 warning), yani kural
+  gevşetmesi olmadığını göster.
+- [x] Lint süresindeki iyileşmeyi ölç (14.373 ms → 11.257 ms).
+- [x] Workspace düzeyinde lint'in kök config'i çözmeye devam ettiğini doğrula.
+
+Kapsam dışı: kural seviyesi değişikliği, kaynak kapsamı değişikliği.
 - [x] `react-router@7.18.1` kümesi (2 high, üretim UI): ayrı "react-router v8
   geçişi" paketinde kapatıldı. Bkz. aşağıdaki bölüm.
 
