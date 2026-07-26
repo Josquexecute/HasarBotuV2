@@ -11,6 +11,8 @@ const CASE_ID = '018f3f4c-89ab-7def-8123-456789abcdef'
 const USER_ID = '018f3f4c-89ab-7def-8123-456789abcdea'
 const DRAFT_ID = '018f3f4c-89ab-7def-8123-456789abcdeb'
 const VERSION_ID = '018f3f4c-89ab-7def-8123-456789abcdec'
+const DRAFT_A_ID = '018f3f4c-89ab-7def-8123-456789abcdd1'
+const DRAFT_B_ID = '018f3f4c-89ab-7def-8123-456789abcdd2'
 const HASH = 'a'.repeat(64)
 
 const aiPlan: EmailAiPlanRecord = {
@@ -175,6 +177,40 @@ function buildDraft(version = 1): EmailDraftRecord {
     createdByDisplayName: 'Eksper',
     createdAt: '2026-07-16T12:00:00.000Z',
     updatedAt: `2026-07-16T12:0${version}:00.000Z`,
+  }
+}
+
+function makeDraft(id: string, subject: string): EmailDraftRecord {
+  const current = {
+    id: `${id}-v1`,
+    draftVersion: 1,
+    previousVersionId: null,
+    to: ['hasar@example.test'],
+    cc: [],
+    subject,
+    body: 'Merhaba.\n\nİyi çalışmalar.',
+    attachments: [],
+    templateVersion: 'email-draft-template/1.0.0' as const,
+    sourceType: 'deterministic_template' as const,
+    emailAiSuggestionRunId: null,
+    previewHash: HASH,
+    revisionReason: null,
+    createdByUserId: USER_ID,
+    createdByDisplayName: 'Eksper',
+    createdAt: '2026-07-16T12:00:00.000Z',
+  }
+  return {
+    id,
+    caseId: CASE_ID,
+    draftType: 'preliminary_report_notice',
+    version: 1,
+    currentVersion: current,
+    versions: [current],
+    handoffs: [],
+    createdByUserId: USER_ID,
+    createdByDisplayName: 'Eksper',
+    createdAt: '2026-07-16T12:00:00.000Z',
+    updatedAt: '2026-07-16T12:00:00.000Z',
   }
 }
 
@@ -391,5 +427,58 @@ describe('EmailDraftApiModule', () => {
     render(<EmailDraftApiModule item={item} source="api" onUnauthorized={vi.fn()} port={port} />)
     expect(await screen.findByRole('alert')).toHaveTextContent('mock taslak gösterilmedi')
     expect(screen.queryByText(/Bu metin yalnız UI prototipidir/)).toBeNull()
+  })
+
+  it('açık taslak seçimi, ilgisiz bir yeniden yüklemede ilk taslağa mutabakatla geri dönmez', async () => {
+    // Regresyon: seçim `explicitDraftId !== '' ? explicitDraftId : drafts[0].id`
+    // olarak render sırasında türetilir (bkz. HB-2026-096 madde 3). Kullanıcı
+    // ikinci taslağı açıkça seçtikten sonra taslak listesiyle İLGİSİZ bir
+    // mutasyon (Gmail handoff) `workspace.reload()` tetikler; aynı iki taslak
+    // taze nesnelerle yeniden gelse bile açık seçim ilk taslağa dönmemelidir.
+    let loadCalls = 0
+    const draftA = makeDraft(DRAFT_A_ID, 'Taslak A Konu')
+    const draftB = makeDraft(DRAFT_B_ID, 'Taslak B Konu')
+    const port: EmailDraftDataPort = {
+      load: vi.fn(async () => { loadCalls += 1; return workspace([draftA, draftB]) }),
+      preview: vi.fn(),
+      create: vi.fn(),
+      revise: vi.fn(),
+      prepareHandoff: vi.fn(async () => ({
+        draft: draftB,
+        handoff: {
+          id: USER_ID,
+          draftVersionId: draftB.currentVersion.id,
+          provider: 'gmail_web' as const,
+          preparedByUserId: USER_ID,
+          preparedByDisplayName: 'Eksper',
+          preparedAt: '2026-07-16T12:02:00.000Z',
+        },
+        compose: {
+          to: draftB.currentVersion.to,
+          cc: draftB.currentVersion.cc,
+          subject: draftB.currentVersion.subject,
+          body: draftB.currentVersion.body,
+          attachments: draftB.currentVersion.attachments,
+        },
+        deliveryStatus: 'not_sent' as const,
+      })),
+    }
+    const openExternal = vi.fn(() => ({}))
+    const user = userEvent.setup()
+    render(<EmailDraftApiModule item={item} source="api" onUnauthorized={vi.fn()} port={port} openExternal={openExternal} />)
+
+    expect(await screen.findByRole('heading', { name: 'Taslak A Konu' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Taslak B Konu/ }))
+    expect(await screen.findByRole('heading', { name: 'Taslak B Konu' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Taslak A Konu' })).not.toBeInTheDocument()
+
+    const loadCallsBeforeHandoff = loadCalls
+    await user.click(screen.getByLabelText(/harici veri çıkışını onaylıyorum/))
+    await user.click(screen.getByRole('button', { name: 'Gmail Taslağını Aç' }))
+    await waitFor(() => expect(loadCalls).toBeGreaterThan(loadCallsBeforeHandoff))
+
+    expect(await screen.findByRole('heading', { name: 'Taslak B Konu' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Taslak A Konu' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Taslak B Konu/ })).toHaveClass('is-active')
   })
 })

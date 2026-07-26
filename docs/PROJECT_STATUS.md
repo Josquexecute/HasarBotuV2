@@ -1,6 +1,6 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-26
+Son güncelleme: 2026-07-27
 
 ## Mevcut sürüm ve aşama
 
@@ -66,6 +66,30 @@ Son güncelleme: 2026-07-26
   `hasarbotu_test` PostgreSQL ile **2.051 başarılı / 6 ortam-koşullu UI skip**
   (+1 yeni test, mevcut hiçbir test bozulmadı), build/bundle **412.643 bayt**
   (değişmedi, yalnız test dosyası eklendi), `npm audit` 0 bulgu geçti.
+- **4. dilim — kalan iki seçim/fail-closed türetmesi için doğrudan regresyon
+  testi (2026-07-27):** 2. grubun geri kalan iki türetmesi için de kalıcı
+  vaka eklendi; üretim kodu **değişmedi** (önce her ikisi için de gerçek bir
+  kusur aranıp bulunamadı, sonra test eklendi — bkz. HB-2026-098/099).
+  - `EmailDraftApiModule`: `explicitDraftId !== '' ? explicitDraftId :
+    drafts[0].id` türetmesi için 2 taslaklı bir workspace'te açık seçimin,
+    seçimle İLGİSİZ bir mutasyonun (Gmail handoff) tetiklediği `reload()`
+    sonrası aynı iki taslak taze nesnelerle gelse bile ilk taslağa
+    dönmediğini doğrudan doğrulayan vaka eklendi.
+  - `CaseDetailPage`: `override.key === \`${caseId}#${baseItem.version}\`
+    ? override.value : null` türetmesi için, düzenleme ile uygulanan yerel
+    override'ın "Tek Dosyayı Yenile" sunucudan farklı bir sürüm getirdiğinde
+    (4 → 6) mutabakatla eski override'a değil taze sunucu verisine
+    döndüğünü tam sayfa (`MemoryRouter`) üzerinden doğrulayan vaka eklendi.
+  - Her iki vakanın da gerçekten kusur yakaladığı ayrı ayrı kanıtlandı:
+    ilgili türetme satırı geçici olarak bozuldu (EmailDraftApiModule'de
+    her zaman ilk taslağa sabitlendi; CaseDetailPage'de `overrideKey`
+    sürümü düşürüldü), yeni testler kırıldı, sonra satırlar aynen geri
+    getirilip (her iki component dosyasında da net diff yok) yeniden
+    yeşile dönüldü.
+  - Ana ağaçta typecheck, lint (**0 error / 2 warning**, değişmedi), gerçek
+    `hasarbotu_test` PostgreSQL ile **2.053 başarılı / 6 ortam-koşullu UI
+    skip** (+2 yeni test), build/bundle **412.643 bayt** (değişmedi),
+    `npm audit` 0 bulgu geçti.
 
 ## `src/data` barrel bölünmesi (2026-07-25)
 

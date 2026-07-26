@@ -2118,3 +2118,73 @@ Etki: Yalniz `src/features/cases/PolicyAiCandidatesModule.test.tsx` (+1 vaka,
 warning, degismedi), gercek `hasarbotu_test` PostgreSQL ile 2.051 basarili / 6
 ortam-kosullu UI skip (+1), build/bundle 412.643 bayt (degismedi), `npm audit`
 0 bulgu.
+
+## 2026-07-27 — HB-2026-098: EmailDraftApiModule secim turetmesi icin dogrudan regresyon testi; kusur bulunamadi
+
+Karar:
+
+1. HB-2026-096'nin 2. grubunda `EmailDraftApiModule`in `selectedDraftId`
+   turetmesi de "secim mutabakati" kapsamindaydi ancak kalici testte ayri bir
+   vaka olarak yoktu. Once turetme yeniden incelendi: `explicitDraftId !== ''
+   ? explicitDraftId : drafts[0]?.id`. PolicyAiCandidatesModule'daki gibi bir
+   "mevcut olanlari koru, yoksa tumunu sec" mutabakat mantigi YOKTUR; tek bir
+   boolean-benzeri kisayoldur ve `explicitDraftId`'yi sifirlayan hicbir kod
+   yolu bulunmamaktadir. Yapisal olarak PolicyAiCandidatesModule sinifi
+   kusura acik degildir.
+2. Gercek bir kusur KANITLANAMADI; bu nedenle uretim kodu DEGISTIRILMEDI.
+3. Yine de kalici regresyon testi eklendi:
+   `EmailDraftApiModule.test.tsx`'e 2 taslakli bir workspace'te ikinci taslak
+   acikca secilir, sonra secimle ilgisiz bir mutasyon (Gmail handoff)
+   `workspace.reload()` tetikler; iki taslak taze nesnelerle ayni kimlikle
+   geri gelir. Acik secimin ilk taslaga donmedigi dogrudan doğrulanir.
+4. Testin gercekten kusur yakaladigi kanitlandi: turetme satiri gecici olarak
+   `workspace.data?.drafts[0]?.id ?? ''`e (her zaman ilk taslak) sabitlendi,
+   yeni test kirildi, sonra satir aynen geri getirilip (component dosyasinda
+   net diff yok) yeniden yesile donuldu.
+
+Gerekce: Bir mekanizmanin "yapisal olarak kusura acik degil" diye
+degerlendirilmesi, kalici bir regresyon koruyucusunun yerini tutmaz; ileride
+turetme yanlislikla PolicyAiCandidatesModule'daki gibi bir mutabakat/reset
+deseniyle degistirilirse test derhal kirilir.
+
+Etki: Yalniz `src/features/cases/EmailDraftApiModule.test.tsx` (+1 vaka).
+Uretim kodu degismedi (component dosyasinda sifir net diff). Ana agacta
+typecheck, lint (0 error / 2 warning, degismedi), gercek `hasarbotu_test`
+PostgreSQL ile 2.052 basarili / 6 ortam-kosullu UI skip (+1), build/bundle
+412.643 bayt (degismedi), `npm audit` 0 bulgu.
+
+## 2026-07-27 — HB-2026-099: CaseDetailPage fail-closed override turetmesi icin dogrudan regresyon testi; kusur bulunamadi
+
+Karar:
+
+1. HB-2026-096'nin 2. grubunda `CaseDetailPage`in yerel `caseOverride`
+   turetmesi de kalici testte ayri bir vaka olarak yoktu. Turetme:
+   `overrideKey = \`${caseId}#${baseItem?.version ?? ''}\``,
+   `caseOverride = override.key === overrideKey ? override.value : null`.
+2. RTL'nin `act()` sarmali, testte bir efektin "ayni render'da" mi yoksa "bir
+   sonraki tikte" mi calistigini ayirt etmeyi engeller (her iki durumda da
+   `await user.click(...)` donene kadar efektler zaten akmis olur); bu yuzden
+   tek-frame'lik kanit RTL ile DOGRUDAN kanitlanamaz. Bunun yerine turetme
+   FORMULUNUN kendisi test edildi: sürüm degisince override GERCEKTEN
+   dusuyor mu?
+3. Gercek bir kusur KANITLANAMADI; uretim kodu DEGISTIRILMEDI.
+4. Kalici regresyon testi eklendi: `CaseDetailPage.api.test.tsx`'e tam sayfa
+   (`MemoryRouter`) uzerinden, "Temel Bilgileri Duzenle" ile uygulanan yerel
+   override'in (asama: Yeni Ihbar -> Hasar Tespiti, surum 4 sabit) "Tek
+   Dosyayi Yenile" sunucudan FARKLI bir surum (6, asama: Parca ve Iscilik)
+   getirdiginde eski override'a degil taze sunucu verisine dondugunu
+   dogrudan doğrulayan bir vaka eklendi.
+5. Testin gercekten kusur yakaladigi kanitlandi: `overrideKey` gecici olarak
+   surum bilgisini dislayacak sekilde (yalniz `caseId`) degistirildi, yeni
+   test kirildi, sonra satir aynen geri getirilip (component dosyasinda net
+   diff yok) yeniden yesile donuldu.
+
+Gerekce: HB-2026-098 ile ayni: yapisal degerlendirme kalici testin yerini
+tutmaz. Surum tabanli fail-closed gecersiz kilma, ileride "yalniz caseId
+yeterli" gibi bir sadelestirmeyle yanlislikla kaldirilirsa test derhal kirilir.
+
+Etki: Yalniz `src/features/cases/CaseDetailPage.api.test.tsx` (+1 vaka).
+Uretim kodu degismedi (component dosyasinda sifir net diff). Ana agacta
+typecheck, lint (0 error / 2 warning, degismedi), gercek `hasarbotu_test`
+PostgreSQL ile 2.053 basarili / 6 ortam-kosullu UI skip (+1), build/bundle
+412.643 bayt (degismedi), `npm audit` 0 bulgu.
