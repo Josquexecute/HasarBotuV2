@@ -6,7 +6,55 @@ Son güncelleme: 2026-07-27
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
-- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.097 başarılı / 6 ortam-koşullu skip.**
+- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.098 başarılı / 6 ortam-koşullu skip.**
+
+## Kapanan Dosyalar uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Paket 21'in (HB-2026-027) kabul edildiği andan bu yana ilk
+  kez, gerçek kapanış saga'sı (plan → onay → gerçek Agent fiziksel taşıması
+  → finalize) → `GET /api/v1/cases?status=closed|open` liste üyeliği →
+  gerçek yeniden açma → tenant izolasyonu → salt-okunur rol görünürlüğü
+  zinciri **sentetik SQL ile onaylı sürüm enjekte etmeden** doğrulandı.
+  Mevcut `case-lifecycle.test.ts` (432 satır) saga'yı ve RBAC/tenant/stale-
+  version reddini zaten kapsamlıca kanıtlıyordu ama HER ZAMAN `cases`
+  tablosunu doğrudan SQL ile okuyordu — hiçbir yerde gerçek saga sonrası
+  gerçek `GET ?status=closed` ucu çağrılmamıştı; `cases-pagination.test.ts`
+  ise `status=closed` filtresini yalnız TEK organizasyonlu SQL-seed veriyle
+  kanıtlıyordu (çapraz-org kapalı liste izolasyonu hiç kanıtlanmamıştı).
+- **Doğrulanan gerçek zincir:** gerçek `POST /cases` → tam hazır evrak/
+  fotoğraf/onaylı Değer Kaybı → gerçek kapanış saga'sı (plan/onay/gerçek
+  Agent `runOnce` fiziksel taşıması) → `GET ?status=closed` GERÇEKTEN
+  case'i içerdi, `GET ?status=open` GERÇEKTEN içermedi → yabancı
+  organizasyonun (zaten) kapalı case'i hiçbir kapalı listede sızmadı (iki
+  yönlü: org A'nın listesinde org B'nin case'i yok, org B'nin listesinde
+  org A'nın case'i yok) → `secretary` rolü kapalı listeyi GÖREBİLDİ (yalnız
+  `requireSession`) ama yeniden açma KOMUTUNU veremedi (403, kalıcı etkisiz)
+  → admin ile gerçek yeniden açma saga'sı (plan/onay/gerçek Agent taşıması)
+  → `GET ?status=open` GERÇEKTEN case'i içerdi, `GET ?status=closed`
+  GERÇEKTEN içermedi → audit zinciri (`close_planned/approved/closed`,
+  `reopen_planned/approved/reopened`) eksiksiz, çapraz-org id sızıntısı yok.
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Üretim kodunda değişiklik
+  yapılmadı.
+- **Dikkat çekilecek (belgelenmiş, kusur değil):** `case-lifecycle`
+  `COMMAND_ROLES` (`admin/expert/case_manager`) kasten `cases` yazma
+  rollerinden (`+secretary/accounting`) daha dardır (HB-2026-027 §7); ön uç
+  kapısı (`CaseDetailPage.tsx`) sunucuyla birebir eşleşir, sürüklenme yok.
+  Ayrıca `ClosedCasesPage`'deki "Salt Okunur Dosyayı Aç" butonu aslında tam
+  yetkili `CaseDetailPage`'e gider (yetkili roller için gerçek "Yeniden Aç"
+  düğmesi orada görünür) — güvenlik açığı değil (rol kapısı hem istemci hem
+  sunucuda doğru) ama etiket yanıltıcı; küçük bir metin düzeltmesi, kabul
+  edilmiş UI baseline'ını değiştirmemek için bu görevde YAPILMADI.
+- Kalıcı kanıt olarak `services/api/test/closed-cases-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL + sentetik dosya sistemi +
+  gerçek Agent `runOnce`). Ana ağaçta typecheck, lint (0 error / 2 warning,
+  önceden var olan ve bu görevde dokunulmayan dosyalarda, değişmedi), gerçek
+  PostgreSQL ile **domain 759 + contracts 324 + database 74 + UI 374
+  (+6 skip) + API 489 (+1 yeni) + file-agent 78**, build/bundle (417.259
+  bayt, değişmedi), `npm audit` (moderate) 0 açık geçti.
+- Kapsam dışı: PERT'in kapanış saga'sına bağlanması (HB-2026-027'de zaten
+  belgelenmiş bilinen sınır), Kasko Değer Kaybı kapanış entegrasyonu
+  (HB-2026-046'da ayrı açık kapsam), "Salt Okunur" etiket düzeltmesi
+  (yukarıda not edildi).
 
 ## Ayarlar uçtan uca UAT doğrulaması (2026-07-27)
 
