@@ -6,7 +6,57 @@ Son güncelleme: 2026-07-27
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
-- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.088 başarılı / 6 ortam-koşullu skip.**
+- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.089 başarılı / 6 ortam-koşullu skip.**
+
+## Yönetim uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Paket 18/47'nin kabul edildiği andan bu yana ilk kez, gerçek
+  kullanıcı/rol/eksper referansları → yetki değişikliği → tenant izolasyonu
+  → oturum yenileme zinciri **sentetik SQL ile onaylı sürüm enjekte etmeden**
+  doğrulandı.
+- **ÖNEMLİ BULGU (kusur değil, belgelenmiş kapsam boşluğu):** "Yönetim"
+  sayfası bugün GERÇEK bir yönetim konsolu DEĞİLDİR. Kullanıcılar/Servisler
+  sekmeleri yalnız salt-okunur referans listeleridir (`GET /references/*`);
+  "Erişim ve Yetki" sekmesi tamamen statik metindir. Hiçbir kullanıcı
+  oluşturma, rol atama veya servis/eksper referans CRUD ucu YOKTUR — bu,
+  HB-2026-053/Paket 47'de tekrarlanan biçimde KASITLI olarak kapsam dışı
+  bırakılmıştır ("Yeni tablo, migration, endpoint veya sözleşme eklenmez").
+  Bu görev kapsamında yeni bir rol atama API'si veya UI'ı EKLENMEDİ — bu,
+  tek bir UAT görevinin kapsamını aşan yeni bir paket gerektirir.
+- **Doğrulanan gerçek zincir:** "yetki değişikliği" bugün var olan TEK
+  mekanizmayla — `user_roles`/`users.status` doğrudan mutasyonu (gelecekteki
+  bir rol atama API'sinin sonunda kendisi de yapacağı persistence adımı) —
+  sürüldü ve asıl kritik üretim davranışı kanıtlandı: `auth/store.ts`
+  `findActiveSession()` rolleri HER İSTEKTE canlı JOIN ile çözer, oturum
+  satırında rol önbelleği YOKTUR. Zaten açık bir oturum (probeCookie), HİÇ
+  yeniden giriş yapılmadan: (1) `read_only`→`expert` yükseltmesini bir
+  SONRAKİ istekte anında yansıttı (`GET /auth/session` rolleri güncellendi,
+  `POST /cases` 403'ten 201'e döndü, kullanıcı `/references/experts`
+  listesinde GERÇEKTEN belirdi); (2) `expert`→`read_only` geri almasını da
+  aynı anında yansıttı (yazma tekrar 403, eksper listesinden kayboldu); (3)
+  en sert değişiklik olan hesap devre dışı bırakmada (`users.status=
+  'disabled'`) AYNI çerez bir sonraki istekte 401 aldı ve kullanıcı
+  `/references/users` listesinden tamamen kayboldu. Org A'daki tüm bu
+  mutasyonlar boyunca org B'nin kendi oturumu/rolü/eksper görünürlüğü
+  değişmeden kaldı (tenant izolasyonu).
+- **Sonuç: gerçek üretim kusuru bulunmadı** — canlı rol çözümlemesi hem
+  yükseltmede hem geri almada hem devre dışı bırakmada doğru ve anında
+  çalışıyor; bu iyi bir mimari özellik olup daha önce hiçbir testte
+  kanıtlanmamıştı. Üretim kodunda değişiklik yapılmadı.
+- Kalıcı kanıt olarak `services/api/test/management-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL, sentetik anonim veriyle;
+  mevcut `references.test.ts`'in zaten kapsamlıca kanıtladığı referans
+  uçlarının 401/tenant/aktif-filtre davranışı TEKRARLANMADI). Ana ağaçta
+  typecheck, lint (0 error / 2 warning, önceden var olan ve bu görevde
+  dokunulmayan dosyalarda, değişmedi), gerçek PostgreSQL ile **domain 759 +
+  contracts 324 + database 74 + UI 366 (+6 skip) + API 488 (+1 yeni) +
+  file-agent 78**, build/bundle (417.259 bayt, değişmedi), `npm audit`
+  (moderate) 0 açık geçti.
+- Kapsam dışı: gerçek kullanıcı oluşturma/rol atama API'si ve UI'ı, servis/
+  eksper referans CRUD, "Erişim ve Yetki" sekmesinin gerçek bir izin
+  editörüne dönüştürülmesi — hepsi HB-2026-053'te zaten kasıtlı olarak
+  sonraki pakete ertelenmiş; bu UAT bunları YENİDEN AÇMADI, yalnız mevcut
+  davranışı belgeledi ve doğruladı.
 
 ## Bildirimler uçtan uca UAT doğrulaması (2026-07-27)
 
