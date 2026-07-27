@@ -8,6 +8,56 @@ Son güncelleme: 2026-07-27
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.080 başarılı / 6 ortam-koşullu skip.**
 
+## İşçilik uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Paket 58/64/65A/65B'nin kabul edildiği andan bu yana ilk kez,
+  gerçek anonim bir Trafik dosyasında İşçilik zincirinin TAMAMI (AI öneri →
+  kullanıcı düzeltmesi → onay → File Agent güvenli fiziksel yazım → yeniden
+  okuma → audit) **tek case üzerinde, sentetik SQL ile onaylı sürüm enjekte
+  etmeden, yalnız gerçek command API'leriyle** sürüldü. Mevcut testler bu
+  adımları ayrı ayrı doğruluyordu (Paket 58: öneri/düzeltme provenance'ı;
+  Paket 65B: preview→approve→yazım) ama HİÇBİRİ gerçek File Agent `runOnce`
+  döngüsünü (`@hasarbotu/file-agent`) İşçilik workbook job'ları için
+  çalıştırmıyordu — workspace, file_operation, PDF/policy OCR ve Değer Kaybı
+  kapanış taşıması gibi diğer bütün job türleri için bu döngü zaten gerçek
+  testlerde kullanılıyordu. Bu tur o boşluğu kapattı.
+- **Doğrulanan gerçek zincir:** gerçek `POST /cases` ile case oluşturma →
+  iki kalemli İşçilik föyü → gerçek AI analizi (deterministik sağlayıcı,
+  kasıtlı düşük güvenle `controlRequired: true` üretir) → onay: 1. kalemde
+  hem tutar hem kategori dağılımı, 2. kalemde YALNIZ kategori dağılımı
+  kullanıcı tarafından AI önerisinden gerçekten farklı biçimde düzeltildi
+  (ikisi de doğrudan karşılaştırmayla kanıtlandı: `suggestedLaborAmountMinor`
+  ≠ `appliedLaborAmountMinor`, `proposed_category_amounts` ≠
+  `applied_category_amounts`) → Excel profili → preview isteği → **gerçek
+  Agent kayıt/claim/`runOnce`** ile preview job'ı işlendi → plan AI'nin
+  önerdiği değeri değil kullanıcının onayladığı nihai değeri taşıdığı
+  doğrulandı → açık onay → **gerçek `runOnce`** ile apply job'ı işlendi
+  (backup + atomik yazım + ikinci preflight) → workbook diskten BAĞIMSIZ
+  yeniden okundu: D hücrelerinde AI önerisi (10000.00) DEĞİL kullanıcının
+  düzelttiği tutarlar (9000.00 / 2000.00) yazılı, H–N sütunları ve
+  `docProps/core.xml` byte-birebir korunmuş, backup kaynakla byte-eş → audit
+  zinciri `case.created`'dan `labor_workbook.apply_completed`'a kadar tam,
+  mutlak yol/hücre değeri/ham açıklama sızıntısı yok.
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Zincirin tamamı belgelenen
+  tasarıma (HB-2026-072/078/080/085/086) göre çalıştı; üretim kodunda
+  değişiklik yapılmadı. Ayrıca deterministik AI harness'inin kasıtlı düşük
+  güveni nedeniyle "hiç dokunmadan onayla" yolunun fiziksel yazıma
+  ULAŞAMADIĞI (control_required temizlenmeden job üretilmediği) gözlemlendi
+  — bu bir gerileme değil, HB-2026-086 madde 3'ün tam olarak amaçladığı
+  fail-closed davranıştır.
+- Kalıcı kanıt olarak `services/api/test/labor-workbook-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL + gerçek File Agent Agent
+  API client/`runOnce`/yerel filesystem yazımı, sentetik anonim veriyle).
+  Ana ağaçta typecheck, lint (0 error / 2 warning, değişmedi), gerçek
+  PostgreSQL/OCR ile **domain 759 + contracts 324 + database 74 + UI 366
+  (+6 skip) + API 481 (+1 yeni) + file-agent 78**, build/bundle (417.259
+  bayt, değişmedi), `npm audit` (moderate) 0 açık geçti.
+- Kapsam dışı: yeni migration, yeni endpoint, UI değişikliği, yeni dependency,
+  üretim veri/migration çalıştırma. Fiziksel konum ataması (Paket 12) bu
+  turda da -- Değer Kaybı UAT'ındaki gibi -- ayrı test edilen bir modül
+  olarak ön koşul (`verified` case_location) kabul edildi, gerçek `PUT
+  .../location` akışıyla yeniden sürülmedi.
+
 ## Değer Kaybı uçtan uca UAT doğrulaması (2026-07-27)
 
 - **Kapsam:** Paket 32/33/34/40'ın kabul edildiği andan bu yana ilk kez, gerçek
