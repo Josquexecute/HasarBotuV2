@@ -6,7 +6,68 @@ Son güncelleme: 2026-07-27
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
-- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.099 başarılı / 6 ortam-koşullu skip.**
+- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.101 başarılı / 6 ortam-koşullu skip.**
+
+## Mevzuat ve AI Yardımcısı uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Sekiz ana navigasyon modülünün UAT dizisindeki SONUNCUSU.
+  Kullanıcının istediği zincir ("gerçek kaynak → analiz/yanıt → kanıt/
+  provenance → tenant ve yetki izolasyonu → UI navigasyonu") doğrulanmadan
+  önce bu modülün GERÇEK mevcut durumu araştırıldı.
+- **ÖNEMLİ BULGU (kusur değil, tekrar tekrar belgelenmiş kasıtlı karantina):**
+  Mevzuat ve AI Yardımcısı'nın HİÇBİR gerçek backend'i yoktur — ne mevzuat
+  kaynak kütüphanesi tablosu/migration'ı, ne genel amaçlı AI sohbet/soru-
+  cevap ucu, ne de sözleşme (contract) tanımı vardır (`packages/domain`'daki
+  `LegislationSourceId` markalı tip tanımlı ama repo genelinde HİÇ
+  kullanılmıyor — ölü kod). Bu, HB-2026-054'te (2026-07-18) açıkça karar
+  verilmiş: "mevzuat kaynak kütüphanesi modeli bilinçli olarak kapsam
+  dışıdır ve ayrı ürün kararı bekler" — HB-2026-055 madde 8'de (Paket 49)
+  yeniden teyit edilmiş: "Mevzuat ekranı HB-2026-054 uyarınca karantinada
+  kalmaya devam eder." Sonraki hiçbir paket bu kararı tersine çevirmedi;
+  bugün hâlâ geçerli. `LegislationPage.tsx` API modunda `BackendUnavailableState`
+  ile "Mevzuat kaynak kütüphanesi henüz yapılandırılmadı." gösterir ve HİÇBİR
+  network isteği yapmaz (kod içinde `fetch`/data-port çağrısı yok); mock
+  modda ise 6 sabit örnek kaynak + tek bir sabit metinli "mock" soru-cevap
+  gösterir (gerçek LLM/servis çağrısı yok, buton tıklamasıyla senkron sabit
+  metin döner).
+- **İstenen zincirin gerçekte neyi karşıladığı:** "gerçek kaynak", "analiz/
+  yanıt" ve "kanıt/provenance" adımlarının test edilecek GERÇEK bir karşılığı
+  yoktur (üretilecek/doğrulanacak üretim kodu/veri hiç mevcut değil).
+  "Tenant ve yetki izolasyonu" için tenant-kapsamlı hiçbir sorgu yapılmadığı
+  için izole edilecek bir yüzey yoktur; tek anlamlı karşılığı rota
+  seviyesindeki oturum kapısı ve API modunda GERÇEKTEN sıfır ek istek
+  yapıldığının kanıtlanmasıdır (Ayarlar UAT'ında aynı mantıkla ele alındı).
+  "UI navigasyonu" ise gerçek ve test edilebilir tek adımdır.
+- **Doğrulanan gerçek zincir:** `/mevzuat-ve-ai`'ye kimliksiz erişim login
+  ekranının arkasında kaldı (daha önce yalnız genel nav taramasıyla dolaylı
+  kanıtlıydı, şimdi doğrudan); girişten sonra API modunda dürüst boş durum
+  ("Mevzuat kaynak kütüphanesi henüz yapılandırılmadı.") GERÇEKTEN TEK istek
+  (oturum bootstrap) ile göründü, sıfır ek/sızan istek atılmadı. Gerçek
+  Chrome ile `router-v8-browser-smoke.mjs` (8 rotalık nav taraması dahil
+  `/mevzuat-ve-ai`, sıfır konsol hatası, taşma yok, 2 ekran/tema kombinasyonu)
+  yeniden çalıştırılıp doğrulandı. Mevcut `LegislationPage.test.tsx` (3 test:
+  API modunda dürüst boş durum + sıfır mock sızıntısı, mock modda tam
+  prototip, varsayılan modda tutarlılık) hâlâ yeşil.
+- **Not:** `scripts/package48-browser-smoke.mjs` (Paket 48'e özgü, CI/`npm
+  test` kapsamı dışı eski bir betik) bu görev sırasında çalıştırılmaya
+  çalışıldı ama Bildirimler'in ESKİ Paket 48 placeholder metnini ("Bildirim
+  altyapısı henüz etkin değil.") arıyor — Bildirimler Paket 49'da (bu
+  oturumda ayrıca UAT'tan geçti) gerçek backend'e geçtiği için o metin artık
+  hiç görünmüyor. Bu, betiğin KENDİSİNİN bayatlaması; Mevzuat'la ilgisi yok
+  ve düzeltilmedi (kapsam dışı, tek kullanımlık eski paket betiği).
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Üretim kodunda değişiklik
+  yapılmadı.
+- Kalıcı kanıt olarak `src/app/appGate.test.tsx`'e 2 yeni test eklendi. Ana
+  ağaçta typecheck, lint (0 error / 2 warning, önceden var olan ve bu
+  görevde dokunulmayan dosyalarda, değişmedi), gerçek PostgreSQL ile
+  **domain 759 + contracts 324 + database 74 + UI 376 (+2 yeni, +6 skip) +
+  API 490 + file-agent 78**, gerçek Chrome ile `router-v8-browser-smoke.mjs`
+  tüm kontroller true, build/bundle (417.259 bayt, değişmedi), `npm audit`
+  (moderate) 0 açık geçti.
+- Kapsam dışı: gerçek mevzuat kaynak kütüphanesi ve AI soru-cevap backend'i
+  (HB-2026-054'te zaten kasıtlı olarak ayrı ürün kararına bırakılmış; bu UAT
+  görevi yeni bir backend/özellik EKLEMEDİ, yalnız mevcut karantina
+  davranışını doğruladı).
 
 ## Raporlar ve Ücretler (üst düzey) uçtan uca UAT doğrulaması (2026-07-27)
 

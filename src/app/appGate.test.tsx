@@ -124,6 +124,38 @@ describe('App oturum kapisi (api mod)', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]).toContain('/api/v1/auth/session')
   })
+
+  it('kimliksiz erisim /mevzuat-ve-ai rotasini da login ekraninin arkasinda tutar', async () => {
+    window.history.replaceState({}, '', '/mevzuat-ve-ai')
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    installFetch({ session: () => ({ status: 401 }) })
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Giriş Yap' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Mevzuat ve AI Yardımcısı' })).not.toBeInTheDocument()
+  })
+
+  it('giristen sonra /mevzuat-ve-ai dürüst boş durumu hiçbir ek istek yapmadan gösterir (tek istek: oturum bootstrap)', async () => {
+    window.history.replaceState({}, '', '/mevzuat-ve-ai')
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
+      calls.push(String(input))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => SESSION,
+        headers: { get: () => null },
+      } as unknown as Response
+    }) as unknown as typeof fetch)
+
+    render(<App />)
+
+    expect(await screen.findByText('Mevzuat kaynak kütüphanesi henüz yapılandırılmadı.')).toBeInTheDocument()
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toContain('/api/v1/auth/session')
+  })
 })
 
 describe('App mock mod (varsayilan baseline korunur)', () => {
