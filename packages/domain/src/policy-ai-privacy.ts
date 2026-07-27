@@ -50,8 +50,19 @@ const RULES: readonly PatternRule[] = [
   { category: 'vehicle_identity', pattern: /\b((?:şasi|sasi|motor)\s*(?:no|numarası|numarasi)?\s*[:#-]\s*)([A-Z0-9][A-Z0-9./-]{4,79})/giu, valueGroup: 2 },
   { category: 'name', pattern: /\b((?:sigortalı|sigortali|sigorta\s+ettiren|ad\s+soyad|adı\s+soyadı|adi\s+soyadi)\s*:\s*)([^\r\n]{2,120})/giu, valueGroup: 2 },
   {
+    /*
+     * Değer kısmı BİLİNÇLİ olarak case-sensitive'dir (yalnız tetikleyici
+     * anahtar kelime `(?i:...)` ile case-insensitive'dir). Tüm örüntü
+     * case-insensitive olsaydı "Sigortalı trafik poliçesi" gibi sistemin
+     * kendi sabit evrak etiketleri (küçük harfli, gerçek isim DEĞİL) gerçek
+     * ad-soyad sanılıp yanlışlıkla [PII:NAME_n] ile redakte edilirdi —
+     * bu da e-posta AI önerisini kendi şablon metnine karşı
+     * AI_OUTPUT_PII_UNSAFE ile fail-closed yapardı. Büyük harfle başlayan
+     * kelime dizisi gerçek özel ad imzasıdır; küçük harfli ortak isim
+     * tamlaması değildir.
+     */
     category: 'name',
-    pattern: /\b((?:sigortalı|sigortali|sigorta\s+ettiren|ad\s+soyad|adı\s+soyadı|adi\s+soyadi)(?!\s*:)\s+)([A-ZÇĞİÖŞÜ][a-zçğıöşü]+(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]+){1,3})(?=[,.;\r\n]|$)/giu,
+    pattern: /\b((?i:sigortalı|sigortali|sigorta\s+ettiren|ad\s+soyad|adı\s+soyadı|adi\s+soyadi)(?!\s*:)\s+)([A-ZÇĞİÖŞÜ][a-zçğıöşü]+(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]+){1,3})(?=[,.;\r\n]|$)/gu,
     valueGroup: 2,
   },
   { category: 'address', pattern: /\b((?:adres|ikametgah)\s*:\s*)([^\r\n]{4,240})/giu, valueGroup: 2 },

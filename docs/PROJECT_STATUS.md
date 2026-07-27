@@ -8,6 +8,75 @@ Son güncelleme: 2026-07-27
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.080 başarılı / 6 ortam-koşullu skip.**
 
+## E-posta hazırlama uçtan uca UAT doğrulaması — GERÇEK KUSUR BULUNDU VE DÜZELTİLDİ (2026-07-27)
+
+- **Kapsam:** Paket 41/42'nin (2026-07-16) kabul edildiği andan bu yana ilk
+  kez, gerçek anonim bir Trafik dosyasında E-posta hazırlama zincirinin
+  TAMAMI (kanıtlar → AI taslak önerisi → kullanıcı düzenlemesi/onayı →
+  Gmail taslağı/eşleştirme → dosya geçmişi) **tek case üzerinde, sentetik
+  SQL ile onaylı sürüm enjekte etmeden, yalnız gerçek command API'leriyle**
+  sürüldü. Mevcut `email-drafts.test.ts` (Paket 41) hiç AI önerisi
+  kullanmadan taslak oluşturuyordu; `email-ai.test.ts` (Paket 42) AI
+  önerisini taslağa kaydettikten sonra hiç düzeltmiyor ve Gmail handoff'a
+  hiç götürmüyordu. Bu senaryo üçünü tek taslağın immutable sürüm+handoff
+  geçmişinde birleştirdi.
+- **GERÇEK ÜRETİM KUSURU BULUNDU VE DÜZELTİLDİ:** paylaşılan PII redaksiyon
+  motorunda (`packages/domain/src/policy-ai-privacy.ts`, labor-ai,
+  labor-allocation-ai, email-ai ve policy-ai tarafından ORTAK kullanılır)
+  "sigortalı" sonrası çıplak (iki noktasız) ad-soyad kuralı TÜM örüntüde
+  case-insensitive'di. Bu, sistemin KENDİ sabit evrak gereksinimi
+  etiketlerinden biri olan **"Sigortalı trafik poliçesi"** metnini (gerçek
+  bir ad değil, `EMAIL_REQUIREMENT_LABELS`'taki sabit Türkçe etiket) yanlış
+  şekilde bir özel ad sanıp `[PII:NAME_1]` ile redakte ediyordu. Somut etki:
+  E-posta AI önerisi, deterministik sağlayıcı şablon gövdesini olduğu gibi
+  geri döndürdüğünde, çıktı-güvenliği doğrulaması (`validateEmailAiSuggestion`)
+  KENDİ redaksiyon motorunun ürettiği bu placeholder'ı YENİDEN tarayıp
+  `AI_OUTPUT_PII_UNSAFE` ile fail-closed yapıyordu — yani dosyada Trafik
+  sigortalı poliçesi eksik olan (çok yaygın gerçek bir senaryo) HER
+  `missing_document_request` AI önerisi kesin olarak başarısız oluyordu.
+  Kusur önce testi kırarak (`git stash` ile düzeltmeyi geçici kaldırıp,
+  gerçek PostgreSQL'de yeniden çalıştırıp) doğrulandı; düzeltme geri
+  getirilip yeniden yeşile dönüldü.
+- **Düzeltme:** Kuraldaki DEĞER kısmı (yakalanan "ad" metni) artık BİLİNÇLİ
+  olarak case-sensitive'dir — yalnız tetikleyici anahtar kelime
+  (`sigortalı`/varyantları) `(?i:...)` satır-içi değiştiriciyle
+  case-insensitive kalır (Node 24 / modern V8 regex modifier grubu desteği
+  doğrulandı). Büyük harfle başlayan kelime dizisi gerçek özel ad imzasıdır;
+  küçük harfli ortak isim tamlaması ("trafik poliçesi", "ehliyet" vb.)
+  artık yanlışlıkla yakalanmaz. Diğer 'name' kuralı (iki noktalı biçim,
+  `Sigortalı: Ayşe Yılmaz`) DEĞİŞMEDİ — o kural zaten iki nokta işaretiyle
+  yeterince güçlü bir sinyale sahip. Mevcut tek PII testi
+  (`packages/domain/test/policy-ai.test.ts`, gerçek "Ayşe Yılmaz" adıyla)
+  etkilenmedi çünkü Title Case bir isim kullanıyor.
+- **Bilinçli, belgelenmiş ödünleşim:** Bu satır-içi kuralla artık YALNIZ
+  Title Case (`Sigortalı Ahmet Yılmaz`) veya karışık büyük/küçük yakalanır;
+  TAMAMEN BÜYÜK HARFLİ bir ad (`SİGORTALI AHMET YILMAZ`) artık bu ÇIPLAK
+  kuralla eşleşmez (iki noktalı kural hâlâ her durumda çalışır). Gerçek iş
+  metinlerinde büyük harfli özel adlar Title Case yazılır; bu ödünleşim
+  kabul edilebilir ve şu anki tek somut kusuru (kendi şablon etiketini
+  ad sanma) doğrudan kapatır.
+- **Doğrulanan gerçek zincir:** gerçek `POST /cases` → ready/doğrulanmış
+  belge+fotoğraf (kanıtlar; File Agent doğrulama döngüsü PERT/İşçilik
+  UAT'larında ayrıca kanıtlandı) → gerçek AI plan+start (deterministik yerel
+  sağlayıcı, artık başarıyla `review_required`) → kullanıcının AI önerisini
+  GERÇEKTEN değiştirip (gövdeye ek not ekleyip) kanıtları ekleyerek açık
+  onayla taslağı kaydetmesi (`sourceType: ai_assisted`) → ikinci bir açık
+  onayla alıcı/gövdeyi tekrar düzeltmesi (immutable 2. sürüm,
+  `manual_revision`) → Gmail handoff hazırlığı (`not_sent`, compose GÜNCEL
+  içerik+ekle eşleşiyor) → bağımsız `GET` ile TAM dosya geçmişi (2 sürüm +
+  1 handoff, v1'in AI-assisted ilk gövdesi sessizce değişmemiş) yeniden
+  okundu. Audit zinciri tam ve gövde/alıcı/dosya adı sızıntısı yok.
+- Kalıcı kanıt olarak `services/api/test/email-draft-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL, sentetik anonim veriyle).
+  Ana ağaçta typecheck, lint (0 error / 2 warning, değişmedi), gerçek
+  PostgreSQL ile **domain 759 + contracts 324 + database 74 + UI 366
+  (+6 skip) + API 484 (+1 yeni) + file-agent 78** (paylaşılan PII motorunu
+  kullanan policy-ai/labor-ai/labor-allocation-ai/email-ai testlerinin
+  TAMAMI dahil, regresyon yok), build/bundle (417.259 bayt, değişmedi),
+  `npm audit` (moderate) 0 açık geçti.
+- Kapsam dışı: yeni migration, yeni endpoint, UI değişikliği, yeni
+  dependency, üretim veri/migration çalıştırma, Gmail OAuth/gerçek gönderim.
+
 ## Kapanış ve Ücret uçtan uca UAT doğrulaması — GERÇEK KUSUR BULUNDU VE DÜZELTİLDİ (2026-07-27)
 
 - **Kapsam:** Paket 39/21'in (2026-07-14/16) kabul edildiği andan bu yana ilk
