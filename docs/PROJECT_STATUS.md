@@ -8,6 +8,41 @@ Son güncelleme: 2026-07-27
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.080 başarılı / 6 ortam-koşullu skip.**
 
+## Değer Kaybı uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Paket 32/33/34/40'ın kabul edildiği andan bu yana ilk kez, gerçek
+  anonim bir Trafik dosyasında hesaplama → revizyon → onay → nihai rapor →
+  Paket 40 kapanış zincirinin TAMAMI **tek case üzerinde, yalnız gerçek command
+  API'leriyle** (sentetik SQL ile onaylı sürüm enjekte etmeden) sürüldü.
+  Mevcut testler bu adımları ayrı ayrı doğruluyordu; bu tur, revizyonun eski
+  nihai raporu geçersiz kıldığını ve yeni raporun kapanış hazırlığını yeniden
+  `present` yaptığını tek akışta kanıtlayan bir boşluğu kapattı.
+- **Doğrulanan gerçek zincir:** case_manager taslak (v1, brüt 120.000 TL,
+  kusur uygulanmış 120.000 TL) → submit → expert onayı → v1 nihai raporu →
+  kapanış önizlemesi `present` → revizyon (v2, ek emsallerle onarım sonrası
+  değer düşürüldü, kusur uygulanmış 160.000 TL) → v1 hâlâ aktif/onaylı kalır
+  (append-only) → v2 submit + onay → **v1 otomatik `superseded` olur** →
+  kapanış önizlemesi revizyondan sonra doğru şekilde `control_required`'a
+  düşer (eski rapor artık güncel sürüme ait değil) → v2 nihai raporu (PDF
+  `%PDF-1.4`, byte-size doğrulandı) → kapanış önizlemesi yeniden `present` →
+  gerçek File Agent taşımasıyla case kapanışı tamamlanır → Paket 40 kapanış
+  özeti listesi ve aylık dönem raporu yeniden hesaplama yapmadan doğru
+  onaylı+raporlu tutarı (160.000 TL) yansıtır.
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Zincirin tamamı belgelenen
+  tasarıma göre çalıştı; üretim kodunda değişiklik yapılmadı.
+- Kalıcı kanıt olarak `services/api/test/traffic-value-loss-closure-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL + gerçek File Agent/yerel
+  filesystem taşıması, sentetik anonim veriyle). Ana ağaçta typecheck, lint
+  (0 error / 2 warning, değişmedi), gerçek PostgreSQL/OCR ile **domain 759 +
+  contracts 324 + database 74 + UI 366 (+6 skip) + API 480 (+1 yeni) +
+  file-agent 78**, build/bundle (417.259 bayt, değişmedi), `npm audit`
+  (moderate) 0 açık geçti.
+- Kapsam dışı: yeni migration, yeni endpoint, UI değişikliği, yeni dependency,
+  üretim veri/migration çalıştırma. UI render yüzeyi (Dosya Detayı Değer
+  Kaybı sekmesi, Kapanan Dosyalar, Raporlar) bu turda ayrıca Chrome ile
+  yeniden gezilmedi; bu yüzeyler Paket 33/34/40 kabulünde gerçek Chrome/CDP
+  smoke ile zaten doğrulanmıştı ve bu turda kod değişmedi.
+
 ## Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlama (2026-07-27)
 
 - **Kapsam kararı (kullanıcı onaylı):** 16 sütunun 12'si mevcut tablolardan
