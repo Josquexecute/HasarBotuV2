@@ -2,15 +2,19 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, CalendarRange, CheckCircle2, ChevronDown, FileDown, Printer, RefreshCw, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { getConfiguredDataSource } from '../../data/ports'
+import type { CaseInventoryDataPort } from '../../data/caseInventoryPort'
 import type { ReportsFeesDataPort } from '../../data/reportsFeesPort'
 import { useCaseSummaryReport } from '../../data/useReportsFees'
 import { formatCurrency, mockCases } from '../../mocks/cases'
 import { closedCases, pendingClosedFees } from '../../mocks/workspaces'
+import { CaseInventoryExportPanel } from './CaseInventoryExportPanel'
 
 export function ReportsPage({
   reportPort,
+  inventoryPort,
 }: {
   readonly reportPort?: ReportsFeesDataPort
+  readonly inventoryPort?: CaseInventoryDataPort
 } = {}) {
   const navigate = useNavigate()
   const [source] = useState(getConfiguredDataSource)
@@ -84,6 +88,7 @@ export function ReportsPage({
               </section>
             </>
           )}
+          <CaseInventoryExportPanel port={inventoryPort} />
         </div>
       </main>
     )

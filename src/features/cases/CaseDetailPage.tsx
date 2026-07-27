@@ -75,6 +75,10 @@ const LaborAllocationAiModule = lazy(async () => {
   return { default: module.LaborAllocationAiModule }
 })
 
+const CaseVehicleOwnersModule = lazy(async () => {
+  const module = await import('./CaseVehicleOwnersModule')
+  return { default: module.CaseVehicleOwnersModule }
+})
 const CaseVehicleProfileModule = lazy(async () => {
   const module = await import('./CaseVehicleProfileModule')
   return { default: module.CaseVehicleProfileModule }
@@ -378,6 +382,12 @@ export function CaseDetailPage() {
               {source === 'api' && (
                 <section className="info-panel overview-grid__wide">
                   <CaseVehicleProfileModule caseId={item.caseId} />
+                </section>
+              )}
+              {/* Dosya Envanteri: araç sahibi mini-yakalama, yalnız API modunda. */}
+              {source === 'api' && (
+                <section className="info-panel overview-grid__wide">
+                  <CaseVehicleOwnersModule caseId={item.caseId} />
                 </section>
               )}
               <section className="info-panel overview-grid__wide">

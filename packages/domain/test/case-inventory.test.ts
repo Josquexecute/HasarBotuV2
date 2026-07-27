@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CASE_INVENTORY_COLUMNS,
+  MAX_CASE_VEHICLE_OWNERS,
   buildInventoryCells,
   buildInventoryExportFilename,
   caseTypeLabel,
@@ -8,6 +9,7 @@ import {
   formatInventoryDate,
   joinOwners,
   normalizePhoneForExport,
+  validateCaseVehicleOwners,
   type CaseInventoryRow,
 } from '../src/index.js'
 
@@ -180,5 +182,57 @@ describe('hücre üretimi bütünlüğü', () => {
     const sparse: CaseInventoryRow = { ...baseRow, insurerName: null }
     const cells = buildInventoryCells(sparse, { includePhones: true, missingAsMarker: false })
     expect(cells.insurerName.value).toBe('')
+  })
+})
+
+describe('validateCaseVehicleOwners', () => {
+  it('boş liste geçerlidir (sahip bilinmiyor durumuna dönüş)', () => {
+    const result = validateCaseVehicleOwners([])
+    expect(result).toEqual({ valid: true, owners: [] })
+  })
+
+  it('geçerli ad ve telefonu trim eder', () => {
+    const result = validateCaseVehicleOwners([{ name: '  Ahmet Demir  ', phone: ' 0532 111 22 33 ' }])
+    expect(result).toEqual({ valid: true, owners: [{ name: 'Ahmet Demir', phone: '0532 111 22 33' }] })
+  })
+
+  it('telefonu olmayan sahibi kabul eder (null)', () => {
+    const result = validateCaseVehicleOwners([{ name: 'Ahmet Demir', phone: null }])
+    expect(result).toEqual({ valid: true, owners: [{ name: 'Ahmet Demir', phone: null }] })
+  })
+
+  it('boş string telefonu null olarak normalize eder', () => {
+    const result = validateCaseVehicleOwners([{ name: 'Ahmet Demir', phone: '   ' }])
+    expect(result).toEqual({ valid: true, owners: [{ name: 'Ahmet Demir', phone: null }] })
+  })
+
+  it(`üst sınırı (${MAX_CASE_VEHICLE_OWNERS}) aşan listeyi reddeder`, () => {
+    const owners = Array.from({ length: MAX_CASE_VEHICLE_OWNERS + 1 }, (_, index) => ({ name: `Sahip ${index}`, phone: null }))
+    expect(validateCaseVehicleOwners(owners)).toEqual({ valid: false, reasonCode: 'OWNERS_TOO_MANY' })
+  })
+
+  it('boş adı reddeder', () => {
+    expect(validateCaseVehicleOwners([{ name: '   ', phone: null }]))
+      .toEqual({ valid: false, reasonCode: 'OWNER_NAME_INVALID' })
+  })
+
+  it('kontrol karakteri içeren adı reddeder', () => {
+    expect(validateCaseVehicleOwners([{ name: 'Ahmet\tDemir', phone: null }]))
+      .toEqual({ valid: false, reasonCode: 'OWNER_NAME_INVALID' })
+  })
+
+  it('harf içeren telefonu reddeder (numeric-değil ama biçimsiz metin de kabul edilmez)', () => {
+    expect(validateCaseVehicleOwners([{ name: 'Ahmet Demir', phone: 'call-me' }]))
+      .toEqual({ valid: false, reasonCode: 'OWNER_PHONE_INVALID' })
+  })
+
+  it('baştaki sıfırı korur; sayıya çevirmez', () => {
+    const result = validateCaseVehicleOwners([{ name: 'Ahmet Demir', phone: '05321234567' }])
+    expect(result).toEqual({ valid: true, owners: [{ name: 'Ahmet Demir', phone: '05321234567' }] })
+  })
+
+  it('çok kısa telefonu reddeder', () => {
+    expect(validateCaseVehicleOwners([{ name: 'Ahmet Demir', phone: '12' }]))
+      .toEqual({ valid: false, reasonCode: 'OWNER_PHONE_INVALID' })
   })
 })

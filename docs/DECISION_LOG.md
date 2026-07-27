@@ -2237,3 +2237,66 @@ Etki: Yalniz yeni `src/features/cases/TrafficValueLossReportPanel.test.tsx`
 agacta typecheck, lint (0 error / 2 warning, degismedi), gercek
 `hasarbotu_test` PostgreSQL ile 2.055 basarili / 6 ortam-kosullu UI skip
 (+2), build/bundle 412.643 bayt (degismedi), `npm audit` 0 bulgu.
+
+## 2026-07-27 — HB-2026-101: Dosya Envanteri Migration 0042 — araç sahibi capture, gercek API/export, kullanici onayli kapsam
+
+Karar:
+
+1. Case inventory export domain cekirdegi (2026-07-21) tek basina
+   yetersizdi: migration, API, xlsx yazici ve UI yoktu; migration numaralari
+   0041->0043 arasinda kasitli bir bosluk (0042) birakmisti.
+2. On inceleme 16 sutunun 12'sinin mevcut tablolardan (cases/insurers/
+   users/service_centers) turetilebilecegini, ancak UC sutunun (araç sahibi
+   ad/telefonu, servis ili, eksper rapor no) hicbir tabloda karsiligi
+   olmadigini gosterdi. Araç sahibi PII-gated iki gercek sutun tasidigi
+   (domain zaten `includePhones` ayrimini tasarlamisti) icin bu, gercek bir
+   urun karari geregiydi; diger ikisi (servis ili, rapor no) dusuk riskliydi
+   (PII degil, domain'in mevcut "Eksik" politikasiyla dogru sekilde
+   karsilanir).
+3. Kullaniciya soruldu: araç sahibi verisi icin (a) yeni minimal capture
+   ekle, (b) daima "Eksik" birak, (c) baska kaynaga bagla. Kullanici (a)'yi
+   sectii. Servis ili ve eksper rapor no icin AYRI onay istenmedi; bunlar
+   PII tasimiyor ve domain'in "eksik bilgi tahmin edilmez" ilkesiyle zaten
+   dogru sekilde ele aliniyordu (yeni tablo/capture eklenmedi).
+4. Migration 0042 (`case_vehicle_owner_sets` + `case_vehicle_owners`):
+   TAM surum zinciri (case_vehicle_profile_versions gibi) BILINCLI OLARAK
+   kurulmadi -- orantisiz olurdu. Liste tek seferde degistirilir; eski
+   `set_version` satirlari asla silinmez/guncellenmez (append-only guard
+   trigger), `current_set_version` optimistic locking icin kullanilir. Bu,
+   ayri bir tarihce tablosu olmadan dogal bir denetim izi verir.
+5. xlsx yazici sifirdan minimal OOXML uretir (Paket 65A/65B'nin surgical
+   patch akisindan FARKLI: var olan dosyayi duzenlemez). `fflate` zaten
+   `file-agent`'ta onayli/kullanimda olan bir bagimliliktir; `services/api`
+   paketine de eklendi (yeni ekosistem bagimliligi degil, mevcut kullanimin
+   genisletilmesi). Bes parcali standart yapi, `inlineStr` hucreler
+   (paylasilan string tablosu yok, daha az hareketli parca).
+6. Export SALT SAYIM donen bir onizleme (`/api/v1/case-inventory`, PII
+   tasimaz) ile gercek dosyayi ureten bir indirme (`/api/v1/case-inventory/
+   export`) olarak ikiye ayrildi. Telefon sutunlari yalniz admin/expert/
+   case_manager oturumunda uretilir (digerlerinde HIC uretilmez, gizlenmez).
+   Her export merkezi audit'e (`case_inventory.exported`) satir sayisi/rol/
+   filtre ile duser; PII audit'e yazilmaz.
+7. Veritabani entegrasyon test dosyasinin (`packages/database/test/
+   integration.test.ts`) mevcut kademeli rollback/reapply testleri migration
+   ADLARINI VE SAYILARINI sabit koddu; 0042'nin 0041-0043 arasina girmesi
+   44 ayri assertion'i (array icerigi + rollback count) guncelleme
+   gerektirdi. Hepsi dogrulandi; gercek PostgreSQL'de 58/58 gecti.
+
+Gerekce: Envanter export'unun PII sutunlari gercek veri tasimadan
+(daima "Eksik") sevk edilmesi, ozelligi anlamsizlastirir ve dogruluk
+ilkesini (uydurulmus/varsayilmis veri yok) ihlal ederdi; bu yuzden yeni
+capture ayri bir "kucuk teknik karar" degil, kullanicinin onaylamasi
+gereken gercek bir urun karariydi.
+
+Etki: Yeni migration 0042; yeni contracts (`case-vehicle-owners`,
+`case-inventory`); yeni API modulleri (`case-vehicle-owners`,
+`case-inventory` + xlsx yazici); yeni UI (`CaseVehicleOwnersModule`,
+`CaseInventoryExportPanel`) ve veri portlari; `services/api`'ye `fflate`
+bagimliligi eklendi. `packages/database/test/integration.test.ts` mevcut
+44 assertion guncellendi (davranis degil, migration sirasi). Ana agacta
+typecheck, lint (0 error / 2 warning, degismedi), gercek `hasarbotu_test`
+PostgreSQL ile 2.080 basarili / 6 ortam-kosullu UI skip (+25), build/bundle
+417.187 bayt (butce 500.000), `npm audit` 0 bulgu. Gercek Chrome/CDP smoke:
+gercek case olusturma, araç sahibi kaydi (PostgreSQL round-trip), Dosya
+Envanteri paneli ve gercek export istegi (200, konsol temiz) dogrulandi;
+kalici dev DB'sine uygulanan migration ve smoke verisi temizlendi.

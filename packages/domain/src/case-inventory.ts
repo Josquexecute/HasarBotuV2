@@ -139,6 +139,71 @@ export function buildInventoryExportFilename(input: {
   return `Dosya_Envanteri_${date}_${user}.xlsx`
 }
 
+/**
+ * Araç sahibi mini-yakalama çekirdeği.
+ *
+ * Ad/telefon hiçbir tabloda yoktu; envanter export'unun `ownerNames`/
+ * `ownerPhones` sütunları başka türlü hep "Eksik" kalırdı. Liste TEK SEFERDE
+ * değiştirilir (efekt/geçmiş sürüm zinciri yok); en küçük güvenli tasarım.
+ */
+export const MAX_CASE_VEHICLE_OWNERS = 6 as const
+export const MAX_OWNER_NAME_LENGTH = 200 as const
+export const MAX_OWNER_PHONE_LENGTH = 32 as const
+
+export interface CaseVehicleOwnerInput {
+  readonly name: string
+  readonly phone: string | null
+}
+
+export type CaseVehicleOwnersInvalidReason =
+  | 'OWNERS_TOO_MANY'
+  | 'OWNER_NAME_INVALID'
+  | 'OWNER_PHONE_INVALID'
+
+export type CaseVehicleOwnersValidation =
+  | { readonly valid: true; readonly owners: readonly CaseVehicleOwnerInput[] }
+  | { readonly valid: false; readonly reasonCode: CaseVehicleOwnersInvalidReason }
+
+const CONTROL_CHARACTER = /\p{Cc}/u
+/** Yalnız rakam, boşluk ve yaygın ayraçlar (+, (), ., -). Harf/özel karakter YOK. */
+const OWNER_PHONE_PATTERN = /^[0-9()+. -]+$/
+
+function normalizeOwnerName(value: string): string | null {
+  const trimmed = value.trim()
+  if (trimmed.length === 0 || trimmed.length > MAX_OWNER_NAME_LENGTH) return null
+  if (CONTROL_CHARACTER.test(trimmed)) return null
+  return trimmed
+}
+
+/** `null` = telefon yok (geçerli). `undefined` = geçersiz girdi. */
+function normalizeOwnerPhone(value: string | null): string | null | undefined {
+  if (value === null) return null
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return null
+  if (trimmed.length < 3 || trimmed.length > MAX_OWNER_PHONE_LENGTH) return undefined
+  if (!OWNER_PHONE_PATTERN.test(trimmed) || CONTROL_CHARACTER.test(trimmed)) return undefined
+  return trimmed
+}
+
+/**
+ * Sahip listesini doğrular. Boş liste GEÇERLİDİR (kullanıcı "sahip bilinmiyor"
+ * durumuna dönebilir); yalnız üst sınır ve satır biçimi zorlanır.
+ */
+export function validateCaseVehicleOwners(
+  owners: readonly CaseVehicleOwnerInput[],
+): CaseVehicleOwnersValidation {
+  if (owners.length > MAX_CASE_VEHICLE_OWNERS) return { valid: false, reasonCode: 'OWNERS_TOO_MANY' }
+  const normalized: CaseVehicleOwnerInput[] = []
+  for (const owner of owners) {
+    const name = normalizeOwnerName(owner.name)
+    if (name === null) return { valid: false, reasonCode: 'OWNER_NAME_INVALID' }
+    const phone = normalizeOwnerPhone(owner.phone)
+    if (phone === undefined) return { valid: false, reasonCode: 'OWNER_PHONE_INVALID' }
+    normalized.push({ name, phone })
+  }
+  return { valid: true, owners: normalized }
+}
+
 /** Bir envanter satırının ham (henüz Excel'e çevrilmemiş) alanları. */
 export interface CaseInventoryRow {
   readonly caseId: string

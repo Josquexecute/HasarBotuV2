@@ -5,8 +5,57 @@ Son güncelleme: 2026-07-27
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
-- Aşama: Modül seviyesi `set-state-in-effect` temizliği (4. dilim) tamamlandı
-- Durum: **`set-state-in-effect` kuralı artık `error` seviyesinde. 33 bulgudan 31'i giderildi; kalan 2 bulgu kanıtlı, dosya kapsamlı istisnadır ve `warn` seviyesindedir. Lint 0 error / 2 warning**
+- Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
+- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.080 başarılı / 6 ortam-koşullu skip.**
+
+## Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlama (2026-07-27)
+
+- **Kapsam kararı (kullanıcı onaylı):** 16 sütunun 12'si mevcut tablolardan
+  (cases/insurers/users/service_centers) türetildi. Üç alanın kaynağı
+  hiçbir tabloda yoktu: `expertReportNumber` ve `serviceCity` dürüstlükle
+  daima "Eksik" kalır (tahmin edilmedi, yeni tablo eklenmedi); araç sahibi
+  ad/telefonu için ise kullanıcıya soruldu ve **yeni minimal capture**
+  onaylandı (owner verisi PII-gated, gerçek export sütununu anlamlı kılıyor).
+- **Migration 0042** (`case_vehicle_owner_sets` + `case_vehicle_owners`):
+  tam sürüm zinciri yok — liste tek seferde değiştirilir, append-only
+  (eski `set_version` satırları asla silinmez/güncellenmez, guard trigger
+  zorlar), `case_vehicle_owner_sets.current_set_version` optimistic
+  locking işaretçisidir. Telefon DAİMA text (regex `^[0-9()+. -]+$`);
+  baştaki sıfır korunur. Gerçek PostgreSQL'de forward/rollback/reapply ve
+  tenant/format/append-only kısıt testi geçti.
+- **API:**
+  - `GET/PUT /api/v1/cases/:caseId/vehicle-owners` — WRITE_ROLES
+    admin/expert/case_manager (vehicle-profile ile aynı), sekreterlik salt
+    okunur; optimistic `expectedSetVersion` kilidi.
+  - `GET /api/v1/case-inventory` — yalnız SAYIM döner (PII taşımaz), her
+    oturum için `includesPhones` rol bazlı hesaplanır.
+  - `GET /api/v1/case-inventory/export` — gerçek `.xlsx` üretir ve indirir;
+    `includePhones=false` ise telefon hücreleri HİÇ üretilmez (gizlemek
+    değil, üretilmemek). Her export `case_inventory.exported` audit
+    kaydı bırakır (satır sayısı/rol/filtre; PII yok).
+  - Sıfırdan minimal OOXML `.xlsx` yazıcı (`fflate`, zaten Paket 65A/65B'de
+    kullanılan kütüphane — yeni paket değil, mevcut kullanım genişletildi).
+    Beş parçalık standart yapı, `inlineStr` hücreler (paylaşılan string
+    tablosu yok). Gerçek API testinde üretilen dosya `unzipSync` ile geri
+    açılıp içerik ve PII-gating doğrulandı.
+- **UI:** `CaseVehicleOwnersModule` (Dosya Detayı > Özet, araç profilinin
+  altında) — liste görünümü + düzenle/kaydet formu, üst sınır 6 sahip.
+  `CaseInventoryExportPanel` (Raporlar ve Ücretler, API modunda) — filtre
+  + gerçek zamanlı sayım önizleme + "Excel İndir". Mock moddaki eski sahte
+  "Excel Taslağı" butonu değişmedi (ayrı kod yolu, API modunda gösterilmez).
+- **Doğrulama:** typecheck, lint (0 error / 2 warning, değişmedi), gerçek
+  `hasarbotu_test` PostgreSQL ile **2.080 başarılı / 6 ortam-koşullu UI
+  skip** (2.055’ten +25: domain +10, database +1, API +5, UI +9),
+  build/bundle **417.187 bayt** (bütçe 500.000, +4.544 bayt), `npm audit`
+  (production + moderate) 0 bulgu. Gerçek Chrome/CDP smoke: API login,
+  gerçek case oluşturma, araç sahibi ekleme/kaydetme (PostgreSQL round-trip
+  doğrulandı), Raporlar ve Ücretler'de Dosya Envanteri paneli, gerçek
+  export isteği (200, konsol temiz). Kalıcı `hasarbotu` dev DB'sine
+  manuel uygulanan migration + smoke verisi doğrulanıp temizlendi (guard
+  trigger'lar tekrar etkin, sıfır kalıntı).
+- **Bilinen sınır:** `serviceCity`/`expertReportNumber` hâlâ kaynaksız;
+  gelecekte gerçek bir kaynak (yeni alan/entegrasyon) onaylanırsa ayrı
+  karar gerekir. Envanter export satır sınırı 5.000 (`CASE_INVENTORY_MAX_ROWS`).
 
 ## Modül seviyesi `set-state-in-effect` temizliği — 4. dilim (2026-07-25)
 
