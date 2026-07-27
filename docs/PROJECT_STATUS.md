@@ -8,6 +8,54 @@ Son güncelleme: 2026-07-27
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.080 başarılı / 6 ortam-koşullu skip.**
 
+## PERT uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Paket 45'in (2026-07-18, HB-2026-051) kabul edildiği andan bu
+  yana ilk kez, gerçek anonim bir Trafik dosyasında PERT/Ağır Hasar
+  zincirinin TAMAMI (rayiç + hasar bedeli girişi → fotoğraf/kanıt →
+  eksper kanaati → merkez kararı → nihai PERT sonucu) **tek case üzerinde,
+  sentetik SQL ile onaylı sürüm enjekte etmeden, yalnız gerçek command
+  API'leriyle** sürüldü. Mevcut `pert.test.ts` bu geçişleri yalnız ayrı
+  senaryolarda (her `it` kendi kısa sürüm zincirini kuruyordu) doğruluyordu
+  ve kanıt/fotoğraf hiç işin içinde değildi.
+- **Doğrulanan gerçek zincir:** gerçek `POST /cases` ile case → gerçek
+  belge/fotoğraf kaydı (`sbm_heavy_damage_result` + hasar fotoğrafı) →
+  **gerçek File Agent `runOnce`** ile disk üzerinde hash/boyut doğrulaması
+  (`pending → ready`, bağımsız `GET` ile yeniden okundu) → PERT
+  değerlendirmesi `data_missing` (kanıt var, rayiç/hasar bedeli henüz yok)
+  → **rayiç (850.000 TL) + hasar bedeli (720.000 TL) girilince** sunucuda
+  türetilen oran doğru hesaplandı (**%85**, istemci hesaplamaz/göndermez)
+  ve durum `pert_candidate`'a geçti → gerçek **eksper** kullanıcısı kanaatini
+  (`pert` + zorunlu gerekçe) kaydetti (`expert_opinion_issued`) →
+  `center_decision_pending` → gerçek **admin** (merkez) kullanıcısı kararı
+  kesinleştirdi: **nihai PERT sonucu `pert_decided`**, beş immutable/
+  append-only sürüm olarak. Bağımsız bir `GET workspace` isteğiyle tam
+  sürüm geçmişi yeniden okunup hiçbir eski sürümün (v1'in null rayiç/hasar
+  değerleri dahil) sonradan değişmediği doğrulandı.
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Zincirin tamamı belgelenen
+  tasarıma (HB-2026-051) göre çalıştı; üretim kodunda değişiklik
+  yapılmadı. Audit zincirinde (`case.created` → `document.registered` →
+  `photo.registered` → 2× `job.verified` → `pert_assessment.created` →
+  4× `pert_assessment.revised`) yapısal not/gerekçe/merkez notu serbest
+  metninin HİÇ audit'e kopyalanmadığı doğrudan doğrulandı (yalnız durum/
+  kanaat/karar kodları ve türetilmiş oran).
+- **Ölçülen bilinen sınır:** PERT değerlendirmesinin case-lifecycle kapanış
+  gereksinimleriyle (Değer Kaybı'nın aksine) hiçbir entegrasyonu yok —
+  case-lifecycle store'da PERT'e referans bulunamadı. Bu bir gerileme
+  değil, Paket 45'in belgelenen kapsamının (yalnız kullanıcı kontrollü
+  değerlendirme çekirdeği) doğrudan sonucu; kapanış entegrasyonu hiç
+  planlanmamıştı.
+- Kalıcı kanıt olarak `services/api/test/pert-uat-e2e.test.ts` eklendi
+  (gerçek `hasarbotu_test` PostgreSQL + gerçek File Agent Agent API
+  client/`runOnce`/yerel filesystem doğrulaması, sentetik anonim veriyle).
+  Ana ağaçta typecheck, lint (0 error / 2 warning, değişmedi), gerçek
+  PostgreSQL ile **domain 759 + contracts 324 + database 74 + UI 366
+  (+6 skip) + API 482 (+1 yeni) + file-agent 78**, build/bundle (417.259
+  bayt, değişmedi), `npm audit` (moderate) 0 açık geçti.
+- Kapsam dışı: yeni migration, yeni endpoint, UI değişikliği, yeni
+  dependency, üretim veri/migration çalıştırma, PERT'in case-lifecycle
+  kapanışına bağlanması (mevcut tasarımda yok; ayrı ürün kararı gerektirir).
+
 ## İşçilik uçtan uca UAT doğrulaması (2026-07-27)
 
 - **Kapsam:** Paket 58/64/65A/65B'nin kabul edildiği andan bu yana ilk kez,
