@@ -6,7 +6,60 @@ Son güncelleme: 2026-07-27
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
-- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.087 başarılı / 6 ortam-koşullu skip.**
+- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.088 başarılı / 6 ortam-koşullu skip.**
+
+## Bildirimler uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Paket 49/51/52'nin (2026-07-18) kabul edildiği andan bu yana
+  ilk kez, gerçek uyarı üretimi → bildirim listesi → okunma/durum değişimi →
+  ilgili dosyaya navigasyon → tenant ve yetki izolasyonu zincirinin TAMAMI
+  **sentetik SQL ile onaylı sürüm enjekte etmeden, uyarıları gerçek `POST
+  /cases` + gerçek `POST /cases/:caseId/tasks` command API'leriyle üreterek**
+  doğrulandı (yalnız hazır evrak satırları, PERT/İşçilik/Kasko UAT'larında
+  ayrıca kanıtlı File Agent doğrulama döngüsünü tekrarlamamak için SQL ile
+  hazır kabul edildi — mevcut `operational-alerts.test.ts`'in kendisi de aynı
+  şekilde yapıyor). Mevcut üçlü paket (`operational-alerts.test.ts` +
+  `operational-alerts-case-filter.test.ts` + `operational-alerts-scaling.test.ts`,
+  925+ satır) türetme mantığını, kural motoru detaylarını, 200 sınırını ve
+  N+1 korumasını zaten kapsamlıca kanıtlıyordu ama yalnız `case_manager`
+  rolüyle çalışıyordu ve `caseDetailPath`'i yalnız düzenli ifadeyle
+  doğruluyordu.
+- **ÖNEMLİ BULGU (kusur değil, doğrulanmış kasıtlı tasarım):** Bildirimler
+  kalıcı bir gelen kutusu DEĞİLDİR (HB-2026-055, 2026-07-18). Her `GET
+  /api/v1/operational-alerts` çağrısında görev/takip/evrak verisinden
+  deterministik olarak türetilir; ne bildirim tablosu, ne arka plan işçisi,
+  ne okundu/durum alanı, ne de yazma ucu vardır. Kullanıcının istediği
+  "okunma/durum değişimi" adımı bu sistemde GERÇEKTEN yoktur — bu test o
+  yokluğu doğrudan kanıtlar: ham JSON yanıtı `isRead`/`status`/`id` alanı
+  taşımaz, tekrarlanan çağrı bayt-bayt aynı sonucu döner ve audit kaydı
+  yazmaz, `PATCH /operational-alerts` denemesi 404 döner (yazma ucu hiç
+  kayıtlı değil). Ayrıca uçta kasıtlı olarak rol kısıtı yoktur (`auth/
+  guard.ts`: "ilk aşamada tüm aktif kullanıcılar tam yetkilidir") — bu,
+  gerçek altı rolle (admin/expert/case_manager/secretary/accounting/
+  read_only) tek tek kanıtlandı, hepsi 200 alıp yalnız kendi organizasyonunu
+  görüyor.
+- **Doğrulanan gerçek zincir:** gerçek `POST /cases` (geçmiş takip tarihi) →
+  gerçek `POST /cases/:caseId/tasks` (geçmiş bitiş tarihi) → eksik zorunlu
+  evrak → `GET /operational-alerts` GERÇEK overdue_task/overdue_follow_up/
+  missing_required_document uyarıları üretti (özet, önem derecesi,
+  kaynak tarihi, `caseDetailPath` tam eşleşti) → liste seviyesinde tenant
+  izolasyonu iki ayrı organizasyonla kanıtlandı → "ilgili dosyaya navigasyon"
+  `caseDetailPath` yalnız biçim değil GERÇEK `GET /cases/:caseId` çağrısıyla
+  çözülüp plaka/ofis no eşleşmesi doğrulandı (çapraz-org navigasyon denemesi
+  gerçekten 404 aldı) → altı rolün tümü kendi organizasyonunu okuyabildi,
+  oturumsuz erişim 401 aldı.
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Üretim kodunda değişiklik
+  yapılmadı.
+- Kalıcı kanıt olarak `services/api/test/notifications-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL, sentetik anonim veriyle). Ana
+  ağaçta typecheck, lint (0 error / 2 warning, önceden var olan ve bu
+  görevde dokunulmayan dosyalarda, değişmedi), gerçek PostgreSQL ile
+  **domain 759 + contracts 324 + database 74 + UI 366 (+6 skip) + API 487
+  (+1 yeni) + file-agent 78**, build/bundle (417.259 bayt, değişmedi),
+  `npm audit` (moderate) 0 açık geçti.
+- Kapsam dışı: kalıcı bildirim tablosu/kuyruk/worker, okundu/ertelendi/silindi
+  kullanıcı durumu, kaynak-bazlı ince taneli permission matrisi (HB-2026-055
+  ve HB-2026-011'de zaten sonraki pakete ertelenmiş).
 
 ## Dosyalar ve Dosya Detayı uçtan uca UAT doğrulaması — GERÇEK KUSUR BULUNDU VE DÜZELTİLDİ (2026-07-27)
 
