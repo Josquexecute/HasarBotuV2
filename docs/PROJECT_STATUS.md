@@ -6,7 +6,51 @@ Son güncelleme: 2026-07-27
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
-- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.098 başarılı / 6 ortam-koşullu skip.**
+- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.099 başarılı / 6 ortam-koşullu skip.**
+
+## Raporlar ve Ücretler (üst düzey) uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Paket 39/45'in (HB-2026-045) kabul edildiği andan bu yana ilk
+  kez, üst düzey `/raporlar-ve-ucretler` sayfasının gerçek verisi
+  (`GET /api/v1/reports/case-summary`) için gerçek kapanış → gerçek ücret
+  onayı → aylık rapora yansıma → tenant izolasyonu → rol görünürlüğü zinciri
+  **sentetik SQL ile onaylı sürüm enjekte etmeden (yalnız yabancı organizasyon
+  karşılaştırma verisi için SQL kullanılarak)** doğrulandı. Bu, dosya-içi
+  "Raporlar ve Ücretler" SEKMESİNDEN ayrı, örgüt geneli bir toplama panosudur.
+- **Kapatılan gerçek boşluklar:** (1) Aylık rapor ucunun tenant izolasyonu
+  hiçbir zaman YABANCI organizasyonun KENDİ oturumundan sorgulanarak
+  kanıtlanmamıştı (`closure-fees-reports.test.ts` yabancı case'i yalnız
+  detay-404 için seedliyordu, hiç ücret eklemiyor ve hiç o organizasyon
+  olarak giriş yapmıyordu). Bu test yabancı organizasyonda GERÇEKTEN onaylı
+  bir ücret oluşturdu ve HER İKİ organizasyonun KENDİ oturumuyla raporu
+  sorgulayıp `summary`, `distribution`, `responsibleUsers`, `services` VE
+  `pendingFees` alanlarının TAMAMININ sızmadığını doğrudan kanıtladı — dahil
+  filtre-organizasyon kombinasyonu (yabancı bir `responsibleUserId` filtre
+  olarak geçilse dahi organizasyon sınırının içinde kalıp güvenli biçimde
+  boş sonuç döndüğü, hata vermediği ya da sızdırmadığı). (2) Bu uçta rol
+  kısıtı YOKTUR (yalnız `requireSession`); `secretary` ve `read_only`
+  rollerinin GERÇEKTEN aynı gerçek mali toplamları görebildiği hiç gerçek
+  oturumlarla kanıtlanmamıştı — artık kanıtlı (kasıtlı tasarım, DECISIONS ile
+  tutarlı: "ilk aşamada herkes tam yetkili çalışır").
+- **Zaten kanıtlı olan, TEKRARLANMAYAN:** Onaylı ücretin GERÇEK yeniden
+  açmadan sonra aylık toplamdan doğru düştüğü (bu oturumda daha önce bulunup
+  düzeltilen çift-sayım kusuru) `closure-fee-uat-e2e.test.ts`'te BU AYNI uç
+  üzerinden zaten kanıtlı; bu görev onu doğrulamak için yeniden çalıştırmadı,
+  yalnız `npm test` ile birlikte yeşil kaldığını teyit etti.
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Üretim kodunda değişiklik
+  yapılmadı.
+- Kalıcı kanıt olarak `services/api/test/reports-fees-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL + sentetik dosya sistemi +
+  gerçek Agent `runOnce`). Ana ağaçta typecheck, lint (0 error / 2 warning,
+  önceden var olan ve bu görevde dokunulmayan dosyalarda, değişmedi), gerçek
+  PostgreSQL ile **domain 759 + contracts 324 + database 74 + UI 374
+  (+6 skip) + API 490 (+1 yeni) + file-agent 78**, build/bundle (417.259
+  bayt, değişmedi), `npm audit` (moderate) 0 açık geçti.
+- Kapsam dışı: PDF/OCR ücret çıkarımı, Excel dışa aktarımı (ayrı Dosya
+  Envanteri modülüyle zaten kapatıldı), genel muhasebe yönetimi — hepsi
+  HB-2026-045 madde 8'de zaten kasıtlı olarak dışarıda bırakılmış; gerçek
+  backend'e karşı React `ReportsPage` UI entegrasyon testi (yalnız mock-fetch
+  ile test edilen mevcut kapsam) bu görevde eklenmedi.
 
 ## Kapanan Dosyalar uçtan uca UAT doğrulaması (2026-07-27)
 
