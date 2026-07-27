@@ -8,6 +8,79 @@ Son güncelleme: 2026-07-27
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.080 başarılı / 6 ortam-koşullu skip.**
 
+## Kasko poliçe analizi uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Paket 23/26/27'nin (2026-07-14/15) kabul edildiği andan bu
+  yana ilk kez, gerçek anonim bir Kasko dosyasında poliçe analizi
+  zincirinin TAMAMI (poliçe kaynağı → OCR/metin → AI analizi → kullanıcı
+  onayı → immutable geçmiş) **tek case üzerinde, sentetik SQL ile onaylı
+  sürüm enjekte etmeden -- yalnız Paket 24/25'in kendi ayrı kanıtlanmış
+  pdfjs/tesseract hattının hazır çıktısı kabul edilerek -- yalnız gerçek
+  command API'leriyle** sürüldü. Mevcut `policy-ai.test.ts` AI adayı
+  üretip promote ediyordu ama taslağı HİÇ onaylamıyordu
+  (`humanApprovalStatus: pending` üzerinde duruyordu); mevcut
+  `policy-analysis.test.ts` yalnız MANUEL/sentetik import edilmiş bir
+  analizi onaylıyordu, AI candidate/promotion zincirinden hiç geçmemiş
+  veriyle. Bu senaryo ikisini birleştirdi.
+- **Gerçek zincirde ölçülen, önceden belgelenmemiş ama KASITLI/doğru üç
+  davranış** (üçü de dikkatlice izlenip doğrulandı, kusur değil):
+  1. AI-promote edilmiş taslak `sourceCompleteness:'partial'` ile geldi
+     çünkü adaylardan biri (`deductible.conditional`) AI'nin KENDİ kanıt
+     kalitesi belirsiz kaldığı için kullanıcı "kabul" etse bile evidence
+     durumu `validated` sayılmadı. `POST .../approve` ucu
+     `source_completeness≠'complete'` iken KESİN OLARAK reddediyor —
+     İşçilik UAT'ındaki HB-2026-086 madde 3 ile aynı ilke: kullanıcının
+     "kabul ettim" demesi belirsiz kanıtı geriye dönük güçlendirmiyor.
+  2. Bu yüzden gerçek ürün akışı, kullanıcının (eksper) eksik/belirsiz
+     alanları GERÇEKTEN tamamlayıp yeni bir manuel sürüm girmesini
+     gerektiriyor (`POST .../versions`, `sourceCompleteness:'complete'`
+     açıkça beyan edilerek) — bu sürüm ONAYLANABİLİYOR ve GERÇEKTEN canlı
+     senaryo değerlendirmesinde (`POST .../policy-scenarios/evaluate`,
+     sonuç `covered`) kullanılabiliyor.
+  3. Hiç onaylanmamış 1. (AI-promote, partial) sürüm yeni sürümle
+     değiştirildiğinde `superseded` OLMUYOR — `conflict_detected`
+     durumunda donuk kalıyor; `superseded` yalnız DAHA ÖNCE onaylanmış bir
+     sürüm değiştiğinde kullanılıyor. DB immutability guard'ı da yalnız
+     `approved`/`superseded` sürümleri koruyor (`policy_analysis_versions_
+     approved_guard`); hiç onaylanmamış taslak sürüm teknik olarak hâlâ
+     düzenlenebilir kalıyor (append-only garantisi yalnız GERÇEKTEN
+     onaylanmış kayıtlar için başlıyor).
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Yukarıdaki üçü de kodun
+  gerçek davranışını doğru okumamaktan kaynaklanan yanlış varsayımlardı;
+  kaynak trigger/store mantığı okunduktan sonra üçü de kasıtlı ve tutarlı
+  çıktı. Üretim kodunda değişiklik yapılmadı.
+- **Doğrulanan gerçek zincir:** gerçek `POST /cases` (Kasko) → poliçe
+  kaynağı (ready belge) → OCR/metin (Paket 24 PDF metin + Paket 25 yerel
+  OCR, ikisi de ready) → gerçek plan (provider çağırmaz) → gerçek start
+  (deterministik sağlayıcı, 5 aday + 1 çelişki) → kullanıcı incelemesi:
+  biri GERÇEKTEN düzenlendi (AI önerisinden farklı koşul eklendi), biri
+  önce reddedilip sonra kabul edildi, biri önce kontrol-gerekli işaretlenip
+  sonra kabul edildi → promotion-preview → gerçek promotion (Paket 23
+  taslak sürüm 1, `pending/partial/conflict_detected`) → eksper GERÇEKTEN
+  tamamlanmış bir 2. sürüm girdi (`complete/awaiting_approval`) → eksper
+  GERÇEKTEN onayladı (`approved/isActive:true`) → onaylı analiz GERÇEKTEN
+  canlı senaryo değerlendirmesinde kullanıldı (`covered`, gerçek kaynak
+  referansıyla) → bağımsız yeniden okuma + DB seviyesinde append-only/
+  immutable garantiler (AI facts, review geçmişi, onaylı sürüm) GERÇEKTEN
+  zorlanarak doğrulandı.
+- Audit zinciri (`case.created` → `policy_ai_extraction.planned/started/
+  review_required` → `policy_ai_candidate.promoted` → `policy_analysis.
+  approved`) tam ve ham poliçe metni/PII/mutlak yol sızıntısı yok
+  doğrulandı.
+- Kalıcı kanıt olarak `services/api/test/policy-ai-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL, sentetik anonim veriyle;
+  belge/fotoğraf `ready` doğrulaması SQL ile hazır kabul edildi -- gerçek
+  File Agent doğrulama döngüsü PERT/İşçilik UAT'larında zaten ayrıca
+  kanıtlandı). Ana ağaçta typecheck, lint (0 error / 2 warning,
+  değişmedi), gerçek PostgreSQL ile **domain 759 + contracts 324 +
+  database 74 + UI 366 (+6 skip) + API 485 (+1 yeni) + file-agent 78**,
+  build/bundle (417.259 bayt, değişmedi), `npm audit` (moderate) 0 açık
+  geçti.
+- Kapsam dışı: yeni migration, yeni endpoint, UI değişikliği, yeni
+  dependency, üretim veri/migration çalıştırma, gerçek OpenAI/Gemini
+  sağlayıcı çağrısı (deterministik sağlayıcı kullanıldı; dış sağlayıcı
+  PII-minimize zinciri `policy-ai.test.ts`'te zaten ayrıca kanıtlı).
+
 ## E-posta hazırlama uçtan uca UAT doğrulaması — GERÇEK KUSUR BULUNDU VE DÜZELTİLDİ (2026-07-27)
 
 - **Kapsam:** Paket 41/42'nin (2026-07-16) kabul edildiği andan bu yana ilk
