@@ -92,6 +92,38 @@ describe('App oturum kapisi (api mod)', () => {
     expect(screen.getByRole('button', { name: 'Giriş Yap' })).toBeInTheDocument()
     expect(screen.queryByText('34 MPA 764')).not.toBeInTheDocument()
   })
+
+  it('kimliksiz erisim /ayarlar rotasini da login ekraninin arkasinda tutar', async () => {
+    window.history.replaceState({}, '', '/ayarlar')
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    installFetch({ session: () => ({ status: 401 }) })
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Giriş Yap' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Ayarlar' })).not.toBeInTheDocument()
+  })
+
+  it('giristen sonra /ayarlar organizasyon kapsamli hicbir ek istek yapmadan acilir (tek istek: oturum bootstrap)', async () => {
+    window.history.replaceState({}, '', '/ayarlar')
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
+      calls.push(String(input))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => SESSION,
+        headers: { get: () => null },
+      } as unknown as Response
+    }) as unknown as typeof fetch)
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument()
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toContain('/api/v1/auth/session')
+  })
 })
 
 describe('App mock mod (varsayilan baseline korunur)', () => {

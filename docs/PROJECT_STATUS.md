@@ -6,7 +6,65 @@ Son güncelleme: 2026-07-27
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
-- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.089 başarılı / 6 ortam-koşullu skip.**
+- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.097 başarılı / 6 ortam-koşullu skip.**
+
+## Ayarlar uçtan uca UAT doğrulaması (2026-07-27)
+
+- **Kapsam:** Ayarlar sayfasının kabul edildiği andan bu yana ilk kez, tema/
+  kullanıcı tercihleri/kalıcılık/oturum yenileme/tenant izolasyonu zinciri
+  doğrulandı.
+- **ÖNEMLİ BULGU (kusur değil, belgelenmiş kapsam):** Ayarlar sayfası
+  HİÇBİR sunucu çağrısı yapmaz — tema, tablo yoğunluğu, sol menü, varsayılan
+  açılış sayfası ve mock çalışma klasörü yalnız tarayıcı `localStorage`'ında
+  saklanır (HB-2026-013, Paket 08: "Kabul edilmiş UI davranışı ve Ayarlar
+  ekranı değiştirilmez"). Bu yüzden "oturum yenileme" ve "tenant izolasyonu"
+  bu modül için yalnız route-koruması seviyesinde anlamlıdır; Ayarlar'ın
+  kendisinin izole edilecek organizasyon-kapsamlı verisi yoktur.
+- **Kapatılan gerçek boşluk:** `SettingsPage`'in HİÇ kendi test dosyası
+  yoktu (yalnız üst düzey navigasyon/başlık smoke kontrolü ve header'daki
+  PAYLAŞILAN tema/yoğunluk düğmeleri test ediliyordu — sayfanın KENDİ radyo
+  düğmeleri, açılış sayfası seçimi, mock klasör değiştirme ve sıfırlama
+  denetimleri hiç dokunulmamıştı). Ayrıca `/ayarlar` rotasının diğer tüm
+  korumalı rotalarla AYNI oturum kapısından geçtiği ve girişten sonra
+  organizasyon kapsamlı HİÇBİR ek istek yapmadan (tek istek: oturum
+  bootstrap) açıldığı hiç doğrudan kanıtlanmamıştı.
+- **Doğrulanan gerçek zincir:** gerçek `usePersistentState` kancasıyla (App.tsx
+  üretimde kullandığı AYNI kanca) tema/yoğunluk/menü radyo düğmeleri →
+  gerçek `localStorage` anahtarlarına (`hasarbotu-theme`, `hasarbotu-density`,
+  `hasarbotu-sidebar-collapsed`) kalıcı yazdı; sayfa yenilemesi (yeniden
+  mount) önceden yazılmış tüm beş anahtarı (yukarıdakiler + `hasarbotu-
+  default-page`, `hasarbotu-mock-folder`) doğru hidratladı; açılış sayfası
+  seçimi ve mock klasör değiştirme kalıcı yazdı ve bildirim gösterdi;
+  "Varsayılanlara Dön" tüm beş anahtarı gerçek mock varsayılanlarına
+  sıfırladı. Route-koruması: `/ayarlar`'a kimliksiz erişim login ekranının
+  arkasında kaldı; girişten sonra `/ayarlar` yalnız TEK istek (oturum
+  bootstrap) yaptı, organizasyon kapsamlı hiçbir veri isteği göndermedi.
+  Gerçek Chrome ile `router-v8-browser-smoke.mjs` (korumalı derin bağlantı,
+  8 rotalık nav taraması dahil `/ayarlar`, header tema düğmesiyle gerçek
+  koyu tema geçişi, `location.reload()` rota korunumu, sıfır konsol hatası)
+  yeniden çalıştırılıp doğrulandı.
+- **Sonuç: gerçek üretim kusuru bulunmadı.** Üretim kodunda değişiklik
+  yapılmadı; yalnız eksik test kapsamı kapatıldı.
+- **Dikkat çekilecek (düzeltilmedi, kapsam dışı):** "Sistem Durumu" paneli
+  (`SettingsPage.tsx`) tamamen statik metindir — `Backend: Eklenmedi`,
+  `AI Servisi: Mock karar desteği` gibi ifadeler `getConfiguredDataSource()`
+  hiç kontrol edilmeden HER ZAMAN gösterilir. Paket 08'den bu yana onlarca
+  gerçek backend paketi eklendiği için bu metin `api` modunda artık YANLIŞ
+  bilgi verebilir. Bu, HB-2026-013'te Ayarlar ekranının kasıtlı olarak
+  değiştirilmediği erken bir karardan kalma ve gerçek bir düzeltmesi (hangi
+  sağlık sinyalinin gösterileceği kararı) tek bir UAT görevinin kapsamını
+  aşan yeni bir ürün kararı gerektirir; bu görevde DEĞİŞTİRİLMEDİ.
+- Kalıcı kanıt olarak `src/features/settings/SettingsPage.test.tsx` (yeni,
+  6 test) eklendi ve `src/app/appGate.test.tsx`'e 2 yeni test eklendi. Ana
+  ağaçta typecheck, lint (0 error / 2 warning, önceden var olan ve bu
+  görevde dokunulmayan dosyalarda, değişmedi), gerçek PostgreSQL ile
+  **domain 759 + contracts 324 + database 74 + UI 374 (+8 yeni, +6 skip) +
+  API 488 + file-agent 78**, gerçek Chrome ile `router-v8-browser-smoke.mjs`
+  tüm kontroller true, build/bundle (417.259 bayt, değişmedi), `npm audit`
+  (moderate) 0 açık geçti.
+- Kapsam dışı: sunucu tarafı kullanıcı tercihi kalıcılığı (hiçbir zaman
+  planlanmadı), "Sistem Durumu" panelinin gerçek sağlık sinyaline bağlanması
+  (yukarıda not edildi, yeni ürün kararı gerektirir).
 
 ## Yönetim uçtan uca UAT doğrulaması (2026-07-27)
 
