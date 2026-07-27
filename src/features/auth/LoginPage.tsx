@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { LogIn, ShieldCheck } from 'lucide-react'
+import { LogIn } from 'lucide-react'
 import { HttpAuthError } from '../../data/authPort'
 import { useSession } from '../../app/sessionContext'
 
@@ -44,7 +44,10 @@ export function LoginPage() {
     <div className="login-screen">
       <form className="login-card" onSubmit={handleSubmit} aria-labelledby="login-title">
         <div className="login-card__brand">
-          <span className="login-card__logo" aria-hidden="true"><ShieldCheck size={22} /></span>
+          <span className="login-card__logo" aria-hidden="true">
+            <img className="brand__logo brand__logo--light" src="/brand/logo-horizontal.png" alt="" />
+            <img className="brand__logo brand__logo--dark" src="/brand/logo-mark-dark.png" alt="" />
+          </span>
           <div>
             <h1 id="login-title">HasarBotu V2</h1>
             <p>Baran Global Ekspertiz · Operasyon</p>

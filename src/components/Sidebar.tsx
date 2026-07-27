@@ -1,6 +1,5 @@
 import {
   Bell,
-  Bot,
   ChartNoAxesCombined,
   ChevronsLeft,
   ChevronsRight,
@@ -70,7 +69,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`}>
       <div className="brand">
         <span className="brand__mark" aria-hidden="true">
-          <Bot size={21} />
+          <img className="brand__logo brand__logo--light" src="/brand/logo-horizontal.png" alt="" />
+          <img className="brand__logo brand__logo--dark" src="/brand/logo-mark-dark.png" alt="" />
         </span>
         {!collapsed && (
           <span className="brand__copy">

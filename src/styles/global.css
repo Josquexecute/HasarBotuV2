@@ -149,15 +149,31 @@ button {
 
 .brand__mark {
   display: inline-flex;
-  width: 36px;
-  min-width: 36px;
-  height: 34px;
+  min-width: 0;
+  height: 32px;
   align-items: center;
-  justify-content: center;
-  color: #fff;
-  border: 1px solid #1b50c8;
-  border-radius: var(--radius-md);
-  background: linear-gradient(145deg, #3474f2, #2059d9);
+  justify-content: flex-start;
+}
+
+.brand__logo {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.brand__logo--dark {
+  display: none;
+}
+
+[data-theme='dark'] .brand__logo--light {
+  display: none;
+}
+
+[data-theme='dark'] .brand__logo--dark {
+  display: block;
 }
 
 .brand__copy,
@@ -2444,13 +2460,13 @@ button {
 
 .login-card__logo {
   display: inline-flex;
-  width: 40px;
   height: 40px;
   align-items: center;
   justify-content: center;
-  color: var(--accent-contrast);
-  border-radius: var(--radius-md);
-  background: var(--accent);
+}
+
+[data-theme='dark'] .login-card__logo {
+  height: 72px;
 }
 
 .login-card__brand h1 {
