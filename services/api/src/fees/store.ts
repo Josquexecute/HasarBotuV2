@@ -398,10 +398,16 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
            count(*) FILTER (WHERE c.lifecycle_status='closed')::int AS closed_case_count,
            count(*) FILTER (WHERE c.case_type='traffic')::int AS traffic_case_count,
            count(*) FILTER (WHERE c.case_type='casco')::int AS casco_case_count,
-           count(*) FILTER (WHERE current.status IN ('approved','corrected'))::int AS approved_fee_count,
+           count(*) FILTER (
+             WHERE c.lifecycle_status='closed' AND current.status IN ('approved','corrected')
+           )::int AS approved_fee_count,
            COALESCE(sum(current.approved_amount_minor)
-             FILTER (WHERE current.status IN ('approved','corrected')),0)::text AS approved_fee_total_minor,
-           count(*) FILTER (WHERE current.status='control_required')::int AS control_required_fee_count,
+             FILTER (
+               WHERE c.lifecycle_status='closed' AND current.status IN ('approved','corrected')
+             ),0)::text AS approved_fee_total_minor,
+           count(*) FILTER (
+             WHERE c.lifecycle_status='closed' AND current.status='control_required'
+           )::int AS control_required_fee_count,
            count(*) FILTER (WHERE c.lifecycle_status='closed' AND fee.id IS NULL)::int AS closed_without_fee_count,
            count(*) FILTER (
              WHERE c.lifecycle_status='closed' AND c.case_type='traffic'

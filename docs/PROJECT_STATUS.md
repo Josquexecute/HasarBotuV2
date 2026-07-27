@@ -8,6 +8,66 @@ Son güncelleme: 2026-07-27
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.080 başarılı / 6 ortam-koşullu skip.**
 
+## Kapanış ve Ücret uçtan uca UAT doğrulaması — GERÇEK KUSUR BULUNDU VE DÜZELTİLDİ (2026-07-27)
+
+- **Kapsam:** Paket 39/21'in (2026-07-14/16) kabul edildiği andan bu yana ilk
+  kez, gerçek anonim bir Kasko dosyasında Kapanış+Ücret zincirinin TAMAMI
+  (kapanış → nihai rapor ücret çıkarımı → kullanıcı onayı → aylık rapora
+  yansıma → yeniden açma) **tek case üzerinde, sentetik SQL ile onaylı sürüm
+  enjekte etmeden, yalnız gerçek command API'leriyle** sürüldü. Kasko
+  seçildi çünkü Trafik değer kaybı kapanış gereksinimi Kasko'da otomatik
+  `not_applicable` olur (HB-2026-046); bu, zaten ayrı kanıtlanmış
+  (`traffic-value-loss-closure-e2e.test.ts`) bir alt-zinciri tekrarlamadan
+  Kapanış+Ücret'e odaklanmayı sağladı.
+- **GERÇEK ÜRETİM KUSURU BULUNDU VE DÜZELTİLDİ:** `GET /api/v1/reports/
+  case-summary` sorgusunda `approved_fee_count` / `approved_fee_total_minor`
+  / `control_required_fee_count` sayaçlarında `c.lifecycle_status='closed'`
+  filtresi EKSİKTİ — aynı sorgudaki `closedCaseWithoutFeeCount` ve tüm değer
+  kaybı sayaçlarında bu filtre vardı, yalnız ücret sayaçlarında yoktu. Somut
+  etki: bir dosya kapatılıp ücreti onaylandıktan SONRA yeniden açılınca,
+  case satırı o ayki `scopedSql` penceresini "open + bu ay oluşturuldu"
+  dalından hâlâ karşıladığı için `closedCaseCount` doğru şekilde 0'a
+  düşerken `approvedFeeCount`/`approvedFeeTotalMinor` YANLIŞLIKLA eski
+  değerinde (1 / 485.000 TL) kalmaya devam ediyordu — aynı ay için "0
+  kapanan dosya" ile "485.000 TL onaylı ücret" birlikte görünen, muhasebe
+  açısından yanıltıcı iç tutarsız bir rapor üretiyordu. Kusur önce testi
+  kırarak (`git stash` ile düzeltmeyi geçici kaldırıp) doğrulandı, düzeltme
+  geri getirilip yeniden yeşile dönüldü.
+- **Düzeltme:** `services/api/src/fees/store.ts` — üç sayaca da diğer
+  sayaçlarla aynı `c.lifecycle_status='closed'` koşulu eklendi. Mevcut
+  `closure-fees-reports.test.ts` (5/5) etkilenmedi çünkü o testteki her
+  ücretli case zaten `closed` durumda kalıyor; bu, düzeltmenin yalnız
+  reopen-sonrası durumu hedeflediğini doğrular.
+- **Doğrulanan gerçek zincir:** gerçek `POST /cases` (Kasko) → gerçek plan
+  → onay → gerçek File Agent `runOnce` taşımasıyla kapanış (`closed_at`
+  set edildi) → nihai rapor ücret çıkarımı (verified `expert_report`
+  belgesine referansla aday: 4.850 TL) → aday onaydan önce aylık toplamda
+  YOK (`control_required`) → gerçek `accounting` rollü kullanıcı onayı →
+  append-only 2. sürüm (`approved`) → aylık rapor artık onaylı tutarı
+  taşıyor → gerçek yeniden açma planı/onayı/File Agent taşıması → `closed_at`
+  SIFIRLANMADI (append-only, en son kapanış zamanını korur) → ücret KAYDI
+  bozulmadan `approved` kalmaya devam ediyor (bağımsız `GET` ile doğrulandı)
+  → düzeltme sonrası aylık rapor artık dosyayı DOĞRU şekilde "kapanan
+  dosya" ve "onaylı ücret" toplamlarının İKİSİNDEN de düşürüyor.
+- Audit zinciri (`case.created` → `case_lifecycle.close_planned/approved/
+  closed` → `closure_fee.candidate_created/approved` →
+  `case_lifecycle.reopen_planned/approved/reopened`) tam ve ham gerekçe/
+  mutlak yol sızıntısı yok doğrulandı.
+- Kalıcı kanıt olarak `services/api/test/closure-fee-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL + gerçek File Agent Agent API
+  client/`runOnce`/yerel filesystem taşıması, sentetik anonim veriyle). Ana
+  ağaçta typecheck, lint (0 error / 2 warning, değişmedi), gerçek PostgreSQL
+  ile **domain 759 + contracts 324 + database 74 + UI 366 (+6 skip) + API
+  483 (+1 yeni) + file-agent 78**, build/bundle (417.259 bayt, değişmedi —
+  yalnız `services/api/src/fees/store.ts` SQL metni değişti, kod boyutu
+  frontend bundle'ı etkilemez), `npm audit` (moderate) 0 açık geçti.
+- Kapsam dışı: yeni migration, yeni endpoint, UI değişikliği, yeni
+  dependency, üretim veri/migration çalıştırma. Belge/fotoğraf `ready`
+  doğrulaması bu turda SQL ile hazır kabul edildi (gerçek File Agent
+  `runOnce` doğrulama döngüsü PERT ve İşçilik UAT'larında zaten ayrıca
+  kanıtlandı); rücu durumu ve fiziksel konum ataması ayrı test edilen
+  modüllerdir.
+
 ## PERT uçtan uca UAT doğrulaması (2026-07-27)
 
 - **Kapsam:** Paket 45'in (2026-07-18, HB-2026-051) kabul edildiği andan bu
