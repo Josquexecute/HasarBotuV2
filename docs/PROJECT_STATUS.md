@@ -6,7 +6,66 @@ Son güncelleme: 2026-07-27
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
-- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.080 başarılı / 6 ortam-koşullu skip.**
+- Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.087 başarılı / 6 ortam-koşullu skip.**
+
+## Dosyalar ve Dosya Detayı uçtan uca UAT doğrulaması — GERÇEK KUSUR BULUNDU VE DÜZELTİLDİ (2026-07-27)
+
+- **Kapsam:** Paket 09'un (Cases yazma uçları) kabul edildiği andan bu yana
+  ilk kez, gerçek case oluşturma → listeleme/arama/filtreleme → detay açma →
+  sekmeler → yenileme → geri/ileri navigasyon → yetki ve tenant izolasyonu
+  zincirinin TAMAMI **sentetik SQL ile onaylı sürüm enjekte etmeden**
+  doğrulandı. Mevcut `cases-read.test.ts` (925 satırlık üçlü paketin bir
+  parçası) filtre/arama/sıralama/sayfalamayı ve TEK case'in detay ucunda
+  tenant izolasyonunu zaten kapsamlıca kanıtlıyordu ama yalnız TEK
+  organizasyon fikstürüyle çalışıyordu — LİSTE/ARAMA seviyesinde iki gerçek
+  organizasyon arasında hiç doğrudan izolasyon kanıtı yoktu. Ayrıca
+  `router-v8-browser-smoke.mjs` (gerçek Chrome/CDP + gerçek Vite + gerçek API
+  + gerçek `_test` PostgreSQL) detay/sekme/yenileme/geri-ileri navigasyon
+  zincirini zaten kapsıyordu ama bu oturumda hiç ÇALIŞTIRILMAMIŞTI.
+- **GERÇEK ÜRETİM KUSURU BULUNDU VE DÜZELTİLDİ:** `POST /api/v1/cases` ve
+  `PATCH /api/v1/cases/:caseId` (`services/api/src/cases/write-routes.ts`)
+  yalnız `requireSession` kullanıyordu — `requireAnyRole` YOKTU. Sonuç:
+  `read_only` rolündeki bir kullanıcı bile yeni dosya oluşturabiliyor ve
+  mevcut dosyayı düzenleyebiliyordu. Bu, sistemdeki her diğer modülün
+  (İşçilik, PERT, E-posta, Değer Kaybı, Kapanma Ücreti, Poliçe Analizi) kendi
+  WRITE_ROLES sınırıyla tutarlı deseninin aksine bir istisnaydı. Yazma
+  rolü kapsamı belgelerde açıkça tanımlı olmadığından (HB-2026-011 yalnız
+  "ilk aşamada herkes tam yetkili" temelini belirtir, dosya oluşturmaya özgü
+  rol kısıtı belirtmez) kullanıcıya soruldu; kullanıcı **"read_only hariç
+  herkes yazabilsin"** seçeneğini onayladı. `WRITE_ROLES =
+  ['admin','expert','case_manager','secretary','accounting']` olarak
+  düzeltildi (İşçilik/PERT ile birebir aynı desen). Kusur önce testi
+  kırarak (`git stash` ile düzeltmeyi geçici kaldırıp gerçek PostgreSQL'de
+  yeniden çalıştırıp `expected 201 to be 403` hatasıyla doğrulanıp) kanıtlandı;
+  düzeltme geri getirilip yeniden yeşile dönüldü. Yan etki: mevcut
+  `cases-write.test.ts`'in birincil aktörünün hiç rolü yoktu (önceki
+  rolsüz-serbest davranışa dayanıyordu); yeni RBAC kapısı altında
+  yeşil kalması için `case_manager` rolü eklendi.
+- **Doğrulanan gerçek zincir:** gerçek `POST /cases` (iki ayrı organizasyonda,
+  kasıtlı örtüşen aranabilir metinle) → liste/arama/filtre ORG A ve ORG B
+  görünümlerinde ayrı ayrı doğrulandı (çapraz org hiç sızmadı) → detay açma
+  çapraz-org 404 → RBAC: `read_only` create/update 403 (ve 403'ün GERÇEKTEN
+  hiçbir kalıcı etki bırakmadığı DB seviyesinde doğrulandı) ama read 200 →
+  daha önce hiç doğrulanmamış `secretary`/`accounting` yazma rolleri gerçek
+  201/200 ile kanıtlandı → yenileme (`PATCH` sonrası yeniden `GET` ile hem
+  detay hem liste güncel `stage`/`version` gösteriyor) → audit zinciri
+  (`case.created`, `case.updated`) eksiksiz, çapraz-org id veya PII sızıntısı
+  yok. Ayrıca `router-v8-browser-smoke.mjs` GERÇEKTEN çalıştırıldı: korumalı
+  derin bağlantı → giriş → 8 ana nav rotası → case detayı + 8 sekme →
+  arama query-string korunumu → `history.back()/forward()` → `location.reload()`
+  rota+query korunumu → bilinmeyen rota placeholder → çıkış sonrası korumalı
+  rota engeli → 2 ekran/tema kombinasyonu → sıfır konsol hatası — TÜMÜ geçti.
+- Kalıcı kanıt olarak `services/api/test/cases-navigation-uat-e2e.test.ts`
+  eklendi (gerçek `hasarbotu_test` PostgreSQL, sentetik anonim veriyle).
+  Ana ağaçta typecheck, lint (0 error / 2 warning, önceden var olan ve bu
+  görevde dokunulmayan dosyalarda, değişmedi), gerçek PostgreSQL ile
+  **domain 759 + contracts 324 + database 74 + UI 366 (+6 skip) + API 486
+  (+1 yeni) + file-agent 78**, `router-v8-browser-smoke.mjs` (gerçek Chrome),
+  build/bundle (417.259 bayt, değişmedi), `npm audit` (moderate) 0 açık
+  geçti.
+- Kapsam dışı: yeni migration, yeni UI komponenti, dosya kapatma/yeniden açma
+  akışı (ayrı paket), kaynak-bazlı ince taneli permission matrisi (yalnız
+  case create/update rol kapısı kapsamda).
 
 ## Kasko poliçe analizi uçtan uca UAT doğrulaması (2026-07-27)
 

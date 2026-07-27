@@ -12,9 +12,10 @@ import {
   idempotencyKeySchema,
   zodErrorToApiError,
   type ApiErrorCode,
+  type RoleCode,
 } from '@hasarbotu/contracts'
 import { failureBody } from '../errors/failure.js'
-import { requireSession } from '../auth/guard.js'
+import { requireAnyRole } from '../auth/guard.js'
 import { createAuthStore } from './../auth/store.js'
 import { createCasesWriteStore, hashRequestBody, ReferenceCheckError } from './write-store.js'
 
@@ -23,6 +24,15 @@ export interface CasesWriteRoutesOptions {
 }
 
 const CREATE_SCOPE = 'cases.create'
+/**
+ * `read_only` hariç tüm roller dosya oluşturabilir/düzenleyebilir
+ * (kullanıcı onayı, 2026-07-27). Diğer bütün modüllerin (İşçilik, PERT,
+ * E-posta, Değer Kaybı, Kapanma Ücreti, Poliçe Analizi) kendi WRITE_ROLES
+ * sınırıyla tutarlıdır; bu uç önceden yalnız `requireSession` kullanıyordu
+ * ve `read_only` rolü dahi dosya oluşturabiliyordu (gerçek Dosyalar UAT'ında
+ * bulunan kusur).
+ */
+const WRITE_ROLES = ['admin', 'expert', 'case_manager', 'secretary', 'accounting'] as const satisfies readonly RoleCode[]
 
 function sendValidation(reply: FastifyReply, requestId: string, path: string, code: string): void {
   void reply.code(400).send(
@@ -49,7 +59,7 @@ export function registerCasesWriteRoutes(app: FastifyInstance, options: CasesWri
 
   app.post(CASES_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
 
     const keyHeader = request.headers[IDEMPOTENCY_KEY_HEADER]
@@ -114,7 +124,7 @@ export function registerCasesWriteRoutes(app: FastifyInstance, options: CasesWri
 
   app.patch(CASE_DETAIL_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
 
     const params = caseDetailParamsSchema.safeParse(request.params)

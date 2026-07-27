@@ -67,6 +67,7 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',
       [userId, orgId, EMAIL, 'Yazici', await hashPassword(PASSWORD)],
     )
+    await pool.query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE code='case_manager'", [userId])
     await pool.query(
       'INSERT INTO service_centers (id, organization_id, name, center_type, service_type) VALUES ($1, $2, $3, $4, $5)',
       [serviceId, orgId, 'Merkez Servis', 'ozel', 'private'],
