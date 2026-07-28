@@ -2378,3 +2378,71 @@ izolasyonunu birlikte dogrulayacak sekilde guncellendi.
 
 Dogrulanamayan: Gercek Chrome/CDP tarayici smoke bu pakette CALISTIRILMADI;
 UI davranisi yalniz component testleriyle dogrulandi.
+
+## 2026-07-28 - HB-2026-103: D1 masaustu kabugu icin loopback ayni-origin koprusu (Electron oncesi mimari kilit)
+
+Karar: Electron kabugunda renderer'in gordugu origin sayisi **bire**
+indirilecektir. Masaustu main process'i 127.0.0.1'de bir loopback HTTP
+koprusu acar; ayni host:port hem UI build ciktisini hem `/api/*`
+isteklerini karsilar ve `/api/*` sunucu-sunucu API origin'ine iletilir.
+Tarayici API origin'ini HIC gormez. Bu, bugun Vite dev proxy'sinin
+(`vite.config.ts`) sagladigi davranisin uretimdeki karsiligidir.
+
+Reddedilen iki secenek:
+
+1. **API'ye CORS + CSRF token eklemek.** Bugun CSRF korumasi tamamen
+   `SameSite=Strict` + ayni-origin varsayimina dayanir
+   (`services/api/src/auth/cookies.ts`). CORS acmak bu korumayi gonullu
+   olarak birakip yerine yeni bir CSRF altyapisi kurmak demekti; HB-011'de
+   yeni siklastirilan yetki hattina yeni saldiri yuzeyi eklerdi.
+2. **API'nin static UI sunmasi.** `@fastify/static` yok, eklenmesi
+   gerekirdi; API'yi UI sunucusuna donusturur ve web/desktop dagitimini
+   birbirine baglardi.
+
+Gerekce: Kopru secenegi UI sozlesmesine, 28 HTTP adapter'in `baseUrl`
+kullanimina, oturum cerezi politikasina ve API'ye HIC dokunmaz. Geri alma
+stratejisi ("desktop paketini kaldir, web dagitimini kullan",
+INFRASTRUCTURE_IMPLEMENTATION_PLAN Paket 21) aynen gecerli kalir.
+
+Kanit (gercek PostgreSQL + gercek API + gercek login):
+`services/api/test/desktop-bridge-same-origin-e2e.test.ts` 5/5 gecti.
+- Gercek login kopru uzerinden 200; `Set-Cookie` nitelikleri
+  (`SameSite=Strict; HttpOnly; Path=/`) korunuyor ve API'nin DOGRUDAN
+  urettigi cerezle nitelik nitelik AYNI (kopru cerezi yeniden yazmiyor).
+- Cerezi VEREN istek ile onu TASIYAN istek ayni scheme+host+port'ta;
+  tarayicinin `SameSite=Strict` cerezi gondermesinin dayanagi budur.
+- Oturumlu `GET /auth/session` gercek kullaniciyi cozuyor; HB-011 admin-only
+  `GET /users` kapisi koprüden geciyor.
+- Ne kopru ne API `access-control-*` uretiyor (CORS acilmadi).
+- Cerezsiz istek 401 kaliyor (kopru kimlik uydurmuyor).
+- BrowserRouter derin yolu `index.html`'e dusuyor; EKSIK varlik dosyasi 404
+  kaliyor (bozuk build sessizce HTML donmuyor).
+- Traversal denemeleri (ham HTTP yoluyla, istemci normalizasyonu atlanarak)
+  kok DISINDAKI dosyanin icerigini hicbir durumda dondurmuyor; olumlu
+  kontrol ayni yolla kok icindeki dosyanin dondugunu kanitliyor.
+- Loopback disi `Host` 403; API erisilemezken 502 ve ham hata metni yok.
+
+Kapsam siniri: Bu pakette Electron dependency'si, `apps/desktop` ve
+paketleme YOKTUR (kullanici talimati). Gercek Chrome/CDP ile tarayicinin
+SameSite kararinin gozlenmesi D2'ye birakildi; bu testte tarayici
+CALISTIRILMADI ve taklit EDILMEDI - kararin dayandigi iki olgu (origin
+birligi + nitelik korunumu) dogrudan kanitlandi.
+
+Bulunan ve duzeltilen gercek kusur: `resolveAssetPath` surucu onekini tum
+dizgede ariyordu; URL yolu daima `/` ile basladigi icin `/C:/Windows`
+KACIYORDU. Kontrol segment bazina alindi (`path.resolve` bir `C:` segmentini
+surucuye goreli sayip kokten cikabilirdi). Birlestirme sonrasi containment
+denetimi zaten ikinci savunma katmani olarak duruyordu.
+
+Etki: Yeni `packages/desktop-bridge` workspace'i (runtime dependency YOK,
+yalniz Node yerlesikleri; Electron import edilmez). `services/api`'ye yalniz
+devDependency olarak eklendi (mevcut `@hasarbotu/file-agent` devDependency
+precedent'i ile ayni). Kok `build:packages`/`typecheck`/`test` zincirlerine
+eklendi. UI, contracts, API runtime kodu ve migration DEGISMEDI. Ana agacta
+typecheck, lint (0 error / 2 mevcut warning, degismedi), gercek
+`hasarbotu_test` PostgreSQL ile 2.120 basarili / 6 ortam-kosullu UI skip,
+build/bundle 426.065 bayt (degismedi) ve `npm audit --audit-level=moderate`
+0 bulgu gecti.
+
+Acik kalan: uretim masaustu kurulumunda `cookieSecure` degeri (duz loopback
+HTTP mi, koprude TLS sonlandirma mi) D2/Paket 22 dagitim karari.

@@ -39,6 +39,7 @@
     "pdfjs-dist": "6.1.200"
   },
   "devDependencies": {
+    "@hasarbotu/desktop-bridge": "*",
     "@hasarbotu/file-agent": "*",
     "@types/node": "24.13.3",
     "tsx": "4.23.0"
