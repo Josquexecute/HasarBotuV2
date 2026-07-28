@@ -2502,3 +2502,88 @@ Acik kalan (HB-2026-103'ten devam): uretim masaustu kurulumunda `cookieSecure`
 degeri (duz loopback HTTP mi, koprude TLS sonlandirma mi) D2/Paket 22 dagitim
 kararidir. Bu smoke duz HTTP loopback'i olcer ve cerezde `secure=false`
 oldugunu ACIKCA kaydeder.
+
+## 2026-07-28 - HB-2026-105: D2 ince Electron kabugu iskeleti (apps/desktop)
+
+Karar: Masaustu kabugu `apps/desktop` workspace'i olarak, ADR-Q06 "ince
+shell" kuralina bagli kalarak kuruldu. Kabuk YALNIZ uc sey yapar: D1
+koprusunu baslatir, guvenli bir `BrowserWindow` acar ve `security.ts`teki
+kararlari Electron API'lerine baglar. Kabukta is mantigi YOKTUR ve
+`ipcMain` handler'i KAYDEDILMEZ.
+
+Preload allowlist'i KASITLI OLARAK AYRICALIKSIZDIR: renderer'a yalniz iki
+VERI alani acilir (`isDesktopShell`, `platform`). Hicbir fonksiyon, hicbir
+IPC kanali ve `ipcRenderer`'in kendisi acilmaz. Gerekce: UI verisini bugun
+oldugu gibi goreli `/api/...` uzerinden alir (HB-2026-103); kabuga bir cagri
+yuzeyi eklemek Paket 21'in geri alma stratejisini ("desktop paketini kaldir,
+web dagitimini kullan") zayiflatir. Izin ve yeni-pencere allowlist'leri de
+acik ama BOS dizilerdir; sessizce genislemezler.
+
+Yapilandirma siniri `services/api/src/config.ts` sozlesmesini izler: acik
+parser, sessiz coercion yok, gecersiz degerde BASLATMA YOK, hata mesajinda
+ortam DEGERI tasinmaz. Ek kural: `HASARBOTU_API_ORIGIN` icin duz `http`
+YALNIZ loopback'te kabul edilir; uzak API `https` olmalidir. Ofis LAN'inda
+(Paket 22) oturum cerezi agda duz metin gecemeyecegi icin bu kural kabukta
+uygulanir ki yanlis yapilandirma sessizce uretime sizmasin.
+
+CSP `default-src 'none'` ile baslar; `script-src`/`style-src`/`connect-src`
+yalniz `'self'`. `unsafe-inline` ve `unsafe-eval` YOKTUR - `style-src` dahil.
+React'in `style={{...}}` prop'u CSSOM uzerinden yazdigi icin etkilenmez ve
+gercek uretim UI build'i bu politika altinda TEK BIR ihlal uretmedi. CSP
+yalniz dokuman yanitlarina yazilir; `/api/*` JSON yanitlari degistirilmez ki
+koprunun seffafligi ve `set-cookie` aktarimi bozulmasin.
+
+Kanit (gercek Electron 43 + gercek Chromium + gercek API + gercek PostgreSQL
++ gercek login), `apps/desktop/test/electron-shell-e2e.test.ts` 6/6 -
+kosum aracı uretim kabugunun ta kendisini (`startDesktopShell`) baslatir,
+urun kodunda test kancasi YOKTUR:
+
+1. `getLastWebPreferences()` ile gercek renderer ayarlari: `nodeIntegration`
+   false, `contextIsolation` true, `sandbox` true, `webSecurity` true,
+   `webviewTag` false. Yuklenen adres koprunun loopback origin'i, tek pencere.
+2. Renderer'da Node yok: `require`, `process`, `module`, `Buffer`, `global`,
+   `__dirname` ve `ipcRenderer` sayfada `undefined`.
+3. Preload yuzeyi tam olarak `['isDesktopShell','platform']`; fonksiyon alani
+   YOK; sayfanin degistirme denemesi degeri degistirmedi.
+4. GERCEK LOGIN ZINCIRI, tarayicinin kendi cerez kavanozuyla: `document.cookie`
+   cerezi HICBIR asamada gormedi (HttpOnly'yi Chromium uyguluyor), buna ragmen
+   SONRAKI `/auth/session` istegi 200 dondu ve gercek kullaniciyi (`roles:
+   ['admin']`) cozdu. HB-011 admin-only `/users` kapisi da kabuktan gecti.
+5. CSP gercekten uygulaniyor: inline script CALISMADI ve ihlal
+   `script-src-elem` olarak raporlandi; dis ag cikisi engellendi ve
+   `connect-src` ihlali raporlandi (XSS olsa bile veri disari sizamaz).
+6. Kapilar gercek Chromium'da tutuyor: `window.open` `null` dondu ve ikinci
+   pencere ACILMADI; `Notification.requestPermission()` `denied`; sayfa
+   baslatmali uzak gezinme engellendi ve adres degismedi.
+7. GERCEK URETIM UI BUILD'i (`dist`) ayni kabukta acildi: login ekrani render
+   edildi, gercek form gercek API'ye gonderildi, `.app-shell` render edildi
+   (hata mesaji yok). Chromium'un KENDI cerez kaydinda `httpOnly=true`,
+   `sameSite=strict`, `path=/`, `secure=false` (duz loopback). Uretim UI'i bu
+   CSP altinda hicbir ihlal uretmedi.
+
+Ayrica uretim giris noktasi (`dist/main/main.js`) elle smoke edildi: gercek
+pencere "HasarBotu V2" basligiyla acildi; `HASARBOTU_API_ORIGIN` uzak bir
+duz-http degeri verildiginde surec 1 ile cikti ve stderr yalniz alan adi +
+kural yazdi (deger sizmadi).
+
+Bulunan ve duzeltilen gercek kusur: **ESM giris noktasinda ust duzey
+`await app.whenReady()` uygulamayi kilitliyor.** Electron, giris modulunun
+degerlendirmesi bitmeden `ready` olayini yaymaz; ilk yazim bu yuzden sessizce
+asili kaldi (gercek Electron 43 ile gozlendi, uc bagimsiz kosumda dogrulandi).
+Baslatma `app.whenReady().then(bootstrap)` icine alindi ve hem `main.ts` hem
+kosum araci bu kurali belgeleyen bir uyari tasiyor.
+
+Etki: Yeni `apps/desktop` workspace'i. `electron@43.2.0` YALNIZ devDependency
+(paketleyici tarafindan bundle edilir); tek runtime dependency
+`@hasarbotu/desktop-bridge`. Kok `build:packages`/`typecheck`/`test`
+zincirlerine eklendi. UI, contracts, API runtime kodu, migration, adapter
+sozlesmeleri ve kopru davranisi DEGISMEDI; yeni tablo/endpoint/sozlesme yok.
+
+Kapsam disi (kullanici talimati): code signing, installer, otomatik guncelleme.
+Ayrica renderer'dan Node/fs erisimi, dogrudan PostgreSQL ve harici baglantiyi
+varsayilan tarayiciya devretme bu pakette YOK.
+
+Acik kalan (HB-2026-103/104'ten devam): uretimde `cookieSecure` degeri (duz
+loopback HTTP mi, koprude TLS sonlandirma mi) Paket 22 dagitim kararidir. D2
+duz HTTP loopback ile calisti ve Chromium'un cerezi `secure=false` olarak
+kaydettigini acikca dogruladi.
