@@ -37,7 +37,9 @@ import { buildApp, hashPassword } from '../src/index.js'
  *   (1) çerezi TAŞIYAN istek ile çerezi VEREN istek AYNI origin'dedir, ve
  *   (2) `Set-Cookie` nitelikleri (`SameSite=Strict; HttpOnly; Path=/`)
  *       köprüden geçerken bit-birebir korunur.
- * Gerçek Chrome/CDP doğrulaması D2 (kabuk iskeleti) kapsamındadır.
+ * Tarayıcının kararının GERÇEKTEN gözlendiği yer `scripts/d1-bridge-browser-
+ * smoke.mjs`tir (gerçek Chrome/CDP + gerçek üretim build; HB-2026-104). Chrome
+ * bir test bağımlılığı olmadığı için o kanıt `npm test` kapsamında değildir.
  *
  * Ayrıca köprünün kimlik UYDURMADIĞI (çerezsiz istek 401 kalır), API
  * erişilemezken sahte başarı ÜRETMEDİĞİ (502) ve yerel sunucunun DNS

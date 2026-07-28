@@ -2446,3 +2446,59 @@ build/bundle 426.065 bayt (degismedi) ve `npm audit --audit-level=moderate`
 
 Acik kalan: uretim masaustu kurulumunda `cookieSecure` degeri (duz loopback
 HTTP mi, koprude TLS sonlandirma mi) D2/Paket 22 dagitim karari.
+
+## 2026-07-28 - HB-2026-104: D1 kopru kanitinin GERCEK TARAYICI ile tamamlanmasi
+
+Karar: HB-2026-103'te (D1) "D2'ye birakildi" denen tek dogrulama boslugu -
+tarayicinin `SameSite=Strict` kararinin GERCEKTEN gozlenmesi - D2'ye
+BIRAKILMADAN kapatildi. Tarayici kaniti, mevcut Chrome/CDP smoke
+precedent'iyle ayni bicimde ELDE TUTULAN bir betikle saglanir
+(`scripts/d1-bridge-browser-smoke.mjs`); `npm test` kapsamina ALINMAZ.
+
+Gerekce: Chrome bir test bagimliligi degildir ve repo genelinde tarayici
+kaniti (router-v8, package37-66) daima ayri betikle uretilmistir. Bu betigin
+digerlerinden farki, dev sunucusu KULLANMAMASIDIR: kopru gercek uretim UI
+build ciktisini (`dist`) sunar, yani dagitim biciminin ta kendisi test edilir.
+Vite dev proxy'si devrede DEGILDIR.
+
+Kanit (gercek Chrome + gercek uretim build + gercek kopru + gercek API +
+gercek PostgreSQL + gercek login), 10 kontrol PASS:
+
+1. Renderer TEK origin yukler; dokuman `dist/index.html`'den gelir
+   (`import.meta.env.PROD` oldugu icin veri kaynagi zorunlu olarak `api`).
+2. Gercek login formu gercek oturum acar.
+3. Cerezin TARAYICININ KENDI kaydindaki nitelikleri (`Network.getAllCookies`):
+   `sameSite=Strict`, `httpOnly=true`, `path=/`, host-only `127.0.0.1`,
+   `secure=false` (duz loopback), TTL 43.199 s (12 saat).
+4. `document.cookie` cerezi GORMEZ - HttpOnly'yi tarayici uygular.
+5. Ayni-origin `/api/v1/auth/session` 200 doner ve gercek kullaniciyi cozer;
+   cerezin gonderildigi yanit govdesinden DEGIL, tarayicinin istek kaydindan
+   (`Network.requestWillBeSentExtraInfo.associatedCookies`, blockedReasons
+   BOS) dogrulanir.
+6. API'ye bagli ekran (`/dosyalar`) gercek veriyi kopruden gecerek render eder.
+7. Tarayici API origin'ine HIC istek atmaz: gozlenen 28 istegin 28'i kopru
+   origin'ine, 0'i API authority'sine gitti.
+8. Tarayici hicbir yanitta `access-control-*` gormedi (CORS acilmadi).
+9. **SameSite=Strict'in gercek tarayici davranisi.** Ayni hedef URL, ayni
+   cerez, ayni sunucu; degisen tek sey baslaticinin site'i:
+   - ayni-site baslatici (`http://127.0.0.1:{port}` sayfasi) -> cerez
+     gonderildi -> 200, gercek e-posta govdede;
+   - capraz-site baslatici (`http://localhost:{port}` sayfasi; kopru
+     `policy.ts` geregi bu Host'u da kabul eder ve `localhost` ile `127.0.0.1`
+     AYRI site'lardir) -> ayni URL'ye ust duzey gezinme -> 401 `unauthorized`,
+     ve Chrome cerezi tutma gerekcesini `blockedReasons: ["SameSiteStrict"]`
+     olarak BILDIRDI.
+   Bu, CSRF korumasinin `SameSite=Strict` uzerine kurulmasinin ve CORS
+   acmanin neden reddedildiginin dogrudan tarayici kanitidir.
+10. Eksik varlik gercek tarayicida da 404 kalir: `index.html` favicon
+    bildirmedigi icin Chrome `/favicon.ico` istedi ve kopru uzantili yolu SPA
+    kabugu ile karsilamadi (404, iki gozlem).
+
+Etki: YALNIZ yeni bir dogrulama betigi eklendi. Uretim kodu, UI, contracts,
+API, migration, adapter sozlesmeleri ve kopru davranisi DEGISMEDI. CORS/CSRF
+altyapisi eklenmedi; API static UI sunmuyor.
+
+Acik kalan (HB-2026-103'ten devam): uretim masaustu kurulumunda `cookieSecure`
+degeri (duz loopback HTTP mi, koprude TLS sonlandirma mi) D2/Paket 22 dagitim
+kararidir. Bu smoke duz HTTP loopback'i olcer ve cerezde `secure=false`
+oldugunu ACIKCA kaydeder.

@@ -1,6 +1,6 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-27
+Son güncelleme: 2026-07-28
 
 ## Mevcut sürüm ve aşama
 
@@ -2544,4 +2544,11 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - **Bu pakette Electron dependency'si, `apps/desktop` ve paketleme YOKTUR.** UI, contracts, API runtime kodu ve migration değişmedi; yeni tablo/migration/endpoint/sözleşme yok.
 - Ana çalışma ağacında typecheck, lint (0 error / 2 mevcut warning, değişmedi), gerçek `hasarbotu_test` PostgreSQL ile **2.120 başarılı / 6 mevcut ortam-koşullu UI skip**, build/bundle ve moderate audit (0 açık) geçti. Dağılım: UI 379/6; domain 759; contracts 324; database 74; desktop-bridge 10; API 496; file-agent 78 (HB-011'e göre +15: 10 köprü politika testi + 5 gerçek e2e).
 - Build başlangıç JavaScript grafiği **426.065 baytta değişmedi**; 10 zorunlu lazy modül korundu (köprü frontend bundle'ına girmez).
-- **Doğrulanamayan:** gerçek Chrome/CDP ile tarayıcının SameSite kararının gözlenmesi bu pakette yapılmadı; tarayıcı çalıştırılmadı ve taklit edilmedi. Kararın dayandığı iki olgu (origin birliği + nitelik korunumu) doğrudan kanıtlandı; tarayıcı doğrulaması D2 (kabuk iskeleti) kapsamındadır. Üretimde `cookieSecure` değeri (düz loopback HTTP mi, köprüde TLS sonlandırma mı) D2/Paket 22 dağıtım kararıdır.
+- **GERÇEK TARAYICI KANITI (HB-2026-104, aynı gün tamamlandı — D2'ye bırakılmadı):** `scripts/d1-bridge-browser-smoke.mjs` gerçek Chrome/CDP + **gerçek üretim UI build çıktısı (`dist`)** + gerçek köprü + gerçek API + gerçek PostgreSQL + gerçek login ile koştu, **10 kontrol PASS**. Vite dev proxy'si devrede **değil**: köprü dağıtım biçiminin ta kendisi ölçüldü.
+  - Çerezin **tarayıcının kendi kaydındaki** nitelikleri (`Network.getAllCookies`): `sameSite=Strict`, `httpOnly=true`, `path=/`, host-only `127.0.0.1`, `secure=false` (düz loopback), TTL 43.199 s. `document.cookie` çerezi görmüyor — HttpOnly'yi tarayıcı uyguluyor.
+  - Aynı-origin `/api/v1/auth/session` 200 ve gerçek kullanıcı; çerezin gönderildiği tarayıcının **istek kaydından** doğrulandı (`requestWillBeSentExtraInfo.associatedCookies`, blockedReasons boş). API'ye bağlı `/dosyalar` ekranı gerçek veriyi köprüden geçerek render etti.
+  - Tarayıcı **API origin'ine hiç istek atmadı**: gözlenen 28 isteğin 28'i köprü origin'ine, 0'ı API authority'sine. Hiçbir yanıtta `access-control-*` görülmedi.
+  - **SameSite=Strict'in gerçek tarayıcı davranışı:** aynı hedef URL, aynı çerez, aynı sunucu; değişen tek şey başlatıcının site'ı. Aynı-site başlatıcı → çerez gönderildi, 200; **çapraz-site başlatıcı (`http://localhost:{port}` sayfası) → 401 `unauthorized` ve Chrome gerekçeyi `blockedReasons: ["SameSiteStrict"]` olarak bildirdi.** CSRF korumasının SameSite üzerine kurulmasının ve CORS'un reddedilmesinin doğrudan kanıtı.
+  - Eksik varlık gerçek tarayıcıda da 404: `index.html` favicon bildirmediği için Chrome `/favicon.ico` istedi, köprü uzantılı yolu SPA kabuğuna düşürmedi.
+  - Betik `npm test` kapsamına **alınmadı** (Chrome test bağımlılığı değil; repo genelindeki `router-v8`/`packageNN-browser-smoke` precedent'iyle aynı) ve üretim kodunda **hiçbir değişiklik gerektirmedi**.
+- **Açık kalan:** üretimde `cookieSecure` değeri (düz loopback HTTP mi, köprüde TLS sonlandırma mı) D2/Paket 22 dağıtım kararıdır; smoke düz HTTP loopback'i ölçer ve çerezde `secure=false` olduğunu açıkça kaydeder.
