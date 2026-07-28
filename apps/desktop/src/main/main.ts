@@ -1,13 +1,17 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog, shell as electronShell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { parseDesktopConfig, DesktopConfigError } from './config.js'
-import { guardWebContents, startDesktopShell } from './shell.js'
+import { runStartupGate, type GateChoice, type GateMessage } from './gate.js'
+import { probeApiReadiness } from './readiness.js'
+import { DesktopStartupAbortedError, guardWebContents, startDesktopShell } from './shell.js'
 
 /**
- * Masaüstü kabuğunun giriş noktası (D2).
+ * Masaüstü kabuğunun giriş noktası (D2, D3).
  *
- * İnce tutulur: yapılandırmayı okur, kabuğu başlatır ve uygulama yaşam
- * döngüsünü bağlar. Karar veren kod `config.ts` ve `security.ts`tedir.
+ * İnce tutulur: yapılandırmayı okur, başlangıç kapısını Electron iletişim
+ * kutusuna bağlar, kabuğu başlatır ve uygulama yaşam döngüsünü bağlar. Karar
+ * veren kod `config.ts`, `security.ts`, `external.ts`, `downloads.ts`,
+ * `compatibility.ts` ve `gate.ts`tedir.
  *
  * Bu pakette code signing, installer ve otomatik güncelleme YOKTUR
  * (kullanıcı talimatı; Paket 21/22 dağıtım kararları).
@@ -35,12 +39,46 @@ function defaultAssetRoot(): string {
  */
 let shellOrigin: string | undefined
 
+/**
+ * Kapının kullanıcıya sorusu. Modal pencere henüz YOKTUR (pencere kapıdan
+ * sonra açılır), bu yüzden penceresiz `showMessageBox` kullanılır.
+ */
+async function promptGate(message: GateMessage): Promise<GateChoice> {
+  const response = await dialog.showMessageBox({
+    type: 'warning',
+    // Ana pencere başlığından AYRI tutulur: kullanıcı (ve otomatik doğrulama)
+    // görev çubuğunda kapıyı uygulama penceresinden ayırt edebilmelidir.
+    title: 'HasarBotu V2 — Sunucu denetimi',
+    message: message.title,
+    detail: message.detail,
+    buttons: ['Yeniden dene', 'Kapat'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  })
+  return response.response === 0 ? 'retry' : 'close'
+}
+
 async function bootstrap(): Promise<void> {
   try {
     const config = parseDesktopConfig(process.env, { assetRoot: defaultAssetRoot() })
-    const shell = await startDesktopShell(config)
+    const shell = await startDesktopShell({
+      ...config,
+      // Kapı köprü origin'ini alır ama API'yi DOĞRUDAN sorgular: `/health`
+      // sürümlü `/api/v1` tabanının dışındadır ve köprü yalnız `/api/*` iletir.
+      startupGate: () => runStartupGate({
+        probe: () => probeApiReadiness({ apiOrigin: config.apiOrigin }),
+        prompt: promptGate,
+      }),
+      openExternal: (url) => electronShell.openExternal(url),
+    })
     shellOrigin = shell.origin
   } catch (error) {
+    if (error instanceof DesktopStartupAbortedError) {
+      // Kullanıcının kendi kararı; hata değil.
+      app.exit(0)
+      return
+    }
     // Yapılandırma hatasında sessizce yarım bir kabuk açılmaz. Hata mesajı
     // yalnız alan adı ve kuralı taşır (bkz. `config.ts`).
     if (error instanceof DesktopConfigError) console.error(error.message)
@@ -58,7 +96,9 @@ if (!app.requestSingleInstanceLock()) {
 
   // Kabuk içinde oluşan HER webContents aynı kapılardan geçer.
   app.on('web-contents-created', (_event, contents) => {
-    if (shellOrigin !== undefined) guardWebContents(contents, shellOrigin)
+    if (shellOrigin !== undefined) {
+      guardWebContents(contents, shellOrigin, (url) => electronShell.openExternal(url))
+    }
   })
 
   app.on('window-all-closed', () => { app.quit() })

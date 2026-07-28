@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process'
+import { createServer as createHttpServer } from 'node:http'
+import { once } from 'node:events'
 import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
@@ -45,6 +47,9 @@ const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.sk
 const PASSWORD = 'd2-kabuk-sentetik-guclu-parola-28'
 const ADMIN_EMAIL = 'd2-kabuk-admin@test.local'
 
+/** D3: allowlist'teki gerçek Gmail compose biçimi. */
+const ALLOWLISTED_COMPOSE_URL = 'https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=eksper%40firma.example'
+
 const require_ = createRequire(import.meta.url)
 /** `electron` paketi Node'dan import edildiğinde ikili dosyanın YOLUNU verir. */
 const ELECTRON_BINARY = require_('electron') as unknown as string
@@ -78,6 +83,7 @@ interface ProbeResult {
   readonly origin: string
   readonly externalFetchBlocked: boolean
   readonly windowOpenResult: string
+  readonly windowOpenAllowlistedResult: string
   readonly notificationPermission?: string
   readonly error?: string
 }
@@ -89,6 +95,8 @@ interface HarnessResult {
   readonly windowCountAfterLoad?: number
   readonly windowCountAfterOpenAttempt?: number
   readonly urlAfterNavigationAttempt?: string
+  readonly openedExternally: readonly string[]
+  readonly downloads: readonly { url: string; filename: string; state: string }[]
   readonly webPreferences?: Record<string, boolean>
   readonly consoleMessages: readonly string[]
   readonly loadFailures: readonly { code: number; description: string; url: string }[]
@@ -147,7 +155,34 @@ async function runElectron(
   return JSON.parse(await readFile(resultPath, 'utf8')) as HarnessResult
 }
 
-describeDb('D2 ince Electron kabuğu: gerçek Chromium + gerçek login + SameSite oturum zinciri', () => {
+/**
+ * D3: kabuk origin'i DIŞINDAN gerçek bir indirme üreten sunucu. `will-download`
+ * ancak gerçek bir yanıt geldiğinde yayıldığı için, var olmayan bir host ile
+ * yabancı indirme sınanamaz.
+ */
+async function startForeignDownloadServer(): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = createHttpServer((_request, response) => {
+    response.writeHead(200, {
+      'content-type': 'application/octet-stream',
+      'content-disposition': 'attachment; filename="yabanci.bin"',
+    })
+    response.end('YABANCI-ORIGIN-ICERIGI')
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  if (typeof address !== 'object' || address === null) throw new Error('foreign server did not bind')
+  return {
+    url: `http://127.0.0.1:${address.port}/yabanci.bin`,
+    close: async () => {
+      server.closeAllConnections()
+      server.close()
+      await once(server, 'close')
+    },
+  }
+}
+
+describeDb('D2/D3 ince Electron kabuğu: gerçek Chromium + gerçek login + kapılar', () => {
   let config: DatabaseConfig
   let pool: pg.Pool
   let app: FastifyInstance
@@ -156,6 +191,7 @@ describeDb('D2 ince Electron kabuğu: gerçek Chromium + gerçek login + SameSit
   let probeRoot: string
   let probeResult: HarnessResult
   let realUiResult: HarnessResult | undefined
+  let foreignServer: { url: string; close: () => Promise<void> }
 
   beforeAll(async () => {
     config = assertTestDatabaseUrl(TEST_URL as string)
@@ -218,9 +254,15 @@ describeDb('D2 ince Electron kabuğu: gerçek Chromium + gerçek login + SameSit
     )
     await writeFile(join(probeRoot, 'probe-run.js'), buildProbeScript(), 'utf8')
 
+    const downloadDir = join(workspace, 'indirmeler')
+    await mkdir(downloadDir, { recursive: true })
+    foreignServer = await startForeignDownloadServer()
+
     probeResult = await runElectron('probe', {
       HASARBOTU_API_ORIGIN: apiOrigin,
       HASARBOTU_ASSET_ROOT: probeRoot,
+      HB_E2E_DOWNLOAD_DIR: downloadDir,
+      HB_E2E_FOREIGN_DOWNLOAD_URL: foreignServer.url,
     }, workspace)
 
     if (UI_BUILT) {
@@ -234,6 +276,7 @@ describeDb('D2 ince Electron kabuğu: gerçek Chromium + gerçek login + SameSit
   }, 240_000)
 
   afterAll(async () => {
+    if (foreignServer !== undefined) await foreignServer.close()
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
     if (workspace !== undefined) await rm(workspace, { recursive: true, force: true })
@@ -307,14 +350,43 @@ describeDb('D2 ince Electron kabuğu: gerçek Chromium + gerçek login + SameSit
 
   it('gezinme, yeni pencere ve izin kapıları gerçek Chromium\'da tutar', () => {
     const probe = requireProbe(probeResult)
-    // `window.open` reddedildi: yeni pencere açılmadı.
+    // `window.open` HİÇBİR hedef için Electron penceresi açmaz — allowlist'te
+    // olan hedef bile. Uzak içerik kabuğun içine girmez.
     expect(probe.windowOpenResult).toBe('null')
+    expect(probe.windowOpenAllowlistedResult).toBe('null')
     expect(probeResult.windowCountAfterOpenAttempt).toBe(1)
     // Hiçbir izin verilmez.
     expect(probe.notificationPermission).toBe('denied')
-    // Sayfa başlatmalı uzak gezinme engellendi; adres değişmedi.
+    // Sayfa başlatmalı uzak gezinme adresi değiştirmedi.
     expect(probeResult.urlAfterNavigationAttempt?.startsWith(probeResult.shellOrigin ?? 'x')).toBe(true)
     expect(probeResult.urlAfterNavigationAttempt).not.toContain('ornek.gecersiz.example')
+  })
+
+  it('D3: yalnız allowlist\'teki hedef işletim sistemine devredilir', () => {
+    // UI'ın GERÇEK harici bağlantı yolu budur: Gmail ve mevzuat bağlantıları
+    // `target="_blank"` ile açılır, yani `setWindowOpenHandler`dan geçer.
+    //
+    // Gerçek Chromium'da gözlenen devir listesi. Gerçek tarayıcı AÇILMAZ;
+    // kabuğun işletim sistemine VERDİĞİ URL doğrudan kaydedilir.
+    expect(probeResult.openedExternally).toEqual([ALLOWLISTED_COMPOSE_URL])
+    // Allowlist dışındaki hedef, aynı `window.open` yolundan geçmesine rağmen
+    // HİÇBİR biçimde devredilmedi.
+    expect(probeResult.openedExternally.join(' ')).not.toContain('ornek.gecersiz.example')
+  })
+
+  it('D3: kabuk origin\'inden indirme geçer, yabancı origin\'den indirme iptal edilir', () => {
+    const downloads = probeResult.downloads
+    expect(downloads).toHaveLength(2)
+
+    // 1) UI'ın gerçek akışıyla aynı biçim: kabuk origin'i üzerinde `blob:`.
+    const own = downloads[0]
+    expect(own?.url.startsWith(`blob:${probeResult.shellOrigin ?? 'x'}/`)).toBe(true)
+    expect(own?.state).toBe('completed')
+
+    // 2) Kabuk origin'i DIŞINDAN gerçek bir indirme yanıtı: iptal edilir.
+    const foreign = downloads[1]
+    expect(foreign?.url).toBe(foreignServer.url)
+    expect(foreign?.state).toBe('cancelled')
   })
 
   itWithUiBuild('gerçek üretim UI build\'i kabuğun CSP\'si altında açılır ve gerçek login oturumu açar (önce `npm run build:ui`)', () => {
@@ -413,6 +485,14 @@ function buildProbeScript(): string {
       hb.windowOpenResult = window.open('https://ornek.gecersiz.example/') === null ? 'null' : 'window'
     } catch (ignored) {
       hb.windowOpenResult = 'threw'
+    }
+
+    // Allowlist'teki hedef de Electron penceresi AÇMAMALI; işletim sistemine
+    // devredilmelidir. Devredildiği main process tarafında gözlenir.
+    try {
+      hb.windowOpenAllowlistedResult = window.open(${JSON.stringify(ALLOWLISTED_COMPOSE_URL)}) === null ? 'null' : 'window'
+    } catch (ignored) {
+      hb.windowOpenAllowlistedResult = 'threw'
     }
 
     if (typeof Notification !== 'undefined') {

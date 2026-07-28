@@ -2587,3 +2587,96 @@ Acik kalan (HB-2026-103/104'ten devam): uretimde `cookieSecure` degeri (duz
 loopback HTTP mi, koprude TLS sonlandirma mi) Paket 22 dagitim kararidir. D2
 duz HTTP loopback ile calisti ve Chromium'un cerezi `secure=false` olarak
 kaydettigini acikca dogruladi.
+
+## 2026-07-28 - HB-2026-106: D3 - openExternal allowlist, guvenli indirme, API hazirlik ve surum uyum kapisi
+
+Karar: D2 iskeletine dort saf politika modulu eklendi; kabukta HALA is
+mantigi YOKTUR, yalniz karar+baglama ayrimi genisledi.
+
+**openExternal allowlist** (`src/main/external.ts`): kabuk artik uzak
+navigasyon/`window.open` denemesini koşulsuz reddetmiyor - once host
+allowlist'ine soruyor. Allowlist YALNIZ repository'de GERCEKTEN kullanilan
+bes host'u icerir: `mail.google.com` (e-posta hazirlama Gmail compose,
+`src/data/emailDraftPort.ts`) ve Deger Kaybi kural kaynaklari
+`resmigazete.gov.tr`/`www.resmigazete.gov.tr`/`seddk.gov.tr`/`www.seddk.gov.tr`
+(`packages/domain/src/traffic-value-loss.ts`). Yalniz `https`, kimlik
+bilgisiz, kontrol karakteri/satir sonu YOK, 16 KB ust siniri (asan KISALTILMAZ,
+REDDEDILIR). Izin verilen hedef bile Electron icinde HICBIR yeni pencere
+ACMAZ - isletim sistemi tarayicisina DEVREDILIR; boylece uzak icerik kabugun
+icine hicbir zaman girmez.
+
+**Guvenli indirme yonetimi** (`src/main/downloads.ts`): `will-download`
+kapida iki karar var. (1) Indirme kabugun KENDI origin'inden mi basladi -
+UI'in rapor PDF/envanter Excel akislari `URL.createObjectURL` + `<a
+download>` kullandigi icin `blob:{kabuk-origin}/...` bicimindedir; yabanci
+origin'den gelen HER indirme IPTAL edilir. (2) Sunucudan gelen dosya adi
+(`content-disposition`) isletim sistemi icin guvenli hale getirilir: yol
+ayiricilari/yasak karakterler `_`ye cevrilir, Windows ayrilmis cihaz adlari
+onceklenir, uzunluk UZANTI KORUNARAK sinirlanir. Kabuk kaydetme YOLUNU
+KENDISI SECMEZ (`setSavePath` cagrilmaz); yalniz kaydetme kutusuna guvenli
+bir on ad verilir - kullanici onayi olmadan diske hicbir sey yazilmaz.
+
+**API hazirlik + surum uyum kapisi** (`src/main/readiness.ts`,
+`compatibility.ts`, `gate.ts`): kabuk PENCEREYI ACMADAN ONCE API'nin
+`/health` yanitini SUNUCU-SUNUCU sorgular (koprü uzerinden DEGIL - `/health`
+surumlu `/api/v1` tabaninin disindadir ve kopru yalniz `/api/*` iletir).
+Yanit contracts semasiyla dogrulanir. Uyum kurali: servis kimligi birebir,
+ana surum birebir; ana surum `0` iken ikincil surum de birebir (semver `0.x`
+serisinde kirici degisiklik ikincil surumle tasinir). Yama surumu ve on surum
+etiketi uyumu ETKILEMEZ. Sunucu erisilemez/uyumsuz/saglik durumu `degraded`
+ise pencere ACILMAZ; kullaniciya Turkce, ham hata metni/yol/deger TASIMAYAN
+bir iletisim kutusu (Yeniden dene / Kapat) gosterilir - kullanici MAHSUR
+KALMAZ, sonsuz donguye de girilmez (deneme ust siniri).
+
+Gerekce: kabuk ve API AYRI dagitilir (kullanicinin makinesi vs. ofis
+sunucusu, Paket 22); surumleri kacinilmaz olarak ayrisir. Uyumsuz bir ciftin
+sessizce calismasi hatayi kullaniciya "veri yanlis" olarak gosterir. Harici
+baglanti ve indirme icin sinirsiz izin, CSP'nin `connect-src 'self'` ile
+kapattigi ag cikisini baska bir kapidan yeniden acardi; bu yuzden ikisi de
+DAR ve GERCEK kullanima gore olculu allowlist'tir.
+
+Kanit (birim + gercek API + gercek Electron/Chromium):
+
+- `external.test.ts`: allowlist UI'in KENDI ureticisine (`buildGmailWebComposeUrl`
+  bicimi) ve `packages/domain`teki GERCEK mevzuat kaynak listesine karsi
+  dogrulandi - sabit kopya degil. Sema/kimlik bilgisi/kontrol karakteri/
+  uzunluk/normalizasyon testleri.
+- `downloads.test.ts`: gercek rapor adlari (Turkce, tarih, dosya numarasi
+  icerenler) oldugu gibi korunuyor; traversal, Windows yasak karakter,
+  ayrilmis cihaz adi, kontrol karakteri/baslik enjeksiyonu ve uzunluk+uzanti
+  senaryolari.
+- `compatibility.test.ts`: uyum kontrolu API'nin KENDI yayimladigi
+  `API_SERVICE_NAME`/`API_VERSION`e karsi dogrulandi.
+- `readiness-integration.test.ts`: GERCEK `buildApp()` Fastify sunucusuna
+  karsi - hazir/uyumlu, saglik-disi (`healthDependencyCheck: false`),
+  erisilemez, zaman asimi, sozlesmeye uymayan govde, HTML donen yanlis
+  adres, yanlis servis, uyumsuz surum, HTTP hata kodu.
+- `gate.test.ts`: senaryolu prob ile kullanicinin yeniden deneyip sonunda
+  gecmesi, kapatmayi secmesi ve sonsuz donguye GIRMEMESI.
+- `electron-shell-e2e.test.ts` (gercek Electron 43 + Chromium, 10/10):
+  `window.open` HICBIR hedef icin (allowlist'teki dahil) Electron penceresi
+  ACMADI; yalniz allowlist'teki Gmail compose bagalantisi isletim sistemine
+  DEVREDILDI, digeri hicbir bicimde devredilmedi. Kabuk origin'inden
+  baslatilan gercek indirme TAMAMLANDI; GERCEK bir HTTP sunucusunun ürettigi
+  yabanci origin indirmesi IPTAL edildi (`state: 'cancelled'`).
+- Elle smoke: gercek API (3100) acikken pencere GERCEKTEN acildi (baslik
+  "HasarBotu V2"); uyumsuz surum (9.9.9) bildiren gercek bir stub sunucuya
+  karsi pencere ACILMADI, yalniz "HasarBotu V2 — Sunucu denetimi" baslikli
+  kapi penceresi goruldu.
+
+Etki: `apps/desktop` icinde 5 yeni saf modul + main.ts/shell.ts baglama
+degisikligi. `@hasarbotu/contracts` artik `apps/desktop`in runtime
+dependency'si (yalniz `healthResponseSchema`/`HEALTH_ROUTE` icin - yeni
+sozlesme veya alan EKLENMEDI). UI, API runtime kodu, migration ve adapter
+sozlesmeleri DEGISMEDI. Paketleme, code signing ve otomatik guncelleme bu
+pakette YOKTUR (kullanici talimati).
+
+Ana calisma agacinda typecheck, lint (0 error / 2 mevcut warning,
+degismedi), gercek `hasarbotu_test` PostgreSQL ile **2.221 basarili / 6
+mevcut ortam-kosullu UI skip**, build/bundle 426.065 bayt (degismedi) ve
+moderate audit (0 acik) gecti. Dagilim: desktop 75 (D2'ye gore +49).
+
+Acik kalan: Windows installer/paketleme smoke'u bu pakette YOK (kapsam
+disi); openExternal/indirme testleri paketlenmemis calistirma ile
+dogrulandi. Paket 22 dagitim kararlari (cookieSecure, code signing,
+otomatik guncelleme) hala acik.

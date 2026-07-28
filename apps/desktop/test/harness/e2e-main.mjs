@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { startDesktopShell } from '../../dist/main/shell.js'
 
 /**
@@ -24,6 +25,8 @@ const apiOrigin = process.env.HASARBOTU_API_ORIGIN
 const assetRoot = process.env.HASARBOTU_ASSET_ROOT
 const email = process.env.HB_E2E_EMAIL ?? ''
 const password = process.env.HB_E2E_PASSWORD ?? ''
+const downloadDir = process.env.HB_E2E_DOWNLOAD_DIR ?? ''
+const foreignDownloadUrl = process.env.HB_E2E_FOREIGN_DOWNLOAD_URL ?? ''
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -42,7 +45,31 @@ async function pollUntil(read, isDone, timeoutMs = 30_000) {
 app.disableHardwareAcceleration()
 app.enableSandbox()
 
-const result = { mode, consoleMessages: [], loadFailures: [] }
+const result = { mode, consoleMessages: [], loadFailures: [], openedExternally: [], downloads: [] }
+
+/**
+ * `shell.openExternal` yerine geçen kaydedici. Gerçek tarayıcı AÇILMAZ;
+ * kabuğun KARARI ve işletim sistemine verdiği URL doğrudan gözlenir.
+ * Politikanın kendisi (`external.ts`) ayrıca birim testlidir.
+ */
+async function recordExternalOpen(url) {
+  result.openedExternally.push(url)
+}
+
+/**
+ * Kabuğun `will-download` işleyicisinden SONRA kaydedilir; kabuk iptal
+ * ettiyse bu dinleyici de aynı `item`i görür ve son durumu `done` olayından
+ * okur. İzin verilen indirmeye kaydetme yolu burada verilir ki otomatik
+ * koşumda kaydetme kutusu açılıp süreci kilitlemesin.
+ */
+function observeDownloads(session) {
+  session.on('will-download', (_event, item) => {
+    const record = { url: item.getURL(), filename: item.getFilename(), state: 'pending' }
+    result.downloads.push(record)
+    if (downloadDir !== '') item.setSavePath(join(downloadDir, `indirme-${result.downloads.length}.bin`))
+    item.once('done', (__event, state) => { record.state = state })
+  })
+}
 
 async function collectProbeMode(contents) {
   // Sayfanın KENDİ topladığı sonuçlar. `executeJavaScript` CSP'yi atladığı
@@ -54,7 +81,41 @@ async function collectProbeMode(contents) {
   )
   result.probe = typeof raw === 'string' ? JSON.parse(raw) : null
 
-  // Sayfa başlatmalı gezinme denemesi: `will-navigate` kapısı devrede mi?
+  // İndirme sayfadan başlatılır — UI'ın rapor/Excel akışıyla aynı biçim:
+  // `URL.createObjectURL` + `<a download>`. Tetikleme buradan yapılır ki
+  // gözlemci dinleyicisi kesinlikle kurulmuş olsun.
+  await contents.executeJavaScript(`(() => {
+    const blob = new Blob(['D3-INDIRME-KANITI'], { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = '../../kotu ad.xlsx'
+    anchor.rel = 'noopener'
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+    return true
+  })()`)
+
+  await pollUntil(
+    async () => result.downloads,
+    (downloads) => downloads.length > 0 && downloads.every((item) => item.state !== 'pending'),
+    15_000,
+  )
+
+  // Kabuk origin'i DIŞINDAN indirme: gerçek bir yanıt üreten yabancı sunucu.
+  if (foreignDownloadUrl !== '') {
+    const before = result.downloads.length
+    contents.downloadURL(foreignDownloadUrl)
+    await pollUntil(
+      async () => result.downloads,
+      (downloads) => downloads.length > before && downloads[before].state !== 'pending',
+      15_000,
+    )
+  }
+
+  // Sayfa başlatmalı uzak gezinme denemesi: adres değişmemeli.
   await contents.executeJavaScript("window.location.href = 'https://ornek.gecersiz.example/'; true")
   await delay(1_500)
   result.urlAfterNavigationAttempt = contents.getURL()
@@ -120,10 +181,16 @@ async function collectRealUiMode(contents) {
 async function run() {
   let shell
   try {
-    shell = await startDesktopShell({ apiOrigin, assetRoot, show: false })
+    shell = await startDesktopShell({
+      apiOrigin,
+      assetRoot,
+      show: false,
+      openExternal: recordExternalOpen,
+    })
     result.shellOrigin = shell.origin
 
     const contents = shell.window.webContents
+    observeDownloads(contents.session)
     contents.on('console-message', (...args) => {
       // Electron 36+ tek olay nesnesi verir; eski imza (event, level, message).
       const event = args[0]

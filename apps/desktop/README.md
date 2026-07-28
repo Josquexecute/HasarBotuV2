@@ -2,11 +2,12 @@
 
 HasarBotu V2'nin **ince Electron kabuğu** (ADR-Q06, Paket 21 / D2).
 
-Kabuk üç şey yapar ve başka hiçbir şey yapmaz:
+Kabuk şunları yapar ve başka hiçbir şey yapmaz:
 
 1. Loopback aynı-origin köprüsünü başlatır (`@hasarbotu/desktop-bridge`, D1).
-2. Güvenli bir `BrowserWindow` açar ve o **tek** origin'i yükler.
-3. `src/main/security.ts`teki kararları Electron API'lerine bağlar.
+2. API'nin ayakta ve **sürüm olarak uyumlu** olduğunu doğrular (D3).
+3. Güvenli bir `BrowserWindow` açar ve o **tek** origin'i yükler.
+4. `src/main/*` içindeki saf politika kararlarını Electron API'lerine bağlar.
 
 **Kabukta iş mantığı yoktur** ve `ipcMain` handler'ı kaydedilmez. UI verisini
 bugün olduğu gibi göreli `/api/...` üzerinden alır; hiçbir adapter sözleşmesi
@@ -21,9 +22,36 @@ kaldır, web dağıtımını kullan") geçerli kalmasının tek şartıdır.
 | Preload | Yalnız iki **veri** alanı (`isDesktopShell`, `platform`). Fonksiyon yok, IPC kanalı yok, `ipcRenderer` yok |
 | CSP | `default-src 'none'` ile başlar; `script-src`/`style-src`/`connect-src` yalnız `'self'`. `unsafe-inline`/`unsafe-eval` yok |
 | Navigasyon | Yalnız köprü origin'i. `file:`, `data:`, `about:blank`, uzak origin ve şema kaçışları reddedilir |
-| Yeni pencere | `window.open` ve `target="_blank"` daima reddedilir |
+| Yeni pencere | Electron içinde **hiçbir** yeni pencere açılmaz — allowlist'teki hedef bile |
+| Harici bağlantı | Yalnız `https` + host allowlist'i; hedef işletim sistemi tarayıcısına devredilir (`src/main/external.ts`) |
+| İndirme | Yalnız kabuk origin'inden; dosya adı işletim sistemi için güvenli hâle getirilir; kaydetme yolunu **kullanıcı** seçer (`src/main/downloads.ts`) |
 | İzinler | Kamera/mikrofon/konum/bildirim/pano dâhil **hiçbir** izin verilmez |
 | Ağ çıkışı | `connect-src 'self'` — renderer'dan dışarıya istek atılamaz |
+
+### Harici bağlantı allowlist'i
+
+Her giriş repository'de gerçekten kullanılan bir hedefe karşılık gelir:
+
+| Host | Neden |
+|---|---|
+| `mail.google.com` | E-posta hazırlama, Gmail web compose bağlantısı |
+| `resmigazete.gov.tr`, `www.resmigazete.gov.tr` | Değer Kaybı kural kaynakları |
+| `seddk.gov.tr`, `www.seddk.gov.tr` | Değer Kaybı kural kaynakları |
+
+### API hazırlık ve sürüm uyum kapısı
+
+Pencere **açılmadan önce** kabuk API'nin `/health` yanıtını doğrular. Sorgu main
+process'ten sunucu-sunucu yapılır (`/health` sürümlü `/api/v1` tabanının
+dışındadır ve köprü yalnız `/api/*` iletir).
+
+Pencere yalnız API ayakta, `status: ok` ve sürüm uyumluyken açılır. Aksi hâlde
+kullanıcıya **Yeniden dene / Kapat** seçenekli bir iletişim kutusu gösterilir;
+uygulama yarım açılmaz ve kullanıcı mahsur kalmaz.
+
+Uyum kuralı (`src/main/compatibility.ts`): servis kimliği birebir eşleşmeli,
+ana sürüm birebir eşleşmeli; ana sürüm `0` iken ikincil sürüm de birebir
+eşleşmelidir (semver'de `0.x` serisinde kırıcı değişiklik ikincil sürümle
+taşınır). Yama sürümü ve ön sürüm etiketi uyumu etkilemez.
 
 ## Yapılandırma
 

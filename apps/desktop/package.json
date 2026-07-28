@@ -16,12 +16,13 @@
     "start": "electron ."
   },
   "dependencies": {
+    "@hasarbotu/contracts": "*",
     "@hasarbotu/desktop-bridge": "*"
   },
   "devDependencies": {
     "@hasarbotu/api": "*",
-    "@hasarbotu/contracts": "*",
     "@hasarbotu/database": "*",
+    "@hasarbotu/domain": "*",
     "@types/node": "24.13.3",
     "electron": "43.2.0"
   }
