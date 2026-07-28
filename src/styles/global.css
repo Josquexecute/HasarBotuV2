@@ -2843,6 +2843,15 @@ button {
 .management-state p { margin: 0; color: var(--text-secondary); font-size: 12px; }
 .management-empty { margin: 10px 16px 14px; color: var(--text-secondary); font-size: 11px; }
 
+/* Gerçek rol ataması ve yetki matrisi (HB-011) */
+.role-checkbox-group { display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: 380px; }
+.role-checkbox { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.role-checkbox input { margin: 0; accent-color: var(--accent); }
+.role-checkbox input:disabled + span, .role-checkbox input:disabled { cursor: not-allowed; opacity: 0.6; }
+.role-row-feedback { margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); }
+.permission-matrix td:first-child { white-space: normal; }
+.permission-matrix .role-cell { font-size: 11px; color: var(--text-secondary); }
+
 /* Ağır Hasar / PERT (Paket 45) */
 .pert-decisions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
 .pert-decisions .decision-card h3 { margin: 6px 0 4px; font-size: 15px; }

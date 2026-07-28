@@ -41,6 +41,8 @@ export interface FeeRoutesOptions {
 
 const CANDIDATE_ROLES = ['admin', 'expert', 'case_manager'] as const
 const APPROVE_ROLES = ['admin', 'expert', 'accounting'] as const
+/** HB-011: mali tutar/rapor görünürlüğü; secretary ve read_only kapsam dışıdır. */
+const FINANCIAL_READ_ROLES = ['admin', 'expert', 'case_manager', 'accounting'] as const satisfies readonly RoleCode[]
 
 function hasRole(roles: readonly RoleCode[], allowed: readonly RoleCode[]): boolean {
   return roles.some((role) => allowed.includes(role))
@@ -50,6 +52,7 @@ function capabilities(roles: readonly RoleCode[]): FeeCapabilities {
   return {
     canCreateCandidate: hasRole(roles, CANDIDATE_ROLES),
     canApprove: hasRole(roles, APPROVE_ROLES),
+    canView: hasRole(roles, FINANCIAL_READ_ROLES),
   }
 }
 
@@ -122,7 +125,7 @@ export function registerFeeRoutes(app: FastifyInstance, options: FeeRoutesOption
 
   app.get(CASE_FEE_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(auth, request, reply)
+    const session = await requireAnyRole(auth, request, reply, FINANCIAL_READ_ROLES)
     if (session === undefined) return
     const params = caseFeeParamsSchema.safeParse(request.params)
     if (!params.success) return invalid(reply, params.error, requestId)
@@ -139,7 +142,7 @@ export function registerFeeRoutes(app: FastifyInstance, options: FeeRoutesOption
 
   app.get(FEES_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(auth, request, reply)
+    const session = await requireAnyRole(auth, request, reply, FINANCIAL_READ_ROLES)
     if (session === undefined) return
     const query = closureFeeListQuerySchema.safeParse(request.query)
     if (!query.success) return invalid(reply, query.error, requestId)

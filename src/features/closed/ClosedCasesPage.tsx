@@ -130,6 +130,7 @@ export function ClosedCasesPage({
           {source === 'api' && status === 'unauthorized' && <p role="alert" className="page-subtitle">Oturum gerekli; mock veri gösterilmiyor.</p>}
           {source === 'api' && status === 'unavailable' && <p role="alert" className="page-subtitle">Kapalı dosya servisine ulaşılamıyor; mock veri gösterilmiyor.</p>}
           {source === 'api' && feeList.status === 'unavailable' && <p role="alert" className="page-subtitle">Ücret servisine ulaşılamıyor; ücret alanlarında varsayım yapılmıyor.</p>}
+          {source === 'api' && feeList.status === 'forbidden' && <p role="alert" className="page-subtitle">Mali tutarları görüntüleme yetkiniz yok; ücret alanları boş gösterilir.</p>}
           {source === 'api' && valueLossList.status === 'unavailable' && <p role="alert" className="page-subtitle">Değer kaybı kapanış özetine ulaşılamıyor; mock veya tahmini sonuç gösterilmiyor.</p>}
         </div>
         {source === 'mock' && (

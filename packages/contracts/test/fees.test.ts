@@ -67,6 +67,7 @@ describe('kapanma ücreti ve rapor contracts', () => {
       periodEndExclusive: '2026-08-01',
       generatedAt: '2026-07-16T10:00:00.000Z',
       periodBasis: 'open_created_closed_finalized',
+      includesFinancials: true,
       summary: {
         totalCaseCount: 0,
         openCaseCount: 0,

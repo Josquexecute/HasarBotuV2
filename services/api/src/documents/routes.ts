@@ -24,12 +24,16 @@ import {
   registerPhotoRequestSchema,
   zodErrorToApiError,
   type ApiErrorCode,
+  type RoleCode,
 } from '@hasarbotu/contracts'
 import { failureBody } from '../errors/failure.js'
-import { requireSession } from '../auth/guard.js'
+import { requireAnyRole, requireSession } from '../auth/guard.js'
 import { createAuthStore } from '../auth/store.js'
 import { hashRequestBody } from '../db/idempotency.js'
 import { createDocumentsStore } from './store.js'
+
+/** HB-011: belge/fotoğraf kaydı case-operations notu/görevi ile aynı sınıf clerical yazma işidir. */
+const WRITE_ROLES = ['admin', 'expert', 'case_manager', 'secretary'] as const satisfies readonly RoleCode[]
 
 export interface DocumentRoutesOptions {
   readonly pool: pg.Pool
@@ -79,7 +83,7 @@ export function registerDocumentRoutes(app: FastifyInstance, options: DocumentRo
 
   app.post(DOCUMENTS_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
 
     const params = caseScopedParamsSchema.safeParse(request.params)
@@ -156,7 +160,7 @@ export function registerDocumentRoutes(app: FastifyInstance, options: DocumentRo
 
   app.post(PHOTOS_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
     const params = caseScopedParamsSchema.safeParse(request.params)
     if (!params.success) {

@@ -15,8 +15,9 @@ import {
   fileOperationResponseSchema,
   idempotencyKeySchema,
   zodErrorToApiError,
+  type RoleCode,
 } from '@hasarbotu/contracts'
-import { requireSession } from '../auth/guard.js'
+import { requireAnyRole, requireSession } from '../auth/guard.js'
 import { createAuthStore } from '../auth/store.js'
 import { hashRequestBody, isIdempotencyRace } from '../db/idempotency.js'
 import { failureBody } from '../errors/failure.js'
@@ -29,6 +30,13 @@ import {
 } from './store.js'
 
 export interface FileOperationRoutesOptions { readonly pool: pg.Pool }
+
+/**
+ * HB-011: fiziksel dosya/klasör taşıma "kritik işlem"dir (AGENTS.md §7).
+ * case-lifecycle'ın COMMAND_ROLES'ü ile aynı — bu uçlar case-lifecycle'ın
+ * kendi rol kapısını atlayan BAĞIMSIZ bir yüzeydir, aynı sınırı taşımalıdır.
+ */
+const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const satisfies readonly RoleCode[]
 
 function parseKey(request: { headers: Record<string, unknown> }): string | undefined {
   const raw = request.headers[IDEMPOTENCY_KEY_HEADER]
@@ -67,7 +75,7 @@ export function registerFileOperationRoutes(app: FastifyInstance, options: FileO
 
   app.post(CASE_FILE_OPERATION_PLAN_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
     const params = fileOperationPlanParamsSchema.safeParse(request.params)
     const body = fileOperationPlanRequestSchema.safeParse(request.body)
@@ -125,7 +133,7 @@ export function registerFileOperationRoutes(app: FastifyInstance, options: FileO
     kind: 'approve' | 'cancel',
   ) {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
     const params = fileOperationParamsSchema.safeParse(request.params)
     const parsed = (kind === 'approve' ? fileOperationApproveRequestSchema : fileOperationCancelRequestSchema).safeParse(request.body ?? {})

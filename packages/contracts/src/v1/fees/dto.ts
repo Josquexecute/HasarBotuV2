@@ -84,11 +84,12 @@ export const reportFeeSummarySchema = z.strictObject({
   trafficCaseCount: z.number().int().min(0).max(100_000),
   cascoCaseCount: z.number().int().min(0).max(100_000),
   approvedFeeCount: z.number().int().min(0).max(100_000),
-  approvedFeeTotalMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  /** `includesFinancials=false` iken (HB-011) rolün mali görünürlüğü yoktur; tutar `null` döner. */
+  approvedFeeTotalMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
   controlRequiredFeeCount: z.number().int().min(0).max(100_000),
   closedCaseWithoutFeeCount: z.number().int().min(0).max(100_000),
   approvedValueLossCount: z.number().int().min(0).max(100_000),
-  approvedValueLossTotalMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  approvedValueLossTotalMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
   controlRequiredValueLossCount: z.number().int().min(0).max(100_000),
   notApplicableValueLossCount: z.number().int().min(0).max(100_000),
 })
@@ -109,6 +110,8 @@ export const caseSummaryReportResponseSchema = z.strictObject({
   periodEndExclusive: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   generatedAt: utcDateTimeSchema,
   periodBasis: z.literal('open_created_closed_finalized'),
+  /** HB-011: mali alan (tutar/bekleyen ücret listesi) yalnız FINANCIAL_READ_ROLES için doludur. */
+  includesFinancials: z.boolean(),
   summary: reportFeeSummarySchema,
   distribution: z.array(reportDistributionItemSchema).length(3),
   responsibleUsers: z.array(reportFilterOptionSchema).max(5_000),

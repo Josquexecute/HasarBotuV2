@@ -23,6 +23,9 @@
       "type": "string",
       "const": "open_created_closed_finalized"
     },
+    "includesFinancials": {
+      "type": "boolean"
+    },
     "summary": {
       "type": "object",
       "properties": {
@@ -57,9 +60,16 @@
           "maximum": 100000
         },
         "approvedFeeTotalMinor": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "controlRequiredFeeCount": {
           "type": "integer",
@@ -77,9 +87,16 @@
           "maximum": 100000
         },
         "approvedValueLossTotalMinor": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "controlRequiredValueLossCount": {
           "type": "integer",
@@ -599,6 +616,7 @@
     "periodEndExclusive",
     "generatedAt",
     "periodBasis",
+    "includesFinancials",
     "summary",
     "distribution",
     "responsibleUsers",

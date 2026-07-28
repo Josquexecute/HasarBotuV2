@@ -84,6 +84,8 @@ export interface CaseSummaryReportRecord {
   readonly periodEndExclusive: string
   readonly generatedAt: string
   readonly periodBasis: 'open_created_closed_finalized'
+  /** HB-011: `false` iken tutar alanları `null`, `pendingFees` boştur (secretary/read_only). */
+  readonly includesFinancials: boolean
   readonly summary: {
     readonly totalCaseCount: number
     readonly openCaseCount: number
@@ -91,11 +93,11 @@ export interface CaseSummaryReportRecord {
     readonly trafficCaseCount: number
     readonly cascoCaseCount: number
     readonly approvedFeeCount: number
-    readonly approvedFeeTotalMinor: number
+    readonly approvedFeeTotalMinor: number | null
     readonly controlRequiredFeeCount: number
     readonly closedCaseWithoutFeeCount: number
     readonly approvedValueLossCount: number
-    readonly approvedValueLossTotalMinor: number
+    readonly approvedValueLossTotalMinor: number | null
     readonly controlRequiredValueLossCount: number
     readonly notApplicableValueLossCount: number
   }

@@ -9,7 +9,9 @@ import {
   AUTH_LOGIN_ROUTE,
   CASES_ROUTE,
   CASE_FEE_CANDIDATES_ROUTE,
+  CASE_FEE_ROUTE,
   CASE_SUMMARY_REPORT_ROUTE,
+  FEES_ROUTE,
   FEE_APPROVE_ROUTE,
   IDEMPOTENCY_KEY_HEADER,
   caseLifecycleOperationResponseSchema,
@@ -43,10 +45,14 @@ import { buildApp, hashPassword } from '../src/index.js'
  *    İKİ organizasyonun KENDİ oturumuyla raporu sorgulayıp `summary`,
  *    `distribution`, `responsibleUsers`, `services` VE `pendingFees`
  *    alanlarının TAMAMININ sızmadığını doğrudan kanıtlar.
- * 2. Bu uçta rol kısıtı YOKTUR (yalnız `requireSession`) — `secretary` ve
- *    `read_only` rollerinin GERÇEKTEN aynı gerçek mali toplamları
- *    görebildiği hiç kanıtlanmamıştı; bu test bunu gerçek oturumlarla
- *    doğrudan doğrular (kasıtlı tasarım, HB-2026-045/DECISIONS ile tutarlı).
+ * 2. HB-011 (2026-07-27): mali alan görünürlüğü artık rol bazlıdır.
+ *    `secretary`/`read_only` raporu okuyabilir (yalnız `requireSession`
+ *    kalır) ama tutar alanları `null`, `pendingFees` boş ve
+ *    `includesFinancials:false` döner; adanmış ücret uçları
+ *    (`GET /fees`, `GET /cases/:caseId/fee`) bu rollere 403 verir.
+ *    Bu, önceki (herkes aynı mali toplamı görür) davranışın YERİNE geçti;
+ *    bu test artık HB-011'in maskeleme + tenant izolasyonunun BİRLİKTE
+ *    doğru çalıştığını kanıtlar.
  *
  * Onaylı ücretin GERÇEK yeniden açmadan sonra aylık toplamdan doğru şekilde
  * düştüğü (önceki oturumda bulunup düzeltilen kusur) zaten
@@ -351,13 +357,28 @@ describeDb('Raporlar ve Ücretler uçtan uca UAT: gerçek kapanış → ücret o
     })).json())
     expect(crossOrgFilterAttempt.summary).toMatchObject({ totalCaseCount: 0, closedCaseCount: 0, approvedFeeCount: 0 })
 
-    // 7) ROL GÖRÜNÜRLÜĞÜ — bu uçta kasıtlı olarak rol kısıtı yoktur; secretary
-    //    ve read_only GERÇEKTEN aynı mali toplamları görebilir.
+    // 7) ROL GÖRÜNÜRLÜĞÜ (HB-011) — secretary ve read_only raporu GÖREBİLİR
+    //    (yalnız requireSession) ama mali alanlar maskelenir: tutarlar `null`,
+    //    bekleyen ücret listesi boş, `includesFinancials:false`. Operasyonel
+    //    sayaçlar (dosya sayıları/dağılım) DEĞİŞMEDEN görünür.
     for (const roleCookie of [secretaryACookie, readOnlyACookie]) {
-      const roleReport = caseSummaryReportResponseSchema.parse((await app.inject({
-        method: 'GET', url: reportUrl, headers: { cookie: roleCookie },
-      })).json())
-      expect(roleReport.summary).toEqual(reportA.summary)
+      const roleReportResponse = await app.inject({ method: 'GET', url: reportUrl, headers: { cookie: roleCookie } })
+      expect(roleReportResponse.statusCode).toBe(200)
+      const roleReport = caseSummaryReportResponseSchema.parse(roleReportResponse.json())
+      expect(roleReport.includesFinancials).toBe(false)
+      expect(roleReport.summary).toEqual({
+        ...reportA.summary,
+        approvedFeeTotalMinor: null,
+        approvedValueLossTotalMinor: null,
+      })
+      expect(roleReport.pendingFees).toEqual([])
+    }
+    // Mali rol dışındaki roller adanmış ücret uçlarına (dedicated fee routes) erişemez.
+    for (const roleCookie of [secretaryACookie, readOnlyACookie]) {
+      expect((await app.inject({ method: 'GET', url: FEES_ROUTE, headers: { cookie: roleCookie } })).statusCode).toBe(403)
+      expect((await app.inject({
+        method: 'GET', url: CASE_FEE_ROUTE.replace(':caseId', caseId), headers: { cookie: roleCookie },
+      })).statusCode).toBe(403)
     }
     // Oturumsuz erişim kesin reddedilir.
     expect((await app.inject({ method: 'GET', url: reportUrl })).statusCode).toBe(401)

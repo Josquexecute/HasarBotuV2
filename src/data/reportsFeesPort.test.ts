@@ -54,6 +54,7 @@ describe('reports/fees HTTP adapter', () => {
           periodEndExclusive: '2026-08-01',
           generatedAt: '2026-07-16T10:00:00.000Z',
           periodBasis: 'open_created_closed_finalized',
+          includesFinancials: true,
           summary: {
             totalCaseCount: 1,
             openCaseCount: 0,

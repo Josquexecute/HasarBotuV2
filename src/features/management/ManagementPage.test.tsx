@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DATA_SOURCE_STORAGE_KEY, type CaseReferenceDataPort } from '../../data/ports'
 import { ReferenceDataError } from '../../data/referenceHttpAdapter'
+import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
+import type { UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
 import { ManagementPage } from './ManagementPage'
 
 const references = {
@@ -106,5 +108,84 @@ describe('ManagementPage', () => {
     expect(screen.getByText('Yalnız iki dosya türü vardır')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Erişim ve Yetki' }))
     expect(screen.getByText('AI Güvenlik Sınırı')).toBeInTheDocument()
+  })
+})
+
+describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () => {
+  function adminSession(): SessionContextValue {
+    return {
+      mode: 'api',
+      status: 'authenticated',
+      user: { id: 'admin-1', organizationId: 'org-1', email: 'admin@baran.example', displayName: 'Admin', roles: ['admin'] },
+      notice: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+      reportUnauthorized: vi.fn(),
+    }
+  }
+
+  function expertSession(): SessionContextValue {
+    return {
+      mode: 'api',
+      status: 'authenticated',
+      user: { id: 'expert-1', organizationId: 'org-1', email: 'expert@baran.example', displayName: 'Eksper', roles: ['expert'] },
+      notice: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+      reportUnauthorized: vi.fn(),
+    }
+  }
+
+  const users: readonly UserSummaryRecord[] = [
+    { id: 'usr-1', email: 'sekreter@baran.example', displayName: 'Sekreter Kullanıcı', status: 'active', roles: ['secretary'], version: 1 },
+  ]
+
+  function makeUsersPort(overrides: Partial<UsersDataPort> = {}): UsersDataPort {
+    return {
+      list: vi.fn().mockResolvedValue(users),
+      updateRoles: vi.fn().mockResolvedValue({ ...users[0], roles: ['secretary', 'expert'], version: 2 }),
+      ...overrides,
+    } as UsersDataPort
+  }
+
+  it('admin oturumunda gerçek rol tablosu görünür ve rol değişikliği gerçek PATCH çağırır', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const usersPort = makeUsersPort()
+    const user = userEvent.setup()
+    render(
+      <SessionContext.Provider value={adminSession()}>
+        <ManagementPage port={makePort()} usersPort={usersPort} />
+      </SessionContext.Provider>,
+    )
+
+    expect(await screen.findByText('Kullanıcı ve Rol Yönetimi')).toBeInTheDocument()
+    expect(screen.getByText('Sekreter Kullanıcı')).toBeInTheDocument()
+    // Referans-tabanlı salt-okunur görünüm ARTIK gösterilmez (admin gerçek yönetim görür).
+    expect(screen.queryByText('Kullanıcı ve Sorumlu Listesi')).not.toBeInTheDocument()
+
+    const expertCheckbox = screen.getByRole('checkbox', { name: 'Eksper' })
+    expect(expertCheckbox).not.toBeChecked()
+    await user.click(expertCheckbox)
+    await user.click(screen.getByRole('button', { name: 'Kaydet' }))
+
+    await waitFor(() => expect(usersPort.updateRoles).toHaveBeenCalledWith(
+      'usr-1',
+      { roles: expect.arrayContaining(['secretary', 'expert']), expectedVersion: 1 },
+    ))
+    expect(await screen.findByText('Roller güncellendi.')).toBeInTheDocument()
+  })
+
+  it('admin olmayan oturumda mevcut salt-okunur referans görünümü değişmeden kalır', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const usersPort = makeUsersPort()
+    render(
+      <SessionContext.Provider value={expertSession()}>
+        <ManagementPage port={makePort()} usersPort={usersPort} />
+      </SessionContext.Provider>,
+    )
+
+    expect(await screen.findByText('Gerçek Eksper')).toBeInTheDocument()
+    expect(screen.queryByText('Kullanıcı ve Rol Yönetimi')).not.toBeInTheDocument()
+    expect(usersPort.list).not.toHaveBeenCalled()
   })
 })

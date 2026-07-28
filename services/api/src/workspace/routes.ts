@@ -13,14 +13,18 @@ import {
   workspaceProvisioningParamsSchema,
   workspaceProvisioningResponseSchema,
   zodErrorToApiError,
+  type RoleCode,
 } from '@hasarbotu/contracts'
-import { requireSession } from '../auth/guard.js'
+import { requireAnyRole, requireSession } from '../auth/guard.js'
 import { createAuthStore } from '../auth/store.js'
 import { hashRequestBody, isIdempotencyRace } from '../db/idempotency.js'
 import { failureBody } from '../errors/failure.js'
 import { createWorkspaceStore, WORKSPACE_APPROVE_SCOPE, WORKSPACE_PLAN_SCOPE } from './store.js'
 
 export interface WorkspaceRoutesOptions { readonly pool: pg.Pool }
+
+/** HB-011: ilk fiziksel klasör kurulumu da "kritik işlem"dir; case-lifecycle ile aynı sınır. */
+const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const satisfies readonly RoleCode[]
 
 function parseKey(request: { headers: Record<string, unknown> }): string | undefined {
   const raw = request.headers[IDEMPOTENCY_KEY_HEADER]
@@ -69,7 +73,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, options: Workspace
 
   app.post(CASE_WORKSPACE_PLANS_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
     const params = workspacePlanParamsSchema.safeParse(request.params)
     const body = workspacePlanRequestSchema.safeParse(request.body)
@@ -120,7 +124,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, options: Workspace
 
   app.post(CASE_WORKSPACE_APPROVE_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
     const params = workspaceProvisioningParamsSchema.safeParse(request.params)
     const body = workspaceApproveRequestSchema.safeParse(request.body ?? {})

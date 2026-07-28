@@ -2300,3 +2300,81 @@ PostgreSQL ile 2.080 basarili / 6 ortam-kosullu UI skip (+25), build/bundle
 gercek case olusturma, araç sahibi kaydi (PostgreSQL round-trip), Dosya
 Envanteri paneli ve gercek export istegi (200, konsol temiz) dogrulandi;
 kalici dev DB'sine uygulanan migration ve smoke verisi temizlendi.
+
+## 2026-07-28 - HB-2026-102: HB-011 kaynak bazli yetki matrisi - gercek rol atama ucu, write-role bosluk kapanisi, mali gorunurluk
+
+Karar: Yetkilendirme "oturum var mi" seviyesinden kaynak bazli role
+matrisine tasindi. Uc alanda gercek bosluk haritalandi ve kapatildi:
+
+1. YAZMA BOSLUKLARI (gercek kusur). Dort uc yalniz `requireSession`
+   kullaniyordu; `read_only` rolu bile fiziksel klasor kurulumu/tasima
+   planlayabiliyor, dosya konumu atayabiliyor ve evrak/fotograf kaydi
+   girebiliyordu. AGENTS.md ss.7 bunlari "kritik islem" sayar.
+   - `file-operations`, `workspace`, `storage` (case-location):
+     `admin|expert|case_manager` (case-lifecycle COMMAND_ROLES ile ayni sinir).
+   - `documents` (evrak/fotograf): `admin|expert|case_manager|secretary`
+     (case-operations not/gorev ile ayni clerical sinif).
+
+2. MALI GORUNURLUK. `GET /fees` ve `GET /cases/:caseId/fee` artik
+   FINANCIAL_READ_ROLES (`admin|expert|case_manager|accounting`) ister;
+   `secretary`/`read_only` 403 alir. Aylik case-summary raporu HERKESE
+   acik kalir (operasyonel sayaclar is icin gerekli) ama mali alanlar
+   maskelenir: `approvedFeeTotalMinor` ve `approvedValueLossTotalMinor`
+   `null`, `pendingFees` bos, yeni `includesFinancials:false`. UI tutar
+   yerine "Gizli" gosterir; uydurulmus 0 URETILMEZ.
+
+3. ROL ATAMA UCU. Once rol degisikligi yalnizca dogrudan `user_roles` SQL
+   mutasyonuyla mumkundu; gercek bir atama API'si/UI'i yoktu.
+   `GET /api/v1/users` + `PATCH /api/v1/users/:userId/roles` eklendi
+   (admin-only, tenant kapsamli, `users.version` ile optimistic lock,
+   `user.roles_changed` audit kaydi). Yonetim > Kullanicilar sekmesi admin
+   oturumunda gercek rol tablosunu gosterir.
+
+Gerekce: Rol tablosu ve `requireAnyRole` altyapisi zaten vardi; eksik olan
+kaynak-uc eslemesiydi. Yazma bosluklari teorik degil gercekti - UAT testi
+403 beklentisiyle bunlari dogrudan kanitliyor. Mali gorunurlukte raporu
+tumden kapatmak yerine maskeleme secildi: sekreterin dosya sayilarina
+ihtiyaci var, firma gelirine yok.
+
+Kapsam sinirlari (bilincli):
+- Deger kaybi tazminat tutari mali alan SAYILMADI; modul okumalari tum
+  rollere acik kalir. Sinir "firma geliri (kapanma ucreti) mali veridir,
+  dosya sonucu degildir" seklinde cizildi. Rapordaki deger kaybi TOPLAMI
+  yine de maskelenir (toplu mali raporlama sinifinda). Bu asimetri
+  bilerek birakildi; genisletilmesi ayri urun karari gerektirir.
+- Kullanici olusturma/silme/pasiflestirme eklenmedi; yalniz rol atamasi.
+- Yeni tablo veya migration YOK; mevcut `users`/`roles`/`user_roles`
+  (migration 0002) kullanildi. Yeni dependency yok.
+
+Guvenlik notlari (overlay ss.1/2/8 karsisinda dogrulandi):
+- Her sorgu `organization_id` tasir; capraz tenant PATCH 404 doner.
+- `roles` girdisi `roleCodeSchema` enum'u; tum SQL parametreli.
+- Son-yonetici garantisi: bir admin KENDI admin rolunu kaldiramaz
+  (`user_self_lockout_blocked`, 409). Admin rolu yalnizca bir admin
+  tarafindan kaldirilabildigi ve aktor kendisini kaldiramadigi icin
+  organizasyon hicbir zaman sifir yoneticide kalamaz.
+- Oturum canli JOIN ile cozuldugu (`findActiveSession`, `u.status='active'`)
+  icin hem yukseltme hem dusurme bir sonraki istekte aninda etkilidir;
+  bayat yetki tasinmaz. UAT testi bunu gercek oturumla kanitlar.
+- Sertlestirme: rol INSERT'unun satir sayisi istenen rol sayisiyla
+  karsilastirilir. Sozlesme enum'u ile `roles` tablosu ayrisirsa islem geri
+  alinir; GERCEKTE verilmemis bir yetki verilmis gibi RAPORLANMAZ.
+- Audit `details` yalniz rol kodu ve surum tasir; PII ve fiziksel yol yok
+  (UAT testi dogrudan assert eder).
+
+Etki: Yeni contracts `v1/users` ve `user_self_lockout_blocked` hata kodu;
+yeni API modulu `services/api/src/users`; yeni UI portu `usersPort` +
+`useUsers` kancasi; Yonetim'de gercek rol atama tablosu; "Erisim ve Yetki"
+sekmesindeki mugalak ozet, sunucudaki gercek kapilari yansitan 15 satirlik
+kaynak bazli matrisle degistirildi. `caseSummaryReportResponse` sozlesmesi
+kirici degisti (`includesFinancials` zorunlu; iki tutar alani nullable) -
+JSON schema fixture'lari guncellendi. Ana agacta typecheck, lint
+(0 error / 2 mevcut warning, degismedi), gercek `hasarbotu_test` PostgreSQL
+ile 2.105 basarili / 6 ortam-kosullu UI skip, build/bundle 426.065 bayt
+(butce 500.000, 10 lazy modul), `npm audit --audit-level=moderate` 0 bulgu.
+Yeni UAT testi `permission-matrix-uat-e2e.test.ts` gercek PostgreSQL ile
+kosuldu (skip EDILMEDI); `reports-fees-uat-e2e.test.ts` maskeleme + tenant
+izolasyonunu birlikte dogrulayacak sekilde guncellendi.
+
+Dogrulanamayan: Gercek Chrome/CDP tarayici smoke bu pakette CALISTIRILMADI;
+UI davranisi yalniz component testleriyle dogrulandi.

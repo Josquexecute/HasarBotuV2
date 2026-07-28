@@ -48,6 +48,8 @@ interface IdempotencyContext {
 export interface FeeCapabilities {
   readonly canCreateCandidate: boolean
   readonly canApprove: boolean
+  /** HB-011: mali tutar/rapor görünürlüğü; `false` iken rapor tutarları/bekleyen ücretler maskelenir. */
+  readonly canView: boolean
 }
 
 interface FeeRecordRow {
@@ -524,6 +526,7 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
         periodEndExclusive,
         generatedAt,
         periodBasis: 'open_created_closed_finalized',
+        includesFinancials: capabilities.canView,
         summary: {
           totalCaseCount: summary.total_case_count,
           openCaseCount: summary.open_case_count,
@@ -531,11 +534,11 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
           trafficCaseCount: summary.traffic_case_count,
           cascoCaseCount: summary.casco_case_count,
           approvedFeeCount: summary.approved_fee_count,
-          approvedFeeTotalMinor: safeMinor(summary.approved_fee_total_minor),
+          approvedFeeTotalMinor: capabilities.canView ? safeMinor(summary.approved_fee_total_minor) : null,
           controlRequiredFeeCount: summary.control_required_fee_count,
           closedCaseWithoutFeeCount: summary.closed_without_fee_count,
           approvedValueLossCount: summary.approved_value_loss_count,
-          approvedValueLossTotalMinor: safeMinor(summary.approved_value_loss_total_minor),
+          approvedValueLossTotalMinor: capabilities.canView ? safeMinor(summary.approved_value_loss_total_minor) : null,
           controlRequiredValueLossCount: summary.control_required_value_loss_count,
           notApplicableValueLossCount: summary.not_applicable_value_loss_count,
         },
@@ -548,7 +551,7 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
           .sort((left, right) => left.name.localeCompare(right.name, 'tr')),
         services: [...services].map(([id, name]) => ({ id, name }))
           .sort((left, right) => left.name.localeCompare(right.name, 'tr')),
-        pendingFees: pendingRows.map((row) => ({
+        pendingFees: capabilities.canView ? pendingRows.map((row) => ({
           caseId: row.case_id,
           officeCaseNumber: row.office_number,
           plate: row.plate,
@@ -558,7 +561,7 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
           responsibleUserName: row.responsible_user_name,
           closedAt: row.closed_at.toISOString(),
           fee: records.get(row.fee_id),
-        })),
+        })) : [],
       })
     },
 

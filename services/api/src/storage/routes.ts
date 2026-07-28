@@ -13,15 +13,19 @@ import {
   storageRootsResponseSchema,
   zodErrorToApiError,
   type ApiErrorCode,
+  type RoleCode,
 } from '@hasarbotu/contracts'
 import { failureBody } from '../errors/failure.js'
-import { requireSession } from '../auth/guard.js'
+import { requireAnyRole, requireSession } from '../auth/guard.js'
 import { createAuthStore } from '../auth/store.js'
 import { createStorageStore } from './store.js'
 
 export interface StorageRoutesOptions {
   readonly pool: pg.Pool
 }
+
+/** HB-011: konum atama fiziksel taşımanın ön koşuludur; aynı "kritik işlem" sınırı. */
+const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const satisfies readonly RoleCode[]
 
 function sendUnknownRoot(reply: FastifyReply, requestId: string): void {
   void reply.code(400).send(
@@ -84,7 +88,7 @@ export function registerStorageRoutes(app: FastifyInstance, options: StorageRout
 
   app.put(CASE_LOCATION_ROUTE, async (request, reply) => {
     const requestId = String(request.id)
-    const session = await requireSession(authStore, request, reply)
+    const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
 
     const params = caseLocationParamsSchema.safeParse(request.params)

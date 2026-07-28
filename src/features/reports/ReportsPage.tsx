@@ -9,6 +9,11 @@ import { formatCurrency, mockCases } from '../../mocks/cases'
 import { closedCases, pendingClosedFees } from '../../mocks/workspaces'
 import { CaseInventoryExportPanel } from './CaseInventoryExportPanel'
 
+/** HB-011: `null` -> mali görünürlük bu rolde yok (secretary/read_only); uydurulmuş 0 gösterilmez. */
+function formatMaybeCurrency(minor: number | null): string {
+  return minor === null ? 'Gizli' : formatCurrency(minor / 100)
+}
+
 export function ReportsPage({
   reportPort,
   inventoryPort,
@@ -64,12 +69,17 @@ export function ReportsPage({
           )}
           {report !== null && (
             <>
+              {!report.includesFinancials && (
+                <section className="info-panel">
+                  <div className="assistant-note" role="status"><AlertTriangle size={15} /><span>Mali tutarları görüntüleme yetkiniz yok; bu rapor rolünüz için tutar içermez.</span></div>
+                </section>
+              )}
               <section className="metric-strip" aria-label="Gerçek rapor özeti">
                 <div><span>Toplam Dosya</span><strong>{report.summary.totalCaseCount}</strong><small>{report.period}</small></div>
                 <div><span>Açık Dosya</span><strong>{report.summary.openCaseCount}</strong><small>Dönemde oluşturulan</small></div>
                 <div><span>Kapanan Dosya</span><strong>{report.summary.closedCaseCount}</strong><small>Dönemde kesinleşen</small></div>
-                <div><span>Onaylı Eksper Ücreti</span><strong>{formatCurrency(report.summary.approvedFeeTotalMinor / 100)}</strong><small>{report.summary.approvedFeeCount} onaylı kayıt</small></div>
-                <div><span>Onaylı Değer Kaybı</span><strong>{formatCurrency(report.summary.approvedValueLossTotalMinor / 100)}</strong><small>{report.summary.approvedValueLossCount} raporlu Trafik dosyası</small></div>
+                <div><span>Onaylı Eksper Ücreti</span><strong>{formatMaybeCurrency(report.summary.approvedFeeTotalMinor)}</strong><small>{report.summary.approvedFeeCount} onaylı kayıt</small></div>
+                <div><span>Onaylı Değer Kaybı</span><strong>{formatMaybeCurrency(report.summary.approvedValueLossTotalMinor)}</strong><small>{report.summary.approvedValueLossCount} raporlu Trafik dosyası</small></div>
                 <div><span>Kontrol Bekleyen</span><strong>{report.summary.controlRequiredFeeCount + report.summary.controlRequiredValueLossCount}</strong><small>{report.summary.controlRequiredFeeCount} ücret · {report.summary.controlRequiredValueLossCount} değer kaybı</small></div>
               </section>
               <div className="reports-grid">
@@ -80,11 +90,16 @@ export function ReportsPage({
                     return <div className={`distribution-row${tone}`} key={item.code}><span>{label}</span><div><i style={{ width: `${Math.max(item.count > 0 ? 10 : 0, item.count / Math.max(1, report.summary.totalCaseCount) * 100)}%` }} /></div><strong>{item.count}</strong></div>
                   })}
                 </section>
-                <section className="info-panel"><header><h2>Ücret ve Değer Kaybı</h2><span>{report.period}</span></header><dl className="detail-list"><div><dt>Onaylı Ücret</dt><dd>{formatCurrency(report.summary.approvedFeeTotalMinor / 100)}</dd></div><div><dt>Ücret Kontrolü</dt><dd>{report.summary.controlRequiredFeeCount} dosya</dd></div><div><dt>Ücret Kaydı Yok</dt><dd>{report.summary.closedCaseWithoutFeeCount} dosya</dd></div><div><dt>Onaylı Değer Kaybı</dt><dd>{formatCurrency(report.summary.approvedValueLossTotalMinor / 100)}</dd></div><div><dt>Değer Kaybı Kontrolü</dt><dd>{report.summary.controlRequiredValueLossCount} dosya</dd></div><div><dt>Kasko / Uygulanmaz</dt><dd>{report.summary.notApplicableValueLossCount} dosya</dd></div><div><dt>Kural</dt><dd>traffic-value-loss-closure/1.0.0</dd></div></dl></section>
+                <section className="info-panel"><header><h2>Ücret ve Değer Kaybı</h2><span>{report.period}</span></header><dl className="detail-list"><div><dt>Onaylı Ücret</dt><dd>{formatMaybeCurrency(report.summary.approvedFeeTotalMinor)}</dd></div><div><dt>Ücret Kontrolü</dt><dd>{report.summary.controlRequiredFeeCount} dosya</dd></div><div><dt>Ücret Kaydı Yok</dt><dd>{report.summary.closedCaseWithoutFeeCount} dosya</dd></div><div><dt>Onaylı Değer Kaybı</dt><dd>{formatMaybeCurrency(report.summary.approvedValueLossTotalMinor)}</dd></div><div><dt>Değer Kaybı Kontrolü</dt><dd>{report.summary.controlRequiredValueLossCount} dosya</dd></div><div><dt>Kasko / Uygulanmaz</dt><dd>{report.summary.notApplicableValueLossCount} dosya</dd></div><div><dt>Kural</dt><dd>traffic-value-loss-closure/1.0.0</dd></div></dl></section>
               </div>
               <section className="office-table-panel report-table"><header className="panel-heading"><div><h2>Kapanış Ücreti Bekleyen Dosyalar</h2><span>Aday tutar kesin toplama eklenmez</span></div></header>
                 <div className="table-scroll"><table className="data-table"><thead><tr><th>Kapanış</th><th>Dosya No</th><th>Plaka</th><th>Şirket</th><th>Tür</th><th>Sorumlu</th><th>Servis</th><th>Durum</th><th>Aday Tutar</th></tr></thead><tbody>{report.pendingFees.map((row) => <tr key={row.fee.id} tabIndex={0} onClick={() => navigate(`/dosyalar/${row.caseId}`)} onKeyDown={(event) => { if (event.key === 'Enter') navigate(`/dosyalar/${row.caseId}`) }}><td>{new Date(row.closedAt).toLocaleDateString('tr-TR')}</td><td>{row.officeCaseNumber}</td><td><span className="plate plate--table">{row.plate}</span></td><td>{row.insurerName ?? '—'}</td><td>{row.caseType === 'traffic' ? 'Trafik' : 'Kasko'}</td><td>{row.responsibleUserName ?? '—'}</td><td>{row.serviceName ?? '—'}</td><td><span className="status-pill status-pill--review">Kontrol Gerekli</span></td><td>{formatCurrency(row.fee.currentVersion.candidateAmountMinor / 100)}</td></tr>)}</tbody></table></div>
-                {report.pendingFees.length === 0 && <div className="metadata-empty"><CheckCircle2 size={18} /><span>Bu filtrede ücret kontrolü bekleyen aday yok.</span></div>}
+                {report.pendingFees.length === 0 && (
+                  <div className="metadata-empty">
+                    <CheckCircle2 size={18} />
+                    <span>{report.includesFinancials ? 'Bu filtrede ücret kontrolü bekleyen aday yok.' : 'Mali tutarları görüntüleme yetkiniz yok.'}</span>
+                  </div>
+                )}
               </section>
             </>
           )}

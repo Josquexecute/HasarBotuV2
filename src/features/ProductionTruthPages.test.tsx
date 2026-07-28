@@ -107,6 +107,7 @@ describe('production truth sayfalari', () => {
           periodEndExclusive: '2026-08-01',
           generatedAt: '2026-07-16T10:00:00.000Z',
           periodBasis: 'open_created_closed_finalized',
+          includesFinancials: true,
           summary: {
             totalCaseCount: 3,
             openCaseCount: 1,
@@ -138,5 +139,55 @@ describe('production truth sayfalari', () => {
     expect(screen.getByText('Onaylı Eksper Ücreti')).toBeInTheDocument()
     expect(screen.getAllByText('Onaylı Değer Kaybı')).toHaveLength(2)
     expect(screen.queryByText(/28\.750,00/)).not.toBeInTheDocument()
+  })
+
+  // HB-011: mali görünürlüğü olmayan rol (secretary/read_only) için sunucu
+  // tutarları `null`, `pendingFees`'i boş ve `includesFinancials:false` döner.
+  // UI bu durumda UYDURULMUŞ ₺0,00 GÖSTERMEZ; yetki eksikliğini açıkça söyler.
+  it('Raporlar mali yetkisi olmayan rolde tutar yerine "Gizli" gösterir ve sıfır uydurmaz', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const currentPeriod = new Date().toISOString().slice(0, 7)
+    const reportPort = createHttpReportsFeesAdapter({
+      fetchImpl: async () => new Response(JSON.stringify({
+        period: currentPeriod,
+        periodStart: `${currentPeriod}-01`,
+        periodEndExclusive: '2026-08-01',
+        generatedAt: '2026-07-16T10:00:00.000Z',
+        periodBasis: 'open_created_closed_finalized',
+        includesFinancials: false,
+        summary: {
+          totalCaseCount: 3,
+          openCaseCount: 1,
+          closedCaseCount: 2,
+          trafficCaseCount: 2,
+          cascoCaseCount: 1,
+          approvedFeeCount: 1,
+          approvedFeeTotalMinor: null,
+          controlRequiredFeeCount: 0,
+          closedCaseWithoutFeeCount: 1,
+          approvedValueLossCount: 1,
+          approvedValueLossTotalMinor: null,
+          controlRequiredValueLossCount: 0,
+          notApplicableValueLossCount: 1,
+        },
+        distribution: [
+          { code: 'traffic', count: 2 },
+          { code: 'casco', count: 1 },
+          { code: 'closed', count: 2 },
+        ],
+        responsibleUsers: [],
+        services: [],
+        pendingFees: [],
+      }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    })
+    render(<MemoryRouter><ReportsPage reportPort={reportPort} /></MemoryRouter>)
+
+    expect(await screen.findByText('Mali tutarları görüntüleme yetkiniz yok; bu rapor rolünüz için tutar içermez.')).toBeInTheDocument()
+    expect(screen.getAllByText('Gizli')).toHaveLength(4)
+    // Operasyonel sayaçlar maskelenmez; yalnız tutarlar gizlenir.
+    expect(screen.getByText('Toplam Dosya')).toBeInTheDocument()
+    expect(screen.getByText('Mali tutarları görüntüleme yetkiniz yok.')).toBeInTheDocument()
+    // Uydurulmuş sıfır tutar hiçbir yerde gösterilmez.
+    expect(screen.queryByText(/₺0,00/)).not.toBeInTheDocument()
   })
 })
