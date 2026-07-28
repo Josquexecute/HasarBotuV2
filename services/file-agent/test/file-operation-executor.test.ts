@@ -53,6 +53,37 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
 
   const roots = () => ({ 'source-root': sourceRoot, 'destination-root': destinationRoot })
 
+  it('D4 fail-closed: kaynak kök erişilemezken HİÇBİR fiziksel adım denemez', async () => {
+    await rm(sourceRoot, { recursive: true, force: true })
+    const result = await executeFileOperation(roots(), applyPayload())
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'storage_unavailable' })
+  })
+
+  it('D4 fail-closed: hedef kök erişilemezken HİÇBİR fiziksel adım denemez', async () => {
+    const payload = applyPayload({ destination: { storageRootKey: 'destination-root', relativePath: '34ABC123-YENI' } })
+    await rm(destinationRoot, { recursive: true, force: true })
+    const result = await executeFileOperation(roots(), payload)
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'storage_unavailable' })
+    // Kaynak DOKUNULMADAN kalır: kısmi taşıma denemesi hiç başlamadı.
+    await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).resolves.toBeUndefined()
+  })
+
+  it('D4 fail-closed: cleanup işi de kaynak kök erişilemezken denemez', async () => {
+    const cleanupPayload = {
+      kind: 'file_operation_cleanup' as const,
+      operationId: '01900000-0000-7000-8000-000000000020',
+      source: { storageRootKey: 'source-root', relativePath: sourceRelative },
+      destination: { storageRootKey: 'source-root', relativePath: '2026/Temmuz 2026/34ABC123-YENI' },
+      manifestHash: 'irrelevant',
+      fileCount: 2,
+      directoryCount: 2,
+      totalBytes: 10,
+    }
+    await rm(sourceRoot, { recursive: true, force: true })
+    const result = await executeFileOperation(roots(), cleanupPayload as never)
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'storage_unavailable' })
+  })
+
   it('same-volume atomik rename uygular, manifesti doğrular ve kaynağı bırakmaz', async () => {
     const payload = applyPayload()
     const result = await executeFileOperation(roots(), payload)
@@ -72,11 +103,32 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
     await expect(access(join(sourceRoot, '2026', 'Temmuz 2026', '.hasarbotu-rename-01900000-0000-7000-8000-000000000020'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('mevcut hedefin üzerine yazmaz veya merge yapmaz', async () => {
+  it('mevcut hedefin üzerine yazmaz veya merge yapmaz; D4 manuel drift olarak işaretler', async () => {
     await mkdir(join(sourceRoot, '2026', 'Temmuz 2026', '34ABC123-YENI'), { recursive: true })
     await writeFile(join(sourceRoot, '2026', 'Temmuz 2026', '34ABC123-YENI', 'koru.txt'), 'koru')
-    expect(await executeFileOperation(roots(), applyPayload())).toEqual({ outcome: 'failed', errorCode: 'destination_exists' })
+    expect(await executeFileOperation(roots(), applyPayload())).toEqual({
+      outcome: 'failed',
+      errorCode: 'manual_drift_detected',
+      fileOperation: { phase: 'manual_recovery_required', strategy: 'atomic_rename', safeOutcomeCode: 'manual_drift_detected' },
+    })
     expect(await readFile(join(sourceRoot, '2026', 'Temmuz 2026', '34ABC123-YENI', 'koru.txt'), 'utf8')).toBe('koru')
+    // Kaynak da BIRAKILIR: ne hedef ne kaynak silinir/taşınır; kullanıcı kararına bırakılır.
+    await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).resolves.toBeUndefined()
+  })
+
+  it('mevcut hedefin içeriği kaynakla EŞLEŞİYORSA (atomic_rename) idempotent olarak kabul eder', async () => {
+    // Bu, agent'ın önceki başarılı ama ack'lenmemiş denemesini VEYA kullanıcının
+    // Explorer ile aynı sonucu üreten bir taşımasını temsil eder (D4).
+    await mkdir(join(sourceRoot, '2026', 'Temmuz 2026', '34ABC123-YENI', 'EVRAK'), { recursive: true })
+    await writeFile(join(sourceRoot, '2026', 'Temmuz 2026', '34ABC123-YENI', 'EVRAK', 'ruhsat.txt'), 'sentetik-ruhsat')
+    await writeFile(join(sourceRoot, '2026', 'Temmuz 2026', '34ABC123-YENI', 'not.txt'), 'sentetik-not')
+    const result = await executeFileOperation(roots(), applyPayload())
+    expect(result).toMatchObject({
+      outcome: 'verified',
+      fileOperation: { phase: 'destination_verified', strategy: 'atomic_rename', safeOutcomeCode: 'recovered_existing_destination' },
+    })
+    // Kaynak, hedef doğrulanmadan silinmez; ancak burada zaten hedefte durur —
+    // fonksiyon kaynağı silmez (yalnız rename dener), bu yüzden kaynak kalır.
     await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).resolves.toBeUndefined()
   })
 

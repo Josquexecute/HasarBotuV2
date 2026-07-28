@@ -13,6 +13,7 @@ import {
   applyLaborWorkbookWrite,
   previewLaborWorkbookWrite,
 } from './labor-workbook-writer.js'
+import { probeRootHealth, STORAGE_UNAVAILABLE_ERROR_CODE } from './root-health.js'
 
 export type LaborWorkbookExecutionResult =
   | {
@@ -32,6 +33,10 @@ export async function executeLaborWorkbookPreview(
   rootAbsolute: string,
   payload: LaborWorkbookPreviewJobPayload,
 ): Promise<LaborWorkbookExecutionResult> {
+  // D4: önizleme salt okumadır; köke ekstra yazma/silme trafiği yüklenmez.
+  const health = await probeRootHealth(rootAbsolute, undefined, { verifyWritable: false })
+  if (!health.ok) return { outcome: 'failed', errorCode: STORAGE_UNAVAILABLE_ERROR_CODE }
+
   const preview = await previewLaborWorkbookWrite({
     rootAbsolute,
     relativeWorkbookPath: payload.relativePath,
@@ -71,6 +76,11 @@ export async function executeLaborWorkbookApply(
   client: AgentApiClient,
   jobId: string,
 ): Promise<LaborWorkbookExecutionResult> {
+  // D4 fail-closed: köke GERÇEKTEN yazılabildiği doğrulanmadan Excel yazma
+  // denemesi yapılmaz (yarım/bozuk çalışma kitabı riski baştan kesilir).
+  const health = await probeRootHealth(rootAbsolute)
+  if (!health.ok) return { outcome: 'failed', errorCode: STORAGE_UNAVAILABLE_ERROR_CODE }
+
   const result = await applyLaborWorkbookWrite({
     rootAbsolute,
     relativeWorkbookPath: payload.relativePath,

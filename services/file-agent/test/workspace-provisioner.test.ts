@@ -1,4 +1,4 @@
-import { access, lstat, mkdtemp, mkdir, rm, symlink } from 'node:fs/promises'
+import { access, lstat, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -61,5 +61,18 @@ describe('provisionCaseWorkspace (sentetik geçici filesystem)', () => {
     await symlink(join(root, 'gerçek'), join(root, '2026'), 'junction')
     const result = await provisionCaseWorkspace(root, payload)
     expect(result).toEqual({ outcome: 'failed', errorCode: 'reparse_point_rejected' })
+  })
+
+  it('D4 fail-closed: kök yokken HİÇBİR dizin oluşturma denemesi yapmaz', async () => {
+    await rm(root, { recursive: true, force: true })
+    const result = await provisionCaseWorkspace(root, payload)
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'storage_unavailable' })
+  })
+
+  it('D4 fail-closed: kök bir dosyaysa storage_unavailable döner', async () => {
+    await rm(root, { recursive: true, force: true })
+    await writeFile(root, 'dosya, dizin değil')
+    const result = await provisionCaseWorkspace(root, payload)
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'storage_unavailable' })
   })
 })

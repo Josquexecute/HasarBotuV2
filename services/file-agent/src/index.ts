@@ -7,10 +7,22 @@ import { runLoop } from './agent.js'
 export { loadAgentConfigFromEnv, AgentConfigError, type AgentConfig } from './config.js'
 export {
   assertRealPathUnderRoot,
+  DEFAULT_MAX_ABSOLUTE_PATH_LENGTH,
   isUnderRoot,
   PathSafetyError,
   resolveUnderRoot,
 } from './path-resolver.js'
+export {
+  nodeRootHealthFileSystem,
+  probeRootHealth,
+  ROOT_HEALTH_PROBE_FILENAME,
+  STORAGE_UNAVAILABLE_ERROR_CODE,
+  type RootHealthCode,
+  type RootHealthFileSystem,
+  type RootHealthOptions,
+  type RootHealthResult,
+  type RootHealthStats,
+} from './root-health.js'
 export { streamSha256, verifyTarget, type VerifyResult } from './verifier.js'
 export { AgentApiError, createAgentApiClient, type AgentApiClient, type AgentApiClientOptions } from './api-client.js'
 export { runLoop, runOnce, type RunOnceResult } from './agent.js'
@@ -88,7 +100,11 @@ async function main(): Promise<void> {
   const config = loadAgentConfigFromEnv()
   const client = createAgentApiClient({ baseUrl: config.apiBaseUrl, agentId: config.agentId, secret: config.agentSecret })
   await runLoop(client, config, {
-    onCycleError: (code) => console.error(`File Agent cycle failed: ${code}`),
+    onCycleError: (code) => console.error(
+      code === 'storage_unavailable'
+        ? 'File Agent: storage root unreachable, not claiming new jobs (PENDING_STORAGE)'
+        : `File Agent cycle failed: ${code}`,
+    ),
   })
 }
 

@@ -2,6 +2,7 @@ import { lstat, mkdir, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { JobPayload } from '@hasarbotu/contracts'
 import { isUnderRoot, PathSafetyError, resolveUnderRoot } from './path-resolver.js'
+import { probeRootHealth, STORAGE_UNAVAILABLE_ERROR_CODE } from './root-health.js'
 
 export interface WorkspaceProvisionResult {
   readonly outcome: 'verified' | 'failed'
@@ -67,16 +68,20 @@ async function ensureDirectoryChain(
 /**
  * Güvenli, eklemeli ve idempotent klasör provisioning işlemi. Silme, taşıma veya
  * yeniden adlandırma yapmaz. Hata hâlinde oluşturulmuş dizinleri geriye almaz.
+ *
+ * D4 fail-closed: kök GERÇEKTEN yazılabilir olduğu (D4 root health probu ile)
+ * doğrulanmadan HİÇBİR dizin oluşturma denemesi yapılmaz — kısmi/tutarsız
+ * klasör yapısı ve yarım kalmış iş bütçesi (attempt) tüketimi riski baştan
+ * kesilir. Hata kodu her zaman `storage_unavailable`dır.
  */
 export async function provisionCaseWorkspace(
   rootAbsolute: string,
   payload: WorkspacePayload,
   hooks: WorkspaceProvisionHooks = {},
 ): Promise<WorkspaceProvisionResult> {
+  const health = await probeRootHealth(rootAbsolute)
+  if (!health.ok) return { outcome: 'failed', errorCode: STORAGE_UNAVAILABLE_ERROR_CODE }
   try {
-    const rootMetadata = await lstat(rootAbsolute)
-    if (rootMetadata.isSymbolicLink()) return { outcome: 'failed', errorCode: 'root_reparse_point_rejected' }
-    if (!rootMetadata.isDirectory()) return { outcome: 'failed', errorCode: 'root_not_a_directory' }
     const rootReal = await realpath(rootAbsolute)
     resolveUnderRoot(rootAbsolute, payload.relativePath)
 

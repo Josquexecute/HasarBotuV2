@@ -3,12 +3,22 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import type { JobPayload } from '@hasarbotu/contracts'
 import { assertRealPathUnderRoot, PathSafetyError, resolveUnderRoot } from './path-resolver.js'
+import { probeRootHealth, STORAGE_UNAVAILABLE_ERROR_CODE } from './root-health.js'
 
 /**
  * Dosya/dizin doğrulama (Paket 14). Agent GERÇEK dosyadan SHA-256'yı STREAMING
  * olarak hesaplar (tüm dosya belleğe ALINMAZ) ve boyutu gerçek okumadan alır.
  * İstemcinin beyan ettiği hash'e GÜVENMEZ; yalnız gözleneni raporlar (eşleşme
  * kararı sunucudadır). Dosya içeriği loglanmaz.
+ *
+ * D4: hedef yol çözülmeden ÖNCE kökün kendisi sağlıklı mı diye bakılır.
+ * Aksi hâlde `P:\` bağlantısı geçici koparsa `assertRealPathUnderRoot`in
+ * ENOENT'i "hedef silinmiş" (`missing`) sanılır — oysa dosya YERİNDE olabilir,
+ * yalnız kök o an görünmüyordur. Bu karışıklık `verification_status`u
+ * KALICI OLARAK `missing` yapabileceği için ciddi bir veri bütünlüğü
+ * riskidir; bu yüzden burada `storage_unavailable` (RETRYABLE) ile ayrılır.
+ * Salt-okuma olduğu için köke yazma/silme trafiği YÜKLENMEZ
+ * (`verifyWritable: false`) — yalnız kökün varlığı/türü doğrulanır.
  */
 export interface VerifyResult {
   readonly outcome: 'verified' | 'missing' | 'failed'
@@ -40,6 +50,10 @@ export async function verifyTarget(rootAbsolute: string, payload: JobPayload): P
   if (payload.kind === 'workspace' || payload.kind === 'file_operation' || payload.kind === 'file_operation_cleanup') {
     return { outcome: 'failed', errorCode: 'unsupported_job_kind' }
   }
+
+  const rootHealth = await probeRootHealth(rootAbsolute, undefined, { verifyWritable: false })
+  if (!rootHealth.ok) return { outcome: 'failed', errorCode: STORAGE_UNAVAILABLE_ERROR_CODE }
+
   let candidate: string
   try {
     candidate = resolveUnderRoot(rootAbsolute, payload.relativePath)

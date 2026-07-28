@@ -68,4 +68,20 @@ describe('verifyTarget (yalnız sentetik geçici dosyalar)', () => {
       await rm(outside, { recursive: true, force: true })
     }
   })
+
+  it('D4: kök TAMAMEN erişilemezken hedefi YANLIŞ biçimde "missing" saymaz', async () => {
+    // Gerçek kusur: kök (P:\) geçici koparsa hedefin ENOENT'i önceden "missing"
+    // sayılıyordu — oysa dosya YERİNDE olabilir, yalnız kök o an görünmüyordur.
+    // `verification_status`u KALICI OLARAK bozmamak için RETRYABLE bir kod
+    // (`storage_unavailable`) döner, "missing" DEĞİL.
+    await rm(root, { recursive: true, force: true })
+    const result = await verifyTarget(root, filePayload('EVRAK/r.pdf', sha256('x'), 1))
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'storage_unavailable' })
+  })
+
+  it('D4: kök geçerliyken (yalnız hedef eksikken) missing davranışı DEĞİŞMEDİ', async () => {
+    // Regresyon: kök sağlıklıyken gerçek "dosya silinmiş" durumu hâlâ missing.
+    const result = await verifyTarget(root, filePayload('EVRAK/yok.pdf', sha256('x'), 1))
+    expect(result.outcome).toBe('missing')
+  })
 })

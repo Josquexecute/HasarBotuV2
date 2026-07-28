@@ -2680,3 +2680,120 @@ Acik kalan: Windows installer/paketleme smoke'u bu pakette YOK (kapsam
 disi); openExternal/indirme testleri paketlenmemis calistirma ile
 dogrulandi. Paket 22 dagitim kararlari (cookieSecure, code signing,
 otomatik guncelleme) hala acik.
+
+## 2026-07-28 - HB-2026-107: D4 - File Agent kok saglik probu, STORAGE_UNAVAILABLE, manuel drift tespiti ve Windows yol uzunlugu siniri
+
+Karar: `services/file-agent`e dort ilgili, birbirini tamamlayan D4 yetenegi
+eklendi (FILE_STORAGE_AND_AGENT_PLAN.md §7, §11, §15 acik maddeleri).
+
+**Kok saglik probu** (yeni `root-health.ts`): yalniz `lstat` YETERLI
+SAYILMAZ - pCloud gibi senkron koklerde baglanti koparsa dizin listeleme
+cogu zaman son onbelleklenmis haliyle BASARILI gorunur. Kokun GERCEKTEN
+yazilabilir oldugu sabit adli (`.hasarbotu-health-probe.tmp`) kucuk bir
+dosya yazip SILEREK dogrulanir. Salt-okuma dogrulama iclerinde
+(`verifier.ts`) yazma probu ATLANIR (`verifyWritable:false`) - koke gereksiz
+yazma/silme trafigi yuklenmez; yalniz varlik/tur (dizin miyim, reparse point
+miyim) dogrulanir.
+
+**STORAGE_UNAVAILABLE**: probun basarisiz oldugu HER yerde sunucuya
+raporlanan hata kodu HER ZAMAN sabit `storage_unavailable` dizgesidir; kokun
+NEDEN erisilemez oldugu (`RootHealthResult.code`: `root_missing`,
+`root_not_a_directory`, `root_reparse_point_rejected`, `root_not_writable`,
+`root_probe_failed`) yalniz yerel tani amaclidir, sunucuya/audit'e tasinmaz.
+Bu kod HICBIR sunucu tarafi "nonRetryable" listesinde degildir; mevcut
+backoff/retry mekanizmasina (§9) hicbir server-side degisiklik olmadan
+RETRYABLE olarak akar.
+
+**PENDING_STORAGE**: yeni bir DB sutunu/migration/API sozlesmesi
+EKLENMEDI. Bunun yerine `agent.ts`da PROAKTIF bir kapi eklendi:
+`runOnce`, `client.claim()`i cagirmadan ONCE yapilandirilmis TUM koklerin
+HAFIF (yazma probu OLMAYAN) saglik kontrolunden gecer. Herhangi biri
+erisilemezse o dongude HICBIR iş claim EDILMEZ ve `{kind:
+'storage_unavailable'}` doner; `runLoop` bunu `no_work` gibi ele alip normal
+poll araligiyla bekler ve `onCycleError('storage_unavailable')` ile bildirir.
+Boylece PostgreSQL `jobs` tablosunda isler sessizce `pending` KALIR - bu,
+"PENDING_STORAGE" durumunun DOGAL, sema degisikligi gerektirmeyen karsiligidir.
+
+Bu kapi, bulunan GERCEK bir kusuru da onler: onceden, uzun bir `P:\`
+kesintisinde her iş TEKRAR TEKRAR claim edilip ANINDA basarisiz olarak
+attempt butcesini (varsayilan 5) tuketir ve kesinti biterse bile is zaten
+`dead_letter`a dusmus olurdu. Artik kesinti boyunca HICBIR attempt
+harcanmaz.
+
+Kapi bilincli olarak HAFIF (lstat-tabanli, yazma OLMAYAN) tutuldu: "yeni
+fiziksel isleri fail-closed durdur" talebi ozellikle YAZMA islerini
+hedefler; kok TAMAMEN kayipken (en yaygin gercek arizada - surucu/mount
+kaybi) hem okuma hem yazma isleri dogru sekilde durur, ama kok "gorunur ama
+salt-okunur/yer tutucu" gibi DAHA NADIR bir durumda salt-okuma dogrulama
+isleri claim edilmeye devam edebilir; bu isler kendi (READ, yazma probu
+olmayan) kontrolunden GECER. Fiziksel (yazma) yurutucülerin HER BIRI
+(`workspace-provisioner.ts`, `file-operation-executor.ts` - kaynak VE hedef
+kok, `labor-workbook-executor.ts`'in yalniz `apply` yolu) KENDI GIRISINDE
+AYRICA tam (yazma-kanitli) probu calistirir - claim sonrasi kok cokerse
+ikinci savunma katmanidir.
+
+**Manuel drift tespiti** (`file-operation-executor.ts`): `atomic_rename`
+stratejisinde hedef, agent bu isi HENUZ hic denemeden once zaten
+doluysa, onceden yalniz genel ve YANLIS bicimde yeniden-denenebilir sayilan
+`destination_exists` donuyordu (staged_copy stratejisi ayni durumda ZATEN
+manifest karsilastirmasi yapiyordu, atomic_rename yapmiyordu - tutarsizlik).
+Simdi atomic_rename de ayni manifest karsilastirmasindan gecer: icerik
+KAYNAKLA EsLESIYORSA (onceki basarili ama ack'lenmemis deneme YA DA
+kullanicinin Explorer ile ayni sonucu ureten bir tasimasi - ikisi
+filesystem'den AYIRT EDILEMEZ) zaten test edilmis
+`recovered_existing_destination` yoluna girer; ESLESMIYORSA kaynak
+BIRAKILIR (silinmez/taşınmaz) ve YENI, adiyla anilan `manual_drift_detected`
+kodu ile `manual_recovery_required` fazina girilir - kullanicidan MANUEL
+dogrulama ister, sessizce yeniden denemez (FILE_STORAGE_AND_AGENT_PLAN §7).
+
+**Windows toplam yol uzunlugu siniri** (`path-resolver.ts`):
+`resolveUnderRoot` - TUM fiziksel/dogrulama yollarinin TEK cozum noktasi -
+artik klasik Windows `MAX_PATH` sinirini (260 karakter NULL DAHIL, yani 259
+kullanilabilir) da dogrular; asan yol `windows_path_too_long` ile
+REDDEDILIR. Sinir fonksiyon parametresiyle gecersiz kilinabilir (varsayilan
+degismez) - ofis dagitiminda Windows uzun yol destegi
+(`LongPathsEnabled`, >32.767) acilip acilmayacagi HENUZ KARARLASTIRILMADI
+(bkz. DEPLOYMENT_AND_OPERATIONS_PLAN.md "uzun yol" acik notu); acik karar
+verilene kadar KORUYUCU (klasik) deger kullanilir. `.hasarbotu-staging/
+{jobId}` gibi turetilmis goreli yollar da AYNI cozum noktasindan gectigi
+icin otomatik kapsanir. Kapsam DISI (belgelenmis kalan risk): bir taban
+yola SONRADAN eklenen sabit soneklerin (iscilik yazim modulunun
+`.hasarbotu-write.lock`/`.hasarbotu-{token}.tmp.xlsx` gecici/kilit adlari)
+AYRICA yeniden kontrolu - taban yol zaten sinirin cok yakininda olan nadir
+bir kenar durum.
+
+Kapsam disi (bilinc olarak, ayni kok-ENOENT yanlis siniflandirma
+kalibini paylasan ama bu pakette DEGISTIRILMEYEN): `pdf-text-extractor.ts`
+ve `policy-ocr-extractor.ts` (AI/OCR okuma-agirlikli isler; "yeni fiziksel
+isleri" kapsamina girmiyor, ayrica sunucu tarafinda zaten RETRYABLE).
+
+Kanit (gercek gecici filesystem, gercek PostgreSQL + gercek API ile e2e'ler
+DAHIL, hicbir mock fs YOK): 24 yeni test - `root-health.test.ts` (8: saglikli
+kok, kok kayip/dosya/reparse-point, verifyWritable:false yazma denemez,
+enjekte edilmis yazma/lstat hatalari, silme basarisizligi sagligi
+degistirmez), `path-resolver.test.ts` (+4: sinirin tam altinda/ustunde,
+parametreyle gecersiz kilma, staging yolu da kapsanir), `verifier.test.ts`
+(+2: kok tamamen kayipken YANLIS "missing" DEGIL "storage_unavailable";
+kok saglikliyken gercek "missing" davranisi DEGISMEDI), `workspace-
+provisioner.test.ts` (+2), `file-operation-executor.test.ts` (+3 kok
+erisilemezlik + guncellenmis 1 mevcut test + yeni 1 idempotent-eslesme
+testi), `labor-workbook-executor.test.ts` (yeni dosya, 2), `agent-loop.test.ts`
+(+2, 1 guncellendi: sentetik `C:\synthetic` gercek gecici dizine cevrildi ki
+API-kapali senaryosu D4 kapisiyla KARISMASIN).
+
+`services/api`nin 496 testi (gercek PostgreSQL, `runOnce`/`executeFileOperation`
+kullanan gercek e2e'ler dahil) DEGISIKLIKSIZ gecti - server tarafinda hicbir
+kod degismedi.
+
+Etki: Yalniz `services/file-agent` degisti (yeni `root-health.ts` + 5 dosyada
+entegrasyon). API, contracts, UI, migration ve is akisi sozlesmeleri
+DEGISMEDI; yeni tablo/sutun/route yok. Ana calisma agacinda typecheck, lint
+(0 error / 2 mevcut warning, degismedi), gercek `hasarbotu_test` PostgreSQL
+ile **2.225 basarili / 6 mevcut ortam-kosullu UI skip** (file-agent 78→102,
++24), build/bundle 426.065 bayt (degismedi) ve moderate audit (0 acik) gecti.
+
+Acik kalan: Paket 22 dagitim karari olarak Windows uzun yol destegi
+(LongPathsEnabled) acilip acilmayacagi; acilirsa `resolveUnderRoot`in tek
+sabiti (`DEFAULT_MAX_ABSOLUTE_PATH_LENGTH`) guncellenecektir. PDF/OCR
+yurutucülerindeki ayni kok-ENOENT yanlis siniflandirma kalibi bu pakette
+DUZELTILMEDI (yukarida belirtildigi gibi bilincli kapsam disi).

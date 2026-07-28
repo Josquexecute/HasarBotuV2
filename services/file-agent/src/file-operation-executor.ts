@@ -11,6 +11,7 @@ import type {
 import { parseRelativePath } from '@hasarbotu/domain'
 import { isUnderRoot, PathSafetyError, resolveUnderRoot } from './path-resolver.js'
 import { streamSha256 } from './verifier.js'
+import { probeRootHealth, STORAGE_UNAVAILABLE_ERROR_CODE } from './root-health.js'
 
 type ApplyPayload = Extract<JobPayload, { readonly kind: 'file_operation' }>
 type CleanupPayload = Extract<JobPayload, { readonly kind: 'file_operation_cleanup' }>
@@ -106,6 +107,21 @@ async function assertOrdinaryDirectory(
   const resolved = await fs.realpath(candidate)
   if (!isUnderRoot(rootReal, resolved)) throw new PathSafetyError('root_escape', 'real path escapes root')
   return metadata
+}
+
+/**
+ * D4 fail-closed: taşıma/kopyalama BAŞLAMADAN ÖNCE ilgili köklerin (kaynak ve
+ * hedef; farklıysa ikisi) GERÇEKTEN erişilebilir olduğu doğrulanır. Aksi
+ * hâlde yarım taşıma/kopya riski baştan kesilir. Hata kodu her zaman
+ * `storage_unavailable`dır.
+ */
+async function probeRequiredRoots(...rootsAbsolute: readonly string[]): Promise<string | undefined> {
+  const unique = [...new Set(rootsAbsolute)]
+  for (const rootAbsolute of unique) {
+    const health = await probeRootHealth(rootAbsolute)
+    if (!health.ok) return STORAGE_UNAVAILABLE_ERROR_CODE
+  }
+  return undefined
 }
 
 async function rootContext(fs: FileSystemAdapter, rootAbsolute: string): Promise<{ rootReal: string }> {
@@ -300,6 +316,8 @@ async function applyOperation(
   const sourceRoot = roots[payload.source.storageRootKey]
   const destinationRoot = roots[payload.destination.storageRootKey]
   if (sourceRoot === undefined || destinationRoot === undefined) return { outcome: 'failed', errorCode: 'unknown_root_mapping' }
+  const unavailable = await probeRequiredRoots(sourceRoot, destinationRoot)
+  if (unavailable !== undefined) return { outcome: 'failed', errorCode: unavailable }
   try {
     await rootContext(fs, sourceRoot)
     await rootContext(fs, destinationRoot)
@@ -322,14 +340,23 @@ async function applyOperation(
         : { outcome: 'missing', errorCode: 'source_missing' }
     }
     if (destinationKind === 'directory' && !caseOnlyLogicalRename) {
+      // D4 manuel drift tespiti: hedef, agent bu işi HENÜZ hiç denemeden ÖNCE
+      // zaten var. İçerik kaynakla EŞLEŞİYORSA muhtemelen bir önceki agent
+      // denemesi ya da kullanıcının Explorer ile yaptığı taşıma sonucu doğru
+      // yerdedir — staged_copy ile ZATEN aynı biçimde ele alınan
+      // `recovered_existing_destination` yoluna girer. EŞLEŞMİYORSA kaynak
+      // BIRAKILIR (silinmez/taşınmaz) ve `manual_drift_detected` ile MANUEL
+      // inceleme istenir; önceden burası atomic_rename için yalnız genel,
+      // yanlış biçimde YENİDEN DENENEBİLİR sayılan `destination_exists`
+      // döndürüyordu.
       const sourceManifest = await buildWorkspaceManifest(fs, sourceRoot, payload.source.relativePath)
-      if (payload.strategy === 'staged_copy') {
-        const destinationManifest = await buildWorkspaceManifest(fs, destinationRoot, payload.destination.relativePath)
-        return sameManifest(sourceManifest, destinationManifest)
-          ? manifestResult('destination_verified', 'staged_copy', destinationManifest, 'recovered_existing_destination')
-          : manualRecovery('staged_copy', 'destination_manifest_mismatch')
+      const destinationManifest = await buildWorkspaceManifest(fs, destinationRoot, payload.destination.relativePath)
+      if (sameManifest(sourceManifest, destinationManifest)) {
+        return manifestResult('destination_verified', payload.strategy, destinationManifest, 'recovered_existing_destination')
       }
-      return { outcome: 'failed', errorCode: 'destination_exists' }
+      return payload.strategy === 'staged_copy'
+        ? manualRecovery('staged_copy', 'destination_manifest_mismatch')
+        : manualRecovery('atomic_rename', 'manual_drift_detected')
     }
 
     const sourceManifest = await buildWorkspaceManifest(fs, sourceRoot, payload.source.relativePath)
@@ -376,6 +403,8 @@ async function cleanupOperation(
   const sourceRoot = roots[payload.source.storageRootKey]
   const destinationRoot = roots[payload.destination.storageRootKey]
   if (sourceRoot === undefined || destinationRoot === undefined) return { outcome: 'failed', errorCode: 'unknown_root_mapping' }
+  const unavailable = await probeRequiredRoots(sourceRoot, destinationRoot)
+  if (unavailable !== undefined) return { outcome: 'failed', errorCode: unavailable }
   try {
     const destinationManifest = await buildWorkspaceManifest(fs, destinationRoot, payload.destination.relativePath)
     if (destinationManifest.manifestHash !== payload.manifestHash

@@ -11,6 +11,7 @@ import {
   executeLaborWorkbookApply,
   executeLaborWorkbookPreview,
 } from './labor-workbook-executor.js'
+import { probeRootHealth } from './root-health.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -19,9 +20,31 @@ import {
  */
 export type RunOnceResult =
   | { readonly kind: 'no_work' }
+  | { readonly kind: 'storage_unavailable' }
   | { readonly kind: 'reported'; readonly jobId: string; readonly outcome: string; readonly reported: JobResultResponse }
 
+/**
+ * D4 fail-closed: yapılandırılmış köklerden biri tamamen erişilemezse (kök
+ * kayıp/sürücü değil/reparse point) yeni iş HİÇ claim EDİLMEZ. Bu, uzun bir
+ * `P:\` kesintisinde işlerin tekrar tekrar claim edilip anında başarısız
+ * olarak attempt bütçesini tüketmesini (ve zamanla sessizce `dead_letter`a
+ * düşmesini) ÖNLER — kesinti boyunca işler `pending` kalır (PENDING_STORAGE).
+ * Yalnız HAFİF (yazma probu OLMAYAN) kontrol yapılır; belirli bir fiziksel
+ * işin yazma-yeteneği ihtiyacı ilgili yürütücüde AYRICA doğrulanır.
+ */
+async function allConfiguredRootsReachable(roots: Readonly<Record<string, string>>): Promise<boolean> {
+  for (const rootAbsolute of Object.values(roots)) {
+    const health = await probeRootHealth(rootAbsolute, undefined, { verifyWritable: false })
+    if (!health.ok) return false
+  }
+  return true
+}
+
 export async function runOnce(client: AgentApiClient, config: AgentConfig): Promise<RunOnceResult> {
+  if (!(await allConfiguredRootsReachable(config.roots))) {
+    return { kind: 'storage_unavailable' }
+  }
+
   const job = await client.claim()
   if (job === null) return { kind: 'no_work' }
 
@@ -111,21 +134,22 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
   return { kind: 'reported', jobId: job.id, outcome: result.outcome, reported }
 }
 
-/** Sürekli döngü: iş varken hemen devam eder, boş kuyrukta poll aralığı bekler. */
+/** Sürekli döngü: iş varken hemen devam eder, boş kuyrukta/depoda poll aralığı bekler. */
 export async function runLoop(
   client: AgentApiClient,
   config: AgentConfig,
   options: {
     readonly signal?: AbortSignal
-    /** Ham exception yerine yalnız güvenli döngü hata kodu bildirilir. */
-    readonly onCycleError?: (code: 'api_unavailable' | 'agent_cycle_failed') => void
+    /** Ham exception yerine yalnız güvenli döngü hata/durum kodu bildirilir. */
+    readonly onCycleError?: (code: 'api_unavailable' | 'agent_cycle_failed' | 'storage_unavailable') => void
   } = {},
 ): Promise<void> {
   const { signal } = options
   while (signal === undefined || !signal.aborted) {
     try {
       const result = await runOnce(client, config)
-      if (result.kind !== 'no_work') continue
+      if (result.kind === 'storage_unavailable') options.onCycleError?.('storage_unavailable')
+      if (result.kind !== 'no_work' && result.kind !== 'storage_unavailable') continue
     } catch (error) {
       options.onCycleError?.(error instanceof AgentApiError ? 'api_unavailable' : 'agent_cycle_failed')
     }
