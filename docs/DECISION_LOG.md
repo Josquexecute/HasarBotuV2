@@ -3081,3 +3081,148 @@ Acik kalan: D5'in "pCloud senkron klasore gec" onerisi, bu bulguyla
 yeniden degerlendirilmeyi HAK EDIYOR ama bu KULLANICI KARARI. Ofis
 dagitim makinesinde de ayni probun calistirilip sonucun (muhtemelen ayni
 pCloud surumu/ayariyla) DOGRULANMASI onerilir.
+
+## 2026-07-29 - HB-2026-111: D5 yeniden degerlendirmesi - gercek yazma/silme, ACL, pCloud oturum bagimliligi kaniti; NIHAI ONERI DEGISMEDI (gerekce degisti)
+
+Karar: HB-2026-110'un "P:\ SYSTEM'den GORUNUYOR" bulgusu uzerine, kullanici
+acikca D5'in yeniden degerlendirilmesini istedi: gercek SYSTEM yazma/silme
+probu, ACL/en-az-yetki durumu ve pCloud'un etkilesimli kullanici oturumuna
+bagimliligi kanitlanmali. Reboot/logoff, veri tasima, WinSW kurulumu
+YAPILMADI (kullanici talimati). `probe-p-drive-system-context.ps1`e geriye
+donuk UYUMLU, varsayilani DEGISTIRMEYEN yeni bir anahtar eklendi:
+`-IncludeWriteAndAclProbe` (kapatildiginda mevcut RUNBOOK adimlari BIREBIR
+ayni davranir). Bu anahtarla SYSTEM baglaminda UC ek kanit toplaniyor: (1)
+kokte sabit adli kucuk bir dosya yazip okuyup SILEREK gercek yazma/silme
+yetenegi (gercek musteri verisine DOKUNULMADAN); (2) `Get-Acl` ile kok ACL'i;
+(3) `\\?\GLOBALROOT\GLOBAL??\<Harf>:\` NT ad alani yolu dogrudan sinanarak
+surucu harfinin GLOBAL mi yoksa oturuma-ozel "Local" ad alaninda mi oldugu.
+
+**Sonuc 1 - Yazma/silme (GERCEKTEN test edildi, SYSTEM baglaminda):**
+`writeTestOk=True`, `deleteTestOk=True`. SYSTEM, P:\ kokunde gercekten
+dosya olusturup icerigini dogrulayip silebiliyor (yalniz kendi urettigi
+gecici isaretci `.hasarbotu-system-p-probe-writetest-<stamp>.tmp`; gercek
+veriye dokunulmadi).
+
+**Sonuc 2 - ACL / en-az-yetki (KRITIK bulgu):** `Get-Acl P:\` ->
+Owner=`Everyone`, tek ACE: `Everyone: -1 (Allow)` (`-1` = 0xFFFFFFFF, tum
+bitler acik — adlandirilmis `FullControl` degerinin [2032127] bile
+USTUNDE, sentetik/sanal dosya sistemlerinde tipik olan "sinirsiz" bir
+maskedir). **Bu, en-az-yetki DEGIL** — makinede calisan HERHANGI bir
+hesap/surec (SYSTEM'e ozel bir kisitlama YOK, ozel bir grant da YOK,
+"Everyone" tum haklara sahip) P:\ uzerinde tam denetime sahip. Windows'un
+kendi ACL mekanizmasi burada HICBIR erisim sinirlamasi UYGULAMIYOR.
+
+**Sonuc 3 - GLOBAL ad alani (HB-2026-108'in TEMEL varsayimini CURUTEN kanit):**
+`globalNamespaceEntryExists=True`. `\\?\GLOBALROOT\GLOBAL??\P:\`
+(oturuma-ozel DosDevices tablosunu TAMAMEN atlayan, dogrudan NT nesne
+yoneticisi kok ad alanina giden resmi Win32 `GLOBALROOT` onekiyle) `P:`
+GERCEKTEN bulundu ve listelenebilir cikti (`Directory.Exists=True`).
+Bu, surucu harfinin `\GLOBAL??` (makine geneli) ad alaninda kayitli
+oldugunu DOGRUDAN ve KESIN olarak kanitlar — HB-2026-108'in varsaydigi
+oturuma-ozel "Local" `DefineDosDevice` DEGIL.
+
+**Neden global? Kok neden bulundu — EldoS CBFS surucusu:** `fltmc instances`
+P:'e baglı bir "bfs" minifiltre gosterdi; `Win32_SystemDriver`/`sc qc bfs`
+bunun `bfs.sys` ("Aracilik Dosya Sistemi" = EldoS **Callback File System**)
+oldugunu, "FSFilter Virtualization" yukleme sirasi grubunda, **AUTO_START**
+(onyuklemede kendiliginden yuklenen) bir cekirdek surucusu oldugunu ve
+yalniz `FltMgr`e bagimli oldugunu gosterdi (ayni ailenin ikinci surucusu
+`cbfs20.sys` da yuklu/calisiyor). `QueryDosDevice("P:")` -> ham NT hedefi
+`\Device\{GUID}#0#0` — CBFS'in tipik cihaz adlandirma bicimi. `Win32_LogicalDisk`:
+`FileSystem=exFAT`, gercek bir `HarddiskVolume` DEGIL (sentetik/sanal
+birim). Cekirdek surucusu MAKINE GENELINDE (oturumdan bagimsiz) yuklu
+oldugu icin surucu harfi de GLOBAL kaydediliyor — HB-2026-108'in "her
+sanal surucu istemcisi oturuma-ozel DefineDosDevice kullanir" genellemesi
+BU pCloud kurulumu icin YANLIS cikti.
+
+**Sonuc 4 - pCloud etkilesimli oturum bagimliligi (mimari kanit, CANLI
+oldurme testi YAPILMADI):** CBFS'in TUM amaci, cekirdek surucunun gercek
+G/C (okuma/yazma/listeleme) isteklerini KAYDOLMUS bir KULLANICI MODU
+geri-cagirma (callback) isleyicisine devretmesidir — bu isleyici burada
+`pCloud.exe`dir (Oturum 1'de calisan, Windows SERVISI OLMAYAN, sıradan
+etkilesimli bir surec; `Get-Service`de "pcloud" adinda hicbir servis YOK,
+yalniz cekirdek suruculeri servis olarak kayitli). Surucu harfinin kendisi
+GLOBAL olsa da, SYSTEM'in bugun basarili sekilde okuyup yazabilmesi,
+`pCloud.exe`nin O ANDA Oturum 1'de calisiyor ve callback'lere yanit
+veriyor OLMASINA baglidir — cagri GLOBAL sembolik baglantidan gecse de,
+sonunda AYNI kayitli isleyiciye yonlendirilir. Kullanicinin acikca
+yasakladigi reboot/logoff YAPILMADAN VE `pCloud.exe`yi durdurup canli
+oturumu KESINTIYE UGRATMADAN bu bagimliligin dogrudan "surucuyu kapat,
+basarisiz oldugunu goster" testi BILINCLI olarak YAPILMADI (kullanicinin
+gercek, calisan masaustu oturumunu bozma riski); bunun yerine YUKARIDAKI
+mimari kanit zinciri (CBFS = callback mimarisi + pCloud.exe servis DEGIL +
+sadece Oturum 1'de calisan sıradan bir uygulama) kullanildi. Bu, dogrudan
+olcum degil ama COK GUCLU, spesifik teknik kaniti bir cikarimdir.
+
+**NIHAI ONERI (kullanicinin istedigi karar): NTFS senkronize klasor
+onerisi GECERLILIGINI KORUYOR — ancak HB-2026-108'in gerekcesi YANLIS,
+duzeltilmis gerekce asagida:**
+
+YANLIS (eski) gerekce: "SYSTEM surucu harfini GOREMEZ." Bu artik CURUTULDU
+— SYSTEM GORUYOR, okuyor, yaziyor, siliyor.
+
+DOGRU (yeni) gerekce, iki bagimsiz nedenle:
+1. **Kullanilabilirlik/dayaniklilik:** P:\ uzerindeki GERCEK G/C, Windows
+   SERVISI OLMAYAN, sadece bir insan oturum actiginda baslayan sıradan bir
+   masaustu uygulamasina (`pCloud.exe`) baglidir. Insansiz/kesintisiz 7/24
+   calismasi gereken bir Windows servisinin (File Agent), kendi calismasi
+   icin BASKA, servis-olmayan, oturuma bagli bir uygulamanin ayakta
+   kalmasina GUVENMESI kirilgan bir mimaridir — ozellikle sunucu
+   yeniden baslatildiginda otomatik oturum acma yoksa veya pCloud
+   uygulamasi coker/guncellenirse File Agent sessizce bozulur.
+2. **ACL/en-az-yetki:** `Everyone: -1 (tum haklar)` gercek musteri
+   verisi (EVRAK/HASAR/OLAY YERI/ONARIM/DEGER KAYBI) icin savunulabilir
+   bir erisim sinirlamasi SAGLAMIYOR; makinede calisan HERHANGI bir surec
+   veri okuyup degistirip silebilir. NTFS senkron klasore gecis, dosyalarin
+   normal NTFS ACL'leriyle (servis hesabina ozel, denetlenebilir izinlerle)
+   korunmasini SAGLAR — bu, AGENTS.md §6/§7'nin AI/kritik islem
+   sinirlarindan BAGIMSIZ, temel dosya sistemi katmaninda eksik olan bir
+   savunma katmanidir.
+
+Kanit (bu makinede, gercek SYSTEM calistirmasiyla, veri tasima/kurulum
+OLMADAN):
+- `writeTestOk=True`, `deleteTestOk=True` (gecici isaretci dosya,
+  gercek veri degil).
+- `Get-Acl P:\`: Owner=Everyone, `Everyone: -1 (Allow)`, tek ACE,
+  `IsInherited=False`. `[int][System.Security.AccessControl.FileSystemRights]::FullControl`
+  = 2032127 (karsilastirma icin) — ACE degeri (-1) bunun da OTESINDE.
+- `[System.IO.Directory]::Exists('\\?\GLOBALROOT\GLOBAL??\P:\')` = True
+  (hem SYSTEM baglaminda hem normal yukseltilmis oturumdan bagimsiz
+  olarak dogrulandi).
+- `Get-CimInstance Win32_SystemDriver`/`sc qc bfs`: `bfs.sys` = EldoS
+  Callback File System, `FSFilter Virtualization`, `AUTO_START`, yalniz
+  `FltMgr`e bagimli; `cbfs20.sys` da yuklu. `fltmc instances`: "bfs" P:'e
+  bagli en ust ornek. `QueryDosDevice("P:")` -> `\Device\{GUID}#0#0`.
+- `Get-Process`: `pCloud.exe` yalniz Oturum 1'de, sıradan bir kullanici
+  sureci olarak calisiyor; `Get-Service` sorgusunda "pcloud" adinda HICBIR
+  Windows servisi YOK.
+- `net use` bos (SMB/network mapping DEGIL); `Win32_LogicalDisk`:
+  `FileSystem=exFAT`, `DriveType=2` (sentetik/sanal birim, gercek
+  `HarddiskVolume` DEGIL).
+- Yeni `-IncludeWriteAndAclProbe` anahtari KAPALIYKEN (varsayilan) betik
+  cikisi HB-2026-110 ile BIREBIR ayni kaldi (geriye-donuk uyumluluk
+  dogrulandi, ayrica calistirilarak).
+- `[System.Management.Automation.Language.Parser]::ParseFile`: 0 hata.
+  `npm run check:deploy`: gecti. `npm audit --audit-level=moderate`:
+  0 acik. Yalniz `.ps1` dosyasi degistigi icin typecheck/lint/test/build
+  GEREKMEDI (TS/JS kaynagi degismedi).
+
+**Bilerek YAPILMAYAN (kullanici kisitlamasi + ihtiyat):** `pCloud.exe`nin
+canli oturumda durdurulup P:\'in GERCEKTEN erisilemez hale gelip
+gelmedigini gozlemleyen dogrudan "kill-test" — kullanicinin gercek,
+calisan masaustu oturumunu kesintiye ugratacagi icin YAPILMADI. Bu, D5
+sonucunu DEGISTIRMEZ (yukaridaki mimari kanit zaten yeterince guclu) ama
+istenirse acik bir kullanici onayiyla ayri bir adim olarak yapilabilir.
+
+Etki: Yalniz `deploy/windows-service/probe-p-drive-system-context.ps1`
+degisti (yeni opsiyonel `-IncludeWriteAndAclProbe` anahtari, varsayilan
+davranis DEGISMEDI). `install-services.ps1`, WinSW sablonlari, uygulama
+kodu, migration, API/contracts DEGISMEDI. Gercek kurulum veya veri tasima
+bu paket kapsaminda YAPILMADI.
+
+Acik kalan: Ofis dagitim makinesinde ayni derin probun calistirilip ACL/
+surucu mimarisinin (ayni EldoS CBFS surumu mu, farkli bir pCloud yapilandirmasi
+mi) DOGRULANMASI onerilir — farkli bir pCloud surumu/ayari FARKLI bir ACL/
+ad-alani sonucu verebilir. NTFS senkron klasore GECISIN KENDISI (uygulama,
+veri tasima, File Agent kok degisikligi) bu paketin kapsaminda DEGIL;
+ayri, acikca onaylanmis bir gorev olarak planlanmalidir.

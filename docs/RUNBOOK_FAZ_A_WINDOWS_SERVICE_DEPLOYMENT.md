@@ -16,15 +16,22 @@ belgenin kabul ölçütü).
   dondu (2017 "ön-sürüm" bile hâlâ önerilir); Görev Zamanlayıcı'nın SCM
   sağlık/bağımlılık semantiği yoktur. ADR-Q08 bu kararla kilitlenmiştir.
 - **Depolama kökü: pCloud SENKRONİZE KLASÖR modu, sürücü harfi DEĞİL.**
-  Ölçüldü ve doğrulandı (bkz. §2 gerekçe): `P:\` bir pCloud SANAL sürücüsüdür
-  (`net use` boş, `DriveType=2`, `VolumeName=pCloud Drive`), oluşturan
-  `pCloud.exe` süreci etkileşimli kullanıcı oturumundadır (Session 1).
-  Microsoft'un MS-DOS aygıt ad alanı davranışına göre
+  `P:\` bir pCloud SANAL sürücüsüdür (`net use` boş, `DriveType=2`,
+  `VolumeName=pCloud Drive`, `FileSystem=exFAT`). **HB-2026-111'de bu
+  makinede yapılan gerçek SYSTEM çalıştırması, aşağıdaki "Local" ad alanı
+  varsayımını ÇÜRÜTTÜ:** sürücü harfi aslında `\GLOBAL??` (makine geneli)
+  ad alanında kayıtlı (EldoS Callback File System `bfs.sys`/`cbfs20.sys`
+  kullanılıyor, basit bir oturuma-özel `DefineDosDevice` DEĞİL) ve SYSTEM
+  gerçekten görüp okuyup yazıp silebiliyor. Öneri yine de GEÇERLİ ama
+  gerekçesi farklı — bkz. §2: (1) gerçek G/Ç, Windows servisi OLMAYAN,
+  yalnız etkileşimli oturumda çalışan `pCloud.exe`ye (CBFS callback
+  işleyicisi) bağımlı, bu kullanılabilirlik için kırılgan; (2) ölçülen ACL
+  `Everyone: tüm haklar` — en-az-yetki sağlamıyor. Eski (yanlış) gerekçe
+  referans için: Microsoft'un genel MS-DOS aygıt ad alanı belgelemesi
   ([Defining an MS-DOS Device Name](https://learn.microsoft.com/en-us/windows/win32/fileio/defining-an-ms-dos-device-name))
-  böyle bir eşleme yalnız OLUŞTURAN oturumun görebileceği "Local" ad
-  alanına girer; hiçbir Windows servisi (hangi hesapla çalışırsa çalışsın)
-  bunu göremez. Bu, servis hesabı seçimiyle ÇÖZÜLEMEZ — kökün KENDİSİ
-  değişmelidir.
+  tipik `DefineDosDevice` çağrılarının oturuma özel "Local" ad alanına
+  girdiğini açıklar, ancak BU pCloud kurulumu (CBFS tabanlı) bu genellemeye
+  UYMUYOR.
 - **Başlangıç sırası: PostgreSQL -> API -> File Agent**, WinSW `<depend>`
   ile SCM seviyesinde ifade edilir. Bu bir İYİLEŞTİRMEDİR, TEK korumadır
   değildir: API (`services/api/src/server.ts`) Postgres hazır olmadan da
@@ -64,11 +71,22 @@ audit kaydına (§6) eklenir.
 **Ön koşul:** Adım 1 tamamlanmış; mevcut `P:\BARAN GLOBAL EKSPERTİZ`
 içeriğinin bütünlüğü biliniyor (dosya sayısı/toplam boyut notu).
 
-**Gerekçe (ölçülüp doğrulandı, bkz. §0):** pCloud'un "Sanal Sürücü" (Drive)
-modu bir sürücü harfi oluşturur ve bu, YALNIZ etkileşimli kullanıcı
-oturumunda görünür. pCloud'un "Senkronize Klasör" (Sync) modu ise düz bir
-NTFS dizinini sürekli senkronize eder — bu, sıradan bir dizin olduğu için
-Windows servis hesabı dâhil HERHANGİ bir süreç, NTFS izniyle erişebilir.
+**Gerekçe (HB-2026-111'de düzeltildi — bkz. DECISION_LOG):** İlk gerekçe
+("SYSTEM sürücü harfini göremez") bu makinede yapılan gerçek SYSTEM
+çalıştırmasıyla ÇÜRÜTÜLDÜ — pCloud bu kurulumda EldoS Callback File System
+(`bfs.sys`) kullanıyor ve sürücü harfi `\GLOBAL??` (makine geneli) ad
+alanında kayıtlı; SYSTEM gerçekten okuyup yazıp silebiliyor. Geçiş önerisi
+GEÇERLİLİĞİNİ KORUYOR ama gerekçesi farklı, iki bağımsız nedenle: (1)
+**kullanılabilirlik** — gerçek G/Ç, Windows servisi OLMAYAN, yalnız bir
+kullanıcı oturum açtığında çalışan `pCloud.exe`ye (callback işleyicisi)
+bağımlıdır; insansız 7/24 çalışması gereken bir Windows servisinin buna
+güvenmesi kırılgandır. (2) **ACL/en-az-yetki** — ölçülen ACL
+`Everyone: tüm haklar` (tek ACE, `-1`) döndürdü; bu, gerçek müşteri verisi
+için savunulabilir bir erişim sınırı SAĞLAMIYOR. pCloud'un "Senkronize
+Klasör" (Sync) modu düz bir NTFS dizinini senkronize eder — bu, sıradan
+bir dizin olduğu için hem servis hesabına özel NTFS ACL'leriyle
+korunabilir hem de Windows servisinden bağımsız (interaktif oturum
+gerektirmeyen) bir bileşen tarafından senkronize edilir.
 
 **Komut/işlem:**
 
@@ -249,10 +267,13 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   yollarının doğru `exit 1` ile durduğu (Postgres servisi yokken,
   `dist\index.js` yokken) SENTETİK bir dizin yapısıyla test edildi;
   GERÇEK bir servis hiçbir zaman kurulmadı.
-- `probe-p-drive-system-context.ps1`in sözdizimi doğrulandı; GERÇEK
-  SYSTEM görev testi bu geliştirme ortamında yönetici yükseltmesi
-  mevcut olmadığı için ÇALIŞTIRILAMADI (D5 karar raporunda belirtildi) —
-  ofis makinesinde Adım 2.5 olarak ilk gerçek çalıştırma yapılmalıdır.
+- `probe-p-drive-system-context.ps1` bu makinede GERÇEK yönetici
+  yükseltmesiyle çalıştırıldı (HB-2026-110/111): `LastTaskResult=0`,
+  P:\ SYSTEM'den görünüyor/okunabiliyor/yazılabiliyor/silinebiliyor;
+  sürücü harfi `\GLOBAL??` ad alanında (EldoS CBFS), ACL `Everyone: tüm
+  haklar`. Bu, TEK bir geliştirme makinesindeki sonuçtur — ofis
+  dağıtım makinesinde Adım 2.5 olarak bağımsız doğrulanmalıdır (farklı
+  pCloud sürümü/yapılandırması farklı sonuç verebilir).
 
 ## Açık kalan
 
