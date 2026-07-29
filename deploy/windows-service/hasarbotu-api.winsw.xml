@@ -1,0 +1,64 @@
+<!--
+  HasarBotu V2 — Merkezi API için WinSW servis şablonu (D5, HB-2026-108).
+
+  ŞABLON dosyasıdır; olduğu gibi kurulmaz. `install-services.ps1` bu dosyayı
+  OKUR, aşağıdaki yer tutucuları (__...__) gerçek değerlerle değiştirip
+  kurulum hedefine YAZAR — bu şablon repo'da her zaman makineden bağımsız
+  kalır:
+    - __NODE_EXE__     : node.exe'nin mutlak yolu (varsayılan tespit edilir)
+    - __APP_DIR__      : `services/api` dağıtım dizininin mutlak yolu
+
+  SECRET/DATABASE_URL/GEMINI_API_KEY BU DOSYADA YOKTUR. Servis, Windows
+  ortam değişkenlerini normal bir süreç gibi devralır; secret'lar `setx /M`
+  ile SİSTEM kapsamında ayrı ayarlanır (bkz. RUNBOOK, Adım 4). Bu, mevcut
+  `services/api/src/config.ts` politikasıyla birebir tutarlıdır: API zaten
+  `.env` kullanmaz, değerleri doğrudan process ortamından okur.
+
+  Bağımlılık: `postgresql-x64-17` (bu makinede ZATEN kurulu, NetworkService
+  hesabıyla çalışıyor — bkz. RUNBOOK Adım 1 doğrulaması). API, Postgres
+  SCM'de "running" olmadan BAŞLAMAZ. Bu; API'nin kendi kodundaki (havuz
+  TEMBEL, `/health` `degraded` ile hazır olmayan bağımlılığı güvenle
+  bildirir) dayanıklılığa EK bir katmandır, TEK koruma değildir — D5 karar
+  raporunda doğrulandığı gibi API zaten Postgres olmadan çökmeden başlar.
+-->
+<service>
+  <id>hasarbotu-api</id>
+  <name>HasarBotu V2 - Merkezi API</name>
+  <description>HasarBotu V2 merkezi API sürecini barındırır. Doğrudan elle durdurulmamalı; bakım için önce File Agent, sonra bu servis durdurulur.</description>
+
+  <executable>__NODE_EXE__</executable>
+  <arguments>dist\index.js</arguments>
+  <workingdirectory>__APP_DIR__</workingdirectory>
+
+  <env name="NODE_ENV" value="production"/>
+
+  <!-- Yalnız postgresql SCM'de "running" olduktan SONRA başlar (bkz. üstteki not). -->
+  <depend>postgresql-x64-17</depend>
+
+  <startmode>Automatic</startmode>
+
+  <!-- Artan gecikmeli sınırlı yeniden deneme; sonsuz hızlı restart YOK
+       (DEPLOYMENT_AND_OPERATIONS_PLAN.md §2.4). 3 denemeden sonra saat
+       başına sıfırlanır; bu süre içinde 4. çökme insan incelemesi bekler. -->
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+
+  <!-- Yapılandırılmış JSON log zaten uygulamanın kendi çıktısıdır (Pino);
+       WinSW yalnız stdout/stderr'i dosyaya döndürür, saklama sınırı
+       tanımlar (DEPLOYMENT_AND_OPERATIONS_PLAN.md §2.6). Parola/oturum
+       belirteci/e-posta gövdesi/mutlak dosya yolu API loglayıcısında zaten
+       yok (services/api/src/app.ts REDACTED_LOG_PATHS); WinSW bu davranışı
+       DEĞİŞTİRMEZ, yalnız taşır. -->
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+
+  <!-- Servis durdurulduğunda graceful shutdown'a (SIGINT/SIGTERM,
+       services/api/src/server.ts) zaman tanınır; süre aşılırsa WinSW süreci
+       zorla sonlandırır. -->
+  <stoptimeout>15 sec</stoptimeout>
+</service>

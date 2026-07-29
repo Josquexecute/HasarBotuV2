@@ -1,0 +1,55 @@
+<!--
+  HasarBotu V2 — File Agent için WinSW servis şablonu (D5, HB-2026-108).
+
+  ŞABLON dosyasıdır; olduğu gibi kurulmaz — bkz. hasarbotu-api.winsw.xml
+  başındaki not (aynı yer tutucu/kurulum modeli burada da geçerlidir).
+
+  ÖN KOŞUL (kritik, D5 karar raporunda ölçülüp doğrulandı): bu servis
+  yalnız `HASARBOTU_AGENT_ROOTS` GERÇEK bir yerel dizine (pCloud
+  SENKRONİZE KLASÖR modu, sürücü harfi DEĞİL) işaret ediyorsa çalışabilir.
+  P:\ gibi pCloud SANAL SÜRÜCÜSÜ etkileşimli kullanıcı oturumuna bağlıdır
+  ve Session 0'da (yani HERHANGİ bir Windows servisinde) GÖRÜNMEZ — bkz.
+  `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` §2 (pCloud geçiş
+  runbook'u). Bu servis, o geçiş TAMAMLANMADAN kurulmamalıdır: aksi hâlde
+  D4'te eklenen kök sağlık probu her döngüde `storage_unavailable`
+  bildirir ve hiçbir iş asla claim edilmez (fail-closed; veri kaybı
+  YOKTUR ama iş de ilerlemez).
+
+  `HASARBOTU_AGENT_SECRET` ve `HASARBOTU_AGENT_ROOTS` (JSON) BU DOSYADA
+  YOKTUR; makine ortam değişkeni olarak ayrı ayarlanır (RUNBOOK Adım 4/5).
+-->
+<service>
+  <id>hasarbotu-file-agent</id>
+  <name>HasarBotu V2 - File Agent</name>
+  <description>HasarBotu V2 File Agent kuyruk işçisini barındırır. Depolama kökü pCloud senkronize klasörüne bağımlıdır; bkz. RUNBOOK.</description>
+
+  <executable>__NODE_EXE__</executable>
+  <arguments>dist\index.js</arguments>
+  <workingdirectory>__APP_DIR__</workingdirectory>
+
+  <env name="NODE_ENV" value="production"/>
+
+  <!-- API servisi SCM'de "running" olmadan başlamaz. File Agent'ın kendi
+       runLoop'u (D4) API henüz hazır değilken de çökmeden bekler/yeniden
+       dener — bu bağımlılık ek bir katmandır, tek koruma değildir. -->
+  <depend>hasarbotu-api</depend>
+
+  <startmode>Automatic</startmode>
+
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+
+  <!-- Planlı bakımda önce bu servis durdurulmalıdır ki yürüyen bir fiziksel
+       iş (workspace/file_operation/işçilik yazımı) yarıda KESİLMESİN;
+       lease süresi dolmadan aynı işi başka bir agent süreci de ALMAZ
+       (mevcut lease/heartbeat modeli, services/api/src/agent/store.ts). -->
+  <stoptimeout>30 sec</stoptimeout>
+</service>

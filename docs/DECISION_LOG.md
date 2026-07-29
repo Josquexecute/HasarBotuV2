@@ -2797,3 +2797,111 @@ Acik kalan: Paket 22 dagitim karari olarak Windows uzun yol destegi
 sabiti (`DEFAULT_MAX_ABSOLUTE_PATH_LENGTH`) guncellenecektir. PDF/OCR
 yurutucülerindeki ayni kok-ENOENT yanlis siniflandirma kalibi bu pakette
 DUZELTILMEDI (yukarida belirtildigi gibi bilincli kapsam disi).
+
+## 2026-07-29 - HB-2026-108: D5 - ADR-Q08 kilidi (WinSW), P:\ gorunurluk bulgusu ve Faz A servis dagitim paketi
+
+Karar: ADR-Q08 (Windows servis yonetimi) **WinSW** ile kilitlendi. Ayrica
+D5 arastirmasi sirasinda gercek bir mimari kisit olculup dogrulandi:
+mevcut `P:\` pCloud SANAL surucusu, servis sarmalayici SECIMINDEN
+BAGIMSIZ olarak hicbir Windows servisinden GORULEMEZ. Bu paket hem karari
+hem bu bulgunun COZUMUNU (config + runbook + otomatik dogrulama olarak)
+teslim eder. **Gercek kurulum bu pakette YAPILMADI** (kullanici talimati);
+tum artefaktlar sentetik/kum havuzu ortamda dogrulandi.
+
+**P:\ bulgusu (olculup dogrulandi):** `net use` BOS (klasik SMB paylasimi
+DEGIL); `Get-CimInstance Win32_LogicalDisk` `DriveType=2`
+(cikarilabilir/sanal aygit), `VolumeName=pCloud Drive`; olusturan
+`pCloud.exe` sureci etkilesimli kullanici oturumunda (Session 1), servis
+degil. Microsoft'un resmi belgelemesi
+([Defining an MS-DOS Device Name](https://learn.microsoft.com/en-us/windows/win32/fileio/defining-an-ms-dos-device-name)):
+LocalSystem OLMAYAN bir surecin olusturdugu aygit adi yalniz o oturumun
+AuthenticationID'sinin gorebilecegi "Local" MS-DOS aygit ad alanina girer;
+Global ad alanina yalniz LocalSystem yazabilir. Bu, servis hesabi
+SECIMIYLE (SYSTEM/NetworkService/ozel hesap fark etmez) COZULEMEYECEK bir
+kisittir. SYSTEM baglaminda birebir ampirik dogrulama, bu gelistirme
+ortaminda yonetici yukseltmesi bulunmadigi icin YAPILAMADI (kayitli, acik
+kalan tek nokta); bunun yerine tekrar kullanilabilir, kendi kendini
+temizleyen bir prob araci (`probe-p-drive-system-context.ps1`) teslim
+edildi — ofis makinesinde Adim 2.5 olarak ilk calistirma BU sonucu
+kesinlestirecektir.
+
+**Cozum: pCloud'u "Senkronize Klasor" moduna gecirmek** (sürücü harfi
+DEGIL, duz NTFS dizini) — veritabani semasi zaten yalniz `rootKey` +
+goreli yol tuttugu icin (`FILE_STORAGE_AND_AGENT_PLAN.md` §2) bu YALNIZ
+File Agent'in yerel `HASARBOTU_AGENT_ROOTS` degerinin guncellenmesidir;
+kod/migration/API degismez.
+
+**WinSW secimi gerekcesi:** NSSM'in resmi karali surumu 2014-08-31'de
+dondu, Windows 10+ icin bile yalniz 2017-04-26 "on-surum" onerilir
+(nssm.cc/download, dogrudan resmi kaynaktan dogrulandi — bir arama motoru
+ozetinin "2.25/VS2026" iddiasi resmi kaynakla CELISTIGI icin
+KULLANILMADI). Gorev Zamanlayici SCM saglik/bagimlilik semantiginden
+yoksundur. WinSW aktif bakimli (guncel karali surum v2.12.0, 2025-01-28),
+`<depend>` ile bagimlilik sirasini deklaratif ifade eder, config repo'da
+versiyonlanabilir XML'dir.
+
+**Baslangic sirasi:** PostgreSQL (bu makinede zaten kurulu,
+`NT AUTHORITY\NetworkService`, `DEPENDENCIES: RPCSS`, gecikmesiz
+Auto-start) -> API (`<depend>postgresql-x64-17</depend>`) -> File Agent
+(`<depend>hasarbotu-api</depend>`). Kod incelemesiyle dogrulandi: bu SCM
+sirasi bir IYILESTIRMEDIR, TEK korumadir DEGILDIR — `services/api/src/
+server.ts` Postgres havuzunu TEMBEL kurar ve Postgres hazir olmadan da
+`/health` `degraded` ile cokmeden baslar; `services/file-agent/src/
+agent.ts`in `runLoop`u (D4) API hazir olmadan da cokmeden bekler/yeniden
+dener.
+
+**Teslim edilen artefaktlar** (`deploy/windows-service/`):
+- `hasarbotu-api.winsw.xml`, `hasarbotu-file-agent.winsw.xml`: makineden
+  bagimsiz SABLONLAR (`__NODE_EXE__`/`__APP_DIR__` yer tutuculari);
+  secret/DATABASE_URL/mutlak `P:\`/gelistirici yolu ICERMEZ; roll-by-size
+  log dondurme (10 MB x 8 dosya), artan gecikmeli restart (10/30/60 sn,
+  1 saatte sifirlanir), `<depend>` zinciri.
+- `install-services.ps1`: PLANLA -> ONIZLE -> ONAY -> UYGULA modeli
+  (AGENTS.md §7). `-Apply` verilmeden HICBIR degisiklik yapmaz; ancak
+  GERCEK kurulum (`-Apply`) YALNIZ yukseltilmis oturumda calisir — plan
+  gorunumu yukseltme GEREKTIRMEZ (operator once guvenle onizler).
+- `probe-p-drive-system-context.ps1`: herhangi bir surucu harfinin SYSTEM
+  baglamindan gorunurlugunu, gecici/kendi kendini temizleyen bir Gorev
+  Zamanlayici gorevi ile olcer.
+- `scripts/check-windows-service-configs.mjs` (`npm run check:deploy`):
+  iki WinSW sablonunun yapisal dogrulugunu (etiket dengesi, gerekli
+  elemanlar, dogru `<depend>` zinciri, secret/mutlak yol SIZINTISI YOK)
+  otomatik kanitlar; yeni dependency EKLENMEDI (AGENTS.md §8).
+- `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`: sahip/on kosul/
+  komut/beklenen cikti/durdurma olcutu/dogrulama/audit kaniti alanlariyla
+  (DEPLOYMENT_AND_OPERATIONS_PLAN.md §5 sablonu) tam prosedur.
+
+**Kanit (gercek kurulum OLMADAN):**
+- `check-windows-service-configs.mjs` GECTI; kasitli BOZULMUS bir XML'e
+  karsi da dogrulandi (etiket dengesi hatasini DOGRU yakaladi, sonra
+  orijinal dosya geri yuklendi).
+- Her iki `.ps1` dosyasi `[System.Management.Automation.Language.Parser]`
+  ile sozdizimi GECERLI bulundu.
+- `install-services.ps1` SENTETIK bir dizin yapisiyla UC senaryoda test
+  edildi: (1) tum on kosullar saglanmis + yukseltme YOK -> yalniz plan
+  basariyla gosterildi, HICBIR dosya olusmadi; (2) `-Apply` VAR ama
+  yukseltme YOK -> acikca durdu (exit 1), HICBIR dosya olusmadi;
+  (3) `dist\index.js` eksik -> acikca durdu (exit 1). Hicbir gercek
+  WinSW kurulumu/servis kaydi YAPILMADI.
+- `probe-p-drive-system-context.ps1` yukseltilmemis oturumda calistirildi:
+  acik, eylemsel hata mesajiyla exit 2 ile durdu; HICBIR Gorev
+  Zamanlayici gorevi olusturulmadi (`Get-ScheduledTask` sonrasinda
+  dogrulandi).
+
+Etki: Yeni `deploy/windows-service/` dizini + `scripts/
+check-windows-service-configs.mjs` + yeni runbook. Kok `package.json`a
+yalniz `check:deploy` betigi eklendi (ana `build`/`test` zincirlerine
+DAHIL EDILMEDI — bu bir uygulama testi degil, dagitim artefakti
+dogrulamasidir). Uygulama kodu, sema, contracts, migration DEGISMEDI. Ana
+calisma agacinda typecheck, lint (0 error / 2 mevcut warning, degismedi),
+gercek `hasarbotu_test` PostgreSQL ile **2.225 basarili / 6 mevcut
+ortam-kosullu UI skip** (degismedi — D5 uygulama testi eklemedi),
+build/bundle 426.065 bayt (degismedi) ve moderate audit (0 acik) gecti.
+
+Acik kalan: SYSTEM baglaminda P:\ gorunmezliginin birebir ampirik
+kaniti ofis makinesinde (yonetici erisimiyle) `probe-p-drive-system-
+context.ps1` ile ALINMALIDIR — mevcut kanit cok yuksek guvenle ayni
+sonuca isaret eden GOZLEM + resmi Microsoft davranis belgesidir, ancak
+SYSTEM baglaminda dogrudan calistirilmis DEGILDIR. WinSW ikili dosyasinin
+butunluk dogrulamasi (checksum/imza) operator kararina birakildi. TLS
+(OPS-Q03) ve izleme (OPS-Q05) bu paketin kapsami DISINDADIR.

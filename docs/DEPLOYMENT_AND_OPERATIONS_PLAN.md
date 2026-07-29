@@ -39,7 +39,7 @@ Bu bilgisayar kişisel günlük kullanım makinesi değil, geçici merkezi servi
 - PostgreSQL yalnız API ve yetkili bakım kaynağından erişilebilir; ofis istemcilerine genel olarak açılmaz.
 - API portu Windows Güvenlik Duvarı'nda yalnız gerekli özel ağ profiline ve mümkünse ofis alt ağına açılır.
 - File Agent dışarıdan dinleyen genel bir port sunmaz; iş kuyruğunu PostgreSQL/API sözleşmesi üzerinden alır.
-- P:\ gibi sürücü harfi servis hesabında garanti değilse UNC veya servis hesabına özel yerel kök ayarı değerlendirilir. Veritabanındaki göreceli yol modeli değişmez.
+- **Ölçülüp doğrulandı (HB-2026-108, 2026-07-29):** mevcut `P:\` pCloud sanal sürücüsü servis hesabından (hangisi olursa olsun) GÖRÜNMEZ — bu bir varsayım değil, gözlemlenmiş mimari kısıttır. Çözüm: pCloud senkronize klasör moduna geçiş (bkz. `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` §2). Veritabanındaki göreceli yol modeli değişmez.
 
 ### 2.3 Servis hesapları ve en az yetki
 
@@ -52,7 +52,7 @@ Bu bilgisayar kişisel günlük kullanım makinesi değil, geçici merkezi servi
 ### 2.4 Servis başlangıcı ve yeniden başlatma
 
 - PostgreSQL Windows hizmeti olarak otomatik başlar.
-- API ve File Agent, karar verilecek Windows hizmet sarmalayıcısı ile otomatik ve gecikmeli başlar; WinSW önerisi açık karardır.
+- API ve File Agent, WinSW ile otomatik başlar (HB-2026-108, 2026-07-29 — bkz. `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`).
 - Servisler kullanıcı oturumu açılmadan çalışmalıdır.
 - Başarısız başlangıçlarda artan gecikmeli sınırlı yeniden deneme uygulanır; sonsuz hızlı yeniden başlatma yapılmaz.
 - Başlangıç sırası: PostgreSQL sağlıklı -> API hazır -> File Agent kuyruk tüketebilir. Her servis bağımlılığı hazır değilken güvenli biçimde bekler.
@@ -175,11 +175,11 @@ Yalnız endpoint, sır yönetimi, depolama kökü eşlemesi, servis barındırma
 
 Gerçek uygulama başlamadan şu kısa runbook'lar oluşturulmalıdır:
 
-- servis başlatma/durdurma ve sürüm doğrulama,
+- **servis başlatma/durdurma, sürüm doğrulama ve pCloud senkronize klasör geçişi — hazır: `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` (HB-2026-108, 2026-07-29).**
 - API/File Agent güncelleme ve geri alma,
 - migration önizleme/uygulama/doğrulama,
 - PostgreSQL yedekleme ve geri yükleme,
-- depolama kökü/pCloud kesintisi,
+- depolama kökü/pCloud kesintisi (ilk kurulum kısmı yukarıdaki runbook'ta; işletim-zamanı kesinti senaryosu ayrı runbook gerektirir),
 - disk doluluk ve log temizleme,
 - takılı File Agent işi inceleme,
 - sertifika yenileme,
@@ -192,7 +192,7 @@ Her runbook sahip, ön koşul, komut/işlem, beklenen çıktı, durdurma ölçü
 
 | Kimlik | Karar | Seçenekler | Geçici öneri | Ne zaman kilitlenmeli |
 |---|---|---|---|---|
-| OPS-Q01 | Faz A servis sarmalayıcısı | WinSW / NSSM / görev zamanlayıcı | WinSW değerlendirmesi | API iskeleti öncesi |
+| OPS-Q01 | Faz A servis sarmalayıcısı | WinSW / NSSM / görev zamanlayıcı | **Kilitlendi (HB-2026-108, 2026-07-29): WinSW.** Config/runbook `deploy/windows-service/`, `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` | Kilitlendi |
 | OPS-Q02 | Faz A PostgreSQL | Yerel Windows / container | Yerel Windows hizmeti | Veritabanı paketi öncesi |
 | OPS-Q03 | TLS otoritesi | Kurumsal CA / yerel CA / geçici sertifika | Yönetilen yerel veya kurumsal CA | LAN kabulü öncesi |
 | OPS-Q04 | Sabit ad çözümleme | Yerel DNS / DHCP+hosts | Yerel DNS | Faz A kurulumunda |
