@@ -3365,3 +3365,106 @@ uygulama, WinSW sablonuna `<serviceaccount>` ekleme, parola rotasyon
 prosedurunun yazilmasi) AYRI, acikca onaylanmis bir uygulama gorevidir.
 Virtual Service Account alternatifi kullanici tarafindan yeniden
 degerlendirilebilir.
+
+## 2026-07-29 - HB-2026-114: D6 - File Agent servis hesabi plan/preview/apply betigi yazildi ve test edildi (gercek hesap/ACL/servis kurulumu YOK)
+
+Karar: HB-2026-113'un karari `deploy/windows-service/setup-file-agent-
+service-account.ps1` olarak GERCEK bir arac haline getirildi.
+`install-services.ps1` ile AYNI Planla->Onizle->Onay->Uygula modelini
+kullanir. Kullanicinin acik talimatiyla bu pakette GERCEK hesap
+olusturulmadi, GERCEK ACL degistirilmedi, GERCEK servis kurulmadi, veri
+tasinmadi — yalniz betik yazildi ve GUVENLE test edilebilen kisimlari
+GERCEKTEN test edildi.
+
+**Dort dogrulama/uygulama alani (betigin kendisi hem PLAN hem APPLY
+modunda calisir):**
+
+1. Hesap varligi + "Users" grubu uyeligi.
+2. `SeServiceLogonRight` (Log on as a service) — kendi LSA
+   `LsaAddAccountRights`/`LsaEnumerateAccountRights` P/Invoke'u ile
+   (ek dependency YOK, yalniz `advapi32.dll`); WinSW'nin
+   `allowservicelogon`ina BAGIMLI DEGIL, bu yuzden davranisi
+   ONGORULEBILIR.
+3. `SeDenyInteractiveLogonRight`/`SeDenyRemoteInteractiveLogonRight`
+   (etkilesimli/RDP oturum yasagi) — ayni LSA API.
+4. NTFS en-az-yetki ACL — `icacls` metin ayrıştırma DEGIL,
+   `System.Security.AccessControl.DirectorySecurity`/
+   `FileSystemAccessRule` ile programatik (miras kesilir, yalniz hesaba
+   Modify/Read+Execute ve Administrators'a FullControl).
+5. WinSW `<serviceaccount>` kimligi (`<domain>`/`<user>`/
+   `<allowservicelogon>`) — `<password>` elemani KASITLI OLARAK ASLA
+   YAZILMAZ; gercek parola servis KURULDUKTAN SONRA
+   `Set-FileAgentServiceLogonCredential` (`sc.exe config ... password=`,
+   yalniz bellekte cozulur) ile ayarlanir — bu fonksiyon HAZIR ama bu
+   betik tarafindan CAGRILMAZ (gercek servis yok).
+
+**Test sirasinda BULUNAN VE DUZELTILEN iki gercek kusur:**
+
+1. **ACL karsilastirma yanlis-negatif uretiyordu.** .NET
+   `FileSystemAccessRule` kurucusu "Allow" kurallari icin `Synchronize`
+   bitini OTOMATIK ekler (`Modify` -> gercekte `Modify, Synchronize`);
+   `Test-LeastPrivilegeAcl` ham `$ExpectedRights.ToString()` ile
+   karsilastirinca GERCEKTEN dogru uygulanmis bir ACL'i bile YANLIS
+   olarak raporluyordu. Duzeltme: karsilastirma, AYNI kurucuyla
+   olusturulmus bir REFERANS kuralin ToString()'iyle yapilir (kendi-
+   tutarli). Gercek scratch-klasor testiyle BULUNDU (Modify uygulandi,
+   Pass=False donuyordu) ve duzeltme sonrasi Pass=True + negatif test
+   (yanlis hak = False) DOGRULANDI.
+2. **WinSW XML okuma/yazma HB-2026-110 ile AYNI kusur sinifini
+   tasiyordu.** `Get-Content -Raw` (varsayilan kodlama) + `$xml.OuterXml`
+   kullanimi (a) gercek sablondaki Turkce yorumlari BOM'suz okurken
+   sistem ANSI kod sayfasina (tr-TR) dusurup mojibake uretiyordu, (b)
+   TUM bicimlendirmeyi (satir sonu/girinti) atip dosyayi TEK SATIRA
+   COKERTIYORDU. Gercek sablonun bir SENTETIK kopyasina karsi test
+   edilerek BULUNDU. Duzeltme: okuma `[System.IO.File]::ReadAllText(...,
+   Encoding.UTF8)` ile acikca UTF-8; yazma `XmlWriterSettings`
+   (`Indent=true`, UTF8 BOM'suz) ile GIRINTILI ve DOGRU Turkce karakterle.
+
+**Kanit (bu makinede, gercek hesap/ACL/servis OLMADAN):**
+- `[System.Management.Automation.Language.Parser]::ParseFile`: 0 hata
+  (her iki duzeltmeden sonra da tekrar dogrulandi).
+- Onizleme (Apply'siz) modu SENTETIK dizinlere (repo/hedef DISINDA,
+  scratchpad) karsi GERCEKTEN calistirildi: mevcut durum + plan dogru
+  raporlandi, HICBIR degisiklik yapilmadi.
+- ACL uygula/dogrula fonksiyonlari bir SCRATCH klasore karsi MEVCUT
+  (yeni OLUSTURULMAMIS) bir kullanici hesabiyla (`desktop-efn2g33\user`)
+  gercekten calistirildi: Modify senaryosu Pass=True, ReadAndExecute
+  senaryosu Pass=True, kasitli YANLIS beklenen-hak senaryosu Pass=False
+  (dogru negatif).
+- `Get-AccountRights` (salt-okunur LSA sorgusu) MEVCUT hesaplara
+  (`NT AUTHORITY\NETWORK SERVICE`, geçerli kullanici, olmayan bir hesap)
+  karsi calistirildi — hicbir hak DEGISTIRILMEDEN dogru/tutarli sonuc
+  dondu.
+- WinSW kimlik ekleme/dogrulama gercek `hasarbotu-file-agent.winsw.xml`
+  SABLONUNUN bir SENTETIK kopyasina (repo'daki gercek dosya
+  DEGISTIRILMEDI) karsi test edildi: ekleme oncesi Pass=False (eleman
+  yok), sonrasi Pass=True, Turkce yorumlar DOGRU goruntulendi, XML
+  GIRINTILI/okunabilir kaldi; kasitli eklenen `<password>` elemani
+  DOGRU tespit edilip Pass=False raporlandi.
+- `-Apply` yukseltme VARKEN ama `-ServiceAccountPassword` VERILMEDEN
+  cagrildi: `exit 2`, hicbir hesap olusmadi (`Get-LocalUser` sonrasinda
+  dogrulandi), hicbir ACL degismedi.
+- `npm run check:deploy`: gecti (WinSW XML sablonlari ETKILENMEDI).
+  `npm audit --audit-level=moderate`: 0 acik. Yalniz yeni bir `.ps1`
+  dosyasi eklendigi/degistirildigi icin typecheck/lint/test/build
+  GEREKMEDI (TS/JS kaynagi degismedi).
+
+**Bilerek TEST EDILMEYEN (gercek hesap/ACL olusturmamak icin, kullanici
+talimatiyla TUTARLI):** `New-LocalUser` ile GERCEK hesap olusturma ve
+`LsaAddAccountRights` ile GERCEK hak verme/reddetme hicbir hesaba karsi
+CAGRILMADI (yeni VEYA mevcut) — bunlar SADECE kod incelemesiyle
+dogrulandi (standart, yaygin bilinen LSA P/Invoke deseni; ayni struct
+duzeni/cagri sirasi coklu kamuya acik referansta kullanilir). D6'nin
+GERCEK yurutulmesinde bu iki cagrinin ampirik dogrulanmasi GEREKIR.
+
+Etki: Yalniz `deploy/windows-service/setup-file-agent-service-account.ps1`
+(YENI dosya) ve `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`
+(§2c guncellendi + §7/Acik kalan) degisti. `install-services.ps1`,
+WinSW sablonlari, uygulama kodu, migration, API/contracts, gercek
+hesap/ACL/ortam degiskeni DEGISMEDI.
+
+Acik kalan: `New-LocalUser`/`LsaAddAccountRights` cagrilarinin GERCEK
+ortamda ampirik dogrulanmasi (D6'nin gercek yurutulmesi); parola
+rotasyon prosedurunun yazilmasi; `install-services.ps1`e entegrasyon
+(bu betigi WinSW kurulumundan ONCE otomatik cagirma) henuz yapilmadi —
+hepsi ayri, acikca onaylanmis adimlardir.

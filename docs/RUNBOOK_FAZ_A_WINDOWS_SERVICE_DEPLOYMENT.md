@@ -356,139 +356,100 @@ olarak `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı bırakılır
 `C:\ProgramData\HasarBotu\probe\probe-result-*.json` dosyası deployment
 audit kaydına eklenir.
 
-## 2c. File Agent servis hesabı — D6 kararı (HB-2026-113, PLAN — henüz uygulanmadı)
+## 2c. File Agent servis hesabı — D6 (HB-2026-113/114): araç HAZIR, gerçek ortamda henüz UYGULANMADI
 
-**Durum:** Bu bölüm bir PLANDIR. Bu paket kapsamında hesap, ACL veya kod
-DEĞİŞTİRİLMEDİ — yalnız §3 (WinSW kurulumu) BAŞLAMADAN ÖNCE izlenecek
-somut prosedür yazıldı. `install-services.ps1`/WinSW XML şablonları bu
-kararı henüz UYGULAMIYOR; D6'nın kendisi ayrı, açıkça onaylanmış bir
-uygulama görevidir.
+**Durum:** `deploy/windows-service/setup-file-agent-service-account.ps1`
+(HB-2026-114) HB-2026-113'ün kararını PLAN/ÖNİZLE/UYGULA modeliyle
+uygulayan gerçek bir araçtır. Bu araç sentetik dizinlerle VE mevcut
+hesaplara karşı salt-okunur sorgularla test edildi (bkz. DECISION_LOG
+HB-2026-114); **gerçek `svc-hasarbotu-fileagent` hesabı bu pakette
+oluşturulmadı, gerçek ACL/servis kurulumu yapılmadı**. `install-services.ps1`
+bu betiği HENÜZ çağırmaz — entegrasyon D6'nın gerçek yürütülmesinde yapılır.
 
 **Sahip:** Kurulumu yapan operatör (yönetici).
 
 **Ön koşul:** §2/§2a (senkron klasör geçişi) tamamlanmış; hedef kök
-`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` mevcut.
+`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` mevcut; §3 (WinSW kurulumu)
+İÇİN `$FileAgentDir` (`dist\index.js` içeren dağıtım dizini) belirlenmiş.
 
 **Gerekçe:** WinSW'nin varsayılanı (serviceaccount tanımlanmazsa)
 **LocalSystem**dir — HB-2026-111'in ölçtüğü gibi bu hesap makine genelinde
 neredeyse sınırsız yetkiye sahiptir; klasör ACL'i tek başına en-az-yetkiyi
 SAĞLAMAZ. `DEPLOYMENT_AND_OPERATIONS_PLAN.md` §2.3 zaten "File Agent
 hesabına yalnız tanımlı depolama kökünde gereken yetki verilir" ilkesini
-BELGELİYORDU; bu bölüm o ilkeyi somut, uygulanabilir bir prosedüre çevirir.
+BELGELİYORDU; bu araç o ilkeyi uygulayan somut kodu sağlar.
 
-**Komut/işlem (GERÇEK kurulumda, sırayla):**
+**Komut/işlem — önce ÖNİZLEME (hiçbir değişiklik yapmaz):**
 
-1. **Hesabı oluştur** (güçlü, rastgele üretilmiş parola; parola KOMUT
-   GEÇMİŞİNE/LOG'A YAZILMAZ — `SecureString` kullanılır):
+```powershell
+cd deploy\windows-service
+.\setup-file-agent-service-account.ps1 -FileAgentAppDir C:\HasarBotu\services\file-agent
+```
 
-   ```powershell
-   $accountName = 'svc-hasarbotu-fileagent'
-   $bytes = [byte[]]::new(24)
-   [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-   $securePw = ConvertTo-SecureString -String ([Convert]::ToBase64String($bytes)) -AsPlainText -Force
-   New-LocalUser -Name $accountName -Password $securePw `
-       -PasswordNeverExpires -UserMayNotChangePassword `
-       -Description 'HasarBotu V2 File Agent — yalnız Windows servis oturumu, etkilesimli giris YASAK (D6, HB-2026-113)'
-   # Yerel "Users" grubundan ÇIKAR (varsayılan üyelik, gereksiz genel haklar taşır):
-   Remove-LocalGroupMember -Group 'Users' -Member $accountName -ErrorAction SilentlyContinue
-   ```
+Bu, mevcut durumu (hesap var mı, haklar var mı, ACL uygun mu, verilirse
+`-WinSwXmlPath` ile WinSW kimliği uygun mu) okur ve YAPILACAK adımları
+yazdırır — hiçbir hesap/ACL/dosya DEĞİŞMEZ.
 
-2. **"Log on as a service" hakkı** — WinSW'nin `<serviceaccount>` bloğundaki
-   `allowservicelogon: true` seçeneği bunu kurulumda OTOMATİK vermeyi
-   dener (resmi WinSW özelliği); **bu davranış D6 uygulamasında GERÇEKTEN
-   doğrulanmalıdır** (bu pakette doğrulanmadı). Otomatik verilmezse veya
-   önceden elle doğrulanmak istenirse, LSA politika API'siyle (ek
-   dependency GEREKTİRMEZ — `advapi32.dll`) doğrudan verilebilir:
+**Komut/işlem — GERÇEK uygulama (yalnız önizleme gözden geçirilip
+onaylandıktan sonra, D6'nın gerçek yürütülmesinde):**
 
-   ```powershell
-   # Add-AccountRight yardımcı fonksiyonu (LsaAddAccountRights P/Invoke).
-   # Kaynak: standart, yaygın bilinen LSA-rights P/Invoke deseni.
-   Add-Type -Namespace Native -Name Lsa -MemberDefinition @'
-   [DllImport("advapi32.dll", SetLastError = true)]
-   public static extern uint LsaOpenPolicy(IntPtr SystemName, ref LSA_OBJECT_ATTRIBUTES ObjectAttributes, int DesiredAccess, out IntPtr PolicyHandle);
-   [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-   public static extern uint LsaAddAccountRights(IntPtr PolicyHandle, byte[] AccountSid, LSA_UNICODE_STRING[] UserRights, int CountOfRights);
-   [DllImport("advapi32.dll")] public static extern int LsaClose(IntPtr ObjectHandle);
-   [StructLayout(LayoutKind.Sequential)] public struct LSA_OBJECT_ATTRIBUTES { public int Length; public IntPtr RootDirectory; public IntPtr ObjectName; public int Attributes; public IntPtr SecurityDescriptor; public IntPtr SecurityQualityOfService; }
-   [StructLayout(LayoutKind.Sequential)] public struct LSA_UNICODE_STRING { public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
-   '@
-   # (Gövde: SID çözümleme + LSA_UNICODE_STRING doldurma + LsaOpenPolicy/LsaAddAccountRights
-   #  çağrısı D6 uygulamasında yazılır; burada yalnız YAKLAŞIM belgelenir.)
-   # Eklenecek haklar: SeServiceLogonRight (yalnız otomatik verilmediyse yedek).
-   ```
+```powershell
+$pw = Read-Host -AsSecureString 'svc-hasarbotu-fileagent parolası'
+.\setup-file-agent-service-account.ps1 -FileAgentAppDir C:\HasarBotu\services\file-agent `
+    -WinSwXmlPath C:\HasarBotu\services\file-agent\hasarbotu-file-agent.xml `
+    -ServiceAccountPassword $pw -Apply
+```
 
-3. **Etkileşimli/RDP oturumunu YASAKLA** (aynı LSA API, farklı haklar —
-   bu D6'nın ZORUNLU adımıdır, opsiyonel değil):
+Bu TEK komut şunları yapar (kod: `setup-file-agent-service-account.ps1`):
 
-   ```text
-   SeDenyInteractiveLogonRight        — "Deny log on locally"
-   SeDenyRemoteInteractiveLogonRight  — "Deny log on through Remote Desktop Services"
-   ```
+1. **Hesabı oluşturur** (`New-LocalUser`, rastgele güçlü parola verilen
+   `SecureString`'den, `-PasswordNeverExpires -UserMayNotChangePassword`),
+   yerel `Users` grubundan ÇIKARIR.
+2. **"Log on as a service" hakkını (`SeServiceLogonRight`) VERİR** —
+   kendi LSA `LsaAddAccountRights` P/Invoke'u ile (ek dependency
+   GEREKTİRMEZ, yalnız `advapi32.dll`); WinSW'nin `allowservicelogon`
+   özelliğine BAĞIMLI DEĞİLDİR, bu yüzden davranışı öngörülebilir ve
+   test edilmiştir (aşağıya bakın).
+3. **Etkileşimli/RDP oturumunu YASAKLAR** — aynı LSA API ile
+   `SeDenyInteractiveLogonRight` + `SeDenyRemoteInteractiveLogonRight`
+   (ZORUNLU adım, atlanmaz).
+4. **Hedef depolama kökünde miras keser, yalnız hesaba Modify +
+   Administrators'a Full Control verir** (.NET `DirectorySecurity`/
+   `FileSystemAccessRule` ile, `icacls` metin ayrıştırması DEĞİL) — bu,
+   §2a.2'nin (HB-2026-112) `NT AUTHORITY\SYSTEM:(OI)(CI)F` grantını
+   SÜPERSEDE eder.
+5. **Uygulama dizininde Read+Execute, yalnız `logs` alt dizininde
+   Modify** verir (LocalSystem'in aksine açıkça gerekir).
+6. **`-WinSwXmlPath` verilirse WinSW XML'ine `<serviceaccount>` ekler**
+   (`<domain>`/`<user>`/`<allowservicelogon>true</allowservicelogon>`) —
+   **`<password>` elemanını KASITLI OLARAK HİÇBİR ZAMAN YAZMAZ**; bu
+   yüzden §2c'nin önceki taslağındaki `__FILE_AGENT_SERVICE_PASSWORD__`
+   yer tutucusu YOKTUR/GEREKMEZ. Gerçek parola, servis KURULDUKTAN SONRA
+   ayrı bir adımda (`Set-FileAgentServiceLogonCredential` fonksiyonu,
+   `sc.exe config <servis> obj= ... password= ...` — parola yalnız
+   bellekte çözülür, hiçbir dosyaya yazılmaz) ayarlanır; bu betik o adımı
+   ÇAĞIRMAZ (gerçek servis bu pakette kurulmadı).
+7. Tüm adımlardan SONRA her şeyi YENİDEN OKUYUP doğrular; herhangi biri
+   başarısızsa çıkış kodu `1` ile açıkça bildirir.
 
-   (Opsiyonel ek sertleştirme, bu kararın kapsamı dışında ama önerilir:
-   `SeDenyNetworkLogonRight` — hesabın SMB/ağ üzerinden başka bir amaçla
-   kullanılmasını da engeller.)
+**Beklenen çıktı:** `SONUÇ: Tüm kontroller GEÇTİ.` ve çıkış kodu `0`.
 
-4. **Hedef depolama kökünde yalnız Modify** (Tam Denetim DEĞİL):
+**Durdurma ölçütü:** `-Apply` yükseltme OLMADAN veya `-ServiceAccountPassword`
+VERİLMEDEN çağrılırsa betik `exit 2` ile durur, HİÇBİR değişiklik yapmaz
+(test edildi). Doğrulama adımlarından biri başarısızsa (`exit 1`) WinSW
+servis kurulumu (§3) İLERLETİLMEZ.
 
-   ```powershell
-   $target = 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'
-   icacls $target /inheritance:d
-   icacls $target /remove 'BUILTIN\Users' 'NT AUTHORITY\Authenticated Users' 'Everyone' 'NT AUTHORITY\SYSTEM' 2>$null
-   icacls $target /grant:r "$env:COMPUTERNAME\svc-hasarbotu-fileagent:(OI)(CI)M"
-   icacls $target /grant:r 'BUILTIN\Administrators:(OI)(CI)F'
-   ```
-
-   Bu, §2a.2'nin (HB-2026-112) `NT AUTHORITY\SYSTEM:(OI)(CI)F` grantını
-   SÜPERSEDE eder — File Agent artık SYSTEM olarak çalışmayacağı için o
-   grant GEREKSİZDİR ve kaldırılmalıdır.
-
-5. **Uygulama dizininde en az yetki** (LocalSystem'in aksine, adanmış
-   hesabın `node.exe`/`dist\index.js`'i okuyabilmesi ve kendi log
-   dizinine yazabilmesi için AÇIKÇA gerekir — kolayca gözden kaçan adım):
-
-   ```powershell
-   $appDir = $FileAgentDir   # örn. C:\HasarBotu\services\file-agent
-   icacls $appDir /grant:r "$env:COMPUTERNAME\svc-hasarbotu-fileagent:(OI)(CI)RX"
-   icacls (Join-Path $appDir 'logs') /grant:r "$env:COMPUTERNAME\svc-hasarbotu-fileagent:(OI)(CI)M"
-   ```
-
-6. **WinSW kimlik yapılandırması** (`hasarbotu-file-agent.winsw.xml`
-   ŞABLONUNA eklenecek — repo'daki şablon parolayı ASLA içermez, yalnız
-   yer tutucu; GERÇEK parola yalnız render sırasında, repo DIŞINDAKİ
-   dağıtım kopyasına yazılır — mevcut `__NODE_EXE__`/`__APP_DIR__` deseniyle
-   AYNI ilke):
-
-   ```xml
-   <serviceaccount>
-     <domain>%COMPUTERNAME%</domain>
-     <user>svc-hasarbotu-fileagent</user>
-     <password>__FILE_AGENT_SERVICE_PASSWORD__</password>
-     <allowservicelogon>true</allowservicelogon>
-   </serviceaccount>
-   ```
-
-**Beklenen çıktı:** Hesap oluşturuldu, yalnız "Log on as a service" hakkına
-sahip, etkileşimli/RDP girişi reddediliyor (`runas /user:svc-hasarbotu-fileagent
-cmd` GERÇEKTEN reddedilmeli — bkz. doğrulama), hedef kökte
-`icacls`in yalnız bu hesabı (Modify) ve Administrators'ı (Full) gösterdiği.
-
-**Durdurma ölçütü:** Hesap "Log on as a service" hakkını ALAMAMIŞSA WinSW
-servis kurulumu (§3) sırasında SCM açıkça hata verir (`Logon failure`);
-kurulum bu hata çözülmeden İLERLETİLMEZ. Etkileşimli giriş reddi
-doğrulanamıyorsa (adım aşağıda) hesap kullanıma ALINMAZ.
-
-**Doğrulama:**
+**Doğrulama (betiğin kendisi de son adımda otomatik yapar; elle
+tekrarlamak için):**
 
 ```powershell
 runas /user:svc-hasarbotu-fileagent cmd   # AÇIKÇA reddedilmeli (etkileşimli giriş yasak)
-icacls 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'   # yalnız SYSTEM YOK, svc-hasarbotu-fileagent:(M), Administrators:(F)
-whoami /priv  # (servis GERÇEKTEN bu hesapla çalışırken, D6 uygulamasında) SeServiceLogonRight listede
+icacls 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'   # yalnız svc-hasarbotu-fileagent:(M), Administrators:(F)
 ```
 
-**Audit kanıtı:** Hesap adı, oluşturma tarihi, verilen/reddedilen haklar
-ve `icacls` çıktısı deployment audit kaydına (§6) eklenir. Parolanın
-KENDİSİ hiçbir zaman audit kaydına/log'a/repository'ye YAZILMAZ.
+**Audit kanıtı:** Betiğin tam ekran çıktısı (durum + plan + uygulama +
+doğrulama) deployment audit kaydına (§6) eklenir. Parolanın KENDİSİ
+hiçbir zaman audit kaydına/log'a/repository'ye YAZILMAZ.
 
 ## 3. WinSW servislerinin kurulumu
 
@@ -610,6 +571,20 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   haklar`. Bu, TEK bir geliştirme makinesindeki sonuçtur — ofis
   dağıtım makinesinde Adım 2.5 olarak bağımsız doğrulanmalıdır (farklı
   pCloud sürümü/yapılandırması farklı sonuç verebilir).
+- `setup-file-agent-service-account.ps1` (HB-2026-114): sözdizimi
+  (`Parser::ParseFile`, 0 hata) doğrulandı; önizleme (Apply'sız) modu
+  sentetik dizinlere karşı GERÇEKTEN çalıştırıldı; ACL uygula/doğrula
+  fonksiyonları bir SCRATCH klasöre karşı MEVCUT (yeni oluşturulmamış)
+  kullanıcı hesabıyla gerçekten test edildi (Modify VE ReadAndExecute
+  senaryoları, artı kasıtlı yanlış-hak negatif testi); WinSW kimlik
+  ekleme/doğrulama fonksiyonları gerçek şablonun SENTETİK bir kopyasına
+  karşı test edildi (parola alanı kasıtlı eklenip DOĞRU tespit edildiği
+  dahil); `-Apply` parolasız çağrıldığında `exit 2` ile GÜVENLE
+  reddedildiği doğrulandı. **Test edilMEYEN (kasıtlı, gerçek hesap/ACL
+  oluşturmamak için):** `New-LocalUser` ile GERÇEK hesap oluşturma ve
+  `LsaAddAccountRights` ile GERÇEK hak verme/reddetme — bunlar yalnız
+  kod incelemesiyle doğrulandı, D6'nın gerçek yürütülmesinde ampirik
+  olarak kanıtlanmalıdır.
 
 ## Açık kalan
 
@@ -618,15 +593,14 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   tanımlandı — bkz. HB-2026-112). Ofis üretim verisinin gerçek
   hacmi bu geliştirme makinesindeki ölçümden (6.258 dosya/~8,64 GB)
   FARKLI olabilir; §2a.1 ofis makinesinde TEKRARLANMALIDIR.
-- **KARARA BAĞLANDI (HB-2026-113, §2c):** File Agent artık LocalSystem
-  yerine adanmış `svc-hasarbotu-fileagent` hesabı altında çalışacak; ACL
-  o hesaba daraltılacak. Bu, PLAN aşamasındadır — `install-services.ps1`
-  ve WinSW XML şablonları henüz UYGULAMIYOR (D6, ayrı görev). Açık kalan:
-  WinSW'nin `allowservicelogon` özelliğinin bu ortamda "Log on as a
-  service" hakkını GERÇEKTEN otomatik verip vermediği D6 uygulamasında
-  doğrulanmalı; LSA P/Invoke yardımcı fonksiyonunun tam gövdesi (§2c
-  adım 2) D6'da yazılıp test edilmeli; parola rotasyon prosedürü (sıklık,
-  kim yapar, WinSW'ye nasıl yansıtılır) henüz tanımlanmadı.
+- **ARAÇ HAZIR (HB-2026-113/114, §2c):** File Agent artık LocalSystem
+  yerine adanmış `svc-hasarbotu-fileagent` hesabı altında çalışacak;
+  `setup-file-agent-service-account.ps1` bunu uygular/doğrular. Açık
+  kalan: `New-LocalUser`/`LsaAddAccountRights` çağrılarının GERÇEK
+  ortamda ampirik doğrulanması (D6'nın gerçek yürütülmesi); parola
+  rotasyon prosedürü (sıklık, kim yapar, `sc.exe config` ile nasıl
+  yansıtılır) henüz tanımlanmadı; `install-services.ps1`e entegrasyon
+  (bu betiği §3'ten önce otomatik çağırma) henüz yapılmadı.
 - WinSW ikili dosyasının bütünlük doğrulaması (checksum/imza) için kesin
   prosedür operatör kararına bırakıldı.
 - TLS/sertifika (OPS-Q03) ve izleme (OPS-Q05) bu runbook'un kapsamı
