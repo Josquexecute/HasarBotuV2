@@ -3226,3 +3226,75 @@ mi) DOGRULANMASI onerilir — farkli bir pCloud surumu/ayari FARKLI bir ACL/
 ad-alani sonucu verebilir. NTFS senkron klasore GECISIN KENDISI (uygulama,
 veri tasima, File Agent kok degisikligi) bu paketin kapsaminda DEGIL;
 ayri, acikca onaylanmis bir gorev olarak planlanmalidir.
+
+## 2026-07-29 - HB-2026-112: NTFS senkron klasor gecisi icin dry-run plani (yalniz PLAN, veri tasima/WinSW kurulumu YOK)
+
+Karar: Kullanicinin istegiyle `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTIZ`
+hedefine gecis icin somut bir dry-run plani hazirlandi ve RUNBOOK'a
+`§2a. Dry-run dogrulama plani` olarak eklendi. Reboot/logoff, GERCEK veri
+tasima veya WinSW kurulumu YAPILMADI — yalniz salt-okunur olcum (kapasite,
+mevcut dosya/klasor sayisi) ve ACL/hash/rollback PROSEDURU yazildi.
+
+**Kapasite (bu makinede, salt-okunur olculdu, GERCEK veri):** Kaynak
+`P:\BARAN GLOBAL EKSPERTIZ` = 6.258 dosya, 603 klasor, ~8,64 GB. Hedef
+`C:\` = ~726 GB bos alan. Kapasite SORUN DEGIL (onerilen 3x pay = ~26 GB,
+mevcut bos alanin cok altinda). **Ihtiyat:** bu, GELISTIRME/test pCloud
+hesabinin verisidir; ofis uretim hesabinin gercek hacmi FARKLI (muhtemelen
+daha buyuk) olabilir, GERCEK gecisten once ofis makinesinde
+TEKRAR OLCULMELIDIR.
+
+**ACL tasarimi (planlandi, UYGULANMADI):** HB-2026-111'in bulgusu
+(`P:\`de `Everyone: tum haklar`) duzeltilecek sekilde, yeni kok C:\'den
+miras alinan genis `BUILTIN\Users`/`Authenticated Users` haklarini
+DEVRALMAYACAK; `icacls /inheritance:d` + yalniz `NT AUTHORITY\SYSTEM`
+(WinSW varsayilan servis hesabi) ve `BUILTIN\Administrators`e acik grant
+planlandi. **Acik mimari not:** File Agent bugun LocalSystem altinda
+calisiyor (WinSW sablonunda `<serviceaccount>` YOK); LocalSystem zaten
+makine genelinde genis yetkiye sahip oldugu icin klasor ACL'i tek basina
+tam en-az-yetki SAGLAMAZ — adanmis, dusuk yetkili bir servis hesabina
+gecis AYRI, henuz karara baglanmamis bir oneri olarak kaydedildi.
+
+**Dosya/hash karsilastirma metodolojisi:** Bu olcekte (6.258 dosya/8,64 GB)
+istatistiksel ornekleme YERINE TAM SHA-256 karsilastirmasi onerildi
+(hesaplama maliyeti dusuk). Iki asama: (A) dosya sayisi + toplam boyut
+esitligi (ucuz, ilk gecis kapisi), (B) her dosyanin goreli-yol eslesmis
+SHA-256'si (tam kanit). Karsilastirma ciktisi (yalniz goreli yol + hash,
+ICERIK DEGIL) `C:\ProgramData\HasarBotu\probe\`e zaman damgali yazilacak,
+REPOSITORY'YE COMMIT EDILMEYECEK (gercek dosya adlari musteri verisi izi
+tasiyabilir).
+
+**HASARBOTU_AGENT_ROOTS degisimi:** rootKey (`baran-global-primary`)
+DEGISMEZ, yalniz makine ortam degiskeninin degeri `P:\BARAN GLOBAL
+EKSPERTIZ` -> `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTIZ` olarak
+guncellenecek + File Agent servisi yeniden baslatilacak (ortam degiskeni
+yalniz surec baslarken okunur). Veritabaninda HICBIR satir degismez
+(`FILE_STORAGE_AND_AGENT_PLAN.md` §2).
+
+**Rollback plani:** Tek geri donus adimi ayni ortam degiskenini eski
+P:\ degerine dondurup servisi yeniden baslatmaktir (DB degismez). Eski
+`P:\` surucusu geciften sonra EN AZ 14 gun (oneri) DEGISTIRILMEDEN
+salt-okunur referans olarak tutulur; silinmesi AYRI, acikca onaylanmis
+bir adimdir.
+
+**Bulunan ve duzeltilen gercek kusur (RUNBOOK icinde, calistirmadan once):**
+mevcut §4'teki `HASARBOTU_AGENT_ROOTS` ornek degerinde klasor adi yanlis
+yazilmisti (`EKSPERTIZ` duz `I`, gercek klasor `EKSPERTİZ` noktali Turkce
+`İ` ile) — bu, harfi harfine kopyalanirsa GERCEK bir yol uyusmazligina
+(dolayisiyla `storage_unavailable`) yol acardi. Duzeltildi.
+
+Kanit: `Get-ChildItem -Recurse` ile gercek dosya/klasor sayisi ve toplam
+boyut olculdu (salt-okunur, hicbir dosya tasinmadi/silinmedi/yazilmadi).
+`Get-CimInstance Win32_LogicalDisk` ile C:\ bos alani olculdu. Hedef
+`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` bu olcum aninda HENUZ
+OLUSTURULMAMISTI (`Test-Path`=False, dogrulandi) — plan gercekten
+"dry-run", kismi/yarim bir gecis durumu YOK.
+
+Etki: Yalniz `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` degisti
+(yeni §2a + §4 yazim hatasi duzeltmesi + Acik kalan guncellemesi).
+Uygulama kodu, WinSW sablonlari, migration, API/contracts, gercek ortam
+degiskenleri DEGISMEDI. Gercek kurulum veya veri tasima bu paket
+kapsaminda YAPILMADI.
+
+Acik kalan: Bu plan kullanicinin acik onayi olmadan YURUTULMEYECEKTIR.
+Ofis dagitim makinesinde §2a.1 kapasite olcumu TEKRARLANMALI; File Agent
+servis hesabi (LocalSystem vs adanmis hesap) kararı ayrica verilmelidir.

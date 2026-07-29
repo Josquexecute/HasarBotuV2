@@ -2616,6 +2616,16 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Ana çalışma ağacında typecheck, lint (0 error / 2 mevcut warning, değişmedi), gerçek `hasarbotu_test` PostgreSQL ile **2.225 başarılı / 6 mevcut ortam-koşullu UI skip** (değişmedi — D5 uygulama testi eklemedi), build/bundle **426.065 baytta değişmedi** ve moderate audit (0 açık) geçti.
 - **Doğrulanamayan (HB-2026-108 sınırı — HB-2026-110 ile kapatıldı, aşağıya bakın):** SYSTEM bağlamında P:\ görünürlüğünün birebir ampirik kanıtı bu geliştirme ortamında yönetici yükseltmesi bulunmadığı için alınamamıştı.
 
+## NTFS senkron klasör geçişi — dry-run planı (HB-2026-112, 2026-07-29, yalnız PLAN)
+
+- Kullanıcı isteğiyle `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` hedefine geçiş için `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`e yeni bir **§2a Dry-run doğrulama planı** eklendi. **Gerçek veri taşıma veya WinSW kurulumu yapılmadı** — yalnız salt-okunur ölçüm + prosedür yazıldı.
+- **Kapasite (gerçek ölçüm, salt-okunur):** kaynak `P:\BARAN GLOBAL EKSPERTİZ` = 6.258 dosya, 603 klasör, ~8,64 GB. Hedef `C:\` boş alan ~726 GB — kapasite sorun değil (önerilen 3× pay ~26 GB). Bu geliştirme/test pCloud hesabına ait bir ölçüm; ofis üretim hacmi farklı olabilir, gerçek geçişten önce tekrarlanmalı.
+- **ACL tasarımı (planlandı, uygulanmadı):** HB-2026-111'in `Everyone: tüm haklar` bulgusunu düzeltecek şekilde, yeni kökte `icacls /inheritance:d` + yalnız `NT AUTHORITY\SYSTEM` (WinSW varsayılan servis hesabı) ve `BUILTIN\Administrators`e açık grant planlandı. Açık mimari not: File Agent bugün LocalSystem altında çalışıyor; adanmış, düşük yetkili bir servis hesabına geçiş ayrı, henüz karara bağlanmamış bir öneri.
+- **Hash karşılaştırma:** bu ölçekte istatistiksel örnekleme yerine tam SHA-256 karşılaştırması önerildi (iki aşama: sayı/boyut eşitliği, sonra göreli-yol eşleştirilmiş tam hash). Karşılaştırma çıktısı repository'ye commit edilmeyecek (gerçek dosya adları müşteri verisi izi taşıyabilir).
+- **`HASARBOTU_AGENT_ROOTS` değişimi + rollback:** rootKey değişmez, yalnız makine ortam değişkeni güncellenip servis yeniden başlatılır (DB değişmez). Rollback tek adımdır: değişkeni eski `P:\` değerine döndür + yeniden başlat; eski `P:\` en az 14 gün silinmeden tutulur.
+- **Bulunan ve düzeltilen gerçek kusur:** RUNBOOK §4'teki `HASARBOTU_AGENT_ROOTS` örneğinde klasör adı yanlış yazılmıştı (`EKSPERTIZ` düz I, gerçek klasör `EKSPERTİZ` noktalı Türkçe İ) — harfiyen kopyalanırsa gerçek bir yol uyuşmazlığına yol açardı. Düzeltildi.
+- Yalnız `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` değişti. Uygulama kodu, WinSW şablonları, migration, gerçek ortam değişkenleri değişmedi. **Açık kalan:** plan kullanıcı onayı olmadan yürütülmeyecek; ofis makinesinde kapasite ölçümü tekrarlanmalı; servis hesabı kararı (LocalSystem vs adanmış hesap) ayrıca verilmeli.
+
 ## D5 düzeltme #2 — Gerçek SYSTEM çalıştırması: iki kök kusur bulundu ve düzeltildi; P:\ SYSTEM'den GÖRÜNÜYOR (HB-2026-110, 2026-07-29)
 
 - Bu makinede ilk kez yönetici yükseltmesiyle probe **gerçekten** çalıştırıldı; `LastTaskResult=1`, sonuç/log dosyası hiç oluşmadı, konsol Türkçe metni bozuktu (bildirilen semptomla birebir).

@@ -118,6 +118,201 @@ karşılaştırması runbook kaydına eklenir. Veritabanı DEĞİŞMEZ — yaln�
 File Agent'ın yerel `HASARBOTU_AGENT_ROOTS` değeri güncellenir
 (`FILE_STORAGE_AND_AGENT_PLAN.md` §2'de belgelenen taşınabilirlik).
 
+## 2a. Dry-run doğrulama planı (HB-2026-112 — gerçek veri taşınmadan, plan)
+
+**Durum:** Bu bölüm bir PLANDIR; §2'nin GERÇEK yürütülmesinden ÖNCE her
+adımın nasıl doğrulanacağını somutlaştırır. Bu paket kapsamında GERÇEK
+veri taşıma veya WinSW kurulumu YAPILMADI — yalnız salt-okunur ölçüm ve
+plan üretildi.
+
+### 2a.1 Kapasite ön-kontrolü
+
+**Sahip:** Kurulumu yapan operatör.
+
+**Ölçüldü (bu geliştirme makinesinde, salt-okunur, 2026-07-29):**
+
+```text
+Kaynak: P:\BARAN GLOBAL EKSPERTİZ
+  Dosya sayısı : 6.258
+  Klasör sayısı: 603
+  Toplam boyut : ~8,64 GB (9.279.237.358 bayt)
+Hedef sürücü: C:\
+  Toplam      : ~930,5 GB
+  Boş alan    : ~726,3 GB (ÖLÇÜM ANINDA)
+```
+
+**Komut (tekrarlanabilir, salt-okunur):**
+
+```powershell
+$stats = Get-ChildItem -LiteralPath 'P:\BARAN GLOBAL EKSPERTİZ' -Recurse -File -ErrorAction Stop | Measure-Object -Property Length -Sum
+$dirCount = (Get-ChildItem -LiteralPath 'P:\BARAN GLOBAL EKSPERTİZ' -Recurse -Directory -ErrorAction Stop | Measure-Object).Count
+"Dosya: $($stats.Count)  Boyut(GB): $([math]::Round($stats.Sum/1GB,3))  Klasor: $dirCount"
+Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" | Select-Object @{n='FreeGB';e={[math]::Round($_.FreeSpace/1GB,2)}}
+```
+
+**Beklenen çıktı:** Hedef sürücüde boş alan, kaynak toplam boyutun EN AZ
+3 katı (senkronizasyon sırasında geçici çakışma + eski `P:\` kopyasının
+paralel tutulma penceresi için pay) — bu makinede 8,64 GB × 3 ≈ 26 GB
+gerekirken 726 GB müsait, kapasite SORUN DEĞİL.
+
+**Durdurma ölçütü:** Boş alan < kaynak boyutu × 3 ise geçişe BAŞLANMAZ;
+disk büyütme veya eski verinin arşivlenmesi ayrı karar gerektirir.
+
+**ÖNEMLİ ihtiyat notu:** Yukarıdaki sayılar BU geliştirme/test pCloud
+hesabına aittir. Ofis üretim hesabındaki gerçek veri hacmi FARKLI (muhtemelen
+DAHA BÜYÜK — yıllar boyu birikmiş dosya/klasör) olabilir; GERÇEK geçişten
+önce bu ölçüm ofis makinesinde TEKRARLANMALIDIR.
+
+### 2a.2 Hedef ACL tasarımı (en-az-yetki — HB-2026-111 bulgusunun düzeltmesi)
+
+**Sahip:** Kurulumu yapan operatör (yönetici).
+
+**Gerekçe:** HB-2026-111, `P:\` üzerinde `Everyone: tüm haklar` (tek ACE,
+`-1`) tespit etti — en-az-yetki YOK. Yeni NTFS kökü, üst dizinden (`C:\`)
+miras alınan geniş `BUILTIN\Users`/`Authenticated Users` haklarını
+DEVRALMAMALI; yalnız gereken hesaplara açık, dar bir ACL almalı.
+
+**Planlanan ACL (uygulanacak, henüz UYGULANMADI):**
+
+```powershell
+# Hedef klasör önce oluşturulur (pCloud senkron istemcisi de oluşturabilir —
+# ikisi çakışırsa istemcinin kendi oluşturduğu klasör esas alınır).
+$target = 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'
+icacls $target /inheritance:d                              # üst dizinden miras KESİLİR
+icacls $target /remove 'BUILTIN\Users' 'NT AUTHORITY\Authenticated Users' 'Everyone' 2>$null
+icacls $target /grant:r 'NT AUTHORITY\SYSTEM:(OI)(CI)F'     # File Agent servis hesabı (bkz. not)
+icacls $target /grant:r 'BUILTIN\Administrators:(OI)(CI)F'  # IT/operatör bakım
+```
+
+**ÖNEMLİ açık mimari not:** `hasarbotu-file-agent.winsw.xml`de
+`<serviceaccount>` TANIMLANMAMIŞ, yani WinSW varsayılanı olan
+**LocalSystem** (= `NT AUTHORITY\SYSTEM`, tam olarak bu paketin probunun
+kullandığı hesap) kullanılacaktır. Yukarıdaki ACL bu varsayımla
+tasarlandı. LocalSystem makine genelinde zaten neredeyse sınırsız yetkiye
+sahip olduğundan, klasör ACL'i tek başına "en-az-yetki"yi TAM sağlamaz —
+File Agent'ı adanmış, düşük yetkili bir servis hesabı altında çalıştırıp
+ACL'i O HESABA daraltmak daha güçlü bir savunma katmanı olurdu. Bu,
+WinSW şablonunu ve servis kurulum kararını etkileyen AYRI bir mimari
+karardır; bu planın kapsamında DEĞİŞTİRİLMEDİ, yalnız açık öneri olarak
+kaydedildi.
+
+**Doğrulama:** `icacls $target` çıktısında yalnız SYSTEM + Administrators
+(+ varsa açıkça eklenen adlandırılmış operatör hesapları) görünmeli;
+`Everyone`/`BUILTIN\Users`/`Authenticated Users` OLMAMALI.
+
+**Durdurma ölçütü:** ACL uygulaması sonrası File Agent'ın (SYSTEM hesabı)
+hedef kökte GERÇEK yazma/silme yapabildiği §2.5'in `-IncludeWriteAndAclProbe`
+anahtarıyla (bkz. `probe-p-drive-system-context.ps1 -DriveLetter C`... not:
+bu anahtar sürücü harfi değil TAM YOL da destekleyecek şekilde ayrı bir
+doğrulama gerektirebilir — TEK dosya/silme testi için basit bir
+`Test-Path`/`New-Item`/`Remove-Item` PROBU yeterlidir) doğrulanmadan
+servis BAŞLATILMAZ.
+
+### 2a.3 Dosya/hash karşılaştırma metodolojisi
+
+**Sahip:** Kurulumu yapan operatör.
+
+**Ölçek gerekçesi:** Bu makinede ölçülen ~6.258 dosya/~8,64 GB ölçeğinde
+TAM (örnekleme değil) SHA-256 karşılaştırması hesaplama açısından
+UCUZDUR (dakikalar mertebesinde); bu yüzden istatistiksel örnekleme YERİNE
+tam karşılaştırma ÖNERİLİR. Ofis üretim verisi çok daha büyükse (örn.
+100 GB+) bu eşik yeniden değerlendirilip katmanlı (önce sayı/boyut, sonra
+istatistiksel örnekleme, sonra tam hash) bir yaklaşıma geçilebilir.
+
+**İki aşamalı doğrulama (her ikisi de GEÇMELİ):**
+
+```powershell
+# Aşama A — ucuz: dosya sayısı + toplam boyut (her iki kökte)
+function Get-FolderStats($path) {
+    $s = Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction Stop | Measure-Object -Property Length -Sum
+    [pscustomobject]@{ Count = $s.Count; Bytes = $s.Sum }
+}
+$old = Get-FolderStats 'P:\BARAN GLOBAL EKSPERTİZ'
+$new = Get-FolderStats 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'
+"Eski: $($old.Count) dosya / $($old.Bytes) bayt"
+"Yeni: $($new.Count) dosya / $($new.Bytes) bayt"
+$old.Count -eq $new.Count -and $old.Bytes -eq $new.Bytes   # True olmalı
+
+# Aşama B — tam: her dosyanın göreli-yol eşleştirilmiş SHA-256'sı
+$oldRoot = 'P:\BARAN GLOBAL EKSPERTİZ'
+$newRoot = 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'
+$oldHashes = Get-ChildItem -LiteralPath $oldRoot -Recurse -File | ForEach-Object {
+    [pscustomobject]@{ Rel = $_.FullName.Substring($oldRoot.Length); Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
+}
+$newHashes = Get-ChildItem -LiteralPath $newRoot -Recurse -File | ForEach-Object {
+    [pscustomobject]@{ Rel = $_.FullName.Substring($newRoot.Length); Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
+}
+$oldMap = @{}; foreach ($h in $oldHashes) { $oldMap[$h.Rel] = $h.Hash }
+$newMap = @{}; foreach ($h in $newHashes) { $newMap[$h.Rel] = $h.Hash }
+$mismatches = foreach ($rel in $oldMap.Keys) {
+    if (-not $newMap.ContainsKey($rel)) { "EKSİK (yeni kökte yok): $rel" }
+    elseif ($newMap[$rel] -ne $oldMap[$rel]) { "HASH UYUŞMUYOR: $rel" }
+}
+$extras = foreach ($rel in $newMap.Keys) { if (-not $oldMap.ContainsKey($rel)) { "FAZLA (eski kökte yok): $rel" } }
+$mismatches + $extras   # BOŞ olmalı
+```
+
+Karşılaştırma çıktısı (yalnız göreli yol + hash, GERÇEK dosya İÇERİĞİ
+DEĞİL) `C:\ProgramData\HasarBotu\probe\` altına zaman damgalı bir dosyaya
+yazılıp kalıcı audit kanıtı olarak tutulur (mevcut SYSTEM probu ile AYNI
+konvansiyon) — bu dosya repository'ye COMMIT EDİLMEZ (gerçek göreli
+yol/dosya adları müşteri verisi izi taşıyabilir).
+
+**Beklenen çıktı:** Aşama A `True`, Aşama B `$mismatches`/`$extras` BOŞ
+dizi.
+
+**Durdurma ölçütü:** Herhangi bir eksik/fazla/hash-uyuşmazlığı VARSA
+`HASARBOTU_AGENT_ROOTS` DEĞİŞTİRİLMEZ, File Agent eski `P:\` kökünde
+kalmaya devam eder; fark araştırılır (genellikle senkronizasyon henüz
+TAMAMLANMAMIŞTIR — pCloud'un kendi senkron durumu göstergesi kontrol
+edilir).
+
+### 2a.4 `HASARBOTU_AGENT_ROOTS` değişimi (yalnız 2a.1–2a.3 TAMAMEN GEÇTİKTEN sonra)
+
+Değişim, mevcut §4'teki tek satırla AYNIDIR (rootKey `baran-global-primary`
+DEĞİŞMEZ — veritabanında hiçbir satır güncellenmez, yalnız bu makine
+ortam değişkeni):
+
+```powershell
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ROOTS', '{"baran-global-primary":"C:\\HasarBotuStorage\\BARAN GLOBAL EKSPERTİZ"}', 'Machine')
+Restart-Service hasarbotu-file-agent   # makine ortam değişkeni yalnız süreç BAŞLARKEN okunur
+```
+
+**Doğrulama:** Değişimden sonra ilk döngüde File Agent logunda
+`storage_unavailable`/`PENDING_STORAGE` GÖRÜNMEZ (D4); §2.5'teki SYSTEM
+probu yeni yol (`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ`) için
+`PASS` verir.
+
+### 2a.5 Rollback planı
+
+**Tetikleyici koşullar:** 2a.3'ün hash karşılaştırması geçiş SONRASI
+(örn. gecikmeli pCloud senkron farkı nedeniyle) tekrar çalıştırıldığında
+uyuşmazlık bulunması; File Agent'ın kök sağlık probunun (D4) yeni kökte
+`storage_unavailable` bildirmesi; operatörün gözlemlediği herhangi bir
+veri tutarsızlığı.
+
+**Rollback GERİ DÖNÜŞÜ tek bir ortam değişkeni + servis yeniden başlatmadır
+(veritabanı DEĞİŞMEZ, çünkü yalnız `rootKey` + göreli yol saklanır —
+`FILE_STORAGE_AND_AGENT_PLAN.md` §2):**
+
+```powershell
+Stop-Service hasarbotu-file-agent
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ROOTS', '{"baran-global-primary":"P:\\BARAN GLOBAL EKSPERTİZ"}', 'Machine')
+Start-Service hasarbotu-file-agent
+# Eski kökün hâlâ çalıştığını kanıtla:
+.\probe-p-drive-system-context.ps1 -DriveLetter P
+```
+
+**Ön koşul (geri dönüşün MÜMKÜN olması için):** Eski `P:\` sürücüsü,
+geçişten sonra EN AZ 14 gün (öneri; kesin süre kullanıcı kararı) DEĞİŞTİRİLMEDEN
+salt-okunur referans olarak tutulur — pCloud "Senkronize Klasör" moduna
+geçilse bile istemci hesabı aynı kalır, geçmiş veri pCloud bulutunda
+zaten durur; yerel `P:\` kopyasının silinmesi AYRI, açıkça onaylanmış bir
+adımdır, bu planın parçası DEĞİLDİR.
+
+**Audit kanıtı:** Rollback'in tarihi, tetikleyen bulgu ve komut çıktısı
+DECISION_LOG/deployment audit kaydına eklenir.
+
 ## 2.5. SYSTEM bağlamı doğrulaması
 
 **Sahip:** Kurulumu yapan operatör.
@@ -213,7 +408,7 @@ kaydedilir.
 [Environment]::SetEnvironmentVariable('DATABASE_URL', '<gercek-deger>', 'Machine')
 [Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ID', '<gercek-deger>', 'Machine')
 [Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_SECRET', '<gercek-deger>', 'Machine')
-[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ROOTS', '{"baran-global-primary":"C:\\HasarBotuStorage\\BARAN GLOBAL EKSPERTIZ"}', 'Machine')
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ROOTS', '{"baran-global-primary":"C:\\HasarBotuStorage\\BARAN GLOBAL EKSPERTİZ"}', 'Machine')
 [Environment]::SetEnvironmentVariable('HASARBOTU_API_BASE_URL', 'http://127.0.0.1:3100', 'Machine')
 ```
 
@@ -278,7 +473,14 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
 ## Açık kalan
 
 - pCloud senkronize klasör geçişinin GERÇEK ofis verisiyle süresi ve
-  disk alanı etkisi ölçülmedi (yalnız prosedür tanımlandı).
+  disk alanı etkisi ölçülmedi (yalnız prosedür/§2a dry-run planı
+  tanımlandı — bkz. HB-2026-112). Ofis üretim verisinin gerçek
+  hacmi bu geliştirme makinesindeki ölçümden (6.258 dosya/~8,64 GB)
+  FARKLI olabilir; §2a.1 ofis makinesinde TEKRARLANMALIDIR.
+- File Agent'ın WinSW varsayılanı olan LocalSystem yerine adanmış,
+  düşük yetkili bir servis hesabı altında çalıştırılıp ACL'in o hesaba
+  daraltılması (§2a.2'de not edildi) — AYRI, henüz karara bağlanmamış
+  bir mimari karar.
 - WinSW ikili dosyasının bütünlük doğrulaması (checksum/imza) için kesin
   prosedür operatör kararına bırakıldı.
 - TLS/sertifika (OPS-Q03) ve izleme (OPS-Q05) bu runbook'un kapsamı
