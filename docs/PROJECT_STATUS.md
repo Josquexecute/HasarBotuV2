@@ -2616,6 +2616,18 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Ana çalışma ağacında typecheck, lint (0 error / 2 mevcut warning, değişmedi), gerçek `hasarbotu_test` PostgreSQL ile **2.225 başarılı / 6 mevcut ortam-koşullu UI skip** (değişmedi — D5 uygulama testi eklemedi), build/bundle **426.065 baytta değişmedi** ve moderate audit (0 açık) geçti.
 - **Doğrulanamayan (HB-2026-108 sınırı — HB-2026-110 ile kapatıldı, aşağıya bakın):** SYSTEM bağlamında P:\ görünürlüğünün birebir ampirik kanıtı bu geliştirme ortamında yönetici yükseltmesi bulunmadığı için alınamamıştı.
 
+## D6 BAŞARIYLA TAMAMLANDI — gerçek servis hesabı + LSA + ACL + WinSW kurulumu bu makinede gerçekten kuruldu (HB-2026-119, 2026-07-29)
+
+- Kullanıcı, SCM kimlik bilgisi adımı için `sc.exe config`e (yalnız bu dar adımda) dönülmesini onayladı — geri kalan her şey (hesap/LSA/ACL/WinSW kurulumu) doğrudan Win32 API ile kaldı. **Gerçek 12. `-Apply` denemesi ilk seferde tam başarılı oldu.**
+- **Bu makinede (DESKTOP-EFN2G33) gerçek ve kalıcı olarak kuruldu, bağımsız salt-okunur sorgularla doğrulandı:**
+  - Hesap `svc-hb-fileagent` (Enabled, "Users" grubunda değil).
+  - LSA hakları — `SeServiceLogonRight`, `SeDenyInteractiveLogonRight`, `SeDenyRemoteInteractiveLogonRight` — üçü de doğrudan `LsaEnumerateAccountRights` sorgusuyla True.
+  - ACL: depolama kökünde tam olarak 3 ACE (Administrators:Full, `DESKTOP-EFN2G33\user`:Modify [pCloud], `svc-hb-fileagent`:Modify); uygulama dizininde 2 ACE (Administrators:Full, svc-hb-fileagent:ReadAndExecute); log dizininde 2 ACE (Administrators:Full, svc-hb-fileagent:Modify). Başka hiçbir ACE yok.
+  - WinSW servisi `hasarbotu-file-agent` kurulu — **`sc.exe qc` ile doğrulandı: START_TYPE=DISABLED, Status=Stopped.** Servis hiçbir zaman başlatılmadı.
+- **Çözülemeyen ilginç not:** `sc.exe config` ilk denemede çalıştı ama doğrudan `ChangeServiceConfigW` P/Invoke'u 11 denemede de aynı hatayla (87/1057) başarısız olmuştu — `sc.exe`nin kendi iç çağrısının neden farklı bir sonuç verdiği bulunamadı, düşük öncelikli açık bir araştırma notu olarak kaydedildi.
+- **Açık kalan (ayrı, onaylanmış gelecekteki adımlar):** servisi etkinleştirme/başlatma, `HASARBOTU_AGENT_ROOTS` ortam değişkeninin gerçek yeni köke güncellenmesi, gerçek pCloud→NTFS veri geçişi (hedef hâlâ boş test klasörü).
+- `npm run check:deploy` geçti, `npm audit` 0 açık.
+
 ## D6 devamı — kullanıcının önerdiği 3 hipotez de test edilip elendi, kök neden hâlâ açık (HB-2026-118, 2026-07-29)
 
 - Kullanıcının önerdiği üç hipotez sırayla gerçek `-Apply` ile (toplam 11 deneme) test edildi: **(b) parola karakter kümesi** (Base64 → alfanumerik+güvenli-özel-karakter, kalıcı tutuldu) — aynı Win32 87 hatası, elendi. **(a) "Users" grubu üyeliği** (geçici olarak çıkarma adımı atlandı) — yine aynı hata, elendi; çıkarma adımı geri konuldu. **(c) yerel güvenlik politikası çelişkisi** (`secedit /export`, salt-okunur) — `SeDenyServiceLogonRight` politikada hiç tanımlı değil, çelişki yok, elendi.

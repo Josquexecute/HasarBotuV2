@@ -359,22 +359,24 @@ olarak `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı bırakılır
 `C:\ProgramData\HasarBotu\probe\probe-result-*.json` dosyası deployment
 audit kaydına eklenir.
 
-## 2c. File Agent servis hesabı + WinSW kurulumu — D6 (HB-2026-113/114/115/116/117): ATOMIK araç HAZIR, gerçek ortamda henüz UYGULANMADI
+## 2c. File Agent servis hesabı + WinSW kurulumu — D6 (HB-2026-113…119): GERÇEKTEN KURULDU (bu makinede, DESKTOP-EFN2G33)
 
 **Durum:** `deploy/windows-service/setup-file-agent-service-account.ps1`
-(HB-2026-114, HB-2026-115'te çift-hesap ACL desteğiyle, HB-2026-116'da
-GERÇEK WinSW kurulumuyla ATOMIK hale getirildi) HB-2026-113'ün kararını
-uygulayan gerçek bir araçtır. Hesap oluşturma + LSA hakları + ACL +
-GERÇEK WinSW servis kurulumu **TEK ATOMIK işlemdir**: adımlar sırayla
-uygulanır, herhangi biri başarısız olursa o ana kadar tamamlanmış TÜM
-adımlar ters sırayla GERİ ALINIR (hesap silinir, verilen LSA hakları
-kaldırılır, ACL önceki haline döner, kurulan servis kaldırılır). Bu araç
-sentetik dizinlerle, GERÇEK hedef değerlerle (salt-okunur önizleme),
-gerçek WinSW şablonuyla (render, salt-okunur/scratch-hedef) VE
-scratch-klasörde gerçek geri-alma senaryolarıyla test edildi (bkz.
-DECISION_LOG HB-2026-114/115/116); **gerçek `svc-hasarbotu-fileagent`
-hesabı bu pakette oluşturulmadı, gerçek ACL/servis kurulumu/veri taşıma
-yapılmadı**.
+GERÇEK `-Apply` ile bu makinede ÇALIŞTIRILDI ve BAŞARILI oldu
+(HB-2026-119, 2026-07-29 — 12 gerçek deneme, önceki 11'i çeşitli gerçek
+kusurlar nedeniyle atomik olarak geri alındı, bkz. DECISION_LOG
+HB-2026-118). Gerçek ve KALICI olarak kurulu: yerel hesap
+`svc-hb-fileagent`, LSA hakları (`SeServiceLogonRight` +iki deny hakkı),
+üç ACL (depolama kökü/uygulama dizini/log dizini), WinSW servisi
+`hasarbotu-file-agent` (**`Disabled`, `Stopped` — hiç başlatılmadı**).
+Aşağıdaki adımlar artık GERÇEKLEŞTİRİLMİŞ referans olarak okunmalıdır;
+araç sentetik+gerçek-hedef senaryolarla önceden test edilmişti (bkz.
+DECISION_LOG HB-2026-114/115/116/117), SON adım (SCM kimlik bilgisi)
+`ChangeServiceConfigW`in bu makinede tutarlı biçimde başarısız olması
+üzerine kullanıcı onayıyla `sc.exe config`e döndürüldü (HB-2026-118/119)
+— geri kalan her şey doğrudan Win32 API ile kaldı. **`HASARBOTU_AGENT_ROOTS`
+değişikliği, servisi etkinleştirme/başlatma ve gerçek pCloud→NTFS veri
+geçişi HÂLÂ AYRI, onaylanmamış adımlardır.**
 
 **Sahip:** Kurulumu yapan operatör (yönetici).
 

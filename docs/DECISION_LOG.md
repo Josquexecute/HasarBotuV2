@@ -4034,3 +4034,71 @@ Kullaniciya sunulan iki secenek: (1) yalniz bu TEK adim icin `sc.exe
 config`e GERI DONMEK (HB-2026-117'nin argv-ifsa endisesini bu dar
 kapsamda kabul ederek), (2) D6'yi bu haliyle birakip arastirmayi baska
 bir zamana ertelemek. Karar KULLANICIYA aittir.
+
+## 2026-07-29 - HB-2026-119: D6 BASARIYLA TAMAMLANDI - kullanici sc.exe'ye (yalniz SCM kimlik adimi icin) donulmesini onayladi, GERCEK 12. -Apply denemesi TAM basarili oldu
+
+Karar: Kullanici iki secenekten `sc.exe config`e (yalniz SCM oturum acma
+kimlik bilgisi adimi icin) DONULMESINI sectikten sonra, `Set-
+FileAgentServiceLogonCredential` HB-2026-116 ONCESI sc.exe tabanli
+uygulamasina GERI DONDURULDU (artik gereksiz olan `HasarBotu.Svc`
+Add-Type blogu - `OpenSCManagerW`/`OpenServiceW`/`ChangeServiceConfigW`/
+`CloseServiceHandle` - TAMAMEN KALDIRILDI). Bu, HB-2026-117'nin argv-ifsa
+endisesini YALNIZ bu dar, tek adimda kabul eder; hesap olusturma, LSA
+haklari, UC ACL ve GERCEK WinSW servis kurulumu HALA dogrudan Win32
+API ile, cocuk surec OLMADAN yapilir.
+
+**GERCEK 12. -Apply denemesi ILK SEFERDE BASARILI oldu** - onceki 11
+denemenin (HB-2026-118) TAMAMINDA takilan SON adim, `ChangeServiceConfigW`
+yerine `sc.exe config` kullanilinca ANINDA calisti. Bu, ilginc bir
+KAPANMAMIS soru birakiyor: `sc.exe`nin kendi ic uygulamasi da nihayetinde
+`ChangeServiceConfig`i cagiriyor OLMALIDIR, ama BIZIM DOGRUDAN P/Invoke
+cagrimizdan FARKLI bir surec/yetki baglaminda basariliya ulasiyor - kesin
+neden (belki sc.exe'nin KENDI surec token'i/oturum baglami, belki
+LookupAccountName'in sc.exe icinde farkli cozulmesi) HALA bilinmiyor ama
+ARTIK ENGELLEYICI DEGIL.
+
+**Tam dogrulanmis GERCEK sonuc (bu makinede, DESKTOP-EFN2G33):**
+- Hesap: `svc-hb-fileagent`, Enabled=True, "Users" grubunda DEGIL,
+  Description="HasarBotu V2 File Agent servis hesabi (D6)".
+- LSA haklari (dogrudan `LsaEnumerateAccountRights` sorgusuyla
+  BAGIMSIZ dogrulandi): `SeServiceLogonRight`,
+  `SeDenyInteractiveLogonRight`, `SeDenyRemoteInteractiveLogonRight` -
+  UCU DE True.
+- ACL (`Get-Acl` ile BAGIMSIZ dogrulandi, `icacls`/`sc.exe qc` DEGIL):
+  - Depolama koku (`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ`): TAM
+    OLARAK UC ACE - `BUILTIN\Administrators` (FullControl),
+    `DESKTOP-EFN2G33\user` (Modify - pCloud senkron hesabi),
+    `DESKTOP-EFN2G33\svc-hb-fileagent` (Modify). Baska HICBIR ACE yok.
+  - Uygulama dizini (`C:\HasarBotu\services\file-agent`): TAM OLARAK IKI
+    ACE - Administrators (Full), svc-hb-fileagent (ReadAndExecute).
+  - Log dizini (`...\logs`): TAM OLARAK IKI ACE - Administrators (Full),
+    svc-hb-fileagent (Modify).
+- WinSW servisi (`sc.exe qc`, salt-okunur sorgu ile BAGIMSIZ dogrulandi):
+  `hasarbotu-file-agent`, TYPE=WIN32_OWN_PROCESS, **START_TYPE=DISABLED**,
+  **Status=Stopped**, SERVICE_START_NAME=`.\svc-hb-fileagent`,
+  DEPENDENCIES=hasarbotu-api (WinSW sablonundan, degistirilmedi).
+- Servis KURULU ama **HICBIR ZAMAN BASLATILMADI** - kullanicinin
+  talimatina TAM UYGUN.
+
+Kanit: GERCEK 12. -Apply calistirmasi (toplam), TAM BASARILI, ardindan
+5 ayri BAGIMSIZ salt-okunur dogrulama sorgusu (`Get-LocalUser`,
+`Get-AccountRights` [dogrudan LSA], `Get-Service`+`sc.exe qc`, 3x
+`Get-Acl`) HEPSI beklenen sonucu GERCEKTEN dogruladi. `npm run
+check:deploy` gecti; `npm audit --audit-level=moderate`: 0 acik.
+
+Etki: `deploy/windows-service/setup-file-agent-service-account.ps1`
+degisti (`Set-FileAgentServiceLogonCredential` sc.exe'ye donduruldu,
+kullanilmayan `HasarBotu.Svc` P/Invoke blogu kaldirildi). Bu makinede
+GERCEK ve KALICI olarak degisti: yerel hesap `svc-hb-fileagent`
+(olusturuldu), LSA haklari (verildi), UC dizinin ACL'i (kilitlendi),
+WinSW servisi `hasarbotu-file-agent` (kuruldu, Disabled). HASARBOTU_
+AGENT_ROOTS/ortam degiskenleri, API/File Agent calistirma, gercek is
+verisi tasima YAPILMADI (kullanici talimatina uygun).
+
+Acik kalan: Servisi etkinlestirme/baslatma, `HASARBOTU_AGENT_ROOTS`
+ortam degiskeninin gercek yeni koke (`C:\HasarBotuStorage\BARAN GLOBAL
+EKSPERTİZ`) guncellenmesi, GERCEK pCloud->NTFS senkron veri gecisi
+(hedef klasor su an BOS bir test klasoru) - hepsi AYRI, acikca
+onaylanmis gelecekteki adimlardir. `ChangeServiceConfigW`in NEDEN
+basarisiz oldugu (sc.exe neden farkli davraniyor) COZULMEDI - kucuk,
+dusuk-oncelikli bir arastirma notu olarak kayitli kalir.
