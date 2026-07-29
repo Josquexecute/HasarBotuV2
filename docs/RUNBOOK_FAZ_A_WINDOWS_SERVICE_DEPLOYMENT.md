@@ -111,22 +111,30 @@ de bir kez çalıştırılıp GERÇEKTEN görünmediği kanıtlanabilir).
 
 ```powershell
 cd deploy\windows-service
-.\probe-p-drive-system-context.ps1               # varsayılan: P
-.\probe-p-drive-system-context.ps1 -DriveLetter C  # yeni kök C:\ altındaysa NTFS erişimi ayrıca `icacls` ile doğrulanır
+.\probe-p-drive-system-context.ps1                              # varsayılan: P, 90 sn üst sınır
+.\probe-p-drive-system-context.ps1 -DriveLetter C -TimeoutSeconds 120  # yeni kök C:\ altındaysa; NTFS erişimi ayrıca `icacls` ile doğrulanır
 ```
 
 **Beklenen çıktı:** `SONUÇ: ... SYSTEM bağlamından GÖRÜNÜYOR ve
 listelenebiliyor.` ve çıkış kodu `0`.
 
 **Durdurma ölçütü:** Çıkış kodu `1` ise (görünmüyor) File Agent servisi
-KURULMAZ; Adım 2'ye dönülür.
+KURULMAZ; Adım 2'ye dönülür. Çıkış kodu `3` ise (zaman aşımı) `-TimeoutSeconds`
+artırılıp tekrar denenir; yine aşarsa aşağıdaki log/`LastTaskResult`
+incelenir.
 
-**Doğrulama:** Betiğin ekran çıktısı (whoami, session id, sonuç)
-kaydedilir. Betik HER DURUMDA geçici görevi ve dosyaları temizler —
-`Get-ScheduledTask -TaskName HasarBotuStorageRootSystemProbe` boş
-dönmelidir.
+**Doğrulama (HB-2026-109):** Betik ekrana `LastTaskResult` (Görev
+Zamanlayıcı'nın kendi durum kodu) ve varsa görev eylem log dosyasının
+içeriğini yazdırır — zaman aşımı/hata durumunda ham kanıt sağlar. Yalnız
+Görev Zamanlayıcı KAYDI (geçici görev) her durumda kaldırılır
+(`Get-ScheduledTask -TaskName HasarBotuStorageRootSystemProbe` boş
+dönmelidir); sonuç JSON'u, iç betik ve log dosyası **kalıcı audit kanıtı**
+olarak `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı bırakılır
+(üzerine yazılmaz, sonraki çalıştırmalar birikir).
 
-**Audit kanıtı:** Bu adımın çıktısı deployment audit kaydına eklenir.
+**Audit kanıtı:** Bu adımın ekran çıktısı VE
+`C:\ProgramData\HasarBotu\probe\probe-result-*.json` dosyası deployment
+audit kaydına eklenir.
 
 ## 3. WinSW servislerinin kurulumu
 

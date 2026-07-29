@@ -2905,3 +2905,83 @@ sonuca isaret eden GOZLEM + resmi Microsoft davranis belgesidir, ancak
 SYSTEM baglaminda dogrudan calistirilmis DEGILDIR. WinSW ikili dosyasinin
 butunluk dogrulamasi (checksum/imza) operator kararina birakildi. TLS
 (OPS-Q03) ve izleme (OPS-Q05) bu paketin kapsami DISINDADIR.
+
+## 2026-07-29 - HB-2026-109: D5 duzeltme - SYSTEM P: probu zaman asimi, ProgramData konumu, tanilama ve UTF-8 duzeltmesi
+
+Karar: `probe-p-drive-system-context.ps1` (HB-2026-108) dort noktada
+duzeltildi; koklu bir yeniden tasarim DEGIL, ayni betigin GUVENILIRLIGINI
+artiran hedefli bir degisiklik.
+
+**1. Zaman asimi:** sabit 20 saniyelik bekleme suresi, gercek ortamda ILK
+SYSTEM baglamli Gorev Zamanlayici calismasinin (surec baslatma + olasi
+AV taramasi) her zaman bu kadar hizli bitmeyebilecegini hesaba katmiyordu.
+`-TimeoutSeconds` parametresiyle varsayilan 90 saniyeye cikarildi (20-600
+araliginda ayarlanabilir) ve bekleme dongusu artik yalniz sonuc dosyasinin
+VARLIGINA degil, `Get-ScheduledTask`in `State -eq 'Ready'` (gorev GERCEKTEN
+bitti) durumuna da bakiyor - bu, "dosya henuz olusmadi ama gorev de
+bitti" (kalici hata) durumunu erken yakalar.
+
+**2. Konum: `C:\ProgramData\HasarBotu\probe`.** Onceki surum sonuc/betik
+dosyalarini CAGIRAN (yonetici) oturumun kullanici profiline (`$env:TEMP`)
+yaziyordu; SYSTEM baglamindaki gorev bu MUTLAK yola erisebilse de, iki
+farkli guvenlik baglami arasinda gereksiz bir bagimliliktir ve zaman
+asimi ayiklamasini zorlastirir (hicbir log YOKTU). ProgramData makine
+genelinde her hesabin eristigi standart konumdur.
+
+**3. Tanilama: `LastTaskResult` ve eylem ciktisi RAPORLANIYOR.** Onceki
+surumde bir hata olsa bile HICBIR IZ kalmiyordu, yalniz "zaman asimi"
+goruluyordu. Ic betik artik kendi TUM ciktisini/istisnalarini
+`Start-Transcript` ile bir log dosyasina yazar; dis betik hem bu log
+icerigini hem `Get-ScheduledTaskInfo`nin `LastTaskResult`/`LastRunTime`
+degerlerini EKRANA yazdirir - basarili VEYA basarisiz her calistirmada.
+Yalniz Gorev Zamanlayici KAYDI (gecici gorev) her durumda kaldirilir;
+sonuc JSON'u, ic betik ve log dosyasi ARTIK SILINMEZ - zaman damgali
+(`probe-result-<yyyyMMdd-HHmmss>.json`) kalici audit kaniti olarak
+`ProgramData`da birikir.
+
+**4. UTF-8 Turkce karakter sorunu:** PowerShell 5.1 konsolunda Turkce
+karakterler (`Yönetici` -> `YÃ¶netici` gibi) bozuk gorunuyordu. Iki katmanli
+duzeltme: (a) `[Console]::OutputEncoding`/`$OutputEncoding` betik
+basinda acikca UTF-8'e (BOM'suz) ayarlanir - konsol GORUNTUSUNU duzeltir;
+(b) sonuc/log/ic betik dosyalari `Set-Content -Encoding utf8` (BOM'LU,
+PowerShell 5.1 varsayilani) yerine `[System.IO.File]::WriteAllText(...,
+UTF8Encoding($false))` ile acikca BOM'SUZ UTF-8 yazilir/okunur - dosya
+icerigi konsol kod sayfasindan TAMAMEN bagimsiz, guvenilir sekilde
+dogru kalir. Bu ayrim GERCEK bir sentetik testle dogrulandi: Turkce metin
+(`İĞÜŞÖÇ` dahil) round-trip yazilip okundu (esitlik TRUE), dosyanin ilk
+3 bayti BOM DEGIL, ve konsol kodlamasi ayarlandiktan sonra metin EKRANDA
+DOGRU goruntulendi.
+
+Yukseltme kontrolu, HERHANGI bir dosya/dizin yan etkisinden (ProgramData
+dizini olusturma DAHIL) ONCE yapilacak sekilde yeniden siralandi - "yukseltme
+yoksa hicbir iz birakma" ilkesi korundu; sentetik testle dogrulandi
+(yukseltilmemis oturumda `C:\ProgramData\HasarBotu` OLUSMADI).
+
+**Bulunan gercek hata:** ilk tasarimda dis komut satirinda `cmd /c ... >
+log 2>&1` ile stdout/stderr yonlendirmesi denendi, ancak betik yolundaki
+Turkce/bosluklu karakterlerle IC ICE tirnaklama riski fark edildi ve
+KULLANILMADI; bunun yerine ic betigin KENDISI `Start-Transcript` ile
+kendi ciktisini yazar - dis komut satiri SADE kalir, tirnaklama riski
+YOK. Bu, kod incelemesi sirasinda (gercek calistirma OLMADAN) fark edilip
+duzeltildi.
+
+Kanit (gercek makinede, GERCEK kurulum/veri tasima OLMADAN):
+- Her iki `.ps1` (bu dosya + `install-services.ps1`, etkilenmedi)
+  `[System.Management.Automation.Language.Parser]` ile sozdizimi GECERLI.
+- Yukseltilmemis oturumda betik acik, eylemsel hatayla durdu; `C:\
+  ProgramData\HasarBotu` dizini OLUSMADI (dogrulandi).
+- UTF-8 BOM'suz round-trip + konsol goruntu duzeltmesi GERCEK bir sentetik
+  yazma/okuma/goruntuleme testiyle dogrulandi (yukarida detay).
+- Bu oturumda YINE yonetici yukseltmesi YOK; SYSTEM baglaminda GERCEK
+  calistirma (asil zaman asimi senaryosunun kendisi) hala YAPILAMADI -
+  bu HB-2026-108'in acik kalan tek maddesiyle AYNI kisittir, yeni bir
+  kisit degildir. Ofis makinesinde yukseltilmis oturumda calistirilip
+  `C:\ProgramData\HasarBotu\probe\` altindaki sonuc dosyasi paylasilmalidir.
+
+Etki: Yalniz `deploy/windows-service/probe-p-drive-system-context.ps1` ve
+ilgili RUNBOOK/README pasajlari degisti. `install-services.ps1`, WinSW XML
+sablonlari, `check-windows-service-configs.mjs` DEGISMEDI. Uygulama kodu
+DEGISMEDI. Typecheck, lint (0 error / 2 mevcut warning), gercek
+`hasarbotu_test` PostgreSQL ile **2.225 basarili / 6 mevcut ortam-kosullu
+UI skip** (degismedi), build/bundle 426.065 bayt (degismedi) ve moderate
+audit (0 acik) gecti.
