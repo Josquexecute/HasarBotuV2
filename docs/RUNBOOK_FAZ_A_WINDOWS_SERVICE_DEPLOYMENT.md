@@ -359,7 +359,7 @@ olarak `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı bırakılır
 `C:\ProgramData\HasarBotu\probe\probe-result-*.json` dosyası deployment
 audit kaydına eklenir.
 
-## 2c. File Agent servis hesabı + WinSW kurulumu — D6 (HB-2026-113/114/115/116): ATOMIK araç HAZIR, gerçek ortamda henüz UYGULANMADI
+## 2c. File Agent servis hesabı + WinSW kurulumu — D6 (HB-2026-113/114/115/116/117): ATOMIK araç HAZIR, gerçek ortamda henüz UYGULANMADI
 
 **Durum:** `deploy/windows-service/setup-file-agent-service-account.ps1`
 (HB-2026-114, HB-2026-115'te çift-hesap ACL desteğiyle, HB-2026-116'da
@@ -451,10 +451,18 @@ olursa TÜMÜ geri alınır):
    kimliğini (PAROLASIZ) ekler, `<exe> install` çalıştırır. *Geri alma:
    kopyalanan ikili/render edilmiş XML silinir; servis kurulduysa
    `<exe> uninstall`.*
-8. **SCM oturum açma kimlik bilgisini ayarlar:** `sc.exe config <servis>
-   obj= ... password= ...` — parola BURADA, TEK SEFERLİK komut satırı
-   argümanı olarak SCM'ye aktarılır; **hiçbir dosyaya/log'a/repository'ye
-   YAZILMAZ**.
+8. **SCM oturum açma kimlik bilgisini ayarlar — HB-2026-117: `sc.exe`
+   KULLANILMAZ.** Doğrudan Win32 SCM API'si (`ChangeServiceConfigW`,
+   `advapi32.dll`) bu sürecin İÇİNDEN çağrılır — `sc.exe` gibi bir ÇOCUK
+   SÜREÇ hiç başlatılmaz, bu yüzden parola bir komut satırı argümanında
+   (argv) HİÇBİR ZAMAN görünmez (aksi hâlde çalıştığı kısa süre boyunca
+   başka bir sürecin — WMI `Win32_Process`, denetim/audit araçları —
+   komut satırını okuyabilmesi riski olurdu). Parola yalnız geçici,
+   yönetilmeyen (unmanaged) bir bellek arabelleğine (`Marshal.
+   SecureStringToGlobalAllocUnicode`) çözülüp API'ye HAM POINTER olarak
+   geçer; çağrı biter bitmez `Marshal.ZeroFreeGlobalAllocUnicode` ile
+   ÖNCE SIFIRLANIR SONRA serbest bırakılır. **Hiçbir dosyaya/argv'ye/
+   ortam değişkenine/log'a/repository'ye YAZILMAZ**.
 9. **Servis başlangıç türünü `Disabled` yapar ve BAŞLATMAZ** — servisi
    etkinleştirme/başlatma bu betiğin KAPSAMI DIŞINDADIR, ayrı, açıkça
    onaylanmış bir adımdır.
@@ -640,13 +648,46 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   durduruyordu — gerçek çıkış kodu her zaman `1` oluyordu, belgelenen
   `2` DEĞİL (üç ayrı ön-koşul kapısında gerçekten çalıştırılarak
   BULUNDU); `-ErrorAction Continue` ile düzeltildi ve tekrar test
-  edilip doğru kod (`2`) döndüğü doğrulandı. **Test edilMEYEN (kasıtlı,
+  edilip doğru kod (`2`) döndüğü doğrulandı.
+  **HB-2026-117 (ChangeServiceConfigW + tam zincir failure-injection
+  testi):** `sc.exe config` kaldırıldı, yerine `advapi32.dll`
+  `OpenSCManagerW`/`OpenServiceW`/`ChangeServiceConfigW`/
+  `CloseServiceHandle` DOĞRUDAN (çocuk süreç OLMADAN) çağrılıyor; parola
+  yalnız `Marshal.SecureStringToGlobalAllocUnicode` ile geçici unmanaged
+  arabelleğe çözülüp API'ye ham `IntPtr` olarak geçiyor, çağrı biter
+  bitmez `Marshal.ZeroFreeGlobalAllocUnicode` ile sıfırlanıp serbest
+  bırakılıyor. **Test sırasında bulunan VE düzeltilen iki gerçek P/Invoke
+  kusuru:** (1) `OpenSCManagerW`'a `lpDatabaseName` için `$null` geçmek
+  — MSDN "ServicesActive"e düşeceğini söylese de — bu ortamda GERÇEKTEN
+  `ERROR_INVALID_NAME (123)` ile başarısız oluyordu; açıkça
+  `'ServicesActive'` vermek düzeltti. (2) `SERVICE_NO_CHANGE` sabiti
+  `0xFFFFFFFF` PowerShell'de önce `Int32 (-1)` olarak ayrıştırılıyor;
+  bu değer `ChangeServiceConfigW`'ın `uint` parametrelerine geçirilmeye
+  çalışılınca "değer UInt32 için çok büyük/küçük" hatasıyla
+  BAŞARISIZ oluyordu; `[uint32]::MaxValue` ile düzeltildi. Düzeltme
+  sonrası SCM P/Invoke'u GERÇEK bir servise (`Spooler`) karşı SALT-OKUNUR
+  erişimle (yalnız `SERVICE_QUERY_STATUS`) test edildi: handle'lar
+  gerçekten açılıp kapandı; `ChangeServiceConfigW` bu salt-okunur
+  handle'la çağrıldığında Windows'un KENDİSİ `ACCESS_DENIED (5)` ile
+  REDDETTİĞİ doğrulandı (yanlış P/Invoke imzası çökme/crash üretirdi —
+  bunun yerine düzgün bir Win32 hata kodu dönmesi imzanın DOĞRU
+  olduğunun kanıtıdır); `Spooler` hiçbir şekilde değişmedi. Parola
+  round-trip'i (`SecureString` → unmanaged arabellek → doğru okunan
+  düz metin → sıfırla+serbest bırak) izole doğrulandı. **Tam zincir
+  failure-injection testi:** hesap+haklar (mock, gerçek hesap/hak
+  OLUŞTURMADAN) + depolama/uygulama-dizini/log ACL'leri + WinSW
+  ikili kopyalama + XML render+kimlik enjeksiyonu (HEPSİ GERÇEK
+  fonksiyonlarla, scratch klasörlerde) yedi adım sırayla uygulandı,
+  ardından "WinSW install başarısız" kasıtlı olarak enjekte edildi;
+  `Invoke-Rollback` tüm yedi adımı TAM TERS SIRAYLA geri aldı ve
+  gerçek dosya/ACL durumu (miras dahil) BİREBİR orijinaline döndüğü
+  doğrulandı (`undoStack` boşaldı). **Test edilMEYEN (kasıtlı,
   kullanıcı talimatıyla — henüz gerçek Apply çalıştırılmadı):**
   `New-LocalUser`/`Set-LocalUser` ile GERÇEK hesap oluşturma/parola
   ayarlama, `LsaAddAccountRights` ile GERÇEK hak verme, gerçek WinSW
-  `install`/`sc.exe config`/`Set-Service -StartupType Disabled` —
-  bunlar yalnız kod incelemesiyle doğrulandı, D6'nın gerçek
-  yürütülmesinde ampirik olarak kanıtlanmalıdır.
+  `install`, gerçek bir servise karşı GERÇEK `ChangeServiceConfigW`
+  (SERVICE_CHANGE_CONFIG haklı bir handle'la) çağrısı — bunlar D6'nın
+  gerçek yürütülmesinde ampirik olarak kanıtlanmalıdır.
 
 ## Açık kalan
 
@@ -657,7 +698,7 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   verisidir, ayrı ölçüm GEREKMEZ. Açık kalan TEK şey: senkronizasyonun
   GERÇEK süresi/disk etkisi geçiş fiilen yapılana kadar bilinmez
   (yalnız prosedür/§2a dry-run planı tanımlandı — bkz. HB-2026-112).
-- **ARAÇ HAZIR VE ATOMIK (HB-2026-113/114/115/116, §2c):** File Agent
+- **ARAÇ HAZIR VE ATOMIK (HB-2026-113/114/115/116/117, §2c):** File Agent
   artık LocalSystem yerine adanmış `svc-hasarbotu-fileagent` hesabı
   altında çalışacak; `setup-file-agent-service-account.ps1` hesabı, LSA
   haklarını, ACL'i VE GERÇEK WinSW kurulumunu TEK ATOMIK işlem olarak
@@ -665,10 +706,14 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   pCloud'u çalıştıran etkileşimli kullanıcıya (`-PCloudSyncAccount`) da
   Modify verir. HB-2026-116: parola operatörden ALINMAZ (betik kendi
   üretir, SecureString, hiçbir dosyaya yazılmaz), servis her zaman
-  `Disabled` kurulur ve BAŞLATILMAZ. Açık kalan: gerçek hesap oluşturma/
-  LSA hakkı verme/WinSW `install`/`sc.exe config` çağrılarının GERÇEK
-  ortamda ampirik doğrulanması (D6'nın gerçek yürütülmesi — kasıtlı
-  olarak bu pakette YAPILMADI); parola rotasyon prosedürü (sıklık, kim
+  `Disabled` kurulur ve BAŞLATILMAZ. HB-2026-117: SCM'ye parola aktarımı
+  artık `sc.exe` (çocuk süreç, argv ifşası riski) DEĞİL, doğrudan
+  `ChangeServiceConfigW` Win32 API çağrısı; tam atomik zincir (hesap+
+  haklar mock, ACL+WinSW render GERÇEK) bir failure-injection testiyle
+  uçtan uca doğrulandı. Açık kalan: gerçek hesap oluşturma/LSA hakkı
+  verme/WinSW `install`/gerçek `ChangeServiceConfigW` çağrılarının
+  GERÇEK ortamda ampirik doğrulanması (D6'nın gerçek yürütülmesi —
+  kasıtlı olarak bu pakette YAPILMADI); parola rotasyon prosedürü (sıklık, kim
   yapar — mekanizma HAZIR: betiği tekrar `-Apply` ile çalıştırmak) henüz
   RESMİ bir prosedür olarak yazılmadı; `install-services.ps1`e entegrasyon
   (API servisiyle TEK bir orkestrasyon akışına alma) henüz yapılmadı;

@@ -3685,3 +3685,117 @@ SIKLIGI/sorumlusu resmi bir prosedur olarak yazilmali;
 `probe-p-drive-system-context.ps1`/`install-services.ps1`deki benzer
 `Write-Error; exit N` desenlerinin AYNI kusuru tasiyip tasimadigi ayrica
 kontrol edilmelidir (kucuk, dusuk-risk bir takip maddesi).
+
+## 2026-07-29 - HB-2026-117: sc.exe kaldirildi, dogrudan ChangeServiceConfigW (Win32 API) kullanildi; tam atomik zincir failure-injection ile test edildi (gercek Apply hala calistirilmadi)
+
+Karar: Kullanicinin talimatiyla SCM parola aktariminda `sc.exe config`
+KALDIRILDI - `sc.exe` bir COCUK SUREC baslatir ve parolayi `password=`
+KOMUT SATIRI ARGUMANI olarak tasir; bu, sürec calistigi kisa sure
+boyunca WMI `Win32_Process`/denetim araclari gibi baska bir surecin
+komut satirini okuyabilmesi anlamina gelir. Yerine dogrudan Win32 SCM
+API'si (`advapi32.dll`: `OpenSCManagerW`/`OpenServiceW`/
+`ChangeServiceConfigW`/`CloseServiceHandle`) bu surecin ICINDEN cagrilir
+- HICBIR cocuk surec olusturulmaz, parola HICBIR ZAMAN bir komut
+satirinda gorunmez.
+
+**Parola bellek guvenligi:** `Marshal.SecureStringToGlobalAllocUnicode`
+ile SecureString GECICI, YONETILMEYEN (unmanaged, .NET GC/heap DISINDA)
+bir arabellege cozulur; `ChangeServiceConfigW`'a bu arabellegin HAM
+POINTER'i (`IntPtr`) gecer - yonetilen bir `string` ASLA olusturulmaz
+(immutable oldugu ve guvenle sifirlanamayacagi icin). API cagrisi biter
+bitmez `Marshal.ZeroFreeGlobalAllocUnicode` cagrilir - bu, .NET'in
+BELGELENEN API garantisidir: yalniz `FreeHGlobal` (serbest birakma)
+DEGIL, ONCE icerigi sifirlar SONRA serbest birakir.
+
+**Test sirasinda GERCEKTEN calistirilarak bulunan VE duzeltilen iki
+P/Invoke kusuru:**
+1. **`OpenSCManagerW` NULL `lpDatabaseName` ile basarisiz oluyordu.**
+   MSDN, `lpDatabaseName=NULL` gecildiginde varsayilan "ServicesActive"
+   veritabanina baglanildigini soyler. Bu ortamda GERCEKTEN test edildi:
+   NULL gecmek `ERROR_INVALID_NAME` (Win32 kod 123) ile basarisiz
+   oluyordu; acikca `'ServicesActive'` string'i vermek ise basarili
+   oldu (handle GERCEKTEN gecerli donuyor). Izole minimal repro ile
+   (bu betikten BAGIMSIZ, salt Add-Type + tek cagri) DOGRULANDI - bu
+   PowerShell/.NET marshaling katmaninin bir ozelligi, betigin kendi
+   mantik hatasi degil, ama pratik sonucu AYNI: acikca 'ServicesActive'
+   verilmeli.
+2. **`SERVICE_NO_CHANGE` sabiti (`0xFFFFFFFF`) P/Invoke `uint`
+   parametrelerine GECIRILEMIYORDU.** PowerShell 5.1, `0xFFFFFFFF`
+   hex literalini once `Int32 (-1)` olarak ayristirir; bu deger
+   `ChangeServiceConfigW`'in `uint dwServiceType`/`dwStartType`/
+   `dwErrorControl` parametrelerine baglanmaya calisilinca "Deger bir
+   UInt32 icin cok buyuk ya da cok kucuktu" hatasiyla BASARISIZ oluyordu
+   - GERCEKTEN cagrilarak BULUNDU. `[uint32]0xFFFFFFFF` (acik cast)
+   dahi AYNI hatayi veriyor (once Int32 -1'e ayristirilip SONRA araligi
+   asan bir UInt32 cast'i deneniyor); dogru cozum `[uint32]::MaxValue`
+   (doğrudan .NET statik alani, isaretsiz bit deseni ile).
+
+**Tam atomik zincir - failure-injection testi (kullanicinin ozellikle
+istedigi):** Gercek hesap/ACL/servis OLUSTURMADAN, hesap+LSA haklari
+adimlari MOCK (yalniz sira/log dogrulamasi) birakildi; depolama koku
+ACL'i, uygulama dizini ACL'i, log dizini olusturma+ACL'i, WinSW ikili
+"kopyalama", WinSW XML render+kimlik enjeksiyonu ise GERCEK fonksiyonlarla
+(`Set-LeastPrivilegeAcl`, `New-RenderedWinSwConfig`,
+`Set-WinSwServiceAccountIdentity`) SCRATCH klasorlerde/gercek commit'li
+sablona karsi calistirildi. Yedi adim BASARIYLA tamamlandiktan SONRA
+"WinSW install basarisiz" KASITLI olarak `throw` ile enjekte edildi.
+`Invoke-Rollback` TUM yedi adimi TAM TERS SIRAYLA geri aldi (do/undo
+log'u kanitladi); GERCEK dogrulama: WinSW ikili/XML dosyalari silindi,
+log dizini kaldirildi, depolama VE uygulama dizini ACL'leri (miras/
+`IsProtected` durumu DAHIL) BIREBIR orijinaline dondu, `$undoStack`
+bosaldi.
+
+**Test sirasinda GORULEN ama SCRIPT KUSURU OLMAYAN bir arac-katmani
+garipligi:** Test komutlarinda `'C:\Program Files\nodejs\node.exe'`
+(bosluklu, GERCEK bir yol AMA test icin sadece PLACEHOLDER string
+olarak kullaniliyordu) GECTIGINDE, PowerShell arac cagrisi katmaninda
+"Remove-Item on system path 'C:\Program' is blocked" hatasi ALINDI - bu,
+GERCEK script kodunda degil, bu oturumun kendi arac-cagirma katmaninin
+bosluklu yol string'lerini nasil ilettigiyle ilgili bir ARTEFAKT olarak
+teshis edildi (bosluksuz bir test yolu kullanilinca kayboldu; script'in
+KENDI `New-RenderedWinSwConfig`/ACL fonksiyonlari bosluklu GERCEK
+yollarla daha once BASKA testlerde zaten basariyla calistirilmisti).
+Kayda gecirildi ama script'te HICBIR degisiklik gerektirmedi.
+
+Kanit (bu makinede, GERCEK hesap/ACL/servis/veri OLMADAN):
+- `Parser::ParseFile`: 0 hata (her duzeltmeden sonra tekrar dogrulandi).
+- SCM P/Invoke plumbing'i GERCEK bir servise (`Spooler`) karsi SALT-OKUNUR
+  erisimle (`SERVICE_QUERY_STATUS`, `SERVICE_CHANGE_CONFIG` DEGIL) test
+  edildi: `OpenSCManagerW`/`OpenServiceW` GECERLI handle'lar dondu,
+  `CloseServiceHandle` ikisini de basariyla kapatti.
+- Negatif test: ayni salt-okunur handle `ChangeServiceConfigW`'a
+  gecirildi - Windows'un KENDISI `ACCESS_DENIED` (Win32 kod 5) ile
+  REDDETTI (crash/access violation DEGIL - bu, P/Invoke imzasinin
+  struct/parametre duzeninin DOGRU oldugunun kanitidir); `Spooler`
+  HICBIR sekilde degismedi (calisir durumda kaldigi ayrica dogrulandi).
+- Parola marshaling round-trip'i izole dogrulandi: bilinen bir metin
+  SecureString'e alinip `SecureStringToGlobalAllocUnicode` ile
+  cozulup `PtrToStringUni` ile GERI OKUNDU (birebir eslesti),
+  `ZeroFreeGlobalAllocUnicode` hatasiz cagrildi.
+- Tam zincir failure-injection testi: 7 adim ileri (hesap/haklar mock,
+  ACL x3 + WinSW kopyalama + XML render GERCEK), 1 enjekte hata, 7 adim
+  ters-sirali geri alma - TUMU basarili, GERCEK dosya/ACL durumu
+  birebir orijinaline dondugu dogrulandi.
+- `npm run check:deploy` gecti (WinSW XML sablonlari ETKILENMEDI);
+  `npm audit --audit-level=moderate`: 0 acik. Yalniz `.ps1`/`.md`
+  degistigi icin typecheck/lint/test/build GEREKMEDI.
+- Islem sonunda: gercek hesap YOK, hedef klasor YOK, `hasarbotu-file-agent`
+  servisi YOK, `Spooler` etkilenmedi (hepsi dogrulandi).
+
+**Bilerek TEST EDILMEYEN (kullanicinin acik talimatiyla - "henuz apply
+calistirma"):** Gercek `SERVICE_CHANGE_CONFIG` hakli bir handle'la
+GERCEK bir servise karsi `ChangeServiceConfigW`'in BASARILI cagrisi
+(yani GERCEKTEN bir servisin oturum acma kimlik bilgisini degistirmek)
+hicbir servise karsi (yeni VEYA mevcut) denenmedi - bu, D6'nin gercek
+yurutulmesinde, gercek `hasarbotu-file-agent` servisine karsi ampirik
+olarak kanitlanmalidir.
+
+Etki: Yalniz `deploy/windows-service/setup-file-agent-service-account.ps1`
+ve `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` (§2c + §7/Acik
+kalan guncellendi) degisti. `install-services.ps1`, WinSW sablonlari,
+uygulama kodu, migration, API/contracts, gercek hesap/ACL/servis/veri/
+ortam degiskeni DEGISMEDI.
+
+Acik kalan: D6'nin gercek yurutulmesi (kullanici onayiyla) `ChangeServiceConfigW`'in
+GERCEK bir servise karsi basarili cagrisini ve tam uctan uca akisi
+ampirik olarak kanitlamalidir.

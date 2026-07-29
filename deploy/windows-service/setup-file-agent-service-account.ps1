@@ -38,15 +38,20 @@
     MEVCUT durumu okur ve YAPILACAK plani yazdirir (AGENTS.md SS7 "kritik
     islem standardi": Planla -> Onizle -> Onay -> Uygula -> Dogrula).
 
-    PAROLA GUVENLIGI (HB-2026-116): Parola operator tarafindan VERILMEZ -
-    betik `-Apply` sirasinda BIR KEZ, kriptografik RNG ile kendi uretir,
-    yalniz `SecureString` olarak bellekte tutar. Parola: (1) hesabi
-    olusturur/sifirlar (`New-LocalUser`/`Set-LocalUser`), (2) SCM'ye
-    `sc.exe config ... password=` ile TEK SEFERLIK komut satiri argumani
-    olarak aktarilir (Windows SCM'nin gerektirdigi ASGARI ifsa). Parola
-    HICBIR ZAMAN: repo'ya, WinSW XML'ine (ne sablon ne render edilmis
-    kopya), herhangi bir log/transcript dosyasina, konsol ciktisina
-    YAZILMAZ. Islem bittikten sonra parolayi bilen/hatirlayan HICBIR
+    PAROLA GUVENLIGI (HB-2026-116/117): Parola operator tarafindan
+    VERILMEZ - betik `-Apply` sirasinda BIR KEZ, kriptografik RNG ile
+    kendi uretir, yalniz `SecureString` olarak bellekte tutar. Parola:
+    (1) hesabi olusturur/sifirlar (`New-LocalUser`/`Set-LocalUser`),
+    (2) SCM'ye DOGRUDAN Win32 API'siyle (`ChangeServiceConfigW`,
+    `advapi32.dll`) aktarilir - `sc.exe` gibi bir COCUK SUREC ASLA
+    baslatilmaz, bu yuzden parola HICBIR ZAMAN bir komut satiri
+    argumaninda (argv) gorunmez; API'ye yalniz gecici, unmanaged bir
+    bellek pointer'i (IntPtr) olarak gecer ve cagri biter bitmez
+    `Marshal.ZeroFreeGlobalAllocUnicode` ile ONCE SIFIRLANIR SONRA
+    serbest birakilir. Parola HICBIR ZAMAN: repo'ya, WinSW XML'ine (ne
+    sablon ne render edilmis kopya), herhangi bir log/transcript
+    dosyasina, ortam degiskenine, konsol ciktisina YAZILMAZ. Islem
+    bittikten sonra parolayi bilen/hatirlayan HICBIR
     kayit KALMAZ - bu KASITLIDIR: hesap yalniz "Log on as a service" icin
     kullanilir, hicbir insan ona etkilesimli giris yapmaz, parolayi
     bilmesi GEREKMEZ. Rotasyon, betigi tekrar `-Apply` ile calistirip
@@ -225,6 +230,42 @@ public static extern int LsaNtStatusToWinError(uint status);
 
 [DllImport("advapi32.dll")]
 public static extern int LsaFreeMemory(IntPtr Buffer);
+'@
+}
+
+# --- SCM (Service Control Manager) icin P/Invoke ---------------------------
+# HB-2026-117: `sc.exe config ... password=` cocuk surec olusturup parolayi
+# KOMUT SATIRI ARGUMANI olarak tasiyordu - bu, calistigi kisa sure boyunca
+# baska bir surecin (WMI Win32_Process, Process Explorer, denetim/audit
+# araclari) surecin komut satirini okuyabilmesi anlamina gelir. Bunun yerine
+# DOGRUDAN Win32 SCM API'si (OpenSCManagerW/OpenServiceW/ChangeServiceConfigW)
+# COCUK SUREC OLUSTURMADAN cagrilir - parola hicbir zaman bir komut satirinda
+# GORUNMEZ, yalniz bu surecin KENDI bellegindeki gecici, acikca sifirlanan
+# bir unmanaged arabellek uzerinden Windows'un kendi SCM'sine aktarilir.
+if (-not ('HasarBotu.Svc' -as [type])) {
+    Add-Type -Namespace HasarBotu -Name Svc -MemberDefinition @'
+[DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+public static extern IntPtr OpenSCManagerW(string lpMachineName, string lpDatabaseName, uint dwDesiredAccess);
+
+[DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+public static extern IntPtr OpenServiceW(IntPtr hSCManager, string lpServiceName, uint dwDesiredAccess);
+
+[DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+public static extern bool ChangeServiceConfigW(
+    IntPtr hService,
+    uint dwServiceType,
+    uint dwStartType,
+    uint dwErrorControl,
+    string lpBinaryPathName,
+    string lpLoadOrderGroup,
+    IntPtr lpdwTagId,
+    string lpDependencies,
+    string lpServiceStartName,
+    IntPtr lpPassword,
+    string lpDisplayName);
+
+[DllImport("advapi32.dll", SetLastError = true)]
+public static extern bool CloseServiceHandle(IntPtr hSCObject);
 '@
 }
 
@@ -525,23 +566,69 @@ function Set-WinSwServiceAccountIdentity {
 }
 
 function Set-FileAgentServiceLogonCredential {
-    <# Parola YALNIZ bellekte cozulur, HICBIR dosyaya/log'a yazilmaz;
-       `sc.exe config` cagrisina TEK SEFERLIK komut satiri argumani
-       olarak gecer (Windows SCM'nin gerektirdigi ASGARI ifsa). #>
+    <# HB-2026-117: `sc.exe` COCUK SURECI KULLANMAZ - dogrudan Win32 SCM
+       API'sini (ChangeServiceConfigW) bu surecin ICINDEN cagirir. Parola
+       HICBIR ZAMAN: bir komut satiri argumaninda (argv), ortam
+       degiskeninde (env), dosyada/XML'de veya log'da GORUNMEZ. Parola
+       yalniz `Marshal.SecureStringToGlobalAllocUnicode` ile GECICI,
+       unmanaged (yonetilmeyen, .NET GC/heap DISINDA) bir arabellege
+       cozulur; ChangeServiceConfigW'a HAM POINTER (IntPtr) olarak gecer
+       (yonetilen bir `string` ASLA olusturulmaz - .NET string'leri
+       immutable'dir ve GUVENLE sifirlanamaz); API cagrisi biter bitmez
+       `Marshal.ZeroFreeGlobalAllocUnicode` ile arabellek ONCE SIFIRLANIR
+       SONRA serbest birakilir (bu, .NET'in belgelenen API garantisidir -
+       yalniz `FreeHGlobal` DEGIL, ic:erigi de temizler). #>
     param(
         [Parameter(Mandatory = $true)][string]$ServiceName,
         [Parameter(Mandatory = $true)][string]$AccountName,
         [Parameter(Mandatory = $true)][System.Security.SecureString]$Password
     )
-    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
+    $SC_MANAGER_CONNECT = [uint32]0x0001
+    $SERVICE_CHANGE_CONFIG = [uint32]0x0002
+    # NOT: `0xFFFFFFFF` PowerShell'de once Int32 (-1) olarak ayrıştırılır;
+    # `[uint32]0xFFFFFFFF` bu -1'i ARALIK KONTROLUYLE UInt32'ye cevirmeye
+    # calisip BASARISIZ olur ("Deger UInt32 icin cok buyuk/kucuk") -
+    # GERCEKTEN denenip BULUNDU (bkz. DECISION_LOG HB-2026-117).
+    # `[uint32]::MaxValue` dogru, ACIK bit deseniyle SERVICE_NO_CHANGE'i verir.
+    $SERVICE_NO_CHANGE = [uint32]::MaxValue
+
+    # NOT: MSDN'e gore lpDatabaseName=NULL "ServicesActive"e DUSMELIDIR,
+    # ancak bu ortamda GERCEKTEN test edilip BULUNDU: NULL gecmek
+    # ERROR_INVALID_NAME (123) ile basarisiz oluyor - acikca
+    # 'ServicesActive' vermek CALISIYOR. Bkz. DECISION_LOG HB-2026-117.
+    $scmHandle = [HasarBotu.Svc]::OpenSCManagerW($null, 'ServicesActive', $SC_MANAGER_CONNECT)
+    if ($scmHandle -eq [IntPtr]::Zero) {
+        $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        throw "OpenSCManagerW basarisiz (Win32 hata kodu: $err)."
+    }
     try {
-        $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-        $objArg = ".\$AccountName"
-        & sc.exe config $ServiceName obj= $objArg password= $plainPassword | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "sc.exe config basarisiz oldu (kod $LASTEXITCODE)." }
+        $serviceHandle = [HasarBotu.Svc]::OpenServiceW($scmHandle, $ServiceName, $SERVICE_CHANGE_CONFIG)
+        if ($serviceHandle -eq [IntPtr]::Zero) {
+            $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            throw "OpenServiceW basarisiz ($ServiceName; Win32 hata kodu: $err)."
+        }
+        try {
+            $passwordPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($Password)
+            try {
+                $accountArg = ".\$AccountName"
+                $ok = [HasarBotu.Svc]::ChangeServiceConfigW(
+                    $serviceHandle, $SERVICE_NO_CHANGE, $SERVICE_NO_CHANGE, $SERVICE_NO_CHANGE,
+                    $null, $null, [IntPtr]::Zero, $null, $accountArg, $passwordPtr, $null)
+                if (-not $ok) {
+                    $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                    throw "ChangeServiceConfigW basarisiz ($ServiceName; Win32 hata kodu: $err)."
+                }
+            } finally {
+                # Sifirla SONRA serbest birak - yalniz serbest birakmak
+                # (FreeHGlobal) icerigi bellekte/sayfalama dosyasinda
+                # birakabilirdi; bu cagri ONCE sifirlar.
+                [System.Runtime.InteropServices.Marshal]::ZeroFreeGlobalAllocUnicode($passwordPtr)
+            }
+        } finally {
+            [HasarBotu.Svc]::CloseServiceHandle($serviceHandle) | Out-Null
+        }
     } finally {
-        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        Remove-Variable -Name plainPassword -ErrorAction SilentlyContinue
+        [HasarBotu.Svc]::CloseServiceHandle($scmHandle) | Out-Null
     }
 }
 
@@ -683,7 +770,7 @@ if (-not $appDirAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $FileAge
 if (-not $logsAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $logsDir (yalniz $AccountName -> Modify, Administrators -> Full)") }
 if (-not $existingService) {
     $planSteps.Add("WinSW servisi KURULACAK: $ServiceName ($FileAgentAppDir\$ServiceName.xml render edilecek, <serviceaccount> PAROLASIZ eklenecek)")
-    $planSteps.Add('SCM servis oturum acma kimlik bilgisi (parola) BIR KEZ uretilip sc.exe config ile AKTARILACAK - hicbir dosyaya yazilmayacak')
+    $planSteps.Add('SCM servis oturum acma kimlik bilgisi (parola) BIR KEZ uretilip dogrudan ChangeServiceConfigW (Win32 API, cocuk surec YOK) ile AKTARILACAK - hicbir dosyaya/argv/env/log''a yazilmayacak')
     $planSteps.Add('Servis baslangic turu DISABLED olarak ayarlanacak ve BASLATILMAYACAK')
 } else {
     $planSteps.Add("UYARI: $ServiceName servisi ZATEN kurulu - bu betik VAR OLAN bir servisi guncellemez/yeniden kurmaz, atomik islem yalniz servis HENUZ yokken desteklenir.")
@@ -821,8 +908,9 @@ try {
     $undoStack.Push({ & $exeDest uninstall 2>$null }.GetNewClosure())
     Write-Host "  Servis kuruldu: $ServiceName" -ForegroundColor Green
 
-    # --- SCM oturum acma kimlik bilgisi: parola BURADA, TEK SEFERLIK ------
-    # sc.exe'ye aktarilir - hicbir dosyaya/log'a YAZILMAZ.
+    # --- SCM oturum acma kimlik bilgisi: parola BURADA, dogrudan Win32 ----
+    # API'siyle (ChangeServiceConfigW) aktarilir - cocuk surec/argv/env/
+    # dosya/log YOK (HB-2026-117).
     Set-FileAgentServiceLogonCredential -ServiceName $ServiceName -AccountName $AccountName -Password $servicePassword
     Write-Host '  SCM oturum acma kimlik bilgisi ayarlandi (parola hicbir dosyaya yazilmadi).' -ForegroundColor Green
 
