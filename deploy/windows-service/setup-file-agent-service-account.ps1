@@ -638,9 +638,25 @@ function Set-FileAgentServiceLogonCredential {
         try {
             $passwordPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($Password)
             try {
+                # HB-2026-118 arastirmasi: `lpServiceStartName=NULL` (hesap
+                # adi degismiyor) hata kodunu 87 (ERROR_INVALID_PARAMETER)
+                # yerine 1057 (ERROR_INVALID_SERVICE_ACCOUNT: "hesap adi
+                # gecersiz VEYA parola gecersiz") YAPTI - bu, SCM'nin GERCEK
+                # hesap+parola dogrulama yoluna ULASTIGIMIZI gosteriyor.
+                # Hipotez: YENI olusturulan hesap SAM/LSA'ya TAM
+                # yayilmadan (propagation) bu dogrulamaya maruz kaliyor
+                # olabilir - kisa bir bekleme + birkac deneme ile test
+                # edilir (GERCEKTEN, bu ortamda).
+                # HB-2026-118 (COZULMEDI): GERCEKTEN test edilip ZAMANLAMA/
+                # yayilma (propagation) IHTIMALI KESIN olarak ELENDI - 5 deneme,
+                # 2'ser sn gecikmeyle, HER IKI varyasyonda da (accountArg acik
+                # ".\hesap" -> Win32 87 ERROR_INVALID_PARAMETER; $null -> Win32
+                # 1057 ERROR_INVALID_SERVICE_ACCOUNT) SONUC TUTARLI/DETERMINISTIK
+                # kaldi. Kok neden HALA bulunamadi; kullanici yonlendirmesi
+                # bekleniyor (bkz. DECISION_LOG HB-2026-118).
                 $accountArg = ".\$AccountName"
                 $ok = [HasarBotu.Svc]::ChangeServiceConfigW(
-                    $serviceHandle, $SERVICE_WIN32_OWN_PROCESS, $SERVICE_NO_CHANGE, $SERVICE_NO_CHANGE,
+                    $serviceHandle, $SERVICE_NO_CHANGE, $SERVICE_NO_CHANGE, $SERVICE_NO_CHANGE,
                     $null, $null, [IntPtr]::Zero, $null, $accountArg, $passwordPtr, $null)
                 if (-not $ok) {
                     $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()

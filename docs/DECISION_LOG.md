@@ -3911,3 +3911,71 @@ nedeni HALA COZULMEDI - kullanicinin yonlendirmesi/onayi olmadan
 ek ham P/Invoke denemesi YAPILMAYACAK (guvenlik siniflandiricisi
 sinirina saygi gosterildi). D6 servis hesabinin GERCEK SCM kimlik
 bilgisi kurulumu bu yuzden HALA TAMAMLANMADI.
+
+## 2026-07-29 - HB-2026-118 devami: ZAMANLAMA/yayilma hipotezi KESIN olarak elendi; iki FARKLI, DETERMINISTIK hata kodu bulundu; kok neden HALA acik
+
+Karar: Kullanici "reviewed script icinde denemeye devam et" secenegini
+sectikten sonra, `ChangeServiceConfigW` sorunu icin UC ek GERCEK -Apply
+denemesi (toplam 9) yapildi - hicbiri basarili olmadi ama iki onemli
+YENI bulgu elde edildi.
+
+**Bulgu 1 - lpServiceStartName parametresi SONUCU DEGISTIRIYOR (deterministik):**
+- `lpServiceStartName = ".\svc-hb-fileagent"` (acik, WinSW'nin zaten
+  ayarladigi DEGERLE AYNI) -> HER ZAMAN Win32 87 (ERROR_INVALID_PARAMETER).
+- `lpServiceStartName = $null` (MSDN'e gore "hesap adi degismiyor") ->
+  HER ZAMAN Win32 1057 (ERROR_INVALID_SERVICE_ACCOUNT: "hesap adi
+  gecersiz VEYA parola gecersiz").
+Bu FARK kendisi onemli bir kanittir: iki FARKLI SCM dogrulama yoluna
+giriliyor; NULL varyanti GERCEK hesap+parola dogrulama mantigina
+ULASIYOR (1057, yapisal bir parametre-sekli hatasi DEGIL, ozel bir
+hesap/parola hatasi), acik-isim varyanti ise DAHA ERKEN, farkli bir
+kontrolde takiliyor (87).
+
+**Bulgu 2 - ZAMANLAMA/yayilma (propagation) hipotezi KESIN olarak
+ELENDI:** Her iki varyant da 5'er kez, 2'ser saniye gecikmeyle (toplam
+10 sn) tekrar denendi - SONUC HER SEFERINDE AYNI/DETERMINISTIK kaldi
+(87 hep 87, 1057 hep 1057). Bu, hesabin SAM/LSA'ya yayilmasi icin
+zaman gerektigi HIPOTEZINI GECERSIZ kilar - sorun GERCEK, kalici bir
+mantik/yapilandirma sorunudur, GECICI bir yaris kosulu (race condition)
+DEGILDIR.
+
+**Denenmeyen (kullanicinin yonlendirmesiyle SINIRLANDI):** Reviewed
+script DISINDA, rollback korumasi OLMAYAN, ozel bir servis/hesap
+olusturarak HIZLI yineleme yapan bagimsiz bir P/Invoke tani script'i
+Claude Code'un otomatik mod GUVENLIK SINIFLANDIRICISI tarafindan
+ENGELLENMISTI (onceki entry'de belgelendi); kullanici "reviewed script
+icinde devam et" dedigi icin BU SINIRLAMA KORUNDU - yalniz zaten
+onaylanmis, rollback-korumali GERCEK betik uzerinde, MSDN'in belgeledigi
+parametre varyasyonlari (acik hesap adi vs NULL, gecikme/tekrar)
+denendi.
+
+**Kalan olasi nedenler (test EDILMEDI, GELECEKTEKI arastirma icin
+kayit):** (a) bu makinenin Yerel Guvenlik Politikasinda (`secedit`)
+`SeDenyServiceLogonRight` (Deny log on as a service) altinda hesabin
+DOLAYLI olarak dahil oldugu bir GRUP olabilir (ornegin bir GPO/yerel
+politika kalintisi); (b) parolanin KENDISI (Base64 uretilen, `+`/`/`/`=`
+karakterleri icerebilir) SCM'nin kendi ic dogrulamasinda REDDEDILEN bir
+karakter kalibi tasiyor olabilir (New-LocalUser'in KABUL etmesi
+ChangeServiceConfigW'in de kabul edecegi ANLAMINA GELMEYEBILIR - ayri
+kod yollari); (c) hesabin "Users" grubundan CIKARILMIS olmasi (betigin
+KENDI kasitli sertlestirmesi) SCM'nin servis hesabi dogrulamasinda
+BEKLENMEYEN bir on kosul olabilir (ornegin SCM bir servis hesabinin
+EN AZ bir yerel gruba uye olmasini ORTULU olarak bekliyor olabilir) -
+bu, "Users" grubundan CIKARMA adimi GECICI olarak ATLANARAK test
+edilebilir (henuz DENENMEDI).
+
+Kanit: Ek 3 GERCEK -Apply calistirmasi (toplam 9), HER BIRINDE atomik
+rollback (hesap+haklar+3 ACL+GERCEK WinSW servisi `uninstall` ile)
+basariyla tamamlandi - dogrulandi. `npm run check:deploy` gecti;
+`npm audit --audit-level=moderate`: 0 acik.
+
+Etki: Yalniz `deploy/windows-service/setup-file-agent-service-account.ps1`
+degisti (ChangeServiceConfigW cagrisi acik hesap adina donduruldu,
+gecikmeli-tekrar mantigi KALDIRILDI - zamanlama SORUN OLMADIGI icin
+gereksiz karmasiklik). Gercek hesap/ACL/servis/veri KALICI OLARAK
+DEGISMEDI.
+
+Acik kalan: Kok neden HALA bulunamadi. Kullanicinin belirtecegi bir
+sonraki yön (ör. "Users" grubundan cikarma adimini GECICI atla, farkli
+bir parola karakter kumesi dene, yerel guvenlik politikasini incele,
+ya da sc.exe'ye bu TEK adim icin don) beklenmektedir.
