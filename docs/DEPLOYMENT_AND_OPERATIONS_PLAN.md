@@ -40,6 +40,7 @@ Bu bilgisayar kişisel günlük kullanım makinesi değil, geçici merkezi servi
 - API portu Windows Güvenlik Duvarı'nda yalnız gerekli özel ağ profiline ve mümkünse ofis alt ağına açılır.
 - File Agent dışarıdan dinleyen genel bir port sunmaz; iş kuyruğunu PostgreSQL/API sözleşmesi üzerinden alır.
 - **Ölçülüp doğrulandı (HB-2026-108, 2026-07-29):** mevcut `P:\` pCloud sanal sürücüsü servis hesabından (hangisi olursa olsun) GÖRÜNMEZ — bu bir varsayım değil, gözlemlenmiş mimari kısıttır. Çözüm: pCloud senkronize klasör moduna geçiş (bkz. `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` §2). Veritabanındaki göreceli yol modeli değişmez.
+  **Düzeltme (HB-2026-110/111, 2026-07-29):** bu makinede yapılan GERÇEK SYSTEM çalıştırması yukarıdaki "görünmez" iddiasını ÇÜRÜTTÜ — sürücü harfi bu pCloud kurulumunda (EldoS CBFS) GLOBAL ad alanında kayıtlı, SYSTEM görüp okuyup yazabiliyor. Senkron klasör geçişi kararı GEÇERLİLİĞİNİ KORUYOR ama gerekçesi kullanılabilirlik + ACL/en-az-yetkidir (SYSTEM görünürlüğü DEĞİL) — ayrıntı DECISION_LOG HB-2026-110/111.
 
 ### 2.3 Servis hesapları ve en az yetki
 
@@ -48,6 +49,19 @@ Bu bilgisayar kişisel günlük kullanım makinesi değil, geçici merkezi servi
 - File Agent hesabına yalnız tanımlı depolama kökünde gereken okuma/yazma/taşıma yetkisi verilir.
 - PostgreSQL hesabı işletim sistemi yöneticisi değildir; uygulama veritabanı rolü migration rolünden ayrılır.
 - pCloud istemcisi kullanıcı oturumuna bağımlıysa otomatik başlangıç ve kilit ekranı sonrası davranış ayrıca test edilir. Bu bağımlılık geçici fazın bilinen riskidir.
+
+**D6 servis hesabı kararı (HB-2026-113, 2026-07-29 — PLAN, henüz uygulanmadı;
+somut prosedür `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` §2c):**
+File Agent için WinSW'nin varsayılanı olan LocalSystem YERİNE ayrı, yerel,
+etkileşimli oturum açamayan bir servis hesabı (`svc-hasarbotu-fileagent`)
+kullanılacaktır. Bu hesap: (1) yalnız "Log on as a service" hakkına sahiptir
+(`SeServiceLogonRight`), (2) "Deny log on locally" ve "Deny log on through
+Remote Desktop Services" haklarıyla etkileşimli/RDP oturumu YASAKLANMIŞTIR,
+(3) hedef NTFS depolama kökünde (§2a) yalnız **Modify** (Tam Denetim/izin
+değiştirme/sahiplik alma DEĞİL) yetkisine sahiptir, (4) File Agent uygulama
+dizininde salt Read+Execute, yalnız kendi `logs` alt dizininde Modify'a
+sahiptir. Bu, HB-2026-112'nin açık bıraktığı "adanmış servis hesabı" sorusunu
+CEVAPLAR. API ve PostgreSQL hesap kararları bu kararın KAPSAMI DIŞINDADIR.
 
 ### 2.4 Servis başlangıcı ve yeniden başlatma
 

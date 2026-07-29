@@ -2616,6 +2616,14 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Ana çalışma ağacında typecheck, lint (0 error / 2 mevcut warning, değişmedi), gerçek `hasarbotu_test` PostgreSQL ile **2.225 başarılı / 6 mevcut ortam-koşullu UI skip** (değişmedi — D5 uygulama testi eklemedi), build/bundle **426.065 baytta değişmedi** ve moderate audit (0 açık) geçti.
 - **Doğrulanamayan (HB-2026-108 sınırı — HB-2026-110 ile kapatıldı, aşağıya bakın):** SYSTEM bağlamında P:\ görünürlüğünün birebir ampirik kanıtı bu geliştirme ortamında yönetici yükseltmesi bulunmadığı için alınamamıştı.
 
+## D6 servis hesabı kararı (HB-2026-113, 2026-07-29, yalnız PLAN — henüz uygulanmadı)
+
+- D6 (WinSW servis kurulumu) başlamadan önce File Agent'ın hangi hesap altında çalışacağı kararlaştırıldı: WinSW varsayılanı LocalSystem **yerine** adanmış yerel `svc-hasarbotu-fileagent` hesabı. Kod/hesap/ACL/veri **değiştirilmedi** — yalnız `DEPLOYMENT_AND_OPERATIONS_PLAN.md` §2.3 ve RUNBOOK'a yeni **§2c** eklendi.
+- Dört bileşen: (1) adanmış hesap (`New-LocalUser`, rastgele parola, "Users" grubundan çıkarılmış), (2) "Log on as a service" hakkı (WinSW `allowservicelogon` birincil, LSA `LsaAddAccountRights` yedek — D6'da doğrulanmalı), (3) **zorunlu** etkileşimli/RDP oturum yasağı (`SeDenyInteractiveLogonRight`/`SeDenyRemoteInteractiveLogonRight`), (4) hedef klasörde yalnız **Modify** (Tam Denetim değil) + uygulama dizininde Read+Execute/`logs`ta Modify.
+- Bu, HB-2026-112'nin `NT AUTHORITY\SYSTEM:(OI)(CI)F` ACL planını **süpersede eder** (RUNBOOK'ta çapraz referansla işaretlendi).
+- **Reddedilen alternatif (kayıtlı):** Windows Virtual Service Account (`NT SERVICE\...`, parola yönetimi gerektirmez) — kullanıcının "ayrı yerel hesap" talebi net olduğu için birincil plan olarak seçilmedi, D6'da yeniden değerlendirilebilir.
+- Yalnız `docs/DEPLOYMENT_AND_OPERATIONS_PLAN.md` ve `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` değişti; `.ps1`/`.xml` dosyası etkilenmediği için gate çalıştırma gerekmedi. **Açık kalan:** D6'nın kendisi (gerçek hesap oluşturma, LSA hakları, ACL uygulama, WinSW şablonuna `<serviceaccount>` ekleme, parola rotasyon prosedürü) ayrı, açıkça onaylanmış bir uygulama görevi.
+
 ## NTFS senkron klasör geçişi — dry-run planı (HB-2026-112, 2026-07-29, yalnız PLAN)
 
 - Kullanıcı isteğiyle `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` hedefine geçiş için `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`e yeni bir **§2a Dry-run doğrulama planı** eklendi. **Gerçek veri taşıma veya WinSW kurulumu yapılmadı** — yalnız salt-okunur ölçüm + prosedür yazıldı.

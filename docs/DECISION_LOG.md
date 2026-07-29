@@ -3298,3 +3298,70 @@ kapsaminda YAPILMADI.
 Acik kalan: Bu plan kullanicinin acik onayi olmadan YURUTULMEYECEKTIR.
 Ofis dagitim makinesinde §2a.1 kapasite olcumu TEKRARLANMALI; File Agent
 servis hesabi (LocalSystem vs adanmis hesap) kararı ayrica verilmelidir.
+
+## 2026-07-29 - HB-2026-113: D6 servis hesabi karari (PLAN, henuz uygulanmadi) - File Agent icin adanmis yerel servis hesabi
+
+Karar: D6 (WinSW/servis kurulumu paketi) baslamadan once, File Agent'in
+hangi Windows hesabi altinda calisacagina dair BAGLAYICI bir karar
+verildi ve somut prosedur olarak yazildi. Kod, hesap, ACL veya veri
+DEGISTIRILMEDI — yalniz `DEPLOYMENT_AND_OPERATIONS_PLAN.md` §2.3 ve
+`RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` yeni §2c guncellendi.
+
+**Karar:** File Agent, WinSW'nin varsayilani olan **LocalSystem** YERINE
+adanmis, yerel bir servis hesabi (`svc-hasarbotu-fileagent`) altinda
+calisacaktir. Bu, HB-2026-111/112'nin acik biraktigi "adanmis servis
+hesabi" sorusunu CEVAPLAR — HB-2026-111 olcumu `P:\` uzerinde `Everyone:
+tum haklar` VE File Agent'in bugun LocalSystem oldugunu (klasor ACL'inin
+tek basina en-az-yetki SAGLAMADIGINI) gostermisti.
+
+**Kararin dort somut bileseni (RUNBOOK §2c'de tam prosedur):**
+
+1. **Adanmis yerel hesap:** `New-LocalUser` ile olusturulur, rastgele
+   guclu parola (SecureString, hicbir zaman komut gecmisine/log'a
+   yazilmaz), varsayilan "Users" grup uyeliginden CIKARILIR (gereksiz
+   genel haklari tasimamasi icin).
+2. **"Log on as a service" hakki:** WinSW'nin `<serviceaccount>`
+   blogundaki `allowservicelogon: true` bunu OTOMATIK vermeyi dener
+   (resmi WinSW ozelligi) — **D6 UYGULAMASINDA GERCEKTEN dogrulanmali**,
+   bu pakette dogrulanmadi (yalniz plan). Yedek: LSA politika API'si
+   (`advapi32.dll` LsaAddAccountRights, ek dependency GEREKTIRMEZ) ile
+   `SeServiceLogonRight` elle verilir — yaklasim RUNBOOK'ta belgelendi,
+   tam govde D6'da yazilip test edilecek.
+3. **Etkilesimli/RDP oturumu YASAGI (ZORUNLU, opsiyonel degil):** ayni
+   LSA API ile `SeDenyInteractiveLogonRight` + `SeDenyRemoteInteractiveLogonRight`.
+4. **NTFS ACL — yalniz Modify:** hedef depolama kokunde (`icacls
+   /inheritance:d` sonrasi) yalniz bu hesaba `(OI)(CI)M` (Modify — Tam
+   Denetim/izin degistirme/sahiplik alma DEGIL) ve Administrators'a Full
+   Control. Uygulama dizininde ayrica Read+Execute (+ yalniz `logs` alt
+   dizininde Modify) — LocalSystem'in aksine bu erisim ACIKCA verilmelidir,
+   kolayca gozden kacan bir adimdir.
+
+**Bu karar §2a.2'yi (HB-2026-112) SUPERSEDE eder:** o plan LocalSystem
+varsayimiyla `NT AUTHORITY\SYSTEM:(OI)(CI)F` grantligi tasarlamisti ve
+kendisi zaten bunu "acik mimari not" olarak isaretlemisti. Artik gecerli
+degil; RUNBOOK'ta capraz referansla isaretlendi.
+
+**Reddedilen alternatif (kayit icin):** Windows'un **Virtual Service
+Account**i (`NT SERVICE\hasarbotu-file-agent`, parola YONETIMI
+gerektirmeyen, dogasi geregi etkilesimli oturum acamayan bir hesap turu)
+teknik olarak daha az operasyonel yuk (parola rotasyonu YOK) getirirdi.
+Kullanicinin acik talebi "ayri YEREL servis hesabi" oldugu icin bu
+alternatif birincil plan olarak SECILMEDI; ancak D6 uygulamasinda ikinci
+bir secenek olarak yeniden degerlendirilebilir (kullanici karari).
+
+Kanit: Bu pakette GERCEK hesap olusturulmadi, ACL degistirilmedi, WinSW
+XML sablonu degistirilmedi. `DEPLOYMENT_AND_OPERATIONS_PLAN.md`/`RUNBOOK`
+degisiklikleri yalniz metin/prosedur; hicbir `.ps1`/`.xml` dosyasi
+etkilenmedigi icin `Parser::ParseFile`/`check:deploy`/typecheck/lint/test/
+build calistirilmasi GEREKMEDI (kod degismedi).
+
+Etki: Yalniz `docs/DEPLOYMENT_AND_OPERATIONS_PLAN.md` ve
+`docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` degisti. Uygulama
+kodu, WinSW sablonlari, `install-services.ps1`, migration, API/contracts,
+gercek hesap/ACL/ortam degiskeni DEGISMEDI.
+
+Acik kalan: D6'nin KENDISI (gercek hesap olusturma, LSA haklari, ACL
+uygulama, WinSW sablonuna `<serviceaccount>` ekleme, parola rotasyon
+prosedurunun yazilmasi) AYRI, acikca onaylanmis bir uygulama gorevidir.
+Virtual Service Account alternatifi kullanici tarafindan yeniden
+degerlendirilebilir.
