@@ -7,7 +7,7 @@
 
 .DESCRIPTION
     HB-2026-113 karari: File Agent, WinSW varsayilani olan LocalSystem
-    YERINE ayri bir yerel servis hesabi (varsayilan: svc-hasarbotu-fileagent)
+    YERINE ayri bir yerel servis hesabi (varsayilan: svc-hb-fileagent)
     altinda calisir. HB-2026-116'da bu betik, hesap + LSA haklari + ACL +
     GERCEK WinSW servis kurulumunu TEK ATOMIK islem haline getirdi: adimlar
     SIRAYLA uygulanir; HERHANGI biri basarisiz olursa, o ana kadar
@@ -59,7 +59,7 @@
 
 .PARAMETER AccountName
     Olusturulacak/dogrulanacak yerel hesap adi (varsayilan:
-    svc-hasarbotu-fileagent).
+    svc-hb-fileagent).
 
 .PARAMETER StorageRoot
     File Agent'in depolama koku (varsayilan: HB-2026-112/113'teki hedef).
@@ -132,7 +132,16 @@
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$AccountName = 'svc-hasarbotu-fileagent',
+    # HB-2026-118: Windows yerel hesap adlari (SAM) EN FAZLA 20 karakter
+    # olabilir - `svc-hasarbotu-fileagent` (23 karakter) GERCEK -Apply
+    # calistirmasinda `New-LocalUser` parametre dogrulamasiyla BASARISIZ
+    # oldu (atomik rollback DOGRU sekilde devreye girip hicbir iz
+    # birakmadan geri aldi). Varsayilan `svc-hb-fileagent`e (16 karakter)
+    # kisaltildi; ek olarak ASAGIDAKI dogrulama, ozel bir -AccountName
+    # verilirse AYNI hatanin sessizce New-LocalUser'a kadar ULASMASINI
+    # onler.
+    [ValidateLength(1, 20)]
+    [string]$AccountName = 'svc-hb-fileagent',
 
     [string]$StorageRoot = 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ',
 
@@ -540,8 +549,16 @@ function Set-WinSwServiceAccountIdentity {
     [xml]$xml = [System.IO.File]::ReadAllText($XmlPath, [System.Text.Encoding]::UTF8)
     $existing = $xml.service.serviceaccount
     if ($null -ne $existing) { $xml.service.RemoveChild($existing) | Out-Null }
+    # HB-2026-118: `%COMPUTERNAME%` GERCEK -Apply calistirmasinda WinSW
+    # tarafindan bir ortam degiskeni olarak GENISLETILMEDI - literal
+    # metin olarak alinip hesap aramasi basarisiz oldu (WinSW FATAL:
+    # "Failed to find the account", Win32 1332/ERROR_NONE_MAPPED).
+    # Windows'un yerel makine icin standart kisaltmasi olan tek nokta
+    # (".") - "sc.exe"siz `Set-FileAgentServiceLogonCredential`nin zaten
+    # kullandigi ".\hesap" deseniyle AYNI ilke - GERCEKTEN test edilip
+    # DUZELTILDI.
     $serviceAccountNode = $xml.CreateElement('serviceaccount')
-    $domainNode = $xml.CreateElement('domain'); $domainNode.InnerText = '%COMPUTERNAME%'
+    $domainNode = $xml.CreateElement('domain'); $domainNode.InnerText = '.'
     $userNode = $xml.CreateElement('user'); $userNode.InnerText = $AccountName
     $allowNode = $xml.CreateElement('allowservicelogon'); $allowNode.InnerText = 'true'
     $serviceAccountNode.AppendChild($domainNode) | Out-Null
@@ -591,6 +608,17 @@ function Set-FileAgentServiceLogonCredential {
     # GERCEKTEN denenip BULUNDU (bkz. DECISION_LOG HB-2026-117).
     # `[uint32]::MaxValue` dogru, ACIK bit deseniyle SERVICE_NO_CHANGE'i verir.
     $SERVICE_NO_CHANGE = [uint32]::MaxValue
+    # HB-2026-118: GERCEK -Apply calistirmasinda ChangeServiceConfigW,
+    # `dwServiceType` icin `SERVICE_NO_CHANGE` (tum bitleri 1) VERILIP
+    # AYNI ANDA hesap LocalSystem DISINA degistirilince ERROR_INVALID_
+    # PARAMETER (Win32 87) ile basarisiz oldu - MSDN'e gore hesap
+    # LocalSystem degilse `dwServiceType` SERVICE_INTERACTIVE_PROCESS
+    # BITINI ICEREMEZ; `SERVICE_NO_CHANGE`in tum-bitleri-1 deseni bu
+    # biti de "set" gosteriyor OLABILIR. WinSW'nin kurdugu servisler
+    # HER ZAMAN SERVICE_WIN32_OWN_PROCESS (etkilesimli DEGIL) oldugu
+    # icin bu deger ACIKCA verilir - SERVICE_NO_CHANGE yalniz DstartType/
+    # ErrorControl icin kullanilir (bunlar ayni belirsizligi TASIMAZ).
+    $SERVICE_WIN32_OWN_PROCESS = [uint32]0x00000010
 
     # NOT: MSDN'e gore lpDatabaseName=NULL "ServicesActive"e DUSMELIDIR,
     # ancak bu ortamda GERCEKTEN test edilip BULUNDU: NULL gecmek
@@ -612,7 +640,7 @@ function Set-FileAgentServiceLogonCredential {
             try {
                 $accountArg = ".\$AccountName"
                 $ok = [HasarBotu.Svc]::ChangeServiceConfigW(
-                    $serviceHandle, $SERVICE_NO_CHANGE, $SERVICE_NO_CHANGE, $SERVICE_NO_CHANGE,
+                    $serviceHandle, $SERVICE_WIN32_OWN_PROCESS, $SERVICE_NO_CHANGE, $SERVICE_NO_CHANGE,
                     $null, $null, [IntPtr]::Zero, $null, $accountArg, $passwordPtr, $null)
                 if (-not $ok) {
                     $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
@@ -842,9 +870,13 @@ try {
     Write-Host '  Parola uretildi (SecureString, hicbir yere yazilmayacak).'
 
     if (-not $accountExists) {
+        # HB-2026-118: Windows yerel hesap "Description" alani EN FAZLA 48
+        # karakter olabilir - onceki (102 karakter) metin GERCEK -Apply
+        # calistirmasinda New-LocalUser dogrulamasiyla BASARISIZ oldu
+        # (atomik rollback DOGRU sekilde devreye girdi). Kisaltildi.
         New-LocalUser -Name $AccountName -Password $servicePassword `
             -PasswordNeverExpires -UserMayNotChangePassword `
-            -Description 'HasarBotu V2 File Agent - yalniz Windows servis oturumu, etkilesimli giris YASAK (D6, HB-2026-113/116)' | Out-Null
+            -Description 'HasarBotu V2 File Agent servis hesabi (D6)' | Out-Null
         $undoStack.Push({ Remove-LocalUser -Name $AccountName -ErrorAction SilentlyContinue }.GetNewClosure())
         Remove-LocalGroupMember -Group 'Users' -Member $AccountName -ErrorAction SilentlyContinue
         Write-Host "  Hesap olusturuldu: $AccountName" -ForegroundColor Green

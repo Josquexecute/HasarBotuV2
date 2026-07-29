@@ -3799,3 +3799,115 @@ ortam degiskeni DEGISMEDI.
 Acik kalan: D6'nin gercek yurutulmesi (kullanici onayiyla) `ChangeServiceConfigW`'in
 GERCEK bir servise karsi basarili cagrisini ve tam uctan uca akisi
 ampirik olarak kanitlamalidir.
+
+## 2026-07-29 - HB-2026-118: D6 GERCEK -Apply bu makinede (DESKTOP-EFN2G33) calistirildi - UC gercek kusur bulunup duzeltildi, atomik rollback ALTI kez ustuste gercekten dogrulandi; SON adim (ChangeServiceConfigW) HALA basarisiz - devam eden acik iş
+
+Karar: Kullanicinin acik onayiyla D6'nin GERCEK `-Apply` islemi bu ofis
+makinesinde calistirildi. Iki gercek on-kosul eksigi kullaniciya soruldu
+ve ONAYLANDI: (1) `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` bu
+makinede henuz yoktu (pCloud->NTFS gecisi hic yapilmamisti) - kullanici
+BOS bir test klasoru olusturulmasini onayladi (GERCEK veri tasima
+YAPILMADI); (2) WinSW ikili dosyasi hicbir yerde yoktu - kullanici resmi
+GitHub release'inden (v2.12.0, SHA256 dogrulandi, boyut GitHub API'siyle
+eslesti) indirilmesini onayladi.
+
+**Onemli mimari karar (bu gorev sirasinda verildi):** `-FileAgentAppDir`
+icin REPO'NUN KENDI `services/file-agent` calisma dizini KULLANILMADI -
+bu, o dizinin ACL'ini kilitleyip (miras kesme + genis gruplari kaldirma)
+git deposunun CANLI calisma agacini etkilerdi (ornegin `logs` alt dizini
+depoda izlenmeyen bir klasor olarak olusurdu, ve baska surecler/oturumlar
+icin erisim degisirdi). Bunun yerine RUNBOOK'un KENDI ornek deseniyle
+(`C:\HasarBotu\services\file-agent`) TUTARLI, depo DISINDA ayri bir
+dagitim dizini olusturuldu ve `dist/` cikti KOPYALANDI (is verisi DEGIL,
+derlenmis kod - "veri tasima" yasaginin kapsami DISINDA degerlendirildi).
+
+**GERCEKTEN bulunan ve duzeltilen UC kusur (her biri GERCEK -Apply
+calistirmasinda ortaya cikti, HER SEFERINDE atomik rollback DOGRU
+sekilde devreye girip HICBIR iz birakmadan geri aldi):**
+
+1. **Hesap adi cok uzun.** Windows yerel hesap adlari (SAM) EN FAZLA 20
+   karakter olabilir; `svc-hasarbotu-fileagent` 23 karakterdi,
+   `New-LocalUser` parametre dogrulamasiyla ANINDA basarisiz oldu.
+   Varsayilan `svc-hb-fileagent`e (16 karakter) kisaltildi;
+   `[ValidateLength(1,20)]` eklendi (ozel bir -AccountName verilirse
+   AYNI hatanin sessizce New-LocalUser'a kadar ulasmasini onler).
+2. **Aciklama metni cok uzun.** Windows yerel hesap "Description" alani
+   EN FAZLA 48 karakter olabilir; onceki metin 102 karakterdi. Kisaltildi:
+   "HasarBotu V2 File Agent servis hesabi (D6)" (42 karakter).
+3. **WinSW XML'de `<domain>%COMPUTERNAME%</domain>` GENISLETILMEDI.**
+   WinSW bunu bir ortam degiskeni olarak DEGIL, literal metin olarak
+   okudu; `install` sirasinda servis hesabi ayarlanirken Windows
+   "%COMPUTERNAME%\svc-hb-fileagent" adini COZEMEDI (WinSW FATAL:
+   "Failed to find the account", Win32 1332/ERROR_NONE_MAPPED).
+   Windows'un yerel makine icin standart kisaltmasi olan tek nokta (".")
+   ile duzeltildi - `Set-FileAgentServiceLogonCredential`nin zaten
+   kullandigi ".\hesap" deseniyle AYNI ilke.
+
+Bu uc duzeltmeden SONRA akis COK ilerledi: hesap olusturuldu, LSA
+haklari verildi, UC ACL de (depolama koku, uygulama dizini, log dizini)
+GERCEKTEN uygulandi, WinSW ikilisi kopyalandi, XML dogru render edildi
+VE **WinSW servis kurulumunun kendisi GERCEKTEN BASARILI oldu** ("Service
+... was installed successfully").
+
+**HALA COZULEMEYEN son adim:** `Set-FileAgentServiceLogonCredential`
+(`ChangeServiceConfigW`) `ERROR_INVALID_PARAMETER` (Win32 kod 87) ile
+basarisiz oluyor - servis hesabinin SCM oturum acma kimlik bilgisini
+(parola) ayarlama adimi. Denenen VE ISE YARAMAYAN duzeltmeler: (a)
+`dwServiceType` icin `SERVICE_NO_CHANGE` yerine acikca
+`SERVICE_WIN32_OWN_PROCESS` (0x10) verilmesi - `sc.exe qc` ile GERCEK
+servisin zaten TAM OLARAK bu tipte oldugu dogrulandi, ama hata AYNI
+kaldi. Tani: `sc.exe qc` (salt-okunur) GERCEK kurulu servisin
+`SERVICE_START_NAME`sinin ZATEN `.\svc-hb-fileagent` oldugunu gosterdi -
+yani WinSW'nin kendi `install`i, XML'deki `<serviceaccount>` bloguna
+gore servis hesabini PAROLASIZ olarak ONCEDEN ayarlamis; bizim
+`ChangeServiceConfigW` cagrimiz ayni hesabi (degismemis) + YENI bir
+parola ayarlamaya calisiyor.
+
+**Bu noktada bagimsiz bir P/Invoke tani script'i (gercek reviewed
+`setup-file-agent-service-account.ps1` DISINDA, atomik/rollback
+korumasi OLMAYAN, tek seferlik bir test servisi/hesabi olusturan ayri
+bir betik) Claude Code'un otomatik mod GUVENLIK SINIFLANDIRICISI
+tarafindan ENGELLENDI** ("Blocked by classifier"). Bu, ham/dogrulanmamis
+Win32 servis yapilandirma denemelerinin reviewed/test edilmis arac
+DISINDA yapilmasina karsi bir guvenlik siniri olarak YORUMLANDI ve
+BUNA UYULDU - engeli asmaya CALISILMADI. Olusturulan tek kullanimlik
+tani hesabi (`hbtest-diag`) ve servisi (`hbdiagtest`) HEMEN temizlendi
+(dogrulandi: ikisi de artik yok).
+
+Kanit (bu makinede, ALTI ayri GERCEK `-Apply` calistirmasi, HER
+SEFERINDE atomik rollback basarili):
+- Calistirma 1: hesap adi uzunlugu hatasi - `New-LocalUser` parametre
+  dogrulamasinda ANINDA basarisiz, HICBIR sey olusturulmadi.
+- Calistirma 2 (duzeltme sonrasi): aciklama uzunlugu hatasi - AYNI
+  sekilde ANINDA basarisiz, HICBIR sey olusturulmadi.
+- Calistirma 3 (duzeltme sonrasi): domain placeholder hatasi - hesap+
+  haklar+3 ACL basariyla uygulandiktan SONRA WinSW install FATAL hatasi;
+  rollback hesabi/haklari/ACL'leri/WinSW dosyalarini GERCEKTEN geri aldi.
+- Calistirma 4 (duzeltme sonrasi): WinSW install BASARILI, ChangeServiceConfigW
+  Win32 87 ile basarisiz; rollback SIMDI GERCEK bir WinSW servisini de
+  (`<exe> uninstall` ile) basariyla kaldirdi - ilk kez TAM zincir (hesap+
+  haklar+ACL+GERCEK servis) geri alindi.
+- Calistirma 5 (dwServiceType duzeltmesi denendi): AYNI hata (87).
+- Calistirma 6 (tani ile): `sc.exe qc` SERVICE_START_NAME'in zaten dogru
+  ayarlandigini gosterdi; ChangeServiceConfigW yine AYNI hatayla
+  basarisiz; rollback yine TAM basarili.
+- Her calistirma sonrasi dogrulandi: gercek hesap YOK, gercek servis YOK,
+  depolama koku ACL'i (`IsProtected`) baslangictaki (miras acik) haline
+  DONDU.
+- `npm run check:deploy` gecti; `npm audit --audit-level=moderate`:
+  0 acik.
+
+Etki: Yalniz `deploy/windows-service/setup-file-agent-service-account.ps1`
+degisti (hesap adi/aciklama kisaltmasi + domain duzeltmesi). Gercekten
+olusturulan/kalici KALAN: `C:\Tools\WinSW-x64.exe` (resmi, dogrulanmis
+indirme), `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` (BOS test
+klasoru, kullanici onayli), `C:\HasarBotu\services\file-agent\dist\`
+(derlenmis kod kopyasi, is verisi DEGIL). GERCEK servis hesabi, ACL
+kilidi VEYA WinSW servisi KALICI olarak KURULMADI - atomik rollback
+her seferinde tam geri aldi.
+
+Acik kalan: `ChangeServiceConfigW`in ERROR_INVALID_PARAMETER (87)
+nedeni HALA COZULMEDI - kullanicinin yonlendirmesi/onayi olmadan
+ek ham P/Invoke denemesi YAPILMAYACAK (guvenlik siniflandiricisi
+sinirina saygi gosterildi). D6 servis hesabinin GERCEK SCM kimlik
+bilgisi kurulumu bu yuzden HALA TAMAMLANMADI.
