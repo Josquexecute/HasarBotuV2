@@ -3979,3 +3979,58 @@ Acik kalan: Kok neden HALA bulunamadi. Kullanicinin belirtecegi bir
 sonraki yön (ör. "Users" grubundan cikarma adimini GECICI atla, farkli
 bir parola karakter kumesi dene, yerel guvenlik politikasini incele,
 ya da sc.exe'ye bu TEK adim icin don) beklenmektedir.
+
+## 2026-07-29 - HB-2026-118 devami: kullanicinin ONERDIGI UC hipotez de GERCEKTEN test edildi ve ELENDI - kok neden HALA acik
+
+Karar: Kullanici "ucunu de reviewed script icinde sirayla dene" dedi.
+Sirayla, GERCEKTEN, bu makinede test edildi:
+
+**Hipotez (b) - parola karakter kumesi:** `New-ServiceAccountPassword`
+Base64 (`+`/`/`/`=` icerebilen) yerine yalniz alfanumerik + birkac
+guvenli ozel karaktere (`!@#%^&*-_`) degistirildi. Gercek -Apply (10.
+deneme) ile test edildi: **AYNI Win32 87 hatasi**. Hipotez ELENDI -
+parola karakter kumesi neden DEGIL. Karakter kumesi degisikligi yine de
+KALICI tutuldu (daha genis bir SCM/uygulama uyumlulugu icin makul bir
+ek onlem, zarari yok).
+
+**Hipotez (a) - "Users" grubu uyeligi:** Hesap olusturulduktan sonra
+`Remove-LocalGroupMember -Group 'Users'` cagrisi GECICI olarak
+atlanip hesap "Users" grubunda BIRAKILDI. Gercek -Apply (11. deneme)
+ile test edildi: **YINE AYNI Win32 87 hatasi**. Hipotez ELENDI - grup
+uyeligi neden DEGIL. Cikarma adimi KALICI davranis olarak GERI
+KONULDU (en-az-yetki ilkesi, HB-2026-113'un orijinal karari).
+
+**Hipotez (c) - yerel guvenlik politikasinda deny-listesi celismesi:**
+`secedit /export /areas USER_RIGHTS` ile (salt-okunur, GERCEK makine
+politikasi) incelendi. Sonuc: `SeDenyServiceLogonRight` POLITIKADA HIC
+TANIMLI DEGIL (bos/yok) - hesabimizin (veya baska hicbir hesabin) bu
+hakla CELISEN bir DENY kaydi YOK. `SeServiceLogonRight` politikasi
+zaten bazi well-known SID'leri (`NT SERVICE\ALL SERVICES` vb.) icerir
+ama bu, bizim GERCEK `LsaAddAccountRights` ile DOGRUDAN verdigimiz
+hakla CELISMEZ/cakismaz (ikisi ADITIF mekanizmalardir). Hipotez ELENDI -
+yerel politika celismesi neden DEGIL (bu ozel test icin gercek -Apply
+calistirmasi GEREKMEDI, salt-okunur politika incelemesi yeterliydi).
+
+**Durum:** Kullanicinin onerdigi UC hipotez de (parola karakter kumesi,
+grup uyeligi, politika celismesi) GERCEKTEN test edilip ELENDI. Kok
+neden HALA bulunamadi. Toplam GERCEK -Apply denemesi: 11, HEPSI atomik
+rollback ile basariyla geri alindi (hicbir kalici hesap/ACL/servis
+KALMADI).
+
+Kanit: 2 ek GERCEK -Apply calistirmasi (toplam 11) + 1 salt-okunur
+`secedit /export` incelemesi. Her -Apply sonrasi rollback dogrulandi
+(hesap YOK, servis YOK). `npm run check:deploy` gecti; `npm audit
+--audit-level=moderate`: 0 acik.
+
+Etki: Yalniz `deploy/windows-service/setup-file-agent-service-account.ps1`
+degisti (parola karakter kumesi Base64'ten alfanumerik+guvenli-ozel-
+karakterlere kalici olarak degisti - masumca iyi bir degisiklik, kok
+nedeni COZMEDI ama zarari da YOK). Gercek hesap/ACL/servis/veri KALICI
+OLARAK DEGISMEDI.
+
+Acik kalan: `ChangeServiceConfigW`in ERROR_INVALID_PARAMETER (87)/
+ERROR_INVALID_SERVICE_ACCOUNT (1057) kok nedeni HALA bulunamadi.
+Kullaniciya sunulan iki secenek: (1) yalniz bu TEK adim icin `sc.exe
+config`e GERI DONMEK (HB-2026-117'nin argv-ifsa endisesini bu dar
+kapsamda kabul ederek), (2) D6'yi bu haliyle birakip arastirmayi baska
+bir zamana ertelemek. Karar KULLANICIYA aittir.

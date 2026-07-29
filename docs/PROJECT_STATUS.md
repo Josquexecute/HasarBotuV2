@@ -2616,6 +2616,13 @@ Paket 22'nin atomik commit'i tamamlandıktan sonra durulmalıdır; sonraki paket
 - Ana çalışma ağacında typecheck, lint (0 error / 2 mevcut warning, değişmedi), gerçek `hasarbotu_test` PostgreSQL ile **2.225 başarılı / 6 mevcut ortam-koşullu UI skip** (değişmedi — D5 uygulama testi eklemedi), build/bundle **426.065 baytta değişmedi** ve moderate audit (0 açık) geçti.
 - **Doğrulanamayan (HB-2026-108 sınırı — HB-2026-110 ile kapatıldı, aşağıya bakın):** SYSTEM bağlamında P:\ görünürlüğünün birebir ampirik kanıtı bu geliştirme ortamında yönetici yükseltmesi bulunmadığı için alınamamıştı.
 
+## D6 devamı — kullanıcının önerdiği 3 hipotez de test edilip elendi, kök neden hâlâ açık (HB-2026-118, 2026-07-29)
+
+- Kullanıcının önerdiği üç hipotez sırayla gerçek `-Apply` ile (toplam 11 deneme) test edildi: **(b) parola karakter kümesi** (Base64 → alfanumerik+güvenli-özel-karakter, kalıcı tutuldu) — aynı Win32 87 hatası, elendi. **(a) "Users" grubu üyeliği** (geçici olarak çıkarma adımı atlandı) — yine aynı hata, elendi; çıkarma adımı geri konuldu. **(c) yerel güvenlik politikası çelişkisi** (`secedit /export`, salt-okunur) — `SeDenyServiceLogonRight` politikada hiç tanımlı değil, çelişki yok, elendi.
+- **Kök neden hâlâ bulunamadı.** Toplam 11 gerçek `-Apply` denemesi, hepsi atomik rollback ile güvenle geri alındı — hiçbir kalıcı hesap/ACL/servis kalmadı.
+- Kullanıcıya iki seçenek sunuldu: (1) yalnız bu tek adım için `sc.exe config`e geri dönmek, (2) D6'yı bu haliyle bırakıp araştırmayı ertelemek.
+- Yalnız `.ps1` değişti (parola karakter kümesi kalıcı olarak değişti — zararsız). `npm run check:deploy` geçti, `npm audit` 0 açık.
+
 ## D6 devamı — ChangeServiceConfigW kök nedeni hâlâ açık: zamanlama hipotezi kesin elendi, iki farklı deterministik hata kodu bulundu
 
 - Kullanıcının "reviewed script içinde denemeye devam et" yönlendirmesiyle 3 ek gerçek `-Apply` denemesi yapıldı (toplam 9), hepsi atomik rollback ile güvenle geri alındı. **`lpServiceStartName` parametresi sonucu değiştiriyor:** açık `.\svc-hb-fileagent` → her zaman Win32 87 (ERROR_INVALID_PARAMETER); `$null` (MSDN'e göre "hesap adı değişmiyor") → her zaman Win32 1057 (ERROR_INVALID_SERVICE_ACCOUNT — "hesap adı geçersiz veya parola geçersiz"). **Zamanlama/yayılma hipotezi kesin olarak elendi:** her iki varyant 5×2 saniye gecikmeyle tekrar denendi, sonuç her seferinde birebir aynı kaldı — gerçek, kalıcı bir mantık sorunu, geçici bir yarış durumu değil.

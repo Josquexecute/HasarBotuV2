@@ -679,13 +679,26 @@ function Set-FileAgentServiceLogonCredential {
 function New-ServiceAccountPassword {
     <# HB-2026-116: parolayi OPERATOR degil, betik kendisi BIR KEZ,
        kriptografik RNG ile uretir; yalniz SecureString olarak doner.
-       Cagiran hicbir zaman duz metnini GORMEZ/KAYDETMEZ. #>
+       Cagiran hicbir zaman duz metnini GORMEZ/KAYDETMEZ.
+
+       HB-2026-118 arastirmasi: onceki surum Base64 kullaniyordu
+       (`+`/`/`/`=` iceren) - `ChangeServiceConfigW` COZULEMEYEN bir
+       ERROR_INVALID_SERVICE_ACCOUNT (1057)/ERROR_INVALID_PARAMETER (87)
+       ile basarisiz oluyordu (`New-LocalUser` AYNI parolayi KABUL
+       ediyordu, yani iki API'nin kendi ic dogrulamasi FARKLI olabilir).
+       Bu, olasi nedenlerden biri olarak test edilmek uzere alfanumerik +
+       birkac YAYGIN guvenli ozel karaktere degistirildi (`=`/`/`/`+`
+       KESINLIKLE YOK). #>
+    $charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#%^&*-_'
     $bytes = [byte[]]::new(32)
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-    $plain = [Convert]::ToBase64String($bytes)
+    $chars = New-Object 'System.Collections.Generic.List[char]'
+    foreach ($b in $bytes) { $chars.Add($charset[$b % $charset.Length]) }
+    $plain = -join $chars
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
     Remove-Variable -Name plain -ErrorAction SilentlyContinue
     Remove-Variable -Name bytes -ErrorAction SilentlyContinue
+    Remove-Variable -Name chars -ErrorAction SilentlyContinue
     return $secure
 }
 
@@ -894,6 +907,10 @@ try {
             -PasswordNeverExpires -UserMayNotChangePassword `
             -Description 'HasarBotu V2 File Agent servis hesabi (D6)' | Out-Null
         $undoStack.Push({ Remove-LocalUser -Name $AccountName -ErrorAction SilentlyContinue }.GetNewClosure())
+        # HB-2026-118 hipotez testi: "Users" grubunda BIRAKARAK (grup
+        # uyeliginin SCM dogrulamasinda ortulu bir on kosul olup olmadigi)
+        # test edildi - AYNI Win32 87 hatasi alindi, hipotez ELENDI.
+        # Cikarma adimi KALICI davranis olarak KORUNUR (en-az-yetki).
         Remove-LocalGroupMember -Group 'Users' -Member $AccountName -ErrorAction SilentlyContinue
         Write-Host "  Hesap olusturuldu: $AccountName" -ForegroundColor Green
     } else {
