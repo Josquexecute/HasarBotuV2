@@ -50,18 +50,25 @@ Bu bilgisayar kişisel günlük kullanım makinesi değil, geçici merkezi servi
 - PostgreSQL hesabı işletim sistemi yöneticisi değildir; uygulama veritabanı rolü migration rolünden ayrılır.
 - pCloud istemcisi kullanıcı oturumuna bağımlıysa otomatik başlangıç ve kilit ekranı sonrası davranış ayrıca test edilir. Bu bağımlılık geçici fazın bilinen riskidir.
 
-**D6 servis hesabı kararı (HB-2026-113, 2026-07-29 — PLAN, henüz uygulanmadı;
-somut prosedür `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` §2c):**
+**D6 servis hesabı kararı (HB-2026-113/114/115, 2026-07-29 — araç HAZIR,
+gerçek ortamda henüz UYGULANMADI; somut prosedür/kod
+`docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` §2c,
+`deploy/windows-service/setup-file-agent-service-account.ps1`):**
 File Agent için WinSW'nin varsayılanı olan LocalSystem YERİNE ayrı, yerel,
 etkileşimli oturum açamayan bir servis hesabı (`svc-hasarbotu-fileagent`)
 kullanılacaktır. Bu hesap: (1) yalnız "Log on as a service" hakkına sahiptir
 (`SeServiceLogonRight`), (2) "Deny log on locally" ve "Deny log on through
 Remote Desktop Services" haklarıyla etkileşimli/RDP oturumu YASAKLANMIŞTIR,
-(3) hedef NTFS depolama kökünde (§2a) yalnız **Modify** (Tam Denetim/izin
+(3) hedef NTFS depolama kökünde (§2a) **Modify** (Tam Denetim/izin
 değiştirme/sahiplik alma DEĞİL) yetkisine sahiptir, (4) File Agent uygulama
 dizininde salt Read+Execute, yalnız kendi `logs` alt dizininde Modify'a
-sahiptir. Bu, HB-2026-112'nin açık bıraktığı "adanmış servis hesabı" sorusunu
-CEVAPLAR. API ve PostgreSQL hesap kararları bu kararın KAPSAMI DIŞINDADIR.
+sahiptir. **HB-2026-115 düzeltmesi:** depolama kökünde servis hesabı TEK
+BAŞINA yeterli DEĞİLDİR — pCloud'u çalıştıran ETKİLEŞİMLİ KULLANICI hesabı
+da (bu makinede `DESKTOP-EFN2G33\user`) aynı köke Modify almalıdır, aksi
+hâlde pCloud senkron klasör moduna geçtiğinde kendi yazma erişimini
+kaybedip senkronizasyonu SESSİZCE durdurur. Bu, HB-2026-112'nin açık
+bıraktığı "adanmış servis hesabı" sorusunu CEVAPLAR. API ve PostgreSQL
+hesap kararları bu kararın KAPSAMI DIŞINDADIR.
 
 ### 2.4 Servis başlangıcı ve yeniden başlatma
 

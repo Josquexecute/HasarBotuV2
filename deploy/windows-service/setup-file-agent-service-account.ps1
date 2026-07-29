@@ -14,9 +14,15 @@
       3. Etkilesimli/RDP oturum YASAGI (SeDenyInteractiveLogonRight,
          SeDenyRemoteInteractiveLogonRight) VAR mi.
       4. Hedef depolama kokunde VE File Agent uygulama dizininde NTFS
-         en-az-yetki ACL'i (yalniz Modify / Read+Execute, Everyone/Users/
-         Authenticated Users YOK) dogru mu; verilirse WinSW XML'inde
-         `<serviceaccount>` kimligi dogru mu (PAROLA ICERMEDEN).
+         en-az-yetki ACL'i (Everyone/Users/Authenticated Users YOK) dogru
+         mu; verilirse WinSW XML'inde `<serviceaccount>` kimligi dogru mu
+         (PAROLA ICERMEDEN).
+
+    HB-2026-115 duzeltmesi: depolama koku ACL'i YALNIZ File Agent servis
+    hesabina degil, pCloud'u calistiran ETKILESIMLI KULLANICI hesabina da
+    (`-PCloudSyncAccount`) Modify verir - aksi halde NTFS senkron klasor
+    moduna gecildiginde pCloud'un kendisi o klasore YAZAMAZ ve
+    senkronizasyon SESSIZCE durur (bkz. `-PCloudSyncAccount`).
 
     `-Apply` VERILMEDEN bu betik HICBIR kalici degisiklik yapmaz; yalniz
     MEVCUT durumu okur ve YAPILACAK plani yazdirir (AGENTS.md SS7 "kritik
@@ -41,6 +47,16 @@
     File Agent'in depolama koku (varsayilan: HB-2026-112/113'teki hedef).
     Bu betik klasoru OLUSTURMAZ - onceden var olmalidir (pCloud senkron
     klasor gecisi, RUNBOOK SS2/SS2a, ayri bir adimdir).
+
+.PARAMETER PCloudSyncAccount
+    (HB-2026-115 duzeltmesi) pCloud istemcisinin (`pCloud.exe`) calistigi
+    ETKILESIMLI KULLANICI hesabi (varsayilan: bu oturumun kendisi,
+    "$env:COMPUTERNAME\$env:USERNAME"). NTFS senkron klasor moduna
+    gecildiginde pCloud'un GERCEKTEN dosya yazabilmesi icin bu hesap da
+    depolama kokunde Modify almalidir - servis hesabina (File Agent) ACL
+    vermek TEK BASINA YETMEZ, pCloud'un kendi yazma erisimini KESER. File
+    Agent uygulama dizininde/loglarinda bu hesaba HICBIR yetki VERILMEZ
+    (pCloud o dizinlere dokunmaz).
 
 .PARAMETER FileAgentAppDir
     File Agent dagitim dizini (icinde `dist\index.js`, `logs\` bulunur).
@@ -81,6 +97,8 @@ param(
     [string]$AccountName = 'svc-hasarbotu-fileagent',
 
     [string]$StorageRoot = 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ',
+
+    [string]$PCloudSyncAccount = "$env:COMPUTERNAME\$env:USERNAME",
 
     [Parameter(Mandatory = $true)]
     [string]$FileAgentAppDir,
@@ -282,14 +300,25 @@ function Get-DirectoryAclReport {
     return [pscustomobject]@{ Exists = $true; IsProtected = $acl.AreAccessRulesProtected; Rules = @($rules) }
 }
 
+function New-AclGrant {
+    <# Yardimci: Test-LeastPrivilegeAcl/Set-LeastPrivilegeAcl'in $Grants
+       dizisi icin tek bir eleman olusturur. #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Identity,
+        [Parameter(Mandatory = $true)][System.Security.AccessControl.FileSystemRights]$Rights
+    )
+    return @{ Identity = $Identity; Rights = $Rights }
+}
+
 function Test-LeastPrivilegeAcl {
-    <# Salt-okunur dogrulama: miras kesilmis mi, adanmis hesap TAM OLARAK
-       beklenen haklara sahip mi, genis (Everyone/Users/Authenticated Users)
-       hicbir ACE YOK mu. #>
+    <# Salt-okunur dogrulama: miras kesilmis mi, HER $Grants elemani TAM
+       OLARAK beklenen haklara sahip mi, genis (Everyone/Users/Authenticated
+       Users) hicbir ACE YOK mu, $Grants DISINDA baska bir ACE YOK mu
+       (HB-2026-115: birden fazla hesaba - ör. File Agent servis hesabi VE
+       pCloud'u calistiran etkilesimli kullanici - grant desteklenir). #>
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$AccountName,
-        [Parameter(Mandatory = $true)][System.Security.AccessControl.FileSystemRights]$ExpectedRights
+        [Parameter(Mandatory = $true)][hashtable[]]$Grants
     )
     $report = Get-DirectoryAclReport -Path $Path
     $problems = New-Object 'System.Collections.Generic.List[string]'
@@ -306,48 +335,58 @@ function Test-LeastPrivilegeAcl {
             $problems.Add("Genis/beklenmeyen ACE bulundu: $($rule.Identity) ($($rule.Rights))")
         }
     }
-    # .NET FileSystemAccessRule constructor "Allow" kurallari icin OTOMATIK
-    # olarak Synchronize bitini ekler (ör. Modify -> "Modify, Synchronize");
-    # bu, Get-Acl/Set-Acl round-trip'inden BAGIMSIZ, .NET'in kendi
-    # kurucusunun davranisidir. Bu yuzden ham ExpectedRights.ToString() ile
-    # DEGIL, AYNI kurucu ile olusturulmus bir REFERANS kuralin ToString()'i
-    # ile karsilastirilir - kendi-tutarli (self-consistent) karsilastirma.
-    $referenceRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        'Everyone', $ExpectedRights, 'ContainerInherit, ObjectInherit', 'None', 'Allow')
-    $expectedRightsString = $referenceRule.FileSystemRights.ToString()
+    foreach ($grant in $Grants) {
+        # .NET FileSystemAccessRule constructor "Allow" kurallari icin
+        # OTOMATIK olarak Synchronize bitini ekler (ör. Modify -> "Modify,
+        # Synchronize"); bu, Get-Acl/Set-Acl round-trip'inden BAGIMSIZ,
+        # .NET'in kendi kurucusunun davranisidir. Bu yuzden ham
+        # Rights.ToString() ile DEGIL, AYNI kurucu ile olusturulmus bir
+        # REFERANS kuralin ToString()'i ile karsilastirilir (kendi-tutarli).
+        $referenceRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            'Everyone', $grant.Rights, 'ContainerInherit, ObjectInherit', 'None', 'Allow')
+        $expectedRightsString = $referenceRule.FileSystemRights.ToString()
 
-    $accountRule = $report.Rules | Where-Object { $_.Identity -like "*$AccountName" }
-    if (-not $accountRule) {
-        $problems.Add("$AccountName icin hicbir ACE bulunamadi.")
-    } else {
-        foreach ($rule in $accountRule) {
-            if ($rule.Rights -ne $expectedRightsString) {
-                $problems.Add("$AccountName hakki beklenenden FARKLI: gorulen='$($rule.Rights)' beklenen='$expectedRightsString'")
+        $accountRule = $report.Rules | Where-Object { $_.Identity -like "*$($grant.Identity)" }
+        if (-not $accountRule) {
+            $problems.Add("$($grant.Identity) icin hicbir ACE bulunamadi.")
+        } else {
+            foreach ($rule in $accountRule) {
+                if ($rule.Rights -ne $expectedRightsString) {
+                    $problems.Add("$($grant.Identity) hakki beklenenden FARKLI: gorulen='$($rule.Rights)' beklenen='$expectedRightsString'")
+                }
             }
+        }
+    }
+    $expectedIdentities = @($Grants | ForEach-Object { $_.Identity })
+    foreach ($rule in $report.Rules) {
+        $isExpected = $false
+        foreach ($identity in $expectedIdentities) { if ($rule.Identity -like "*$identity") { $isExpected = $true } }
+        if (-not $isExpected -and -not ($broadIdentities -contains $rule.Identity)) {
+            $problems.Add("BEKLENMEYEN fazladan ACE bulundu: $($rule.Identity) ($($rule.Rights)) - Grants listesinde YOK.")
         }
     }
     return [pscustomobject]@{ Pass = ($problems.Count -eq 0); Problems = $problems.ToArray(); Report = $report }
 }
 
 function Set-LeastPrivilegeAcl {
-    <# YAZAR: mirasi keser, yalniz belirtilen hesaba ExpectedRights ve
-       Administrators'a FullControl verir. Yalniz -Apply akisinda cagrilir. #>
+    <# YAZAR: mirasi keser, YALNIZ $Grants listesindeki hesaplara belirtilen
+       haklari verir (baska hicbir ACE eklenmez - Administrators dahil
+       gereken her grant caller tarafindan ACIKCA $Grants icine konur).
+       Yalniz -Apply akisinda cagrilir. #>
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$AccountName,
-        [Parameter(Mandatory = $true)][System.Security.AccessControl.FileSystemRights]$ExpectedRights
+        [Parameter(Mandatory = $true)][hashtable[]]$Grants
     )
     if (-not (Test-Path -LiteralPath $Path)) { throw "Yol mevcut degil, ACL uygulanamaz: $Path" }
     $acl = New-Object System.Security.AccessControl.DirectorySecurity
     $acl.SetAccessRuleProtection($true, $false)
     $inheritFlags = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
     $propagationFlags = [System.Security.AccessControl.PropagationFlags]::None
-    $accountRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        $AccountName, $ExpectedRights, $inheritFlags, $propagationFlags, [System.Security.AccessControl.AccessControlType]::Allow)
-    $adminRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        'BUILTIN\Administrators', [System.Security.AccessControl.FileSystemRights]::FullControl, $inheritFlags, $propagationFlags, [System.Security.AccessControl.AccessControlType]::Allow)
-    $acl.AddAccessRule($accountRule)
-    $acl.AddAccessRule($adminRule)
+    foreach ($grant in $Grants) {
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $grant.Identity, $grant.Rights, $inheritFlags, $propagationFlags, [System.Security.AccessControl.AccessControlType]::Allow)
+        $acl.AddAccessRule($rule)
+    }
     Set-Acl -LiteralPath $Path -AclObject $acl
 }
 
@@ -457,16 +496,36 @@ foreach ($right in $sensitiveRightsDenied) {
     Write-Host "  Sahip mi: $right   : $($currentRights -contains $right)"
 }
 
-$storageAclCheck = Test-LeastPrivilegeAcl -Path $StorageRoot -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]::Modify)
+# HB-2026-115: depolama koku SVC hesabi + Administrators DISINDA, pCloud'u
+# calistiran ETKILESIMLI KULLANICI hesabina da Modify alir - aksi halde
+# pCloud senkron klasor moduna gecince kendi yazma erisimini KAYBEDER ve
+# senkronizasyon SESSIZCE durur. Uygulama dizini/loglar bu hesaba HICBIR
+# yetki VERMEZ (pCloud oraya dokunmaz).
+$storageGrants = @(
+    (New-AclGrant -Identity $AccountName -Rights ([System.Security.AccessControl.FileSystemRights]::Modify)),
+    (New-AclGrant -Identity $PCloudSyncAccount -Rights ([System.Security.AccessControl.FileSystemRights]::Modify)),
+    (New-AclGrant -Identity 'BUILTIN\Administrators' -Rights ([System.Security.AccessControl.FileSystemRights]::FullControl))
+)
+$appDirGrants = @(
+    (New-AclGrant -Identity $AccountName -Rights ([System.Security.AccessControl.FileSystemRights]'ReadAndExecute')),
+    (New-AclGrant -Identity 'BUILTIN\Administrators' -Rights ([System.Security.AccessControl.FileSystemRights]::FullControl))
+)
+$logsGrants = @(
+    (New-AclGrant -Identity $AccountName -Rights ([System.Security.AccessControl.FileSystemRights]::Modify)),
+    (New-AclGrant -Identity 'BUILTIN\Administrators' -Rights ([System.Security.AccessControl.FileSystemRights]::FullControl))
+)
+
+$storageAclCheck = Test-LeastPrivilegeAcl -Path $StorageRoot -Grants $storageGrants
 Write-Host "  Depolama koku ACL uygun mu ($StorageRoot) : $($storageAclCheck.Pass)"
+Write-Host "    (beklenen: $AccountName -> Modify, $PCloudSyncAccount -> Modify, Administrators -> Full)"
 foreach ($problem in $storageAclCheck.Problems) { Write-Host "    - $problem" -ForegroundColor DarkYellow }
 
-$appDirAclCheck = Test-LeastPrivilegeAcl -Path $FileAgentAppDir -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]'ReadAndExecute')
+$appDirAclCheck = Test-LeastPrivilegeAcl -Path $FileAgentAppDir -Grants $appDirGrants
 Write-Host "  Uygulama dizini ACL uygun mu ($FileAgentAppDir) : $($appDirAclCheck.Pass)"
 foreach ($problem in $appDirAclCheck.Problems) { Write-Host "    - $problem" -ForegroundColor DarkYellow }
 
 $logsDir = Join-Path $FileAgentAppDir 'logs'
-$logsAclCheck = Test-LeastPrivilegeAcl -Path $logsDir -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]::Modify)
+$logsAclCheck = Test-LeastPrivilegeAcl -Path $logsDir -Grants $logsGrants
 Write-Host "  Log dizini ACL uygun mu ($logsDir) : $($logsAclCheck.Pass)"
 foreach ($problem in $logsAclCheck.Problems) { Write-Host "    - $problem" -ForegroundColor DarkYellow }
 
@@ -490,7 +549,7 @@ foreach ($right in $sensitiveRightsRequired) {
 foreach ($right in $sensitiveRightsDenied) {
     if ($currentRights -notcontains $right) { $planSteps.Add("Hak VERILECEK (yasak): $right") }
 }
-if (-not $storageAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $StorageRoot (yalniz $AccountName -> Modify, Administrators -> Full)") }
+if (-not $storageAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $StorageRoot ($AccountName -> Modify, $PCloudSyncAccount -> Modify, Administrators -> Full)") }
 if (-not $appDirAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $FileAgentAppDir (yalniz $AccountName -> Read+Execute, Administrators -> Full)") }
 if (-not $logsAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $logsDir (yalniz $AccountName -> Modify, Administrators -> Full)") }
 if ($WinSwXmlPath -and -not $winSwCheck.Pass) { $planSteps.Add("WinSW XML guncellenecek: $WinSwXmlPath (<serviceaccount> - PAROLASIZ)") }
@@ -545,16 +604,16 @@ if ($rightsToGrant.Count -gt 0) {
 }
 
 if (-not $storageAclCheck.Pass) {
-    Set-LeastPrivilegeAcl -Path $StorageRoot -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]::Modify)
+    Set-LeastPrivilegeAcl -Path $StorageRoot -Grants $storageGrants
     Write-Host "ACL uygulandi: $StorageRoot" -ForegroundColor Green
 }
 if (-not $appDirAclCheck.Pass) {
-    Set-LeastPrivilegeAcl -Path $FileAgentAppDir -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]'ReadAndExecute')
+    Set-LeastPrivilegeAcl -Path $FileAgentAppDir -Grants $appDirGrants
     Write-Host "ACL uygulandi: $FileAgentAppDir" -ForegroundColor Green
 }
 if (-not $logsAclCheck.Pass) {
     if (-not (Test-Path -LiteralPath $logsDir)) { New-Item -ItemType Directory -Path $logsDir -Force | Out-Null }
-    Set-LeastPrivilegeAcl -Path $logsDir -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]::Modify)
+    Set-LeastPrivilegeAcl -Path $logsDir -Grants $logsGrants
     Write-Host "ACL uygulandi: $logsDir" -ForegroundColor Green
 }
 if ($WinSwXmlPath -and -not $winSwCheck.Pass) {
@@ -566,9 +625,9 @@ Write-Host ''
 Write-Host '--- DOGRULAMA (uygulama sonrasi yeniden okunuyor) ---' -ForegroundColor Yellow
 
 $finalRights = Get-AccountRights -Account $AccountName
-$finalStorageAcl = Test-LeastPrivilegeAcl -Path $StorageRoot -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]::Modify)
-$finalAppDirAcl = Test-LeastPrivilegeAcl -Path $FileAgentAppDir -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]'ReadAndExecute')
-$finalLogsAcl = Test-LeastPrivilegeAcl -Path $logsDir -AccountName $AccountName -ExpectedRights ([System.Security.AccessControl.FileSystemRights]::Modify)
+$finalStorageAcl = Test-LeastPrivilegeAcl -Path $StorageRoot -Grants $storageGrants
+$finalAppDirAcl = Test-LeastPrivilegeAcl -Path $FileAgentAppDir -Grants $appDirGrants
+$finalLogsAcl = Test-LeastPrivilegeAcl -Path $logsDir -Grants $logsGrants
 $finalWinSw = if ($WinSwXmlPath) { Test-WinSwServiceAccountIdentity -XmlPath $WinSwXmlPath -AccountName $AccountName } else { $null }
 
 $allOk = $true

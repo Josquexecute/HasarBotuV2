@@ -129,7 +129,7 @@ plan üretildi.
 
 **Sahip:** Kurulumu yapan operatör.
 
-**Ölçüldü (bu geliştirme makinesinde, salt-okunur, 2026-07-29):**
+**Ölçüldü (bu makinede — DESKTOP-EFN2G33, GERÇEK ofis/dağıtım makinesi, salt-okunur, 2026-07-29 — bkz. HB-2026-115 düzeltmesi):**
 
 ```text
 Kaynak: P:\BARAN GLOBAL EKSPERTİZ
@@ -158,10 +158,13 @@ gerekirken 726 GB müsait, kapasite SORUN DEĞİL.
 **Durdurma ölçütü:** Boş alan < kaynak boyutu × 3 ise geçişe BAŞLANMAZ;
 disk büyütme veya eski verinin arşivlenmesi ayrı karar gerektirir.
 
-**ÖNEMLİ ihtiyat notu:** Yukarıdaki sayılar BU geliştirme/test pCloud
-hesabına aittir. Ofis üretim hesabındaki gerçek veri hacmi FARKLI (muhtemelen
-DAHA BÜYÜK — yıllar boyu birikmiş dosya/klasör) olabilir; GERÇEK geçişten
-önce bu ölçüm ofis makinesinde TEKRARLANMALIDIR.
+**DÜZELTME (HB-2026-115):** Önceki taslak bu makineyi "geliştirme/test"
+olarak nitelendirip ölçümün ofis makinesinde tekrarlanmasını öneriyordu —
+bu YANLIŞ VARSAYIMDI. DESKTOP-EFN2G33 **GERÇEK ofis/dağıtım makinesidir**;
+yukarıdaki sayılar zaten GERÇEK üretim verisidir (`P:\BARAN GLOBAL
+EKSPERTİZ` altında gerçek iş dosyaları, kimlik fotokopisi dahil gerçek
+müşteri/personel verisi gözlemlendi — bkz. DECISION_LOG HB-2026-115).
+Tekrar ölçüm GEREKMEZ; kapasite sonucu NİHAİDİR.
 
 ### 2a.2 Hedef ACL tasarımı (en-az-yetki — HB-2026-111 bulgusunun düzeltmesi)
 
@@ -356,15 +359,17 @@ olarak `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı bırakılır
 `C:\ProgramData\HasarBotu\probe\probe-result-*.json` dosyası deployment
 audit kaydına eklenir.
 
-## 2c. File Agent servis hesabı — D6 (HB-2026-113/114): araç HAZIR, gerçek ortamda henüz UYGULANMADI
+## 2c. File Agent servis hesabı — D6 (HB-2026-113/114/115): araç HAZIR, gerçek ortamda henüz UYGULANMADI
 
 **Durum:** `deploy/windows-service/setup-file-agent-service-account.ps1`
-(HB-2026-114) HB-2026-113'ün kararını PLAN/ÖNİZLE/UYGULA modeliyle
-uygulayan gerçek bir araçtır. Bu araç sentetik dizinlerle VE mevcut
-hesaplara karşı salt-okunur sorgularla test edildi (bkz. DECISION_LOG
-HB-2026-114); **gerçek `svc-hasarbotu-fileagent` hesabı bu pakette
-oluşturulmadı, gerçek ACL/servis kurulumu yapılmadı**. `install-services.ps1`
-bu betiği HENÜZ çağırmaz — entegrasyon D6'nın gerçek yürütülmesinde yapılır.
+(HB-2026-114, HB-2026-115'te çift-hesap ACL desteğiyle düzeltildi)
+HB-2026-113'ün kararını PLAN/ÖNİZLE/UYGULA modeliyle uygulayan gerçek bir
+araçtır. Bu araç sentetik dizinlerle, GERÇEK hedef değerlerle (salt-okunur
+önizleme) VE mevcut hesaplara karşı salt-okunur/scratch-klasör sorgularla
+test edildi (bkz. DECISION_LOG HB-2026-114/115); **gerçek
+`svc-hasarbotu-fileagent` hesabı bu pakette oluşturulmadı, gerçek ACL/
+servis kurulumu yapılmadı**. `install-services.ps1` bu betiği HENÜZ
+çağırmaz — entegrasyon D6'nın gerçek yürütülmesinde yapılır.
 
 **Sahip:** Kurulumu yapan operatör (yönetici).
 
@@ -397,8 +402,14 @@ onaylandıktan sonra, D6'nın gerçek yürütülmesinde):**
 $pw = Read-Host -AsSecureString 'svc-hasarbotu-fileagent parolası'
 .\setup-file-agent-service-account.ps1 -FileAgentAppDir C:\HasarBotu\services\file-agent `
     -WinSwXmlPath C:\HasarBotu\services\file-agent\hasarbotu-file-agent.xml `
+    -PCloudSyncAccount 'DESKTOP-EFN2G33\<pCloud'u çalıştıran gerçek kullanıcı>' `
     -ServiceAccountPassword $pw -Apply
 ```
+
+`-PCloudSyncAccount` varsayılanı BU KOMUTU ÇALIŞTIRAN oturumun kendisidir
+(`$env:COMPUTERNAME\$env:USERNAME`) — GERÇEK kurulumda pCloud'u çalıştıran
+hesap FARKLI bir operatör/hizmet hesabı olabilir; bu durumda parametre
+AÇIKÇA verilmelidir (varsayılana güvenilmemelidir).
 
 Bu TEK komut şunları yapar (kod: `setup-file-agent-service-account.ps1`):
 
@@ -413,11 +424,15 @@ Bu TEK komut şunları yapar (kod: `setup-file-agent-service-account.ps1`):
 3. **Etkileşimli/RDP oturumunu YASAKLAR** — aynı LSA API ile
    `SeDenyInteractiveLogonRight` + `SeDenyRemoteInteractiveLogonRight`
    (ZORUNLU adım, atlanmaz).
-4. **Hedef depolama kökünde miras keser, yalnız hesaba Modify +
-   Administrators'a Full Control verir** (.NET `DirectorySecurity`/
-   `FileSystemAccessRule` ile, `icacls` metin ayrıştırması DEĞİL) — bu,
-   §2a.2'nin (HB-2026-112) `NT AUTHORITY\SYSTEM:(OI)(CI)F` grantını
-   SÜPERSEDE eder.
+4. **Hedef depolama kökünde miras keser; servis hesabına Modify,
+   `-PCloudSyncAccount`e (HB-2026-115 — pCloud'u çalıştıran etkileşimli
+   kullanıcı) de Modify, Administrators'a Full Control verir** (.NET
+   `DirectorySecurity`/`FileSystemAccessRule` ile, `icacls` metin
+   ayrıştırması DEĞİL) — bu, §2a.2'nin (HB-2026-112) `NT AUTHORITY\
+   SYSTEM:(OI)(CI)F` grantını SÜPERSEDE eder. **pCloud hesabına grant
+   ŞARTTIR:** pCloud senkron klasör moduna geçtiğinde dosyaları GERÇEKTEN
+   yazan süreç budur; yalnız servis hesabına Modify verilirse pCloud
+   kendi yazma erisimini KAYBEDER ve senkronizasyon SESSIZCE durur.
 5. **Uygulama dizininde Read+Execute, yalnız `logs` alt dizininde
    Modify** verir (LocalSystem'in aksine açıkça gerekir).
 6. **`-WinSwXmlPath` verilirse WinSW XML'ine `<serviceaccount>` ekler**
@@ -444,7 +459,7 @@ tekrarlamak için):**
 
 ```powershell
 runas /user:svc-hasarbotu-fileagent cmd   # AÇIKÇA reddedilmeli (etkileşimli giriş yasak)
-icacls 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'   # yalnız svc-hasarbotu-fileagent:(M), Administrators:(F)
+icacls 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'   # svc-hasarbotu-fileagent:(M), <pCloud hesabı>:(M), Administrators:(F) - başka HİÇBİR şey
 ```
 
 **Audit kanıtı:** Betiğin tam ekran çıktısı (durum + plan + uygulama +
@@ -564,43 +579,55 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   yollarının doğru `exit 1` ile durduğu (Postgres servisi yokken,
   `dist\index.js` yokken) SENTETİK bir dizin yapısıyla test edildi;
   GERÇEK bir servis hiçbir zaman kurulmadı.
-- `probe-p-drive-system-context.ps1` bu makinede GERÇEK yönetici
+- `probe-p-drive-system-context.ps1` bu makinede (DESKTOP-EFN2G33 —
+  GERÇEK ofis/dağıtım makinesi, bkz. HB-2026-115) GERÇEK yönetici
   yükseltmesiyle çalıştırıldı (HB-2026-110/111): `LastTaskResult=0`,
   P:\ SYSTEM'den görünüyor/okunabiliyor/yazılabiliyor/silinebiliyor;
   sürücü harfi `\GLOBAL??` ad alanında (EldoS CBFS), ACL `Everyone: tüm
-  haklar`. Bu, TEK bir geliştirme makinesindeki sonuçtur — ofis
-  dağıtım makinesinde Adım 2.5 olarak bağımsız doğrulanmalıdır (farklı
-  pCloud sürümü/yapılandırması farklı sonuç verebilir).
-- `setup-file-agent-service-account.ps1` (HB-2026-114): sözdizimi
+  haklar`. Bu artık NİHAİ ofis-makinesi sonucudur — ayrı bir makinede
+  tekrar doğrulama GEREKMEZ.
+- `setup-file-agent-service-account.ps1` (HB-2026-114/115): sözdizimi
   (`Parser::ParseFile`, 0 hata) doğrulandı; önizleme (Apply'sız) modu
-  sentetik dizinlere karşı GERÇEKTEN çalıştırıldı; ACL uygula/doğrula
-  fonksiyonları bir SCRATCH klasöre karşı MEVCUT (yeni oluşturulmamış)
-  kullanıcı hesabıyla gerçekten test edildi (Modify VE ReadAndExecute
-  senaryoları, artı kasıtlı yanlış-hak negatif testi); WinSW kimlik
-  ekleme/doğrulama fonksiyonları gerçek şablonun SENTETİK bir kopyasına
-  karşı test edildi (parola alanı kasıtlı eklenip DOĞRU tespit edildiği
-  dahil); `-Apply` parolasız çağrıldığında `exit 2` ile GÜVENLE
-  reddedildiği doğrulandı. **Test edilMEYEN (kasıtlı, gerçek hesap/ACL
-  oluşturmamak için):** `New-LocalUser` ile GERÇEK hesap oluşturma ve
+  hem sentetik dizinlere hem GERÇEK hedef değerlere (`C:\HasarBotuStorage\
+  BARAN GLOBAL EKSPERTİZ`, gerçek WinSW şablonu — salt-okunur) karşı
+  GERÇEKTEN çalıştırıldı; ACL uygula/doğrula fonksiyonları bir SCRATCH
+  klasöre karşı MEVCUT (yeni oluşturulmamış) hesaplarla — TEK hesap VE
+  İKİ hesap (HB-2026-115: File Agent servis hesabı + pCloud'u çalıştıran
+  etkileşimli kullanıcı) senaryolarında, artı eksik-ACE/fazladan-ACE
+  negatif testleriyle — gerçekten test edildi; WinSW kimlik ekleme/
+  doğrulama fonksiyonları gerçek şablonun SENTETİK bir kopyasına karşı
+  test edildi (parola alanı kasıtlı eklenip DOĞRU tespit edildiği dahil);
+  `-Apply` parolasız çağrıldığında `exit 2` ile GÜVENLE reddedildiği
+  doğrulandı. **Test edilMEYEN (kasıtlı, gerçek hesap/ACL oluşturmamak
+  için):** `New-LocalUser` ile GERÇEK hesap oluşturma ve
   `LsaAddAccountRights` ile GERÇEK hak verme/reddetme — bunlar yalnız
   kod incelemesiyle doğrulandı, D6'nın gerçek yürütülmesinde ampirik
   olarak kanıtlanmalıdır.
 
 ## Açık kalan
 
-- pCloud senkronize klasör geçişinin GERÇEK ofis verisiyle süresi ve
-  disk alanı etkisi ölçülmedi (yalnız prosedür/§2a dry-run planı
-  tanımlandı — bkz. HB-2026-112). Ofis üretim verisinin gerçek
-  hacmi bu geliştirme makinesindeki ölçümden (6.258 dosya/~8,64 GB)
-  FARKLI olabilir; §2a.1 ofis makinesinde TEKRARLANMALIDIR.
-- **ARAÇ HAZIR (HB-2026-113/114, §2c):** File Agent artık LocalSystem
+- **DÜZELTİLDİ (HB-2026-115):** Bu bölüm önceden pCloud senkron
+  geçişinin "ofis üretim verisiyle" ayrıca ölçülmesi gerektiğini
+  söylüyordu — DESKTOP-EFN2G33 zaten GERÇEK ofis/üretim makinesi
+  olduğu için §2a.1'deki ölçüm (6.258 dosya/~8,64 GB) GERÇEK üretim
+  verisidir, ayrı ölçüm GEREKMEZ. Açık kalan TEK şey: senkronizasyonun
+  GERÇEK süresi/disk etkisi geçiş fiilen yapılana kadar bilinmez
+  (yalnız prosedür/§2a dry-run planı tanımlandı — bkz. HB-2026-112).
+- **ARAÇ HAZIR (HB-2026-113/114/115, §2c):** File Agent artık LocalSystem
   yerine adanmış `svc-hasarbotu-fileagent` hesabı altında çalışacak;
-  `setup-file-agent-service-account.ps1` bunu uygular/doğrular. Açık
-  kalan: `New-LocalUser`/`LsaAddAccountRights` çağrılarının GERÇEK
-  ortamda ampirik doğrulanması (D6'nın gerçek yürütülmesi); parola
+  `setup-file-agent-service-account.ps1` bunu uygular/doğrular. HB-2026-115:
+  depolama kökü ACL'i artık pCloud'u çalıştıran etkileşimli kullanıcıya
+  (`-PCloudSyncAccount`, varsayılan bu oturumun kendisi) da Modify verir —
+  aksi hâlde pCloud senkron klasöre yazamazdı. Açık kalan:
+  `New-LocalUser`/`LsaAddAccountRights` çağrılarının GERÇEK hesap/hak
+  oluşturarak ampirik doğrulanması (D6'nın gerçek yürütülmesi); parola
   rotasyon prosedürü (sıklık, kim yapar, `sc.exe config` ile nasıl
   yansıtılır) henüz tanımlanmadı; `install-services.ps1`e entegrasyon
-  (bu betiği §3'ten önce otomatik çağırma) henüz yapılmadı.
+  (bu betiği §3'ten önce otomatik çağırma) henüz yapılmadı; pCloud'un
+  gerçek çalıştığı hesabın GERÇEK kurulumda (bu makinede beklenen:
+  `DESKTOP-EFN2G33\user`, ama gerçek dağıtım operatör hesabı farklı
+  olabilir) doğru şekilde `-PCloudSyncAccount`e verilmesi operatör
+  sorumluluğudur.
 - WinSW ikili dosyasının bütünlük doğrulaması (checksum/imza) için kesin
   prosedür operatör kararına bırakıldı.
 - TLS/sertifika (OPS-Q03) ve izleme (OPS-Q05) bu runbook'un kapsamı

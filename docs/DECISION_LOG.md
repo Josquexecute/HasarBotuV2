@@ -3468,3 +3468,100 @@ ortamda ampirik dogrulanmasi (D6'nin gercek yurutulmesi); parola
 rotasyon prosedurunun yazilmasi; `install-services.ps1`e entegrasyon
 (bu betigi WinSW kurulumundan ONCE otomatik cagirma) henuz yapilmadi —
 hepsi ayri, acikca onaylanmis adimlardir.
+
+## 2026-07-29 - HB-2026-115: KRITIK DUZELTME - DESKTOP-EFN2G33 gercek ofis/dagitim makinesidir (gelistirme/test varsayimi YANLISTI); ACL planina pCloud senkron hesabi eklendi
+
+Karar: Kullanici, bu oturum boyunca (HB-2026-108'den HB-2026-114'e kadar,
+ayrica onceki preview raporunda) TUTARLI bicimde tekrarlanan bir
+VARSAYIMI duzeltti: **DESKTOP-EFN2G33 gercek ofis/dagitim makinesidir,
+"gelistirme/test makinesi" DEGILDIR.** Bu, onceki entrylerin METNINDE
+(prosedur/mantik DEGIL) yer alan gercek bir hatadir.
+
+**Duzeltmenin kapsami ve ETKISI (ONEMLI - cogu bulgu GUCLENIYOR, zayiflamiyor):**
+- HB-2026-108 ile HB-2026-114 arasindaki TUM ampirik olcumler (P:\
+  SYSTEM'den gorunurluk/yazma/silme, GLOBAL ad alani kaniti, EldoS CBFS
+  surucu bulgusu, ACL `Everyone: tum haklar`, kapasite olcumu — 6.258
+  dosya/603 klasor/~8,64 GB, `setup-file-agent-service-account.ps1`in
+  onizleme testleri) GERCEK PROOF makinesinde yapilmis GERCEK URETIM
+  VERISIDIR — "gelistirme ortaminda olculdu, ofis makinesinde farkli
+  cikabilir" seklindeki TUM ihtiyat notlari GECERSIZDIR ve kaldirildi
+  (`RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`, `PROJECT_STATUS.md`,
+  `DEPLOYMENT_AND_OPERATIONS_PLAN.md`).
+- `P:\BARAN GLOBAL EKSPERTIZ` altinda GOZLEMLENEN icerik (gercek is
+  dosyalari, kimlik fotokopisi dahil gercek musteri/personel verisi)
+  bu duzeltmeyle TUTARLIDIR — bu bir test/sentetik hesap DEGIL, gercek
+  isletme verisidir. AGENTS.md'nin "gercek musteri verisi kullanma"
+  ilkesi geregi bu veriye hicbir zaman icerik olarak ERISILMEDI/OKUNMADI,
+  yalniz salt-okunur sayim/boyut olcumu yapildi ve HICBIR gercek dosya
+  adi committed dokumana yazilmadi.
+- DECISION_LOG'un ESKI entryleri (HB-2026-108...114) METIN OLARAK
+  DEGISTIRILMEDI - bu, append-only audit kaydi ilkesiyle TUTARLIDIR
+  (bkz. AGENTS.md, `case_location_history` deseni). Bu entry AUTORITER
+  duzeltmedir; eski entrylerdeki "gelistirme makinesi" ifadeleri artik
+  GECERSIZ sayilmalidir. `PROJECT_STATUS.md`/`RUNBOOK` gibi "canli"
+  operasyonel belgelerde ise dogrudan duzeltme yapildi (yanlis bilginin
+  operatoru yanlis yonlendirmesini onlemek icin).
+
+**IKINCI, BAGIMSIZ VE KRITIK bulgu: ACL planinda pCloud senkron hesabi
+EKSIKTI.** Kullanici sunu belirtti: `pCloud.exe` `DESKTOP-EFN2G33\user`
+hesabiyla calisiyor (HB-2026-111'de zaten `Get-Process` ile GOZLEMLENMISTI
+ama D6/HB-2026-113-114'un ACL tasarimina YANSITILMAMISTI). HB-2026-113/114
+plani depolama kokune YALNIZ File Agent servis hesabina (`svc-hasarbotu-
+fileagent`) Modify + Administrators'a Full Control veriyordu. **NTFS
+senkron klasor moduna gecildiginde pCloud'un KENDISI bu klasore dosya
+YAZAR** (senkronizasyon budur); servis hesabina grant vermek pCloud'a
+HICBIR sey vermez. Miras kesilip Everyone/Users/Authenticated Users
+kaldirildiginda pCloud'un kendi yazma erisimi de KOPARDI - senkronizasyon
+SESSIZCE (hata mesaji olmadan, dosyalar basitce guncellenmeyerek)
+durabilirdi. Bu, calistirilmadan ONCE kod incelemesiyle DEGIL, kullanicinin
+mimari bilgisiyle YAKALANDI - onemli bir dogrulama katmanidir.
+
+**Duzeltme (`setup-file-agent-service-account.ps1`):**
+- Yeni parametre: `-PCloudSyncAccount` (varsayilan: bu oturumun kendisi,
+  `$env:COMPUTERNAME\$env:USERNAME` — GERCEK kurulumda ACIKCA verilmelidir).
+- `Test-LeastPrivilegeAcl`/`Set-LeastPrivilegeAcl` TEK hesap+hak yerine
+  `[hashtable[]]$Grants` (coklu kimlik+hak) kabul edecek sekilde
+  GENELLESTIRILDI; `New-AclGrant` yardimci fonksiyonu eklendi.
+- Depolama koku artik UC grant aliyor: servis hesabi -> Modify,
+  `-PCloudSyncAccount` -> Modify, Administrators -> Full Control.
+  Uygulama dizini/loglar DEGISMEDI (pCloud oraya dokunmaz, yalniz
+  File Agent servis hesabi).
+- `Test-LeastPrivilegeAcl`e YENI bir kontrol eklendi: `$Grants`
+  DISINDA baska HICBIR ACE olmamali (once yalniz "beklenen hesap
+  eksik mi" kontrol ediliyordu, "beklenmeyen FAZLA hesap var mi"
+  KONTROL EDILMIYORDU - coklu-hesap senaryosunda bu bosluk onemli
+  hale geldi).
+
+**Kanit (bu makinede, gercek hesap/ACL/veri OLMADAN):**
+- `Parser::ParseFile`: 0 hata (refactor sonrasi tekrar dogrulandi).
+- Coklu-hesap ACL mantigi bir SCRATCH klasore karsi IKI MEVCUT
+  (yeni olusturulmamis) hesapla (`DESKTOP-EFN2G33\user` +
+  `NT AUTHORITY\NETWORK SERVICE`, ikincisi gercek bir "ikinci hesap"
+  temsilcisi olarak) GERCEKTEN test edildi: uygulama oncesi Pass=False
+  (iki hesap da eksik), uygulama sonrasi Pass=True, UC ayri negatif
+  test (beklenen ucuncu bir hesap eksik -> False; hesaplardan biri
+  Grants listesinden CIKARILINCA "beklenmeyen fazla ACE" DOGRU
+  tespit edildi -> False).
+- `-Apply` verilmeden GERCEK hedef degerlerle (`C:\HasarBotuStorage\
+  BARAN GLOBAL EKSPERTİZ`, `C:\HasarBotu\services\file-agent`, gercek
+  commit'li WinSW sablonu — salt-okunur kontrol) yeniden onizleme
+  calistirildi: plan artik UC grant'i (servis hesabi + `DESKTOP-
+  EFN2G33\user` + Administrators) doguru gosteriyor; `git status`
+  sablon dosyasinda DEGISIKLIK YOK; gercek hesap/klasor OLUSMADI.
+- `npm run check:deploy` gecti; `npm audit --audit-level=moderate`
+  0 acik. Yalniz `.ps1`/`.md` degistigi icin typecheck/lint/test/build
+  GEREKMEDI.
+
+Etki: `deploy/windows-service/setup-file-agent-service-account.ps1`
+(coklu-hesap ACL destegi), `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`
+(§2/§2a/§2c/§7/Acik kalan makine-kimligi + ACL duzeltmesi),
+`docs/PROJECT_STATUS.md` (ilgili "gelistirme makinesi" notlarinin
+duzeltilmesi), `docs/DEPLOYMENT_AND_OPERATIONS_PLAN.md` (§2.3 D6
+karari guncellendi) degisti. Uygulama kodu, WinSW sablonlari, migration,
+API/contracts, gercek hesap/ACL/servis/veri DEGISMEDI.
+
+Acik kalan: GERCEK kurulumda `-PCloudSyncAccount`in dogru hesaba
+(muhtemelen `DESKTOP-EFN2G33\user`dan FARKLI, gercek operator/servis
+hesabi olabilir) ACIKCA verilmesi operator sorumlulugudur - varsayilana
+GUVENILMEMELIDIR. `New-LocalUser`/`LsaAddAccountRights`in gercek hesaba
+karsi ampirik dogrulanmasi D6'nin gercek yurutulmesinde GEREKIR.
