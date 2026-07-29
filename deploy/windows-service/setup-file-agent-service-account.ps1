@@ -1,13 +1,22 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    File Agent icin adanmis, en-az-yetkili yerel servis hesabini PLANLAR,
-    ONIZLER ve (yalniz -Apply ile) UYGULAR (D6, HB-2026-113).
+    File Agent icin adanmis, en-az-yetkili yerel servis hesabini VE WinSW
+    servis kurulumunu ATOMIK olarak PLANLAR, ONIZLER ve (yalniz -Apply
+    ile) UYGULAR (D6, HB-2026-113/114/115/116).
 
 .DESCRIPTION
     HB-2026-113 karari: File Agent, WinSW varsayilani olan LocalSystem
     YERINE ayri bir yerel servis hesabi (varsayilan: svc-hasarbotu-fileagent)
-    altinda calisir. Bu betik dort seyi PLANLAR/DOGRULAR:
+    altinda calisir. HB-2026-116'da bu betik, hesap + LSA haklari + ACL +
+    GERCEK WinSW servis kurulumunu TEK ATOMIK islem haline getirdi: adimlar
+    SIRAYLA uygulanir; HERHANGI biri basarisiz olursa, o ana kadar
+    TAMAMLANMIS TUM adimlar TERS SIRAYLA geri alinmaya calisilir (hesap
+    silinir, verilen LSA haklari kaldirilir, ACL onceki haline dondurulur,
+    kurulan servis kaldirilir) - ya HEPSI basarili ya da HICBIRI kalici
+    degildir.
+
+    Bu betik dort seyi PLANLAR/DOGRULAR/UYGULAR:
 
       1. Hesabin VARLIGI ve "Users" grubu uyeliginden CIKARILMIS olmasi.
       2. "Log on as a service" hakki (SeServiceLogonRight) VAR mi.
@@ -15,8 +24,9 @@
          SeDenyRemoteInteractiveLogonRight) VAR mi.
       4. Hedef depolama kokunde VE File Agent uygulama dizininde NTFS
          en-az-yetki ACL'i (Everyone/Users/Authenticated Users YOK) dogru
-         mu; verilirse WinSW XML'inde `<serviceaccount>` kimligi dogru mu
-         (PAROLA ICERMEDEN).
+         mu; WinSW XML'inde `<serviceaccount>` kimligi dogru mu (PAROLA
+         ICERMEDEN); GERCEK WinSW servisi kurulu mu, `Disabled`
+         baslangic turunde mi (KURULUR ama HICBIR ZAMAN BASLATILMAZ).
 
     HB-2026-115 duzeltmesi: depolama koku ACL'i YALNIZ File Agent servis
     hesabina degil, pCloud'u calistiran ETKILESIMLI KULLANICI hesabina da
@@ -28,16 +38,19 @@
     MEVCUT durumu okur ve YAPILACAK plani yazdirir (AGENTS.md SS7 "kritik
     islem standardi": Planla -> Onizle -> Onay -> Uygula -> Dogrula).
 
-    PAROLA GUVENLIGI: `-ServiceAccountPassword` YALNIZ `SecureString`
-    kabul eder; hicbir zaman Write-Host/Write-Verbose ile yazdirilmaz,
-    hicbir dosyaya (repo, WinSW XML, log) YAZILMAZ. WinSW XML'ine yalniz
-    hesap KIMLIGI (`<domain>`/`<user>`/`<allowservicelogon>`) yazilir;
-    `<password>` elemani KASITLI olarak HICBIR ZAMAN eklenmez - servis
-    kimlik bilgisi GERCEK kurulumdan SONRA, ayri bir adimda
-    `Set-FileAgentServiceLogonCredential` ile `sc.exe config ... password=`
-    kullanilarak (yalniz bellekte, dosyaya yazilmadan) ayarlanir. Bu betik
-    o adimi CAGIRMAZ (gercek servis bu pakette kurulmadi); fonksiyon yalniz
-    D6'nin sonraki asamasi icin HAZIR tutulur.
+    PAROLA GUVENLIGI (HB-2026-116): Parola operator tarafindan VERILMEZ -
+    betik `-Apply` sirasinda BIR KEZ, kriptografik RNG ile kendi uretir,
+    yalniz `SecureString` olarak bellekte tutar. Parola: (1) hesabi
+    olusturur/sifirlar (`New-LocalUser`/`Set-LocalUser`), (2) SCM'ye
+    `sc.exe config ... password=` ile TEK SEFERLIK komut satiri argumani
+    olarak aktarilir (Windows SCM'nin gerektirdigi ASGARI ifsa). Parola
+    HICBIR ZAMAN: repo'ya, WinSW XML'ine (ne sablon ne render edilmis
+    kopya), herhangi bir log/transcript dosyasina, konsol ciktisina
+    YAZILMAZ. Islem bittikten sonra parolayi bilen/hatirlayan HICBIR
+    kayit KALMAZ - bu KASITLIDIR: hesap yalniz "Log on as a service" icin
+    kullanilir, hicbir insan ona etkilesimli giris yapmaz, parolayi
+    bilmesi GEREKMEZ. Rotasyon, betigi tekrar `-Apply` ile calistirip
+    parolayi/SCM kaydini YENIDEN uretmektir (ayri, gelecekteki bir adim).
 
 .PARAMETER AccountName
     Olusturulacak/dogrulanacak yerel hesap adi (varsayilan:
@@ -59,34 +72,54 @@
     (pCloud o dizinlere dokunmaz).
 
 .PARAMETER FileAgentAppDir
-    File Agent dagitim dizini (icinde `dist\index.js`, `logs\` bulunur).
-    Hesabin Read+Execute (+ yalniz `logs`da Modify) alacagi dizin.
+    File Agent dagitim dizini (icinde `dist\index.js`, `logs\` bulunur,
+    GERCEK kurulumda WinSW ikilisi/XML'i de buraya kopyalanir/render
+    edilir). Hesabin Read+Execute (+ yalniz `logs`da Modify) alacagi
+    dizin.
 
 .PARAMETER WinSwXmlPath
-    (Opsiyonel) Dogrulanacak/guncellenecek WinSW XML dosyasinin yolu. Repo
-    icindeki SABIT sablonlar (`hasarbotu-file-agent.winsw.xml`) DEGIL -
-    kurulum HEDEFINDEKI RENDER EDILMIS kopya (veya sentetik test dosyasi)
-    beklenir. Verilmezse WinSW kimlik adimi ATLANIR.
+    (Opsiyonel, salt-okunur ONIZLEME icin) Dogrulanacak WinSW XML
+    dosyasinin yolu - repo'daki sabit sablon veya sentetik test dosyasi
+    olabilir. `-Apply` sirasinda KULLANILMAZ (render hedefi her zaman
+    `$FileAgentAppDir\$ServiceName.xml`dir); yalniz onizlemede "eklenirse
+    ne olur" gostermek icin verilebilir.
 
-.PARAMETER ServiceAccountPassword
-    Yeni hesabin parolasi (SecureString). Yalniz `-Apply` ile GEREKLIDIR;
-    hicbir zaman yazdirilmaz/kaydedilmez.
+.PARAMETER WinSwExe
+    GERCEK kurulum icin: onceden indirilmis WinSW ikili dosyasinin mutlak
+    yolu (bu repo WinSW'yi DAGITMAZ, bkz. `install-services.ps1`). Yalniz
+    `-Apply` icin GEREKLIDIR.
+
+.PARAMETER WinSwTemplatePath
+    Render edilecek WinSW XML SABLONU (varsayilan: bu betikle ayni
+    dizindeki `hasarbotu-file-agent.winsw.xml` - repo'daki GERCEK, sabit
+    sablon; hicbir zaman DEGISTIRILMEZ, yalniz OKUNUR).
+
+.PARAMETER NodeExe
+    node.exe mutlak yolu. Verilmezse PATH'ten tespit edilir (yalniz
+    `-Apply` icin gereklidir).
+
+.PARAMETER ServiceName
+    WinSW servis kimligi (varsayilan: hasarbotu-file-agent).
 
 .PARAMETER Apply
     Verilmezse yalniz mevcut durum + plan yazdirilir, HICBIR degisiklik
     yapilmaz. Gercek uygulama icin ACIKCA verilmelidir (ayrica yukseltme
-    ve PSCmdlet.ShouldProcess onayi GEREKTIRIR).
+    ve PSCmdlet.ShouldProcess onayi GEREKTIRIR). Basarili UYGULAMA SONUNDA
+    dahi servis `Disabled` baslangic turundedir ve BASLATILMAMISTIR -
+    servisi etkinlestirme/baslatma bu betigin KAPSAMI DISINDADIR, ayri,
+    acikca onaylanmis bir adimdir.
 
 .EXAMPLE
     # Onizleme (hicbir sey degismez):
     .\setup-file-agent-service-account.ps1 -FileAgentAppDir C:\HasarBotu\services\file-agent
 
 .EXAMPLE
-    # Gercek uygulama (yalniz D6'nin gercek yurutulmesinde):
-    $pw = Read-Host -AsSecureString 'Servis hesabi parolasi'
+    # Gercek uygulama (yalniz D6'nin gercek yurutulmesinde; parola
+    # OPERATORDEN ALINMAZ, betik kendi uretir):
     .\setup-file-agent-service-account.ps1 -FileAgentAppDir C:\HasarBotu\services\file-agent `
-        -WinSwXmlPath C:\HasarBotu\services\file-agent\hasarbotu-file-agent.xml `
-        -ServiceAccountPassword $pw -Apply
+        -WinSwExe C:\Tools\WinSW-x64.exe `
+        -PCloudSyncAccount 'DESKTOP-EFN2G33\<pCloud'u calistiran gercek kullanici>' `
+        -Apply
 
 .NOTES
     Yonetici (elevation) yalniz `-Apply` icin GEREKIR; salt-okunur
@@ -105,12 +138,27 @@ param(
 
     [string]$WinSwXmlPath,
 
-    [System.Security.SecureString]$ServiceAccountPassword,
+    [string]$WinSwExe,
+
+    [string]$WinSwTemplatePath,
+
+    [string]$NodeExe,
+
+    [string]$ServiceName = 'hasarbotu-file-agent',
 
     [switch]$Apply
 )
 
 $ErrorActionPreference = 'Stop'
+
+# NOT: varsayilan deger param() blogunda `$PSScriptRoot` ile VERILMEZ -
+# bazi cagrim yollarinda (ör. dot-source) `$PSScriptRoot` param blogu
+# degerlendirilirken henuz BOS olabilir (gercekten test edilip BULUNDU:
+# "Join-Path: Cannot bind argument... empty string"). Govde icinde,
+# `$PSScriptRoot` KESIN dolu oldugunda cozulur.
+if (-not $WinSwTemplatePath) {
+    $WinSwTemplatePath = Join-Path $PSScriptRoot 'hasarbotu-file-agent.winsw.xml'
+}
 
 try {
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -262,6 +310,24 @@ function Grant-AccountRights {
         if ($status -ne 0) {
             $win32Error = [HasarBotu.Lsa]::LsaNtStatusToWinError($status)
             throw "LsaAddAccountRights basarisiz ($($Rights -join ', '); NTSTATUS=$status, Win32=$win32Error)."
+        }
+    } finally {
+        [HasarBotu.Lsa]::LsaClose($policyHandle) | Out-Null
+    }
+}
+
+function Remove-AccountRights {
+    <# GERI ALMA: hesaptan belirtilen LSA haklarini KALDIRIR. Yalniz
+       rollback akisinda cagrilir. #>
+    param([Parameter(Mandatory = $true)][string]$Account, [Parameter(Mandatory = $true)][string[]]$Rights)
+    $sidBytes = Get-AccountSidBytes -Account $Account
+    $policyHandle = Get-LsaPolicyHandle
+    try {
+        $lsaRights = ConvertTo-LsaUnicodeStringArray -Values $Rights
+        $status = [HasarBotu.Lsa]::LsaRemoveAccountRights($policyHandle, $sidBytes, $false, $lsaRights, $lsaRights.Length)
+        if ($status -ne 0) {
+            $win32Error = [HasarBotu.Lsa]::LsaNtStatusToWinError($status)
+            Write-Host "  UYARI: LsaRemoveAccountRights basarisiz ($($Rights -join ', '); NTSTATUS=$status, Win32=$win32Error) - elle kontrol edin." -ForegroundColor Red
         }
     } finally {
         [HasarBotu.Lsa]::LsaClose($policyHandle) | Out-Null
@@ -459,9 +525,7 @@ function Set-WinSwServiceAccountIdentity {
 }
 
 function Set-FileAgentServiceLogonCredential {
-    <# GERCEK SERVIS KURULUMUNDAN SONRA kullanilacak adim (bu betik
-       tarafindan CAGRILMAZ - D6'nin sonraki asamasi icin HAZIR tutulur).
-       Parola YALNIZ bellekte cozulur, HICBIR dosyaya/log'a yazilmaz;
+    <# Parola YALNIZ bellekte cozulur, HICBIR dosyaya/log'a yazilmaz;
        `sc.exe config` cagrisina TEK SEFERLIK komut satiri argumani
        olarak gecer (Windows SCM'nin gerektirdigi ASGARI ifsa). #>
     param(
@@ -479,6 +543,67 @@ function Set-FileAgentServiceLogonCredential {
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
         Remove-Variable -Name plainPassword -ErrorAction SilentlyContinue
     }
+}
+
+function New-ServiceAccountPassword {
+    <# HB-2026-116: parolayi OPERATOR degil, betik kendisi BIR KEZ,
+       kriptografik RNG ile uretir; yalniz SecureString olarak doner.
+       Cagiran hicbir zaman duz metnini GORMEZ/KAYDETMEZ. #>
+    $bytes = [byte[]]::new(32)
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $plain = [Convert]::ToBase64String($bytes)
+    $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
+    Remove-Variable -Name plain -ErrorAction SilentlyContinue
+    Remove-Variable -Name bytes -ErrorAction SilentlyContinue
+    return $secure
+}
+
+function Resolve-NodeExe {
+    <# install-services.ps1 ile AYNI desen. #>
+    param([string]$Explicit)
+    if ($Explicit) { return $Explicit }
+    $found = Get-Command node.exe -ErrorAction SilentlyContinue
+    if ($null -eq $found) { throw 'node.exe PATH''te bulunamadi. -NodeExe ile mutlak yol verin.' }
+    return $found.Source
+}
+
+function Invoke-Rollback {
+    <# HERHANGI bir atomik adim basarisiz oldugunda cagirilir: yigindaki
+       (stack) TUM geri-alma scriptblock'larini TERS SIRAYLA calistirir
+       (best-effort - bir geri alma adimi basarisiz olursa DIGERLERI
+       yine de denenir, hicbiri digerini engellemez). Ana akistan
+       BAGIMSIZ test edilebilmesi icin fonksiyon tanimlari arasina
+       (main-flow'un olasi erken `exit`lerinden ONCE) konuldu. #>
+    param([System.Collections.Generic.Stack[scriptblock]]$Stack)
+    Write-Host ''
+    Write-Host '--- HATA: ATOMIK ISLEM GERI ALINIYOR (best-effort) ---' -ForegroundColor Red
+    while ($Stack.Count -gt 0) {
+        $undo = $Stack.Pop()
+        try { & $undo } catch { Write-Host "  GERI ALMA ADIMI BASARISIZ: $($_.Exception.Message)" -ForegroundColor Red }
+    }
+    Write-Host '--- GERI ALMA TAMAMLANDI ---' -ForegroundColor Red
+}
+
+function New-RenderedWinSwConfig {
+    <# `install-services.ps1`deki `New-RenderedServiceConfig` ile AYNI
+       yer tutucu cozme mantigi, ancak HB-2026-110/114 dersiyle acikca
+       UTF-8 okuma/yazma (Get-Content/Set-Content varsayilan kodlamasi
+       BOM'suz dosyalarda sistem ANSI kod sayfasina duser). #>
+    param(
+        [Parameter(Mandatory = $true)][string]$TemplatePath,
+        [Parameter(Mandatory = $true)][string]$NodeExePath,
+        [Parameter(Mandatory = $true)][string]$AppDirPath,
+        [Parameter(Mandatory = $true)][string]$OutputPath
+    )
+    $xml = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8)
+    $xml = $xml.Replace('__NODE_EXE__', $NodeExePath).Replace('__APP_DIR__', $AppDirPath)
+    if ($xml.Contains('__NODE_EXE__') -or $xml.Contains('__APP_DIR__')) {
+        throw "Yer tutucu cozumlenemedi: $TemplatePath"
+    }
+    [xml]$parsed = $xml
+    if ($null -eq $parsed) { throw "Render edilen XML gecersiz: $TemplatePath" }
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($OutputPath, $xml, $utf8NoBom)
 }
 
 # --- Ana akis: DURUM -> PLAN -> (yalniz -Apply) UYGULA -> DOGRULA ---------
@@ -538,11 +663,15 @@ if ($WinSwXmlPath) {
     Write-Host '  WinSW kimligi: -WinSwXmlPath verilmedi, ATLANDI.'
 }
 
+$existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+Write-Host "  WinSW servisi ($ServiceName) kurulu mu : $($null -ne $existingService)"
+if ($existingService) { Write-Host "    StartType=$($existingService.StartType) Status=$($existingService.Status)" }
+
 Write-Host ''
 Write-Host '--- PLAN (Apply verilmedikce hicbir sey degismez) ---' -ForegroundColor Yellow
 
 $planSteps = New-Object 'System.Collections.Generic.List[string]'
-if (-not $accountExists) { $planSteps.Add("Yerel hesap olusturulacak: $AccountName (rastgele parola, 'Users' grubundan cikarilacak)") }
+if (-not $accountExists) { $planSteps.Add("Yerel hesap olusturulacak: $AccountName (betigin KENDI urettigi rastgele parola, 'Users' grubundan cikarilacak)") }
 foreach ($right in $sensitiveRightsRequired) {
     if ($currentRights -notcontains $right) { $planSteps.Add("Hak VERILECEK: $right") }
 }
@@ -552,7 +681,13 @@ foreach ($right in $sensitiveRightsDenied) {
 if (-not $storageAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $StorageRoot ($AccountName -> Modify, $PCloudSyncAccount -> Modify, Administrators -> Full)") }
 if (-not $appDirAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $FileAgentAppDir (yalniz $AccountName -> Read+Execute, Administrators -> Full)") }
 if (-not $logsAclCheck.Pass) { $planSteps.Add("ACL yeniden yazilacak: $logsDir (yalniz $AccountName -> Modify, Administrators -> Full)") }
-if ($WinSwXmlPath -and -not $winSwCheck.Pass) { $planSteps.Add("WinSW XML guncellenecek: $WinSwXmlPath (<serviceaccount> - PAROLASIZ)") }
+if (-not $existingService) {
+    $planSteps.Add("WinSW servisi KURULACAK: $ServiceName ($FileAgentAppDir\$ServiceName.xml render edilecek, <serviceaccount> PAROLASIZ eklenecek)")
+    $planSteps.Add('SCM servis oturum acma kimlik bilgisi (parola) BIR KEZ uretilip sc.exe config ile AKTARILACAK - hicbir dosyaya yazilmayacak')
+    $planSteps.Add('Servis baslangic turu DISABLED olarak ayarlanacak ve BASLATILMAYACAK')
+} else {
+    $planSteps.Add("UYARI: $ServiceName servisi ZATEN kurulu - bu betik VAR OLAN bir servisi guncellemez/yeniden kurmaz, atomik islem yalniz servis HENUZ yokken desteklenir.")
+}
 
 if ($planSteps.Count -eq 0) {
     Write-Host '  Yapilacak hicbir sey yok - mevcut durum zaten hedeflenen duruma uygun.' -ForegroundColor Green
@@ -571,92 +706,176 @@ if ($planSteps.Count -eq 0) {
     exit 0
 }
 
+# NOT: `Write-Error` global `$ErrorActionPreference = 'Stop'` altinda
+# TERMINATING sayilir ve script'i O ANDA durdurur - sonraki `exit N`
+# satirina HIC ULASILMAZ, gercek cikis kodu PowerShell'in kendi genel
+# hata kodu (1) olur, istenen N DEGIL (gercekten calistirilarak BULUNDU -
+# bkz. DECISION_LOG HB-2026-116). `-ErrorAction Continue` ile bu tek
+# cagri icin gecersiz kilinir, boylece `exit N` GERCEKTEN calisir.
 if (-not (Test-IsElevated)) {
-    Write-Error 'Bu betik -Apply ile yalniz yonetici (Administrator) yukseltmesiyle calisir. Hicbir degisiklik yapilmadi.'
+    Write-Error 'Bu betik -Apply ile yalniz yonetici (Administrator) yukseltmesiyle calisir. Hicbir degisiklik yapilmadi.' -ErrorAction Continue
     exit 2
 }
 
-if (-not $ServiceAccountPassword) {
-    Write-Error 'Hesap olusturmak/dogrulamak icin -ServiceAccountPassword (SecureString) GEREKIR. Hicbir degisiklik yapilmadi.'
+if ($existingService) {
+    Write-Error "$ServiceName servisi ZATEN kurulu - atomik kurulum yalniz servis HENUZ yokken desteklenir. Once elle kaldirin (`"$($existingService.Name)`" WinSW exe ile 'uninstall') veya farkli -ServiceName kullanin. Hicbir degisiklik yapilmadi." -ErrorAction Continue
     exit 2
 }
 
-if (-not $PSCmdlet.ShouldProcess("$AccountName / $StorageRoot / $FileAgentAppDir", 'Servis hesabi + ACL + WinSW kimligini uygula')) {
+if (-not $WinSwExe -or -not (Test-Path -LiteralPath $WinSwExe)) {
+    Write-Error "GERCEK servis kurulumu icin -WinSwExe (onceden indirilmis WinSW ikili dosyasi) GEREKIR. Hicbir degisiklik yapilmadi." -ErrorAction Continue
+    exit 2
+}
+
+try { $resolvedNodeExe = Resolve-NodeExe -Explicit $NodeExe } catch {
+    Write-Error "$($_.Exception.Message) Hicbir degisiklik yapilmadi." -ErrorAction Continue
+    exit 2
+}
+
+if (-not (Test-Path -LiteralPath $WinSwTemplatePath)) {
+    Write-Error "WinSW sablonu bulunamadi: $WinSwTemplatePath. Hicbir degisiklik yapilmadi." -ErrorAction Continue
+    exit 2
+}
+
+if (-not $PSCmdlet.ShouldProcess("$AccountName / $StorageRoot / $FileAgentAppDir / $ServiceName", 'Servis hesabi + LSA haklari + ACL + WinSW kurulumunu ATOMIK olarak uygula')) {
     exit 0
 }
 
-Write-Host '--- UYGULANIYOR ---' -ForegroundColor Yellow
+# --- ATOMIK UYGULAMA: her basarili adim ters-sirali bir "geri al" -------
+$undoStack = New-Object 'System.Collections.Generic.Stack[scriptblock]'
+$exeDest = Join-Path $FileAgentAppDir "$ServiceName.exe"
+$xmlDest = Join-Path $FileAgentAppDir "$ServiceName.xml"
 
-if (-not $accountExists) {
-    New-LocalUser -Name $AccountName -Password $ServiceAccountPassword `
-        -PasswordNeverExpires -UserMayNotChangePassword `
-        -Description 'HasarBotu V2 File Agent - yalniz Windows servis oturumu, etkilesimli giris YASAK (D6, HB-2026-113)' | Out-Null
-    Remove-LocalGroupMember -Group 'Users' -Member $AccountName -ErrorAction SilentlyContinue
-    Write-Host "Hesap olusturuldu: $AccountName" -ForegroundColor Green
-}
+try {
+    Write-Host '--- UYGULANIYOR (atomik) ---' -ForegroundColor Yellow
 
-$rightsToGrant = @()
-foreach ($right in $sensitiveRightsRequired) { if ($currentRights -notcontains $right) { $rightsToGrant += $right } }
-foreach ($right in $sensitiveRightsDenied) { if ($currentRights -notcontains $right) { $rightsToGrant += $right } }
-if ($rightsToGrant.Count -gt 0) {
-    Grant-AccountRights -Account $AccountName -Rights $rightsToGrant
-    Write-Host "Haklar verildi: $($rightsToGrant -join ', ')" -ForegroundColor Green
-}
+    # HB-2026-116: parola OPERATORDEN ALINMAZ, burada BIR KEZ uretilir;
+    # islem sonuna kadar YALNIZ bu degiskende (SecureString) tutulur.
+    $servicePassword = New-ServiceAccountPassword
+    Write-Host '  Parola uretildi (SecureString, hicbir yere yazilmayacak).'
 
-if (-not $storageAclCheck.Pass) {
-    Set-LeastPrivilegeAcl -Path $StorageRoot -Grants $storageGrants
-    Write-Host "ACL uygulandi: $StorageRoot" -ForegroundColor Green
-}
-if (-not $appDirAclCheck.Pass) {
-    Set-LeastPrivilegeAcl -Path $FileAgentAppDir -Grants $appDirGrants
-    Write-Host "ACL uygulandi: $FileAgentAppDir" -ForegroundColor Green
-}
-if (-not $logsAclCheck.Pass) {
-    if (-not (Test-Path -LiteralPath $logsDir)) { New-Item -ItemType Directory -Path $logsDir -Force | Out-Null }
-    Set-LeastPrivilegeAcl -Path $logsDir -Grants $logsGrants
-    Write-Host "ACL uygulandi: $logsDir" -ForegroundColor Green
-}
-if ($WinSwXmlPath -and -not $winSwCheck.Pass) {
-    Set-WinSwServiceAccountIdentity -XmlPath $WinSwXmlPath -AccountName $AccountName
-    Write-Host "WinSW kimligi guncellendi: $WinSwXmlPath" -ForegroundColor Green
-}
+    if (-not $accountExists) {
+        New-LocalUser -Name $AccountName -Password $servicePassword `
+            -PasswordNeverExpires -UserMayNotChangePassword `
+            -Description 'HasarBotu V2 File Agent - yalniz Windows servis oturumu, etkilesimli giris YASAK (D6, HB-2026-113/116)' | Out-Null
+        $undoStack.Push({ Remove-LocalUser -Name $AccountName -ErrorAction SilentlyContinue }.GetNewClosure())
+        Remove-LocalGroupMember -Group 'Users' -Member $AccountName -ErrorAction SilentlyContinue
+        Write-Host "  Hesap olusturuldu: $AccountName" -ForegroundColor Green
+    } else {
+        # Hesap zaten vardi: SCM'nin kullanacagi parolayla senkron kalmasi
+        # icin GERCEK parola burada da (yeniden) ayarlanir - bu hesabin
+        # ESKI parolasi zaten bilinmiyordu/bilinmemesi gerekiyordu, bu
+        # yuzden GERI ALINACAK bir "eski parola" YOKTUR (kasitli - bkz.
+        # DECISION_LOG HB-2026-116).
+        Set-LocalUser -Name $AccountName -Password $servicePassword
+        Write-Host "  Mevcut hesabin parolasi yenilendi: $AccountName" -ForegroundColor Green
+    }
 
-Write-Host ''
-Write-Host '--- DOGRULAMA (uygulama sonrasi yeniden okunuyor) ---' -ForegroundColor Yellow
+    $rightsToGrant = @()
+    foreach ($right in $sensitiveRightsRequired) { if ($currentRights -notcontains $right) { $rightsToGrant += $right } }
+    foreach ($right in $sensitiveRightsDenied) { if ($currentRights -notcontains $right) { $rightsToGrant += $right } }
+    if ($rightsToGrant.Count -gt 0) {
+        Grant-AccountRights -Account $AccountName -Rights $rightsToGrant
+        $undoStack.Push({ Remove-AccountRights -Account $AccountName -Rights $rightsToGrant }.GetNewClosure())
+        Write-Host "  Haklar verildi: $($rightsToGrant -join ', ')" -ForegroundColor Green
+    }
 
-$finalRights = Get-AccountRights -Account $AccountName
-$finalStorageAcl = Test-LeastPrivilegeAcl -Path $StorageRoot -Grants $storageGrants
-$finalAppDirAcl = Test-LeastPrivilegeAcl -Path $FileAgentAppDir -Grants $appDirGrants
-$finalLogsAcl = Test-LeastPrivilegeAcl -Path $logsDir -Grants $logsGrants
-$finalWinSw = if ($WinSwXmlPath) { Test-WinSwServiceAccountIdentity -XmlPath $WinSwXmlPath -AccountName $AccountName } else { $null }
+    if (-not $storageAclCheck.Pass) {
+        $originalAcl = if (Test-Path -LiteralPath $StorageRoot) { Get-Acl -LiteralPath $StorageRoot } else { $null }
+        Set-LeastPrivilegeAcl -Path $StorageRoot -Grants $storageGrants
+        $undoStack.Push({ if ($originalAcl) { Set-Acl -LiteralPath $StorageRoot -AclObject $originalAcl } }.GetNewClosure())
+        Write-Host "  ACL uygulandi: $StorageRoot" -ForegroundColor Green
+    }
+    if (-not $appDirAclCheck.Pass) {
+        $originalAcl = if (Test-Path -LiteralPath $FileAgentAppDir) { Get-Acl -LiteralPath $FileAgentAppDir } else { $null }
+        Set-LeastPrivilegeAcl -Path $FileAgentAppDir -Grants $appDirGrants
+        $undoStack.Push({ if ($originalAcl) { Set-Acl -LiteralPath $FileAgentAppDir -AclObject $originalAcl } }.GetNewClosure())
+        Write-Host "  ACL uygulandi: $FileAgentAppDir" -ForegroundColor Green
+    }
+    if (-not $logsAclCheck.Pass) {
+        $logsDirPreExisted = Test-Path -LiteralPath $logsDir
+        $originalAcl = if ($logsDirPreExisted) { Get-Acl -LiteralPath $logsDir } else { $null }
+        if (-not $logsDirPreExisted) {
+            New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+            $undoStack.Push({ Remove-Item -LiteralPath $logsDir -Recurse -Force -ErrorAction SilentlyContinue }.GetNewClosure())
+        }
+        Set-LeastPrivilegeAcl -Path $logsDir -Grants $logsGrants
+        if ($logsDirPreExisted) {
+            $undoStack.Push({ if ($originalAcl) { Set-Acl -LiteralPath $logsDir -AclObject $originalAcl } }.GetNewClosure())
+        }
+        Write-Host "  ACL uygulandi: $logsDir" -ForegroundColor Green
+    }
 
-$allOk = $true
-foreach ($right in $sensitiveRightsRequired) {
-    $ok = $finalRights -contains $right
-    Write-Host "  $right : $ok"
-    if (-not $ok) { $allOk = $false }
-}
-foreach ($right in $sensitiveRightsDenied) {
-    $ok = $finalRights -contains $right
-    Write-Host "  $right : $ok"
-    if (-not $ok) { $allOk = $false }
-}
-Write-Host "  Depolama koku ACL : $($finalStorageAcl.Pass)"
-if (-not $finalStorageAcl.Pass) { $allOk = $false }
-Write-Host "  Uygulama dizini ACL : $($finalAppDirAcl.Pass)"
-if (-not $finalAppDirAcl.Pass) { $allOk = $false }
-Write-Host "  Log dizini ACL : $($finalLogsAcl.Pass)"
-if (-not $finalLogsAcl.Pass) { $allOk = $false }
-if ($null -ne $finalWinSw) {
+    # --- GERCEK WinSW servis kurulumu -------------------------------------
+    Copy-Item -LiteralPath $WinSwExe -Destination $exeDest -Force
+    $undoStack.Push({ Remove-Item -LiteralPath $exeDest -ErrorAction SilentlyContinue }.GetNewClosure())
+    Write-Host "  WinSW ikilisi kopyalandi: $exeDest" -ForegroundColor Green
+
+    New-RenderedWinSwConfig -TemplatePath $WinSwTemplatePath -NodeExePath $resolvedNodeExe -AppDirPath $FileAgentAppDir -OutputPath $xmlDest
+    $undoStack.Push({ Remove-Item -LiteralPath $xmlDest -ErrorAction SilentlyContinue }.GetNewClosure())
+    Set-WinSwServiceAccountIdentity -XmlPath $xmlDest -AccountName $AccountName
+    Write-Host "  WinSW XML render edildi (serviceaccount PAROLASIZ eklendi): $xmlDest" -ForegroundColor Green
+
+    & $exeDest install
+    if ($LASTEXITCODE -ne 0) { throw "WinSW 'install' basarisiz oldu (kod $LASTEXITCODE)." }
+    $undoStack.Push({ & $exeDest uninstall 2>$null }.GetNewClosure())
+    Write-Host "  Servis kuruldu: $ServiceName" -ForegroundColor Green
+
+    # --- SCM oturum acma kimlik bilgisi: parola BURADA, TEK SEFERLIK ------
+    # sc.exe'ye aktarilir - hicbir dosyaya/log'a YAZILMAZ.
+    Set-FileAgentServiceLogonCredential -ServiceName $ServiceName -AccountName $AccountName -Password $servicePassword
+    Write-Host '  SCM oturum acma kimlik bilgisi ayarlandi (parola hicbir dosyaya yazilmadi).' -ForegroundColor Green
+
+    # --- Guvenlik: servis DISABLED - ASLA otomatik/elle baslatilmaz ------
+    Set-Service -Name $ServiceName -StartupType Disabled
+    Write-Host "  Servis baslangic turu: Disabled (BASLATILMADI)." -ForegroundColor Green
+
+    Write-Host ''
+    Write-Host '--- DOGRULAMA (uygulama sonrasi yeniden okunuyor) ---' -ForegroundColor Yellow
+
+    $finalRights = Get-AccountRights -Account $AccountName
+    $finalStorageAcl = Test-LeastPrivilegeAcl -Path $StorageRoot -Grants $storageGrants
+    $finalAppDirAcl = Test-LeastPrivilegeAcl -Path $FileAgentAppDir -Grants $appDirGrants
+    $finalLogsAcl = Test-LeastPrivilegeAcl -Path $logsDir -Grants $logsGrants
+    $finalWinSw = Test-WinSwServiceAccountIdentity -XmlPath $xmlDest -AccountName $AccountName
+    $finalService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+
+    $allOk = $true
+    foreach ($right in $sensitiveRightsRequired) {
+        $ok = $finalRights -contains $right
+        Write-Host "  $right : $ok"
+        if (-not $ok) { $allOk = $false }
+    }
+    foreach ($right in $sensitiveRightsDenied) {
+        $ok = $finalRights -contains $right
+        Write-Host "  $right : $ok"
+        if (-not $ok) { $allOk = $false }
+    }
+    Write-Host "  Depolama koku ACL : $($finalStorageAcl.Pass)"
+    if (-not $finalStorageAcl.Pass) { $allOk = $false }
+    Write-Host "  Uygulama dizini ACL : $($finalAppDirAcl.Pass)"
+    if (-not $finalAppDirAcl.Pass) { $allOk = $false }
+    Write-Host "  Log dizini ACL : $($finalLogsAcl.Pass)"
+    if (-not $finalLogsAcl.Pass) { $allOk = $false }
     Write-Host "  WinSW kimligi : $($finalWinSw.Pass)"
     if (-not $finalWinSw.Pass) { $allOk = $false }
-}
+    $serviceOk = ($null -ne $finalService) -and ($finalService.StartType -eq 'Disabled') -and ($finalService.Status -ne 'Running')
+    Write-Host "  Servis kurulu+Disabled+calismiyor : $serviceOk (StartType=$($finalService.StartType), Status=$($finalService.Status))"
+    if (-not $serviceOk) { $allOk = $false }
 
-Write-Host ''
-if ($allOk) {
-    Write-Host 'SONUC: Tum kontroller GECTI.' -ForegroundColor Green
+    if (-not $allOk) { throw 'Dogrulama basarisiz - bkz. yukaridaki isaretli kontroller.' }
+
+    Write-Host ''
+    Write-Host 'SONUC: Tum adimlar ATOMIK olarak basarili. Servis kuruldu, DISABLED, BASLATILMADI.' -ForegroundColor Green
     exit 0
-} else {
-    Write-Host 'SONUC: En az bir kontrol BASARISIZ - yukarida isaretlendi.' -ForegroundColor Red
+}
+catch {
+    Write-Host ''
+    Write-Host "HATA: $($_.Exception.Message)" -ForegroundColor Red
+    Invoke-Rollback -Stack $undoStack
+    Write-Error 'Atomik islem BASARISIZ oldu ve geri alindi. Hicbir kalici degisiklik KALMAMIS olmalidir (yukaridaki geri alma sonuclarini kontrol edin).' -ErrorAction Continue
     exit 1
+}
+finally {
+    Remove-Variable -Name servicePassword -ErrorAction SilentlyContinue
 }

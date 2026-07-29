@@ -3565,3 +3565,123 @@ Acik kalan: GERCEK kurulumda `-PCloudSyncAccount`in dogru hesaba
 hesabi olabilir) ACIKCA verilmesi operator sorumlulugudur - varsayilana
 GUVENILMEMELIDIR. `New-LocalUser`/`LsaAddAccountRights`in gercek hesaba
 karsi ampirik dogrulanmasi D6'nin gercek yurutulmesinde GEREKIR.
+
+## 2026-07-29 - HB-2026-116: D6 gercek uygulama akisi ATOMIK hale getirildi - tek seferlik bellek-ici parola, hata halinde tam geri alma, servis Disabled kurulur (gercek Apply hala calistirilmadi)
+
+Karar: Kullanicinin talimatiyla `setup-file-agent-service-account.ps1`in
+`-Apply` akisi ATOMIK hale getirildi: hesap + LSA haklari + ACL + GERCEK
+WinSW servis kurulumu TEK islem olarak uygulanir; herhangi bir adim
+basarisiz olursa TAMAMLANMIS TUM adimlar ters sirayla GERI ALINIR. Servis
+her zaman `Disabled` kurulur ve ASLA baslatilmaz. Bu pakette GERCEK
+Apply YINE calistirilmadi (kullanici acikca yasakladi) - yalniz arac
+degistirildi ve GUVENLE test edilebilen kisimlari test edildi.
+
+**Parola guvenligi (HB-2026-116'nin ana talebi):** Onceki surumde parola
+OPERATOR tarafindan uretilip `-ServiceAccountPassword` (SecureString)
+parametresiyle VERILIYORDU. Artik betik parolayi KENDISI, `-Apply`
+sirasinda BIR KEZ, `RandomNumberGenerator` ile (32 bayt) uretir; islem
+boyunca YALNIZ SecureString olarak bellekte tutulur; hesaba
+(`New-LocalUser`/`Set-LocalUser`) ve SCM'ye (`sc.exe config ...
+password=`, TEK SEFERLIK komut satiri argumani) aktarilir; HICBIR
+dosyaya/WinSW XML'ine/log'a/repository'ye YAZILMAZ. Islem bittikten
+sonra parolayi bilen/hatirlayan HICBIR kayit KALMAZ - bu KASITLIDIR
+(hesap yalniz "Log on as a service" icindir, hicbir insan interaktif
+giris yapmaz). Rotasyon = betigi tekrar `-Apply` ile calistirmaktir
+(mekanizma HAZIR, resmi bir "ne siklikta" prosedur henuz yazilmadi).
+
+**Atomiklik (rollback):** `$undoStack` (`Stack[scriptblock]`) her basarili
+adimdan SONRA o adimi geri alan bir scriptblock'u yigina ekler:
+- Hesap YENI olusturulduysa: `Remove-LocalUser` (onceden VARSA, parolasi
+  YENILENIR ama hesabin KENDISI silinmez - eski parola zaten bilinmiyordu,
+  "geri alinacak eski hal" YOKTUR, kasitli).
+- LSA haklari verildiyse: `LsaRemoveAccountRights` (P/Invoke, zaten
+  tanimliydi, ilk kez KULLANILDI).
+- ACL degistirildiyse: degisiklikten ONCE `Get-Acl` ile yakalanan orijinal
+  ACL nesnesi, `Set-Acl` ile AYNEN geri yazilir (miras/`IsProtected`
+  durumu DAHIL); `logs` dizini bu adimda YENI olusturulduysa TAMAMEN
+  silinir.
+- WinSW ikilisi/XML'i kopyalandiysa/render edildiyse: silinir; servis
+  KURULDUYSA `<exe> uninstall`.
+Basarisizlik durumunda `Invoke-Rollback` yigindaki TUM adimlari POP
+ederek (LIFO - ters sira) calistirir; bir geri alma adimi basarisiz
+olursa DIGERLERI yine de denenir (best-effort, birbirini ENGELLEMEZ).
+
+**Servis her zaman Disabled:** GERCEK `<exe> install` + SCM kimlik
+bilgisi ayarlandiktan HEMEN SONRA `Set-Service -StartupType Disabled`
+cagrilir; betik HICBIR ZAMAN `Start-Service` cagirmaz. Servisi
+etkinlestirme/baslatma bu betigin KAPSAMI DISINDA, ayri onaylanmis bir
+adimdir.
+
+**Bulunan ve duzeltilen gercek kusur (gercekten calistirilarak BULUNDU):**
+`Write-Error 'mesaj'; exit N` deseni, script-genelinde
+`$ErrorActionPreference = 'Stop'` iken `Write-Error`in TERMINATING
+sayilmasi nedeniyle `exit N` satirina HIC ULASMIYORDU - gercek cikis kodu
+her zaman PowerShell'in kendi genel hata kodu (`1`) oluyordu, belgelenen
+`N` (ör. `2`) DEGIL. Bu, `-Apply` icin `-WinSwExe` verilmeden cagirma
+testinde GERCEKTEN yakalandi (beklenen `2`, gozlemlenen `1`). Duzeltme:
+ilgili tum `Write-Error` cagrilarina `-ErrorAction Continue` eklendi
+(yalniz o cagri icin global tercihi gecersiz kilar); tekrar test edilip
+dogru kod (`2`) dondugu DOGRULANDI. Bu kusur muhtemelen `probe-p-drive-
+system-context.ps1`/`install-services.ps1`deki BENZER desenlerde de
+mevcuttur (henuz elle DOGRULANMADI - ayri, kucuk bir takip maddesi).
+
+**Yapisal degisiklik:** `Invoke-Rollback` fonksiyonu ana akisin ERKEN
+`exit`lerinden (ör. `-Apply` verilmemisse) BAGIMSIZ test edilebilmesi
+icin fonksiyon tanimlari bolumune tasindi (daha once main-flow icinde,
+try blogundan hemen once tanimliydi - bu haliyle dot-source ile izole
+TEST EDILEMIYORDU; gercekten denenip BULUNDU).
+
+Kanit (bu makinede, GERCEK hesap/ACL/servis/veri OLMADAN):
+- `Parser::ParseFile`: 0 hata (her degisiklikten sonra tekrar dogrulandi).
+- Onizleme modu GERCEK hedef degerlerle (`C:\HasarBotuStorage\BARAN
+  GLOBAL EKSPERTİZ`, `C:\HasarBotu\services\file-agent`, gercek WinSW
+  sablonu) yeniden calistirildi: plan artik WinSW kurulum + Disabled
+  adimlarini da gosteriyor; HICBIR degisiklik yapilmadi.
+- `New-ServiceAccountPassword`: gercekten cagrildi, `SecureString` tipi
+  dogrulandi, uretilen deger 44 karakter (32 bayt base64), IKI ayri
+  cagri FARKLI deger uretti (rastgelelik saglandi).
+- `New-RenderedWinSwConfig`: gercek commit'li sablona karsi SCRATCH bir
+  hedefe calistirildi - Turkce metin DOGRU (mojibake YOK), `__NODE_EXE__`/
+  `__APP_DIR__` yer tutucular DOGRU deger'e cozuldu (`<executable>C:\
+  Program Files\nodejs\node.exe</executable>` vb.), sablonun KENDISI
+  DEGISMEDI.
+- `Invoke-Rollback` sahte (dummy) scriptblock'larla izole test edildi:
+  4 eleman TERS sirayla (4,3,2,1) calisti; bir eleman kasitli `throw`
+  ettiginde DIGER ikisi yine de calisti (best-effort dogrulandi).
+- ACL geri-alma deseni bir SCRATCH klasorde GERCEK uygulandi: orijinal
+  ACL (`SYSTEM/Administrators/user: FullControl`, miras ACIK) yakalanip
+  kilitlendi (`user: Modify`), sonra rollback closure cagrilarak BIREBIR
+  orijinal ACL'e (ayni 3 ACE + `IsProtected=False`) DONULDUGU dogrulandi.
+- `-Apply` `-WinSwExe` verilmeden cagrildi: `exit 2`, hicbir degisiklik
+  yok (duzeltme ONCESI yanlislikla `exit 1` veriyordu - BULUNUP
+  duzeltildi).
+- `-Apply` GERCEK, onceden kurulu bir Windows servisine (`Spooler`)
+  `-ServiceName` ile isaret ederek cagrildi: `exit 2`, `Spooler`e
+  HICBIR sekilde dokunulmadi (yalniz salt-okunur `Get-Service`).
+- `npm run check:deploy` gecti (WinSW XML sablonlari ETKILENMEDI);
+  `npm audit --audit-level=moderate`: 0 acik. Yalniz `.ps1`/`.md`
+  degistigi icin typecheck/lint/test/build GEREKMEDI.
+- Islem sonunda: gercek hesap YOK, `C:\HasarBotuStorage\...` YOK,
+  `C:\HasarBotu` YOK, `hasarbotu-file-agent` servisi YOK (hepsi
+  dogrulandi).
+
+**Bilerek TEST EDILMEYEN (kullanicinin acik talimatiyla - "henuz apply
+calistirma"):** Gercek `-Apply` akisinin TAM UCTAN UCA calistirilmasi
+(gercek hesap olusturma, gercek LSA hakki verme, gercek WinSW `install`,
+gercek `sc.exe config`, gercek `Set-Service -StartupType Disabled`) VE
+kasitli bir hata enjekte edip GERCEK rollback'in butun zinciri (hesap+
+haklar+ACL+servis) dogru geri aldigini kanitlama - bunlar D6'nin gercek
+yurutulmesinde, acik kullanici onayiyla YAPILMALIDIR.
+
+Etki: Yalniz `deploy/windows-service/setup-file-agent-service-account.ps1`
+ve `docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md` (§2c tamamen
+yeniden yazildi + §7/Acik kalan guncellendi) degisti. `install-services.ps1`,
+WinSW sablonlari, uygulama kodu, migration, API/contracts, gercek hesap/
+ACL/servis/veri/ortam degiskeni DEGISMEDI.
+
+Acik kalan: D6'nin gercek yurutulmesi (kullanici onayiyla) tam uctan uca
+akisi ve rollback'i ampirik olarak kanitlamalidir; parola rotasyon
+SIKLIGI/sorumlusu resmi bir prosedur olarak yazilmali;
+`probe-p-drive-system-context.ps1`/`install-services.ps1`deki benzer
+`Write-Error; exit N` desenlerinin AYNI kusuru tasiyip tasimadigi ayrica
+kontrol edilmelidir (kucuk, dusuk-risk bir takip maddesi).

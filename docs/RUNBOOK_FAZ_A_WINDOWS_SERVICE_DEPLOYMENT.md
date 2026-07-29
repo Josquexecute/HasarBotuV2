@@ -359,23 +359,29 @@ olarak `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı bırakılır
 `C:\ProgramData\HasarBotu\probe\probe-result-*.json` dosyası deployment
 audit kaydına eklenir.
 
-## 2c. File Agent servis hesabı — D6 (HB-2026-113/114/115): araç HAZIR, gerçek ortamda henüz UYGULANMADI
+## 2c. File Agent servis hesabı + WinSW kurulumu — D6 (HB-2026-113/114/115/116): ATOMIK araç HAZIR, gerçek ortamda henüz UYGULANMADI
 
 **Durum:** `deploy/windows-service/setup-file-agent-service-account.ps1`
-(HB-2026-114, HB-2026-115'te çift-hesap ACL desteğiyle düzeltildi)
-HB-2026-113'ün kararını PLAN/ÖNİZLE/UYGULA modeliyle uygulayan gerçek bir
-araçtır. Bu araç sentetik dizinlerle, GERÇEK hedef değerlerle (salt-okunur
-önizleme) VE mevcut hesaplara karşı salt-okunur/scratch-klasör sorgularla
-test edildi (bkz. DECISION_LOG HB-2026-114/115); **gerçek
-`svc-hasarbotu-fileagent` hesabı bu pakette oluşturulmadı, gerçek ACL/
-servis kurulumu yapılmadı**. `install-services.ps1` bu betiği HENÜZ
-çağırmaz — entegrasyon D6'nın gerçek yürütülmesinde yapılır.
+(HB-2026-114, HB-2026-115'te çift-hesap ACL desteğiyle, HB-2026-116'da
+GERÇEK WinSW kurulumuyla ATOMIK hale getirildi) HB-2026-113'ün kararını
+uygulayan gerçek bir araçtır. Hesap oluşturma + LSA hakları + ACL +
+GERÇEK WinSW servis kurulumu **TEK ATOMIK işlemdir**: adımlar sırayla
+uygulanır, herhangi biri başarısız olursa o ana kadar tamamlanmış TÜM
+adımlar ters sırayla GERİ ALINIR (hesap silinir, verilen LSA hakları
+kaldırılır, ACL önceki haline döner, kurulan servis kaldırılır). Bu araç
+sentetik dizinlerle, GERÇEK hedef değerlerle (salt-okunur önizleme),
+gerçek WinSW şablonuyla (render, salt-okunur/scratch-hedef) VE
+scratch-klasörde gerçek geri-alma senaryolarıyla test edildi (bkz.
+DECISION_LOG HB-2026-114/115/116); **gerçek `svc-hasarbotu-fileagent`
+hesabı bu pakette oluşturulmadı, gerçek ACL/servis kurulumu/veri taşıma
+yapılmadı**.
 
 **Sahip:** Kurulumu yapan operatör (yönetici).
 
 **Ön koşul:** §2/§2a (senkron klasör geçişi) tamamlanmış; hedef kök
-`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` mevcut; §3 (WinSW kurulumu)
-İÇİN `$FileAgentDir` (`dist\index.js` içeren dağıtım dizini) belirlenmiş.
+`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` mevcut; File Agent
+`dist\index.js` build edilmiş (`npm run build --workspace @hasarbotu/file-agent`);
+WinSW ikili dosyası önceden indirilmiş (bkz. §3 ön koşulu).
 
 **Gerekçe:** WinSW'nin varsayılanı (serviceaccount tanımlanmazsa)
 **LocalSystem**dir — HB-2026-111'in ölçtüğü gibi bu hesap makine genelinde
@@ -391,19 +397,19 @@ cd deploy\windows-service
 .\setup-file-agent-service-account.ps1 -FileAgentAppDir C:\HasarBotu\services\file-agent
 ```
 
-Bu, mevcut durumu (hesap var mı, haklar var mı, ACL uygun mu, verilirse
-`-WinSwXmlPath` ile WinSW kimliği uygun mu) okur ve YAPILACAK adımları
-yazdırır — hiçbir hesap/ACL/dosya DEĞİŞMEZ.
+Bu, mevcut durumu (hesap var mı, haklar var mı, ACL uygun mu, WinSW
+servisi kurulu mu/`Disabled` mi) okur ve YAPILACAK adımları yazdırır —
+hiçbir hesap/ACL/dosya/servis DEĞİŞMEZ.
 
 **Komut/işlem — GERÇEK uygulama (yalnız önizleme gözden geçirilip
-onaylandıktan sonra, D6'nın gerçek yürütülmesinde):**
+onaylandıktan sonra, D6'nın gerçek yürütülmesinde; PAROLA OPERATÖRDEN
+ALINMAZ — betik kendi üretir):**
 
 ```powershell
-$pw = Read-Host -AsSecureString 'svc-hasarbotu-fileagent parolası'
 .\setup-file-agent-service-account.ps1 -FileAgentAppDir C:\HasarBotu\services\file-agent `
-    -WinSwXmlPath C:\HasarBotu\services\file-agent\hasarbotu-file-agent.xml `
+    -WinSwExe C:\Tools\WinSW-x64.exe `
     -PCloudSyncAccount 'DESKTOP-EFN2G33\<pCloud'u çalıştıran gerçek kullanıcı>' `
-    -ServiceAccountPassword $pw -Apply
+    -Apply
 ```
 
 `-PCloudSyncAccount` varsayılanı BU KOMUTU ÇALIŞTIRAN oturumun kendisidir
@@ -411,60 +417,78 @@ $pw = Read-Host -AsSecureString 'svc-hasarbotu-fileagent parolası'
 hesap FARKLI bir operatör/hizmet hesabı olabilir; bu durumda parametre
 AÇIKÇA verilmelidir (varsayılana güvenilmemelidir).
 
-Bu TEK komut şunları yapar (kod: `setup-file-agent-service-account.ps1`):
+Bu TEK komut şunları ATOMIK olarak yapar (kod:
+`setup-file-agent-service-account.ps1`; herhangi bir adım başarısız
+olursa TÜMÜ geri alınır):
 
-1. **Hesabı oluşturur** (`New-LocalUser`, rastgele güçlü parola verilen
-   `SecureString`'den, `-PasswordNeverExpires -UserMayNotChangePassword`),
-   yerel `Users` grubundan ÇIKARIR.
-2. **"Log on as a service" hakkını (`SeServiceLogonRight`) VERİR** —
+1. **Parolayı BİR KEZ üretir** (kriptografik RNG, 32 bayt), yalnız
+   `SecureString` olarak bellekte tutar. Operatör parolayı GÖRMEZ/
+   GİRMEZ; hesap yalnız "Log on as a service" için kullanılır, hiçbir
+   insan ona etkileşimli giriş yapmadığı için parolanın bilinmesi
+   GEREKMEZ. Rotasyon = betiği tekrar `-Apply` ile çalıştırmaktır.
+2. **Hesabı oluşturur** (yoksa `New-LocalUser`; varsa `Set-LocalUser` ile
+   parolayı YENİLER — SCM ile senkron kalması için), yerel `Users`
+   grubundan ÇIKARIR. *Geri alma: yeni oluşturulduysa `Remove-LocalUser`;
+   önceden vardıysa hesap SİLİNMEZ (yalnız parolası değişmiş kalır — eski
+   parola zaten bilinmiyordu, geri alınacak bir "eski hâl" YOKTUR).*
+3. **"Log on as a service" hakkını (`SeServiceLogonRight`) VERİR** —
    kendi LSA `LsaAddAccountRights` P/Invoke'u ile (ek dependency
-   GEREKTİRMEZ, yalnız `advapi32.dll`); WinSW'nin `allowservicelogon`
-   özelliğine BAĞIMLI DEĞİLDİR, bu yüzden davranışı öngörülebilir ve
-   test edilmiştir (aşağıya bakın).
-3. **Etkileşimli/RDP oturumunu YASAKLAR** — aynı LSA API ile
-   `SeDenyInteractiveLogonRight` + `SeDenyRemoteInteractiveLogonRight`
-   (ZORUNLU adım, atlanmaz).
-4. **Hedef depolama kökünde miras keser; servis hesabına Modify,
-   `-PCloudSyncAccount`e (HB-2026-115 — pCloud'u çalıştıran etkileşimli
-   kullanıcı) de Modify, Administrators'a Full Control verir** (.NET
-   `DirectorySecurity`/`FileSystemAccessRule` ile, `icacls` metin
-   ayrıştırması DEĞİL) — bu, §2a.2'nin (HB-2026-112) `NT AUTHORITY\
-   SYSTEM:(OI)(CI)F` grantını SÜPERSEDE eder. **pCloud hesabına grant
-   ŞARTTIR:** pCloud senkron klasör moduna geçtiğinde dosyaları GERÇEKTEN
-   yazan süreç budur; yalnız servis hesabına Modify verilirse pCloud
-   kendi yazma erisimini KAYBEDER ve senkronizasyon SESSIZCE durur.
-5. **Uygulama dizininde Read+Execute, yalnız `logs` alt dizininde
-   Modify** verir (LocalSystem'in aksine açıkça gerekir).
-6. **`-WinSwXmlPath` verilirse WinSW XML'ine `<serviceaccount>` ekler**
-   (`<domain>`/`<user>`/`<allowservicelogon>true</allowservicelogon>`) —
-   **`<password>` elemanını KASITLI OLARAK HİÇBİR ZAMAN YAZMAZ**; bu
-   yüzden §2c'nin önceki taslağındaki `__FILE_AGENT_SERVICE_PASSWORD__`
-   yer tutucusu YOKTUR/GEREKMEZ. Gerçek parola, servis KURULDUKTAN SONRA
-   ayrı bir adımda (`Set-FileAgentServiceLogonCredential` fonksiyonu,
-   `sc.exe config <servis> obj= ... password= ...` — parola yalnız
-   bellekte çözülür, hiçbir dosyaya yazılmaz) ayarlanır; bu betik o adımı
-   ÇAĞIRMAZ (gerçek servis bu pakette kurulmadı).
-7. Tüm adımlardan SONRA her şeyi YENİDEN OKUYUP doğrular; herhangi biri
-   başarısızsa çıkış kodu `1` ile açıkça bildirir.
+   GEREKTİRMEZ). *Geri alma: `LsaRemoveAccountRights`.*
+4. **Etkileşimli/RDP oturumunu YASAKLAR** — `SeDenyInteractiveLogonRight`
+   + `SeDenyRemoteInteractiveLogonRight` (ZORUNLU, atlanmaz).
+5. **Hedef depolama kökünde miras keser; servis hesabına Modify,
+   `-PCloudSyncAccount`e (HB-2026-115) de Modify, Administrators'a Full
+   Control verir** (.NET `FileSystemAccessRule` ile). *Geri alma:
+   ÖNCEKİ ACL, değişiklikten önce yakalanıp aynen geri yazılır (miras
+   durumu dahil) — scratch-klasörde gerçek test edildi.*
+6. **Uygulama dizininde Read+Execute, yalnız `logs` alt dizininde
+   Modify** verir. *Geri alma: aynı ACL-restore deseni; `logs` dizini
+   bu adımda YENİ oluşturulduysa TAMAMEN silinir.*
+7. **GERÇEK WinSW kurulumu:** WinSW ikilisini `$FileAgentAppDir`e
+   kopyalar, şablonu (`hasarbotu-file-agent.winsw.xml` — repo'daki GERÇEK
+   dosya, hiçbir zaman değiştirilmez, yalnız okunur) `__NODE_EXE__`/
+   `__APP_DIR__` yer tutucularını çözerek render eder, `<serviceaccount>`
+   kimliğini (PAROLASIZ) ekler, `<exe> install` çalıştırır. *Geri alma:
+   kopyalanan ikili/render edilmiş XML silinir; servis kurulduysa
+   `<exe> uninstall`.*
+8. **SCM oturum açma kimlik bilgisini ayarlar:** `sc.exe config <servis>
+   obj= ... password= ...` — parola BURADA, TEK SEFERLİK komut satırı
+   argümanı olarak SCM'ye aktarılır; **hiçbir dosyaya/log'a/repository'ye
+   YAZILMAZ**.
+9. **Servis başlangıç türünü `Disabled` yapar ve BAŞLATMAZ** — servisi
+   etkinleştirme/başlatma bu betiğin KAPSAMI DIŞINDADIR, ayrı, açıkça
+   onaylanmış bir adımdır.
+10. Tüm adımlardan SONRA her şeyi YENİDEN OKUYUP doğrular (hesap hakları,
+    üç ACL, WinSW kimliği, servis kurulu+`Disabled`+çalışmıyor); herhangi
+    biri başarısızsa bu da bir HATA sayılır ve TÜM işlem geri alınır.
 
-**Beklenen çıktı:** `SONUÇ: Tüm kontroller GEÇTİ.` ve çıkış kodu `0`.
+**Beklenen çıktı:** `SONUÇ: Tüm adımlar ATOMIK olarak başarılı. Servis
+kuruldu, DISABLED, BAŞLATILMADI.` ve çıkış kodu `0`.
 
-**Durdurma ölçütü:** `-Apply` yükseltme OLMADAN veya `-ServiceAccountPassword`
-VERİLMEDEN çağrılırsa betik `exit 2` ile durur, HİÇBİR değişiklik yapmaz
-(test edildi). Doğrulama adımlarından biri başarısızsa (`exit 1`) WinSW
-servis kurulumu (§3) İLERLETİLMEZ.
+**Durdurma ölçütü:** `-Apply` yükseltme OLMADAN, `-WinSwExe` VERİLMEDEN
+veya `$ServiceName` servisi ZATEN kuruluyken çağrılırsa betik `exit 2`
+ile durur, HİÇBİR değişiklik yapmaz (gerçekten test edildi — bkz.
+DECISION_LOG HB-2026-116, ayrıca bir `Write-Error`/global
+`$ErrorActionPreference=Stop` etkileşim hatası bulunup düzeltildi: önceki
+sürüm bu durumlarda yanlışlıkla çıkış kodu `2` yerine `1` veriyordu).
+Adımlardan HERHANGİ biri (ACL, WinSW kurulumu, SCM kimlik bilgisi,
+doğrulama) başarısız olursa TÜM işlem geri alınır ve `exit 1` ile
+biter — servis §3'e İLERLETİLMEZ.
 
-**Doğrulama (betiğin kendisi de son adımda otomatik yapar; elle
-tekrarlamak için):**
+**Doğrulama (betiğin kendisi son adımda otomatik yapar; elle tekrarlamak
+için):**
 
 ```powershell
 runas /user:svc-hasarbotu-fileagent cmd   # AÇIKÇA reddedilmeli (etkileşimli giriş yasak)
 icacls 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'   # svc-hasarbotu-fileagent:(M), <pCloud hesabı>:(M), Administrators:(F) - başka HİÇBİR şey
+Get-Service hasarbotu-file-agent   # StartType=Disabled, Status != Running
 ```
 
 **Audit kanıtı:** Betiğin tam ekran çıktısı (durum + plan + uygulama +
-doğrulama) deployment audit kaydına (§6) eklenir. Parolanın KENDİSİ
-hiçbir zaman audit kaydına/log'a/repository'ye YAZILMAZ.
+doğrulama VEYA hata + geri alma) deployment audit kaydına (§6) eklenir.
+Parolanın KENDİSİ hiçbir zaman audit kaydına/log'a/repository'ye
+YAZILMAZ; işlem bittikten sonra parolayı bilen hiçbir kayıt kalmaz
+(kasıtlı — bkz. DECISION_LOG HB-2026-116).
 
 ## 3. WinSW servislerinin kurulumu
 
@@ -586,7 +610,7 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   sürücü harfi `\GLOBAL??` ad alanında (EldoS CBFS), ACL `Everyone: tüm
   haklar`. Bu artık NİHAİ ofis-makinesi sonucudur — ayrı bir makinede
   tekrar doğrulama GEREKMEZ.
-- `setup-file-agent-service-account.ps1` (HB-2026-114/115): sözdizimi
+- `setup-file-agent-service-account.ps1` (HB-2026-114/115/116): sözdizimi
   (`Parser::ParseFile`, 0 hata) doğrulandı; önizleme (Apply'sız) modu
   hem sentetik dizinlere hem GERÇEK hedef değerlere (`C:\HasarBotuStorage\
   BARAN GLOBAL EKSPERTİZ`, gerçek WinSW şablonu — salt-okunur) karşı
@@ -596,13 +620,33 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   etkileşimli kullanıcı) senaryolarında, artı eksik-ACE/fazladan-ACE
   negatif testleriyle — gerçekten test edildi; WinSW kimlik ekleme/
   doğrulama fonksiyonları gerçek şablonun SENTETİK bir kopyasına karşı
-  test edildi (parola alanı kasıtlı eklenip DOĞRU tespit edildiği dahil);
-  `-Apply` parolasız çağrıldığında `exit 2` ile GÜVENLE reddedildiği
-  doğrulandı. **Test edilMEYEN (kasıtlı, gerçek hesap/ACL oluşturmamak
-  için):** `New-LocalUser` ile GERÇEK hesap oluşturma ve
-  `LsaAddAccountRights` ile GERÇEK hak verme/reddetme — bunlar yalnız
-  kod incelemesiyle doğrulandı, D6'nın gerçek yürütülmesinde ampirik
-  olarak kanıtlanmalıdır.
+  test edildi (parola alanı kasıtlı eklenip DOĞRU tespit edildiği dahil).
+  **HB-2026-116 (atomik akış):** parola üretici fonksiyon gerçekten
+  çağrılıp `SecureString` tipinde, 44 karakter, İKİ ayrı çağrıda FARKLI
+  değer ürettiği doğrulandı; WinSW şablon render fonksiyonu gerçek
+  commit'li şablona karşı SCRATCH hedefe çalıştırılıp Türkçe metnin
+  doğru, yer tutucuların (`__NODE_EXE__`/`__APP_DIR__`) doğru
+  çözüldüğü doğrulandı; geri-alma (rollback) yığını sahte (dummy)
+  scriptblock'larla TERS SIRA çalıştığı VE bir adım başarısız olsa bile
+  DİĞERLERİNİN yine de denendiği (best-effort) doğrulandı; ACL geri-alma
+  deseni bir scratch klasörde GERÇEK uygulanıp GERÇEK geri alınarak
+  (miras durumu dahil, birebir orijinal ACL'e dönüldüğü) doğrulandı;
+  `-Apply` `-WinSwExe` verilmeden VE zaten kurulu GERÇEK bir Windows
+  servisine (`Spooler`) karşı `-ServiceName` ile çağrıldığında `exit 2`
+  ile GÜVENLE reddedildiği doğrulandı (`Spooler`e HİÇBİR dokunulmadı,
+  salt-okunur `Get-Service`). **Bulunan ve düzeltilen gerçek kusur:**
+  `Write-Error` global `$ErrorActionPreference='Stop'` altında
+  TERMINATING sayılıp script'i sonraki `exit N` satırına ULAŞMADAN
+  durduruyordu — gerçek çıkış kodu her zaman `1` oluyordu, belgelenen
+  `2` DEĞİL (üç ayrı ön-koşul kapısında gerçekten çalıştırılarak
+  BULUNDU); `-ErrorAction Continue` ile düzeltildi ve tekrar test
+  edilip doğru kod (`2`) döndüğü doğrulandı. **Test edilMEYEN (kasıtlı,
+  kullanıcı talimatıyla — henüz gerçek Apply çalıştırılmadı):**
+  `New-LocalUser`/`Set-LocalUser` ile GERÇEK hesap oluşturma/parola
+  ayarlama, `LsaAddAccountRights` ile GERÇEK hak verme, gerçek WinSW
+  `install`/`sc.exe config`/`Set-Service -StartupType Disabled` —
+  bunlar yalnız kod incelemesiyle doğrulandı, D6'nın gerçek
+  yürütülmesinde ampirik olarak kanıtlanmalıdır.
 
 ## Açık kalan
 
@@ -613,20 +657,24 @@ audit kanıtını içerir" kabul ölçütünü karşılar.
   verisidir, ayrı ölçüm GEREKMEZ. Açık kalan TEK şey: senkronizasyonun
   GERÇEK süresi/disk etkisi geçiş fiilen yapılana kadar bilinmez
   (yalnız prosedür/§2a dry-run planı tanımlandı — bkz. HB-2026-112).
-- **ARAÇ HAZIR (HB-2026-113/114/115, §2c):** File Agent artık LocalSystem
-  yerine adanmış `svc-hasarbotu-fileagent` hesabı altında çalışacak;
-  `setup-file-agent-service-account.ps1` bunu uygular/doğrular. HB-2026-115:
-  depolama kökü ACL'i artık pCloud'u çalıştıran etkileşimli kullanıcıya
-  (`-PCloudSyncAccount`, varsayılan bu oturumun kendisi) da Modify verir —
-  aksi hâlde pCloud senkron klasöre yazamazdı. Açık kalan:
-  `New-LocalUser`/`LsaAddAccountRights` çağrılarının GERÇEK hesap/hak
-  oluşturarak ampirik doğrulanması (D6'nın gerçek yürütülmesi); parola
-  rotasyon prosedürü (sıklık, kim yapar, `sc.exe config` ile nasıl
-  yansıtılır) henüz tanımlanmadı; `install-services.ps1`e entegrasyon
-  (bu betiği §3'ten önce otomatik çağırma) henüz yapılmadı; pCloud'un
-  gerçek çalıştığı hesabın GERÇEK kurulumda (bu makinede beklenen:
-  `DESKTOP-EFN2G33\user`, ama gerçek dağıtım operatör hesabı farklı
-  olabilir) doğru şekilde `-PCloudSyncAccount`e verilmesi operatör
+- **ARAÇ HAZIR VE ATOMIK (HB-2026-113/114/115/116, §2c):** File Agent
+  artık LocalSystem yerine adanmış `svc-hasarbotu-fileagent` hesabı
+  altında çalışacak; `setup-file-agent-service-account.ps1` hesabı, LSA
+  haklarını, ACL'i VE GERÇEK WinSW kurulumunu TEK ATOMIK işlem olarak
+  uygular/doğrular/gerekirse geri alır. HB-2026-115: depolama kökü ACL'i
+  pCloud'u çalıştıran etkileşimli kullanıcıya (`-PCloudSyncAccount`) da
+  Modify verir. HB-2026-116: parola operatörden ALINMAZ (betik kendi
+  üretir, SecureString, hiçbir dosyaya yazılmaz), servis her zaman
+  `Disabled` kurulur ve BAŞLATILMAZ. Açık kalan: gerçek hesap oluşturma/
+  LSA hakkı verme/WinSW `install`/`sc.exe config` çağrılarının GERÇEK
+  ortamda ampirik doğrulanması (D6'nın gerçek yürütülmesi — kasıtlı
+  olarak bu pakette YAPILMADI); parola rotasyon prosedürü (sıklık, kim
+  yapar — mekanizma HAZIR: betiği tekrar `-Apply` ile çalıştırmak) henüz
+  RESMİ bir prosedür olarak yazılmadı; `install-services.ps1`e entegrasyon
+  (API servisiyle TEK bir orkestrasyon akışına alma) henüz yapılmadı;
+  pCloud'un gerçek çalıştığı hesabın GERÇEK kurulumda (bu makinede
+  beklenen: `DESKTOP-EFN2G33\user`, ama gerçek dağıtım operatör hesabı
+  farklı olabilir) doğru şekilde `-PCloudSyncAccount`e verilmesi operatör
   sorumluluğudur.
 - WinSW ikili dosyasının bütünlük doğrulaması (checksum/imza) için kesin
   prosedür operatör kararına bırakıldı.
