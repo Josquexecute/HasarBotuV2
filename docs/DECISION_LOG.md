@@ -2985,3 +2985,99 @@ DEGISMEDI. Typecheck, lint (0 error / 2 mevcut warning), gercek
 `hasarbotu_test` PostgreSQL ile **2.225 basarili / 6 mevcut ortam-kosullu
 UI skip** (degismedi), build/bundle 426.065 bayt (degismedi) ve moderate
 audit (0 acik) gecti.
+
+## 2026-07-29 - HB-2026-110: D5 probu GERCEK SYSTEM calistirmasiyla iki kok kusur bulundu ve duzeltildi; P:\ SYSTEM'den GORUNUYOR
+
+Karar: Bu ofis/gelistirme makinesinde ilk kez yonetici yukseltmesiyle
+`probe-p-drive-system-context.ps1` GERCEKTEN calistirildi (HB-2026-108/109
+BUNU YAPAMAMISTI). Calistirma `LastTaskResult=1`, sonuc/log dosyasi HIC
+OLUSMAMIS ve konsolda Turkce karakterler bozuk (mojibake) olarak basladi —
+kullanicinin bildirdigi ile BIREBIR ayni. Kok neden analiziyle HB-2026-109'un
+DUZELTMEDIGI iki AYRI gercek kusur bulundu:
+
+**1. Array-literal `+` birlestirme kusuru (LastTaskResult=1'in asil nedeni).**
+`$innerLines` dizisinde tek bir eleman `'...' + $DriveLetter + '...'`
+bicimindeki string birlestirmeyle olusturuluyordu. Windows PowerShell 5.1,
+bu ifadeyi `@(...)` dizi literali icinde TEK bir string olarak degil,
+`$DriveLetter`in etrafina GERCEK CRLF ekleyerek UC AYRI parcaya bolerek
+degerlendiriyor (ampirik olarak izole edilip dogrulandi — bkz. kanit).
+Sonuc: uretilen ic betik dosyasi `Get-PSDrive -Name` / `P` / ` -ErrorAction
+SilentlyContinue)` uc satira bolunmus GECERSIZ PowerShell iceriyordu; ic
+betik `Start-Transcript`in ilk satirina bile ulasamadan parser hatasiyla
+COKUYOR, bu yuzden log dosyasi HIC OLUSMUYORDU (yalniz bos degil, TAMAMEN
+YOKTU). Duzeltme: o tek satir, dizideki DIGER tum satirlarin zaten kullandigi
+GUVENLI kaliba (double-quote interpolasyon, `+` birlestirme YOK) cevrildi:
+`"  \`$result.psDriveVisible = [bool](Get-PSDrive -Name $DriveLetter
+-ErrorAction SilentlyContinue)"`.
+
+**2. Kaynak dosya UTF-8 BOM eksikligi (asil "PowerShell 5.1 UTF-8 bozuk"
+nedeni — HB-2026-109 YANLIS katmani duzeltmisti).** HB-2026-109
+`[Console]::OutputEncoding`/`$OutputEncoding`i (KONSOL/PIPE ciktisi) duzeltti,
+ancak asil kusur SATIR OKUMA asamasindaydi: her iki `.ps1` dosyasi da BOM'suz
+kaydedilmisti. Windows PowerShell 5.1 (.NET Framework), BOM'suz betik
+dosyalarini `Encoding.Default`e (bu makinede tr-TR sistem ANSI kod sayfasi,
+Windows-1254) gore okur — betik icindeki Turkce karakter iceren string
+literalleri KONSOLA YAZILMADAN COK ONCE, PARSE ANINDA yanlis kod sayfasiyla
+cozulup BOZULUYORDU. `[Console]::OutputEncoding` bu asamayi ETKILEMEZ (o
+zaten dogru cozulmus .NET string'lerin GORUNTULENMESINI kontrol eder,
+KAYNAGIN nasil okundugunu degil). Izole testle kesin kanitlandi: aynı Turkce
+metni iceren iki betik, BOM'suz ve BOM'lu, birebir ayni ortamda calistirildi
+— BOM'suz `SYSTEM baÄŸlamÄ±ndan ... Ä°ÄÃœÅÃ–Ã‡` (mojibake), BOM'lu `SYSTEM
+bağlamından ... İĞÜŞÖÇ` (dogru). Duzeltme: her iki dosya da (`probe-p-drive-
+system-context.ps1`, `install-services.ps1` — ikisi de Turkce icerik tasiyor
+ve BOM'suzdu) UTF-8 BOM ile yeniden yazildi; ICERIK TEK BAYT BILE DEGISMEDI
+(git diff yalniz ilk satira BOM ekledigini ve yukaridaki tek satirlik
+concat duzeltmesini gosteriyor).
+
+**Gercek SYSTEM sonucu (bu makinede, ilk kez GERCEKTEN olculdu):** duzeltme
+sonrasi `LastTaskResult=0`, log/sonuc dosyalari OLUSTU, konsol Turkce metni
+DOGRU: `whoami=nt authority\system`, `Oturum=0`, `Get-PSDrive=True`,
+`Test-Path=True`, `Win32_LogicalDisk=True`, `Dizin listeleme=True` ->
+**"P:\ SYSTEM bagliminda GORUNUYOR ve listelenebiliyor."**
+
+**ONEMLI - HB-2026-108'in varsayimiyla CELISIYOR:** HB-2026-108, Microsoft'un
+"Local" MS-DOS ad alani belgelemesine dayanarak P:\'in SYSTEM'den
+GORUNMEYECEGINI teorik olarak sonuclandirmis ve buna dayanarak "pCloud'u
+Senkronize Klasor moduna gecirme" cozumunu onermisti. Bu makinedeki GERCEK
+olcum bunun TERSINI gosteriyor. Bu, TEK bir gelistirme makinesindeki
+ampirik veridir; ofis dagitim makinesinde pCloud'un ayni surum/ayarla
+(ozellikle "tum kullanicilar icin surucu harfi" tipi makine-geneli ayarlar
+farkli davranabilir) DOGRULANMADAN D5'in senkron-klasor-gecis kararini
+GERI ALMAK bu paketin kapsami DISINDADIR — bu gercek bir mimari/urun karari
+olup KULLANICI ONAYI gerektirir. Bu paket kapsaminda veri tasima veya
+servis kurulumu YAPILMADI (kullanici talimati).
+
+Kanit (bu makinede, gercek yonetici yukseltmesiyle, GERCEK calistirma):
+- Duzeltme ONCESI: `LastTaskResult=1`, `probe-result-*.json` ve
+  `probe-log-*.log` HIC OLUSMADI (üç ayrı gerçek çalıştırmada tekrarlandı).
+- Uretilen ic betik dogrudan calistirilarak izole edildi: PowerShell parser
+  tam olarak `Get-PSDrive -Name` / `P` / ` -ErrorAction SilentlyContinue)`
+  satir bolunmesini rapor etti (`MissingEndParenthesisInExpression`).
+- Minimal izole test: `@('X', 'A' + $Var + 'B', 'Y')` GERCEK bir `.ps1`
+  dosyasindan `-File` ile calistirildiginda 3 degil 5 (veya baglama gore
+  daha az/coklu, tutarli sekilde YANLIS) eleman uretiyor — kusur PowerShell
+  5.1'in kendisinde, arac zincirinde degil.
+- Duzeltme SONRASI: ayni makinede DORT ayri gercek SYSTEM calistirmasi
+  `LastTaskResult=0` ve dogru log/sonuc dosyalariyla basarili oldu.
+- UTF-8: BOM'suz/BOM'lu izole ikili test yukarida aciklandigi gibi kesin
+  ayrimi gosterdi; duzeltme sonrasi GERCEK SYSTEM calistirmasinin konsol
+  ciktisi (Bash pipe VE dogrudan PowerShell VE `Start-Process`
+  `-RedirectStandardOutput` ile) UC FARKLI yakalama yontemi ile de dogru
+  Turkce karakterler gosterdi.
+- `[System.Management.Automation.Language.Parser]::ParseFile` her iki
+  duzeltilmis dosyada da 0 hata verdi.
+- `npm run check:deploy` gecti (WinSW XML'leri etkilenmedi). `npm audit
+  --audit-level=moderate`: 0 acik. Bu degisiklik yalniz iki `.ps1` dosyasini
+  etkiledigi icin typecheck/lint/test/build calismasi GEREKMEDI (TS/JS
+  kaynagi degismedi); bu, degisikligin kapsamiyla TUTARLIDIR.
+
+Etki: Yalniz `deploy/windows-service/probe-p-drive-system-context.ps1` ve
+`deploy/windows-service/install-services.ps1` degisti (BOM eklendi;
+`install-services.ps1`de icerik DEGISMEDI, yalniz BOM). Uygulama kodu,
+WinSW XML sablonlari, migration, API/contracts DEGISMEDI. Gercek kurulum
+veya veri tasima bu paket kapsaminda YAPILMADI.
+
+Acik kalan: D5'in "pCloud senkron klasore gec" onerisi, bu bulguyla
+yeniden degerlendirilmeyi HAK EDIYOR ama bu KULLANICI KARARI. Ofis
+dagitim makinesinde de ayni probun calistirilip sonucun (muhtemelen ayni
+pCloud surumu/ayariyla) DOGRULANMASI onerilir.

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Bir sürücü harfinin SYSTEM (Session 0 / Windows servis) bağlamından
@@ -131,7 +131,7 @@ $innerLines = @(
     '  $result.whoami = (whoami)',
     '  $result.sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId',
     "  `$drivePath = [string]::Concat('$DriveLetter', ':', [char]92)",
-    '  $result.psDriveVisible = [bool](Get-PSDrive -Name ' + $DriveLetter + ' -ErrorAction SilentlyContinue)',
+    "  `$result.psDriveVisible = [bool](Get-PSDrive -Name $DriveLetter -ErrorAction SilentlyContinue)",
     '  $result.testPathVisible = Test-Path -LiteralPath $drivePath',
     '  try {',
     "    `$result.logicalDisk = [bool](Get-CimInstance Win32_LogicalDisk -Filter `"DeviceID='$($DriveLetter):'`" -ErrorAction Stop)",

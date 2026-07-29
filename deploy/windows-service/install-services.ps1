@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     HasarBotu V2 API ve File Agent'ı WinSW ile Windows servisi olarak kurar
