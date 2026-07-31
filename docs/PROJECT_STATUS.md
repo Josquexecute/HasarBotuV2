@@ -20,15 +20,20 @@ Son güncelleme: 2026-07-31
   hatası nedeniyle manifest üretilmedi. Tarama sırasında kaynak ayrıca
   35 dosya / 5.195.196 bayt büyüdü; snapshot kararlı değildi.
 - Kalıcı tooling:
-  `deploy/windows-service/test-storage-sync-migration-preflight.ps1`.
-  Araç dosya/yol adı sızdırmadan, hiçbir dosya/ACL/registry/env/servis
-  yazımı yapmadan `BeforeSync` kaynak okunabilirlik ve `AfterSync`
-  göreli-yol eşlemeli tam SHA-256 kapısı sağlar.
+  `deploy/windows-service/test-storage-sync-migration-preflight.ps1` ve
+  `deploy/windows-service/invoke-storage-source-io-diagnostic.ps1`.
+  İkinci araç hassas yolları yalnız Administrators erişimli ProgramData
+  raporuna yazar; konsola ve repo dokümanlarına taşımaz.
+- On hatanın tamamı üç kontrollü yeniden okumada da kalıcı
+  `System.IO.IOException / 0x8007045D / 1117 (ERROR_IO_DEVICE)` verdi.
+  Offline/recall, dosya/üst dizin reparse, paylaşım kilidi ve yol uzunluğu
+  bulgusu yoktur. Yeniden okumayla düzelen dosya olmadı.
 - Veri kopyalama, pCloud ayarı, `HASARBOTU_AGENT_ROOTS` değişikliği ve
   servis başlatma yapılmadı. File Agent `Disabled/Stopped`, hedef boş ve
   D6 ACL'i değişmeden kaldı.
-- Sonraki tek adım: 10 G/Ç hatasının kaynağını giderip yazmasız bakım
-  penceresinde `BeforeSync` çalışmasını `pass/0` ile tamamlamak.
+- Sonraki tek adım: kaynağa yazan iş süreçlerini kontrollü bakım
+  penceresinde durdurup tanılama aracını yeniden çalıştırmak; sıfır hata
+  elde edilirse `BeforeSync` çalışmasını `pass/0` ile tamamlamak.
 
 ## Mevzuat ve AI Yardımcısı uçtan uca UAT doğrulaması (2026-07-27)
 

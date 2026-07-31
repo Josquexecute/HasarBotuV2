@@ -620,6 +620,75 @@ başlatılmaz. Daha sonra `AfterSync` için sayı+boyut+tam SHA-256
 `pass/0` olmadan `HASARBOTU_AGENT_ROOTS` değiştirilmez ve File Agent
 etkinleştirilmez/başlatılmaz.
 
+### 2d.5 On `IO_ERROR` için salt-okunur yerel operatör tanılaması — HB-2026-122
+
+2026-07-31 gerçek tanılama sonucu:
+
+```text
+İlk hata sayısı                  : 10 / beklenenle eşleşti
+Kök hata türü                    : System.IO.IOException
+HResult                          : 0x8007045D
+Win32/native kod                 : 1117 (ERROR_IO_DEVICE)
+Sınıf                            : io_device_error_persistent (10/10)
+Offline/recall                    : 0
+Dosya/üst dizin reparse           : 0
+Paylaşım/erişim kilidi            : 0
+260 karakter sınırını aşan yol    : 0
+255 karakteri aşan yol bileşeni   : 0
+Yeniden okumayla düzelen          : 0
+Üç yeniden okumadan sonra kalıcı  : 10
+```
+
+Her üç yeniden okuma turunda da 10 dosyanın 0'ı okunabildi; 10'u aynı
+`System.IO.IOException / 0x8007045D / 1117` sonucu verdi. Sıfır baytlık,
+paylaşımlı erişim kontrolü 10/10 dosyada açılabildi; bu nedenle bulgu bir
+paylaşım/erişim kilidi olarak sınıflandırılmadı. Tam yollar 112–144 karakter,
+en uzun bileşen 64 karakterdi. Makine genelinde `LongPathsEnabled=false`
+olmasına rağmen ölçülen yollar eski `MAX_PATH` veya bileşen sınırını aşmadığı
+için yol uzunluğu neden değildir. On kaydın tamamı `Hidden` öznitelikli
+`.tmp` dosyasıdır; adları ve yolları repo/özet çıktısına alınmaz.
+
+Bu ölçüm dosya bozulmasını tek başına kanıtlamaz. Kanıtlanan durum, pCloud
+sanal sürücüsünde aynı 10 nesnenin metadata ve paylaşım erişimi bulunmasına
+rağmen tam veri okumasının dört denemenin tamamında aygıt G/Ç hatasıyla
+kalıcı biçimde başarısız olmasıdır. D7 `BLOCKED` kalır.
+
+Kalıcı araç:
+`deploy/windows-service/invoke-storage-source-io-diagnostic.ps1`.
+Araç kaynakta yalnız okuma yapar; pCloud, hedef, registry, ortam değişkeni
+veya servis durumunu değiştirmez. Hassas dosya adları, göreli/tam yollar ve
+hata bağlamı yalnız
+`C:\ProgramData\HasarBotu\migration-preflight\source-io-diagnostic-20260731T071919716Z-556e9a93.json`
+içindedir. Bu klasör ve rapor mirası kapalı, sahibi
+`BUILTIN\Administrators`, tek ACE'si `S-1-5-32-544 FullControl` olacak
+şekilde doğrulandı. Önceki iki `1.0.0` tanılama raporu da aynı ACL altında
+tutulur; yetkili kayıt `storage-source-io-diagnostic/1.0.1` şemalı dosyadır.
+
+Bakım penceresinde, yükseltilmiş Windows PowerShell ile repository kökünde,
+kaynağa yazan iş süreçleri durduktan sonra çalıştırılacak kesin komut:
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+  -NoProfile `
+  -ExecutionPolicy Bypass `
+  -File ".\deploy\windows-service\invoke-storage-source-io-diagnostic.ps1" `
+  -ExpectedInitialErrorCount 10 `
+  -RetryDelayMilliseconds 1500 `
+  -ProgressInterval 500
+```
+
+Tanılama `ActualInitialErrorCount=0` göstermeden geçiş preflight'ına devam
+edilmez. Sıfır hata elde edildikten sonra aynı yazmasız bakım penceresinde:
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+  -NoProfile `
+  -ExecutionPolicy Bypass `
+  -File ".\deploy\windows-service\test-storage-sync-migration-preflight.ps1" `
+  -Stage BeforeSync `
+  -ProgressInterval 500
+```
+
 ## 3. WinSW servislerinin kurulumu
 
 **Sahip:** Kurulumu yapan operatör.

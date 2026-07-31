@@ -4241,3 +4241,45 @@ etkinlestirilmeyecek/baslatilmayacak.
 Etki: Yalniz docs/tooling degisti. Runtime/is mantigi, IPC, dependency,
 veri modeli, veri yazma yolu ve servis yapilandirmasi degismedi.
 Gercek veri kopyalanmadi; pCloud/registry/env/servis ayari degismedi.
+
+## 2026-07-31 - HB-2026-122: 10 IO_ERROR kalici aygit okuma hatasi olarak siniflandirildi
+
+Kapsam: D7 kaynak tam SHA-256 taramasindaki 10 `IO_ERROR` icin
+salt-okunur yerel operator tanilamasi yapildi. Hassas dosya adlari ve
+tam/goreli yollar yalniz Administrators erisimli
+`C:\ProgramData\HasarBotu\migration-preflight` raporunda tutuldu; repo,
+commit ve ozet ciktilarina alinmadi.
+
+Gercek sonuc:
+
+- Ilk 10 hatanin tamami kokte `System.IO.IOException`,
+  `HResult=0x8007045D`, Win32/native `1117 (ERROR_IO_DEVICE)` verdi.
+- Her dosyada 1.500 ms aralikli uc kontrollu tam yeniden okuma yapildi.
+  Her turun sonucu 0 basari / 10 ayni hata; toplamda 0 duzelen,
+  10 kalici hata.
+- Offline/recall ozniteligi 0; dosya veya ust dizin reparse bulgusu 0.
+- Sifir baytlik paylasimli acis 10/10 kayitta basariliydi; paylasim veya
+  erisim kilidi siniflandirilmadi.
+- Tam yol uzunluklari 112-144, en uzun bilesen 64 karakterdi; 260 ve 255
+  karakter esiklerini asan kayit yoktu. `LongPathsEnabled=false` bu
+  kayitlar icin neden degildi.
+- On kaydin tamami `Hidden` oznitelikli `.tmp` dosyasiydi. Kayit adlari
+  ve yollari repo kanitina alinmadi.
+- Yetkili `storage-source-io-diagnostic/1.0.1` raporu
+  `source-io-diagnostic-20260731T071919716Z-556e9a93.json` adiyla guvenli
+  dizinde olusturuldu. Dizin ve rapor mirasi kapali, owner
+  `S-1-5-32-544`, tek ACE Administrators FullControl olarak bagimsiz
+  dogrulandi.
+
+Karar: Bulgular dosya bozulmasini tek basina kanitlamaz; ancak ayni 10
+nesnenin metadata/paylasim acisi bulunmasina ragmen dort tam veri okumasinin
+tamaminda aygit G/C hatasiyla kalici basarisiz oldugunu kanitlar. D7
+**BLOCKED** kalir. Bakim penceresinde kaynak yazarlari durduktan sonra
+tanilama yeniden kosulur; `ActualInitialErrorCount=0` olmadan `BeforeSync`
+tam SHA-256 kapisina gecilmez.
+
+Etki: Yalniz docs/tooling ve kullanicinin acikca istedigi, Administrators
+erisimiyle sinirli ProgramData tanilama raporlari yazildi. Kaynak dosya,
+pCloud ayari, hedef, registry/env veya servis durumu degistirilmedi.
+Runtime/is mantigi, IPC, dependency, veri modeli ve uygulama veri yazma yolu
+degismedi.

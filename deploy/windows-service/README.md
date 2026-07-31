@@ -15,6 +15,7 @@ ve salt-okunur/planlı PowerShell araçları içerir. Tam prosedür için:
 | `probe-p-drive-system-context.ps1` | Bir sürücü harfinin SYSTEM (Windows servis) bağlamından GERÇEKTEN görünüp görünmediğini geçici bir Görev Zamanlayıcı görevi ile ölçer. Görev KAYDI her durumda kaldırılır; sonuç/log `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı, kalıcı audit kanıtı olarak bırakılır. |
 | `setup-file-agent-service-account.ps1` | D6 için adanmış File Agent hesabı, LSA hakları, dar ACL ve WinSW kurulumunu planlar; yalnız açık `-Apply` ile değişiklik yapar ve hata halinde geri alır. |
 | `test-storage-sync-migration-preflight.ps1` | D7 için tamamen salt-okunur envanter/kapasite/tam SHA-256 kapısıdır. Yol veya dosya adı sızdırmadan JSON özet ve fail-closed çıkış kodu üretir; dosya, ayar, ortam değişkeni veya servis değiştirmez. |
+| `invoke-storage-source-io-diagnostic.ps1` | D7 kaynak `IO_ERROR` kayıtlarını salt-okunur sınıflandırır. İlk hata ve üç kontrollü yeniden okumayı, offline/reparse, paylaşım kilidi ve yol uzunluğu bulgularıyla birlikte yalnız Administrators erişimli `C:\ProgramData\HasarBotu\migration-preflight` raporuna yazar; konsola dosya/yol adı vermez. |
 
 ## Bu repo'da OLMAYANLAR (bilinçli)
 
