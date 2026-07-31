@@ -609,6 +609,42 @@ function New-ServiceAccountPassword {
     return $secure
 }
 
+function Set-AccountPasswordRequired {
+    <# HB-2026-120: Bu makinede yerel guvenlik politikasi "En kisa parola
+       uzunlugu = 0" (`net accounts`) oldugundan, Windows `NetUserAdd`/
+       `NetUserSetInfo` (dolayisiyla `New-LocalUser`/`Set-LocalUser
+       -Password`) GERCEK bir parola verilmis olsa BILE hesabi
+       ADS_UF_PASSWD_NOTREQD (0x0020) SAM bayragiyla birakiyor -
+       `Get-LocalUser`in `PasswordRequired` alani YANLIS sekilde False
+       donuyor. Bu, servis hesabinin teorik olarak parolasiz oturum
+       acmasina izin veren bir SAM bayragidir (parolanin KENDISI
+       DEGISMEZ/ACIGA CIKMAZ - yalniz bu bayrak temizlenir). WinNT ADSI
+       saglayicisiyla bayragi dogrudan temizler; GERI ALMA icin ONCEKI
+       UserFlags degerini dondurur. #>
+    param([Parameter(Mandatory = $true)][string]$AccountName)
+    $ADS_UF_PASSWD_NOTREQD = 0x0020
+    $adsi = [ADSI]"WinNT://$env:COMPUTERNAME/$AccountName,user"
+    $originalFlags = [int]$adsi.UserFlags.Value
+    $adsi.UserFlags = ($originalFlags -band (-bnot $ADS_UF_PASSWD_NOTREQD))
+    $adsi.SetInfo()
+    return $originalFlags
+}
+
+function Restore-AccountUserFlags {
+    <# Rollback icin: ONCEKI UserFlags degerini AYNEN geri yazar (yalniz
+       PASSWD_NOTREQD bitini degil, o andaki TUM bayrak durumunu).
+       Bu geri alma yalniz betik baslamadan ONCE var olan hesap icin
+       yigina eklenir; hata sessizce yutulmaz, Invoke-Rollback diger
+       adimlara devam ederken basarisizligi acikca raporlar. #>
+    param(
+        [Parameter(Mandatory = $true)][string]$AccountName,
+        [Parameter(Mandatory = $true)][int]$OriginalFlags
+    )
+    $adsi = [ADSI]"WinNT://$env:COMPUTERNAME/$AccountName,user"
+    $adsi.UserFlags = $OriginalFlags
+    $adsi.SetInfo()
+}
+
 function Resolve-NodeExe {
     <# install-services.ps1 ile AYNI desen. #>
     param([string]$Explicit)
@@ -672,6 +708,14 @@ foreach ($right in $sensitiveRightsDenied) {
     Write-Host "  Sahip mi: $right   : $($currentRights -contains $right)"
 }
 
+# HB-2026-120: bu makinede yerel guvenlik politikasi "En kisa parola
+# uzunlugu = 0" oldugundan, `New-LocalUser`/`Set-LocalUser -Password`
+# GERCEK bir parola verilse BILE hesabi ADS_UF_PASSWD_NOTREQD bayragiyla
+# birakiyor - `PasswordRequired` YANLIS sekilde False donuyor. Salt-okunur
+# durum burada raporlanir; gercek duzeltme yalniz -Apply ile yapilir.
+$currentPasswordRequired = if ($accountExists) { (Get-LocalUser -Name $AccountName).PasswordRequired } else { $false }
+if ($accountExists) { Write-Host "  Parola gerekli (PasswordRequired) : $currentPasswordRequired" }
+
 # HB-2026-115: depolama koku SVC hesabi + Administrators DISINDA, pCloud'u
 # calistiran ETKILESIMLI KULLANICI hesabina da Modify alir - aksi halde
 # pCloud senkron klasor moduna gecince kendi yazma erisimini KAYBEDER ve
@@ -723,6 +767,7 @@ Write-Host '--- PLAN (Apply verilmedikce hicbir sey degismez) ---' -ForegroundCo
 
 $planSteps = New-Object 'System.Collections.Generic.List[string]'
 if (-not $accountExists) { $planSteps.Add("Yerel hesap olusturulacak: $AccountName (betigin KENDI urettigi rastgele parola, 'Users' grubundan cikarilacak)") }
+if ($accountExists -and -not $currentPasswordRequired) { $planSteps.Add("PasswordRequired duzeltilecek: $AccountName icin ADS_UF_PASSWD_NOTREQD SAM bayragi temizlenecek (parolanin KENDISI DEGISMEZ, yalniz bayrak)") }
 foreach ($right in $sensitiveRightsRequired) {
     if ($currentRights -notcontains $right) { $planSteps.Add("Hak VERILECEK: $right") }
 }
@@ -830,6 +875,17 @@ try {
         Write-Host "  Mevcut hesabin parolasi yenilendi: $AccountName" -ForegroundColor Green
     }
 
+    # HB-2026-120: ADS_UF_PASSWD_NOTREQD bayragini temizle (yukarida
+    # aciklanan yerel politika kaynakli bug'a karsi). Yeni hesap icin
+    # ayri bir geri-alma GEREKMEZ (ustteki Remove-LocalUser undo'su
+    # hesabi zaten TAMAMEN kaldirir); var olan hesap icin ONCEKI bayrak
+    # degeri geri alinabilir sekilde saklanir.
+    $originalUserFlags = Set-AccountPasswordRequired -AccountName $AccountName
+    if ($accountExists) {
+        $undoStack.Push({ Restore-AccountUserFlags -AccountName $AccountName -OriginalFlags $originalUserFlags }.GetNewClosure())
+    }
+    Write-Host '  PasswordRequired duzeltildi (ADS_UF_PASSWD_NOTREQD temizlendi).' -ForegroundColor Green
+
     $rightsToGrant = @()
     foreach ($right in $sensitiveRightsRequired) { if ($currentRights -notcontains $right) { $rightsToGrant += $right } }
     foreach ($right in $sensitiveRightsDenied) { if ($currentRights -notcontains $right) { $rightsToGrant += $right } }
@@ -912,6 +968,9 @@ try {
         Write-Host "  $right : $ok"
         if (-not $ok) { $allOk = $false }
     }
+    $finalPasswordRequired = (Get-LocalUser -Name $AccountName).PasswordRequired
+    Write-Host "  Parola gerekli (PasswordRequired) : $finalPasswordRequired"
+    if (-not $finalPasswordRequired) { $allOk = $false }
     Write-Host "  Depolama koku ACL : $($finalStorageAcl.Pass)"
     if (-not $finalStorageAcl.Pass) { $allOk = $false }
     Write-Host "  Uygulama dizini ACL : $($finalAppDirAcl.Pass)"

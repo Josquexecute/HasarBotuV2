@@ -4095,6 +4095,88 @@ WinSW servisi `hasarbotu-file-agent` (kuruldu, Disabled). HASARBOTU_
 AGENT_ROOTS/ortam degiskenleri, API/File Agent calistirma, gercek is
 verisi tasima YAPILMADI (kullanici talimatina uygun).
 
+## 2026-07-29 - HB-2026-120: D6 post-apply guvenlik duzeltmesi - `svc-hb-fileagent` icin PasswordRequired=False (ADS_UF_PASSWD_NOTREQD) bulundu ve duzeltildi, parola DEGISTIRILMEDI
+
+Bulgu: HB-2026-119 sonrasi bagimsiz dogrulama sirasinda `Get-LocalUser
+svc-hb-fileagent`in `PasswordRequired` alaninin **False** oldugu
+GORULDU - hesap GERCEK bir rastgele parolayla olusturulmus olmasina
+RAGMEN. Kok neden: bu makinede yerel guvenlik politikasi "En kisa
+parola uzunlugu = 0" (`net accounts` ile dogrulandi). Bu kosulda
+Windows'un `NetUserAdd`/`NetUserSetInfo` (dolayisiyla `New-LocalUser`/
+`Set-LocalUser -Password`) hesabi SESSIZCE `ADS_UF_PASSWD_NOTREQD`
+(0x0020) SAM bayragiyla birakiyor - bilinen bir Windows/PowerShell
+LocalAccounts davranisi, betigin kendi hatasi DEGIL. ADSI (`[ADSI]
+"WinNT://.../user"`) ile `UserFlags` OKUNARAK dogrudan dogrulandi:
+duzeltme ONCESI `0x10261` (66145), PASSWD_NOTREQD biti (0x20) SET.
+
+Duzeltme (bu makinede, GERCEK):
+1. `[ADSI]` WinNT saglayicisiyla `UserFlags` degeri OKUNDU (`0x10261`),
+   YALNIZ `0x0020` biti temizlenerek `0x10241`e (66113) YAZILDI.
+   `(before -bxor after) -eq 0x0020` dogrulamasiyla BASKA HICBIR
+   bayragin (DONT_EXPIRE_PASSWD, PASSWD_CANT_CHANGE, NORMAL_ACCOUNT,
+   SCRIPT) degismedigi KANITLANDI.
+2. Bu, mevcut kurulu servisi (`hasarbotu-file-agent`) etkileyen betigin
+   TAM `-Apply` akisi UZERINDEN YAPILAMADI - atomik arac, servis ZATEN
+   kuruluyken kasitli olarak `exit 2` ile durur (bkz. satir ~771,
+   "servis ZATEN kurulu"); GERCEK parolayi da yeniden ureten/degistiren
+   o akisi calistirmak kullanicinin ACIKCA yasakladigi bir parola
+   degisikligine YOL ACARDI. Bu yuzden bayrak, betigin DISINDA, tek bir
+   dogrudan ADSI cagrisiyla, parolaya HICBIR sekilde dokunmadan
+   duzeltildi.
+3. Betigin KENDISI de gelecekteki tum -Apply calismalarinda (yeni hesap
+   olusturma VE mevcut hesap parola yenileme yollarinin IKISINDE de) ayni
+   bug'in TEKRARLANMAMASI icin duzeltildi: `Set-AccountPasswordRequired`/
+   `Restore-AccountUserFlags` fonksiyonlari eklendi (ADSI tabanli, P/Invoke
+   DEGIL), atomik akisa hesap olusturma/parola yenileme adiminin HEMEN
+   ardindan kablolandi (mevcut hesap icin geri-alinabilir `undoStack`
+   girisiyle), salt-okunur DURUM/PLAN bolumune ve son DOGRULAMA bolumune
+   `PasswordRequired` kontrolu eklendi (`$allOk`e dahil). Mevcut hesap
+   `UserFlags` geri almasi basarisiz olursa hata artik sessizce yutulmaz;
+   `Invoke-Rollback` hatayi raporlar ve kalan geri alma adimlarini
+   best-effort surdurur.
+
+Bagimsiz dogrulama (duzeltme SONRASI, hepsi ayri sorgularla):
+- `Get-LocalUser`: `Enabled=True`, `PasswordRequired=True`,
+  `UserMayChangePassword=False`, Description degismedi.
+- `net user svc-hb-fileagent`: "Parolanin son ayarlandigi" damgasi
+  **29.07.2026 21:53:53** olarak HB-2026-119'daki (duzeltme ONCESI)
+  degerle BIREBIR AYNI - **parola KESINLIKLE degismedi**, yalniz bayrak.
+  "Parola gerekli: Evet" (once "Hayir"idi).
+- Grup uyelikleri: `Users`, `Administrators`, `Remote Desktop Users`,
+  `Backup Operators` - DORDUNDE de UYE DEGIL (degismedi).
+- LSA haklari betikten BAGIMSIZ olarak, yukseltilmis salt-okunur
+  `secedit /export /areas USER_RIGHTS` ciktisindan yeniden okundu:
+  `SeServiceLogonRight`, `SeDenyInteractiveLogonRight`,
+  `SeDenyRemoteInteractiveLogonRight` - UCU DE hala True.
+- ACL'ler betikten BAGIMSIZ, yukseltilmis `Get-Acl` sorgulariyla ayri
+  ayri okundu: depolama koku, uygulama dizini ve log dizini mirasi
+  kesilmis halde ve HB-2026-119'daki TAM ACE listeleriyle degismedi.
+- Servis: `hasarbotu-file-agent` hala kurulu, `StartType=Disabled`,
+  `Status=Stopped` - HICBIR ZAMAN BASLATILMADI.
+
+31.07.2026 tamamlama notu: Claude'dan kalan uncommitted diff silinmeden
+incelendi. `Get-LocalUser` ve ADSI yeniden okumasinda
+`PasswordRequired=True`, `UserFlags=66113 (0x10241)` ve
+`PASSWD_NOTREQD=False` goruldu; zaten dogru olan bayrak tekrar yazilmadi.
+Parola son ayar zamani gorev basindaki ve sonundaki sorgularda
+`29.07.2026 21:53:53` olarak ayni kaldi. Hedef dort grup dahil tum yerel
+gruplar ayri tarandi ve hesap hicbirine uye degildi. LSA, ACL ve servis
+kontrolleri yukaridaki bagimsiz araclarla tekrarlandi.
+
+Kanit: `Parser::ParseFile` 0 hata ve UTF-8 BOM korundu; rollback hata
+gorunurlugu izole testte `True`; yukseltilmis salt-okunur betik dry-run'i
+exit 0 ve tum durum kontrolleri `True`; `git diff --check` hata vermedi;
+`npm run check:deploy` gecti; `npm audit --audit-level=moderate`: 0 acik.
+
+Etki: `deploy/windows-service/setup-file-agent-service-account.ps1`
+degisti (yeni fonksiyonlar + atomik akisa kablolama + DURUM/PLAN/
+DOGRULAMA raporlamasi). Bu makinede GERCEK ve KALICI olarak degisti:
+`svc-hb-fileagent` hesabinin SAM `UserFlags` bayragi (`PasswordRequired`
+artik True). Parola, Enabled durumu, grup uyelikleri, LSA haklari, ACL'ler
+ve servis durumu DEGISMEDI/DEGISTIRILMEDI. HASARBOTU_AGENT_ROOTS/ortam
+degiskenleri, veri tasima, servis baslatma YAPILMADI (kullanici
+talimatina uygun).
+
 Acik kalan: Servisi etkinlestirme/baslatma, `HASARBOTU_AGENT_ROOTS`
 ortam degiskeninin gercek yeni koke (`C:\HasarBotuStorage\BARAN GLOBAL
 EKSPERTİZ`) guncellenmesi, GERCEK pCloud->NTFS senkron veri gecisi
