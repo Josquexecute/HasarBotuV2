@@ -8,6 +8,28 @@ Son güncelleme: 2026-07-31
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.101 başarılı / 6 ortam-koşullu skip.**
 
+## D8 pCloud → NTFS uygulama önizlemesi (2026-07-31)
+
+- **Durum: `PREVIEW_READY / NOT_EXECUTED`.** pCloud `5.1.8.0` için resmi
+  davranış doğrulandı: Sync iki yönlüdür; mevcut bulut klasörü ile boş yerel
+  klasör yerel kopya oluşturmak için desteklenen başlangıç desenidir. Eşleme
+  başladıktan sonra yerel silme/değişiklik buluta da yansıyabileceğinden
+  hedef tek yönlü indirme veya salt-okunur mirror sayılmaz.
+- Yerel güncel durum değişmedi: pCloud DB'de sync kaydı 0, hedef boş, D7
+  `BeforeSync PASS/0`, File Agent `Stopped + Disabled`, üç kapsamda env
+  tanımsız. Bu çalışmada pCloud ayarı, dosya, env veya servis değiştirilmedi.
+- Güvenli sıra; taze `BeforeSync PASS` → bütün yazarları durdurma → boş hedef
+  ile mevcut bulut kökünü yalnız `Sync/Add new sync` üzerinden eşleme → kuyruk
+  bitişi → tam `AfterSync` kapısıdır. Stop/rollback sırasında eşleme aktifken
+  hedef silinmez veya temizlenmez.
+- Kritik tooling düzeltmesi: `AfterSync` artık hashli ve Administrators-only
+  `BeforeSync PASS` raporunu zorunlu tutar. Güncel kaynak tam manifest
+  SHA-256'sı baseline ile değişmediyse ve kaynak↔hedef tam göreli-yol SHA-256
+  eşitliği sağlandıysa `PASS/0` verir. Böylece senkron sırasında iki tarafın
+  birlikte eksilmesi eski yöntem gibi görünmez kalamaz.
+- `AfterSync` gerçek senkron olmadığı için çalıştırılmadı. Sonraki tek adım,
+  ayrı açık operatör onayıyla runbook §2e başlangıç sırasını uygulamaktır.
+
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 
 - **Güncel sonuç: `BeforeSync PASS/0`; geçiş henüz başlatılmadı.** Önceki

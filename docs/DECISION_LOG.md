@@ -4320,3 +4320,46 @@ Sonraki karar: Ayrica onayli operator adiminda hedef senkron klasoru
 yapilandirilip tam senkronizasyon beklenecek. Ayni exact manifestle
 `AfterSync` sayi+boyut+tam SHA-256 `pass/0` olmadan
 `HASARBOTU_AGENT_ROOTS` veya File Agent durumu degistirilmeyecek.
+
+## 2026-07-31 - HB-2026-124: D8 pCloud -> NTFS uygulama onizlemesi ve sabit BeforeSync baseline kapisi
+
+Kapsam: Gercek sync baslatmadan, pCloud ayari/dosya/env/servis durumunu
+degistirmeden mevcut bulut klasoru ile bos yerel hedef eslemesinin silme ve
+iki yonlu sync riski, guvenli baslangic/durdurma/rollback ve AfterSync tam
+SHA-256 kabul zinciri netlestirildi.
+
+Guncel resmi davranis:
+
+- pCloud `5.1.8.0`, 23 Temmuz 2026 tarihli guncel Windows surumudur.
+- Masaustu Sync iki yonludur; iki taraftaki degisiklikler birbirine yansir.
+  Mevcut bulut klasoru ile bos yerel klasoru baglayip yerel kopya olusturmak
+  resmi desteklenen desendir. Bu nedenle bos hedefin ilk baglantida bulutu
+  silmesi beklenen davranis degildir; ancak baglanti sonrasinda yerel silme
+  de buluta yayilabilir.
+- Resmi durdurma yontemi ilgili Sync baglantisindaki `Stop` dugmesidir.
+  Trash/Revisions/Rewind geri alma araligi hesap planina gore 15/30/365
+  gundur ve garantili bagimsiz yedek sayilmaz.
+
+Bu makinedeki salt-okunur sonuc: pCloud calisiyor, yerel DB sync kaydi 0,
+hedef bos, D7 `BeforeSync PASS/0`, File Agent `Stopped + Disabled` ve env
+uc kapsamda tanimsiz. Baska cihazdaki sync/yazarlar yerel DB'den
+dogrulanamaz; gercek uygulama bakim penceresi gerektirir.
+
+Kritik tooling karari: Onceki `AfterSync`, o andaki kaynak ile hedef beraber
+eksilmisse ikisini esit gorup gecebilirdi. `storage-sync-migration-preflight`
+`1.2.0` artik hashli ve Administrators-only `BeforeSync PASS` raporunu ve
+rapor SHA-256'sini zorunlu tutar. Guncel kaynak dosya/klasor/bayt bilgisi ve
+tam manifest SHA-256 baseline ile ayni degilse
+`SOURCE_BASELINE_CHANGED_SINCE_BEFORE_SYNC` blockeri verir. Baseline ayni
+kalsa bile kaynak-hedef envanter ve goreli-yol tam SHA-256 esitligi ayrica
+zorunludur.
+
+Rollback karari: D8 env/servis cutover'indan once biter. Normal durdurma,
+yalniz ilgili sync baglantisini durdurup iki tarafi dokunmadan korumaktir;
+aktif sync altindaki yerel hedefi silmek/temizlemek yasaktir. Bulut mutasyonu
+olursa restore ayri, acik veri-yazma onayi gerektirir.
+
+Etki: Yalniz docs ve salt-okunur deployment tooling'i degisti. Runtime/is
+mantigi, IPC, dependency, veri modeli ve uygulama veri yazma yolu degismedi.
+Gercek sync/AfterSync calistirilmadi; pCloud ayari, kaynak/hedef veri, env ve
+servis durumu degistirilmedi.

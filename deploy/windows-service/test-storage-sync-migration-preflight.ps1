@@ -15,7 +15,12 @@ param(
 
     [string]$GhostExclusionManifestPath,
 
-    [string]$PCloudLocalDatabasePath
+    [string]$PCloudLocalDatabasePath,
+
+    [string]$BeforeSyncReportPath,
+
+    [ValidatePattern('^[a-fA-F0-9]{64}$')]
+    [string]$BeforeSyncReportSha256
 )
 
 Set-StrictMode -Version Latest
@@ -34,9 +39,11 @@ $ErrorActionPreference = 'Stop'
 #   cikarilir. Wildcard, uzanti veya klasor kurali YOKTUR.
 # - BeforeSync: hedefin boslugunu, 3x kapasiteyi ve kaynaktaki HER dosyanin
 #   SHA-256 ile gercekten okunabildigini fail-closed dogrular.
-# - AfterSync: iki kokteki HER dosyayi goreli-yol eslemeli SHA-256 ile
-#   karsilastirir; eksik/fazla/hash farki veya tarama sirasinda kaynak/hedef
-#   degisimi varsa fail-closed durur.
+# - AfterSync: hashli ve Administrators-only BeforeSync PASS raporunu zorunlu
+#   kilar. Guncel kaynagin tam manifesti bu sabit baseline ile ayni kalmali;
+#   ayrica iki kokteki HER dosya goreli-yol eslemeli SHA-256 ile eslesmelidir.
+#   Eksik/fazla/hash farki veya tarama sirasinda kaynak/hedef degisimi varsa
+#   fail-closed durur.
 
 function Add-Blocker {
     param(
@@ -112,6 +119,127 @@ function Test-AdministratorsOnlyFile {
     }
     catch {
         return $false
+    }
+}
+
+function Test-JsonProperty {
+    param(
+        $Object,
+        [string]$Name
+    )
+
+    return (
+        $null -ne $Object -and
+        $null -ne $Object.PSObject.Properties[$Name]
+    )
+}
+
+function Get-ValidatedBeforeSyncBaseline {
+    param(
+        [string]$ReportPath,
+        [string]$ExpectedSha256
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ReportPath)) {
+        Throw-SafePreflightError 'BEFORE_SYNC_REPORT_REQUIRED'
+    }
+    if ($ExpectedSha256 -cnotmatch '^[a-fA-F0-9]{64}$') {
+        Throw-SafePreflightError 'BEFORE_SYNC_REPORT_SHA256_REQUIRED'
+    }
+
+    $reportFullPath = [System.IO.Path]::GetFullPath($ReportPath)
+    if (-not (Test-AdministratorsOnlyFile $reportFullPath)) {
+        Throw-SafePreflightError 'BEFORE_SYNC_REPORT_ADMIN_ACL_REQUIRED'
+    }
+
+    $actualHash = (
+        Get-FileHash -LiteralPath $reportFullPath -Algorithm SHA256
+    ).Hash.ToLowerInvariant()
+    if ($actualHash -ne $ExpectedSha256.ToLowerInvariant()) {
+        Throw-SafePreflightError 'BEFORE_SYNC_REPORT_HASH_MISMATCH'
+    }
+
+    try {
+        $report = [System.IO.File]::ReadAllText($reportFullPath) | ConvertFrom-Json
+    }
+    catch {
+        Throw-SafePreflightError 'BEFORE_SYNC_REPORT_JSON_INVALID'
+    }
+
+    foreach ($propertyName in @(
+        'SchemaVersion',
+        'Stage',
+        'Status',
+        'ReadOnly',
+        'Source',
+        'GhostExclusion',
+        'Target',
+        'Blockers'
+    )) {
+        if (-not (Test-JsonProperty $report $propertyName)) {
+            Throw-SafePreflightError 'BEFORE_SYNC_REPORT_SHAPE_INVALID'
+        }
+    }
+
+    if (
+        $report.SchemaVersion -notin @(
+            'storage-sync-migration-preflight/1.1.0',
+            'storage-sync-migration-preflight/1.2.0'
+        ) -or
+        $report.Stage -ne 'BeforeSync' -or
+        $report.Status -ne 'pass' -or
+        $report.ReadOnly -ne $true -or
+        @($report.Blockers).Count -ne 0
+    ) {
+        Throw-SafePreflightError 'BEFORE_SYNC_REPORT_NOT_PASS'
+    }
+
+    foreach ($propertyName in @(
+        'FileCount',
+        'DirectoryCount',
+        'Bytes',
+        'ReparsePointCount',
+        'HashedFileCount',
+        'HashErrorCount',
+        'ManifestSha256',
+        'SnapshotStable'
+    )) {
+        if (-not (Test-JsonProperty $report.Source $propertyName)) {
+            Throw-SafePreflightError 'BEFORE_SYNC_REPORT_SOURCE_INVALID'
+        }
+    }
+    foreach ($propertyName in @('ManifestSha256', 'EntryCount')) {
+        if (-not (Test-JsonProperty $report.GhostExclusion $propertyName)) {
+            Throw-SafePreflightError 'BEFORE_SYNC_REPORT_EXCLUSION_INVALID'
+        }
+    }
+    foreach ($propertyName in @('IsEmpty', 'SnapshotStable')) {
+        if (-not (Test-JsonProperty $report.Target $propertyName)) {
+            Throw-SafePreflightError 'BEFORE_SYNC_REPORT_TARGET_INVALID'
+        }
+    }
+
+    if (
+        $report.Source.ManifestSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $report.Source.FileCount -ne $report.Source.HashedFileCount -or
+        $report.Source.HashErrorCount -ne 0 -or
+        $report.Source.ReparsePointCount -ne 0 -or
+        $report.Source.SnapshotStable -ne $true -or
+        $report.GhostExclusion.ManifestSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $report.GhostExclusion.EntryCount -ne 10 -or
+        $report.Target.IsEmpty -ne $true -or
+        $report.Target.SnapshotStable -ne $true
+    ) {
+        Throw-SafePreflightError 'BEFORE_SYNC_REPORT_BASELINE_INVALID'
+    }
+
+    return [pscustomobject]@{
+        ReportSha256 = $actualHash
+        SourceFileCount = [int64]$report.Source.FileCount
+        SourceDirectoryCount = [int64]$report.Source.DirectoryCount
+        SourceBytes = [int64]$report.Source.Bytes
+        SourceManifestSha256 = [string]$report.Source.ManifestSha256
+        GhostManifestSha256 = [string]$report.GhostExclusion.ManifestSha256
     }
 }
 
@@ -594,6 +722,13 @@ $blockers = [System.Collections.Generic.List[string]]::new()
 $exitCode = 1
 
 try {
+    $beforeSyncBaseline = $null
+    if ($Stage -eq 'AfterSync') {
+        $beforeSyncBaseline = Get-ValidatedBeforeSyncBaseline `
+            $BeforeSyncReportPath `
+            $BeforeSyncReportSha256
+    }
+
     if ([string]::IsNullOrWhiteSpace($SourceRoot) -or [string]::IsNullOrWhiteSpace($TargetRoot)) {
         $companyFolder = 'BARAN GLOBAL EKSPERT' + [char]0x0130 + 'Z'
         if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
@@ -615,6 +750,13 @@ try {
         $GhostExclusionManifestPath `
         $source `
         $PCloudLocalDatabasePath
+
+    if (
+        $null -ne $beforeSyncBaseline -and
+        $beforeSyncBaseline.GhostManifestSha256 -ne $ghostExclusion.ManifestSha256
+    ) {
+        Throw-SafePreflightError 'BEFORE_SYNC_EXCLUSION_MANIFEST_MISMATCH'
+    }
 
     $sourceBefore = Get-TreeSnapshot $source $ghostExclusion.RelativePaths
     $targetBefore = Get-TreeSnapshot $target $null
@@ -650,6 +792,20 @@ try {
     $sourceHashResult = Get-FullHashSet $sourceBefore 'source' $ProgressInterval
     if ($sourceHashResult.ErrorCount -gt 0) {
         Add-Blocker $blockers 'SOURCE_FULL_HASH_INCOMPLETE'
+    }
+
+    $sourceBaselineMatch = $null
+    if ($Stage -eq 'AfterSync') {
+        $sourceBaselineMatch = (
+            $sourceHashResult.ErrorCount -eq 0 -and
+            $sourceBefore.FileCount -eq $beforeSyncBaseline.SourceFileCount -and
+            $sourceBefore.DirectoryCount -eq $beforeSyncBaseline.SourceDirectoryCount -and
+            $sourceBefore.Bytes -eq $beforeSyncBaseline.SourceBytes -and
+            $sourceHashResult.ManifestSha256 -eq $beforeSyncBaseline.SourceManifestSha256
+        )
+        if (-not $sourceBaselineMatch) {
+            Add-Blocker $blockers 'SOURCE_BASELINE_CHANGED_SINCE_BEFORE_SYNC'
+        }
     }
 
     $targetHashResult = $null
@@ -716,7 +872,7 @@ try {
     }
 
     $result = [ordered]@{
-        SchemaVersion = 'storage-sync-migration-preflight/1.1.0'
+        SchemaVersion = 'storage-sync-migration-preflight/1.2.0'
         Stage = $Stage
         Status = $status
         ReadOnly = $true
@@ -756,6 +912,22 @@ try {
             WildcardRuleCount = 0
             ExtensionRuleCount = 0
             FolderRuleCount = 0
+        }
+        BeforeSyncBaseline = [ordered]@{
+            Required = ($Stage -eq 'AfterSync')
+            ReportSha256 = if ($null -ne $beforeSyncBaseline) {
+                $beforeSyncBaseline.ReportSha256
+            }
+            else {
+                $null
+            }
+            SourceManifestSha256 = if ($null -ne $beforeSyncBaseline) {
+                $beforeSyncBaseline.SourceManifestSha256
+            }
+            else {
+                $null
+            }
+            CurrentSourceMatches = $sourceBaselineMatch
         }
         Target = [ordered]@{
             FileCount = $targetBefore.FileCount
@@ -829,7 +1001,7 @@ try {
 }
 catch {
     $safeError = [ordered]@{
-        SchemaVersion = 'storage-sync-migration-preflight/1.1.0'
+        SchemaVersion = 'storage-sync-migration-preflight/1.2.0'
         Stage = $Stage
         Status = 'error'
         ReadOnly = $true

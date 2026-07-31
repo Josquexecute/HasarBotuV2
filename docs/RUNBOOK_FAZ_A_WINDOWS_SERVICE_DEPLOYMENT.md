@@ -528,12 +528,17 @@ $ghostManifest = '<Administrators-only exact exclusion manifesti>'
 
 # pCloud hedefi tamamen senkronize ettikten SONRA, fakat
 # HASARBOTU_AGENT_ROOTS/servis değişiminden ÖNCE:
+$beforeSyncReport = '<Administrators-only BeforeSync PASS raporu>'
+$beforeSyncReportSha256 = '<raporun doğrulanmış SHA-256 değeri>'
 .\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
   -Stage AfterSync `
-  -GhostExclusionManifestPath $ghostManifest
+  -GhostExclusionManifestPath $ghostManifest `
+  -BeforeSyncReportPath $beforeSyncReport `
+  -BeforeSyncReportSha256 $beforeSyncReportSha256
 ```
 
-Araç `storage-sync-migration-preflight/1.1.0` JSON özeti üretir:
+Araç `storage-sync-migration-preflight/1.2.0` JSON özeti üretir. Mevcut
+`1.1.0` `BeforeSync PASS` raporunu baseline olarak kabul eder:
 
 - kaynak/hedef dosya, klasör, bayt ve reparse-point sayısı,
 - hedef sürücü toplam/boş alanı ve kaynak boyutunun 3 katı kapasite kapısı,
@@ -543,6 +548,9 @@ Araç `storage-sync-migration-preflight/1.1.0` JSON özeti üretir:
   SHA-256 ile gerçek okunabilirliği,
 - `AfterSync`te iki kökün göreli-yol eşlemeli **tam** SHA-256
   karşılaştırması,
+- `AfterSync`te güncel kaynak tam manifestinin hashli `BeforeSync PASS`
+  baseline'ıyla değişmeden kalması; böylece senkron sırasında iki tarafın
+  birlikte eksilmesi/değişmesi de fail-closed yakalanır,
 - tarama başı/sonu envanter farkı ve snapshot kararlılığı,
 - yalnız güvenli hata kodu/sayısı; dosya adı, göreli/mutlak yol ve ham hata
   metni YOKTUR.
@@ -724,6 +732,132 @@ Güncel aynı yazmasız bakım penceresi komutu:
 Sonraki adım ayrı operatör onayıyla hedef senkron klasörünü yapılandırıp
 tam senkronizasyonu beklemektir. Ardından aynı manifestle `AfterSync`
 sayı+boyut+tam SHA-256 `PASS/0` olmadan ortam veya servis geçişi yapılmaz.
+
+## 2e. D8 pCloud → NTFS uygulama önizlemesi — HB-2026-124
+
+**Durum (2026-07-31): `PREVIEW_READY / NOT_EXECUTED`.** Bu bölüm yalnız
+gelecekteki operatör uygulamasının fail-closed önizlemesidir. Bu çalışmada
+pCloud ayarı açılmadı/değiştirilmedi; dosya kopyalanmadı, silinmedi,
+taşınmadı veya yeniden adlandırılmadı; ortam değişkeni ve servis durumu
+değişmedi.
+
+### 2e.1 Güncel pCloud davranışı ve risk kararı
+
+Resmi pCloud kaynakları (2026-07-31'de yeniden doğrulandı):
+
+- [Offline Access / Sync](https://help.pcloud.com/article/offline-access):
+  masaüstü Sync **iki yönlüdür**; iki taraftaki değişiklikler birbirine
+  yansır. Windows/macOS için mevcut bulut klasöründen yerel kopya oluşturma,
+  Linux için de açıkça mevcut bulut klasörünü boş yerel klasöre bağlama
+  anlatılır. Aynı sayfa bağlantıyı durdurmak için Sync sekmesindeki `Stop`
+  düğmesini belirtir.
+- [Windows release notes](https://www.pcloud.com/release-notes/windows.html):
+  bu makinedeki `5.1.8.0`, 23 Temmuz 2026 tarihli güncel Windows sürümüdür.
+- [File recovery and history](https://help.pcloud.com/article/file-recovery-and-history):
+  Trash/Revisions/Rewind koruması hesap planına göre 15/30/365 gündür;
+  kalıcı silme veya süre aşımı geri alınamaz.
+
+**Karar:** Mevcut bulut klasörü + gerçekten boş yerel klasör eşlemesi,
+pCloud'un desteklediği yerel kopya başlangıç desenidir. Boş hedefin ilk
+bağlantıda bulutu silmesi beklenen davranış değildir. Buna rağmen bağlantı
+kurulduğu andan sonra iki yönlüdür: hedefte yapılan silme/değişiklik de
+buluta yansıyabilir. Bu son cümle, pCloud'un “iki taraftaki değişiklikler
+yansır” sözleşmesinden çıkan güvenlik sonucudur; Sync tek yönlü indirme
+veya salt-okunur mirror olarak kabul edilmez.
+
+Bu makinedeki salt-okunur güncel kanıt:
+
+- pCloud `5.1.8.0` çalışıyor; yerel DB'de `syncfolder=0` ve
+  `syncfolderdelayed=0`.
+- Hedef mevcut, reparse point değil ve tamamen boş; dar üç ACE'li D6 ACL'i
+  korunuyor.
+- D7 `BeforeSync PASS/0`: 6.404 gözlenen kaydın yalnız doğrulanmış 10 exact
+  ghost kaydı dışlandı; 6.394/6.394 etkili dosya tam SHA-256 ile okundu,
+  hash hatası ve blocker yoktu.
+- File Agent `Stopped + Disabled`; süreç/kullanıcı/makine kapsamlarında
+  `HASARBOTU_AGENT_ROOTS` tanımsız.
+
+Yerel DB'deki `0` sync kaydı yalnız **bu istemciyi** kanıtlar. Başka bir
+cihazdaki sync veya açık dosya/yazma faaliyeti buradan görülemez. Gerçek
+başlangıçtan önce bütün yazarların ve diğer istemcilerin bakım penceresine
+alınması zorunludur.
+
+### 2e.2 Güvenli başlangıç — gelecekteki uygulama sırası
+
+1. Bütün pCloud/iş uygulaması yazarlarını ve diğer cihazları bakım
+   penceresine al; bulut kökünde yeni yazma olmayacağını doğrula.
+2. Aynı exact exclusion manifestiyle **taze** `BeforeSync` çalıştır.
+   `PASS/0`, kararlı kaynak, boş hedef, 0 hash hatası ve 0 blocker yoksa
+   dur. JSON raporu Administrators-only tut ve rapor SHA-256'sını ayrı
+   doğrula. Eski PASS yalnız tarihsel kanıttır; kaynak değişebileceği için
+   gerçek başlangıçta yeniden alınır.
+3. Hedefin hâlâ 0 dosya/0 klasör/0 bayt olduğunu; pCloud yerel DB'sinde
+   hâlâ sync kaydı olmadığını; File Agent/env durumunun değişmediğini
+   salt-okunur doğrula.
+4. pCloud `Sync` sekmesinde `Add new sync` seç. Yerel taraf için doğrulanmış
+   **boş NTFS hedefi**, bulut tarafı için **mevcut bulut kökünü** seç.
+   `Backup` veya `Uploads` seçme. Onay ekranında iki kökü tekrar kontrol et.
+5. `Add Sync` tek değişiklik/başlatma noktasıdır. Yalnız ayrı açık operatör
+   onayıyla bir kez tıkla. Sonrasında yerel hedefte Explorer, script veya
+   uygulamayla hiçbir oluşturma/silme/yeniden adlandırma yapma.
+6. pCloud aktarım kuyruğu tamamen bitene kadar File Agent'ı başlatma ve env
+   değiştirme. Kaynak dosya/bayt sayısında düşüş, conflict kopyası, pCloud
+   hata durumu, beklenmeyen ekstra dosya veya hedef kararsızlığı görülürse
+   aşağıdaki durdurma adımına geç.
+
+### 2e.3 Durdurma ve rollback
+
+**Durdurma:** pCloud `Sync` sekmesinde yalnız ilgili eşlemenin `Stop`
+düğmesini kullan. Bir onay penceresi dosya silme/temizleme ima ederse
+`İptal` et ve durumu Administrators-only kanıta al; belirsiz seçeneği
+onaylama. Hesabı `Unlink` etme, hedefi boşaltma ve eşleme aktifken yerel
+dosya silme yapma. Stop sonrası iki taraf da olduğu gibi korunur; inceleme
+bitmeden hedef yeniden kullanılmaz.
+
+**Rollback sınırı:** D8, env/servis cutover'ından **önce** biter. Bu nedenle
+normal rollback; eşlemeyi durdurmak, iki ağacı dokunmadan korumak ve taze
+`BeforeSync` ile yeniden planlamaktır. Ortam veya servis geri alma komutu
+yoktur; çünkü bunlar D8'de hiç değiştirilmez.
+
+Bulutta eksilme/overwrite kanıtlanırsa otomatik rollback yapılmaz. Önce sync
+durdurulur; sonra olay türüne göre Trash, Revisions veya Rewind kullanımı
+ayrı, açık veri-yazma onayıyla yürütülür. Hesaba özgü retention süresi web
+arayüzünden doğrulanmadan bu imkân “garantili yedek” sayılmaz. Sync aktifken
+yerel hedefi silmek rollback değildir; iki yönlü silmeyi büyütebilir.
+
+### 2e.4 AfterSync tam SHA-256 kabul kapısı
+
+pCloud kuyruğu boş ve bütün yazarlar hâlâ durmuşken:
+
+```powershell
+$ghostManifest = '<Administrators-only exact exclusion manifesti>'
+$beforeSyncReport = '<aynı bakım penceresindeki Administrators-only PASS raporu>'
+$beforeSyncReportSha256 = '<raporun bağımsız doğrulanmış SHA-256 değeri>'
+
+.\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
+  -Stage AfterSync `
+  -GhostExclusionManifestPath $ghostManifest `
+  -BeforeSyncReportPath $beforeSyncReport `
+  -BeforeSyncReportSha256 $beforeSyncReportSha256 `
+  -ProgressInterval 500
+```
+
+`PASS/0` için aynı anda şunların tümü zorunludur:
+
+- baseline raporu hash ve Administrators-only ACL kontrolünden geçer;
+- baseline'daki 10 exact exclusion manifest hash'i güncel manifestle aynıdır;
+- güncel kaynak dosya/klasör/bayt sayısı ve **tam kaynak manifest SHA-256**
+  değeri `BeforeSync` baseline'ıyla aynıdır;
+- kaynak ve hedef envanteri birebir eşittir;
+- her göreli yolda dosya SHA-256 değeri birebir eşittir;
+- eksik, fazla, hash farkı, G/Ç hatası veya tarama sırasında kaynak/hedef
+  değişimi yoktur.
+
+`SOURCE_BASELINE_CHANGED_SINCE_BEFORE_SYNC`, `INVENTORY_MISMATCH`,
+`FULL_HASH_COMPARISON_FAILED` veya başka herhangi bir blocker sonucu
+`BLOCKED/2`dir. `PASS/0` olmadan `HASARBOTU_AGENT_ROOTS`, File Agent veya
+eski kök hakkında hiçbir değişiklik yapılmaz. Hedef bugün boş olduğundan
+`AfterSync` bu önizleme çalışmasında kasıtlı olarak çalıştırılmadı.
 
 ## 3. WinSW servislerinin kurulumu
 
