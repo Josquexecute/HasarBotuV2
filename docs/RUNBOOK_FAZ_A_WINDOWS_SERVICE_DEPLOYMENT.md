@@ -526,9 +526,10 @@ $ghostManifest = '<Administrators-only exact exclusion manifesti>'
   -Stage BeforeSync `
   -GhostExclusionManifestPath $ghostManifest
 
-# pCloud hedefi tamamen senkronize ettikten SONRA, fakat
-# HASARBOTU_AGENT_ROOTS/servis değişiminden ÖNCE:
-$beforeSyncReport = '<Administrators-only BeforeSync PASS raporu>'
+# D8 bakım kapısı + D8BeforeSync geçtikten ve pCloud hedefi tamamen
+# senkronize olduktan SONRA, fakat HASARBOTU_AGENT_ROOTS/servis
+# değişiminden ÖNCE (ayrıntı: §2e):
+$beforeSyncReport = '<Administrators-only D8BeforeSync PASS raporu>'
 $beforeSyncReportSha256 = '<raporun doğrulanmış SHA-256 değeri>'
 .\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
   -Stage AfterSync `
@@ -537,8 +538,9 @@ $beforeSyncReportSha256 = '<raporun doğrulanmış SHA-256 değeri>'
   -BeforeSyncReportSha256 $beforeSyncReportSha256
 ```
 
-Araç `storage-sync-migration-preflight/1.2.0` JSON özeti üretir. Mevcut
-`1.1.0` `BeforeSync PASS` raporunu baseline olarak kabul eder:
+Araç `storage-sync-migration-preflight/1.3.0` JSON özeti üretir. `AfterSync`
+yalnız §2e'deki bakım penceresi kanıtını taşıyan `D8BeforeSync PASS` raporunu
+baseline olarak kabul eder:
 
 - kaynak/hedef dosya, klasör, bayt ve reparse-point sayısı,
 - hedef sürücü toplam/boş alanı ve kaynak boyutunun 3 katı kapasite kapısı,
@@ -548,7 +550,7 @@ Araç `storage-sync-migration-preflight/1.2.0` JSON özeti üretir. Mevcut
   SHA-256 ile gerçek okunabilirliği,
 - `AfterSync`te iki kökün göreli-yol eşlemeli **tam** SHA-256
   karşılaştırması,
-- `AfterSync`te güncel kaynak tam manifestinin hashli `BeforeSync PASS`
+- `AfterSync`te güncel kaynak tam manifestinin hashli `D8BeforeSync PASS`
   baseline'ıyla değişmeden kalması; böylece senkron sırasında iki tarafın
   birlikte eksilmesi/değişmesi de fail-closed yakalanır,
 - tarama başı/sonu envanter farkı ve snapshot kararlılığı,
@@ -735,7 +737,7 @@ sayı+boyut+tam SHA-256 `PASS/0` olmadan ortam veya servis geçişi yapılmaz.
 
 ## 2e. D8 pCloud → NTFS uygulama önizlemesi — HB-2026-124
 
-**Durum (2026-07-31): `PREVIEW_READY / NOT_EXECUTED`.** Bu bölüm yalnız
+**Durum (2026-07-31): `GATE_READY / NOT_EXECUTED` (HB-2026-125).** Bu bölüm yalnız
 gelecekteki operatör uygulamasının fail-closed önizlemesidir. Bu çalışmada
 pCloud ayarı açılmadı/değiştirilmedi; dosya kopyalanmadı, silinmedi,
 taşınmadı veya yeniden adlandırılmadı; ortam değişkeni ve servis durumu
@@ -782,30 +784,112 @@ cihazdaki sync veya açık dosya/yazma faaliyeti buradan görülemez. Gerçek
 başlangıçtan önce bütün yazarların ve diğer istemcilerin bakım penceresine
 alınması zorunludur.
 
-### 2e.2 Güvenli başlangıç — gelecekteki uygulama sırası
+### 2e.2 Uzak pCloud yazma izolasyonu bakım penceresi — HB-2026-125
+
+D8 başlangıcı artık sözlü “yazarlar durdu” beyanıyla açılamaz. Aşağıdaki kapı
+pCloud'un yerel `data.db` + WAL diff akışını ve kaynak ağacını birlikte izler:
+
+- pCloud `diffid` cursor'ı, uzak kök dosya/klasör kimlik+metadata envanteri,
+  `runstatus`, bekleyen task/upload/cache kuyrukları ve sync kayıtları;
+- P: kaynakta exact 10 ghost dışında dosya/klasör sayısı, toplam bayt,
+  göreli-yol+boyut+mtime metadata SHA-256'sı;
+- sessiz pencerenin başında ve sonunda bütün etkili kaynak dosyalarının tam
+  SHA-256 manifesti.
+
+Canlı SQLite pCloud tarafından kilitli olduğu için araç base DB'yi tek başına
+`immutable` okuyup sahte sessizlik üretmez. DB, WAL ve SHM yalnız OS temp
+alanına kopyalanır; kaynak dosyaların boyut/mtime'ı kopya öncesi/sonrası aynı
+ve kopya `PRAGMA quick_check=ok` olmadıkça örnek geçersizdir. Temp snapshot her
+örnekten sonra silinir. Kaynak veya pCloud dosyasına yazılmaz.
+
+Üretim kapısında sessizlik süresi sabit alt sınır olarak **600 saniyedir**;
+10 dakikanın altına inen CLI/PowerShell parametresi yoktur. Şunlardan biri
+görülürse sayaç o anda sıfırlanır ve konsola yalnız güvenli sayılarla
+`MAINTENANCE_WINDOW_RESET` yazılır:
+
+- uzak create/modify/delete,
+- uzak envanter aynı görünse bile `diffid` ilerlemesi,
+- kaynak create/modify/delete veya tam manifest farkı.
+
+pCloud süreci/`runstatus` yoksa, DB+WAL tutarlı okunamazsa, bekleyen pCloud işi
+veya önceden kurulmuş sync kaydı varsa kapı fail-closed kapanır. Kapı yazarın
+hangi cihaz/kullanıcı olduğunu söylemez; bu nedenle bütün diğer istemcileri
+bakım penceresine alma operasyon yükümlülüğü devam eder.
+
+Yazmasız uyumluluk probu (D8'e **asla** izin vermez, rapor dosyası yazmaz):
+
+```powershell
+& '.\deploy\windows-service\test-pcloud-maintenance-window-gate.ps1' `
+  -GhostExclusionManifestPath $ghostManifest `
+  -ProbeOnly `
+  -ProgressInterval 0
+```
+
+Gerçek bakım penceresi kapısı (yükseltilmiş Windows PowerShell):
+
+```powershell
+& '.\deploy\windows-service\test-pcloud-maintenance-window-gate.ps1' `
+  -GhostExclusionManifestPath $ghostManifest `
+  -PollSeconds 15 `
+  -MaximumMinutes 30 `
+  -ProgressInterval 500
+```
+
+`PASS/0` sonucu yalnız Administrators erişimli
+`C:\ProgramData\HasarBotu\migration-preflight` altında JSON + SHA-256 sidecar
+üretir. `BLOCKED/2` de hareket/reset sayılarıyla aynı korumalı alanda kanıt
+üretir fakat D8 izni vermez. `ERROR/1` önkoşul/tooling hatasıdır.
+
+Bu geliştirme sırasında yalnız `ProbeOnly` gerçek makinede çalıştırıldı:
+pCloud diff akışı, sıfır bekleyen iş/sync kaydı, uzak ve kaynak envanteri
+birlikte okunabildi; sonuç tasarım gereği `PROBE_ONLY_NOT_D8_GATE`,
+`EligibleForD8=false`, `BLOCKED/2` oldu. 600 saniyelik gerçek kapı koşulmadı
+ve admin-only bakım raporu üretilmedi.
+
+### 2e.3 Güvenli başlangıç — gelecekteki uygulama sırası
 
 1. Bütün pCloud/iş uygulaması yazarlarını ve diğer cihazları bakım
-   penceresine al; bulut kökünde yeni yazma olmayacağını doğrula.
-2. Aynı exact exclusion manifestiyle **taze** `BeforeSync` çalıştır.
-   `PASS/0`, kararlı kaynak, boş hedef, 0 hash hatası ve 0 blocker yoksa
-   dur. JSON raporu Administrators-only tut ve rapor SHA-256'sını ayrı
-   doğrula. Eski PASS yalnız tarihsel kanıttır; kaynak değişebileceği için
-   gerçek başlangıçta yeniden alınır.
-3. Hedefin hâlâ 0 dosya/0 klasör/0 bayt olduğunu; pCloud yerel DB'sinde
-   hâlâ sync kaydı olmadığını; File Agent/env durumunun değişmediğini
-   salt-okunur doğrula.
-4. pCloud `Sync` sekmesinde `Add new sync` seç. Yerel taraf için doğrulanmış
+   penceresine al.
+2. §2e.2 gerçek bakım kapısını çalıştır. `PASS/0`, en az 600 saniye son sessiz
+   pencere, sıfır create/modify/delete/cursor ilerlemesi ve eşit başlangıç/son
+   tam SHA-256 olmadan dur. Rapor basename ve SHA-256'sını kaydet.
+3. Aynı exact exclusion manifesti ve aynı bakım raporuyla **taze**
+   `D8BeforeSync` çalıştır:
+
+   ```powershell
+   $maintenanceReport = '<Administrators-only bakım penceresi PASS raporu>'
+   $maintenanceReportSha256 = '<raporun doğrulanmış SHA-256 değeri>'
+
+   .\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
+     -Stage D8BeforeSync `
+     -GhostExclusionManifestPath $ghostManifest `
+     -MaintenanceWindowReportPath $maintenanceReport `
+     -MaintenanceWindowReportSha256 $maintenanceReportSha256 `
+     -ProgressInterval 500
+   ```
+
+   `storage-sync-migration-preflight/1.3.0`, bakım raporunu hash/ACL/şema/süre
+   açısından doğrular; rapor 15 dakikadan eskiyse durur. pCloud diff cursor ve
+   iki envanterin hâlâ raporla aynı olduğunu tam hash **öncesi ve sonrasında**
+   yeniden kontrol eder. Kendi tam manifesti bakım raporuyla aynı değilse
+   `MAINTENANCE_WINDOW_SOURCE_BASELINE_CHANGED` ile `BLOCKED/2` verir.
+4. `D8BeforeSync PASS/0` raporunu Administrators-only tut ve SHA-256'sını
+   doğrula. Hedefin hâlâ boş, File Agent'ın `Stopped + Disabled` ve env'in
+   değişmemiş olduğunu salt-okunur doğrula.
+5. pCloud `Sync` sekmesinde `Add new sync` seç. Yerel taraf için doğrulanmış
    **boş NTFS hedefi**, bulut tarafı için **mevcut bulut kökünü** seç.
    `Backup` veya `Uploads` seçme. Onay ekranında iki kökü tekrar kontrol et.
-5. `Add Sync` tek değişiklik/başlatma noktasıdır. Yalnız ayrı açık operatör
+6. `Add Sync` tek değişiklik/başlatma noktasıdır. Yalnız ayrı açık operatör
    onayıyla bir kez tıkla. Sonrasında yerel hedefte Explorer, script veya
    uygulamayla hiçbir oluşturma/silme/yeniden adlandırma yapma.
-6. pCloud aktarım kuyruğu tamamen bitene kadar File Agent'ı başlatma ve env
+7. pCloud aktarım kuyruğu tamamen bitene kadar File Agent'ı başlatma ve env
    değiştirme. Kaynak dosya/bayt sayısında düşüş, conflict kopyası, pCloud
    hata durumu, beklenmeyen ekstra dosya veya hedef kararsızlığı görülürse
    aşağıdaki durdurma adımına geç.
 
-### 2e.3 Durdurma ve rollback
+Eski `BeforeSync PASS` yalnız D7/tarihsel kanıttır; D8 başlangıcını açmaz.
+
+### 2e.4 Durdurma ve rollback
 
 **Durdurma:** pCloud `Sync` sekmesinde yalnız ilgili eşlemenin `Stop`
 düğmesini kullan. Bir onay penceresi dosya silme/temizleme ima ederse
@@ -815,8 +899,8 @@ dosya silme yapma. Stop sonrası iki taraf da olduğu gibi korunur; inceleme
 bitmeden hedef yeniden kullanılmaz.
 
 **Rollback sınırı:** D8, env/servis cutover'ından **önce** biter. Bu nedenle
-normal rollback; eşlemeyi durdurmak, iki ağacı dokunmadan korumak ve taze
-`BeforeSync` ile yeniden planlamaktır. Ortam veya servis geri alma komutu
+normal rollback; eşlemeyi durdurmak, iki ağacı dokunmadan korumak ve yeni
+bakım kapısı + taze `D8BeforeSync` ile yeniden planlamaktır. Ortam veya servis geri alma komutu
 yoktur; çünkü bunlar D8'de hiç değiştirilmez.
 
 Bulutta eksilme/overwrite kanıtlanırsa otomatik rollback yapılmaz. Önce sync
@@ -825,13 +909,13 @@ ayrı, açık veri-yazma onayıyla yürütülür. Hesaba özgü retention süres
 arayüzünden doğrulanmadan bu imkân “garantili yedek” sayılmaz. Sync aktifken
 yerel hedefi silmek rollback değildir; iki yönlü silmeyi büyütebilir.
 
-### 2e.4 AfterSync tam SHA-256 kabul kapısı
+### 2e.5 AfterSync tam SHA-256 kabul kapısı
 
 pCloud kuyruğu boş ve bütün yazarlar hâlâ durmuşken:
 
 ```powershell
 $ghostManifest = '<Administrators-only exact exclusion manifesti>'
-$beforeSyncReport = '<aynı bakım penceresindeki Administrators-only PASS raporu>'
+$beforeSyncReport = '<D8BeforeSync Administrators-only PASS raporu>'
 $beforeSyncReportSha256 = '<raporun bağımsız doğrulanmış SHA-256 değeri>'
 
 .\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
@@ -844,10 +928,12 @@ $beforeSyncReportSha256 = '<raporun bağımsız doğrulanmış SHA-256 değeri>'
 
 `PASS/0` için aynı anda şunların tümü zorunludur:
 
-- baseline raporu hash ve Administrators-only ACL kontrolünden geçer;
+- baseline raporu `storage-sync-migration-preflight/1.3.0` + `D8BeforeSync`
+  stage'indedir; bakım penceresi kanıtı taşır ve hash/Administrators-only ACL
+  kontrolünden geçer;
 - baseline'daki 10 exact exclusion manifest hash'i güncel manifestle aynıdır;
 - güncel kaynak dosya/klasör/bayt sayısı ve **tam kaynak manifest SHA-256**
-  değeri `BeforeSync` baseline'ıyla aynıdır;
+  değeri `D8BeforeSync` baseline'ıyla aynıdır;
 - kaynak ve hedef envanteri birebir eşittir;
 - her göreli yolda dosya SHA-256 değeri birebir eşittir;
 - eksik, fazla, hash farkı, G/Ç hatası veya tarama sırasında kaynak/hedef

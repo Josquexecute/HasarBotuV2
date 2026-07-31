@@ -4363,3 +4363,66 @@ Etki: Yalniz docs ve salt-okunur deployment tooling'i degisti. Runtime/is
 mantigi, IPC, dependency, veri modeli ve uygulama veri yazma yolu degismedi.
 Gercek sync/AfterSync calistirilmadi; pCloud ayari, kaynak/hedef veri, env ve
 servis durumu degistirilmedi.
+
+## 2026-07-31 - HB-2026-125: D8 uzak pCloud yazar izolasyonu icin 600 saniyelik fail-closed bakim penceresi kapisi
+
+Kapsam: D8 Add Sync oncesinde "butun yazarlar durdu" beyanini olculebilir,
+fail-closed bir kapiya cevirmek istendi. pCloud diff akisi ile kaynak
+envanterinin birlikte izlenmesi; en az 10 dakika sifir create/modify/delete ve
+kararli sayi/boyut/hash olmadan D8'e izin verilmemesi zorunlu tutuldu. Kaynak
+veya hedef veri, pCloud ayari, Add Sync, env ve servis degisikligi yasakti.
+
+Karar ve tooling:
+
+- `test-pcloud-maintenance-window-gate.ps1` +
+  `pcloud-maintenance-window-gate.mjs` eklendi. Uretim sessizlik alt siniri
+  sabit 600 saniyedir; bunu dusuren test/CLI parametresi yoktur. Azami bekleme
+  dolarsa sessizlik eksigine ve/veya kararlı final hash+envanter eksigine ait
+  blocker'lar ile exit 2 uretilir.
+- Canli pCloud SQLite dogrudan `mode=ro` acilamadi (`database is locked`). Base
+  DB'yi `immutable` acmak WAL'daki guncel diff'i kacirabilecegi icin reddedildi.
+  Arac `data.db` + `data.db-wal` + `data.db-shm` dosyalarini yalniz OS temp
+  alanina kopyalar; kaynak stamp'leri kopya basinda/sonunda ayni ve kopya
+  `PRAGMA quick_check=ok` degilse ornegi fail-closed reddeder. Temp snapshot
+  her ornekten sonra silinir; pCloud dosyalarina yazilmaz.
+- Her ornek pCloud `setting.diffid`, `runstatus`, bekleyen task/upload/cache
+  kuyruklari, sync kaydi ve exact ghost zincirinden cozulen uzak kokun
+  file/folder kimlik+metadata envanterini okur. Uzak create/modify/delete veya
+  envanter ayni gorunse bile cursor ilerlemesi sureyi sifirlar.
+- Ayni anda P: kaynakta exact 10 ghost disinda dosya/klasor/bayt ve
+  goreli-yol+boyut+mtime metadata SHA-256 izlenir. Kaynak create/modify/delete
+  veya tam manifest farki de sureyi sifirlar. Final PASS icin sessiz pencere
+  baslangic/son tam dosya SHA-256 manifesti aynidir; hash hatasi sifirdir.
+- Hassas ad/path/fileId rapora veya konsola cikmaz. PASS ve BLOCKED kaniti
+  yalniz Administrators-only `C:\ProgramData\HasarBotu\migration-preflight`
+  altinda JSON + SHA-256 sidecar olarak yazilir. `ProbeOnly` hic rapor yazmaz
+  ve daima `EligibleForD8=false`, `BLOCKED/2` verir.
+- `test-storage-sync-migration-preflight.ps1` semasi `1.3.0` oldu. D8 icin
+  yeni `D8BeforeSync` stage'i zorunludur: admin-only gate raporu+hash, en az
+  600 saniye ve en cok 15 dakika rapor yasi aranir. pCloud diff/source
+  envanteri tam hash oncesi/sonrasi yeniden kontrol edilir; preflight tam
+  manifesti gate baseline'iyla ayni degilse
+  `MAINTENANCE_WINDOW_SOURCE_BASELINE_CHANGED` blockeri verir. `AfterSync`
+  yalniz bu stage'in PASS raporunu baseline kabul eder; eski D7 `BeforeSync`
+  D8 izni sayilmaz.
+
+Test sonucu (bu commit oncesi calisma agaci):
+
+- `node --test deploy/windows-service/pcloud-maintenance-window-gate.test.mjs`
+  7/7 gecti: create/modify/delete, cursor-only reset, snapshot/tam-hash
+  kararsizliginda reset, 600 saniye yeniden baslatma, baslangic/son rapor
+  esitsizligi reddi, sentetik WAL+exact ghost kok ve 599 saniye bypass reddi.
+- `npm run check:deploy` gecti ve dinamik olarak ayni 7 testi de calistirdi.
+- Gercek makinede yalniz `ProbeOnly` calisti. pCloud diff cursor/runstatus,
+  sifir pending task, sifir sync kaydi, uzak ve kaynak envanteri birlikte
+  okunabildi; beklenen `PROBE_ONLY_NOT_D8_GATE`, `EligibleForD8=false`,
+  `BLOCKED/2` alindi. Rapor dosyasi olusturulmadi. Ayni calismadaki iki ayri
+  prob arasinda hem kaynak hem pCloud dosya sayisi 6.416'dan 6.419'a cikti.
+  Yazar kimligi belirlenemese de uzak envanter hareketi kanitlandigi icin D8
+  bloklu kaldi; gercek gate sayaci baslatilmadi.
+
+Etki: Yalniz deploy tooling ve docs degisti. Uygulama runtime/is mantigi,
+IPC, dependency, veri modeli ve uygulama veri yazma yolu degismedi. 600
+saniyelik gercek gate, `D8BeforeSync`, Add Sync, gercek sync ve `AfterSync`
+calistirilmadi; pCloud ayari, kaynak/hedef veri, env ve servis durumu
+degistirilmedi.

@@ -8,9 +8,9 @@ Son güncelleme: 2026-07-31
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.101 başarılı / 6 ortam-koşullu skip.**
 
-## D8 pCloud → NTFS uygulama önizlemesi (2026-07-31)
+## D8 pCloud → NTFS fail-closed bakım penceresi kapısı (2026-07-31)
 
-- **Durum: `PREVIEW_READY / NOT_EXECUTED`.** pCloud `5.1.8.0` için resmi
+- **Durum: `GATE_READY / NOT_EXECUTED`.** pCloud `5.1.8.0` için resmi
   davranış doğrulandı: Sync iki yönlüdür; mevcut bulut klasörü ile boş yerel
   klasör yerel kopya oluşturmak için desteklenen başlangıç desenidir. Eşleme
   başladıktan sonra yerel silme/değişiklik buluta da yansıyabileceğinden
@@ -18,17 +18,39 @@ Son güncelleme: 2026-07-31
 - Yerel güncel durum değişmedi: pCloud DB'de sync kaydı 0, hedef boş, D7
   `BeforeSync PASS/0`, File Agent `Stopped + Disabled`, üç kapsamda env
   tanımsız. Bu çalışmada pCloud ayarı, dosya, env veya servis değiştirilmedi.
-- Güvenli sıra; taze `BeforeSync PASS` → bütün yazarları durdurma → boş hedef
-  ile mevcut bulut kökünü yalnız `Sync/Add new sync` üzerinden eşleme → kuyruk
-  bitişi → tam `AfterSync` kapısıdır. Stop/rollback sırasında eşleme aktifken
-  hedef silinmez veya temizlenmez.
+- Güvenli sıra; bütün yazarları durdurma → gerçek 600 saniyelik bakım kapısı
+  `PASS/0` → aynı raporla taze `D8BeforeSync PASS/0` → boş hedef ile mevcut
+  bulut kökünü yalnız `Sync/Add new sync` üzerinden eşleme → kuyruk bitişi →
+  tam `AfterSync` kapısıdır. Stop/rollback sırasında eşleme aktifken hedef
+  silinmez veya temizlenmez.
 - Kritik tooling düzeltmesi: `AfterSync` artık hashli ve Administrators-only
-  `BeforeSync PASS` raporunu zorunlu tutar. Güncel kaynak tam manifest
+  `D8BeforeSync PASS` raporunu zorunlu tutar. Güncel kaynak tam manifest
   SHA-256'sı baseline ile değişmediyse ve kaynak↔hedef tam göreli-yol SHA-256
   eşitliği sağlandıysa `PASS/0` verir. Böylece senkron sırasında iki tarafın
   birlikte eksilmesi eski yöntem gibi görünmez kalamaz.
-- `AfterSync` gerçek senkron olmadığı için çalıştırılmadı. Sonraki tek adım,
-  ayrı açık operatör onayıyla runbook §2e başlangıç sırasını uygulamaktır.
+- HB-2026-125 ile sözlü bakım penceresi fail-closed tooling kapısına çevrildi.
+  Yeni kapı pCloud DB+WAL `diffid` akışını/uzak envanteri ve P: kaynak
+  envanterini birlikte izler. Üretimde en az 600 saniye zorunludur; create,
+  modify, delete, yalnız diff cursor ilerlemesi veya kaynak hareketi süreyi
+  sıfırlar ve güvenli sayaçlarla blocker raporlar. Başlangıç/son tam kaynak
+  SHA-256 manifesti eşit değilse izin üretmez.
+- `test-storage-sync-migration-preflight.ps1` artık `1.3.0` şemalı ayrı
+  `D8BeforeSync` stage'i taşır. Admin-only bakım raporu+SHA olmadan başlamaz;
+  raporun en çok 15 dakikalık olmasını, pCloud diff/source envanterinin tam
+  hash öncesi ve sonrasında hâlâ aynı olmasını ve kendi tam SHA-256'sının
+  bakım baseline'ıyla eşitliğini zorunlu tutar. Eski D7 `BeforeSync PASS`,
+  D8 izni değildir.
+- Gerçek makinede yalnız yazmasız `ProbeOnly` çalıştırıldı. WAL dâhil diff
+  cursor, `runstatus=1`, sıfır bekleyen iş, sıfır sync kaydı ve iki envanter
+  birlikte okunabildi; tasarım gereği `EligibleForD8=false`, `BLOCKED/2`
+  döndü ve rapor dosyası yazmadı. Bu çalışma içindeki iki ayrı prob arasında
+  hem kaynak hem pCloud dosya sayısı `6.416 → 6.419` yükseldi. Yazarın
+  cihazı/kullanıcısı belirlenemese de uzak envanter hareketi kanıtlandı;
+  bakım sessiz değildir ve D8 blokludur. 600 saniyelik gerçek gate,
+  `D8BeforeSync`, Add Sync ve `AfterSync` çalıştırılmadı.
+- Sonraki tek adım, bütün uzak yazarlar bakım penceresine alındıktan sonra
+  ayrı açık operatör onayıyla gerçek 600 saniyelik kapıyı çalıştırmaktır.
+  `PASS/0` ve ardından `D8BeforeSync PASS/0` olmadan Add Sync'e geçilmez.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 
@@ -50,9 +72,10 @@ Son güncelleme: 2026-07-31
   repo veya konsol çıktısına girmez.
 - Veri kopyalama, pCloud ayarı, registry/env veya servis durumu değişikliği
   yapılmadı. Hedef boş, File Agent mevcut durumda bırakıldı.
-- Sonraki tek adım: ayrı operatör onayıyla pCloud hedef senkron klasörünü
-  yapılandırıp tam senkronizasyonu beklemek; ardından aynı exact manifestle
-  `AfterSync` sayı+boyut+tam SHA-256 kapısını geçirmek. Bu kapı geçmeden
+- Sonraki tek adım: bütün yazarları bakım penceresine alıp gerçek 600 saniyelik
+  pCloud diff/source envanter kapısını ve `D8BeforeSync PASS/0` kapısını
+  geçirmek. Ancak bundan sonra ayrı açık operatör onayıyla hedef sync
+  yapılandırılır; ardından `AfterSync` sayı+boyut+tam SHA-256 geçmeden
   `HASARBOTU_AGENT_ROOTS` veya File Agent durumu değiştirilmez.
 
 ## Mevzuat ve AI Yardımcısı uçtan uca UAT doğrulaması (2026-07-27)

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('BeforeSync', 'AfterSync')]
+    [ValidateSet('BeforeSync', 'D8BeforeSync', 'AfterSync')]
     [string]$Stage = 'BeforeSync',
 
     [string]$SourceRoot,
@@ -20,7 +20,12 @@ param(
     [string]$BeforeSyncReportPath,
 
     [ValidatePattern('^[a-fA-F0-9]{64}$')]
-    [string]$BeforeSyncReportSha256
+    [string]$BeforeSyncReportSha256,
+
+    [string]$MaintenanceWindowReportPath,
+
+    [ValidatePattern('^[a-fA-F0-9]{64}$')]
+    [string]$MaintenanceWindowReportSha256
 )
 
 Set-StrictMode -Version Latest
@@ -39,7 +44,10 @@ $ErrorActionPreference = 'Stop'
 #   cikarilir. Wildcard, uzanti veya klasor kurali YOKTUR.
 # - BeforeSync: hedefin boslugunu, 3x kapasiteyi ve kaynaktaki HER dosyanin
 #   SHA-256 ile gercekten okunabildigini fail-closed dogrular.
-# - AfterSync: hashli ve Administrators-only BeforeSync PASS raporunu zorunlu
+# - D8BeforeSync: bunlara ek olarak hashli/admin-only, en az 600 saniyelik
+#   pCloud diff + kaynak envanteri sessizlik raporunu zorunlu tutar. Raporun
+#   halen guncel oldugunu tam hash oncesi ve sonrasinda yeniden dogrular.
+# - AfterSync: hashli ve Administrators-only D8BeforeSync PASS raporunu zorunlu
 #   kilar. Guncel kaynagin tam manifesti bu sabit baseline ile ayni kalmali;
 #   ayrica iki kokteki HER dosya goreli-yol eslemeli SHA-256 ile eslesmelidir.
 #   Eksik/fazla/hash farki veya tarama sirasinda kaynak/hedef degisimi varsa
@@ -166,6 +174,9 @@ function Get-ValidatedBeforeSyncBaseline {
         Throw-SafePreflightError 'BEFORE_SYNC_REPORT_JSON_INVALID'
     }
 
+    if (-not (Test-JsonProperty $report 'MaintenanceWindow')) {
+        Throw-SafePreflightError 'BEFORE_SYNC_REPORT_MAINTENANCE_WINDOW_INVALID'
+    }
     foreach ($propertyName in @(
         'SchemaVersion',
         'Stage',
@@ -182,11 +193,8 @@ function Get-ValidatedBeforeSyncBaseline {
     }
 
     if (
-        $report.SchemaVersion -notin @(
-            'storage-sync-migration-preflight/1.1.0',
-            'storage-sync-migration-preflight/1.2.0'
-        ) -or
-        $report.Stage -ne 'BeforeSync' -or
+        $report.SchemaVersion -ne 'storage-sync-migration-preflight/1.3.0' -or
+        $report.Stage -ne 'D8BeforeSync' -or
         $report.Status -ne 'pass' -or
         $report.ReadOnly -ne $true -or
         @($report.Blockers).Count -ne 0
@@ -218,6 +226,17 @@ function Get-ValidatedBeforeSyncBaseline {
             Throw-SafePreflightError 'BEFORE_SYNC_REPORT_TARGET_INVALID'
         }
     }
+    foreach ($propertyName in @(
+        'Required',
+        'EligibleForD8',
+        'ReportSha256',
+        'ObservedQuietSeconds',
+        'SourceManifestSha256'
+    )) {
+        if (-not (Test-JsonProperty $report.MaintenanceWindow $propertyName)) {
+            Throw-SafePreflightError 'BEFORE_SYNC_REPORT_MAINTENANCE_WINDOW_INVALID'
+        }
+    }
 
     if (
         $report.Source.ManifestSha256 -cnotmatch '^[a-f0-9]{64}$' -or
@@ -228,7 +247,12 @@ function Get-ValidatedBeforeSyncBaseline {
         $report.GhostExclusion.ManifestSha256 -cnotmatch '^[a-f0-9]{64}$' -or
         $report.GhostExclusion.EntryCount -ne 10 -or
         $report.Target.IsEmpty -ne $true -or
-        $report.Target.SnapshotStable -ne $true
+        $report.Target.SnapshotStable -ne $true -or
+        $report.MaintenanceWindow.Required -ne $true -or
+        $report.MaintenanceWindow.EligibleForD8 -ne $true -or
+        $report.MaintenanceWindow.ReportSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $report.MaintenanceWindow.ObservedQuietSeconds -lt 600 -or
+        $report.MaintenanceWindow.SourceManifestSha256 -ne $report.Source.ManifestSha256
     ) {
         Throw-SafePreflightError 'BEFORE_SYNC_REPORT_BASELINE_INVALID'
     }
@@ -240,7 +264,248 @@ function Get-ValidatedBeforeSyncBaseline {
         SourceBytes = [int64]$report.Source.Bytes
         SourceManifestSha256 = [string]$report.Source.ManifestSha256
         GhostManifestSha256 = [string]$report.GhostExclusion.ManifestSha256
+        MaintenanceWindowReportSha256 = [string]$report.MaintenanceWindow.ReportSha256
+        MaintenanceWindowObservedQuietSeconds = [int64]$report.MaintenanceWindow.ObservedQuietSeconds
     }
+}
+
+function Get-ValidatedMaintenanceWindowReport {
+    param(
+        [string]$ReportPath,
+        [string]$ExpectedSha256
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ReportPath)) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_REQUIRED'
+    }
+    if ($ExpectedSha256 -cnotmatch '^[a-fA-F0-9]{64}$') {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_SHA256_REQUIRED'
+    }
+    $reportFullPath = [System.IO.Path]::GetFullPath($ReportPath)
+    if (-not (Test-AdministratorsOnlyFile $reportFullPath)) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_ADMIN_ACL_REQUIRED'
+    }
+    $actualHash = (
+        Get-FileHash -LiteralPath $reportFullPath -Algorithm SHA256
+    ).Hash.ToLowerInvariant()
+    if ($actualHash -ne $ExpectedSha256.ToLowerInvariant()) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_HASH_MISMATCH'
+    }
+    try {
+        $report = [System.IO.File]::ReadAllText($reportFullPath) | ConvertFrom-Json
+    }
+    catch {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_JSON_INVALID'
+    }
+    if (
+        $report.SchemaVersion -ne 'pcloud-maintenance-window/1.0.0' -or
+        $report.Mode -ne 'gate' -or
+        $report.Status -ne 'pass' -or
+        $report.ReadOnly -ne $true -or
+        $report.EligibleForD8 -ne $true -or
+        $report.MinimumQuietSeconds -ne 600 -or
+        $report.ObservedQuietSeconds -lt 600 -or
+        @($report.Blockers).Count -ne 0
+    ) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_NOT_PASS'
+    }
+    foreach ($propertyName in @('GhostExclusion', 'FinalWindow')) {
+        if (-not (Test-JsonProperty $report $propertyName)) {
+            Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_SHAPE_INVALID'
+        }
+    }
+    foreach ($propertyName in @(
+        'Baseline',
+        'Source',
+        'PCloud',
+        'RemoteChanges',
+        'SourceChanges'
+    )) {
+        if (-not (Test-JsonProperty $report.FinalWindow $propertyName)) {
+            Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_SHAPE_INVALID'
+        }
+    }
+    foreach ($propertyName in @('Source', 'PCloud')) {
+        if (-not (Test-JsonProperty $report.FinalWindow.Baseline $propertyName)) {
+            Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_SHAPE_INVALID'
+        }
+    }
+    $sourcePropertyNames = @(
+        'ObservedFileCount',
+        'ObservedBytes',
+        'ExcludedFileCount',
+        'ExcludedBytes',
+        'FileCount',
+        'DirectoryCount',
+        'Bytes',
+        'MetadataSha256',
+        'ManifestSha256',
+        'HashedFileCount',
+        'HashErrorCount',
+        'SnapshotStable'
+    )
+    foreach ($sourceObject in @(
+        $report.FinalWindow.Baseline.Source,
+        $report.FinalWindow.Source
+    )) {
+        foreach ($propertyName in $sourcePropertyNames) {
+            if (-not (Test-JsonProperty $sourceObject $propertyName)) {
+                Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_SHAPE_INVALID'
+            }
+        }
+    }
+    $pcloudPropertyNames = @(
+        'DiffCursorSha256',
+        'RootIdentitySha256',
+        'RunStatus',
+        'PendingTaskCount',
+        'SyncRecordCount',
+        'FileCount',
+        'DirectoryCount',
+        'Bytes',
+        'InventorySha256'
+    )
+    foreach ($pcloudObject in @(
+        $report.FinalWindow.Baseline.PCloud,
+        $report.FinalWindow.PCloud
+    )) {
+        foreach ($propertyName in $pcloudPropertyNames) {
+            if (-not (Test-JsonProperty $pcloudObject $propertyName)) {
+                Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_SHAPE_INVALID'
+            }
+        }
+    }
+    try {
+        $completedAtUtc = [DateTime]::Parse(
+            [string]$report.CompletedAtUtc,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AssumeUniversal -bor
+            [Globalization.DateTimeStyles]::AdjustToUniversal
+        )
+    }
+    catch {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_TIMESTAMP_INVALID'
+    }
+    $reportAge = [DateTime]::UtcNow - $completedAtUtc
+    if ($reportAge.TotalSeconds -lt -60 -or $reportAge.TotalMinutes -gt 15) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_STALE'
+    }
+    $source = $report.FinalWindow.Source
+    $pcloud = $report.FinalWindow.PCloud
+    $baselineSource = $report.FinalWindow.Baseline.Source
+    $baselinePcloud = $report.FinalWindow.Baseline.PCloud
+    $remoteChanges = $report.FinalWindow.RemoteChanges
+    $sourceChanges = $report.FinalWindow.SourceChanges
+    if (
+        $null -eq $source -or
+        $null -eq $pcloud -or
+        $null -eq $baselineSource -or
+        $null -eq $baselinePcloud -or
+        $remoteChanges.CreateCount -ne 0 -or
+        $remoteChanges.ModifyCount -ne 0 -or
+        $remoteChanges.DeleteCount -ne 0 -or
+        $remoteChanges.DiffCursorAdvanceCount -ne 0 -or
+        $sourceChanges.CreateCount -ne 0 -or
+        $sourceChanges.ModifyCount -ne 0 -or
+        $sourceChanges.DeleteCount -ne 0 -or
+        $source.ManifestSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $source.MetadataSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $source.FileCount -ne $source.HashedFileCount -or
+        $source.HashErrorCount -ne 0 -or
+        $source.SnapshotStable -ne $true -or
+        $pcloud.DiffCursorSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $pcloud.InventorySha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $pcloud.RunStatus -ne '1' -or
+        $pcloud.PendingTaskCount -ne 0 -or
+        $pcloud.SyncRecordCount -ne 0 -or
+        $baselineSource.ObservedFileCount -ne $source.ObservedFileCount -or
+        $baselineSource.ObservedBytes -ne $source.ObservedBytes -or
+        $baselineSource.ExcludedFileCount -ne $source.ExcludedFileCount -or
+        $baselineSource.ExcludedBytes -ne $source.ExcludedBytes -or
+        $baselineSource.FileCount -ne $source.FileCount -or
+        $baselineSource.DirectoryCount -ne $source.DirectoryCount -or
+        $baselineSource.Bytes -ne $source.Bytes -or
+        $baselineSource.MetadataSha256 -ne $source.MetadataSha256 -or
+        $baselineSource.ManifestSha256 -ne $source.ManifestSha256 -or
+        $baselineSource.HashedFileCount -ne $source.HashedFileCount -or
+        $baselineSource.HashErrorCount -ne 0 -or
+        $baselineSource.SnapshotStable -ne $true -or
+        $baselinePcloud.DiffCursorSha256 -ne $pcloud.DiffCursorSha256 -or
+        $baselinePcloud.RootIdentitySha256 -ne $pcloud.RootIdentitySha256 -or
+        $baselinePcloud.RunStatus -ne $pcloud.RunStatus -or
+        $baselinePcloud.PendingTaskCount -ne $pcloud.PendingTaskCount -or
+        $baselinePcloud.SyncRecordCount -ne $pcloud.SyncRecordCount -or
+        $baselinePcloud.FileCount -ne $pcloud.FileCount -or
+        $baselinePcloud.DirectoryCount -ne $pcloud.DirectoryCount -or
+        $baselinePcloud.Bytes -ne $pcloud.Bytes -or
+        $baselinePcloud.InventorySha256 -ne $pcloud.InventorySha256
+    ) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_BASELINE_INVALID'
+    }
+    return [pscustomobject]@{
+        ReportPath = $reportFullPath
+        ReportSha256 = $actualHash
+        ReportAgeSecondsAtStart = [int][Math]::Floor($reportAge.TotalSeconds)
+        ObservedQuietSeconds = [int64]$report.ObservedQuietSeconds
+        WindowResetCount = [int64]$report.WindowResetCount
+        GhostManifestSha256 = [string]$report.GhostExclusion.ManifestSha256
+        SourceFileCount = [int64]$source.FileCount
+        SourceDirectoryCount = [int64]$source.DirectoryCount
+        SourceBytes = [int64]$source.Bytes
+        SourceMetadataSha256 = [string]$source.MetadataSha256
+        SourceManifestSha256 = [string]$source.ManifestSha256
+        PCloudDiffCursorSha256 = [string]$pcloud.DiffCursorSha256
+        PCloudInventorySha256 = [string]$pcloud.InventorySha256
+    }
+}
+
+function Invoke-MaintenanceWindowCurrentCheck {
+    param(
+        $MaintenanceBaseline,
+        [string]$SourceRoot,
+        [string]$ManifestPath,
+        [string]$ManifestSha256,
+        [string]$PCloudDatabasePath
+    )
+
+    if (@(Get-Process -Name 'pCloud' -ErrorAction SilentlyContinue).Count -eq 0) {
+        Throw-SafePreflightError 'PCLOUD_DIFF_FLOW_PROCESS_NOT_RUNNING'
+    }
+    $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -eq $nodeCommand) {
+        Throw-SafePreflightError 'NODE_RUNTIME_NOT_FOUND'
+    }
+    $gatePath = Join-Path $PSScriptRoot 'pcloud-maintenance-window-gate.mjs'
+    if (-not [System.IO.File]::Exists($gatePath)) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_TOOL_NOT_FOUND'
+    }
+    try {
+        $stdout = & $nodeCommand.Source `
+            $gatePath `
+            '--mode' 'verify-current' `
+            '--source-root' $SourceRoot `
+            '--ghost-manifest' $ManifestPath `
+            '--ghost-manifest-sha256' $ManifestSha256 `
+            '--pcloud-db' $PCloudDatabasePath `
+            '--maintenance-report' $MaintenanceBaseline.ReportPath | Out-String
+        $validatorExitCode = $LASTEXITCODE
+    }
+    catch {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_CURRENT_CHECK_START_FAILED'
+    }
+    try {
+        $validation = $stdout | ConvertFrom-Json
+    }
+    catch {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_CURRENT_CHECK_OUTPUT_INVALID'
+    }
+    if ($validatorExitCode -eq 1 -or $validation.Status -eq 'error') {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_CURRENT_CHECK_FAILED'
+    }
+    if ($validatorExitCode -notin @(0, 2)) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_NO_LONGER_CURRENT'
+    }
+    return $validation
 }
 
 function Get-ValidatedGhostExclusion {
@@ -722,6 +987,7 @@ $blockers = [System.Collections.Generic.List[string]]::new()
 $exitCode = 1
 
 try {
+    $isBeforeSync = $Stage -in @('BeforeSync', 'D8BeforeSync')
     $beforeSyncBaseline = $null
     if ($Stage -eq 'AfterSync') {
         $beforeSyncBaseline = Get-ValidatedBeforeSyncBaseline `
@@ -746,16 +1012,56 @@ try {
         throw [System.ArgumentException]::new('ROOTS_MUST_BE_DIFFERENT')
     }
 
+    if ([string]::IsNullOrWhiteSpace($PCloudLocalDatabasePath)) {
+        if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+            Throw-SafePreflightError 'PCLOUD_LOCAL_DATABASE_NOT_CONFIGURED'
+        }
+        $PCloudLocalDatabasePath = Join-Path $env:LOCALAPPDATA 'pCloud\data.db'
+    }
+    $pcloudDatabaseFullPath = [System.IO.Path]::GetFullPath(
+        $PCloudLocalDatabasePath
+    )
+
     $ghostExclusion = Get-ValidatedGhostExclusion `
         $GhostExclusionManifestPath `
         $source `
-        $PCloudLocalDatabasePath
+        $pcloudDatabaseFullPath
 
     if (
         $null -ne $beforeSyncBaseline -and
         $beforeSyncBaseline.GhostManifestSha256 -ne $ghostExclusion.ManifestSha256
     ) {
         Throw-SafePreflightError 'BEFORE_SYNC_EXCLUSION_MANIFEST_MISMATCH'
+    }
+
+    $maintenanceBaseline = $null
+    $maintenanceCurrentAtStart = $null
+    $maintenanceCurrentAtEnd = $null
+    if ($Stage -eq 'D8BeforeSync') {
+        $maintenanceBaseline = Get-ValidatedMaintenanceWindowReport `
+            $MaintenanceWindowReportPath `
+            $MaintenanceWindowReportSha256
+        if (
+            $maintenanceBaseline.GhostManifestSha256 -ne
+            $ghostExclusion.ManifestSha256
+        ) {
+            Throw-SafePreflightError 'MAINTENANCE_WINDOW_EXCLUSION_MISMATCH'
+        }
+        $maintenanceCurrentAtStart = Invoke-MaintenanceWindowCurrentCheck `
+            $maintenanceBaseline `
+            $source `
+            $GhostExclusionManifestPath `
+            $ghostExclusion.ManifestSha256 `
+            $pcloudDatabaseFullPath
+        if ($maintenanceCurrentAtStart.Status -ne 'pass') {
+            Add-Blocker $blockers 'MAINTENANCE_WINDOW_NO_LONGER_CURRENT'
+        }
+    }
+    elseif (
+        -not [string]::IsNullOrWhiteSpace($MaintenanceWindowReportPath) -or
+        -not [string]::IsNullOrWhiteSpace($MaintenanceWindowReportSha256)
+    ) {
+        Throw-SafePreflightError 'MAINTENANCE_WINDOW_REPORT_UNEXPECTED_FOR_STAGE'
     }
 
     $sourceBefore = Get-TreeSnapshot $source $ghostExclusion.RelativePaths
@@ -775,11 +1081,11 @@ try {
     if ($targetBefore.ReparsePointCount -gt 0) {
         Add-Blocker $blockers 'TARGET_REPARSE_POINT_FOUND'
     }
-    if (-not $capacityPass -and $Stage -eq 'BeforeSync') {
+    if (-not $capacityPass -and $isBeforeSync) {
         Add-Blocker $blockers 'CAPACITY_BELOW_THRESHOLD'
     }
     if (
-        $Stage -eq 'BeforeSync' -and
+        $isBeforeSync -and
         (
             $targetBefore.FileCount -gt 0 -or
             $targetBefore.DirectoryCount -gt 0 -or
@@ -792,6 +1098,18 @@ try {
     $sourceHashResult = Get-FullHashSet $sourceBefore 'source' $ProgressInterval
     if ($sourceHashResult.ErrorCount -gt 0) {
         Add-Blocker $blockers 'SOURCE_FULL_HASH_INCOMPLETE'
+    }
+    if (
+        $Stage -eq 'D8BeforeSync' -and
+        (
+            $sourceHashResult.ErrorCount -ne 0 -or
+            $sourceBefore.FileCount -ne $maintenanceBaseline.SourceFileCount -or
+            $sourceBefore.DirectoryCount -ne $maintenanceBaseline.SourceDirectoryCount -or
+            $sourceBefore.Bytes -ne $maintenanceBaseline.SourceBytes -or
+            $sourceHashResult.ManifestSha256 -ne $maintenanceBaseline.SourceManifestSha256
+        )
+    ) {
+        Add-Blocker $blockers 'MAINTENANCE_WINDOW_SOURCE_BASELINE_CHANGED'
     }
 
     $sourceBaselineMatch = $null
@@ -853,6 +1171,17 @@ try {
     if (-not $targetStable) {
         Add-Blocker $blockers 'TARGET_CHANGED_DURING_PREFLIGHT'
     }
+    if ($Stage -eq 'D8BeforeSync') {
+        $maintenanceCurrentAtEnd = Invoke-MaintenanceWindowCurrentCheck `
+            $maintenanceBaseline `
+            $source `
+            $GhostExclusionManifestPath `
+            $ghostExclusion.ManifestSha256 `
+            $pcloudDatabaseFullPath
+        if ($maintenanceCurrentAtEnd.Status -ne 'pass') {
+            Add-Blocker $blockers 'MAINTENANCE_WINDOW_NO_LONGER_CURRENT'
+        }
+    }
 
     $inventoryMatch = (
         $sourceBefore.FileCount -eq $targetBefore.FileCount -and
@@ -872,7 +1201,7 @@ try {
     }
 
     $result = [ordered]@{
-        SchemaVersion = 'storage-sync-migration-preflight/1.2.0'
+        SchemaVersion = 'storage-sync-migration-preflight/1.3.0'
         Stage = $Stage
         Status = $status
         ReadOnly = $true
@@ -928,6 +1257,67 @@ try {
                 $null
             }
             CurrentSourceMatches = $sourceBaselineMatch
+        }
+        MaintenanceWindow = [ordered]@{
+            Required = ($Stage -in @('D8BeforeSync', 'AfterSync'))
+            EligibleForD8 = if ($Stage -eq 'D8BeforeSync') {
+                (
+                    $null -ne $maintenanceBaseline -and
+                    $null -ne $maintenanceCurrentAtStart -and
+                    $maintenanceCurrentAtStart.Status -eq 'pass' -and
+                    $null -ne $maintenanceCurrentAtEnd -and
+                    $maintenanceCurrentAtEnd.Status -eq 'pass' -and
+                    $sourceHashResult.ManifestSha256 -eq
+                    $maintenanceBaseline.SourceManifestSha256
+                )
+            }
+            elseif ($Stage -eq 'AfterSync') {
+                $true
+            }
+            else {
+                $false
+            }
+            ReportSha256 = if ($null -ne $maintenanceBaseline) {
+                $maintenanceBaseline.ReportSha256
+            }
+            elseif ($null -ne $beforeSyncBaseline) {
+                $beforeSyncBaseline.MaintenanceWindowReportSha256
+            }
+            else {
+                $null
+            }
+            ReportAgeSecondsAtStart = if ($null -ne $maintenanceBaseline) {
+                $maintenanceBaseline.ReportAgeSecondsAtStart
+            }
+            else {
+                $null
+            }
+            ObservedQuietSeconds = if ($null -ne $maintenanceBaseline) {
+                $maintenanceBaseline.ObservedQuietSeconds
+            }
+            elseif ($Stage -eq 'AfterSync') {
+                $beforeSyncBaseline.MaintenanceWindowObservedQuietSeconds
+            }
+            else {
+                0
+            }
+            WindowResetCount = if ($null -ne $maintenanceBaseline) {
+                $maintenanceBaseline.WindowResetCount
+            }
+            else {
+                $null
+            }
+            SourceManifestSha256 = if ($null -ne $maintenanceBaseline) {
+                $maintenanceBaseline.SourceManifestSha256
+            }
+            elseif ($null -ne $beforeSyncBaseline) {
+                $beforeSyncBaseline.SourceManifestSha256
+            }
+            else {
+                $null
+            }
+            CurrentAtStart = ($null -ne $maintenanceCurrentAtStart)
+            CurrentAtEnd = ($null -ne $maintenanceCurrentAtEnd)
         }
         Target = [ordered]@{
             FileCount = $targetBefore.FileCount
@@ -1001,7 +1391,7 @@ try {
 }
 catch {
     $safeError = [ordered]@{
-        SchemaVersion = 'storage-sync-migration-preflight/1.2.0'
+        SchemaVersion = 'storage-sync-migration-preflight/1.3.0'
         Stage = $Stage
         Status = 'error'
         ReadOnly = $true

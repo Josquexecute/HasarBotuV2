@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 /**
@@ -124,6 +125,8 @@ if (!fileAgentDependsOnApi) {
 try {
   const preflight = await readFile(`${DEPLOY_DIR}test-storage-sync-migration-preflight.ps1`, 'utf8')
   const validator = await readFile(`${DEPLOY_DIR}validate-storage-ghost-exclusion.mjs`, 'utf8')
+  const maintenanceGate = await readFile(`${DEPLOY_DIR}pcloud-maintenance-window-gate.mjs`, 'utf8')
+  const maintenanceWrapper = await readFile(`${DEPLOY_DIR}test-pcloud-maintenance-window-gate.ps1`, 'utf8')
 
   assertContains(preflight, /\$GhostExclusionManifestPath/, 'test-storage-sync-migration-preflight.ps1', 'zorunlu exclusion manifest parametresi')
   assertContains(preflight, /GHOST_EXCLUSION_MANIFEST_REQUIRED/, 'test-storage-sync-migration-preflight.ps1', 'manifest yokluğunda fail-closed hata kodu')
@@ -133,12 +136,41 @@ try {
   assertContains(preflight, /\$BeforeSyncReportSha256/, 'test-storage-sync-migration-preflight.ps1', 'BeforeSync rapor SHA-256 parametresi')
   assertContains(preflight, /BEFORE_SYNC_REPORT_REQUIRED/, 'test-storage-sync-migration-preflight.ps1', 'AfterSync baseline yokluğunda fail-closed hata kodu')
   assertContains(preflight, /SOURCE_BASELINE_CHANGED_SINCE_BEFORE_SYNC/, 'test-storage-sync-migration-preflight.ps1', 'senkron sırasında kaynak baseline değişimi blockeri')
-  assertContains(preflight, /storage-sync-migration-preflight\/1\.2\.0/, 'test-storage-sync-migration-preflight.ps1', '1.2.0 sonuç şeması')
+  assertContains(preflight, /storage-sync-migration-preflight\/1\.3\.0/, 'test-storage-sync-migration-preflight.ps1', '1.3.0 sonuç şeması')
+  assertContains(preflight, /D8BeforeSync/, 'test-storage-sync-migration-preflight.ps1', 'D8 bakım pencereli ayrı stage')
+  assertContains(preflight, /MAINTENANCE_WINDOW_REPORT_REQUIRED/, 'test-storage-sync-migration-preflight.ps1', 'D8 raporu yokluğunda fail-closed hata kodu')
+  assertContains(preflight, /Invoke-MaintenanceWindowCurrentCheck/, 'test-storage-sync-migration-preflight.ps1', 'tam hash öncesi/sonrası güncellik kontrolü')
+  assertContains(preflight, /MAINTENANCE_WINDOW_SOURCE_BASELINE_CHANGED/, 'test-storage-sync-migration-preflight.ps1', 'bakım penceresi tam hash baseline blockeri')
   assertContains(validator, /exact_windows_path_and_pcloud_file_id/, 'validate-storage-ghost-exclusion.mjs', 'exact path+fileId eşleşme modu')
   assertContains(validator, /entryCount === 10/, 'validate-storage-ghost-exclusion.mjs', 'tam 10 kayıt kapısı')
   assertContains(validator, /new DatabaseSync\(databaseUrl, \{ readOnly: true, timeout: 0 \}\)/, 'validate-storage-ghost-exclusion.mjs', 'salt-okunur SQLite açılışı')
   assertContains(validator, /databaseUrl\.searchParams\.set\('immutable', '1'\)/, 'validate-storage-ghost-exclusion.mjs', 'immutable SQLite modu')
   assertNotContains(validator, /endsWith\(['"]\.tmp['"]\)|includes\(['"]\.tmp['"]\)/, 'validate-storage-ghost-exclusion.mjs', 'uzantıya dayalı exclusion kuralı')
+
+  assertContains(maintenanceGate, /MINIMUM_QUIET_SECONDS = 600/, 'pcloud-maintenance-window-gate.mjs', 'değiştirilemez en az 600 saniye kapısı')
+  assertContains(maintenanceGate, /getTextSetting\(database, 'diffid'/, 'pcloud-maintenance-window-gate.mjs', 'pCloud diff cursor okuması')
+  assertContains(maintenanceGate, /\$\{path\.basename\(databasePath\)\}-wal/, 'pcloud-maintenance-window-gate.mjs', 'WAL dahil canlı DB snapshot')
+  assertContains(maintenanceGate, /compareEntryMaps/, 'pcloud-maintenance-window-gate.mjs', 'create/modify/delete fark sayacı')
+  assertContains(maintenanceGate, /MAINTENANCE_WINDOW_RESET/, 'pcloud-maintenance-window-gate.mjs', 'yazar hareketinde süre sıfırlama raporu')
+  assertContains(maintenanceGate, /PCLOUD_CHANGED_DURING_OBSERVATION/, 'pcloud-maintenance-window-gate.mjs', 'örnek içi uzak harekette fail-closed reset')
+  assertContains(maintenanceGate, /PCLOUD_DATABASE_SNAPSHOT_UNSTABLE/, 'pcloud-maintenance-window-gate.mjs', 'DB snapshot kararsızlığında fail-closed reset')
+  assertContains(maintenanceGate, /SOURCE_CHANGED_DURING_FULL_HASH/, 'pcloud-maintenance-window-gate.mjs', 'tam hash sırasında kaynak hareketinde fail-closed reset')
+  assertContains(maintenanceGate, /SOURCE_CHANGED_DURING_INVENTORY/, 'pcloud-maintenance-window-gate.mjs', 'envanter taraması sırasında kaynak hareketinde fail-closed reset')
+  assertContains(maintenanceGate, /Baseline:/, 'pcloud-maintenance-window-gate.mjs', 'başlangıç ve son sayı/boyut/hash kanıtı')
+  assertContains(maintenanceGate, /DiffCursorAdvanceCount: 0/, 'pcloud-maintenance-window-gate.mjs', 'final sessiz pencerede sıfır diff hareketi')
+  assertContains(maintenanceWrapper, /\[ValidateRange\(10, 120\)\]/, 'test-pcloud-maintenance-window-gate.ps1', '10 dakikanın altına inemeyen wrapper')
+  assertContains(maintenanceWrapper, /Test-AdministratorsOnlyFile/, 'test-pcloud-maintenance-window-gate.ps1', 'admin-only manifest kapısı')
+  assertContains(maintenanceWrapper, /New-AdminOnlySecurity/, 'test-pcloud-maintenance-window-gate.ps1', 'admin-only gate raporu')
+  assertNotContains(maintenanceWrapper, /SetEnvironmentVariable|Start-Service|Set-Service|Stop-Service|Stop-Process/, 'test-pcloud-maintenance-window-gate.ps1', 'env/servis/pCloud süreç mutasyonu')
+
+  const maintenanceTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}pcloud-maintenance-window-gate.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (maintenanceTests.status !== 0) {
+    throw new Error(`pCloud bakım penceresi testleri başarısız — ${maintenanceTests.stderr || maintenanceTests.stdout}`)
+  }
 } catch (error) {
   errors.push(`D7 ghost exclusion tooling doğrulaması çalışmadı — ${error.message}`)
 }
