@@ -4184,3 +4184,60 @@ EKSPERTİZ`) guncellenmesi, GERCEK pCloud->NTFS senkron veri gecisi
 onaylanmis gelecekteki adimlardir. `ChangeServiceConfigW`in NEDEN
 basarisiz oldugu (sc.exe neden farkli davraniyor) COZULMEDI - kucuk,
 dusuk-oncelikli bir arastirma notu olarak kayitli kalir.
+
+## 2026-07-31 - HB-2026-121: D7 salt-okunur pCloud -> NTFS gecis preflight'i BLOCKED; 10 G/C okuma hatasi ve aktif kaynak degisimi bulundu
+
+Kapsam: Kullanici D7 gecis preflight'inda kaynak
+`P:\BARAN GLOBAL EKSPERTİZ` ile hedef
+`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` durumunun, hedef
+boslugunun, kapasitenin, pCloud senkron yapilandirmasinin, envanterin ve
+tam SHA-256 yonteminin salt-okunur incelenmesini istedi. Veri
+kopyalama, pCloud ayari, `HASARBOTU_AGENT_ROOTS` degisikligi ve servis
+baslatma ACIKCA yasakti.
+
+Gercek sonuc:
+
+- Kaynak hash baslangicinda 6.363 dosya, 623 klasor,
+  9.324.951.196 bayt, 0 reparse point.
+- Hedef gercekten mevcut ve tamamen bos: 0 dosya, 0 klasor, 0 bayt,
+  reparse point degil. D6 ACL'i bagimsiz `Get-Acl` ile aynen korundu:
+  Administrators FullControl, pCloud kullanicisi Modify,
+  `svc-hb-fileagent` Modify; baska ACE yok.
+- C: toplam 999.124.103.168 bayt; tam hash calismasi aninda
+  780.604.567.552 bayt bos; 3x gereken 27.974.853.588 bayt. Kapasite
+  PASS.
+- pCloud 5.1.8.0 etkilesimli oturumda calisiyor ve otomatik baslangic
+  kaydi var. Registry `SyncDrive=P:\`; P: `pCloud Drive`,
+  `DriveType=2`, `exFAT`. Canli DB kilitli oldugu icin durdurma/kopya
+  yapilmadi; guncel base DB `mode=ro&immutable=1` ile okundu:
+  `syncfolder=0`, `syncfolderdelayed=0`, hedef kaydi yok. Hedefin bos
+  olmasi ve logda hedef izi bulunmamasi bu sonucu destekledi. Windows
+  UI otomasyon pipe'i bu oturumda acilamadigi icin GUI menu goruntusu
+  alinamadi; hicbir pCloud dugmesine basilmadi.
+- Ilk dogrudan `Get-FileHash` denemesi yaklasik 500. dosyada G/C aygit
+  hatasiyla fail-closed durdu. Bunun uzerine yol/ad sildirmayan kalici
+  salt-okunur tooling eklendi:
+  `deploy/windows-service/test-storage-sync-migration-preflight.ps1`.
+- Gercek arac calismasi 5:49 surdu. 6.353 dosya hashlenebildi; 10 dosya
+  `IO_ERROR` verdi. Hata varsa manifest digest KASITLI uretilmedi.
+  Kaynak snapshot ayrica kararsizdi. Hemen sonraki envanter 6.398
+  dosya / 9.330.146.392 bayt oldu: tarama boyunca +35 dosya /
+  +5.195.196 bayt. Hedef snapshot kararli ve bos kaldi.
+- Arac `BeforeSync`te tam kaynak okunabilirligi + bos hedef + 3x
+  kapasiteyi; `AfterSync`te iki kokun goreli-yol eslemeli tam SHA-256
+  esitligini ve bas/son snapshot kararliligini fail-closed denetler.
+  Kaynak/hedefte temp/kanit dosyasi olusturmaz; ACL, registry, env veya
+  servise yazmaz; gercek yol/dosya adi/ham hata metni ciktiya vermez.
+  Cikis sozlesmesi `0=pass`, `2=blocked`, `1=arac/on kosul hatasi`.
+
+Karar: D7 **GECISE HAZIR DEGIL / BLOCKED**. 10 G/C okuma hatasi
+giderilmeden ve kaynak uretim yazimlari kontrollu bir bakim penceresinde
+durup `BeforeSync` tek kararli snapshot'ta `pass/0` vermeden pCloud
+hedef sync yapilandirmasi baslatilmayacak. Sync tamamlandiktan sonra
+`AfterSync` sayi+boyut+tam SHA-256 `pass/0` vermeden
+`HASARBOTU_AGENT_ROOTS` degistirilmeyecek ve File Agent
+etkinlestirilmeyecek/baslatilmayacak.
+
+Etki: Yalniz docs/tooling degisti. Runtime/is mantigi, IPC, dependency,
+veri modeli, veri yazma yolu ve servis yapilandirmasi degismedi.
+Gercek veri kopyalanmadi; pCloud/registry/env/servis ayari degismedi.

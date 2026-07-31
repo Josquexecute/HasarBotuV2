@@ -1,12 +1,34 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-28
+Son güncelleme: 2026-07-31
 
 ## Mevcut sürüm ve aşama
 
 - Sürüm: `0.1.0-ui-baseline`
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.101 başarılı / 6 ortam-koşullu skip.**
+
+## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
+
+- **Sonuç: BLOCKED; geçişe başlanmadı.** Kaynak başlangıçta 6.363
+  dosya / 623 klasör / 9.324.951.196 bayt, hedef 0 dosya / 0 klasör /
+  0 bayt ve boştu. C: için 3× kapasite kapısı geçti.
+- pCloud `5.1.8.0` çalışıyor; registry hâlâ `SyncDrive=P:\`, güncel
+  salt-okunur base DB snapshot'ında `syncfolder=0` ve
+  `syncfolderdelayed=0`. Hedef senkron klasör olarak yapılandırılmamış.
+- Tam kaynak SHA-256 okuması 6.353/6.363 dosyada tamamlandı; 10 G/Ç
+  hatası nedeniyle manifest üretilmedi. Tarama sırasında kaynak ayrıca
+  35 dosya / 5.195.196 bayt büyüdü; snapshot kararlı değildi.
+- Kalıcı tooling:
+  `deploy/windows-service/test-storage-sync-migration-preflight.ps1`.
+  Araç dosya/yol adı sızdırmadan, hiçbir dosya/ACL/registry/env/servis
+  yazımı yapmadan `BeforeSync` kaynak okunabilirlik ve `AfterSync`
+  göreli-yol eşlemeli tam SHA-256 kapısı sağlar.
+- Veri kopyalama, pCloud ayarı, `HASARBOTU_AGENT_ROOTS` değişikliği ve
+  servis başlatma yapılmadı. File Agent `Disabled/Stopped`, hedef boş ve
+  D6 ACL'i değişmeden kaldı.
+- Sonraki tek adım: 10 G/Ç hatasının kaynağını giderip yazmasız bakım
+  penceresinde `BeforeSync` çalışmasını `pass/0` ile tamamlamak.
 
 ## Mevzuat ve AI Yardımcısı uçtan uca UAT doğrulaması (2026-07-27)
 

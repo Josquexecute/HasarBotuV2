@@ -500,6 +500,126 @@ Parolanın KENDİSİ hiçbir zaman audit kaydına/log'a/repository'ye
 YAZILMAZ; işlem bittikten sonra parolayı bilen hiçbir kayıt kalmaz
 (kasıtlı — bkz. DECISION_LOG HB-2026-116).
 
+## 2d. D7 salt-okunur senkron klasör geçiş preflight'ı — HB-2026-121
+
+**Durum (2026-07-31, bu makinede GERÇEK ölçüm): `BLOCKED`.**
+
+Bu adımda veri kopyalanmadı, pCloud ayarı değiştirilmedi,
+`HASARBOTU_AGENT_ROOTS` yazılmadı ve hiçbir servis başlatılmadı.
+`hasarbotu-file-agent` ölçüm sonunda da `Disabled` + `Stopped`, makine ve
+süreç kapsamlı `HASARBOTU_AGENT_ROOTS` değerleri de tanımsız kaldı.
+
+### 2d.1 Salt-okunur araç
+
+```powershell
+Set-Location -LiteralPath '<repository-root>'
+
+# pCloud sync ayarı yapılmadan ÖNCE:
+.\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
+  -Stage BeforeSync
+
+# pCloud hedefi tamamen senkronize ettikten SONRA, fakat
+# HASARBOTU_AGENT_ROOTS/servis değişiminden ÖNCE:
+.\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
+  -Stage AfterSync
+```
+
+Araç `storage-sync-migration-preflight/1.0.0` JSON özeti üretir:
+
+- kaynak/hedef dosya, klasör, bayt ve reparse-point sayısı,
+- hedef sürücü toplam/boş alanı ve kaynak boyutunun 3 katı kapasite kapısı,
+- `BeforeSync`te kaynaktaki **her dosyanın** SHA-256 ile gerçek
+  okunabilirliği,
+- `AfterSync`te iki kökün göreli-yol eşlemeli **tam** SHA-256
+  karşılaştırması,
+- tarama başı/sonu envanter farkı ve snapshot kararlılığı,
+- yalnız güvenli hata kodu/sayısı; dosya adı, göreli/mutlak yol ve ham hata
+  metni YOKTUR.
+
+Araç kaynak/hedefte kanıt veya temp dosyası oluşturmaz; ACL, registry,
+ortam değişkeni, pCloud ve servis durumuna yazmaz. `0=pass`, `2=blocked`,
+`1=araç/önkoşul hatası`dır.
+
+### 2d.2 Ölçülen envanter ve kapasite
+
+Tam hash başlangıcındaki salt-okunur envanter:
+
+```text
+Kaynak:
+  Dosya       : 6.363
+  Klasör      : 623
+  Boyut       : 9.324.951.196 bayt
+  Reparse     : 0
+
+Hedef:
+  Dosya       : 0
+  Klasör      : 0
+  Boyut       : 0 bayt
+  Boş         : Evet
+  Reparse     : 0
+
+C:\ (hash çalışmasının ölçüm anı):
+  Toplam      : 999.124.103.168 bayt
+  Boş         : 780.604.567.552 bayt
+  3x gereken  : 27.974.853.588 bayt
+  Kapasite    : PASS
+```
+
+Hedef NTFS, reparse point değil ve D6'daki dar ACL'i koruyor: yalnız
+Administrators `FullControl`, pCloud'u çalıştıran kullanıcı `Modify` ve
+`svc-hb-fileagent` `Modify`; miras kapalı.
+
+Önceki 2026-07-29 ölçümüne göre kaynak büyümüştür (6.258 → 6.363 dosya,
+9.279.237.358 → 9.324.951.196 bayt). Bu nedenle eski envanter artık geçiş
+kanıtı değildir; her gerçek deneme güncel ölçümle başlamalıdır.
+
+### 2d.3 pCloud yapılandırma sonucu
+
+- pCloud `5.1.8.0` etkileşimli kullanıcı oturumunda çalışıyor ve otomatik
+  başlangıç kaydı mevcut.
+- Registry `SyncDrive=P:\`; `P:` hâlâ `pCloud Drive`, `DriveType=2`,
+  `exFAT` sanal sürücüdür.
+- Canlı pCloud DB kilitli olduğu için yazma/kopya/servis durdurma yapılmadan,
+  güncel base DB yalnız `mode=ro&immutable=1` ile okundu. `syncfolder=0`,
+  `syncfolderdelayed=0`; hedef için kayıt yoktu. Registry, boş hedef ve
+  logda hedef izi bulunmaması da aynı sonucu destekliyor.
+- Windows UI otomasyon bağlantısı bu oturumda açılamadığı için pCloud
+  ekranındaki menü görsel olarak doğrulanamadı. Ancak mevcut yerel
+  yapılandırmanın hedef senkron klasöre geçirilmediği yukarıdaki bağımsız
+  salt-okunur kanıtlarla uyumludur.
+
+Sonuç: pCloud ayarı **henüz sanal sürücü modundadır**; hedef senkron klasör
+olarak yapılandırılmamıştır. D7 preflight bunu değiştirmez.
+
+### 2d.4 Tam SHA-256 sonucu ve durdurma kararı
+
+Gerçek `BeforeSync` çalışması 5 dakika 49 saniye sürdü:
+
+```text
+Başlangıç dosyası : 6.363
+Hashlenen          : 6.353
+G/Ç hatası         : 10
+Manifest SHA-256   : ÜRETİLMEDİ (fail-closed)
+Kaynak snapshot    : KARARSIZ
+Hedef snapshot     : KARARLI / BOŞ
+Çıkış              : 2 / blocked
+Blocker            : SOURCE_FULL_HASH_INCOMPLETE
+Blocker            : SOURCE_CHANGED_DURING_PREFLIGHT
+```
+
+Tarama hemen sonrasında kaynak 6.398 dosya / 9.330.146.392 bayt olarak
+yeniden ölçüldü; tarama sırasında 35 dosya ve 5.195.196 bayt eklenmiştir.
+Bu, kaynakta gerçek yazma/üretim etkinliği bulunduğunu kanıtlar. Tam hash
+okuması ayrıca pCloud önbelleği nedeniyle C: boş alanını ölçüm boyunca
+değiştirebilir; kapasite payı yine çok yüksektir.
+
+**Durdurma ölçütü tetiklendi:** 10 G/Ç hatası çözülmeden ve kaynak yazımları
+kontrollü bir bakım penceresinde durdurulup `BeforeSync` tek ve kararlı
+snapshot üzerinde `pass/0` vermeden pCloud hedef senkronizasyonu
+başlatılmaz. Daha sonra `AfterSync` için sayı+boyut+tam SHA-256
+`pass/0` olmadan `HASARBOTU_AGENT_ROOTS` değiştirilmez ve File Agent
+etkinleştirilmez/başlatılmaz.
+
 ## 3. WinSW servislerinin kurulumu
 
 **Sahip:** Kurulumu yapan operatör.

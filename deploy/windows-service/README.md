@@ -1,7 +1,7 @@
-# HasarBotu V2 — Windows servis dağıtım araçları (D5, HB-2026-108)
+# HasarBotu V2 — Windows servis ve depolama geçiş araçları (D5–D7)
 
 Bu dizin **kod değildir**; Faz A ofis dağıtımı için WinSW servis şablonları
-ve iki yardımcı PowerShell betiği içerir. Tam prosedür için:
+ve salt-okunur/planlı PowerShell araçları içerir. Tam prosedür için:
 
 **→ [`docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`](../../docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md)**
 
@@ -13,6 +13,8 @@ ve iki yardımcı PowerShell betiği içerir. Tam prosedür için:
 | `hasarbotu-file-agent.winsw.xml` | File Agent için WinSW servis **şablonu**. Aynı yer tutucu modeli. |
 | `install-services.ps1` | Şablonları render edip WinSW ile kurar. `-Apply` verilmeden yalnız PLAN yazdırır, hiçbir değişiklik yapmaz. |
 | `probe-p-drive-system-context.ps1` | Bir sürücü harfinin SYSTEM (Windows servis) bağlamından GERÇEKTEN görünüp görünmediğini geçici bir Görev Zamanlayıcı görevi ile ölçer. Görev KAYDI her durumda kaldırılır; sonuç/log `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı, kalıcı audit kanıtı olarak bırakılır. |
+| `setup-file-agent-service-account.ps1` | D6 için adanmış File Agent hesabı, LSA hakları, dar ACL ve WinSW kurulumunu planlar; yalnız açık `-Apply` ile değişiklik yapar ve hata halinde geri alır. |
+| `test-storage-sync-migration-preflight.ps1` | D7 için tamamen salt-okunur envanter/kapasite/tam SHA-256 kapısıdır. Yol veya dosya adı sızdırmadan JSON özet ve fail-closed çıkış kodu üretir; dosya, ayar, ortam değişkeni veya servis değiştirmez. |
 
 ## Bu repo'da OLMAYANLAR (bilinçli)
 
@@ -27,7 +29,9 @@ ve iki yardımcı PowerShell betiği içerir. Tam prosedür için:
   ayrı ayarlanır — `services/api/src/config.ts`'in zaten uyguladığı
   "process ortamından oku, repo'ya/`.env`'e yazma" kuralıyla birebir
   tutarlıdır.
-- **Gerçek kurulum.** Bu pakette hiçbir servis gerçek bir makineye
-  kurulmadı; `install-services.ps1` yalnız sözdizimi ve ön koşul
-  doğrulama testleriyle (bkz. `scripts/check-windows-service-configs.mjs`
-  ve repo testleri) kanıtlandı.
+- **Kendiliğinden gerçek kurulum/geçiş.** Araçlar açık `-Apply` olmadan
+  kurulum yapmaz; D7 preflight aracı ise hiçbir modda yazma yapmaz. Bu
+  makinedeki gerçek D6 sonucu ve D7 salt-okunur ölçümü runbook/karar
+  günlüğünde ayrıca kayıtlıdır. pCloud ayarı, veri kopyalama,
+  `HASARBOTU_AGENT_ROOTS` değişikliği ve servis başlatma bu araçların
+  kendiliğinden yaptığı işlemler değildir.
