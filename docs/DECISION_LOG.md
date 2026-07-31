@@ -4283,3 +4283,40 @@ erisimiyle sinirli ProgramData tanilama raporlari yazildi. Kaynak dosya,
 pCloud ayari, hedef, registry/env veya servis durumu degistirilmedi.
 Runtime/is mantigi, IPC, dependency, veri modeli ve uygulama veri yazma yolu
 degismedi.
+
+## 2026-07-31 - HB-2026-123: D7 exact ghost exclusion ile `BeforeSync` PASS
+
+Kapsam: Yalniz admin-only kanit paketinde dogrulanan 10 ghost kaydin exact
+path/fileId ciftiyle salt-okunur preflight disinda tutulmasi istendi.
+Wildcard, uzanti ve klasor kurali; kaynak/hedef mutasyonu; pCloud, env ve
+servis degisikligi yasakti.
+
+Karar ve tooling:
+
+- `storage-ghost-exclusion/1.0.0` manifesti tam 10 kayitla, SHA-256 sidecar
+  ve Administrators-only ACL ile olusturuldu. Hassas path/fileId degerleri
+  repo, commit ve konsol ozetine alinmadi.
+- Preflight `storage-sync-migration-preflight/1.1.0` oldu. Manifest yoksa,
+  SHA-256/sidecar/ACL gecmezse, kayit sayisi veya exact path degisirse ya da
+  yerel pCloud DB `fileId + parentFolderId + name + size + hash + time/flags`
+  bagi koparsa hash taramasindan once fail-closed durur.
+- Yerel DB dogrulamasi `node:sqlite` ile `mode=ro&immutable=1` acilir. Sadece
+  guvenli durum/sayac ciktisi verir; wildcard, uzanti veya klasor bazli
+  exclusion uretilmez.
+- Negatif kapida manifestsiz kosu
+  `GHOST_EXCLUSION_MANIFEST_REQUIRED`/exit 1 verdi. Gecerli manifest 10/10
+  exact path ve 10/10 yerel DB metadata eslesmesi verdi.
+
+Gercek `BeforeSync` sonucu:
+
+- 6.404 kaynak metadata girdisi gozlemlendi; yalniz 10 yetkili ghost kayit
+  dislandi; 6.394/6.394 dosya SHA-256 ile okundu.
+- Hash hatasi 0, kaynak snapshot kararli, hedef bos, 3x kapasite PASS ve
+  blocker 0. Nihai sonuc `pass/0`.
+- Veri kopyalanmadi/silinmedi/tasinmadi; pCloud ayari, registry/env ve servis
+  durumu degistirilmedi.
+
+Sonraki karar: Ayrica onayli operator adiminda hedef senkron klasoru
+yapilandirilip tam senkronizasyon beklenecek. Ayni exact manifestle
+`AfterSync` sayi+boyut+tam SHA-256 `pass/0` olmadan
+`HASARBOTU_AGENT_ROOTS` veya File Agent durumu degistirilmeyecek.

@@ -11,7 +11,11 @@ param(
     [int]$RequiredFreeMultiplier = 3,
 
     [ValidateRange(0, 10000)]
-    [int]$ProgressInterval = 500
+    [int]$ProgressInterval = 500,
+
+    [string]$GhostExclusionManifestPath,
+
+    [string]$PCloudLocalDatabasePath
 )
 
 Set-StrictMode -Version Latest
@@ -24,6 +28,10 @@ $ErrorActionPreference = 'Stop'
 # - Kaynak veya hedefte gecici kanit dosyasi OLUSTURMAZ.
 # - Gercek dosya adlarini, goreli/mutlak yollari veya hata mesajlarini
 #   ciktiya YAZMAZ.
+# - Hash + Administrators-only ACL ile korunan exact ghost exclusion manifesti
+#   olmadan taramaya BASLAMAZ. Yalniz manifestteki 10 exact path/fileId cifti,
+#   canli yerel pCloud DB kaydi da birebir eslesirse kaynak snapshot'indan
+#   cikarilir. Wildcard, uzanti veya klasor kurali YOKTUR.
 # - BeforeSync: hedefin boslugunu, 3x kapasiteyi ve kaynaktaki HER dosyanin
 #   SHA-256 ile gercekten okunabildigini fail-closed dogrular.
 # - AfterSync: iki kokteki HER dosyayi goreli-yol eslemeli SHA-256 ile
@@ -55,6 +63,179 @@ function Add-ErrorCount {
     }
 }
 
+function Throw-SafePreflightError {
+    param([string]$Code)
+
+    $exception = [System.InvalidOperationException]::new($Code)
+    $exception.Data['SafeCode'] = $Code
+    throw $exception
+}
+
+function Test-AdministratorsOnlyFile {
+    param([string]$Path)
+
+    try {
+        if (-not [System.IO.File]::Exists($Path)) {
+            return $false
+        }
+
+        $acl = Get-Acl -LiteralPath $Path
+        if (-not $acl.AreAccessRulesProtected) {
+            return $false
+        }
+
+        $administratorsSid = 'S-1-5-32-544'
+        $ownerSid = ([System.Security.Principal.NTAccount]$acl.Owner).Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+        if ($ownerSid -ne $administratorsSid) {
+            return $false
+        }
+
+        $rules = @($acl.GetAccessRules(
+            $true,
+            $true,
+            [System.Security.Principal.SecurityIdentifier]
+        ))
+        if ($rules.Count -ne 1) {
+            return $false
+        }
+
+        $rule = $rules[0]
+        $fullControl = [System.Security.AccessControl.FileSystemRights]::FullControl
+        return (
+            $rule.IdentityReference.Value -eq $administratorsSid -and
+            $rule.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+            -not $rule.IsInherited -and
+            ($rule.FileSystemRights -band $fullControl) -eq $fullControl
+        )
+    }
+    catch {
+        return $false
+    }
+}
+
+function Get-ValidatedGhostExclusion {
+    param(
+        [string]$ManifestPath,
+        [string]$SourceRoot,
+        [string]$PCloudDatabasePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_MANIFEST_REQUIRED'
+    }
+
+    $manifestFullPath = [System.IO.Path]::GetFullPath($ManifestPath)
+    $sidecarPath = $manifestFullPath + '.sha256'
+    if (
+        -not (Test-AdministratorsOnlyFile $manifestFullPath) -or
+        -not (Test-AdministratorsOnlyFile $sidecarPath)
+    ) {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_ADMIN_ACL_REQUIRED'
+    }
+
+    $sidecarText = [System.IO.File]::ReadAllText($sidecarPath).Trim()
+    $sidecarMatch = [System.Text.RegularExpressions.Regex]::Match(
+        $sidecarText,
+        '^([a-f0-9]{64})  ([^\r\n]+)$',
+        [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+    )
+    if (
+        -not $sidecarMatch.Success -or
+        $sidecarMatch.Groups[2].Value -ne [System.IO.Path]::GetFileName($manifestFullPath)
+    ) {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_SIDECAR_INVALID'
+    }
+
+    $actualHash = (Get-FileHash -LiteralPath $manifestFullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $sidecarMatch.Groups[1].Value) {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_HASH_MISMATCH'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($PCloudDatabasePath)) {
+        if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+            Throw-SafePreflightError 'PCLOUD_LOCAL_DATABASE_NOT_CONFIGURED'
+        }
+        $PCloudDatabasePath = Join-Path $env:LOCALAPPDATA 'pCloud\data.db'
+    }
+    $pcloudDatabaseFullPath = [System.IO.Path]::GetFullPath($PCloudDatabasePath)
+    if (-not [System.IO.File]::Exists($pcloudDatabaseFullPath)) {
+        Throw-SafePreflightError 'PCLOUD_LOCAL_DATABASE_NOT_FOUND'
+    }
+
+    $validatorPath = Join-Path $PSScriptRoot 'validate-storage-ghost-exclusion.mjs'
+    if (-not [System.IO.File]::Exists($validatorPath)) {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_VALIDATOR_NOT_FOUND'
+    }
+
+    $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -eq $nodeCommand) {
+        Throw-SafePreflightError 'NODE_RUNTIME_NOT_FOUND'
+    }
+
+    try {
+        $stdout = & $nodeCommand.Source `
+            $validatorPath `
+            '--manifest' $manifestFullPath `
+            '--source-root' $SourceRoot `
+            '--pcloud-db' $pcloudDatabaseFullPath `
+            2>$null | Out-String
+        $validatorExitCode = $LASTEXITCODE
+    }
+    catch {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_VALIDATOR_START_FAILED'
+    }
+
+    try {
+        $validation = $stdout | ConvertFrom-Json
+    }
+    catch {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_VALIDATOR_OUTPUT_INVALID'
+    }
+
+    if ($validation.Status -ne 'pass' -or $validatorExitCode -ne 0) {
+        $safeCode = [string]$validation.ErrorCode
+        if ($safeCode -cnotmatch '^[A-Z0-9_]+$') {
+            $safeCode = 'GHOST_EXCLUSION_VALIDATION_FAILED'
+        }
+        Throw-SafePreflightError $safeCode
+    }
+    if (
+        $validation.EntryCount -ne 10 -or
+        $validation.ExactPathMatchedCount -ne 10 -or
+        $validation.LocalDbMatchedCount -ne 10 -or
+        $validation.WildcardRuleCount -ne 0 -or
+        $validation.ExtensionRuleCount -ne 0 -or
+        $validation.FolderRuleCount -ne 0
+    ) {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_VALIDATION_COUNTS_INVALID'
+    }
+
+    try {
+        $manifest = [System.IO.File]::ReadAllText($manifestFullPath) | ConvertFrom-Json
+    }
+    catch {
+        Throw-SafePreflightError 'GHOST_EXCLUSION_MANIFEST_JSON_INVALID'
+    }
+
+    $relativePaths = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($entry in $manifest.Entries) {
+        if (-not $relativePaths.Add([string]$entry.RelativePath)) {
+            Throw-SafePreflightError 'GHOST_EXCLUSION_DUPLICATE_PATH'
+        }
+    }
+
+    return [pscustomobject]@{
+        RelativePaths = $relativePaths
+        EntryCount = 10
+        ManifestSha256 = $actualHash
+        LocalDbMatchedCount = 10
+    }
+}
+
 function ConvertTo-Hex {
     param([byte[]]$Bytes)
 
@@ -81,7 +262,10 @@ function Get-SafeRoot {
 }
 
 function Get-TreeSnapshot {
-    param([string]$Root)
+    param(
+        [string]$Root,
+        [System.Collections.Generic.HashSet[string]]$ExcludedRelativePaths
+    )
 
     $rootInfo = [System.IO.DirectoryInfo]::new($Root)
     $rootInfo.Refresh()
@@ -97,6 +281,10 @@ function Get-TreeSnapshot {
     $directories = 0
     $reparsePoints = 0
     $bytes = [int64]0
+    $observedFiles = 0
+    $observedBytes = [int64]0
+    $excludedFiles = 0
+    $excludedBytes = [int64]0
 
     if ($rootIsReparsePoint) {
         $reparsePoints = 1
@@ -130,6 +318,17 @@ function Get-TreeSnapshot {
                     [System.IO.Path]::AltDirectorySeparatorChar
                 )
 
+                $observedFiles++
+                $observedBytes += [int64]$file.Length
+                if (
+                    $null -ne $ExcludedRelativePaths -and
+                    $ExcludedRelativePaths.Contains($relativePath)
+                ) {
+                    $excludedFiles++
+                    $excludedBytes += [int64]$file.Length
+                    continue
+                }
+
                 $record = [pscustomobject]@{
                     RelativePath = $relativePath
                     FullName = $file.FullName
@@ -153,6 +352,10 @@ function Get-TreeSnapshot {
         DirectoryCount = $directories
         Bytes = $bytes
         ReparsePointCount = $reparsePoints
+        ObservedFileCount = $observedFiles
+        ObservedBytes = $observedBytes
+        ExcludedFileCount = $excludedFiles
+        ExcludedBytes = $excludedBytes
     }
 }
 
@@ -166,7 +369,11 @@ function Test-SnapshotEqual {
         $Before.FileCount -ne $After.FileCount -or
         $Before.DirectoryCount -ne $After.DirectoryCount -or
         $Before.Bytes -ne $After.Bytes -or
-        $Before.ReparsePointCount -ne $After.ReparsePointCount
+        $Before.ReparsePointCount -ne $After.ReparsePointCount -or
+        $Before.ObservedFileCount -ne $After.ObservedFileCount -or
+        $Before.ObservedBytes -ne $After.ObservedBytes -or
+        $Before.ExcludedFileCount -ne $After.ExcludedFileCount -or
+        $Before.ExcludedBytes -ne $After.ExcludedBytes
     ) {
         return $false
     }
@@ -229,6 +436,10 @@ function Get-SnapshotDelta {
         ReparsePointCountDelta = (
             $After.ReparsePointCount - $Before.ReparsePointCount
         )
+        ObservedFileCountDelta = $After.ObservedFileCount - $Before.ObservedFileCount
+        ObservedBytesDelta = $After.ObservedBytes - $Before.ObservedBytes
+        ExcludedFileCountDelta = $After.ExcludedFileCount - $Before.ExcludedFileCount
+        ExcludedBytesDelta = $After.ExcludedBytes - $Before.ExcludedBytes
     }
 }
 
@@ -400,8 +611,13 @@ try {
         throw [System.ArgumentException]::new('ROOTS_MUST_BE_DIFFERENT')
     }
 
-    $sourceBefore = Get-TreeSnapshot $source
-    $targetBefore = Get-TreeSnapshot $target
+    $ghostExclusion = Get-ValidatedGhostExclusion `
+        $GhostExclusionManifestPath `
+        $source `
+        $PCloudLocalDatabasePath
+
+    $sourceBefore = Get-TreeSnapshot $source $ghostExclusion.RelativePaths
+    $targetBefore = Get-TreeSnapshot $target $null
 
     $targetDriveRoot = [System.IO.Path]::GetPathRoot($target)
     $targetDrive = [System.IO.DriveInfo]::new($targetDriveRoot)
@@ -410,6 +626,9 @@ try {
 
     if ($sourceBefore.ReparsePointCount -gt 0) {
         Add-Blocker $blockers 'SOURCE_REPARSE_POINT_FOUND'
+    }
+    if ($sourceBefore.ExcludedFileCount -ne $ghostExclusion.EntryCount) {
+        Throw-SafePreflightError 'SOURCE_GHOST_EXCLUSION_SET_MISMATCH'
     }
     if ($targetBefore.ReparsePointCount -gt 0) {
         Add-Blocker $blockers 'TARGET_REPARSE_POINT_FOUND'
@@ -462,8 +681,8 @@ try {
         }
     }
 
-    $sourceAfter = Get-TreeSnapshot $source
-    $targetAfter = Get-TreeSnapshot $target
+    $sourceAfter = Get-TreeSnapshot $source $ghostExclusion.RelativePaths
+    $targetAfter = Get-TreeSnapshot $target $null
     $sourceStable = Test-SnapshotEqual $sourceBefore $sourceAfter
     $targetStable = Test-SnapshotEqual $targetBefore $targetAfter
     $sourceDelta = Get-SnapshotDelta $sourceBefore $sourceAfter
@@ -471,6 +690,9 @@ try {
 
     if (-not $sourceStable) {
         Add-Blocker $blockers 'SOURCE_CHANGED_DURING_PREFLIGHT'
+    }
+    if ($sourceAfter.ExcludedFileCount -ne $ghostExclusion.EntryCount) {
+        Add-Blocker $blockers 'SOURCE_GHOST_EXCLUSION_SET_CHANGED'
     }
     if (-not $targetStable) {
         Add-Blocker $blockers 'TARGET_CHANGED_DURING_PREFLIGHT'
@@ -494,13 +716,17 @@ try {
     }
 
     $result = [ordered]@{
-        SchemaVersion = 'storage-sync-migration-preflight/1.0.0'
+        SchemaVersion = 'storage-sync-migration-preflight/1.1.0'
         Stage = $Stage
         Status = $status
         ReadOnly = $true
         StartedAtUtc = $startedAtUtc.ToString('o')
         CompletedAtUtc = [DateTime]::UtcNow.ToString('o')
         Source = [ordered]@{
+            ObservedFileCount = $sourceBefore.ObservedFileCount
+            ObservedBytes = $sourceBefore.ObservedBytes
+            ExcludedFileCount = $sourceBefore.ExcludedFileCount
+            ExcludedBytes = $sourceBefore.ExcludedBytes
             FileCount = $sourceBefore.FileCount
             DirectoryCount = $sourceBefore.DirectoryCount
             Bytes = $sourceBefore.Bytes
@@ -510,10 +736,26 @@ try {
             HashErrors = $sourceHashResult.Errors
             ManifestSha256 = $sourceHashResult.ManifestSha256
             SnapshotStable = $sourceStable
+            FinalObservedFileCount = $sourceAfter.ObservedFileCount
+            FinalObservedBytes = $sourceAfter.ObservedBytes
+            FinalExcludedFileCount = $sourceAfter.ExcludedFileCount
+            FinalExcludedBytes = $sourceAfter.ExcludedBytes
             FinalFileCount = $sourceAfter.FileCount
             FinalDirectoryCount = $sourceAfter.DirectoryCount
             FinalBytes = $sourceAfter.Bytes
             Delta = $sourceDelta
+        }
+        GhostExclusion = [ordered]@{
+            Required = $true
+            Policy = 'exact_windows_path_and_pcloud_file_id'
+            ManifestSha256 = $ghostExclusion.ManifestSha256
+            EntryCount = $ghostExclusion.EntryCount
+            InitialExactPathMatchCount = $sourceBefore.ExcludedFileCount
+            FinalExactPathMatchCount = $sourceAfter.ExcludedFileCount
+            LocalDbMatchedCount = $ghostExclusion.LocalDbMatchedCount
+            WildcardRuleCount = 0
+            ExtensionRuleCount = 0
+            FolderRuleCount = 0
         }
         Target = [ordered]@{
             FileCount = $targetBefore.FileCount
@@ -587,13 +829,21 @@ try {
 }
 catch {
     $safeError = [ordered]@{
-        SchemaVersion = 'storage-sync-migration-preflight/1.0.0'
+        SchemaVersion = 'storage-sync-migration-preflight/1.1.0'
         Stage = $Stage
         Status = 'error'
         ReadOnly = $true
         StartedAtUtc = $startedAtUtc.ToString('o')
         CompletedAtUtc = [DateTime]::UtcNow.ToString('o')
-        ErrorCode = 'PREFLIGHT_RUNTIME_ERROR'
+        ErrorCode = if (
+            $null -ne $_.Exception.Data -and
+            $_.Exception.Data.Contains('SafeCode')
+        ) {
+            [string]$_.Exception.Data['SafeCode']
+        }
+        else {
+            'PREFLIGHT_RUNTIME_ERROR'
+        }
         ErrorType = $_.Exception.GetType().Name
         ErrorLine = $_.InvocationInfo.ScriptLineNumber
     }

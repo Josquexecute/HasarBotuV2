@@ -14,7 +14,8 @@ ve salt-okunur/planlı PowerShell araçları içerir. Tam prosedür için:
 | `install-services.ps1` | Şablonları render edip WinSW ile kurar. `-Apply` verilmeden yalnız PLAN yazdırır, hiçbir değişiklik yapmaz. |
 | `probe-p-drive-system-context.ps1` | Bir sürücü harfinin SYSTEM (Windows servis) bağlamından GERÇEKTEN görünüp görünmediğini geçici bir Görev Zamanlayıcı görevi ile ölçer. Görev KAYDI her durumda kaldırılır; sonuç/log `C:\ProgramData\HasarBotu\probe\` altında zaman damgalı, kalıcı audit kanıtı olarak bırakılır. |
 | `setup-file-agent-service-account.ps1` | D6 için adanmış File Agent hesabı, LSA hakları, dar ACL ve WinSW kurulumunu planlar; yalnız açık `-Apply` ile değişiklik yapar ve hata halinde geri alır. |
-| `test-storage-sync-migration-preflight.ps1` | D7 için tamamen salt-okunur envanter/kapasite/tam SHA-256 kapısıdır. Yol veya dosya adı sızdırmadan JSON özet ve fail-closed çıkış kodu üretir; dosya, ayar, ortam değişkeni veya servis değiştirmez. |
+| `test-storage-sync-migration-preflight.ps1` | D7 için tamamen salt-okunur envanter/kapasite/tam SHA-256 kapısıdır. Hashli ve Administrators-only exact ghost exclusion manifesti olmadan taramaya başlamaz; wildcard, uzantı veya klasör kuralı kabul etmez. Yol veya dosya adı sızdırmadan JSON özet ve fail-closed çıkış kodu üretir. |
+| `validate-storage-ghost-exclusion.mjs` | Exclusion manifestindeki tam 10 path/fileId kaydını strict şema ile doğrular ve her fileId+metadata bağını yerel pCloud DB'de `mode=ro&immutable=1` ile yeniden kontrol eder. Yalnız güvenli sayaç/kod çıktısı verir. |
 | `invoke-storage-source-io-diagnostic.ps1` | D7 kaynak `IO_ERROR` kayıtlarını salt-okunur sınıflandırır. İlk hata ve üç kontrollü yeniden okumayı, offline/reparse, paylaşım kilidi ve yol uzunluğu bulgularıyla birlikte yalnız Administrators erişimli `C:\ProgramData\HasarBotu\migration-preflight` raporuna yazar; konsola dosya/yol adı vermez. |
 
 ## Bu repo'da OLMAYANLAR (bilinçli)

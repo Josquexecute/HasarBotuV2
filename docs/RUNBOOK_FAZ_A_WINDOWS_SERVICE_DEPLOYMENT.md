@@ -502,7 +502,10 @@ YAZILMAZ; işlem bittikten sonra parolayı bilen hiçbir kayıt kalmaz
 
 ## 2d. D7 salt-okunur senkron klasör geçiş preflight'ı — HB-2026-121
 
-**Durum (2026-07-31, bu makinede GERÇEK ölçüm): `BLOCKED`.**
+**Güncel durum (2026-07-31, bu makinede GERÇEK ölçüm): `BeforeSync PASS/0`;**
+hedef senkronizasyonu ve `AfterSync` henüz yapılmadı. Aşağıdaki ilk
+`BLOCKED` ölçümü tarihsel tanı kanıtıdır; güncel exact exclusion sonucu
+§2d.6'da kayıtlıdır.
 
 Bu adımda veri kopyalanmadı, pCloud ayarı değiştirilmedi,
 `HASARBOTU_AGENT_ROOTS` yazılmadı ve hiçbir servis başlatılmadı.
@@ -514,31 +517,41 @@ süreç kapsamlı `HASARBOTU_AGENT_ROOTS` değerleri de tanımsız kaldı.
 ```powershell
 Set-Location -LiteralPath '<repository-root>'
 
+# Operatör, admin-only kanıt paketindeki exact manifesti seçer.
+# Manifestin tam yolu repo'ya, komut çıktısına veya genel loga yazılmaz.
+$ghostManifest = '<Administrators-only exact exclusion manifesti>'
+
 # pCloud sync ayarı yapılmadan ÖNCE:
 .\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
-  -Stage BeforeSync
+  -Stage BeforeSync `
+  -GhostExclusionManifestPath $ghostManifest
 
 # pCloud hedefi tamamen senkronize ettikten SONRA, fakat
 # HASARBOTU_AGENT_ROOTS/servis değişiminden ÖNCE:
 .\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
-  -Stage AfterSync
+  -Stage AfterSync `
+  -GhostExclusionManifestPath $ghostManifest
 ```
 
-Araç `storage-sync-migration-preflight/1.0.0` JSON özeti üretir:
+Araç `storage-sync-migration-preflight/1.1.0` JSON özeti üretir:
 
 - kaynak/hedef dosya, klasör, bayt ve reparse-point sayısı,
 - hedef sürücü toplam/boş alanı ve kaynak boyutunun 3 katı kapasite kapısı,
-- `BeforeSync`te kaynaktaki **her dosyanın** SHA-256 ile gerçek
-  okunabilirliği,
+- her iki aşamada hashli/Administrators-only manifest, strict 10 kayıt,
+  exact path ve canlı yerel pCloud DB fileId+metadata bağının doğrulanması,
+- `BeforeSync`te yalnız bu 10 exact ghost kayıt dışındaki **her dosyanın**
+  SHA-256 ile gerçek okunabilirliği,
 - `AfterSync`te iki kökün göreli-yol eşlemeli **tam** SHA-256
   karşılaştırması,
 - tarama başı/sonu envanter farkı ve snapshot kararlılığı,
 - yalnız güvenli hata kodu/sayısı; dosya adı, göreli/mutlak yol ve ham hata
   metni YOKTUR.
 
-Araç kaynak/hedefte kanıt veya temp dosyası oluşturmaz; ACL, registry,
-ortam değişkeni, pCloud ve servis durumuna yazmaz. `0=pass`, `2=blocked`,
-`1=araç/önkoşul hatası`dır.
+Wildcard, uzantı veya klasör bazlı exclusion kabul edilmez. Manifest yoksa,
+hash/ACL doğrulanmazsa, 10'lu küme değişirse ya da fileId/metadata bağı
+koparsa kaynak taraması başlamadan fail-closed durur. Araç kaynak/hedefte
+kanıt veya temp dosyası oluşturmaz; ACL, registry, ortam değişkeni, pCloud
+ve servis durumuna yazmaz. `0=pass`, `2=blocked`, `1=araç/önkoşul hatası`dır.
 
 ### 2d.2 Ölçülen envanter ve kapasite
 
@@ -613,7 +626,7 @@ Bu, kaynakta gerçek yazma/üretim etkinliği bulunduğunu kanıtlar. Tam hash
 okuması ayrıca pCloud önbelleği nedeniyle C: boş alanını ölçüm boyunca
 değiştirebilir; kapasite payı yine çok yüksektir.
 
-**Durdurma ölçütü tetiklendi:** 10 G/Ç hatası çözülmeden ve kaynak yazımları
+**Bu tarihsel koşuda durdurma ölçütü tetiklendi:** 10 G/Ç hatası çözülmeden ve kaynak yazımları
 kontrollü bir bakım penceresinde durdurulup `BeforeSync` tek ve kararlı
 snapshot üzerinde `pass/0` vermeden pCloud hedef senkronizasyonu
 başlatılmaz. Daha sonra `AfterSync` için sayı+boyut+tam SHA-256
@@ -677,8 +690,10 @@ kaynağa yazan iş süreçleri durduktan sonra çalıştırılacak kesin komut:
   -ProgressInterval 500
 ```
 
-Tanılama `ActualInitialErrorCount=0` göstermeden geçiş preflight'ına devam
-edilmez. Sıfır hata elde edildikten sonra aynı yazmasız bakım penceresinde:
+HB-2026-122'deki `ActualInitialErrorCount=0` ölçütü tarihsel genel kuraldır.
+HB-2026-123 bunu yalnız kanıtlanmış 10 exact path/fileId kaydı için daraltır;
+bu küme dışındaki tek okuma hatası veya kümedeki tek değişiklik yine blokerdir.
+Güncel aynı yazmasız bakım penceresi komutu:
 
 ```powershell
 & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
@@ -686,8 +701,29 @@ edilmez. Sıfır hata elde edildikten sonra aynı yazmasız bakım penceresinde:
   -ExecutionPolicy Bypass `
   -File ".\deploy\windows-service\test-storage-sync-migration-preflight.ps1" `
   -Stage BeforeSync `
+  -GhostExclusionManifestPath $ghostManifest `
   -ProgressInterval 500
 ```
+
+### 2d.6 Exact ghost exclusion ve güncel `BeforeSync` sonucu — HB-2026-123
+
+- Admin-only kanıt zincirindeki 10 kayıt sunucuda `MISSING`, yerelde
+  `stale_temp_candidate` olarak doğrulandı; F01 revision farkı `PASS` ile
+  kapandı. Path/fileId değerleri yalnız korumalı manifesttedir.
+- Exclusion manifesti tam 10 exact path/fileId kaydı taşır. Wildcard,
+  uzantı veya klasör kuralı yoktur. Manifest ve SHA-256 sidecar mirası
+  kapalı, owner/tek ACE Administrators FullControl olarak doğrulandı.
+- Araç manifest olmadan `GHOST_EXCLUSION_MANIFEST_REQUIRED` ile hash
+  taramasından önce durdu. Geçerli manifest 10/10 exact path ve 10/10
+  salt-okunur yerel pCloud DB metadata bağı verdi.
+- Gerçek tekrar koşusu: 6.404 gözlenen metadata girdisi, 10 exact exclusion,
+  6.394/6.394 başarılı SHA-256, 0 hash hatası, kararlı kaynak snapshot,
+  boş hedef, geçen kapasite kapısı ve sıfır blocker. Sonuç `PASS/0`.
+- Veri kopyalanmadı; pCloud ayarı, registry/env ve servis durumu değişmedi.
+
+Sonraki adım ayrı operatör onayıyla hedef senkron klasörünü yapılandırıp
+tam senkronizasyonu beklemektir. Ardından aynı manifestle `AfterSync`
+sayı+boyut+tam SHA-256 `PASS/0` olmadan ortam veya servis geçişi yapılmaz.
 
 ## 3. WinSW servislerinin kurulumu
 

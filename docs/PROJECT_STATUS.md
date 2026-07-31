@@ -10,30 +10,28 @@ Son güncelleme: 2026-07-31
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 
-- **Sonuç: BLOCKED; geçişe başlanmadı.** Kaynak başlangıçta 6.363
-  dosya / 623 klasör / 9.324.951.196 bayt, hedef 0 dosya / 0 klasör /
-  0 bayt ve boştu. C: için 3× kapasite kapısı geçti.
-- pCloud `5.1.8.0` çalışıyor; registry hâlâ `SyncDrive=P:\`, güncel
-  salt-okunur base DB snapshot'ında `syncfolder=0` ve
-  `syncfolderdelayed=0`. Hedef senkron klasör olarak yapılandırılmamış.
-- Tam kaynak SHA-256 okuması 6.353/6.363 dosyada tamamlandı; 10 G/Ç
-  hatası nedeniyle manifest üretilmedi. Tarama sırasında kaynak ayrıca
-  35 dosya / 5.195.196 bayt büyüdü; snapshot kararlı değildi.
-- Kalıcı tooling:
-  `deploy/windows-service/test-storage-sync-migration-preflight.ps1` ve
-  `deploy/windows-service/invoke-storage-source-io-diagnostic.ps1`.
-  İkinci araç hassas yolları yalnız Administrators erişimli ProgramData
-  raporuna yazar; konsola ve repo dokümanlarına taşımaz.
-- On hatanın tamamı üç kontrollü yeniden okumada da kalıcı
-  `System.IO.IOException / 0x8007045D / 1117 (ERROR_IO_DEVICE)` verdi.
-  Offline/recall, dosya/üst dizin reparse, paylaşım kilidi ve yol uzunluğu
-  bulgusu yoktur. Yeniden okumayla düzelen dosya olmadı.
-- Veri kopyalama, pCloud ayarı, `HASARBOTU_AGENT_ROOTS` değişikliği ve
-  servis başlatma yapılmadı. File Agent `Disabled/Stopped`, hedef boş ve
-  D6 ACL'i değişmeden kaldı.
-- Sonraki tek adım: kaynağa yazan iş süreçlerini kontrollü bakım
-  penceresinde durdurup tanılama aracını yeniden çalıştırmak; sıfır hata
-  elde edilirse `BeforeSync` çalışmasını `pass/0` ile tamamlamak.
+- **Güncel sonuç: `BeforeSync PASS/0`; geçiş henüz başlatılmadı.** Önceki
+  10 kalıcı G/Ç kaydı, admin-only kanıt zincirinde sunucuda `MISSING`, yerel
+  olarak `stale_temp_candidate` ve exact path/fileId çifti şeklinde
+  doğrulandı. F01 revision ayrımı ayrıca `PASS` ile kapandı.
+- Hashli, yalnız Administrators erişimli exclusion manifesti tam 10 kayıt
+  taşır. Wildcard, uzantı ve klasör kuralı yoktur. Manifest yoksa, hash/ACL
+  bozuksa, kayıt sayısı/kimliği değişirse veya yerel pCloud DB exact metadata
+  bağı koparsa araç kaynak hash taramasına başlamadan fail-closed kapanır.
+- Gerçek tekrar koşusunda 6.404 kaynak metadata girdisi görüldü; yalnız 10
+  yetkili ghost kayıt dışlandı, kalan 6.394 dosyanın tamamı SHA-256 ile
+  okundu. Hash hatası 0, kaynak snapshot kararlı, hedef boş ve 3× kapasite
+  kapısı `PASS`; blocker yoktur.
+- Kalıcı tooling: `test-storage-sync-migration-preflight.ps1`,
+  `validate-storage-ghost-exclusion.mjs` ve
+  `invoke-storage-source-io-diagnostic.ps1`. Hassas yollar/fileId değerleri
+  repo veya konsol çıktısına girmez.
+- Veri kopyalama, pCloud ayarı, registry/env veya servis durumu değişikliği
+  yapılmadı. Hedef boş, File Agent mevcut durumda bırakıldı.
+- Sonraki tek adım: ayrı operatör onayıyla pCloud hedef senkron klasörünü
+  yapılandırıp tam senkronizasyonu beklemek; ardından aynı exact manifestle
+  `AfterSync` sayı+boyut+tam SHA-256 kapısını geçirmek. Bu kapı geçmeden
+  `HASARBOTU_AGENT_ROOTS` veya File Agent durumu değiştirilmez.
 
 ## Mevzuat ve AI Yardımcısı uçtan uca UAT doğrulaması (2026-07-27)
 
