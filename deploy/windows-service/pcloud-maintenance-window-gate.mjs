@@ -18,6 +18,7 @@ export const MINIMUM_QUIET_SECONDS = 600
 const DEFAULT_POLL_SECONDS = 15
 const DEFAULT_MAXIMUM_SECONDS = 1800
 const DATABASE_SNAPSHOT_ATTEMPTS = 5
+const DATABASE_SNAPSHOT_RETRY_DELAY_MS = 250
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
 const DECIMAL_ID_PATTERN = /^[1-9][0-9]*$/
 
@@ -40,6 +41,10 @@ function assert(condition, safeCode) {
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function ordinalCompare(left, right) {
@@ -247,7 +252,15 @@ async function withConsistentPcloudDatabase(databasePath, reader) {
         }
       }
       const after = await captureDatabaseFiles(databasePath)
-      if (!databaseFilesStable(before, after)) continue
+      if (!databaseFilesStable(before, after)) {
+        // HB-2026-127: heavy sustained source reads (a full-tree hash pass)
+        // can leave pCloud's local DB/WAL momentarily busy right afterward.
+        // Retrying with zero backoff can exhaust all attempts before it
+        // settles; a short pause gives a real chance to observe a stable
+        // snapshot instead of failing closed on transient contention.
+        if (attempt < DATABASE_SNAPSHOT_ATTEMPTS) await sleep(DATABASE_SNAPSHOT_RETRY_DELAY_MS)
+        continue
+      }
 
       const snapshotPath = path.join(temporaryDirectory, path.basename(databasePath))
       const database = new DatabaseSync(snapshotPath, { readOnly: true, timeout: 0 })
@@ -267,6 +280,7 @@ async function withConsistentPcloudDatabase(databasePath, reader) {
       if (attempt === DATABASE_SNAPSHOT_ATTEMPTS) {
         fail('PCLOUD_DATABASE_SNAPSHOT_UNSTABLE')
       }
+      await sleep(DATABASE_SNAPSHOT_RETRY_DELAY_MS)
     } finally {
       await rm(temporaryDirectory, { recursive: true, force: true })
     }
