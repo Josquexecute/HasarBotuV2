@@ -322,17 +322,31 @@ try {
 
     $mode = if ($ProbeOnly) { 'probe' } else { 'gate' }
     $maximumSeconds = $MaximumMinutes * 60
-    $gateOutput = & $nodeCommand.Source `
-        $gatePath `
-        '--mode' $mode `
-        '--source-root' $source `
-        '--ghost-manifest' $manifestPath `
-        '--ghost-manifest-sha256' $manifestHash `
-        '--pcloud-db' $databasePath `
-        '--poll-seconds' $PollSeconds `
-        '--maximum-seconds' $maximumSeconds `
-        '--progress-interval' $ProgressInterval | Out-String
-    $gateExitCode = $LASTEXITCODE
+    # HB-2026-126: Node çekirdeği bekleme sırasında ilerleme bilgisini
+    # (MAINTENANCE_WINDOW_PROGRESS / MAINTENANCE_WINDOW_RESET) BİLEREK
+    # stderr'e yazar; bu bir hata değildir. PowerShell 5.1'de yerel exe
+    # stderr satırları $ErrorActionPreference='Stop' altında sonlandırıcı
+    # istisnaya dönüşür ve kapı ilk ilerleme satırında çöker. Yalnız bu
+    # çağrı için tercihi geçici olarak 'Continue' yapıp geri yükle; stdout
+    # akışı ayrı kaldığı için JSON ayrıştırması etkilenmez.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $gateOutput = & $nodeCommand.Source `
+            $gatePath `
+            '--mode' $mode `
+            '--source-root' $source `
+            '--ghost-manifest' $manifestPath `
+            '--ghost-manifest-sha256' $manifestHash `
+            '--pcloud-db' $databasePath `
+            '--poll-seconds' $PollSeconds `
+            '--maximum-seconds' $maximumSeconds `
+            '--progress-interval' $ProgressInterval | Out-String
+        $gateExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     try {
         $gateResult = $gateOutput | ConvertFrom-Json
     }
