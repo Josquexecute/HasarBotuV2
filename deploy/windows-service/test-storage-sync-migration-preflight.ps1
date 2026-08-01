@@ -31,6 +31,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'pcloud-database-quiescence.ps1')
+
 # D7 salt-okunur gecis preflight araci.
 #
 # Guvenlik siniri:
@@ -1112,6 +1114,22 @@ try {
         Add-Blocker $blockers 'MAINTENANCE_WINDOW_SOURCE_BASELINE_CHANGED'
     }
 
+    $quiescence = $null
+    if ($Stage -eq 'D8BeforeSync') {
+        # HB-2026-128: tam kaynak hash gecisi az once bittigi icin pCloud
+        # yerel DB'si kisa sure mesgul kalabilir. DB snapshot kontrolune
+        # (asagida Invoke-MaintenanceWindowCurrentCheck) gecmeden once
+        # data.db/-wal/-shm en az 3 ardisik 5 saniyelik ornekte degismeden
+        # kalmali; aksi halde en fazla 180 saniye bekledikten sonra
+        # fail-closed BLOCKED doner. withConsistentPcloudDatabase'in kendi
+        # dogrulamasi ve 15 dakikalik tazelik kurali bu barrier'dan
+        # BAGIMSIZ ve DEGISTIRILMEMIS kalir.
+        $quiescence = Wait-PCloudDatabaseQuiescence -PCloudDatabasePath $pcloudDatabaseFullPath
+        if ($quiescence.Status -ne 'pass') {
+            Add-Blocker $blockers 'PCLOUD_DATABASE_QUIESCENCE_TIMEOUT'
+        }
+    }
+
     $sourceBaselineMatch = $null
     if ($Stage -eq 'AfterSync') {
         $sourceBaselineMatch = (
@@ -1318,6 +1336,16 @@ try {
             }
             CurrentAtStart = ($null -ne $maintenanceCurrentAtStart)
             CurrentAtEnd = ($null -ne $maintenanceCurrentAtEnd)
+            Quiescence = if ($null -ne $quiescence) {
+                [ordered]@{
+                    Status = $quiescence.Status
+                    ConsecutiveStableCount = $quiescence.ConsecutiveStableCount
+                    ResetCount = $quiescence.ResetCount
+                }
+            }
+            else {
+                $null
+            }
         }
         Target = [ordered]@{
             FileCount = $targetBefore.FileCount
