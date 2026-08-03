@@ -968,6 +968,36 @@ içindir.
    `ACTIVE_SYNC_WINDOW_SOURCE_BASELINE_CHANGED` ile `BLOCKED/2` verir — bu
    durumda taze bir gate+stage çifti yeniden çalıştırılır.
 
+### 2e.4c Tek dosya stale-target repair — `repair-post-sync-stale-target-files.ps1` (HB-2026-130)
+
+`PostSyncRebaseline` gate'i `SOURCE_TARGET_HASH_MISMATCH_AT_PASS` ile BLOCKED
+verirse ve fark, kaynağın gerçekten güncel olduğu (pCloud `filerevision`
+geçmişinde açıkça superseded görünen eski bir hedef kopyası) belgelenmiş
+belirli dosyalarsa, bu **tek** araç o dosyaları kontrollü şekilde onarır.
+Bu depodaki **tek gerçek yazma yolu** olduğu için `install-services.ps1` ile
+aynı Planla→Önizle→Apply modelini kullanır: `-Apply` verilmeden hiçbir yazma
+yapmaz (yedek dizini bile oluşturmaz).
+
+Önkoşul: hash'li, Administrators-only bir forensics raporu (SHA-256, EXIF,
+JPEG bütünlüğü, perceptual hash, pCloud `file`+`filerevision` geçmişi ile
+üretilmiş, her dosyayı `source_current_valid`/`target_current_valid`/
+`ambiguous` sınıflayan) — yalnız `source_current_valid` girişleri işlenir.
+
+```powershell
+.\deploy\windows-service\repair-post-sync-stale-target-files.ps1 `
+  -GhostExclusionManifestPath $ghostManifest `
+  -ForensicsReportPath $forensicsReport `
+  -ForensicsReportSha256 $forensicsReportSha256
+```
+
+`-Apply` olmadan yalnız her dosya için taze doğrulama sonucunu (`would_apply`
+veya blocker kodu) yazdırır. `-Apply` ile, yalnız TÜM şu kontroller taze
+geçerse dosya başına: hedefi Administrators-only+hash'li yedekle (sync kökü
+DIŞINDA), kaynağı hedefin dizininde stage edip hash/JPEG doğrula, atomik
+`[System.IO.File]::Replace` ile değiştir, kaynak=hedef SHA-256 eşitliğini
+yeniden doğrula. Bir dosyanın blockeri diğerlerini durdurmaz. pCloud ayarı,
+sync eşlemesi, env ve servis asla değişmez.
+
 ### 2e.5 AfterSync tam SHA-256 kabul kapısı
 
 pCloud kuyruğu boş ve bütün yazarlar hâlâ durmuşken:

@@ -217,6 +217,48 @@ try {
   errors.push(`D8 post-sync rebaseline tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-130: D8 post-sync stale-target-file repair — bu depodaki İLK
+// gerçek yazma yolu olan araç. Statik kapı, -Apply olmadan hiçbir yazma
+// yapılmadığını ve Add Sync/env/servise hiç dokunulmadığını korur.
+try {
+  const stateProbe = await readFile(`${DEPLOY_DIR}pcloud-stale-target-file-state.mjs`, 'utf8')
+  const repairScript = await readFile(`${DEPLOY_DIR}repair-post-sync-stale-target-files.ps1`, 'utf8')
+
+  assertContains(stateProbe, /This module is READ-ONLY/, 'pcloud-stale-target-file-state.mjs', 'salt-okunur oldugunu belirten dokumantasyon')
+  assertNotContains(stateProbe, /writeFile|WriteAllText|WriteAllBytes|\.exec\(['"]INSERT|\.exec\(['"]UPDATE|\.exec\(['"]DELETE/, 'pcloud-stale-target-file-state.mjs', 'herhangi bir dosya/DB yazma cagrisi')
+
+  assertContains(repairScript, /\[switch\]\$Apply/, 'repair-post-sync-stale-target-files.ps1', 'varsayilan onizleme, yalniz acik -Apply ile gercek yazma')
+  assertContains(repairScript, /ForensicsReportPath/, 'repair-post-sync-stale-target-files.ps1', 'kapsamin hash dogrulanmis forensics raporundan gelmesi (sabit kodlanmis yol listesi degil)')
+  assertContains(repairScript, /SOURCE_CHANGED_SINCE_FORENSICS/, 'repair-post-sync-stale-target-files.ps1', 'kaynak degisimi fail-closed blockeri')
+  assertContains(repairScript, /TARGET_NOT_KNOWN_SUPERSEDED_VERSION/, 'repair-post-sync-stale-target-files.ps1', 'hedefin bilinen eski surum olmama blockeri')
+  assertContains(repairScript, /PCLOUD_TASK_REFERENCE_FOUND/, 'repair-post-sync-stale-target-files.ps1', 'pending task/conflict referansi blockeri')
+  assertContains(repairScript, /TARGET_FILE_LOCKED/, 'repair-post-sync-stale-target-files.ps1', 'acik handle kontrolu')
+  assertContains(repairScript, /Test-AdministratorsOnlyFile/, 'repair-post-sync-stale-target-files.ps1', 'admin-only forensics rapor/manifest ACL kapisi')
+  assertContains(repairScript, /New-AdminOnlySecurity/, 'repair-post-sync-stale-target-files.ps1', 'admin-only yedek/rapor ACL uygulamasi')
+  assertContains(repairScript, /\[System\.IO\.File\]::Replace/, 'repair-post-sync-stale-target-files.ps1', 'atomik replace ilkeli')
+  assertNotContains(repairScript, /SetEnvironmentVariable|Start-Service|Set-Service|Stop-Service|Stop-Process/, 'repair-post-sync-stale-target-files.ps1', 'env/servis mutasyonu')
+
+  const stateProbeTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}pcloud-stale-target-file-state.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (stateProbeTests.status !== 0) {
+    throw new Error(`stale-target-file-state testleri başarısız — ${stateProbeTests.stderr || stateProbeTests.stdout}`)
+  }
+
+  const repairTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}repair-post-sync-stale-target-files.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (repairTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(repairTests.stdout)) {
+    throw new Error(`repair-post-sync-stale-target-files testleri başarısız — ${repairTests.stderr || repairTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`D8 post-sync stale-target-file repair tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

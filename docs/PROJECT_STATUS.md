@@ -51,11 +51,28 @@ Son güncelleme: 2026-07-31
   `AfterSync`e geçilmeyecek şekilde fail-closed durduruldu. Sync eşlemesi,
   Stop/Clear, dosya, env ve servis bu paket boyunca hiç değiştirilmedi.
 - `node --test` (yeni + mevcut pCloud gate testleri) 15/15, `npm run
-  check:deploy` geçti. Sonraki adım: operatör `56AAG629` vakasının bu 4
-  fotoğrafını (neden küçültüldüğü, hangi versiyonun doğru olduğu) inceleyip
-  pCloud'un bu farkı kendiliğinden gidermesini beklemeli veya elle
-  müdahale etmeli; ardından taze gate→stage→`AfterSync` zinciri
-  tekrarlanmalıdır.
+  check:deploy` geçti.
+- **Salt-okunur adli analiz (HB-2026-130a):** SHA-256/EXIF/JPEG bütünlüğü/
+  perceptual hash/pCloud `filerevision` geçmişi ile 4 dosya da
+  `source_current_valid` sınıflandı — hedef, pCloud'un açıkça "superseded"
+  işaretlediği eski (4032×3024) kamera çıktısını taşıyor; kaynak, aynı
+  fotoğrafın pCloud'un current nesnesi olan küçültülmüş (1024×768) türevi.
+- **Kontrollü canlı repair aracı eklendi (HB-2026-130):** bu depodaki İLK
+  gerçek yazma yolu — `repair-post-sync-stale-target-files.ps1` +
+  `pcloud-stale-target-file-state.mjs`, `install-services.ps1` ile aynı
+  Planla→Önizle→Apply modeli. Her dosya için taze fail-closed doğrulama
+  (kaynak/hedef SHA-256 hâlâ forensics anındaki gibi, pCloud current
+  satırı kaynakla eşleşiyor, sıfır task/fstask referansı, hedef kilitli
+  değil) olmadan `-Apply` hiçbir şeye dokunmaz. 24 test (Node+PowerShell,
+  2 gerçek kusur bulup düzeltti: `.NET` `File.Replace(...,$null)` quirk'i
+  ve PS5.1'in `ConvertFrom-Json`/`ConvertTo-Json` dizi-sarma tuhaflığı)
+  hepsi geçti. **Gerçek makinede yalnız salt-okunur PREVIEW çalıştırıldı**
+  (gerçek 4 dosyaya karşı): `preview_ok`, 4/4 `would_apply`, 0 blocker —
+  hiçbir dosya değiştirilmedi, hiçbir yedek alınmadı. Gerçek `-Apply`,
+  kullanıcı onayı bekleniyor.
+- Sonraki adım: kullanıcı onayı sonrası gerçek `-Apply` çalıştırmak, sonra
+  kuyruk=0+quiescence PASS ile taze gate→`PostSyncRebaseline`→`AfterSync`
+  zincirini tamamlamak.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 

@@ -4525,3 +4525,124 @@ Acik kalan: `56AAG629` vakasinin 4 fotografinin neden/nasil kucultuldugu ve
 hangi versiyonun dogru oldugu operator tarafindan belirlenmeli; pCloud'un
 bulut->hedef indirmesini neden tetiklemedigi (yerel kuyruk tablolari sifir
 gosterse de) ayrica arastirilabilir ama bu paketin kapsaminda degil.
+
+## 2026-08-03 - HB-2026-130a: 56AAG629 HASAR 101-104 icin salt-okunur surum adli analizi — hepsi source_current_valid
+
+Kullanici SHA-256, boyut, tarih, cozunurluk, EXIF, JPEG butunlugu/truncation,
+gorsel/perceptual benzerlik, pCloud current object+revision+islem gecmisi ve
+hedefin neden eski kaldigina dair task/DB/log kanitini talep etti; her dosya
+source_current_valid/target_current_valid/ambiguous olarak siniflanacakti.
+Tam yollar yalniz admin-only rapora yazildi; hicbir dosya kopyalanmadi,
+silinmedi, yeniden adlandirilmadi; sync restart/Stop/Clear, pCloud/env/servis
+degisikligi yapilmadi.
+
+Bulgular (4 dosyanin hepsi icin ozdes desen):
+
+- pCloud `file` (current) + `filerevision` (tam gecmis) tablolari: guncel
+  bulut nesnesi KUCUK/yeni surum (kaynakla ayni boyut+saniye hassasiyetinde
+  mtime), buyuk/eski surum ise `filerevision`de acikca ONCEKI (superseded)
+  revizyon olarak kayitli — belirsizlik yok.
+- .NET `System.Drawing` ile EXIF: her iki tarafta da `DateTimeOriginal`
+  BIREBIR ayni (ayni cekim ani, Apple iPhone 14 Pro Max), yalniz cozunurluk
+  farkli (hedef 4032x3024 orijinal kamera cikisi, kaynak 1024x768 kucultulmus
+  turev).
+- JPEG butunlugu (SOI/EOI) her iki tarafta da saglam, truncation yok.
+- 8x8 average-hash perceptual karsilastirma: Hamming mesafesi TAM 0/64 —
+  gorsel icerik ozdes, yalniz cozunurluk/sikistirma farkli.
+- Kaynagin `LastWriteTimeUtc`'si yeni revizyonun bulut `ctime`'iyla saniye
+  hassasiyetinde birebir ortusuyor — kucultme kaynakta yapilip basariyla
+  yuklenmis. wpflog.log olaydan ~2 gun once durdugu icin ek log kaniti yok.
+
+Siniflandirma: 4 dosyanin da tumu `source_current_valid`. Kanit
+Administrators-only pakete yazildi
+(`56aag629-hasar-version-forensics-20260803T110432189Z-919b7cd3.json`).
+
+## 2026-08-03 - HB-2026-130: Kontrollu canli stale-target-file repair araci — ilk gercek yazma yolu, Planla->Onizle->Apply modeli
+
+Forensik analiz (HB-2026-130a) kaynagin dogru oldugunu kanitladiktan sonra
+kullanici "mesai bitimini beklemiyoruz" diyerek bu 4 dosya icin kontrollu
+canli onarim istedi: kaynak dogrulugu forensics raporundan, her dosya oncesi
+taze fail-closed dogrulama (kaynak SHA-256=pCloud current object, hedef
+yalniz superseded eski surum, pending task/conflict/delete yok, acik handle
+yok), eski hedefi sync koku DISINDA Administrators-only+hash'li yedekleme,
+guncel kaynagi once C: uzerinde stage+hash+JPEG dogrulama, sonra hedefte
+atomik replace, sonrasinda kaynak=bulut=hedef hash esitligi dogrulamasi.
+
+**Kritik degerlendirme:** bu depodaki HER ARAC bugune kadar kasitli olarak
+salt-okunuzdu ("hicbir modda yazma yapmaz" AGENTS.md/README boyunca defalarca
+tekrarlanan temel ilke). Bu istek ilk kez gercek dosya icerigine, canli
+pCloud senkron kokunde, gercek musteri (hasar ekspertiz) verisinde yazma
+gerektiriyordu. AGENTS.md #7 "Kritik islem standardi" (Planla->Onizle->
+Kullanici onayi->Uygula->Dogrula->Kesinlestir->Audit) tam olarak bu sinif
+islem icin var ve ayni deseni zaten `install-services.ps1` ile
+`setup-file-agent-service-account.ps1` `-Apply` anahtariyla uyguluyor. Karar:
+araci once TAM insa et ve sentetik fixture'larla test et (gercek veriye hic
+dokunmadan), sonra GERCEK 4 dosyaya karsi salt-okunur PREVIEW calistir,
+somut sonucu kullaniciya goster ve gercek -Apply oncesi tek net onay iste —
+bu, pCloud'un kontrolsuz, canli, ucuncu taraf bir surec olmasi ve bunun ilk
+gercek yazma islemi olmasi nedeniyle CLAUDE.md'nin "veri kaybi riski" +
+"yuksek guvenlik riski" durdurma kriterlerine tam eslesiyor.
+
+Tooling (yeni, mevcut hicbir salt-okunur aracin davranisini degistirmedi):
+
+- `pcloud-stale-target-file-state.mjs`: salt-okunur, tek goreli yol icin
+  pCloud'un TAZE current `file` satirini, tam `filerevision` gecmisini ve
+  `task`/`fstask` referans sayisini doner. Mevcut `pcloud-maintenance-window-gate.mjs`
+  export'larini (`withConsistentPcloudDatabase`, `getExactGhostRootId`,
+  `getTextSetting`) yeniden kullanir.
+- `repair-post-sync-stale-target-files.ps1`: forensics raporunu (hash+ACL)
+  dogrular, yalniz `source_current_valid` girisleri isler. Her dosya icin
+  TAZE (raporun kendisine guvenmeden) yeniden dogrulama: kaynak/hedef
+  SHA-256 hala forensics anindakiyle ayni, pCloud current satiri (boyut+
+  saniye mtime) kaynakla eslesiyor, en eski `filerevision` hedefin boyutuyla
+  eslesiyor, sifir task/fstask referansi, hedef `FileShare.Read` ile
+  acilabiliyor (kilitli degil), kaynak JPEG SOI/EOI saglam. `-Apply`
+  olmadan SIFIR yazma (yedek dizini bile olusturulmaz). `-Apply` ile:
+  Administrators-only+hash'li yedek -> ayni birimde stage+hash+JPEG
+  dogrulama -> `[System.IO.File]::Replace` atomik degistirme -> kaynak=
+  hedef SHA-256 son dogrulama. Bir dosyanin blockeri digerlerini durdurmaz.
+- **Bulunan ve duzeltilen iki gercek kusur (gercek calistirmayla):**
+  (1) `.NET Framework`'te `[System.IO.File]::Replace($src, $dst, $null)`
+  ucuncu parametre icin literal null'u "Yol gecerli bir bicimde degil"
+  ArgumentException'iyla reddediyor (PowerShell 5.1/.NET Framework'e ozgu,
+  izole repro ile dogrulandi) — duzeltme: gercek, ayni dizinde bir atma
+  yedek yolu verip hemen sonra silmek (kendi Administrators-only yedegimiz
+  zaten ayrica aliniyor). (2) Windows PowerShell 5.1'in `ConvertFrom-Json`/
+  `ConvertTo-Json` round-trip'i, daha once deserialize edilmis bir diziyi
+  YENI bir nesnenin ozelligi olarak yeniden atayinca `{ value: [...],
+  Count: N }` seklinde sarabiliyor — GERCEK forensics raporunda ampirik
+  olarak dogrulandi (`"Files": {"value": [...], "Count": 4}`). Tarihsel
+  kanit dosyasi DEGISTIRILMEDI; onarim araci `Get-NormalizedJsonArray` ile
+  her iki sekli de kabul edecek sekilde duzeltildi ve regresyon testi
+  eklendi.
+- `scripts/check-windows-service-configs.mjs`e yeni dosyalarin fail-closed
+  kablolamasini (Apply-gated, admin-only ACL, blocker kodlari, env/servis
+  mutasyonu YOK) koruyan statik denetim + testlerin gercekten calistirilmasi
+  eklendi.
+
+Test sonucu:
+
+- `node --test` (3 dosya birlikte) 19/19 gecti.
+- `repair-post-sync-stale-target-files.tests.ps1` (bagimliliksiz, sentetik
+  fixture) 6 senaryo/18 assertion: preview sifir yazma, apply yedek+atomik-
+  replace+dogrulama, task-referansi bloklama, kaynak-degisimi bloklama,
+  ayni dosyaya ikinci apply bloklama (artik superseded degil), PS5.1
+  wrapped-array regresyonu — hepsi PASS.
+- `npm run check:deploy` gecti (yeni Node + PowerShell test cagrilarini da
+  calistirdi).
+- **Gercek makinede calistirilan tek gercek islem: salt-okunur PREVIEW**
+  (gercek 4 dosyaya karsi, `-Apply` YOK). Sonuc: `preview_ok`,
+  `WouldApplyCount=4`, `BlockedCount=0` — her 4 dosya da taze fail-closed
+  kontrollerin TUMUNDEN gecti (kaynak/hedef SHA-256 forensics anindakiyle
+  ayni, pCloud current satiri kaynakla eslesiyor, sifir task/fstask
+  referansi, hedef kilitli degil, kaynak JPEG saglam). Sifir dosya
+  degistirildi, sifir yedek alindi.
+
+Etki: Yalniz deploy tooling ve docs degisti; uygulama runtime/is mantigi
+degismedi. **Gercek -Apply bu paket icinde CALISTIRILMADI** — kullaniciya
+somut PREVIEW sonucu sunulup gercek yazmadan once tek net onay istendi
+(AGENTS.md #7 Onizle->Onay adimlari). Sync eslemesi, Stop/Clear, env, servis
+HIC degistirilmedi. Test sirasinda `C:\ProgramData\HasarBotu\migration-preflight`e
+dusen sentetik test raporlari (gercek kanitla karismamalari icin) temizlendi.
+Acik kalan: kullanicinin onayi sonrasi gercek `-Apply` calistirmasi, ardindan
+kuyruk=0+quiescence PASS ile taze `PostSyncRebaseline`->`AfterSync` zinciri.
