@@ -1,6 +1,6 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-07-31
+Son güncelleme: 2026-08-03
 
 ## Mevcut sürüm ve aşama
 
@@ -70,9 +70,22 @@ Son güncelleme: 2026-07-31
   (gerçek 4 dosyaya karşı): `preview_ok`, 4/4 `would_apply`, 0 blocker —
   hiçbir dosya değiştirilmedi, hiçbir yedek alınmadı. Gerçek `-Apply`,
   kullanıcı onayı bekleniyor.
-- Sonraki adım: kullanıcı onayı sonrası gerçek `-Apply` çalıştırmak, sonra
-  kuyruk=0+quiescence PASS ile taze gate→`PostSyncRebaseline`→`AfterSync`
-  zincirini tamamlamak.
+- **Gerçek `-Apply` tamamlandı ve bağımsız doğrulandı (HB-2026-130b):** 4
+  dosya (kaynak==hedef SHA-256 birebir eşit) onarıldı. `localfolder.taskcnt`
+  toplamının gerçek kuyruklardan bağımsız, kalıcı ve işle ilgisiz bir sapma
+  taşıdığı bulunup gate'ten blocker olarak kaldırıldı (commit 1951e39).
+- **Düzeltilmiş gate tek deneme yeniden çalıştırıldı, YENİ (HB-2026-131,
+  2026-08-03 ~17:15 UTC): `BLOCKED / SOURCE_TARGET_HASH_MISMATCH_AT_PASS`.**
+  Ön koşulların tümü geçti ve gerçek 719 saniyelik kesintisiz sessizlik ilk
+  kez sağlandı (`WindowResetCount=0`), ama final tam SHA-256'da dosya sayısı
+  eşitken (6873/673) toplam bayt 708 bayt farklı — HB-2026-130'daki
+  4-fotoğraflık ~16,96 MB'lik farktan tamamen ayrı, önceden belgelenmemiş
+  yeni bir tutarsızlık. Talimat gereği otomatik yeniden deneme YAPILMADI.
+- Sonraki adım: bu yeni 708 baytlık farkın kaynağını (hangi dosya/dosyalar)
+  ayrı, salt-okunur bir teşhis adımıyla (HB-2026-130a tarzı forensics)
+  tespit etmek — kullanıcının açık talebiyle ayrı görev; ardından taze
+  `PostSyncRebaseline` gate'i yeniden çalıştırıp PASS alınırsa `AfterSync`
+  zincirine geçmek.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 

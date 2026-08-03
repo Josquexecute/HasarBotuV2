@@ -4704,3 +4704,48 @@ kaynak/hedef dosya, env, servis butun bu surec boyunca HIC degistirilmedi.
 Acik kalan: duzeltilmis gate ile kullanicinin talebi uzerine yeniden
 denenecek; PASS alinirsa `PostSyncRebaseline`->`AfterSync` zinciri
 tamamlanacak.
+
+
+## 2026-08-03 - HB-2026-131: Duzeltilmis PostSyncRebaseline gate tek deneme calistirildi — tam 600 sn sessizlik saglandi ama YENI, kucuk bir kaynak/hedef fark bulundu
+
+`localfolder.taskcnt` duzeltmesinden (HB-2026-130 devami, commit 1951e39)
+sonra kullanicinin talebiyle gate TEK SEFERLIK yeniden calistirildi
+(`test-pcloud-post-sync-rebaseline-gate.ps1`, ayni ghost exclusion
+manifesti, `PollSeconds 15`/`MaximumMinutes 30`). Sync eslemesi, dosya, env,
+servis HIC degistirilmedi; calistirma tamamen salt-okunurdu.
+
+Sonuc: `BLOCKED/2`, `SOURCE_TARGET_HASH_MISMATCH_AT_PASS`.
+
+- On kosullarin TUMU gecti: tek `syncfolder` kaydi, sifir bekleyen/delayed
+  kuyruk, sifir conflict-adi, ghost exclusion 10/10 dogrulandi.
+- Gercek 719 saniyelik kesintisiz sessizlik saglandi (`WindowResetCount=0`
+  — kaynak, hedef VE uzak kok boyunca tek bir hareket bile olmadi). Bu,
+  onceki 9 denemenin (HB-2026-130b) hicbirinin ulasamadigi asamadir.
+- Final tam SHA-256 karsilastirmasinda dosya/klasor SAYISI birebir esit
+  (6873 dosya, 673 klasor -- HB-2026-130'da onarilan 4 fotograf artik
+  sayimda fark yaratmiyor) ama toplam bayt farkli: kaynak 3.369.254.755,
+  hedef 3.369.254.047 (fark: 708 bayt). Manifest SHA-256'lari da farkli
+  (`e6542afb...` vs `e9ccd4b9...`).
+- Bu, HB-2026-130'da cozulen 4 fotografli ~16,96 MB'lik farktan TAMAMEN
+  AYRI, daha once hic belgelenmemis YENI bir tutarsizlik. Gate'in ciktisi
+  toplu manifest hash'i verir, dosya bazinda fark listesi vermez -- hangi
+  dosyanin/dosyalarin bu 708 baytlik farka neden oldugu bu calistirmadan
+  belli DEGIL.
+- Rapor Administrators-only kanit dizinine yazildi
+  (`pcloud-post-sync-rebaseline-20260803T171520164Z-1c05b05b.json` + sha256
+  sidecar).
+
+Talimat geregi (BLOCKED durumunda yeniden deneme baslatmadan neden
+raporlanip durulacak) otomatik yeniden calistirma YAPILMADI.
+`PostSyncRebaseline` -> `AfterSync` zinciri bu paket icinde
+TAMAMLANMADI ve tamamlanamaz.
+
+Etki: Kod/tooling degisikligi yok, yalnix bu karar kaydi ve
+`PROJECT_STATUS.md` guncellendi. Sync eslemesi, Stop/Clear, kaynak/hedef
+dosya, env, servis hic degismedi.
+
+Acik kalan: bu yeni 708 baytlik kaynak/hedef farkinin hangi dosya(lar)dan
+kaynaklandigini tespit etmek icin ayri, salt-okunur bir teshis adimi
+gerekir (orn. HB-2026-130a'daki forensics yaklasiminin bu fark icin
+tekrarlanmasi) — kullanicinin acik onayi/talebiyle ayri bir gorev olarak
+ele alinmali.
