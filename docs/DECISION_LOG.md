@@ -4894,3 +4894,41 @@ bu paket boyunca degismedi.
 Acik kalan: gercekten sakin bir donemde (kullanicinin acik talebi
 uzerine) taze gate->PostSyncRebaseline->AfterSync uclusunun yeniden
 denenmesi.
+
+
+## 2026-08-03 - HB-2026-134: HB-2026-133'ten sonraki tek yeni gate+PostSyncRebaseline+AfterSync zinciri denemesi — gate kendisi BLOCKED, zincir baslamadan durduruldu
+
+Kullanicinin talebiyle, tek dosya onariminin (HB-2026-133) kaynak=hedef
+tam SHA-256 esitligiyle kesinlestigi durumdan sonra taze
+gate->`PostSyncRebaseline`->`AfterSync` zinciri **tek deneme** olarak
+yeniden calistirildi (attempt 12, ayni ghost manifesti,
+`PollSeconds 15`/`MaximumMinutes 30`). Sync/dosya/pCloud/env/servis hic
+degistirilmedi.
+
+Sonuc: gate'in kendisi `BLOCKED/2`, blocker `PCLOUD_PENDING_TASKS_FOUND`.
+`ObservedQuietSeconds=95` (600 sinirinin cok altinda), `WindowResetCount=6`
+— pencere 30 dakika boyunca gercek, devam eden pCloud kuyruk aktivitesi
+(bekleyen task/fstask) yuzunden hicbir zaman kararli 600 saniyeye
+ulasamadi. Bu, HB-2026-133'teki "gate PASS oldu ama PostSyncRebaseline
+hemen ardindan taze aktiviteyle BLOCKED oldu" durumundan farkli: bu kez
+gate'in KENDISI hic PASS vermedi, bu yuzden `PostSyncRebaseline` ve
+`AfterSync` stage'leri hic CALISTIRILMADI (calistirilmalari icin onceki
+stage'in PASS raporu gerekir).
+
+Rapor Administrators-only kanit dizinine yazildi
+(`pcloud-post-sync-rebaseline-20260803T183444407Z-408d2ba0.json` + sha256
+sidecar).
+
+Talimat geregi ("herhangi bir task ... BLOCKED raporla ve yeniden deneme
+baslatma") otomatik yeniden calistirma YAPILMADI. `PostSyncRebaseline`
+ve `AfterSync` bu paket icinde CALISTIRILMADI.
+
+Etki: Sifir kod/tooling degisikligi — yalniz bu karar kaydi ve
+`PROJECT_STATUS.md` guncellendi. Sync eslemesi, Stop/Clear, kaynak/hedef
+dosya, env, servis hic degismedi.
+
+Acik kalan: HB-2026-133'teki tek dosyanin onarimi hala kesin ve
+bagimsiz dogrulanmis durumda (bu paketten etkilenmedi). D8 migration
+cutover (`AfterSync`) hala tamamlanmadi. Gercekten sakin, pCloud
+kuyruklarinin da bos oldugu bir donemde (kullanicinin acik talebiyle)
+zincirin yeniden denenmesi gerekiyor.

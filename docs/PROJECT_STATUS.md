@@ -112,12 +112,19 @@ Son güncelleme: 2026-08-03
   `SOURCE_CHANGED_DURING_PREFLIGHT` vb. Araç kusuru değil: sistem gerçek
   eşzamanlı değişikliği doğru şekilde yakalayıp durdu. Talimat gereği
   yeniden deneme YAPILMADI; `AfterSync` bu paket içinde ÇALIŞTIRILMADI.
-- **Durum: dosya onarımı KESİN tamamlandı; D8 migration cutover
-  (`AfterSync`) hâlâ tamamlanmadı.** Sync eşlemesi, Stop/Clear, env, servis,
-  başka hiçbir dosya değişmedi.
-- Sonraki adım: gerçekten sakin bir ofis döneminde (kullanıcının açık
-  talebiyle) taze gate→`PostSyncRebaseline`→`AfterSync` üçlüsünün yeniden
-  denenmesi.
+- **Yeni tek deneme (HB-2026-134, aynı gün ~18:34 UTC): gate'in kendisi
+  `BLOCKED` — `PCLOUD_PENDING_TASKS_FOUND`.** `ObservedQuietSeconds=95`
+  (600 sınırının çok altında), 30 dakikalık pencere boyunca gerçek, devam
+  eden pCloud kuyruk aktivitesi yüzünden hiç kararlı hale gelmedi. Bu kez
+  gate hiç PASS vermediği için `PostSyncRebaseline`/`AfterSync` hiç
+  ÇALIŞTIRILMADI (bir önceki stage'in PASS raporu şart). Talimat gereği
+  yeniden deneme yapılmadı.
+- **Durum: dosya onarımı (HB-2026-133) KESİN tamamlandı ve bu paketten
+  etkilenmedi; D8 migration cutover (`AfterSync`) hâlâ tamamlanmadı.**
+  Sync eşlemesi, Stop/Clear, env, servis, başka hiçbir dosya değişmedi.
+- Sonraki adım: gerçekten sakin, pCloud kuyruklarının da boş olduğu bir
+  dönemde (kullanıcının açık talebiyle) taze gate→`PostSyncRebaseline`→
+  `AfterSync` üçlüsünün yeniden denenmesi.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 
