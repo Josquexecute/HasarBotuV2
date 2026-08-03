@@ -119,6 +119,18 @@ Son güncelleme: 2026-08-03
   gate hiç PASS vermediği için `PostSyncRebaseline`/`AfterSync` hiç
   ÇALIŞTIRILMADI (bir önceki stage'in PASS raporu şart). Talimat gereği
   yeniden deneme yapılmadı.
+- **`PCLOUD_PENDING_TASKS_FOUND` salt-okunur 15 dakikalık teşhis (HB-2026-135,
+  yeni `pcloud-task-queue-forensics.mjs`/`run-pcloud-task-queue-forensics.ps1`
+  ile, aynı gün).** 45 örneğin 44'ünde (~14 dk 40 sn) kuyruklar tamamen
+  boştu; yalnızca pencere kapanmadan saniyeler önce 4 yeni `task` satırı
+  belirdi (aracın kendi sınıflandırması: `unknown`/`AMBIGUOUS_SIGNALS` —
+  tek örnek noktasından kesin sınıflandırma yapılamadı). Admin-only ham
+  kayıtların manuel incelemesi: klasik "kaydet → geçici dosya → yeniden
+  adlandır" deseni, `hasarbotu-dosya-listesi-2026-07-21 - Kopya.xlsx`
+  (HasarBotu'nun kendi iç dosyası, müşteri kanıtı DEĞİL) için — sıkıntılı
+  bir kuyruk değil, zararsız tek dosyalık gerçek bir kaydetme/yükleme
+  izlenimi (yorum, kesin değil). Gate/PostSyncRebaseline/AfterSync HİÇ
+  çalıştırılmadı, hiçbir şey değişmedi.
 - **Durum: dosya onarımı (HB-2026-133) KESİN tamamlandı ve bu paketten
   etkilenmedi; D8 migration cutover (`AfterSync`) hâlâ tamamlanmadı.**
   Sync eşlemesi, Stop/Clear, env, servis, başka hiçbir dosya değişmedi.

@@ -4932,3 +4932,55 @@ bagimsiz dogrulanmis durumda (bu paketten etkilenmedi). D8 migration
 cutover (`AfterSync`) hala tamamlanmadi. Gercekten sakin, pCloud
 kuyruklarinin da bos oldugu bir donemde (kullanicinin acik talebiyle)
 zincirin yeniden denenmesi gerekiyor.
+
+
+## 2026-08-03 - HB-2026-135: PCLOUD_PENDING_TASKS_FOUND salt-okunur 15 dakikalik teshis — 14 dakika 40 saniye tamamen bos kuyruk, pencere kapanmadan hemen once tek, sikinti verici olmayan yerel dosya kaydetme patlamasi
+
+Kullanicinin talebiyle, yeni salt-okunur `pcloud-task-queue-forensics.mjs` +
+`run-pcloud-task-queue-forensics.ps1` araci (bu paket icinde eklendi,
+ayrica commit edildi) 900 saniye/20 saniye ornekleme ile gercek makinede
+calistirildi. Gate, `PostSyncRebaseline` veya `AfterSync` HIC
+calistirilmadi; sync/dosya/pCloud/env/servis hic degistirilmedi.
+
+**Gercek sonuc:** 45 ornekten **44'unde** (`~18:47:22` - `~19:01:55` UTC,
+yaklasik 14 dakika 40 saniye) `task`/`fstask`/`upload_tasks` kuyruklarinin
+UCU DE tamamen BOSTU (`distinctEntries=0`). Yalnizca SON ornekte
+(`~19:02:22`, pencere kapanmadan saniyeler once) 4 yeni `task` satiri
+belirdi — hepsi tek seferlik (`AppearanceCount=1`), pencere onlarin
+akip gitmesini gormeden kapandi. Aracin kendi siniflandirmasi:
+**`unknown` / `AMBIGUOUS_SIGNALS`** (tek ornek noktasindan kesin
+siniflandirma yapilamadi — arac kasitli olarak asiri iddiali tahminde
+bulunmadi).
+
+**Admin-only ham kayitlarin manuel incelemesi (yorumlayici, aracin kendi
+iddiasi degil):** 4 girisin ikisi ayni `itemid`yi (`102676961963`,
+goreli yol `2026\hasarbotu-dosya-listesi-2026-07-21 - Kopya.xlsx` —
+HasarBotu'nun kendi ic dosya listesi calisma kopyasi, MUSTERI KANITI
+DEGIL), diger ikisi ayni baska `itemid`yi (`102675441610`, literal ad
+`567286C1.tmp` / tam yol `.../2026/567286C1.tmp`) paylasiyor —
+klasik "kaydet -> gecici dosya olustur -> son ada yeniden adlandir"
+deseni. `SourceDelta` tam olarak `modifyCount=1` (yerel kaynakta bir
+dosya degisti), `RemoteDelta` tam olarak `createCount=1`+`deleteCount=1`
+(uzakta bir nesne olustu, bir gecici nesne silindi) — sayilar birebir bu
+yorumla tutarli. Bu, sikintili/takilan bir kuyruk degil, sikici,
+sikinti verici olmayan tek dosyalik gercek bir yerel kaydetme+yukleme
+olayi izlenimi veriyor; ancak arac yalnizca tek bir an yakaladigi icin bu
+YORUM olarak isaretleniyor, kesin siniflandirma degil.
+
+Rapor Administrators-only kanit dizinine yazildi
+(`pcloud-task-queue-forensics-20260803T190227180Z-f562c6ff.json` + sha256
+sidecar; tam yollar yalniz bu dosyada, konsol/karar kaydinda yalniz
+goreli yol).
+
+Etki: Sifir dosya/DB yazma cagrisi. Sync eslemesi, Stop/Clear, kaynak/
+hedef dosya, env, servis hic degismedi. Gate/PostSyncRebaseline/AfterSync
+HIC calistirilmadi.
+
+Acik kalan: `PCLOUD_PENDING_TASKS_FOUND`'un HB-2026-134'teki BLOCKED
+nedeninin, bu 15 dakikalik pencerede gozlemlenen turden kisa, izole,
+zararsiz patlamalarin ofis mesaisi boyunca tekrar tekrar cikip 600
+saniyelik kesintisiz sessizlik penceresini kapatmasi oldugu (aracin
+`unknown` verdigi tek olay bunu KANITLAMIYOR, yalnizca bu yorumla
+TUTARLI). Gercekten sakin bir donemde (kullanicinin acik talebiyle)
+gate->PostSyncRebaseline->AfterSync uclusunun yeniden denenmesi hala
+acik.
