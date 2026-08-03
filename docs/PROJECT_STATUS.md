@@ -131,12 +131,23 @@ Son güncelleme: 2026-08-03
   bir kuyruk değil, zararsız tek dosyalık gerçek bir kaydetme/yükleme
   izlenimi (yorum, kesin değil). Gate/PostSyncRebaseline/AfterSync HİÇ
   çalıştırılmadı, hiçbir şey değişmedi.
+- **"Ofis kullanımı durdu" bildirimiyle yeni tek deneme (HB-2026-136, aynı
+  gün ~19:20 UTC): gate yine `BLOCKED` — `PCLOUD_PENDING_TASKS_FOUND`.**
+  `ObservedQuietSeconds=35`. Bu kez yalnız kuyruk sayacı değil, ~9 dk 48 sn
+  boyunca GERÇEK, ölçümlenmiş kaynak+hedef+uzak hareketi kaydedildi
+  (`RemoteCreateCount=4`, `RemoteModifyCount=1`, `RemoteDeleteCount=3`,
+  `SourceCreateCount=2`, `SourceModifyCount=3`, `SourceDeleteCount=1`,
+  `TargetCreateCount=2`, `TargetModifyCount=3`, `TargetDeleteCount=1`) —
+  bildirilen "durdu" durumuyla tutarsız. Talimat gereği yeniden deneme
+  yapılmadı; `PostSyncRebaseline`/`AfterSync` yine hiç çalıştırılmadı.
 - **Durum: dosya onarımı (HB-2026-133) KESİN tamamlandı ve bu paketten
   etkilenmedi; D8 migration cutover (`AfterSync`) hâlâ tamamlanmadı.**
   Sync eşlemesi, Stop/Clear, env, servis, başka hiçbir dosya değişmedi.
-- Sonraki adım: gerçekten sakin, pCloud kuyruklarının da boş olduğu bir
-  dönemde (kullanıcının açık talebiyle) taze gate→`PostSyncRebaseline`→
-  `AfterSync` üçlüsünün yeniden denenmesi.
+- Sonraki adım: bir sonraki denemeden önce, mümkünse
+  `pcloud-task-queue-forensics` ile kısa bir ön-kontrolle gerçekten sıfır
+  kaynak/hedef/uzak hareketi olduğu bağımsız doğrulanmış bir dönem
+  seçilmesi; ardından (kullanıcının açık talebiyle) taze
+  gate→`PostSyncRebaseline`→`AfterSync` üçlüsünün yeniden denenmesi.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 

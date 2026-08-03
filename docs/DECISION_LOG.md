@@ -4984,3 +4984,43 @@ saniyelik kesintisiz sessizlik penceresini kapatmasi oldugu (aracin
 TUTARLI). Gercekten sakin bir donemde (kullanicinin acik talebiyle)
 gate->PostSyncRebaseline->AfterSync uclusunun yeniden denenmesi hala
 acik.
+
+
+## 2026-08-03 - HB-2026-136: Ofis kullaniminin durdugu bildirilen donemde tek gate->PostSyncRebaseline->AfterSync zinciri denemesi — gate yine BLOCKED, gercek kaynak/hedef/uzak hareketiyle
+
+Kullanicinin "ofis kullanimi durdu" bildirimiyle taze
+gate->`PostSyncRebaseline`->`AfterSync` zinciri **tek deneme** olarak
+yeniden calistirildi (attempt 13, ayni ghost manifesti,
+`PollSeconds 15`/`MaximumMinutes 30`). Sync/dosya/pCloud/env/servis hic
+degistirilmedi.
+
+Sonuc: gate'in kendisi yine `BLOCKED/2`, blocker yine
+`PCLOUD_PENDING_TASKS_FOUND`. `ObservedQuietSeconds=35`,
+`WindowResetCount=6`. Bu kez blocker yalniz kuyruk sayaciyla sinirli
+degildi — calisma boyunca (`~19:10:51`-`~19:20:39` UTC, ~9 dk 48 sn)
+GERCEK, olcumlenmis hareket kaydedildi: `RemoteCreateCount=4`,
+`RemoteModifyCount=1`, `RemoteDeleteCount=3`, `SourceCreateCount=2`,
+`SourceModifyCount=3`, `SourceDeleteCount=1`, `TargetCreateCount=2`,
+`TargetModifyCount=3`, `TargetDeleteCount=1`, `DiffCursorAdvanceCount=5`.
+Bu, kullanicinin bildirdigi "durdu" durumuyla tutarsiz gercek, devam eden
+kaynak+hedef+uzak degisikligidir (HB-2026-135'te gozlemlenen turden kisa
+kaydetme/yukleme patlamalarina benzer sekilde, ama bu kez birden fazla).
+
+Rapor Administrators-only kanit dizinine yazildi
+(`pcloud-post-sync-rebaseline-20260803T192039461Z-56c1b30c.json` + sha256
+sidecar).
+
+Talimat geregi ("BLOCKED olursa yeniden deneme baslatma") otomatik
+yeniden calistirma YAPILMADI. `PostSyncRebaseline` ve `AfterSync` bu
+paket icinde CALISTIRILMADI (gate hic PASS vermedi).
+
+Etki: Sifir kod/tooling degisikligi — yalniz bu karar kaydi ve
+`PROJECT_STATUS.md` guncellendi. Sync eslemesi, Stop/Clear, kaynak/hedef
+dosya, env, servis hic degismedi.
+
+Acik kalan: HB-2026-133'teki tek dosyanin onarimi hala kesin ve bagimsiz
+dogrulanmis durumda (bu paketten etkilenmedi). D8 migration cutover
+(`AfterSync`) hala tamamlanmadi. Bir sonraki deneme oncesi, mumkunse,
+gercekten sifir kaynak/hedef/uzak hareketi oldugu bagimsiz olarak (orn.
+`pcloud-task-queue-forensics` ile kisa bir on-kontrolle) dogrulanmis bir
+donem secilmesi onerilir.
