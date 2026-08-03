@@ -196,7 +196,7 @@ try {
   assertContains(rebaselineGate, /SYNC_MAPPING_ROOT_MISMATCH/, 'pcloud-post-sync-rebaseline-gate.mjs', 'sync kaydinin beklenen uzak kokle eslesme sarti')
   assertContains(rebaselineGate, /SYNC_MAPPING_TARGET_MISMATCH/, 'pcloud-post-sync-rebaseline-gate.mjs', 'sync kaydinin beklenen hedef yerel yolla eslesme sarti')
   assertContains(rebaselineGate, /PCLOUD_PENDING_TASKS_FOUND/, 'pcloud-post-sync-rebaseline-gate.mjs', 'sifir bekleyen pCloud kuyrugu sarti')
-  assertContains(rebaselineGate, /PCLOUD_LOCALFOLDER_TASKS_FOUND/, 'pcloud-post-sync-rebaseline-gate.mjs', 'localfolder.taskcnt toplaminin da sifir olma sarti')
+  assertContains(rebaselineGate, /localFolderTaskSum/, 'pcloud-post-sync-rebaseline-gate.mjs', 'localfolder.taskcnt toplaminin (bilgi amacli, artik blocker degil) okunup rapora tasinmasi')
   assertContains(rebaselineGate, /PCLOUD_CONFLICT_NAME_PATTERN_DETECTED/, 'pcloud-post-sync-rebaseline-gate.mjs', 'conflict-adi deseni fail-closed reddi')
   assertContains(rebaselineGate, /SOURCE_TARGET_HASH_MISMATCH_AT_PASS/, 'pcloud-post-sync-rebaseline-gate.mjs', 'kaynak/hedef tam SHA-256 esitsizliginde fail-closed BLOCKED')
   assertContains(rebaselineGate, /MINIMUM_QUIET_SECONDS,/, 'pcloud-post-sync-rebaseline-gate.mjs', 'pre-sync gate ile ayni degistirilemez 600 saniye sabitinin yeniden kullanimi')

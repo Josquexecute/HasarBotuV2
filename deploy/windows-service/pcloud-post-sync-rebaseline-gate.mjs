@@ -43,17 +43,6 @@ const TRANSIENT_SAFE_CODES = new Set([
   'SOURCE_CHANGED_DURING_FULL_HASH',
   'SOURCE_CHANGED_DURING_INVENTORY',
   'PCLOUD_DATABASE_SNAPSHOT_UNSTABLE',
-  // Real repro (HB-2026-130 follow-up): pCloud's own per-folder task
-  // counter was observed transiently NEGATIVE (-2) within ~90s of a
-  // legitimate atomic File.Replace on a synced target -- bookkeeping noise
-  // while it settles, not a real backlog. Per the operator's own "active
-  // writer activity should reset the counter, not hard-stop" instruction,
-  // this one specific signal is reset-and-wait. task/fstask pending work,
-  // delayed sync items and conflict-name artifacts were all confirmed
-  // zero/absent in the same real incident -- they stay hard stops, since
-  // an actual nonzero reading there is a meaningfully different, real
-  // signal worth stopping for immediately rather than silently retrying.
-  'PCLOUD_LOCALFOLDER_TASKS_FOUND',
 ])
 
 class SafeGateError extends Error {
@@ -243,7 +232,15 @@ async function captureRebaselineObservation(sourceRoot, targetRoot, databasePath
   assert(pcloud.mapping.localPathMatches, 'SYNC_MAPPING_TARGET_MISMATCH')
   assert(pcloud.mapping.delayedCount === 0, 'SYNC_MAPPING_DELAYED_ITEMS_PRESENT')
   assert(pcloud.pendingTaskCount === 0, 'PCLOUD_PENDING_TASKS_FOUND')
-  assert(pcloud.localFolderTaskSum === 0, 'PCLOUD_LOCALFOLDER_TASKS_FOUND')
+  // HB-2026-130 follow-up: NOT gated on === 0. Real observation over
+  // several hours (including a confirmed-quiet office period) showed this
+  // sum sitting persistently non-zero and drifting further from zero
+  // (-2, then -4) while every real queue table (task/fstask/upload_tasks/
+  // localfileupload/uptask_fileupload/pagecachetask) stayed genuinely at 0.
+  // It does not track pending work for this installation, so treating a
+  // nonzero reading as a blocker made the gate unable to ever pass
+  // regardless of true system quiescence. Still captured on the report for
+  // audit visibility, just not asserted on.
   assert(pcloud.conflictNames.length === 0, 'PCLOUD_CONFLICT_NAME_PATTERN_DETECTED')
 
   const source = await enumerateSourceTree(sourceRoot, ghost.excludedPaths)

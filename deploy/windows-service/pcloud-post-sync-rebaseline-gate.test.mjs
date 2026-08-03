@@ -159,10 +159,10 @@ test('CLI: aktif sync eslemesi olmadan REBASELINE_PRECONDITION_FAILED ile BLOCKE
   assert.equal(output.SourceTargetHashMatch, false)
 })
 
-test('CLI: pCloud localfolder.taskcnt toplami gecici olarak negatifse cokmez, PCLOUD_LOCALFOLDER_TASKS_FOUND ile temiz BLOCKED doner', async (context) => {
+test('CLI: pCloud localfolder.taskcnt toplami negatif veya baska bir sifir-disi degerde takili kalsa bile gate engellenmez (gercek kesif: bu alan pending isi izlemiyor)', async (context) => {
   const fixture = await buildFixture(context)
   const database = new DatabaseSync(fixture.databasePath)
-  database.exec('INSERT INTO localfolder (id, taskcnt) VALUES (1, -2);')
+  database.exec('INSERT INTO localfolder (id, taskcnt) VALUES (1, -4);')
   database.close()
 
   const scriptPath = fileURLToPath(new URL('./pcloud-post-sync-rebaseline-gate.mjs', import.meta.url))
@@ -177,8 +177,11 @@ test('CLI: pCloud localfolder.taskcnt toplami gecici olarak negatifse cokmez, PC
   ], { encoding: 'utf8' })
 
   const output = JSON.parse(result.stdout)
-  assert.equal(output.Status, 'error')
-  assert.equal(output.ErrorCode, 'PCLOUD_LOCALFOLDER_TASKS_FOUND')
+  // ProbeOnly always reports blocked-by-design (PROBE_ONLY_NOT_REBASELINE_GATE),
+  // never an error -- the point of this test is that a persistently nonzero
+  // localfolder.taskcnt no longer surfaces as PCLOUD_LOCALFOLDER_TASKS_FOUND.
+  assert.equal(output.Status, 'blocked')
+  assert.deepEqual(output.Blockers, ['PROBE_ONLY_NOT_REBASELINE_GATE'])
 })
 
 test('CLI: hedef yerel yolu beklenenle uyusmuyorsa SYNC_MAPPING_TARGET_MISMATCH ile BLOCKED doner', async (context) => {

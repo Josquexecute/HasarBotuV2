@@ -4646,3 +4646,61 @@ HIC degistirilmedi. Test sirasinda `C:\ProgramData\HasarBotu\migration-preflight
 dusen sentetik test raporlari (gercek kanitla karismamalari icin) temizlendi.
 Acik kalan: kullanicinin onayi sonrasi gercek `-Apply` calistirmasi, ardindan
 kuyruk=0+quiescence PASS ile taze `PostSyncRebaseline`->`AfterSync` zinciri.
+
+## 2026-08-03 - HB-2026-130b: -Apply sonrasi 4 dosya bagimsiz dogrulandi; taze PostSyncRebaseline gate 9 kez calistirildi; kendi eklegim bir kontrolde yanlis varsayim bulunup kaldirildi
+
+Kullanici onayi sonrasi gercek `-Apply` calistirildi: 4 dosya (backup+atomik
+replace+dogrulama) basariyla uygulandi. Bagimsiz kontrol: her 4 dosyada
+kaynak==hedef SHA-256 birebir esit, yedekler orijinal (superseded) icerikle
+birebir esit, admin-only ACL dogru. Bu kisim kesin ve tamamlandi.
+
+Taze `PostSyncRebaseline` gate'i ardindan 9 kez calistirildi (~15:20-18:22,
+~3 saat):
+
+- Ilk calistirma (attempt 3) `localfolder.taskcnt` toplaminin gecici olarak
+  -2 olmasi yuzunden PowerShell wrapper'inda `PropertyNotFoundException` ile
+  coktu — iki gercek kusur bulundu ve duzeltildi (HB-2026-130'un devami,
+  ayri commit): `safeInteger`'in `>=0` tabani bu alan icin kaldirildi,
+  `buildReport`'un erken-donus yolu `EligibleForRebaseline`/
+  `SourceTargetHashMatch` alanlarini artik her zaman tasiyor.
+- Sonraki 6 calistirma (attempt 3-8) `PCLOUD_PENDING_TASKS_FOUND` ile
+  BLOCKED oldu (reset sayilari: 10, 102, 8, 60, 25, 69) — gercek `task`/
+  `fstask` kuyruklari araliksiz doluydu; ofis mesai saatinde gercekten aktif
+  kullanimdaydi. Kullanicinin ac1k periyodik-deneme onayiyla otomatik
+  yeniden calistirildi; yapisal bir blocker (SYNC_MAPPING_*) gorulmedigi
+  icin durdurulmadi. 6. BLOCKED'da kullanici otomatik denemeyi durdurdu,
+  `ACTIVE_REMOTE_WRITERS` olarak raporlandi.
+- Kullanici ofis kullaniminin durdugunu bildirip TEK bir yeni deneme istedi
+  (attempt 9, Stop/Clear/dosya/env/servis degisikligi olmadan). Bu kez
+  `STABLE_INITIAL_OBSERVATION_NOT_REACHED` ile BLOCKED oldu — 30 dakika
+  boyunca 112 ardisik gecici hata, tek bir temiz ilk gozlem bile
+  saglanamadi. Bu, gercek ofis aktivitesiyle tutarsizdi (kullanici aktivite
+  durdugunu soylemisti).
+- **Kok neden bulundu:** `localfolder.taskcnt` toplami salt-okunur olarak
+  tekrar kontrol edildi — hala kalici olarak sifir DEGIL, aksine SIFIRDAN
+  UZAKLASIYORDU (-2 -> -4), ayni anda butun 6 gercek kuyruk tablosu
+  (`task`/`fstask`/`upload_tasks`/`localfileupload`/`uptask_fileupload`/
+  `pagecachetask`) gercekten sifirken. Bu, bu depoda BASKA HICBIR yerde
+  kullanilmayan, kendi eklegim ek bir savunma katmaniydi (orijinal pre-sync
+  gate'te hic yok) ve bu kurulum icin **yanlis bir varsayima** dayaniyordu:
+  bu SQL toplami gercek bekleyen isi izlemiyor, kalici, isle ilgisiz bir
+  sapma tasiyor. Sifir olmasini sart kosmak, gercek sessizlik ne olursa
+  olsun kapinin ASLA PASS verememesine yol aciyordu.
+- **Duzeltme:** `assert(pcloud.localFolderTaskSum === 0, ...)` tamamen
+  kaldirildi. Deger hala okunup gozlem/rapor nesnesinde tasiniyor (denetim
+  gorunurlugu icin) ama artik blocker degil. `PCLOUD_LOCALFOLDER_TASKS_FOUND`
+  kodu hem gecici-kod kumesinden hem kaynaktan silindi (artik hic
+  atilmiyor). Ilgili test gercek bulguyu yansitacak sekilde guncellendi
+  (negatif/sifir-disi deger artik gate'i ENGELLEMIYOR). `npm run
+  check:deploy`in statik denetimi de guncellendi.
+
+Test sonucu: `node --test` (3 dosya) 20/20 gecti (guncellenmis test dahil),
+`npm run check:deploy` gecti.
+
+Etki: Yalniz deploy tooling degisti. **4 dosyanin gercek onarimi bu paketten
+BAGIMSIZ, zaten tamamlanmis ve dogrulanmis durumda** — bu paket yalniz taze
+migration baseline'i olusturma girisimiyle ilgili. Sync eslemesi, Stop/Clear,
+kaynak/hedef dosya, env, servis butun bu surec boyunca HIC degistirilmedi.
+Acik kalan: duzeltilmis gate ile kullanicinin talebi uzerine yeniden
+denenecek; PASS alinirsa `PostSyncRebaseline`->`AfterSync` zinciri
+tamamlanacak.
