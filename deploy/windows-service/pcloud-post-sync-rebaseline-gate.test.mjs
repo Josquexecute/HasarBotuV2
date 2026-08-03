@@ -150,6 +150,35 @@ test('CLI: aktif sync eslemesi olmadan REBASELINE_PRECONDITION_FAILED ile BLOCKE
   const output = JSON.parse(result.stdout)
   assert.equal(output.Status, 'blocked')
   assert.deepEqual(output.Blockers, ['SYNC_MAPPING_ROW_COUNT_INVALID'])
+  // HB-2026-130 follow-up: a hard block reached before any finalObservation
+  // must still carry these two fields so a PowerShell consumer running
+  // under Set-StrictMode never throws PropertyNotFoundException reading
+  // them unconditionally (real incident: the wrapper crashed on exactly
+  // this report shape).
+  assert.equal(output.EligibleForRebaseline, false)
+  assert.equal(output.SourceTargetHashMatch, false)
+})
+
+test('CLI: pCloud localfolder.taskcnt toplami gecici olarak negatifse cokmez, PCLOUD_LOCALFOLDER_TASKS_FOUND ile temiz BLOCKED doner', async (context) => {
+  const fixture = await buildFixture(context)
+  const database = new DatabaseSync(fixture.databasePath)
+  database.exec('INSERT INTO localfolder (id, taskcnt) VALUES (1, -2);')
+  database.close()
+
+  const scriptPath = fileURLToPath(new URL('./pcloud-post-sync-rebaseline-gate.mjs', import.meta.url))
+  const result = spawnSync(process.execPath, [
+    scriptPath,
+    '--mode', 'probe',
+    '--source-root', fixture.sourceRoot,
+    '--target-root', fixture.targetRoot,
+    '--ghost-manifest', fixture.manifestPath,
+    '--ghost-manifest-sha256', fixture.manifestHash,
+    '--pcloud-db', fixture.databasePath,
+  ], { encoding: 'utf8' })
+
+  const output = JSON.parse(result.stdout)
+  assert.equal(output.Status, 'error')
+  assert.equal(output.ErrorCode, 'PCLOUD_LOCALFOLDER_TASKS_FOUND')
 })
 
 test('CLI: hedef yerel yolu beklenenle uyusmuyorsa SYNC_MAPPING_TARGET_MISMATCH ile BLOCKED doner', async (context) => {

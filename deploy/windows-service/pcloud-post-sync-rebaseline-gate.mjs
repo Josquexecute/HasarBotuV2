@@ -43,6 +43,17 @@ const TRANSIENT_SAFE_CODES = new Set([
   'SOURCE_CHANGED_DURING_FULL_HASH',
   'SOURCE_CHANGED_DURING_INVENTORY',
   'PCLOUD_DATABASE_SNAPSHOT_UNSTABLE',
+  // Real repro (HB-2026-130 follow-up): pCloud's own per-folder task
+  // counter was observed transiently NEGATIVE (-2) within ~90s of a
+  // legitimate atomic File.Replace on a synced target -- bookkeeping noise
+  // while it settles, not a real backlog. Per the operator's own "active
+  // writer activity should reset the counter, not hard-stop" instruction,
+  // this one specific signal is reset-and-wait. task/fstask pending work,
+  // delayed sync items and conflict-name artifacts were all confirmed
+  // zero/absent in the same real incident -- they stay hard stops, since
+  // an actual nonzero reading there is a meaningfully different, real
+  // signal worth stopping for immediately rather than silently retrying.
+  'PCLOUD_LOCALFOLDER_TASKS_FOUND',
 ])
 
 class SafeGateError extends Error {
@@ -200,10 +211,15 @@ async function captureRebaselineObservation(sourceRoot, targetRoot, databasePath
     const inventory = getRemoteInventory(database, rootId)
     const conflictNames = findConflictNames(database, rootId)
     const taskState = getPcloudTaskState(database)
-    const localFolderTaskSum = safeInteger(
-      database.prepare('SELECT COALESCE(sum(taskcnt),0) AS s FROM localfolder').get().s,
-      'PCLOUD_LOCALFOLDER_TASKCNT_INVALID',
-    )
+    // pCloud's own per-folder task counter has been observed to go
+    // transiently NEGATIVE right after a local file replace it is still
+    // settling (real repro: -2 within ~90s of an atomic File.Replace on a
+    // synced target). That is bookkeeping noise, not a corrupt read, so
+    // this does not use safeInteger's >=0 floor -- only require it to be a
+    // safe integer at all.
+    const localFolderTaskSumRaw = Number(database.prepare('SELECT COALESCE(sum(taskcnt),0) AS s FROM localfolder').get().s)
+    assert(Number.isSafeInteger(localFolderTaskSumRaw), 'PCLOUD_LOCALFOLDER_TASKCNT_INVALID')
+    const localFolderTaskSum = localFolderTaskSumRaw
     const mapping = getSyncMappingState(database, rootId, targetRoot)
 
     return {
@@ -537,6 +553,11 @@ function buildReport(result, ghost, mode) {
       EntryCount: ghost.excludedPaths.size,
     },
     Blockers: result.blockers,
+    // Always present (even on an early precondition failure with no
+    // finalObservation yet) so a PowerShell consumer running under
+    // Set-StrictMode can safely read these two fields unconditionally.
+    EligibleForRebaseline: false,
+    SourceTargetHashMatch: false,
   }
   if (result.status !== 'pass' && !result.finalObservation) {
     return base
