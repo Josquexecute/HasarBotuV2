@@ -8,49 +8,54 @@ Son güncelleme: 2026-07-31
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.101 başarılı / 6 ortam-koşullu skip.**
 
-## D8 pCloud → NTFS fail-closed bakım penceresi kapısı (2026-07-31)
+## D8 pCloud → NTFS migration — Add Sync gerçekleşti, post-sync rebaseline BLOCKED (2026-08-03, HB-2026-129)
 
-- **Durum: `GATE_READY / NOT_EXECUTED`.** pCloud `5.1.8.0` için resmi
-  davranış doğrulandı: Sync iki yönlüdür; mevcut bulut klasörü ile boş yerel
-  klasör yerel kopya oluşturmak için desteklenen başlangıç desenidir. Eşleme
-  başladıktan sonra yerel silme/değişiklik buluta da yansıyabileceğinden
-  hedef tek yönlü indirme veya salt-okunur mirror sayılmaz.
-- Yerel güncel durum değişmedi: pCloud DB'de sync kaydı 0, hedef boş, D7
-  `BeforeSync PASS/0`, File Agent `Stopped + Disabled`, üç kapsamda env
-  tanımsız. Bu çalışmada pCloud ayarı, dosya, env veya servis değiştirilmedi.
-- Güvenli sıra; bütün yazarları durdurma → gerçek 600 saniyelik bakım kapısı
-  `PASS/0` → aynı raporla taze `D8BeforeSync PASS/0` → boş hedef ile mevcut
-  bulut kökünü yalnız `Sync/Add new sync` üzerinden eşleme → kuyruk bitişi →
-  tam `AfterSync` kapısıdır. Stop/rollback sırasında eşleme aktifken hedef
-  silinmez veya temizlenmez.
-- Kritik tooling düzeltmesi: `AfterSync` artık hashli ve Administrators-only
-  `D8BeforeSync PASS` raporunu zorunlu tutar. Güncel kaynak tam manifest
-  SHA-256'sı baseline ile değişmediyse ve kaynak↔hedef tam göreli-yol SHA-256
-  eşitliği sağlandıysa `PASS/0` verir. Böylece senkron sırasında iki tarafın
-  birlikte eksilmesi eski yöntem gibi görünmez kalamaz.
-- HB-2026-125 ile sözlü bakım penceresi fail-closed tooling kapısına çevrildi.
-  Yeni kapı pCloud DB+WAL `diffid` akışını/uzak envanteri ve P: kaynak
-  envanterini birlikte izler. Üretimde en az 600 saniye zorunludur; create,
-  modify, delete, yalnız diff cursor ilerlemesi veya kaynak hareketi süreyi
-  sıfırlar ve güvenli sayaçlarla blocker raporlar. Başlangıç/son tam kaynak
-  SHA-256 manifesti eşit değilse izin üretmez.
-- `test-storage-sync-migration-preflight.ps1` artık `1.3.0` şemalı ayrı
-  `D8BeforeSync` stage'i taşır. Admin-only bakım raporu+SHA olmadan başlamaz;
-  raporun en çok 15 dakikalık olmasını, pCloud diff/source envanterinin tam
-  hash öncesi ve sonrasında hâlâ aynı olmasını ve kendi tam SHA-256'sının
-  bakım baseline'ıyla eşitliğini zorunlu tutar. Eski D7 `BeforeSync PASS`,
-  D8 izni değildir.
-- Gerçek makinede yalnız yazmasız `ProbeOnly` çalıştırıldı. WAL dâhil diff
-  cursor, `runstatus=1`, sıfır bekleyen iş, sıfır sync kaydı ve iki envanter
-  birlikte okunabildi; tasarım gereği `EligibleForD8=false`, `BLOCKED/2`
-  döndü ve rapor dosyası yazmadı. Bu çalışma içindeki iki ayrı prob arasında
-  hem kaynak hem pCloud dosya sayısı `6.416 → 6.419` yükseldi. Yazarın
-  cihazı/kullanıcısı belirlenemese de uzak envanter hareketi kanıtlandı;
-  bakım sessiz değildir ve D8 blokludur. 600 saniyelik gerçek gate,
-  `D8BeforeSync`, Add Sync ve `AfterSync` çalıştırılmadı.
-- Sonraki tek adım, bütün uzak yazarlar bakım penceresine alındıktan sonra
-  ayrı açık operatör onayıyla gerçek 600 saniyelik kapıyı çalıştırmaktır.
-  `PASS/0` ve ardından `D8BeforeSync PASS/0` olmadan Add Sync'e geçilmez.
+- **Durum: `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
+  kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
+  çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
+  commit'lerde kayıtlı). Operatör senkron sırasında bilerek 2 büyük program
+  dosyası sildi (onaylı) — `AfterSync` bunu doğru şekilde
+  `SOURCE_BASELINE_CHANGED_SINCE_BEFORE_SYNC` ile BLOCKED yaptı.
+- **Yeni: `PostSyncRebaseline` stage'i (HB-2026-129).** `D8BeforeSync`'in
+  aksine **aktif** bir Add Sync eşlemesi altında çalışan, eşlemeyi hiç
+  durdurmayan/kaldırmayan ayrı bir gate+stage çifti eklendi:
+  `pcloud-post-sync-rebaseline-gate.mjs` +
+  `test-pcloud-post-sync-rebaseline-gate.ps1` + `test-storage-sync-migration-preflight.ps1`'e
+  yeni `-Stage PostSyncRebaseline`. Eski pre-sync gate/`D8BeforeSync`
+  hiç değiştirilmedi (sıfır sync kaydı varsayımı korunuyor); bu tamamen ayrı
+  bir araç. Tam olarak bir `syncfolder` kaydının beklenen kök+hedefle
+  eşleşmesini, sıfır bekleyen/delayed kuyruğu (task/fstask/upload_tasks/
+  localfileupload/uptask_fileupload/pagecachetask/`localfolder.taskcnt`),
+  sıfır conflict-adı desenini, en az 600 saniye kaynak+hedef+uzak eşzamanlı
+  sessizliği ve nihai tam kaynak==hedef SHA-256 eşitliğini zorunlu kılar.
+  `Get-ValidatedBeforeSyncBaseline` artık `D8BeforeSync` VEYA
+  `PostSyncRebaseline` kaynaklı raporu kabul eder (AfterSync'in kendisi
+  değişmedi).
+- **Gerçek çalıştırma sonucu:** Gate 669 saniye tam sessizlik sağladı
+  (`WindowResetCount=0` — kaynak/hedef/uzak üçü de hareketsiz), ama nihai
+  `EligibleForRebaseline=false`, `Status=blocked`,
+  `SOURCE_TARGET_HASH_MISMATCH_AT_PASS`. Kaynak ve hedefte dosya/klasör
+  sayısı birebir eşit (6715/662) ama toplam bayt ~16,96 MB farklı. Salt-okunur
+  ek tarama tam olarak **4 dosyayı** ayrı ayrı tespit etti — hepsi
+  `56AAG629\HASAR` klasöründe (`HASAR 101–104.jpeg`): kaynak (P:) artık çok
+  daha küçük (~377–379 KB, daha yeni mtime), hedef hâlâ çok daha büyük
+  (~4,4–4,8 MB, daha eski mtime) kopyaları taşıyor. Uzak (bulut) toplam bayt
+  kaynakla birebir eşleşiyor (kaynak→bulut yüklemesi bitmiş), ama pCloud'un
+  yerel kuyruk tabloları tümü sıfır göstermesine rağmen bulut→hedef indirmesi
+  bu 4 dosya için hiç güncellenmemiş. Bu; ilk keşfedilen sahte "2 dosya
+  silindi" alarmının (kararlılık kontrolsüz ad-hoc taramadan kaynaklanan yanlış
+  alarm, gerçek araçla düzeltildi) aksine **gerçek, kalıcı bir tutarsızlık**.
+- Bulgu Administrators-only kanıta yazıldı
+  (`post-sync-rebaseline-blocked-diff-*.json` + sha256 sidecar). Migration
+  bu 4 dosya çözülüp taze bir `PostSyncRebaseline PASS` alınmadan
+  `AfterSync`e geçilmeyecek şekilde fail-closed durduruldu. Sync eşlemesi,
+  Stop/Clear, dosya, env ve servis bu paket boyunca hiç değiştirilmedi.
+- `node --test` (yeni + mevcut pCloud gate testleri) 15/15, `npm run
+  check:deploy` geçti. Sonraki adım: operatör `56AAG629` vakasının bu 4
+  fotoğrafını (neden küçültüldüğü, hangi versiyonun doğru olduğu) inceleyip
+  pCloud'un bu farkı kendiliğinden gidermesini beklemeli veya elle
+  müdahale etmeli; ardından taze gate→stage→`AfterSync` zinciri
+  tekrarlanmalıdır.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 

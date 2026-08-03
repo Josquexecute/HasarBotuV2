@@ -61,7 +61,7 @@ function foldWindows(value) {
   return value.normalize('NFC').toLocaleUpperCase('tr-TR')
 }
 
-function windowsPathEqual(left, right) {
+export function windowsPathEqual(left, right) {
   return foldWindows(normalizeWindowsPath(left)) === foldWindows(normalizeWindowsPath(right))
 }
 
@@ -237,7 +237,7 @@ async function captureDatabaseFiles(databasePath) {
   return values
 }
 
-async function withConsistentPcloudDatabase(databasePath, reader) {
+export async function withConsistentPcloudDatabase(databasePath, reader) {
   for (let attempt = 1; attempt <= DATABASE_SNAPSHOT_ATTEMPTS; attempt += 1) {
     const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'hasarbotu-pcloud-ro-'))
     try {
@@ -289,13 +289,13 @@ async function withConsistentPcloudDatabase(databasePath, reader) {
   fail('PCLOUD_DATABASE_SNAPSHOT_UNSTABLE')
 }
 
-function getTextSetting(database, id, safeCode) {
+export function getTextSetting(database, id, safeCode) {
   const row = database.prepare('SELECT value FROM setting WHERE id = ?').get(id)
   assert(row && typeof row.value === 'string' && row.value.length > 0, safeCode)
   return row.value
 }
 
-function getExactGhostRootId(database, ghost) {
+export function getExactGhostRootId(database, ghost) {
   const getFile = database.prepare(`
     SELECT
       CAST(id AS TEXT) AS id_text,
@@ -350,7 +350,7 @@ function getExactGhostRootId(database, ghost) {
   return rootId
 }
 
-function getRemoteInventory(database, rootId) {
+export function getRemoteInventory(database, rootId) {
   const statement = database.prepare(`
     WITH RECURSIVE tree(id) AS (
       SELECT ?
@@ -425,7 +425,7 @@ function getRemoteInventory(database, rootId) {
   }
 }
 
-function getPcloudTaskState(database) {
+export function getPcloudTaskState(database) {
   const taskTables = [
     'task',
     'fstask',

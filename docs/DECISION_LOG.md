@@ -4426,3 +4426,102 @@ IPC, dependency, veri modeli ve uygulama veri yazma yolu degismedi. 600
 saniyelik gercek gate, `D8BeforeSync`, Add Sync, gercek sync ve `AfterSync`
 calistirilmadi; pCloud ayari, kaynak/hedef veri, env ve servis durumu
 degistirilmedi.
+
+## 2026-08-03 - HB-2026-129: D8 post-sync rebaseline gate/stage'i eklendi; gercek calistirmada 4 dosyalik kalici kaynak/hedef tutarsizligi bulundu, migration fail-closed durduruldu
+
+Bu paket arasinda (HB-2026-125'ten sonra, karar gunlugune ayrica yazilmamis)
+gercek 600 saniyelik bakim kapisi, `D8BeforeSync` ve pCloud `Add new sync`
+bu makinede fiilen calistirildi (bkz. commit gecmisi HB-2026-126/127/128:
+D8 gate'e retry backoff, PS5.1 native stderr canliligi, pCloud DB
+quiescence bariyeri). Senkron calisirken operatorun kendisi kasten 2 buyuk
+program dosyasini pCloud icinden sildi (onaylandi); gercek `AfterSync`
+calistirmasi bunu dogru sekilde `SOURCE_BASELINE_CHANGED_SINCE_BEFORE_SYNC`
+ile BLOCKED yapti (kaynak/hedef zaten o an tam SHA-256 esitiydi, tek
+blocker buydu).
+
+Kullanici acikca yeni bir "post-sync rebaseline" asamasi istedi: **aktif**
+Add Sync eslemesi altinda calisan, eslemeyi Stop/Unlink ile hic durdurmayan,
+mevcut pre-sync gate'in sifir-sync-kaydi varsayimini gevsetmeyen/atlatmayan
+AYRI bir arac. Sebep: `test-pcloud-maintenance-window-gate.ps1` ve
+`D8BeforeSync`, `takeCombinedObservation` icinde `syncRecordCount === 0`
+sarti tasidigi icin Add Sync tikladiktan sonra bir daha ASLA PASS veremez —
+bu ampirik olarak dogrulandi (gercek calistirma `PCLOUD_SYNC_ALREADY_CONFIGURED`
+ile hatali). RUNBOOK'un o zamanki rollback metni de bunu "eslemeyi durdur"
+diye yaziyordu; kullanici eslemeye dokunulmasini istemedigi icin bu celiskiyi
+`AskUserQuestion` ile acikca sordu (Stop denendi, pCloud silme uyarisi
+verdi, iptal edildi — sonunda kullanici eslemeye dokunmama karari verdi ve
+yeni ayri arac istedi).
+
+Karar ve tooling (hicbiri mevcut pre-sync gate/D8BeforeSync/AfterSync
+davranisini degistirmedi — yalniz katkida bulundu):
+
+- `pcloud-maintenance-window-gate.mjs`den bes yardimci fonksiyon
+  (`withConsistentPcloudDatabase`, `getExactGhostRootId`, `getRemoteInventory`,
+  `getPcloudTaskState`, `getTextSetting`, `windowsPathEqual`) sadece `export`
+  eklenerek disariya acildi — mantik SIFIR degisti (`node --test` 7/7 hala
+  gecti); yeni modul bunlari import edip yeniden kullaniyor.
+- Yeni `pcloud-post-sync-rebaseline-gate.mjs`: tam olarak bir `syncfolder`
+  kaydinin beklenen uzak kok+hedef yerel yolla eslesmesini, sifir
+  `syncfolderdelayed`, sifir bekleyen kuyruk (task/fstask/upload_tasks/
+  localfileupload/uptask_fileupload/pagecachetask + `localfolder.taskcnt`
+  toplami — orijinal gate'in kapsamadigi ek bir tablo), sifir conflict-adi
+  deseni (`(conflicted copy...)`/`.deleted`) zorunlu kilar. Sessizlik takibi
+  UC eksenlidir: kaynak + hedef + uzak envanter, ayni MINIMUM_QUIET_SECONDS
+  (600, import edilen sabit) esigiyle. Nihai kabul: kaynak==hedef tam
+  SHA-256 esitligi (`SOURCE_TARGET_HASH_MISMATCH_AT_PASS` aksi halde).
+  Gercek DB-snapshot/kaynak-envanter kararsizligi (HB-2026-127 ile ayni sinif)
+  fail-closed reset+retry olarak ele alinir; sync-eslemesi/kuyruk/conflict
+  onkosullari ise HARD stop'tur (30 dakika boyunca sessizce yeniden
+  denenmez).
+- Yeni `test-pcloud-post-sync-rebaseline-gate.ps1`: orijinal wrapper'la ayni
+  Administrators-only ACL/rapor-yazma deseni; hedef+kaynak farkli kok,
+  `-ProbeOnly` hep `BLOCKED/2`.
+- `test-storage-sync-migration-preflight.ps1`e yeni `-Stage PostSyncRebaseline`
+  eklendi (ValidateSet'e ek, mevcut `BeforeSync`/`D8BeforeSync`/`AfterSync`
+  dallari degismedi). `Get-ValidatedBeforeSyncBaseline` artik
+  `D8BeforeSync` VEYA `PostSyncRebaseline` kaynakli raporu kabul eder;
+  D8BeforeSync icin hedefin BOS olmasi hala sarttir, PostSyncRebaseline icin
+  ise hedefin DOLU olup `Comparison.Eligible/Missing/Extra/HashMismatch`
+  temiz olmasi sarttir (Target.IsEmpty ters mantikla kontrol edilir).
+- Yeni `-ActiveSyncWindowReportPath`/`-ActiveSyncWindowReportSha256` +
+  `Get-ValidatedActiveSyncWindowReport` + `Invoke-ActiveSyncWindowCurrentCheck`
+  (D8BeforeSync'in `MaintenanceWindow*` cift kontrolunun PostSyncRebaseline
+  icin ayri, paralel karsiligi).
+- `scripts/check-windows-service-configs.mjs`e yeni dosyalarin fail-closed
+  kablolamasini koruyan statik denetim bloku eklendi.
+
+Test sonucu:
+
+- `node --test deploy/windows-service/pcloud-maintenance-window-gate.test.mjs
+  deploy/windows-service/pcloud-post-sync-rebaseline-gate.test.mjs` 15/15
+  gecti (8 yeni: kok cozumleme, eksik/yanlis sync kaydi, bekleyen task,
+  delayed oge, conflict-adi deseni, 600 saniye alt siniri, ProbeOnly reddi).
+- `npm run check:deploy` gecti (yeni statik denetim bloku dahil).
+- `[System.Management.Automation.Language.Parser]::ParseFile` her iki
+  `.ps1` icin 0 hata.
+- **Gercek makinede calistirildi** (Administrator, aktif Add Sync
+  eslemesiyle): gate 669 saniye tam sessizlik sagladi
+  (`WindowResetCount=0` — kaynak/hedef/uzak ucu de tum pencere boyunca
+  hareketsiz), ama nihai `EligibleForRebaseline=false`, `BLOCKED/2`,
+  `SOURCE_TARGET_HASH_MISMATCH_AT_PASS`. Kaynak/hedef dosya+klasor sayisi
+  birebir esit (6715/662) ama toplam bayt ~16,96 MB farkli. Ek salt-okunur
+  tarama tam 4 dosyayi izole etti — `56AAG629\HASAR\HASAR 101–104.jpeg`:
+  kaynak simdi kucuk (~377–379 KB, yeni mtime), hedef hala buyuk
+  (~4,4–4,8 MB, eski mtime). Uzak (bulut) toplam bayt kaynakla birebir
+  esit (kaynak->bulut yuklemesi bitmis) ama pCloud yerel kuyruk tablolari
+  hepsi sifirken bulut->hedef indirmesi bu 4 dosya icin guncellenmemis —
+  gercek, kalici bir tutarsizlik (erken bir kararlilik-kontrolsuz ad-hoc
+  taramanin ürettigi "2 dosya silinmis" yanlis alarmindan FARKLI ve ondan
+  bagimsiz dogrulanmis gercek bir bulgu).
+
+Etki: Yalniz deploy tooling ve docs degisti; uygulama runtime/is mantigi,
+IPC, dependency, veri modeli degismedi. Sync eslemesi/Stop/Clear, kaynak/
+hedef dosyalar, env ve servis bu paket boyunca HIC degistirilmedi. Migration
+fail-closed durduruldu: 4 dosyalik tutarsizlik cozulup taze bir
+`PostSyncRebaseline PASS` alinmadan `AfterSync` calistirilmayacak. Bulgu
+Administrators-only kanita yazildi
+(`post-sync-rebaseline-blocked-diff-20260803T095328717Z-f03cb9e4.json`).
+Acik kalan: `56AAG629` vakasinin 4 fotografinin neden/nasil kucultuldugu ve
+hangi versiyonun dogru oldugu operator tarafindan belirlenmeli; pCloud'un
+bulut->hedef indirmesini neden tetiklemedigi (yerel kuyruk tablolari sifir
+gosterse de) ayrica arastirilabilir ama bu paketin kapsaminda degil.

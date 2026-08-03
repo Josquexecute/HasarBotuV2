@@ -898,16 +898,75 @@ onaylama. Hesabı `Unlink` etme, hedefi boşaltma ve eşleme aktifken yerel
 dosya silme yapma. Stop sonrası iki taraf da olduğu gibi korunur; inceleme
 bitmeden hedef yeniden kullanılmaz.
 
-**Rollback sınırı:** D8, env/servis cutover'ından **önce** biter. Bu nedenle
-normal rollback; eşlemeyi durdurmak, iki ağacı dokunmadan korumak ve yeni
-bakım kapısı + taze `D8BeforeSync` ile yeniden planlamaktır. Ortam veya servis geri alma komutu
-yoktur; çünkü bunlar D8'de hiç değiştirilmez.
+**Rollback sınırı:** D8, env/servis cutover'ından **önce** biter. `test-pcloud-maintenance-window-gate.ps1`
+ve `D8BeforeSync` yalnız Add Sync'ten ÖNCEKİ durum için tasarlıdır (sıfır
+`syncfolder` kaydı zorunlu kılar) — Add Sync bir kez tıklandıktan sonra bu
+ikisi **artık hiçbir zaman** yeniden PASS veremez; eşlemeyi (Stop ile) durdurup
+kaldırmadan yeniden çalıştırılamazlar. Normal rollback bu yüzden eşlemeyi
+`Stop` ile durdurmak, iki ağacı dokunmadan korumak ve **§2e.4b'deki
+`PostSyncRebaseline`** ile yeniden planlamaktır — eşleme aktif kalacaksa (Stop
+istenmiyorsa) rebaseline yolu zaten eşlemeye dokunmadan çalışır. Ortam veya
+servis geri alma komutu yoktur; çünkü bunlar D8'de hiç değiştirilmez.
 
 Bulutta eksilme/overwrite kanıtlanırsa otomatik rollback yapılmaz. Önce sync
 durdurulur; sonra olay türüne göre Trash, Revisions veya Rewind kullanımı
 ayrı, açık veri-yazma onayıyla yürütülür. Hesaba özgü retention süresi web
 arayüzünden doğrulanmadan bu imkân “garantili yedek” sayılmaz. Sync aktifken
 yerel hedefi silmek rollback değildir; iki yönlü silmeyi büyütebilir.
+
+### 2e.4b Aktif sync altında rebaseline — `PostSyncRebaseline` (HB-2026-129)
+
+Add Sync tıklandıktan sonra (operatör tarafından kabul edilmiş bir kaynak
+değişikliği, pCloud UI'de görünen "Error during sync" öğelerinin tamamının
+bilinen 10 ghost exclusion kaydıyla eşleştiğinin doğrulanması veya benzeri bir
+nedenle) taze bir migration baseline'ı gerekiyorsa, **eşlemeyi Stop/Unlink
+etmeden** aşağıdaki iki adım çalıştırılır. Bu araçlar §2e.2/§2e.3'teki
+pre-sync `test-pcloud-maintenance-window-gate.ps1`/`D8BeforeSync`'in yerini
+almaz; onlar hiç değiştirilmedi ve hâlâ yalnız Add Sync'ten ÖNCEKİ senaryo
+içindir.
+
+1. Kuyruğun gerçekten boşaldığını (pCloud UI "Everything downloaded/uploaded")
+   salt-okunur doğrula, sonra taze rebaseline kapısını çalıştır:
+
+   ```powershell
+   & '.\deploy\windows-service\test-pcloud-post-sync-rebaseline-gate.ps1' `
+     -GhostExclusionManifestPath $ghostManifest `
+     -PollSeconds 15 `
+     -MaximumMinutes 30 `
+     -ProgressInterval 500
+   ```
+
+   Bu, tam olarak bir `syncfolder` kaydının beklenen uzak kök + hedef yerel
+   yolla eşleştiğini, sıfır bekleyen/delayed pCloud kuyruğunu (`task`/`fstask`/
+   `upload_tasks`/`localfileupload`/`uptask_fileupload`/`pagecachetask`/
+   `localfolder.taskcnt`) ve sıfır conflict-adı desenini zorunlu kılar; ardından
+   kaynak+hedef+uzak envanterde en az 600 saniye eşzamanlı sessizlik ve nihai
+   tam kaynak==hedef SHA-256 eşitliği olmadan `PASS/0` vermez. Rapor +
+   SHA-256 aynı Administrators-only `C:\ProgramData\HasarBotu\migration-preflight`
+   altına yazılır.
+
+2. Aynı rapor ve exact exclusion manifestiyle `PostSyncRebaseline` stage'ini
+   çalıştır — bu, D8BeforeSync'in AKSİNE hedefin **dolu** olmasını bekler ve
+   kabul kriteri hedefin boşluğu değil, kaynak==hedef tam SHA-256 eşitliğidir:
+
+   ```powershell
+   $activeSyncReport = '<Administrators-only rebaseline kapısı PASS raporu>'
+   $activeSyncReportSha256 = '<raporun doğrulanmış SHA-256 değeri>'
+
+   .\deploy\windows-service\test-storage-sync-migration-preflight.ps1 `
+     -Stage PostSyncRebaseline `
+     -GhostExclusionManifestPath $ghostManifest `
+     -ActiveSyncWindowReportPath $activeSyncReport `
+     -ActiveSyncWindowReportSha256 $activeSyncReportSha256 `
+     -ProgressInterval 500
+   ```
+
+   `PostSyncRebaseline PASS/0` raporu, `AfterSync`'in `-BeforeSyncReportPath`'i
+   olarak `D8BeforeSync`'in ürettiğiyle **aynı şemayı** ve aynı kabul yolunu
+   kullanır (`Get-ValidatedBeforeSyncBaseline` her iki stage adını da kabul
+   eder). Eski baseline'dan bu yana kaynak değiştiyse (operatör silmesi dahil)
+   `ACTIVE_SYNC_WINDOW_SOURCE_BASELINE_CHANGED` ile `BLOCKED/2` verir — bu
+   durumda taze bir gate+stage çifti yeniden çalıştırılır.
 
 ### 2e.5 AfterSync tam SHA-256 kabul kapısı
 
@@ -929,8 +988,8 @@ $beforeSyncReportSha256 = '<raporun bağımsız doğrulanmış SHA-256 değeri>'
 `PASS/0` için aynı anda şunların tümü zorunludur:
 
 - baseline raporu `storage-sync-migration-preflight/1.3.0` + `D8BeforeSync`
-  stage'indedir; bakım penceresi kanıtı taşır ve hash/Administrators-only ACL
-  kontrolünden geçer;
+  **veya** (§2e.4b) `PostSyncRebaseline` stage'indedir; ilgili sessizlik
+  penceresi kanıtı taşır ve hash/Administrators-only ACL kontrolünden geçer;
 - baseline'daki 10 exact exclusion manifest hash'i güncel manifestle aynıdır;
 - güncel kaynak dosya/klasör/bayt sayısı ve **tam kaynak manifest SHA-256**
   değeri `D8BeforeSync` baseline'ıyla aynıdır;

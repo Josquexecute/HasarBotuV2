@@ -175,6 +175,48 @@ try {
   errors.push(`D7 ghost exclusion tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-129: D8 post-sync rebaseline — aktif Add Sync altında çalışan,
+// pre-sync gate'in sync-yok varsayımını ASLA gevşetmeyen ayrı stage/araç.
+// Statik kapı bu yeni dosyaların fail-closed kablolamasını korur.
+try {
+  const preflight = await readFile(`${DEPLOY_DIR}test-storage-sync-migration-preflight.ps1`, 'utf8')
+  const rebaselineGate = await readFile(`${DEPLOY_DIR}pcloud-post-sync-rebaseline-gate.mjs`, 'utf8')
+  const rebaselineWrapper = await readFile(`${DEPLOY_DIR}test-pcloud-post-sync-rebaseline-gate.ps1`, 'utf8')
+
+  assertContains(preflight, /'PostSyncRebaseline'/, 'test-storage-sync-migration-preflight.ps1', 'aktif sync altında çalışan ayrı PostSyncRebaseline stage')
+  assertContains(preflight, /\$ActiveSyncWindowReportPath/, 'test-storage-sync-migration-preflight.ps1', 'PostSyncRebaseline için ayrı rapor parametresi (MaintenanceWindowReportPath DEĞİL)')
+  assertContains(preflight, /ACTIVE_SYNC_WINDOW_SOURCE_BASELINE_CHANGED/, 'test-storage-sync-migration-preflight.ps1', 'post-sync rebaseline sırasında kaynak baseline değişimi blockeri')
+  assertContains(preflight, /Invoke-ActiveSyncWindowCurrentCheck/, 'test-storage-sync-migration-preflight.ps1', 'post-sync rebaseline tam hash öncesi/sonrası güncellik kontrolü')
+  assertContains(preflight, /Get-ValidatedActiveSyncWindowReport/, 'test-storage-sync-migration-preflight.ps1', 'post-sync rebaseline rapor doğrulayıcısı')
+  assertContains(preflight, /report\.Stage -notin @\('D8BeforeSync', 'PostSyncRebaseline'\)/, 'test-storage-sync-migration-preflight.ps1', 'AfterSync baseline kabulünün D8BeforeSync VE PostSyncRebaseline ile sınırlı kalması')
+
+  assertContains(rebaselineGate, /getExactGhostRootId,/, 'pcloud-post-sync-rebaseline-gate.mjs', 'pre-sync gate ile aynı vetted kok cozumleme mantiginin yeniden kullanimi')
+  assertContains(rebaselineGate, /withConsistentPcloudDatabase,/, 'pcloud-post-sync-rebaseline-gate.mjs', 'pre-sync gate ile ayni WAL-dahil tutarli snapshot tekniginin yeniden kullanimi')
+  assertContains(rebaselineGate, /SYNC_MAPPING_ROW_COUNT_INVALID/, 'pcloud-post-sync-rebaseline-gate.mjs', 'tam olarak bir aktif sync kaydi sarti')
+  assertContains(rebaselineGate, /SYNC_MAPPING_ROOT_MISMATCH/, 'pcloud-post-sync-rebaseline-gate.mjs', 'sync kaydinin beklenen uzak kokle eslesme sarti')
+  assertContains(rebaselineGate, /SYNC_MAPPING_TARGET_MISMATCH/, 'pcloud-post-sync-rebaseline-gate.mjs', 'sync kaydinin beklenen hedef yerel yolla eslesme sarti')
+  assertContains(rebaselineGate, /PCLOUD_PENDING_TASKS_FOUND/, 'pcloud-post-sync-rebaseline-gate.mjs', 'sifir bekleyen pCloud kuyrugu sarti')
+  assertContains(rebaselineGate, /PCLOUD_LOCALFOLDER_TASKS_FOUND/, 'pcloud-post-sync-rebaseline-gate.mjs', 'localfolder.taskcnt toplaminin da sifir olma sarti')
+  assertContains(rebaselineGate, /PCLOUD_CONFLICT_NAME_PATTERN_DETECTED/, 'pcloud-post-sync-rebaseline-gate.mjs', 'conflict-adi deseni fail-closed reddi')
+  assertContains(rebaselineGate, /SOURCE_TARGET_HASH_MISMATCH_AT_PASS/, 'pcloud-post-sync-rebaseline-gate.mjs', 'kaynak/hedef tam SHA-256 esitsizliginde fail-closed BLOCKED')
+  assertContains(rebaselineGate, /MINIMUM_QUIET_SECONDS,/, 'pcloud-post-sync-rebaseline-gate.mjs', 'pre-sync gate ile ayni degistirilemez 600 saniye sabitinin yeniden kullanimi')
+
+  assertContains(rebaselineWrapper, /Test-AdministratorsOnlyFile/, 'test-pcloud-post-sync-rebaseline-gate.ps1', 'admin-only manifest kapısı')
+  assertContains(rebaselineWrapper, /New-AdminOnlySecurity/, 'test-pcloud-post-sync-rebaseline-gate.ps1', 'admin-only gate raporu')
+  assertNotContains(rebaselineWrapper, /SetEnvironmentVariable|Start-Service|Set-Service|Stop-Service|Stop-Process|Unlink|Clear-/, 'test-pcloud-post-sync-rebaseline-gate.ps1', 'env/servis/pCloud eslemesi mutasyonu')
+
+  const rebaselineTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}pcloud-post-sync-rebaseline-gate.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (rebaselineTests.status !== 0) {
+    throw new Error(`D8 post-sync rebaseline testleri başarısız — ${rebaselineTests.stderr || rebaselineTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`D8 post-sync rebaseline tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)
