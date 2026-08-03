@@ -294,6 +294,39 @@ try {
   errors.push(`D8 post-sync diff forensics tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-134 follow-up: PCLOUD_PENDING_TASKS_FOUND salt-okunur teshis
+// araci. Gate/PostSyncRebaseline/AfterSync'i asla calistirmadigini ve
+// hicbir yazma yapmadigini koruyan statik denetim.
+try {
+  const queueForensics = await readFile(`${DEPLOY_DIR}pcloud-task-queue-forensics.mjs`, 'utf8')
+  const queueWrapper = await readFile(`${DEPLOY_DIR}run-pcloud-task-queue-forensics.ps1`, 'utf8')
+
+  assertContains(queueForensics, /This module is READ-ONLY/, 'pcloud-task-queue-forensics.mjs', 'salt-okunur oldugunu belirten dokumantasyon')
+  assertNotContains(queueForensics, /writeFile|WriteAllText|WriteAllBytes|\.exec\(['"]INSERT|\.exec\(['"]UPDATE|\.exec\(['"]DELETE/, 'pcloud-task-queue-forensics.mjs', 'herhangi bir dosya/DB yazma cagrisi')
+  assertContains(queueForensics, /'genuine_transfer'/, 'pcloud-task-queue-forensics.mjs', 'genuine_transfer siniflandirmasi')
+  assertContains(queueForensics, /'recurring_retry'/, 'pcloud-task-queue-forensics.mjs', 'recurring_retry siniflandirmasi')
+  assertContains(queueForensics, /'metadata_churn'/, 'pcloud-task-queue-forensics.mjs', 'metadata_churn siniflandirmasi')
+  assertContains(queueForensics, /'remote_writer'/, 'pcloud-task-queue-forensics.mjs', 'remote_writer siniflandirmasi')
+  assertContains(queueForensics, /'unknown'/, 'pcloud-task-queue-forensics.mjs', 'unknown siniflandirmasi')
+  assertContains(queueForensics, /IMPORTANT HONESTY NOTE/, 'pcloud-task-queue-forensics.mjs', 'undokumante type/status kodlarinin uydurulmadigini belirten not')
+
+  assertContains(queueWrapper, /ADMINISTRATOR_REQUIRED/, 'run-pcloud-task-queue-forensics.ps1', 'admin rol sarti')
+  assertContains(queueWrapper, /Test-AdministratorsOnlyFile/, 'run-pcloud-task-queue-forensics.ps1', 'admin-only manifest ACL kapisi')
+  assertContains(queueWrapper, /New-AdminOnlySecurity/, 'run-pcloud-task-queue-forensics.ps1', 'admin-only rapor ACL uygulamasi')
+  assertNotContains(queueWrapper, /SetEnvironmentVariable|Start-Service|Set-Service|Stop-Service|Stop-Process|\[System\.IO\.File\]::Replace|\[System\.IO\.File\]::Delete|\[System\.IO\.File\]::Copy|test-pcloud-post-sync-rebaseline-gate|test-storage-sync-migration-preflight/, 'run-pcloud-task-queue-forensics.ps1', 'env/servis/dosya yazma + gate/PostSyncRebaseline/AfterSync cagrisi yok (yalniz rapor yazimi)')
+
+  const queueForensicsTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}pcloud-task-queue-forensics.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (queueForensicsTests.status !== 0) {
+    throw new Error(`pcloud-task-queue-forensics testleri başarısız — ${queueForensicsTests.stderr || queueForensicsTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`pCloud task queue forensics tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)
