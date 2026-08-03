@@ -5110,3 +5110,63 @@ arasindaki (~30 saniyelik) pencerede bile gercek dosya hareketinin
 tamamen durmasini beklemek. Zincir tekrar denenecekse, mumkunse daha
 uzun bir sessizlik dogrulamasi (gate'in kendi 600 saniyesinin OTESINDE,
 stage gecisleri sirasinda da) faydali olabilir.
+
+
+## 2026-08-03 - HB-2026-139: D8 pCloud -> NTFS migration zinciri (gate -> PostSyncRebaseline -> AfterSync) ILK KEZ BASTAN SONA PASS ile tamamlandi
+
+Kullanicinin "sakin donem" bildirimiyle once 2 dakikalik salt-okunur
+on-kontrol calistirildi (`pcloud-task-queue-forensics`, 120 sn/20 sn, 7
+ornek): sifir hareket (`RemoteChanged=false`, `DiffCursorAdvanced=false`,
+`SourceStableAcrossWindow=true`, `DistinctQueueEntryCount=0`). Bu temiz
+sonuc uzerine tek seferlik gate->`PostSyncRebaseline`->`AfterSync`
+zinciri baslatildi (attempt 15) ve **UCU DE PASS verdi.**
+
+1. **Gate: `PASS`.** `ObservedQuietSeconds=657` (>=600),
+   `WindowResetCount=11` (calisma boyunca gecici hareket oldu ama son
+   pencere kesintisiz kaldi), `SourceTargetHashMatch=true` (6873 dosya,
+   tam esitlik). Rapor Administrators-only yazildi
+   (`pcloud-post-sync-rebaseline-20260803T211633801Z-61d9d81c.json`).
+2. **`PostSyncRebaseline` stage'i (`test-storage-sync-migration-preflight.ps1
+   -Stage PostSyncRebaseline`): `PASS`.** Sifir blocker,
+   `Comparison.Eligible=true`, `MissingFileCount=0`, `ExtraFileCount=0`,
+   `HashMismatchCount=0`, kaynak==hedef manifest hash birebir esit
+   (`e5a1475e...`). Rapor manuel olarak Administrators-only kanit
+   dizinine yazildi (`poststage-postsyncrebaseline-20260803T211827782Z-
+   fab8fa75.json`) — bu script'in kendisi (`test-storage-sync-migration-
+   preflight.ps1`) hicbir modda dosyaya yazmaz, yalniz stdout'a JSON
+   basar; operator (bu oturumda: ajan) raporu hash'leyip admin-only
+   ACL'le kalici hale getirmekten sorumludur (runbook'ta belgelendigi
+   gibi).
+3. **`AfterSync` stage'i: `PASS`.** Sifir blocker,
+   `BeforeSyncBaseline.CurrentSourceMatches=true`,
+   `Comparison.Eligible=true`, `MissingFileCount=0`, `ExtraFileCount=0`,
+   `HashMismatchCount=0`, kaynak==hedef manifest hash birebir esit
+   (ayni `e5a1475e...`). Rapor Administrators-only kanit dizinine
+   yazildi (`poststage-aftersync-20260803T211949338Z-1bb00fbc.json`).
+
+**D8 pCloud -> NTFS geçis DOGRULAMASI (HB-2026-129'dan bu yana ilk kez)
+BASTAN SONA basariyla tamamlandi:** 6873 dosya, 673 klasor, kaynak (P:)
+ve hedef (C:\HasarBotuStorage) arasinda tam SHA-256 esitligi kanitlandi.
+
+**ONEMLI SINIR:** `AfterSync` stage'i TAMAMEN salt-okunurdur — kendisi
+HICBIR mutasyon yapmaz (env degiskeni, servis durumu, sync ayari,
+`HASARBOTU_AGENT_ROOTS` vb. HICBIRINE dokunmaz). Bu PASS, migrasyonun
+DOGRULANDIGINI kanitlar, ama gercek operasyonel devretme (File Agent'in
+hangi kok dizini kullandiginin degistirilmesi, pCloud sync'in
+durdurulmasi/kaldirilmasi vb.) runbook'a gore AYRI, acik bir sonraki
+adimdir ve bu paket icinde YAPILMADI. Sync eslemesi, Stop/Clear, kaynak/
+hedef dosya, env, servis bu paket boyunca hic degismedi.
+
+Test sonucu: Bu paket icin kod/tooling degismedi (yalniz gercek arac
+calistirmalari + docs); mevcut `node --test`/`npm run check:deploy`
+durumu HB-2026-138'den beri degismedi.
+
+Etki: D8 migration validasyonu artik `AfterSync PASS/0` durumunda.
+HB-2026-133'teki tek dosya onarimi (ALKOL RAPORU .jpg) ve bu zincirin
+basarisi dogrudan iliskili — o onarim olmadan kaynak/hedef hic bir zaman
+tam esitlenemezdi.
+
+Acik kalan: Gercek operasyonel devretme (env/servis/File Agent kok dizini
+degisikligi) — kullanicinin acik talebi ve ayri bir kritik islem
+onayiyla (AGENTS.md #7) ele alinmali. Bu depo kurallari geregi bu adim
+otonom olarak baslatilmadi.

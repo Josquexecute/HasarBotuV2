@@ -1,6 +1,6 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-08-03
+Son güncelleme: 2026-08-04
 
 ## Mevcut sürüm ve aşama
 
@@ -8,9 +8,24 @@ Son güncelleme: 2026-08-03
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.101 başarılı / 6 ortam-koşullu skip.**
 
-## D8 pCloud → NTFS migration — Add Sync gerçekleşti, post-sync rebaseline BLOCKED (2026-08-03, HB-2026-129)
+## D8 pCloud → NTFS migration — doğrulama zinciri (gate→PostSyncRebaseline→AfterSync) İLK KEZ baştan sona PASS (2026-08-03, HB-2026-139)
 
-- **Durum: `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
+- **GÜNCEL DURUM: `AFTERSYNC_PASS / CUTOVER_NOT_STARTED`.** HB-2026-129'dan
+  beri süren post-sync rebaseline BLOCKED durumu, HB-2026-133'teki tek
+  dosya onarımı ve ardından art arda denemelerle (HB-2026-134–138) sonunda
+  HB-2026-139'da çözüldü: `gate` → `PostSyncRebaseline` → `AfterSync`
+  zincirinin **üçü de PASS/0** verdi. 6873 dosya, 673 klasör, kaynak
+  (P:) ve hedef (`C:\HasarBotuStorage`) arasında tam SHA-256 eşitliği
+  kanıtlandı. Kanıtlar Administrators-only
+  `C:\ProgramData\HasarBotu\migration-preflight` altında (gate + PostSync-
+  Rebaseline stage + AfterSync stage raporları, hepsi hash'li).
+  **ÖNEMLİ SINIR: `AfterSync` tamamen salt-okunur bir doğrulamadır —
+  gerçek operasyonel devretme (env/servis/File Agent kök dizini
+  değişikliği) AYRI, henüz YAPILMAMIŞ bir adımdır** (kullanıcının açık
+  talebi + AGENTS.md #7 kritik işlem onayı gerekir).
+- Ayrıntı için `HB-2026-139` (karar günlüğü) — aşağıdaki geçmiş kayıtlar
+  bu noktaya nasıl gelindiğini belgeler.
+- **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
   commit'lerde kayıtlı). Operatör senkron sırasında bilerek 2 büyük program
@@ -162,13 +177,17 @@ Son güncelleme: 2026-08-03
   kanıtlıyor** — darboğaz artık gate'in 600 saniyesi değil, PASS ile bir
   sonraki stage'in başlaması arasındaki kısa pencerede bile mutlak
   sıfır dosya hareketi gerekmesi.
-- **Durum: dosya onarımı (HB-2026-133) KESİN tamamlandı ve bu paketten
-  etkilenmedi; D8 migration cutover (`AfterSync`) hâlâ tamamlanmadı.**
-  Sync eşlemesi, Stop/Clear, env, servis, başka hiçbir dosya değişmedi.
-- Sonraki adım: (kullanıcının açık talebiyle) taze gate→
-  `PostSyncRebaseline`→`AfterSync` üçlüsünün yeniden denenmesi;
-  mümkünse ofis genelinde daha uzun süreli, gerçekten kesintisiz bir
-  sessizlik dönemi hedeflenmeli.
+- **Zincir İLK KEZ baştan sona PASS (HB-2026-139, aynı gün ~21:19 UTC):
+  gate `PASS` (657 sn sessizlik) → `PostSyncRebaseline` `PASS` (sıfır
+  blocker) → `AfterSync` `PASS` (sıfır blocker).** Kaynak==hedef tam
+  SHA-256 eşitliği (6873 dosya) kanıtlandı; üç aşamanın raporu da
+  Administrators-only kanıt dizininde. D8 migration DOĞRULAMASI tamamlandı.
+  **Gerçek operasyonel devretme (env/servis/File Agent kök dizini)
+  AYRI, henüz YAPILMAMIŞ bir adım** — kullanıcının açık talebi ve ayrı
+  bir kritik işlem onayı gerekiyor.
+- Sonraki adım: kullanıcının açık talebiyle gerçek operasyonel devretmeyi
+  (AGENTS.md #7 Planla→Önizle→Onay→Uygula→Doğrula→Kesinleştir→Audit
+  modeliyle) planlamak.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 
