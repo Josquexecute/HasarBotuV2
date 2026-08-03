@@ -259,6 +259,41 @@ try {
   errors.push(`D8 post-sync stale-target-file repair tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-131: D8 post-sync source/target diff forensics — rebaseline
+// gate'in SOURCE_TARGET_HASH_MISMATCH_AT_PASS'te verdiği toplu hash
+// uyuşmazlığını dosya bazında izole eden, tamamen salt-okunur araç.
+try {
+  const diffForensics = await readFile(`${DEPLOY_DIR}pcloud-post-sync-diff-forensics.mjs`, 'utf8')
+  const diffWrapper = await readFile(`${DEPLOY_DIR}run-pcloud-post-sync-diff-forensics.ps1`, 'utf8')
+
+  assertContains(diffForensics, /This module is READ-ONLY/, 'pcloud-post-sync-diff-forensics.mjs', 'salt-okunur oldugunu belirten dokumantasyon')
+  assertNotContains(diffForensics, /writeFile|WriteAllText|WriteAllBytes|\.exec\(['"]INSERT|\.exec\(['"]UPDATE|\.exec\(['"]DELETE/, 'pcloud-post-sync-diff-forensics.mjs', 'herhangi bir dosya/DB yazma cagrisi')
+  assertContains(diffForensics, /'missing'/, 'pcloud-post-sync-diff-forensics.mjs', 'missing siniflandirmasi')
+  assertContains(diffForensics, /'extra'/, 'pcloud-post-sync-diff-forensics.mjs', 'extra siniflandirmasi')
+  assertContains(diffForensics, /'content_mismatch'/, 'pcloud-post-sync-diff-forensics.mjs', 'content_mismatch siniflandirmasi')
+  assertContains(diffForensics, /'metadata_only'/, 'pcloud-post-sync-diff-forensics.mjs', 'metadata_only siniflandirmasi')
+  assertContains(diffForensics, /getTaskReferenceCount/, 'pcloud-post-sync-diff-forensics.mjs', 'pCloud task/fstask referans kontrolu')
+  assertContains(diffForensics, /getRevisionHistory/, 'pcloud-post-sync-diff-forensics.mjs', 'pCloud filerevision gecmisi')
+  assertContains(diffForensics, /isNotLockedForWrite/, 'pcloud-post-sync-diff-forensics.mjs', 'acik handle probu')
+  assertContains(diffForensics, /findAllConflictNames/, 'pcloud-post-sync-diff-forensics.mjs', 'conflict-adi deseni taramasi')
+
+  assertContains(diffWrapper, /ADMINISTRATOR_REQUIRED/, 'run-pcloud-post-sync-diff-forensics.ps1', 'admin rol sarti')
+  assertContains(diffWrapper, /Test-AdministratorsOnlyFile/, 'run-pcloud-post-sync-diff-forensics.ps1', 'admin-only manifest ACL kapisi')
+  assertContains(diffWrapper, /New-AdminOnlySecurity/, 'run-pcloud-post-sync-diff-forensics.ps1', 'admin-only rapor ACL uygulamasi')
+  assertNotContains(diffWrapper, /SetEnvironmentVariable|Start-Service|Set-Service|Stop-Service|Stop-Process|\[System\.IO\.File\]::Replace|\[System\.IO\.File\]::Delete|\[System\.IO\.File\]::Copy/, 'run-pcloud-post-sync-diff-forensics.ps1', 'env/servis/dosya yazma-tasima mutasyonu yok (yalniz rapor yazimi)')
+
+  const diffForensicsTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}pcloud-post-sync-diff-forensics.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (diffForensicsTests.status !== 0) {
+    throw new Error(`pcloud-post-sync-diff-forensics testleri başarısız — ${diffForensicsTests.stderr || diffForensicsTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`D8 post-sync diff forensics tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

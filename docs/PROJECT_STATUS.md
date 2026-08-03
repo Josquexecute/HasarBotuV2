@@ -81,11 +81,22 @@ Son güncelleme: 2026-08-03
   eşitken (6873/673) toplam bayt 708 bayt farklı — HB-2026-130'daki
   4-fotoğraflık ~16,96 MB'lik farktan tamamen ayrı, önceden belgelenmemiş
   yeni bir tutarsızlık. Talimat gereği otomatik yeniden deneme YAPILMADI.
-- Sonraki adım: bu yeni 708 baytlık farkın kaynağını (hangi dosya/dosyalar)
-  ayrı, salt-okunur bir teşhis adımıyla (HB-2026-130a tarzı forensics)
-  tespit etmek — kullanıcının açık talebiyle ayrı görev; ardından taze
-  `PostSyncRebaseline` gate'i yeniden çalıştırıp PASS alınırsa `AfterSync`
-  zincirine geçmek.
+- **708 baytlık fark dosya bazında izole edildi (HB-2026-132, aynı gün,
+  yeni `pcloud-post-sync-diff-forensics.mjs` + `run-pcloud-post-sync-diff-forensics.ps1`
+  ile).** Tam olarak TEK dosya sorumlu:
+  `2026\Ağustos 2026\56AAG629\EVRAK\ALKOL RAPORU .jpg`. Kaynak (P:)
+  210.808 bayt (`LastWriteTimeUtc` 2026-08-03T11:01:44Z), hedef
+  210.100 bayt (2026-08-03T09:20:27Z) — fark tam 708 bayt. pCloud'un
+  current satırı kaynakla eşleşiyor, `filerevision` geçmişinde hedefin
+  boyutuyla eşleşen eski bir kayıt var (`source_current_target_superseded`),
+  sıfır task/fstask referansı, iki taraf da kilitli değil. Bu,
+  HB-2026-130'daki 4 HASAR fotoğrafından tamamen bağımsız, bugün oluşmuş
+  yeni bir tek dosyalık pCloud bulut→hedef indirme gecikmesi. Talimat
+  gereği onarım ÇALIŞTIRILMADI — yalnız izolasyon yapıldı.
+- Sonraki adım: kullanıcının açık talebiyle bu tek dosya için ayrı bir
+  forensics raporu üretip `repair-post-sync-stale-target-files.ps1`
+  `-Apply` ile onarmak; ardından taze `PostSyncRebaseline` gate'i yeniden
+  çalıştırıp PASS alınırsa `AfterSync` zincirine geçmek.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 

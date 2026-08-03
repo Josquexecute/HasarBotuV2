@@ -998,6 +998,34 @@ DIŞINDA), kaynağı hedefin dizininde stage edip hash/JPEG doğrula, atomik
 yeniden doğrula. Bir dosyanın blockeri diğerlerini durdurmaz. pCloud ayarı,
 sync eşlemesi, env ve servis asla değişmez.
 
+### 2e.4d Genel dosya-bazlı diff izolasyonu — `run-pcloud-post-sync-diff-forensics.ps1` (HB-2026-131)
+
+`PostSyncRebaseline` gate'i `SOURCE_TARGET_HASH_MISMATCH_AT_PASS` ile BLOCKED
+verdiğinde yalnız TOPLU manifest hash uyuşmazlığını raporlar; hangi
+dosya(lar)ın sorumlu olduğunu söylemez. Bu araç, hangi belirli dosyaların
+(§2e.4c'deki bilinen 4-fotoğraf vakasından bağımsız olarak) farklı olduğunu
+salt-okunur biçimde izole eder:
+
+```powershell
+.\deploy\windows-service\run-pcloud-post-sync-diff-forensics.ps1 `
+  -GhostExclusionManifestPath $ghostManifest `
+  -ProgressInterval 500
+```
+
+Kaynağı (ghost 10 kayıt hariç) ve hedefi (hariçsiz) tek tek SHA-256 ile
+hash'ler; göreli yola göre `missing`/`extra`/`content_mismatch`/
+`metadata_only` sınıflandırır. Her farklı dosya için pCloud'un current
+`file` satırını, tam `filerevision` geçmişini, `task`/`fstask` referans
+sayısını ve açık-handle olasılığını ekleyip hangi tarafın (kaynak/hedef)
+pCloud'un current nesnesiyle eşleştiğini (`Currency` alanı) belirler. Tam
+sonuç (mutlak yollar dahil) yalnız Administrators-only
+`C:\ProgramData\HasarBotu\migration-preflight` altına yazılır; konsola
+yalnız göreli yol + sınıflandırma + sayaç özeti basılır. Hiçbir dosya/DB/
+sync/env/servis yazma çağrısı içermez — bu bir teşhis aracıdır, onarım
+yapmaz. Bulunan `content_mismatch` girişleri, gerekiyorsa
+`repair-post-sync-stale-target-files.ps1`'in ayrı bir forensics raporuyla
+onarılmasına girdi olabilir.
+
 ### 2e.5 AfterSync tam SHA-256 kabul kapısı
 
 pCloud kuyruğu boş ve bütün yazarlar hâlâ durmuşken:

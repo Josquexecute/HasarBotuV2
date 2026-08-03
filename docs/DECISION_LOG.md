@@ -4749,3 +4749,75 @@ kaynaklandigini tespit etmek icin ayri, salt-okunur bir teshis adimi
 gerekir (orn. HB-2026-130a'daki forensics yaklasiminin bu fark icin
 tekrarlanmasi) — kullanicinin acik onayi/talebiyle ayri bir gorev olarak
 ele alinmali.
+
+
+## 2026-08-03 - HB-2026-132: 708 baytlik SOURCE_TARGET_HASH_MISMATCH farki dosya bazinda izole edildi — yeni, tek dosyalik bir pCloud bulut->hedef indirme gecikmesi (HB-2026-130'dan bagimsiz)
+
+HB-2026-131'de bulunan 708 baytlik toplu kaynak/hedef fark, yalnix
+salt-okunur yeni bir arac ile dosya bazinda izole edildi. Yeni araclar
+(kod/tooling degisikligi, sifir yazma):
+
+- `pcloud-post-sync-diff-forensics.mjs`: kaynagi (ghost 10 kayit haric) ve
+  hedefi (haricsiz) tek tek SHA-256 ile hash'ler, goreli yola gore
+  `missing`/`extra`/`content_mismatch`/`metadata_only` siniflandirir, her
+  farkli dosya icin pCloud'un current `file` satirini, tam `filerevision`
+  gecmisini, `task`/`fstask` referans sayisini ve acik-handle olasiligini
+  (salt-okunur `FileShare.Read` probu) ekler. 7/7 node test (sentetik
+  karisik fixture) gecti.
+- `run-pcloud-post-sync-diff-forensics.ps1`: admin rolu + hash'li/ACL'li
+  ghost exclusion manifesti zorunlu kilan sarmalayici. Tam sonucu (mutlak
+  yollar dahil) yalniz Administrators-only
+  `C:\ProgramData\HasarBotu\migration-preflight` altina yazar; konsola
+  yalniz goreli yol + siniflandirma + sayac basar.
+- **Bulunan gercek kusur (gercek calistirmayla):** Node ciktisinin
+  `PCloud` alani basari halinde `found` alanini tasimiyordu; PowerShell
+  Set-StrictMode altinda `$_.PCloud.found` `PropertyNotFoundException`
+  ile coktu (attempt 1, gercek makinede). Ayrica basarili raporun hic
+  `Status` alani yoktu, sarmalayicinin `$report.Status -eq 'error'`
+  kontrolu ayni sekilde cokuyordu (attempt 2). Ikisi de duzeltildi
+  (`PCloud.found=true` her zaman, basarili raporda `Status: 'ok'`); 3.
+  calistirma (sentetik fixture'la sarmalayici smoke test) ve 4. calistirma
+  (gercek makine) basarili oldu.
+- `scripts/check-windows-service-configs.mjs`e yeni dosyalarin salt-okunur
+  oldugunu (yazma cagrisi yok, env/servis/dosya-tasima mutasyonu yok) ve
+  test calistirmasini koruyan statik denetim eklendi.
+
+**Gercek sonuc (Administrators-only rapora yazildi,
+`pcloud-post-sync-diff-forensics-20260803T173040644Z-289605a4.json`):**
+
+- 6873 dosyanin 6872'si birebir ozdes (`identical`), `missing`/`extra`
+  sifir. Tam olarak BIR dosya `content_mismatch`:
+  `2026\Ağustos 2026\56AAG629\EVRAK\ALKOL RAPORU .jpg`.
+- Kaynak (P:): 210.808 bayt, `LastWriteTimeUtc` 2026-08-03T11:01:44Z.
+  Hedef (C:\HasarBotuStorage): 210.100 bayt, `LastWriteTimeUtc`
+  2026-08-03T09:20:27Z. Fark tam 708 bayt — HB-2026-131'deki toplu gate
+  farkiyla birebir ortusuyor; **bu tek dosya farkin tamamini acikliyor.**
+- pCloud'un current `file` satiri kaynagin boyutu+mtime'iyla (210.808,
+  ctime/mtime 1785754904) birebir eslesiyor. `filerevision` gecmisinde iki
+  kayit var: eski (210.100 bayt, ctime 1785748827 — hedefin boyutuyla
+  eslesiyor, superseded) ve guncel (210.808 bayt — kaynakla eslesiyor).
+  Siniflandirma: `source_current_target_superseded`.
+- `TaskReferenceCount=0`, kaynak ve hedef ikisi de kilitli degil
+  (`NotLockedForWrite=true`), conflict-adi deseni yok, pCloud kuyruklari
+  bos.
+- Bu, HB-2026-130'da onarilan 4 HASAR fotografindan **TAMAMEN BAGIMSIZ,
+  bugun (2026-08-03) olusmus YENI tek bir olay** — ayni bilinen kok neden
+  sinifi (pCloud bulut->hedef indirmesinin, yerel kuyruklar bos gozukse
+  bile, belirli bir dosya icin guncellenmemesi), farkli dosya/klasor
+  (`EVRAK`, `HASAR` degil), farkli zaman.
+
+Talimat geregi ("yalniz izole et... raporla ve dur") **onarim
+calistirilmadi**. `repair-post-sync-stale-target-files.ps1` bu dosyayi
+onarmak icin kullanilabilir olurdu ama ayri bir forensics raporu ve
+kullanicinin acik onayi/talebi gerektirir.
+
+Test sonucu: `node --test` (yeni dahil, deploy/windows-service altindaki
+tum .test.mjs) 27/27 gecti, `npm run check:deploy` gecti.
+
+Etki: Yalniz yeni salt-okunur tooling + docs eklendi. Sync eslemesi,
+Stop/Clear, kaynak/hedef dosya, env, servis hic degismedi. Sifir dosya/DB
+yazma cagrisi.
+
+Acik kalan: bu tek dosyanin (kullanicinin acik talebiyle, ayri bir
+forensics+`-Apply` adiminda) onarilip onarilmayacagi; sonrasinda taze
+`PostSyncRebaseline` gate'inin yeniden calistirilmasi.
