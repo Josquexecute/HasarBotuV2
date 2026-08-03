@@ -5063,3 +5063,50 @@ dogrulanmis durumda (bu paketten etkilenmedi). D8 migration cutover
 (`AfterSync`) hala tamamlanmadi. Zincir yeniden denenmeden once,
 mumkunse daha uzun (orn. HB-2026-135'teki 15 dakikalik) bir on-kontrolun
 BASTAN SONA sifir kaynak/hedef/uzak degisikligi gostermesi beklenmeli.
+
+
+## 2026-08-03 - HB-2026-138: On-kontrol temizdi, gate (attempt 14) ILK KEZ PASS verdi, ama hemen ardindan PostSyncRebaseline yine kucuk gercek bir degisiklikle BLOCKED oldu
+
+Kullanicinin "Excel kapatildi" bildirimiyle once 2 dakikalik salt-okunur
+on-kontrol calistirildi (`pcloud-task-queue-forensics`, 120 sn/20 sn, 7
+ornek): **sifir hareket** (`RemoteChanged=false`, `DiffCursorAdvanced=false`,
+`SourceStableAcrossWindow=true`, `DistinctQueueEntryCount=0`). Bu temiz
+sonuc uzerine tek seferlik gate->`PostSyncRebaseline`->`AfterSync`
+zinciri baslatildi (attempt 14). Sync/dosya/pCloud/env/servis hic
+degistirilmedi.
+
+**Gate: `PASS`.** `ObservedQuietSeconds=650` (>=600), `WindowResetCount=2`,
+`SourceTargetHashMatch=true` (6876 dosya, tam esitlik). Rapor
+Administrators-only yazildi
+(`pcloud-post-sync-rebaseline-20260803T203855798Z-b8a215af.json`).
+
+**`PostSyncRebaseline` stage'i bu PASS raporuyla hemen ardindan
+calistirildi (~27 sn sonra) — `BLOCKED`.** Bu kez fark HB-2026-133'teki
+buyuk aktivite patlamasindan cok daha kucuktu: kaynakta VE hedefte tam
+olarak `MetadataChangedFileCount=1`, `BytesDelta=+627` (birebir ayni,
+her iki tarafta) — muhtemelen tek bir kucuk dosyanin stage'in kendi ~1
+dakikalik hash gecisi sirasinda (`20:39:23`-`20:40:22` UTC) gercekten
+degismesi. Blockerlar: `ACTIVE_SYNC_WINDOW_NO_LONGER_CURRENT`,
+`ACTIVE_SYNC_WINDOW_SOURCE_BASELINE_CHANGED`,
+`TARGET_FULL_HASH_INCOMPLETE`, `FULL_HASH_COMPARISON_NOT_ELIGIBLE`,
+`SOURCE_CHANGED_DURING_PREFLIGHT`, `TARGET_CHANGED_DURING_PREFLIGHT`.
+Arac kusuru degil: sistem gercek, cok kucuk bir eszamanli degisikligi
+dogru sekilde yakalayip durdu.
+
+Talimat geregi ("BLOCKED'da dur, tekrar deneme baslatma") otomatik
+yeniden calistirma YAPILMADI. `AfterSync` bu paket icinde
+CALISTIRILMADI.
+
+Etki: Sifir kod/tooling degisikligi — yalniz bu karar kaydi ve
+`PROJECT_STATUS.md` guncellendi. Sync eslemesi, Stop/Clear, kaynak/hedef
+dosya, env, servis hic degismedi.
+
+Acik kalan: HB-2026-133'teki tek dosyanin onarimi hala kesin ve bagimsiz
+dogrulanmis durumda (bu paketten etkilenmedi). D8 migration cutover
+(`AfterSync`) hala tamamlanmadi. Bu, gate'in artik gercekten PASS
+verebildigini kanitliyor (HB-2026-133'ten sonra 2. kez) — darbogaz artik
+gate'in kendisi degil, gate PASS'i ile bir sonraki stage'in baslamasi
+arasindaki (~30 saniyelik) pencerede bile gercek dosya hareketinin
+tamamen durmasini beklemek. Zincir tekrar denenecekse, mumkunse daha
+uzun bir sessizlik dogrulamasi (gate'in kendi 600 saniyesinin OTESINDE,
+stage gecisleri sirasinda da) faydali olabilir.

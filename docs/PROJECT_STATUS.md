@@ -148,14 +148,27 @@ Son güncelleme: 2026-08-03
   `SourceDelta.modifyCount=1`, `RemoteDelta.createCount=1`+`deleteCount=1`,
   `DiffCursorAdvanced=true` — bildirilen "durdu" durumuyla tutarsız. Talimat
   gereği gate/`PostSyncRebaseline`/`AfterSync`'ten hiçbiri başlatılmadı.
+- **Temiz ön-kontrol sonrası gate (attempt 14) İLK KEZ PASS, ama
+  `PostSyncRebaseline` yine küçük gerçek bir değişiklikle BLOCKED
+  (HB-2026-138, aynı gün ~20:39 UTC).** Ön-kontrol sıfır hareket
+  gösterdikten sonra başlatılan gate: `ObservedQuietSeconds=650`,
+  `SourceTargetHashMatch=true`. Ancak `PostSyncRebaseline` stage'i bu
+  PASS'in ~27 sn ardından başlayınca kendi ~1 dakikalık hash geçişinde
+  çok küçük gerçek bir değişiklik yakaladı (`MetadataChangedFileCount=1`,
+  `BytesDelta=+627`, hem kaynak hem hedefte) —
+  `SOURCE_CHANGED_DURING_PREFLIGHT`/`TARGET_CHANGED_DURING_PREFLIGHT`.
+  Araç kusuru değil. Talimat gereği yeniden deneme yapılmadı; `AfterSync`
+  çalıştırılmadı. **Bu, gate'in artık gerçekten PASS verebildiğini
+  kanıtlıyor** — darboğaz artık gate'in 600 saniyesi değil, PASS ile bir
+  sonraki stage'in başlaması arasındaki kısa pencerede bile mutlak
+  sıfır dosya hareketi gerekmesi.
 - **Durum: dosya onarımı (HB-2026-133) KESİN tamamlandı ve bu paketten
   etkilenmedi; D8 migration cutover (`AfterSync`) hâlâ tamamlanmadı.**
   Sync eşlemesi, Stop/Clear, env, servis, başka hiçbir dosya değişmedi.
-- Sonraki adım: zincir yeniden denenmeden önce, mümkünse daha uzun (örn.
-  HB-2026-135'teki 15 dakikalık) bir ön-kontrolün BAŞTAN SONA sıfır
-  kaynak/hedef/uzak değişikliği göstermesi beklenmeli; ardından
-  (kullanıcının açık talebiyle) taze gate→`PostSyncRebaseline`→
-  `AfterSync` üçlüsünün yeniden denenmesi.
+- Sonraki adım: (kullanıcının açık talebiyle) taze gate→
+  `PostSyncRebaseline`→`AfterSync` üçlüsünün yeniden denenmesi;
+  mümkünse ofis genelinde daha uzun süreli, gerçekten kesintisiz bir
+  sessizlik dönemi hedeflenmeli.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 
