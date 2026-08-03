@@ -5024,3 +5024,42 @@ dogrulanmis durumda (bu paketten etkilenmedi). D8 migration cutover
 gercekten sifir kaynak/hedef/uzak hareketi oldugu bagimsiz olarak (orn.
 `pcloud-task-queue-forensics` ile kisa bir on-kontrolle) dogrulanmis bir
 donem secilmesi onerilir.
+
+
+## 2026-08-03 - HB-2026-137: Gate zincirinden once 2 dakikalik salt-okunur on-kontrol — hareket tespit edildi, hicbir asama baslatilmadan BLOCKED raporlandi
+
+Kullanicinin "eksper bilgisayarindaki Excel kapatildi" bildirimiyle, gate
+zincirini calistirmadan once 2 dakikalik salt-okunur bir on-kontrol
+istendi: hareket yoksa zincir baslatilacak, hareket varsa hicbir asama
+baslatilmadan durulacak. `pcloud-task-queue-forensics` 120 saniye/20
+saniye ornekleme ile calistirildi (7 ornek). Sync/dosya/pCloud/env/servis
+hic degistirilmedi; gate/PostSyncRebaseline/AfterSync HIC calistirilmadi.
+
+Sonuc: **hareket tespit edildi.** 7 ornegin tamami kuyrukta sifir satir
+gosterdi (`DistinctQueueEntryCount=0` — 20 saniyelik ornekleme araligi,
+kuyrukta cok kisa omurlu bir satiri kacirmis olabilir), ama pencerenin
+basi ile sonu arasindaki tam agac karsilastirmasi GERCEK degisikligi
+yakaladi: `SourceDelta.modifyCount=1` (kaynakta bir dosya degisti),
+`RemoteDelta.createCount=1`+`deleteCount=1` (uzakta bir nesne olustu, bir
+nesne silindi — HB-2026-135'te gozlemlenen kaydet/gecici-dosya/yeniden-
+adlandirma deseniyle tutarli), `DiffCursorAdvanced=true`. Bu, "Excel
+kapatildi" bildirimiyle CELISEN, kisa ama gercek bir tek-dosyalik
+degisiklik.
+
+Rapor Administrators-only kanit dizinine yazildi
+(`pcloud-task-queue-forensics-20260803T200038942Z-f07ed1ac.json` + sha256
+sidecar).
+
+Talimat geregi ("hareket varsa hicbir asamayi baslatmadan BLOCKED
+raporla ve dur") gate/PostSyncRebaseline/AfterSync'ten HICBIRI
+baslatilmadi.
+
+Etki: Sifir kod/tooling degisikligi — yalniz bu karar kaydi ve
+`PROJECT_STATUS.md` guncellendi. Sync eslemesi, Stop/Clear, kaynak/hedef
+dosya, env, servis hic degismedi.
+
+Acik kalan: HB-2026-133'teki tek dosyanin onarimi hala kesin ve bagimsiz
+dogrulanmis durumda (bu paketten etkilenmedi). D8 migration cutover
+(`AfterSync`) hala tamamlanmadi. Zincir yeniden denenmeden once,
+mumkunse daha uzun (orn. HB-2026-135'teki 15 dakikalik) bir on-kontrolun
+BASTAN SONA sifir kaynak/hedef/uzak degisikligi gostermesi beklenmeli.

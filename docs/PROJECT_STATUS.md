@@ -140,14 +140,22 @@ Son güncelleme: 2026-08-03
   `TargetCreateCount=2`, `TargetModifyCount=3`, `TargetDeleteCount=1`) —
   bildirilen "durdu" durumuyla tutarsız. Talimat gereği yeniden deneme
   yapılmadı; `PostSyncRebaseline`/`AfterSync` yine hiç çalıştırılmadı.
+- **2 dakikalık ön-kontrol, gate baştan çalıştırılmadan (HB-2026-137, aynı
+  gün ~20:00 UTC): hareket tespit edildi, hiçbir aşama başlatılmadı.**
+  "Excel kapatıldı" bildirimiyle `pcloud-task-queue-forensics` 120 sn/20 sn
+  ile önce çalıştırıldı. Kuyruk 7 örneğin tamamında boştu ama pencere
+  başı/sonu tam ağaç karşılaştırması gerçek değişiklik yakaladı:
+  `SourceDelta.modifyCount=1`, `RemoteDelta.createCount=1`+`deleteCount=1`,
+  `DiffCursorAdvanced=true` — bildirilen "durdu" durumuyla tutarsız. Talimat
+  gereği gate/`PostSyncRebaseline`/`AfterSync`'ten hiçbiri başlatılmadı.
 - **Durum: dosya onarımı (HB-2026-133) KESİN tamamlandı ve bu paketten
   etkilenmedi; D8 migration cutover (`AfterSync`) hâlâ tamamlanmadı.**
   Sync eşlemesi, Stop/Clear, env, servis, başka hiçbir dosya değişmedi.
-- Sonraki adım: bir sonraki denemeden önce, mümkünse
-  `pcloud-task-queue-forensics` ile kısa bir ön-kontrolle gerçekten sıfır
-  kaynak/hedef/uzak hareketi olduğu bağımsız doğrulanmış bir dönem
-  seçilmesi; ardından (kullanıcının açık talebiyle) taze
-  gate→`PostSyncRebaseline`→`AfterSync` üçlüsünün yeniden denenmesi.
+- Sonraki adım: zincir yeniden denenmeden önce, mümkünse daha uzun (örn.
+  HB-2026-135'teki 15 dakikalık) bir ön-kontrolün BAŞTAN SONA sıfır
+  kaynak/hedef/uzak değişikliği göstermesi beklenmeli; ardından
+  (kullanıcının açık talebiyle) taze gate→`PostSyncRebaseline`→
+  `AfterSync` üçlüsünün yeniden denenmesi.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 
