@@ -4821,3 +4821,76 @@ yazma cagrisi.
 Acik kalan: bu tek dosyanin (kullanicinin acik talebiyle, ayri bir
 forensics+`-Apply` adiminda) onarilip onarilmayacagi; sonrasinda taze
 `PostSyncRebaseline` gate'inin yeniden calistirilmasi.
+
+
+## 2026-08-03 - HB-2026-133: HB-2026-132'de izole edilen tek dosya onarildi ve bagimsiz dogrulandi; ardindan ilk kez gercek PostSyncRebaseline gate PASS alindi; PostSyncRebaseline stage'i taze ofis aktivitesi nedeniyle BLOCKED — zincir talimat geregi burada durduruldu
+
+Kullanicinin acik talimatiyla HB-2026-132'de izole edilen TEK dosya icin
+kontrollu, taze dogrulamali repair uygulandi:
+
+1. **Taze bagimsiz on-dogrulama:** Kaynak SHA-256 (`da9d2cdb...`) pCloud'un
+   current `file` satiriyla (boyut 210.808, mtime unix 1785754904) taze
+   olarak tekrar eslesti; hedefin boyutu (210.100) `filerevision`
+   gecmisindeki en eski (superseded) kayitla eslesti; `task`/`fstask`
+   referans sayisi 0; hedef ve kaynak ikisi de kilitli degil
+   (`FileShare.Read` probu); kaynak JPEG SOI/EOI saglam.
+2. Mevcut `repair-post-sync-stale-target-files.ps1` (HB-2026-130) icin,
+   bu taze degerlerle, eski `hasarbotu-56aag629-hasar-version-forensics/1.0.0`
+   semasinda TEK dosyalik yeni bir Administrators-only forensics raporu
+   uretildi (dosya sistemi enumerasyonuyla cozulen yollarla — Turkce
+   `İ`/`ğ` karakterlerinin komut satirina dogrudan yazilmasi bir onceki
+   denemede mojibake'e yol acti, bu rapor dosya-sistemi nesnelerinden
+   cozulen yollarla yeniden uretildi ve duzeltildi).
+3. **Preview** (`-Apply` yok): `preview_ok`, `WouldApplyCount=1`,
+   `BlockedCount=0`.
+4. **`-Apply`:** `applied`, `AppliedCount=1`, `BlockedCount=0`. Eski
+   hedef Administrators-only+hash'li yedeklendi (sync koku DISINDA,
+   `pre-repair-backups\20260803T175345907Z\`), kaynak ayni ciltte
+   stage+hash+JPEG dogrulamasindan sonra `[System.IO.File]::Replace` ile
+   atomik degistirildi.
+5. **Bagimsiz son dogrulama (aracin kendi ic kontrolunden AYRI, ayrica
+   calistirildi):** kaynak==hedef SHA-256 birebir esit (`da9d2cdb...`),
+   pCloud current satiri hala kaynakla eslesiyor — kaynak=bulut=hedef
+   esitligi saglandi.
+
+**Ardindan tek seferlik post-sync rebaseline gate calistirildi (attempt
+11, duzeltilmis `localfolder.taskcnt` mantigiyla) — ILK KEZ gercek
+`PASS`:** `EligibleForRebaseline=true`, `ObservedQuietSeconds=641`
+(>=600), `WindowResetCount=6`, `SourceTargetHashMatch=true` (6876 dosya,
+tam kaynak==hedef manifest hash esitligi). Rapor Administrators-only
+yazildi (`pcloud-post-sync-rebaseline-20260803T181111154Z-6bc8161a.json`).
+
+**`PostSyncRebaseline` stage'i (`test-storage-sync-migration-preflight.ps1
+-Stage PostSyncRebaseline`) bu PASS raporuyla hemen ardindan calistirildi
+— `BLOCKED`:** gate'in 641 saniyelik sessiz penceresi kapandiktan yalnizca
+~33 saniye sonra baslayan bu stage'in kendi tam kaynak+hedef hash
+gecisinde GERCEK, taze ofis aktivitesi yakalandi: kaynak/hedef dosya
+sayisi -1 (her ikisinde de ayni ~161.895 bayt eksildi — muhtemelen ayni
+dosyanin gercek bir kullanici tarafindan silinmesi), kaynakta 2, hedefte
+1 `IO_ERROR` + 1 `FILE_CHANGED_DURING_HASH`. Blockerlar:
+`SOURCE_FULL_HASH_INCOMPLETE`, `ACTIVE_SYNC_WINDOW_SOURCE_BASELINE_CHANGED`,
+`TARGET_FULL_HASH_INCOMPLETE`, `FULL_HASH_COMPARISON_NOT_ELIGIBLE`,
+`SOURCE_CHANGED_DURING_PREFLIGHT`, `TARGET_CHANGED_DURING_PREFLIGHT`,
+`ACTIVE_SYNC_WINDOW_NO_LONGER_CURRENT`. Bu bir arac kusuru DEGIL — sistem
+gercek, ofis mesaisi icinde devam eden dosya hareketini dogru sekilde
+yakalayip fail-closed durdu; yanlis bir "migration tamamlandi" sertifikasi
+UretMEDI.
+
+Talimat geregi ("BLOCKED olursa tekrar deneme baslatma") **ne
+PostSyncRebaseline stage'i tekrar denendi ne yeni bir gate calistirildi
+ne de `AfterSync` calistirildi.** Zincir burada durduruldu.
+
+Test sonucu: `node --test` (deploy/windows-service, tum .test.mjs)
+27/27 gecti, `npm run check:deploy` gecti (bu paket icin kod
+degismedi, yalniz gercek arac calistirmalari ve docs).
+
+Etki: **Tek dosyanin onarimi KESIN ve BAGIMSIZ dogrulanmis durumda**
+(kaynak=hedef=bulut SHA-256 esitligi). D8 migration cutover (`AfterSync`)
+HALA TAMAMLANMADI — bir sonraki deneme icin ofis mesaisinin gercekten
+durdugu bir anda taze bir gate+PostSyncRebaseline+AfterSync uclusunun
+yeniden denenmesi gerekecek. Sync eslemesi, Stop/Clear, env, servis, baska hicbir dosya
+bu paket boyunca degismedi.
+
+Acik kalan: gercekten sakin bir donemde (kullanicinin acik talebi
+uzerine) taze gate->PostSyncRebaseline->AfterSync uclusunun yeniden
+denenmesi.

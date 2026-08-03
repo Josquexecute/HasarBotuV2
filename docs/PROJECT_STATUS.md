@@ -93,10 +93,31 @@ Son güncelleme: 2026-08-03
   HB-2026-130'daki 4 HASAR fotoğrafından tamamen bağımsız, bugün oluşmuş
   yeni bir tek dosyalık pCloud bulut→hedef indirme gecikmesi. Talimat
   gereği onarım ÇALIŞTIRILMADI — yalnız izolasyon yapıldı.
-- Sonraki adım: kullanıcının açık talebiyle bu tek dosya için ayrı bir
-  forensics raporu üretip `repair-post-sync-stale-target-files.ps1`
-  `-Apply` ile onarmak; ardından taze `PostSyncRebaseline` gate'i yeniden
-  çalıştırıp PASS alınırsa `AfterSync` zincirine geçmek.
+- **Tek dosya onarıldı ve bağımsız doğrulandı (HB-2026-133, aynı gün
+  ~17:53 UTC).** `ALKOL RAPORU .jpg` (56AAG629/EVRAK) için taze fail-closed
+  ön doğrulama (kaynak SHA-256 pCloud current object ile, hedef boyutu
+  superseded `filerevision` ile eşleşiyor, sıfır task/fstask, kilit yok)
+  sonrası `repair-post-sync-stale-target-files.ps1 -Apply`: yedek alındı
+  (sync kökü dışında, admin-only+hash'li), atomik replace yapıldı.
+  Bağımsız son kontrol: kaynak==hedef SHA-256 birebir eşit.
+- **Ardından tek seferlik post-sync rebaseline gate'i (attempt 11) İLK KEZ
+  gerçek `PASS` verdi:** `ObservedQuietSeconds=641`, `WindowResetCount=6`,
+  `SourceTargetHashMatch=true` (6876 dosya, tam eşitlik).
+- **`PostSyncRebaseline` stage'i bu PASS raporuyla hemen ardından
+  çalıştırıldı — `BLOCKED`.** Gate'in 641 saniyelik penceresi kapandıktan
+  yalnızca ~33 saniye sonra başlayan stage'in kendi hash geçişinde GERÇEK,
+  taze ofis aktivitesi yakalandı (kaynak+hedefte aynı ~161.895 bayt eksildi,
+  birkaç `IO_ERROR`/`FILE_CHANGED_DURING_HASH`) —
+  `ACTIVE_SYNC_WINDOW_SOURCE_BASELINE_CHANGED` +
+  `SOURCE_CHANGED_DURING_PREFLIGHT` vb. Araç kusuru değil: sistem gerçek
+  eşzamanlı değişikliği doğru şekilde yakalayıp durdu. Talimat gereği
+  yeniden deneme YAPILMADI; `AfterSync` bu paket içinde ÇALIŞTIRILMADI.
+- **Durum: dosya onarımı KESİN tamamlandı; D8 migration cutover
+  (`AfterSync`) hâlâ tamamlanmadı.** Sync eşlemesi, Stop/Clear, env, servis,
+  başka hiçbir dosya değişmedi.
+- Sonraki adım: gerçekten sakin bir ofis döneminde (kullanıcının açık
+  talebiyle) taze gate→`PostSyncRebaseline`→`AfterSync` üçlüsünün yeniden
+  denenmesi.
 
 ## D7 salt-okunur pCloud → NTFS geçiş preflight'ı (2026-07-31)
 
