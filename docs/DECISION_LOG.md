@@ -5285,3 +5285,83 @@ Acik kalan: (a) B3 duzeltmesi ve (b) API deploy yardimci script'i, HER
 IKISI kendi Plan->Onizle->Onay->Uygula->Dogrula donguleriyle, ayri
 paketler olarak; ardindan gercekten sakin bir pencerede kullanicinin
 acik onayiyla D9 plan belgesi SS4 Adim 3-6.
+
+
+## 2026-08-04 - HB-2026-142: D9'un ilk kucuk paketi tamamlandi — install-services.ps1'e File Agent'a hic dokunmayan, fail-closed, idempotent tek-servis secici eklendi (B3 cozuldu)
+
+Kullanicinin onayladigi D9 plani B3 blocker'i icin: `install-services.ps1`
+`-Services` parametresi aldi (`ValidateSet('Api','FileAgent')`,
+varsayilan ikisi de — HB-2026-108'deki orijinal davranisla BIREBIR
+ayni). `-Services Api` verilince `-FileAgentDir`, File Agent build
+ciktisi, File Agent WinSW sablonu/kurulumu dahil File Agent'a ait
+HICBIR alan okunmaz/dogrulanmaz/degistirilmez (simetrik olarak
+`-Services FileAgent`).
+
+**Yeni idempotency guard'i:** secilen servislerden HERHANGI biri SCM'de
+ZATEN kuruluysa, bu artik `-Apply` OLMADAN BILE fail-closed bir on-kosul
+hatasidir — betik var olan bir servisi asla yeniden `install` etmez.
+Bu, `-Services` hic verilmese BILE (varsayilan, her iki servis) devreye
+girer; onceden bu betik hicbir gercek servise karsi `-Apply` ile hic
+calistirilmamisti (File Agent TAMAMEN AYRI bir aracla kuruldu), yani bu
+yeni kontrol daha once GUVENLI oldugu KANITLANMIS hicbir yolu bozmuyor —
+yalniz daha once hic test edilmemis "zaten kurulu servise tekrar
+-Apply" durumunu simdi acikca REDDEDIYOR.
+
+**Bulunan ve duzeltilen iki gercek kusur (gercek calistirmayla):**
+
+1. `Write` araciyla tam dosya yeniden yazimi UTF-8 BOM'unu KALDIRDI
+   (orijinal dosyalarda `EF BB BF` var, benim yeniden yazdigim
+   dosyalarda yoktu — `xxd` ile dogrulandi). Windows PowerShell 5.1
+   BOM'suz .ps1 dosyalarini sistem ANSI kod sayfasiyla ayristiriyor,
+   dosya icindeki her Turkce harf string literalini PARSE ZAMANINDA
+   bozuyor (`İ` -> `Ä°` deseni) — bu, konsol encoding ayariyla
+   (`[Console]::OutputEncoding`) DUZELTILEMEZ cunku bozulma STRING
+   TOKEN'LARININ KENDISINDE, konsola yazilmadan once olusuyor. Duzeltme:
+   `install-services.ps1` ve yeni test dosyasi `[System.IO.File]::
+   WriteAllText(..., [System.Text.UTF8Encoding]::new($true))` ile
+   BOM'lu yeniden yazildi (repodaki tum diger .ps1 dosyalariyla ayni
+   kural).
+2. Test dosyamda `& $scriptPath ... 2>&1 | Out-String` kullanmistim —
+   ama PowerShell 5.1'de `Write-Host` Information stream'ine (6) yazar,
+   `2>&1` yalniz stream 2'yi (Error) 1'e (Success) yonlendirir, stream
+   6'yi ETKILEMEZ. Bu yuzden `$out` degiskeni Write-Host ciktisini HIC
+   ICERMIYORDU (konsolda GORUNMESINE ragmen) — tum `-match` iddialarim
+   sessizce basarisiz oluyordu. Duzeltme: `*>&1` (TUM stream'leri
+   yonlendirir) kullanildi; bu desen zaten bu oturumda baska yerlerde
+   (`test-pcloud-post-sync-rebaseline-gate.ps1` vb. calistirmalarinda)
+   dogru kullanilmisti, yalniz bu yeni test dosyasinda unutulmustu.
+
+**8 regresyon testi eklendi** (`install-services.tests.ps1`,
+bagimliliksiz, Pester gerektirmez): (1) `-Services` verilmezse eski
+davranis (ikisi de zorunlu/kontrol edilir) korunuyor, (2) `-Services Api`
+ile FileAgentDir hic gerekmiyor/kontrol edilmiyor, (3) `-Services
+FileAgent` ile ApiDir/Postgres hic kontrol edilmiyor, (4) bos `-Services`
+fail-closed reddediliyor, (5) idempotency — GERCEK `hasarbotu-file-agent`
+servisiyle (bu makinede zaten kurulu) dogrulandi, (6) varsayilan modda da
+idempotency korumasi devrede, (7) gecersiz servis adi `ValidateSet`
+tarafindan reddediliyor, (8) her iki servis secilip ikisinin de build
+ciktisi eksikse HER IKI hata da raporlaniyor. Hepsi GECTI (`SUMMARY: 0
+failure(s)`). `scripts/check-windows-service-configs.mjs`e bu testleri
+calistiran + betigin kilit ozelliklerini (Services varsayilani,
+idempotency mesaji, kosullu Install-OneService cagrilari, UTF-8 BOM
+duzeltmesi) dogrulayan statik denetim eklendi — `install-services.ps1`
+daha once bu dosyada HIC test edilmiyordu.
+
+**Gercek makinede yalniz salt-okunur onizleme calistirildi** (`-Apply`
+HICBIR ZAMAN verilmedi): `-Services Api` -> yalniz "API build ciktisi
+yok" hatasi (File Agent hic bahsi gecmedi); `-Services FileAgent` ->
+idempotency blocker dogru raporlandi ("hasarbotu-file-agent servisi
+ZATEN kurulu"), API/Postgres hic kontrol edilmedi. Ikisi de `exit 1`,
+sifir degisiklik.
+
+Test sonucu: `node --test` (deploy/windows-service) 38/38, `npm run
+check:deploy` gecti (yeni install-services testleri dahil).
+
+Etki: `install-services.ps1` KOD degisikligi aldi (D9 plani B3
+blocker'inin cozumu, kullanicinin acik onayiyla). Gercek env degiskeni,
+gercek Windows servisi, gercek deploy dosyasi veya pCloud ayari HIC
+degismedi — yalniz salt-okunur onizleme calistirildi.
+
+Acik kalan: D9 plani SS8'deki (b) maddesi — API deploy yardimci
+script'i, ayri kucuk bir paket olarak; ardindan gercekten sakin bir
+pencerede kullanicinin acik onayiyla D9 SS4 Adim 3-6.

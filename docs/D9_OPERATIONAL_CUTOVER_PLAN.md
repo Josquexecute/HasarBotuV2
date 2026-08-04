@@ -69,7 +69,7 @@ salt-okunur olarak sorgulandı (komutlar ve tam çıktılar §5'te):
 |---|---|---|
 | **B1** | `C:\HasarBotu\services\api\` dizini hiç yok; `install-services.ps1` bu yüzden `API build çıktısı yok` ile `exit 1` (bu pakette GERÇEKTEN çalıştırılıp doğrulandı, §5) | Çözüm: `npm run build --workspace @hasarbotu/api` (repo'da) sonrası `services/api/dist` + `package.json`/gerekli runtime dosyalarının `C:\HasarBotu\services\api\`e kopyalanması. Bu paket içinde YAPILMADI. |
 | **B2** | Repo'daki `services/api/dist/index.js` / `services/file-agent/dist/index.js` çıktısının GÜNCEL HEAD'e karşı taze olduğu doğrulanmadı | Apply öncesi `npm run build:packages` yeniden çalıştırılıp temiz çıkış alınmalı. |
-| **B3 (mimari boşluk)** | `install-services.ps1` **her zaman İKİ servisi de** (`hasarbotu-api` + `hasarbotu-file-agent`) sırayla kurar; TEK servis seçme seçeneği YOK (kod: `Install-OneService` çağrıları satır 171-172, koşulsuz). `setup-file-agent-service-account.ps1`in kendi önizlemesi de doğruladı: *"hasarbotu-file-agent servisi ZATEN kurulu — bu betik VAR OLAN bir servisi güncellemez/yeniden kurmaz"* — yani D6'nın atomik aracı da tekrar dokunmayı reddediyor. `install-services.ps1`i olduğu gibi `-Apply` ile çalıştırmak `hasarbotu-file-agent`i YENİDEN `install` eder; WinSW şablonundaki `<startmode>Automatic</startmode>` gerçek SCM `StartType=Disabled`i (D6'nın kasıtlı, ayrı bir `ChangeServiceConfigW` çağrısıyla verdiği) SESSİZCE Automatic'e döndürebilir — bu, "önce env/secret ayarlanmadan asla otomatik başlamasın" fail-closed davranışını BOZAR. | **Çözüm önerisi (bu pakette YAPILMADI, ayrı küçük bir paket gerektirir):** `install-services.ps1`e `-Services @('Api')` / `-Services @('Api','FileAgent')` gibi dar bir seçici parametre eklemek, yalnız seçilenler için `Install-OneService` çağırmak, mevcut sözdizimi/ön-koşul testlerine yeni test eklemek. Bu, D9 Apply'ının GERÇEKTEN güvenle atılabilmesi için ÖNKOŞULDUR. |
+| **B3 (mimari boşluk) — ÇÖZÜLDÜ (HB-2026-142, 2026-08-04)** | `install-services.ps1` her zaman iki servisi de kurardı, tek servis seçme seçeneği yoktu. | **Çözüldü:** `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi parametresi eklendi. `-Services` verilmezse davranış birebir aynı kaldı (regresyon testiyle doğrulandı). Tek-servis modunda seçilmeyen servise ait HİÇBİR dosya/dizin okunmaz/doğrulanmaz. Ayrıca yeni bir idempotency guard'ı eklendi: seçilen servis SCM'de zaten kuruluysa `-Apply` OLMADAN BİLE fail-closed reddedilir (gerçek makinede `hasarbotu-file-agent` ile doğrulandı). 8 regresyon testi (`install-services.tests.ps1`) + statik denetim eklendi, `npm run check:deploy`e bağlandı. Gerçek makinede yalnız salt-okunur önizleme çalıştırıldı (`-Services Api`: yalnız API build eksikliği raporlandı; `-Services FileAgent`: idempotency blocker doğru raporlandı) — hiçbir servis/env/dosya değişmedi. |
 | **B4** | Gerçek `HASARBOTU_AGENT_ID`/`HASARBOTU_AGENT_SECRET` yok — bunlar sabit kodlanamaz; API'nin `POST /api/v1/agents` (admin oturumu gerektirir, `services/api/src/agent/routes.ts:187`) uç noktasından ÜRETİLİR ve yalnız BİR KEZ düz metin döner (`services/api/src/agent/store.ts:126` `registerAgent`) | API çalışmadan bu adım atılamaz — sıralama: API kur+başlat (secret olmadan, yalnız `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET` gerektirmeyen kısım) → admin oturumuyla agent kaydet → dönen `agentId`+`secret`i File Agent ortam değişkenlerine yaz → File Agent'ı başlat. |
 | **B5** | En az bir admin rollü kullanıcının DB'de var olduğu bu pakette doğrulanmadı (agent kaydı admin oturumu gerektirir) | Apply öncesi salt-okunur `SELECT` ile doğrulanmalı (gerçek parola/bağlantı dizesi hiçbir çıktıya yazdırılmadan). |
 | **B6** | `AGENTS.md` §7 kritik işlem standardı gereği bu, açık kullanıcı onayı gerektiren bir sınıf işlemdir (env/servis değişikliği) | Bu belge onay İSTEĞİDİR — gerçek `-Apply` yalnız kullanıcının bu planı gözden geçirip AÇIKÇA onaylamasından sonra çalıştırılmalı. |
@@ -97,12 +97,12 @@ New-Item -ItemType Directory -Path 'C:\HasarBotu\services\api' -Force
 # yardımcı betikle yapar, ayrı bir küçük paket olarak).
 ```
 
-### Adım 2 — (Ayrı küçük paket, B3) `install-services.ps1`e `-Services` seçici eklenmesi
-Bu paket kapsamı DIŞINDA. Değişiklik küçük, test edilebilir olmalı:
-mevcut `-ApiDir`/`-FileAgentDir` semantiği korunur, yalnız hangi
-servis(ler)in kurulacağı seçilebilir hâle gelir; `hasarbotu-file-agent`
-zaten kuruluysa varsayılan olarak ATLANIR (yeniden `install`
-ÇAĞRILMAZ).
+### Adım 2 — TAMAMLANDI (HB-2026-142): `install-services.ps1`e `-Services` seçici eklendi
+`-Services Api` / `-Services FileAgent` / (varsayılan) ikisi. Mevcut
+`-ApiDir`/`-FileAgentDir` semantiği korundu; seçilmeyen servise hiç
+dokunulmaz. Zaten kurulu bir servis seçilirse (idempotency) fail-closed
+reddedilir. 8 regresyon testi + statik denetim eklendi. Gerçek makinede
+yalnız önizleme çalıştırıldı (§5'e eklendi).
 
 ### Adım 3 — Yalnız API'nin WinSW kurulumu
 ```powershell
@@ -184,6 +184,31 @@ EXITCODE=1
 (`exit 1` beklenen fail-closed davranıştır — hiçbir dosya/servis
 değişmedi.)
 
+**C) Tek-servis önizlemesi, HB-2026-142 sonrası** (`install-services.ps1 -Services Api`, `-Apply` YOK, gerçek yollarla):
+```
+--- HasarBotu V2 Windows servis kurulumu: PLAN ---
+  Seçilen servisler   : Api
+  API dizini          : C:\HasarBotu\services\api
+--- Ön koşul HATALARI (kurulum yapılamaz) ---
+  - API build çıktısı yok: C:\HasarBotu\services\api\dist\index.js
+    (önce 'npm run build --workspace @hasarbotu/api')
+EXITCODE=1
+```
+File Agent hiç bahsi geçmedi/kontrol edilmedi.
+
+**D) Tek-servis önizlemesi** (`install-services.ps1 -Services FileAgent`, `-Apply` YOK, gerçek yollarla):
+```
+--- HasarBotu V2 Windows servis kurulumu: PLAN ---
+  Seçilen servisler   : FileAgent
+  File Agent dizini   : C:\HasarBotu\services\file-agent
+--- Ön koşul HATALARI (kurulum yapılamaz) ---
+  - hasarbotu-file-agent servisi ZATEN kurulu - bu betik VAR OLAN bir
+    servisi güncellemez/yeniden kurmaz.
+EXITCODE=1
+```
+Idempotency guard gerçek, zaten kurulu servise karşı doğru çalıştı;
+API/Postgres hiç bahsi geçmedi/kontrol edilmedi.
+
 ## 6. Rollback planı
 
 `HASARBOTU_AGENT_ROOTS` değişimi geri alınabilirdir (mevcut karar,
@@ -217,12 +242,20 @@ içinde HER ZAMAN mümkündür.
 - Hiçbir Windows servisi kurulmadı/başlatılmadı/durdurulmadı/değiştirilmedi.
 - Hiçbir dosya kopyalanmadı/taşınmadı/silinmedi (bu plan dosyası hariç).
 - pCloud ayarı, sync eşlemesi hiç değişmedi.
-- `install-services.ps1`, `setup-file-agent-service-account.ps1` veya
-  başka hiçbir mevcut araç DEĞİŞTİRİLMEDİ — yalnız `-Apply` OLMADAN
-  çalıştırıldı.
+- `setup-file-agent-service-account.ps1` DEĞİŞTİRİLMEDİ — yalnız
+  `-Apply` OLMADAN çalıştırıldı.
 - Gerçek `DATABASE_URL`/agent secret DEĞERLERİ hiçbir yerde
   okunmadı/yazdırılmadı/kaydedilmedi (yalnız pass dosyasının VARLIĞI
   doğrulandı).
+
+**Güncelleme (HB-2026-142, 2026-08-04):** Yukarıdaki liste ilk plan
+paketi (HB-2026-140) içindir. B3'ün çözümü olarak `install-services.ps1`
+KOD DEĞİŞİKLİĞİ aldı (`-Services` seçici + idempotency guard'ı) — bu,
+kod/test/statik-denetim değişikliğidir, GERÇEK servis/env/deploy
+dosyası mutasyonu DEĞİLDİR. Bu değişiklikten sonra bile gerçek
+makinede yalnız `-Apply` OLMADAN önizleme çalıştırıldı (§5.C/D); hiçbir
+env değişkeni, gerçek Windows servisi, deploy dosyası veya pCloud ayarı
+değişmedi.
 
 ## 8. Onay bekleyen açık kararlar — CEVAPLANDI (2026-08-04)
 
@@ -245,9 +278,10 @@ yürütülecek.
    önceden planlanmış bir pencerede.** D8 zincirinde görülen kısa
    aktivite patlamalarının riskini azaltmak için.
 
-Bu dört karar kayda geçti; ancak gerçek `-Apply` HÂLÂ bu paket içinde
-başlatılmadı. Sıradaki adımlar: (a) B3 düzeltmesi (ayrı küçük paket),
-(b) API deploy yardımcı script'i (ayrı küçük paket), her ikisi kendi
-Plan→Önizle→Onay→Uygula→Doğrula döngüsüyle; ancak bunlar tamamlanıp
-gerçekten sakin bir pencere geldiğinde, kullanıcının o anki açık onayıyla
-Adım 3-6 (§4) yürütülür.
+Bu dört karar kayda geçti. **B3 düzeltmesi TAMAMLANDI (HB-2026-142,
+2026-08-04)** — `install-services.ps1` artık File Agent'a hiç dokunmadan
+yalnız API'yi kurabiliyor, idempotency guard'ıyla birlikte. Sıradaki
+adım: (b) API deploy yardımcı script'i (ayrı küçük paket), kendi
+Plan→Önizle→Onay→Uygula→Doğrula döngüsüyle; bu tamamlanıp gerçekten sakin
+bir pencere geldiğinde, kullanıcının o anki açık onayıyla Adım 3-6 (§4)
+yürütülür. Gerçek `-Apply` HÂLÂ bu paket içinde başlatılmadı.

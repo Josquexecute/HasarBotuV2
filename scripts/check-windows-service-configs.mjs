@@ -327,6 +327,33 @@ try {
   errors.push(`pCloud task queue forensics tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-142 (D9 ilk kucuk paketi): install-services.ps1'e tek-servis
+// secici eklendi. -Services verilmezse eski davranis (her iki servis)
+// korunmali; secili olmayan servise ait dizin/build/servis durumu HIC
+// okunmamali; zaten kurulu bir servis (idempotency) fail-closed
+// reddedilmeli. Bu araç daha once bu dosyada HIC test edilmiyordu.
+try {
+  const installServices = await readFile(`${DEPLOY_DIR}install-services.ps1`, 'utf8')
+
+  assertContains(installServices, /\[ValidateSet\('Api', 'FileAgent'\)\]/, 'install-services.ps1', 'Services parametresinin izinli degerleri Api/FileAgent ile sinirlandirilmasi')
+  assertContains(installServices, /\[string\[\]\]\$Services = @\('Api', 'FileAgent'\)/, 'install-services.ps1', '-Services verilmezse varsayilanin HER IKI servis olmasi (eski davranis korunur)')
+  assertContains(installServices, /servisi ZATEN kurulu - bu betik VAR OLAN bir servisi güncellemez\/yeniden kurmaz/, 'install-services.ps1', 'idempotency: zaten kurulu servise fail-closed red')
+  assertContains(installServices, /if \(\$installApi\)/, 'install-services.ps1', 'API kontrol/kurulum adimlarinin -Services secimine kosullu olmasi')
+  assertContains(installServices, /if \(\$installFileAgent\)/, 'install-services.ps1', 'File Agent kontrol/kurulum adimlarinin -Services secimine kosullu olmasi')
+  assertContains(installServices, /\[Console\]::OutputEncoding = \[System\.Text\.UTF8Encoding\]::new\(\$false\)/, 'install-services.ps1', 'Turkce konsol ciktisi icin UTF-8 encoding duzeltmesi')
+
+  const installServicesTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}install-services.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (installServicesTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(installServicesTests.stdout)) {
+    throw new Error(`install-services testleri başarısız — ${installServicesTests.stderr || installServicesTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`install-services.ps1 tek-servis seçici doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

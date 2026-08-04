@@ -33,10 +33,18 @@ Son güncelleme: 2026-08-04
   zaten kurulu (D6, `Disabled`/`Stopped`), hesap/ACL doğru;
   `hasarbotu-api` servisi hiç kurulu değil, deploy dizini yok;
   `HASARBOTU_*`/`DATABASE_URL` ortam değişkenlerinin hiçbiri tanımlı
-  değil. Bulunan gerçek mimari boşluk: `install-services.ps1` her zaman
-  iki servisi de kurar, tek-servis seçimi yok — dosyadaki B1–B6
-  blocker'ları çözülmeden ve kullanıcı dört açık soruyu (§8)
-  cevaplamadan gerçek `-Apply` başlatılmayacak.
+  değil. Kullanıcı dört açık soruyu (§8, HB-2026-141) onaylanan
+  seçeneklerle cevapladı.
+- **D9'un ilk küçük paketi tamamlandı (B3 çözüldü, HB-2026-142,
+  2026-08-04):** `install-services.ps1`e `-Services Api`/`FileAgent`
+  seçici + idempotency guard'ı eklendi (File Agent'a hiç dokunmadan
+  yalnız API kurulabiliyor artık; zaten kurulu bir servis `-Apply`
+  olmadan bile fail-closed reddediliyor). 8 regresyon testi + statik
+  denetim eklendi, `npm test`/`check:deploy` geçti. Gerçek makinede
+  yalnız salt-okunur önizleme çalıştırıldı — hiçbir env/servis/deploy
+  dosyası değişmedi. Kalan: (b) API deploy yardımcı script'i (ayrı
+  küçük paket), sonra gerçekten sakin bir pencerede kullanıcı onayıyla
+  gerçek `-Apply`.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
