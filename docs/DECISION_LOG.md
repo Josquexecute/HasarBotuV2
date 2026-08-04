@@ -5782,3 +5782,104 @@ B4/B5/B6 (agent kaydi, admin dogrulamasi, kullanici onayi) D9 plan
 belgesindeki gibi acik. Sonra gercekten sakin bir pencerede kullanicinin
 acik onayiyla D9 plan belgesi SS4: Adim 1 (API dosyalari) -> Adim 1b
 (bu paket, reference-data saglama) -> Adim 2-6.
+
+## 2026-08-04 - HB-2026-146: D9 gercek cutover oncesi son salt-okunur hazirlik denetimi — iki gercek, dogrulanmis bulgu: (1) Adim 1/1b sirasi TERSINE calismiyor, gercekte 1b ONCE olmali, (2) YENI B9 blocker: DB'de 0 organizasyon/0 kullanici, ilk admin olusturacak hicbir mekanizma yok
+
+Istek: "D9 gercek cutover oncesi son salt-okunur readiness auditini yap.
+B2/B4/B5/B6 ile API deploy, dependency closure, reference-data, servis
+hesabi, ACL, env, DB erisimi, rollback ve smoke-test onkosullarini tek
+tabloda PASS/BLOCKED goster. Gercek Apply komut sirasini ve
+kullanicidan uygulama aninda istenecek manuel kimlik kaydini
+netlestir. Hicbir build, deploy, reference-data, env veya servis
+degisikligi yapma. Sonucu dokumante et, commit et ve gercek Apply icin
+acik kullanici onayi bekle."
+
+Yontem: HER satir bu paket icinde GERCEKTEN, salt-okunur olarak
+sorgulandi (hicbir build/deploy/env/servis mutasyonu yok):
+
+1. `resolve-runtime-dependency-closure.mjs` TAZE calistirildi (api:
+   3+113, file-agent: 2+20, ikisi de Status=ok) ve bu TAZE kapanislarla
+   `deploy-service-artifacts.ps1` onizlemesi GERCEK `C:\HasarBotu\...`
+   hedeflerine karsi yeniden calistirildi.
+2. **Gercek bulgu #1:** API onizlemesi artik `Status:"blocked"` donuyor
+   -- tek blocker, reference-data hedefte olmamasi. Bu, D9 plan
+   belgesinin o ana kadarki Adim 1 (API dosyalari) -> Adim 1b
+   (reference-data) sirasinin GERCEKTE calismadigini kanitliyor:
+   `deploy-service-artifacts.ps1`nin KENDI `ExtraDataReferences`
+   on kosulu reference-data hedefte olmadan API dosyalarinin dagitimini
+   fail-closed reddediyor. `provision-extra-data-references.ps1`nin
+   KENDI onizlemesi ayrica calistirilip `-ServiceTargetDir`in
+   (`C:\HasarBotu\services\api`) HENUZ var OLMASININ gerekmedigi
+   (yalniz `C:\HasarBotu\services`in var olmasi yeterli) dogrulandi --
+   yani Adim 1b, Adim 1'den TAMAMEN BAGIMSIZ calisabiliyor ve
+   GERCEKTE ONCE calismali. D9 plan belgesi SS4 bu dogru sirayla
+   (1a: kapanis hesapla -> 1b: reference-data -> 1c: API dosyalari)
+   yeniden yazildi.
+3. `setup-file-agent-service-account.ps1` ve `install-services.ps1`
+   (`-Services Api`/`-Services FileAgent`) TAZE onizlemeleri calistirildi
+   -- hicbir surukleme yok, onceki HB-2026-142/143 kayitlarindaki
+   durumla birebir ayni.
+4. Makine env degiskenleri (`HASARBOTU_*`, `DATABASE_URL`, `NODE_ENV`)
+   UC kapsamda da (Machine/User/Process) TAZE olarak kontrol edildi --
+   hicbiri tanimli degil (beklenen).
+5. B2 (build tazeligi) icin GERCEK build CALISTIRILMADAN, salt-okunur
+   proxy kontrolu yapildi: `git status` 5/5 ilgili dizinde (services/api,
+   services/file-agent, packages/{contracts,database,domain}) temiz;
+   `dist/` mtime'i `src/` mtime'indan YENI (5/5). Bu KESIN bir garanti
+   DEGIL -- yalniz makul bir on-isaret.
+6. **Gercek bulgu #2 (B9, YENI):** B5 (admin kullanici var mi) icin
+   GERCEK, salt-okunur bir DB baglantisi kuruldu (`hasarbotu_app` rolu,
+   parola `%USERPROFILE%\.hasarbotu\hasarbotu_app.pass`den okundu,
+   HICBIR ciktiya yazdirilmadi -- yalniz sayisal SELECT sonuclari).
+   Sonuc: `organizations`=0 satir, `users`=0 satir, `roles` 6 kodla
+   seed edilmis (migration 0002) ama HICBIR kullaniciya bagli degil.
+   Kod taramasi (`services/api/src/users/routes.ts` yalniz GET,
+   `users/store.ts` yalniz `list`+`updateRoles` -- var olan kullaniciya
+   rol atar, YENI kullanici OLUSTURMAZ) ve `docs/IMPLEMENTATION_PLAN.md`/
+   `ROADMAP.md` incelemesi, repo genelinde organizasyon/kullanici
+   OLUSTURAN hicbir HTTP/CLI/seed yolunun bulunmadigini dogruladi.
+   `services/api/src/agent/routes.ts:187`deki `POST /api/v1/agents`nin
+   `requireAdmin` gate'i (`AGENT_ADMIN_ROLES.has(role)`) da kod
+   okumasiyla dogrulandi -- admin oturumu olmadan ERISILEMEZ. Bu, B4/B5'in
+   KOK NEDENI: D9 plan belgesine yeni bir blocker (B9) olarak eklendi.
+   Argon2id parametreleri (`services/api/src/auth/password.ts`
+   `ARGON2_OPTIONS`: memoryCost=19456, timeCost=2, parallelism=1) ve
+   gereken SQL INSERT sirasi (organizations -> users -> user_roles)
+   belgelendi; HICBIR INSERT bu pakette CALISTIRILMADI -- bu, ayri bir
+   urun/operasyon karari (elle SQL mi, kucuk bir bootstrap araci mi)
+   gerektiriyor ve kullaniciya birakildi.
+7. Rollback mekanizmasi (iki `-Rollback` araci + env-var geri alma) ve
+   smoke-test onkosullari (`smoke-test-deployed-service.mjs`, `/health`
+   ve `/api/v1/agents` route sabitleri) kod okumasiyla ve mevcut test
+   kanitlarina bakilarak dogrulandi -- YENI bir gercek calistirma
+   gerektirmedi (henuz hicbir gercek yedek yok, cunku hic Apply
+   calistirilmadi -- bu BEKLENEN durum).
+
+D9 plan belgesine yeni **§9 (Gercek cutover oncesi son salt-okunur
+hazirlik denetimi)** eklendi: tek PASS/BLOCKED tablosu (B1/B2/B4/B5/B6/
+B7/B8/B9 + servis hesabi/ACL/env/DB erisimi/rollback/smoke-test), B9
+bulgusunun tam anlatimi, ve SS4'un duzeltilmis Adim sirasi (1a/1b/1c).
+SS3 blocker tablosuna B9 satiri ve B5'in "DOGRULANDI: BLOCKED" guncellemesi
+eklendi.
+
+Test sonucu: bu pakette KOD DEGISIKLIGI yapilmadi (yalniz dokumantasyon +
+salt-okunur gercek makine sorgulari) -- `npm run check:deploy` ve
+`node --test` calistirilmasina GEREK yoktu (hic script/kod dokunulmadi);
+bunun yerine TUM ilgili araclarin GERCEK onizlemeleri (deploy-service-
+artifacts.ps1 x2, provision-extra-data-references.ps1,
+setup-file-agent-service-account.ps1, install-services.ps1 x2,
+resolve-runtime-dependency-closure.mjs x2) GERCEK makinede yeniden
+calistirilip TAZE kanitlar toplandi.
+
+Etki: HICBIR build, deploy, reference-data, env veya servis degisikligi
+YAPILMADI -- yalniz D9_OPERATIONAL_CUTOVER_PLAN.md guncellendi (SS3, SS4,
+YENI SS9) ve bu DECISION_LOG kaydi eklendi. Gercek DB baglantisi
+KURULDU ama yalniz salt-okunur SELECT'ler calistirildi; parola/baglanti
+dizesi hicbir ciktiya yazilmadi.
+
+Acik kalan: **B9 (admin bootstrap)** -- gercek bir urun/operasyon karari
+gerektiriyor, kullaniciya birakildi. B2 (build tazeligi, Apply oncesi
+gercek `npm run build:packages` ile kesinlestirilmeli), B6 (kullanici
+onayi). D9 plan belgesi SS4'un duzeltilmis sirasi (1a -> 1b -> 1c ->
+2 -> 3 -> 4 [B9 cozulmus olmali] -> 5 -> 6) kullaniciya sunuldu.
+**Gercek `-Apply` icin kullanicinin ACIK ONAYI bekleniyor.**

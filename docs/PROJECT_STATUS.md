@@ -98,10 +98,26 @@ Son güncelleme: 2026-08-04
   bayt), kimlik doğrulaması GEÇTİ, `would_apply`, sıfır blocker — gerçek
   `-Apply` bu pakette çalıştırılmadı, `C:\HasarBotu\reference-data\`
   hâlâ yok.
-- Kalan: gerçek `-Apply` (D9 Adım 1 → Adım 1b [bu paket] → Adım 2-6),
-  B2 (build tazeliği), B4/B5/B6 (agent kaydı, admin doğrulaması,
-  kullanıcı onayı), sonra gerçekten sakin bir pencerede kullanıcı
-  onayıyla gerçek `-Apply`.
+- **D9 gerçek cutover öncesi son salt-okunur hazırlık denetimi
+  (HB-2026-146, 2026-08-04):** tek PASS/BLOCKED tablosunda konsolide
+  edildi (`D9_OPERATIONAL_CUTOVER_PLAN.md` §9). **İki gerçek bulgu:**
+  (1) Adım 1 (API dosyaları) → Adım 1b (reference-data) sırası GERÇEKTE
+  TERSİNE çalışmıyor — taze önizleme, `deploy-service-artifacts.ps1`nin
+  KENDİ `ExtraDataReferences` ön koşulunun reference-data hedefte
+  olmadan API dosyalarını fail-closed reddettiğini kanıtladı; doğru sıra
+  (kapanış hesapla → reference-data → API dosyaları) §4'e işlendi. (2)
+  **Yeni blocker B9:** gerçek, salt-okunur DB sorgusu `organizations`=0,
+  `users`=0 (dolayısıyla 0 admin) buldu — repo'da ilk kullanıcıyı
+  oluşturacak hiçbir HTTP/CLI/seed mekanizması yok (kod taramasıyla
+  doğrulandı), bu B4/B5'in kök nedeni. Servis hesabı/ACL/env/DB
+  bağlantısı/rollback mekanizması/smoke-test önkoşulları hepsi PASS,
+  sürüklenme yok. Hiçbir build/deploy/reference-data/env/servis
+  değişikliği YAPILMADI.
+- Kalan: **B9 (admin bootstrap, ayrı bir ürün/operasyon kararı gerektiriyor)**,
+  B2 (build tazeliği, Apply öncesi gerçek `npm run build:packages` ile
+  kesinleştirilmeli), B6 (kullanıcı onayı). Düzeltilmiş sıra: D9 Adım 1a
+  (kapanış) → 1b (reference-data) → 1c (API dosyaları) → 2-6, sonra
+  gerçekten sakin bir pencerede kullanıcı onayıyla gerçek `-Apply`.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

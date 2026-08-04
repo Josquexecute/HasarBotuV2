@@ -73,8 +73,9 @@ salt-okunur olarak sorgulandı (komutlar ve tam çıktılar §5'te):
 | **B2** | Repo'daki `services/api/dist/index.js` / `services/file-agent/dist/index.js` çıktısının GÜNCEL HEAD'e karşı taze olduğu doğrulanmadı | Apply öncesi `npm run build:packages` yeniden çalıştırılıp temiz çıkış alınmalı. |
 | **B3 (mimari boşluk) — ÇÖZÜLDÜ (HB-2026-142, 2026-08-04)** | `install-services.ps1` her zaman iki servisi de kurardı, tek servis seçme seçeneği yoktu. | **Çözüldü:** `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi parametresi eklendi. `-Services` verilmezse davranış birebir aynı kaldı (regresyon testiyle doğrulandı). Tek-servis modunda seçilmeyen servise ait HİÇBİR dosya/dizin okunmaz/doğrulanmaz. Ayrıca yeni bir idempotency guard'ı eklendi: seçilen servis SCM'de zaten kuruluysa `-Apply` OLMADAN BİLE fail-closed reddedilir (gerçek makinede `hasarbotu-file-agent` ile doğrulandı). 8 regresyon testi (`install-services.tests.ps1`) + statik denetim eklendi, `npm run check:deploy`e bağlandı. Gerçek makinede yalnız salt-okunur önizleme çalıştırıldı (`-Services Api`: yalnız API build eksikliği raporlandı; `-Services FileAgent`: idempotency blocker doğru raporlandı) — hiçbir servis/env/dosya değişmedi. |
 | **B4** | Gerçek `HASARBOTU_AGENT_ID`/`HASARBOTU_AGENT_SECRET` yok — bunlar sabit kodlanamaz; API'nin `POST /api/v1/agents` (admin oturumu gerektirir, `services/api/src/agent/routes.ts:187`) uç noktasından ÜRETİLİR ve yalnız BİR KEZ düz metin döner (`services/api/src/agent/store.ts:126` `registerAgent`) | API çalışmadan bu adım atılamaz — sıralama: API kur+başlat (secret olmadan, yalnız `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET` gerektirmeyen kısım) → admin oturumuyla agent kaydet → dönen `agentId`+`secret`i File Agent ortam değişkenlerine yaz → File Agent'ı başlat. |
-| **B5** | En az bir admin rollü kullanıcının DB'de var olduğu bu pakette doğrulanmadı (agent kaydı admin oturumu gerektirir) | Apply öncesi salt-okunur `SELECT` ile doğrulanmalı (gerçek parola/bağlantı dizesi hiçbir çıktıya yazdırılmadan). |
+| **B5 — DOĞRULANDI: BLOCKED (HB-2026-146, 2026-08-04)** | En az bir admin rollü kullanıcının DB'de var olduğu salt-okunur `SELECT` ile doğrulandı (gerçek `hasarbotu_app` bağlantısıyla, parola/bağlantı dizesi hiçbir çıktıya yazdırılmadan). **Sonuç: 0 admin kullanıcı.** | **GERÇEK, doğrulanmış blocker:** `organizations` tablosunda **0 satır**, `users` tablosunda **0 satır** (dolayısıyla admin dahil hiçbir rol atanmış kullanıcı yok). `roles` tablosu 6 kod ile seed edilmiş (migration 0002) ama HİÇBİR organizasyon/kullanıcı satırı ile ilişkilendirilmemiş. Bkz. **B9** — bu, ayrı ve daha temel bir blocker. |
 | **B6** | `AGENTS.md` §7 kritik işlem standardı gereği bu, açık kullanıcı onayı gerektiren bir sınıf işlemdir (env/servis değişikliği) | Bu belge onay İSTEĞİDİR — gerçek `-Apply` yalnız kullanıcının bu planı gözden geçirip AÇIKÇA onaylamasından sonra çalıştırılmalı. |
+| **B9 (YENİ, HB-2026-146'da bulundu) — B5'in kök nedeni** | Repo'da organizasyon/kullanıcı (özellikle İLK admin) oluşturacak **HİÇBİR mekanizma yok**: `services/api/src/users/routes.ts`de yalnız `GET` (liste) var, `services/api/src/users/store.ts`de yalnız `list`+`updateRoles` var (roller yalnız VAR OLAN bir kullanıcıya atanır) — `INSERT INTO users`/`INSERT INTO organizations` üreten hiçbir HTTP uç noktası, CLI aracı veya seed betiği repo genelinde bulunamadı (kod taraması, `docs/IMPLEMENTATION_PLAN.md`/`ROADMAP.md` incelemesi). `organizations`/`users` tabloları DB tarafında varsayılan/seed satır ÜRETMEZ (ID'ler uygulamada UUIDv7 üretilir). | **Çözülmedi, gerçek bir ürün kararı gerektirir** (bu pakette YAPILMADI): (a) operatör Apply anında elle, doğrudan SQL `INSERT` ile bir organizasyon + argon2 (`ARGON2_OPTIONS`: argon2id, m=19456, t=2, p=1) hash'li parolayla bir admin kullanıcı oluşturur (aşağıda §9'da tam şablon), YA DA (b) ayrı, küçük bir "ilk admin bootstrap" aracı yazılır (yeni küçük paket, bu pakette YAPILMADI). Kullanıcı hangisini istediğine karar vermeli. |
 
 ## 4. Sıralı Apply planı (yalnız kullanıcı onayından SONRA çalıştırılacak)
 
@@ -89,35 +90,69 @@ Model: Planla → Önizle → Onay → Uygula → Doğrula → Kesinleştir → 
 ```
 `PASS/0` olmadan hiçbir sonraki adıma geçilmez.
 
-### Adım 1 — TAMAMLANDI (mekanizma, HB-2026-143): Build + API dağıtım dizini
+### Adım 1 — Dosya hazırlığı (üç alt-adım, bu SIRAYLA — HB-2026-146'da düzeltildi)
+
+**SIRA DÜZELTMESİ (HB-2026-146, 2026-08-04):** Önceki sürüm Adım 1'i
+(API dosyaları) Adım 1b'den (reference-data) ÖNCE listeliyordu. Gerçek
+makinede taze bir önizleme, `deploy-service-artifacts.ps1`nin KENDİ
+`ExtraDataReferences` ön koşulunun `reference-data` hedefte olmadan API
+dosyalarının dağıtımını fail-closed REDDETTİĞİNİ kanıtladı — yani
+sıralama TERSİNE çalışmaz. Aşağıdaki sıra GERÇEKTEN çalışan tek sıradır
+(1b, 1a'dan SONRA ama 1c'den ÖNCE çalıştırılmalı).
+
+**Adım 1a — Kapanış hesaplama (her Apply'dan hemen önce TAZE, salt-okunur):**
+```powershell
+node deploy\windows-service\resolve-runtime-dependency-closure.mjs `
+  --repo-root 'C:\...\HasarBotuV2' --workspace services/api > $env:TEMP\api-closure.json
+node deploy\windows-service\resolve-runtime-dependency-closure.mjs `
+  --repo-root 'C:\...\HasarBotuV2' --workspace services/file-agent > $env:TEMP\file-agent-closure.json
+```
+İkisi de `"Status":"ok"` dönmeli (aksi halde sonraki adımlara geçilmez).
+
+**Adım 1b — Ek veri referansı sağlama (reference-data), API dosyalarından ÖNCE:**
+```powershell
+.\deploy\windows-service\provision-extra-data-references.ps1 `
+  -RepoRoot 'C:\...\HasarBotuV2' `
+  -DependencyClosureManifestPath "$env:TEMP\api-closure.json" `
+  -ServiceTargetDir 'C:\HasarBotu\services\api' `
+  -DataLabel 'value-loss-reference-data' `
+  -Apply
+```
+Araç TAMAMLANDI, test edildi, gerçek makinede yalnız önizleme çalıştırıldı
+(§5.G, §9) — `C:\HasarBotu\reference-data\...` HENÜZ oluşturulmadı.
+`-ServiceTargetDir`in KENDİSİNİN henüz var OLMAMASI sorun değildir (araç
+yalnız `C:\HasarBotu\services`in var olmasını ister, gerçek makinede
+doğrulandı — §9).
+
+**Adım 1c — API dosyaları (dist/+node_modules kapanışı), Adım 1b'DEN SONRA:**
 ```powershell
 npm run build:packages   # B2: tazelik icin her Apply'dan once yeniden calistirilmali
 .\deploy\windows-service\deploy-service-artifacts.ps1 `
   -SourceDir 'C:\...\HasarBotuV2\services\api' `
   -TargetDir 'C:\HasarBotu\services\api' `
   -ServiceLabel 'api' `
-  -DependencyClosureManifestPath 'C:\...\api-closure.json' `
+  -DependencyClosureManifestPath "$env:TEMP\api-closure.json" `
   -RepoRoot 'C:\...\HasarBotuV2' `
   -Apply
 ```
 `deploy-service-artifacts.ps1` (B1) yazıldı, test edildi, gerçek makinede
-yalnız önizleme çalıştırıldı (§5.E/§5.F). **B7 ÇÖZÜLDÜ (HB-2026-144)** —
+yalnız önizleme çalıştırıldı (§5.E/§5.F/§9). **B7 ÇÖZÜLDÜ (HB-2026-144)** —
 `-DependencyClosureManifestPath`/`-RepoRoot` verilirse servis artık
-gerçekten kendi kendine yeten (self-contained) dağıtılır.
+gerçekten kendi kendine yeten (self-contained) dağıtılır. Adım 1b
+tamamlanmadan bu adım fail-closed REDDEDİLİR (§9'da gerçek makinede
+kanıtlandı).
 
-**Adım 1b (YENİ, B8 çözümü, HB-2026-145) — Apply öncesi, Adım 1'den SONRA:**
+File Agent için de aynı şekilde (kapanış zaten hesaplandı, `ExtraDataReferences`
+yok — Adım 1b'ye gerek yok):
 ```powershell
-.\deploy\windows-service\provision-extra-data-references.ps1 `
+.\deploy\windows-service\deploy-service-artifacts.ps1 `
+  -SourceDir 'C:\...\HasarBotuV2\services\file-agent' `
+  -TargetDir 'C:\HasarBotu\services\file-agent' `
+  -ServiceLabel 'file-agent' `
+  -DependencyClosureManifestPath "$env:TEMP\file-agent-closure.json" `
   -RepoRoot 'C:\...\HasarBotuV2' `
-  -DependencyClosureManifestPath 'C:\...\api-closure.json' `
-  -ServiceTargetDir 'C:\HasarBotu\services\api' `
-  -DataLabel 'value-loss-reference-data' `
   -Apply
 ```
-Araç TAMAMLANDI, test edildi, gerçek makinede yalnız önizleme çalıştırıldı
-(§5.G) — `C:\HasarBotu\reference-data\...` HENÜZ oluşturulmadı. Bu adım
-Adım 1'den (API dosyaları) SONRA, servisi gerçekten başlatmadan (Adım 5)
-ÖNCE çalıştırılmalıdır.
 
 ### Adım 2 — TAMAMLANDI (HB-2026-142): `install-services.ps1`e `-Services` seçici eklendi
 `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi. Mevcut
@@ -152,6 +187,30 @@ Invoke-RestMethod http://127.0.0.1:3100/health   # "ok" beklenir
 # yalnız güvenli şekilde saklanır):
 #   POST /api/v1/agents  { "name": "file-agent-baran-global" }
 #   -> { agent: { id, ... }, secret: "..." }  (BİR KEZ döner)
+#
+# ÖNKOŞUL (B9, HB-2026-146'da bulundu — bu adımdan ÖNCE, herhangi bir
+# zamanda yapılabilir): giriş yapılabilecek EN AZ BİR admin rollü
+# kullanıcı GEREKİR. Gerçek makinede doğrulandı: şu an 0 organizasyon,
+# 0 kullanıcı var. Repo'da bunu oluşturacak HİÇBİR API/CLI/seed
+# mekanizması yok (bkz. §3 B9, §9). Operatör KENDİSİ, doğrudan SQL ile
+# (parola HİÇBİR YERE yazdırılmadan, yalnız operatörün kendi terminalinde):
+#   1) Bir organizasyon INSERT'i (code + name, UUIDv7 id uygulamada
+#      üretilir — `gen_random_uuid()` de kabul edilir, uygulama yalnız
+#      geçerli bir UUID bekler).
+#   2) argon2id hash'i KENDİ makinesinde, `services/api`nin KENDİ argon2
+#      bağımlılığıyla, AYNI parametrelerle üretir (`services/api/src/
+#      auth/password.ts` `ARGON2_OPTIONS`: argon2id, memoryCost=19456,
+#      timeCost=2, parallelism=1) -- parola HİÇBİR ZAMAN komut satırı
+#      argümanı/geçmişi olarak YAZILMAMALI. Bu pakette böyle bir betik
+#      YAZILMADI/ÇALIŞTIRILMADI; yalnız gereken parametreler belgelendi
+#      -- gerçek Apply'dan önce ayrıca (elle veya küçük bir yardımcı
+#      betikle) hazırlanmalı.
+#   3) Bir `users` INSERT'i (id, organization_id, email, display_name,
+#      password_hash, status='active').
+#   4) `user_roles`e bu kullanıcı+`roles.code='admin'` satırı INSERT.
+# Bu, ayrı bir karar gerektirir (§3 B9): elle SQL mi, yoksa küçük bir
+# bootstrap aracı mı (ayrı paket) yazılacağı KULLANICI TARAFINDAN
+# seçilmeli — bu pakette YAPILMADI.
 
 [Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ID', '<agent.id>', 'Machine')
 [Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_SECRET', '<secret>', 'Machine')
@@ -441,3 +500,60 @@ Adım 1b (`provision-extra-data-references.ps1 -Apply`) ile
 yerleştirilmelidir — yoksa API'nin `traffic-value-loss` modülü servis
 başlatıldığında `ENOENT` ile çöker. File Agent bu sorundan etkilenmiyor
 (kendi kapanışında `ExtraDataReferences` yok).
+
+## 9. Gerçek cutover öncesi son salt-okunur hazırlık denetimi (HB-2026-146, 2026-08-04)
+
+Bu bölüm, gerçek `-Apply`den hemen önce yapılan SON denetimdir. Hiçbir
+build, deploy, reference-data, env veya servis değişikliği YAPILMADI —
+her satır bu paket içinde GERÇEKTEN, salt-okunur olarak sorgulandı.
+
+### 9.1 Tek tablo — PASS / BLOCKED
+
+| Alan | Durum | Kanıt |
+|---|---|---|
+| **B1 — API dosyaları dağıtımı** | **BLOCKED** | Taze önizleme: `deploy-service-artifacts.ps1`, kapanış-farkındalı, `C:\HasarBotu\services\api` hedefine karşı → `Status:"blocked"`, tek blocker: reference-data hedefte yok (B8'e bağımlı — araç KENDİSİ bozuk değil, sıralama gereği). |
+| **B7 — Dependency closure hesaplama** | **PASS** | Taze hesaplama: api → 3 workspace-internal + 113 harici (10 platform-uyumsuz optional elendi), file-agent → 2+20; ikisi de `Status:"ok"`, `lockIntegrityOk` hepsinde `true`. |
+| **B8 — reference-data sağlama** | **PASS (önizleme)** | Taze önizleme: `provision-extra-data-references.ps1` → `Status:"would_apply"`, 4 dosya (108.525 bayt), kimlik/sürüm doğrulaması `snapshot.json` için GEÇTİ, sıfır blocker. `C:\HasarBotu\reference-data` HÂLÂ yok. Ön koşulu (`C:\HasarBotu\services`) GERÇEKTEN var — B1'den BAĞIMSIZ çalışabiliyor. |
+| **B2 — Build tazeliği** | **PASS (proxy, kesin değil)** | `git status` 5/5 ilgili dizinde (`services/api`, `services/file-agent`, `packages/{contracts,database,domain}`) TEMİZ; `dist/` mtime'ı `src/` mtime'ından YENİ (5/5). Gerçek `npm run build:packages` çalıştırılmadan KESİN garanti YOK — Apply'dan hemen önce yine de çalıştırılmalı (Adım 1c). |
+| **Servis hesabı (`svc-hb-fileagent`)** | **PASS** | Taze önizleme (`setup-file-agent-service-account.ps1`): hesap var, `SeServiceLogonRight`/`SeDenyInteractiveLogonRight`/`SeDenyRemoteInteractiveLogonRight` ✓, `PasswordRequired=True`. Sürüklenme YOK. |
+| **ACL** | **PASS** | Aynı çalıştırma: depolama kökü ACL, uygulama dizini ACL, log dizini ACL — üçü de `True`. |
+| **`install-services.ps1` fail-closed davranışı** | **PASS** | Taze önizleme: `-Services Api` → API build eksik (beklenen, B1/B2 henüz tamam değil); `-Services FileAgent` → idempotency guard doğru reddediyor (zaten kurulu). |
+| **env (Machine/User/Process)** | **PASS (beklenen boş durum)** | `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET`/`HASARBOTU_API_BASE_URL`/`DATABASE_URL`/`NODE_ENV` — ÜÇ kapsamın DA HİÇBİRİNDE tanımlı değil. `hasarbotu-api` servisi kurulu değil; `hasarbotu-file-agent` `Stopped`/`Disabled`; `postgresql-x64-17` `Running`/`Automatic`. |
+| **DB erişimi** | **PASS** | `hasarbotu_app` rolüyle GERÇEK bağlantı kuruldu (parola `%USERPROFILE%\.hasarbotu\hasarbotu_app.pass`den okundu, HİÇBİR ÇIKTIYA yazdırılmadı — yalnız sayısal sonuçlar). |
+| **B5 — admin kullanıcı var mı** | **BLOCKED (yeni doğrulandı)** | Aynı bağlantıyla salt-okunur `SELECT`: `organizations` = **0 satır**, `users` = **0 satır**, dolayısıyla admin dahil **0 rol atanmış kullanıcı**. `roles` tablosu 6 kodla seed edilmiş (`admin` dahil) ama hiçbir kullanıcıya bağlı değil. |
+| **B9 — admin bootstrap mekanizması (YENİ)** | **BLOCKED (kod taramasıyla doğrulandı)** | `services/api/src/users/routes.ts` yalnız `GET`; `users/store.ts` yalnız `list`+`updateRoles` (var olan kullanıcıya rol atar, YENİ kullanıcı OLUŞTURMAZ). `INSERT INTO users`/`organizations` üreten hiçbir HTTP/CLI/seed yolu repo genelinde YOK. B5'in kök nedeni. |
+| **B4 — Agent secret üretimi** | **BLOCKED (B5/B9'a bağımlı)** | `services/api/src/agent/routes.ts:187` `POST /api/v1/agents` → `requireAdmin` gate'i (`AGENT_ADMIN_ROLES.has(role)`) kod okumasıyla DOĞRULANDI — admin oturumu olmadan ERİŞİLEMEZ, B9 çözülmeden imkânsız. |
+| **B6 — kullanıcı onayı** | **BEKLEMEDE** | Bu bölüm dahil tüm belge onay İSTEĞİDİR. |
+| **Rollback** | **PASS (mekanizma, henüz kullanılmadı)** | `deploy-service-artifacts.ps1 -Rollback` ve `provision-extra-data-references.ps1 -Rollback` ikisi de sentetik regresyon testleriyle KANITLANMIŞ (HB-2026-143/145); `HASARBOTU_AGENT_ROOTS` geri alma §6'da belgeli. Henüz GERÇEK bir yedek YOK (hiç `-Apply` çalıştırılmadı) — bu BEKLENEN durumdur. |
+| **Smoke-test önkoşulları** | **PASS (araç hazır)** | `smoke-test-deployed-service.mjs` mevcut ve test edilmiş (HB-2026-144, izole modül-çözümleme kanıtı). Adım 6'nın (servis durumu, `/health`, log kontrolü) uç noktaları kod okumasıyla DOĞRULANDI: `HEALTH_ROUTE='/health'`, `AGENTS_ROUTE='/api/v1/agents'` — sürüklenme yok. |
+
+### 9.2 Yeni bulgu: B9 — ilk admin kullanıcısı bootstrap mekanizması yok
+
+B5'in "0 admin kullanıcı" sonucu araştırılırken, bunun tek başına
+GEÇİCİ bir durum değil, **yapısal bir boşluk** olduğu ortaya çıktı:
+repo'da hiçbir yerde (HTTP uç noktası, CLI aracı, migration seed'i)
+organizasyon veya kullanıcı OLUŞTURAN bir kod yolu yok — yalnız VAR OLAN
+kayıtları okuyan/güncelleyen kod var. `users`/`organizations` tabloları
+migration'da seed edilmez (ID'ler uygulamada UUIDv7 üretilir, DB
+varsayılanı yok). Bu, D9'un kendisinin bulduğu bir kusur değil,
+sistemde önceden var olan ve şimdiye kadar hiç Apply denenmediği için
+fark edilmemiş bir boşluktur (B7/B8'in ortaya çıkış şekliyle aynı
+desen).
+
+**Adım 4c'den önce, kullanıcının karar vermesi gereken açık soru:**
+elle SQL (şablon Adım 4c yorumlarında) mi, yoksa ayrı küçük bir
+"ilk admin bootstrap" aracı mı (yeni küçük paket)? Bu pakette İKİSİ DE
+YAPILMADI — yalnız gereken adımlar/parametreler belgelendi.
+
+### 9.3 Sonuç
+
+D9 gerçek `-Apply`'ı şu an İKİ bağımsız neden ile mümkün değil:
+1. **Sıralama düzeltmesi gerekiyor** (B1↔B8) — artık §4'te düzeltildi,
+   YENİ kod DEĞİŞİKLİĞİ gerektirmiyor, yalnız doğru SIRAYLA
+   çalıştırılmalı.
+2. **B9 (admin bootstrap) çözülmeli** — Adım 4c'ye ulaşılamadan önce,
+   gerçek bir ürün/operasyon kararı gerektiriyor.
+
+B2/B4/B5/B6 dahil hiçbir blocker bu pakette KAPATILMADI (B6 zaten
+kapatılamaz — kullanıcı onayı gerektirir). **Gerçek `-Apply` için
+kullanıcının açık onayı bekleniyor.**
