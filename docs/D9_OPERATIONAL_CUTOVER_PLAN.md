@@ -75,7 +75,7 @@ salt-okunur olarak sorgulandı (komutlar ve tam çıktılar §5'te):
 | **B4** | Gerçek `HASARBOTU_AGENT_ID`/`HASARBOTU_AGENT_SECRET` yok — bunlar sabit kodlanamaz; API'nin `POST /api/v1/agents` (admin oturumu gerektirir, `services/api/src/agent/routes.ts:187`) uç noktasından ÜRETİLİR ve yalnız BİR KEZ düz metin döner (`services/api/src/agent/store.ts:126` `registerAgent`) | API çalışmadan bu adım atılamaz — sıralama: API kur+başlat (secret olmadan, yalnız `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET` gerektirmeyen kısım) → admin oturumuyla agent kaydet → dönen `agentId`+`secret`i File Agent ortam değişkenlerine yaz → File Agent'ı başlat. |
 | **B5 — DOĞRULANDI: BLOCKED (HB-2026-146, 2026-08-04)** | En az bir admin rollü kullanıcının DB'de var olduğu salt-okunur `SELECT` ile doğrulandı (gerçek `hasarbotu_app` bağlantısıyla, parola/bağlantı dizesi hiçbir çıktıya yazdırılmadan). **Sonuç: 0 admin kullanıcı.** | **GERÇEK, doğrulanmış blocker:** `organizations` tablosunda **0 satır**, `users` tablosunda **0 satır** (dolayısıyla admin dahil hiçbir rol atanmış kullanıcı yok). `roles` tablosu 6 kod ile seed edilmiş (migration 0002) ama HİÇBİR organizasyon/kullanıcı satırı ile ilişkilendirilmemiş. Bkz. **B9** — bu, ayrı ve daha temel bir blocker. |
 | **B6** | `AGENTS.md` §7 kritik işlem standardı gereği bu, açık kullanıcı onayı gerektiren bir sınıf işlemdir (env/servis değişikliği) | Bu belge onay İSTEĞİDİR — gerçek `-Apply` yalnız kullanıcının bu planı gözden geçirip AÇIKÇA onaylamasından sonra çalıştırılmalı. |
-| **B9 (YENİ, HB-2026-146'da bulundu) — B5'in kök nedeni** | Repo'da organizasyon/kullanıcı (özellikle İLK admin) oluşturacak **HİÇBİR mekanizma yok**: `services/api/src/users/routes.ts`de yalnız `GET` (liste) var, `services/api/src/users/store.ts`de yalnız `list`+`updateRoles` var (roller yalnız VAR OLAN bir kullanıcıya atanır) — `INSERT INTO users`/`INSERT INTO organizations` üreten hiçbir HTTP uç noktası, CLI aracı veya seed betiği repo genelinde bulunamadı (kod taraması, `docs/IMPLEMENTATION_PLAN.md`/`ROADMAP.md` incelemesi). `organizations`/`users` tabloları DB tarafında varsayılan/seed satır ÜRETMEZ (ID'ler uygulamada UUIDv7 üretilir). | **Çözülmedi, gerçek bir ürün kararı gerektirir** (bu pakette YAPILMADI): (a) operatör Apply anında elle, doğrudan SQL `INSERT` ile bir organizasyon + argon2 (`ARGON2_OPTIONS`: argon2id, m=19456, t=2, p=1) hash'li parolayla bir admin kullanıcı oluşturur (aşağıda §9'da tam şablon), YA DA (b) ayrı, küçük bir "ilk admin bootstrap" aracı yazılır (yeni küçük paket, bu pakette YAPILMADI). Kullanıcı hangisini istediğine karar vermeli. |
+| **B9 — ARACI TAMAMLANDI (HB-2026-147, 2026-08-04) — gerçek Apply HENÜZ ÇALIŞTIRILMADI** | Repo'da organizasyon/kullanıcı (özellikle İLK admin) oluşturacak **HİÇBİR mekanizma yoktu**: `services/api/src/users/routes.ts`de yalnız `GET` (liste), `users/store.ts`de yalnız `list`+`updateRoles` (roller yalnız VAR OLAN bir kullanıcıya atanır) — `INSERT INTO users`/`INSERT INTO organizations` üreten hiçbir HTTP uç noktası, CLI aracı veya seed betiği repo genelinde yoktu. | **Araç TAMAMLANDI:** `bootstrap-first-admin.mjs` (yeni) eklendi — yalnız `organizations=0` VE `users=0` iken çalışır (transaction İÇİNDE TAZE yeniden kontrol, TOCTOU güvenli), gerçek şema/domain doğrulamalarını (`@hasarbotu/contracts`nin `userSummarySchema.shape.email`/`.displayName`, `passwordSchema`) ve gerçek argon2id hash mekanizmasını (`@hasarbotu/api`nin `hashPassword`, `ARGON2_OPTIONS`) YENİDEN KULLANIR — yeniden implemente ETMEZ. Parola ASLA CLI argümanı/dosya/log olarak geçmez — yalnız ham (raw-mode) terminalden yankısız okunur, izin verilen tek bayrak `--apply`dır. Organizasyon+kullanıcı+`user_roles`+iki `audit_events` kaydı TEK DB transaction'ında yazılır; hata veya yarış durumunda tam `ROLLBACK`. 15 test (7 birim/CLI + 8 GERÇEK PostgreSQL entegrasyon testi — tek-kullanımlık red, TOCTOU yarış simülasyonu, geçersiz girdi/DB CHECK ihlali sıfır-satır kanıtı dahil) + statik denetim, hepsi geçti. **Gerçek makinede kanıtlandı (yalnız salt-okunur önizleme):** `hasarbotu_app` bağlantısıyla `Status:"ready"`, `OrganizationCount:0`, `UserCount:0`, `AdminRoleSeeded:true`, sıfır blocker, sıfır satır yazıldı. **Gerçek `-Apply` bu pakette ÇALIŞTIRILMADI** — B6 ile aynı, kullanıcının ayrı onayını bekliyor. |
 
 ## 4. Sıralı Apply planı (yalnız kullanıcı onayından SONRA çalıştırılacak)
 
@@ -188,29 +188,26 @@ Invoke-RestMethod http://127.0.0.1:3100/health   # "ok" beklenir
 #   POST /api/v1/agents  { "name": "file-agent-baran-global" }
 #   -> { agent: { id, ... }, secret: "..." }  (BİR KEZ döner)
 #
-# ÖNKOŞUL (B9, HB-2026-146'da bulundu — bu adımdan ÖNCE, herhangi bir
+# ÖNKOŞUL (B9 — ARACI HAZIR, HB-2026-147, bu adımdan ÖNCE, herhangi bir
 # zamanda yapılabilir): giriş yapılabilecek EN AZ BİR admin rollü
-# kullanıcı GEREKİR. Gerçek makinede doğrulandı: şu an 0 organizasyon,
-# 0 kullanıcı var. Repo'da bunu oluşturacak HİÇBİR API/CLI/seed
-# mekanizması yok (bkz. §3 B9, §9). Operatör KENDİSİ, doğrudan SQL ile
-# (parola HİÇBİR YERE yazdırılmadan, yalnız operatörün kendi terminalinde):
-#   1) Bir organizasyon INSERT'i (code + name, UUIDv7 id uygulamada
-#      üretilir — `gen_random_uuid()` de kabul edilir, uygulama yalnız
-#      geçerli bir UUID bekler).
-#   2) argon2id hash'i KENDİ makinesinde, `services/api`nin KENDİ argon2
-#      bağımlılığıyla, AYNI parametrelerle üretir (`services/api/src/
-#      auth/password.ts` `ARGON2_OPTIONS`: argon2id, memoryCost=19456,
-#      timeCost=2, parallelism=1) -- parola HİÇBİR ZAMAN komut satırı
-#      argümanı/geçmişi olarak YAZILMAMALI. Bu pakette böyle bir betik
-#      YAZILMADI/ÇALIŞTIRILMADI; yalnız gereken parametreler belgelendi
-#      -- gerçek Apply'dan önce ayrıca (elle veya küçük bir yardımcı
-#      betikle) hazırlanmalı.
-#   3) Bir `users` INSERT'i (id, organization_id, email, display_name,
-#      password_hash, status='active').
-#   4) `user_roles`e bu kullanıcı+`roles.code='admin'` satırı INSERT.
-# Bu, ayrı bir karar gerektirir (§3 B9): elle SQL mi, yoksa küçük bir
-# bootstrap aracı mı (ayrı paket) yazılacağı KULLANICI TARAFINDAN
-# seçilmeli — bu pakette YAPILMADI.
+# kullanıcı GEREKİR. `bootstrap-first-admin.mjs` (yeni, fail-closed,
+# tek-kullanımlık) bunun için yazıldı — DATABASE_URL zaten Machine
+# kapsamında tanımlı olduğundan ayrıca env vermeye gerek yok:
+#   node deploy\windows-service\bootstrap-first-admin.mjs           # önizleme
+#   node deploy\windows-service\bootstrap-first-admin.mjs --apply   # GERÇEK oluşturma (interaktif)
+# Yalnız `organizations=0` VE `users=0` iken çalışır (bu paket önizlemesinde
+# doğrulandı: Status="ready", OrganizationCount=0, UserCount=0,
+# AdminRoleSeeded=true). `--apply` ile org kodu/adı, admin e-posta/görünen
+# ad düz metin, PAROLA ise ham (raw-mode) terminalden YANKISIZ okunur —
+# hiçbir zaman CLI argümanı/dosya/log olarak geçmez. Gerçek argon2id hash'i
+# (`@hasarbotu/api`nin `hashPassword`/`ARGON2_OPTIONS`) ve gerçek
+# `@hasarbotu/contracts` doğrulamaları YENİDEN KULLANILIR. Organizasyon +
+# kullanıcı + `user_roles` + iki `audit_events` kaydı TEK transaction'da
+# yazılır; ikinci çalıştırma (organizations/users artık boş değilse)
+# fail-closed reddedilir. Kanıt raporu (parola/hash İÇERMEZ) admin-only ACL
+# ile `C:\ProgramData\HasarBotu\migration-preflight\`e yazılır. Bu pakette
+# yalnız salt-okunur önizleme çalıştırıldı — gerçek `--apply` B6 ile aynı,
+# kullanıcının ayrı onayını bekliyor.
 
 [Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ID', '<agent.id>', 'Machine')
 [Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_SECRET', '<secret>', 'Machine')
@@ -521,7 +518,7 @@ her satır bu paket içinde GERÇEKTEN, salt-okunur olarak sorgulandı.
 | **env (Machine/User/Process)** | **PASS (beklenen boş durum)** | `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET`/`HASARBOTU_API_BASE_URL`/`DATABASE_URL`/`NODE_ENV` — ÜÇ kapsamın DA HİÇBİRİNDE tanımlı değil. `hasarbotu-api` servisi kurulu değil; `hasarbotu-file-agent` `Stopped`/`Disabled`; `postgresql-x64-17` `Running`/`Automatic`. |
 | **DB erişimi** | **PASS** | `hasarbotu_app` rolüyle GERÇEK bağlantı kuruldu (parola `%USERPROFILE%\.hasarbotu\hasarbotu_app.pass`den okundu, HİÇBİR ÇIKTIYA yazdırılmadı — yalnız sayısal sonuçlar). |
 | **B5 — admin kullanıcı var mı** | **BLOCKED (yeni doğrulandı)** | Aynı bağlantıyla salt-okunur `SELECT`: `organizations` = **0 satır**, `users` = **0 satır**, dolayısıyla admin dahil **0 rol atanmış kullanıcı**. `roles` tablosu 6 kodla seed edilmiş (`admin` dahil) ama hiçbir kullanıcıya bağlı değil. |
-| **B9 — admin bootstrap mekanizması (YENİ)** | **BLOCKED (kod taramasıyla doğrulandı)** | `services/api/src/users/routes.ts` yalnız `GET`; `users/store.ts` yalnız `list`+`updateRoles` (var olan kullanıcıya rol atar, YENİ kullanıcı OLUŞTURMAZ). `INSERT INTO users`/`organizations` üreten hiçbir HTTP/CLI/seed yolu repo genelinde YOK. B5'in kök nedeni. |
+| **B9 — admin bootstrap mekanizması** | **PASS (araç TAMAMLANDI, HB-2026-147)** | `bootstrap-first-admin.mjs` yazıldı, 15 test (8'i GERÇEK PostgreSQL entegrasyonu) + statik denetim geçti. Gerçek makinede önizleme: `Status:"ready"`, `OrganizationCount:0`, `UserCount:0`, `AdminRoleSeeded:true`, sıfır blocker, sıfır satır yazıldı. Gerçek `--apply` bu pakette ÇALIŞTIRILMADI. |
 | **B4 — Agent secret üretimi** | **BLOCKED (B5/B9'a bağımlı)** | `services/api/src/agent/routes.ts:187` `POST /api/v1/agents` → `requireAdmin` gate'i (`AGENT_ADMIN_ROLES.has(role)`) kod okumasıyla DOĞRULANDI — admin oturumu olmadan ERİŞİLEMEZ, B9 çözülmeden imkânsız. |
 | **B6 — kullanıcı onayı** | **BEKLEMEDE** | Bu bölüm dahil tüm belge onay İSTEĞİDİR. |
 | **Rollback** | **PASS (mekanizma, henüz kullanılmadı)** | `deploy-service-artifacts.ps1 -Rollback` ve `provision-extra-data-references.ps1 -Rollback` ikisi de sentetik regresyon testleriyle KANITLANMIŞ (HB-2026-143/145); `HASARBOTU_AGENT_ROOTS` geri alma §6'da belgeli. Henüz GERÇEK bir yedek YOK (hiç `-Apply` çalıştırılmadı) — bu BEKLENEN durumdur. |
@@ -540,20 +537,24 @@ sistemde önceden var olan ve şimdiye kadar hiç Apply denenmediği için
 fark edilmemiş bir boşluktur (B7/B8'in ortaya çıkış şekliyle aynı
 desen).
 
-**Adım 4c'den önce, kullanıcının karar vermesi gereken açık soru:**
-elle SQL (şablon Adım 4c yorumlarında) mi, yoksa ayrı küçük bir
-"ilk admin bootstrap" aracı mı (yeni küçük paket)? Bu pakette İKİSİ DE
-YAPILMADI — yalnız gereken adımlar/parametreler belgelendi.
+**HB-2026-147 güncellemesi (2026-08-04): çözüldü.** Kullanıcı ayrı küçük bir
+"ilk admin bootstrap" aracı istedi — `bootstrap-first-admin.mjs` (yeni)
+bu ihtiyacı karşılıyor: yalnız `organizations=0` VE `users=0` iken çalışır,
+gerçek şema/domain doğrulamalarını ve gerçek argon2id hash mekanizmasını
+yeniden kullanır, parola asla argv/dosya/log olarak geçmez, tek transaction
++ audit kanıtı üretir, tekrar çalıştırmayı fail-closed reddeder (bkz. §3 B9
+ve Adım 4c). Ayrıntılar için `docs/DECISION_LOG.md` HB-2026-147.
 
 ### 9.3 Sonuç
 
-D9 gerçek `-Apply`'ı şu an İKİ bağımsız neden ile mümkün değil:
-1. **Sıralama düzeltmesi gerekiyor** (B1↔B8) — artık §4'te düzeltildi,
-   YENİ kod DEĞİŞİKLİĞİ gerektirmiyor, yalnız doğru SIRAYLA
-   çalıştırılmalı.
-2. **B9 (admin bootstrap) çözülmeli** — Adım 4c'ye ulaşılamadan önce,
-   gerçek bir ürün/operasyon kararı gerektiriyor.
+D9 gerçek `-Apply`'ı şu an TEK bağımsız neden ile mümkün değil:
+1. ~~Sıralama düzeltmesi gerekiyor (B1↔B8)~~ — §4'te düzeltildi, YENİ kod
+   DEĞİŞİKLİĞİ gerektirmiyor, yalnız doğru SIRAYLA çalıştırılmalı.
+2. ~~B9 (admin bootstrap) çözülmeli~~ — **araç TAMAMLANDI (HB-2026-147)**,
+   yalnız salt-okunur önizleme ile kanıtlandı.
+3. **B6 — kullanıcının açık onayı** — AGENTS.md §7 gereği, tek kalan ve
+   ASLA otomatikleştirilemeyecek adım.
 
-B2/B4/B5/B6 dahil hiçbir blocker bu pakette KAPATILMADI (B6 zaten
-kapatılamaz — kullanıcı onayı gerektirir). **Gerçek `-Apply` için
-kullanıcının açık onayı bekleniyor.**
+B2/B4/B5 gerçek `-Apply` sırasında Adım 4'teki SIRAYLA uygulanacak;
+hiçbiri ayrı bir kod/araç değişikliği gerektirmiyor. **Gerçek `-Apply`
+için kullanıcının açık onayı bekleniyor.**

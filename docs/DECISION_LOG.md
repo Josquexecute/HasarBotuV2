@@ -5883,3 +5883,123 @@ gercek `npm run build:packages` ile kesinlestirilmeli), B6 (kullanici
 onayi). D9 plan belgesi SS4'un duzeltilmis sirasi (1a -> 1b -> 1c ->
 2 -> 3 -> 4 [B9 cozulmus olmali] -> 5 -> 6) kullaniciya sunuldu.
 **Gercek `-Apply` icin kullanicinin ACIK ONAYI bekleniyor.**
+
+## 2026-08-04 - HB-2026-147: D9 B9 araci tamamlandi — ilk organizasyon+admin kullanicisini uygulama aninda elle girilen bilgilerle olusturan tek-kullanimlik, fail-closed bootstrap CLI'si; gercek argon2id hash + gercek contracts dogrulamalari yeniden kullanildi, parola hicbir zaman argv/dosya/log olarak gecmedi; gercek makinede yalniz onizleme kanitlandi
+
+Istek: "D9 B9 kucuk paketini uygula: ilk organization ve admin
+kullanicisini uygulama aninda elle girilen bilgilerle olusturan
+tek-kullanimlik, fail-closed bootstrap CLI gelistir. Yalniz
+organizations=0 ve users=0 iken calisabilsin. Preview/-Apply ayri olsun.
+Mevcut sema, domain dogrulamalari ve gercek parola hash mekanizmasini
+kullansin. Parola komut satiri argumani, dosya veya loga yazilmasin;
+guvenli interaktif giris olsun. Tum islem tek DB transaction icinde
+gerceklessin, audit kaniti uretsin ve tekrar calistirmayi reddetsin.
+Gercek DB'de yalniz preview calistir; organization/user olusturma. Test
+et, commit et ve kisa raporla." (HB-2026-146'nin bulup kullaniciya
+biraktigi B9 karari icin secilen yol: (b) ayri kucuk bootstrap araci.)
+
+Yontem:
+
+1. **Yeniden kullanim taramasi:** `@hasarbotu/api`nin `exports` haritasi
+   yalniz kok girisi (`dist/index.js`) disa aciyor -- `hashPassword`/
+   `verifyPassword`/`ARGON2_OPTIONS` (auth/password.ts) kok seviyede
+   re-export edilmis ve KULLANILABILIR; ama `createAuditService`/
+   `Queryable`/`withTransaction`/`createUsersStore` (audit/users
+   servisleri) paket DISINDAN erisilemez. Bilincli karar: audit_events
+   INSERT'i gercek servisin (8 kolon: id, organization_id,
+   actor_user_id, action, resource_type, resource_id, request_id,
+   details) BIREBIR ayni sekliyle elle yazildi -- ayri bir paket
+   tasima/kopyalama yerine. `organizations`/`users` icin hicbir zod
+   semasi repo'da yok -- migration'daki GERCEK DB CHECK kisitlarina
+   (`code ~ '^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]$'`, bos olmayan `name`)
+   birebir karsi elle dogrulama yazildi (sema ile DB'nin sessizce
+   ayrisamamasi icin savunma). `uuidv7()` (`@hasarbotu/database`) ve
+   `userSummarySchema.shape.email`/`.displayName` + `passwordSchema`
+   (`@hasarbotu/contracts`) dogrudan yeniden kullanildi.
+2. **Tek-kullanimliklik, ayri bir kilit/durum mekanizmasi OLMADAN:**
+   `getBootstrapReadiness` (organizations=0 VE users=0 VE admin rolu
+   seed edilmis mi) once preview/prompt-oncesi kontrol edilir, SONRA
+   `bootstrapFirstAdmin`nin ACTIGI TEK transaction'in ICINDE TAZE
+   olarak YENIDEN kontrol edilir -- boylece preview ile gercek yazma
+   arasindaki TOCTOU penceresi kapanir. Gercek bir testte, iki kontrol
+   arasina BASKA bir surecin rakip bir organizasyon INSERT'i elle
+   yerlestirilerek bu koruma dogrulandi: `bootstrapFirstAdmin`
+   `READINESS_CHANGED_SINCE_CHECK` ile reddediyor, YARIM/yetim bir
+   admin kullanicisi KALMIYOR.
+3. **Parola guvenligi:** `readHiddenLine` -- raw-mode stdin, TAM
+   yankisiz (asteriksli maskeleme bile YOK, ssh/sudo gelenegiyle ayni),
+   yapistirilan girdi TEK bir chunk olarak gelebildigi icin chunk'in
+   HER karakteri ayri islenir. Parolanin CLI argumani/env-var ile
+   otomatik/nonverbal gecebilmesi ihtimalini YAPISAL olarak kapatmak
+   icin -Apply'a bilincli olarak HICBIR non-interactive/env-var bypass
+   eklenmedi -- `--apply` verildiginde `stdin.isTTY` degilse (ör. CI/
+   script'ten yanlislikla cagrilirsa) PROMPT'A GELMEDEN
+   `STDIN_NOT_INTERACTIVE` ile fail-closed reddedilir (gercek testte
+   dogrulandi). Testler bu yuzden interaktif stdin'i emule ETMEZ --
+   `bootstrapFirstAdmin(...)`i dogrudan cagirir.
+4. **Iki gercek hata bulundu ve duzeltildi:**
+   a. Ilk `readHiddenLine` taslaginda Ctrl-C/Backspace icin literal
+      kontrol karakteri (`\x03`/`\x7f`) string karsilastirmasi
+      kullanildi -- Write araciyla yazilan bu gorunmez byte'lar Edit
+      araciyla eslesmeyi bozdu (tur-donusu guvenilir degil). Duzeltme:
+      `char.codePointAt(0)` ile isimlendirilmis sabit sayisal kod
+      karsilastirmasina gecildi (`CONTROL_CODE_ETX=3`,
+      `CONTROL_CODE_BACKSPACE=8`, `CONTROL_CODE_DEL=127`), tam dosya
+      yeniden yazilip byte-taramasiyla (0x09 altinda / 0x0d-0x20 arasi
+      hicbir byte yok) ve `node --check` ile dogrulandi.
+   b. Ilk gercek DB testinde `pg` DeprecationWarning: tek bir
+      `pg.PoolClient` uzerinde `Promise.all` ile 3 sorguyu ESZAMANLI
+      calistirmak (Pool'da guvenli, tek Client'ta DEGIL) --
+      `getBootstrapReadiness` sirali (await...await...await) sorguya
+      donusturuldu. Testler yeniden calistirildi: 15/15 gecti, SIFIR
+      uyari.
+5. **Statik denetim:** `scripts/check-windows-service-configs.mjs`e
+   yeni bir HB-2026-147 bloku eklendi -- gercek argon2/uuidv7/contracts
+   semasi yeniden kullanimini, `--apply` disinda hicbir CLI bayraginin
+   olmadigini, parolanin dosyaya yazilmadigini, raw-mode/TTY
+   kontrolunu, tek-kullanimliklik+TOCTOU blocker kodlarini, BEGIN/
+   COMMIT/ROLLBACK'i, audit_events INSERT'ini ve Administrators-only
+   ACL kanit yazimini kaynak uzerinde regex ile dogrular, sonra
+   `node --test bootstrap-first-admin.test.mjs` calistirir.
+
+Test sonucu (hepsi GERCEKTEN calistirildi):
+- `node --test deploy/windows-service/bootstrap-first-admin.test.mjs`
+  (TEST_DATABASE_URL YOKKEN): 7/7 gecti (5 validator + 2 CLI), gercek DB
+  suite'i temiz sekilde ATLANDI (fail degil).
+- Ayni komut, GERCEK `hasarbotu_test` DB'siyle (TEST_DATABASE_URL
+  `%USERPROFILE%\.hasarbotu\hasarbotu_test.pass`den kuruldu): **15/15
+  gecti**, SIFIR uyari -- readiness, basarili bootstrap (parola GERCEKTEN
+  argon2 ile dogrulanabilir, `user_roles`='admin', 2 `audit_events`
+  `details.bootstrap=true` ile), ikinci calistirma reddi, TOCTOU yarisi,
+  gecersiz girdi (DB yazmadan once red), DB CHECK ihlali (ROLLBACK ile
+  sifir satir), CLI preview (sifir yazma), CLI --apply+TTY-olmayan
+  (sifir yazma) dahil.
+- `node --test deploy/windows-service/*.test.mjs` (TUM D9 araclari
+  birlikte, regresyon kontrolu): **77/77 gecti**, sifir basarisiz, sifir
+  atlanan (bootstrap'in DB-gated suite'i haric).
+- `node scripts/check-windows-service-configs.mjs`: **GECTI** (yeni
+  HB-2026-147 blogu dahil).
+- **Gercek `hasarbotu` (uretim-bagli) DB'sinde SADECE onizleme**
+  (`hasarbotu_app` rolu, `--apply` VERILMEDEN):
+  `{"Mode":"preview","Status":"ready","OrganizationCount":0,"UserCount":0,
+  "AdminRoleSeeded":true,"Blockers":[]}`, exit 0. HB-2026-146'nin
+  bulgusuyla BIREBIR tutarli (sifir surukleme); SIFIR satir yazildi,
+  hicbir organizasyon/kullanici OLUSTURULMADI.
+
+Etki: iki yeni dosya --
+`deploy/windows-service/bootstrap-first-admin.mjs` (arac) ve
+`bootstrap-first-admin.test.mjs` (test) -- artı
+`scripts/check-windows-service-configs.mjs`e yeni denetim blogu.
+D9_OPERATIONAL_CUTOVER_PLAN.md guncellendi: SS3 B9 satiri "ARACI
+TAMAMLANDI"ya cevrildi, Adim 4c artik elle-SQL yerine gercek araci
+referans aliyor, SS9.1 tablosu B9 satiri PASS'e cevrildi, SS9.2/9.3
+aracin var oldugunu ve B6'nin (kullanici onayi) TEK kalan blocker
+oldugunu yansitiyor. Hicbir gercek organizasyon/kullanici olusturulmadi,
+hicbir servis/env/build degisikligi yapilmadi.
+
+Acik kalan: gercek `--apply` HALA calistirilmadi -- B6 (AGENTS.md SS7
+geregi kullanicinin ACIK onayi) TEK kalan blocker. Onay sonrasi sira:
+D9 plan belgesi Adim 0-4 (B9 artik cozulmus, Adim 4c'de
+`bootstrap-first-admin.mjs --apply` gercek admin kimligini uygulama
+aninda elle girer) -> Adim 5 (smoke test) -> Adim 6 (kesinlestir).
+**Gercek `-Apply` icin kullanicinin ACIK ONAYI bekleniyor.**

@@ -113,11 +113,31 @@ Son güncelleme: 2026-08-04
   bağlantısı/rollback mekanizması/smoke-test önkoşulları hepsi PASS,
   sürüklenme yok. Hiçbir build/deploy/reference-data/env/servis
   değişikliği YAPILMADI.
-- Kalan: **B9 (admin bootstrap, ayrı bir ürün/operasyon kararı gerektiriyor)**,
-  B2 (build tazeliği, Apply öncesi gerçek `npm run build:packages` ile
-  kesinleştirilmeli), B6 (kullanıcı onayı). Düzeltilmiş sıra: D9 Adım 1a
-  (kapanış) → 1b (reference-data) → 1c (API dosyaları) → 2-6, sonra
-  gerçekten sakin bir pencerede kullanıcı onayıyla gerçek `-Apply`.
+- **D9'un beşinci küçük paketi tamamlandı (B9 aracı, HB-2026-147,
+  2026-08-04):** `bootstrap-first-admin.mjs` eklendi — ilk organizasyon +
+  admin kullanıcısını uygulama anında elle girilen bilgilerle oluşturan
+  tek-kullanımlık, fail-closed CLI. Yalnız `organizations=0` VE
+  `users=0` iken çalışır (transaction içinde TAZE TOCTOU yeniden
+  kontrolü — gerçek yarış testiyle kanıtlandı). Gerçek argon2id hash
+  (`@hasarbotu/api` `hashPassword`) ve gerçek `@hasarbotu/contracts`
+  doğrulamaları YENİDEN KULLANILDI — yeniden implemente edilmedi. Parola
+  ASLA argv/dosya/log olarak geçmez, yalnız ham (raw-mode) terminalden
+  yankısız okunur. Org+kullanıcı+`user_roles`+2 `audit_events` TEK
+  transaction'da yazılır. 15 test (7 birim/CLI + 8 GERÇEK PostgreSQL
+  entegrasyonu) + statik denetim, hepsi geçti; bu sırada 2 gerçek hata
+  bulunup düzeltildi (kaynak dosyada görünmez kontrol karakteri
+  bozulması; `pg`nin tek client üzerinde eşzamanlı sorgu deprecation
+  uyarısı). **Gerçek makinede kanıtlandı (yalnız salt-okunur önizleme,
+  `hasarbotu` DB'sinde):** `Status:"ready"`, `OrganizationCount:0`,
+  `UserCount:0`, `AdminRoleSeeded:true`, sıfır blocker, sıfır satır
+  yazıldı — gerçek `--apply` bu pakette çalıştırılmadı.
+- Kalan: **B6 (kullanıcı onayı) — TEK kalan blocker.** B9 artık araç
+  olarak TAMAMLANDI (yalnız onay bekliyor); B2 (build tazeliği) Apply
+  öncesi gerçek `npm run build:packages` ile ayrıca kesinleştirilmeli.
+  Düzeltilmiş sıra: D9 Adım 1a (kapanış) → 1b (reference-data) → 1c (API
+  dosyaları) → 2-4 (Adım 4c'de `bootstrap-first-admin.mjs --apply`) →
+  5-6, sonra gerçekten sakin bir pencerede kullanıcı onayıyla gerçek
+  `-Apply`.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

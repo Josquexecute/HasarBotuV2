@@ -523,6 +523,45 @@ try {
   errors.push(`D9 B8 (ek veri referansı sağlama) tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-147 (D9 B9 cozumu): ilk organizasyon+admin kullanicisi icin
+// tek-kullanimlik, fail-closed bootstrap CLI'si -- bu depodaki GERCEK bir
+// veritabani INSERT'i yapan ilk Node araci. Statik kapı: gercek parola
+// hash mekanizmasinin (argon2, @hasarbotu/api) VE gercek id uretecinin
+// (uuidv7, @hasarbotu/database) yeniden kullanildigini, parolanin asla
+// argv/dosya/log olarak gecmedigini, TEK transaction+TOCTOU-taze-yeniden-
+// kontrol+audit_events kaydinin var oldugunu dogrular.
+try {
+  const bootstrapScript = await readFile(`${DEPLOY_DIR}bootstrap-first-admin.mjs`, 'utf8')
+
+  assertContains(bootstrapScript, /import \{ hashPassword \} from '@hasarbotu\/api'/, 'bootstrap-first-admin.mjs', 'gercek argon2id parola hash mekanizmasinin yeniden kullanimi (kendi implementasyonu degil)')
+  assertContains(bootstrapScript, /import \{ uuidv7,/, 'bootstrap-first-admin.mjs', 'gercek uuidv7 id ureticisinin yeniden kullanimi (registerAgent/createSession ile ayni)')
+  assertContains(bootstrapScript, /userSummarySchema\.shape\.email|userSummarySchema\.shape\.displayName/, 'bootstrap-first-admin.mjs', 'gercek contracts semasinin (userSummarySchema) yeniden kullanimi')
+  assertContains(bootstrapScript, /passwordSchema\.safeParse/, 'bootstrap-first-admin.mjs', 'gercek contracts parola semasinin (passwordSchema) yeniden kullanimi')
+  assertContains(bootstrapScript, /allowed = new Set\(\['--apply'\]\)/, 'bootstrap-first-admin.mjs', 'yalniz --apply bayragi izinli -- parola ASLA CLI argumani olamaz')
+  assertNotContains(bootstrapScript, /--password|argv.*password|password.*argv/i, 'bootstrap-first-admin.mjs', 'parolanin CLI argumani olarak gecmesi ihtimali')
+  assertNotContains(bootstrapScript, /writeFile\([^)]*password|appendFile\([^)]*password/i, 'bootstrap-first-admin.mjs', 'parolanin dosyaya yazilmasi ihtimali')
+  assertContains(bootstrapScript, /setRawMode\(true\)/, 'bootstrap-first-admin.mjs', 'guvenli (yankisiz) interaktif parola girisi')
+  assertContains(bootstrapScript, /STDIN_NOT_INTERACTIVE/, 'bootstrap-first-admin.mjs', 'TTY olmayan baglamda fail-closed red (otomasyonla yanlislikla calistirilamaz)')
+  assertContains(bootstrapScript, /ORGANIZATIONS_NOT_EMPTY_|USERS_NOT_EMPTY_/, 'bootstrap-first-admin.mjs', 'tek-kullanimlik fail-closed koruma (organizations=0 VE users=0 sarti)')
+  assertContains(bootstrapScript, /READINESS_CHANGED_SINCE_CHECK/, 'bootstrap-first-admin.mjs', 'TOCTOU: transaction icinde TAZE yeniden kontrol')
+  assertContains(bootstrapScript, /await client\.query\('BEGIN'\)/, 'bootstrap-first-admin.mjs', 'tek DB transaction (BEGIN)')
+  assertContains(bootstrapScript, /await client\.query\('COMMIT'\)/, 'bootstrap-first-admin.mjs', 'tek DB transaction (COMMIT)')
+  assertContains(bootstrapScript, /await client\.query\('ROLLBACK'\)/, 'bootstrap-first-admin.mjs', 'hata halinde tam geri alma (ROLLBACK)')
+  assertContains(bootstrapScript, /INSERT INTO audit_events/, 'bootstrap-first-admin.mjs', 'audit kaniti -- ayni transaction icinde audit_events kaydi')
+  assertContains(bootstrapScript, /SetAccessControl/, 'bootstrap-first-admin.mjs', 'yerel kanit raporu icin Administrators-only ACL')
+
+  const bootstrapTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}bootstrap-first-admin.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (bootstrapTests.status !== 0) {
+    throw new Error(`bootstrap-first-admin testleri başarısız — ${bootstrapTests.stderr || bootstrapTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`D9 B9 (ilk admin bootstrap) tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)
