@@ -68,7 +68,8 @@ salt-okunur olarak sorgulandı (komutlar ve tam çıktılar §5'te):
 | Kod | Blocker | Not |
 |---|---|---|
 | **B1 (mekanizma HAZIR, HB-2026-143, 2026-08-04) — kopyalama HENÜZ UYGULANMADI** | `C:\HasarBotu\services\api\` dizini hâlâ yok. | **Araç hazır:** `deploy-service-artifacts.ps1` (fail-closed, idempotent, atomik, geri alınabilir, allowlist=`dist/`+`package.json`) yazıldı, 12 regresyon testi + statik denetim eklendi. Gerçek makinede yalnız salt-okunur önizleme çalıştırıldı: kaynak `services/api` → hedef `C:\HasarBotu\services\api`, **436 allowlist dosyası, ~1,56 MB**, `would_apply`, sıfır değişiklik. Gerçek `-Apply` HÂLÂ çalıştırılmadı (B6 — kullanıcı onayı + sakin pencere bekliyor). |
-| **B7 (yeni, HB-2026-143'te bulundu)** | `deploy-service-artifacts.ps1` yalnız `dist/`+`package.json` taşır — npm workspace'in KÖK `node_modules`'ında hoisted olan çalışma zamanı bağımlılıklarını (fastify, pg, zod, `@hasarbotu/contracts`/`database`/`domain` vb.) TAŞIMAZ. Gerçek makinede doğrulandı: `services/api/node_modules` yalnız `@types`+`undici-types` (tip-only) içeriyor, gerçek bağımlılıklar KÖK `node_modules`'ta. **Aynı sorun File Agent'ın ZATEN GERÇEK yapılan D6 dağıtımında da var** (`C:\HasarBotu\services\file-agent`de node_modules YOK) — yani bu, API'ye özgü değil, HİÇBİR servis şu an deploy dizininden gerçekten BAŞLATILAMAZ (`Cannot find module` ile çöker), servis hiçbiri gerçek `-Apply`/başlatma ile denenmediği için bu şimdiye kadar fark edilmemişti. | **Çözülmedi, ayrı bir karar/paket gerektirir:** üç seçenek (a) deploy script'ine kök `node_modules`'tan gerekli alt kümeyi kopyalayan bir adım eklemek, (b) build'i esbuild/rollup ile TEK DOSYAYA bundle etmek (node_modules gerekmez), (c) `npm install --omit=dev` ile deploy dizininde bağımsız bir kurulum yapmak. Servis GERÇEKTEN başlatılmadan önce bu ÇÖZÜLMELİDİR. |
+| **B7 — ÇÖZÜLDÜ (HB-2026-144, 2026-08-04)** | `deploy-service-artifacts.ps1` yalnız `dist/`+`package.json` taşıyordu — npm workspace'in KÖK `node_modules`'ında hoisted olan çalışma zamanı bağımlılıklarını (fastify, pg, zod, `@hasarbotu/contracts`/`database`/`domain`, argon2, `@napi-rs/canvas`, tesseract.js vb.) TAŞIMIYORDU. | **Çözüldü:** `resolve-runtime-dependency-closure.mjs` (yeni, salt-okunur) `package-lock.json`dan (canlı `node_modules` introspeksiyonu DEĞİL) Node'un KENDİ modül çözümleme sırasıyla birebir eşleşen, deterministik bir kapanış hesaplar — workspace-internal paketler (yalnız kendi `dist/`+`package.json`'ı), harici paketler (TAM dizin, iç içe override'lar dahil, platform-uyumsuz optional'lar ZATEN elenmiş), kilit bütünlüğü çift doğrulamalı. `deploy-service-artifacts.ps1`e opsiyonel `-DependencyClosureManifestPath`/`-RepoRoot` eklendi (verilmezse davranış HB-2026-143 ile birebir aynı — regresyon güvenliği). 27 regresyon testi (deploy) + 16 birim testi (resolver) + 4 izole smoke testi, hepsi geçti. **Gerçek makinede kanıtlandı:** api kapanışı 3 workspace-internal + 113 harici paket (10 platform-uyumsuz optional elendi), file-agent 2+20; her ikisi de gerçek `-Apply` ile izole bir kısa ömürlü test dizinine dağıtıldı (api: 6429 dosya/~102MB, file-agent: 2156 dosya/~158MB, sıfır doğrulama uyumsuzluğu) ve repo köküne/NODE_PATH'e HİÇ erişimi olmayan ayrı bir Node sürecinden `dist/index.js` başarıyla import edilip TÜM modül grafiği (argon2, `@napi-rs/canvas`, tesseract.js dahil native modüller) çözüldü — gerçek servis kodu ASLA başlatılmadı (giriş-noktası koruması nedeniyle). Test dizinleri silindi. |
+| **B8 (yeni, HB-2026-144'te bulundu)** | B7 çözümü sırasında izole smoke testte GERÇEK bir ek sorun bulundu: `services/api/src/traffic-value-loss/rule-source.ts`, hash-doğrulamalı bir referans-veri snapshot'ını (`reference-data/value-loss/real-market-analysis/2026-07-01/1.0.0/snapshot.json`) derlenmiş kod konumuna göre REPO KÖKÜNE sabit kodlanmış göreli yolla (`new URL('../../../../reference-data/...', import.meta.url)`) okuyor — bu, kilit dosyasında hiç görünmez ve servisin KENDİ `dist/`inin dışında kaldığı için normal kopyalama bunu kapsamaz; deploy sonrası `ENOENT` ile çöker (gerçek izole smoke testte üretildi ve doğrulandı). File Agent'ta bu desen YOK (statik tarama: sıfır sonuç). | **Kısmen çözüldü:** `resolve-runtime-dependency-closure.mjs` bu tür referansları statik olarak tarayıp tespit ediyor (`ExtraDataReferences`); `deploy-service-artifacts.ps1` GERÇEK `-TargetDir`e göre TAZE olarak ihtiyaç duyulan konumu hesaplıyor ve zaten doğru içerikle orada değilse `-Apply`'ı net bir mesajla (kaynak+beklenen hedef yolu) fail-closed reddediyor — servis SESSİZCE bozuk dağıtılamaz. Betik bu dosyayı OTOMATİK KOPYALAMAZ (hedef tek bir `-TargetDir`in DIŞINA çıkabilir — gerçek `C:\HasarBotu\services\api` için hesaplanan konum `C:\HasarBotu\reference-data\...`dir, `services`in kardeşi, paylaşılabilir bir konum). **Apply öncesi ayrıca çözülmesi gereken açık nokta:** `reference-data/` dizini gerçek makinede `C:\HasarBotu\reference-data\`e (elle veya küçük ayrı bir kopyalama adımıyla) yerleştirilmelidir; gerçek preview bunu doğruladı (§5.F). |
 | **B2** | Repo'daki `services/api/dist/index.js` / `services/file-agent/dist/index.js` çıktısının GÜNCEL HEAD'e karşı taze olduğu doğrulanmadı | Apply öncesi `npm run build:packages` yeniden çalıştırılıp temiz çıkış alınmalı. |
 | **B3 (mimari boşluk) — ÇÖZÜLDÜ (HB-2026-142, 2026-08-04)** | `install-services.ps1` her zaman iki servisi de kurardı, tek servis seçme seçeneği yoktu. | **Çözüldü:** `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi parametresi eklendi. `-Services` verilmezse davranış birebir aynı kaldı (regresyon testiyle doğrulandı). Tek-servis modunda seçilmeyen servise ait HİÇBİR dosya/dizin okunmaz/doğrulanmaz. Ayrıca yeni bir idempotency guard'ı eklendi: seçilen servis SCM'de zaten kuruluysa `-Apply` OLMADAN BİLE fail-closed reddedilir (gerçek makinede `hasarbotu-file-agent` ile doğrulandı). 8 regresyon testi (`install-services.tests.ps1`) + statik denetim eklendi, `npm run check:deploy`e bağlandı. Gerçek makinede yalnız salt-okunur önizleme çalıştırıldı (`-Services Api`: yalnız API build eksikliği raporlandı; `-Services FileAgent`: idempotency blocker doğru raporlandı) — hiçbir servis/env/dosya değişmedi. |
 | **B4** | Gerçek `HASARBOTU_AGENT_ID`/`HASARBOTU_AGENT_SECRET` yok — bunlar sabit kodlanamaz; API'nin `POST /api/v1/agents` (admin oturumu gerektirir, `services/api/src/agent/routes.ts:187`) uç noktasından ÜRETİLİR ve yalnız BİR KEZ düz metin döner (`services/api/src/agent/store.ts:126` `registerAgent`) | API çalışmadan bu adım atılamaz — sıralama: API kur+başlat (secret olmadan, yalnız `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET` gerektirmeyen kısım) → admin oturumuyla agent kaydet → dönen `agentId`+`secret`i File Agent ortam değişkenlerine yaz → File Agent'ı başlat. |
@@ -95,12 +96,17 @@ npm run build:packages   # B2: tazelik icin her Apply'dan once yeniden calistiri
   -SourceDir 'C:\...\HasarBotuV2\services\api' `
   -TargetDir 'C:\HasarBotu\services\api' `
   -ServiceLabel 'api' `
+  -DependencyClosureManifestPath 'C:\...\api-closure.json' `
+  -RepoRoot 'C:\...\HasarBotuV2' `
   -Apply
 ```
 `deploy-service-artifacts.ps1` (B1) yazıldı, test edildi, gerçek makinede
-yalnız önizleme çalıştırıldı (§5.E). **B7 (node_modules) çözülmeden bu
-adımın gerçek Apply'ı servis çalıştırılabilir hâle GETİRMEZ** — yalnız
-`dist/`+`package.json`i taşır.
+yalnız önizleme çalıştırıldı (§5.E/§5.F). **B7 ÇÖZÜLDÜ (HB-2026-144)** —
+`-DependencyClosureManifestPath`/`-RepoRoot` verilirse servis artık
+gerçekten kendi kendine yeten (self-contained) dağıtılır. **B8 (yeni)
+Apply öncesi ayrıca çözülmeli:** API için `reference-data/` dizini
+`C:\HasarBotu\reference-data\`e yerleştirilmeden gerçek `-Apply`
+fail-closed reddedilir (§5.F, gerçek makinede doğrulandı).
 
 ### Adım 2 — TAMAMLANDI (HB-2026-142): `install-services.ps1`e `-Services` seçici eklendi
 `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi. Mevcut
@@ -227,6 +233,55 @@ API/Postgres hiç bahsi geçmedi/kontrol edilmedi.
 436 dosya (`dist/` tamamı + `package.json`), ~1,56 MB. Hedef dizin
 oluşturulmadı, hiçbir dosya kopyalanmadı.
 
+**F) Kapanış-farkındalı (closure-aware) önizleme, HB-2026-144** (`deploy-service-artifacts.ps1 -DependencyClosureManifestPath ... -RepoRoot ...`, `-Apply` YOK, gerçek yollarla):
+
+API (kaynak: repo `services/api`, hedef: `C:\HasarBotu\services\api`):
+```
+--- HasarBotu V2 servis dağıtımı: preview (api) ---
+  Bağımlılık kapanışı : EVET (workspace-internal=3, harici=113)
+  Dağıtılacak dosya sayısı : 0
+  Hedef zaten var mı  : False
+--- Ön koşul HATALARI (dağıtım yapılamaz) ---
+  - Ek veri dosyası hedefte yok/eski (dist/traffic-value-loss/rule-source.js
+    içinde '../../../../reference-data/value-loss/real-market-analysis/
+    2026-07-01/1.0.0/snapshot.json' referansı) -- beklenen konum:
+    C:\HasarBotu\reference-data\value-loss\real-market-analysis\
+    2026-07-01\1.0.0\snapshot.json
+EXITCODE=2
+```
+Bu, B8'in GERÇEK makinede doğrulanmış kanıtıdır: `reference-data/`
+gerçek `C:\HasarBotu\`e yerleştirilmeden API `-Apply` fail-closed
+reddedilir (servis SESSİZCE bozuk dağıtılamaz).
+
+File Agent (kaynak: repo `services/file-agent`, hedef: `C:\HasarBotu\
+services\file-agent` — D6'da ZATEN gerçek kurulu, yalnız `dist/`+
+`package.json` içeriyor):
+```
+--- HasarBotu V2 servis dağıtımı: preview (file-agent) ---
+  Bağımlılık kapanışı : EVET (workspace-internal=2, harici=20)
+  Dağıtılacak dosya sayısı : 2156
+  Toplam bayt         : 157738198
+  Hedef zaten var mı  : True
+  Hedef zaten güncel mi : False
+Ön koşullar karşılandı.
+-Apply verilmedi: yalnız plan gösterildi, HİÇBİR değişiklik yapılmadı.
+```
+File Agent'ta `ExtraDataReferences` YOK (statik tarama sıfır sonuç
+verdi) — B8 yalnız API'ye özgü. Bu önizleme, D6'da zaten kurulu File
+Agent'ın node_modules kapanışıyla self-contained hâle getirilebileceğini
+kanıtlar; hiçbir dosya bu paket içinde değişmedi.
+
+Ayrıca izole bir smoke-test dizininde (`C:\HBSmoke144\...`, repoya
+DOKUNMAYAN, gerçek `-Apply` ile GERÇEKTEN dağıtılan, iş bitince silinen,
+`C:\HasarBotu\...` DEĞİL) her iki kapanış da uygulandı (api: 6429 dosya,
+file-agent: 2156 dosya, sıfır doğrulama uyumsuzluğu) ve repo köküne/
+`node_modules`'a/`NODE_PATH`'e HİÇ erişimi olmayan ayrı bir Node
+sürecinden `dist/index.js` başarıyla import edilip argon2, `@napi-rs/
+canvas`, tesseract.js dahil TÜM native modül grafiği çözüldü (giriş
+noktası koruması sayesinde gerçek servis kodu ASLA başlatılmadı). Test
+dizini ve `C:\ProgramData\...\pre-deploy-backups` altındaki sentetik
+test yedekleri silindi.
+
 ## 6. Rollback planı
 
 `HASARBOTU_AGENT_ROOTS` değişimi geri alınabilirdir (mevcut karar,
@@ -286,6 +341,19 @@ services\api`) — hiçbir dosya kopyalanmadı/taşınmadı. Bu çalıştırma
 sırasında YENİ bir gerçek blocker (B7, node_modules/bağımlılık çözümü)
 bulundu ve belgelendi.
 
+**Güncelleme (HB-2026-144, 2026-08-04):** B7'nin çözümü olarak YENİ bir
+araç (`resolve-runtime-dependency-closure.mjs` + testleri) EKLENDİ ve
+`deploy-service-artifacts.ps1` kapanış-farkındalı hâle getirildi — bu da
+kod/test/statik-denetim değişikliğidir, GERÇEK deploy dosyası mutasyonu
+DEĞİLDİR. Gerçek makinede yalnız `-Apply` OLMADAN önizleme çalıştırıldı
+(§5.F) — hiçbir dosya `C:\HasarBotu\...`e kopyalanmadı/taşınmadı. Ayrıca
+izole, repoya dokunmayan, iş bitince silinen bir smoke-test dizininde
+(`C:\HBSmoke144\...`) her iki servis GERÇEKTEN `-Apply` ile dağıtılıp
+repo köküne/`NODE_PATH`'e erişimi olmayan ayrı bir Node sürecinden
+başarıyla import edildi (native modüller dahil). Bu çalıştırmalar
+sırasında YENİ bir gerçek blocker (B8, kilit dışı veri dosyası
+referansı) bulundu ve belgelendi; sentetik test yedekleri temizlendi.
+
 ## 8. Onay bekleyen açık kararlar — CEVAPLANDI (2026-08-04)
 
 Kullanıcı aşağıdaki dört soruyu yanıtladı. Bu, yalnız KARARLARIN
@@ -314,11 +382,15 @@ mekanizması da TAMAMLANDI (HB-2026-143, 2026-08-04)** —
 `deploy-service-artifacts.ps1` yazıldı, test edildi, gerçek makinede
 yalnız önizlendi. Gerçek `-Apply` HÂLÂ bu paket içinde başlatılmadı.
 
-**Yeni açık nokta (B7):** deploy edilen `dist/`+`package.json` npm
-workspace'in kök `node_modules`'ında hoisted olan çalışma zamanı
-bağımlılıklarını taşımıyor — bu, hem API hem (zaten gerçek kurulu) File
-Agent için geçerli, servisleri GERÇEKTEN başlatmadan önce ayrıca
-çözülmesi gereken bir karar/paket gerektiriyor (üç seçenek §3'te). D9'un
-Adım 3-6'sı (gerçekten sakin bir pencerede, kullanıcının açık onayıyla)
-B7 çözülmeden servisin gerçekten ÇALIŞTIĞINI garanti etmez — yalnız
-kurulum/env adımlarını tamamlar.
+**B7 ÇÖZÜLDÜ (HB-2026-144, 2026-08-04):** `deploy-service-artifacts.ps1`
+artık opsiyonel `-DependencyClosureManifestPath`/`-RepoRoot` ile
+kendi kendine yeten (self-contained) dağıtım üretebiliyor — hem API hem
+(zaten gerçek kurulu) File Agent için gerçek makinede kanıtlandı (§5.F).
+**Yeni açık nokta (B8):** API'nin bir modülü, kilit dosyasında hiç
+görünmeyen bir referans-veri dosyasını repo köküne göre sabit kodlanmış
+göreli yolla okuyor — bu, servisi GERÇEKTEN başlatmadan önce
+`reference-data/`nin `C:\HasarBotu\reference-data\`e ayrıca
+yerleştirilmesini gerektiriyor (§3, §5.F). D9'un Adım 3-6'sı (gerçekten
+sakin bir pencerede, kullanıcının açık onayıyla) B8 çözülmeden API'nin
+`traffic-value-loss` modülünün gerçekten ÇALIŞTIĞINI garanti etmez —
+File Agent bu sorundan etkilenmiyor.

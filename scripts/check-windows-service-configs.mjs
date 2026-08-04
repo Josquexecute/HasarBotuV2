@@ -374,6 +374,22 @@ try {
   assertContains(deployArtifacts, /\[Console\]::OutputEncoding = \[System\.Text\.UTF8Encoding\]::new\(\$false\)/, 'deploy-service-artifacts.ps1', 'Turkce konsol ciktisi icin UTF-8 encoding duzeltmesi')
   assertNotContains(deployArtifacts, /Start-Service|Stop-Service|Set-Service|New-Service|\.exe['"]?\s+install\b|SetEnvironmentVariable|hasarbotu-api\.exe|hasarbotu-file-agent\.exe/, 'deploy-service-artifacts.ps1', 'servis kurma/baslatma/env yazma yok (kapsam disi)')
 
+  // HB-2026-144 (D9 B7 cozumu): opsiyonel bagimlilik kapanisi destegi --
+  // verilmezse HB-2026-143 ile birebir ayni davranis, verilirse
+  // workspace-internal + harici paketleri de dahil eden self-contained
+  // dagitim.
+  assertContains(deployArtifacts, /\[string\]\$DependencyClosureManifestPath/, 'deploy-service-artifacts.ps1', 'opsiyonel -DependencyClosureManifestPath parametresi')
+  assertContains(deployArtifacts, /\[string\]\$RepoRoot/, 'deploy-service-artifacts.ps1', 'opsiyonel -RepoRoot parametresi')
+  assertContains(deployArtifacts, /birlikte verilmeli/, 'deploy-service-artifacts.ps1', 'kapanis parametrelerinin birlikte-yoksa fail-closed reddi')
+  assertContains(deployArtifacts, /function Get-SourceDeploymentManifest/, 'deploy-service-artifacts.ps1', 'kapanis-farkindali kaynak envanteri fonksiyonu')
+  assertContains(deployArtifacts, /function Get-FullTreeManifest/, 'deploy-service-artifacts.ps1', 'zaten dagitilmis (hedef/yedek) dizinler icin sinirsiz envanter fonksiyonu')
+  assertContains(deployArtifacts, /function Add-FullSubtreeEntries/, 'deploy-service-artifacts.ps1', 'harici paketin TAM dizinini vendoring ilkesiyle ekleyen fonksiyon')
+  assertContains(deployArtifacts, /Join-Path 'node_modules' \(\$workspacePackageName -replace '\/', '\\'\)/, 'deploy-service-artifacts.ps1', 'workspace-internal paketlerin node_modules\\@hasarbotu\\<ad>\\ altina yerlestirilmesi')
+  assertContains(deployArtifacts, /Kilit bütünlüğü uyuşmazlığı \(TAZE doğrulama\)/, 'deploy-service-artifacts.ps1', 'Apply anindaki BAGIMSIZ (manifest-uretim-anindan ayrı) taze kilit butunlugu kontrolu')
+  assertContains(deployArtifacts, /MAX_PATH sınırını/, 'deploy-service-artifacts.ps1', 'derin ic ice node_modules override zincirlerinde Windows MAX_PATH fail-closed kapisi')
+  assertNotContains(deployArtifacts, /\(Get-FileHash -LiteralPath \$Path/, 'deploy-service-artifacts.ps1', 'Get-Sha256 artik ham .NET akisi kullanmali (performans, HB-2026-144) -- eski Get-FileHash cmdlet cagrisi kalmamali')
+  assertContains(deployArtifacts, /\[System\.Security\.Cryptography\.SHA256\]::Create\(\)/, 'deploy-service-artifacts.ps1', 'Get-Sha256 ham .NET SHA256 akis hash implementasyonu kullanmali')
+
   const deployArtifactsBytes = await readFile(`${DEPLOY_DIR}deploy-service-artifacts.ps1`)
   if (!(deployArtifactsBytes[0] === 0xef && deployArtifactsBytes[1] === 0xbb && deployArtifactsBytes[2] === 0xbf)) {
     throw new Error('deploy-service-artifacts.ps1 UTF-8 BOM eksik (Windows PowerShell 5.1 Turkce karakterleri BOM olmadan yanlis ayristirir)')
@@ -393,6 +409,37 @@ try {
   }
 } catch (error) {
   errors.push(`deploy-service-artifacts.ps1 doğrulaması çalışmadı — ${error.message}`)
+}
+
+// HB-2026-144 (D9 B7 cozumu): API ve File Agent'in GERCEK calisma zamani
+// bagimlilik kapanisini SADECE package-lock.json'dan (canli node_modules
+// introspeksiyonu DEGIL) cikaran salt-okunur resolver. Statik kapı:
+// salt-okunurlugu, link-stub yonlendirmesini, platform filtrelemesini ve
+// kilitlenmemis-lockfile-surumu red kapisini korur.
+try {
+  const closureResolver = await readFile(`${DEPLOY_DIR}resolve-runtime-dependency-closure.mjs`, 'utf8')
+
+  assertContains(closureResolver, /This module is READ-ONLY/, 'resolve-runtime-dependency-closure.mjs', 'salt-okunur oldugunu belirten dokumantasyon')
+  assertNotContains(closureResolver, /writeFile|WriteAllText|WriteAllBytes|\.exec\(['"]INSERT|\.exec\(['"]UPDATE|\.exec\(['"]DELETE/, 'resolve-runtime-dependency-closure.mjs', 'herhangi bir dosya/DB yazma cagrisi')
+  assertContains(closureResolver, /LOCKFILE_VERSION_UNSUPPORTED/, 'resolve-runtime-dependency-closure.mjs', 'desteklenmeyen lockfileVersion fail-closed reddi')
+  assertContains(closureResolver, /export function resolveDependencyLockKey/, 'resolve-runtime-dependency-closure.mjs', 'Node modul cozumlemesini taklit eden yukari-dogru yol yurumesi')
+  assertContains(closureResolver, /export function isOptionalDependencyCompatible/, 'resolve-runtime-dependency-closure.mjs', 'platform/mimari uyumluluk filtresi')
+  assertContains(closureResolver, /export function computeClosure/, 'resolve-runtime-dependency-closure.mjs', 'saf (dosya sistemi erisimsiz) kapanis hesaplayicisi')
+  assertContains(closureResolver, /export async function verifyOnDiskVersions/, 'resolve-runtime-dependency-closure.mjs', 'diskteki surumu kilit dosyasiyla karsilastiran kilit butunlugu kontrolu')
+  assertContains(closureResolver, /entry\.link === true/, 'resolve-runtime-dependency-closure.mjs', 'npm workspace link:true stub yonlendirmesi (harici paket olarak yanlis siniflandirmayi onler)')
+  assertContains(closureResolver, /keys ONLY \(never "devDependencies"\)/, 'resolve-runtime-dependency-closure.mjs', 'devDependencies HICBIR ZAMAN izlenmez dokumantasyonu')
+  assertContains(closureResolver, /LOCK_INTEGRITY_MISMATCH/, 'resolve-runtime-dependency-closure.mjs', 'diskteki surum kilitten sapmissa fail-closed red')
+
+  const closureResolverTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}resolve-runtime-dependency-closure.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (closureResolverTests.status !== 0) {
+    throw new Error(`resolve-runtime-dependency-closure testleri başarısız — ${closureResolverTests.stderr || closureResolverTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`resolve-runtime-dependency-closure.mjs doğrulaması çalışmadı — ${error.message}`)
 }
 
 if (errors.length > 0) {

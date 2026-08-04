@@ -5469,3 +5469,167 @@ ve test sirasinda olusan sentetik kanitlar temizlendi.
 Acik kalan: B7 (node_modules/bagimlilik cozumu) — ayri bir karar/paket;
 bu cozulmeden servisler GERCEKTEN baslatilamaz. Sonra gercekten sakin bir
 pencerede kullanicinin acik onayiyla D9 plan belgesi SS4 Adim 3-6.
+
+## 2026-08-04 - HB-2026-144: D9 B7 cozuldu — package-lock.json'dan deterministik calisma zamani bagimlilik kapaniсi (workspace-internal + harici + native modul) cikaran yeni arac, self-contained deploy'a entegre edildi; izole gercek smoke test kanitlandi; yeni gercek blocker (B8, kilit disi veri dosyasi referansi) bulundu
+
+Istek: "D9 B7 paketini çöz. API ve File Agent'ın gerçek runtime dependency
+closure'ını package-lock/workspace yapısından çıkar; internal workspace
+paketleri, native modüller ve veri dosyalarını dahil eden self-contained,
+deterministic ve rollback'li deploy artifact yaklaşımını seç ve uygula.
+Repo kökü/node_modules erişimi ve NODE_PATH olmadan izole dizinde her iki
+servisin module-resolution/native-import smoke testini kanıtla... Gerçek
+deploy, env veya servis değişikliği yapma; yalnız preview çalıştır."
+
+Tasarim: `resolve-runtime-dependency-closure.mjs` (yeni, tamamen
+salt-okunur Node betigi) `package-lock.json`i (lockfileVersion 3,
+CANLI `node_modules` introspeksiyonu DEGIL — npm kurulumlar arasinda
+farkli hoisting yapabilir, devDependencies'i asla transitif olarak
+icermez) okuyarak, bir workspace servisinin (`services/api`,
+`services/file-agent`) GERCEK calisma zamani kapanisini hesaplar:
+1. Workspace'in KENDI `dependencies` anahtarlarindan (asla
+   `devDependencies`) baslar.
+2. Her (fromPath, depName) cifti icin, Node'un KENDI `require()`
+   cozumlemesini BIREBIR taklit eden yukari-dogru dizin yurumesiyle
+   (`node_modules/<name>` her ata onekinde, en-spesifikten en-genele)
+   bagimliligin kilit anahtarini bulur — bu, gercek kilit dosyasindaki
+   ic ice "override" zincirlerini (fastify'in kendi ajv-compiler/
+   fast-json-stringify/light-my-request/thread-stream alt agaclari)
+   DOGRU cozmek icin ZORUNLU.
+3. Cozulen paketin KENDI `dependencies` VE `optionalDependencies`'ine
+   ozyinelemeli devam eder — ama optional bir bagimlilik yalniz kendi
+   kilit kaydinin `os`/`cpu` dizileri MEVCUT platform/mimariyle uyumluysa
+   izlenir (npm'in kendi platform-uyumluluk kontrolu; `@napi-rs/canvas`in
+   11 platform ikilisinden 10'unu Windows kapanisindan DISLAR).
+4. Her ziyaret edilen yol ya workspace-internal (`node_modules/`
+   segmenti yok, ör. `packages/contracts`) ya da harici (`node_modules/`
+   icerir) olarak siniflandirilir; npm workspace'lerin `link: true`
+   stub'lari (`node_modules/@hasarbotu/contracts` -> `packages/
+   contracts`) GERCEK hedefe yonlendirilir (ilk calistirmada bu
+   yonlendirme EKSIKTI, stub'lar `undefined` surumlu harici paket gibi
+   yanlis siniflandirilip sahte `LOCK_INTEGRITY_MISMATCH` uretiyordu —
+   bulundu, duzeltildi).
+5. Her harici paketin DISKTEKI KENDI `package.json` surumu kilit
+   dosyasindaki kayitla karsilastirilir (`LockIntegrityOk`) — bu,
+   pratikte ulasilabilir tek butunluk kapisidir (orijinal npm registry
+   tarball hash'ini yeniden dogrulamak gercekci degil).
+
+`deploy-service-artifacts.ps1` (HB-2026-143) opsiyonel
+`-DependencyClosureManifestPath`/`-RepoRoot` parametreleriyle
+genisletildi. VERILMEZSE davranis HB-2026-143 ile BIREBIR aynidir
+(regresyon guvenligi, 12 eski test degismeden GECTI). VERILIRSE:
+workspace-internal paketlerin KENDI `dist/`+`package.json`'i
+`node_modules\@hasarbotu\<ad>\` altina, harici paketlerin TAM dizini
+kilit dosyasindaki TAM goreli yoluyla (`node_modules\fastify\...`, ic
+ice override'lar dahil) eklenir; kilit butunlugu HER `-Apply`'da TAZE
+olarak (rapor bayatlamis olabilir diye) ikinci kez bagimsiz dogrulanir.
+
+**Gercek calisma sirasinda bulunan ve duzeltilen 4 hata:**
+1. `entry.link === true` yonlendirmesi eksikti (yukarida anlatildi) —
+   ilk calistirmada gercek lockfile'a karsi hemen bulundu.
+2. **Ic ice node_modules cift-sayimi** (gercek file-agent kapanisinda
+   bulundu): harici bir paketin (`node-fetch`) KENDI ic ice
+   `node_modules`'inde baska paketler (`tr46`, `webidl-conversions`,
+   `whatwg-url`) var VE bu paketler kapanis cozumleyicisi tarafindan
+   AYRICA, kendi dogru hedef yoluyla ayri birer External girdisi olarak
+   da bulunuyor. Paketin TAM alt agacini yururken kendi ic ice
+   `node_modules`'i kopyalamak ayni hedef yola IKI KEZ yazip
+   `FILE_COUNT_MISMATCH` uretiyordu (file-agent: 2173 planli/2156
+   gercek; API'de fastify'in derin override'lari yuzunden cok daha
+   buyuk: 8010/6445). Duzeltme: `Add-FullSubtreeEntries` artik paketin
+   KENDI ic ice `node_modules` alt dizinini atliyor (zaten kapanisin
+   kendisi tarafindan dogru sekilde ayri ayri kapsaniyor).
+3. **Windows MAX_PATH:** gercek kapanislarda derin ic ice override
+   zincirleri, ozellikle uzun bir hedef yol tabaniyla birlikte, 260
+   karakter sinirini asabiliyor. `\\?\` uzun-yol onekini PowerShell 5.1/
+   .NET Framework'un tum ham dosya sistemi cagrilarina guvenli sekilde
+   retrofit etmek riskli oldugundan, bunun yerine staging'e kopyalamadan
+   ONCE her hedef yolun uzunlugu hesaplanip fail-closed, net bir
+   blocker'la reddediliyor (kriptik bir `PathTooLongException` yerine).
+4. **PowerShell fonksiyon-donusu bos dizi tuzagi (Set-StrictMode ile
+   gercek calisma zamaninda bulundu):** `return @()` bir fonksiyondan
+   PIPELINE'a SIFIR nesne yazar — cagiran tarafta bu `$null`'a
+   "cozulur", StrictMode altinda sonraki bir `.Count` erisiminde
+   `PropertyNotFoundException` firlatir. Duzeltme: fonksiyon virgul
+   operatoruyle (`return , @(...)`) HER ZAMAN TEK bir dizi nesnesi
+   dondurecek sekilde yazildi. AYRICA (ikinci, ince bir hata): boyle bir
+   fonksiyonu DOGRUDAN `foreach ($x in FONKSIYON-cagrisi)` icinde
+   kullanmak, fonksiyonun CIKTI AKISINI (1 oge = tum dizi) yineler, dizi
+   ELEMANLARINI DEGIL — once degiskene atayip (`$x = FONKSIYON`), SONRA
+   o degisken uzerinde foreach yapmak dogru sekilde calisir; ikisi de
+   gercek calisma zamaninda ayri ayri bulundu ve duzeltildi.
+
+**YENI gercek blocker bulundu (B8):** izole gercek smoke test sirasinda
+API servisinin `dist/index.js`'i import edilirken `ENOENT` hatasi
+alindi: `services/api/src/traffic-value-loss/rule-source.ts`, hash
+dogrulamali bir referans-veri snapshot'ini (`reference-data/value-loss/
+real-market-analysis/2026-07-01/1.0.0/snapshot.json`, saticiya baglanan
+gercek piyasa analizi verisi) derlenmis dosya KONUMUNA gore REPO
+KOKUNE sabit kodlanmis goreli yolla (`new URL('../../../../
+reference-data/...', import.meta.url)`) okuyor — bu dosya kilit
+dosyasinda hic gorunmez ve servisin KENDI `dist/`inin disinda kalir.
+Cozum: kapanis cozumleyicisi artik derlenmis cikisi statik olarak
+tarayip bu tur "kilit disi veri referanslarini" (`ExtraDataReferences`)
+tespit ediyor; deploy betigi GERCEK `-TargetDir`e gore TAZE olarak
+ihtiyac duyulan konumu (referans veren dosyanin dagitilacagi yer + ayni
+goreli yol) hesaplayip, zaten dogru icerikle orada degilse net, eyleme
+gecirilebilir bir blocker'la `-Apply`'i reddediyor — servis SESSIZCE
+bozuk dagitilamiyor. Betik bu dosyayi OTOMATIK KOPYALAMAZ (hedef tek bir
+`-TargetDir`in DISINA cikabilir — gercek `C:\HasarBotu\services\api`
+icin hesaplanan konum `C:\HasarBotu\reference-data\...`dir, `services`in
+kardesi; birden fazla servis arasinda paylasilabilir bir konum, atomik
+tek-hedef yedekleme/rollback modelinin kapsami DISINDA). File Agent'ta
+bu desen YOK (statik tarama sifir sonuc verdi).
+
+**27 regresyon testi** (`deploy-service-artifacts.tests.ps1`, 12 eski +
+15 yeni) ve **16 birim testi** (`resolve-runtime-dependency-closure.test.mjs`,
+sentetik fixture + GERCEK monorepo lockfile'ina karsi entegrasyon testi
+dahil) ve **4 smoke testi** (`smoke-test-deployed-service.test.mjs`,
+sentetik fixture) — hepsi GECTI. `scripts/check-windows-service-configs.mjs`e
+yeni closure resolver blogu + closure-farkindali deploy assertion'lari
+eklendi.
+
+**Gercek makinede kanitlandi (yalniz salt-okunur onizleme + izole
+smoke-test dizini; GERCEK `C:\HasarBotu\...` HIC degismedi):**
+- API kapanisi: 3 workspace-internal (`packages/contracts`/`database`/
+  `domain`) + 113 harici paket (10 platform-uyumsuz `@napi-rs/canvas-*`
+  optional elendi), tumu lockIntegrityOk=true.
+- File Agent kapanisi: 2 workspace-internal + 20 harici paket (tesseract.js,
+  `@tesseract.js-data/eng`+`/tur` dahil), tumu lockIntegrityOk=true,
+  ExtraDataReferences=0.
+- Gercek `C:\HasarBotu\services\api` (henuz yok) ve `C:\HasarBotu\
+  services\file-agent` (D6'da ZATEN gercek kurulu, node_modules'siz)
+  hedeflerine karsi salt-okunur onizleme calistirildi: API B8 nedeniyle
+  fail-closed BLOCKED (gercek, eyleme gecirilebilir mesajla), File Agent
+  temiz `would_apply` (2156 dosya, ~158 MB) dondu.
+- Izole, repoya DOKUNMAYAN, kisa omurlu bir smoke-test dizininde
+  (`C:\HBSmoke144\...`, GERCEK `C:\HasarBotu\...` DEGIL) her iki servis
+  GERCEK `-Apply` ile dagitildi (API icin reference-data ayrica bu
+  izole dizine saglanarak): API 6429 dosya/~102 MB, File Agent 2156
+  dosya/~158 MB, ikisinde de sifir bagimsiz dogrulama uyumsuzlugu.
+  Ardindan repo kokune/`node_modules`'a/`NODE_PATH`'e HIC erisimi
+  olmayan AYRI bir Node surecinden her iki `dist/index.js` basariyla
+  import edildi (argon2, `@napi-rs/canvas`, tesseract.js dahil TUM
+  native modul grafigi cozuldu) — giris-noktasi korumasi sayesinde
+  gercek servis kodu (sunucu baglama/OCR donguleri) ASLA calistirilmadi.
+  Test dizini ve `C:\ProgramData\...\pre-deploy-backups` altindaki
+  sentetik test yedekleri (test4-pre-rollback-*, tekrarlanan test
+  calistirmalarindan birikmis) temizlendi.
+
+Test sonucu: `node --test` (deploy/windows-service, tum dosyalar) 58/58
+(closure resolver 16 + smoke-test-deployed-service 4 + onceki 38),
+`deploy-service-artifacts.tests.ps1` 27/27, `npm run check:deploy` gecti.
+
+Etki: `resolve-runtime-dependency-closure.mjs`+testi ve
+`smoke-test-deployed-service.mjs`+testi YENI eklendi;
+`deploy-service-artifacts.ps1`+testi kapanis-farkindali hale
+GENISLETILDI (hepsi kod/test/statik-denetim). Gercek env degiskeni,
+gercek Windows servisi, gercek `C:\HasarBotu\...` deploy dosyasi veya
+pCloud ayari HIC degismedi — yalniz salt-okunur onizleme + izole,
+repo-disi bir smoke-test dizini kullanildi (silindi).
+
+Acik kalan: B8 (API'nin `reference-data/` bagimliligi) — Apply oncesi
+`C:\HasarBotu\reference-data\`e ayrica saglanmali (elle veya kucuk ayri
+bir kopyalama adimiyla). B2 (build tazeligi), B4/B5/B6 (agent kaydi,
+admin dogrulamasi, kullanici onayi) hala D9 plan belgesindeki gibi acik.
+Sonra gercekten sakin bir pencerede kullanicinin acik onayiyla D9 plan
+belgesi SS4 Adim 1-6 (reference-data saglanmasi dahil).

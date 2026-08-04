@@ -56,8 +56,34 @@ Son güncelleme: 2026-08-04
   taşımıyor — bu, zaten gerçek kurulu File Agent dağıtımında da var
   (orada da `node_modules` yok); hiçbir servis şu an deploy dizininden
   gerçekten başlatılamaz. Ayrı bir karar/paket gerektiriyor.
-- Kalan: B7 (node_modules/bağımlılık çözümü — ayrı paket), sonra
-  gerçekten sakin bir pencerede kullanıcı onayıyla gerçek `-Apply`.
+- **D9'un üçüncü küçük paketi tamamlandı (B7 çözüldü, HB-2026-144,
+  2026-08-04):** `resolve-runtime-dependency-closure.mjs` eklendi —
+  `package-lock.json`dan (canlı `node_modules` introspeksiyonu DEĞİL)
+  Node'un kendi modül çözümlemesiyle birebir eşleşen, deterministik bir
+  çalışma zamanı bağımlılık kapanışı hesaplar (workspace-internal +
+  harici paketler + platform-uyumsuz optional native modül filtrelemesi).
+  `deploy-service-artifacts.ps1` opsiyonel `-DependencyClosureManifestPath`/
+  `-RepoRoot` ile kapanış-farkındalı hâle getirildi (verilmezse davranış
+  HB-2026-143 ile birebir aynı). 27 regresyon testi + 16 birim testi + 4
+  smoke testi + statik denetim eklendi. **Gerçek makinede kanıtlandı:**
+  API (3 workspace-internal + 113 harici) ve File Agent (2+20) kapanışları
+  hesaplandı; gerçek `C:\HasarBotu\...` hedeflerine karşı salt-okunur
+  önizleme çalıştırıldı (dosya değişmedi); izole, repo-dışı bir
+  smoke-test dizininde her iki servis GERÇEK `-Apply` ile dağıtılıp repo
+  köküne/`NODE_PATH`'e erişimi olmayan ayrı bir Node sürecinden
+  `dist/index.js` başarıyla import edilip argon2/`@napi-rs/canvas`/
+  tesseract.js dahil tüm native modül grafiği çözüldü (giriş-noktası
+  koruması sayesinde gerçek servis kodu hiç başlatılmadı); test dizini
+  silindi. **Yeni gerçek blocker bulundu (B8):** API'nin bir modülü
+  (`traffic-value-loss/rule-source.ts`) kilit dosyasında hiç görünmeyen
+  bir referans-veri dosyasını repo köküne göre sabit kodlanmış göreli
+  yolla okuyor — deploy betiği bunu artık statik olarak tespit edip
+  `-Apply`'ı net bir mesajla fail-closed reddediyor (otomatik kopyalamıyor,
+  hedef tek bir `-TargetDir`in dışına çıkabiliyor). File Agent bu
+  sorundan etkilenmiyor.
+- Kalan: B8 (API'nin `reference-data/` bağımlılığının `C:\HasarBotu\
+  reference-data\`e ayrıca sağlanması), B2/B4/B5/B6, sonra gerçekten
+  sakin bir pencerede kullanıcı onayıyla gerçek `-Apply`.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
