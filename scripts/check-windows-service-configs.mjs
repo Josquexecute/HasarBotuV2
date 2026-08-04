@@ -442,6 +442,87 @@ try {
   errors.push(`resolve-runtime-dependency-closure.mjs doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-145 (D9 B8 cozumu): kilit disi "ExtraDataReferences" icin
+// kimlik/surum dogrulamasi (deger kaybi referans-veri snapshot'inin
+// uygulamanin KENDI kanonik JSON hash algoritmasiyla dogrulanmasi) ve
+// bunlari GERCEK, planlanan servis hedefine gore TAZE hesaplanan konuma
+// saglayan fail-closed, idempotent, atomik, geri alinabilir arac. Statik
+// kapı: kimlik sabitlerinin domain paketiyle eslestigini, salt-okunur
+// dogrulayicinin hicbir yazma yapmadigini ve saglama betiginin TOCTOU
+// (eksik/fazla/degismis) korumasini/sabit-yol-sozlesmesi-degistirmedigini
+// dogrular.
+try {
+  const identityVerifier = await readFile(`${DEPLOY_DIR}verify-value-loss-reference-data-identity.mjs`, 'utf8')
+  const domainSnapshotSource = await readFile(
+    fileURLToPath(new URL('../packages/domain/src/value-loss-rule-snapshot.ts', import.meta.url)),
+    'utf8',
+  )
+  const domainRealMarketSource = await readFile(
+    fileURLToPath(new URL('../packages/domain/src/traffic-value-loss-real-market.ts', import.meta.url)),
+    'utf8',
+  )
+
+  assertNotContains(identityVerifier, /writeFile|WriteAllText|WriteAllBytes|\.exec\(['"]INSERT|\.exec\(['"]UPDATE|\.exec\(['"]DELETE/, 'verify-value-loss-reference-data-identity.mjs', 'herhangi bir dosya/DB yazma cagrisi (salt-okunur dogrulayici)')
+  assertContains(identityVerifier, /export function canonicalizeValueLossJson/, 'verify-value-loss-reference-data-identity.mjs', 'kanonik (siralanmis anahtar) JSON serilestirici')
+  assertContains(identityVerifier, /export function verifySnapshotIdentity/, 'verify-value-loss-reference-data-identity.mjs', 'kimlik+hash dogrulama fonksiyonu')
+
+  // Bu araçtaki sabitlerin domain paketinin KENDI sabitleriyle esleştigini
+  // dogrudan kaynak metinden dogrula -- iki kopya arasinda sessiz sapmayi
+  // engeller (biri degisirse bu denetim BASARISIZ olur).
+  const identityMatch = /const EXPECTED_SNAPSHOT_IDENTITY = '([^']+)'/.exec(identityVerifier)
+  const hashMatch = /const EXPECTED_SNAPSHOT_SHA256 =\s*\n?\s*'([^']+)'/.exec(identityVerifier)
+  if (identityMatch === null || hashMatch === null) {
+    throw new Error('verify-value-loss-reference-data-identity.mjs: EXPECTED_SNAPSHOT_IDENTITY/SHA256 sabitleri bulunamadı')
+  }
+  if (!domainSnapshotSource.includes(`VALUE_LOSS_SNAPSHOT_IDENTITY = '${identityMatch[1]}'`)) {
+    throw new Error('verify-value-loss-reference-data-identity.mjs: EXPECTED_SNAPSHOT_IDENTITY, packages/domain/src/value-loss-rule-snapshot.ts VALUE_LOSS_SNAPSHOT_IDENTITY ile eşleşmiyor (biri değişmiş, diğeri güncellenmemiş)')
+  }
+  if (!domainRealMarketSource.includes(hashMatch[1])) {
+    throw new Error('verify-value-loss-reference-data-identity.mjs: EXPECTED_SNAPSHOT_SHA256, packages/domain/src/traffic-value-loss-real-market.ts REAL_MARKET_VALUE_LOSS_SNAPSHOT_SHA256 ile eşleşmiyor (biri değişmiş, diğeri güncellenmemiş)')
+  }
+
+  const identityVerifierTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}verify-value-loss-reference-data-identity.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (identityVerifierTests.status !== 0) {
+    throw new Error(`verify-value-loss-reference-data-identity testleri başarısız — ${identityVerifierTests.stderr || identityVerifierTests.stdout}`)
+  }
+
+  const provisionScript = await readFile(`${DEPLOY_DIR}provision-extra-data-references.ps1`, 'utf8')
+  assertContains(provisionScript, /ExtraDataReferences/, 'provision-extra-data-references.ps1', 'kapanistan ExtraDataReferences okunmasi (yol sabit kodlanmaz)')
+  assertContains(provisionScript, /verify-value-loss-reference-data-identity\.mjs/, 'provision-extra-data-references.ps1', 'kimlik/surum dogrulayicisinin cagrilmasi')
+  assertContains(provisionScript, /SOURCE_DATA_CHANGED_SINCE_PLAN/, 'provision-extra-data-references.ps1', 'TOCTOU (eksik/fazla/degismis) fail-closed korumasi')
+  assertContains(provisionScript, /function Get-ManifestDiff/, 'provision-extra-data-references.ps1', 'plan-ani ile taze manifest arasindaki fark hesaplayicisi')
+  assertContains(provisionScript, /farklı ek veri kök dizini bulundu/, 'provision-extra-data-references.ps1', 'coklu-hedef-grubu henuz desteklenmedigi icin fail-closed reddi')
+  assertContains(provisionScript, /Servis dağıtım köküne ait üst dizin yok/, 'provision-extra-data-references.ps1', 'servis dagitim koku saglik tabani kontrolu')
+  assertContains(provisionScript, /\[System\.IO\.Directory\]::Move\(\$target, \$backupPath\)/, 'provision-extra-data-references.ps1', 'yedekleme kopya degil atomik Directory.Move ile')
+  assertContains(provisionScript, /-Rollback/, 'provision-extra-data-references.ps1', 'rollback modu var')
+  assertContains(provisionScript, /\[Console\]::OutputEncoding = \[System\.Text\.UTF8Encoding\]::new\(\$false\)/, 'provision-extra-data-references.ps1', 'Turkce konsol ciktisi icin UTF-8 encoding duzeltmesi')
+  assertNotContains(provisionScript, /Start-Service|Stop-Service|Set-Service|New-Service|SetEnvironmentVariable/, 'provision-extra-data-references.ps1', 'servis kurma/baslatma/env yazma yok (kapsam disi)')
+
+  const provisionScriptBytes = await readFile(`${DEPLOY_DIR}provision-extra-data-references.ps1`)
+  if (!(provisionScriptBytes[0] === 0xef && provisionScriptBytes[1] === 0xbb && provisionScriptBytes[2] === 0xbf)) {
+    throw new Error('provision-extra-data-references.ps1 UTF-8 BOM eksik')
+  }
+  const provisionTestsBytes = await readFile(`${DEPLOY_DIR}provision-extra-data-references.tests.ps1`)
+  if (!(provisionTestsBytes[0] === 0xef && provisionTestsBytes[1] === 0xbb && provisionTestsBytes[2] === 0xbf)) {
+    throw new Error('provision-extra-data-references.tests.ps1 UTF-8 BOM eksik')
+  }
+
+  const provisionTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}provision-extra-data-references.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (provisionTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(provisionTests.stdout)) {
+    throw new Error(`provision-extra-data-references testleri başarısız — ${provisionTests.stderr || provisionTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`D9 B8 (ek veri referansı sağlama) tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

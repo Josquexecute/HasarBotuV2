@@ -81,9 +81,27 @@ Son güncelleme: 2026-08-04
   `-Apply`'ı net bir mesajla fail-closed reddediyor (otomatik kopyalamıyor,
   hedef tek bir `-TargetDir`in dışına çıkabiliyor). File Agent bu
   sorundan etkilenmiyor.
-- Kalan: B8 (API'nin `reference-data/` bağımlılığının `C:\HasarBotu\
-  reference-data\`e ayrıca sağlanması), B2/B4/B5/B6, sonra gerçekten
-  sakin bir pencerede kullanıcı onayıyla gerçek `-Apply`.
+- **D9'un dördüncü küçük paketi tamamlandı (B8 aracı, HB-2026-145,
+  2026-08-04):** `provision-extra-data-references.ps1` + `verify-value-
+  loss-reference-data-identity.mjs` eklendi. `ExtraDataReferences`i
+  (kilit dosyasında görünmeyen referans-veri dosyaları) `deploy-service-
+  artifacts.ps1` ile birebir aynı hesaplamayla türetilen gerçek hedefe
+  kaynak allowlist + canonical SHA-256 manifest + uygulamanın kendi
+  kanonik JSON hash algoritmasıyla kimlik/sürüm doğrulaması (`packages/
+  domain`nin `REAL_MARKET_VALUE_LOSS_SNAPSHOT_SHA256` sabitine karşı) +
+  TOCTOU (eksik/fazla/değişmiş) fail-closed koruması + atomik
+  değiştirme + admin-only yedek + idempotency + rollback ile sağlar. 24
+  test + statik denetim eklendi (kimlik dogrulama testi GERÇEK diskteki
+  snapshot'a ve domain paketinin GERÇEK sabitine pinlenmiş). **Gerçek
+  makinede kanıtlandı:** hesaplanan hedef `C:\HasarBotu\reference-data\
+  value-loss\real-market-analysis\2026-07-01\1.0.0\`, 4 dosya (108.525
+  bayt), kimlik doğrulaması GEÇTİ, `would_apply`, sıfır blocker — gerçek
+  `-Apply` bu pakette çalıştırılmadı, `C:\HasarBotu\reference-data\`
+  hâlâ yok.
+- Kalan: gerçek `-Apply` (D9 Adım 1 → Adım 1b [bu paket] → Adım 2-6),
+  B2 (build tazeliği), B4/B5/B6 (agent kaydı, admin doğrulaması,
+  kullanıcı onayı), sonra gerçekten sakin bir pencerede kullanıcı
+  onayıyla gerçek `-Apply`.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

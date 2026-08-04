@@ -69,7 +69,7 @@ salt-okunur olarak sorgulandı (komutlar ve tam çıktılar §5'te):
 |---|---|---|
 | **B1 (mekanizma HAZIR, HB-2026-143, 2026-08-04) — kopyalama HENÜZ UYGULANMADI** | `C:\HasarBotu\services\api\` dizini hâlâ yok. | **Araç hazır:** `deploy-service-artifacts.ps1` (fail-closed, idempotent, atomik, geri alınabilir, allowlist=`dist/`+`package.json`) yazıldı, 12 regresyon testi + statik denetim eklendi. Gerçek makinede yalnız salt-okunur önizleme çalıştırıldı: kaynak `services/api` → hedef `C:\HasarBotu\services\api`, **436 allowlist dosyası, ~1,56 MB**, `would_apply`, sıfır değişiklik. Gerçek `-Apply` HÂLÂ çalıştırılmadı (B6 — kullanıcı onayı + sakin pencere bekliyor). |
 | **B7 — ÇÖZÜLDÜ (HB-2026-144, 2026-08-04)** | `deploy-service-artifacts.ps1` yalnız `dist/`+`package.json` taşıyordu — npm workspace'in KÖK `node_modules`'ında hoisted olan çalışma zamanı bağımlılıklarını (fastify, pg, zod, `@hasarbotu/contracts`/`database`/`domain`, argon2, `@napi-rs/canvas`, tesseract.js vb.) TAŞIMIYORDU. | **Çözüldü:** `resolve-runtime-dependency-closure.mjs` (yeni, salt-okunur) `package-lock.json`dan (canlı `node_modules` introspeksiyonu DEĞİL) Node'un KENDİ modül çözümleme sırasıyla birebir eşleşen, deterministik bir kapanış hesaplar — workspace-internal paketler (yalnız kendi `dist/`+`package.json`'ı), harici paketler (TAM dizin, iç içe override'lar dahil, platform-uyumsuz optional'lar ZATEN elenmiş), kilit bütünlüğü çift doğrulamalı. `deploy-service-artifacts.ps1`e opsiyonel `-DependencyClosureManifestPath`/`-RepoRoot` eklendi (verilmezse davranış HB-2026-143 ile birebir aynı — regresyon güvenliği). 27 regresyon testi (deploy) + 16 birim testi (resolver) + 4 izole smoke testi, hepsi geçti. **Gerçek makinede kanıtlandı:** api kapanışı 3 workspace-internal + 113 harici paket (10 platform-uyumsuz optional elendi), file-agent 2+20; her ikisi de gerçek `-Apply` ile izole bir kısa ömürlü test dizinine dağıtıldı (api: 6429 dosya/~102MB, file-agent: 2156 dosya/~158MB, sıfır doğrulama uyumsuzluğu) ve repo köküne/NODE_PATH'e HİÇ erişimi olmayan ayrı bir Node sürecinden `dist/index.js` başarıyla import edilip TÜM modül grafiği (argon2, `@napi-rs/canvas`, tesseract.js dahil native modüller) çözüldü — gerçek servis kodu ASLA başlatılmadı (giriş-noktası koruması nedeniyle). Test dizinleri silindi. |
-| **B8 (yeni, HB-2026-144'te bulundu)** | B7 çözümü sırasında izole smoke testte GERÇEK bir ek sorun bulundu: `services/api/src/traffic-value-loss/rule-source.ts`, hash-doğrulamalı bir referans-veri snapshot'ını (`reference-data/value-loss/real-market-analysis/2026-07-01/1.0.0/snapshot.json`) derlenmiş kod konumuna göre REPO KÖKÜNE sabit kodlanmış göreli yolla (`new URL('../../../../reference-data/...', import.meta.url)`) okuyor — bu, kilit dosyasında hiç görünmez ve servisin KENDİ `dist/`inin dışında kaldığı için normal kopyalama bunu kapsamaz; deploy sonrası `ENOENT` ile çöker (gerçek izole smoke testte üretildi ve doğrulandı). File Agent'ta bu desen YOK (statik tarama: sıfır sonuç). | **Kısmen çözüldü:** `resolve-runtime-dependency-closure.mjs` bu tür referansları statik olarak tarayıp tespit ediyor (`ExtraDataReferences`); `deploy-service-artifacts.ps1` GERÇEK `-TargetDir`e göre TAZE olarak ihtiyaç duyulan konumu hesaplıyor ve zaten doğru içerikle orada değilse `-Apply`'ı net bir mesajla (kaynak+beklenen hedef yolu) fail-closed reddediyor — servis SESSİZCE bozuk dağıtılamaz. Betik bu dosyayı OTOMATİK KOPYALAMAZ (hedef tek bir `-TargetDir`in DIŞINA çıkabilir — gerçek `C:\HasarBotu\services\api` için hesaplanan konum `C:\HasarBotu\reference-data\...`dir, `services`in kardeşi, paylaşılabilir bir konum). **Apply öncesi ayrıca çözülmesi gereken açık nokta:** `reference-data/` dizini gerçek makinede `C:\HasarBotu\reference-data\`e (elle veya küçük ayrı bir kopyalama adımıyla) yerleştirilmelidir; gerçek preview bunu doğruladı (§5.F). |
+| **B8 — ÇÖZÜLDÜ (araç, HB-2026-145, 2026-08-04) — gerçek Apply HENÜZ ÇALIŞTIRILMADI** | B7 çözümü sırasında izole smoke testte GERÇEK bir ek sorun bulundu: `services/api/src/traffic-value-loss/rule-source.ts`, hash-doğrulamalı bir referans-veri snapshot'ını (`reference-data/value-loss/real-market-analysis/2026-07-01/1.0.0/snapshot.json`) derlenmiş kod konumuna göre REPO KÖKÜNE sabit kodlanmış göreli yolla (`new URL('../../../../reference-data/...', import.meta.url)`) okuyor — bu, kilit dosyasında hiç görünmez ve servisin KENDİ `dist/`inin dışında kaldığı için normal kopyalama bunu kapsamaz; deploy sonrası `ENOENT` ile çöker (gerçek izole smoke testte üretildi ve doğrulandı). File Agent'ta bu desen YOK (statik tarama: sıfır sonuç). | **Araç TAMAMLANDI:** `provision-extra-data-references.ps1` (yeni) + `verify-value-loss-reference-data-identity.mjs` (yeni) eklendi. Kaynak allowlist (referansı İÇEREN dizinin TAMAMI, kilit dosyasındaki gibi başka hiçbir şey), canonical SHA-256 manifest, uygulamanın KENDİ kanonik JSON hash algoritmasıyla kimlik/sürüm doğrulaması (`packages/domain`nin `VALUE_LOSS_SNAPSHOT_IDENTITY`/`REAL_MARKET_VALUE_LOSS_SNAPSHOT_SHA256` sabitlerine karşı), `-Apply`'dan hemen önce kaynağı TAZE yeniden tarayıp plan-anıyla karşılaştıran eksik/fazla/değişmiş TOCTOU koruması, staging+atomik replace, admin-only hash'li zaman damgalı yedek, idempotency, rollback, bağımsız doğrulama — hepsi var. Hedef konumu, `deploy-service-artifacts.ps1` ile BİREBİR AYNI hesaplamayla `ExtraDataReferences`ten TÜRETİLİR (API'nin sabit yol sözleşmesi HİÇ değiştirilmedi, hiçbir yol bu yeni araçta da sabit kodlanmadı). 12 regresyon testi + 12 kimlik-doğrulama birim testi (GERÇEK diskteki snapshot'a ve domain paketinin GERÇEK sabitine pinlenmiş) + statik denetim, hepsi geçti. **Gerçek makinede kanıtlandı (yalnız salt-okunur önizleme):** `C:\HasarBotu\services\api` hedefine göre hesaplanan konum `C:\HasarBotu\reference-data\value-loss\real-market-analysis\2026-07-01\1.0.0\`dir; 4 dosya (108.525 bayt), kimlik doğrulaması `snapshot.json` için GEÇTİ, `would_apply`, sıfır blocker (§5.G). **Gerçek `-Apply` bu pakette ÇALIŞTIRILMADI** — B6 ile aynı, kullanıcının ayrı onayını bekliyor. |
 | **B2** | Repo'daki `services/api/dist/index.js` / `services/file-agent/dist/index.js` çıktısının GÜNCEL HEAD'e karşı taze olduğu doğrulanmadı | Apply öncesi `npm run build:packages` yeniden çalıştırılıp temiz çıkış alınmalı. |
 | **B3 (mimari boşluk) — ÇÖZÜLDÜ (HB-2026-142, 2026-08-04)** | `install-services.ps1` her zaman iki servisi de kurardı, tek servis seçme seçeneği yoktu. | **Çözüldü:** `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi parametresi eklendi. `-Services` verilmezse davranış birebir aynı kaldı (regresyon testiyle doğrulandı). Tek-servis modunda seçilmeyen servise ait HİÇBİR dosya/dizin okunmaz/doğrulanmaz. Ayrıca yeni bir idempotency guard'ı eklendi: seçilen servis SCM'de zaten kuruluysa `-Apply` OLMADAN BİLE fail-closed reddedilir (gerçek makinede `hasarbotu-file-agent` ile doğrulandı). 8 regresyon testi (`install-services.tests.ps1`) + statik denetim eklendi, `npm run check:deploy`e bağlandı. Gerçek makinede yalnız salt-okunur önizleme çalıştırıldı (`-Services Api`: yalnız API build eksikliği raporlandı; `-Services FileAgent`: idempotency blocker doğru raporlandı) — hiçbir servis/env/dosya değişmedi. |
 | **B4** | Gerçek `HASARBOTU_AGENT_ID`/`HASARBOTU_AGENT_SECRET` yok — bunlar sabit kodlanamaz; API'nin `POST /api/v1/agents` (admin oturumu gerektirir, `services/api/src/agent/routes.ts:187`) uç noktasından ÜRETİLİR ve yalnız BİR KEZ düz metin döner (`services/api/src/agent/store.ts:126` `registerAgent`) | API çalışmadan bu adım atılamaz — sıralama: API kur+başlat (secret olmadan, yalnız `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET` gerektirmeyen kısım) → admin oturumuyla agent kaydet → dönen `agentId`+`secret`i File Agent ortam değişkenlerine yaz → File Agent'ı başlat. |
@@ -103,10 +103,21 @@ npm run build:packages   # B2: tazelik icin her Apply'dan once yeniden calistiri
 `deploy-service-artifacts.ps1` (B1) yazıldı, test edildi, gerçek makinede
 yalnız önizleme çalıştırıldı (§5.E/§5.F). **B7 ÇÖZÜLDÜ (HB-2026-144)** —
 `-DependencyClosureManifestPath`/`-RepoRoot` verilirse servis artık
-gerçekten kendi kendine yeten (self-contained) dağıtılır. **B8 (yeni)
-Apply öncesi ayrıca çözülmeli:** API için `reference-data/` dizini
-`C:\HasarBotu\reference-data\`e yerleştirilmeden gerçek `-Apply`
-fail-closed reddedilir (§5.F, gerçek makinede doğrulandı).
+gerçekten kendi kendine yeten (self-contained) dağıtılır.
+
+**Adım 1b (YENİ, B8 çözümü, HB-2026-145) — Apply öncesi, Adım 1'den SONRA:**
+```powershell
+.\deploy\windows-service\provision-extra-data-references.ps1 `
+  -RepoRoot 'C:\...\HasarBotuV2' `
+  -DependencyClosureManifestPath 'C:\...\api-closure.json' `
+  -ServiceTargetDir 'C:\HasarBotu\services\api' `
+  -DataLabel 'value-loss-reference-data' `
+  -Apply
+```
+Araç TAMAMLANDI, test edildi, gerçek makinede yalnız önizleme çalıştırıldı
+(§5.G) — `C:\HasarBotu\reference-data\...` HENÜZ oluşturulmadı. Bu adım
+Adım 1'den (API dosyaları) SONRA, servisi gerçekten başlatmadan (Adım 5)
+ÖNCE çalıştırılmalıdır.
 
 ### Adım 2 — TAMAMLANDI (HB-2026-142): `install-services.ps1`e `-Services` seçici eklendi
 `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi. Mevcut
@@ -282,6 +293,27 @@ noktası koruması sayesinde gerçek servis kodu ASLA başlatılmadı). Test
 dizini ve `C:\ProgramData\...\pre-deploy-backups` altındaki sentetik
 test yedekleri silindi.
 
+**G) Ek veri referansı sağlama önizlemesi, HB-2026-145** (`provision-extra-data-references.ps1`, `-Apply` YOK, gerçek yollarla — kaynak: repo `reference-data/value-loss/real-market-analysis/2026-07-01/1.0.0/`, hedef: `deploy-service-artifacts.ps1` ile BİREBİR AYNI hesaplamadan türetildi):
+```
+--- Ek veri referansı sağlama: preview (value-loss-reference-data) ---
+  Kaynak dizin        : C:\...\HasarBotuV2\reference-data\value-loss\real-market-analysis\2026-07-01\1.0.0
+  Hedef dizin         : C:\HasarBotu\reference-data\value-loss\real-market-analysis\2026-07-01\1.0.0
+  Sağlanacak dosya sayısı : 4
+  Toplam bayt         : 108525
+  Kimlik doğrulaması yapılan dosya sayısı : 1
+  Hedef zaten var mı  : False
+Ön koşullar karşılandı (kimlik/sürüm doğrulaması dahil).
+-Apply verilmedi: yalnız plan gösterildi, HİÇBİR değişiklik yapılmadı.
+{"Status":"would_apply", "IdentityVerifiedFileCount":1, "Blockers":[], ...}
+```
+Kimlik/sürüm doğrulaması `snapshot.json`ın GERÇEKTEN uygulamanın kabul
+edeceği doğru sürüm (`real-market-analysis/2026-07-01/1.0.0`, kanonik
+JSON hash `packages/domain`nin `REAL_MARKET_VALUE_LOSS_SNAPSHOT_SHA256`
+sabitiyle birebir eşleşiyor) olduğunu GERÇEKTEN doğruladı. 4 dosya
+(`manifest.json`, `product-decisions.json`, `schema.json`, `snapshot.json`
+— referansı İÇEREN dizinin TAMAMI, allowlist ilkesiyle), hedef dizin
+oluşturulmadı, hiçbir dosya kopyalanmadı.
+
 ## 6. Rollback planı
 
 `HASARBOTU_AGENT_ROOTS` değişimi geri alınabilirdir (mevcut karar,
@@ -354,6 +386,17 @@ başarıyla import edildi (native modüller dahil). Bu çalıştırmalar
 sırasında YENİ bir gerçek blocker (B8, kilit dışı veri dosyası
 referansı) bulundu ve belgelendi; sentetik test yedekleri temizlendi.
 
+**Güncelleme (HB-2026-145, 2026-08-04):** B8'in çözümü olarak İKİ YENİ
+araç (`provision-extra-data-references.ps1` + `verify-value-loss-
+reference-data-identity.mjs`, ikisi de testleriyle) EKLENDİ — bu da kod/
+test/statik-denetim değişikliğidir, GERÇEK deploy dosyası mutasyonu
+DEĞİLDİR. Gerçek makinede yalnız `-Apply` OLMADAN önizleme çalıştırıldı
+(§5.G, gerçek `reference-data/...` → `C:\HasarBotu\reference-data\...`)
+— hiçbir dosya kopyalanmadı/taşınmadı, `C:\HasarBotu\reference-data\`
+HÂLÂ yok. Kimlik/sürüm doğrulaması `snapshot.json`ın GERÇEKTEN
+uygulamanın (`packages/domain`) kabul edeceği doğru sürüm olduğunu
+kanıtladı.
+
 ## 8. Onay bekleyen açık kararlar — CEVAPLANDI (2026-08-04)
 
 Kullanıcı aşağıdaki dört soruyu yanıtladı. Bu, yalnız KARARLARIN
@@ -386,11 +429,15 @@ yalnız önizlendi. Gerçek `-Apply` HÂLÂ bu paket içinde başlatılmadı.
 artık opsiyonel `-DependencyClosureManifestPath`/`-RepoRoot` ile
 kendi kendine yeten (self-contained) dağıtım üretebiliyor — hem API hem
 (zaten gerçek kurulu) File Agent için gerçek makinede kanıtlandı (§5.F).
-**Yeni açık nokta (B8):** API'nin bir modülü, kilit dosyasında hiç
-görünmeyen bir referans-veri dosyasını repo köküne göre sabit kodlanmış
-göreli yolla okuyor — bu, servisi GERÇEKTEN başlatmadan önce
-`reference-data/`nin `C:\HasarBotu\reference-data\`e ayrıca
-yerleştirilmesini gerektiriyor (§3, §5.F). D9'un Adım 3-6'sı (gerçekten
-sakin bir pencerede, kullanıcının açık onayıyla) B8 çözülmeden API'nin
-`traffic-value-loss` modülünün gerçekten ÇALIŞTIĞINI garanti etmez —
-File Agent bu sorundan etkilenmiyor.
+
+**B8 ARACI TAMAMLANDI (HB-2026-145, 2026-08-04):** `provision-extra-data-
+references.ps1` + `verify-value-loss-reference-data-identity.mjs`
+yazıldı, test edildi (24 regresyon+birim testi), gerçek makinede yalnız
+önizlendi (§5.G) — `C:\HasarBotu\reference-data\...` HÂLÂ yok, gerçek
+`-Apply` bu paket içinde çalıştırılmadı. D9'un Adım 3-6'sı (gerçekten
+sakin bir pencerede, kullanıcının açık onayıyla) çalıştırılmadan ÖNCE
+Adım 1b (`provision-extra-data-references.ps1 -Apply`) ile
+`reference-data/` gerçekten `C:\HasarBotu\reference-data\`e
+yerleştirilmelidir — yoksa API'nin `traffic-value-loss` modülü servis
+başlatıldığında `ENOENT` ile çöker. File Agent bu sorundan etkilenmiyor
+(kendi kapanışında `ExtraDataReferences` yok).

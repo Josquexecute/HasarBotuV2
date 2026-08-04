@@ -5633,3 +5633,152 @@ bir kopyalama adimiyla). B2 (build tazeligi), B4/B5/B6 (agent kaydi,
 admin dogrulamasi, kullanici onayi) hala D9 plan belgesindeki gibi acik.
 Sonra gercekten sakin bir pencerede kullanicinin acik onayiyla D9 plan
 belgesi SS4 Adim 1-6 (reference-data saglanmasi dahil).
+
+## 2026-08-04 - HB-2026-145: D9 B8 araci tamamlandi — API'nin kilit-disi referans-veri (deger kaybi snapshot'i) icin kaynak allowlist + canonical SHA-256 manifest + uygulamanin KENDI kanonik hash algoritmasiyla kimlik/surum dogrulamasi + TOCTOU (eksik/fazla/degismis) fail-closed + atomik replace + admin-only yedek + idempotency + rollback saglayan yeni arac; gercek makinede yalniz onizleme kanitlandi
+
+Istek: "D9 B8 küçük paketini uygula: API'nin ihtiyaç duyduğu
+`reference-data/` içeriğini kontrollü ve deterministic biçimde
+`C:\HasarBotu\reference-data` için provision eden yardımcı script
+geliştir. Preview ve -Apply ayrı olsun. Kaynak allowlist, canonical
+SHA-256 manifest, sürüm/kimlik doğrulaması, eksik/fazla/değişmiş
+dosyada fail-closed, staging+atomik replace, admin-only hash'li yedek,
+idempotency, rollback ve bağımsız doğrulama ekle. API'deki sabit yol
+sözleşmesini değiştirmeden gerçek gerekli dosya kapanışını çıkar.
+Gerçek makinede yalnız preview çalıştır; deploy/env/servis/
+reference-data mutasyonu yapma. Test et, commit et ve kısa raporla."
+
+Arastirma: `services/api/src/traffic-value-loss/rule-source.ts`'in
+okudugu snapshot, `packages/domain/src/value-loss-rule-snapshot.ts`de
+tanimli `VALUE_LOSS_SNAPSHOT_IDENTITY = 'real-market-analysis/
+2026-07-01/1.0.0'` ve `packages/domain/src/traffic-value-loss-real-
+market.ts`de `REAL_MARKET_VALUE_LOSS_SNAPSHOT_SHA256 =
+'e4fc8087ddbc1ff92e3255546e053c6956e20bd1dca269533113b727f728b940'`
+sabitlerine karsi dogrulaniyor -- ama bu HAM dosya byte hash'i DEGIL,
+`hashValueLossRuleSnapshot`nin (`canonicalValueLossJson` -- anahtarlari
+ozyinelemeli SIRALAYAN kanonik JSON serilestirme + SHA-256) urettigi bir
+"icerik kimligi" hash'idir. Genel bir dosya-hash manifesti bu OZEL
+garantiyi SAGLAMAZ: byte-icin-byte degismemis ama YANLIS/eski bir
+snapshot dosyasi genel manifestten GECER ama uygulama tarafindan REDDEDILIR
+(veya daha kotusu, sessizce KABUL EDILIR eger uygulamanin kendi kontrolu
+zayifsa). `reference-data/value-loss/real-market-analysis/2026-07-01/
+1.0.0/` dizininde snapshot.json'a EK olarak manifest.json, schema.json,
+product-decisions.json (ayni surumun kardes dosyalari, provenance/semа
+icin) bulundu -- hicbiri kod tarafindan DOGRUDAN okunmuyor ama ayni
+versiyonlu "yayin" birimi.
+
+Tasarim: iki yeni arac.
+
+1. `verify-value-loss-reference-data-identity.mjs` (salt-okunur Node
+   modulu+CLI): `canonicalizeValueLossJson` -- `value-loss-rule-
+   snapshot.ts`nin `canonicalize` fonksiyonundan BIREBIR KOPYALANMIS
+   (anahtarlari `Object.keys(...).sort()` ile ozyinelemeli siralayan
+   JSON serilestirme; sıradan `JSON.stringify` anahtar SIRALAMAZ, bu
+   yuzden birebir kopya SART). SHA-256 icin domain paketinin elle
+   yazilmis (sandbox-portable) implementasyonu yerine `node:crypto`
+   kullanildi -- ayni UTF-8 byte dizisi icin STANDART SHA-256
+   sonucu HER ZAMAN ayni oldugundan (implementasyondan bagimsiz),
+   bu esdegerlik testle KANITLANDI (asagida). Derlenmis
+   `packages/domain` build'ini IMPORT ETMEK yerine BILEREK kopyalama
+   secildi: bu aracin isi fail-closed DOGRULAMA, derlenmis build durumuna
+   (bayat olabilir) sessizce baglanmak yanlis olurdu; olasi sapma,
+   GERCEK diskteki snapshot.json'a VE domain paketinin GERCEK sabitine
+   pinlenmis bir testle YAKALANIR.
+2. `provision-extra-data-references.ps1` (ana arac, `deploy-service-
+   artifacts.ps1` ile ayni Planla->Onizle->Onay->Uygula->Dogrula
+   iskeletini paylasir): `-TargetDir` gibi bir yol parametresi ALMAZ,
+   hicbir veri yolunu (`reference-data/` dahil) kendi icinde sabit
+   kodlamaz -- `-DependencyClosureManifestPath`teki `ExtraDataReferences`i
+   `-ServiceTargetDir` ile `deploy-service-artifacts.ps1`teki BIREBIR
+   AYNI matematikle (referans veren dosyanin dagitilacagi konum + o
+   dosyadaki literal goreli yol traversal'i, GetFullPath ile normalize)
+   birlestirerek nereyi saglayacagini TURETIR. Kaynak allowlist =
+   referansin kaynak dosyasini ICEREN DIZININ TAMAMI (bugun tam olarak
+   biri var; birden fazla FARKLI hedef koke cozulen referans bulunursa
+   -- bugun yok -- bu arac henuz DESTEKLEMEDIGI icin fail-closed
+   reddeder, sessizce yanlis bir seyi birlestirmez). Allowlist'teki HER
+   `snapshot.json` adli dosya icin kimlik dogrulayicisi subprocess
+   olarak cagrilir (node.exe `Get-Command` ile PATH'ten cozulur, HB-2026-142
+   `install-services.ps1`deki AYNI desen); diger kardes dosyalar
+   (manifest.json vb.) icin ayri bir kimlik sabiti uygulama kodunda
+   TANIMLI OLMADIGINDAN yalniz genel SHA-256 manifestiyle korunur --
+   bu FARK ciktida acikca belirtilir (`IdentityVerifiedFileCount`),
+   asla sessizce "hepsi dogrulandi" varsayilmaz. TOCTOU korumasi: kaynak
+   manifesti PLAN aninda hesaplanir, `-Apply` staging'e kopyalamadan
+   HEMEN ONCE TAZE yeniden taranir, plan-ani manifestiyle karsilastirilir
+   -- eksik/fazla/degismis HERHANGI bir fark `SOURCE_DATA_CHANGED_SINCE_
+   PLAN` ile fail-closed reddedilir. Yedekleme/atomik-degistirme/
+   idempotency/rollback/bagimsiz-dogrulama `deploy-service-artifacts.ps1`
+   ile BIREBIR ayni (kod duplikasyonu, bu depoda ONCEDEN yerlesik
+   desen -- ayri PS araclari birbirini dot-source ETMEZ, cunku
+   `deploy-service-artifacts.ps1`nin KENDI ust-seviye calisan kodu var,
+   guvenli sekilde dot-source edilemez).
+
+Gercek calisma sirasinda bulunan onemli bir tasarim sorunu (kod hatasi
+DEGIL, ONCEDEN dusunulmesi gereken bir mimari fark): `deploy-service-
+artifacts.ps1`nin `-TargetDir` on kosulu YALNIZ DOGRUDAN ebeveynin
+(`services\`) var olmasini ister -- bu, `services\` onceden elle
+kurulmus, TEK SEVIYELI bir kok oldugu icin dogru. Ama bu yeni aracin
+hedefi (`reference-data\value-loss\real-market-analysis\2026-07-01\
+1.0.0\`) DORT SEVIYE turetilmis, ILK KEZ olusturulan bir yoldur --
+"dogrudan ebeveyn onceden var olmali" kurali burada aracin KENDI
+amacini (ilk kez saglama) IMKANSIZ kilar. Gercek makinede TAM OLARAK bu
+sekilde bulundu (`C:\HasarBotu\reference-data\...\2026-07-01` yok
+diye BLOCKED). Duzeltme: `Get-DeepestExistingAncestor` ile var olan EN
+DERIN atada yazma izni dogrulanir; eksik ara seviyeler `-Apply`
+sirasinda `[System.IO.Directory]::CreateDirectory` ile (TUM eksik
+seviyeler, .NET'in kendi "mkdir -p" davranisiyla) guvenle olusturulur.
+Servisin KENDI dagitim kokunun (`C:\HasarBotu\services`) GERCEKTEN var
+oldugu AYRI bir saglik-tabani kontroluyle dogrulanir (aksi halde servis
+henuz hic dagitilmamis demektir ve ek veri saglamanin anlami yoktur).
+
+**24 test, hepsi GECTI:**
+- `verify-value-loss-reference-data-identity.test.mjs` (12): kanonik
+  JSON siralama (uc ornekte, ust-seviye anahtar EKLEME sirasi
+  degistirilmis ama AYNI hash'i ureten bir orenk dahil), gecersiz
+  JSON/eksik identity/yanlis identity/tahrif edilmis icerik red yollari,
+  **GERCEK diskteki `reference-data/.../snapshot.json`in dogru
+  identity+hash ile GECTIGI (domain paketinin GERCEK sabitine
+  `e4fc8087ddbc1ff92e3255546e053c6956e20bd1dca269533113b727f728b940`
+  pinlenmis)**, CLI exit kodlari.
+- `provision-extra-data-references.tests.ps1` (12): onizleme (would_apply,
+  2 sentetik dosya, 1 kimlik dogrulamasi GECTI), eksik kaynak dizini
+  blocker'i, tahrif edilmis identity BLOCKED (SNAPSHOT_IDENTITY_MISMATCH),
+  bos ExtraDataReferences icin nothing_to_provision, coklu-farkli-hedef-
+  grubu red, gercek -Apply (dogru hedefe, allowlist disi hicbir sey
+  olmadan, bagimsiz dogrulama sifir uyumsuzluk), idempotency (mtime
+  degismedi), gercek yedekleme (ACL Administrators-only, eski icerik
+  birebir korunuyor), rollback onizleme+uygulama (icerik birebir geri
+  geldi, rollback oncesi de ayrica yedeklendi), hedef ONCEDEN dogru
+  icerikle sagliyorsa ilk calistirmada bile idempotent, servis dagitim
+  koku yoksa saglik-tabani blocker'i. `scripts/check-windows-service-
+  configs.mjs`e: salt-okunurlugu, sabitlerin `packages/domain`nin
+  GERCEK kaynak metniyle esleştigini (dogrudan string-icerir kontroluyle
+  -- biri degisip digeri guncellenmezse bu denetim BASARISIZ olur), TOCTOU
+  korumasini, coklu-grup reddini, UTF-8 BOM'u ve her iki testi calistiran
+  yeni bir blok eklendi.
+
+**Gercek makinede yalniz salt-okunur onizleme calistirildi** (`-Apply`
+HICBIR ZAMAN verilmedi): kaynak `reference-data/value-loss/real-market-
+analysis/2026-07-01/1.0.0/` (repo) -> `deploy-service-artifacts.ps1` ile
+AYNI hesaplamadan turetilen hedef `C:\HasarBotu\reference-data\value-
+loss\real-market-analysis\2026-07-01\1.0.0\` -- **4 dosya (108.525
+bayt)**, kimlik/surum dogrulamasi `snapshot.json` icin GECTI, `would_
+apply`, sifir blocker. `C:\HasarBotu\reference-data\` HALA yok, hicbir
+dosya kopyalanmadi/tasinmadi.
+
+Test sonucu: `node --test` (deploy/windows-service, tum dosyalar)
+70/70 (12 yeni identity + onceki 58), `provision-extra-data-
+references.tests.ps1` 12/12, `npm run check:deploy` gecti.
+
+Etki: `provision-extra-data-references.ps1`+testi ve `verify-value-
+loss-reference-data-identity.mjs`+testi YENI eklendi (kod/test/statik-
+denetim). Gercek env degiskeni, gercek Windows servisi, gercek
+`C:\HasarBotu\...` deploy dosyasi veya pCloud ayari HIC degismedi --
+yalniz salt-okunur onizleme kullanildi.
+
+Acik kalan: gercek `-Apply` bu pakette CALISTIRILMADI --
+`C:\HasarBotu\reference-data\` hala olusturulmadi. B2 (build tazeligi),
+B4/B5/B6 (agent kaydi, admin dogrulamasi, kullanici onayi) D9 plan
+belgesindeki gibi acik. Sonra gercekten sakin bir pencerede kullanicinin
+acik onayiyla D9 plan belgesi SS4: Adim 1 (API dosyalari) -> Adim 1b
+(bu paket, reference-data saglama) -> Adim 2-6.
