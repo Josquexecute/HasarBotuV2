@@ -6003,3 +6003,79 @@ D9 plan belgesi Adim 0-4 (B9 artik cozulmus, Adim 4c'de
 `bootstrap-first-admin.mjs --apply` gercek admin kimligini uygulama
 aninda elle girer) -> Adim 5 (smoke test) -> Adim 6 (kesinlestir).
 **Gercek `-Apply` icin kullanicinin ACIK ONAYI bekleniyor.**
+
+## 2026-08-04 - HB-2026-148: D9 gercek cutover Adim 0'da GERCEK, yeni bir veri-butunlugu blocker'i (B10) nedeniyle DURDURULDU -- hicbir env/servis/deploy/DB degisikligi denenmedi
+
+Istek: "D9 gercek cutover icin acik onay veriyorum. Planlanan sakin
+bakim penceresinde Adim 0-6'yi fail-closed uygula... Herhangi bir
+blocker veya dogrulama hatasinda rollback et, sonraki adima gecme ve
+raporla."
+
+Yontem: Adim 0 (taze D8 dogrulamasi) gercek makinede, gercek ghost
+exclusion manifestiyle (`storage-ghost-exclusion/1.0.0`,
+HB-2026-123'ten beri kullanilan ayni manifest) calistirildi:
+
+1. `test-pcloud-post-sync-rebaseline-gate.ps1` (arka planda, gercek
+   600+ saniyelik es zamanli kaynak+hedef+uzak sessizlik bekleyerek)
+   calistirildi. **Sessizlik kismi TEMIZ GECTI:** `ObservedQuietSeconds
+   =689` (>=600), `WindowResetCount=0` (hic kesinti YOK -- gercekten
+   sakin bir pencere). Ama **nihai tam kaynak==hedef SHA-256
+   karsilastirmasi UYUSMADI:** `SourceTargetHashMatch=false`,
+   blocker `SOURCE_TARGET_HASH_MISMATCH_AT_PASS`, exit 2. Rapor
+   Administrators-only+hash'li olarak aracin KENDISI tarafindan
+   yazildi (`pcloud-post-sync-rebaseline-20260804T203327936Z-
+   f50a5eff.json`).
+2. Bu blocker'i dosya bazinda izole etmek icin **salt-okunur**
+   `run-pcloud-post-sync-diff-forensics.ps1` (HB-2026-131, hicbir
+   `-Apply` secenegi bile YOK) ayni gerçek makinede calistirildi.
+   **Gercek, dogrulanmis bulgu:** 6996 kaynak / 7000 hedef dosya
+   arasinda 6987 ozdes, 2 yalniz-metadata (zararsiz), ve **13 gercek
+   veri-butunlugu farki** -- 3 ayri dosya (vaka) klasorunde:
+   - **6 dosya:** hedefte (NTFS, `C:\HasarBotuStorage\...`) TAM SIFIR
+     BAYT (bos dosya SHA-256'siyla eslesiyor) iken kaynakta (pCloud
+     sanal surucu `P:\...`) GERCEK icerik var -- yani hedefe yazma
+     TAMAMLANMAMIS/kesintiye ugramis gibi gorunuyor.
+   - **1 dosya:** hedef ve kaynak IKISI DE dolu ama icerikleri
+     BIRBIRINDEN FARKLI (ne bos ne ayni).
+   - **4 dosya:** yalniz hedefte var, kaynakta HIC karsiligi yok
+     (`extra`, `target_only_no_source_counterpart`).
+   - Butun 13 dosya icin `PCloudTaskReferenceCount=0` -- yani bunlar
+     HENUZ senkronize olmayi bekleyen GECICI bir durum DEGIL, KARARLI
+     (stable) bir farktir; kendiliginden duzelmesi beklenmez.
+   Tam sonuc (kesin goreli yollar + vaka klasoru adlari dahil)
+   Administrators-only+hash'li rapora yazildi
+   (`pcloud-post-sync-diff-forensics-20260804T203501157Z-
+   75ebf919.json`) -- kesin yollar/vaka numaralari bu belgeye veya
+   commit'e ALINMADI (HB-2026-123 ile ayni ilke: hassas path/vaka
+   degerleri repo'ya girmez); kullaniciya SOHBET icinde tam detayla
+   raporlandi.
+
+**KARAR: D9'un TAMAMI bu pakette DURDURULDU.** Adim 0 gecmeden
+Adim 1+'ye HICBIR sekilde gecilmedi -- talimatin acik geregi. Hicbir
+env degiskeni, Windows servisi, deploy dosyasi, DB satiri veya pCloud
+ayari bu paket icinde DEGISMEDI/denenmedi; dolayisiyla rollback
+edilecek HICBIR sey yoktu (Adim 0 ve forensics ikisi de TAMAMEN
+salt-okunur araclardir, kendi `ReadOnly:true` alanlariyla dogrulanir).
+
+Bu, D9'un B1-B9 blocker zincirinden TAMAMEN BAGIMSIZ, **yeni bir
+blocker (B10)**: gercek P:\ / C:\HasarBotuStorage icerik sapmasi.
+Cozumu (elle inceleme mi, HB-2026-130'un dar kapsamli
+`repair-post-sync-stale-target-files.ps1` araciyla mi, yoksa baska bir
+yontemle mi ele alinacagi) belgelerde cevabi olmayan gercek bir
+urun/operasyon karari -- bu pakette hicbir onarim GIRISIMI YAPILMADI.
+
+Test sonucu: bu pakette kod/tooling DEGISMEDI (yalniz gercek, zaten
+var olan salt-okunur araclarin gercek makinede calistirilmasi +
+docs). `npm run check:deploy`/`node --test` durumu HB-2026-147'den
+beri degismedi.
+
+Etki: Hicbir env/servis/deploy/DB/pCloud degisikligi YAPILMADI. Yalniz
+bu DECISION_LOG kaydi ve D9_OPERATIONAL_CUTOVER_PLAN.md'ye yeni B10
+blocker'i eklendi.
+
+Acik kalan: **B10 (post-sync icerik sapmasi, 13 dosya/3 vaka
+klasoru)** -- kullanicinin karar vermesi gereken gercek bir urun
+karari. B10 cozulmeden Adim 0 tekrar PASS veremez, dolayisiyla D9
+cutover'in geri kalani (Adim 1-6, B9 admin bootstrap dahil)
+baslatilamaz. **Gercek Apply'a devam icin kullanicinin B10 hakkindaki
+karari bekleniyor.**

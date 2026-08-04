@@ -76,6 +76,7 @@ salt-okunur olarak sorgulandı (komutlar ve tam çıktılar §5'te):
 | **B5 — DOĞRULANDI: BLOCKED (HB-2026-146, 2026-08-04)** | En az bir admin rollü kullanıcının DB'de var olduğu salt-okunur `SELECT` ile doğrulandı (gerçek `hasarbotu_app` bağlantısıyla, parola/bağlantı dizesi hiçbir çıktıya yazdırılmadan). **Sonuç: 0 admin kullanıcı.** | **GERÇEK, doğrulanmış blocker:** `organizations` tablosunda **0 satır**, `users` tablosunda **0 satır** (dolayısıyla admin dahil hiçbir rol atanmış kullanıcı yok). `roles` tablosu 6 kod ile seed edilmiş (migration 0002) ama HİÇBİR organizasyon/kullanıcı satırı ile ilişkilendirilmemiş. Bkz. **B9** — bu, ayrı ve daha temel bir blocker. |
 | **B6** | `AGENTS.md` §7 kritik işlem standardı gereği bu, açık kullanıcı onayı gerektiren bir sınıf işlemdir (env/servis değişikliği) | Bu belge onay İSTEĞİDİR — gerçek `-Apply` yalnız kullanıcının bu planı gözden geçirip AÇIKÇA onaylamasından sonra çalıştırılmalı. |
 | **B9 — ARACI TAMAMLANDI (HB-2026-147, 2026-08-04) — gerçek Apply HENÜZ ÇALIŞTIRILMADI** | Repo'da organizasyon/kullanıcı (özellikle İLK admin) oluşturacak **HİÇBİR mekanizma yoktu**: `services/api/src/users/routes.ts`de yalnız `GET` (liste), `users/store.ts`de yalnız `list`+`updateRoles` (roller yalnız VAR OLAN bir kullanıcıya atanır) — `INSERT INTO users`/`INSERT INTO organizations` üreten hiçbir HTTP uç noktası, CLI aracı veya seed betiği repo genelinde yoktu. | **Araç TAMAMLANDI:** `bootstrap-first-admin.mjs` (yeni) eklendi — yalnız `organizations=0` VE `users=0` iken çalışır (transaction İÇİNDE TAZE yeniden kontrol, TOCTOU güvenli), gerçek şema/domain doğrulamalarını (`@hasarbotu/contracts`nin `userSummarySchema.shape.email`/`.displayName`, `passwordSchema`) ve gerçek argon2id hash mekanizmasını (`@hasarbotu/api`nin `hashPassword`, `ARGON2_OPTIONS`) YENİDEN KULLANIR — yeniden implemente ETMEZ. Parola ASLA CLI argümanı/dosya/log olarak geçmez — yalnız ham (raw-mode) terminalden yankısız okunur, izin verilen tek bayrak `--apply`dır. Organizasyon+kullanıcı+`user_roles`+iki `audit_events` kaydı TEK DB transaction'ında yazılır; hata veya yarış durumunda tam `ROLLBACK`. 15 test (7 birim/CLI + 8 GERÇEK PostgreSQL entegrasyon testi — tek-kullanımlık red, TOCTOU yarış simülasyonu, geçersiz girdi/DB CHECK ihlali sıfır-satır kanıtı dahil) + statik denetim, hepsi geçti. **Gerçek makinede kanıtlandı (yalnız salt-okunur önizleme):** `hasarbotu_app` bağlantısıyla `Status:"ready"`, `OrganizationCount:0`, `UserCount:0`, `AdminRoleSeeded:true`, sıfır blocker, sıfır satır yazıldı. **Gerçek `-Apply` bu pakette ÇALIŞTIRILMADI** — B6 ile aynı, kullanıcının ayrı onayını bekliyor. |
+| **B10 (YENİ, HB-2026-148'de bulundu) — GERÇEK Apply denemesi #1'i Adım 0'da durdurdu** | Kullanıcının açık onayıyla başlatılan gerçek Apply denemesinde, taze Adım 0 (`test-pcloud-post-sync-rebaseline-gate.ps1`) çalıştırıldı: sessizlik kısmı TEMİZ geçti (`ObservedQuietSeconds=689`, `WindowResetCount=0`), ama nihai tam kaynak==hedef SHA-256 karşılaştırması UYUŞMADI (`SOURCE_TARGET_HASH_MISMATCH_AT_PASS`). Salt-okunur `run-pcloud-post-sync-diff-forensics.ps1` ile izole edildi: 6996/7000 dosyadan 6987 özdeş, 2 zararsız metadata-only, **13 GERÇEK fark** (3 ayrı vaka klasöründe) — 6 dosya hedefte TAM SIFIR BAYT (yazma tamamlanmamış gibi), 1 dosya iki tarafta da dolu ama İÇERİK FARKLI, 4 dosya yalnız hedefte var (kaynakta karşılığı yok). Hepsi `PCloudTaskReferenceCount=0` (geçici değil, KARARLI fark). | **Çözülmedi, gerçek bir ürün/operasyon kararı gerektirir** (bu pakette YAPILMADI): hangi dosyaların nasıl ele alınacağı (elle inceleme, HB-2026-130'un dar kapsamlı `repair-post-sync-stale-target-files.ps1` aracıyla mı, başka bir yöntemle mi) kullanıcıya bırakıldı — hiçbir onarım GİRİŞİMİ yapılmadı. Tam dosya listesi (kesin yollar/vaka numaraları) yalnız Administrators-only+hash'li rapordadır (`pcloud-post-sync-diff-forensics-20260804T203501157Z-75ebf919.json`) ve kullanıcıya sohbet içinde tam detayla raporlandı — repo/commit'e (HB-2026-123 ilkesiyle) ALINMADI. **B10 çözülmeden Adım 0 tekrar PASS veremez, D9'un geri kalanı (Adım 1-6) başlatılamaz.** |
 
 ## 4. Sıralı Apply planı (yalnız kullanıcı onayından SONRA çalıştırılacak)
 
@@ -558,3 +559,20 @@ D9 gerçek `-Apply`'ı şu an TEK bağımsız neden ile mümkün değil:
 B2/B4/B5 gerçek `-Apply` sırasında Adım 4'teki SIRAYLA uygulanacak;
 hiçbiri ayrı bir kod/araç değişikliği gerektirmiyor. **Gerçek `-Apply`
 için kullanıcının açık onayı bekleniyor.**
+
+## 10. Gerçek Apply denemesi #1 — Adım 0'da B10 ile durduruldu (HB-2026-148, 2026-08-04)
+
+Kullanıcının "D9 gerçek cutover için açık onay veriyorum" talimatıyla
+gerçek Apply denemesi başlatıldı. **Adım 0 (taze D8 doğrulaması) FAIL
+verdi** — bkz. §3 B10. Sessizlik/zamanlama sorunu DEĞİL: gerçek 689
+saniyelik kesintisiz sessizlik elde edildi. Sorun, nihai tam kaynak==
+hedef SHA-256 karşılaştırmasının 13 dosyada UYUŞMAMASI (6 dosya
+hedefte sıfır bayt, 1 dosya iki tarafta da farklı içerik, 4 dosya
+yalnız hedefte). Talimat gereği ("herhangi bir blocker... sonraki
+adıma geçme") **Adım 1'e HİÇ geçilmedi** — hiçbir env/servis/deploy/DB
+değişikliği denenmedi, dolayısıyla rollback edilecek bir şey yoktu.
+
+Tam dosya/vaka detayı yalnız Administrators-only+hash'li rapordadır;
+kullanıcıya sohbet içinde tam olarak raporlandı. **D9'un geri kalanı
+(Adım 1-6), kullanıcı B10'u nasıl ele alacağına karar verip Adım 0
+tekrar temiz PASS verene kadar başlatılamaz.**

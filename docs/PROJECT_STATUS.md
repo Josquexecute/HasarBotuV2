@@ -131,13 +131,23 @@ Son güncelleme: 2026-08-04
   `hasarbotu` DB'sinde):** `Status:"ready"`, `OrganizationCount:0`,
   `UserCount:0`, `AdminRoleSeeded:true`, sıfır blocker, sıfır satır
   yazıldı — gerçek `--apply` bu pakette çalıştırılmadı.
-- Kalan: **B6 (kullanıcı onayı) — TEK kalan blocker.** B9 artık araç
-  olarak TAMAMLANDI (yalnız onay bekliyor); B2 (build tazeliği) Apply
-  öncesi gerçek `npm run build:packages` ile ayrıca kesinleştirilmeli.
-  Düzeltilmiş sıra: D9 Adım 1a (kapanış) → 1b (reference-data) → 1c (API
-  dosyaları) → 2-4 (Adım 4c'de `bootstrap-first-admin.mjs --apply`) →
-  5-6, sonra gerçekten sakin bir pencerede kullanıcı onayıyla gerçek
-  `-Apply`.
+- **D9 gerçek Apply denemesi #1 — Adım 0'da YENİ bir blocker (B10) ile
+  durduruldu (HB-2026-148, 2026-08-04):** kullanıcı B6'yı (açık onay)
+  verdi, gerçek cutover başlatıldı. Adım 0'ın sessizlik kısmı TEMİZ
+  geçti (689 sn, sıfır kesinti) ama nihai tam kaynak==hedef SHA-256
+  karşılaştırması UYUŞMADI. Salt-okunur forensics ile izole edildi:
+  6996/7000 dosyadan 6987 özdeş, **13 gerçek fark** (3 vaka
+  klasöründe) — 6 dosya hedefte sıfır bayt, 1 dosya iki tarafta da
+  farklı içerik, 4 dosya yalnız hedefte. Talimat gereği Adım 1'e HİÇ
+  geçilmedi — hiçbir env/servis/deploy/DB değişikliği denenmedi,
+  rollback edilecek bir şey yoktu. Tam dosya/vaka detayı yalnız
+  Administrators-only+hash'li raporda; kullanıcıya sohbette tam
+  raporlandı, repo'ya (HB-2026-123 ilkesiyle) alınmadı.
+- Kalan: **B10 (post-sync içerik sapması, 13 dosya/3 vaka klasörü) —
+  kullanıcının kararı bekleniyor.** B9 araç olarak TAMAMLANDI; B2
+  (build tazeliği) Apply öncesi gerçek `npm run build:packages` ile
+  ayrıca kesinleştirilmeli. B10 çözülmeden Adım 0 tekrar PASS veremez,
+  D9'un geri kalanı (Adım 1-6) başlatılamaz.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
