@@ -354,6 +354,47 @@ try {
   errors.push(`install-services.ps1 tek-servis seçici doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-143 (D9 ikinci kucuk paketi): servis KURMAYAN, yalniz build
+// ciktisini (dist/ + package.json, allowlist disi HICBIR SEY) fail-closed,
+// idempotent, atomik-degistirmeli, geri alinabilir sekilde deploy dizinine
+// hazirlayan arac. Servis kurma/env yazma/servis baslatma bu aracin
+// KAPSAMI DISINDADIR -- statik denetim bunu da dogrular.
+try {
+  const deployArtifacts = await readFile(`${DEPLOY_DIR}deploy-service-artifacts.ps1`, 'utf8')
+
+  assertContains(deployArtifacts, /\$AllowlistTopLevelDir = 'dist'/, 'deploy-service-artifacts.ps1', 'allowlist yalniz dist/ dizinine sinirli')
+  assertContains(deployArtifacts, /\$AllowlistTopLevelFile = 'package\.json'/, 'deploy-service-artifacts.ps1', 'allowlist yalniz package.json dosyasina sinirli')
+  assertContains(deployArtifacts, /SOURCE_DIST_REPARSE_POINT/, 'deploy-service-artifacts.ps1', 'dist altinda reparse point/symlink fail-closed reddi')
+  assertContains(deployArtifacts, /already_up_to_date/, 'deploy-service-artifacts.ps1', 'idempotency: hedef zaten guncelse degisiklik yapilmamasi')
+  assertContains(deployArtifacts, /\[System\.IO\.Directory\]::Move\(\$target, \$backupPath\)/, 'deploy-service-artifacts.ps1', 'yedekleme kopya degil atomik Directory.Move ile')
+  assertContains(deployArtifacts, /STAGING_HASH_MISMATCH/, 'deploy-service-artifacts.ps1', 'staging asamasinda hash dogrulamasi')
+  assertContains(deployArtifacts, /PostApplyVerificationMismatches/, 'deploy-service-artifacts.ps1', 'uygulama sonrasi bagimsiz hash dogrulamasi')
+  assertContains(deployArtifacts, /-Rollback/, 'deploy-service-artifacts.ps1', 'rollback modu var')
+  assertContains(deployArtifacts, /bütünlük hatası/, 'deploy-service-artifacts.ps1', 'rollback oncesi yedek butunlugu dogrulamasi')
+  assertContains(deployArtifacts, /\[Console\]::OutputEncoding = \[System\.Text\.UTF8Encoding\]::new\(\$false\)/, 'deploy-service-artifacts.ps1', 'Turkce konsol ciktisi icin UTF-8 encoding duzeltmesi')
+  assertNotContains(deployArtifacts, /Start-Service|Stop-Service|Set-Service|New-Service|\.exe['"]?\s+install\b|SetEnvironmentVariable|hasarbotu-api\.exe|hasarbotu-file-agent\.exe/, 'deploy-service-artifacts.ps1', 'servis kurma/baslatma/env yazma yok (kapsam disi)')
+
+  const deployArtifactsBytes = await readFile(`${DEPLOY_DIR}deploy-service-artifacts.ps1`)
+  if (!(deployArtifactsBytes[0] === 0xef && deployArtifactsBytes[1] === 0xbb && deployArtifactsBytes[2] === 0xbf)) {
+    throw new Error('deploy-service-artifacts.ps1 UTF-8 BOM eksik (Windows PowerShell 5.1 Turkce karakterleri BOM olmadan yanlis ayristirir)')
+  }
+  const deployArtifactsTestsBytes = await readFile(`${DEPLOY_DIR}deploy-service-artifacts.tests.ps1`)
+  if (!(deployArtifactsTestsBytes[0] === 0xef && deployArtifactsTestsBytes[1] === 0xbb && deployArtifactsTestsBytes[2] === 0xbf)) {
+    throw new Error('deploy-service-artifacts.tests.ps1 UTF-8 BOM eksik')
+  }
+
+  const deployArtifactsTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}deploy-service-artifacts.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (deployArtifactsTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(deployArtifactsTests.stdout)) {
+    throw new Error(`deploy-service-artifacts testleri başarısız — ${deployArtifactsTests.stderr || deployArtifactsTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`deploy-service-artifacts.ps1 doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

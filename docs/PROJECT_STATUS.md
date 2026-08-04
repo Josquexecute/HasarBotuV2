@@ -42,9 +42,22 @@ Son güncelleme: 2026-08-04
   olmadan bile fail-closed reddediliyor). 8 regresyon testi + statik
   denetim eklendi, `npm test`/`check:deploy` geçti. Gerçek makinede
   yalnız salt-okunur önizleme çalıştırıldı — hiçbir env/servis/deploy
-  dosyası değişmedi. Kalan: (b) API deploy yardımcı script'i (ayrı
-  küçük paket), sonra gerçekten sakin bir pencerede kullanıcı onayıyla
-  gerçek `-Apply`.
+  dosyası değişmedi.
+- **D9'un ikinci küçük paketi tamamlandı (B1 çözüldü, HB-2026-143,
+  2026-08-04):** `deploy-service-artifacts.ps1` eklendi — servis
+  KURMAZ/env YAZMAZ/servis BAŞLATMAZ, yalnız bir servisin build
+  çıktısını (`dist/`+`package.json`, yapısal allowlist) fail-closed,
+  idempotent, atomik, geri alınabilir şekilde deploy dizinine hazırlar.
+  12 regresyon testi + statik denetim eklendi. Gerçek makinede yalnız
+  önizleme çalıştırıldı (`services/api` → `C:\HasarBotu\services\api`:
+  436 dosya, ~1,56 MB, `would_apply`) — hiçbir dosya değişmedi.
+  **Yeni gerçek blocker bulundu (B7):** deploy edilen içerik npm
+  workspace'in kök `node_modules`'ındaki çalışma zamanı bağımlılıklarını
+  taşımıyor — bu, zaten gerçek kurulu File Agent dağıtımında da var
+  (orada da `node_modules` yok); hiçbir servis şu an deploy dizininden
+  gerçekten başlatılamaz. Ayrı bir karar/paket gerektiriyor.
+- Kalan: B7 (node_modules/bağımlılık çözümü — ayrı paket), sonra
+  gerçekten sakin bir pencerede kullanıcı onayıyla gerçek `-Apply`.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

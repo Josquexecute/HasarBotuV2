@@ -67,7 +67,8 @@ salt-okunur olarak sorgulandı (komutlar ve tam çıktılar §5'te):
 
 | Kod | Blocker | Not |
 |---|---|---|
-| **B1** | `C:\HasarBotu\services\api\` dizini hiç yok; `install-services.ps1` bu yüzden `API build çıktısı yok` ile `exit 1` (bu pakette GERÇEKTEN çalıştırılıp doğrulandı, §5) | Çözüm: `npm run build --workspace @hasarbotu/api` (repo'da) sonrası `services/api/dist` + `package.json`/gerekli runtime dosyalarının `C:\HasarBotu\services\api\`e kopyalanması. Bu paket içinde YAPILMADI. |
+| **B1 (mekanizma HAZIR, HB-2026-143, 2026-08-04) — kopyalama HENÜZ UYGULANMADI** | `C:\HasarBotu\services\api\` dizini hâlâ yok. | **Araç hazır:** `deploy-service-artifacts.ps1` (fail-closed, idempotent, atomik, geri alınabilir, allowlist=`dist/`+`package.json`) yazıldı, 12 regresyon testi + statik denetim eklendi. Gerçek makinede yalnız salt-okunur önizleme çalıştırıldı: kaynak `services/api` → hedef `C:\HasarBotu\services\api`, **436 allowlist dosyası, ~1,56 MB**, `would_apply`, sıfır değişiklik. Gerçek `-Apply` HÂLÂ çalıştırılmadı (B6 — kullanıcı onayı + sakin pencere bekliyor). |
+| **B7 (yeni, HB-2026-143'te bulundu)** | `deploy-service-artifacts.ps1` yalnız `dist/`+`package.json` taşır — npm workspace'in KÖK `node_modules`'ında hoisted olan çalışma zamanı bağımlılıklarını (fastify, pg, zod, `@hasarbotu/contracts`/`database`/`domain` vb.) TAŞIMAZ. Gerçek makinede doğrulandı: `services/api/node_modules` yalnız `@types`+`undici-types` (tip-only) içeriyor, gerçek bağımlılıklar KÖK `node_modules`'ta. **Aynı sorun File Agent'ın ZATEN GERÇEK yapılan D6 dağıtımında da var** (`C:\HasarBotu\services\file-agent`de node_modules YOK) — yani bu, API'ye özgü değil, HİÇBİR servis şu an deploy dizininden gerçekten BAŞLATILAMAZ (`Cannot find module` ile çöker), servis hiçbiri gerçek `-Apply`/başlatma ile denenmediği için bu şimdiye kadar fark edilmemişti. | **Çözülmedi, ayrı bir karar/paket gerektirir:** üç seçenek (a) deploy script'ine kök `node_modules`'tan gerekli alt kümeyi kopyalayan bir adım eklemek, (b) build'i esbuild/rollup ile TEK DOSYAYA bundle etmek (node_modules gerekmez), (c) `npm install --omit=dev` ile deploy dizininde bağımsız bir kurulum yapmak. Servis GERÇEKTEN başlatılmadan önce bu ÇÖZÜLMELİDİR. |
 | **B2** | Repo'daki `services/api/dist/index.js` / `services/file-agent/dist/index.js` çıktısının GÜNCEL HEAD'e karşı taze olduğu doğrulanmadı | Apply öncesi `npm run build:packages` yeniden çalıştırılıp temiz çıkış alınmalı. |
 | **B3 (mimari boşluk) — ÇÖZÜLDÜ (HB-2026-142, 2026-08-04)** | `install-services.ps1` her zaman iki servisi de kurardı, tek servis seçme seçeneği yoktu. | **Çözüldü:** `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi parametresi eklendi. `-Services` verilmezse davranış birebir aynı kaldı (regresyon testiyle doğrulandı). Tek-servis modunda seçilmeyen servise ait HİÇBİR dosya/dizin okunmaz/doğrulanmaz. Ayrıca yeni bir idempotency guard'ı eklendi: seçilen servis SCM'de zaten kuruluysa `-Apply` OLMADAN BİLE fail-closed reddedilir (gerçek makinede `hasarbotu-file-agent` ile doğrulandı). 8 regresyon testi (`install-services.tests.ps1`) + statik denetim eklendi, `npm run check:deploy`e bağlandı. Gerçek makinede yalnız salt-okunur önizleme çalıştırıldı (`-Services Api`: yalnız API build eksikliği raporlandı; `-Services FileAgent`: idempotency blocker doğru raporlandı) — hiçbir servis/env/dosya değişmedi. |
 | **B4** | Gerçek `HASARBOTU_AGENT_ID`/`HASARBOTU_AGENT_SECRET` yok — bunlar sabit kodlanamaz; API'nin `POST /api/v1/agents` (admin oturumu gerektirir, `services/api/src/agent/routes.ts:187`) uç noktasından ÜRETİLİR ve yalnız BİR KEZ düz metin döner (`services/api/src/agent/store.ts:126` `registerAgent`) | API çalışmadan bu adım atılamaz — sıralama: API kur+başlat (secret olmadan, yalnız `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET` gerektirmeyen kısım) → admin oturumuyla agent kaydet → dönen `agentId`+`secret`i File Agent ortam değişkenlerine yaz → File Agent'ı başlat. |
@@ -87,15 +88,19 @@ Model: Planla → Önizle → Onay → Uygula → Doğrula → Kesinleştir → 
 ```
 `PASS/0` olmadan hiçbir sonraki adıma geçilmez.
 
-### Adım 1 — Build + API dağıtım dizini (B1/B2 çözümü)
+### Adım 1 — TAMAMLANDI (mekanizma, HB-2026-143): Build + API dağıtım dizini
 ```powershell
-npm run build:packages
-New-Item -ItemType Directory -Path 'C:\HasarBotu\services\api' -Force
-# services/api/dist + gerekli runtime dosyaları kopyalanır (file-agent'ın
-# D6'da nasıl dağıtıldığıyla AYNI yöntem — repo bu kopyalama adımını
-# otomatikleştiren bir betik İÇERMİYOR; operatör elle veya küçük bir
-# yardımcı betikle yapar, ayrı bir küçük paket olarak).
+npm run build:packages   # B2: tazelik icin her Apply'dan once yeniden calistirilmali
+.\deploy\windows-service\deploy-service-artifacts.ps1 `
+  -SourceDir 'C:\...\HasarBotuV2\services\api' `
+  -TargetDir 'C:\HasarBotu\services\api' `
+  -ServiceLabel 'api' `
+  -Apply
 ```
+`deploy-service-artifacts.ps1` (B1) yazıldı, test edildi, gerçek makinede
+yalnız önizleme çalıştırıldı (§5.E). **B7 (node_modules) çözülmeden bu
+adımın gerçek Apply'ı servis çalıştırılabilir hâle GETİRMEZ** — yalnız
+`dist/`+`package.json`i taşır.
 
 ### Adım 2 — TAMAMLANDI (HB-2026-142): `install-services.ps1`e `-Services` seçici eklendi
 `-Services Api` / `-Services FileAgent` / (varsayılan) ikisi. Mevcut
@@ -209,6 +214,19 @@ EXITCODE=1
 Idempotency guard gerçek, zaten kurulu servise karşı doğru çalıştı;
 API/Postgres hiç bahsi geçmedi/kontrol edilmedi.
 
+**E) API deploy önizlemesi, HB-2026-143** (`deploy-service-artifacts.ps1`, `-Apply` YOK, gerçek yollarla — kaynak: repo `services/api`, hedef: `C:\HasarBotu\services\api`):
+```
+--- HasarBotu V2 servis dağıtımı: preview (api) ---
+  Allowlist dosya sayısı : 436
+  Toplam bayt         : 1562900
+  Hedef zaten var mı  : False
+Ön koşullar karşılandı.
+-Apply verilmedi: yalnız plan gösterildi, HİÇBİR değişiklik yapılmadı.
+{"Status":"would_apply", ...}
+```
+436 dosya (`dist/` tamamı + `package.json`), ~1,56 MB. Hedef dizin
+oluşturulmadı, hiçbir dosya kopyalanmadı.
+
 ## 6. Rollback planı
 
 `HASARBOTU_AGENT_ROOTS` değişimi geri alınabilirdir (mevcut karar,
@@ -257,6 +275,17 @@ makinede yalnız `-Apply` OLMADAN önizleme çalıştırıldı (§5.C/D); hiçbi
 env değişkeni, gerçek Windows servisi, deploy dosyası veya pCloud ayarı
 değişmedi.
 
+**Güncelleme (HB-2026-143, 2026-08-04):** B1'in çözümü olarak YENİ bir
+araç (`deploy-service-artifacts.ps1` + testleri) EKLENDİ — bu da kod/
+test/statik-denetim değişikliğidir, GERÇEK deploy dosyası mutasyonu
+DEĞİLDİR. Testler sırasında `C:\ProgramData\HasarBotu\migration-preflight\
+pre-deploy-backups\` altına düşen SENTETİK test yedekleri (gerçek kanıtla
+karışmasınlar diye) temizlendi. Gerçek makinede yalnız `-Apply` OLMADAN
+önizleme çalıştırıldı (§5.E, gerçek `services/api` → `C:\HasarBotu\
+services\api`) — hiçbir dosya kopyalanmadı/taşınmadı. Bu çalıştırma
+sırasında YENİ bir gerçek blocker (B7, node_modules/bağımlılık çözümü)
+bulundu ve belgelendi.
+
 ## 8. Onay bekleyen açık kararlar — CEVAPLANDI (2026-08-04)
 
 Kullanıcı aşağıdaki dört soruyu yanıtladı. Bu, yalnız KARARLARIN
@@ -280,8 +309,16 @@ yürütülecek.
 
 Bu dört karar kayda geçti. **B3 düzeltmesi TAMAMLANDI (HB-2026-142,
 2026-08-04)** — `install-services.ps1` artık File Agent'a hiç dokunmadan
-yalnız API'yi kurabiliyor, idempotency guard'ıyla birlikte. Sıradaki
-adım: (b) API deploy yardımcı script'i (ayrı küçük paket), kendi
-Plan→Önizle→Onay→Uygula→Doğrula döngüsüyle; bu tamamlanıp gerçekten sakin
-bir pencere geldiğinde, kullanıcının o anki açık onayıyla Adım 3-6 (§4)
-yürütülür. Gerçek `-Apply` HÂLÂ bu paket içinde başlatılmadı.
+yalnız API'yi kurabiliyor, idempotency guard'ıyla birlikte. **B1'in
+mekanizması da TAMAMLANDI (HB-2026-143, 2026-08-04)** —
+`deploy-service-artifacts.ps1` yazıldı, test edildi, gerçek makinede
+yalnız önizlendi. Gerçek `-Apply` HÂLÂ bu paket içinde başlatılmadı.
+
+**Yeni açık nokta (B7):** deploy edilen `dist/`+`package.json` npm
+workspace'in kök `node_modules`'ında hoisted olan çalışma zamanı
+bağımlılıklarını taşımıyor — bu, hem API hem (zaten gerçek kurulu) File
+Agent için geçerli, servisleri GERÇEKTEN başlatmadan önce ayrıca
+çözülmesi gereken bir karar/paket gerektiriyor (üç seçenek §3'te). D9'un
+Adım 3-6'sı (gerçekten sakin bir pencerede, kullanıcının açık onayıyla)
+B7 çözülmeden servisin gerçekten ÇALIŞTIĞINI garanti etmez — yalnız
+kurulum/env adımlarını tamamlar.

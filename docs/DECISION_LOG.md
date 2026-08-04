@@ -5365,3 +5365,107 @@ degismedi — yalniz salt-okunur onizleme calistirildi.
 Acik kalan: D9 plani SS8'deki (b) maddesi — API deploy yardimci
 script'i, ayri kucuk bir paket olarak; ardindan gercekten sakin bir
 pencerede kullanicinin acik onayiyla D9 SS4 Adim 3-6.
+
+
+## 2026-08-04 - HB-2026-143: D9'un ikinci kucuk paketi tamamlandi — servis kurmayan, fail-closed, idempotent, atomik ve geri alinabilir API/servis artifact deploy araci eklendi (B1 cozuldu); yeni gercek blocker (B7, node_modules) bulundu
+
+Kullanicinin onayladigi D9 plani B1 (API deploy dizini hazirlama) icin:
+`deploy-service-artifacts.ps1` yazildi. Servis KURMAZ, env YAZMAZ, servis
+BASLATMAZ — yalniz bir servisin build ciktisini (`dist\` tamami +
+`package.json`, YAPISAL olarak baska HICBIR SEY) fail-closed, idempotent,
+atomik-degistirmeli, geri alinabilir sekilde bir dagitim dizinine
+hazirlar.
+
+**Allowlist YAPISAL olarak sinirli:** enumerasyon fonksiyonu yalniz
+`dist\` (ozyinelemeli) ve `package.json`i tarar — kaynak kokte
+`node_modules`, `.env`, `src` her ne olursa olsun bu fonksiyon ONLARI HIC
+GORMEZ/OKUMAZ (bir filtre degil, yapisal bir sinir).
+
+**Onkosullar (fail-closed, `-Apply` ile bile UYGULANMAZ):** `dist\
+index.js` + `package.json` var mi, `dist\` altinda reparse point/symlink
+yok mu, hedef birimde yeterli bos alan var mi (carpanli), hedef
+ebeveynine yazma izni var mi.
+
+**Idempotency:** hedefte ZATEN ayni icerik (ayni goreli yol kumesi + ayni
+SHA-256'lar) varsa, `-Apply` bile HICBIR SEY DEGISTIRMEZ
+(`already_up_to_date`) — gercek test: ayni kaynakla ikinci `-Apply`
+sonrasi hedef dosyanin `LastWriteTimeUtc`si BIREBIR ayni kaldi.
+
+**Yedekleme + atomik degistirme:** hedef zaten mevcutsa, KOPYALAMADAN
+(bayt bayt ayni, anlik) atomik `Directory.Move` ile Administrators-only+
+zaman damgali bir yedek konumuna TASINIR, yaninda goreli-yol+SHA-256
+manifest JSON'u yazilir. Yeni icerik once STAGING dizininde (hedefle AYNI
+birimde) kopyalanip her dosyanin hash'i kaynakla dogrulanir, sonra atomik
+`Directory.Move` ile hedefe tasinir, sonra hedefteki HER dosya YENIDEN
+diskten okunup KAYNAGIN ORIJINAL hash'iyle BAGIMSIZ olarak tekrar
+dogrulanir.
+
+**Rollback:** `-Rollback -RollbackBackupPath <tam yol>` — once yedegin
+KENDI manifest'ine karsi butunlugu dogrulanir (bozuksa REDDEDILIR, hicbir
+sey degismez), sonra hedefteki GUNCEL icerik de (varsa) AYRICA bir
+"pre-rollback" yedegine tasinir (hicbir veri asla silinmez), sonra
+belirtilen yedek hedefe geri tasinir. Rollback de `-Apply` gerektirir.
+
+**Bulunan ve duzeltilen UC gercek kusur (gercek calistirmayla):**
+
+1. Bu ortamda PowerShell'in `@arrayOf('-Name','Value',...)` DIZI
+   splatting'i, isimli parametreleri TANIMIYOR — dashli token'lari
+   yoksayip TAMAMEN POZISYONEL bagliyor (izole tekrarlanabilir repro ile
+   dogrulandi: minimal bir betikte bile ayni hata). Duzeltme: testlerde
+   HASHTABLE splatting (`@{ Name = Value }`) kullanildi — bu isimle
+   dogru bagliyor.
+2. `Measure-Object -Property Size -Sum` BOS bir diziye uygulaninca
+   Set-StrictMode altinda `.Sum` erisiminde `PropertyNotFoundException`
+   firlatiyor (kaynak dizin hic yokken/allowlist bos donerken gercekten
+   tetiklendi). Duzeltme: once `.Count -gt 0` kontrolu eklendi.
+3. (HB-2026-142'nin devami, burada da tekrar dogrulandi) `Write` araciyla
+   olusturulan yeni `.ps1` dosyalarinda UTF-8 BOM eksikligi — bu paketin
+   HER IKI yeni dosyasinda da (`deploy-service-artifacts.ps1` ve testi)
+   olusturulur olusmaz hemen `[System.IO.File]::WriteAllText(...,
+   [System.Text.UTF8Encoding]::new($true))` ile duzeltildi; artik yerlesik
+   bir aliskanlik.
+
+**12 regresyon testi eklendi** (`deploy-service-artifacts.tests.ps1`,
+bagimliliksiz): taze dagitim onizlemesi, eksik dist/package.json/ebeveyn/
+reparse-point blocker'lari, allowlist-disi dosyalarin (node_modules, .env,
+src) KESINLIKLE kopyalanmadigi (gercek dosya sistemi kontrolu), idempotency
+(mtime degismedi), gercek yedekleme (eski icerik birebir korunuyor, ACL
+Administrators-only), rollback onizleme+uygulama (icerik birebir geri
+geldi, rollback oncesi de ayrica yedeklendi), bozuk-yedek reddi, asiri
+kapasite carpaninin calistigi, eksik ebeveyn, reparse-point reddi. Hepsi
+GECTI. `scripts/check-windows-service-configs.mjs`e bu testleri
+calistiran + allowlist/idempotency/atomik-yedekleme/rollback/UTF-8-BOM
+ozelliklerini dogrulayan statik denetim eklendi.
+
+**Gercek makinede yalniz salt-okunur onizleme calistirildi** (`-Apply`
+HICBIR ZAMAN verilmedi): kaynak `services/api` (repo) -> hedef
+`C:\HasarBotu\services\api`, **436 allowlist dosyasi (~1,56 MB)**,
+`would_apply`, hedef dizin olusturulmadi, hicbir dosya kopyalanmadi. Test
+sirasinda `C:\ProgramData\HasarBotu\migration-preflight\pre-deploy-backups\`
+altina dusen SENTETIK test yedekleri (gercek kanitla karismamalari icin)
+temizlendi.
+
+**YENI gercek blocker bulundu (B7):** `deploy-service-artifacts.ps1`
+yalniz `dist/`+`package.json` tasir — npm workspace'in KOK
+`node_modules`'inda hoisted olan calisma zamani bagimliliklarini (fastify,
+pg, `@hasarbotu/*` vb.) TASIMAZ. Gercek makinede dogrulandi:
+`services/api/node_modules` yalniz `@types`+`undici-types` (tip-only)
+iceriyor. **Ayni sorun File Agent'in ZATEN GERCEK yapilan D6
+dagitiminda da var** (`C:\HasarBotu\services\file-agent`de node_modules
+YOK) — yani bu API'ye ozgu degil, HICBIR servis su an deploy dizininden
+gercekten baslatilamaz, bu simdiye kadar hicbir servis gercek `-Apply`/
+baslatma ile denenmedigi icin fark edilmemisti. Cozum (uc secenek: kok
+node_modules'tan alt kume kopyalama, bundle build, veya `npm install
+--omit=dev`) bu pakette YAPILMADI, ayri bir karar/paket gerektiriyor.
+
+Test sonucu: `node --test` (deploy/windows-service) 38/38, `npm run
+check:deploy` gecti (yeni deploy-service-artifacts testleri dahil).
+
+Etki: `deploy-service-artifacts.ps1` + testi YENI eklendi (kod). Gercek
+env degiskeni, gercek Windows servisi, gercek deploy dosyasi (repo disi)
+veya pCloud ayari HIC degismedi — yalniz salt-okunur onizleme calistirildi
+ve test sirasinda olusan sentetik kanitlar temizlendi.
+
+Acik kalan: B7 (node_modules/bagimlilik cozumu) — ayri bir karar/paket;
+bu cozulmeden servisler GERCEKTEN baslatilamaz. Sonra gercekten sakin bir
+pencerede kullanicinin acik onayiyla D9 plan belgesi SS4 Adim 3-6.
