@@ -25,6 +25,18 @@ Son güncelleme: 2026-08-04
   talebi + AGENTS.md #7 kritik işlem onayı gerekir).
 - Ayrıntı için `HB-2026-139` (karar günlüğü) — aşağıdaki geçmiş kayıtlar
   bu noktaya nasıl gelindiğini belgeler.
+- **D9 gerçek operasyonel devretme — YALNIZ plan + fail-closed önizleme
+  hazır (HB-2026-140, 2026-08-04):**
+  [`docs/D9_OPERATIONAL_CUTOVER_PLAN.md`](D9_OPERATIONAL_CUTOVER_PLAN.md).
+  Bu pakette hiçbir env/servis/dosya/pCloud ayarı DEĞİŞMEDİ. Gerçek
+  makine durumu salt-okunur doğrulandı: `hasarbotu-file-agent` servisi
+  zaten kurulu (D6, `Disabled`/`Stopped`), hesap/ACL doğru;
+  `hasarbotu-api` servisi hiç kurulu değil, deploy dizini yok;
+  `HASARBOTU_*`/`DATABASE_URL` ortam değişkenlerinin hiçbiri tanımlı
+  değil. Bulunan gerçek mimari boşluk: `install-services.ps1` her zaman
+  iki servisi de kurar, tek-servis seçimi yok — dosyadaki B1–B6
+  blocker'ları çözülmeden ve kullanıcı dört açık soruyu (§8)
+  cevaplamadan gerçek `-Apply` başlatılmayacak.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

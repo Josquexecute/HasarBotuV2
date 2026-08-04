@@ -5170,3 +5170,88 @@ Acik kalan: Gercek operasyonel devretme (env/servis/File Agent kok dizini
 degisikligi) — kullanicinin acik talebi ve ayri bir kritik islem
 onayiyla (AGENTS.md #7) ele alinmali. Bu depo kurallari geregi bu adim
 otonom olarak baslatilmadi.
+
+
+## 2026-08-04 - HB-2026-140: D9 gercek operasyonel devretme icin salt-okunur plan + fail-closed onizleme hazirlandi (uygulama YOK)
+
+D8 (HB-2026-139) `AfterSync PASS` sonrasi kullanicinin talebiyle D9
+(gercek env/servis devretme) icin YALNIZ plan ve fail-closed onizleme
+hazirlandi: `docs/D9_OPERATIONAL_CUTOVER_PLAN.md`. Hicbir env, servis,
+dosya veya pCloud ayari DEGISTIRILMEDI.
+
+**Bu paket icinde salt-okunur dogrulanan GERCEK makine durumu
+(DESKTOP-EFN2G33):**
+
+- `hasarbotu-file-agent` servisi KURULU (`StartType=Disabled`,
+  `Status=Stopped` — D6, HB-2026-119/120'de gercekten uygulanmis).
+  `hasarbotu-api` servisi hic KURULU DEGIL.
+- `svc-hb-fileagent` hesabi gercekten var, `SeServiceLogonRight`/
+  `SeDenyInteractiveLogonRight`/`SeDenyRemoteInteractiveLogonRight`/
+  `PasswordRequired=True` hepsi dogru. Depolama koku + uygulama dizini +
+  log dizini ACL'leri hepsi dogru (`Administrators` Full,
+  `DESKTOP-EFN2G33\user` Modify, `svc-hb-fileagent` Modify).
+- `C:\HasarBotu\services\file-agent\dist\index.js` VAR;
+  `C:\HasarBotu\services\api\` dizini HIC YOK.
+- WinSW ikili dosyasi `C:\Tools\WinSW-x64.exe` var (18.243.033 bayt).
+  Postgres (`postgresql-x64-17`) Running/Automatic. `node.exe` mevcut.
+- Makine `HASARBOTU_AGENT_ROOTS`/`_ID`/`_SECRET`/`_API_BASE_URL`/
+  `DATABASE_URL` ortam degiskenlerinin HICBIRI (Machine/User/Process)
+  TANIMLI DEGIL. `%USERPROFILE%\.hasarbotu\hasarbotu_app.pass` dosyasi
+  VAR (icerigi OKUNMADI/yazdirilmadi).
+- Repo agacinda `services/api/dist/index.js` ve
+  `services/file-agent/dist/index.js` ikisi de MEVCUT (tazeligi
+  dogrulanmadi).
+
+**Gercekten calistirilan iki salt-okunur onizleme (`-Apply` YOK):**
+
+1. `setup-file-agent-service-account.ps1` (gercek `-FileAgentAppDir`/
+   `-WinSwExe`/`-PCloudSyncAccount` ile): hesap/haklar/ACL/servis
+   hepsi "uygun" dondu; kritik uyari: *"hasarbotu-file-agent servisi
+   ZATEN kurulu — bu betik VAR OLAN bir servisi guncellemez/yeniden
+   kurmaz."* `EXITCODE=0`.
+2. `install-services.ps1` (gercek `-ApiDir`/`-FileAgentDir`/`-WinSwExe`
+   ile): fail-closed `exit 1`, blocker "API build ciktisi yok:
+   C:\HasarBotu\services\api\dist\index.js".
+
+**Bulunan gercek mimari bosluk (B3, plan belgesinde detayli):**
+`install-services.ps1` HER ZAMAN iki servisi de (`hasarbotu-api` +
+`hasarbotu-file-agent`) sirayla kurar, tek-servis secimi YOK
+(`Install-OneService` cagrilari kosulsuz). Bunu oldugu gibi `-Apply`
+ile calistirmak zaten dogru kurulu `hasarbotu-file-agent`i YENIDEN
+`install` eder ve WinSW sablonundaki `<startmode>Automatic</startmode>`
+gercek SCM `StartType=Disabled`i (D6'nin kasitli ayri
+`ChangeServiceConfigW` cagrisiyla verdigi) SESSIZCE geri alabilir — bu
+D9 Apply'ini engelleyen gercek bir onkosuldur, cozumu (dar bir
+`-Services` secici parametresi) ayri, kucuk bir paket olarak
+onerilmistir, bu pakette YAPILMADI.
+
+**Diger bulunan gercek onkosullar (plan belgesinde B1/B2/B4/B5/B6
+olarak numaralandi):** API deploy dizini hic yok (B1); repo build
+ciktisinin tazeligi dogrulanmadi (B2); gercek `HASARBOTU_AGENT_ID`/
+`_SECRET` API'nin `POST /api/v1/agents` (admin oturumu gerektirir,
+`services/api/src/agent/routes.ts:187`, `registerAgent`,
+`services/api/src/agent/store.ts:126`) uc noktasindan URETILMELI, sabit
+kodlanamaz (B4); en az bir admin rollu kullanicinin var oldugu bu
+pakette dogrulanmadi (B5); AGENTS.md SS7 kritik islem standardi geregi
+gercek Apply acik kullanici onayi gerektirir (B6).
+
+Plan belgesi ayrica hedef son durumu, adim adim Apply sirasini (build ->
+API deploy -> tek-servis kurulum -> secret/env sirasi -> servis
+baslatma sirasi -> smoke test -> kesinlestirme), rollback prosedurunu
+(mevcut PROJECT_STATUS karariyla tutarli: rootKey degismez, yalniz
+`HASARBOTU_AGENT_ROOTS` eski `P:\` degerine donup servisler yeniden
+baslatilir, DB degismez, eski `P:\` en az 14 gun tutulur) ve dort acik
+onay bekleyen karari icerir.
+
+Test sonucu: Bu paket icin kod degismedi (yalniz docs + gercek
+salt-okunur arac calistirmalari); mevcut test/build durumu
+degismedi.
+
+Etki: Sifir dosya/servis/env/pCloud degisikligi. `deploy/windows-service`
+altindaki hicbir arac degistirilmedi.
+
+Acik kalan: Kullanicinin bu plani inceleyip SS8'deki dort soruyu
+cevaplamasi ve gercek Apply'a acikca onay vermesi. Onaydan sonra bile
+Apply, D9 plan belgesindeki tam sirayla (once B3 cozumu, sonra build/
+deploy, sonra servis kurulumu, sonra secret/env, sonra baslatma) ayri
+bir paket olarak yurutulmeli.
