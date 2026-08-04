@@ -148,11 +148,24 @@ Son güncelleme: 2026-08-04
   değişikliği denenmedi. Tam dosya/vaka detayı yalnız
   Administrators-only+hash'li raporda; kullanıcıya sohbette tam
   raporlandı, repo'ya (HB-2026-123 ilkesiyle) alınmadı.
-- Kalan: **B10 (7 repair adayı + 4 blocker, 3 vaka klasörü) —
-  kullanıcının kararı bekleniyor.** B9 araç olarak TAMAMLANDI; B2
-  (build tazeliği) Apply öncesi gerçek `npm run build:packages` ile
-  ayrıca kesinleştirilmeli. B10 çözülmeden Adım 0 tekrar PASS veremez,
-  D9'un geri kalanı (Adım 1-6) başlatılamaz.
+- **B10 onarım aracı genelleştirildi (HB-2026-150, 2026-08-05):**
+  `repair-post-sync-stale-target-files.ps1` artık genel
+  `pcloud-post-sync-diff-forensics/1.0.0` şemasını açık bir adapter
+  ile destekliyor (eski 56AAG629 yolu değişmedi). Yol boyunca gerçek
+  bir hata bulunup düzeltildi: paylaşılan taze-doğrulama zinciri
+  yalnız `revisions[0]`e bakıyordu — gerçek B10 verisinde 3 dosyada
+  pCloud CURRENT revizyonu index 0'da dönüyor (eşit ctime), bu da 3
+  gerçek adayı yanlış reddediyordu; artık index'e değil "ayrı,
+  hedefle eşleşen herhangi bir revizyon var mı"ya bakıyor. 11 test
+  (6 eski değişmeden + 5 yeni) + statik denetim geçti. **Gerçek
+  makinede kanıtlandı (yalnız önizleme, `-Apply` verilmeden):**
+  `WouldApplyCount=7, BlockedCount=0, ClassificationBlockedCount=4,
+  OutOfScopeCount=2` — sıfır dosya değişti.
+- Kalan: **B10 gerçek onarım Apply'ı (7 aday) — kullanıcının kararı
+  bekleniyor.** B9 araç olarak TAMAMLANDI; B2 (build tazeliği) Apply
+  öncesi gerçek `npm run build:packages` ile ayrıca kesinleştirilmeli.
+  B10 çözülmeden Adım 0 tekrar PASS veremez, D9'un geri kalanı (Adım
+  1-6) başlatılamaz.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

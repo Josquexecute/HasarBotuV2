@@ -238,6 +238,16 @@ try {
   assertContains(repairScript, /\[System\.IO\.File\]::Replace/, 'repair-post-sync-stale-target-files.ps1', 'atomik replace ilkeli')
   assertNotContains(repairScript, /SetEnvironmentVariable|Start-Service|Set-Service|Stop-Service|Stop-Process/, 'repair-post-sync-stale-target-files.ps1', 'env/servis mutasyonu')
 
+  // HB-2026-149: pcloud-post-sync-diff-forensics/1.0.0 semasi icin adapter
+  // eklendi -- eski 56AAG629-ozel yol (fonksiyon adiyla) bozulmadan korunmali.
+  assertContains(repairScript, /function Get-CandidateEntries56aag629/, 'repair-post-sync-stale-target-files.ps1', 'eski 56AAG629 semasinin degismeden korundugu (ayri fonksiyon)')
+  assertContains(repairScript, /function Get-CandidateEntriesDiffForensics/, 'repair-post-sync-stale-target-files.ps1', 'jenerik pcloud-post-sync-diff-forensics semasi icin adapter')
+  assertContains(repairScript, /'TARGET_ONLY_NO_SOURCE_COUNTERPART'/, 'repair-post-sync-stale-target-files.ps1', 'target-only dosyalarin ASLA aday olmamasi (yalniz blocker)')
+  assertContains(repairScript, /'CURRENCY_NOT_SOURCE_CURRENT_TARGET_SUPERSEDED'/, 'repair-post-sync-stale-target-files.ps1', 'ters yon (hedef guncel/kaynak eski) asla aday olmamasi')
+  assertContains(repairScript, /'NO_DISTINCT_SUPERSEDED_REVISION_MATCHING_TARGET'/, 'repair-post-sync-stale-target-files.ps1', 'revision kaniti olmadan content_mismatch aday olmamasi')
+  assertContains(repairScript, /'METADATA_ONLY_CONTENT_IDENTICAL'/, 'repair-post-sync-stale-target-files.ps1', 'metadata_only kayitlarin kapsam disi birakilmasi')
+  assertContains(repairScript, /ClassificationBlockedCount/, 'repair-post-sync-stale-target-files.ps1', 'aday/blocker/kapsam-disi sayilarinin ayri raporlanmasi')
+
   const stateProbeTests = spawnSync(
     process.execPath,
     ['--test', `${DEPLOY_DIR}pcloud-stale-target-file-state.test.mjs`],

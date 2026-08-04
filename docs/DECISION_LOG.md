@@ -6174,3 +6174,83 @@ icin karari (HB-2026-130 araci mi genellestirilecek, yoksa yeni/ayri
 bir onarim yolu mu) ve 4 blocker'in nasil ele alinacagi (kaynakta hic
 olmayan dosyalar -- ayri bir arastirma konusu olabilir) bekleniyor.
 B10 cozulmeden D9 Adim 0 tekrar PASS veremez.
+
+## 2026-08-05 - HB-2026-150: repair-post-sync-stale-target-files.ps1 genel pcloud-post-sync-diff-forensics/1.0.0 semasini acik adapter ile destekliyor (eski 56AAG629 yolu DEGISMEDI); gercek B10 onizlemesi TAM 7 aday/4 blocker/2 kapsam-disi verdi; yol boyunca GERCEK bir sira-bagimliligi hatasi bulunup duzeltildi
+
+Istek: "Repair aracini pcloud-post-sync-diff-forensics/1.0.0 semasini da
+acik bir adapter ile destekleyecek sekilde genellestir; eski 56AAG629
+sema destegini bozma." + 6 fail-closed kural (yalniz kanitlanan 7 dosya
+aday, target-only blocker/dokunulmaz, metadata_only kapsam disi, eksik
+kanitta red, allowlist yalniz admin-only rapordan, preview/Apply ayri +
+mevcut yedek/hash/atomik/bagimsiz-dogrulama korunsun) + regresyon testi
++ yalniz gercek preview + test/commit/kisa rapor.
+
+Yontem:
+
+1. `Get-CandidateEntries56aag629` (eski mantik, DEGISTIRILMEDEN ayri
+   fonksiyona tasindi) ve `Get-CandidateEntriesDiffForensics` (yeni
+   adapter) eklendi; `$report.SchemaVersion`e gore ikisinden birine
+   dallanir, taninmayan sema hala `FORENSICS_REPORT_SCHEMA_INVALID`
+   ile reddedilir. Adapter, HER `Entries[]` kaydini fail-closed
+   siniflandirir: `extra` -> HER ZAMAN blocker
+   (`TARGET_ONLY_NO_SOURCE_COUNTERPART`, asla aday), `metadata_only`
+   -> kapsam disi, `content_mismatch` -> yalniz `Currency==
+   source_current_target_superseded` VE pCloud `found`+`TaskReferenceCount
+   =0` VE `CurrentRow.size==Source.Size` VE `Revisions`de CURRENT'tan
+   FARKLI hash'li, hedef boyutuyla eslesen bir kayit varsa aday;
+   digerleri (ters yon currency, revision kaniti yok, PCloud yok/
+   gorev referansli, taninmayan siniflandirma) ayri kodlarla blocker.
+   Adaylar SONRA ayni GENEL taze-yeniden-dogrulama+yedek+atomik-
+   replace+bagimsiz-dogrulama zincirinden (DEGISTIRILMEDEN) gecer.
+2. **Gercek hata bulundu ve duzeltildi:** gercek B10 raporuna karsi ilk
+   calistirmada 7 adaydan 3'u (`revisions[0]` boyutunun hedefle
+   eslesmedigi) `TARGET_NOT_PRIOR_REVISION` ile YANLIS reddedildi.
+   Kok neden: paylasilan taze-yeniden-dogrulama dongusu yalniz
+   `revisions[0]`e bakiyordu -- "en eski revizyon INDEX 0'dadir"
+   varsayimi, orijinal 56AAG629 verisinde hep dogruydu ama GERCEK
+   B10 verisinde 3 dosyada iki revizyon AYNI ctime'a sahip
+   (`pcloud-stale-target-file-state.mjs`nin kendi sorgusu `ORDER BY
+   ctime ASC` kullaniyor ama esitligi bozamiyor) ve pCloud CURRENT
+   revizyonu index 0'da donduruyor. Duzeltme: kontrol artik "index 0"
+   yerine "CURRENT'tan farkli hash'li, hedef boyutuyla eslesen HERHANGI
+   bir revizyon var mi" (adapter'daki AYNI mantik) -- eskiden gecen her
+   durum hala gecer (index-0 eslesmesi zaten "bir eslesme"ydi), yalniz
+   YENI durumlar (current-once-donen, ayni ctime'li) artik da dogru
+   gecer. Bu, hem yeni hem eski sema yolunun PAYLASTIGI kodda -- ikisi
+   de bu duzeltmeden fayda gorur, testler DEGISMEDEN gecmeye devam
+   ediyor.
+3. Statik denetime (`check-windows-service-configs.mjs`) yeni
+   assertion'lar eklendi: iki fonksiyonun da var oldugu, target-only/
+   ters-yon/revision-kaniti-yok/metadata-only kodlarinin kaynak kodda
+   bulundugu, ayri sayilarla raporlama.
+
+Test sonucu: 11/11 gecti (`repair-post-sync-stale-target-files.tests.ps1`)
+-- 6 eski (DEGISMEDEN gecmeye devam ediyor) + 5 yeni: (7) tek raporda 7
+farkli sonuc tam dogru sayilarla siniflandirilir, (8) `-Apply` YALNIZ
+gercek adayi degistirir, diger 6 dosya bayt-bayt AYNI kalir (ozellikle
+`extra` dosyalar HIC dokunulmadan), (9) bilinmeyen sema surumu hala
+reddedilir, (10) eski sema adapter eklendikten sonra da DEGISMEDI, (11)
+esit-ctime/current-once-donen GERCEK B10 deseni yeniden uretilip
+`-Apply`in dogru calistigi kanitlandi (fixture'in kendisi de gercek
+hatayi yeniden urettigi ayrica dogrulandi). `check-windows-service-
+configs.mjs` GECTI.
+
+**Gercek makinede SADECE onizleme** (`-Apply` VERILMEDEN), gercek B10
+forensics raporuna (`pcloud-post-sync-diff-forensics-20260804T203501157Z-
+75ebf919.json`) karsi: `OverallStatus:"preview_ok"`, **WouldApplyCount=7,
+BlockedCount=0, ClassificationBlockedCount=4, OutOfScopeCount=2** --
+onceki (HB-2026-149) manuel analizle BIREBIR ayni 7 dosya aday, ayni
+vaka klasorundeki 4 dosya blocker, ayni 2 dosya kapsam disi. Sifir
+dosya yazildi/silindi/degistirildi.
+
+Etki: `repair-post-sync-stale-target-files.ps1`/`.tests.ps1` degisti
+(genelleme + siradan-bagimsiz duzeltme), `check-windows-service-
+configs.mjs`ye yeni denetim eklendi, `deploy/windows-service/README.md`
+iki satiri guncellendi. Hicbir env/servis/DB/pCloud/dosya degisikligi
+YAPILMADI.
+
+Acik kalan: **B10 icin gercek `-Apply` hala calistirilmadi** -- arac
+artik 7 adayin HEPSini dogru tespit ediyor, ama gercek onarimi
+calistirmak ayri, acik bir kullanici onayi gerektiriyor (AGENTS.md
+SS7). 4 blocker (kaynakta hic olmayan dosyalar) icin de ayri bir karar/
+arastirma gerekiyor -- bu pakette YAPILMADI.

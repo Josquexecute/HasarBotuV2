@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$SourceRoot,
 
@@ -70,6 +70,8 @@ $ErrorActionPreference = 'Stop'
 
 $AdministratorSidValue = 'S-1-5-32-544'
 $ReportDirectory = 'C:\ProgramData\HasarBotu\migration-preflight'
+$LegacyForensicsSchemaVersion = 'hasarbotu-56aag629-hasar-version-forensics/1.0.0'
+$DiffForensicsSchemaVersion = 'pcloud-post-sync-diff-forensics/1.0.0'
 
 function Throw-SafeRepairError {
     param([string]$Code)
@@ -150,6 +152,112 @@ function Get-NormalizedJsonArray {
     return @($Value)
 }
 
+function Get-CandidateEntries56aag629 {
+    # Original HB-2026-130 candidate derivation, extracted verbatim --
+    # behavior UNCHANGED: a file is a candidate only if the report's own
+    # Classification map marks it 'source_current_valid'.
+    param($report)
+    $names = @($report.Classification.PSObject.Properties | Where-Object { $_.Value -eq 'source_current_valid' } | ForEach-Object { $_.Name })
+    if ($names.Count -eq 0) { Throw-SafeRepairError 'NO_SOURCE_CURRENT_VALID_ENTRIES' }
+    $normalizedFiles = Get-NormalizedJsonArray $report.Files
+    $fileEntries = @()
+    foreach ($name in $names) {
+        $entry = $normalizedFiles | Where-Object { $_.Name -eq $name } | Select-Object -First 1
+        if ($null -eq $entry) { Throw-SafeRepairError 'FORENSICS_REPORT_ENTRY_MISSING' }
+        $fileEntries += $entry
+    }
+    return , $fileEntries
+}
+
+function Get-CandidateEntriesDiffForensics {
+    # HB-2026-149 adapter for the general pcloud-post-sync-diff-forensics/1.0.0
+    # report schema (produced by pcloud-post-sync-diff-forensics.mjs), ADDED
+    # alongside the original 56AAG629-specific path above -- that path is
+    # untouched.
+    #
+    # Fail-closed classification, one report entry at a time:
+    #   - 'extra' (target has no source counterpart): NEVER a candidate --
+    #     always ClassificationBlocked. This tool only ever copies
+    #     source -> target; with no source there is nothing safe to copy,
+    #     and the file is never deleted or modified.
+    #   - 'metadata_only' (content identical, only mtime/flags differ):
+    #     OutOfScope -- not a data problem, never processed.
+    #   - 'content_mismatch': a candidate ONLY if ALL of the following hold
+    #     from the report's OWN recorded evidence (the generic per-file loop
+    #     further below re-verifies the SHA-256/pCloud state FRESH
+    #     regardless -- this gate is additional, not a replacement for it):
+    #       * Currency == 'source_current_target_superseded' (never the
+    #         reverse -- if source were the stale side, copying it over
+    #         target would destroy the correct content)
+    #       * PCloud.found is true and PCloud.TaskReferenceCount is 0
+    #       * PCloud.CurrentRow.size matches Source.Size (pCloud's own
+    #         bookkeeping agrees source is the live object)
+    #       * PCloud.Revisions contains a DISTINCT entry (different hash
+    #         than CurrentRow) whose size matches Target.Size -- proof that
+    #         target's content is a genuine prior pCloud revision, not
+    #         unrelated/random content ("revision kaniti")
+    #   - anything else (unrecognized classification, missing Source/Target/
+    #     PCloud data, or any of the above checks failing): ClassificationBlocked,
+    #     fail-closed -- never a candidate.
+    param($report)
+    $entries = Get-NormalizedJsonArray $report.Entries
+    $candidates = @()
+    $outOfScope = @()
+    $blocked = @()
+    foreach ($entry in $entries) {
+        $name = [string]$entry.RelativePath
+        $classification = [string]$entry.Classification
+
+        if ($classification -eq 'metadata_only') {
+            $outOfScope += [pscustomobject]@{ Name = $name; Reason = 'METADATA_ONLY_CONTENT_IDENTICAL' }
+            continue
+        }
+        if ($classification -eq 'extra') {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'TARGET_ONLY_NO_SOURCE_COUNTERPART' }
+            continue
+        }
+        if ($classification -ne 'content_mismatch') {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = "UNKNOWN_OR_UNSUPPORTED_CLASSIFICATION_$classification" }
+            continue
+        }
+        if ([string]$entry.Currency -ne 'source_current_target_superseded') {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'CURRENCY_NOT_SOURCE_CURRENT_TARGET_SUPERSEDED' }
+            continue
+        }
+        if ($null -eq $entry.Source -or $null -eq $entry.Target) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'SOURCE_OR_TARGET_DATA_MISSING' }
+            continue
+        }
+        if ($null -eq $entry.PCloud -or $entry.PCloud.found -ne $true) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'PCLOUD_FILE_NOT_FOUND' }
+            continue
+        }
+        if ([int64]$entry.PCloud.TaskReferenceCount -ne 0) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'PCLOUD_TASK_REFERENCE_FOUND' }
+            continue
+        }
+        if ($null -eq $entry.PCloud.CurrentRow -or [int64]$entry.PCloud.CurrentRow.size -ne [int64]$entry.Source.Size) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'PCLOUD_CURRENT_ROW_SIZE_MISMATCH_SOURCE' }
+            continue
+        }
+
+        $currentHash = [string]$entry.PCloud.CurrentRow.hash
+        $revisions = Get-NormalizedJsonArray $entry.PCloud.Revisions
+        $supersededMatch = @($revisions | Where-Object { [int64]$_.size -eq [int64]$entry.Target.Size -and [string]$_.hash -ne $currentHash })
+        if ($supersededMatch.Count -lt 1) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'NO_DISTINCT_SUPERSEDED_REVISION_MATCHING_TARGET' }
+            continue
+        }
+
+        $candidates += [pscustomobject]@{
+            Name   = $name
+            Source = [pscustomobject]@{ FullPath = [string]$entry.Source.FullPath; Sha256 = [string]$entry.Source.Sha256 }
+            Target = [pscustomobject]@{ FullPath = [string]$entry.Target.FullPath; Sha256 = [string]$entry.Target.Sha256 }
+        }
+    }
+    return [pscustomobject]@{ Candidates = @($candidates); OutOfScope = @($outOfScope); Blocked = @($blocked) }
+}
+
 function Test-FileNotLockedForWrite {
     param([string]$Path)
     try {
@@ -202,7 +310,7 @@ try {
     catch {
         Throw-SafeRepairError 'FORENSICS_REPORT_JSON_INVALID'
     }
-    if ($report.SchemaVersion -ne 'hasarbotu-56aag629-hasar-version-forensics/1.0.0') {
+    if ($report.SchemaVersion -ne $LegacyForensicsSchemaVersion -and $report.SchemaVersion -ne $DiffForensicsSchemaVersion) {
         Throw-SafeRepairError 'FORENSICS_REPORT_SCHEMA_INVALID'
     }
 
@@ -217,15 +325,24 @@ try {
     }
     $backupDirectoryFullPath = [System.IO.Path]::GetFullPath($BackupDirectory)
 
-    $names = @($report.Classification.PSObject.Properties | Where-Object { $_.Value -eq 'source_current_valid' } | ForEach-Object { $_.Name })
-    if ($names.Count -eq 0) { Throw-SafeRepairError 'NO_SOURCE_CURRENT_VALID_ENTRIES' }
-
-    $normalizedFiles = Get-NormalizedJsonArray $report.Files
-    $fileEntries = @()
-    foreach ($name in $names) {
-        $entry = $normalizedFiles | Where-Object { $_.Name -eq $name } | Select-Object -First 1
-        if ($null -eq $entry) { Throw-SafeRepairError 'FORENSICS_REPORT_ENTRY_MISSING' }
-        $fileEntries += $entry
+    $outOfScopeEntries = @()
+    $classificationBlockedEntries = @()
+    if ($report.SchemaVersion -eq $LegacyForensicsSchemaVersion) {
+        $fileEntries = Get-CandidateEntries56aag629 $report
+    }
+    else {
+        $adapterResult = Get-CandidateEntriesDiffForensics $report
+        $fileEntries = $adapterResult.Candidates
+        $outOfScopeEntries = $adapterResult.OutOfScope
+        $classificationBlockedEntries = $adapterResult.Blocked
+        # Zero candidates is a legitimate outcome (e.g. every entry turned
+        # out to be 'extra'/'metadata_only', or unproven) and must NOT throw
+        # -- only a structurally empty report (no Entries at all: neither a
+        # candidate, a blocker, nor an out-of-scope item) is treated as a
+        # malformed/wrong-file input.
+        if ($fileEntries.Count -eq 0 -and $outOfScopeEntries.Count -eq 0 -and $classificationBlockedEntries.Count -eq 0) {
+            Throw-SafeRepairError 'NO_ENTRIES_IN_FORENSICS_REPORT'
+        }
     }
 
     if ($Apply -and -not [System.IO.Directory]::Exists($backupDirectoryFullPath)) {
@@ -295,8 +412,25 @@ try {
                     if ([int64]$state.currentRow.size -ne [int64]$sourceInfo.Length -or [int64]$state.currentRow.mtime -ne $expectedMtimeUnix) {
                         $blockers.Add('PCLOUD_CURRENT_OBJECT_MISMATCH')
                     }
+                    # HB-2026-149: pCloud does not guarantee filerevision row
+                    # order (confirmed against real B10 data -- several files
+                    # return the CURRENT revision at index 0, not the
+                    # superseded one, when both revisions share the same
+                    # ctime). Checking index 0 only is a positional
+                    # assumption, not proof; check for ANY revision whose
+                    # size matches target's AND whose hash differs from the
+                    # current row's (a genuinely distinct, superseded
+                    # revision). Strictly more permissive than the old
+                    # index-0 check for cases that already passed it (index 0
+                    # matching was always itself "a revision matching"), and
+                    # strictly safer for the coincidental case where index 0
+                    # would have matched size while actually BEING the
+                    # current revision.
                     $revisions = @($state.revisions)
-                    if ($revisions.Count -lt 1 -or [int64]$revisions[0].size -ne [int64]([System.IO.FileInfo]::new($targetPath)).Length) {
+                    $targetSize = [int64]([System.IO.FileInfo]::new($targetPath)).Length
+                    $currentRevisionHash = [string]$state.currentRow.hash
+                    $supersededRevisionMatch = @($revisions | Where-Object { [int64]$_.size -eq $targetSize -and [string]$_.hash -ne $currentRevisionHash })
+                    if ($supersededRevisionMatch.Count -lt 1) {
                         $blockers.Add('TARGET_NOT_PRIOR_REVISION')
                     }
                 }
@@ -381,11 +515,14 @@ try {
         SchemaVersion = 'hasarbotu-stale-target-file-repair/1.0.0'
         Mode = if ($Apply) { 'apply' } else { 'preview' }
         GeneratedAtUtc = [DateTime]::UtcNow.ToString('o')
+        ForensicsReportSchemaVersion = [string]$report.SchemaVersion
         ForensicsReportPath = $reportFullPath
         ForensicsReportSha256 = $reportActualHash
         BackupDirectory = $backupDirectoryFullPath
         OverallStatus = $overallStatus
         Files = $results
+        ClassificationBlocked = @($classificationBlockedEntries | ForEach-Object { [ordered]@{ Name = $_.Name; Reason = $_.Reason } })
+        OutOfScope = @($outOfScopeEntries | ForEach-Object { [ordered]@{ Name = $_.Name; Reason = $_.Reason } })
     }
 
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -412,6 +549,8 @@ try {
             OverallStatus = $overallStatus
             AppliedCount = @($results | Where-Object { $_.Status -eq 'applied' }).Count
             BlockedCount = @($results | Where-Object { $_.Status -eq 'blocked' }).Count
+            ClassificationBlockedCount = $classificationBlockedEntries.Count
+            OutOfScopeCount = $outOfScopeEntries.Count
             Report = [ordered]@{ FileName = $fileName; Sha256 = $reportHash; AdminOnly = $true }
         } | ConvertTo-Json -Depth 4)
     }
@@ -420,7 +559,11 @@ try {
             OverallStatus = $overallStatus
             WouldApplyCount = @($results | Where-Object { $_.Status -eq 'would_apply' }).Count
             BlockedCount = @($results | Where-Object { $_.Status -eq 'blocked' }).Count
+            ClassificationBlockedCount = $classificationBlockedEntries.Count
+            OutOfScopeCount = $outOfScopeEntries.Count
             PerFile = @($results | ForEach-Object { [ordered]@{ Name = $_.Name; Status = $_.Status; Blockers = $_.Blockers } })
+            ClassificationBlocked = @($classificationBlockedEntries | ForEach-Object { [ordered]@{ Name = $_.Name; Reason = $_.Reason } })
+            OutOfScope = @($outOfScopeEntries | ForEach-Object { [ordered]@{ Name = $_.Name; Reason = $_.Reason } })
         } | ConvertTo-Json -Depth 6)
     }
     exit 0
