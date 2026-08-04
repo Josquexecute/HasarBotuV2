@@ -5255,3 +5255,33 @@ cevaplamasi ve gercek Apply'a acikca onay vermesi. Onaydan sonra bile
 Apply, D9 plan belgesindeki tam sirayla (once B3 cozumu, sonra build/
 deploy, sonra servis kurulumu, sonra secret/env, sonra baslatma) ayri
 bir paket olarak yurutulmeli.
+
+
+## 2026-08-04 - HB-2026-141: D9 planindaki dort acik onay sorusu kullaniciya soruldu ve cevaplandi (uygulama YOK)
+
+`docs/D9_OPERATIONAL_CUTOVER_PLAN.md` SS8'deki dort soru kullaniciya
+soruldu, hepsi onerilen (Recommended) secenekle cevaplandi:
+
+1. **B3 (install-services.ps1 tek-servis kurulum bosluğu):** once kucuk
+   bir duzeltme yapilacak (elle/manuel gecici yontem DEGIL) — File
+   Agent'a hic dokunulmadan yalniz API'yi kurabilen dar bir secici
+   parametre, ayri kucuk bir paket olarak.
+2. **API deploy dizini kopyalama:** kucuk bir yardimci script ile (elle
+   kopyalama DEGIL) — D6'nin File Agent icin kullandigi yonteme benzer.
+3. **Agent kaydi (Adim 4c):** uygulama aninda kullanicinin kendisi elle
+   yapacak (ajan otomasyonu DEGIL) — yonetici oturumu/sifresi
+   gerektirdigi icin.
+4. **Gercek Apply zamanlamasi:** ofis tamamen sakinken, onceden
+   planlanmis bir pencerede (simdi/yakin zamanda risk goze alarak
+   DEGIL).
+
+Kararlar plan belgesinin SS8'ine islendi. Talimat geregi bu paket
+icinde hicbir kod, env, servis veya gercek dagitim dosyasi
+DEGISTIRILMEDI — yalniz karar kaydi.
+
+Etki: Sifir kod/env/servis/dosya degisikligi.
+
+Acik kalan: (a) B3 duzeltmesi ve (b) API deploy yardimci script'i, HER
+IKISI kendi Plan->Onizle->Onay->Uygula->Dogrula donguleriyle, ayri
+paketler olarak; ardindan gercekten sakin bir pencerede kullanicinin
+acik onayiyla D9 plan belgesi SS4 Adim 3-6.

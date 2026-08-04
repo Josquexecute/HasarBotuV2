@@ -224,17 +224,30 @@ içinde HER ZAMAN mümkündür.
   okunmadı/yazdırılmadı/kaydedilmedi (yalnız pass dosyasının VARLIĞI
   doğrulandı).
 
-## 8. Onay bekleyen açık kararlar
+## 8. Onay bekleyen açık kararlar — CEVAPLANDI (2026-08-04)
 
-1. **B3 çözümü onaylanıyor mu** — `install-services.ps1`e tek-servis
-   seçici parametre eklenmesi ayrı, küçük bir paket olarak mı yapılsın?
-2. **API deploy dizini kopyalama yöntemi** — elle mi, yoksa yeni bir
-   küçük yardımcı betikle mi (D6'nın file-agent için yaptığı gibi)?
-3. **Agent kaydı (Adım 4c)** kimin admin hesabıyla, ne zaman yapılacak?
-4. **Gerçek Apply zamanlaması** — ofis mesaisi dışında mı planlanacak
-   (D8 zincirinde görüldüğü gibi gerçek ofis aktivitesi kısa aralıklarla
-   dosya hareketine yol açabiliyor; servis kesintisi/File Agent ilk
-   başlatması için sakin bir pencere tercih edilir)?
+Kullanıcı aşağıdaki dört soruyu yanıtladı. Bu, yalnız KARARLARIN
+kayıt altına alınmasıdır — hiçbiri bu paket içinde UYGULANMADI; her biri
+kendi ayrı paketinde, kendi Plan→Önizle→Onay→Uygula→Doğrula döngüsüyle
+yürütülecek.
 
-Bu dört sorunun cevabı olmadan gerçek `-Apply` bu depo kuralları
-gereği BAŞLATILMAZ.
+1. **B3 çözümü** → **Onaylandı: önce küçük bir düzeltme yapılacak.**
+   `install-services.ps1`e yalnız API'yi kurabilen dar bir seçici
+   parametre eklenmesi, File Agent'a hiç dokunulmadan, ayrı küçük bir
+   paket olarak yürütülecek (elle/manuel geçici yöntem yerine).
+2. **API deploy dizini kopyalama** → **Onaylandı: küçük bir yardımcı
+   script ile.** D6'nın File Agent için kullandığı yönteme benzer,
+   tekrarlanabilir bir script yazılacak (elle kopyalama yerine).
+3. **Agent kaydı (Adım 4c)** → **Onaylandı: uygulama anında kullanıcının
+   kendisi elle yapacak.** Yönetici oturumu/şifresi gerektirdiği için
+   otomasyona sokulmayacak.
+4. **Gerçek Apply zamanlaması** → **Onaylandı: ofis tamamen sakinken,
+   önceden planlanmış bir pencerede.** D8 zincirinde görülen kısa
+   aktivite patlamalarının riskini azaltmak için.
+
+Bu dört karar kayda geçti; ancak gerçek `-Apply` HÂLÂ bu paket içinde
+başlatılmadı. Sıradaki adımlar: (a) B3 düzeltmesi (ayrı küçük paket),
+(b) API deploy yardımcı script'i (ayrı küçük paket), her ikisi kendi
+Plan→Önizle→Onay→Uygula→Doğrula döngüsüyle; ancak bunlar tamamlanıp
+gerçekten sakin bir pencere geldiğinde, kullanıcının o anki açık onayıyla
+Adım 3-6 (§4) yürütülür.
