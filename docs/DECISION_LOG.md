@@ -6079,3 +6079,98 @@ karari. B10 cozulmeden Adim 0 tekrar PASS veremez, dolayisiyla D9
 cutover'in geri kalani (Adim 1-6, B9 admin bootstrap dahil)
 baslatilamaz. **Gercek Apply'a devam icin kullanicinin B10 hakkindaki
 karari bekleniyor.**
+
+## 2026-08-04 - HB-2026-149: B10 icin kesin allowlist DOGRU kaynaktan (Administrators-only forensics JSON + TAZE pCloud/SHA-256 yeniden dogrulama) cikarildi; HB-2026-148'deki "13 gercek fark" ifadesi DUZELTILDI; repair araci (HB-2026-130) BU rapor semasini kabul ETMIYOR
+
+Istek: "Preview exact allowlist'i yalniz Administrators-only forensics
+JSON'undan cikar; metin ozetine guvenme. Rapor 13 dosya derken
+listelenen kalemler 11 ediyor, iki dosyalik farki acikla. Yalniz
+source_current/target_stale oldugu pCloud current object ve SHA-256
+ile kanitlanan dosyalari repair adayi yap. Source'ta bulunmayan
+target-only dosyalari silme/degistirme; blocker olarak raporla.
+Content mismatch dosyasini revision kaniti olmadan aday yapma. Apply
+calistirma. Adaylar, blocker'lar ve kapsam disi dosyalari ayri
+sayilarla raporla ve dur."
+
+**Sayim duzeltmesi:** HB-2026-148'deki "13 gercek fark" ifadesi
+YANLIS cerceveliydi. Ham JSON'un `Entries` dizisi tam 13 kayit
+icerir (`Counts`: content_mismatch=7, metadata_only=2, extra=4 --
+identical=6987 bu diziye hic girmez) -- yani 13, TUM ozdes-olmayan
+kayit sayisidir, "gercek/endise verici fark" sayisi DEGIL. Onceki
+raporun maddelenen listesi (6 sifir-bayt + 1 icerik-farkli + 4
+yalniz-hedef = 11) ASLINDA DOGRUYDU; hata, "13"u bu 11'in basligi
+olarak kullanip 2 zararsiz metadata_only kaydini sessizce disarida
+birakmakti.
+
+**Yontem (ham JSON'dan, metin ozetinden DEGIL):**
+
+1. Administrators-only forensics JSON'u (`pcloud-post-sync-diff-
+   forensics-20260804T203501157Z-75ebf919.json`) dogrudan okundu, tum
+   13 `Entries` kaydi tek tek incelendi.
+2. HB-2026-130'un `repair-post-sync-stale-target-files.ps1` araci
+   BU rapora karsi `-Apply` OLMADAN calistirilmaya calisildi --
+   **GERCEK, yeni bir bulgu:** arac yalniz sabit kodlanmis
+   `SchemaVersion == 'hasarbotu-56aag629-hasar-version-forensics/
+   1.0.0'`i kabul ediyor (orijinal 56AAG629 olayina ozel format);
+   bu incelemenin genel `pcloud-post-sync-diff-forensics/1.0.0`
+   semasini `FORENSICS_REPORT_SCHEMA_INVALID` ile fail-closed
+   REDDETTI (exit 1). Arac kod DEGISTIRILMEDEN bu rapora karsi
+   calistirilamaz -- bu pakette DEGISTIRILMEDI.
+3. Bu nedenle, ayni kanit standardini (pCloud current object + taze
+   SHA-256) SAGLAYAN, jenerik ve zaten var olan salt-okunur
+   `pcloud-stale-target-file-state.mjs` araci, 11 endise verici
+   dosyanin HER BIRI icin TEK TEK, TAZE (rapor anindan degil, ŞİMDİ)
+   calistirildi: gercek pCloud DB'sinden guncel `currentRow` +
+   TAM `revisions` gecmisi + `taskReferenceCount`. Ayrica 7
+   content_mismatch dosyasinin kaynak+hedefi icin GERCEKTEN,
+   ŞİMDİ SHA-256 yeniden hesaplandi (`Get-FileHash`).
+   **Sonuc: hicbir surukleme yok** -- tum taze degerler forensics
+   anindakiyle BIREBIR ayni (ayni boyutlar, ayni pCloud hash'leri,
+   ayni `taskReferenceCount=0`).
+
+**Kesin siniflandirma (13 = 7 aday + 4 blocker + 2 kapsam disi):**
+
+- **7 REPAIR ADAYI** (`source_current`/`target_stale`, pCloud
+  `currentRow`.size TAZE kaynak SHA-256/boyutuyla eslesiyor, pCloud
+  `revisions` gecmisinde AYRI bir kayit TAZE hedef boyutuyla
+  eslesiyor, `taskReferenceCount=0`): bunlarin 6'si hedefte sifir
+  bayt (bos dosya SHA-256'siyla eslesiyor, pCloud'un revision
+  gecmisinde de AYNI sifir-boyutlu bir eski revizyon var); 1'i
+  (iki tarafta da DOLU icerik, farkli boyut) YALNIZ pCloud'un GERCEK
+  iki ayri revizyonu (63328B eski -> 280892B guncel, ctime sirasiyla
+  DOGRULANMIS) sayesinde aday sayildi -- bu, revision kaniti
+  OLMADAN aday sayilmayacak TEK "iki taraf da dolu" durumdu ve kanit
+  BULUNDU. Diger 3 sifir-bayt dosyada iki revizyon AYNI ctime'da
+  (sira ile ayirt edilemiyor) -- kanit onlarda pCloud'un `currentRow`
+  alaninin ACIKCA taze kaynak boyutuyla eslesmesine dayaniyor (bu da
+  gecerli ama farkli turde bir kanit; raporda ayrica belirtildi).
+- **4 BLOCKER** (`target_only_no_source_counterpart`): kaynakta
+  KARSILIGI yok, TAZE pCloud sorgusunda da `found:false`. Repair
+  adayi YAPILMADI, silinmedi/degistirilmedi -- yalniz blocker olarak
+  raporlandi.
+- **2 KAPSAM DISI** (`metadata_only`): icerik SHA-256'si IKI tarafta
+  da AYNI, yalniz mtime farkli -- veri sorunu degil, aksiyon
+  gerektirmiyor.
+
+Tam dosya/vaka yollari yine repo'ya alinmadi (HB-2026-123 ilkesi);
+kullaniciya sohbette tam detayla (dosya adlari + kanit turleri
+dahil) raporlandi.
+
+**Hicbir `-Apply` bu pakette calistirilmadi** (repair araci zaten
+schema uyumsuzlugu nedeniyle calisamadi; jenerik state-probe araci
+zaten salt-okunurdur). Hicbir dosya silinmedi/degistirilmedi/
+tasinmadi.
+
+Test sonucu: kod/tooling DEGISMEDI (yalniz gercek, zaten var olan
+salt-okunur araclarin -- ikisi PowerShell wrapper, biri jenerik
+Node state-probe'u 11 kez -- gercek makinede calistirilmasi + taze
+SHA-256 + docs).
+
+Etki: Hicbir env/servis/deploy/DB/pCloud/dosya degisikligi YAPILMADI.
+Yalniz bu DECISION_LOG kaydi.
+
+Acik kalan: **B10 hala cozulmedi** -- kullanicinin 7 repair adayi
+icin karari (HB-2026-130 araci mi genellestirilecek, yoksa yeni/ayri
+bir onarim yolu mu) ve 4 blocker'in nasil ele alinacagi (kaynakta hic
+olmayan dosyalar -- ayri bir arastirma konusu olabilir) bekleniyor.
+B10 cozulmeden D9 Adim 0 tekrar PASS veremez.

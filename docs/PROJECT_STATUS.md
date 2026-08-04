@@ -132,18 +132,23 @@ Son güncelleme: 2026-08-04
   `UserCount:0`, `AdminRoleSeeded:true`, sıfır blocker, sıfır satır
   yazıldı — gerçek `--apply` bu pakette çalıştırılmadı.
 - **D9 gerçek Apply denemesi #1 — Adım 0'da YENİ bir blocker (B10) ile
-  durduruldu (HB-2026-148, 2026-08-04):** kullanıcı B6'yı (açık onay)
-  verdi, gerçek cutover başlatıldı. Adım 0'ın sessizlik kısmı TEMİZ
-  geçti (689 sn, sıfır kesinti) ama nihai tam kaynak==hedef SHA-256
-  karşılaştırması UYUŞMADI. Salt-okunur forensics ile izole edildi:
-  6996/7000 dosyadan 6987 özdeş, **13 gerçek fark** (3 vaka
-  klasöründe) — 6 dosya hedefte sıfır bayt, 1 dosya iki tarafta da
-  farklı içerik, 4 dosya yalnız hedefte. Talimat gereği Adım 1'e HİÇ
-  geçilmedi — hiçbir env/servis/deploy/DB değişikliği denenmedi,
-  rollback edilecek bir şey yoktu. Tam dosya/vaka detayı yalnız
+  durduruldu (HB-2026-148/149, 2026-08-04):** kullanıcı B6'yı (açık
+  onay) verdi, gerçek cutover başlatıldı. Adım 0'ın sessizlik kısmı
+  TEMİZ geçti (689 sn, sıfır kesinti) ama nihai tam kaynak==hedef
+  SHA-256 karşılaştırması UYUŞMADI. Ham Administrators-only forensics
+  JSON'undan (metin özetine güvenilmeden) + 11 dosya için TAZE
+  pCloud DB sorgusu/SHA-256 yeniden hesaplamasıyla (sıfır sürüklenme)
+  kesin sonuç: **7 repair adayı** (kanıtlanmış `source_current`/
+  `target_stale`, 3 vaka klasöründe) + **4 blocker** (kaynakta
+  karşılığı yok, dokunulmadı) + **2 kapsam dışı** (zararsız metadata
+  farkı). `repair-post-sync-stale-target-files.ps1` (HB-2026-130)
+  yalnız kendi eski, olaya özel şemasını kabul ediyor — bu raporu
+  reddediyor (kod değişikliği gerektirir, yapılmadı). Talimat gereği
+  Adım 1'e HİÇ geçilmedi — hiçbir env/servis/deploy/DB/dosya
+  değişikliği denenmedi. Tam dosya/vaka detayı yalnız
   Administrators-only+hash'li raporda; kullanıcıya sohbette tam
   raporlandı, repo'ya (HB-2026-123 ilkesiyle) alınmadı.
-- Kalan: **B10 (post-sync içerik sapması, 13 dosya/3 vaka klasörü) —
+- Kalan: **B10 (7 repair adayı + 4 blocker, 3 vaka klasörü) —
   kullanıcının kararı bekleniyor.** B9 araç olarak TAMAMLANDI; B2
   (build tazeliği) Apply öncesi gerçek `npm run build:packages` ile
   ayrıca kesinleştirilmeli. B10 çözülmeden Adım 0 tekrar PASS veremez,
