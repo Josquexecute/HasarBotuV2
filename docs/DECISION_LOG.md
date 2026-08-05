@@ -6451,3 +6451,32 @@ onarilmis ve dogrulanmis durumda). 4 target-only dosyanin nasil ele
 alinacagi hala kullanicinin karari. Gercekten sakin bir pencerede
 Adim 0'in tekrar denenmesi ve D9'un geri kalani ayri, acik bir
 kullanici talebini bekliyor.
+
+## 2026-08-05 - HB-2026-154: D9 Adim 0 tek seferlik son kez calistirildi -- sessizlik TEMIZ GECTI (907sn, sifir reset, ofis gercekten sakin) ama SOURCE_TARGET_HASH_MISMATCH_AT_PASS ile hala BLOCKED
+
+Istek: "Ofis tamamen sakin. D9 Adim 0 gate'ini yalniz bir kez
+calistir. PASS olursa dur ve sonucu raporla; henuz Adim 1'e gecme.
+BLOCKED olursa tekrar deneme baslatma."
+
+Sonuc: `ObservedQuietSeconds=907` (>=600), `WindowResetCount=0` --
+sessizlik kismi ilk kez TAM TEMIZ gecti, ofis GERCEKTEN sakin.
+Blocker artik zamanlama degil: **`SOURCE_TARGET_HASH_MISMATCH_AT_PASS`**.
+Talimat geregi HICBIR yeniden deneme baslatilmadi, ek tani araci
+(diff-forensics vb.) CALISTIRILMADI -- yalniz gate'in kendi sonucu
+raporlandi.
+
+En olasi aciklama (yeni bir arastirma yapilmadan, mevcut kanittan):
+4 target-only dosya (KTT.jpg + OLAY YERI 1/2/3.jpg, HB-2026-152'de
+kokeni cozulmustu) bilerek dokunulmadan birakildi -- bunlar hedefte
+var oldugu surece tam agac kaynak==hedef esitligi yapisal olarak
+PASS veremez, ofis sessizligiyle ILGISIZ. Bu, DOGRULANMADI (yeni bir
+tarama calistirilmadi) -- yalniz en olasi aciklama olarak not edildi.
+
+Test sonucu/Etki: Kod DEGISMEDI, yalniz gate'in kendisi bir kez
+calistirildi + bu kayit. Hicbir dosya degisti. **D9 Adim 1'e
+GECILMEDI.**
+
+Acik kalan: D9 Adim 0 hala PASS vermiyor. 4 target-only dosya icin
+kullanici karari (silinsin mi, ayri arastirilsin mi, yoksa Adim 0
+mekanizmasi bu dosyalarin varligini tolere edecek sekilde mi
+degerlendirilsin) D9'un PASS verebilmesi icin onkosul haline geldi.
