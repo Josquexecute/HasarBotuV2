@@ -6480,3 +6480,55 @@ Acik kalan: D9 Adim 0 hala PASS vermiyor. 4 target-only dosya icin
 kullanici karari (silinsin mi, ayri arastirilsin mi, yoksa Adim 0
 mekanizmasi bu dosyalarin varligini tolere edecek sekilde mi
 degerlendirilsin) D9'un PASS verebilmesi icin onkosul haline geldi.
+
+## 2026-08-05 - HB-2026-155: Taze salt-okunur diff izolasyonu -- "yalniz 4 bilinen target-only dosya kaldi" ONERMESI YANLIS cikti; 4 dosya hala aynen orada ama TOPLAM 27 fark (5 extra + 17 content_mismatch + 5 metadata_only), en az 6 farkli vaka klasorunde -- temizlik onizleme araci bu nedenle YAZILMADI/CALISTIRILMADI
+
+Istek: "Adim 0 hash farkini salt-okunur exact diff ile izole et.
+Farklarin yalniz daha once dogrulanan 4 target-only dosya oldugunu
+kanitla; baska missing/content_mismatch/metadata farki varsa ayri
+raporla. Yalniz bu 4 dosya kaldiysa, sync koku disinda admin-only
+hash'li yedek + kontrollu hedef temizligi icin preview hazirla. Apply
+yapma, gate'i tekrar calistirma ve D9 Adim 1'e gecme."
+
+Yontem: Salt-okunur `run-pcloud-post-sync-diff-forensics.ps1` taze
+calistirildi (gate DEGIL -- sessizlik gerektirmez).
+
+**Sonuc: onerme YANLIS.** 4 bilinen dosya (HB-2026-152'de kokeni
+cozulen, ayni vaka klasorundeki KTT.jpg + OLAY YERI 1/2/3.jpg) hala
+AYNEN orada, hash'leri BIREBIR ONCEKIYLE ayni -- bu kisim DOGRULANDI.
+Ama bunlar TEK fark DEGIL:
+
+- **extra: 5** (4 bilinen + **1 YENI**, tamamen farkli bir vaka
+  klasorunde, AYNI "KTT.jpg" adiyla -- muhtemelen ayni rename-kalintisi
+  deseni).
+- **content_mismatch: 17** -- 6'si bilinen "hedef bos dosya" deseninde
+  (B10 ile ayni imza), **11'i GERCEKTEN farkli icerik** (iki tarafta
+  da dolu ama BASKA byte'lar) -- bu, B10'da hic gorulmemis YENI bir
+  desen, en az 3 ayri vaka klasorunde (`OLAY YERI` alt klasorleri
+  dahil).
+- **metadata_only: 5** (2 bilinen + 3 yeni, ayni vaka klasorunde).
+
+**Toplam 27 fark, en az 6 farkli vaka klasorunde.** Kaynak/hedef dosya
+sayisi dunki taramadan bu yana **+667/+668** artmis -- yani ofis
+GERCEKTEN cok aktif is uretmis (yeni vaka/fotograf), HB-2026-154'teki
+"907 saniye sessizlik" yalniz o ANDA hareketin durdugunu gosteriyordu,
+BIRIKMIS/YAYGIN farklarin cozuldugu anlamina gelmiyordu.
+
+**Bu nedenle temizlik onizleme araci (backup+delete) bu pakette
+YAZILMADI ve CALISTIRILMADI** -- talimatin acik kosulu ("yalniz bu 4
+dosya kaldiysa") saglanmadi. Gate tekrar calistirilmadi, D9 Adim 1'e
+gecilmedi, hicbir dosyaya dokunulmadi.
+
+Kesin dosya/vaka yollari repo'ya alinmadi (HB-2026-123 ilkesi); tam
+liste yalniz Administrators-only+hash'li rapordadir
+(`pcloud-post-sync-diff-forensics-20260805T203131102Z-3768a0a3.json`);
+kullaniciya sohbette tam detayla raporlandi.
+
+Test sonucu/Etki: Kod DEGISMEDI, yalniz gercek makinede bir salt-okunur
+arac calistirildi + bu kayit. Hicbir dosya degisti.
+
+Acik kalan: 27 farkin (5 extra + 17 content_mismatch + 5 metadata_only,
+6+ vaka klasoru) nasil ele alinacagi -- toplu mu, vaka vaka mi, hangi
+alt kume once -- gercek bir urun/operasyon karari, kullaniciya
+birakildi. D9 Adim 0 bu kapsamli gercek fark cozulmeden PASS
+veremeyecek.
