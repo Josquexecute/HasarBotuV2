@@ -6694,3 +6694,88 @@ Acik kalan: **Gercek `-Apply` (silme) hala calistirilmadi** -- ayri,
 acik bir kullanici onayi gerektiriyor (AGENTS.md SS7). Onaylanip
 calistirildiktan sonra D9 Adim 0'in taze tekrar calistirilmasi, geriye
 yalniz 5 benign metadata_only kalip kalmadigini gosterecek.
+
+## 2026-08-06 - HB-2026-158: 5 target-only dosya icin GERCEK cleanup -Apply calistirildi -- 5/5 basarili, sifir surukleme/blocker; bagimsiz dogrulama sirasinda ARACLA ILGISIZ, GERCEK ve ESZAMANLI bir pCloud silme olayi bulundu (4 karsilik dosya bagimsiz olarak kayboldu); D9 Adim 0 tek seferlik BLOCKED (gercek fark, zamanlama degil)
+
+Istek: "Preview'de dogrulanan exact 5 target-only extra dosyanin
+gercek cleanup -Apply islemini onayliyorum. Apply oncesi her dosyada
+forensics raporu/hash'i, pCloud found:false, taskReferenceCount=0,
+kilit yoklugu ve rename_artifact/stale_duplicate karsilik hash'ini
+taze dogrula. Yalniz bu 5 dosyayi: sync koku disinda Administrators-
+only, hash manifestli yedekle, hedeften sil, silindigini/yedegin
+saglamligini/dogru konumdaki guncel karsiliklarin degismedigini
+bagimsiz dogrula. 5 metadata_only kayda ve baska hicbir dosyaya
+dokunma. Drift veya blocker varsa silme baslatma/durdur. Basarili
+cleanup sonrasi D9 Adim 0 gate'ini yalniz bir kez salt-okunur
+calistir. PASS/BLOCKED sonucunu raporla; D9 Adim 1'e henuz gecme.
+Commit et ve dur."
+
+**1) Apply ONCESI taze dogrulama (5/5 dosya):** canli SHA-256
+karsilik-hash capraz kontrolu (5/5 MATCH), canli kilit kontrolu (5/5
+kilitli degil), canli pCloud yeniden sorgusu (5/5 `found:false`),
+taze global kuyruk durumu (`getPcloudTaskState`, 6 tablo toplami:
+SIFIR), aracin kendi taze onizlemesi (`WouldDeleteCount=5,
+BlockedCount=0`, oncekiyle BIREBIR ayni, surukleme yok). Kosul
+saglandigi icin GERCEK `-Apply` calistirildi.
+
+**2) Sonuc: `OverallStatus:"applied"`, DeletedCount=5, BlockedCount=0.**
+Her dosya icin: hedef Administrators-only+hash'li yedeklendi (sync
+kokunun disinda), `[System.IO.File]::Delete` ile silindi, silme
+sonrasi bagimsiz dogrulandi. Tam sonuc Administrators-only+hash'li
+rapora yazildi (`target-only-orphan-cleanup-20260805T210258935Z-
+11f42c64.json`).
+
+**3) Bagimsiz dogrulama -- kismen BEKLENDIGI GIBI, kismen ONEMLI bir
+YENI bulguyla:**
+- **5/5 hedef GERCEKTEN silindi** (`Test-Path=false`).
+- **5/5 yedek dosyasi mevcut, hash BIREBIR orijinal icerikle ayni,
+  Administrators-only ACL uygulanmis, yedek dizini sync kokunun
+  TAMAMEN disinda.**
+- **Karsilik dosyalar (5 adet, "dogru konumdaki guncel kopyalar"):
+  yalniz 1/5 dogrulanabildi (degismedi). Digeri 4/5 -- bagimsiz
+  dogrulama SIRASINDA, bu ARACIN HIC DOKUNMADIGI dosyalarin
+  KENDILERI de ARTIK YOK oldugu bulundu.** Bu, bu aracin bir hatasi
+  DEGIL -- kanit: (a) bu 4 dosya bu aracin ADAY LISTESINDE HIC
+  yoktu (yalniz 5 orphan islendi, baska hicbir dosyaya yazma/silme
+  cagrisi yapilmadi -- kod incelemesiyle ve testlerle zaten
+  kanitlanmis), (b) bu 4 dosya AYNI ANDA KAYNAKTAN (`P:\...`) DA
+  kayboldu -- bu arac KAYNAGA HICBIR ZAMAN yazmaz/silmez, dolayisiyla
+  bu aracin sebep olmasi YAPISAL olarak imkansiz, (c) pCloud'un canli
+  `file` tablosunda bu 4 dosyanin ESKI fileId'leri ARTIK HIC yok
+  (yeniden adlandirilmis/tasinmis DEGIL -- GERCEKTEN silinmis), (d)
+  ayni anda pCloud kuyrugu tamamen bos (`pendingTaskCount=0`) --
+  yani bu, TAMAMLANMIS, GERCEK, bagimsiz bir pCloud silme olayidir.
+  **Sonuc: bu, bu paketin disinda, gercek isletmede/pCloud
+  hesabinda ESZAMANLI olarak gerceklesen, bu araçla ILGISIZ bir
+  olaydir** -- muhtemelen operatorun kendisi ayni vaka klasorlerinde
+  gercek zamanli calisiyordu.
+- **5 metadata_only kayit: 4/5 DEGISMEDI (dogrulandi), 1/5 (yukaridaki
+  ayni bagimsiz silme dalgasinin bir parcasi olarak) ARTIK YOK.** Bu
+  arac bu kaydi HICBIR ZAMAN islemedi (metadata_only siniflandirmasi
+  bu aracin tasarim geregi HIC ilgilenmedigi bir kategori) -- kayip,
+  yukaridaki ayni bagimsiz olayin sonucu.
+
+Kesin dosya/vaka yollari ve tam pCloud fileId degerleri repo'ya
+ALINMADI (HB-2026-123 ilkesi); tam detay kullaniciya sohbette
+raporlandi.
+
+**4) D9 Adim 0 gate'i TEK SEFERLIK calistirildi (talimat geregi,
+tekrar deneme YOK):** **HALA BLOCKED**, ama sessizlik kismi bu kez
+TAM TEMIZ gecti (`ObservedQuietSeconds=658`, `WindowResetCount=0` --
+yukaridaki bagimsiz olay coktan yerlesmis/durulmus durumda). Blocker
+`SOURCE_TARGET_HASH_MISMATCH_AT_PASS` -- gercek bir icerik farki,
+zamanlama sorunu DEGIL. Talimat geregi D9 Adim 1'e GECILMEDI.
+
+Test sonucu/Etki: Bu pakette kod/tooling DEGISMEDI (HB-2026-157'de
+zaten 6/6 test + statik denetimle dogrulanmisti); bu paket aracin
+GERCEK, uretim verisine karsi ILK gercek `-Apply` (silme)
+calistirmasidir. Hicbir env/servis/pCloud ayari degismedi.
+
+Acik kalan: D9 Adim 0 hala PASS vermiyor -- kalan gercek fark artik
+(a) HB-2026-157'de kanitlanan 5 orphan'in TAMAMI cozuldu, (b) bu
+pakette bagimsiz olarak bulunan, bu isin DISINDA GERCEKLESEN yeni bir
+pCloud silme olayinin (4-5 dosya, ayni 2 vaka klasoru) yansimasi.
+Bu YENI, ayri olay icin herhangi bir aksiyon bu pakette ALINMADI --
+kapsam disi, kullanicinin kendi bilgisine/degerlendirmesine
+birakildi. D9'un geri kalani (Adim 1-6) ayri, acik bir kullanici
+talebini bekliyor.

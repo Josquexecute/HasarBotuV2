@@ -170,21 +170,29 @@ Son güncelleme: 2026-08-04
   artmış, gerçek yoğun iş akışını yansıtıyor. Orijinal (bozuk) içerik
   Administrators-only+hash'li yedeklerde korunuyor. pCloud/env/servis
   hiç değişmedi.
-- **B10 cleanup aracı hazır (HB-2026-157, 2026-08-05):** kalan 5
-  `extra` dosya salt-okunur köken doğrulamasıyla kesin `rename_artifact`
-  (2)/`stale_duplicate` (3) olarak kanıtlandı — içerik+oluşturma
-  zamanı, aynı vakada hâlâ yaşayan güncel bir kardeş dosyayla birebir
-  eşleşiyor. Yeni `cleanup-post-sync-target-only-files.ps1` (+6 test)
-  yazıldı — sync kökü dışında admin-only+hash'li yedek + silme +
-  bağımsız doğrulama. Gerçek makinede yalnız önizleme:
-  `WouldDeleteCount=5, BlockedCount=0`. Gerçek silme Apply'ı hâlâ
-  çalıştırılmadı.
-- Kalan: **5 extra dosyanın silinmesi için kullanıcı onayı** — sonra
-  yalnız 5 benign `metadata_only` fark kalacak. B9 araç olarak
+- **B10 ÇÖZÜLDÜ — 22/22 dosya gerçek makinede işlendi (HB-2026-157/158,
+  2026-08-05–06):** kalan 5 `extra` dosya salt-okunur köken
+  doğrulamasıyla kesin `rename_artifact`(2)/`stale_duplicate`(3)
+  kanıtlandı; yeni `cleanup-post-sync-target-only-files.ps1` (+6 test)
+  yazıldı. Kullanıcının açık onayıyla gerçek silme `-Apply`
+  çalıştırıldı: **5/5 başarılı, sıfır blocker** — sync kökü dışında
+  Administrators-only+hash'li yedeklendi, silindi, bağımsız
+  doğrulandı. **B10 artık tamamen çözüldü (17 repair + 5 cleanup).**
+  **Önemli, B10'dan bağımsız yeni bulgu:** doğrulama sırasında, bu
+  araçların hiç dokunmadığı 4-5 dosyanın (2 vaka klasöründeki "doğru
+  konum" kopyaları) eş zamanlı ve bağımsız olarak gerçek pCloud
+  tarafında silindiği bulundu (kaynaktan da kayıp, pCloud'un canlı
+  tablosunda eski fileId'ler tamamen yok) — bu araçların sebep olması
+  yapısal olarak imkânsız (kaynağa hiç yazmazlar, bu dosyalar aday
+  listesinde hiç yoktu); muhtemelen operatör eş zamanlı gerçek iş
+  yapıyordu. Hiçbir aksiyon alınmadı.
+- Kalan: D9 Adım 0 tek seferlik yeniden çalıştırıldı — sessizlik TAM
+  TEMİZ geçti (658 sn, sıfır reset) ama hâlâ
+  `SOURCE_TARGET_HASH_MISMATCH_AT_PASS` ile BLOCKED (artık B10
+  değil, muhtemelen yukarıdaki yeni olayın yansıması). B9 araç olarak
   TAMAMLANDI; B2 (build tazeliği) Apply öncesi gerçek `npm run
-  build:packages` ile ayrıca kesinleştirilmeli. D9 Adım 0'ın taze
-  tekrar çalıştırılması ve D9'un geri kalanı (Adım 1-6) ayrı, açık
-  bir kullanıcı talebini bekliyor.
+  build:packages` ile ayrıca kesinleştirilmeli. D9'un geri kalanı
+  (Adım 1-6) ayrı, açık bir kullanıcı talebini bekliyor.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
