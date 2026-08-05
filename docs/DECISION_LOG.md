@@ -6254,3 +6254,71 @@ artik 7 adayin HEPSini dogru tespit ediyor, ama gercek onarimi
 calistirmak ayri, acik bir kullanici onayi gerektiriyor (AGENTS.md
 SS7). 4 blocker (kaynakta hic olmayan dosyalar) icin de ayri bir karar/
 arastirma gerekiyor -- bu pakette YAPILMADI.
+
+## 2026-08-05 - HB-2026-151: B10 icin GERCEK -Apply calistirildi -- 7/7 dosya basariyla onarildi, sifir surukleme/blocker, 4 target-only + 2 metadata-only DOKUNULMADAN kaldi; bagimsiz olarak dogrulandi
+
+Istek: "Preview'de dogrulanan exact 7 dosya icin gercek -Apply
+onaylidir. Taze hash/revision/task/lock dogrulamasindan sonra
+admin-only yedek al, atomik replace yap ve kaynak=hedef SHA-256
+esitligini bagimsiz dogrula. 4 target-only ve 2 metadata-only kayda
+dokunma. Drift veya blocker olursa dur. D9 cutover'a devam etme;
+yalniz repair sonucunu raporla."
+
+Yontem: Ayni gercek B10 forensics raporuna
+(`pcloud-post-sync-diff-forensics-20260804T203501157Z-75ebf919.json`,
+hash `ca4c1983...`) karsi `repair-post-sync-stale-target-files.ps1
+-Apply` (HB-2026-150'de genellestirilen adapter yolu) GERCEKTEN
+calistirildi. Arac, 7 adayin HER BIRI icin taze (rapor anindan degil,
+o an) yeniden dogrulama yapti: kaynak/hedef SHA-256 hala rapor
+anindakiyle ayni, pCloud'da sifir task/fstask referansi, pCloud'un
+current satiri kaynakla eslesiyor, `revisions` gecmisinde AYRI
+(current'tan farkli hash'li) bir kayit hedefin boyutuyla eslesiyor,
+hedef kilitli degil, kaynak JPEG butunlugu saglam -- hepsi 7/7 icin
+GECTI. Sonra HER dosya icin: hedefi Administrators-only+hash'li
+yedekle, kaynagi ayni birimde stage edip hash/JPEG dogrula, atomik
+`[System.IO.File]::Replace`, sonra hedef SHA-256'sini kaynakla yeniden
+esitle.
+
+**Sonuc: `OverallStatus:"applied"`, AppliedCount=7, BlockedCount=0,
+ClassificationBlockedCount=4, OutOfScopeCount=2.** Sifir surukleme,
+sifir blocker -- 7 adayin TAMAMI basariyla onarildi. Tam sonuc
+Administrators-only+hash'li rapora yazildi
+(`stale-target-repair-20260805T055654714Z-b3a054d7.json`).
+
+**Bagimsiz dogrulama (aracin kendi raporuna GUVENMEDEN, ayrica gercek
+makinede):**
+- 7 hedef dosyanin TAMAMI canli SHA-256 ile yeniden hash'lendi --
+  hepsi kaynagin SHA-256'siyla BIREBIR eslesiyor (7/7 MATCH).
+- 4 target-only (blocker) dosyanin TAMAMI canli SHA-256 ile yeniden
+  hash'lendi -- hepsi Apply ONCESINDEKI degerle BIREBIR ayni (7/7
+  degil, 4/4 UNCHANGED) -- silinmedi/degistirilmedi.
+- Yedek dizininde tam 7 `.superseded.bak` dosyasi var (fazla veya
+  eksik yok).
+- 2 metadata-only kayit adapter tarafindan hic islenmedi (kapsam disi,
+  `ClassificationBlocked`/`OutOfScope` mekanizmasiyla yapisal olarak
+  hic dokunulamaz).
+
+Kesin dosya/vaka yollari yine repo'ya alinmadi (HB-2026-123 ilkesi);
+tam liste yalniz admin-only rapordadir.
+
+Test sonucu: bu pakette kod/tooling DEGISMEDI (HB-2026-150'de zaten
+11/11 test + statik denetimle dogrulanmisti); bu paket yalniz aracin
+GERCEK, uretim verisine karsi tek seferlik `-Apply` calistirmasidir.
+
+Etki: **7 gercek musteri dosyasi** (`C:\HasarBotuStorage\BARAN GLOBAL
+EKSPERTIZ` altinda, 3 vaka klasorunde) pCloud kaynagiyla (P:\) BIREBIR
+ayni hale getirildi. Bozuk/eksik (sifir bayt veya eski surum) hedef
+icerik, GERCEK ve dogrulanmis kaynak icerikle degistirildi. Orijinal
+(bozuk) hedef icerik, Administrators-only+hash'li 7 ayri yedek dosyasi
+olarak `C:\ProgramData\HasarBotu\migration-preflight\pre-repair-backups\
+20260805T055648793Z\` altinda KORUNUYOR -- kalici degil, geri
+alinabilir. pCloud ayari, sync eslemesi, env, servis HIC degismedi.
+Talimat geregi **D9 cutover'a (Adim 0-6) DEVAM EDILMEDI** -- yalniz bu
+onarim sonucu raporlandi.
+
+Acik kalan: **4 target-only dosya** (kaynakta hic karsiligi olmayan,
+ayni vaka klasorunde) hala cozulmemis, ayri arastirma/karar
+gerektiriyor -- bu pakette dokunulmadi. D9 Adim 0'in taze
+yeniden calistirilmasi (bu 7 dosyanin artik esit oldugunu, kalan
+gercek sapmanin yalniz bu 4 dosyaya indigini dogrulamak icin) ve
+D9'un geri kalani ayri, acik bir kullanici talebini bekliyor.

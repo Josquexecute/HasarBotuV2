@@ -161,11 +161,19 @@ Son güncelleme: 2026-08-04
   makinede kanıtlandı (yalnız önizleme, `-Apply` verilmeden):**
   `WouldApplyCount=7, BlockedCount=0, ClassificationBlockedCount=4,
   OutOfScopeCount=2` — sıfır dosya değişti.
-- Kalan: **B10 gerçek onarım Apply'ı (7 aday) — kullanıcının kararı
-  bekleniyor.** B9 araç olarak TAMAMLANDI; B2 (build tazeliği) Apply
-  öncesi gerçek `npm run build:packages` ile ayrıca kesinleştirilmeli.
-  B10 çözülmeden Adım 0 tekrar PASS veremez, D9'un geri kalanı (Adım
-  1-6) başlatılamaz.
+- **B10 — 7/7 dosya GERÇEKTEN onarıldı (HB-2026-151, 2026-08-05):**
+  kullanıcının açık onayıyla gerçek `-Apply` çalıştırıldı. Sıfır
+  sürüklenme/blocker; 4 target-only + 2 metadata-only dosya
+  dokunulmadan kaldı (bağımsız SHA-256 yeniden hash'lemeyle
+  doğrulandı). Orijinal (bozuk) içerik 7 ayrı Administrators-only+
+  hash'li yedekte korunuyor. pCloud/env/servis değişmedi. Talimat
+  gereği D9 cutover'a (Adım 0-6) devam edilmedi.
+- Kalan: **4 target-only dosya** (kaynakta karşılığı yok, aynı vaka
+  klasöründe) ayrı, çözülmemiş bir konu. B9 araç olarak
+  TAMAMLANDI; B2 (build tazeliği) Apply öncesi gerçek `npm run
+  build:packages` ile ayrıca kesinleştirilmeli. D9 Adım 0'ın taze
+  tekrar çalıştırılması ve D9'un geri kalanı (Adım 1-6) ayrı, açık
+  bir kullanıcı talebini bekliyor.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
