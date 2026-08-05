@@ -6322,3 +6322,80 @@ gerektiriyor -- bu pakette dokunulmadi. D9 Adim 0'in taze
 yeniden calistirilmasi (bu 7 dosyanin artik esit oldugunu, kalan
 gercek sapmanin yalniz bu 4 dosyaya indigini dogrulamak icin) ve
 D9'un geri kalani ayri, acik bir kullanici talebini bekliyor.
+
+## 2026-08-05 - HB-2026-152: D9 Adim 0 taze yeniden calistirildi (salt-okunur) -- 7 onarilan dosya DOGRULANDI (artik identical), 4 target-only dosyanin KOKENI cozuldu, ama AYRI, YENI bir gercek fark (3 dosya, farkli vaka) canli olarak bulundu
+
+Istek: "D9 Adim 0'i yalniz salt-okunur yeniden calistir. 7 onarilan
+dosyada kaynak=hedef SHA-256 esitligini ve kalan tum farklarin yalniz
+4 target-only dosya oldugunu dogrula. Baska fark yoksa 4 target-only
+dosya icin exact path, olusturma/degistirme zamani, hash, EXIF/
+metadata, NTFS owner/ACL, pCloud DB/revision gecmisi ve olasi kaynak
+vaka iliskisini salt-okunur incele. Silme, tasima veya degistirme
+yapma. D9 Adim 1'e gecme."
+
+**1) Adim 0 (gate) yeniden calistirildi:** `PCLOUD_PENDING_TASKS_FOUND`
+ile BLOCKED (`ObservedQuietSeconds=16`, `WindowResetCount=3`) --
+sessizlik hic saglanamadi. Sebep asagida (3) ile aciklaniyor: gercek,
+canli pCloud aktivitesi var.
+
+**2) 7 onarilan dosya: DOGRULANDI.** Taze salt-okunur
+`run-pcloud-post-sync-diff-forensics.ps1` (gate'in aksine sessizlik
+gerektirmez) calistirildi -- HB-2026-151'de onarilan 7 dosyanin
+HICBIRI artik mismatch listesinde YOK (hepsi "identical"). Onceki
+vaka klasorundeki tek kalintilar hala ayni 4 `extra` + 2
+`metadata_only`.
+
+**3) YENI, ayri, canli bir fark bulundu -- "yalniz 4 target-only"
+varsayimi artik DOGRU DEGIL:** Ayni taze taramada, TAMAMEN FARKLI bir
+vaka klasorunde (Temmuz 2026) **3 YENI `content_mismatch` girdisi**
+bulundu -- hedef SHA-256'lari BOS DOSYA hash'i (`e3b0c442...`),
+BIREBIR B10'daki orijinal 7 dosyanin deseniyle ayni ("yazma
+tamamlanmamis gibi"). `PCloudTaskReferenceCount=0` her ucu icin de,
+ama kaynak/hedef dosya sayisi dunden bugune +10/+10 artmis (canli ofis
+aktivitesi) -- bu 3 dosya buyuk ihtimalle SU AN/yakin zamanda
+yuklenmekte/senkronize olmakta ve Adim 0'in `PCLOUD_PENDING_TASKS_
+FOUND` blockeri BUNUNLA TUTARLI. Bu, B10'dan TAMAMEN AYRI, YENI bir
+gercek bulgu -- bu pakette HICBIR aksiyon alinmadi (silme/tasima/
+degistirme YOK), kullaniciya sohbette raporlandi.
+
+**4) 4 target-only dosyanin KOKENI, salt-okunur incelemeyle
+COZULDU:**
+- 1 dosya: hedefteki icerigi VE `CreationTimeUtc`'si, kaynakta HALA
+  VAR OLAN baska bir dosyayla (ayni vaka klasorunde, `metadata_only`
+  olarak zaten bilinen) BIREBIR ayni -- yeniden adlandirma sonrasi
+  eski adin hedefte temizlenmemis kalintisi oldugu sonucuna varildi.
+- 3 dosya: pCloud'un GERCEK `file`/`filerevision` tablolarinda,
+  AYNI vaka klasorunun standart bir ALT klasorunde (AGENTS.md SS5'teki
+  sabit alt klasor setinden biri, `EVRAK`'in KARDESI) HALEN VE
+  DOGRU sekilde senkronize halde, TAM AYNI boyutlarla bulundu --
+  yani bu 3 dosya kaybolmadi/silinmedi, sadece YANLIS alt klasorde
+  (muhtemelen ilk yuklemede) birakilmis kalinti kopyalar; dogru
+  konumdaki guncel kopyalar zaten "identical" olarak sayiliyor.
+- NTFS owner/ACL: 4 dosyanin da sahibi/ACL'i depolama kokunun
+  standart devrali (inherited) ACL'iyle BIREBIR ayni (Administrators/
+  `user`/`svc-hb-fileagent`) -- anormallik yok.
+- EXIF: 4 dosyada da minimal (yalniz kucuk bir ICC-profili benzeri
+  binary blok, DateTimeOriginal/GPS/Make/Model YOK) -- ayirt edici
+  degil, telefon/uygulama kaynakli sikistirilmis fotograflarla
+  tutarli.
+- pCloud DB: 4 dosyanin da o TAM yolda `found:false`; genis
+  (tum agac) isim aramasi ve boyut-bazli `filerevision` capraz
+  kontrolu ile teyit edildi. `task`/`fstask` tablolari SU AN toplam
+  SIFIR satir (bekleyen/kayitli hicbir referans yok).
+
+Kesin dosya/vaka yollari ve tam pCloud fileId/hash degerleri repo'ya
+ALINMADI (HB-2026-123 ilkesi); tam detay kullaniciya sohbette
+raporlandi.
+
+Test sonucu/Etki: Bu pakette kod DEGISMEDI, yalniz gercek makinede
+salt-okunur araclar calistirildi (gate + diff-forensics + NTFS/EXIF/
+pCloud-DB incelemesi) + bu kayit. HICBIR dosya silinmedi/tasinmadi/
+degistirilmedi. **D9 Adim 1'e GECILMEDI** -- talimat geregi.
+
+Acik kalan: **YENI canli fark (3 dosya, HB-2026-152 SS3)** -- once bu
+dosyalarin gercekten aktif senkronizasyonun mu, yoksa B10 ile ayni
+turden yeni bir sorunun mu parcasi oldugu netlesmeli (muhtemelen
+biraz zaman gecip yeniden taranarak). **4 target-only dosyanin nasil
+ele alinacagi** (kokeni artik biliniyor: 1 rename-kalintisi + 3
+yanlis-alt-klasor-kalintisi) hala kullanicinin karari. D9'un geri
+kalani ayri, acik bir kullanici talebini bekliyor.
