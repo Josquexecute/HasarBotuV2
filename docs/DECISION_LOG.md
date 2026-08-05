@@ -6602,3 +6602,95 @@ klasorunde) hala cozulmemis. Toplam 27 farktan geriye 5 extra + 5
 benign metadata_only kaldi -- D9 Adim 0 bunlar cozulmeden/degerlendirilmeden
 PASS veremeyecek. D9'un geri kalani ayri, acik bir kullanici talebini
 bekliyor.
+
+## 2026-08-05 - HB-2026-157: 5 extra dosyanin tamami salt-okunur KANITLANDI (2 rename_artifact + 3 stale_duplicate); yeni cleanup-post-sync-target-only-files.ps1 araci yazildi/test edildi; gercek makinede yalniz onizleme -- WouldDeleteCount=5, BlockedCount=0
+
+Istek: "Kalan exact 5 target-only extra dosya icin salt-okunur koken
+dogrulamasi yap: kaynak/pCloud exact path ve revision gecmisi, ayni
+hash/icerikli guncel kardes dosya, rename/move izi, olusturma/degistirme
+zamani, task/fstask ve kilit durumu. 4 bilinen dosyanin onceki kanitini
+taze dogrula. Yeni extra dosyayi ayrica siniflandir. Besi de kesin
+rename_artifact/stale_duplicate ise sync koku disinda admin-only
+hash'li yedek + hedef cleanup icin yalniz preview hazirla. Apply
+yapma, gate calistirma, D9'a devam etme."
+
+Yontem -- her dosya icin salt-okunur, GERCEK makinede:
+
+1. **Taze dizin listelemesi** (kaynak + hedef, ilgili 2 vaka klasoru):
+   NTFS `CreationTimeUtc`/`LastWriteTimeUtc`/boyut hem hedefteki
+   orphan'lar hem de kaynaktaki/hedefteki GUNCEL kardes dosyalar icin
+   toplandi.
+2. **Hash capraz kontrolu** (canli `Get-FileHash`, HB-2026-152'deki
+   analizden BAGIMSIZ, sifirdan): her orphan'in SHA-256'si, iddia
+   edilen "guncel kardes"in SHA-256'siyla BIREBIR karsilastirildi.
+3. **Canli pCloud yeniden sorgusu** (`pcloud-stale-target-file-state.mjs`,
+   5 dosyanin TAMAMI icin tek tek): hepsi taze `found:false` verdi.
+4. **Kuyruk durumu** (`getPcloudTaskState`, 6 tablo toplami): SU AN
+   toplam SIFIR satir -- hicbir dosyaya (bu 5 dahil) pending/kayitli
+   referans yok.
+5. **NTFS owner/ACL** (5 dosyanin tamami): depolama kokunun standart
+   devrali ACL'iyle (Administrators/`user`/`svc-hb-fileagent`)
+   BIREBIR ayni -- anormallik yok. Kilit kontrolu: 5/5 kilitli degil.
+
+**Sonuc -- 5/5 dosya kesin siniflandirildi:**
+- **2 dosya: `rename_artifact` (KANITLANDI).** Icerigi VE `CreationTimeUtc`'si,
+  AYNI vaka klasorunde HALEN kaynakta var olan bir dosyanin (farkli/
+  yeni adla) icerigi+olusturma zamaniyla BIREBIR ayni -- yani hedef,
+  dosyanin YENIDEN ADLANDIRILMADAN ONCEKI adiyla kalmis bir kalinti.
+  Biri HB-2026-152'de zaten kanitlanmisti (bu pakette TAZE yeniden
+  dogrulandi, hala ayni); digeri bu pakette ILK KEZ kanitlandi (ayni
+  desen, farkli vaka).
+- **3 dosya: `stale_duplicate` (KANITLANDI, HB-2026-152'de kanitlanmis,
+  bu pakette TAZE yeniden dogrulandi).** Icerigi, AYNI vaka klasorunun
+  standart bir ALT klasorunde (AGENTS.md SS5'teki sabit alt klasor
+  setinden biri) HALEN VE DOGRU sekilde senkronize halde bulunan bir
+  dosyanin icerigiyle BIREBIR ayni -- yani hedef, yanlis alt klasorde
+  (muhtemelen ilk yuklemede) birakilmis bir kalinti kopya.
+
+5/5 icin: kaynak yok, pCloud canli agacinda nesne yok, kilitli degil,
+kuyruk referansi yok. **Onerme dogrulandi: hepsi kesin `rename_artifact`
+veya `stale_duplicate`.**
+
+Kesin dosya/vaka yollari ve tam pCloud fileId/hash degerleri repo'ya
+ALINMADI (HB-2026-123 ilkesi); tam detay kullaniciya sohbette
+raporlandi.
+
+**Bu kosul saglandigi icin yeni bir arac yazildi:**
+`cleanup-post-sync-target-only-files.ps1` (D9 B10, HB-2026-157) --
+bu depodaki IKINCI gercek yazma yolu (ilki repair, bu SILME). Yalniz
+`extra` sinifli kayitlari isler; `content_mismatch`/`metadata_only`/
+baska her sey bu aracin HIC konusu degildir, dokunulmaz VE
+raporlanmaz. Her aday icin TAZE yeniden dogrulama zorunlu: hedef
+SHA-256 hala rapor anindakiyle ayni, kaynak HALA yok, pCloud'un canli
+agacinda HALA nesne yok (`PCLOUD_OBJECT_NOW_FOUND` ile geri cekilme),
+kilitli degil. Yalniz hepsi gecerse `-Apply`: hedefin GECERLI
+icerigini sync kokunun TAMAMEN DISINDA (`C:\ProgramData\HasarBotu\
+migration-preflight\pre-delete-backups\...`) Administrators-only+
+hash'li yedekler (yedek dizini sync koku icindeyse
+`BACKUP_DIRECTORY_INSIDE_SYNC_ROOT` ile fail-closed reddeder), sonra
+`[System.IO.File]::Delete` ile siler, sonra dosyanin GERCEKTEN yok
+oldugunu bagimsiz dogrular. Bir dosyanin engellenmesi digerlerini
+durdurmaz.
+
+Test sonucu: 6/6 test gecti (preview sifir yazma + extra-olmayan
+kayitlarin tamamen yok sayilmasi; `-Apply`in yalniz kanitlanmis
+orphan'i silip yedeklemesi; pCloud canli nesne/kaynak-yeniden-ortaya-
+cikma/hedef-degisti bloklarinin dokunmadan reddi; yedek dizini sync
+koku icindeyse fail-closed red; ikinci `-Apply`in sifir hata ile sifir
+silme yapmasi) + statik denetime yeni assertion'lar eklendi, GECTI.
+
+**Gercek makinede SADECE onizleme** (`-Apply` VERILMEDEN), gercek
+forensics raporuna karsi: `OverallStatus:"preview_ok"`,
+**WouldDeleteCount=5, BlockedCount=0** -- 5 dosyanin TAMAMI adaydir.
+Sifir dosya silindi/degistirildi. Gate CALISTIRILMADI, D9'a
+DEVAM EDILMEDI.
+
+Etki: Yeni iki dosya (`cleanup-post-sync-target-only-files.ps1` +
+`.tests.ps1`) eklendi, `check-windows-service-configs.mjs`ye yeni
+denetim blogu, `deploy/windows-service/README.md`ye iki yeni satir.
+Hicbir env/servis/DB/pCloud/dosya degisikligi YAPILMADI.
+
+Acik kalan: **Gercek `-Apply` (silme) hala calistirilmadi** -- ayri,
+acik bir kullanici onayi gerektiriyor (AGENTS.md SS7). Onaylanip
+calistirildiktan sonra D9 Adim 0'in taze tekrar calistirilmasi, geriye
+yalniz 5 benign metadata_only kalip kalmadigini gosterecek.

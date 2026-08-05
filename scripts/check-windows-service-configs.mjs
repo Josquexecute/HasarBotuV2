@@ -269,6 +269,38 @@ try {
   errors.push(`D8 post-sync stale-target-file repair tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-157: D9 B10 target-only orphan cleanup — ikinci gerçek yazma
+// (bu sefer silme) yolu. Statik kapı, -Apply olmadan hiçbir yazma
+// yapılmadığını, yalnız 'extra' sınıflı kayıtların işlendiğini, yedek
+// dizininin sync kökü dışında zorunlu tutulduğunu ve pCloud/env/servise
+// hiç dokunulmadığını korur.
+try {
+  const cleanupScript = await readFile(`${DEPLOY_DIR}cleanup-post-sync-target-only-files.ps1`, 'utf8')
+
+  assertContains(cleanupScript, /\[switch\]\$Apply/, 'cleanup-post-sync-target-only-files.ps1', 'varsayılan önizleme, yalnız açık -Apply ile gerçek silme')
+  assertContains(cleanupScript, /-ne 'extra'/, 'cleanup-post-sync-target-only-files.ps1', 'yalnız extra (target-only) kayıtların aday olması')
+  assertContains(cleanupScript, /SOURCE_NOW_EXISTS/, 'cleanup-post-sync-target-only-files.ps1', 'kaynağın yeniden ortaya çıkması fail-closed blockeri')
+  assertContains(cleanupScript, /TARGET_CHANGED_SINCE_FORENSICS/, 'cleanup-post-sync-target-only-files.ps1', 'hedefin forensics anından beri değişmiş olması blockeri')
+  assertContains(cleanupScript, /PCLOUD_OBJECT_NOW_FOUND/, 'cleanup-post-sync-target-only-files.ps1', 'pCloud canlı nesne bulursa fail-closed geri çekilme')
+  assertContains(cleanupScript, /BACKUP_DIRECTORY_INSIDE_SYNC_ROOT/, 'cleanup-post-sync-target-only-files.ps1', 'yedek dizininin sync kökü dışında zorunlu tutulması')
+  assertContains(cleanupScript, /Test-AdministratorsOnlyFile/, 'cleanup-post-sync-target-only-files.ps1', 'admin-only forensics rapor/manifest ACL kapısı')
+  assertContains(cleanupScript, /New-AdminOnlySecurity/, 'cleanup-post-sync-target-only-files.ps1', 'admin-only yedek/rapor ACL uygulaması')
+  assertContains(cleanupScript, /\[System\.IO\.File\]::Delete/, 'cleanup-post-sync-target-only-files.ps1', 'gerçek silme çağrısı')
+  assertContains(cleanupScript, /POST_DELETE_FILE_STILL_EXISTS/, 'cleanup-post-sync-target-only-files.ps1', 'silme sonrası bağımsız doğrulama')
+  assertNotContains(cleanupScript, /SetEnvironmentVariable|Start-Service|Set-Service|Stop-Service|Stop-Process/, 'cleanup-post-sync-target-only-files.ps1', 'env/servis mutasyonu')
+
+  const cleanupTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}cleanup-post-sync-target-only-files.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (cleanupTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(cleanupTests.stdout)) {
+    throw new Error(`cleanup-post-sync-target-only-files testleri başarısız — ${cleanupTests.stderr || cleanupTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`D9 B10 target-only orphan cleanup tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 // HB-2026-131: D8 post-sync source/target diff forensics — rebaseline
 // gate'in SOURCE_TARGET_HASH_MISMATCH_AT_PASS'te verdiği toplu hash
 // uyuşmazlığını dosya bazında izole eden, tamamen salt-okunur araç.

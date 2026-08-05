@@ -161,15 +161,26 @@ Son güncelleme: 2026-08-04
   makinede kanıtlandı (yalnız önizleme, `-Apply` verilmeden):**
   `WouldApplyCount=7, BlockedCount=0, ClassificationBlockedCount=4,
   OutOfScopeCount=2` — sıfır dosya değişti.
-- **B10 — 7/7 dosya GERÇEKTEN onarıldı (HB-2026-151, 2026-08-05):**
-  kullanıcının açık onayıyla gerçek `-Apply` çalıştırıldı. Sıfır
-  sürüklenme/blocker; 4 target-only + 2 metadata-only dosya
-  dokunulmadan kaldı (bağımsız SHA-256 yeniden hash'lemeyle
-  doğrulandı). Orijinal (bozuk) içerik 7 ayrı Administrators-only+
-  hash'li yedekte korunuyor. pCloud/env/servis değişmedi. Talimat
-  gereği D9 cutover'a (Adım 0-6) devam edilmedi.
-- Kalan: **4 target-only dosya** (kaynakta karşılığı yok, aynı vaka
-  klasöründe) ayrı, çözülmemiş bir konu. B9 araç olarak
+- **B10 — 17/17 dosya GERÇEKTEN onarıldı (HB-2026-151/155/156,
+  2026-08-05):** kullanıcının açık onayıyla gerçek `-Apply` iki kez
+  çalıştırıldı (7 + 17 dosya). Sıfır sürüklenme/blocker her ikisinde
+  de; ham forensics JSON'undan çıkarılan tam envanter 27 farkı 6 vaka
+  klasöründe kesinleştirdi (5 extra + 17 content_mismatch + 5
+  metadata_only) — dünden bugüne kaynak/hedef dosya sayısı ~667/668
+  artmış, gerçek yoğun iş akışını yansıtıyor. Orijinal (bozuk) içerik
+  Administrators-only+hash'li yedeklerde korunuyor. pCloud/env/servis
+  hiç değişmedi.
+- **B10 cleanup aracı hazır (HB-2026-157, 2026-08-05):** kalan 5
+  `extra` dosya salt-okunur köken doğrulamasıyla kesin `rename_artifact`
+  (2)/`stale_duplicate` (3) olarak kanıtlandı — içerik+oluşturma
+  zamanı, aynı vakada hâlâ yaşayan güncel bir kardeş dosyayla birebir
+  eşleşiyor. Yeni `cleanup-post-sync-target-only-files.ps1` (+6 test)
+  yazıldı — sync kökü dışında admin-only+hash'li yedek + silme +
+  bağımsız doğrulama. Gerçek makinede yalnız önizleme:
+  `WouldDeleteCount=5, BlockedCount=0`. Gerçek silme Apply'ı hâlâ
+  çalıştırılmadı.
+- Kalan: **5 extra dosyanın silinmesi için kullanıcı onayı** — sonra
+  yalnız 5 benign `metadata_only` fark kalacak. B9 araç olarak
   TAMAMLANDI; B2 (build tazeliği) Apply öncesi gerçek `npm run
   build:packages` ile ayrıca kesinleştirilmeli. D9 Adım 0'ın taze
   tekrar çalıştırılması ve D9'un geri kalanı (Adım 1-6) ayrı, açık
