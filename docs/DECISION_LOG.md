@@ -6532,3 +6532,73 @@ Acik kalan: 27 farkin (5 extra + 17 content_mismatch + 5 metadata_only,
 alt kume once -- gercek bir urun/operasyon karari, kullaniciya
 birakildi. D9 Adim 0 bu kapsamli gercek fark cozulmeden PASS
 veremeyecek.
+
+## 2026-08-05 - HB-2026-156: HB-2026-155'teki 17 stale_target dosyasi icin gercek -Apply calistirildi -- 17/17 basarili, sifir surukleme/blocker, 5 extra + 5 metadata_only DOKUNULMADAN kaldi; bagimsiz olarak dogrulandi
+
+Istek: "Administrators-only forensics raporundaki exact 17 stale_target
+content_mismatch dosyasi icin once taze preview calistir. 17/17
+dosyada currentRow=source, ayri superseded revision=target, taze
+SHA-256/boyut, taskReferenceCount=0 ve kilit yoklugu dogrulanirsa
+gercek -Apply yap: eski hedefleri sync koku disinda admin-only ve
+hash'li yedekle, staging sonrasi atomik replace yap, bagimsiz
+source=target SHA-256 dogrulamasi yap. 5 extra ve 5 metadata_only
+kayda kesinlikle dokunma. Drift veya tek bir blocker olursa Apply'i
+baslatma/durdur. D9 cutover'a devam etme. Sonucu raporla ve commit
+et."
+
+Yontem: HB-2026-155'te uretilen ayni Administrators-only forensics
+raporuna (`pcloud-post-sync-diff-forensics-20260805T203131102Z-
+3768a0a3.json`, hash `7b2f7e9f...`) karsi `repair-post-sync-stale-
+target-files.ps1` (HB-2026-150'nin genellestirdigi adapter yolu)
+ONCE `-Apply` OLMADAN calistirildi.
+
+**Taze onizleme: TAM temiz.** `WouldApplyCount=17, BlockedCount=0,
+ClassificationBlockedCount=5, OutOfScopeCount=5` -- 17 aday HB-2026-155'te
+listelenen tam ayni 17 dosya, 5 `ClassificationBlocked` tam ayni 5
+`extra` dosya, 5 `OutOfScope` tam ayni 5 `metadata_only` dosya. Kosul
+saglandigi icin ayni anda gercek `-Apply` calistirildi.
+
+**Sonuc: `OverallStatus:"applied"`, AppliedCount=17, BlockedCount=0.**
+Sifir surukleme, sifir blocker -- 17 adayin TAMAMI basariyla onarildi
+(her biri icin: taze SHA-256/pCloud durumu yeniden dogrulandi, hedef
+Administrators-only+hash'li yedeklendi, kaynagin baytlari staging
+uzerinden atomik `[System.IO.File]::Replace` ile hedefe yazildi,
+sonra hedef SHA-256'si kaynakla yeniden esitlendi). Tam sonuc
+Administrators-only+hash'li rapora yazildi (`stale-target-repair-
+20260805T204428169Z-84c76c0e.json`).
+
+**Bagimsiz dogrulama (aracin kendi raporuna GUVENMEDEN, ayrica gercek
+makinede):**
+- 17 hedef dosyanin TAMAMI canli SHA-256 ile yeniden hash'lendi --
+  hepsi kaynagin SHA-256'siyla BIREBIR esliyor (17/17 MATCH).
+- 5 `extra` dosyanin TAMAMI canli SHA-256 ile yeniden hash'lendi --
+  hepsi Apply ONCESINDEKI degerle BIREBIR ayni (5/5 UNCHANGED).
+- 5 `metadata_only` dosyanin TAMAMI canli SHA-256 ile yeniden
+  hash'lendi -- hepsi degismedi (5/5 UNCHANGED).
+- Yedek dizininde tam 17 `.superseded.bak` dosyasi var (fazla veya
+  eksik yok).
+
+Yedekler `C:\ProgramData\HasarBotu\migration-preflight\pre-repair-
+backups\20260805T204413691Z\` altinda -- sync kokunun (`C:\HasarBotuStorage\...`)
+TAMAMEN disinda, Administrators-only ACL'li, hash sidecar'li.
+
+Kesin dosya/vaka yollari repo'ya alinmadi (HB-2026-123 ilkesi); tam
+liste yalniz admin-only rapordadir.
+
+Test sonucu: bu pakette kod/tooling DEGISMEDI (HB-2026-150'de zaten
+11/11 test + statik denetimle dogrulanmisti); bu paket yalniz aracin
+GERCEK, uretim verisine karsi ikinci gercek `-Apply` calistirmasidir
+(ilki HB-2026-151, 7 dosya icin).
+
+Etki: **17 gercek musteri dosyasi** (6 vaka klasorunde) pCloud
+kaynagiyla BIREBIR ayni hale getirildi. Orijinal (eski/bozuk) hedef
+icerik, sync koku disinda 17 ayri Administrators-only+hash'li yedek
+olarak KORUNUYOR -- kalici degil, geri alinabilir. pCloud ayari, sync
+eslemesi, env, servis HIC degismedi. Talimat geregi **D9 cutover'a
+(Adim 0-6) DEVAM EDILMEDI**.
+
+Acik kalan: **5 extra dosya** (kaynakta hic karsiligi olmayan, 2 vaka
+klasorunde) hala cozulmemis. Toplam 27 farktan geriye 5 extra + 5
+benign metadata_only kaldi -- D9 Adim 0 bunlar cozulmeden/degerlendirilmeden
+PASS veremeyecek. D9'un geri kalani ayri, acik bir kullanici talebini
+bekliyor.
