@@ -6399,3 +6399,55 @@ biraz zaman gecip yeniden taranarak). **4 target-only dosyanin nasil
 ele alinacagi** (kokeni artik biliniyor: 1 rename-kalintisi + 3
 yanlis-alt-klasor-kalintisi) hala kullanicinin karari. D9'un geri
 kalani ayri, acik bir kullanici talebini bekliyor.
+
+## 2026-08-05 - HB-2026-153: HB-2026-152 SS3'teki 3 dosyalik canli fark KENDILIGINDEN cozuldu (aktif senkronizasyonmus); D9 Adim 0 tek seferlik yeniden calistirildi, HALA BLOCKED (farkli, gercek bir sebeple: kuyruk su an da mesgul)
+
+Istek: "pCloud kuyruklari tamamen bosken HB-2026-152 SS3'teki 3
+dosyayi salt-okunur yeniden tara. Kendiliginden source=target
+olduysa D9 Adim 0 gate'ini yalniz bir kez calistir. Fark devam
+ediyorsa taze forensics + repair preview hazirla; Apply yapma. 4
+target-only eski kopyaya dokunma. D9 Adim 1'e gecme."
+
+Yontem: pCloud'un 6 kuyruk tablosu (`task/fstask/upload_tasks/
+localfileupload/uptask_fileupload/pagecachetask`, gate'in kendi
+kanonik tanimi) salt-okunur olarak, ~20 sn araliklarla, 3 ARDISIK
+sifir okuma gorulene kadar izlendi -- GERCEKTEN bos oldugu dogrulandi.
+Sonra 3 dosya TEK TEK, dogrudan (tum agac taramasi degil) canli
+SHA-256 ile yeniden tarandi.
+
+**Sonuc: uc dosya da artik "fark" DEGIL:**
+- RAYIC 3.jpg ve RAYIC 4.jpg: kaynak==hedef SHA-256, KENDILIGINDEN
+  duzelmis (gercek dizin listelemesi, dosyalarin bugun ~06:12-06:14
+  UTC arasinda -- taramadan cok kisa sure once -- olusturuldugunu
+  gosterdi; yani gercekten aktif yukleme sirasinda yakalanmislar).
+- RAYIC 5.jpg: ARTIK NE KAYNAKTA NE HEDEFTE mevcut degil -- dosyanin
+  kendisi silinmis/degistirilmis (kaynakta yalniz RAYIC 1-4 var).
+  Repair adayi DEGIL (kaynak yok); "fark" olarak da sayilmaz (kiyaslanacak
+  bir sey kalmadi).
+
+**"Fark devam ediyorsa" dali TETIKLENMEDI** -- bu nedenle taze
+forensics/repair preview HAZIRLANMADI (talimat geregi kosullu).
+
+Talimat geregi D9 Adim 0 gate'i TEK SEFERLIK yeniden calistirildi:
+**HALA BLOCKED** -- ama FARKLI, gercek bir sebeple: `PCLOUD_PENDING_
+TASKS_FOUND`, `ObservedQuietSeconds=86` (>onceki 16 ama <<600),
+`WindowResetCount=4`. Bu, RAYIC dosyalariyla ILGILI DEGIL -- ofis
+su anda da GERCEKTEN aktif (baska/surekli yukleme trafigi var), D9
+Adim 0'in kendi 600 saniyelik sessizlik sarti hala saglanamiyor.
+Bu, veri butunlugu sorunu DEGIL, zamanlama durumu.
+
+4 target-only dosyaya (KTT.jpg + OLAY YERI 1/2/3.jpg) hic
+dokunulmadi -- bu pakette konu bile edilmedi.
+
+Test sonucu/Etki: Kod DEGISMEDI, yalniz gercek makinede salt-okunur
+kuyruk izleme + hedefli SHA-256 yeniden tarama + gate'in tek seferlik
+calistirilmasi + bu kayit. Hicbir dosya silinmedi/tasinmadi/
+degistirilmedi. **D9 Adim 1'e GECILMEDI.**
+
+Acik kalan: D9 Adim 0 hala PASS veremiyor -- ama artik bilinen SIFIR
+veri-butunlugu sorunuyla degil, yalniz ofisin GERCEKTEN sakin bir
+doneme girmesini beklemekle ilgili (B10'un kendi 7 dosyasi zaten
+onarilmis ve dogrulanmis durumda). 4 target-only dosyanin nasil ele
+alinacagi hala kullanicinin karari. Gercekten sakin bir pencerede
+Adim 0'in tekrar denenmesi ve D9'un geri kalani ayri, acik bir
+kullanici talebini bekliyor.
