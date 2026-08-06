@@ -648,3 +648,17 @@ sıfır reset) ama hâlâ `SOURCE_TARGET_HASH_MISMATCH_AT_PASS` ile
 BLOCKED — artık B10 değil, muhtemelen bu yeni olayın yansıması. D9
 Adım 1'e geçilmedi. D9'un geri kalanı ayrı, açık bir kullanıcı
 talebini bekliyor.
+
+**Güncelleme (HB-2026-159/160/161, 2026-08-06):** HB-2026-158'de
+bağımsız olarak kaybolan 5 dosya için salt-okunur olay forensics'i +
+recovery mapping + kök-neden hipotez testi yapıldı (bkz.
+`docs/DECISION_LOG.md`) — kayıp dosyaların cleanup'ın allowlist'inde
+hiç olmadığı kanıtlandı; "cleanup, pCloud identity-takibi üzerinden
+tetikledi" hipotezi kanıtla çürütüldü (orphan'lar hiçbir zaman
+pCloud'un takip ettiği nesneler değildi); dar bir zamanlama-tetikleme
+olasılığı açık bırakıldı. Kullanıcının pCloud web Trash kontrolü ve
+açık onayı sonrası, 5 dosya cleanup'ın admin-only yedeklerinden
+GERÇEKTEN restore edildi — **5/5 başarılı**, C:\=P:\=beklenen
+SHA-256, pCloud `found:true`, kuyruk sıfır, bağımsız doğrulandı. D9
+gate çalıştırılmadı, D9 Adım 1'e geçilmedi. D9'un geri kalanı hâlâ
+ayrı, açık bir kullanıcı talebini bekliyor.

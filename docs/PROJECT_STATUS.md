@@ -193,6 +193,17 @@ Son güncelleme: 2026-08-04
   TAMAMLANDI; B2 (build tazeliği) Apply öncesi gerçek `npm run
   build:packages` ile ayrıca kesinleştirilmeli. D9'un geri kalanı
   (Adım 1-6) ayrı, açık bir kullanıcı talebini bekliyor.
+- **5 bağımsız kayıp dosya RESTORE EDİLDİ (HB-2026-159/160/161,
+  2026-08-06):** salt-okunur olay forensics'i + recovery mapping
+  hazırlandı; "cleanup pCloud identity-takibini tetikledi" hipotezi
+  kanıtla çürütüldü (orphan'lar hiçbir zaman pCloud'un takip ettiği
+  nesneler değildi — 3 ayrı zaman noktasında `found:false`
+  doğrulandı), dar bir zamanlama-tetikleme olasılığı açık bırakıldı.
+  Kullanıcının pCloud web Trash kontrolü (bulunamadı) ve açık onayı
+  sonrası, 5 dosya cleanup'ın admin-only yedeklerinden gerçekten
+  restore edildi: **5/5 başarılı**, C:\=P:\=beklenen SHA-256, pCloud
+  `found:true`, kuyruk sıfır — bağımsız doğrulandı. D9 gate
+  çalıştırılmadı, D9 Adım 1'e geçilmedi.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

@@ -6779,3 +6779,102 @@ Bu YENI, ayri olay icin herhangi bir aksiyon bu pakette ALINMADI --
 kapsam disi, kullanicinin kendi bilgisine/degerlendirmesine
 birakildi. D9'un geri kalani (Adim 1-6) ayri, acik bir kullanici
 talebini bekliyor.
+
+## 2026-08-06 - HB-2026-159/160/161: HB-2026-158'de bagimsiz olarak kaybolan 5 dosya icin salt-okunur olay forensics'i + recovery mapping + kok-neden hipotez testi yapildi; kullanicinin pCloud web Trash kontrolu ve acik onayi sonrasi 5 dosya GERCEKTEN admin-only yedekten restore edildi -- 5/5 basarili, C:\=P:\=beklenen SHA-256, pCloud found:true, kuyruk sifir
+
+Istek (3 ayri, art arda gelen talimat): (1) "Kaybolan 5 dogru-konumlu
+dosya icin salt-okunur olay forensics'i yap: exact path/fileId,
+cleanup oncesi/sonrasi hash/boyut/zaman cizelgesi, allowlist-disi
+kaniti, pCloud file/filerevision/task/fstask gecmisi, Trash kontrolu,
+kok neden (C:/P:/uzak istemci/sync propagation). local_cleanup_side_
+effect/sync_propagation/remote_operator/unknown siniflandir." (2)
+"5 dosya icin salt-okunur recovery mapping hazirla... cleanup'in
+allowlist-disi yazma yapmadigini kabul et ama silinen extra
+dosyalarin pCloud rename/identity takibi uzerinden dogru
+karsiliklarin silinmesini tetiklemis olma ihtimalini ayrica
+degerlendir; 'nihai tetikleyici unknown' sonucunu kanitsiz
+kesinlestirme." (3) "pCloud web Trash kontrol edildi, bulunamadi.
+Recovery mapping'deki exact 5 yedekten kontrollu restore onayliyorum:
+taze preview -> yalniz bu 5 dosyayi staging+atomik ile restore et ->
+pCloud'un buluta yuklemesini bekle -> C:\/P:\/pCloud current/kuyruk
+esitligini bagimsiz dogrula. Drift/blocker'da dur, silme/overwrite
+yok. D9 gate/Adim 1 yok. Kanit admin-only+hash'li, kisa raporla,
+commit et."
+
+**HB-2026-159 (olay forensics):** 4 bilinen fileId'li dosyanin
+TAMAMINDA pCloud'un `file`/`filerevision`/`localfile`/`task`/`fstask`
+tablolarinda SIFIR iz bulundu -- bir "supersede" degil, TAM bir
+purge (stale_target orneklerinde hep goruldugu gibi eski+yeni
+revizyonun BIRLIKTE kalmasindan farkli). 5. dosyanin (fileId hic
+yakalanmamisti) boyutuyla genis arama da sifir sonuc verdi -- ayni
+desen. Yerel pCloud semasinda hicbir trash/recycle tablosu YOK --
+Trash durumu yerel artefaktlardan kontrol edilemez. Inceleme
+sirasinda pCloud veritabani GERCEK, surekli yazma yukunde bulundu
+(birkac ek sorgu `PCLOUD_DATABASE_SNAPSHOT_UNSTABLE` verdi) -- hesapta
+o an da gercek aktivite oldugunun ayri kaniti. `cleanup-post-sync-
+target-only-files.ps1`nin GERCEK Apply raporu (tam 5 dosya listeler)
+ile capraz kontrol, bu 5 kayip dosyanin HICBIRININ allowlist'te
+olmadigini KESIN olarak kanitladi.
+
+**HB-2026-160 (recovery mapping + hipotez yeniden testi):** Cleanup'in
+sildigi 5 orphan, kaybolan 5 "dogru" dosyanin KANITLANMIS icerik
+esidiydi -- yani cleanup'in admin-only yedekleri, kaybolan dosyalar
+icin dogrudan, yuksek guvenli kurtarma kaynagi (5/5 SHA-256 birebir
+eslesme). Kullanicinin istedigi spesifik hipotez ("cleanup, pCloud'un
+identity/rename-takibi uzerinden dogru dosyalarin silinmesini
+tetikledi mi?") KANITLA yeniden degerlendirildi: 5 orphan'in
+TAMAMI, silinmeden ONCE UC ayri, zaman icinde yayilmis noktada
+(20:31Z ilk tarama, ~20:57Z koken incelemesi, Apply'dan saniyeler
+once son taze kontrol) tutarli sekilde `PCloud.found:false` idi --
+yani pCloud'un identity-grafiginde bu dosyalar icin HICBIR ZAMAN bir
+fileId yoktu; bir content-hash/rename-tespiti zinciri IKI TARAFIN DA
+takip edilen nesneler olmasini gerektirir. Bu, spesifik hipotezi
+KANITLA CURUTUYOR. Ama TAM "unknown" da denmedi: cleanup Apply'i
+21:02:58.903Z'de bitti, kayip ~21:03:05Z'de (yalniz ~7 sn sonra)
+fark edildi -- pCloud'un dosya izleyicisi, TAKIP EDILMEYEN bir
+silmeye bile tepki verip klasoru YENIDEN TARAYABILIR; eger bu tarama
+BAGIMSIZ, zaten gerceklesmis bir bulut-taraflı silmeyi O AN
+yakaladiysa, cleanup "sebep" degil ama "zamanlamada tetikleyici/
+hizlandirici" olmus olabilir -- bu dar olasilik acik birakildi,
+kanitla ne dogrulanabildi ne curutulebildi.
+
+**HB-2026-161 (GERCEK restore, kullanici onayiyla):** Kullanici pCloud
+web Trash'i KENDISI kontrol edip 5 dosyayi bulamadigini bildirdi ve
+acik onay verdi. Taze preview: 5/5 kaynak/hedef hala yok, 5/5 yedek
+hash'i recovery mapping ile BIREBIR eslesiyor, 5/5 pCloud canli
+sorgusu hala `found:false`, kuyruk sifir, 5/5 yedek kilitli degil,
+hedef ust dizinler mevcut -- TUM kosullar temiz. Gercek restore:
+staged copy -> taze SHA-256+JPEG SOI/EOI butunluk kontrolu -> hedefin
+hala yok oldugu yeniden dogrulanip `[System.IO.File]::Move` ile
+atomik yerlestirme (hedef mevcut olmadigi icin `File.Replace` degil,
+ayni birim ustunde atomik rename kullanildi) -> post-move SHA-256
+yeniden dogrulama. **5/5 restored, sifir blocker.** pCloud'un buluta
+yuklemesi beklendi (20 dakikaya kadar sinirli, 20 sn araliklarla
+salt-okunur poll) -- ILK kontrolde bile 5/5 dosya `P:\`de mevcuttu ve
+kuyruk sifirdi, yani yukleme hizli tamamlandi. **Bagimsiz dogrulama:**
+5/5 icin C:\ SHA-256 = P:\ SHA-256 = beklenen SHA-256 (birebir),
+5/5 icin pCloud `found:true` + boyut birebir eslesiyor + `task
+ReferenceCount=0`. Ilginc bir bulgu: 4 bilinen-fileId'li dosyanin
+TAMAMI pCloud tarafindan AYNI ORIJINAL fileId ile yeniden
+kaydedilmis (5.'sinin orijinal fileId'i hic yakalanmamisti, yeni bir
+id aldi).
+
+Kesin dosya/vaka yollari ve tam pCloud fileId degerleri repo'ya
+ALINMADI (HB-2026-123 ilkesi); tam detay + tum kanitlar Administrators-
+only+hash'li 3 ayri rapora yazildi (`vanished-files-event-forensics-
+20260805T212902009Z-2e6ecfc0.json`, `vanished-files-recovery-mapping-
+20260806T054208766Z-910e3364.json`, `vanished-files-restore-
+20260806T060336179Z-17fdf2f7.json`).
+
+Test sonucu/Etki: Kod DEGISMEDI, yalniz gercek makinede salt-okunur
+sorgular + GERCEK bir restore (5 dosya, admin-only yedekten) +
+bagimsiz dogrulama + bu kayit. Bu 5 disinda HICBIR dosyaya
+dokunulmadi. **D9 gate CALISTIRILMADI, D9 Adim 1'e GECILMEDI.**
+pCloud ayari/sync eslemesi/servis hic degismedi.
+
+Acik kalan: 5 dosyanin GERCEK kok nedeni (kim/ne sildi) hala tam
+kesinlesmedi -- spesifik "cleanup'in pCloud identity-takibini
+tetiklemesi" hipotezi kanitla curutuldu, ama "cleanup'in zamanlamada
+bagimsiz bir bulut-silmesini hizlandirmis/yakalamis olabilecegi" dar
+olasiligi acik. D9 Adim 0 hala PASS vermiyor; D9'un geri kalani ayri,
+acik bir kullanici talebini bekliyor.
