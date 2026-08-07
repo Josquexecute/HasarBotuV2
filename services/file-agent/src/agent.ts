@@ -12,6 +12,7 @@ import {
   executeLaborWorkbookPreview,
 } from './labor-workbook-executor.js'
 import { probeRootHealth } from './root-health.js'
+import { checkCaseFreshness } from './freshness-gate-client.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -63,14 +64,23 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
       } else if (job.payload.kind === 'labor_workbook_preview') {
         result = await executeLaborWorkbookPreview(rootAbsolute, job.payload)
       } else {
-        await client.heartbeat(job.id, 'applying')
-        result = await executeLaborWorkbookApply(
-          rootAbsolute,
-          job.payload,
-          config.agentId,
-          client,
-          job.id,
-        )
+        // D9/HB-2026-171: kritik (yazan) işlem -- KESİNLEŞTİRMEDEN (apply)
+        // önce fail-closed freshness gate. Yalnız BU vakayı engeller;
+        // yapılandırılmamışsa da (freshnessGate=undefined) reddedilir,
+        // sessizce atlanmaz.
+        const freshness = await checkCaseFreshness(config.freshnessGate, rootAbsolute, job.payload.relativePath)
+        if (!freshness.ready) {
+          result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }
+        } else {
+          await client.heartbeat(job.id, 'applying')
+          result = await executeLaborWorkbookApply(
+            rootAbsolute,
+            job.payload,
+            config.agentId,
+            client,
+            job.id,
+          )
+        }
       }
     } else if (job.payload.kind === 'policy_ocr') {
       const rootAbsolute = config.roots[job.payload.storageRootKey]
@@ -91,19 +101,40 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
         })
       }
     } else if (job.payload.kind === 'file_operation' || job.payload.kind === 'file_operation_cleanup') {
-      await client.heartbeat(job.id, job.payload.kind === 'file_operation' ? 'applying' : 'cleanup')
-      result = await executeFileOperation(config.roots, job.payload)
+      const sourceRootAbsolute = config.roots[job.payload.source.storageRootKey]
+      const destinationRootAbsolute = config.roots[job.payload.destination.storageRootKey]
+      if (sourceRootAbsolute === undefined || destinationRootAbsolute === undefined) {
+        result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
+      } else {
+        // Rename/move dokunduğu HER İKİ tarafı (kaynak ve hedef) da fail-
+        // closed kontrol edilir -- biri bile taze değilse işlem yapılmaz.
+        const [sourceFreshness, destinationFreshness] = await Promise.all([
+          checkCaseFreshness(config.freshnessGate, sourceRootAbsolute, job.payload.source.relativePath),
+          checkCaseFreshness(config.freshnessGate, destinationRootAbsolute, job.payload.destination.relativePath),
+        ])
+        if (!sourceFreshness.ready || !destinationFreshness.ready) {
+          result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }
+        } else {
+          await client.heartbeat(job.id, job.payload.kind === 'file_operation' ? 'applying' : 'cleanup')
+          result = await executeFileOperation(config.roots, job.payload)
+        }
+      }
     } else {
       const rootAbsolute = config.roots[job.payload.storageRootKey]
       if (rootAbsolute === undefined) {
         result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
       } else if (job.payload.kind === 'workspace') {
-      await client.heartbeat(job.id, 'applying')
-      result = await provisionCaseWorkspace(rootAbsolute, job.payload, {
-        onVerifying: async () => {
-          await client.heartbeat(job.id, 'verifying')
-        },
-      })
+        const freshness = await checkCaseFreshness(config.freshnessGate, rootAbsolute, job.payload.relativePath)
+        if (!freshness.ready) {
+          result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }
+        } else {
+          await client.heartbeat(job.id, 'applying')
+          result = await provisionCaseWorkspace(rootAbsolute, job.payload, {
+            onVerifying: async () => {
+              await client.heartbeat(job.id, 'verifying')
+            },
+          })
+        }
       } else {
         result = await verifyTarget(rootAbsolute, job.payload)
       }

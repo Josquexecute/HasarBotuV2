@@ -331,6 +331,20 @@ Son güncelleme: 2026-08-04
   körü körüne "ready" demediği bağımsızca kanıtlandı. Kod değişikliği
   yok — mimari gerçek veriyle ilk denemede doğrulandı. Gerçek kaynak/
   hedef dosyalarına hiçbir yazma olmadı (ikisi de salt-okunur).
+- **Freshness gate GERÇEKTEN File Agent TypeScript koduna bağlandı
+  (HB-2026-171, 2026-08-08):** `runOnce()`'ın dispatch'i artık kritik
+  (yazan) işlemlerden (`workspace`, `file_operation`/`_cleanup` — hem
+  kaynak hem hedef, `labor_workbook_apply`) HEMEN ÖNCE fail-closed
+  freshness gate çağırır (yeni `freshness-gate-client.ts`, gerçek bir
+  alt-süreç olarak `pcloud-session0-freshness-gate.mjs`yi çağırır —
+  doğrudan import değil, workspace/rootDir sınırları araştırılıp
+  bilinçli tercih edildi). Not-ready → gerçek executor hiç çağrılmaz,
+  yalnız o iş `case_not_fresh` ile başarısız raporlanır — agent'ın
+  TAMAMI durmaz. Production girişine hiçbir self-test modu eklenmedi
+  (HB-2026-167 Karar 2 ile tutarlı). 110/110 test (102 mevcut + 8 yeni,
+  4'ü gerçek spawn ile) + typecheck + build + lint hepsi temiz. File
+  Agent'ın kendisi hâlâ Disabled/Stopped — bu yalnız kod wiring'i,
+  gerçek makinede henüz çalıştırılmadı.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

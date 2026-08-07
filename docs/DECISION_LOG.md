@@ -7795,3 +7795,115 @@ Acik kalan: attestation deposu ACL Apply'i hala ayri bir karar (Oncelik
 4'ten). Oncelik 7'ye (File Agent freshness gate entegrasyonu,
 rolling/per-case reconciliation, D9 cutover'in kalan blockerlari)
 devam ediliyor.
+
+## 2026-08-08 - HB-2026-171: Oncelik 7 (ilk parca) -- freshness gate GERCEKTEN File Agent TypeScript koduna baglandi (kritik yazan islemler ONCESI fail-closed); production entry point'e HICBIR self-test modu eklenmedi (HB-2026-167 Karar 2 ile tutarli); henuz gercek makinede calistirilmadi/kurulmadi
+
+Istek: "File Agent freshness gate entegrasyonunu ... sirayla coz."
+
+**Arastirma once (kod yazmadan once):** `services/file-agent`in gercek
+job payload semalari (`packages/contracts/src/v1/agent/dto.ts`,
+Zod `strictObject`) incelendi. Bulgular: (1) hicbir payload'da ayri bir
+`caseId` alani YOK -- vaka kimligi TAMAMEN `relativePath` (POSIX,
+`/`) icinde ORTULU, sunucu tarafinin `caseId`si BILEREK agent'a
+ULASMIYOR (guvenlik/mutlak-yol-sizdirmama tasarimi, dto.ts'nin kendi
+yorumu); (2) `file_operation`/`file_operation_cleanup` IKI ayri
+`{storageRootKey, relativePath}` cifti tasiyor (`source` + `destination`)
+-- bir rename/move HER IKI tarafi da etkiler; (3) `workspace` ve
+`labor_workbook_apply` TEK bir `relativePath` tasiyor; (4)
+`deploy/windows-service` npm workspace'in TAMAMEN DISINDA (`tsconfig.
+build.json`in `rootDir: src`i disinda bir dogrudan `import` derleme
+hatasi verir, `.d.ts` yok) -- ama `pcloud-session0-freshness-gate.mjs`
+zaten yalniz `node:*` builtin kullanan, bagimsiz, spawn-dostu bir CLI
+olarak tasarlanmis (kendi yorumu: "File Agent entegrasyonu icin"). Bu
+YENI kod yazmadan ONCE gercek dosyalar okunarak kanitlandi.
+
+**Karar: dogrudan `import` DEGIL, `child_process.spawn` ile ayri bir
+alt-surec cagrisi** -- `run-pcloud-session0-freshness-gate.ps1`nin
+KENDI cikis kodu sozlesmesiyle (0=ready/2=not-ready/1=error) birebir
+ayni JSON-stdout + exit-code protokolu kullanilir; hicbir workspace
+sinir ihlali yok, hicbir yeni npm bagimliligi yok.
+
+**Yapilan:**
+1. `services/file-agent/src/freshness-gate-client.ts` (yeni):
+   `checkCaseFreshness(freshnessGate, rootAbsolute, relativePath)` --
+   `pcloud-session0-freshness-gate.mjs`yi GERCEK bir alt-surec olarak
+   cagirir. HER hata yolu (spawn basarisizligi, gecersiz JSON, zaman
+   asimi -- 30sn varsayilan) fail-closed'dir, ASLA sessizce ready
+   varsayilmaz. `freshnessGate=undefined` ise spawn bile denenmez,
+   dogrudan `freshness_gate_not_configured` doner.
+2. `services/file-agent/src/config.ts`: yeni `FreshnessGateConfig`
+   (`toolPath`, `pcloudLocalDatabasePath`, `topLevelFolderName`,
+   `attestationStoreDirectory`) + `AgentConfig.freshnessGate:
+   FreshnessGateConfig | undefined`. 4 yeni env degiskeni
+   (`HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_PATH`,
+   `HASARBOTU_AGENT_PCLOUD_DB_PATH`,
+   `HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER`,
+   `HASARBOTU_AGENT_ATTESTATION_STORE`) -- DORDU birden verilmisse
+   etkin, HICBIRI verilmemisse `undefined` (ozellik henuz
+   yapilandirilmamis, kritik islemler yine fail-closed reddedilir),
+   KISMEN verilmisse (bazilari var bazilari yok) baslangicta
+   `AgentConfigError` firlatir -- bir kritik is ilk denendiginde degil,
+   servis baslarken hemen yakalanir.
+3. `services/file-agent/src/agent.ts`: `runOnce()`nin dispatch'ine
+   TAM OLARAK AGENTS.md SS7'nin istedigi sekilde baglandi -- **yalniz
+   YAZAN (kritik) islemler icin, yalniz o vakayi engelleyerek**:
+   `workspace`, `file_operation`/`file_operation_cleanup` (HEM
+   `source` HEM `destination` icin, paralel, biri bile not-ready ise
+   islem YAPILMAZ), `labor_workbook_apply` (`labor_workbook_preview`
+   DEGIL -- o salt-okunur bir dry-run). Not-ready durumunda gercek
+   executor (`provisionCaseWorkspace`/`executeFileOperation`/
+   `executeLaborWorkbookApply`) HIC CAGRILMAZ, is `outcome:'failed',
+   errorCode:'case_not_fresh'` olarak API'ye raporlanir (mevcut
+   `unknown_root_mapping` deseniyle AYNI sekilde) -- ne agent'in
+   TAMAMI durur ne de baska bir vakanin isi etkilenir. Salt-okunur
+   islemler (`verifyTarget`, `pdf_text_extraction`, `policy_ocr`,
+   `labor_workbook_preview`) BILEREK kapı DISINDA birakildi.
+
+**Production File Agent'a HICBIR self-test modu EKLENMEDI** -- HB-2026-167
+Karar 2 ile tutarli; bu paket yalniz KRITIK ISLEM DISPATCH'ine gate
+baglar, servisin giris noktasina/calisma modeline HICBIR yeni davranis
+eklemez.
+
+**Gercek hatalar bulunup duzeltildi (typecheck/test calistirilirken):**
+1. Mevcut `test/agent-loop.test.ts`teki 3 `AgentConfig` fixture'i yeni
+   ZORUNLU `freshnessGate` alanini icermiyordu -- GERCEK `tsc --noEmit`
+   calistirmasinda 3 gercek TS2741 hatasiyla yakalandi, `freshnessGate:
+   undefined` eklenerek duzeltildi (davranis degismedi).
+2. Yeni testte bir ayrimci birlesim (discriminated union) daraltmasi
+   `expect(result.ready).toBe(false)` calisma-zamani kontrolune
+   guvenmeye calisiyordu -- TypeScript bunu STATIK olarak anlamaz,
+   GERCEK bir TS2339 hatasiyla yakalandi, uygun `if (result.ready)
+   throw` calisma-akisi daraltmasiyla duzeltildi.
+3. Kullanilmayan bir mock parametresi (`rootAbsolute`) GERCEK bir
+   TS6133 hatasiyla yakalandi, `_` onekiyle duzeltildi.
+
+**Gercek testler (mock DEGIL, gercek spawn):**
+`test/freshness-gate-client.test.ts` (4 test) -- `checkCaseFreshness`
+GERCEK bir sentetik pCloud DB + attestation deposu + GERCEK bir
+`pcloud-session0-freshness-gate.mjs` alt-surec cagrisiyla test edildi:
+attest edilmis vaka icin ready=true, attest EDILMEMIS gercek bir vaka
+icin fail-closed ready=false, `freshnessGate=undefined` icin spawn
+DENENMEDEN fail-closed, olmayan arac yoluna karsi exception FIRLATMADAN
+fail-closed. `test/agent-freshness-gate-dispatch.test.ts` (4 test) --
+`checkCaseFreshness` mock'lanip agent.ts'in KENDI dispatch mantigi
+izole test edildi: not-ready'de `provisionCaseWorkspace`nin HIC
+CALISMADIGI (workspace klasorunun GERCEKTEN diskte olusmadigi, gercek
+`stat()` ile dogrulandi) + ready'de GERCEKTEN calistigi (klasor GERCEKTEN
+olustu); `file_operation`de kaynak VE hedefin IKISININ de kontrol
+edildigi (biri not-ready ise kaynak klasoru YERINDE KALDI, tasinmadi).
+
+Kesin gercek kullanici adi/profil yolu/SID repo'ya ALINMADI.
+
+Test sonucu/Etki: `npm run typecheck` (services/file-agent) GERCEKTEN
+calistirildi, temiz. `npm test` (Vitest) GERCEKTEN calistirildi, **110/110
+gecti** (102 mevcut regresyon + 8 yeni). `npm run build` (tsc) GERCEKTEN
+calistirildi, temiz. `npm run lint` (eslint) GERCEKTEN calistirildi,
+temiz. `dist/` build ciktisi commit EDILMEDI (AGENTS.md SS8).
+
+Acik kalan: File Agent'in KENDISI hala Disabled/Stopped -- bu paket
+yalniz KOD wiring'i, gercek makinede henuz CALISTIRILMADI/test
+edilmedi (gercek servis aktivasyonu ayri, acik bir karar -- HB-2026-
+164/165/168'in halihazirda insa ettigi vehicle-probe+ACL zincirinin
+UCUNDE). 4 yeni env degiskeninin (freshness gate config) gercek
+degerleri de henuz belirlenmedi/ayarlanmadi. Oncelik 7'ye (rolling
+reconciliation, D9 cutover kalan blockerlar) devam ediliyor.

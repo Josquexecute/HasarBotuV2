@@ -403,6 +403,23 @@ sonucu, `svc-hb-fileagent`'ın zaten Modify sahibi olduğu File Agent'ın
 KENDİ `logs` dizinine yazılır — yeni write ACL gerekmedi. Gerçek
 `hasarbotu-file-agent`e hâlâ hiç dokunulmadı.
 
+**Güncelleme (HB-2026-171, 2026-08-08) — freshness gate GERÇEKTEN File
+Agent koduna bağlandı:** bu belgenin en başından beri açık kalan asıl
+soru ("File Agent nasıl entegre olacak") artık kod seviyesinde
+çözüldü. `services/file-agent/src/agent.ts`'in `runOnce()` dispatch'i,
+kritik (yazan) işlemlerden (`workspace`, `file_operation`/`_cleanup`,
+`labor_workbook_apply`) hemen önce `pcloud-session0-freshness-gate.mjs`yi
+gerçek bir alt-süreç olarak çağırır (doğrudan `import` değil —
+`deploy/windows-service` npm workspace'in tamamen dışında olduğu
+araştırılıp doğrulandı) ve not-ready durumunda gerçek executor'ı hiç
+çalıştırmadan yalnız o işi `case_not_fresh` ile başarısız raporlar —
+tam olarak AGENTS.md §7'nin "yalnız ilgili vakayı engeller" mandatosu.
+Production girişine hiçbir self-test modu eklenmedi. 110/110 test
+(4'ü gerçek spawn ile) + typecheck + build + lint temiz. File Agent'ın
+kendisi hâlâ Disabled/Stopped — yalnız kod wiring'i, gerçek makinede
+henüz çalıştırılmadı; gerçek env değişkenlerinin (4 yeni freshness gate
+değişkeni) değerleri de henüz belirlenmedi.
+
 ## 9. D9 planına etkisi
 
 `docs/D9_OPERATIONAL_CUTOVER_PLAN.md` §0/Adım 0 artık bu belgeye referans

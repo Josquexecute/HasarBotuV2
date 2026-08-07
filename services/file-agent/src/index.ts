@@ -4,7 +4,13 @@ import { createAgentApiClient } from './api-client.js'
 import { loadAgentConfigFromEnv } from './config.js'
 import { runLoop } from './agent.js'
 
-export { loadAgentConfigFromEnv, AgentConfigError, type AgentConfig } from './config.js'
+export {
+  loadAgentConfigFromEnv,
+  AgentConfigError,
+  type AgentConfig,
+  type FreshnessGateConfig,
+} from './config.js'
+export { checkCaseFreshness, type FreshnessCheckResult } from './freshness-gate-client.js'
 export {
   assertRealPathUnderRoot,
   DEFAULT_MAX_ABSOLUTE_PATH_LENGTH,

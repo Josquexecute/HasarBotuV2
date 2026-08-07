@@ -36,6 +36,7 @@ describe('File Agent runLoop recovery', () => {
       roots: { 'test-root': root },
       leaseSeconds: 30,
       pollIntervalMs: 1,
+      freshnessGate: undefined,
     }
     const errors: string[] = []
 
@@ -62,6 +63,7 @@ describe('File Agent runLoop recovery', () => {
       roots: { 'test-root': join(root, 'yok-boyle-bir-klasor') },
       leaseSeconds: 30,
       pollIntervalMs: 1,
+      freshnessGate: undefined,
     }
     const errors: string[] = []
     setTimeout(() => abort.abort(), 20)
@@ -89,6 +91,7 @@ describe('File Agent runLoop recovery', () => {
       },
       leaseSeconds: 30,
       pollIntervalMs: 1,
+      freshnessGate: undefined,
     }
     const errors: string[] = []
     setTimeout(() => abort.abort(), 20)
