@@ -322,6 +322,15 @@ Son güncelleme: 2026-08-04
   senkron işareti) hem revizyon hem kaynak-boyut değişimi doğru
   reddedildiği kanıtlandı. 25/25 ilgili test + genişletilmiş statik audit
   geçti.
+- **Attestation→Session-0-gate zinciri GERÇEK vaka üzerinde uçtan uca
+  doğrulandı (HB-2026-170, 2026-08-08):** küçük (40 dosya), zaten
+  senkron gerçek bir vakada attestation üretimi + freshness gate ile
+  **CaseStatus=ready, 40/40 dosya ready** kanıtlandı. İKİNCİ, farklı,
+  attestation'sız gerçek bir vakada (42 dosya) negatif kontrol:
+  **CaseStatus=unknown, 42/42 dosya unknown** — gate'in her şeyi
+  körü körüne "ready" demediği bağımsızca kanıtlandı. Kod değişikliği
+  yok — mimari gerçek veriyle ilk denemede doğrulandı. Gerçek kaynak/
+  hedef dosyalarına hiçbir yazma olmadı (ikisi de salt-okunur).
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

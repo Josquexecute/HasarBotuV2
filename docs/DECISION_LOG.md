@@ -7744,3 +7744,54 @@ Acik kalan: attestation deposu ACL'inin GERCEK Apply'i (yeni bir Apply
 araci gerektirir, HB-2026-164 desenini takip eder) hala ayri, acik bir
 karar. Oncelik 6'ya (gercek vaka uzerinde attestation->gate zinciri)
 devam ediliyor.
+
+## 2026-08-08 - HB-2026-170: Oncelik 6 -- attestation->Session-0-gate zinciri GERCEK, kucuk, halihazirda senkron bir vaka uzerinde uctan uca dogrulandi (CaseStatus=ready, 40/40 dosya) + GERCEK, attestation'siz bir vaka uzerinde negatif kontrol (CaseStatus=unknown, 42/42 dosya) -- kod degisikligi yok, mimari GERCEK veriyle kanitlandi
+
+Istek: "Gercek vaka uzerinde attestation -> Session-0 freshness gate
+zincirini mumkun olan en ileri seviyeye kadar dogrula."
+
+Kucuk (40 dosya), zaten hem gercek kaynagi (pCloud senkron klasoru) hem
+hedefi (`C:\HasarBotuStorage\...`) olan, kapali bir gercek vaka secildi
+(dosya sayimlariyla dogrulandi: kaynak=hedef=40). `generate-pcloud-
+source-attestation.ps1` GERCEKTEN calistirildi -- 40/40 dosya basariyla
+attest edildi (yeni ZORUNLU pre/post kimlik-fence dahil, hicbir yaris
+tetiklenmedi -- durgun, zaten-senkron veri icin beklenen). Ardindan
+`run-pcloud-session0-freshness-gate.ps1` AYNI vaka uzerinde GERCEKTEN
+calistirildi: **CaseStatus=ready, 40/40 dosya ready, 0 conflict, exit
+kodu 0.** Bu, mimarinin TUM zincirini (gercek kaynak SHA-256 -> gercek
+attestation deposu -> Session-0-safe DB-yalniz cozumleme -> gercek
+hedef SHA-256 karsilastirmasi) gercek uretim verisiyle uctan uca
+kanitlar.
+
+**Negatif kontrol (ayni titizlikle):** IKINCI, farkli, kucuk (42 dosya)
+gercek bir vakaya HIC attestation uretilmeden dogrudan gate calistirildi
+-- **CaseStatus=unknown, 42/42 dosya unknown, exit kodu 2**, beklendigi
+gibi. Bu, gate'in "attestation yoksa unknown" kuralinin sahte-pozitif
+uretmedigini (yani her seyi kordu kordu "ready" demedigini) gercek
+veriyle bagimsizca kanitlar.
+
+**Kod degisikligi YOK** -- her iki calistirma da ilk denemede, hicbir
+hata olmadan, tam beklenen sonucu uretti (onceki HB-2026-167/168/169'da
+zaten sentetik+gercek karisik testlerle kanitlanmis mimarinin doğal
+sonucu).
+
+Kesin gercek plaka/vaka kimligi, gercek dosya adlari veya gercek
+klasor yapisi repo'ya ALINMADI (bu kayit dahil) -- yalniz "kucuk,
+zaten-senkron gercek vaka" ve sayimlar genel dilde belirtildi; tam
+detay (gercek yol, plaka, dosya adlari) yalniz Administrators-only+
+hash'li kanit raporlarinda (`pcloud-source-attestation-*.json`,
+`pcloud-session0-freshness-gate-*.json`, ikisi de bu turda GERCEKTEN
+uretildi) mevcut.
+
+Test sonucu/Etki: iki gercek CLI calistirmasi (attestation uretimi +
+freshness gate), ikisi de admin-only+hash'li kanit uretti, ikisi de
+GERCEK veri ustunde calisti. Hicbir gercek kaynak/hedef dosyasi
+degistirilmedi/silinmedi (attestation uretimi salt-okunur; gate tamamen
+salt-okunur). Attestation deposunda artik 40 gercek kayit var (hala
+Administrators-only, HB-2026-169'da planlanan ACL genislemesi HALA
+uygulanmadi).
+
+Acik kalan: attestation deposu ACL Apply'i hala ayri bir karar (Oncelik
+4'ten). Oncelik 7'ye (File Agent freshness gate entegrasyonu,
+rolling/per-case reconciliation, D9 cutover'in kalan blockerlari)
+devam ediliyor.
