@@ -103,18 +103,39 @@ export async function enumerateFilesRecursive(root, relativePrefix = '') {
   return results
 }
 
+function resolveFileDbInfo(database, caseFolderId, relativePath) {
+  const fileRelativeParts = relativePath.split(/[\\/]+/).filter((part) => part.length > 0)
+  const fileName = fileRelativeParts[fileRelativeParts.length - 1]
+  const fileDirParts = fileRelativeParts.slice(0, -1)
+  const fileFolderId = fileDirParts.length === 0
+    ? caseFolderId
+    : resolveFolderIdByRelativeDirParts(database, caseFolderId, fileDirParts)
+  assert(fileFolderId !== null, 'PCLOUD_FILE_FOLDER_NOT_FOUND')
+  const row = getCurrentFileRow(database, fileFolderId, fileName)
+  assert(row, 'PCLOUD_FILE_ROW_NOT_FOUND')
+  return { fileId: row.id_text, pCloudHash: row.hash_text, dbSizeBytes: row.size }
+}
+
 /**
  * Builds (but does not persist) attestation records for every file under
  * a source case folder. Real source bytes ARE read here (SHA-256), which
  * is exactly why this cannot run Session-0-safe -- it needs the same
  * source access `run-pcloud-case-reconciliation.ps1` already requires.
  *
- * All of this case's DB rows are resolved from a SINGLE consistent DB
- * snapshot (one withConsistentPcloudDatabase call for the whole case, not
- * one per file) -- both for efficiency (each snapshot copies data.db +
- * -wal + -shm) and correctness (every file's fileId/hash comes from the
- * exact same point-in-time view of the DB, not N independently-taken
- * snapshots that could disagree on a fast-changing case).
+ * PRE identity fence: all of this case's DB rows are first resolved from
+ * a SINGLE consistent DB snapshot (one withConsistentPcloudDatabase call
+ * for the whole case, not one per file) -- both for efficiency (each
+ * snapshot copies data.db + -wal + -shm) and correctness (every file's
+ * starting fileId/hash comes from the exact same point-in-time view).
+ *
+ * POST identity fence (mandatory, HB-2026-169 Oncelik 5): SHA-256
+ * computation can take real time on a large file, during which pCloud
+ * could revise or replace it. Right after hashing EACH file, its
+ * fileId/pCloudHash/size are re-resolved from a FRESH DB snapshot and
+ * its on-disk size is re-stat'd -- any drift means the SHA-256 no longer
+ * corresponds with certainty to the (fileId, pCloudHash) identity it
+ * would be filed under, so the record is rejected rather than attested
+ * under a possibly-stale pairing.
  */
 export async function buildAttestationRecords({
   sourceCaseRoot,
@@ -136,34 +157,25 @@ export async function buildAttestationRecords({
   const caseRelativeParts = caseRelativePath.split(/[\\/]+/).filter((part) => part.length > 0)
   const nowIso = new Date().toISOString()
 
+  // PRE fence: one batched, consistent snapshot for the whole case.
   const dbInfoByRelativePath = await withConsistentPcloudDatabase(databasePath, (database) => {
     const topId = resolveTopLevelFolderId(database, topLevelFolderName)
     const caseFolderId = resolveFolderIdByRelativeDirParts(database, topId, caseRelativeParts)
     assert(caseFolderId !== null, 'PCLOUD_CASE_FOLDER_NOT_FOUND')
     const resolved = new Map()
     for (const file of files) {
-      const fileRelativeParts = file.relativePath.split(/[\\/]+/).filter((part) => part.length > 0)
-      const fileName = fileRelativeParts[fileRelativeParts.length - 1]
-      const fileDirParts = fileRelativeParts.slice(0, -1)
-      const fileFolderId = fileDirParts.length === 0
-        ? caseFolderId
-        : resolveFolderIdByRelativeDirParts(database, caseFolderId, fileDirParts)
-      assert(fileFolderId !== null, 'PCLOUD_FILE_FOLDER_NOT_FOUND')
-      const row = getCurrentFileRow(database, fileFolderId, fileName)
-      assert(row, 'PCLOUD_FILE_ROW_NOT_FOUND')
-      resolved.set(file.relativePath, { fileId: row.id_text, pCloudHash: row.hash_text, dbSizeBytes: row.size })
+      resolved.set(file.relativePath, resolveFileDbInfo(database, caseFolderId, file.relativePath))
     }
     return resolved
   })
 
   const records = []
   for (const file of files) {
-    const sha256 = await fileSha256(file.fullPath)
     const dbInfo = dbInfoByRelativePath.get(file.relativePath)
 
-    // Real, source-of-truth cross-check: the DB's recorded size for the
-    // CURRENT revision must match the size just observed on disk -- a
-    // mismatch means the file changed between the stat() and the DB
+    // Real, source-of-truth cross-check (PRE): the DB's recorded size for
+    // the CURRENT revision must match the size just observed on disk --
+    // a mismatch means the file changed between the stat() and the DB
     // snapshot (a real race), and attesting under those conditions would
     // silently bind the WRONG (fileId, hash) key to this SHA-256. Fail
     // closed rather than attest a possibly-stale pairing.
@@ -171,6 +183,43 @@ export async function buildAttestationRecords({
       Number(dbInfo.dbSizeBytes) === file.sizeBytes,
       'SOURCE_SIZE_RACE_VS_PCLOUD_DB_DURING_ATTESTATION',
     )
+
+    // eslint-disable-next-line no-await-in-loop -- sequential, fail-closed
+    // hashing (matches every other tool in this directory's throughput
+    // choice); each file's own POST fence immediately follows its hash.
+    const sha256 = await fileSha256(file.fullPath)
+
+    // Test-only, opt-in-only deterministic pause between hash completion
+    // and the POST re-check -- gives a test a reliable window to inject a
+    // real DB mutation exactly here, rather than relying on real-world
+    // hash timing (flaky). No-op unless a test explicitly sets this env
+    // var; never triggered in production (same established pattern as
+    // repair-post-sync-stale-target-files.ps1's own identity-fence sync
+    // marker).
+    // eslint-disable-next-line no-await-in-loop
+    if (process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER === '1') {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => { setTimeout(resolve, 100) })
+    }
+
+    // POST identity fence (mandatory): re-resolve fileId/pCloudHash/size
+    // from a FRESH DB snapshot taken AFTER hashing completed, and re-stat
+    // the source file itself, closing the race window a slow hash of a
+    // large file would otherwise leave open.
+    // eslint-disable-next-line no-await-in-loop
+    const postDbInfo = await withConsistentPcloudDatabase(databasePath, (database) => {
+      const topId = resolveTopLevelFolderId(database, topLevelFolderName)
+      const caseFolderId = resolveFolderIdByRelativeDirParts(database, topId, caseRelativeParts)
+      assert(caseFolderId !== null, 'PCLOUD_CASE_FOLDER_NOT_FOUND')
+      return resolveFileDbInfo(database, caseFolderId, file.relativePath)
+    })
+    assert(postDbInfo.fileId === dbInfo.fileId, 'IDENTITY_FENCE_FILE_ID_CHANGED_DURING_HASH')
+    assert(postDbInfo.pCloudHash === dbInfo.pCloudHash, 'IDENTITY_FENCE_REVISION_CHANGED_DURING_HASH')
+    assert(Number(postDbInfo.dbSizeBytes) === file.sizeBytes, 'IDENTITY_FENCE_DB_SIZE_CHANGED_DURING_HASH')
+    // eslint-disable-next-line no-await-in-loop
+    const postStat = await stat(file.fullPath).catch(() => null)
+    assert(postStat !== null, 'IDENTITY_FENCE_SOURCE_FILE_MISSING_AFTER_HASH')
+    assert(postStat.size === file.sizeBytes, 'IDENTITY_FENCE_SOURCE_SIZE_CHANGED_DURING_HASH')
 
     records.push({
       SchemaVersion: ATTESTATION_RECORD_SCHEMA_VERSION,

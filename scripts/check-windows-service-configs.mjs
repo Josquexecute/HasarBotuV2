@@ -774,6 +774,8 @@ try {
   assertContains(attestationModule, /plain SQLite INTEGER/, 'pcloud-source-attestation.mjs', 'pCloud file.hash kolonunun 256-bit SHA-256 olamayacagi (64-bit INTEGER) acikca belgelenir')
   assertContains(attestationModule, /SOURCE_SIZE_RACE_VS_PCLOUD_DB_DURING_ATTESTATION/, 'pcloud-source-attestation.mjs', 'attestation sirasinda kaynak/DB boyut yarisi fail-closed yakalanir')
   assertContains(attestationModule, /ATTESTATION_RECORD_HASH_MISMATCH/, 'pcloud-source-attestation.mjs', 'kanit dosyasi okuma sirasinda hash-dogrulama yapilir (tampering fail-closed yakalanir)')
+  assertContains(attestationModule, /IDENTITY_FENCE_REVISION_CHANGED_DURING_HASH/, 'pcloud-source-attestation.mjs', 'HB-2026-169 Oncelik 5: SHA-256 hesaplandiktan SONRA pCloud revizyonu degisirse fail-closed (POST kimlik-fence)')
+  assertContains(attestationModule, /IDENTITY_FENCE_SOURCE_SIZE_CHANGED_DURING_HASH/, 'pcloud-source-attestation.mjs', 'SHA-256 hesaplandiktan SONRA kaynak dosya boyutu degisirse fail-closed')
 
   const gateModule = await readFile(`${DEPLOY_DIR}pcloud-session0-freshness-gate.mjs`, 'utf8')
   assertNotContains(gateModule, /['"]P:\\\\/, 'pcloud-session0-freshness-gate.mjs', 'hicbir P:\\ varsayilani/referansi yok (Session-0-safe olmanin tam nedeni)')
@@ -852,6 +854,27 @@ try {
   }
 } catch (error) {
   errors.push(`File Agent service-vehicle probe tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
+// HB-2026-169 Oncelik 4: attestation deposu icin minimum Read/Traverse/
+// Synchronize ACL plani -- PLAN + PREVIEW yalniz, HB-2026-163'un ayni
+// SID-simulasyon modeliyle.
+try {
+  const storeAclScript = await readFile(`${DEPLOY_DIR}preview-file-agent-attestation-store-access.ps1`, 'utf8')
+  assertNotContains(storeAclScript, /\[switch\]\$Apply\b/, 'preview-file-agent-attestation-store-access.ps1', 'yapisal olarak -Apply anahtari yok')
+  assertContains(storeAclScript, /PlannedAcesContainNoWriteOrDeleteBits/, 'preview-file-agent-attestation-store-access.ps1', 'planlanan ACElerde yazma/silme biti olmadigi acikca dogrulanir')
+  assertContains(storeAclScript, /forbiddenBits/, 'preview-file-agent-attestation-store-access.ps1', 'yasakli bit maskesi calisma zamaninda kontrol edilir (yalniz Administrators-only kanit yazma icin FullControl kendi kendine ayri, servis hesabina asla planlanmaz)')
+
+  const storeAclTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}preview-file-agent-attestation-store-access.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (storeAclTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(storeAclTests.stdout)) {
+    throw new Error(`preview-file-agent-attestation-store-access testleri başarısız — ${storeAclTests.stderr || storeAclTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`Attestation deposu ACL önizleme tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
 if (errors.length > 0) {

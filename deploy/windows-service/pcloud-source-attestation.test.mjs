@@ -179,3 +179,61 @@ test('readAttestationRecord: kanit dosyasi sonradan degistirilirse (tampering) f
     /ATTESTATION_RECORD_HASH_MISMATCH/,
   )
 })
+
+test('buildAttestationRecords: POST kimlik-fence -- hash hesaplandiktan SONRA pCloud revizyonu degisirse fail-closed (gercek zamanlamayla, deterministik test-yalniz senkron isaretiyle)', async (context) => {
+  const fixture = await buildFixture(context)
+  process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER = '1'
+  context.after(() => { delete process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER })
+
+  const buildPromise = buildAttestationRecords({
+    sourceCaseRoot: fixture.sourceCaseRoot,
+    databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName,
+    caseRelativePath: fixture.caseRelativePath,
+    attestedBy: 'test-admin',
+  })
+  // Land inside the deterministic 100ms pause the sync marker guarantees
+  // (right after SHA-256 completes, right before the POST DB re-check)
+  // and mutate the DB out from under it -- a REAL revision change during
+  // the exact race window this fence exists to close.
+  await new Promise((resolve) => { setTimeout(resolve, 30) })
+  const database = new DatabaseSync(fixture.databasePath)
+  database.exec(`UPDATE file SET hash = -999999999999999 WHERE id = 5001;`)
+  database.close()
+
+  await assert.rejects(buildPromise, /IDENTITY_FENCE_REVISION_CHANGED_DURING_HASH/)
+})
+
+test('buildAttestationRecords: POST kimlik-fence -- hash hesaplandiktan SONRA kaynak dosya boyutu degisirse fail-closed', async (context) => {
+  const fixture = await buildFixture(context)
+  process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER = '1'
+  context.after(() => { delete process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER })
+
+  const buildPromise = buildAttestationRecords({
+    sourceCaseRoot: fixture.sourceCaseRoot,
+    databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName,
+    caseRelativePath: fixture.caseRelativePath,
+    attestedBy: 'test-admin',
+  })
+  await new Promise((resolve) => { setTimeout(resolve, 30) })
+  // Real file content change during the exact race window -- the DB
+  // still shows the OLD size/hash, but the file itself has already
+  // changed on disk.
+  await writeFile(path.join(fixture.sourceCaseRoot, 'ruhsat.pdf'), 'degisti-farkli-uzunlukta-icerik')
+
+  await assert.rejects(buildPromise, /IDENTITY_FENCE_SOURCE_SIZE_CHANGED_DURING_HASH/)
+})
+
+test('buildAttestationRecords: senkron isareti KAPALIYKEN (uretimdeki normal durum) davranis degismez, tum kayitlar basariyla uretilir', async (context) => {
+  const fixture = await buildFixture(context)
+  assert.equal(process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER, undefined)
+  const records = await buildAttestationRecords({
+    sourceCaseRoot: fixture.sourceCaseRoot,
+    databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName,
+    caseRelativePath: fixture.caseRelativePath,
+    attestedBy: 'test-admin',
+  })
+  assert.equal(records.length, 2)
+})

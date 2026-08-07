@@ -7678,3 +7678,69 @@ Acik kalan: aracin GERCEK `hasarbotu-file-agent`e karsi GERCEK
 calistirilmasi hala ayri, acik bir kullanici onayi gerektiriyor (SCM
 config degisikligi -- kullanicinin acikca "once hazirlik tamamla, sonra
 rapor edip dur" dedigi tam nokta). Oncelik 4-8'e devam ediliyor.
+
+## 2026-08-08 - HB-2026-169: Oncelik 4 (attestation deposu minimum Read/Traverse/Synchronize ACL plani) + Oncelik 5 (attestation uretiminde ZORUNLU pre/post kimlik-fence)
+
+Istek (otonom devamin parcasi): "Attestation store icin yalniz minimum
+Read/Traverse/Synchronize erisimini tasarla" ve "Source attestation
+uretiminde pre/post fileId/revision/path/size identity fence + SHA-256
+zorunlu olsun."
+
+**Oncelik 4:** Yeni `preview-file-agent-attestation-store-access.ps1`
+(+ `.tests.ps1`, 4 test) -- HB-2026-163'un AYNI SID-simulasyon modeli,
+attestation deposuna (`C:\ProgramData\HasarBotu\pcloud-attestations`)
+uyarlandi. `-Apply` yapisal olarak yok. Gercek makinede calistirildi:
+`C:` zaten yeterli (HB-2026-165), ama `C:\ProgramData` ve `C:\ProgramData
+\HasarBotu` icin `svc-hb-fileagent` YENI Traverse gerektiriyor --
+`BUILTIN\Users`in bu dizinlerdeki miras alinan Read+Execute'u
+YARDIMCI OLMUYOR, cunku svc-hb-fileagent HB-2026-113'te o gruptan
+BILEREK cikarilmisti (ayni bulgu HB-2026-163'te pCloud DB icin de
+gecerliydi, burada BAGIMSIZCA yeniden dogrulandi). Depo klasorunun
+kendisi henuz YOK -- yine de Traverse+Read/Synchronize planlanir
+(`generate-pcloud-source-attestation.ps1`in ilk gercek calismasinda
+Administrators-only olusturulacak). Toplam 4 ACE planlandi. Gercek
+Apply bu paketle YAPILMADI -- ayri, acik bir karar.
+
+**Oncelik 5:** `pcloud-source-attestation.mjs`'e ZORUNLU POST kimlik-fence
+eklendi. Onceden: tum dosyalarin fileId/pCloudHash/DB-boyutu TEK bir
+tutarli DB snapshot'iyla (PRE) toplu cozuluyordu, SONRA her dosyanin
+SHA-256'si hesaplaniyordu -- BUYUK bir dosyanin hash'i gercek zaman
+alabilir, ve bu sure icinde pCloud dosyayi degistirebilir/revize
+edebilir, SHA-256'nin artik PRE'de yakalanan (fileId,hash) ciftine
+kesin olarak karsilik gelmedigi bir durum yaratir. **Simdi:** her
+dosyanin SHA-256'si hesaplandiktan HEMEN SONRA, (a) fileId/pCloudHash/
+DB-boyutu TAZE, AYRI bir DB snapshot'iyla yeniden cozulur ve PRE'deki
+degerle KARSILASTIRILIR (`IDENTITY_FENCE_FILE_ID_CHANGED_DURING_HASH`/
+`IDENTITY_FENCE_REVISION_CHANGED_DURING_HASH`/`IDENTITY_FENCE_DB_SIZE_
+CHANGED_DURING_HASH`), (b) kaynak dosya TAZE yeniden stat edilir
+(`IDENTITY_FENCE_SOURCE_SIZE_CHANGED_DURING_HASH`/`_SOURCE_FILE_MISSING_
+AFTER_HASH`) -- HERHANGI bir fark, o dosyayi UYDURULMUS bir kimlikle
+attest etmek yerine, TUM islemi fail-closed durdurur.
+
+**Gercek zamanlamayla test edildi (varsayima dayanmadan):** REPAIR-post-
+sync-stale-target-files.ps1'in KENDI, halihazirda-kanitlanmis desenini
+(`HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER`) tekrar kullandim -- test-
+yalniz, opt-in-only bir ortam degiskeni, SHA-256 tamamlandiktan HEMEN
+SONRA, POST kontrolunden HEMEN ONCE 100ms'lik DETERMINISTIK bir bekleme
+ekler (uretimde HICBIR ZAMAN tetiklenmez). Test, bu pencerede GERCEKTEN
+DB'yi (revizyon degisikligi) veya GERCEK kaynak dosyayi (boyut
+degisikligi) mutasyona ugratir -- ikisi de dogru sekilde
+`IDENTITY_FENCE_*` hatasiyla reddedildi. Senkron isareti KAPALIYKEN
+(uretimdeki normal yol) davranis degismedigi de ayrica dogrulandi.
+
+Kesin gercek kullanici adi/profil yolu/SID repo'ya ALINMADI.
+
+Test sonucu/Etki: `pcloud-source-attestation.test.mjs` artik 11 senaryo
+(3 yeni: POST revizyon-degisimi fail-closed, POST kaynak-boyut-degisimi
+fail-closed, senkron-isareti-kapali normal yol), `pcloud-session0-
+freshness-gate.test.mjs` (6) + `pcloud-post-sync-diff-forensics.test.mjs`
+(8) ile birlikte GERCEKTEN calistirildi, 25/25 gecti (regresyon yok).
+`preview-file-agent-attestation-store-access.tests.ps1` (4 senaryo)
+GERCEKTEN calistirildi, gecti. `node scripts\check-windows-service-
+configs.mjs` GERCEKTEN calistirildi, gecti (2 yeni denetim blogu ile).
+Hicbir gercek ACL/env/servis/pCloud degisikligi yapilmadi.
+
+Acik kalan: attestation deposu ACL'inin GERCEK Apply'i (yeni bir Apply
+araci gerektirir, HB-2026-164 desenini takip eder) hala ayri, acik bir
+karar. Oncelik 6'ya (gercek vaka uzerinde attestation->gate zinciri)
+devam ediliyor.

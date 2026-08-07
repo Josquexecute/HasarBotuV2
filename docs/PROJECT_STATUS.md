@@ -313,6 +313,15 @@ Son güncelleme: 2026-08-04
   eski haline bit-bit döndüğü kanıtlandı (4/4 test). **Gerçek
   `hasarbotu-file-agent`e hâlâ hiç dokunulmadı** — SCM config
   değişikliği gerektiren gerçek çalıştırma ayrı, açık onay bekliyor.
+- **Attestation store ACL planı + ZORUNLU POST kimlik-fence (HB-2026-169,
+  2026-08-08):** attestation deposu için minimum Read/Traverse/
+  Synchronize ACL planı (`preview-file-agent-attestation-store-access.ps1`,
+  gerçek makinede 4 ACE, Apply yapılmadı) ve `pcloud-source-attestation.mjs`e
+  SHA-256 sonrası fileId/pCloudHash/boyutun taze yeniden doğrulandığı
+  zorunlu bir POST kimlik-fence eklendi — gerçek zamanlamayla (test-yalnız
+  senkron işareti) hem revizyon hem kaynak-boyut değişimi doğru
+  reddedildiği kanıtlandı. 25/25 ilgili test + genişletilmiş statik audit
+  geçti.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
