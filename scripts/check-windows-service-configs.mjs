@@ -734,6 +734,34 @@ try {
   errors.push(`File Agent pCloud DB erişim Apply/Rollback tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-166: File Agent kontrollu aktivasyon -- PLAN + PREVIEW.
+// -Apply yapisal olarak yok; hicbir env/servis/dosya/pCloud degisikligi
+// yapmaz. 6 onkosul kategorisini gercek, salt-okunur kontrollerle
+// dogrular ve 7 asamali aktivasyon sirasini (env/root -> service config ->
+// start -> service-context DB probe -> per-case freshness smoke -> File
+// Agent file-operation smoke -> verify/rollback) yalniz PLAN olarak uretir.
+try {
+  const activationScript = await readFile(`${DEPLOY_DIR}preview-file-agent-controlled-activation.ps1`, 'utf8')
+
+  assertNotContains(activationScript, /\bStart-Service\b|\bSet-Service\b|\bEnable-.*Service|New-Service\b/, 'preview-file-agent-controlled-activation.ps1', 'hicbir servis baslatma/etkinlestirme/olusturma yok')
+  assertNotContains(activationScript, /\[Environment\]::SetEnvironmentVariable/, 'preview-file-agent-controlled-activation.ps1', 'hicbir env degisken yazimi yok')
+  assertNotContains(activationScript, /\[switch\]\$Apply\b|ParameterSetName\s*=\s*'Apply'/, 'preview-file-agent-controlled-activation.ps1', 'yapisal olarak -Apply parametresi/anahtari tanimlanmamis')
+  assertContains(activationScript, /blocked_structural/, 'preview-file-agent-controlled-activation.ps1', 'gercek, cozulmemis yapisal engeller (orn. P:\\ Session 0 gorunmezligi) durusce raporlanir, gizlenmez')
+  assertContains(activationScript, /ActivationSequence/, 'preview-file-agent-controlled-activation.ps1', '7 asamali aktivasyon sirasi PLAN olarak uretilir')
+  assertContains(activationScript, /Get-ForbiddenBitsPresent/, 'preview-file-agent-controlled-activation.ps1', 'pCloud DB tarafinda yazma/silme yetkisi bagimsizca (raporun kendi ozetine guvenmeden) yeniden dogrulanir')
+
+  const activationTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}preview-file-agent-controlled-activation.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (activationTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(activationTests.stdout)) {
+    throw new Error(`preview-file-agent-controlled-activation testleri başarısız — ${activationTests.stderr || activationTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`File Agent kontrollü aktivasyon önizleme tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

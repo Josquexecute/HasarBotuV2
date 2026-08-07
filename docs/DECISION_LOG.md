@@ -7308,3 +7308,100 @@ kontrollu aktivasyon asamasina ertelendi (mevcut `SeServiceLogonRight`
 ile, ayri bir gorev). File Agent'in TypeScript kodu HIC degismedi;
 freshness gate hala baglanmadi; D9 Adim 1'e gecis icin hala ayri, acik bir
 kullanici karari gerekiyor.
+
+## 2026-08-07 - HB-2026-166: File Agent KONTROLLU AKTIVASYON paketi -- PLAN + PREVIEW (yalniz onkosul dogrulama + 7 asamali aktivasyon sirasi); gercek start/enable YAPILMADI; GERCEK ve onceden bu baglamda belgelenmemis bir yapisal engel bulundu (freshness gate'in mevcut CLI sozlesmesi P:\ Session 0'da GORUNMEZ oldugu icin bir servis icinden CAGRILAMAZ)
+
+Istek: mevcut `SeServiceLogonRight` ile servis hesabi baglaminda -- pCloud
+data.db/-wal/-shm gercek salt-okunur probe, rolling/per-case freshness
+gate erisimi, storage root `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTIZ`,
+mevcut servis config/credential/ACL/env, startup/health/crash-restart/
+rollback, write/delete yetkisinin pCloud DB tarafinda bulunmadigi --
+onkosullarini dogrulayan, aktivasyon sirasini (env/root -> service
+config -> start -> service-context DB probe -> per-case freshness smoke
+-> File Agent file-operation smoke -> verify/rollback) preview olarak
+ureten bir "File Agent kontrollu aktivasyon" paketi istendi. Hicbir env/
+servis/dosya/pCloud degisikligi yapilmamasi, gercek start/enable'in HENUZ
+YAPILMAMASI acikca istendi.
+
+Yapilan: yeni `preview-file-agent-controlled-activation.ps1` (+
+`.tests.ps1`, 5 test) yazildi. `-Apply` yapisal olarak yok (preview-file-
+agent-pcloud-db-access.ps1 ile ayni disiplin). 6 onkosul kategorisini
+GERCEK, salt-okunur kontrollerle dogrular, her biri `verified_ok`/
+`verified_with_note`/`deferred_to_real_activation`/`blocked_structural`
+olarak raporlanir (hicbiri sessizce atlanmaz):
+1-6. pCloud DB salt-okunur erisim + yazma/silme yoklugu: orijinal
+   `preview-file-agent-pcloud-db-access.ps1` GERCEK alt-surec olarak taze
+   yeniden cagrilir; ardindan raporun kendi `OverallStatus` ozetine
+   guvenmeden, ham ACE listesi BAGIMSIZCA yeniden taranir.
+2. per-case freshness gate erisimi -- CLI sozlesmesinin dosyalari var mi
+   ve kendi test paketi taze GECIYOR mu diye GERCEKTEN kontrol edilir.
+3. storage root -- gercek varlik + tam olarak 3 beklenen ACE (Administrators
+   Full, pCloud senkron hesabi Modify, File Agent servis hesabi Modify),
+   ne fazla ne eksik.
+4. servis config/credential/ACL/env -- `Get-CimInstance Win32_Service` ile
+   gercek StartMode/State/LogOnAs; deploy artifact'lerinin varligi; TUM
+   `HASARBOTU_*` makine env degiskenlerinin GERCEK mevcut durumu.
+5. startup/health/crash-restart/rollback -- deponun KENDI WinSW sablonunda
+   restart policy + stop timeout; File Agent'in KENDI `root-health.ts`
+   modulunde gercek yazma+silme probu (yalniz `lstat` degil) var mi.
+
+**Gercek, onceden bu baglamda belgelenmemis yapisal bulgu (gizlenmedi):**
+`run-pcloud-case-reconciliation.ps1` (HB-2026-162, freshness gate'in
+mimari belgede adi gecen CLI sozlesmesi) kaynak kokunu varsayilan olarak
+`P:\<sirket klasoru>`e isaret ettiriyor (kendi kodu, satir ~118). `P:\`
+pCloud'un SANAL SURUCUSU'dur, etkilesimli kullanici OTURUMUNA baglidir;
+Session 0'da -- yani HANGI hesapla giris yaparsa yapsin HERHANGI bir
+Windows servisinden -- GORUNMEZ. Bu, `hasarbotu-file-agent.winsw.xml`nin
+kendi baslik yorumunda zaten belgelenmis, File Agent'in depolama kokunu
+`P:\`den `C:\HasarBotuStorage\`e tasimaya ZATEN yol acmis olan AYNI kisit.
+Yani freshness gate'in MEVCUT CLI sozlesmesi, ACL/yetki calismasindan
+BAGIMSIZ olarak, bir GERCEK Windows servisi icinden yapisal olarak
+CAGRILAMAZ -- `per_case_freshness_gate_access` her zaman `blocked_
+structural` raporlanir. Bu, tek taraflica "cozulmedi" -- acik bir mimari
+karar (freshness gate'i yalniz ZATEN erisim-verilmis pCloud yerel DB'si +
+hedef-taraf durumuyla, tam kaynak-diff'i olmadan daraltmak; VEYA P:\'nin
+tamamen emekliye ayrilmasini bekleyip gate'i hedef-yalniz duragan duruma
+gore yeniden tasarlamak) gerektiriyor.
+
+**Ayrica GERCEK bir test calistirmasinda yakalanan, gercek bir yanlis-
+pozitif duzeltmesi:** ilk tasarimda "yazma/silme yoklugu" kontrolu servis
+hesabi ILE `Authenticated Users`/`Everyone` icin ACE'lere BIRLIKTE bakiyordu
+-- bu, `C:\` kokunun kendi ONCEDEN VAR OLAN, HasarBotu'nun bu calismayla
+HICBIR ILGISI olmayan standart Windows varsayilan ACE'sini (Authenticated
+Users icin bu-klasor-yalniz `AppendData`) yanlislikla "yasakli bit
+bulundu" olarak bayrakladi -- gercek makinede calistirilinca yakalandi.
+Duzeltme: bu kontrol yalniz SERVIS HESABININ KENDI ACE'lerine bakacak
+sekilde daraltildi (erisim-VERILDI simulasyonunda grup uyeligi mesru
+sekilde onemliyken, "biz ne verdik" sorusu icin onemli degil).
+
+7 asamali aktivasyon sirasi PLAN olarak uretildi (hicbir asama
+CALISTIRILMADI): env/root (env degiskeni ayarlama plani) -> service
+config (**acik tasarim karari**: gercek `hasarbotu-file-agent` servisi
+API kurulu olmadan Automatic+Start edilirse surekli `api_unavailable`
+dongusune girer -- bunun yerine tek-seferlik, kendi kendini temizleyen
+bir "disposable probe vehicle" (probe-p-drive-system-context.ps1'in
+Zamanlanmis Gorev yerine GERCEK bir servis kullanan benzeri) mi, yoksa
+File Agent'in kendi giris noktasina opt-in bir self-test modu mu
+eklenecegi tek tarafli cozulmedi, acik soru olarak birakildi) -> start
+-> service-context DB probe -> per-case freshness smoke (**blocked_
+structural**, yukaridaki bulguya bagli) -> File Agent file-operation
+smoke (`verifyTarget` salt-okunur fonksiyonuyla, sentetik bir dosya
+uzerinde, gercek musteri verisi degil, onerildi) -> verify/rollback.
+
+Kesin gercek kullanici adi/profil yolu/SID/hostname repo'ya ALINMADI; tam
+detay Administrators-only+hash'li kanit raporunda.
+
+Test sonucu/Etki: `preview-file-agent-controlled-activation.tests.ps1`
+(5 senaryo) GERCEKTEN calistirildi, hepsi gecti. `node scripts\check-
+windows-service-configs.mjs` GERCEKTEN calistirildi, gecti (yeni HB-2026-
+166 denetim bloguyla). **Gercek makinede calistirildi (salt-okunur):**
+5/6 onkosul `verified_ok`/`verified_with_note`, 1/6 (`per_case_freshness_
+gate_access`) dogru sekilde `blocked_structural`. Hicbir env/servis/
+dosya/pCloud degisikligi olmadi -- gercek `hasarbotu-file-agent` servisi
+hala Disabled/Stopped, tum `HASARBOTU_*` env degiskenleri hala tanimsiz.
+
+Acik kalan: iki acik mimari karar (Stage 2 vehicle secimi, Stage 5
+freshness gate yeniden tasarimi) ayri, acik kullanici kararlari
+gerektiriyor. Bunlar cozulmeden gercek Apply/aktivasyon araci
+YAZILAMAZ/CALISTIRILAMAZ. File Agent'in TypeScript kodu bu paketle de HIC
+degismedi.

@@ -311,6 +311,34 @@ açık isteğiyle File Agent kontrollü aktivasyon aşamasına ertelendi
 (mevcut `SeServiceLogonRight` ile orada yapılacak). File Agent servisi
 HÂLÂ başlatılmadı; freshness gate hâlâ bağlanmadı.
 
+**Güncelleme (HB-2026-166, 2026-08-07):** "File Agent kontrollü
+aktivasyon" için PLAN + PREVIEW aracı (`preview-file-agent-controlled-
+activation.ps1`, `-Apply` yapısal olarak yok) hazırlandı ve gerçek
+makinede çalıştırıldı — 6 önkoşuldan 5'i `verified_ok`/`verified_with_
+note`. **Yeni, önceden bu belgede kaydedilmemiş gerçek bir bulgu:** §8'in
+"seçenek 1" (ACL grant) yaklaşımı ACL tarafında tamamlandı (HB-2026-163/
+164/165), ama freshness gate'in KENDİSİ (`run-pcloud-case-reconciliation.
+ps1`, per-case gate'in mimari olarak öngörülen CLI sözleşmesi) ayrı,
+bağımsız bir engelle karşı karşıya: kaynağı varsayılan olarak `P:\`'ye
+işaret ediyor, ve `P:\` pCloud'un sanal sürücüsü olduğu için Session 0'da
+(hiçbir Windows servisinden, hangi hesapla giriş yaparsa yapsın) GÖRÜNMEZ
+— File Agent'ın kendi depolama kökünü `P:\`'den `C:\HasarBotuStorage\`e
+taşımasına yol açan AYNI kısıt. Yani freshness gate'in mevcut CLI
+sözleşmesi, ACL/yetki çalışmasından TAMAMEN BAĞIMSIZ olarak, gerçek bir
+Windows servisi içinden yapısal olarak çağrılamaz — `preview-file-agent-
+controlled-activation.ps1` bunu `per_case_freshness_gate_access` için her
+zaman `blocked_structural` olarak dürüstçe raporlar. Bu, §8'e YENİ bir
+açık mimari karar ekliyor: freshness gate ya yalnız zaten erişim verilmiş
+pCloud yerel DB'si + hedef-taraf durumuyla (tam kaynak-diff'i olmadan)
+daraltılmalı, ya da `P:\`nin tamamen emekliye ayrılmasını bekleyip
+hedef-yalnız durağan duruma göre yeniden tasarlanmalı — tek taraflı
+çözülmedi. Ayrıca aktivasyonun "service config"/"start" aşaması için de
+açık bir tasarım sorusu var: gerçek `hasarbotu-file-agent` servisi API
+kurulu olmadan başlatılırsa sürekli `api_unavailable` döngüsüne girer;
+bunun yerine tek-seferlik bir "disposable probe vehicle" mi yoksa File
+Agent'ın kendi girişine opt-in bir self-test modu mu ekleneceği de açık
+bırakıldı. Hiçbir env/servis/dosya/pCloud değişikliği yapılmadı.
+
 `services/file-agent`'ın TypeScript kodu bu paketle HİÇ değiştirilmedi.
 
 ## 9. D9 planına etkisi

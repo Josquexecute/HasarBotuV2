@@ -263,6 +263,23 @@ Son güncelleme: 2026-08-04
   kullanıcının açık isteğiyle File Agent kontrollü aktivasyonuna
   ertelendi. Rollback GERÇEKTEN çalıştırılmadı (paket hazır, gerekirse
   ayrı komutla çalıştırılabilir). File Agent servisi hâlâ başlatılmadı.
+- **File Agent kontrollü aktivasyon — PLAN + PREVIEW hazır (HB-2026-166,
+  2026-08-07):** `preview-file-agent-controlled-activation.ps1` (`-Apply`
+  yapısal olarak yok) 6 önkoşulu gerçek, salt-okunur kontrollerle
+  doğruladı: 5/6 `verified_ok`/`verified_with_note`, 1/6
+  (`per_case_freshness_gate_access`) **`blocked_structural`** — gerçek,
+  önceden belgelenmemiş bir bulgu: freshness gate'in CLI sözleşmesi
+  (`run-pcloud-case-reconciliation.ps1`) varsayılan kaynağı `P:\`'ye
+  işaret ediyor, ve `P:\` pCloud'un sanal sürücüsü olduğu için Session
+  0'da (hiçbir Windows servisinden) GÖRÜNMEZ — freshness gate bu haliyle
+  bir servis içinden yapısal olarak çağrılamaz, gizlenmedi. 7 aşamalı
+  aktivasyon sırası (env/root → service config → start → service-context
+  DB probe → per-case freshness smoke → File Agent file-operation smoke
+  → verify/rollback) yalnız PLAN olarak üretildi; iki adım (servis
+  başlatma vehicle tasarımı, freshness gate yeniden tasarımı) açık,
+  çözülmemiş mimari karar olarak işaretlendi. Hiçbir env/servis/dosya/
+  pCloud değişikliği yapılmadı; gerçek `hasarbotu-file-agent` servisi hâlâ
+  Disabled/Stopped.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
