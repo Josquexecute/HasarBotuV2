@@ -289,6 +289,28 @@ dürüstçe raporlanır. Gerçek `svc-hb-fileagent` ACL'ine hâlâ **Apply
 YAPILMADI** — gerçek makinede yalnız (değişmeyen) preview aracı tekrar
 çalıştırıldı, sonuç aynı: 6 ACE hâlâ eksik.
 
+**Güncelleme (HB-2026-165, 2026-08-07):** kullanıcı onayıyla gerçek
+`-Apply` GERÇEK `svc-hb-fileagent` hesabına karşı çalıştırıldı — 6 ACE
+uygulandı. Apply öncesi araca iki yeni doğrulama eklendi: (1) gerçek
+DB dosyalarının (data.db/-wal/-shm) post-apply ACL'i üzerinde SID/
+effective-access simülasyonu (Read=evet/Write=hayır, data.db için
+zorunlu ve fail-closed); (2) rollback paketinin hash-doğrulamalı geri
+okuma ile hazır-olma doğrulaması (rollback GERÇEKTEN çalıştırılmadı —
+yalnız kullanılabilir olduğu kanıtlandı). Apply sonrası bağımsız
+doğrulama üç ayrı yöntemle yapıldı: aracın kendi post-apply kontrolü,
+taze bir preview çalıştırması (`already_sufficient`), ve `icacls` +
+doğrudan .NET `FileSystemRights` sayısal okuma — hepsi aynı sonucu
+doğruladı: 5 ata düğümde tam `Traverse|Synchronize`, pCloud klasöründe
+`Traverse|Synchronize` + `Read|Synchronize` (ObjectInherit), hiçbir
+düğümde tek bir yazma/silme/sahiplik biti yok. `Synchronize` bitinin
+ata düğümlerde planlanandan (yalnız `Traverse`) fazladan çıkması .NET'in
+Allow ACE'lere otomatik eklediği, kullanıcının kendisinin de baştan
+onayladığı bir hak kategorisidir — kapsam ihlali değildir, rollback
+gerektirmedi. Servis hesabı bağlamında gerçek okuma probe'u kullanıcının
+açık isteğiyle File Agent kontrollü aktivasyon aşamasına ertelendi
+(mevcut `SeServiceLogonRight` ile orada yapılacak). File Agent servisi
+HÂLÂ başlatılmadı; freshness gate hâlâ bağlanmadı.
+
 `services/file-agent`'ın TypeScript kodu bu paketle HİÇ değiştirilmedi.
 
 ## 9. D9 planına etkisi

@@ -63,6 +63,15 @@ $applyOut1 = & $applyScriptPath -PreviewReportPath (Join-Path $adminOnlyDir $pre
 $applyJson1 = $applyOut1 | Out-String | ConvertFrom-Json
 Assert-True ($applyJson1.OverallStatus -eq 'applied') "TEST1: Apply reports OverallStatus=applied (got: $($applyJson1.OverallStatus))"
 Assert-True ($applyJson1.WalShmContinuityConfirmed -eq $true) "TEST1: WAL/SHM inheritance continuity REALLY confirmed (throwaway file inherited the ACE)"
+Assert-True ($applyJson1.RollbackPackageVerified -eq $true) "TEST1: rollback package re-verified via hash-verified re-read (got: $($applyJson1.RollbackPackageVerified))"
+
+$dbSimResults1 = @($applyJson1.DbFileEffectiveAccessSimulation)
+$dbDataFileSim1 = @($dbSimResults1 | Where-Object { $_.Path -eq $f1.DbPath })
+Assert-True ($dbDataFileSim1.Count -eq 1) "TEST1: DB-file effective-access simulation covers data.db"
+Assert-True ($dbDataFileSim1[0].ReadGranted -eq $true) "TEST1: SID simulation confirms Read=granted on the REAL data.db after Apply (got: $($dbDataFileSim1[0].ReadGranted))"
+Assert-True ($dbDataFileSim1[0].ForbiddenAccessGranted -eq $false) "TEST1: SID simulation confirms Write/Delete/Ownership=NOT granted on the REAL data.db after Apply (got: $($dbDataFileSim1[0].ForbiddenAccessGranted))"
+$dbWalFileSim1 = @($dbSimResults1 | Where-Object { $_.Path -eq "$($f1.DbPath)-wal" })
+Assert-True ($dbWalFileSim1.Count -eq 1 -and $dbWalFileSim1[0].ReadGranted -eq $true -and $dbWalFileSim1[0].ForbiddenAccessGranted -eq $false) "TEST1: SID simulation confirms Read=granted/Write=not-granted on the REAL data.db-wal after Apply"
 
 # NOTE: Get-Acl's .Access returns IdentityReference as a friendly NTAccount
 # name (e.g. "NT AUTHORITY\Local Service"), not a SID -- comparing that

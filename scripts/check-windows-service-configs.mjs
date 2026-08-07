@@ -716,6 +716,9 @@ try {
   assertContains(applyScript, /Restore-NodeSddl/, 'apply-file-agent-pcloud-db-access.ps1', 'rollback tam SDDL geri yukler (hangi ACE eklendigini tahmin etmez)')
   assertContains(applyScript, /WalShmContinuityTest|WAL_SHM_CONTINUITY_INHERITANCE_NOT_CONFIRMED/, 'apply-file-agent-pcloud-db-access.ps1', 'WAL/SHM sureklilik GERCEK bir dosya-olusturma + miras kanitiyla dogrulanir, simulasyon degil')
   assertContains(applyScript, /ServiceAccountContextVerification/, 'apply-file-agent-pcloud-db-access.ps1', 'servis hesabi baglaminda gercek Zamanlanmis Gorev tabanli dogrulama denenir (basarisizlik acikca raporlanir, sessizce atlanmaz/sahte basari uretilmez)')
+  assertContains(applyScript, /DbFileEffectiveAccessSimulation/, 'apply-file-agent-pcloud-db-access.ps1', 'gercek DB dosyalari (data.db/-wal/-shm) uzerinde SID/effective-access simulasyonuyla Read=evet/Write=hayir dogrulanir (HB-2026-165)')
+  assertContains(applyScript, /DB_FILE_READ_NOT_CONFIRMED_BY_SIMULATION|DB_FILE_FORBIDDEN_ACCESS_GRANTED_BY_SIMULATION/, 'apply-file-agent-pcloud-db-access.ps1', 'data.db icin simulasyon basarisiz olursa fail-closed (rollback tetiklenir)')
+  assertContains(applyScript, /RollbackPackageVerified|ROLLBACK_PACKAGE_SCHEMA_INCOMPLETE/, 'apply-file-agent-pcloud-db-access.ps1', 'rollback paketi hash-dogrulamali geri okuma ile hazir-olma acisindan dogrulanir (rollback GERCEKTEN calistirilmadan)')
   assertNotContains(applyScript, /LsaAddAccountRights|LsaRemoveAccountRights|SeBatchLogonRight\s*=|New-LocalUser|Set-LocalUser/, 'apply-file-agent-pcloud-db-access.ps1', 'YENI bir LSA hakki/hesap asla verilmez -- yalniz mevcut SeServiceLogonRight ile calisir')
   assertNotContains(applyScript, /Start-Service|Set-Service|SetEnvironmentVariable/, 'apply-file-agent-pcloud-db-access.ps1', 'servis/env mutasyonu yok')
 

@@ -75,6 +75,17 @@ $ErrorActionPreference = 'Stop'
 #     then it is deleted -- this is the exact mechanism WAL/SHM
 #     regeneration continuity depends on, proven directly rather than
 #     assumed. Failure here triggers the same rollback.
+#   - Post-apply, a SID/effective-access SIMULATION (same model as the
+#     preview tool) is run directly against the REAL data.db/-wal/-shm
+#     files, on their real post-apply ACL -- proving Read is granted and
+#     no write/delete/ownership bit is granted on the actual target files,
+#     not just on the containing folder. data.db must exist and pass;
+#     -wal/-shm are tolerated as absent (normal outside an open pCloud
+#     transaction). Failure on data.db triggers the same rollback.
+#   - Post-apply, the rollback PACKAGE itself is re-read through the exact
+#     hash-verified path a separate -Rollback invocation would use, and
+#     its schema is confirmed complete -- WITHOUT executing a rollback
+#     (that would immediately undo the grant just applied).
 #   - Post-apply, real Scheduled-Task-based verification IN THE SERVICE
 #     ACCOUNT'S OWN SECURITY CONTEXT is attempted (mirrors the proven
 #     probe-p-drive-system-context.ps1 pattern). On THIS class of machine
@@ -198,11 +209,20 @@ function Get-NodeAclSnapshot {
         if (-not [System.IO.File]::Exists($Path)) { return $null }
         $acl = [System.IO.File]::GetAccessControl($Path)
     }
+    $aces = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object {
+        [ordered]@{
+            IdentitySid = $_.IdentityReference.Value
+            FileSystemRightsValue = [int64]$_.FileSystemRights
+            AccessControlType = $_.AccessControlType.ToString()
+            IsInherited = $_.IsInherited
+        }
+    })
     return [ordered]@{
         Path = $Path
         Owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
         AreAccessRulesProtected = $acl.AreAccessRulesProtected
         Sddl = $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access -bor [System.Security.AccessControl.AccessControlSections]::Owner)
+        Aces = $aces
     }
 }
 
@@ -248,6 +268,50 @@ function Test-AceWithinWhitelist {
     if (($RightsValue -band $ForbiddenRightsMask) -ne 0) { return $false }
     if (($RightsValue -band (-bnot $AllowedRightsMask)) -ne 0) { return $false }
     return $true
+}
+
+function Test-SimulatedEffectiveAccess {
+    # Read-only SID/well-known-group based simulation (same model as
+    # preview-file-agent-pcloud-db-access.ps1's own function of the same
+    # name -- svc-hb-fileagent cannot be live-impersonated by design, see
+    # that script's ImpersonationLimitNote). Explicit, non-inherited DENY
+    # wins over any ALLOW for the same bit.
+    param($AclSnapshot, [string]$TargetSid, [int64]$RequiredRightsValue)
+    if ($null -eq $AclSnapshot) {
+        return [ordered]@{ Granted = $false; Reason = 'NODE_NOT_FOUND' }
+    }
+    $relevantSids = @($TargetSid, $AuthenticatedUsersSidValue, $EveryoneSidValue)
+    $matching = @($AclSnapshot.Aces | Where-Object { $relevantSids -contains $_.IdentitySid })
+    $explicitDeny = @($matching | Where-Object { $_.AccessControlType -eq 'Deny' -and -not $_.IsInherited -and ([int64]$_.FileSystemRightsValue -band $RequiredRightsValue) -ne 0 })
+    if ($explicitDeny.Count -gt 0) {
+        return [ordered]@{ Granted = $false; Reason = 'EXPLICIT_DENY_PRESENT' }
+    }
+    $grantedBits = 0
+    foreach ($ace in ($matching | Where-Object { $_.AccessControlType -eq 'Allow' })) {
+        $grantedBits = $grantedBits -bor [int64]$ace.FileSystemRightsValue
+    }
+    $granted = (($grantedBits -band $RequiredRightsValue) -eq $RequiredRightsValue)
+    return [ordered]@{ Granted = $granted; Reason = if ($granted) { 'ALLOW_ACE_COVERS_REQUIRED_RIGHTS' } else { 'NO_MATCHING_GRANT' } }
+}
+
+function Test-SimulatedForbiddenAccessAbsent {
+    # Same SID/well-known-group model, inverted: confirms NONE of the
+    # write/delete/ownership bits are effectively granted to the service
+    # account (an explicit, non-inherited DENY on a bit removes it from the
+    # effective-granted set first, matching real NTFS deny-wins order).
+    param($AclSnapshot, [string]$TargetSid, [int64]$ForbiddenRightsMask)
+    if ($null -eq $AclSnapshot) {
+        return [ordered]@{ ForbiddenAccessGranted = $false; Reason = 'NODE_NOT_FOUND' }
+    }
+    $relevantSids = @($TargetSid, $AuthenticatedUsersSidValue, $EveryoneSidValue)
+    $matching = @($AclSnapshot.Aces | Where-Object { $relevantSids -contains $_.IdentitySid })
+    $denyBits = 0
+    foreach ($ace in ($matching | Where-Object { $_.AccessControlType -eq 'Deny' -and -not $_.IsInherited })) { $denyBits = $denyBits -bor [int64]$ace.FileSystemRightsValue }
+    $allowBits = 0
+    foreach ($ace in ($matching | Where-Object { $_.AccessControlType -eq 'Allow' })) { $allowBits = $allowBits -bor [int64]$ace.FileSystemRightsValue }
+    $effectiveBits = $allowBits -band (-bnot $denyBits)
+    $forbiddenGranted = (($effectiveBits -band $ForbiddenRightsMask) -ne 0)
+    return [ordered]@{ ForbiddenAccessGranted = $forbiddenGranted; Reason = if ($forbiddenGranted) { 'FORBIDDEN_BIT_EFFECTIVELY_GRANTED' } else { 'NO_FORBIDDEN_BIT_GRANTED' } }
 }
 
 try {
@@ -415,9 +479,13 @@ try {
         }
 
         # Post-apply confirmation: re-read each node, confirm the exact
-        # planned rights are now present for the service account.
+        # planned rights are now present for the service account, and
+        # capture the FINAL Sddl/Aces per node for the audit record (not
+        # just the pre-apply snapshot).
+        $postApplySnapshots = [System.Collections.Generic.List[object]]::new()
         foreach ($path in $touchedPaths) {
             $after = Get-NodeAclSnapshot -Path $path -IsDirectory $true
+            if ($null -eq $after) { Throw-SafeApplyError "POST_APPLY_NODE_NOT_FOUND_$([System.IO.Path]::GetFileName($path))" }
             $acesForThisPath = @($plannedAces | Where-Object { $_.Path -eq $path })
             $afterAcl = if ($path -match '^[A-Za-z]:$') { [System.IO.Directory]::GetAccessControl("$path\") } else { [System.IO.Directory]::GetAccessControl($path) }
             $matchingRules = @($afterAcl.GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier]) | Where-Object { $_.IdentityReference.Value -eq (([System.Security.Principal.NTAccount]$ServiceAccountName).Translate([System.Security.Principal.SecurityIdentifier]).Value) })
@@ -425,6 +493,7 @@ try {
                 $found = @($matchingRules | Where-Object { ([int64]$_.FileSystemRights -band [int64]$ace.RightsValue) -eq [int64]$ace.RightsValue -and $_.InheritanceFlags.ToString() -eq $ace.InheritanceFlags })
                 if ($found.Count -eq 0) { Throw-SafeApplyError "POST_APPLY_ACE_NOT_CONFIRMED_$([System.IO.Path]::GetFileName($path))" }
             }
+            $postApplySnapshots.Add([ordered]@{ Path = $path; Sddl = $after.Sddl; Aces = $after.Aces })
         }
 
         # WAL/SHM regeneration continuity -- REAL proof, not a simulation:
@@ -448,6 +517,51 @@ try {
             }
         }
         if (-not $continuityResult.InheritedReadAceFound) { Throw-SafeApplyError 'WAL_SHM_CONTINUITY_INHERITANCE_NOT_CONFIRMED' }
+
+        # SID/effective-access simulation directly against the 3 REAL DB
+        # files (data.db mandatory; -wal/-shm best-effort, since pCloud may
+        # not have either open right now -- their absence is normal, not a
+        # failure). Same simulation model as the preview tool, but run here
+        # against the REAL, POST-APPLY ACL of the actual target files, not
+        # just the containing folder -- proving Read is granted AND no
+        # write/delete/ownership bit is granted, on data.db itself.
+        # Empirically confirmed (real test, this machine, this session)
+        # that .NET's Directory.SetAccessControl on the parent DOES
+        # propagate a new ObjectInherit ACE to already-existing child
+        # files immediately, not only to files created afterward -- so
+        # this is a REAL, current-state check, not a future-only promise.
+        $dbFileReadRights = [int64]([System.Security.AccessControl.FileSystemRights]::Read -bor [System.Security.AccessControl.FileSystemRights]::Synchronize)
+        $serviceSidForSimulation = ([System.Security.Principal.NTAccount]$ServiceAccountName).Translate([System.Security.Principal.SecurityIdentifier]).Value
+        $dbBaseFileName = [System.IO.Path]::GetFileName($expectedDbPath)
+        $dbFileNamesForSimulation = @($dbBaseFileName, "$dbBaseFileName-wal", "$dbBaseFileName-shm")
+        $dbFileSimulationResults = [System.Collections.Generic.List[object]]::new()
+        foreach ($name in $dbFileNamesForSimulation) {
+            $fullPath = Join-Path $expectedPCloudFolder $name
+            $isDbFileItself = ($name -eq $dbBaseFileName)
+            if (-not [System.IO.File]::Exists($fullPath)) {
+                $dbFileSimulationResults.Add([ordered]@{ Path = $fullPath; Exists = $false; ReadGranted = $null; ForbiddenAccessGranted = $null; Note = 'Not present at Apply time (normal for -wal/-shm outside an open pCloud transaction) -- not evaluated.' })
+                if ($isDbFileItself) { Throw-SafeApplyError 'DB_FILE_MISSING_AT_APPLY_TIME' }
+                continue
+            }
+            $snapshot = Get-NodeAclSnapshot -Path $fullPath -IsDirectory $false
+            $readCheck = Test-SimulatedEffectiveAccess -AclSnapshot $snapshot -TargetSid $serviceSidForSimulation -RequiredRightsValue $dbFileReadRights
+            $forbiddenCheck = Test-SimulatedForbiddenAccessAbsent -AclSnapshot $snapshot -TargetSid $serviceSidForSimulation -ForbiddenRightsMask $ForbiddenRightsMask
+            $dbFileSimulationResults.Add([ordered]@{
+                Path = $fullPath
+                Exists = $true
+                ReadGranted = $readCheck.Granted
+                ReadReason = $readCheck.Reason
+                ForbiddenAccessGranted = $forbiddenCheck.ForbiddenAccessGranted
+                ForbiddenAccessReason = $forbiddenCheck.Reason
+            })
+            if ($isDbFileItself) {
+                # data.db is the actual point of the whole exercise -- fail
+                # closed (triggers rollback) if the simulation does not
+                # confirm Read=yes / Write=no on the real file.
+                if (-not $readCheck.Granted) { Throw-SafeApplyError 'DB_FILE_READ_NOT_CONFIRMED_BY_SIMULATION' }
+                if ($forbiddenCheck.ForbiddenAccessGranted) { Throw-SafeApplyError 'DB_FILE_FORBIDDEN_ACCESS_GRANTED_BY_SIMULATION' }
+            }
+        }
 
         # Real service-account-context verification (best-effort, does NOT
         # roll back on failure -- see header notes on the known,
@@ -513,10 +627,42 @@ try {
             FreshPreviewReportAtApplyTime = $freshWrapper.Report
             PlannedAces = $plannedAces
             PreApplySnapshots = @($appliedNodes | ForEach-Object { [ordered]@{ Path = $_.Path; IsDirectory = $_.IsDirectory; Sddl = $_.Sddl } })
+            PostApplySnapshots = @($postApplySnapshots)
             WalShmContinuityTest = $continuityResult
+            DbFileEffectiveAccessSimulation = @($dbFileSimulationResults)
             ServiceAccountContextVerification = $contextVerification
         }
         $reportRef = Write-AdminOnlyEvidence -NamePrefix 'file-agent-pcloud-db-access-apply' -ReportObject $applyReport
+
+        # Verify the rollback PACKAGE itself is genuinely usable: read the
+        # just-written evidence file back through the exact same
+        # hash-verified path a separate -Rollback invocation will use, and
+        # confirm its schema has everything a real rollback needs. This
+        # does NOT execute a rollback (that would immediately undo the
+        # grant just applied) -- it proves the package is ready, fail-
+        # closed (triggers the same auto-rollback-of-applied-ACEs as any
+        # other post-apply check) if it is not.
+        $rollbackPackageCheck = [ordered]@{ Verified = $false; Detail = $null }
+        $reEvidence = Read-HashVerifiedReport -Path (Join-Path $ReportDirectory $reportRef.FileName) -ExpectedSha256 $reportRef.Sha256 `
+            -MissingCode 'ROLLBACK_PACKAGE_ADMIN_ACL_REQUIRED' -HashMismatchCode 'ROLLBACK_PACKAGE_HASH_MISMATCH' -InvalidJsonCode 'ROLLBACK_PACKAGE_JSON_INVALID'
+        $preApplyCount = @($reEvidence.PreApplySnapshots).Count
+        $hasAllSddl = -not @($reEvidence.PreApplySnapshots | Where-Object { [string]::IsNullOrWhiteSpace($_.Sddl) })
+        if ($reEvidence.SchemaVersion -eq 'hasarbotu-file-agent-pcloud-db-access-apply/1.0.0' -and $reEvidence.Applied -eq $true -and $preApplyCount -eq @($touchedPaths).Count -and $hasAllSddl) {
+            $rollbackPackageCheck.Verified = $true
+            $rollbackPackageCheck.Detail = "Re-read via the exact hash-verified path -Rollback uses; $preApplyCount pre-apply SDDL snapshot(s) present, schema valid. Rollback NOT executed here (would undo the grant just applied)."
+        }
+        else {
+            Throw-SafeApplyError 'ROLLBACK_PACKAGE_SCHEMA_INCOMPLETE'
+        }
+        $rollbackPackageCheckReport = [ordered]@{
+            SchemaVersion = 'hasarbotu-file-agent-pcloud-db-access-rollback-package-check/1.0.0'
+            GeneratedAtUtc = [DateTime]::UtcNow.ToString('o')
+            SourceApplyEvidenceFile = $reportRef.FileName
+            SourceApplyEvidenceSha256 = $reportRef.Sha256
+            Verified = $rollbackPackageCheck.Verified
+            Detail = $rollbackPackageCheck.Detail
+        }
+        $rollbackPackageCheckRef = Write-AdminOnlyEvidence -NamePrefix 'file-agent-pcloud-db-access-rollback-package-check' -ReportObject $rollbackPackageCheckReport
 
         Write-Output ([ordered]@{
             SchemaVersion = 'hasarbotu-file-agent-pcloud-db-access-apply-wrapper/1.0.0'
@@ -524,10 +670,13 @@ try {
             OverallStatus = 'applied'
             AppliedAceCount = @($plannedAces).Count
             WalShmContinuityConfirmed = $continuityResult.InheritedReadAceFound
+            DbFileEffectiveAccessSimulation = @($dbFileSimulationResults)
+            RollbackPackageVerified = $rollbackPackageCheck.Verified
+            RollbackPackageCheckReport = $rollbackPackageCheckRef
             ServiceAccountContextVerificationSucceeded = $contextVerification.Succeeded
-            ServiceAccountContextVerificationNote = if (-not $contextVerification.Succeeded) { 'Real impersonated read NOT confirmed this run -- see report for the exact reason (known SeBatchLogonRight/disabled-service limitation, not silently skipped). ACL changes remain applied and were independently confirmed via direct ACL re-read + the WAL/SHM inheritance proof.' } else { 'Confirmed: a real process running as the service account read data.db successfully.' }
+            ServiceAccountContextVerificationNote = if (-not $contextVerification.Succeeded) { 'Real impersonated read NOT confirmed this run -- see report for the exact reason (known SeBatchLogonRight/disabled-service limitation, not silently skipped). ACL changes remain applied and were independently confirmed via direct ACL re-read + the WAL/SHM inheritance proof + the DB-file effective-access simulation.' } else { 'Confirmed: a real process running as the service account read data.db successfully.' }
             Report = $reportRef
-        } | ConvertTo-Json -Depth 8)
+        } | ConvertTo-Json -Depth 10)
         exit 0
     }
     catch {

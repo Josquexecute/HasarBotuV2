@@ -7175,3 +7175,136 @@ hesabi baglaminda TAM gercek dogrulama (Zamanlanmis Gorev) icin
 baslatilmasi (D9 ilerlemesine bagli) gerekiyor -- ikisi de bu paketin
 disinda, ayri kararlar. File Agent'in TypeScript kodu HIC degismedi;
 freshness gate hala baglanmadi.
+
+## 2026-08-07 - HB-2026-165: File Agent -> pCloud DB erisimi icin GERCEK Apply yapildi (6 ACE, gercek `svc-hb-fileagent` hesabina, gercek makinede) -- data.db/-wal/-shm uzerinde SID/effective-access simulasyonuyla Read=evet/Write=hayir bagimsizca dogrulandi; servis-hesabi-baglami gercek probe'u kullanicinin acik istegiyle File Agent kontrollu aktivasyonuna ERTELENDI
+
+Istek: HB-2026-163'te dogrulanmis, HB-2026-164'te Apply/Rollback araci
+hazirlanmis exact 6 minimum salt-okunur ACE'nin GERCEK Apply'i onaylandi.
+Acikca yasaklandi: `SeBatchLogonRight` verilmesi, servisin enable/start
+edilmesi, env veya pCloud ayari degistirilmesi. Apply oncesi istendi:
+preview'in taze yeniden dogrulanmasi, canli SDDL baseline'in birebir
+eslesmesi, exact ACE seti disinda hicbir iznin olmamasi, write/modify/
+delete/create/change-permissions/take-ownership bitlerinin kesinlikle
+bulunmamasi. Apply sonrasi istendi: her dugumde final SDDL/ACE dogrulama,
+WAL/SHM inheritance kaniti, SID/effective-access simulasyonuyla DB'nin
+okunabildigi ama yazilamadiginin dogrulanmasi, rollback paketinin ve
+admin-only+hash'li audit kanitlarinin dogrulanmasi. Gercek servis-hesabi-
+baglami DB probe'u acikca "File Agent kontrollu aktivasyonuna" ertelendi
+(mevcut `SeServiceLogonRight` ile orada yapilacak). Drift/blocker varsa
+Apply yapilmamasi veya rollback edilmesi, File Agent'in henuz
+baslatilmamasi acikca istendi.
+
+Yapilan (kod genisletmesi, gercek Apply'dan ONCE): `apply-file-agent-
+pcloud-db-access.ps1`e kullanicinin yeni istedigi iki dogrulama eklendi:
+(1) **DB-file effective-access simulasyonu** -- preview'in kendi
+`Test-SimulatedEffectiveAccess` modeli (SID + Authenticated Users +
+Everyone, explicit-deny-kazanir) apply script'ine tasindi ve GERCEK,
+Apply-SONRASI ACL'ye karsi, GERCEK 3 DB dosyasinin (data.db, -wal, -shm)
+UZERINDE calistirildi -- yalniz klasorde degil, dogrudan hedef dosyalarda.
+Yeni `Test-SimulatedForbiddenAccessAbsent` fonksiyonu write/delete/
+ownership bitlerinden HICBIRININ etkin verilmedigini ayrica dogrular.
+data.db icin bu kontrol ZORUNLU ve basarisiz olursa rollback tetikler
+(`DB_FILE_READ_NOT_CONFIRMED_BY_SIMULATION` / `DB_FILE_FORBIDDEN_
+ACCESS_GRANTED_BY_SIMULATION`); -wal/-shm yoksa (acik pCloud islemi
+disinda normal) tolere edilir. (2) **Rollback-paketi hazir-olma dogrulamasi**
+-- Apply kanit raporu yazildiktan hemen sonra, `-Rollback`in kullanacagi
+AYNI hash-dogrulamali yoldan GERI OKUNUR ve semasi (Applied=true, her
+dokunulan dugum icin SDDL mevcut) dogrulanir; ROLLBACK GERCEKTEN
+CALISTIRILMAZ (bu, az once uygulanan izni hemen geri alir, istenen bu
+degil) -- yalniz paketin GERCEKTEN kullanilabilir oldugu kanitlanir, ayri
+admin-only+hash'li bir "rollback-package-check" kaniti yazilir. Ayrica her
+dokunulan dugumun FINAL Sddl/Aces'i (yalniz pre-apply degil) kanit
+raporuna eklendi (`PostApplySnapshots`). Genisletme sonrasi test paketine
+(TEST1) 5 yeni assertion eklendi (RollbackPackageVerified, data.db VE
+data.db-wal icin ReadGranted=true/ForbiddenAccessGranted=false) --
+`apply-file-agent-pcloud-db-access.tests.ps1` (artik 5 senaryo, TEST1
+icinde 21 assertion) GERCEKTEN calistirildi, hepsi gecti; `node
+scripts\check-windows-service-configs.mjs` GERCEKTEN calistirildi, gecti.
+
+**Gercek on-arastirma (Apply'dan once, kod yazmadan ONCE):** kullanicinin
+"exact ACE seti disinda hicbir izin olmasin" gereksinimini karsilayip
+karsilamadigini kod-inceleme yerine GERCEK, ayri bir deney ile dogruladim
+-- gecici bir klasor + icinde ONCEDEN VAR OLAN bir dosya olusturuldu,
+klasore ObjectInherit bir Read ACE eklendi, VAR OLAN dosyanin ACL'i hemen
+kontrol edildi: `.NET`in `Directory.SetAccessControl`i, VAR OLAN alt
+dosyalara YENI miras edilebilir ACE'yi ANINDA yayiyor (yalniz sonradan
+olusturulan dosyalara degil) -- bu, DB-file simulasyon kontrolunu fail-
+closed yapmadan once dogrulanmasi gereken GERCEK bir varsayimdi, varsayim
+yerine gercek deneyle kanitlandi.
+
+**Gercek Apply calistirmasi (bu makinede, GERCEK `svc-hb-fileagent`
+hesabina, kullanicinin acik onayiyla):**
+1. Taze preview: `OverallStatus=grant_required`, 6 ACE planlandi, 0
+   blocker -- HB-2026-163/164'teki planla birebir ayni.
+2. `-Apply`: `OverallStatus=applied`, 6 ACE uygulandi,
+   `WalShmContinuityConfirmed=true`, DB-file simulasyonu data.db/-wal/-shm
+   UCUNDE de `ReadGranted=true, ForbiddenAccessGranted=false` (GERCEK,
+   post-apply ACL'ye karsi), `RollbackPackageVerified=true`.
+   `ServiceAccountContextVerificationSucceeded=false` -- **kullanicinin
+   acik talimatiyla beklenen ve kabul edilen sonuc** (SeBatchLogonRight
+   verilmedi, servis baslatilmadi -- bkz. asagida "Bilerek ertelendi").
+3. Taze preview (Apply SONRASI, bagimsiz dogrulama): `OverallStatus=
+   already_sufficient`, ata zincirindeki 6 dugumun TUMU
+   `CurrentlyGranted=true`, 3 DB dosyasinin TUMU `CurrentlyGranted=true`.
+4. **Araç disi, bagimsiz dogrulama** (`icacls` + dogrudan .NET
+   `FileSystemRights` sayisal deger okumasi, script'in kendi
+   raporlamasina guvenmeden): 5 ata dugumde tam olarak
+   `ExecuteFile|Synchronize` (deger 1048608) var; pCloud klasorunde tam
+   olarak `ExecuteFile|Synchronize` (1048608, bu-klasor-yalniz) +
+   `Read|Synchronize` (1179785, ObjectInherit) var. `WriteData(2)`,
+   `AppendData(4)`, `WriteExtendedAttributes(16)`, `WriteAttributes(256)`,
+   `Delete(65536)`, `DeleteSubdirectoriesAndFiles(64)`,
+   `ChangePermissions(262144)`, `TakeOwnership(524288)` bitlerinden
+   HICBIRI hicbir dugumde yok -- sifir yazma/silme/sahiplik biti,
+   bagimsizca dogrulandi.
+
+**Onemli, gizlenmeyen gercek bulgu:** ata dugumlerdeki ACE'ler yalniz
+`Traverse`(32) olarak PLANLANMISTI ama gercekte `Traverse|Synchronize`
+(1048608) olarak UYGULANDI. Bu bir kod hatasi DEGIL -- .NET'in
+`FileSystemAccessRule` (Allow tipi) kurucusu, standart senkron I/O
+acmalari icin `Synchronize` bitini otomatik ekler (dokumante edilmis
+platform davranisi, .NET kaynagindan dogrulandi). Bu, kullanicinin
+kendisinin orijinal istekte ACIKCA izin verdigi 3 hak kategorisinden
+biridir ("...ve Synchronize gereken kapsamda verilsin") -- yani onaylanmis
+sinirin DISINA CIKMADI, sadece PLANLANMIS deger ile UYGULANMIS deger
+arasinda (zaten beyaz listede olan) bu farkli bit var. Rollback'e GEREK
+GORULMEDI: (a) hicbir yasakli bit yok, (b) fark kullanicinin kendi
+onceden onayladigi kategoriden, (c) her iki `preview` calistirmasi da
+(Apply oncesi ve sonrasi) ve `icacls`/.NET dogrudan okumasi ayni sonucu
+GERCEKTEN teyit etti.
+
+**Bilerek ertelendi (kullanicinin acik talimatiyla):** servis hesabi
+baglaminda GERCEK Zamanlanmis Gorev tabanli DB okuma probe'u bu turda
+DENENMEDI (araç zaten dener ama HB-2026-164'te belgelenen `SeBatchLogonRight`
+eksikligi/servis Disabled nedeniyle basarisiz olacagi bilinen; kullanici
+bunu "File Agent kontrollu aktivasyonunda mevcut SeServiceLogonRight ile"
+yapmayi acikca istedi) -- `Succeeded:false` durumu ACL degisikligini geri
+almadi, plana uygun. `SeBatchLogonRight` verilmedi, servis enable/start
+edilmedi, env/pCloud ayari degismedi -- yalniz 6 ACE'nin kendisi
+uygulandi.
+
+Rollback GERCEKTEN CALISTIRILMADI (kullanicinin istegi Apply'i kalici
+tutmakti) -- yalniz rollback PAKETININ kullanilabilir oldugu, yukarida
+aciklanan hash-dogrulamali re-read ile kanitlandi. Gerekirse, kanit
+dosyasi ve hash'iyle `-Rollback` ayri, acik bir komutla her an
+calistirilabilir (TAM SDDL geri yukleme, HB-2026-164'te sentetik olarak
+kanitlanmis mekanizma).
+
+Kesin gercek kullanici adi/profil yolu/SID repo'ya ALINMADI; tam detay
+Administrators-only+hash'li kanit raporlarinda (apply + rollback-package-
+check, ikisi de bu turda uretildi).
+
+Test sonucu/Etki: `apply-file-agent-pcloud-db-access.tests.ps1` (5 senaryo,
+genisletilmis assertion seti) GERCEKTEN calistirildi, hepsi gecti. `node
+scripts\check-windows-service-configs.mjs` GERCEKTEN calistirildi, gecti.
+**GERCEK `svc-hb-fileagent` hesabinin ACL'i artik degisti** (yukaridaki 6
+ACE, bagimsizca 3 ayri yontemle -- aracin kendi post-apply kontrolu, taze
+preview, `icacls`+.NET dogrudan okuma -- dogrulandi). D9 gate
+calistirilmadi, D9 Adim 1'e gecilmedi, **File Agent servisi baslatilmadi**
+(kullanicinin acik talimati).
+
+Acik kalan: servis hesabi baglaminda GERCEK okuma probe'u File Agent
+kontrollu aktivasyon asamasina ertelendi (mevcut `SeServiceLogonRight`
+ile, ayri bir gorev). File Agent'in TypeScript kodu HIC degismedi;
+freshness gate hala baglanmadi; D9 Adim 1'e gecis icin hala ayri, acik bir
+kullanici karari gerekiyor.

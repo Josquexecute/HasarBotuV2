@@ -249,6 +249,20 @@ Son güncelleme: 2026-08-04
   `svc-hb-fileagent` ACL'ine hâlâ **Apply YAPILMADI**; gerçek makinede
   yalnız (değişmeyen) preview aracı tekrar çalıştırıldı, sonuç aynı: 6
   ACE hâlâ eksik.
+- **File Agent cross-account pCloud DB erişimi — GERÇEK Apply yapıldı
+  (HB-2026-165, 2026-08-07):** kullanıcı onayıyla 6 ACE GERÇEK
+  `svc-hb-fileagent` hesabına uygulandı. Apply öncesi araca DB dosyaları
+  (data.db/-wal/-shm) üzerinde SID/effective-access simülasyonu
+  (Read=evet/Write=hayır, data.db için zorunlu+fail-closed) ve rollback
+  paketi hazır-olma doğrulaması eklendi. Apply sonrası üç bağımsız
+  yöntemle doğrulandı: aracın kendi kontrolü, taze preview
+  (`already_sufficient`), `icacls`+doğrudan .NET sayısal okuma — tümü
+  aynı sonucu gösterdi: 5 ata düğümde `Traverse|Synchronize`, pCloud
+  klasöründe + `Read|Synchronize` (ObjectInherit), hiçbir yazma/silme/
+  sahiplik biti yok. Servis hesabı bağlamı gerçek okuma probe'u
+  kullanıcının açık isteğiyle File Agent kontrollü aktivasyonuna
+  ertelendi. Rollback GERÇEKTEN çalıştırılmadı (paket hazır, gerekirse
+  ayrı komutla çalıştırılabilir). File Agent servisi hâlâ başlatılmadı.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
