@@ -274,6 +274,21 @@ doğrulandı). **Apply YAPILMADI** — bu hâlâ ayrı, açık bir kullanıcı k
 gerektiriyor; bu güncelleme yalnız "plan hazır ve doğrulandı" durumunu
 kaydeder.
 
+**Güncelleme (HB-2026-164, 2026-08-07):** ayrı bir Apply+Rollback aracı
+(`apply-file-agent-pcloud-db-access.ps1`, + `.tests.ps1`) hazırlandı;
+yalnız preview raporunun ürettiği exact ACE'leri kabul eder, Apply öncesi
+preview'ı taze yeniden çalıştırıp raporla karşılaştırır, her dokunulacak
+düğümün ACL'ini raporun baseline'ıyla karşılaştırır (drift'te fail-closed),
+rollback tam SDDL'yi birebir geri yükler. `NT AUTHORITY\LOCAL SERVICE`
+hedef kimlikle sentetik ortamda GERÇEK ACL mutasyonu + gerçek rollback +
+WAL/SHM mirasının gerçek kanıtı uçtan uca doğrulandı (5 test). Servis
+hesabı bağlamında Zamanlanmış Görev tabanlı gerçek okuma testi denendi;
+bu makinede `SeBatchLogonRight` eksikliği/servisin Disabled olması
+nedeniyle tamamlanamadı — bu YENİ bir hak sessizce verilerek gizlenmedi,
+dürüstçe raporlanır. Gerçek `svc-hb-fileagent` ACL'ine hâlâ **Apply
+YAPILMADI** — gerçek makinede yalnız (değişmeyen) preview aracı tekrar
+çalıştırıldı, sonuç aynı: 6 ACE hâlâ eksik.
+
 `services/file-agent`'ın TypeScript kodu bu paketle HİÇ değiştirilmedi.
 
 ## 9. D9 planına etkisi

@@ -699,6 +699,38 @@ try {
   errors.push(`File Agent pCloud DB erişim önizleme tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-164: File Agent -> pCloud DB erişimi icin APPLY + ROLLBACK.
+// Yalniz HB-2026-163 preview raporunun URETTIGI exact ACE listesini kabul
+// eder; kendi ACE seti UYDURMAZ. Yazma/silme/sahiplik biti asla verilmez
+// (hem calisma zamaninda bit-maskesiyle hem statik denetimde kontrol
+// edilir); drift'te fail-closed; rollback tam SDDL geri yukler.
+try {
+  const applyScript = await readFile(`${DEPLOY_DIR}apply-file-agent-pcloud-db-access.ps1`, 'utf8')
+
+  assertContains(applyScript, /PlannedMinimumAces/, 'apply-file-agent-pcloud-db-access.ps1', 'yalniz preview raporunun urettigi exact ACE listesi kabul edilir (kendi ACE seti uydurulmaz)')
+  assertNotContains(applyScript, /\$AllowedRightsMask\s*=[^\n]*FullControl|\$AllowedRightsMask\s*=[^\n]*Modify\b/, 'apply-file-agent-pcloud-db-access.ps1', 'izin verilen haklar maskesi hic FullControl/Modify icermez (hard-coded genis izin yok)')
+  assertContains(applyScript, /ForbiddenRightsMask/, 'apply-file-agent-pcloud-db-access.ps1', 'yazma/silme/sahiplik/izin-degistirme bitleri acikca yasakli')
+  assertContains(applyScript, /PLANNED_ACE_OUTSIDE_WHITELIST/, 'apply-file-agent-pcloud-db-access.ps1', 'beyaz listedeki haklarin disina cikan ACE fail-closed reddedilir')
+  assertContains(applyScript, /PREVIEW_DRIFT_SINCE_REPORT/, 'apply-file-agent-pcloud-db-access.ps1', 'Apply oncesi ORIJINAL preview scripti TAZE yeniden calistirilir, sonuc raporla uyusmazsa fail-closed')
+  assertContains(applyScript, /ACL_DRIFT_SINCE_PREVIEW_REPORT/, 'apply-file-agent-pcloud-db-access.ps1', 'her dugumun taze ACL SDDL si rapor baseline iyle karsilastirilir, farkta fail-closed')
+  assertContains(applyScript, /Restore-NodeSddl/, 'apply-file-agent-pcloud-db-access.ps1', 'rollback tam SDDL geri yukler (hangi ACE eklendigini tahmin etmez)')
+  assertContains(applyScript, /WalShmContinuityTest|WAL_SHM_CONTINUITY_INHERITANCE_NOT_CONFIRMED/, 'apply-file-agent-pcloud-db-access.ps1', 'WAL/SHM sureklilik GERCEK bir dosya-olusturma + miras kanitiyla dogrulanir, simulasyon degil')
+  assertContains(applyScript, /ServiceAccountContextVerification/, 'apply-file-agent-pcloud-db-access.ps1', 'servis hesabi baglaminda gercek Zamanlanmis Gorev tabanli dogrulama denenir (basarisizlik acikca raporlanir, sessizce atlanmaz/sahte basari uretilmez)')
+  assertNotContains(applyScript, /LsaAddAccountRights|LsaRemoveAccountRights|SeBatchLogonRight\s*=|New-LocalUser|Set-LocalUser/, 'apply-file-agent-pcloud-db-access.ps1', 'YENI bir LSA hakki/hesap asla verilmez -- yalniz mevcut SeServiceLogonRight ile calisir')
+  assertNotContains(applyScript, /Start-Service|Set-Service|SetEnvironmentVariable/, 'apply-file-agent-pcloud-db-access.ps1', 'servis/env mutasyonu yok')
+
+  const applyTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}apply-file-agent-pcloud-db-access.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (applyTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(applyTests.stdout)) {
+    throw new Error(`apply-file-agent-pcloud-db-access testleri başarısız — ${applyTests.stderr || applyTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`File Agent pCloud DB erişim Apply/Rollback tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

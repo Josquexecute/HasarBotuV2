@@ -234,6 +234,21 @@ Son güncelleme: 2026-08-04
   (`BUILTIN\Users` ile `Everyone` karıştırılması) aracın kesin SID
   simülasyonuyla yakalandı. Hiçbir ACL/pCloud/servis/env/dosya
   değişmedi; Apply ayrı, açık bir kullanıcı onayı bekliyor.
+- **File Agent cross-account pCloud DB erişimi — Apply + Rollback aracı
+  hazır ve doğrulandı (HB-2026-164, 2026-08-07):**
+  `apply-file-agent-pcloud-db-access.ps1` (+ `.tests.ps1`, 5 test) yalnız
+  hash-doğrulanmış preview raporundaki exact ACE'leri kabul eder; Apply
+  öncesi preview'ı taze yeniden çalıştırıp raporla karşılaştırır ve her
+  düğümün ACL'ini kayıtlı baseline ile karşılaştırır (drift'te
+  fail-closed), rollback tam SDDL'yi birebir geri yükler. Sentetik ortamda
+  gerçek ACL mutasyonu + gerçek rollback + WAL/SHM mirasının gerçek kanıtı
+  uçtan uca doğrulandı. Servis hesabı bağlamında Zamanlanmış Görev
+  tabanlı gerçek doğrulama bu makinede `SeBatchLogonRight`
+  eksikliği/servisin Disabled olması nedeniyle tamamlanamadı — yeni bir
+  hak sessizce verilmedi, sonuç dürüstçe raporlanır. Gerçek
+  `svc-hb-fileagent` ACL'ine hâlâ **Apply YAPILMADI**; gerçek makinede
+  yalnız (değişmeyen) preview aracı tekrar çalıştırıldı, sonuç aynı: 6
+  ACE hâlâ eksik.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

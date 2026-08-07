@@ -7068,3 +7068,110 @@ gerektiriyor (HB-2026-113+'in ayni titizlikteki modeli: Planla -> Onizle
 -> Onay -> Uygula -> Dogrula -> Kesinlestir -> Audit). File Agent'in
 TypeScript kodu (`services/file-agent`) bu paketle de HIC degismedi;
 freshness gate hala baglanmadi.
+
+## 2026-08-07 - HB-2026-164: File Agent -> pCloud DB erisimi icin ayri APPLY + ROLLBACK paketi yazildi ve GERCEK sentetik ortamda uctan uca dogrulandi (gercek ACL mutasyonu + gercek rollback + WAL/SHM mirasinin GERCEK kaniti); gercek makinede yalniz preview calistirildi, GERCEK svc-hb-fileagent ACL'i HALA degismedi
+
+Istek: HB-2026-163'te dogrulanan minimum ACL plani icin ayri bir Apply/
+rollback paketi istendi -- yalniz preview aracinin urettigi exact 6 ACE
+kabul edilsin, hard-coded genis izin verilmesin, mevcut ACL snapshot+hash
+alinsin, drift'te fail-closed dursun, Apply oncesi preview tekrar
+dogrulansin, yalniz Traverse ve Read/ReadAttributes/ReadExtendedAttributes/
+ReadPermissions/Synchronize gereken kapsamda verilsin, Write/Modify/
+Delete/Create/TakeOwnership/ChangePermissions kesinlikle yasak olsun,
+rollback exact onceki ACL'ye donsun, Apply sonrasi svc-hb-fileagent
+baglaminda data.db/-wal/-shm salt-okunur snapshot/probe GERCEKTEN
+calissin, WAL/SHM yeniden olusma senaryosu dogrulansin, kanitlar admin-
+only+hash'li yazilsin. Gercek makinede yalniz preview calistirilmasi,
+ACL Apply yapilmamasi acikca istendi.
+
+Yapilan: yeni `apply-file-agent-pcloud-db-access.ps1` (+ `.tests.ps1`, 5
+test) yazildi. `-PreviewReportPath`/`-PreviewReportSha256` ile HB-2026-163
+raporunu hash dogrulayarak okur; her ACE'yi bagimsizca (a) `Traverse|Read|
+Synchronize` beyaz listesine (b) `AccessControlType=Allow`e (c) Identity'nin
+parametreyle eslesmesine (d) yolun bagimsizca yeniden hesaplanan ata
+zincirinin disina cikmamasina karsi dogrular -- rapor kendisi UYDURULMUS
+olsa bile bu dort kontrolden herhangi biri BASARISIZ olursa sifir mutasyon.
+`-Apply`dan ONCE HER ZAMAN: orijinal preview scripti gercek bir alt-surec
+olarak TAZE yeniden calistirilir, taze plan raporunkiyle birebir
+eslesmezse (`PREVIEW_DRIFT_SINCE_REPORT`) durur; her dokunulacak dugumun
+TAZE ACL SDDL'si raporun kaydettigi baseline ile karsilastirilir, farkliysa
+(`ACL_DRIFT_SINCE_PREVIEW_REPORT`) durur -- ikisi de sifir mutasyonla.
+Apply yalniz `AddAccessRule` ile EKLER (asla `SetAccessRuleProtection` ile
+sifirlamaz); herhangi bir adim basarisiz olursa o ana kadar uygulanan HER
+sey ters sirada, dokunulmadan onceki TAM SDDL'ye geri alinir. Apply
+sonrasi: (1) her dugum yeniden okunup ACE'nin gercekten orada oldugu
+dogrulanir; (2) WAL/SHM surekliligi GERCEK bir kanitla dogrulanir --
+pCloud klasorunde bir kullan-at dosya olusturulur (Administrator olarak),
+ACE'yi miras aldigi kontrol edilir, silinir -- basarisizlikta rollback
+tetiklenir; (3) servis hesabi baglaminda GERCEK bir Zamanlanmis Gorev
+(Task Scheduler COM API, `TASK_LOGON_SERVICE_ACCOUNT`) ile salt-okunur DB
+okuma denenir. `-Rollback` modu onceki bir Apply kanit raporundaki TAM
+SDDL'yi dugum dugum birebir geri yukler ve dogrular.
+
+**Gercek arastirma (Apply tasarimindan once):** "servis hesabi
+baglaminda gercekten calissin" gereksinimini karsilamak icin GERCEK
+makinede uc farkli mekanizma denendi: (1) `New-ScheduledTaskPrincipal
+-LogonType ServiceAccount` cmdlet'i -- kayitli gorevde sessizce
+`LogonType=Interactive`e donusuyor (gercek, tekrarlanabilir bir hata/
+sinirlama, `SeDenyInteractiveLogonRight` nedeniyle gorev hicbir zaman
+calisamiyor); (2) dogrudan Task Scheduler COM API'siyle acik
+`TASK_LOGON_SERVICE_ACCOUNT=5` -- `SCHED_E_ACCOUNT_INFORMATION_NOT_SET`
+(0x80041318) ile basarisiz; (3) legacy `schtasks.exe /RU <hesap>` (S4U) --
+`SeBatchLogonRight` gerektiriyor, bu hesapta KESIN OLARAK YOK (yalniz
+HB-2026-113'un verdigi `SeServiceLogonRight` var, okuma-yalniz
+`Get-AccountRights`/`LsaEnumerateAccountRights` deseniyle dogrulandi).
+**Karar: bu YENI LSA hakkini (SeBatchLogonRight) sessizce vermek yerine
+-- "yalniz 6 ACE" yetkisinin disina cikacagi icin -- Apply araci gercek
+baglam testini DENER, basarisiz olursa nedeni ACIKCA raporlar
+(`Succeeded:false` + tam detay), ACL degisikligini GERI ALMAZ (zaten
+bagimsizca dogrulanmis).** Bu, acik, dokumante edilmis bir sinirdir --
+gizlenmedi, sahte basariya cevrilmedi.
+
+**Test surecinde bulunup duzeltilen 3 GERCEK hata** (hepsi gercek ACL
+mutasyonuyla sentetik ortamda kosan testlerle yakalandi, sentetik-olmayan/
+mantik-seviyesi testler yakalamazdi):
+1. Beyaz liste maskesine yanlislikla `FullControl` eklenmisti --
+   `FullControl`, `Read`in kendi bitlerini (ReadData/ReadAttributes/vs)
+   ZATEN icerdigi icin, HER gercek Read ACE'sini de "yasakli" olarak
+   reddediyordu. Duzeltme: `FullControl` yasakli maskeden cikarildi (ayri
+   "izin verilenlerin disinda bit var mi" kontrolu zaten yeterli).
+2. Cikci sürücü harfi (`"C:"`) belirsizligi -- HB-2026-163'te
+   `Get-NodeAclSnapshot`da duzeltilmisti, ama ACE yol-zinciri dogrulama
+   dongusunde AYRI bir `GetFullPath` cagrisinda AYNI hata tekrar ortaya
+   cikti (gercek CWD'ye gore yanlis cozuluyordu). Duzeltme: ayni
+   normalizasyon deseni oraya da uygulandi.
+3. Preview sarmalayicisinin BASARI ciktisinda hic `Status` alani yok
+   (yalniz hata yolunda var) -- StrictMode altinda `$freshWrapper.Status`
+   okumasi PropertyNotFoundException atiyordu. Duzeltme: once alanin VAR
+   OLUP OLMADIGI kontrol edilir.
+
+**Gercek dogrulama (sentetik ortam, `NT AUTHORITY\LOCAL SERVICE` hedef
+kimlik, gercek `svc-hb-fileagent`e hic dokunulmadan):** tam Apply -> 6
+ACE'nin GERCEKTEN diskte oldugu (bagimsizca `GetAccessRules` ile
+dogrulandi, hicbir ACE'de yazma/silme/sahiplik biti yok) + WAL/SHM
+mirasinin GERCEKTEN kanitlandigi (kullan-at dosya olusturuldu, ACE'yi
+miras aldigi teyit edildi, silindi) -> Rollback -> TUM dugumlerin SDDL'si
+bit bit eski haline dondu. `-Apply` verilmeden hicbir sey degismedi.
+Kasitli olarak bozulmus (WriteData enjekte edilmis) rapor sifir mutasyonla
+reddedildi. Onizleme sonrasi enjekte edilen ilgisiz bir ACL degisikligi
+(drift) sifir mutasyonla reddedildi. `-ServiceAccountName` uyusmazligi
+reddedildi.
+
+Kesin gercek kullanici adi/profil yolu/SID repo'ya ALINMADI; tam detay
+Administrators-only+hash'li kanit raporlarinda.
+
+Test sonucu/Etki: `apply-file-agent-pcloud-db-access.tests.ps1` (5 test)
+GERCEKTEN calistirildi, hepsi gecti. `node scripts\check-windows-service-
+configs.mjs` GERCEKTEN calistirildi, gecti (yeni beyaz liste/drift/
+rollback denetimleri dahil). **Gercek makinede yalniz preview aracı
+(HB-2026-163, degismedi) taze calistirildi -- GERCEK `svc-hb-fileagent`
+ACL'i hala 6 ACE'nin tamami eksik gosteriyor, hicbir ACL Apply
+YAPILMADI.** D9 gate calistirilmadi, D9 Adim 1'e gecilmedi.
+
+Acik kalan: gercek `-Apply`in GERCEK `svc-hb-fileagent`e karsi
+calistirilmasi hala ayri, acik bir kullanici onayi gerektiriyor. Servis
+hesabi baglaminda TAM gercek dogrulama (Zamanlanmis Gorev) icin
+`SeBatchLogonRight` verilmesi VEYA File Agent servisinin etkinlestirilip
+baslatilmasi (D9 ilerlemesine bagli) gerekiyor -- ikisi de bu paketin
+disinda, ayri kararlar. File Agent'in TypeScript kodu HIC degismedi;
+freshness gate hala baglanmadi.
