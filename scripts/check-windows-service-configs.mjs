@@ -762,6 +762,67 @@ try {
   errors.push(`File Agent kontrollü aktivasyon önizleme tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-167 Karar 1: Session-0-safe per-case freshness gate (attestation
+// tabanli). pCloud DB'nin file.hash kolonu 64-bit SQLite INTEGER'dir --
+// 256-bit SHA-256 icin YAPISAL olarak yetersizdir (gercek sorguyla
+// kanitlandi) -- bu yuzden ready durumu her zaman AYRI, gercek bir SHA-256
+// attestation eslesmesi gerektirir, DB hash/size/mtime TEK BASINA asla
+// yeterli sayilmaz.
+try {
+  const attestationModule = await readFile(`${DEPLOY_DIR}pcloud-source-attestation.mjs`, 'utf8')
+  assertContains(attestationModule, /plain SQLite INTEGER/, 'pcloud-source-attestation.mjs', 'pCloud file.hash kolonunun 256-bit SHA-256 olamayacagi (64-bit INTEGER) acikca belgelenir')
+  assertContains(attestationModule, /SOURCE_SIZE_RACE_VS_PCLOUD_DB_DURING_ATTESTATION/, 'pcloud-source-attestation.mjs', 'attestation sirasinda kaynak/DB boyut yarisi fail-closed yakalanir')
+  assertContains(attestationModule, /ATTESTATION_RECORD_HASH_MISMATCH/, 'pcloud-source-attestation.mjs', 'kanit dosyasi okuma sirasinda hash-dogrulama yapilir (tampering fail-closed yakalanir)')
+
+  const gateModule = await readFile(`${DEPLOY_DIR}pcloud-session0-freshness-gate.mjs`, 'utf8')
+  assertNotContains(gateModule, /['"]P:\\\\/, 'pcloud-session0-freshness-gate.mjs', 'hicbir P:\\ varsayilani/referansi yok (Session-0-safe olmanin tam nedeni)')
+  assertContains(gateModule, /STATUS_PRECEDENCE/, 'pcloud-session0-freshness-gate.mjs', 'CaseStatus her zaman EN KOTU dosya durumunu alir (conflict>syncing>unknown>ready)')
+  assertContains(gateModule, /NO_ATTESTATION_FOR_CURRENT_REVISION/, 'pcloud-session0-freshness-gate.mjs', 'attestation yoksa unknown/syncing -- asla sessizce ready degil')
+  assertContains(gateModule, /FILE_MISSING_FROM_TARGET/, 'pcloud-session0-freshness-gate.mjs', 'pCloud DB dosyayi listeliyor ama target eksikse sessizce atlanmaz')
+  assertContains(gateModule, /PCLOUD_CONFLICT_NAME_PATTERN/, 'pcloud-session0-freshness-gate.mjs', 'conflict-name deseni fail-closed conflict uretir')
+
+  const gateWrapper = await readFile(`${DEPLOY_DIR}run-pcloud-session0-freshness-gate.ps1`, 'utf8')
+  assertNotContains(gateWrapper, /['"]P:\\\\|Join-Path\s+['"]P:\\\\['"]/, 'run-pcloud-session0-freshness-gate.ps1', 'hicbir P:\\ varsayilani yok -- run-pcloud-case-reconciliation.ps1nin aksine Session-0-safe')
+  assertContains(gateWrapper, /ADMINISTRATOR_REQUIRED/, 'run-pcloud-session0-freshness-gate.ps1', 'admin-only kanit yazimi icin Administrator gerektirir (aracin KENDISI degil -- servis hesabi .mjsyi DOGRUDAN cagirir, ayri bir bulguya bkz. probe inner script)')
+
+  const attestationWrapper = await readFile(`${DEPLOY_DIR}generate-pcloud-source-attestation.ps1`, 'utf8')
+  assertContains(attestationWrapper, /ADMINISTRATOR_REQUIRED/, 'generate-pcloud-source-attestation.ps1', 'admin/interactive-context arac -- P:\\ erisimi gerektirir')
+  assertNotContains(attestationWrapper, /Start-Service|Set-Service|SetEnvironmentVariable/, 'generate-pcloud-source-attestation.ps1', 'servis/env mutasyonu yok')
+
+  const probeInner = await readFile(`${DEPLOY_DIR}file-agent-disposable-probe-inner.ps1`, 'utf8')
+  assertNotContains(probeInner, /ADMINISTRATOR_REQUIRED|WindowsBuiltInRole\]::Administrator/, 'file-agent-disposable-probe-inner.ps1', 'BILEREK Administrator gerektirmez -- svc-hb-fileagent dusuk-yetkili hesaptir, bir admin kontrolu bu betigi o kimlikle calisamaz hale getirirdi')
+  assertContains(probeInner, /UnauthorizedAccessException/, 'file-agent-disposable-probe-inner.ps1', 'gercek yazma-reddi kanitlanir (simule edilmez)')
+  assertNotContains(probeInner, /Start-Service|Stop-Service|Set-Service|New-Service|New-LocalUser|Set-LocalUser|sc\.exe|SetEnvironmentVariable|Set-Acl|SetAccessControl/, 'file-agent-disposable-probe-inner.ps1', 'hicbir servis/hesap/ACL/env mutasyonu yok -- yalniz DB okuma + yazma-denemesi (basarisizlik beklenir) + freshness gate cagrisi')
+
+  const probePreview = await readFile(`${DEPLOY_DIR}preview-file-agent-disposable-probe-service.ps1`, 'utf8')
+  assertNotContains(probePreview, /\[switch\]\$Apply\b/, 'preview-file-agent-disposable-probe-service.ps1', 'yapisal olarak -Apply anahtari yok')
+  assertNotContains(probePreview, /<password>/, 'preview-file-agent-disposable-probe-service.ps1', 'planlanan WinSW XMLinde asla <password> elemani yok (HB-2026-118 sc.exe-config-yalniz disiplini)')
+  assertContains(probePreview, /<startmode>Manual<\/startmode>/, 'preview-file-agent-disposable-probe-service.ps1', 'planlanan servis Manual baslar -- asla Automatic (tek seferlik probe, kalici servis degil)')
+  assertContains(probePreview, /second_service_logon_credential/, 'preview-file-agent-disposable-probe-service.ps1', 'ikinci servisin ayni hesapla oturum acma parola mekanigi (sc.exe/SAM) acikca cozulmemis engel olarak raporlanir')
+  // NOTE: does not assertNotContains Start-Service/etc. here -- this
+  // script's OWN forbiddenPatterns array (used to check the INNER script)
+  // legitimately lists those cmdlet names as strings, which would be a
+  // false positive for a naive text-contains check (found via a real
+  // audit run while building this block). file-agent-disposable-probe-
+  // inner.ps1's own check above is the one that matters for actual calls.
+
+  const gateTests = spawnSync('node', ['--test', `${DEPLOY_DIR}pcloud-session0-freshness-gate.test.mjs`], { encoding: 'utf8' })
+  if (gateTests.status !== 0) throw new Error(`pcloud-session0-freshness-gate.test.mjs başarısız — ${gateTests.stderr || gateTests.stdout}`)
+  const attestationTests = spawnSync('node', ['--test', `${DEPLOY_DIR}pcloud-source-attestation.test.mjs`], { encoding: 'utf8' })
+  if (attestationTests.status !== 0) throw new Error(`pcloud-source-attestation.test.mjs başarısız — ${attestationTests.stderr || attestationTests.stdout}`)
+
+  const probePreviewTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}preview-file-agent-disposable-probe-service.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (probePreviewTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(probePreviewTests.stdout)) {
+    throw new Error(`preview-file-agent-disposable-probe-service testleri başarısız — ${probePreviewTests.stderr || probePreviewTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`Session-0-safe freshness gate / disposable probe service tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

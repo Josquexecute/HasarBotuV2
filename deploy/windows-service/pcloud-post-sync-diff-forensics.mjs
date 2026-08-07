@@ -37,7 +37,7 @@ import {
 // Identical entries (same SHA-256 and same mtime) are not included in the
 // report body, only counted.
 
-const CONFLICT_NAME_PATTERN = /\(conflicted copy|conflicted copy \d+|\.deleted\b/i
+export const CONFLICT_NAME_PATTERN = /\(conflicted copy|conflicted copy \d+|\.deleted\b/i
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
 const EMPTY_EXCLUDED_PATHS = new Set()
 
@@ -109,7 +109,7 @@ function normalizeWindowsRoot(value) {
   return path.win32.normalize(path.win32.resolve(value)).replace(/[\\/]+$/, '')
 }
 
-async function fileSha256(fullPath) {
+export async function fileSha256(fullPath) {
   const hasher = createHash('sha256')
   for await (const chunk of createReadStream(fullPath, { flags: 'r' })) {
     hasher.update(chunk)
@@ -157,7 +157,7 @@ async function hashTreeDetailed(root, excludedPaths, progressInterval, label, sc
   return { byKey, fileCount: inventory.fileCount, bytes: inventory.bytes }
 }
 
-function resolveFolderIdByRelativeDirParts(database, rootId, relativeDirParts) {
+export function resolveFolderIdByRelativeDirParts(database, rootId, relativeDirParts) {
   let currentId = rootId
   for (const segment of relativeDirParts) {
     const row = database.prepare(
@@ -169,21 +169,21 @@ function resolveFolderIdByRelativeDirParts(database, rootId, relativeDirParts) {
   return currentId
 }
 
-function getCurrentFileRow(database, folderId, fileName) {
+export function getCurrentFileRow(database, folderId, fileName) {
   return database.prepare(`
     SELECT CAST(id AS TEXT) AS id_text, name, size, CAST(hash AS TEXT) AS hash_text, flags, ctime, mtime
     FROM file WHERE parentfolderid = ? AND name = ?
   `).get(BigInt(folderId), fileName)
 }
 
-function getRevisionHistory(database, fileId) {
+export function getRevisionHistory(database, fileId) {
   return database.prepare(`
     SELECT CAST(hash AS TEXT) AS hash_text, ctime, size
     FROM filerevision WHERE fileid = ? ORDER BY ctime ASC
   `).all(BigInt(fileId))
 }
 
-function getTaskReferenceCount(database, fileId) {
+export function getTaskReferenceCount(database, fileId) {
   const taskRow = database.prepare(
     'SELECT count(*) AS c FROM task WHERE itemid = ? OR localitemid = ? OR newitemid = ?',
   ).get(BigInt(fileId), BigInt(fileId), BigInt(fileId))
@@ -191,7 +191,7 @@ function getTaskReferenceCount(database, fileId) {
   return safeInteger(taskRow.c, 'TASK_COUNT_INVALID') + safeInteger(fstaskRow.c, 'FSTASK_COUNT_INVALID')
 }
 
-function findAllConflictNames(database, rootId) {
+export function findAllConflictNames(database, rootId) {
   const statement = database.prepare(`
     WITH RECURSIVE tree(id) AS (
       SELECT ?

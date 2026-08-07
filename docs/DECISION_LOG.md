@@ -7405,3 +7405,167 @@ freshness gate yeniden tasarimi) ayri, acik kullanici kararlari
 gerektiriyor. Bunlar cozulmeden gercek Apply/aktivasyon araci
 YAZILAMAZ/CALISTIRILAMAZ. File Agent'in TypeScript kodu bu paketle de HIC
 degismedi.
+
+## 2026-08-08 - HB-2026-167: HB-2026-166'nin 2 acik mimari karari ONAYLANDI ve GERCEKLESTIRILDI -- (1) attestation-tabanli Session-0-safe per-case freshness gate, (2) File Agent'a self-test modu EKLEMEK YERINE ayri, tek-seferlik disposable probe service PLAN+PREVIEW; gercek servis install/start/env/cutover Apply YAPILMADI
+
+Istek: kullanici iki mimari karari onayladi. **Karar 1:** P:\ retirement
+beklenmeyecek; File Agent freshness gate Session-0-safe olacak; pCloud DB
+fileId/revision/path/size ile degisim kimligi saglasin; target C: hash'i,
+ayni revision icin ONCEDEN kriptografik olarak dogrulanmis source SHA-256
+attestation ile eslesmeden `ready` verilmesin; pCloud DB dogrudan
+guvenilir content hash sagliyorsa kanitlayip kullan, saglamiyorsa DB+
+size/mtime TEK BASINA yeterli sayilmasin; attestation yoksa `unknown`,
+revision degisirse `syncing/unknown`, conflict varsa fail-closed. **Karar
+2:** production File Agent'a self-test modu EKLENMEYECEK; mevcut
+SeServiceLogonRight + svc-hb-fileagent ile calisan tek-seferlik disposable
+probe service gelistirilecek -- gercek pCloud DB read, WAL/SHM, no-write,
+per-case freshness LIBRARY erisimini dogrulasin, sonra tamamen
+kaldirilabilsin. API hazir olmadan gercek File Agent baslatilmayacak.
+Once plan+preview+testleri yap; gercek servis install/start/env/cutover
+Apply yapma.
+
+**Karar 1 -- gercek arastirma (kod yazmadan ONCE):** pCloud'un gercek
+yerel DB'sine (HB-2026-165 erisimiyle) GERCEK bir salt-okunur sorgu
+calistirildi. `file` tablosunun `hash` kolonu SQLite `INTEGER` affinity'si
+(8 bayt/64 bit tavan) -- gercek orneklenen degerler tam 64-bit ISARETLI
+araligi kapliyor (orn. `-5965063559331438791`). SHA-256, 256 bit/32 bayt
+gerektirir -- bu YAPISAL OLARAK, `file.hash` kolonunun bir tam SHA-256
+digest'i tutmasini IMKANSIZ kilar (varsayim degil, sema + gercek deger
+kaniti). Ayrica `filerevision(fileid, hash, ctime, size)` tablosu, KENDI
+PRIMARY KEY'i (fileid, hash) ile bu ciftin zaten pCloud'un kendi
+REVISION-KIMLIGI anahtari oldugunu dogruluyor -- bu, attestation
+anahtarlamasinda AYNEN kullanildi (uydurulmadi). Folder/file COZUMLEMESI
+(hem ust-duzey sirket klasoru hem alt yollar) TAMAMEN DB-ICI isim
+eslesmesiyle yapilabildigi de gercek sorgularla dogrulandi (`parentfolderid
+= 0 AND name = ?`) -- P:\ dosya sistemine HICBIR gereksinim yok.
+
+**Yapilan (kod):**
+1. `pcloud-post-sync-diff-forensics.mjs`den 6 yardimci fonksiyon/sabit
+   (`resolveFolderIdByRelativeDirParts`, `getCurrentFileRow`,
+   `getRevisionHistory`, `getTaskReferenceCount`, `findAllConflictNames`,
+   `fileSha256`, `CONFLICT_NAME_PATTERN`) `export` edildi (davranis
+   degisikligi SIFIR, yalniz erisim genisletildi) -- 8/8 mevcut test
+   degismeden gecti.
+2. Yeni `pcloud-source-attestation.mjs` (+ `.test.mjs`, 8 test): GERCEK
+   kaynak dosya baytlarindan SHA-256 hesaplar, TEK bir tutarli DB
+   snapshot'iyla (fileId, pCloudHash, DB-kayitli boyut) cozer, kaynak/DB
+   boyut YARISINI fail-closed yakalar (`SOURCE_SIZE_RACE_VS_PCLOUD_DB_
+   DURING_ATTESTATION`), (fileId,hash) cifti disinda hicbir sey uydurmaz.
+   `writeAttestationRecord`/`readAttestationRecord`: her kayit ayri
+   dosya, dosya adi (fileId,hash)den DETERMINISTIK turetilir, SHA-256
+   sidecar ile tamper-evident (degistirilirse `ATTESTATION_RECORD_HASH_
+   MISMATCH`). `generate-pcloud-source-attestation.ps1`+`.mjs`: ADMIN/
+   etkilesimli-baglam araci (P:\ erisimi GEREKTIRIR, run-pcloud-case-
+   reconciliation.ps1 ile ayni), yalniz KENDI attestation deposuna ve
+   admin-only kanit raporuna yazar -- pCloud/kaynak/hedefe HICBIR yazma.
+3. Yeni `pcloud-session0-freshness-gate.mjs` (+ `.test.mjs`, 6 test):
+   **SIFIR P:\ bagimliligi.** Girdiler: pCloud yerel DB (yalniz isim
+   cozumleme + canli task sayisi icin), hedef agac (gercek yerel disk),
+   attestation deposu. Kural TAM OLARAK istendigi gibi: `ready` YALNIZ
+   attestation VARSA VE Sha256'si TAZE hesaplanan hedef SHA-256'yla
+   eslesirse; attestation YOKSA -- canli task varsa `syncing`, yoksa
+   `unknown`; attestation VARSA ama Sha256 UYUSMUYORSA `conflict`
+   (fail-closed); conflict-name deseni HER ZAMAN `conflict`. **Gercek bir
+   bosluk, ilk taslaktan SONRA, test yazmadan ONCE bulunup duzeltildi:**
+   yalniz HEDEF dosyalarini dolasmak, pCloud DB'nin hala listeledigi ama
+   HEDEFTE eksik olan bir dosyayi sessizce ATLARDI (hicbir girdi
+   uretmezdi) -- yeni, DB-yalniz recursive CTE ile (`enumerateDbFilesUnder
+   Folder`) bu artik `syncing`/`unknown` olarak dogru raporlaniyor,
+   ASLA sessizce yok sayilmiyor. CaseStatus HER ZAMAN en kotu dosya
+   durumunu alir. `run-pcloud-session0-freshness-gate.ps1`: run-pcloud-
+   case-reconciliation.ps1 ile AYNI cikis kodu sozlesmesi (0=ready,
+   2=not-ready, 1=error) ama hicbir `-SourceRoot` parametresi/varsayilani
+   YOK -- yapisal olarak P:\'ye cozulebilecek hicbir sey yok.
+
+**Karar 2 -- gercek arastirma (tasarimdan once):** ayni dusuk-yetkili
+hesapla (`svc-hb-fileagent`) IKINCI bir Windows servisi calistirmanin
+gercek mekanigi arastirildi: `sc.exe config <yeniServis> obj= .\<hesap>
+password=<...>` GEREKIR, ve Windows bunu HER SERVIS BASLATMASINDA
+hesabin SAM'deki GERCEK GUNCEL parolasina karsi dogrular -- servise ozel
+bagimsiz bir sir DEGILDIR. HB-2026-118 bu hesabin parolasini BIR KEZ
+uretti, hemen GERCEK `hasarbotu-file-agent` servisi icin `sc.exe config`e
+kullandi, ve hicbir yerde SAKLAMADI (kasitli). Yani probe servisinin
+GERCEK aktivasyonu, hesabin parolasini ONCE SIFIRLAMAYI, hemen HER IKI
+servise de (`sc.exe config` ile) yeniden UYGULAMAYI, sonra yine
+UNUTMAYI gerektirir -- HB-2026-118 ile AYNI "bir kez uret, hemen uygula,
+asla saklama" deseni, yalniz servis ekleme icin TEKRARLANMASI gerekiyor.
+Bu, GERCEK, cozulmemis bir onkosuldur -- gizlenmedi.
+
+**Yapilan (kod):**
+1. Yeni `file-agent-disposable-probe-inner.ps1`: probenin GERCEK
+   yuku (henuz CALISTIRILMADI). **Bilerek Administrator GEREKTIRMEZ** --
+   svc-hb-fileagent dusuk-yetkili bir hesaptir, bir admin kontrolu bu
+   betigi TAM O KIMLIKLE calisamaz hale getirirdi. (1) GERCEK DB okuma
+   probu (data.db/-wal/-shm, var olanlari); (2) GERCEK yazma-reddi probu
+   (data.db'yi Write erisimiyle acmaya calisir, `UnauthorizedAccessException`
+   BEKLENIR -- simule edilmez); (3) `pcloud-session0-freshness-gate.mjs`yi
+   **DOGRUDAN** (node, Administrator-gated .ps1 sarmalayicisi UZERINDEN
+   DEGIL -- o Administrator ister ve dusuk-yetkili hesapta BASARISIZ
+   olurdu) cagirir -- gercek, admin-olmayan bir File Agent cagrisini
+   BIREBIR TAKLIT eder. Sonucunu `-ResultPath`e yazar (gelecekteki
+   orkestratorun ayri, dar bir yazma izni ONCEDEN vermesi gerekir --
+   svc-hb-fileagent'in `C:\ProgramData\HasarBotu\*` altinda BUGUN HICBIR
+   izni yok). Kendi cikis kodu `$result.OverallSucceeded`i yansitir
+   (son alt-surecin `$LASTEXITCODE`sini kazayla DEVRALMAZ).
+2. Yeni `preview-file-agent-disposable-probe-service.ps1` (+
+   `.tests.ps1`, 6 test): PLAN + PREVIEW yalniz, `-Apply` YAPISAL OLARAK
+   yok. 6 onkosulu gercek kontrollerle dogrular: inner script varligi/
+   parse/guvenlik (servis/hesap/ACL/env mutasyonu YOK), WinSW+servis-id
+   (gercek servisle CARPISMA yok, zaten kayitli degil), pCloud DB erisimi
+   (taze yeniden kontrol, already_sufficient), freshness gate KUTUPHANESI
+   (modul + KENDI test paketi taze GECIYOR), sonuc dizini ACL PLANI
+   (`deferred_to_real_activation` -- YENI, dar bir izin, henuz
+   UYGULANMADI), ikinci-servis oturum-acma parola mekanigi
+   (`blocked_structural` -- yukaridaki gercek bulgu, GIZLENMEDI). Planlanan
+   WinSW XML'i (bir STRING, hicbir yere kurulabilir dosya olarak
+   YAZILMAZ) uretir: `Manual` baslangic (asla Automatic), restart-on-
+   failure politikasi YOK (basarisiz tek-seferlik probe donguye
+   girmemeli), `<password>` elemani HICBIR ZAMAN yok (HB-2026-118
+   disiplini). Gercek makinede calistirildi: 4/6 onkosul `verified_ok`,
+   1/6 `deferred_to_real_activation`, 1/6 `blocked_structural` (ikisi de
+   dogru, gercek bulgular).
+
+**Test surecinde bulunup duzeltilen gercek hatalar:**
+1. `Get-ForbiddenBitsPresent`in ilk tasarimi (controlled-activation
+   aracindan, bu paketle ilgisiz ama ayni oturumda) degil -- burada,
+   ilk "her sey ready" testi YANLIS pozitif verdi: SENTETIK sabit
+   veriyi AYNI DB'yi (baska 3 dosya ile) yeniden kullaniyordu -- yeni
+   missing-from-target mantigi bunlari DOGRU sekilde eksik olarak
+   yakaladi, TEST fixture'i izole edilerek duzeltildi (kod hatasi
+   degildi -- kodun DOGRU calistigi bagimsizca kanitlandi).
+2. PowerShell duz-dizi (flat-array) splatting `@array` bu ortamda
+   guvenilir calismiyor (isimli parametreler icin) -- hashtable
+   splatting (`@hashtable`) kullanildi (HB-2026-166'da bulunmustu, burada
+   TEKRAR karsilasilip AYNI cozumle giderildi).
+3. `$report.Status`/`$_.Reason` StrictMode `PropertyNotFoundException` --
+   BASARI JSON ciktisinin bu alanlari hic icermedigi durumlarda (yalniz
+   HATA yolunda var) -- `PSObject.Properties[...]` varlik kontrolu
+   eklendi (HB-2026-164/166'da bulunan AYNI hata sinifi, burada YENIDEN
+   karsilasilip AYNI desenle duzeltildi).
+4. Statik denetimin kendi `assertNotContains` deseni, preview aracinin
+   KENDI "yasakli desenler" dizisindeki STRING LITERAL'leri (kontrol
+   ETTIGI seyler, cagirdigi seyler DEGIL) yanlis pozitif olarak
+   isaretledi -- denetim GERCEK calistirilarak yakalandi, ilgisiz
+   assertion kaldirildi.
+
+Kesin gercek kullanici adi/profil yolu/SID/hostname repo'ya ALINMADI.
+
+Test sonucu/Etki: yeni/etkilenen TUM test paketleri GERCEKTEN
+calistirildi -- `pcloud-post-sync-diff-forensics.test.mjs` (8, export
+sonrasi regresyon), `pcloud-source-attestation.test.mjs` (8),
+`pcloud-session0-freshness-gate.test.mjs` (6),
+`preview-file-agent-disposable-probe-service.tests.ps1` (6) -- hepsi
+GECTI (toplam 39 .mjs testi birlikte de dogrulandi). `node scripts\check-
+windows-service-configs.mjs` GERCEKTEN calistirildi, gecti (yeni HB-2026-
+167 denetim bloguyla). **Hicbir gercek servis kurulmadi/baslatilmadi/
+durdurulmadi, hicbir env degisken yazilmadi, hicbir ACL degismedi** --
+yalniz plan+preview+testler, tam istendigi gibi.
+
+Acik kalan: Karar 1'in GERCEK bir vaka uzerinde uctan uca calistirilmasi
+(attestation uret -> gate calistir) henuz yapilmadi (yalniz sentetik
+fixture'larla dogrulandi). Karar 2'nin GERCEK aktivasyonu iki ayri,
+acik karar/islem gerektiriyor: (a) sonuc dizini ACL'i (yeni, dar
+svc-hb-fileagent yazma izni), (b) ikinci servis icin hesap parolasinin
+sifirlanip sc.exe config ile yeniden uygulanmasi. File Agent'in
+TypeScript kodu bu paketle de HIC degismedi; production File Agent'a
+HICBIR self-test modu eklenmedi (Karar 2'ye gore kasitli).

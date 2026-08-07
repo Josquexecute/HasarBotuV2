@@ -280,6 +280,26 @@ Son güncelleme: 2026-08-04
   çözülmemiş mimari karar olarak işaretlendi. Hiçbir env/servis/dosya/
   pCloud değişikliği yapılmadı; gerçek `hasarbotu-file-agent` servisi hâlâ
   Disabled/Stopped.
+- **HB-2026-166'nın 2 açık mimari kararı ONAYLANDI + GERÇEKLEŞTİRİLDİ
+  (HB-2026-167, 2026-08-08):** **Karar 1** — Session-0-safe, attestation
+  tabanlı yeni bir freshness gate (`pcloud-session0-freshness-gate.mjs`,
+  P:\'ye SIFIR bağımlılık) eklendi. Gerçek sorguyla kanıtlandı: pCloud
+  DB'nin `file.hash` kolonu 64-bit SQLite INTEGER — SHA-256 için yapısal
+  olarak yetersiz — bu yüzden `ready` her zaman ayrı, önceden üretilmiş
+  bir SHA-256 attestation (`pcloud-source-attestation.mjs`, admin/P:\
+  erişimli ayrı bir araçla üretilir) ile eşleşmeyi gerektirir; DB hash/
+  size/mtime tek başına asla yeterli sayılmaz. **Karar 2** — production
+  File Agent'a self-test modu eklenmedi; bunun yerine tek-seferlik,
+  kendi kendini temizleyen bir disposable probe service PLANLANDI
+  (`preview-file-agent-disposable-probe-service.ps1` + gerçek yükü
+  `file-agent-disposable-probe-inner.ps1`, henüz kurulmadı/başlatılmadı).
+  Gerçek, yeni bulunan bir engel dürüstçe raporlandı: aynı hesapla ikinci
+  bir servis kaydı `sc.exe config` ile hesabın SAM'deki gerçek parolasını
+  gerektirir — HB-2026-118 bu parolayı hiç saklamadığı için gerçek
+  aktivasyon önce parola sıfırlamayı gerektirecek
+  (`second_service_logon_credential: blocked_structural`). Gerçek
+  makinede yalnız salt-okunur/sentetik testler çalıştırıldı; hiçbir env/
+  servis/dosya/pCloud değişikliği yapılmadı.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

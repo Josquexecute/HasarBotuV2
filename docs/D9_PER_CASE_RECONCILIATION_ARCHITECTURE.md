@@ -341,6 +341,54 @@ bırakıldı. Hiçbir env/servis/dosya/pCloud değişikliği yapılmadı.
 
 `services/file-agent`'ın TypeScript kodu bu paketle HİÇ değiştirilmedi.
 
+**Güncelleme (HB-2026-167, 2026-08-08) — HB-2026-166'nın iki açık mimari
+kararı ONAYLANDI ve GERÇEKLEŞTİRİLDİ:**
+
+**Karar 1 (freshness gate yeniden tasarımı):** P:\ retirement
+beklenmeyecek — yeni, tamamen Session-0-safe bir freshness gate
+(`pcloud-session0-freshness-gate.mjs`) eklendi, **P:\'ye hiçbir
+bağımlılığı yok**. Gerçek bir sorguyla kanıtlandı: pCloud DB'nin
+`file.hash` kolonu düz bir SQLite `INTEGER` (64 bit tavan) — 256 bit
+gerektiren bir SHA-256'yı yapısal olarak barındıramaz — bu yüzden `ready`
+durumu her zaman ayrı, önceden üretilmiş bir SHA-256 **attestation**
+(`pcloud-source-attestation.mjs`, admin/P:\-erişimli bağlamda üretilir)
+ile eşleşmeyi gerektirir; DB hash/size/mtime tek başına asla yeterli
+sayılmaz. Kurallar tam istendiği gibi: attestation yok → `unknown`
+(canlı task varsa `syncing`); attestation var ama hedef SHA-256
+uyuşmuyor → `conflict` (fail-closed); pCloud DB dosyayı listeliyor ama
+hedefte yoksa → asla sessizce atlanmaz, `syncing`/`unknown`; conflict-name
+deseni → her zaman `conflict`. Folder/file çözümlemesi tamamen pCloud
+DB'nin kendi isim eşlemesiyle yapılıyor (`parentfolderid=0 AND name=?`
+ile başlayarak) — bu da gerçek sorgularla P:\'ye hiç ihtiyaç olmadığı
+kanıtlandı. `run-pcloud-session0-freshness-gate.ps1`,
+run-pcloud-case-reconciliation.ps1 ile AYNI çıkış kodu sözleşmesini
+korur (0=ready/2=not-ready/1=error) ama hiçbir `-SourceRoot`
+parametresi/varsayılanı yok.
+
+**Karar 2 (self-test modu yerine disposable probe service):** production
+File Agent'a **hiçbir self-test modu eklenmedi** — bunun yerine
+`preview-file-agent-disposable-probe-service.ps1` (+ gerçek yükü
+`file-agent-disposable-probe-inner.ps1`) ile tek-seferlik, kendi
+kendini temizleyen, mevcut `svc-hb-fileagent`/`SeServiceLogonRight` ile
+çalışacak ayrı bir WinSW servisi PLANLANDI (henüz kurulmadı/
+başlatılmadı). İç script bilerek Administrator gerektirmez (düşük
+yetkili hesapla çalışabilmesi için) ve freshness gate'i
+Administrator-gated `.ps1` sarmalayıcısı ÜZERİNDEN değil doğrudan (node)
+çağırır. **Gerçek, yeni bulunan bir engel dürüstçe raporlanıyor:** aynı
+hesapla İKİNCİ bir servis kaydetmek `sc.exe config ... password=`
+gerektirir ve Windows bunu hesabın SAM'deki GERÇEK GÜNCEL parolasına
+karşı doğrular — HB-2026-118 bu parolayı bir kez üretip hemen kullanıp
+hiçbir yerde saklamadığı için, gerçek aktivasyon önce parolayı
+sıfırlayıp iki servise de yeniden uygulamayı gerektirecek — bu, preview
+aracında `second_service_logon_credential: blocked_structural` olarak
+açıkça işaretlendi, gizlenmedi. Sonuç dizininin ACL'i de (svc-hb-fileagent
+için yeni, dar bir yazma izni) `deferred_to_real_activation` olarak
+işaretli — henüz uygulanmadı.
+
+Gerçek makinede yalnız salt-okunur/sentetik doğrulamalar çalıştırıldı;
+hiçbir env/servis/dosya/pCloud değişikliği yapılmadı. `services/
+file-agent`'ın TypeScript kodu bu paketle de HİÇ değiştirilmedi.
+
 ## 9. D9 planına etkisi
 
 `docs/D9_OPERATIONAL_CUTOVER_PLAN.md` §0/Adım 0 artık bu belgeye referans
