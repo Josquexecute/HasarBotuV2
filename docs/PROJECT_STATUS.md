@@ -300,6 +300,19 @@ Son güncelleme: 2026-08-04
   (`second_service_logon_credential: blocked_structural`). Gerçek
   makinede yalnız salt-okunur/sentetik testler çalıştırıldı; hiçbir env/
   servis/dosya/pCloud değişikliği yapılmadı.
+- **HB-2026-167'nin "ikinci servis parola" engeli ÇÖZÜLDÜ (HB-2026-168,
+  2026-08-08):** `apply-file-agent-service-vehicle-probe.ps1` — yeni
+  servis kaydetmez; mevcut Disabled/Stopped `hasarbotu-file-agent`
+  kaydını GEÇİCİ, TAM GERİ ALINABİLİR probe vehicle olarak kullanır
+  (SCM'nin zaten sakladığı, HB-2026-118'den beri hiç değişmeyen
+  kimlik bilgisini yeniden kullanır — parola sıfırlama yok, yeni hak
+  yok). Gerçek sentetik WinSW test servisiyle uçtan uca kanıtlandı:
+  repurpose→start→probe GERÇEKTEN servis hesabıyla çalıştı (sonuç
+  servisin KENDİ `logs` dizininde — yeni ACL gerekmedi, zaten
+  `svc-hb-fileagent` Modify sahibi)→stop→XML/StartMode/dependency tam
+  eski haline bit-bit döndüğü kanıtlandı (4/4 test). **Gerçek
+  `hasarbotu-file-agent`e hâlâ hiç dokunulmadı** — SCM config
+  değişikliği gerektiren gerçek çalıştırma ayrı, açık onay bekliyor.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

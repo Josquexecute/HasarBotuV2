@@ -389,6 +389,20 @@ Gerçek makinede yalnız salt-okunur/sentetik doğrulamalar çalıştırıldı;
 hiçbir env/servis/dosya/pCloud değişikliği yapılmadı. `services/
 file-agent`'ın TypeScript kodu bu paketle de HİÇ değiştirilmedi.
 
+**Güncelleme (HB-2026-168, 2026-08-08) — "second_service_logon_credential"
+engeli ÇÖZÜLDÜ:** yeni servis kaydetmek yerine (SCM'nin ikinci bir
+servis kaydı için hesabın gerçek SAM parolasını istediği, HB-2026-118'in
+hiç saklamadığı engel), `apply-file-agent-service-vehicle-probe.ps1`
+mevcut Disabled/Stopped `hasarbotu-file-agent` kaydını GEÇİCİ, tam geri
+alınabilir bir vehicle olarak kullanır — SCM zaten bu kayıt için çalışan
+bir kimlik bilgisi sakladığı için yeni parola gerekmez. Gerçek sentetik
+WinSW test servisiyle (gerçek `hasarbotu-file-agent`e hiç dokunmadan)
+uçtan uca kanıtlandı: repurpose→start→probe gerçekten servis hesabıyla
+çalıştı→stop→XML/StartMode/dependency bit-bit eski haline döndü. Probe
+sonucu, `svc-hb-fileagent`'ın zaten Modify sahibi olduğu File Agent'ın
+KENDİ `logs` dizinine yazılır — yeni write ACL gerekmedi. Gerçek
+`hasarbotu-file-agent`e hâlâ hiç dokunulmadı.
+
 ## 9. D9 planına etkisi
 
 `docs/D9_OPERATIONAL_CUTOVER_PLAN.md` §0/Adım 0 artık bu belgeye referans

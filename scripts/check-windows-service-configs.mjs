@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -821,6 +822,36 @@ try {
   }
 } catch (error) {
   errors.push(`Session-0-safe freshness gate / disposable probe service tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
+// HB-2026-168: mevcut Disabled/Stopped hasarbotu-file-agent servisini
+// TAM GERI ALINABILIR gecici probe vehicle olarak kullanma araci. Yeni
+// bir servis KAYDETMEZ (HB-2026-167'nin "second_service_logon_credential"
+// engelini boyle cozer -- SCM'nin ZATEN sakladigi kimlik bilgisini yeniden
+// kullanir), parola sifirlamaz, yeni bir hak vermez.
+try {
+  const vehicleScript = await readFile(`${DEPLOY_DIR}apply-file-agent-service-vehicle-probe.ps1`, 'utf8')
+
+  assertContains(vehicleScript, /SERVICE_NOT_STOPPED_REFUSING_TO_TOUCH/, 'apply-file-agent-service-vehicle-probe.ps1', 'calisan (Running) bir servise asla dokunulmaz -- fail-closed onkosul')
+  assertContains(vehicleScript, /RestoredExactly/, 'apply-file-agent-service-vehicle-probe.ps1', 'geri yukleme sonrasi snapshot ile bit-bit karsilastirma yapilir, guvenilmez')
+  assertContains(vehicleScript, /Assert-SnapshotsMatch/, 'apply-file-agent-service-vehicle-probe.ps1', 'StartMode/StartName/PathName/DependOnService/XML hash hepsi yeniden dogrulanir')
+  assertNotContains(vehicleScript, /sc\.exe\s+config\s+\S+\s+password=|\$Password\b|New-ServiceAccountPassword|Set-FileAgentServiceLogonCredential/, 'apply-file-agent-service-vehicle-probe.ps1', 'hicbir parola okuma/yazma/sifirlama yok -- SCMnin zaten sakladigi kimlik bilgisi yeniden kullanilir')
+  assertNotContains(vehicleScript, /LsaAddAccountRights/, 'apply-file-agent-service-vehicle-probe.ps1', 'YENI bir LSA hakki asla verilmez (yalniz aciklayici yorumda gecebilir, kod olarak asla)')
+  assertContains(vehicleScript, /ADMINISTRATOR_REQUIRED/, 'apply-file-agent-service-vehicle-probe.ps1', 'admin-only kanit yazimi + gercek servis config mutasyonu icin Administrator gerektirir')
+
+  const winswExists = existsSync('C:\\Tools\\WinSW-x64.exe')
+  if (winswExists) {
+    const vehicleTests = spawnSync(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}apply-file-agent-service-vehicle-probe.tests.ps1`],
+      { encoding: 'utf8' },
+    )
+    if (vehicleTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(vehicleTests.stdout)) {
+      throw new Error(`apply-file-agent-service-vehicle-probe testleri başarısız — ${vehicleTests.stderr || vehicleTests.stdout}`)
+    }
+  }
+} catch (error) {
+  errors.push(`File Agent service-vehicle probe tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
 if (errors.length > 0) {

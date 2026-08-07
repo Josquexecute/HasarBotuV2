@@ -7569,3 +7569,112 @@ svc-hb-fileagent yazma izni), (b) ikinci servis icin hesap parolasinin
 sifirlanip sc.exe config ile yeniden uygulanmasi. File Agent'in
 TypeScript kodu bu paketle de HIC degismedi; production File Agent'a
 HICBIR self-test modu eklenmedi (Karar 2'ye gore kasitli).
+
+## 2026-08-08 - HB-2026-168: HB-2026-167'nin "ikinci servis parola" engelini COZDU -- YENI servis KAYDETMEK yerine mevcut Disabled/Stopped `hasarbotu-file-agent` kaydini GECICI, TAM GERI ALINABILIR probe vehicle olarak kullanma araci; GERCEK sentetik WinSW servisiyle uctan uca kanitlandi (repurpose->start->probe-servis-hesabiyla-calisiyor->stop->bit-bit restore); GERCEK hasarbotu-file-agent'a HENUZ dokunulmadi
+
+Istek (otonom devam talimati): kullanici uyumaya gecerken uzun sureli
+otonom calisma yetkisi verdi, sekiz oncelik sundu, kucuk ara adimlarda
+onay istenmemesini, yalniz gercek servis start/enable/SCM config/ACL/env
+Apply/gercek cutover/musteri verisine yazma noktasinda durup rapor
+edilmesini istedi. **Oncelik 1+2:** servis hesabi parolasini
+resetlemeden ve SeBatchLogonRight vermeden mevcut Disabled/Stopped
+`hasarbotu-file-agent` servisini tam geri alinabilir gecici probe
+vehicle olarak kullanma yaklasimini coz; service config/account/start
+type/binary/dependency/failure-action durumunu snapshot+hash ile koru,
+probe sonrasi exact rollback tasarla. **Oncelik 3:** probe output icin
+mumkunse mevcut File Agent log alanini kullan, gereksiz yeni write ACL
+verme.
+
+**Gercek arastirma (kod yazmadan once):** `sc.exe qc hasarbotu-file-agent`
++ `sc.exe qfailure` + gercek WinSW XML'i (`C:\HasarBotu\services\
+file-agent\hasarbotu-file-agent.xml`) okundu. Bulgular: (1)
+BINARY_PATH_NAME `hasarbotu-file-agent.exe`dir -- bu WinSW'nin kendisi
+(kopyalanip yeniden adlandirilmis), GERCEK calistirilacak sey yaninda
+duran `hasarbotu-file-agent.xml`den okunur; (2) `<depend>hasarbotu-api
+</depend>` var -- `hasarbotu-api` SCM'de HIC kurulu olmadigi icin bu
+servisi -- gecici olarak bile -- baslatmak, bagimlilik cozulmedikce
+basarisiz olur; (3) `C:\HasarBotu\services\file-agent\logs` dizininde
+`svc-hb-fileagent` ZATEN `(OI)(CI)(M)` (Modify) sahibi (D9 cutover
+plani zaten dogru olarak belgelemis) -- probe sonucu icin YENI hicbir
+ACL gerekmiyor, dogrudan bu dizine yazilabilir. Uygulama dizininde
+`svc-hb-fileagent` `(OI)(CI)(RX)` (Read+Execute) sahibi -- probe script'i
+o dizine kopyalanirsa calistirilabilir.
+
+**Cozum:** yeni servis KAYDETMEK yerine (HB-2026-167'nin engeli tam
+olarak buydu -- SCM ikinci bir servis kaydi icin hesabin GERCEK SAM
+parolasini ister, ki bu HB-2026-118'den beri hic saklanmadi), MEVCUT
+`hasarbotu-file-agent` kaydini GECICI olarak yeniden amaclandirdik:
+SCM zaten BU KAYIT icin calisan bir oturum-acma kimlik bilgisi
+sakliyor (HB-2026-118'de bir kez kuruldu, hic degismedi) -- yeni parola
+gerekmiyor. Yeni `apply-file-agent-service-vehicle-probe.ps1` (+
+`.tests.ps1`, gercek sentetik WinSW test servisiyle 4 test):
+
+1. **Fail-closed onkosul:** hedef servis suanda `Stopped` DEGILSE
+   dokunulmaz (`SERVICE_NOT_STOPPED_REFUSING_TO_TOUCH`) -- calisan bir
+   servise, gercek olan bile olsa, asla mudahale edilmez.
+2. **Snapshot (ILK mutasyondan ONCE, admin-only+hash'li):** WinSW XML'in
+   HAM baytlari (Base64, sonradan tam geri yukleme icin), SCM ImagePath/
+   StartMode/StartName/DependOnService -- kayipli `sc.exe qc` metin
+   ayristirmasi DEGIL, registry'den (`HKLM:\SYSTEM\CurrentControlSet\
+   Services\<ad>`) dogrudan okunur.
+3. **Gecici mutasyon (hepsi geri alinir):** WinSW XML'de `<executable>`/
+   `<arguments>` probe'a yonlendirilir, `<depend>` GECICI olarak
+   silinir (hasarbotu-api kurulu degilse baslatma basarisiz olurdu);
+   `sc.exe config start= demand` (taban Disabled, sonra geri
+   yuklenir); `Start-Service` -- SeServiceLogonRight'i GERCEKTEN
+   tetikleyen TEK adim, servis hesabinin KENDI zaten-saklı kimlik
+   bilgisiyle.
+4. **Probe sonucunu bekle** (sinirli sure), SONRA HER DURUMDA (finally):
+   `Stop-Service` -> XML'i TAM ONCEKI baytlarina geri yaz -> `sc.exe
+   config start= disabled` -> baglilik geri yuklenir -> YENIDEN
+   snapshot alinip ILK snapshot'la alan-alan karsilastirilir
+   (StartMode/StartName/PathName/DependOnService/XML SHA-256) --
+   HERHANGI bir fark sessizce kabul edilmez, yuksek sesle raporlanir.
+5. Ayrica bagimsiz bir `-Rollback` modu (onceden alinmis snapshot kaniti
+   ile) -- ana calisma sirasinda bir sorun olursa manuel kurtarma icin,
+   HB-2026-164'un ayni "defense in depth" deseni.
+
+**Gercek dogrulama (sentetik WinSW test servisi, `NT AUTHORITY\LOCAL
+SERVICE` hesabiyla, GERCEK `hasarbotu-file-agent`e HIC dokunulmadan):**
+Dry-run (mutasyon yok) -> GERCEK Apply (repurpose -> start -> probe
+GERCEKTEN servis hesabiyla calisti, sonuc dosyasi servisin KENDI logs
+dizininde -- yeni ACL YOK -- gorunuyor -> stop -> XML/StartMode/
+dependency TAM ONCEKI haline geri yuklendigi hash ile kanitlandi) ->
+bagimsiz `-Rollback` (kasitli bozulmus XML'i de dogru geri yukledigi
+kanitlandi) -> calisan (Running) bir servise dokunmayi reddetme.
+**Hepsi 4/4 test GECTI.**
+
+**Gercek hatalar bulunup duzeltildi (testler yazilirken/calistirilirken):**
+1. Ilk test fixture'i `$env:TEMP` (etkilesimli kullanicinin KENDI
+   profilinin AltAppData\Local\Temp'i) kullaniyordu --
+   `NT AUTHORITY\LOCAL SERVICE`nin oraya HICBIR erisimi yok (GERCEK
+   `Start-Service` basarisizligiyla bulundu) -- `C:\ProgramData` altina
+   tasindi, GERCEK production ACL sekli (RX uygulama dizininde, Modify
+   logs alt-dizininde) test hesabina acikca verildi.
+2. `Assert-SnapshotsMatch`, hashtable indexleme sozdizimini
+   (`$obj['Alan']`) kullaniyordu -- bagimsiz `-Rollback` yolunda
+   `$evidence.Snapshot` JSON'dan gelen bir PSCustomObject'tir, bu
+   sozdizimini desteklemez (GERCEK `RuntimeException`le bulundu) --
+   hem Hashtable/IDictionary hem PSCustomObject icin calisan tur-agnostik
+   bir erisimci (`Get-SnapshotFieldValue`) eklendi.
+3. Statik denetimin `assertNotContains`i, aracin KENDI aciklayici
+   yorumundaki "SeBatchLogonRight" gecen bir cumleyi (kod DEGIL, neden
+   BU yaklasimin ONA gerek duymadigini anlatan metin) yanlis pozitif
+   olarak isaretledi -- denetim GERCEK calistirilarak yakalandi,
+   assertion daraltildi.
+
+Kesin gercek kullanici adi/profil yolu/SID repo'ya ALINMADI.
+
+Test sonucu/Etki: `apply-file-agent-service-vehicle-probe.tests.ps1`
+(4 senaryo, gercek sentetik WinSW servisiyle) GERCEKTEN calistirildi,
+hepsi gecti, servis+dizin tamamen temizlendigi bagimsizca dogrulandi.
+`node scripts\check-windows-service-configs.mjs` GERCEKTEN calistirildi,
+gecti (yeni HB-2026-168 denetim bloguyla, WinSW yoksa nazikce atlar).
+**GERCEK `hasarbotu-file-agent` servisine HIC dokunulmadi** -- yalniz
+`sc.exe qc`/`sc.exe qfailure`/WinSW XML okuma (salt-okunur) ve sentetik
+test servisiyle tam mekanik kanitlandi.
+
+Acik kalan: aracin GERCEK `hasarbotu-file-agent`e karsi GERCEK
+calistirilmasi hala ayri, acik bir kullanici onayi gerektiriyor (SCM
+config degisikligi -- kullanicinin acikca "once hazirlik tamamla, sonra
+rapor edip dur" dedigi tam nokta). Oncelik 4-8'e devam ediliyor.
