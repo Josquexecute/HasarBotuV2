@@ -224,6 +224,16 @@ Son güncelleme: 2026-08-04
   hesabına ait yerel DB'sine okuma erişimi yok) gerektiriyor, mimari
   belgesinin §8'inde net şekilde işaretlendi. D9 gate çalıştırılmadı,
   D9 Adım 1'e geçilmedi.
+- **File Agent cross-account pCloud DB erişimi — PLAN + PREVIEW hazır
+  (HB-2026-163, 2026-08-07):** `preview-file-agent-pcloud-db-access.ps1`
+  (`-Apply` yapısal olarak yok) gerçek makinede çalıştırıldı. Gerçek ACL
+  taramasıyla tam minimum ACE seti çıkarıldı: yalnız 5 ata düğümünde
+  Traverse + pCloud klasöründe 1 Read+Synchronize (dosyalara miras
+  alınır, WAL/SHM yeniden oluşsa da kapsar) — hiçbir yazma/silme biti
+  yok, bağımsızca doğrulandı. Elle yapılan ilk tahminde bir hata
+  (`BUILTIN\Users` ile `Everyone` karıştırılması) aracın kesin SID
+  simülasyonuyla yakalandı. Hiçbir ACL/pCloud/servis/env/dosya
+  değişmedi; Apply ayrı, açık bir kullanıcı onayı bekliyor.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

@@ -667,6 +667,38 @@ try {
   errors.push(`D9 B9 (ilk admin bootstrap) tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-162 SS8: File Agent -> pCloud local DB cross-account READ-ONLY
+// erisimi icin PLAN + PREVIEW ONLY araci. -Apply YOK -- yapisal olarak
+// (guard'li degil, hic mevcut degil) hicbir ACL/pCloud/servis/env/dosya
+// mutasyonu yapamaz.
+try {
+  const previewScript = await readFile(`${DEPLOY_DIR}preview-file-agent-pcloud-db-access.ps1`, 'utf8')
+
+  assertNotContains(previewScript, /\[switch\]\$Apply|SetAccessControl\([^)]*svc|\.SetAccessRule\(|AddAccessRule\([^)]*Write|icacls[^\n]*\/grant/, 'preview-file-agent-pcloud-db-access.ps1', 'Apply parametresi/gercek ACL yazma cagrisi YOK -- yalniz Get-Acl/GetAccessControl okuma')
+  assertContains(previewScript, /Mode = 'preview'/, 'preview-file-agent-pcloud-db-access.ps1', 'sabit preview modu')
+  assertContains(previewScript, /svc-hb-fileagent/, 'preview-file-agent-pcloud-db-access.ps1', 'varsayilan File Agent servis hesabi adi (HB-2026-113 ile ayni)')
+  assertContains(previewScript, /RequiredFilesystemOperationsNote/, 'preview-file-agent-pcloud-db-access.ps1', 'ListDirectory gerekmedigi kod-seviyesinde kanitlanmis (captureDatabaseFiles dogrudan-yol stat)')
+  assertContains(previewScript, /ImpersonationLimitNote/, 'preview-file-agent-pcloud-db-access.ps1', 'canli impersonation yapilamadigi acikca belirtilir (SeDenyInteractiveLogonRight + bilinmeyen parola)')
+  assertContains(previewScript, /EXPLICIT_DENY_PRESENT/, 'preview-file-agent-pcloud-db-access.ps1', 'acik DENY, ALLOW dan once kazanir')
+  assertContains(previewScript, /PlannedAcesContainNoWriteOrDeleteBits/, 'preview-file-agent-pcloud-db-access.ps1', 'planlanan ACE setinin yazma/silme biti icermedigi yapisal olarak dogrulanir')
+  assertContains(previewScript, /forbiddenBits/, 'preview-file-agent-pcloud-db-access.ps1', 'yasakli haklar maskesiyle calisma zamani oz-kontrolu (PLANNED_RIGHTS_CONTAIN_FORBIDDEN_BITS)')
+  assertContains(previewScript, /ObjectInherit/, 'preview-file-agent-pcloud-db-access.ps1', 'pCloud klasorundeki Read ACE dosyalara miras alinir (WAL/SHM yeniden olusursa erisim sureklidir)')
+  assertContains(previewScript, /RollbackPlan/, 'preview-file-agent-pcloud-db-access.ps1', 'rollback plani (tam SDDL geri yukleme)')
+  assertContains(previewScript, /DriftCheckPlan/, 'preview-file-agent-pcloud-db-access.ps1', 'ACL drift kontrol plani')
+  assertNotContains(previewScript, /Start-Service|Stop-Service|Set-Service|SetEnvironmentVariable|New-LocalUser|Set-LocalUser|Remove-LocalUser/, 'preview-file-agent-pcloud-db-access.ps1', 'servis/env/hesap mutasyonu yok')
+
+  const previewTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}preview-file-agent-pcloud-db-access.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (previewTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(previewTests.stdout)) {
+    throw new Error(`preview-file-agent-pcloud-db-access testleri başarısız — ${previewTests.stderr || previewTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`File Agent pCloud DB erişim önizleme tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)

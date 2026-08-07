@@ -6984,3 +6984,87 @@ ayri, acik bir kullanici karari gerektiriyor. 3 vakanin gercek zamanli
 `PCLOUD_DATABASE_SNAPSHOT_UNSTABLE` durumu (devam eden ofis aktivitesi)
 henuz kesin siniflandirilamadi -- sakin bir anda yeniden taranmasi
 gerekebilir.
+
+## 2026-08-07 - HB-2026-163: File Agent -> pCloud yerel DB cross-account salt-okunur erisimi icin tam PLAN + PREVIEW hazirlandi ve GERCEK makinede calistirildi (HB-2026-162 SS8 acik kararinin somutlastirilmasi) -- hicbir ACL/pCloud/servis/env/dosya degistirilmedi, Apply YAPILMADI
+
+Istek: HB-2026-162'de acik birakilan File Agent cross-account pCloud DB
+erisim karari icin YALNIZ plan+preview hazirlanmasi istendi. Gercek servis
+kimligi (`svc-hb-fileagent`) ile: pCloud DB'nin exact path'i ve
+data.db/-wal/-shm gereksinimi belirlenmeli; ata dizinlerde gereken asgari
+Traverse/List izinleri OLCULMELI (varsayilmamali); mevcut ACL'ler
+kaydedilmeli; yalniz Read/ReadAttributes/Traverse/List ile calisan en-az-
+yetki ACE seti cikarilmali; write/modify/delete/create HICBIR sekilde
+verilmemeli; DB snapshot/probe servis hesabi baglaminda salt-okunur test
+edilmeli; WAL/SHM yeniden olusursa erisimin devam edip etmeyecegi
+dogrulanmali; rollback ve ACL drift kontrolu hazirlanmali. Mevcut ACL/
+pCloud/servis/env/dosyalarda degisiklik YAPILMAMASI, Apply YAPILMAMASI
+acikca istendi.
+
+Yapilan: yeni `preview-file-agent-pcloud-db-access.ps1` araci (+
+`.tests.ps1`, 5 test) yazildi -- **script'te -Apply parametresi hic YOK**
+(guard'li degil, yapisal olarak mevcut degil). Gercek makinede GERCEKTEN
+calistirildi:
+
+- pCloud DB exact path'i (`%LOCALAPPDATA%\pCloud\data.db` + `-wal` + `-shm`,
+  ucu de gercekten mevcut, WAL modu aktif) real olarak dogrulandi.
+- `pcloud-maintenance-window-gate.mjs`'in kaynak kodu okunarak
+  `captureDatabaseFiles()`'in yalniz 3 bilinen dosya adini DOGRUDAN YOL ile
+  `stat`'ladigi, HICBIR ZAMAN klasor listelemedigi kesin olarak kanitlandi
+  -- yani `ListDirectory` hicbir dugumde yapisal olarak gerekli DEGIL.
+- Gercek ata zinciri (surucu kokunden pCloud klasorune) gercek ACL ile
+  taranip her dugumde `svc-hb-fileagent`'in (SID + `Authenticated Users` +
+  `Everyone` -- her basarili kimlik dogrulamada otomatik gelen well-known
+  gruplar) su an erisimi olup olmadigi, acik DENY'in ALLOW'dan once
+  kazandigi bir simulasyonla belirlendi. **Gercek sonuc: yalniz 5 dugum
+  yeni Traverse ACE gerektiriyor** (surucu koku + kullanici profili +
+  AppData + Local + pCloud klasoru); bir ust dugum (`C:\Users` dengi)
+  zaten `Everyone` uzerinden yeterli. Bu, calismaya baslamadan once elle
+  yapilan analizde YANLIS tahmin edilmisti (`BUILTIN\Users` ile
+  `Everyone`/`Authenticated Users` karistirilmisti) -- aracin kesin SID
+  bazli simulasyonu bu hatayi GERCEK VERIYLE yakaladi.
+- Cikarilan tam minimum ACE seti: 5x Traverse-yalniz (bu-klasor-yalniz,
+  miras yok) + 1x pCloud klasorunde Read+Synchronize (ObjectInherit --
+  dosyalara miras alinir, `-wal`/`-shm` silinip yeniden olusturulsa bile
+  YENI dosya olusturuldugu anda ayni ACE'yi miras alir, standart NTFS
+  davranisi -- boylece WAL/SHM yeniden olusma sorusu ayrica dogrulanmadan
+  yapisal olarak cozulmus olur). Write/Modify/Delete/Create/AppendData/
+  TakeOwnership/ChangePermissions biti HICBIR ACE'de yok -- hem calisma
+  zamaninda bit-maskesiyle oz-kontrol edildi (`PLANNED_RIGHTS_CONTAIN_
+  FORBIDDEN_BITS`) hem statik denetimde hem testte BAGIMSIZCA yeniden
+  hesaplanarak dogrulandi.
+- "Servis hesabi baglaminda test": `svc-hb-fileagent` kasitli
+  `SeDenyInteractiveLogonRight` ile korunuyor ve parolasi hic
+  bilinmiyor/saklanmiyor (HB-2026-113/116/117/118) -- yani GERCEK canli
+  impersonation YAPILAMAZ (bu sinir rapor icinde acikca belirtildi,
+  gizlenmedi). Bunun yerine gercek ACL uzerinden kesin bir SID/well-known-
+  grup simulasyonu yapildi.
+- Her dugumun TAM SDDL'si admin-only hash'li rapora kaydedildi (rollback
+  ankraji -- gelecekte bir Apply gerekirse, hangi ACE'nin eklendigini
+  tahmin etmek yerine bu SDDL birebir geri yuklenir). Ayni aracin yeniden
+  calistirilmasi drift kontroludur.
+- Calisma sirasinda GERCEK bir kod hatasi bulunup duzeltildi: surucu koku
+  zincir insasinda "C:" ve "C:\" ayri dugumler olarak goruniyordu
+  (dedup edildi) ve pCloud klasoru icin CIFT Traverse ACE planlaniyordu
+  (tekillestirildi) -- ikisi de testle (chain uniqueness + planned-ACE-
+  count assertion) kalici olarak yakalandi.
+
+Kesin gercek kullanici adi/profil yolu repo'ya YAZILMADI (P:\ fiziksel yol
+ile ayni titizlik ilkesi) -- yalniz jenerik `%LOCALAPPDATA%\pCloud\`
+deseni ve ata sayisi kullanildi; tam SDDL/yol Administrators-only+hash'li
+rapora yazildi.
+
+Test sonucu/Etki: `preview-file-agent-pcloud-db-access.tests.ps1` (5 test)
+GERCEKTEN calistirildi, hepsi gecti. `node scripts\check-windows-service-
+configs.mjs` GERCEKTEN calistirildi, gecti (yeni Apply-yok/forbidden-bit/
+ObjectInherit/rollback/drift denetimleri dahil). Gercek makinede script
+GERCEKTEN calistirildi (2 kez, iki bulunan hatanin duzeltmesinden once ve
+sonra) -- hicbir ACL/pCloud/servis/env/dosya degismedi (script'in kendi
+admin-only rapor dizini disinda hicbir yazma yok, `-Apply` yapisal olarak
+mevcut degil). D9 gate calistirilmadi, D9 Adim 1'e gecilmedi.
+
+Acik kalan: Apply henuz YAPILMADI -- gercek ACE'lerin gercekten
+uygulanmasi ayri, acik bir kullanici onayi + ayri bir -Apply paketi
+gerektiriyor (HB-2026-113+'in ayni titizlikteki modeli: Planla -> Onizle
+-> Onay -> Uygula -> Dogrula -> Kesinlestir -> Audit). File Agent'in
+TypeScript kodu (`services/file-agent`) bu paketle de HIC degismedi;
+freshness gate hala baglanmadi.

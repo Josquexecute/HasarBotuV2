@@ -260,6 +260,20 @@ TEK TARAFLI karar verilip uygulanmadı. Önerilen varsayılan: seçenek 1
 (mevcut, kanıtlanmış en-az-yetki NTFS ACL desenini tekrar kullanmak), ama
 kesinleştirme açık kullanıcı onayı gerektirir.
 
+**Güncelleme (HB-2026-163, 2026-08-07):** seçenek 1 için tam PLAN + PREVIEW
+hazırlandı ve gerçek makinede çalıştırıldı: `preview-file-agent-pcloud-db-
+access.ps1` (+ `.tests.ps1`, 5 test). Gerçek ACL taramasıyla kanıtlandı:
+ata zincirinde YALNIZ 5 düğüm (sürücü kökü + kullanıcı profili + AppData +
+Local + pCloud klasörü) yeni Traverse ACE gerektiriyor, `C:\Users` zaten
+`Everyone` üzerinden yeterli (bu ayrım ilk elle yapılan analizde YANLIŞ
+tahmin edilmişti — `BUILTIN\Users` ile `Everyone`/`Authenticated Users`
+karıştırılmıştı; aracın kesin SID bazlı simülasyonu bu hatayı yakaladı).
+Toplam 6 ACE planı çıkarıldı (5 Traverse + 1 Read+Synchronize, hiçbiri
+yazma/silme biti içermiyor, hem statik hem çalışma zamanı öz-kontrolüyle
+doğrulandı). **Apply YAPILMADI** — bu hâlâ ayrı, açık bir kullanıcı kararı
+gerektiriyor; bu güncelleme yalnız "plan hazır ve doğrulandı" durumunu
+kaydeder.
+
 `services/file-agent`'ın TypeScript kodu bu paketle HİÇ değiştirilmedi.
 
 ## 9. D9 planına etkisi
