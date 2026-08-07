@@ -135,8 +135,8 @@ async function isNotLockedForWrite(fullPath) {
   }
 }
 
-async function hashTreeDetailed(root, excludedPaths, progressInterval, label) {
-  const inventory = await enumerateSourceTree(root, excludedPaths)
+async function hashTreeDetailed(root, excludedPaths, progressInterval, label, scopeRelativePath) {
+  const inventory = await enumerateSourceTree(root, excludedPaths, scopeRelativePath ? { scopeRelativePath } : undefined)
   const byKey = new Map()
   let processed = 0
   for (const record of inventory.files) {
@@ -282,8 +282,13 @@ export async function buildDiffForensicsReport(args) {
   const ghost = await loadGhostManifest(args.manifestPath, args.manifestSha256, sourceRoot)
   const rootId = await withConsistentPcloudDatabase(args.pcloudDatabasePath, (database) => getExactGhostRootId(database, ghost))
 
-  const source = await hashTreeDetailed(sourceRoot, ghost.excludedPaths, args.progressInterval, 'source')
-  const target = await hashTreeDetailed(targetRoot, EMPTY_EXCLUDED_PATHS, args.progressInterval, 'target')
+  // HB-2026-162 (per-case reconciliation): when args.caseRelativePath is
+  // given, only that subtree is walked/hashed on both sides — everything
+  // else below (Classification/Currency/PCloud-per-file logic) is
+  // unchanged. Omitting it preserves exact prior whole-tree behavior.
+  const caseRelativePath = args.caseRelativePath ?? null
+  const source = await hashTreeDetailed(sourceRoot, ghost.excludedPaths, args.progressInterval, 'source', caseRelativePath)
+  const target = await hashTreeDetailed(targetRoot, EMPTY_EXCLUDED_PATHS, args.progressInterval, 'target', caseRelativePath)
 
   const allKeys = new Set([...source.byKey.keys(), ...target.byKey.keys()])
   const diffEntries = []
@@ -303,11 +308,20 @@ export async function buildDiffForensicsReport(args) {
     return leftPath < rightPath ? -1 : leftPath > rightPath ? 1 : 0
   })
 
-  const { globalQueueState, conflictNames, runStatus } = await withConsistentPcloudDatabase(args.pcloudDatabasePath, (database) => {
+  const { globalQueueState, conflictNames, runStatus, conflictScanRootId } = await withConsistentPcloudDatabase(args.pcloudDatabasePath, (database) => {
     const taskState = getPcloudTaskState(database)
     const status = getTextSetting(database, 'runstatus', 'PCLOUD_RUN_STATUS_MISSING')
-    const names = findAllConflictNames(database, rootId)
-    return { globalQueueState: taskState, conflictNames: names, runStatus: status }
+    let scanRootId = rootId
+    if (caseRelativePath !== null) {
+      const caseFolderId = resolveFolderIdByRelativeDirParts(database, rootId, caseRelativePath.split(/[\\/]+/).filter((part) => part.length > 0))
+      // A case folder that doesn't exist yet in pCloud's remote tree (e.g.
+      // never synced) has no conflict names to find — that's a fact, not
+      // an error; fall back to an empty scan rather than the whole tenant
+      // tree, preserving per-case isolation (INV-3).
+      scanRootId = caseFolderId
+    }
+    const names = scanRootId === null ? [] : findAllConflictNames(database, scanRootId)
+    return { globalQueueState: taskState, conflictNames: names, runStatus: status, conflictScanRootId: scanRootId }
   })
 
   const entries = []
@@ -355,6 +369,7 @@ export async function buildDiffForensicsReport(args) {
     Status: 'ok',
     ReadOnly: true,
     GeneratedAtUtc: new Date().toISOString(),
+    CaseRelativePath: caseRelativePath,
     GhostExclusion: {
       ManifestSha256: ghost.manifestSha256,
       EntryCount: ghost.excludedPaths.size,

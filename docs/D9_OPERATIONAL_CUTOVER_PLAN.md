@@ -28,6 +28,24 @@ manifest + bu raporu `-BeforeSyncReportPath` olarak) tek kez yeniden
 gözlemlendiği gibi ofis aktivitesi kısa aralıklarla gerçek dosya
 değişikliği üretebiliyor.
 
+**Strateji değişikliği (HB-2026-162, 2026-08-07):** HB-2026-148'den
+HB-2026-161'e kadar süren gerçek olay zinciri, yukarıdaki GLOBAL (bütün
+tenant ağacı, 600 sn kesintisiz sessizlik) kapının canlı bir ofiste
+operasyonel olarak çalışmadığını kanıtladı — bkz.
+`docs/D9_PER_CASE_RECONCILIATION_ARCHITECTURE.md`. Global kapı
+(`pcloud-post-sync-rebaseline-gate.mjs` ve iki wrapper'ı) **hiç
+değiştirilmedi** ve hâlâ geçerli, doğru bir periyodik/manuel bütünlük
+denetim aracıdır — ama artık kritik işlemler için TEK ön koşul değildir.
+Yeni, dar kapsamlı per-case reconciliation motoru
+(`pcloud-case-reconciliation.mjs` / `run-pcloud-case-reconciliation.ps1`)
+salt-okunur olarak uygulandı ve gerçek 10 vaka klasörüne karşı doğrulandı.
+File Agent'a CANLI entegrasyon henüz YAPILMADI — açık bir güvenlik kararı
+(`svc-hb-fileagent`'ın pCloud'un interaktif hesabına ait yerel DB'sine
+okuma erişimi) gerektiriyor, bkz. mimari belgesi §8. Bu nedenle **Adım
+0'ın aşağıdaki gerçek Apply prosedürü değişmedi** — D9'un geri kalanının
+(Adım 1-6) yeni modele göre yeniden sıralanıp sıralanmayacağı ayrı, açık
+bir kullanıcı kararı gerektirir.
+
 ## 1. Bu paket içinde salt-okunur doğrulanan GERÇEK makine durumu
 
 Aşağıdaki her satır bu paket içinde DESKTOP-EFN2G33 üzerinde gerçekten,

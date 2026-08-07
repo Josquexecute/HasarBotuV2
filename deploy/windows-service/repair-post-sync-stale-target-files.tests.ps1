@@ -614,6 +614,290 @@ Assert-True ($json11.AppliedCount -eq 1) "Tied-ctime, current-first revision ord
 Assert-True ((Get-FileHash -LiteralPath $tgt11Path -Algorithm SHA256).Hash.ToLowerInvariant() -eq $src11Sha256) "Tied-ctime case: target now matches source content"
 Remove-Item $root11 -Recurse -Force -ErrorAction SilentlyContinue
 
+Write-Output "`n=== TEST 12: case-reconciliation schema (HB-2026-162) -- only PatternClassification=stale_target content_mismatch entries are candidates ==="
+function New-CaseReconciliationTestFixture {
+    # Exercises Get-CandidateEntriesCaseReconciliation and the new
+    # extension-dispatched integrity check (Test-SourceIntegrityOk):
+    #   - jpeg-candidate.jpg: content_mismatch, PatternClassification
+    #     stale_target -> genuine candidate (JPEG path, unchanged check)
+    #   - png-candidate.png: same but PNG -> exercises the NEW PNG
+    #     signature check (must be a candidate too)
+    #   - corrupt-png.png: content_mismatch, PatternClassification
+    #     stale_target, but the SOURCE bytes are NOT a valid PNG -> must
+    #     block with SOURCE_PNG_INTEGRITY_FAILED, never applied
+    #   - report.pdf: content_mismatch, PatternClassification stale_target,
+    #     non-JPEG/PNG extension -> exercises the minimal non-zero-length
+    #     fallback check (must be a candidate)
+    #   - unknown-mismatch.jpg: content_mismatch but PatternClassification
+    #     'unknown' -> must be blocked, never a candidate
+    #   - renamed-old.pdf: Classification 'extra', PatternClassification
+    #     'rename_artifact' -> must be blocked (this tool never resolves
+    #     renames), never touched
+    $root = Join-Path $env:TEMP ("hasarbotu-repair-casereconciliation-fixture-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    $sourceRoot = Join-Path $root 'KAYNAK'
+    $targetRoot = Join-Path $root 'HEDEF'
+    $ghostDir = Join-Path $sourceRoot 'ghost'
+    $caseDir = Join-Path $sourceRoot 'DAVA\HASAR'
+    $targetCaseDir = Join-Path $targetRoot 'DAVA\HASAR'
+    New-Item -ItemType Directory -Path $ghostDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $caseDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $targetCaseDir -Force | Out-Null
+
+    $soi = [byte[]]@(0xFF, 0xD8)
+    $eoi = [byte[]]@(0xFF, 0xD9)
+    $pngSig = [byte[]]@(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+    function New-JpegBytes2 { param([int]$Seed, [int]$Length = 40) $soi + ([byte[]]((1..$Length) | ForEach-Object { ($_ * $Seed) % 250 })) + $eoi }
+    function New-PngBytes { param([int]$Seed, [int]$Length = 40) $pngSig + ([byte[]]((1..$Length) | ForEach-Object { ($_ * $Seed) % 250 })) }
+    function Write-Pair2 {
+        param([string]$Name, [byte[]]$SourceBytes, [byte[]]$TargetBytes, [bool]$WriteSource = $true)
+        $srcPath = Join-Path $caseDir $Name
+        $tgtPath = Join-Path $targetCaseDir $Name
+        if ($WriteSource) { [System.IO.File]::WriteAllBytes($srcPath, $SourceBytes) }
+        if ($null -ne $TargetBytes) { [System.IO.File]::WriteAllBytes($tgtPath, $TargetBytes) }
+        return [pscustomobject]@{ SourcePath = $srcPath; TargetPath = $tgtPath; RelativePath = "DAVA\HASAR\$Name" }
+    }
+
+    $jpegSrc = New-JpegBytes2 -Seed 3 -Length 60; $jpegTgt = New-JpegBytes2 -Seed 7 -Length 20
+    $jpegPair = Write-Pair2 -Name 'jpeg-candidate.jpg' -SourceBytes $jpegSrc -TargetBytes $jpegTgt
+    $jpegSrcSha = (Get-FileHash -LiteralPath $jpegPair.SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $jpegTgtSha = (Get-FileHash -LiteralPath $jpegPair.TargetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $jpegMtime = [long][Math]::Floor(([DateTimeOffset](Get-Item $jpegPair.SourcePath).LastWriteTimeUtc).ToUnixTimeSeconds())
+
+    $pngSrc = New-PngBytes -Seed 5 -Length 50; $pngTgt = New-PngBytes -Seed 9 -Length 22
+    $pngPair = Write-Pair2 -Name 'png-candidate.png' -SourceBytes $pngSrc -TargetBytes $pngTgt
+    $pngSrcSha = (Get-FileHash -LiteralPath $pngPair.SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $pngTgtSha = (Get-FileHash -LiteralPath $pngPair.TargetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $pngMtime = [long][Math]::Floor(([DateTimeOffset](Get-Item $pngPair.SourcePath).LastWriteTimeUtc).ToUnixTimeSeconds())
+
+    $corruptPngSrc = [byte[]](1..40 | ForEach-Object { $_ % 250 })  # no PNG signature at all
+    $corruptPngTgt = New-PngBytes -Seed 15 -Length 18
+    $corruptPngPair = Write-Pair2 -Name 'corrupt-png.png' -SourceBytes $corruptPngSrc -TargetBytes $corruptPngTgt
+    $corruptPngSrcSha = (Get-FileHash -LiteralPath $corruptPngPair.SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $corruptPngTgtSha = (Get-FileHash -LiteralPath $corruptPngPair.TargetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $corruptPngMtime = [long][Math]::Floor(([DateTimeOffset](Get-Item $corruptPngPair.SourcePath).LastWriteTimeUtc).ToUnixTimeSeconds())
+
+    $pdfSrc = [byte[]](1..70 | ForEach-Object { ($_ * 13) % 250 }); $pdfTgt = [byte[]](1..30 | ForEach-Object { ($_ * 17) % 250 })
+    $pdfPair = Write-Pair2 -Name 'report.pdf' -SourceBytes $pdfSrc -TargetBytes $pdfTgt
+    $pdfSrcSha = (Get-FileHash -LiteralPath $pdfPair.SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $pdfTgtSha = (Get-FileHash -LiteralPath $pdfPair.TargetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $pdfMtime = [long][Math]::Floor(([DateTimeOffset](Get-Item $pdfPair.SourcePath).LastWriteTimeUtc).ToUnixTimeSeconds())
+
+    $unkSrc = New-JpegBytes2 -Seed 21 -Length 33; $unkTgt = New-JpegBytes2 -Seed 25 -Length 12
+    $unkPair = Write-Pair2 -Name 'unknown-mismatch.jpg' -SourceBytes $unkSrc -TargetBytes $unkTgt
+    $unkSrcSha = (Get-FileHash -LiteralPath $unkPair.SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $unkTgtSha = (Get-FileHash -LiteralPath $unkPair.TargetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+    $renamedBytes = New-JpegBytes2 -Seed 29 -Length 44
+    $renamedPair = Write-Pair2 -Name 'renamed-old.pdf' -SourceBytes $null -TargetBytes $renamedBytes -WriteSource $false
+    $renamedTgtSha = (Get-FileHash -LiteralPath $renamedPair.TargetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+    $entries = @()
+    for ($i = 1; $i -le 10; $i++) {
+        $n = "ghost-{0:D2}.tmp" -f $i
+        [System.IO.File]::WriteAllBytes((Join-Path $ghostDir $n), [byte[]]@())
+        $entries += [ordered]@{ relativePath = "ghost\$n"; fileId = "$(5000 + $i)"; parentFolderId = '101'; expectedMetadata = [ordered]@{ name = $n; sizeBytes = 0; hash = "$(6000 + $i)"; flags = 1; ctimeRaw = 10 + $i; mtimeRaw = 20 + $i } }
+    }
+    $manifest = [ordered]@{ schemaVersion = 'storage-ghost-exclusion/1.0.0'; readOnly = $true; sourceRoot = $sourceRoot; entryCount = 10; policy = [ordered]@{ matchMode = 'exact_windows_path_and_pcloud_file_id'; wildcardsAllowed = $false; extensionRulesAllowed = $false; folderRulesAllowed = $false }; entries = $entries }
+    $manifestPath = Join-Path $root 'ghost-manifest.json'
+    [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 6), [System.Text.UTF8Encoding]::new($false))
+    $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    [System.IO.File]::WriteAllText("$manifestPath.sha256", "$manifestHash  ghost-manifest.json", [System.Text.UTF8Encoding]::new($false))
+    Set-TestAdminOnlyFile $manifestPath
+    Set-TestAdminOnlyFile "$manifestPath.sha256"
+
+    $dbPath = Join-Path $root 'data.db'
+    $sql = @"
+PRAGMA journal_mode = WAL;
+CREATE TABLE setting (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER NOT NULL, name TEXT NOT NULL, flags INTEGER NOT NULL, ctime INTEGER NOT NULL, mtime INTEGER NOT NULL, subdircnt INTEGER NOT NULL);
+CREATE TABLE file (id INTEGER PRIMARY KEY, parentfolderid INTEGER NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL, hash INTEGER NOT NULL, flags INTEGER NOT NULL, ctime INTEGER NOT NULL, mtime INTEGER NOT NULL);
+CREATE TABLE filerevision (fileid INTEGER NOT NULL, hash INTEGER NOT NULL, ctime INTEGER NOT NULL, size INTEGER NOT NULL);
+CREATE TABLE task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER, newsyncid INTEGER, itemid INTEGER, localitemid INTEGER, newitemid INTEGER, inprogress INTEGER, name TEXT);
+CREATE TABLE fstask (id INTEGER PRIMARY KEY, type INTEGER, status INTEGER, folderid INTEGER, sfolderid INTEGER, fileid INTEGER, text1 TEXT, text2 TEXT, int1 INTEGER, int2 INTEGER);
+INSERT INTO setting (id, value) VALUES ('diffid', '100'), ('runstatus', '1');
+INSERT INTO folder VALUES (100, 0, 'KAYNAK', 0, 1, 1, 1);
+INSERT INTO folder VALUES (101, 100, 'ghost', 0, 1, 1, 0);
+INSERT INTO folder VALUES (200, 100, 'DAVA', 0, 1, 1, 1);
+INSERT INTO folder VALUES (201, 200, 'HASAR', 0, 1, 1, 0);
+INSERT INTO file VALUES (8001, 201, 'jpeg-candidate.jpg', $($jpegSrc.Length), 9101, 0, $jpegMtime, $jpegMtime);
+INSERT INTO filerevision VALUES (8001, 8101, $jpegMtime, $($jpegTgt.Length));
+INSERT INTO filerevision VALUES (8001, 9101, $jpegMtime, $($jpegSrc.Length));
+INSERT INTO file VALUES (8002, 201, 'png-candidate.png', $($pngSrc.Length), 9102, 0, $pngMtime, $pngMtime);
+INSERT INTO filerevision VALUES (8002, 8102, $pngMtime, $($pngTgt.Length));
+INSERT INTO filerevision VALUES (8002, 9102, $pngMtime, $($pngSrc.Length));
+INSERT INTO file VALUES (8003, 201, 'corrupt-png.png', $($corruptPngSrc.Length), 9103, 0, $corruptPngMtime, $corruptPngMtime);
+INSERT INTO filerevision VALUES (8003, 8103, $corruptPngMtime, $($corruptPngTgt.Length));
+INSERT INTO filerevision VALUES (8003, 9103, $corruptPngMtime, $($corruptPngSrc.Length));
+INSERT INTO file VALUES (8004, 201, 'report.pdf', $($pdfSrc.Length), 9104, 0, $pdfMtime, $pdfMtime);
+INSERT INTO filerevision VALUES (8004, 8104, $pdfMtime, $($pdfTgt.Length));
+INSERT INTO filerevision VALUES (8004, 9104, $pdfMtime, $($pdfSrc.Length));
+"@
+    foreach ($i in 1..10) { $sql += "`nINSERT INTO file VALUES ($(5000 + $i), 101, 'ghost-{0:D2}.tmp', 0, $(6000 + $i), 1, $(10 + $i), $(20 + $i));" -f $i }
+    $sqlPath = Join-Path $root 'setup.sql'
+    [System.IO.File]::WriteAllText($sqlPath, $sql, [System.Text.UTF8Encoding]::new($false))
+    node -e "const { DatabaseSync } = require('node:sqlite'); const fs = require('node:fs'); const db = new DatabaseSync('$($dbPath.Replace('\', '\\\\'))'); db.exec(fs.readFileSync('$($sqlPath.Replace('\', '\\\\'))', 'utf8')); db.close();"
+
+    function StaleEntry {
+        param($Pair, $SrcBytes, $TgtBytes, $SrcSha, $TgtSha, $Fid, $Mtime, $CurHash, $OldHash)
+        [ordered]@{
+            RelativePath = $Pair.RelativePath; Classification = 'content_mismatch'; Currency = 'source_current_target_superseded'
+            PatternClassification = 'stale_target'; PatternNote = 'test fixture'
+            Source = [ordered]@{ FullPath = $Pair.SourcePath; Size = $SrcBytes.Length; Sha256 = $SrcSha }
+            Target = [ordered]@{ FullPath = $Pair.TargetPath; Size = $TgtBytes.Length; Sha256 = $TgtSha }
+            PCloud = [ordered]@{
+                found = $true
+                CurrentRow = [ordered]@{ size = $SrcBytes.Length; hash = "$CurHash"; flags = 0; ctime = $Mtime; mtime = $Mtime }
+                Revisions = @([ordered]@{ hash = "$OldHash"; ctime = $Mtime; size = $TgtBytes.Length }, [ordered]@{ hash = "$CurHash"; ctime = $Mtime; size = $SrcBytes.Length })
+                TaskReferenceCount = 0
+            }
+        }
+    }
+    $entriesJson = @(
+        (StaleEntry $jpegPair $jpegSrc $jpegTgt $jpegSrcSha $jpegTgtSha 8001 $jpegMtime 9101 8101),
+        (StaleEntry $pngPair $pngSrc $pngTgt $pngSrcSha $pngTgtSha 8002 $pngMtime 9102 8102),
+        (StaleEntry $corruptPngPair $corruptPngSrc $corruptPngTgt $corruptPngSrcSha $corruptPngTgtSha 8003 $corruptPngMtime 9103 8103),
+        (StaleEntry $pdfPair $pdfSrc $pdfTgt $pdfSrcSha $pdfTgtSha 8004 $pdfMtime 9104 8104),
+        [ordered]@{
+            RelativePath = $unkPair.RelativePath; Classification = 'content_mismatch'; Currency = 'ambiguous'
+            PatternClassification = 'unknown'; PatternNote = 'test fixture'
+            Source = [ordered]@{ FullPath = $unkPair.SourcePath; Size = $unkSrc.Length; Sha256 = $unkSrcSha }
+            Target = [ordered]@{ FullPath = $unkPair.TargetPath; Size = $unkTgt.Length; Sha256 = $unkTgtSha }
+            PCloud = [ordered]@{ found = $false }
+        },
+        [ordered]@{
+            RelativePath = $renamedPair.RelativePath; Classification = 'extra'; Currency = 'target_only_no_source_counterpart'
+            PatternClassification = 'rename_artifact'; PatternNote = 'test fixture'
+            Source = $null
+            Target = [ordered]@{ FullPath = $renamedPair.TargetPath; Size = $renamedBytes.Length; Sha256 = $renamedTgtSha }
+            PCloud = [ordered]@{ found = $false }
+        }
+    )
+    $report = [ordered]@{
+        SchemaVersion = 'hasarbotu-pcloud-case-reconciliation/1.0.0'; Status = 'ok'; ReadOnly = $true
+        GeneratedAtUtc = [DateTime]::UtcNow.ToString('o'); CaseRelativePath = 'DAVA'; CaseStatus = 'conflict'
+        Entries = $entriesJson
+    }
+    $reportPath = Join-Path $root 'case-reconciliation-report.json'
+    [System.IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+    $reportHash = (Get-FileHash -LiteralPath $reportPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-TestAdminOnlyFile $reportPath
+
+    return [pscustomobject]@{
+        Root = $root; SourceRoot = $sourceRoot; TargetRoot = $targetRoot; ManifestPath = $manifestPath
+        DbPath = $dbPath; ReportPath = $reportPath; ReportHash = $reportHash
+        JpegSourceSha256 = $jpegSrcSha; JpegTargetPath = $jpegPair.TargetPath
+        PngSourceSha256 = $pngSrcSha; PngTargetPath = $pngPair.TargetPath
+        CorruptPngTargetPath = $corruptPngPair.TargetPath; CorruptPngTargetSha256 = $corruptPngTgtSha
+        PdfSourceSha256 = $pdfSrcSha; PdfTargetPath = $pdfPair.TargetPath
+        UnkTargetPath = $unkPair.TargetPath; UnkTargetSha256 = $unkTgtSha
+        RenamedTargetPath = $renamedPair.TargetPath; RenamedTargetSha256 = $renamedTgtSha
+    }
+}
+
+$f12 = New-CaseReconciliationTestFixture
+$backupDir12 = Join-Path $f12.Root 'backups'
+$out12 = & $repairScript -SourceRoot $f12.SourceRoot -TargetRoot $f12.TargetRoot -GhostExclusionManifestPath $f12.ManifestPath -PCloudLocalDatabasePath $f12.DbPath -ForensicsReportPath $f12.ReportPath -ForensicsReportSha256 $f12.ReportHash -BackupDirectory $backupDir12 -Apply 2>&1
+$json12 = $out12 | Out-String | ConvertFrom-Json
+Assert-True ($json12.AppliedCount -eq 3) "case-reconciliation: exactly 3 applied (jpeg + png + pdf candidates) (got: $($json12.AppliedCount))"
+Assert-True ($json12.BlockedCount -eq 1) "case-reconciliation: exactly 1 blocked (corrupt-png.png) (got: $($json12.BlockedCount))"
+Assert-True ($json12.ClassificationBlockedCount -eq 2) "case-reconciliation: exactly 2 classification-blocked (unknown-mismatch.jpg + renamed-old.pdf) (got: $($json12.ClassificationBlockedCount))"
+Assert-True ((Get-FileHash -LiteralPath $f12.JpegTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f12.JpegSourceSha256) "jpeg-candidate.jpg applied: target now matches source (unchanged JPEG check path)"
+Assert-True ((Get-FileHash -LiteralPath $f12.PngTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f12.PngSourceSha256) "png-candidate.png applied: target now matches source (NEW PNG signature check)"
+Assert-True ((Get-FileHash -LiteralPath $f12.PdfTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f12.PdfSourceSha256) "report.pdf applied: target now matches source (NEW minimal non-zero-length fallback check)"
+Assert-True ((Get-FileHash -LiteralPath $f12.CorruptPngTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f12.CorruptPngTargetSha256) "corrupt-png.png target UNCHANGED (source fails PNG signature check)"
+Assert-True ((Get-FileHash -LiteralPath $f12.UnkTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f12.UnkTargetSha256) "unknown-mismatch.jpg target UNCHANGED (PatternClassification unknown, never a candidate)"
+Assert-True ((Get-FileHash -LiteralPath $f12.RenamedTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f12.RenamedTargetSha256) "renamed-old.pdf target UNCHANGED (rename_artifact is never resolved by this tool)"
+$adminReport12 = Get-Content -Raw (Join-Path 'C:\ProgramData\HasarBotu\migration-preflight' $json12.Report.FileName) | ConvertFrom-Json
+$corruptResult12 = @($adminReport12.Files | Where-Object { $_.Name -eq 'DAVA\HASAR\corrupt-png.png' })
+Assert-True ($corruptResult12.Count -eq 1 -and ($corruptResult12[0].Blockers -contains 'SOURCE_PNG_INTEGRITY_FAILED')) "corrupt-png.png blocked with SOURCE_PNG_INTEGRITY_FAILED specifically (got: $($corruptResult12[0].Blockers -join ','))"
+Remove-Item $f12.Root -Recurse -Force -ErrorAction SilentlyContinue
+
+Write-Output "`n=== TEST 13: identity fence retries when source changes mid-repair, succeeds within MaxIdentityRetries, touches ONLY the affected file ==="
+$f13 = New-DiffForensicsTestFixture
+$backupDir13 = Join-Path $f13.Root 'backups'
+$syncMarker13 = Join-Path $f13.Root 'identity-fence-sync.marker'
+$job13 = Start-Job -ScriptBlock {
+    param($script, $sourceRoot, $targetRoot, $manifestPath, $dbPath, $reportPath, $reportHash, $backupDir, $syncMarker)
+    $env:HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER = $syncMarker
+    & $script -SourceRoot $sourceRoot -TargetRoot $targetRoot -GhostExclusionManifestPath $manifestPath -PCloudLocalDatabasePath $dbPath -ForensicsReportPath $reportPath -ForensicsReportSha256 $reportHash -BackupDirectory $backupDir -MaxIdentityRetries 1 -Apply 2>&1 | Out-String
+} -ArgumentList $repairScript, $f13.SourceRoot, $f13.TargetRoot, $f13.ManifestPath, $f13.DbPath, $f13.ReportPath, $f13.ReportHash, $backupDir13, $syncMarker13
+
+# Deterministic sync: wait for the script to reach the exact point right
+# before its identity-fence re-probe (it writes the marker file and then
+# blocks until the marker disappears) -- no timing guesswork.
+$deadline13 = (Get-Date).AddSeconds(15)
+$markerSeen13 = $false
+while ((Get-Date) -lt $deadline13) {
+    if ([System.IO.File]::Exists($syncMarker13)) { $markerSeen13 = $true; break }
+    Start-Sleep -Milliseconds 10
+}
+Assert-True $markerSeen13 "TEST13: script reached the identity-fence sync point (deterministic, not timing-guessed)"
+
+# Simulate a real edit landing during our repair window: new source bytes on
+# disk AND a matching new pCloud current-object row (a new, different
+# revision), both for the SAME fileId (6001, per New-DiffForensicsTestFixture).
+$soi13 = [byte[]]@(0xFF, 0xD8); $eoi13 = [byte[]]@(0xFF, 0xD9)
+$newBytes13 = $soi13 + ([byte[]]((1..70) | ForEach-Object { ($_ * 53) % 250 })) + $eoi13
+[System.IO.File]::WriteAllBytes($f13.CandidateSourcePath, $newBytes13)
+$newSourceSha13 = (Get-FileHash -LiteralPath $f13.CandidateSourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+$newMtimeUnix13 = [long][Math]::Floor(([DateTimeOffset](Get-Item $f13.CandidateSourcePath).LastWriteTimeUtc).ToUnixTimeSeconds())
+$mutateSql13 = "UPDATE file SET size = $($newBytes13.Length), hash = 9999, mtime = $newMtimeUnix13 WHERE id = 6001; INSERT INTO filerevision (fileid, hash, ctime, size) VALUES (6001, 9999, $newMtimeUnix13, $($newBytes13.Length)); PRAGMA wal_checkpoint(FULL);"
+$mutatePath13 = Join-Path $f13.Root 'mutate.sql'
+[System.IO.File]::WriteAllText($mutatePath13, $mutateSql13, [System.Text.UTF8Encoding]::new($false))
+node -e "const { DatabaseSync } = require('node:sqlite'); const fs = require('node:fs'); const db = new DatabaseSync('$($f13.DbPath.Replace('\', '\\\\'))'); db.exec(fs.readFileSync('$($mutatePath13.Replace('\', '\\\\'))', 'utf8')); db.close();"
+# Signal the script to proceed past the sync point now that the mutation landed.
+Remove-Item $syncMarker13 -Force -ErrorAction SilentlyContinue
+
+$job13Result = $job13 | Wait-Job -Timeout 30 | Receive-Job
+Remove-Job $job13 -Force -ErrorAction SilentlyContinue
+$json13 = $job13Result | Out-String | ConvertFrom-Json
+Assert-True ($json13.AppliedCount -eq 1) "TEST13: apply still succeeds after retrying with the changed source (got AppliedCount: $($json13.AppliedCount), BlockedCount: $($json13.BlockedCount))"
+Assert-True ((Get-FileHash -LiteralPath $f13.CandidateTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $newSourceSha13) "TEST13: target now matches the NEW (post-race) source content, not the stale pre-race snapshot"
+Assert-True ((Get-FileHash -LiteralPath $f13.ExtraTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f13.ExtraTargetSha256) "TEST13: unrelated extra-only.jpg in the SAME batch is completely unaffected by the retry on candidate.jpg"
+Remove-Item $f13.Root -Recurse -Force -ErrorAction SilentlyContinue
+
+Write-Output "`n=== TEST 14: identity fence retries EXHAUSTED (MaxIdentityRetries 0) blocks ONLY the affected file; classification of every other entry in the same report is unaffected ==="
+$f14 = New-DiffForensicsTestFixture
+$originalCandidateTargetSha14 = (Get-FileHash -LiteralPath $f14.CandidateTargetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$backupDir14 = Join-Path $f14.Root 'backups'
+$syncMarker14 = Join-Path $f14.Root 'identity-fence-sync.marker'
+$job14 = Start-Job -ScriptBlock {
+    param($script, $sourceRoot, $targetRoot, $manifestPath, $dbPath, $reportPath, $reportHash, $backupDir, $syncMarker)
+    $env:HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER = $syncMarker
+    & $script -SourceRoot $sourceRoot -TargetRoot $targetRoot -GhostExclusionManifestPath $manifestPath -PCloudLocalDatabasePath $dbPath -ForensicsReportPath $reportPath -ForensicsReportSha256 $reportHash -BackupDirectory $backupDir -MaxIdentityRetries 0 -Apply 2>&1 | Out-String
+} -ArgumentList $repairScript, $f14.SourceRoot, $f14.TargetRoot, $f14.ManifestPath, $f14.DbPath, $f14.ReportPath, $f14.ReportHash, $backupDir14, $syncMarker14
+
+$deadline14 = (Get-Date).AddSeconds(15)
+$markerSeen14 = $false
+while ((Get-Date) -lt $deadline14) {
+    if ([System.IO.File]::Exists($syncMarker14)) { $markerSeen14 = $true; break }
+    Start-Sleep -Milliseconds 10
+}
+Assert-True $markerSeen14 "TEST14: script reached the identity-fence sync point (deterministic, not timing-guessed)"
+
+$soi14 = [byte[]]@(0xFF, 0xD8); $eoi14 = [byte[]]@(0xFF, 0xD9)
+$newBytes14 = $soi14 + ([byte[]]((1..80) | ForEach-Object { ($_ * 59) % 250 })) + $eoi14
+[System.IO.File]::WriteAllBytes($f14.CandidateSourcePath, $newBytes14)
+$newMtimeUnix14 = [long][Math]::Floor(([DateTimeOffset](Get-Item $f14.CandidateSourcePath).LastWriteTimeUtc).ToUnixTimeSeconds())
+$mutateSql14 = "UPDATE file SET size = $($newBytes14.Length), hash = 9998, mtime = $newMtimeUnix14 WHERE id = 6001; INSERT INTO filerevision (fileid, hash, ctime, size) VALUES (6001, 9998, $newMtimeUnix14, $($newBytes14.Length)); PRAGMA wal_checkpoint(FULL);"
+$mutatePath14 = Join-Path $f14.Root 'mutate.sql'
+[System.IO.File]::WriteAllText($mutatePath14, $mutateSql14, [System.Text.UTF8Encoding]::new($false))
+node -e "const { DatabaseSync } = require('node:sqlite'); const fs = require('node:fs'); const db = new DatabaseSync('$($f14.DbPath.Replace('\', '\\\\'))'); db.exec(fs.readFileSync('$($mutatePath14.Replace('\', '\\\\'))', 'utf8')); db.close();"
+Remove-Item $syncMarker14 -Force -ErrorAction SilentlyContinue
+
+$job14Result = $job14 | Wait-Job -Timeout 30 | Receive-Job
+Remove-Job $job14 -Force -ErrorAction SilentlyContinue
+$json14 = $job14Result | Out-String | ConvertFrom-Json
+Assert-True ($json14.OverallStatus -eq 'partial_or_blocked') "TEST14: overall status reflects the blocked file (got: $($json14.OverallStatus))"
+Assert-True ((Get-FileHash -LiteralPath $f14.CandidateTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $originalCandidateTargetSha14) "TEST14: candidate.jpg target UNCHANGED (still the original superseded content -- zero retries meant no commit)"
+$adminReport14 = Get-Content -Raw (Join-Path 'C:\ProgramData\HasarBotu\migration-preflight' $json14.Report.FileName) | ConvertFrom-Json
+$candidateResult14 = @($adminReport14.Files | Where-Object { $_.Name -eq 'DAVA\HASAR\candidate.jpg' })
+Assert-True ($candidateResult14.Count -eq 1 -and $candidateResult14[0].Status -eq 'blocked' -and ($candidateResult14[0].Blockers -contains 'SOURCE_IDENTITY_CHANGED_DURING_REPAIR')) "TEST14: candidate.jpg blocked specifically with SOURCE_IDENTITY_CHANGED_DURING_REPAIR (got status=$($candidateResult14[0].Status), blockers=$($candidateResult14[0].Blockers -join ','))"
+Assert-True ($json14.ClassificationBlockedCount -eq 5) "TEST14: the other 5 classification-blocked entries are unaffected by candidate.jpg's identity-fence blocker (got: $($json14.ClassificationBlockedCount))"
+Assert-True ((Get-FileHash -LiteralPath $f14.ExtraTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f14.ExtraTargetSha256) "TEST14: unrelated extra-only.jpg still untouched"
+Remove-Item $f14.Root -Recurse -Force -ErrorAction SilentlyContinue
+
 Write-Output "`n=== SUMMARY: $script:failures failure(s) ==="
 if ($script:failures -gt 0) { exit 1 }
 exit 0

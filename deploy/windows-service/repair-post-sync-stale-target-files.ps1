@@ -17,6 +17,9 @@ param(
 
     [string]$BackupDirectory,
 
+    [ValidateRange(0, 5)]
+    [int]$MaxIdentityRetries = 1,
+
     [switch]$Apply
 )
 
@@ -72,6 +75,7 @@ $AdministratorSidValue = 'S-1-5-32-544'
 $ReportDirectory = 'C:\ProgramData\HasarBotu\migration-preflight'
 $LegacyForensicsSchemaVersion = 'hasarbotu-56aag629-hasar-version-forensics/1.0.0'
 $DiffForensicsSchemaVersion = 'pcloud-post-sync-diff-forensics/1.0.0'
+$CaseReconciliationSchemaVersion = 'hasarbotu-pcloud-case-reconciliation/1.0.0'
 
 function Throw-SafeRepairError {
     param([string]$Code)
@@ -135,6 +139,41 @@ function Get-JpegIntegrityOk {
     $len = $bytes.Length
     if ($len -lt 4) { return $false }
     return ($bytes[0] -eq 0xFF -and $bytes[1] -eq 0xD8 -and $bytes[$len - 2] -eq 0xFF -and $bytes[$len - 1] -eq 0xD9)
+}
+
+function Get-PngIntegrityOk {
+    param([string]$Path)
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 8) { return $false }
+    $pngSignature = @(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+    for ($i = 0; $i -lt 8; $i++) {
+        if ($bytes[$i] -ne $pngSignature[$i]) { return $false }
+    }
+    return $true
+}
+
+function Test-SourceIntegrityOk {
+    # HB-2026-162: the original JPEG SOI/EOI check above (Get-JpegIntegrityOk)
+    # is UNCHANGED and still used verbatim for .jpg/.jpeg -- the two original
+    # schemas only ever process real HASAR-photo JPEGs, and this dispatcher
+    # preserves the exact same call and the exact same blocker code
+    # (SOURCE_JPEG_INTEGRITY_FAILED / STAGED_JPEG_INTEGRITY_FAILED) for that
+    # path. The new case-reconciliation schema can surface stale_target
+    # candidates of any extension (PDFs, PNGs, etc. -- confirmed against
+    # real data). PNG gets an equivalent signature check; anything else
+    # falls back to a minimal non-zero-length check -- deep per-format
+    # corruption detection beyond the SHA-256 hash-match already performed
+    # elsewhere is NOT implemented for other types (documented limitation,
+    # not a silent gap).
+    param([string]$Path)
+    $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    if ($extension -eq '.jpg' -or $extension -eq '.jpeg') {
+        return [pscustomobject]@{ Ok = (Get-JpegIntegrityOk $Path); Code = 'JPEG_INTEGRITY_FAILED' }
+    }
+    if ($extension -eq '.png') {
+        return [pscustomobject]@{ Ok = (Get-PngIntegrityOk $Path); Code = 'PNG_INTEGRITY_FAILED' }
+    }
+    return [pscustomobject]@{ Ok = (([System.IO.FileInfo]::new($Path)).Length -gt 0); Code = 'MINIMAL_INTEGRITY_CHECK_FAILED' }
 }
 
 function Get-NormalizedJsonArray {
@@ -258,6 +297,94 @@ function Get-CandidateEntriesDiffForensics {
     return [pscustomobject]@{ Candidates = @($candidates); OutOfScope = @($outOfScope); Blocked = @($blocked) }
 }
 
+function Get-CandidateEntriesCaseReconciliation {
+    # HB-2026-162 adapter for the hasarbotu-pcloud-case-reconciliation/1.0.0
+    # report schema (produced by run-pcloud-case-reconciliation.ps1 /
+    # pcloud-case-reconciliation.mjs), ADDED alongside the two original
+    # paths above -- neither is touched.
+    #
+    # The case-reconciliation report's Entries[] shares the EXACT same
+    # Source/Target/PCloud shape as the diff-forensics schema (it wraps
+    # buildDiffForensicsReport's own output and adds PatternClassification/
+    # PatternNote on top) -- so the same fail-closed proof checks apply,
+    # gated on PatternClassification == 'stale_target' (the case
+    # module's own classification, which already covers BOTH the classic
+    # genuine-prior-revision pattern AND the zero-byte/incomplete-download
+    # placeholder variant first identified in this same investigation)
+    # instead of Currency alone:
+    #   - 'extra' (any, including rename_artifact-paired ones): NEVER a
+    #     candidate -- this tool only ever copies source -> target; a
+    #     rename/move is not safely resolved by a blind byte overwrite.
+    #   - 'missing': NEVER a candidate -- there is no existing target file
+    #     for [System.IO.File]::Replace to replace.
+    #   - 'metadata_only': OutOfScope -- not a data problem.
+    #   - 'content_mismatch' with PatternClassification != 'stale_target'
+    #     (i.e. 'unknown' or 'rename_artifact'): ClassificationBlocked.
+    #   - 'content_mismatch' with PatternClassification == 'stale_target':
+    #     a candidate ONLY if ALL of the same evidentiary checks the
+    #     diff-forensics adapter requires also hold (PCloud.found,
+    #     TaskReferenceCount == 0, CurrentRow.size == Source.Size, a
+    #     DISTINCT revision matching Target.Size) -- the per-file loop
+    #     further below re-verifies everything fresh regardless.
+    param($report)
+    $entries = Get-NormalizedJsonArray $report.Entries
+    $candidates = @()
+    $outOfScope = @()
+    $blocked = @()
+    foreach ($entry in $entries) {
+        $name = [string]$entry.RelativePath
+        $classification = [string]$entry.Classification
+
+        if ($classification -eq 'metadata_only') {
+            $outOfScope += [pscustomobject]@{ Name = $name; Reason = 'METADATA_ONLY_CONTENT_IDENTICAL' }
+            continue
+        }
+        if ($classification -eq 'extra') {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'TARGET_ONLY_NO_SOURCE_COUNTERPART' }
+            continue
+        }
+        if ($classification -ne 'content_mismatch') {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = "UNKNOWN_OR_UNSUPPORTED_CLASSIFICATION_$classification" }
+            continue
+        }
+        if ([string]$entry.PatternClassification -ne 'stale_target') {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = "PATTERN_CLASSIFICATION_NOT_STALE_TARGET_$([string]$entry.PatternClassification)" }
+            continue
+        }
+        if ($null -eq $entry.Source -or $null -eq $entry.Target) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'SOURCE_OR_TARGET_DATA_MISSING' }
+            continue
+        }
+        if ($null -eq $entry.PCloud -or $entry.PCloud.found -ne $true) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'PCLOUD_FILE_NOT_FOUND' }
+            continue
+        }
+        if ([int64]$entry.PCloud.TaskReferenceCount -ne 0) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'PCLOUD_TASK_REFERENCE_FOUND' }
+            continue
+        }
+        if ($null -eq $entry.PCloud.CurrentRow -or [int64]$entry.PCloud.CurrentRow.size -ne [int64]$entry.Source.Size) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'PCLOUD_CURRENT_ROW_SIZE_MISMATCH_SOURCE' }
+            continue
+        }
+
+        $currentHash = [string]$entry.PCloud.CurrentRow.hash
+        $revisions = Get-NormalizedJsonArray $entry.PCloud.Revisions
+        $supersededMatch = @($revisions | Where-Object { [int64]$_.size -eq [int64]$entry.Target.Size -and [string]$_.hash -ne $currentHash })
+        if ($supersededMatch.Count -lt 1) {
+            $blocked += [pscustomobject]@{ Name = $name; Reason = 'NO_DISTINCT_SUPERSEDED_REVISION_MATCHING_TARGET' }
+            continue
+        }
+
+        $candidates += [pscustomobject]@{
+            Name   = $name
+            Source = [pscustomobject]@{ FullPath = [string]$entry.Source.FullPath; Sha256 = [string]$entry.Source.Sha256 }
+            Target = [pscustomobject]@{ FullPath = [string]$entry.Target.FullPath; Sha256 = [string]$entry.Target.Sha256 }
+        }
+    }
+    return [pscustomobject]@{ Candidates = @($candidates); OutOfScope = @($outOfScope); Blocked = @($blocked) }
+}
+
 function Test-FileNotLockedForWrite {
     param([string]$Path)
     try {
@@ -310,7 +437,7 @@ try {
     catch {
         Throw-SafeRepairError 'FORENSICS_REPORT_JSON_INVALID'
     }
-    if ($report.SchemaVersion -ne $LegacyForensicsSchemaVersion -and $report.SchemaVersion -ne $DiffForensicsSchemaVersion) {
+    if ($report.SchemaVersion -ne $LegacyForensicsSchemaVersion -and $report.SchemaVersion -ne $DiffForensicsSchemaVersion -and $report.SchemaVersion -ne $CaseReconciliationSchemaVersion) {
         Throw-SafeRepairError 'FORENSICS_REPORT_SCHEMA_INVALID'
     }
 
@@ -331,7 +458,12 @@ try {
         $fileEntries = Get-CandidateEntries56aag629 $report
     }
     else {
-        $adapterResult = Get-CandidateEntriesDiffForensics $report
+        $adapterResult = if ($report.SchemaVersion -eq $CaseReconciliationSchemaVersion) {
+            Get-CandidateEntriesCaseReconciliation $report
+        }
+        else {
+            Get-CandidateEntriesDiffForensics $report
+        }
         $fileEntries = $adapterResult.Candidates
         $outOfScopeEntries = $adapterResult.OutOfScope
         $classificationBlockedEntries = $adapterResult.Blocked
@@ -363,6 +495,7 @@ try {
         $backupPath = $null
         $backupSha256 = $null
         $finalTargetSha256 = $null
+        $identityRetryCount = 0
 
         if (-not $sourcePath.StartsWith($source, [StringComparison]::OrdinalIgnoreCase) -or
             -not $targetPath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase)) {
@@ -378,7 +511,8 @@ try {
             $currentTargetSha256 = (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($currentSourceSha256 -ne $expectedSourceSha256) { $blockers.Add('SOURCE_CHANGED_SINCE_FORENSICS') }
             if ($currentTargetSha256 -ne $expectedTargetSha256) { $blockers.Add('TARGET_NOT_KNOWN_SUPERSEDED_VERSION') }
-            if (-not (Get-JpegIntegrityOk $sourcePath)) { $blockers.Add('SOURCE_JPEG_INTEGRITY_FAILED') }
+            $sourceIntegrity = Test-SourceIntegrityOk $sourcePath
+            if (-not $sourceIntegrity.Ok) { $blockers.Add("SOURCE_$($sourceIntegrity.Code)") }
         }
 
         $relativePath = $null
@@ -466,7 +600,71 @@ try {
                     [System.IO.File]::Copy($sourcePath, $stagedPath, $false)
                     $stagedSha256 = (Get-FileHash -LiteralPath $stagedPath -Algorithm SHA256).Hash.ToLowerInvariant()
                     if ($stagedSha256 -ne $currentSourceSha256) { Throw-SafeRepairError 'STAGED_HASH_MISMATCH' }
-                    if (-not (Get-JpegIntegrityOk $stagedPath)) { Throw-SafeRepairError 'STAGED_JPEG_INTEGRITY_FAILED' }
+                    $stagedIntegrity = Test-SourceIntegrityOk $stagedPath
+                    if (-not $stagedIntegrity.Ok) { Throw-SafeRepairError "STAGED_$($stagedIntegrity.Code)" }
+
+                    # Test-only, opt-in-only deterministic sync point: real
+                    # operator use NEVER sets this env var, so this block is
+                    # always a no-op in production. Exists solely so the
+                    # test suite can land a source-identity change in the
+                    # exact window between staging and the fence check
+                    # without relying on wall-clock timing races.
+                    if ($env:HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER) {
+                        $syncMarkerPath = $env:HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER
+                        [System.IO.File]::WriteAllText($syncMarkerPath, 'ready')
+                        $syncDeadline = (Get-Date).AddSeconds(10)
+                        while ((Get-Date) -lt $syncDeadline -and [System.IO.File]::Exists($syncMarkerPath)) {
+                            Start-Sleep -Milliseconds 20
+                        }
+                    }
+
+                    # HB-2026-162 identity fence: re-probe pCloud's LIVE state
+                    # immediately before the atomic replace and compare
+                    # against $state (captured moments earlier in this same
+                    # per-file pass, before staging began). If source's live
+                    # pCloud identity (fileId/current hash/current size)
+                    # moved during staging -- a real possibility in a live
+                    # office, which is the whole point of this package --
+                    # do NOT commit a copy that is stale-since-we-started;
+                    # re-fetch fresh source bytes and retry THIS FILE ONLY,
+                    # up to MaxIdentityRetries times. Exhausting retries
+                    # blocks only this file; every other file in the batch
+                    # is unaffected (unchanged per-file isolation).
+                    $identityFenceOk = $false
+                    $identityAttempt = 0
+                    while (-not $identityFenceOk) {
+                        $identityAttempt += 1
+                        $refreshStdout = & $nodeCommand.Source $statePath `
+                            '--source-root' $source `
+                            '--ghost-manifest' $manifestPath `
+                            '--ghost-manifest-sha256' $manifestHash `
+                            '--pcloud-db' $pcloudDatabaseFullPath `
+                            '--relative-path' $relativePath | Out-String
+                        $refreshExitCode = $LASTEXITCODE
+                        $refreshState = $refreshStdout | ConvertFrom-Json
+                        $identityMatches = (
+                            $refreshExitCode -eq 0 -and $refreshState.Status -eq 'ok' -and $refreshState.found -eq $true -and
+                            [string]$refreshState.fileId -eq [string]$state.fileId -and
+                            [string]$refreshState.currentRow.hash -eq [string]$state.currentRow.hash -and
+                            [int64]$refreshState.currentRow.size -eq [int64]$state.currentRow.size
+                        )
+                        if ($identityMatches) {
+                            $identityFenceOk = $true
+                        }
+                        elseif ($identityAttempt -gt $MaxIdentityRetries) {
+                            Throw-SafeRepairError 'SOURCE_IDENTITY_CHANGED_DURING_REPAIR'
+                        }
+                        else {
+                            $currentSourceSha256 = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+                            [System.IO.File]::Copy($sourcePath, $stagedPath, $true)
+                            $stagedSha256 = (Get-FileHash -LiteralPath $stagedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                            if ($stagedSha256 -ne $currentSourceSha256) { Throw-SafeRepairError 'STAGED_HASH_MISMATCH' }
+                            $retryIntegrity = Test-SourceIntegrityOk $stagedPath
+                            if (-not $retryIntegrity.Ok) { Throw-SafeRepairError "STAGED_$($retryIntegrity.Code)" }
+                            $state = $refreshState
+                            $identityRetryCount += 1
+                        }
+                    }
 
                     [System.IO.File]::Replace($stagedPath, $targetPath, $replaceBackupPath)
 
@@ -505,6 +703,7 @@ try {
             BackupPath = $backupPath
             BackupSha256 = $backupSha256
             FinalTargetSha256 = $finalTargetSha256
+            IdentityRetryCount = $identityRetryCount
         }
     }
 

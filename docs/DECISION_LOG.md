@@ -6878,3 +6878,109 @@ tetiklemesi" hipotezi kanitla curutuldu, ama "cleanup'in zamanlamada
 bagimsiz bir bulut-silmesini hizlandirmis/yakalamis olabilecegi" dar
 olasiligi acik. D9 Adim 0 hala PASS vermiyor; D9'un geri kalani ayri,
 acik bir kullanici talebini bekliyor.
+
+## 2026-08-07 - HB-2026-162: D9 stratejisi degisti -- global 600 sn butun-agac sessizlik kapisi artik kritik islem on kosulu DEGIL (bakim/denetim araci olarak KORUNDU, degismedi); yeni per-case pCloud reconciliation motoru tasarlandi + guvenli tooling UYGULANDI + test edildi + gercek 10 vaka klasorunde dogrulandi
+
+Istek: kullanici D9 stratejisini degistirdi -- global gate kritik islem on
+kosulu olmaktan cikacak (bakim/denetim araci olarak KORUNACAK, bypass/
+gevsetme YOK), yerine canli ofiste guvenli calisan rolling/per-case
+reconciliation mimarisi tasarlanip UYGULANACAK: dosya bazinda source
+identity fence (fileId/revision/relativePath/size/hash), kopyalama
+oncesi/sonrasi kimlik dogrulamasi + yalniz o dosyanin retry'i, hedef
+stale/0-byte icin kontrollu repair, rename/move yalniz fileId/revision
+kanitiyla, extra/unknown ASLA otomatik silinmez, metadata_only yoksayilir,
+her vaka icin ready/syncing/conflict/unknown durumu, File Agent kritik
+islem oncesi yalniz ilgili vaka icin freshness gate (fail-closed, yalniz o
+vakayi engeller), surekli incremental reconciliation (global tree
+quiescence GEREKMEZ), crash/restart/idempotency/audit/rollback destegi.
+Once mevcut 22 gercek farki bu modelle salt-okunur siniflandirip mimari
+plan + test stratejisi cikarilmasi, sonra guvenli tooling degisikliklerinin
+uygulanmasi istendi (gercek repair/delete/cutover Apply YAPILMAYACAK).
+Global gate'in neden production blocker olmaktan cikmasinin guvenli
+oldugunun invariant'larla kanitlanmasi istendi.
+
+Yapilan (detay: `docs/D9_PER_CASE_RECONCILIATION_ARCHITECTURE.md`):
+
+- `pcloud-maintenance-window-gate.mjs`: `enumerateSourceTree`e OPSIYONEL
+  `options.scopeRelativePath` eklendi -- verilmezse 5 mevcut cagri noktasi
+  DAVRANIS DEGISTIRMEDEN calisir (regresyon testiyle kanitlandi), verilirse
+  yalniz o alt-agac taranir (relativePath hala TAM kok'e gore hesaplanir).
+- `pcloud-post-sync-diff-forensics.mjs`: `buildDiffForensicsReport`a
+  OPSIYONEL `args.caseRelativePath` eklendi -- hem kaynak/hedef tarama hem
+  conflict-name taramasi o vaka kokune indirgenir; verilmezse davranis
+  DEGISMEZ.
+- YENI `pcloud-case-reconciliation.mjs` + `.test.mjs` (10 test) + wrapper
+  `run-pcloud-case-reconciliation.ps1`: tek vaka icin PatternClassification
+  (stale_target [0-byte + klasik alt-desen] / rename_artifact [SHA-256
+  esleseniyle] / unknown) + CaseStatus (ready/syncing/conflict/unknown,
+  syncing yalniz TUM etkilenen dosyalarda canli task kaniti varsa --
+  fail-closed). Silme yetenegi YOK.
+- `repair-post-sync-stale-target-files.ps1`: 3. sema adapteri
+  (`Get-CandidateEntriesCaseReconciliation`, yalniz `PatternClassification
+  =='stale_target'` aday) + JPEG/PNG/asgari-uzunluk butunluk kontrolu
+  (uzantiya gore dagitim, JPEG yolu byte-byte DEGISMEDI) + kopyalama-
+  oncesi/sonrasi source identity fence + sinirli yeniden deneme
+  (`-MaxIdentityRetries`, yalniz etkilenen dosyayi bloke eder). Iki eski
+  sema HIC DEGISMEDI (11 eski test + 3 yeni test grubu = 14 test, hepsi
+  gecti). Identity-fence testleri, gercek zamanlama yarisina dusmemek icin
+  test-opt-in-only bir senkron nokta kullanir (`HASARBOTU_TEST_IDENTITY_
+  FENCE_SYNC_MARKER`, uretimde asla ayarlanmaz, no-op).
+- `scripts/check-windows-service-configs.mjs`: yeni arac + genisletilmis
+  repair tool icin statik denetim satirlari eklendi; tam suite (tum yeni/
+  degisen test dosyalari) GERCEKTEN calistirilip gecti.
+- Gercek makinede 10 vaka klasoru (bilinen 22 farkin dagildigi tumu) yeni
+  motorla salt-okunur yeniden taranip siniflandirildi: 7/10 conflict
+  (stale_target/rename_artifact/unknown karisik), 3/10 unknown (gercek,
+  esas zamanli `PCLOUD_DATABASE_SNAPSHOT_UNSTABLE` -- devam eden ofis
+  aktivitesi), 0/10 ready/syncing. Bu surecte GERCEK VERIYLE 2 gercek hata
+  bulundu ve duzeltildi (sentetik testler yakalamamisti): (1) PowerShell
+  wrapper'in Set-StrictMode altinda kisa-devre CaseStatus yollarinin
+  PCloudQueueState/ConflictNamesFound/Summary alanlarini eksik dondurup
+  PropertyNotFoundException atmasi; (2) `missing` siniflandirmali kayitlar
+  icin yanlis (ters anlamli) PatternNote metni.
+
+Invariantlar (INV-1..6, tam detay mimari belgesinde): kaynak kimlik
+dogrulugu (identity fence), sessiz veri kaybi yok (extra/unknown asla
+otomatik silinmez), vakalar arasi izolasyon (bir vakadaki blocker
+digerini asla etkilemez), belirsizlikte fail-closed (ready DISI her
+durum File Agent'i bloke eder), idempotent+guvenli retry, global kapi
+ZAYIFLATILMADI (sifir satir degisti, hala tam ve dogru bir bakim/denetim
+araci). Sonuc: INV-1+INV-4, global kapinin sagladigi guvenligi DAHA INCE
+granulerlikte ve DAHA IYI izolasyonla (INV-3) sagliyor -- hicbir gercek
+kritik islem hicbir zaman "butun agac sessiz" girdisine ihtiyac
+duymadigindan, kaybedilen tek sey hicbir kod yolunun gercekte talep
+etmedigi bir garanti.
+
+Kapsam disi/ertelenen (acik karar gerektirir, bu pakette YAPILMADI): File
+Agent'a (`services/file-agent`) CANLI entegrasyon. Sebep: File Agent
+kasitli olarak SeDenyInteractiveLogonRight ile kisitli ayri bir servis
+hesabi (`svc-hb-fileagent`, HB-2026-113/114/115/116) altinda calisiyor;
+pCloud'un yerel SQLite DB'si ISE pCloud'u calistiran ETKILESIMLI hesabin
+profili altinda -- bugun `svc-hb-fileagent`'in bu dosyaya okuma erisimi
+YOK. Onerilen varsayilan (kesinlesmedi): HB-2026-113+'in TERSI yonunde,
+ayni titizlikte bir NTFS salt-okunur erisim karari. `services/file-agent`
+TypeScript kodu bu paketle HIC degismedi.
+
+Kesin vaka klasoru adlari/plakalari repo'ya ALINMADI (HB-2026-123
+ilkesi); tam detay + 10 vakanin PCloud detayi Administrators-only+hash'li
+raporlarda (her vaka kendi raporu + konsolide indeks
+`per-case-reclassification-index-*.json`).
+
+Test sonucu/Etki: `node --test` ile 3 `.mjs` test dosyasi (yeni/genisletilmis,
+toplam 18 test: 8 diff-forensics + 10 case-reconciliation) GERCEKTEN
+calistirildi, hepsi gecti. `Invoke-Pester` ile repair tool test suite'i (14
+test, 3 kez ust uste) GERCEKTEN calistirildi, hepsi gecti (deterministik,
+flaky degil). `node scripts/check-windows-service-configs.mjs` GERCEKTEN
+calistirildi, gecti. Gercek makinede 10 vaka klasoru salt-okunur taranip
+dogrulandi. Global gate/mevcut iki repair semasi/cleanup tool SIFIR SATIR
+degismedi. Hicbir dosya/pCloud/env/servis yazilmadi -- bu paket tamamen
+salt-okunur arac gelistirme + gercek-veri dogrulamasi. D9 gate bu pakette
+CALISTIRILMADI, D9 Adim 1'e GECILMEDI.
+
+Acik kalan: File Agent canli entegrasyonu icin cross-account pCloud DB
+erisim karari (yukarida) hala acik, ayri bir paket/onay gerektiriyor. D9'un
+Adim 1-6'sinin yeni per-case modele gore yeniden siralanip siralanmayacagi
+ayri, acik bir kullanici karari gerektiriyor. 3 vakanin gercek zamanli
+`PCLOUD_DATABASE_SNAPSHOT_UNSTABLE` durumu (devam eden ofis aktivitesi)
+henuz kesin siniflandirilamadi -- sakin bir anda yeniden taranmasi
+gerekebilir.

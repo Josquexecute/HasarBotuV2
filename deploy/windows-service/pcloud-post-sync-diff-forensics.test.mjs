@@ -293,3 +293,132 @@ test('CLI: manifest hash mismatch GHOST_EXCLUSION_HASH_MISMATCH ile ERROR doner'
   assert.equal(output.Status, 'error')
   assert.equal(output.ErrorCode, 'GHOST_EXCLUSION_HASH_MISMATCH')
 })
+
+test('buildDiffForensicsReport: caseRelativePath verilirse yalniz o vaka klasoru taranir, disaridaki fark ve conflict-name yok sayilir (HB-2026-162)', async (context) => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'hasarbotu-diff-forensics-case-scope-test-'))
+  context.after(async () => rm(temporaryRoot, { recursive: true, force: true }))
+
+  const sourceRoot = path.join(temporaryRoot, 'KAYNAK')
+  const targetRoot = path.join(temporaryRoot, 'HEDEF')
+  const ghostDirectory = path.join(sourceRoot, 'ghost')
+  const caseRelativePath = path.win32.join('2026', '00AAA000')
+  await mkdir(path.join(sourceRoot, '2026', '00AAA000'), { recursive: true })
+  await mkdir(path.join(targetRoot, '2026', '00AAA000'), { recursive: true })
+  await mkdir(ghostDirectory, { recursive: true })
+
+  // In-scope diff: differs on both sides, lives under the case folder.
+  await writeFile(path.join(sourceRoot, '2026', '00AAA000', 'dosya.jpg'), 'guncel-icerik')
+  await writeFile(path.join(targetRoot, '2026', '00AAA000', 'dosya.jpg'), 'eski-icerik-xxxxxxxxxxxxxxx')
+
+  // Out-of-scope diff: differs on both sides too, but OUTSIDE the case
+  // folder — must never appear in a caseRelativePath-scoped report.
+  await writeFile(path.join(sourceRoot, 'disaridaki.txt'), 'baska-vaka-kaynak')
+  await writeFile(path.join(targetRoot, 'disaridaki.txt'), 'baska-vaka-hedef')
+
+  const ghostEntries = []
+  for (let index = 1; index <= 10; index += 1) {
+    const name = `ghost-${String(index).padStart(2, '0')}.tmp`
+    await writeFile(path.join(ghostDirectory, name), '')
+    ghostEntries.push({
+      relativePath: path.win32.join('ghost', name),
+      fileId: String(1000 + index),
+      parentFolderId: '101',
+      expectedMetadata: { name, sizeBytes: 0, hash: String(2100 + index), flags: 1, ctimeRaw: 10 + index, mtimeRaw: 20 + index },
+    })
+  }
+  const manifest = {
+    schemaVersion: 'storage-ghost-exclusion/1.0.0',
+    readOnly: true,
+    sourceRoot,
+    entryCount: 10,
+    policy: {
+      matchMode: 'exact_windows_path_and_pcloud_file_id',
+      wildcardsAllowed: false,
+      extensionRulesAllowed: false,
+      folderRulesAllowed: false,
+    },
+    entries: ghostEntries,
+  }
+  const manifestPath = path.join(temporaryRoot, 'ghost-manifest.json')
+  await writeFile(manifestPath, JSON.stringify(manifest))
+  const manifestHash = digest(await readFile(manifestPath))
+
+  const databasePath = path.join(temporaryRoot, 'data.db')
+  const database = new DatabaseSync(databasePath)
+  database.exec(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE setting (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE folder (
+      id INTEGER PRIMARY KEY, parentfolderid INTEGER NOT NULL, name TEXT NOT NULL,
+      flags INTEGER NOT NULL, ctime INTEGER NOT NULL, mtime INTEGER NOT NULL, subdircnt INTEGER NOT NULL
+    );
+    CREATE TABLE file (
+      id INTEGER PRIMARY KEY, parentfolderid INTEGER NOT NULL, name TEXT NOT NULL,
+      size INTEGER NOT NULL, hash INTEGER NOT NULL, flags INTEGER NOT NULL,
+      ctime INTEGER NOT NULL, mtime INTEGER NOT NULL
+    );
+    CREATE TABLE filerevision (fileid INTEGER NOT NULL, hash INTEGER NOT NULL, ctime INTEGER NOT NULL, size INTEGER NOT NULL);
+    CREATE TABLE task (id INTEGER, itemid INTEGER, localitemid INTEGER, newitemid INTEGER);
+    CREATE TABLE fstask (id INTEGER, fileid INTEGER);
+    CREATE TABLE upload_tasks (id INTEGER);
+    CREATE TABLE localfileupload (id INTEGER);
+    CREATE TABLE uptask_fileupload (id INTEGER);
+    CREATE TABLE pagecachetask (id INTEGER);
+    CREATE TABLE localfolder (id INTEGER, taskcnt INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE syncfolder (id INTEGER, folderid INTEGER, localpath TEXT);
+    CREATE TABLE syncfolderdelayed (id INTEGER);
+    INSERT INTO setting (id, value) VALUES ('diffid', '100'), ('runstatus', '1');
+    INSERT INTO folder VALUES (100, 0, 'KAYNAK', 0, 1, 1, 1);
+    INSERT INTO folder VALUES (101, 100, 'ghost', 0, 1, 1, 0);
+    INSERT INTO folder VALUES (105, 100, '2026', 0, 1, 1, 1);
+    INSERT INTO folder VALUES (106, 105, '00AAA000', 0, 1, 1, 0);
+    INSERT INTO file VALUES (2001, 106, 'dosya.jpg', 13, 3001, 0, 1, 1);
+    -- an in-case conflict-name artifact (must be found when scoped)
+    INSERT INTO file VALUES (2002, 106, 'dosya (conflicted copy 1).jpg', 0, 3002, 0, 1, 1);
+    -- an out-of-case conflict-name artifact (must NOT be found when scoped)
+    INSERT INTO file VALUES (2003, 100, 'baska (conflicted copy 1).txt', 0, 3003, 0, 1, 1);
+    INSERT INTO syncfolder (id, folderid, localpath) VALUES (1, 100, ?);
+  `.replace('?', `'${targetRoot.replace(/'/g, "''")}'`))
+  const insertGhost = database.prepare(`
+    INSERT INTO file (id, parentfolderid, name, size, hash, flags, ctime, mtime)
+    VALUES (?, 101, ?, 0, ?, 1, ?, ?)
+  `)
+  for (const entry of ghostEntries) {
+    insertGhost.run(
+      Number(entry.fileId),
+      entry.expectedMetadata.name,
+      Number(entry.expectedMetadata.hash),
+      entry.expectedMetadata.ctimeRaw,
+      entry.expectedMetadata.mtimeRaw,
+    )
+  }
+  database.close()
+
+  const scopedReport = await buildDiffForensicsReport({
+    sourceRoot,
+    targetRoot,
+    manifestPath,
+    manifestSha256: manifestHash,
+    pcloudDatabasePath: databasePath,
+    progressInterval: 0,
+    caseRelativePath,
+  })
+
+  assert.equal(scopedReport.CaseRelativePath, caseRelativePath)
+  assert.equal(scopedReport.Summary.Counts.content_mismatch, 1)
+  const scopedPaths = scopedReport.Entries.map((entry) => entry.RelativePath)
+  assert.deepEqual(scopedPaths, [path.win32.join('2026', '00AAA000', 'dosya.jpg')])
+  assert.deepEqual(scopedReport.ConflictNamesFound, ['dosya (conflicted copy 1).jpg'])
+
+  const unscopedReport = await buildDiffForensicsReport({
+    sourceRoot,
+    targetRoot,
+    manifestPath,
+    manifestSha256: manifestHash,
+    pcloudDatabasePath: databasePath,
+    progressInterval: 0,
+  })
+  assert.equal(unscopedReport.CaseRelativePath, null)
+  assert.equal(unscopedReport.Summary.Counts.content_mismatch, 2)
+  assert.equal(unscopedReport.ConflictNamesFound.length, 2)
+})

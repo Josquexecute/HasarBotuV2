@@ -158,6 +158,14 @@ try {
   assertContains(maintenanceGate, /SOURCE_CHANGED_DURING_INVENTORY/, 'pcloud-maintenance-window-gate.mjs', 'envanter taraması sırasında kaynak hareketinde fail-closed reset')
   assertContains(maintenanceGate, /Baseline:/, 'pcloud-maintenance-window-gate.mjs', 'başlangıç ve son sayı/boyut/hash kanıtı')
   assertContains(maintenanceGate, /DiffCursorAdvanceCount: 0/, 'pcloud-maintenance-window-gate.mjs', 'final sessiz pencerede sıfır diff hareketi')
+
+  // HB-2026-162: enumerateSourceTree'ye eklenen ISTEGE BAGLI kapsam
+  // parametresi -- per-case reconciliation motorunun tek bir vaka
+  // klasorunu taramasini saglar. options olmadan cagiran 5 mevcut
+  // cagri noktasi (bu blok disinda) davranis degisikligi gormemeli.
+  assertContains(maintenanceGate, /options\?\.scopeRelativePath/, 'pcloud-maintenance-window-gate.mjs', 'enumerateSourceTree kapsam parametresi opsiyonel (options olmadan davranis degismez)')
+  assertContains(maintenanceGate, /SOURCE_SCOPE_NOT_DIRECTORY/, 'pcloud-maintenance-window-gate.mjs', 'kapsam yolu gecersizse fail-closed red')
+  assertContains(maintenanceGate, /scopedExpectedExcludedCount/, 'pcloud-maintenance-window-gate.mjs', 'ghost-exclusion sayisi kapsam altinda daraltilir (tam agac sayisiyla degil)')
   assertContains(maintenanceWrapper, /\[ValidateRange\(10, 120\)\]/, 'test-pcloud-maintenance-window-gate.ps1', '10 dakikanın altına inemeyen wrapper')
   assertContains(maintenanceWrapper, /Test-AdministratorsOnlyFile/, 'test-pcloud-maintenance-window-gate.ps1', 'admin-only manifest kapısı')
   assertContains(maintenanceWrapper, /New-AdminOnlySecurity/, 'test-pcloud-maintenance-window-gate.ps1', 'admin-only gate raporu')
@@ -248,6 +256,23 @@ try {
   assertContains(repairScript, /'METADATA_ONLY_CONTENT_IDENTICAL'/, 'repair-post-sync-stale-target-files.ps1', 'metadata_only kayitlarin kapsam disi birakilmasi')
   assertContains(repairScript, /ClassificationBlockedCount/, 'repair-post-sync-stale-target-files.ps1', 'aday/blocker/kapsam-disi sayilarinin ayri raporlanmasi')
 
+  // HB-2026-162: ucuncu sema adapteri (per-case reconciliation) -- eski iki
+  // yol (56AAG629, diff-forensics) fonksiyon adiyla degismeden korunmali.
+  assertContains(repairScript, /function Get-CandidateEntriesCaseReconciliation/, 'repair-post-sync-stale-target-files.ps1', 'hasarbotu-pcloud-case-reconciliation semasi icin ayri adapter (eski ikisi degismez)')
+  assertContains(repairScript, /PATTERN_CLASSIFICATION_NOT_STALE_TARGET/, 'repair-post-sync-stale-target-files.ps1', 'yalniz PatternClassification==stale_target aday olur (unknown asla); rename_artifact-esli extra ise zaten TARGET_ONLY_NO_SOURCE_COUNTERPART ile bloke olur')
+  // HB-2026-162: JPEG'e ozel butunluk kontrolu artik uzantiya gore
+  // dagitiliyor -- .jpg/.jpeg icin AYNI eski fonksiyon/blocker kodu
+  // (SOURCE_JPEG_INTEGRITY_FAILED) korunur; PNG ve digerleri icin YENI,
+  // AYRI kod adlari kullanilir (mevcut davranisi degistirmeden).
+  assertContains(repairScript, /function Get-PngIntegrityOk/, 'repair-post-sync-stale-target-files.ps1', 'PNG imza kontrolu (yeni, JPEG yolunu degistirmeden)')
+  assertContains(repairScript, /function Test-SourceIntegrityOk/, 'repair-post-sync-stale-target-files.ps1', 'uzantiya gore butunluk kontrolu dagitici')
+  assertContains(repairScript, /MINIMAL_INTEGRITY_CHECK_FAILED/, 'repair-post-sync-stale-target-files.ps1', 'JPEG/PNG disi uzantilar icin asgari sifir-olmayan-uzunluk kontrolu')
+  // HB-2026-162: kopyalama oncesi/sonrasi source identity fence + sinirli
+  // yeniden deneme -- yalniz etkilenen dosyayi bloke eder, digerlerini
+  // etkilemez (mevcut per-dosya izolasyonu degismez).
+  assertContains(repairScript, /MaxIdentityRetries/, 'repair-post-sync-stale-target-files.ps1', 'sinirli kimlik-yeniden-deneme parametresi')
+  assertContains(repairScript, /SOURCE_IDENTITY_CHANGED_DURING_REPAIR/, 'repair-post-sync-stale-target-files.ps1', 'atomik replace ONCESI canli pCloud kimligi yeniden dogrulanir; degistiyse yalniz bu dosya bloke olur')
+
   const stateProbeTests = spawnSync(
     process.execPath,
     ['--test', `${DEPLOY_DIR}pcloud-stale-target-file-state.test.mjs`],
@@ -334,6 +359,44 @@ try {
   }
 } catch (error) {
   errors.push(`D8 post-sync diff forensics tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
+// HB-2026-162: per-case pCloud reconciliation motoru -- global 600 saniyelik
+// bütün-ağaç sessizlik kapısını, tek bir vaka klasörüne dar bir canlı
+// pCloud kimlik denetimiyle değiştiren yeni katman. Tamamen salt-okunur;
+// silme yeteneği YOKTUR (extra/unknown asla otomatik silinmez).
+try {
+  const caseReconciliation = await readFile(`${DEPLOY_DIR}pcloud-case-reconciliation.mjs`, 'utf8')
+  const caseReconciliationWrapper = await readFile(`${DEPLOY_DIR}run-pcloud-case-reconciliation.ps1`, 'utf8')
+
+  assertContains(caseReconciliation, /This module is READ-ONLY/, 'pcloud-case-reconciliation.mjs', 'salt-okunur oldugunu belirten dokumantasyon')
+  assertNotContains(caseReconciliation, /writeFile|WriteAllText|WriteAllBytes|unlink|rmSync|\.exec\(['"]INSERT|\.exec\(['"]UPDATE|\.exec\(['"]DELETE/, 'pcloud-case-reconciliation.mjs', 'herhangi bir dosya/DB yazma veya silme cagrisi (silme yetenegi yok)')
+  assertContains(caseReconciliation, /'stale_target'/, 'pcloud-case-reconciliation.mjs', 'stale_target desen siniflandirmasi')
+  assertContains(caseReconciliation, /'rename_artifact'/, 'pcloud-case-reconciliation.mjs', 'rename_artifact desen siniflandirmasi (SHA-256 esleseni ile)')
+  assertContains(caseReconciliation, /'unknown'/, 'pcloud-case-reconciliation.mjs', 'unknown desen siniflandirmasi (asla otomatik cozulmez)')
+  assertContains(caseReconciliation, /metadata_only/, 'pcloud-case-reconciliation.mjs', 'metadata_only tamamen yok sayilir')
+  assertContains(caseReconciliation, /'ready'/, 'pcloud-case-reconciliation.mjs', 'ready vaka durumu')
+  assertContains(caseReconciliation, /'syncing'/, 'pcloud-case-reconciliation.mjs', 'syncing vaka durumu')
+  assertContains(caseReconciliation, /'conflict'/, 'pcloud-case-reconciliation.mjs', 'conflict vaka durumu')
+  assertContains(caseReconciliation, /CASE_FOLDER_NOT_FOUND_ON_EITHER_SIDE|CASE_FOLDER_MISSING_ON_TARGET|CASE_FOLDER_MISSING_ON_SOURCE/, 'pcloud-case-reconciliation.mjs', 'vaka klasoru eksikse fail-closed unknown/conflict (crash degil)')
+  assertContains(caseReconciliation, /allAffectedFilesSyncing/, 'pcloud-case-reconciliation.mjs', 'syncing yalniz TUM etkilenen dosyalar canli task gosterirse (fail-closed, tek takili dosya conflict e dusurur)')
+
+  assertContains(caseReconciliationWrapper, /ADMINISTRATOR_REQUIRED/, 'run-pcloud-case-reconciliation.ps1', 'admin rol sarti')
+  assertContains(caseReconciliationWrapper, /Test-AdministratorsOnlyFile/, 'run-pcloud-case-reconciliation.ps1', 'admin-only manifest ACL kapisi')
+  assertContains(caseReconciliationWrapper, /New-AdminOnlySecurity/, 'run-pcloud-case-reconciliation.ps1', 'admin-only rapor ACL uygulamasi')
+  assertContains(caseReconciliationWrapper, /CaseRelativePath/, 'run-pcloud-case-reconciliation.ps1', 'tek bir vaka klasoruyle sinirli (Mandatory parametre)')
+  assertNotContains(caseReconciliationWrapper, /SetEnvironmentVariable|Start-Service|Set-Service|Stop-Service|Stop-Process|\[System\.IO\.File\]::Replace|\[System\.IO\.File\]::Delete|\[System\.IO\.File\]::Copy/, 'run-pcloud-case-reconciliation.ps1', 'env/servis/dosya yazma-tasima-silme mutasyonu yok (yalniz rapor yazimi)')
+
+  const caseReconciliationTests = spawnSync(
+    process.execPath,
+    ['--test', `${DEPLOY_DIR}pcloud-case-reconciliation.test.mjs`],
+    { encoding: 'utf8' },
+  )
+  if (caseReconciliationTests.status !== 0) {
+    throw new Error(`pcloud-case-reconciliation testleri başarısız — ${caseReconciliationTests.stderr || caseReconciliationTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`Per-case pCloud reconciliation tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
 // HB-2026-134 follow-up: PCLOUD_PENDING_TASKS_FOUND salt-okunur teshis

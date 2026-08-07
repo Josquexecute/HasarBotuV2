@@ -204,6 +204,26 @@ Son güncelleme: 2026-08-04
   restore edildi: **5/5 başarılı**, C:\=P:\=beklenen SHA-256, pCloud
   `found:true`, kuyruk sıfır — bağımsız doğrulandı. D9 gate
   çalıştırılmadı, D9 Adım 1'e geçilmedi.
+- **D9 stratejisi değişti (HB-2026-162, 2026-08-07):** global 600 sn
+  bütün-ağaç sessizlik kapısı (`pcloud-post-sync-rebaseline-gate.mjs` +
+  iki wrapper'ı) **sıfır satır değişmeden** bakım/denetim aracı olarak
+  korundu, ama artık kritik işlem ön koşulu DEĞİL — bkz.
+  `docs/D9_PER_CASE_RECONCILIATION_ARCHITECTURE.md`. Yeni, dar kapsamlı
+  per-case reconciliation motoru (`pcloud-case-reconciliation.mjs`,
+  `run-pcloud-case-reconciliation.ps1`) salt-okunur uygulandı, test
+  edildi (18 yeni/genişletilmiş `.mjs` testi + 14 repair-tool testi, 3
+  kez üst üste deterministik geçti) ve GERÇEK 10 vaka klasörüne karşı
+  doğrulandı: 7/10 `conflict`, 3/10 `unknown` (gerçek, eş zamanlı
+  `PCLOUD_DATABASE_SNAPSHOT_UNSTABLE`), 0/10 `ready`/`syncing`. Bu
+  süreçte gerçek veriyle (sentetik testlerin yakalamadığı) 2 gerçek hata
+  bulunup düzeltildi. `repair-post-sync-stale-target-files.ps1`'e 3.
+  şema adapteri + kopyalama öncesi/sonrası source identity fence +
+  sınırlı yeniden deneme eklendi; iki eski şema hiç değişmedi.
+  File Agent'a canlı entegrasyon (freshness gate) **YAPILMADI** — açık
+  bir güvenlik kararı (File Agent servis hesabının pCloud'un interaktif
+  hesabına ait yerel DB'sine okuma erişimi yok) gerektiriyor, mimari
+  belgesinin §8'inde net şekilde işaretlendi. D9 gate çalıştırılmadı,
+  D9 Adım 1'e geçilmedi.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

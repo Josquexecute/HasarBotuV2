@@ -337,6 +337,49 @@ test('sentetik kaynak ve WAL dahil pCloud snapshot ayni exact ghost kokunu izler
   const remoteDelta = compareEntryMaps(firstPcloud.entries, secondPcloud.entries)
   assert.deepEqual(remoteDelta, { createCount: 1, modifyCount: 0, deleteCount: 0 })
   assert.notEqual(firstPcloud.diffCursorSha256, secondPcloud.diffCursorSha256)
+
+  // HB-2026-162: options omitted must remain byte-identical to the
+  // pre-existing (2-argument) call shape used above at line 314 — this is
+  // the same call, repeated, to prove adding the 3rd parameter changed
+  // nothing when callers don't opt in.
+  const unscopedAgain = await enumerateSourceTree(sourceRoot, ghost.excludedPaths)
+  assert.equal(unscopedAgain.observedFileCount, 12)
+  assert.equal(unscopedAgain.excludedFileCount, 10)
+  assert.equal(unscopedAgain.fileCount, 2)
+
+  // Scoped walk into a subtree with NO ghost-excluded files under it: only
+  // the file(s) under that subtree are visited; relativePath stays relative
+  // to the full root (not the scope), matching what a full scan would have
+  // produced for that same file.
+  const scopedAlt = await enumerateSourceTree(sourceRoot, ghost.excludedPaths, { scopeRelativePath: 'alt' })
+  assert.equal(scopedAlt.observedFileCount, 1)
+  assert.equal(scopedAlt.excludedFileCount, 0)
+  assert.equal(scopedAlt.fileCount, 1)
+  assert.equal(scopedAlt.files[0].relativePath, 'alt\\ikinci.txt')
+
+  // Scoped walk into the subtree that DOES contain all 10 ghost-excluded
+  // files: the ghost-exclusion-set-mismatch invariant must be evaluated
+  // against only the excluded paths that actually live under the scope,
+  // not the full excludedPaths.size (which would wrongly fail here since
+  // this scope doesn't include belge.txt/alt/ikinci.txt from the full set
+  // count perspective — it should pass because all 10 excluded paths DO
+  // live under 'ghost').
+  const scopedGhost = await enumerateSourceTree(sourceRoot, ghost.excludedPaths, { scopeRelativePath: 'ghost' })
+  assert.equal(scopedGhost.observedFileCount, 10)
+  assert.equal(scopedGhost.excludedFileCount, 10)
+  assert.equal(scopedGhost.fileCount, 0)
+
+  // Invalid scope: points at a file, not a directory.
+  await assert.rejects(
+    enumerateSourceTree(sourceRoot, ghost.excludedPaths, { scopeRelativePath: 'belge.txt' }),
+    (error) => error.safeCode === 'SOURCE_SCOPE_NOT_DIRECTORY',
+  )
+
+  // Invalid scope: escapes the root.
+  await assert.rejects(
+    enumerateSourceTree(sourceRoot, ghost.excludedPaths, { scopeRelativePath: '..\\escape' }),
+    (error) => error.safeCode === 'SOURCE_SCOPE_RELATIVE_PATH_UNSAFE',
+  )
 })
 
 test('CLI 600 saniyenin altinda test bypass kabul etmez', () => {

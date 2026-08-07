@@ -471,13 +471,38 @@ export async function capturePcloudSnapshot(databasePath, ghost) {
   })
 }
 
-export async function enumerateSourceTree(sourceRoot, excludedPaths) {
+export async function enumerateSourceTree(sourceRoot, excludedPaths, options) {
   const root = normalizeWindowsPath(sourceRoot)
   const rootInfo = await lstat(root, { bigint: true })
   assert(rootInfo.isDirectory(), 'SOURCE_ROOT_NOT_DIRECTORY')
   assert(!rootInfo.isSymbolicLink(), 'SOURCE_ROOT_REPARSE_POINT')
 
-  const stack = [root]
+  // Optional scoped walk (HB-2026-162, per-case reconciliation): when
+  // options.scopeRelativePath is given, only that subtree is visited, but
+  // every relativePath/relativeKey below is still computed against the
+  // FULL root (unchanged), so output shapes stay identical to an unscoped
+  // call — callers see the same relative paths a whole-tree scan would
+  // have produced for those same files. Omitting options preserves the
+  // exact prior behavior (all 5 existing call sites pass no 3rd argument).
+  const scopeRelativePath = options?.scopeRelativePath ?? null
+  let walkStart = root
+  let scopedExpectedExcludedCount = null
+  if (scopeRelativePath !== null) {
+    assert(typeof scopeRelativePath === 'string' && scopeRelativePath.length > 0, 'SOURCE_SCOPE_RELATIVE_PATH_INVALID')
+    assert(!path.win32.isAbsolute(scopeRelativePath), 'SOURCE_SCOPE_RELATIVE_PATH_ABSOLUTE')
+    assert(!scopeRelativePath.split(/[\\/]+/).some((segment) => segment.length === 0 || segment === '.' || segment === '..'), 'SOURCE_SCOPE_RELATIVE_PATH_UNSAFE')
+    walkStart = path.join(root, scopeRelativePath)
+    const scopeInfo = await lstat(walkStart, { bigint: true })
+    assert(scopeInfo.isDirectory(), 'SOURCE_SCOPE_NOT_DIRECTORY')
+    assert(!scopeInfo.isSymbolicLink(), 'SOURCE_SCOPE_REPARSE_POINT')
+    const scopeKeyPrefix = `${foldWindows(path.win32.normalize(scopeRelativePath))}\\`
+    scopedExpectedExcludedCount = 0
+    for (const key of excludedPaths) {
+      if (key.startsWith(scopeKeyPrefix)) scopedExpectedExcludedCount += 1
+    }
+  }
+
+  const stack = [walkStart]
   const files = []
   const entries = new Map()
   let directoryCount = 0
@@ -532,7 +557,7 @@ export async function enumerateSourceTree(sourceRoot, excludedPaths) {
     }
   }
 
-  assert(excludedFileCount === excludedPaths.size, 'SOURCE_GHOST_EXCLUSION_SET_MISMATCH')
+  assert(excludedFileCount === (scopedExpectedExcludedCount ?? excludedPaths.size), 'SOURCE_GHOST_EXCLUSION_SET_MISMATCH')
   files.sort((left, right) => ordinalCompare(left.relativePath, right.relativePath))
   return {
     files,
