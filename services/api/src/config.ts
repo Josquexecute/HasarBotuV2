@@ -45,6 +45,15 @@ export interface ApiConfig {
    * BASLATILMAZ. Deger hicbir hata mesajina yazilmaz.
    */
   readonly databaseUrl?: string
+  /**
+   * Oturum çerezine `Secure` niteliği eklenip eklenmeyeceği. `nodeEnv`
+   * `production` değilse her zaman `false` (mevcut, değişmeyen davranış).
+   * `production`da varsayılan `true` (fail-closed) -- `false` yalnız
+   * `ALLOW_INSECURE_LOOPBACK_COOKIES=true` AÇIKÇA verilmiş VE `host` gerçek
+   * bir loopback adresiyse mümkündür; aksi halde config aşamasında REDDEDİLİR
+   * (LAN/proxy'ye açık bir bind'de asla sessizce zayıflatılmaz).
+   */
+  readonly cookieSecure: boolean
   /** Sunucu-sahipli secret ve fiyat ayarlari; istemci/API cevabina asla tasinmaz. */
   readonly openAiPolicyProvider?: OpenAiPolicyProviderConfig
   /**
@@ -110,6 +119,38 @@ function parseNodeEnv(raw: string | undefined): NodeEnv {
     throw new ConfigError('NODE_ENV', `expected one of: ${NODE_ENVS.join(', ')}.`)
   }
   return raw as NodeEnv
+}
+
+/**
+ * Yalnız gerçek IP loopback biçimleri -- `localhost` BİLEREK dışarıda
+ * bırakıldı (DNS/hosts dosyası çözümlemesine bağımlı, bind adresiyle birebir
+ * aynı garantiyi taşımaz). `0.0.0.0`/`::`/gerçek bir LAN IP'si asla loopback
+ * sayılmaz -- bunlardan biri bağlanma adresiyse ağdan erişilebilir olabilir.
+ */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1'])
+
+/**
+ * `Secure` çerez niteliğinin gerçekten uygulanıp uygulanmayacağını belirler.
+ * Yalnız `production`da anlamlıdır (development/test her zaman `false` --
+ * mevcut davranış değişmedi). `production`da varsayılan fail-closed `true`
+ * -- gevşetme YALNIZ açık bir bayrak VE doğrulanmış bir loopback bind ile,
+ * ikisi birden, mümkündür. Yanlış/kısmi kombinasyon SUNUCUYU BAŞLATMAZ
+ * (sessizce en güvenli tarafa düşmez, açıkça reddeder).
+ */
+function parseCookieSecure(env: Readonly<Record<string, string | undefined>>, nodeEnv: NodeEnv, host: string): boolean {
+  if (nodeEnv !== 'production') return false
+  const raw = env.ALLOW_INSECURE_LOOPBACK_COOKIES
+  if (raw === undefined || raw === 'false') return true
+  if (raw !== 'true') {
+    throw new ConfigError('ALLOW_INSECURE_LOOPBACK_COOKIES', 'expected true or false.')
+  }
+  if (!LOOPBACK_HOSTS.has(host)) {
+    throw new ConfigError(
+      'ALLOW_INSECURE_LOOPBACK_COOKIES',
+      `only permitted when HOST is a loopback address (${[...LOOPBACK_HOSTS].join(' or ')}); refusing to start with a non-Secure session cookie on a network-reachable bind.`,
+    )
+  }
+  return false
 }
 
 function parseOptionalDatabaseUrl(raw: string | undefined): string | undefined {
@@ -244,11 +285,13 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
       'deterministic labor allocation providers are not allowed in production.',
     )
   }
+  const host = parseHost(env.HOST)
   return {
-    host: parseHost(env.HOST),
+    host,
     port: parsePort(env.PORT),
     logLevel: parseLogLevel(env.LOG_LEVEL),
     nodeEnv,
+    cookieSecure: parseCookieSecure(env, nodeEnv, host),
     laborAllocationAllowDeterministicProviders,
     ...(databaseUrl !== undefined ? { databaseUrl } : {}),
     ...(openAiPolicyProvider !== undefined ? { openAiPolicyProvider } : {}),

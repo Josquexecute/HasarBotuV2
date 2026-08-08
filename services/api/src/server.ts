@@ -102,7 +102,7 @@ export async function startServer(): Promise<void> {
     ...(pool !== undefined
       ? {
           healthDependencyCheck: async () => (await checkDatabaseHealth(pool)).ok,
-          auth: { pool, cookieSecure: config.nodeEnv === 'production' },
+          auth: { pool, cookieSecure: config.cookieSecure },
           policyAiProviders: createConfiguredPolicyAiProviderRegistry(config),
           emailAiProviders: createConfiguredEmailAiProviderRegistry(config),
         }

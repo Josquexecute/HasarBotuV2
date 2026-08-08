@@ -18,6 +18,8 @@ describe('parseConfig', () => {
       port: DEFAULT_PORT,
       logLevel: DEFAULT_LOG_LEVEL,
       nodeEnv: DEFAULT_NODE_ENV,
+      // development'ta cookieSecure her zaman false (mevcut davranış).
+      cookieSecure: false,
       // Paket 55: deterministik dağıtım sağlayıcıları varsayılan olarak KAPALI.
       laborAllocationAllowDeterministicProviders: false,
     })
@@ -39,6 +41,10 @@ describe('parseConfig', () => {
       port: 8080,
       logLevel: 'debug',
       nodeEnv: 'production',
+      // ALLOW_INSECURE_LOOPBACK_COOKIES verilmedi -> production'da fail-closed
+      // varsayılan: Secure ZORUNLU, host 0.0.0.0 (loopback değil) olsa bile
+      // (opt-in hiç istenmediği için host kontrolüne hiç girilmez).
+      cookieSecure: true,
       databaseUrl: 'postgres://app:pw@127.0.0.1:5432/hasarbotu',
       laborAllocationAllowDeterministicProviders: false,
     })
@@ -179,5 +185,60 @@ describe('parseConfig', () => {
     expect(process.env.PORT).toBe(before)
     // Gercek ortam PORT tasisa bile acik nesne ile calisir.
     expect(parseConfig({}).port).toBe(DEFAULT_PORT)
+  })
+
+  describe('cookieSecure (HB-2026-175 auth-transport)', () => {
+    it('development/test icin ALLOW_INSECURE_LOOPBACK_COOKIES ne olursa olsun her zaman false doner (mevcut davranis)', () => {
+      expect(parseConfig({}).cookieSecure).toBe(false)
+      expect(parseConfig({ NODE_ENV: 'test' }).cookieSecure).toBe(false)
+      expect(parseConfig({ NODE_ENV: 'development', ALLOW_INSECURE_LOOPBACK_COOKIES: 'true', HOST: '0.0.0.0' }).cookieSecure).toBe(false)
+    })
+
+    it('production + opt-in verilmedi -> fail-closed varsayilan: Secure ZORUNLU (host onemsiz)', () => {
+      expect(parseConfig({ NODE_ENV: 'production', DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu' }).cookieSecure).toBe(true)
+      expect(parseConfig({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu',
+        HOST: '127.0.0.1',
+      }).cookieSecure).toBe(true)
+    })
+
+    it('production + opt-in=true + gercek loopback host (127.0.0.1 veya ::1) -> Secure gevsetilir', () => {
+      expect(parseConfig({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu',
+        ALLOW_INSECURE_LOOPBACK_COOKIES: 'true',
+        HOST: '127.0.0.1',
+      }).cookieSecure).toBe(false)
+      expect(parseConfig({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu',
+        ALLOW_INSECURE_LOOPBACK_COOKIES: 'true',
+        HOST: '::1',
+      }).cookieSecure).toBe(false)
+    })
+
+    it('production + opt-in=true + loopback OLMAYAN host (0.0.0.0, gercek LAN IP, localhost hostname) -> fail-closed reddedilir, sunucu BASLAMAZ', () => {
+      const base = { NODE_ENV: 'production' as const, DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu', ALLOW_INSECURE_LOOPBACK_COOKIES: 'true' }
+      expect(() => parseConfig({ ...base, HOST: '0.0.0.0' })).toThrow(ConfigError)
+      expect(() => parseConfig({ ...base, HOST: '192.168.1.50' })).toThrow(ConfigError)
+      // 'localhost' bilerek loopback SAYILMAZ (DNS/hosts dosyasi cozumlemesi,
+      // bind adresiyle birebir ayni garantiyi tasimaz) -- yalniz ciplak IP.
+      expect(() => parseConfig({ ...base, HOST: 'localhost' })).toThrow(ConfigError)
+      try {
+        parseConfig({ ...base, HOST: '0.0.0.0' })
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigError)
+        expect((error as ConfigError).message).toContain('ALLOW_INSECURE_LOOPBACK_COOKIES')
+      }
+    })
+
+    it('ALLOW_INSECURE_LOOPBACK_COOKIES gecersiz deger -> fail-closed reddedilir', () => {
+      const base = { NODE_ENV: 'production' as const, DATABASE_URL: 'postgres://app:pw@127.0.0.1:5432/hasarbotu', HOST: '127.0.0.1' }
+      expect(() => parseConfig({ ...base, ALLOW_INSECURE_LOOPBACK_COOKIES: 'yes' })).toThrow(ConfigError)
+      expect(() => parseConfig({ ...base, ALLOW_INSECURE_LOOPBACK_COOKIES: '1' })).toThrow(ConfigError)
+      // Acik 'false' -- fail-closed varsayilanla AYNI (Secure zorunlu), hata degil.
+      expect(parseConfig({ ...base, ALLOW_INSECURE_LOOPBACK_COOKIES: 'false' }).cookieSecure).toBe(true)
+    })
   })
 })
