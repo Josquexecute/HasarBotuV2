@@ -71,8 +71,15 @@ $f2 = New-Fixture -WithFileAgentDist $false
 $out2 = & $scriptPath -ApiDir $f2.ApiDir -WinSwExe $f2.WinSwExe -Services Api *>&1 | Out-String
 Assert-True ($out2 -notmatch 'FileAgentDir verilmedi') 'FileAgentDir eksikligi HICBIR ZAMAN sikayet edilmedi'
 Assert-True ($out2 -notmatch 'File Agent build') 'File Agent build ciktisi hic kontrol edilmedi (dist yok ama secilmedigi icin sikayet yok)'
-Assert-True ($out2 -match 'File Agent SEÇİLMEDİ') 'Plan aciklamada File Agent secilmedigini belirtti'
 if ($null -eq $realApiService) {
+    # "File Agent SEÇİLMEDİ" mesajı yalnız "steps" bloğunda basılır (issues=0
+    # olduğunda ulaşılır); bu makinede API zaten kuruluysa idempotency
+    # blocker'ı bu bloğa hiç ulaşılmadan zaten test ediyor (Test 5), o yüzden
+    # burada tekrar test edilmesi gerekmez -- TEST 3'teki "API SEÇİLMEDİ"
+    # ile AYNI, simetrik guard (HB-2026-175'te bulunan gerçek asimetri
+    # düzeltildi: bu satır önceden guard'sızdı, TEST 3'ün kendisi zaten
+    # doğruydu).
+    Assert-True ($out2 -match 'File Agent SEÇİLMEDİ') 'Plan aciklamada File Agent secilmedigini belirtti'
     Assert-True ($LASTEXITCODE -eq 0) 'hasarbotu-api gercekten kurulu degilken plan basariyla gosterildi (exit 0)'
     Assert-True ($out2 -match [regex]::Escape('-Apply verilmedi: yalnız plan gösterildi')) 'Onizleme mesaji dogru'
 }
