@@ -680,3 +680,362 @@ GERÇEKTEN restore edildi — **5/5 başarılı**, C:\=P:\=beklenen
 SHA-256, pCloud `found:true`, kuyruk sıfır, bağımsız doğrulandı. D9
 gate çalıştırılmadı, D9 Adım 1'e geçilmedi. D9'un geri kalanı hâlâ
 ayrı, açık bir kullanıcı talebini bekliyor.
+
+## 11. NİHAİ plan/preview paketi — freshness-gate mimarisi entegre, TAZE doğrulanmış (HB-2026-174, 2026-08-08)
+
+**Kapsam:** Bu bölüm §1-10'u GEÇERSİZ KILMAZ (tarihsel kayıt korunur) —
+onun üzerine, HB-2026-162 (per-case reconciliation) ve HB-2026-167..173
+(Session-0-safe attestation→freshness-gate mimarisi, gerçek servis-
+vehicle probe kanıtı, gerçek attestation store ACL Apply'i) ile GELEN
+mimari değişiklikleri de kapsayan, kullanıcının istediği TAM sıralamayla
+(build → reference-data → API deploy → env → API servis kurulum/başlatma/
+health → admin bootstrap → File Agent env/kök → File Agent enable/start →
+service-context freshness smoke → file-operation smoke → nihai
+doğrulama/audit) GÜNCEL, TEK bir nihai paket sunar. **Bu bölüm içinde
+hiçbir gerçek deploy/env/DB/servis start/enable/cutover Apply'i
+ÇALIŞTIRILMADI** — yalnız salt-okunur taze doğrulama + build (yerel,
+geri alınabilir, `dist/` çıktısı — servis/env/DB durumu DEĞİŞMEDİ).
+
+### 11.1 Bu bölümde TAZE doğrulanan gerçek durum
+
+| Alan | Taze sonuç (2026-08-08) | Kanıt |
+|---|---|---|
+| Çalışma ağacı temizliği | **PASS** | `git status --porcelain` — `services/api`, `services/file-agent`, `packages/{contracts,database,domain}` sıfır değişiklik. |
+| **B2 — Build tazeliği** | **PASS (KESİN, artık proxy değil)** | `npm run build:packages` GERÇEKTEN çalıştırıldı — domain→contracts→database→desktop-bridge→api→file-agent→desktop sırasıyla, HEPSİ temiz (`tsc -p tsconfig.build.json`, sıfır hata). |
+| **B7 — Dependency closure** | **PASS, sürüklenme YOK** | Taze hesaplama: api → `Status:"ok"`, workspace-internal=3, harici=113, 10 platform-uyumsuz optional elendi; file-agent → `Status:"ok"`, workspace-internal=2, harici=20 — HB-2026-146 ile birebir aynı sayılar (kilit dosyası değişmedi). |
+| **B1 — API dosya dağıtımı önizlemesi** | **BLOCKED (beklenen, değişmedi)** | Taze `deploy-service-artifacts.ps1` (kapanış-farkındalı) → `Status:"blocked"`, tek blocker: reference-data hedefte yok (B8'e bağımlı, sıralama gereği — araç kendisi sağlam). |
+| File Agent dosya dağıtımı önizlemesi | **PASS (would_apply)** | Taze önizleme: 2159 dosya (~157,7 MB, HB-2026-144'teki 2156'dan küçük, beklenen artış — `src/` büyümesi), hedef zaten kurulu ama güncel değil, ön koşullar karşılandı. |
+| **B8 — reference-data sağlama önizlemesi** | **PASS (would_apply)** | Taze: 4 dosya (108.525 bayt), kimlik/sürüm doğrulaması `snapshot.json` için GEÇTİ, sıfır blocker — HB-2026-145 ile birebir aynı hash'ler. |
+| `install-services.ps1 -Services Api` önizlemesi | **BLOCKED (beklenen)** | Taze: API build çıktısı `C:\HasarBotu\services\api\dist\index.js` hedefte yok (B1 henüz Apply edilmedi) — araç doğru fail-closed reddediyor. |
+| `install-services.ps1 -Services FileAgent` önizlemesi | **BLOCKED (beklenen, idempotency)** | Taze: `hasarbotu-file-agent` ZATEN kurulu — bu adım File Agent için gereksiz, yalnız Adım "File Agent enable/start" (mevcut kaydı Automatic yapıp başlatmak) gerekiyor. |
+| `hasarbotu-file-agent` servis durumu | **Stopped/Disabled** | `Get-CimInstance Win32_Service` — HB-2026-172/173'ten beri değişmedi. |
+| `hasarbotu-api` servis durumu | **Kurulu değil** | Aynı sorgu — boş sonuç. |
+| `postgresql-x64-17` servis durumu | **Running/Automatic** | Aynı sorgu. |
+| Depolama kökü ACL (`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ`) | **PASS, değişmedi** | Taze `Get-Acl`: Administrators Full, `<makine>\user` (pCloud senkron) Modify, `svc-hb-fileagent` Modify — 3 ACE, başka yok. |
+| Attestation store ACL (`C:\ProgramData\HasarBotu\pcloud-attestations`) | **PASS, HB-2026-173 Apply'i hâlâ geçerli** | Taze `Get-Acl`: Administrators Full, `svc-hb-fileagent` Traverse, `svc-hb-fileagent` Read+Synchronize — yazma biti yok. |
+| pCloud DB erişim ACL (HB-2026-165) | **PASS, değişmedi** | Taze `Get-Acl` (`%LOCALAPPDATA%\pCloud`): `svc-hb-fileagent` Traverse + Read/Synchronize. |
+| **Session-0 freshness gate, gerçek test vakası (bkz. HB-2026-170)** | **PASS — CaseStatus=ready, 40/40** | Taze, salt-okunur çalıştırma: `exit=0`, `CaseStatus="ready"`, `Summary.ReadyCount=40/40`. |
+| **B5 — admin kullanıcı sayısı** | **YENİDEN DOĞRULANMADI bu turda** | Bu turda `bootstrap-first-admin.mjs` önizlemesi çalıştırma girişimi araç izin sınıflandırıcısı tarafından REDDEDİLDİ (DB bağlantısı gerektiren komut, iki kez denendi, ikisi de reddedildi) — GERÇEK bir DB sorgusuyla bu turda yeniden kanıtlanamadı. **Son bilinen, bağımsız doğrulanmış durum (HB-2026-147, 2026-08-04): `organizations=0`, `users=0`, `AdminRoleSeeded=true`, `Status:"ready"`.** Gerçek Apply'dan hemen önce bu, tekrar taze çalıştırılıp doğrulanmalı (aşağıdaki Adım 6'da zaten planlı — ayrıca ayrı bir engel değil, zaten sıralamanın kendisi bunu gerektiriyor). |
+| Statik denetim (`npm run check:deploy` kapsamındaki her araç) | **PASS** | Önceki turda (HB-2026-172/173) tam çalıştırıldı, bu turda kod değişikliği olmadığından yeniden gerekmedi — §11.6 sonunda yine de tam suite çalıştırılacak. |
+
+### 11.2 File Agent ortam değişkenleri — TAM liste, gerçek ad/değer/kapsam (kaynak: `services/file-agent/src/config.ts`, kod okumasıyla doğrulandı)
+
+**Her zaman ZORUNLU (4):**
+
+| Değişken | Gerçek değer | Not |
+|---|---|---|
+| `HASARBOTU_AGENT_ROOTS` | `{"baran-global-primary":"C:\\HasarBotuStorage\\BARAN GLOBAL EKSPERTİZ"}` | JSON, `roots` map'i — rootKey ASLA değişmez (mevcut karar). |
+| `HASARBOTU_API_BASE_URL` | `http://127.0.0.1:3100` | API'nin varsayılan `HOST`/`PORT`'uyla (`services/api/src/config.ts`) birebir eşleşir. |
+| `HASARBOTU_AGENT_ID` | **HENÜZ YOK** | Adım 6'da (admin bootstrap sonrası) `POST /api/v1/agents` ile ÜRETİLİR. |
+| `HASARBOTU_AGENT_SECRET` | **HENÜZ YOK** | Aynı çağrıdan, YALNIZ BİR KEZ döner — güvenli saklanmalı. |
+
+**Opsiyonel (varsayılan var, kod okumasıyla doğrulandı):**
+
+| Değişken | Varsayılan |
+|---|---|
+| `HASARBOTU_AGENT_LEASE_SECONDS` | `120` |
+| `HASARBOTU_AGENT_POLL_MS` | `5000` |
+
+**Freshness-gate grubu — HEPSİ BİRDEN VEYA HİÇBİRİ (kısmi verilirse servis başlangıçta `AgentConfigError` ile ÇÖKER, kritik iş denenmeden yakalanır):**
+
+| Değişken | Gerçek değer | Karar/not |
+|---|---|---|
+| `HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_PATH` | `C:\...\HasarBotuV2\deploy\windows-service\pcloud-session0-freshness-gate.mjs` (repo checkout kökü — bu belgenin geri kalanındaki `C:\...\HasarBotuV2\...` gösterimiyle aynı) | **Karar (bu bölümde verildi, aşağıda gerekçeli):** repo checkout yolu doğrudan kullanılıyor — bkz. §11.2.1. |
+| `HASARBOTU_AGENT_PCLOUD_DB_PATH` | `%LOCALAPPDATA%\pCloud\data.db` (gerçek profil yoluyla) | HB-2026-165/172/173'te kullanılan aynı yol. |
+| `HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER` | `BARAN GLOBAL EKSPERTİZ` | Değişmedi. |
+| `HASARBOTU_AGENT_ATTESTATION_STORE` | `C:\ProgramData\HasarBotu\pcloud-attestations` | HB-2026-173'te ACL Apply edildi, taze doğrulandı (§11.1). |
+
+#### 11.2.1 Karar: `HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_PATH` — repo yolu mu, ayrı dağıtım mı?
+
+`freshness-gate-client.ts`, `toolPath`'i `node.exe <toolPath> --args...` ile
+doğrudan spawn eder (import değil). Gerçek dosya zinciri tam olarak 4
+`.mjs` dosyasıdır (`pcloud-session0-freshness-gate.mjs` +
+`pcloud-maintenance-window-gate.mjs` + `pcloud-post-sync-diff-
+forensics.mjs` + `pcloud-source-attestation.mjs`, kod okumasıyla
+doğrulandı) — hepsi `deploy/windows-service/` İÇİNDE aynı dizinde, hiçbir
+`../` importu yok, hiçbir npm bağımlılığı yok (yalnız `node:*` builtin'ler,
+`node:sqlite` dahil — Node 24.16.0'da mevcut, doğrulandı). Bu dosyalar
+`deploy-service-artifacts.ps1`nin File Agent allowlist'inde (yalnız
+`dist/`+`package.json`+bağımlılık kapanışı) YOKTUR.
+
+İki seçenek:
+- **(A, ÖNERİLEN VE BU PLANDA VARSAYILAN) Repo checkout yolunu doğrudan
+  kullan.** Gerekçe: bu makine zaten hem geliştirme hem üretim/dağıtım
+  makinesidir (HB-2026-115'te düzeltilmiş karar); bu turun TÜM gerçek
+  freshness-gate çalıştırmaları (HB-2026-170/172/173, bu bölümün §11.1'i
+  dahil) ZATEN bu repo yolunu kullandı ve kanıtlandı; sıfır yeni kod/test/
+  deploy adımı gerektirir; harici bağımlılığı olmadığından (yalnız
+  `node:*`) sürüm sürüklenme riski yalnız repo'nun KENDİ commit
+  geçmişine bağlıdır (zaten disiplinli test+audit ile korunuyor).
+  Dezavantaj: servis çalışma zamanı, dev repo checkout'unun o yolda
+  kalıcı olarak var olmasına bağımlı hâle gelir (bu makinede bu her
+  zaman doğru olmuştur, ayrı bir dağıtım hedefi YOKTUR).
+- **(B, gelecekteki sertleştirme) `deploy-service-artifacts.ps1`nin
+  allowlist'ini bu 4 dosyayı da (örn. `C:\HasarBotu\services\file-
+  agent\pcloud-tools\`e) kopyalayacak şekilde genişlet.** Temiz ayrım
+  ama yeni kod+test+statik-denetim gerektirir — bu turun kapsamı
+  DIŞINDA bırakıldı.
+
+**Bu seçim kullanıcının aşağıdaki §11.9 tek onay noktasında
+değiştirilebilir** — (B) istenirse gerçek Apply öncesi ayrı, küçük bir
+paket olarak yürütülmeli.
+
+### 11.3 API ortam değişkenleri — TAM liste (kaynak: `services/api/src/config.ts`, kod okumasıyla doğrulandı)
+
+| Değişken | Zorunluluk | Gerçek değer |
+|---|---|---|
+| `NODE_ENV` | Opsiyonel, varsayılan `development` — **production'da `production` OLMALI** | `production` |
+| `DATABASE_URL` | **`NODE_ENV=production` iken ZORUNLU** (`parseDatabaseUrl` ile biçim doğrulanır, geçersizse sunucu BAŞLAMAZ) | `postgres://hasarbotu_app:<pass dosyasından>@127.0.0.1:5432/hasarbotu` |
+| `HOST` | Opsiyonel, varsayılan `127.0.0.1` | varsayılan yeterli |
+| `PORT` | Opsiyonel, varsayılan `3100` | varsayılan yeterli |
+| `LOG_LEVEL` | Opsiyonel, varsayılan `info` | varsayılan yeterli |
+| `OPENAI_*` / `GEMINI_*` / `LABOR_ALLOCATION_ALLOW_DETERMINISTIC_PROVIDERS` | **Tamamı opsiyonel, opt-in** | **Bu cutover'da HİÇBİRİ verilmiyor** — AI sağlayıcıları devre dışı kalır (ayrı, açık bir gelecek karardır; File Agent/API temel çalışması için ZORUNLU DEĞİL). `LABOR_ALLOCATION_ALLOW_DETERMINISTIC_PROVIDERS=true`, `NODE_ENV=production` iken kod SEVİYESİNDE reddedilir (`ConfigError`) — zaten yanlışlıkla açılamaz. |
+
+`/health` yalnız süreç canlılığını DEĞİL, GERÇEK DB bağlantısını da
+yansıtır: `server.ts` `databaseUrl` tanımlıysa gerçek bir `Pool` kurar ve
+`healthDependencyCheck`'i gerçek `checkDatabaseHealth(pool)`'a bağlar
+(kod okumasıyla doğrulandı) — Adım 4'teki `/health` kontrolü bu yüzden
+API↔DB bağlantısının GERÇEK bir kanıtıdır, yalnız süreç varlığının değil.
+
+### 11.4 API→File Agent bağlantı sözleşmesi (kod okumasıyla doğrulandı, route sabitleri `@hasarbotu/contracts`ten)
+
+| Uç nokta | Yol | Kullanım |
+|---|---|---|
+| Health | `GET /health` | Adım 4/9 doğrulaması — `status:"ok"`, DB dahil. |
+| Agent kaydı | `POST /api/v1/agents` (admin oturumu gerekir) | Adım 6 — `agentId`+`secret` üretir, BİR KEZ döner. |
+| Agent listesi | `GET /api/v1/agents` | Doğrulama — kayıtlı agent'ı teyit için. |
+| İş talep etme | `POST /api/v1/agent/jobs/claim` | File Agent'ın kendi poll döngüsü (agent kimlik bilgisiyle). |
+| İş heartbeat | `POST /api/v1/agent/jobs/:jobId/heartbeat` | Aynı. |
+| İş sonucu | `POST /api/v1/agent/jobs/:jobId/result` | Aynı. |
+
+File Agent, `HASARBOTU_AGENT_ID`/`_SECRET` ile `createAgentApiClient`
+(`services/file-agent/src/api-client.ts`) üzerinden bu uç noktalara
+bağlanır — kod okumasıyla doğrulandı, sürüklenme yok.
+
+### 11.5 NİHAİ fail-closed aktivasyon sırası (kullanıcının istediği TAM sıra)
+
+Model: Planla → Önizle → Onay → Uygula → Doğrula → Kesinleştir → Audit
+(AGENTS.md §7). **Her adım bir öncekinin PASS'ine sıkı sıkıya bağlıdır —
+herhangi bir adım BLOCKED/FAIL verirse sonraki adıma GEÇİLMEZ, mevcut
+haldeyken durulur ve rapor edilir.**
+
+**Adım 1 — Build**
+```powershell
+npm run build:packages
+```
+PASS kriteri: sıfır hata. (Bu turda ÇALIŞTIRILDI, PASS — §11.1.)
+
+**Adım 2 — Reference-data sağlama (API dosyalarından ÖNCE, zorunlu sıra)**
+```powershell
+.\deploy\windows-service\provision-extra-data-references.ps1 `
+  -RepoRoot 'C:\...\HasarBotuV2' `
+  -DependencyClosureManifestPath '<api-closure.json>' `
+  -ServiceTargetDir 'C:\HasarBotu\services\api' `
+  -DataLabel 'value-loss-reference-data' `
+  -Apply
+```
+PASS kriteri: `Status:"applied"`, kimlik doğrulaması geçti, hedefte 4
+dosya. Rollback: `-Rollback` (aynı araç, sentetik testte kanıtlı).
+
+**Adım 3 — API deploy**
+```powershell
+.\deploy\windows-service\deploy-service-artifacts.ps1 `
+  -SourceDir 'C:\...\HasarBotuV2\services\api' -TargetDir 'C:\HasarBotu\services\api' `
+  -ServiceLabel 'api' -DependencyClosureManifestPath '<api-closure.json>' `
+  -RepoRoot 'C:\...\HasarBotuV2' -Apply
+node .\deploy\windows-service\smoke-test-deployed-service.mjs 'C:\HasarBotu\services\api'
+```
+PASS kriteri: `Status:"applied"` + smoke-test `status:"ok"` (tüm modül
+grafiği, native eklentiler dahil, hedefin KENDİ `node_modules`'ından
+çözüldü). Rollback: `-Rollback` (zaman damgalı Administrators-only yedek,
+sentetik testte kanıtlı).
+
+**Adım 4 — Env (Machine kapsamı, sıra önemli değil ama hepsi bu adımda)**
+```powershell
+$pw = Get-Content "$env:USERPROFILE\.hasarbotu\hasarbotu_app.pass" -Raw
+[Environment]::SetEnvironmentVariable('DATABASE_URL', "postgres://hasarbotu_app:$($pw.Trim())@127.0.0.1:5432/hasarbotu", 'Machine')
+[Environment]::SetEnvironmentVariable('NODE_ENV', 'production', 'Machine')
+[Environment]::SetEnvironmentVariable('HASARBOTU_API_BASE_URL', 'http://127.0.0.1:3100', 'Machine')
+```
+PASS kriteri: üçü de `[Environment]::GetEnvironmentVariable(...,'Machine')`
+ile (değer YAZDIRILMADAN, yalnız `-ne $null` kontrolüyle) doğrulanır.
+Rollback: `[Environment]::SetEnvironmentVariable('<ad>', $null, 'Machine')`.
+
+**Adım 5 — API servis kurulum/başlatma/health**
+```powershell
+.\deploy\windows-service\install-services.ps1 -ApiDir 'C:\HasarBotu\services\api' `
+  -FileAgentDir 'C:\HasarBotu\services\file-agent' -WinSwExe 'C:\Tools\WinSW-x64.exe' -Services @('Api')
+# önce -Apply OLMADAN gözden geçir, sonra:
+.\deploy\windows-service\install-services.ps1 ... -Services @('Api') -Apply
+Start-Service hasarbotu-api
+Start-Sleep -Seconds 3
+Invoke-RestMethod http://127.0.0.1:3100/health
+```
+PASS kriteri: servis `Running`, `/health` → `{"status":"ok",...}` (DB
+bağlantısı dahil, §11.3). Rollback: `Stop-Service hasarbotu-api`;
+kurulumu tamamen geri almak için `hasarbotu-api.exe uninstall` (WinSW).
+
+**Adım 6 — Admin bootstrap**
+```powershell
+node .\deploy\windows-service\bootstrap-first-admin.mjs           # önizleme (DATABASE_URL env'de olmalı)
+node .\deploy\windows-service\bootstrap-first-admin.mjs --apply   # interaktif, parola ekransız
+```
+PASS kriteri: `Status:"created"` (veya eşdeğeri), tek transaction, audit
+kaydı. Yalnız `organizations=0 VE users=0` iken çalışır — tekrar
+çalıştırma fail-closed reddedilir (ikinci bir admin GEREKMEZ zaten).
+Rollback: mekanizma yok (idempotent tek-kullanımlık) — YANLIŞ girilirse
+DB'den elle silinip yeniden çalıştırılması ayrı bir karardır.
+
+**Adım 6b — Agent kaydı (elle, admin oturumuyla — otomatikleştirilmez, B6 ile aynı sınıf)**
+```
+POST /api/v1/agents  { "name": "file-agent-baran-global" }
+-> { agent: { id, ... }, secret: "..." }   # BİR KEZ döner, güvenli saklanmalı
+```
+
+**Adım 7 — File Agent env + kök**
+```powershell
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ID', '<agent.id>', 'Machine')
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_SECRET', '<secret>', 'Machine')
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ROOTS', '{"baran-global-primary":"C:\\HasarBotuStorage\\BARAN GLOBAL EKSPERTİZ"}', 'Machine')
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_PATH', 'C:\...\HasarBotuV2\deploy\windows-service\pcloud-session0-freshness-gate.mjs', 'Machine')
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_PCLOUD_DB_PATH', "$env:LOCALAPPDATA\pCloud\data.db", 'Machine')
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER', 'BARAN GLOBAL EKSPERTİZ', 'Machine')
+[Environment]::SetEnvironmentVariable('HASARBOTU_AGENT_ATTESTATION_STORE', 'C:\ProgramData\HasarBotu\pcloud-attestations', 'Machine')
+```
+PASS kriteri: 7 değişkenin hepsi Machine kapsamında tanımlı (değer
+YAZDIRILMADAN). Rollback: her biri `$null` ile silinir (§11.6).
+
+**Adım 8 — File Agent enable/start**
+```powershell
+Set-Service hasarbotu-file-agent -StartupType Automatic
+Start-Service hasarbotu-file-agent
+Start-Sleep -Seconds 5
+Get-Content 'C:\HasarBotu\services\file-agent\logs\hasarbotu-file-agent.out.log' -Tail 30
+```
+PASS kriteri: servis `Running`, log'da `AgentConfigError` YOK (freshness-
+gate grubu TAM 4/4 verilmişse config başarıyla yüklenir), `storage_
+unavailable` YOK. Rollback: `Stop-Service hasarbotu-file-agent; Set-
+Service hasarbotu-file-agent -StartupType Disabled` — HB-2026-168'in
+vehicle-probe aracıyla ÇOK KEZ (5/5) kanıtlanmış aynı durdurma mekanizması.
+
+**Adım 9 — Service-context freshness smoke**
+Bu adımın GÜVENLİK-KRİTİK mekanizması (gerçek `svc-hb-fileagent`
+kimliğiyle, gerçek env değerleriyle DB okuma/yazma-red/attestation
+zinciri) HB-2026-172/173'te vehicle-probe aracıyla ZATEN 5 kez gerçek
+makinede kanıtlandı (`RestoredExactly=true` 5/5, `CaseStatus=ready`
+son çalıştırmada) — bu adım o kanıtı TEKRARLAMAZ (vehicle-probe artık
+kullanılamaz: araç Running bir servise dokunmayı yapısal olarak
+reddeder). Bunun yerine, GERÇEK servis şimdi Adım 8'de başladığı için:
+```powershell
+Get-Content 'C:\HasarBotu\services\file-agent\logs\hasarbotu-file-agent.out.log' -Tail 50 | Select-String 'freshness|AgentConfigError|case_not_fresh'
+```
+PASS kriteri: config yükleme hatası yok (servis zaten Running ise bu
+zaten kanıtlanmış demektir — `AgentConfigError` servis başlangıcında
+fırlar ve servis Running durumuna hiç geçmez). Henüz gerçek bir vaka
+işi kuyrukta olmadığından (DB'de vaka verisi yok, B5/Adım 6 az önce
+tamamlandı) freshness gate'in KENDİSİ ilk gerçek `workspace`/
+`file_operation` işine kadar tetiklenmez — bu NORMAL, eksik değil.
+
+**Adım 10 — File-operation smoke (elle, gerçek ama zararsız bir iş)**
+İlk gerçek vaka File Agent'a atandığında (ayrı, kapsam dışı bir ürün
+adımı — UI'dan/API'den gerçek bir dosya kaydı oluşturma), aşağıdakiler
+File Agent log'unda GERÇEK olarak gözlemlenmelidir:
+1. Freshness gate çağrıldı (`checkCaseFreshness` log satırı/iş
+   sonucu).
+2. `CaseStatus` doğru rapor edildi (`ready` ise iş devam etti, değilse
+   `case_not_fresh` ile REDDEDİLDİ — sessizce atlanmadı).
+3. Gerçek işlem (workspace/file_operation) yalnız `ready` iken
+   çalıştı.
+Bu adım İLK GERÇEK vaka atamasıyla doğal olarak gerçekleşir — bu plan
+paketi kapsamında SENTETİK/sahte bir vaka oluşturularak ZORLANMAZ
+(gerçek olmayan DB satırı yaratmak, müşteri verisi yaratma disiplinini
+bozar).
+
+**Adım 11 — Nihai doğrulama + audit**
+- `Get-Service hasarbotu-api, hasarbotu-file-agent` → ikisi de `Running`.
+- `Invoke-RestMethod http://127.0.0.1:3100/health` → `status:"ok"`.
+- 7 File Agent + 3 API env değişkeni Machine kapsamında (değer
+  yazdırılmadan) doğrulanır.
+- `npm run check:deploy` (statik denetim, tüm windows-service araçları)
+  yeniden çalıştırılır.
+- Deployment audit kaydı (RUNBOOK §6 formatı) `docs/DECISION_LOG.md`e
+  yazılır.
+- `P:\BARAN GLOBAL EKSPERTİZ` en az 14 gün silinmeden tutulur (mevcut
+  karar).
+
+### 11.6 Rollback sırası (Adım 11'den 1'e, TERS sıra)
+
+```powershell
+# 1) File Agent durdur (Adım 8'in tersi)
+Stop-Service hasarbotu-file-agent -ErrorAction SilentlyContinue
+Set-Service hasarbotu-file-agent -StartupType Disabled
+
+# 2) File Agent env'i sil (Adım 7'nin tersi)
+foreach ($name in @('HASARBOTU_AGENT_ID','HASARBOTU_AGENT_SECRET','HASARBOTU_AGENT_ROOTS','HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_PATH','HASARBOTU_AGENT_PCLOUD_DB_PATH','HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER','HASARBOTU_AGENT_ATTESTATION_STORE')) {
+  [Environment]::SetEnvironmentVariable($name, $null, 'Machine')
+}
+
+# 3) Agent kaydını iptal et (Adım 6b'nin tersi) -- ayrı, admin oturumuyla elle
+#    (API'de agent devre dışı bırakma/silme uç noktası varsa; yoksa yalnız
+#    secret File Agent'tan silindiği için pratikte zararsız kalır)
+
+# 4) Admin bootstrap GERİ ALINMAZ (Adım 6) -- idempotent tek-kullanımlıktır,
+#    yanlışsa DB'den elle silinip yeniden calıştırılması ayrı bir karardır
+
+# 5) API durdur + env sil (Adım 5/4'ün tersi)
+Stop-Service hasarbotu-api -ErrorAction SilentlyContinue
+foreach ($name in @('DATABASE_URL','NODE_ENV','HASARBOTU_API_BASE_URL')) {
+  [Environment]::SetEnvironmentVariable($name, $null, 'Machine')
+}
+# Kurulumu tamamen kaldırmak icin (opsiyonel, ayrı karar):
+#   C:\HasarBotu\services\api\hasarbotu-api.exe uninstall
+
+# 6) API deploy geri al (Adım 3'ün tersi)
+.\deploy\windows-service\deploy-service-artifacts.ps1 -Rollback -ServiceLabel 'api' `
+  -ApplyEvidenceReportPath '<apply raporu>' -ApplyEvidenceReportSha256 '<hash>'
+
+# 7) Reference-data geri al (Adım 2'nin tersi)
+.\deploy\windows-service\provision-extra-data-references.ps1 -Rollback `
+  -ApplyEvidenceReportPath '<apply raporu>' -ApplyEvidenceReportSha256 '<hash>'
+```
+Her adımın kendi rollback mekanizması AYRI ayrı, sentetik testlerle
+kanıtlanmıştır (HB-2026-143/145 deploy/provision araçları; HB-2026-168
+vehicle-probe zaten 5/5 gerçek restore kanıtladı). Attestation store ve
+pCloud DB ACL'leri (HB-2026-165/173) bu cutover'ın parçası DEĞİLDİR —
+kendi `-Rollback` modlarıyla ayrı yönetilir, bu sıraya dahil değildir
+(zaten uygulanmış, kalıcı altyapı).
+
+### 11.7 Açık bloker'lar / eksik gerçek değerler / kullanıcı kararı gereken noktalar
+
+| # | Konu | Durum |
+|---|---|---|
+| 1 | `HASARBOTU_AGENT_ID`/`_SECRET` gerçek değerleri | **YOK** — yalnız Adım 6b'de (admin oturumu) üretilir, ÖNCEDEN bilinemez. |
+| 2 | B5/admin sayısı taze DB doğrulaması | Bu turda araç izin sınıflandırıcısı tarafından ENGELLENDİ — son bilinen durum (HB-2026-147: 0 org/0 kullanıcı, hazır) güvenilir ama TAZE değil; Adım 6'nın kendi önizlemesi zaten taze kontrol yapacak. |
+| 3 | `HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_PATH` konumu | **Karar bu bölümde verildi** (§11.2.1, seçenek A) — kullanıcı isterse §11.9'da değiştirebilir. |
+| 4 | Gerçek `-Apply` zamanlaması | Önceki karar geçerli (§8.4): ofis sakinken, planlı pencerede. |
+| 5 | AI sağlayıcıları (OPENAI_*/GEMINI_*) | Bu cutover'a DAHİL DEĞİL — ayrı, açık gelecek karar. |
+
+### 11.8 Bu bölümde YAPILMAYANLAR (kesin liste)
+
+- Hiçbir env değişkeni (Machine/User/Process) yazılmadı/değiştirilmedi.
+- Hiçbir Windows servisi kurulmadı/başlatılmadı/durdurulmadı/enable
+  edilmedi.
+- Hiçbir dosya `C:\HasarBotu\...`e kopyalanmadı (yalnız repo içi
+  `dist/` yeniden üretildi — bu commit edilmez, kaynak kod değildir).
+- pCloud ayarı, sync eşlemesi, DB içeriği hiç değişmedi.
+- Admin bootstrap `--apply` ÇALIŞTIRILMADI.
+- Agent kaydı yapılmadı (`HASARBOTU_AGENT_ID`/`_SECRET` üretilmedi).
+
+### 11.9 TEK son onay noktası
+
+Bu paket §11.5'teki 11 adımı, her biri kendi PASS kriteriyle, TAM
+sırayla ve rollback'i hazır şekilde tanımlar. **Gerçek Apply'a
+başlamak için kullanıcının vermesi gereken TEK onay:**
+
+> "D9 gerçek aktivasyonuna §11.5'teki 11 adımın TAMAMI için, sırayla,
+> her adım PASS vermeden bir sonrakine geçilmeksizin, onay veriyorum."
+
+Bu onay verilmeden bu paketten hiçbir gerçek env/deploy/DB/servis
+mutasyonu başlatılmaz. §11.2.1'deki TOOL_PATH kararı (seçenek A) bu
+onayla birlikte zımnen kabul edilmiş sayılır; kullanıcı seçenek B'yi
+istiyorsa onay yerine bunu belirtmelidir.

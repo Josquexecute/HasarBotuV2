@@ -371,6 +371,28 @@ Son güncelleme: 2026-08-04
   start edilmedi, API bring-up/cutover yapılmadı, müşteri dosyalarına
   dokunulmadı (kullanıcının açık yasağı). Sonraki aşama: API bring-up +
   env + gerçek File Agent aktivasyonu — ayrı, açık kullanıcı kararları.
+- **API bring-up + File Agent cutover için NİHAİ plan/preview paketi,
+  TEK onay noktalı (HB-2026-174, 2026-08-08):** `docs/D9_OPERATIONAL_
+  CUTOVER_PLAN.md`e §11 eklendi. `npm run build:packages` GERÇEKTEN
+  çalıştırıldı (temiz, B2 artık kesin) — dependency closure, deploy
+  önizlemeleri (API/File Agent), reference-data önizlemesi, 3 ACL
+  seti, freshness gate (CaseStatus=ready, 40/40) hepsi TAZE doğrulandı,
+  sıfır sürüklenme. Kod okumasıyla File Agent'ın 4+2+4 env değişkeni
+  ve API'nin `NODE_ENV`/`DATABASE_URL`/opsiyonel AI sağlayıcı
+  değişkenleri TAM listelendi; `HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_
+  PATH`in gerçek konumu için bir karar verildi (repo checkout yolu,
+  gerekçeli, kullanıcı tek onay noktasında değiştirebilir). Kullanıcının
+  istediği 11 adımlı (build→reference-data→API deploy→env→API kurulum/
+  başlatma/health→admin bootstrap→File Agent env/kök→enable/start→
+  service-context freshness smoke→file-operation smoke→nihai doğrulama)
+  fail-closed sıra, her adım için exact komut+PASS kriteri+rollback ile
+  yazıldı. **Taze doğrulanamayan tek nokta:** `bootstrap-first-admin.mjs`
+  önizlemesi bu turda araç izin sınıflandırıcısı tarafından 2 kez
+  reddedildi — son bilinen durum (HB-2026-147) açıkça "taze değil"
+  işaretlendi. Bu pakette hiçbir env/deploy/DB/servis mutasyonu
+  yapılmadı — yalnız `npm run build:packages` (yerel, geri alınabilir)
+  ve salt-okunur kontroller. Sonraki adım: kullanıcının TEK onay
+  noktasını (§11.9) vermesi.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

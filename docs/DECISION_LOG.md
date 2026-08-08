@@ -8066,3 +8066,123 @@ Acik kalan: Sonraki asama kullanicinin kendi belirttigi gibi API
 bring-up + 4 env degiskeninin gercek degerleri + gercek File Agent
 enable/start/cutover olacak -- bunlarin HICBIRI bu paketin kapsaminda
 degil, ayri acik kullanici kararlari gerektirir.
+
+## 2026-08-08 - HB-2026-174: API bring-up + gercek File Agent cutover icin NIHAI plan/preview paketi -- TAZE dogrulama (build GERCEKTEN calistirildi, temiz), freshness-gate mimarisi (HB-2026-167..173) entegre 11 adimli fail-closed sira, TEK onay noktasi
+
+Kullanicinin istegi: mevcut gercek durumu taze dogrula (API build/
+dependency-closure/reference-data, API servis kurulum onizlemesi, 4
+File Agent env degiskeni exact ad/deger, DATABASE_URL+API env, admin
+bootstrap hazirligi, storage kok, attestation store+freshness gate,
+API->File Agent baglanti sozlesmesi, rollback sirasi), aktivasyon
+sirasini netlestir (build -> reference-data -> API deploy -> env ->
+API kurulum/baslatma/health -> admin bootstrap -> File Agent env/kok
+-> File Agent enable/start -> service-context freshness smoke ->
+file-operation smoke -> nihai dogrulama/audit), bu turda GERCEK Apply
+yapma, eksik deger/blocker'i acikca belirt, test+commit et, TEK son
+onay noktasi birak.
+
+`docs/D9_OPERATIONAL_CUTOVER_PLAN.md`e yeni §11 eklendi (§1-10
+DEGISTIRILMEDI, tarihsel kayit korundu). Bu bolum icinde GERCEKTEN
+calistirilan, salt-okunur (veya yerel/geri-alinabilir) dogrulamalar:
+
+1. `npm run build:packages` GERCEKTEN calistirildi (domain->contracts->
+   database->desktop-bridge->api->file-agent->desktop), sifir hata --
+   B2 (build tazeligi) artik KESIN, HB-2026-146'daki "proxy, kesin
+   degil" durumundan cikti.
+2. `resolve-runtime-dependency-closure.mjs` taze: api (3+113, 10
+   platform-uyumsuz elendi) + file-agent (2+20) -- HB-2026-146 ile
+   birebir ayni, kilit dosyasi surukmedi.
+3. `deploy-service-artifacts.ps1` (kapanis-farkindali) taze onizleme:
+   API hala B8'e bagimli BLOCKED (beklenen), File Agent would_apply
+   (2159 dosya, ~157,7 MB).
+4. `provision-extra-data-references.ps1` taze onizleme: would_apply, 4
+   dosya, kimlik dogrulamasi GECTI -- HB-2026-145 ile ayni hash'ler.
+5. `install-services.ps1 -Services Api` taze: build eksikligiyle
+   BLOCKED (beklenen); `-Services FileAgent` taze: idempotency guard
+   dogru calisti (zaten kurulu).
+6. Depolama koku ACL, attestation store ACL (HB-2026-173), pCloud DB
+   ACL (HB-2026-165) -- ucu de taze `Get-Acl` ile degismedigi
+   dogrulandi.
+7. Session-0 freshness gate, gercek test vakasi (bkz. HB-2026-170) uzerinde
+   taze calistirildi: `CaseStatus=ready`, 40/40 -- degismedi.
+
+**Taze dogrulanamayan TEK nokta:** `bootstrap-first-admin.mjs`nin
+DATABASE_URL gerektiren onizleme calistirmasi bu turda arac izin
+siniflandiricisi tarafindan IKI KEZ REDDEDILDI -- zorla calistirma
+denenmedi (talimat geregi). Son bilinen, bagimsiz dogrulanmis durum
+(HB-2026-147, 2026-08-04: organizations=0, users=0, hazir) planda
+acikca "TAZE DEGIL" olarak isaretlendi; Adim 6'nin kendi onizlemesi
+gercek Apply oncesi zaten taze kontrol yapacak.
+
+**Kod okumasiyla dogrulanan, ilk kez TAM listelenen gercek sozlesmeler:**
+- File Agent env (`services/file-agent/src/config.ts`): 4 HER ZAMAN
+  zorunlu (`HASARBOTU_AGENT_ROOTS`/`_API_BASE_URL`/`_ID`/`_SECRET`), 2
+  opsiyonel varsayilanli, 4 freshness-gate grubu (HEPSI BIRDEN veya
+  HICBIRI -- kismi verilirse servis baslangicta `AgentConfigError` ile
+  cokup kritik is denenmeden yakalanir).
+- API env (`services/api/src/config.ts`): `NODE_ENV=production`
+  icin `DATABASE_URL` ZORUNLU (bicim `parseDatabaseUrl` ile
+  dogrulanir); AI saglayici degiskenlerinin (OPENAI_*/GEMINI_*) HEPSI
+  opsiyonel/opt-in -- bu cutover'a DAHIL DEGIL.
+- `/health`, `databaseUrl` tanimliysa GERCEK bir DB pool kurup
+  `healthDependencyCheck`i gercek `checkDatabaseHealth`e baglar (kod
+  okumasiyla dogrulandi) -- yalniz surec canliligini degil, GERCEK DB
+  baglantisini da kanitlar.
+- API->File Agent sozlesmesi (`@hasarbotu/contracts`): `GET /health`,
+  `POST/GET /api/v1/agents`, `POST /api/v1/agent/jobs/claim`/
+  `:jobId/heartbeat`/`:jobId/result` -- route sabitleri kod
+  okumasiyla dogrulandi, surukmedi.
+
+**Yeni, ilk kez tam cozumlenen gercek karar noktasi:**
+`HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_PATH`nin gercek deger konumu.
+`freshness-gate-client.ts`, `toolPath`'i dogrudan `node.exe` ile spawn
+eder (import degil); gercek bagimlilik zinciri TAM 4 `.mjs` dosyasi
+(`pcloud-session0-freshness-gate.mjs` + `pcloud-maintenance-window-
+gate.mjs` + `pcloud-post-sync-diff-forensics.mjs` + `pcloud-source-
+attestation.mjs`, hepsi ayni dizinde, `../` importu YOK, npm bagimliligi
+YOK -- yalniz `node:*` builtin'ler, `node:sqlite` dahil) -- bunlar
+`deploy-service-artifacts.ps1`nin File Agent allowlist'inde (yalniz
+`dist/`+`package.json`+bagimlilik kapanisi) YOKTUR. **Karar (bu
+paketle verildi, kullanicinin tek onay noktasinda degistirilebilir):**
+repo checkout yolu dogrudan kullanilsin (secenek A) -- bu makine zaten
+hem gelistirme hem uretim makinesi (HB-2026-115), TUM gercek
+freshness-gate calistirmalari (HB-2026-170/172/173 dahil) zaten bu
+yolu kullandi, sifir yeni kod/deploy adimi gerektirir. Secenek B
+(deploy-service-artifacts.ps1'in allowlist'ini genisletip bu 4
+dosyayi da kopyalamak) gelecekteki sertlestirme olarak notlandi,
+kapsam DISI birakildi.
+
+**11 adimli NIHAI fail-closed sira** (`docs/D9_OPERATIONAL_CUTOVER_
+PLAN.md` §11.5, her adim icin exact komut+PASS kriteri+rollback):
+build -> reference-data -> API deploy(+smoke-test-deployed-service.mjs)
+-> env(3 API degiskeni) -> API kurulum/baslatma/health -> admin
+bootstrap -> agent kaydi(elle) -> File Agent env(7 degisken) -> File
+Agent enable/start -> service-context freshness smoke (log kontrolu --
+guvenlik-kritik mekanizmanin kendisi zaten HB-2026-172/173'te 5 kez
+vehicle-probe ile kanitlandi, vehicle-probe artik Running servise
+dokunamaz) -> file-operation smoke (ILK GERCEK vaka atamasiyla dogal
+gerceklesir, sentetik/sahte vaka ile ZORLANMAZ) -> nihai dogrulama+
+audit. Rollback sirasi (11.6) ters sirayla, her adimin kendi kanitlanmis
+mekanizmasiyla (deploy/provision araclarinin `-Rollback`'i, env
+silme, servis durdurma).
+
+**Bu pakette YAPILMAYANLAR:** hicbir env yazilmadi, hicbir servis
+kurulmadi/baslatildi/enable edildi, hicbir dosya `C:\HasarBotu\...`e
+kopyalanmadi, admin bootstrap `--apply` CALISTIRILMADI, agent kaydi
+yapilmadi. Yalniz `npm run build:packages` (yerel, geri alinabilir,
+`dist/` commit edilmez) ve salt-okunur onizleme/ACL/freshness-gate
+kontrolleri calistirildi.
+
+Kesin gercek hostname/profil yolu/SID repo'ya ALINMADI (yalniz
+`<makine>` gibi genellenmis referanslar veya zaten onceki HB'lerde
+commit edilmis -- bu paketin KENDI yeni metninde hicbiri yok).
+
+Test sonucu/Etki: `npm run build:packages` GERCEKTEN calistirildi,
+temiz (Etki bolumune bkz. -- kod degisikligi olmadigindan ayrica
+test suite/statik denetim tekrar calistirilmasi asagida, commit
+oncesi, bir kez daha yapildi).
+
+Acik kalan: **TEK onay noktasi (§11.9)** -- kullanicinin 11 adimin
+TAMAMINI, sirayla, her biri PASS vermeden sonrakine gecilmeksizin,
+onaylamasi bekleniyor. Onay verilmeden hicbir gercek env/deploy/DB/
+servis mutasyonu baslatilmaz.
