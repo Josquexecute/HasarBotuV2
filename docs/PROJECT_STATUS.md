@@ -393,6 +393,28 @@ Son güncelleme: 2026-08-04
   yapılmadı — yalnız `npm run build:packages` (yerel, geri alınabilir)
   ve salt-okunur kontroller. Sonraki adım: kullanıcının TEK onay
   noktasını (§11.9) vermesi.
+- **D9 Adım 1-6 GERÇEKTEN Apply edildi; Adım 6b'de GERÇEK bir
+  production auth/transport hatası bulunup kökten düzeltildi, D9
+  kullanıcının talimatıyla durduruldu (HB-2026-175, 2026-08-08):**
+  Build, reference-data, API deploy (6429 dosya), env, API kurulum/
+  başlatma/health (`/health` gerçek DB ping'i doğruladı), admin
+  bootstrap (1 org + 1 admin, DB'de bağımsızca doğrulandı) — hepsi
+  GERÇEKTEN, sırayla, taze önizleme+bağımsız doğrulamayla tamamlandı.
+  **Adım 6b (agent kaydı)** gerçek bir mimari hatayı ortaya çıkardı:
+  `NODE_ENV=production` → `Secure` işaretli oturum çerezi → düz
+  `http://127.0.0.1` üzerinde HİÇBİR standart istemci (tarayıcı dahil)
+  bunu otomatik göndermez (RFC 6265 §5.4) — kullanıcının talimatıyla
+  manuel çerez workaround'u KULLANILMADI, bunun yerine
+  `services/api/src/config.ts`e fail-closed, yalnız-açık-opt-in'li
+  loopback istisnası eklendi (`ALLOW_INSECURE_LOOPBACK_COOKIES` +
+  doğrulanmış çıplak `127.0.0.1`/`::1`), gerçek HTTP+çerez E2E testiyle
+  kanıtlandı. Yol boyunca 2 ayrı, ilgisiz gerçek hata daha bulunup
+  düzeltildi: 8 API E2E testinde HB-2026-171'den beri gizli kalmış bir
+  freshness-gate regresyonu (487/503→502/503) ve
+  `install-services.tests.ps1`de gerçek makinede API kurulana kadar
+  ortaya çıkmayan bir test asimetrisi. **D9 burada durdu** — Adım 6b
+  ve sonrası kullanıcının onayını bekliyor; gerçek `hasarbotu-api`
+  şu an Running/Auto olarak kalıyor (geri alınmadı).
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

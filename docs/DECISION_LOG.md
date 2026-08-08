@@ -8186,3 +8186,121 @@ Acik kalan: **TEK onay noktasi (§11.9)** -- kullanicinin 11 adimin
 TAMAMINI, sirayla, her biri PASS vermeden sonrakine gecilmeksizin,
 onaylamasi bekleniyor. Onay verilmeden hicbir gercek env/deploy/DB/
 servis mutasyonu baslatilmaz.
+
+## 2026-08-08 - HB-2026-175: D9 Adim 1-6 GERCEK Apply edildi (kullanicinin TEK onayiyla); Adim 6b'de gercek bir production auth/transport hatasi bulunup KOKTEN duzeltildi; D9 bu noktada durduruldu
+
+Kullanici §11.9'daki TEK onayi verdi: "D9 gercek aktivasyonuna ...
+onay veriyorum." Adim 1-6 sirayla, her biri taze onizleme->Apply->
+bagimsiz dogrulamayla GERCEKTEN calistirildi:
+
+1. **Build**: `npm run build:packages` GERCEKTEN calisti, temiz.
+2. **Reference-data**: `provision-extra-data-references.ps1 -Apply`
+   GERCEKTEN calisti -- 4 dosya, `C:\HasarBotu\reference-data\...`e
+   yerlesti, 4/4 hash bagimsizca dogrulandi.
+3. **API deploy**: `deploy-service-artifacts.ps1 -Apply` GERCEKTEN
+   calisti -- 6429 dosya (~102,5 MB) `C:\HasarBotu\services\api`e,
+   sifir dogrulama uyumsuzlugu. `smoke-test-deployed-service.mjs` ile
+   bagimsizca dogrulandi: 83 export, repo koku erisimi olmadan modul
+   grafigi tam cozuldu.
+4. **Env**: `DATABASE_URL`/`NODE_ENV=production`/
+   `HASARBOTU_API_BASE_URL` Machine kapsaminda yazildi (deger hicbir
+   yere yazdirilmadan, varlik `-ne $null` ile dogrulandi).
+5. **API kurulum/baslatma/health**: `install-services.ps1 -Services
+   Api -Apply` GERCEKTEN calisti, servis kuruldu (`StartMode=Auto`).
+   `Start-Service` + `/health` -> `status:"ok"` -- kod okumasiyla
+   dogrulandi: bu, salt surec canliligi DEGIL, GERCEK bir DB pool
+   ping'idir (`healthDependencyCheck` yalniz `databaseUrl` tanimliysa
+   baglanir, basarisizsa `degraded` doner).
+6. **Admin bootstrap**: `bootstrap-first-admin.mjs`nin DATABASE_URL
+   gerektiren onizlemesi taze calistirildi (`organizations=0,
+   users=0, ready`). Parola GEREKTIGINDE kullanicinin KENDI
+   terminalinden, `Read-Host -AsSecureString` ile, ekransiz alindi --
+   ben hicbir zaman parolayi gormedim/istemedim/loglamadim. Kullanici
+   `--apply`yi KENDISI calistirdi: 1 organizasyon (`baran-global`) +
+   1 admin kullanici GERCEKTEN olusturuldu, tek transaction, 2 audit
+   kaydi, admin-only kanit raporu (`EvidenceWriteError:null`).
+   **Bagimsizca, salt-okunur, GERCEK DB sorgusuyla dogrulandi**
+   (gecici, repo diSI bir dogrulama script'iyle, admin oturumuna
+   asla ihtiyac duymadan): `organizations=1`, `users=1`, org/kullanici
+   alanlari birebir eslesti, `RoleCodesForUser=['admin']`, 2 audit
+   kaydi (`organization.created`, `user.created`) dogru action'larla
+   mevcut. Script hemen silindi.
+
+**Adim 6b (agent kaydi) burada GERCEK bir production hatasi buldu --
+D9 kullanicinin acik talimatiyla DURDURULDU, "manuel cerez header
+workaround"u KULLANILMADI.** Kullanicinin kendi terminalinde
+calistirdigi (admin login -> `POST /api/v1/agents`) betik `POST /api/
+v1/auth/login`den GERCEK 200 aldi ama hemen sonraki `POST /api/v1/
+agents` `401 unauthorized` dondu. Kok neden, KAYNAK KODUNDAN VE
+TESTLERDEN kesin olarak belirlendi (bkz. HB-2026-175'in kod
+degisikligi ozeti, asagida) -- `NODE_ENV=production` -> `cookieSecure=
+true` -> oturum cerezi `Secure` isaretli -> API duz `http://
+127.0.0.1` uzerinde -- hicbir standart-uyumlu istemci (tarayici, .NET
+`CookieContainer`, dolayisiyla `Invoke-RestMethod -SessionVariable`)
+`Secure` isaretli bir cerezi duz HTTP'ye otomatik EKLEMEZ (RFC 6265
+§5.4). Bu, yalniz agent kaydi betigini DEGIL, GERCEK bir tarayici
+tabanli admin/kullanici girisini de AYNI sekilde kirardi.
+
+**Gercek duzeltme** (`services/api/src/config.ts`+`server.ts`,
+3 commit, `7da08c6`/`fc94b44`/`4a22b7f`): `cookieSecure` artik merkezi
+olarak `config.ts`de cozulur. Varsayilan DEGISMEDI (fail-closed,
+`Secure` zorunlu). Gevsetme YALNIZ ACIK bir
+`ALLOW_INSECURE_LOOPBACK_COOKIES=true` opt-in'i VE dogrulanmis, ciplak
+bir loopback `HOST` (yalniz `127.0.0.1`/`::1` -- `0.0.0.0`, gercek bir
+LAN IP'si veya `localhost` hostname'i ASLA sayilmaz) ikisi BIRDEN ile
+mumkundur; herhangi bir yanlis/eksik kombinasyon sunucuyu
+BASLATMAZ (`ConfigError`). `trustProxy` zaten `false` (app.ts), yani
+bu TAMAMEN config-zamanli bir karar, hicbir zaman spoofable header'dan
+turetilen bir istek-zamanli karar degil. GERCEK, mock olmayan bir HTTP
+round-trip'le kanitlandi (`auth-cookie-transport.test.ts`, yeni):
+gercek `app.listen()` + gercek `fetch()` -- Secure niteliginin
+loopback opt-in'inde GERCEKTEN yok oldugu (ve gercek bir login->
+authenticated-request akisinin GERCEKTEN calistigi) VE fail-closed
+varsayilanda GERCEKTEN var oldugu (gercek 401'in tam kanitlanmis kok
+nedeni) kanitlandi.
+
+**Yol boyunca bulunup duzeltilen 2 GERCEK, ilgisiz hata:**
+1. `services/api`nin 8 ayri E2E testinde (case-lifecycle, closed-
+   cases-uat-e2e, closure-fee-uat-e2e, file-operations, labor-
+   workbook-uat-e2e, reports-fees-uat-e2e, traffic-value-loss-
+   closure-e2e, workspace-provisioning) HB-2026-171den beri GIZLI
+   kalmis, gercek bir regresyon: bu testler kendi `AgentConfig`
+   fixture'larini kurar ve GERCEK `runOnce()`u GERCEK PostgreSQL'e
+   karsi cagirir, ama hicbirine calisan bir `freshnessGate`
+   verilmemisti -- HB-2026-171'in fail-closed kapisi bu yuzden HER
+   ZAMAN `case_not_fresh` ile reddediyordu. Hic yakalanmamisti cunku
+   bu testler `TEST_DATABASE_URL` arkasinda kapili ve bu oturumda
+   bugune kadar hic verilmemisti. Deterministik "her zaman ready"
+   test cifti eklendi (`test/fixtures/always-ready-freshness-gate.mjs`
+   -- mock DEGIL, gercek bir alt-surec, gercek CLI sozlesmesiyle).
+   Tam suite: 487/503 -> 502/503.
+2. `install-services.tests.ps1`nin TEST 2'si, TEST 3'un ZATEN dogru
+   uyguladigi bir guard'i (`if ($null -eq $realApiService) {...}`)
+   eksik birakmisti -- gercek makinede `hasarbotu-api` bu oturumda
+   ILK KEZ GERCEKTEN kurulana kadar (Adim 3/5) hic ortaya cikmayan bir
+   asimetri. TEST 3 ile birebir simetrik hale getirildi.
+
+**Kalan, ILGISIZ bir bulgu (duzeltilmedi, kapsam disi birakildi):**
+`services/api/test/policy-ai.test.ts`nin "usage ve audit yalniz
+guvenli ozet tasir" testi izole calistirmada da tutarli sekilde
+basarisiz (`expected 0 to be greater than 2`) -- bu dosya
+`AgentConfig`/`runOnce`e HIC dokunmuyor, yukaridaki hicbir
+duzeltmeyle ilgisi yok. Ayri bir sorun olarak dogrudan raporlandi.
+
+Kesin gercek admin e-posta/parola/org kodu repo'ya ALINMADI (yalniz
+sentetik test degerleri commit edildi, gercek `baran-global`den
+bilercek farkli isimlendirildi -- `baran-global-transport`).
+
+Test sonucu/Etki: `npm run typecheck` (tam repo) temiz. `npm run
+lint` 0 hata (13 onceden var olan, ilgisiz uyari). `npm test`
+(TEST_DATABASE_URL ile, `services/api`): 502/503 (1 ilgisiz, ayri
+raporlandi). `npm run check:deploy`: GERCEKTEN calistirildi, bulunan
+1 hata (install-services.tests.ps1 asimetrisi) duzeltilip yeniden
+calistirildi, temiz.
+
+Acik kalan: D9 burada DURDU (kullanicinin acik talimati). Adim 6b
+(agent kaydi) ve sonrasi (Adim 7-11), kullanicinin auth-transport
+duzeltmesini gozden gecirip yeniden onay vermesini bekliyor. Gercek
+`hasarbotu-api` servisi su an GERCEKTEN Running/Auto (Adim 5'ten beri)
+-- geri alinmadi, kullanicinin acik bir "rollback" talebi olmadan geri
+alinmayacak (bu, D9'un kendi ilerlemesidir, hatali bir durum degil).
