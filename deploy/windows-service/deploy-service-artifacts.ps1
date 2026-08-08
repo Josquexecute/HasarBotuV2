@@ -300,7 +300,92 @@ function Get-FullTreeManifest {
             })
         }
     }
+    # PowerShell'in "bos dizi -> cagiranda $null olur" davranisina karsi
+    # -- bkz. Get-TopLevelSegments'in ustundeki not.
+    if ($entries.Count -eq 0) { return , @() }
     return @($entries | Sort-Object RelativePath)
+}
+
+# HB-2026-175: bu betiğin YÖNETTİĞİ içerik (dist/+package.json+kapanış),
+# gerçek üretimde AYNI dizinde `install-services.ps1`nin yerleştirdiği,
+# bu betiğin HİÇ bilmediği/yönetmediği yabancı içerikle (WinSW ikili
+# dosyası+XML, canlı servisin sürekli açık tuttuğu `logs\` dizini) YAN
+# YANA yaşar -- gerçek makinede, servis ZATEN kurulup ÇALIŞIRKEN yeniden
+# dağıtım denenene kadar hiç ortaya çıkmayan bir senaryo (ilk dağıtım
+# her zaman henüz var OLMAYAN bir hedefe yapılmıştı). Aşağıdaki 3
+# fonksiyon, TÜM taşıma/karşılaştırma işlemlerini yalnız bu betiğin
+# KENDİ üst-düzey segmentlerine (örn. `dist`, `package.json`,
+# `node_modules`) SINIRLAR -- yabancı içerik ASLA okunmaz/taşınmaz/
+# silinmez, canlı bir `logs\*.log` dosyasını açmaya ASLA çalışılmaz.
+
+# Bir manifest'teki (kaynak/kapanış/kayıtlı yedek) TÜM göreli yolların
+# İLK path segmentini (üst-düzey dosya/dizin adını) çıkarır.
+function Get-TopLevelSegments {
+    param([object[]]$Manifest)
+    # PowerShell'in kendi "bos dizi -> pipeline'a hic yazilmaz -> cagiran
+    # tarafta $null olur" davranisina (return @() TEK BASINA GUVENILMEZ)
+    # karsi virgul operatoru ile ACIKCA tek bir dizi degeri olarak
+    # sarilir -- boyle capture edilmezse asagi akista .Count gibi
+    # cagrilar StrictMode altinda gercek bir hataya donusur.
+    return , @($Manifest | ForEach-Object { ($_.RelativePath -split '[\\/]', 2)[0] } | Select-Object -Unique | Sort-Object)
+}
+
+# `Get-FullTreeManifest`nin sınırlı biçimi: `$Root` altında YALNIZ
+# `$Segments`teki üst-düzey ad(lar)ın içine iner -- $Root'taki BAŞKA
+# HİÇBİR üst-düzey dosya/dizin (yabancı içerik) hiç görülmez, hiç
+# açılmaya çalışılmaz. RelativePath'ler `Get-FullTreeManifest`inkiyle
+# BİREBİR aynı biçimdedir (segment adı dahil, $Root'a göre).
+function Get-ScopedTreeManifest {
+    param([string]$Root, [string[]]$Segments)
+    $entries = [System.Collections.Generic.List[object]]::new()
+    foreach ($segment in $Segments) {
+        $segmentPath = Join-Path $Root $segment
+        if ([System.IO.Directory]::Exists($segmentPath)) {
+            foreach ($inner in (Get-FullTreeManifest $segmentPath)) {
+                $entries.Add([pscustomobject]@{
+                    RelativePath = Join-Path $segment $inner.RelativePath
+                    FullPath = $inner.FullPath
+                    Sha256 = $inner.Sha256
+                    Size = $inner.Size
+                })
+            }
+        }
+        elseif ([System.IO.File]::Exists($segmentPath)) {
+            Test-NoReparsePoint $segmentPath $false 'TREE_REPARSE_POINT'
+            $fileInfo = [System.IO.FileInfo]::new($segmentPath)
+            $entries.Add([pscustomobject]@{
+                RelativePath = $segment
+                FullPath = $segmentPath
+                Sha256 = Get-Sha256 $segmentPath
+                Size = $fileInfo.Length
+            })
+        }
+        # else: segment $Root'ta hiç yok -- normal (örn. ilk dağıtımda
+        # hedef henüz boş/yok), sessizce atlanır.
+    }
+    if ($entries.Count -eq 0) { return , @() }
+    return @($entries | Sort-Object RelativePath)
+}
+
+# `$Segments`teki HER üst-düzey adı `$FromDir`den `$ToDir`e taşır --
+# yalnız o adlar; `$FromDir`deki BAŞKA HİÇBİR ŞEYE dokunulmaz (yabancı
+# içerik olduğu yerde kalır). Her taşıma kendi başına atomik bir
+# `Directory.Move`/`File.Move` (aynı birimde yeniden adlandırma); ilk
+# eksik segment sessizce atlanır (örn. ilk dağıtımda hedefte henüz
+# `node_modules` yoktu).
+function Move-TopLevelSegments {
+    param([string]$FromDir, [string]$ToDir, [string[]]$Segments)
+    if (-not [System.IO.Directory]::Exists($ToDir)) { [System.IO.Directory]::CreateDirectory($ToDir) | Out-Null }
+    foreach ($segment in $Segments) {
+        $fromPath = Join-Path $FromDir $segment
+        $toPath = Join-Path $ToDir $segment
+        if ([System.IO.Directory]::Exists($fromPath)) {
+            [System.IO.Directory]::Move($fromPath, $toPath)
+        }
+        elseif ([System.IO.File]::Exists($fromPath)) {
+            [System.IO.File]::Move($fromPath, $toPath)
+        }
+    }
 }
 
 # Allowlist enumerasyonu YAPISAL olarak sınırlıdır: yalnız $SourceRoot içindeki
@@ -438,13 +523,22 @@ function Get-SourceDeploymentManifest {
         }
     }
 
+    if ($entries.Count -eq 0) { return , @() }
     return @($entries | Sort-Object RelativePath)
 }
 
 function Test-ManifestsIdentical {
     param([object[]]$Left, [object[]]$Right)
-    if ($Left.Count -ne $Right.Count) { return $false }
-    for ($i = 0; $i -lt $Left.Count; $i++) {
+    # HB-2026-175: ikinci savunma katmani -- PowerShell'in "bos dizi ->
+    # cagiranda $null" davranisi kaynakta (manifest fonksiyonlarinda)
+    # zaten duzeltildi, ama bu fonksiyon BASKA bir cagiran tarafindan
+    # yanlislikla $null ile cagirilirsa bile StrictMode altinda GERCEK
+    # bir hataya (PropertyNotFoundException) DUSMEDEN, dogru sekilde
+    # "bos == 0 eleman" olarak degerlendirir.
+    $leftCount = if ($null -eq $Left) { 0 } else { $Left.Count }
+    $rightCount = if ($null -eq $Right) { 0 } else { $Right.Count }
+    if ($leftCount -ne $rightCount) { return $false }
+    for ($i = 0; $i -lt $leftCount; $i++) {
         if ($Left[$i].RelativePath -ne $Right[$i].RelativePath -or $Left[$i].Sha256 -ne $Right[$i].Sha256) {
             return $false
         }
@@ -525,6 +619,11 @@ try {
         if (-not (Test-IsElevated)) { Throw-SafeError 'ADMINISTRATOR_REQUIRED_FOR_APPLY' }
         if (-not $PSCmdlet.ShouldProcess($target, 'Rollback')) { exit 0 }
 
+        # HB-2026-175: yalnız YEDEĞİN KENDİ üst-düzey segmentleri (geri
+        # yüklenecek olanlar) taşınır -- $target'ta yan yana yaşayan
+        # yabancı içerik (WinSW ikili/XML, canlı `logs\`) rollback
+        # boyunca da HİÇ dokunulmadan yerinde kalır.
+        $rollbackSegments = Get-TopLevelSegments $recordedManifest
         $preRollbackBackupPath = $null
         if ([System.IO.Directory]::Exists($target)) {
             $timestamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')
@@ -532,7 +631,7 @@ try {
             [System.IO.Directory]::CreateDirectory($BackupRootDirectory) | Out-Null
             Set-AdminOnlySecurityOn $BackupRootDirectory $true
             $preRollbackBackupPath = Join-Path $BackupRootDirectory "$ServiceLabel-pre-rollback-$timestamp-$suffix"
-            [System.IO.Directory]::Move($target, $preRollbackBackupPath)
+            Move-TopLevelSegments -FromDir $target -ToDir $preRollbackBackupPath -Segments $rollbackSegments
             Set-AdminOnlySecurityOn $preRollbackBackupPath $true
             $preRollbackManifest = Get-FullTreeManifest $preRollbackBackupPath
             $preRollbackManifestJson = [ordered]@{ GeneratedAtUtc = [DateTime]::UtcNow.ToString('o'); Entries = $preRollbackManifest } | ConvertTo-Json -Depth 6
@@ -540,10 +639,11 @@ try {
             [System.IO.File]::WriteAllText($preRollbackManifestPath, $preRollbackManifestJson, [System.Text.UTF8Encoding]::new($false))
             Set-AdminOnlySecurityOn $preRollbackManifestPath $false
         }
-        [System.IO.Directory]::Move($backupPath, $target)
+        Move-TopLevelSegments -FromDir $backupPath -ToDir $target -Segments $rollbackSegments
+        if ([System.IO.Directory]::Exists($backupPath)) { [System.IO.Directory]::Delete($backupPath, $true) }
         [System.IO.File]::Delete($backupManifestPath)
 
-        $finalManifest = Get-FullTreeManifest $target
+        $finalManifest = Get-ScopedTreeManifest -Root $target -Segments $rollbackSegments
         $verifyMismatches = @()
         foreach ($entry in $recordedManifest) {
             $match = $finalManifest | Where-Object { $_.RelativePath -eq $entry.RelativePath }
@@ -737,7 +837,11 @@ try {
     $targetManifest = @()
     $alreadyUpToDate = $false
     if ($targetExists -and $issues.Count -eq 0) {
-        $targetManifest = Get-FullTreeManifest $target
+        # HB-2026-175: yalnız BU BETİĞİN yönettiği üst-düzey segmentler
+        # taranır -- hedefte yan yana yaşayan yabancı içerik (WinSW
+        # ikili/XML, canlı `logs\`) ASLA okunmaya çalışılmaz.
+        $managedSegments = Get-TopLevelSegments $sourceManifest
+        $targetManifest = Get-ScopedTreeManifest -Root $target -Segments $managedSegments
         $alreadyUpToDate = Test-ManifestsIdentical $sourceManifest $targetManifest
     }
 
@@ -836,6 +940,16 @@ try {
     if (-not $PSCmdlet.ShouldProcess($target, 'Dağıt')) { exit 0 }
 
     # --- UYGULA ---
+    # HB-2026-175: yalnız BU BETİĞİN yönettiği üst-düzey segmentler
+    # (`$managedSegments`, kaynak manifestinden türetilir -- örn. `dist`,
+    # `package.json`, kapanış varsa `node_modules`) taşınır. Hedefte yan
+    # yana yaşayan yabancı içerik (`install-services.ps1`nin yerleştirdiği
+    # WinSW ikili/XML dosyaları, canlı servisin sürekli açık tuttuğu
+    # `logs\` dizini) HİÇ okunmaz, HİÇ taşınmaz, YERİNDE KALIR -- gerçek
+    # bir çalışan servise karşı yeniden dağıtımın, o servisin kendi SCM
+    # kaydının işaret ettiği ikili dosyayı/log dizinini asla koparmaması
+    # için.
+    $managedSegments = Get-TopLevelSegments $sourceManifest
     $stagingPath = "$target.staging-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
     [System.IO.Directory]::CreateDirectory($stagingPath) | Out-Null
     try {
@@ -856,24 +970,33 @@ try {
             [System.IO.Directory]::CreateDirectory($BackupRootDirectory) | Out-Null
             Set-AdminOnlySecurityOn $BackupRootDirectory $true
             $backupPath = Join-Path $BackupRootDirectory "$ServiceLabel-$timestamp-$suffix"
-            [System.IO.Directory]::Move($target, $backupPath)
+            # Yalnız yönetilen segmentler $target'tan $backupPath'e
+            # TAŞINIR -- yabancı içerik (varsa) $target'ta YERİNDE KALIR.
+            Move-TopLevelSegments -FromDir $target -ToDir $backupPath -Segments $managedSegments
             Set-AdminOnlySecurityOn $backupPath $true
             $backupManifest = Get-FullTreeManifest $backupPath
-            $backupManifestJson = [ordered]@{ GeneratedAtUtc = [DateTime]::UtcNow.ToString('o'); SourceTargetDir = $target; Entries = $backupManifest } | ConvertTo-Json -Depth 8
+            $backupManifestJson = [ordered]@{ GeneratedAtUtc = [DateTime]::UtcNow.ToString('o'); SourceTargetDir = $target; ManagedSegments = $managedSegments; Entries = $backupManifest } | ConvertTo-Json -Depth 8
             $backupManifestPath = "$backupPath.manifest.json"
             [System.IO.File]::WriteAllText($backupManifestPath, $backupManifestJson, [System.Text.UTF8Encoding]::new($false))
             Set-AdminOnlySecurityOn $backupManifestPath $false
         }
 
-        [System.IO.Directory]::Move($stagingPath, $target)
+        # Yönetilen segmentler staging'den $target'a taşınır -- $target
+        # yoksa oluşturulur (ilk dağıtım); varsa (yabancı içerikle
+        # birlikte) İÇİNE eklenir, asla yeniden adlandırılıp
+        # değiştirilmez.
+        Move-TopLevelSegments -FromDir $stagingPath -ToDir $target -Segments $managedSegments
+        if ([System.IO.Directory]::Exists($stagingPath)) { [System.IO.Directory]::Delete($stagingPath, $true) }
     }
     catch {
         if ([System.IO.Directory]::Exists($stagingPath)) { [System.IO.Directory]::Delete($stagingPath, $true) }
         throw
     }
 
-    # --- BAĞIMSIZ DOĞRULAMA (staging'e değil, kaynağın orijinal hash'ine karşı) ---
-    $finalManifest = Get-FullTreeManifest $target
+    # --- BAĞIMSIZ DOĞRULAMA (staging'e değil, kaynağın orijinal hash'ine
+    #     karşı; yalnız yönetilen segmentler taranır -- yabancı içerik
+    #     hiç okunmaya çalışılmaz, sayıma hiç dahil edilmez) ---
+    $finalManifest = Get-ScopedTreeManifest -Root $target -Segments $managedSegments
     $verifyMismatches = [System.Collections.Generic.List[string]]::new()
     foreach ($entry in $sourceManifest) {
         $match = $finalManifest | Where-Object { $_.RelativePath -eq $entry.RelativePath }

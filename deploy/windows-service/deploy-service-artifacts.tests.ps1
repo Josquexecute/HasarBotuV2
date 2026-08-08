@@ -500,5 +500,72 @@ Assert-True ($r27.Json.Blockers.Count -eq 0) 'Ek veri blocker mesaji YOK'
 Remove-Item $f27.Root -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $cf27.RepoRoot -Recurse -Force -ErrorAction SilentlyContinue
 
+function New-WinSwStyleForeignContent {
+    # HB-2026-175: gerçek üretimde install-services.ps1'in AYNI hedef
+    # dizine yerleştirdiği, bu betiğin HİÇ bilmediği/yönetmediği içeriği
+    # (WinSW ikili+XML, canlı servisin sürekli açık tuttuğu `logs\`
+    # dizini) sentetik olarak taklit eder -- gerçek makinede yalnız
+    # servis ZATEN kurulup ÇALIŞIRKEN yeniden dağıtım denenene kadar hiç
+    # ortaya çıkmayan senaryo (HB-2026-175'te gerçek D9 Adım 2
+    # denemesinde gerçek `hasarbotu-api.exe`/`.xml`/`logs\hasarbotu-
+    # api.err.log` ile GERÇEKTEN bulundu).
+    param([string]$TargetDir)
+    New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $TargetDir 'logs') -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $TargetDir 'logs\fake-service.out.log'), 'canli servis log ciktisi -- ASLA silinmemeli/tasinmamali')
+    [System.IO.File]::WriteAllText((Join-Path $TargetDir 'logs\fake-service.err.log'), 'canli servis hata log ciktisi')
+    [System.IO.File]::WriteAllText((Join-Path $TargetDir 'fake-service.exe'), 'sahte WinSW ikili dosyasi -- ASLA silinmemeli/tasinmamali')
+    [System.IO.File]::WriteAllText((Join-Path $TargetDir 'fake-service.xml'), '<service><id>fake-service</id></service>')
+}
+
+function Assert-ForeignContentIntact {
+    param([string]$TargetDir, [string]$Message)
+    $ok = (Test-Path (Join-Path $TargetDir 'logs\fake-service.out.log')) `
+        -and (Test-Path (Join-Path $TargetDir 'logs\fake-service.err.log')) `
+        -and (Test-Path (Join-Path $TargetDir 'fake-service.exe')) `
+        -and (Test-Path (Join-Path $TargetDir 'fake-service.xml')) `
+        -and ((Get-Content -Raw (Join-Path $TargetDir 'logs\fake-service.out.log')) -match 'ASLA silinmemeli')
+    Assert-True $ok $Message
+}
+
+Write-Output "`n=== TEST 28: hedefte WinSW ikili/XML + canli logs\ dizini (install-services.ps1'in yerlestirdigi, bu betigin HIC yonetmedigi yabanci icerik) varken Apply -- yabanci icerik DOKUNULMADAN kalir, yonetilen icerik dogru guncellenir (HB-2026-175 -- gercek makinede bulunan hata) ==="
+$f28 = New-SourceFixture
+New-WinSwStyleForeignContent -TargetDir $f28.TargetDir
+$r28preview = Invoke-DeployJson -Params @{ SourceDir = $f28.SourceDir; TargetDir = $f28.TargetDir; ServiceLabel = 'test28' }
+Assert-True ($r28preview.ExitCode -eq 0) 'Onizleme: yabanci icerikli hedefe karsi bile CRASH OLMADAN calisir (eski hata: Get-FullTreeManifest tum agaci tarardi)'
+Assert-True ($r28preview.Json.Status -eq 'would_apply') 'Onizleme: would_apply (henuz guncel degil, yonetilen icerik hic yok)'
+Assert-ForeignContentIntact -TargetDir $f28.TargetDir -Message 'Onizleme sonrasi yabanci icerik hala oldugu gibi (hicbir degisiklik yapilmadi)'
+
+$r28apply = Invoke-DeployJson -Params @{ SourceDir = $f28.SourceDir; TargetDir = $f28.TargetDir; ServiceLabel = 'test28'; Apply = $true }
+Assert-True ($r28apply.ExitCode -eq 0) 'Apply exit 0'
+Assert-True ($r28apply.Json.Status -eq 'applied') 'Apply Status applied'
+Assert-True (@($r28apply.Json.PostApplyVerificationMismatches).Count -eq 0) 'Apply sonrasi sifir dogrulama uyumsuzlugu'
+Assert-ForeignContentIntact -TargetDir $f28.TargetDir -Message 'GERCEK Apply SONRASI yabanci icerik (WinSW ikili/XML/logs) DOKUNULMADAN duruyor'
+Assert-True ((Get-Content -Raw (Join-Path $f28.TargetDir 'dist\index.js')) -match 'export const v = 1') 'Yonetilen icerik (dist/index.js) dogru dagitildi'
+Assert-True (Test-Path (Join-Path $f28.TargetDir 'package.json')) 'Yonetilen icerik (package.json) dogru dagitildi'
+
+$r28reapply = Invoke-DeployJson -Params @{ SourceDir = $f28.SourceDir; TargetDir = $f28.TargetDir; ServiceLabel = 'test28' }
+Assert-True ($r28reapply.Json.Status -eq 'already_up_to_date') 'Yeniden onizleme: already_up_to_date (yabanci icerik karsilastirmaya hic karismiyor)'
+Remove-Item $f28.Root -Recurse -Force -ErrorAction SilentlyContinue
+if ($r28apply.Json.BackupPath) { Remove-Item $r28apply.Json.BackupPath -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item "$($r28apply.Json.BackupPath).manifest.json" -Force -ErrorAction SilentlyContinue }
+
+Write-Output "`n=== TEST 29: TEST 28'in Apply'inden SONRA -Rollback -- yabanci icerik rollback SIRASINDA da HIC dokunulmadan kalir, ESKI yonetilen icerik geri doner ==="
+$f29 = New-SourceFixture
+New-WinSwStyleForeignContent -TargetDir $f29.TargetDir
+New-Item -ItemType Directory -Path (Join-Path $f29.TargetDir 'dist') -Force | Out-Null
+[System.IO.File]::WriteAllText((Join-Path $f29.TargetDir 'dist\index.js'), 'export const v = 0; // ESKI SURUM')
+[System.IO.File]::WriteAllText((Join-Path $f29.TargetDir 'package.json'), '{"version":"ESKI"}')
+$r29apply = Invoke-DeployJson -Params @{ SourceDir = $f29.SourceDir; TargetDir = $f29.TargetDir; ServiceLabel = 'test29'; Apply = $true }
+Assert-True ($r29apply.Json.Status -eq 'applied') 'Onhazirlik Apply basarili (ESKI -> YENI)'
+Assert-True ((Get-Content -Raw (Join-Path $f29.TargetDir 'dist\index.js')) -match 'export const v = 1') 'Apply sonrasi YENI icerik yerinde'
+
+$r29rollback = Invoke-DeployJson -Params @{ Rollback = $true; RollbackBackupPath = $r29apply.Json.BackupPath; TargetDir = $f29.TargetDir; ServiceLabel = 'test29'; Apply = $true }
+Assert-True ($r29rollback.Json.Status -eq 'rolled_back') 'Rollback Status rolled_back'
+Assert-True (@($r29rollback.Json.PostRollbackVerificationMismatches).Count -eq 0) 'Rollback sonrasi sifir dogrulama uyumsuzlugu'
+Assert-True ((Get-Content -Raw (Join-Path $f29.TargetDir 'dist\index.js')) -match 'ESKI SURUM') 'Rollback SONRASI ESKI yonetilen icerik dogru geri geldi'
+Assert-ForeignContentIntact -TargetDir $f29.TargetDir -Message 'Rollback SONRASI yabanci icerik (WinSW ikili/XML/logs) DOKUNULMADAN duruyor'
+Remove-Item $f29.Root -Recurse -Force -ErrorAction SilentlyContinue
+if ($r29rollback.Json.PreRollbackBackupPath) { Remove-Item $r29rollback.Json.PreRollbackBackupPath -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item "$($r29rollback.Json.PreRollbackBackupPath).manifest.json" -Force -ErrorAction SilentlyContinue }
+
 Write-Output "`n=== SUMMARY: $($script:failures) failure(s) ==="
 if ($script:failures -gt 0) { exit 1 } else { exit 0 }

@@ -472,7 +472,18 @@ try {
   assertContains(deployArtifacts, /\$AllowlistTopLevelFile = 'package\.json'/, 'deploy-service-artifacts.ps1', 'allowlist yalniz package.json dosyasina sinirli')
   assertContains(deployArtifacts, /SOURCE_DIST_REPARSE_POINT/, 'deploy-service-artifacts.ps1', 'dist altinda reparse point/symlink fail-closed reddi')
   assertContains(deployArtifacts, /already_up_to_date/, 'deploy-service-artifacts.ps1', 'idempotency: hedef zaten guncelse degisiklik yapilmamasi')
-  assertContains(deployArtifacts, /\[System\.IO\.Directory\]::Move\(\$target, \$backupPath\)/, 'deploy-service-artifacts.ps1', 'yedekleme kopya degil atomik Directory.Move ile')
+  // HB-2026-175: yedekleme artik TEK bir Directory.Move($target,
+  // $backupPath) DEGIL -- yalnix bu betigin YONETTIGI ust-duzey
+  // segmentler (dist/package.json/kapanis) Move-TopLevelSegments ile
+  // taginir; install-services.ps1'in AYNI hedefe yerlestirdigi yabanci
+  // icerige (WinSW ikili/XML, canli logs\) HIC dokunulmaz -- gercek
+  // makinede, servis ZATEN kurulup calisirken yeniden dagitim denenene
+  // kadar hic ortaya cikmayan bir kirilma bulunup duzeltildi.
+  assertContains(deployArtifacts, /Move-TopLevelSegments -FromDir \$target -ToDir \$backupPath -Segments \$managedSegments/, 'deploy-service-artifacts.ps1', 'yedekleme yalniz yonetilen segmentleri tasir -- yabanci icerige (WinSW/logs) dokunmaz')
+  assertContains(deployArtifacts, /function Move-TopLevelSegments/, 'deploy-service-artifacts.ps1', 'segment-sinirli tasima yardimci fonksiyonu var')
+  assertContains(deployArtifacts, /\[System\.IO\.Directory\]::Move\(\$fromPath, \$toPath\)/, 'deploy-service-artifacts.ps1', 'Move-TopLevelSegments GERCEKTEN atomik Directory.Move kullanir (kopya degil)')
+  assertContains(deployArtifacts, /function Get-ScopedTreeManifest/, 'deploy-service-artifacts.ps1', 'hedefte yalniz yonetilen segmentleri tarayan (yabanci icerigi hic okumayan) sinirli envanter fonksiyonu var')
+  assertContains(deployArtifacts, /return , @\(\)/, 'deploy-service-artifacts.ps1', 'bos manifest donusu PowerShell\'in "bos dizi -> $null" tuzagina karsi acikca virgul-sarilmis (HB-2026-175, gercek makinede bulunan ikinci hata)')
   assertContains(deployArtifacts, /STAGING_HASH_MISMATCH/, 'deploy-service-artifacts.ps1', 'staging asamasinda hash dogrulamasi')
   assertContains(deployArtifacts, /PostApplyVerificationMismatches/, 'deploy-service-artifacts.ps1', 'uygulama sonrasi bagimsiz hash dogrulamasi')
   assertContains(deployArtifacts, /-Rollback/, 'deploy-service-artifacts.ps1', 'rollback modu var')
