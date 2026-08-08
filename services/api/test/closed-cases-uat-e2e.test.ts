@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
@@ -22,6 +23,9 @@ import {
 } from '@hasarbotu/database'
 import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
+
+// HB-2026-175: bkz. case-lifecycle.test.ts'deki aynı sabitin açıklaması.
+const ALWAYS_READY_FRESHNESS_GATE_PATH = fileURLToPath(new URL('./fixtures/always-ready-freshness-gate.mjs', import.meta.url))
 
 /**
  * UAT-tarzı uçtan uca doğrulama: Kapanan Dosyalar için gerçek kapanış saga'sı
@@ -271,7 +275,20 @@ describeDb('Kapanan Dosyalar uçtan uca UAT: gerçek kapanış/yeniden açma sag
     expect(registered.statusCode).toBe(201)
     const agent = registered.json() as { agent: { id: string }; secret: string }
     root = await mkdtemp(join(tmpdir(), 'hb-uat-kapanan-'))
-    agentConfig = { apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret, roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }
+    agentConfig = {
+      apiBaseUrl: '',
+      agentId: agent.agent.id,
+      agentSecret: agent.secret,
+      roots: { [ROOT_KEY]: root },
+      leaseSeconds: 120,
+      pollIntervalMs: 1000,
+      freshnessGate: {
+        toolPath: ALWAYS_READY_FRESHNESS_GATE_PATH,
+        pcloudLocalDatabasePath: 'unused-in-always-ready-stub.db',
+        topLevelFolderName: 'unused',
+        attestationStoreDirectory: 'unused-store',
+      },
+    }
     agentClient = createAgentApiClient({ baseUrl: '', agentId: agent.agent.id, secret: agent.secret, fetchImpl: injectFetch })
   }, 60_000)
 

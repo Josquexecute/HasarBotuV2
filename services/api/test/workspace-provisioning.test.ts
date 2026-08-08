@@ -1,6 +1,7 @@
 import { access, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
@@ -21,6 +22,9 @@ import {
 } from '@hasarbotu/database'
 import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
+
+// HB-2026-175: bkz. case-lifecycle.test.ts'deki aynı sabitin açıklaması.
+const ALWAYS_READY_FRESHNESS_GATE_PATH = fileURLToPath(new URL('./fixtures/always-ready-freshness-gate.mjs', import.meta.url))
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -133,7 +137,12 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
       roots: { 'test-primary': root },
       leaseSeconds: 120,
       pollIntervalMs: 1000,
-      freshnessGate: undefined,
+      freshnessGate: {
+        toolPath: ALWAYS_READY_FRESHNESS_GATE_PATH,
+        pcloudLocalDatabasePath: 'unused-in-always-ready-stub.db',
+        topLevelFolderName: 'unused',
+        attestationStoreDirectory: 'unused-store',
+      },
     }
     agentClient = createAgentApiClient({ baseUrl: '', agentId: registered.agent.id, secret: registered.secret, fetchImpl: injectFetch })
   }, 60_000)

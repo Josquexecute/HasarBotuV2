@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
@@ -28,6 +29,9 @@ import {
 } from '@hasarbotu/database'
 import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
+
+// HB-2026-175: bkz. case-lifecycle.test.ts'deki aynı sabitin açıklaması.
+const ALWAYS_READY_FRESHNESS_GATE_PATH = fileURLToPath(new URL('./fixtures/always-ready-freshness-gate.mjs', import.meta.url))
 
 /**
  * UAT-tarzı uçtan uca doğrulama: gerçek anonim bir Trafik dosyasında
@@ -212,7 +216,20 @@ describeDb('Değer Kaybı uçtan uca UAT: hesaplama -> revizyon -> onay -> rapor
       await mkdir(join(absolute, directory), { recursive: true })
     }
     await writeFile(join(absolute, 'EVRAK', 'sentetik.txt'), 'uat-deger-kaybi', 'utf8')
-    agentConfig = { apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret, roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }
+    agentConfig = {
+      apiBaseUrl: '',
+      agentId: agent.agent.id,
+      agentSecret: agent.secret,
+      roots: { [ROOT_KEY]: root },
+      leaseSeconds: 120,
+      pollIntervalMs: 1000,
+      freshnessGate: {
+        toolPath: ALWAYS_READY_FRESHNESS_GATE_PATH,
+        pcloudLocalDatabasePath: 'unused-in-always-ready-stub.db',
+        topLevelFolderName: 'unused',
+        attestationStoreDirectory: 'unused-store',
+      },
+    }
     agentClient = createAgentApiClient({ baseUrl: '', agentId: agent.agent.id, secret: agent.secret, fetchImpl: injectFetch })
 
     for (const type of BASE_TYPES) await seedReadyDocument(type)

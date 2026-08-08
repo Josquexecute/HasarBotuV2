@@ -1,6 +1,7 @@
 import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
@@ -21,6 +22,15 @@ import {
 } from '@hasarbotu/database'
 import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
+
+// HB-2026-175: HB-2026-171'in fail-closed freshness-gate dispatch kapısı
+// (workspace/file_operation/labor_workbook_apply) gerçek bir freshnessGate
+// olmadan bu vakayı HER ZAMAN case_not_fresh ile reddeder -- bu, sentetik/
+// geçici dosya sistemi kullanan bu E2E testlerin amacı DEĞİL (freshness
+// gate'in KENDİSİ zaten ayrı, gerçek testlerle kanıtlı). Deterministik
+// "her zaman ready" test çifti kullanılır -- bkz. fixtures dosyasının kendi
+// açıklaması.
+const ALWAYS_READY_FRESHNESS_GATE_PATH = fileURLToPath(new URL('./fixtures/always-ready-freshness-gate.mjs', import.meta.url))
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -242,7 +252,20 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     expect(registered.statusCode).toBe(201)
     const agent = registered.json() as { agent: { id: string }; secret: string }
     root = await mkdtemp(join(tmpdir(), 'hb-p21-lifecycle-'))
-    agentConfig = { apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret, roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }
+    agentConfig = {
+      apiBaseUrl: '',
+      agentId: agent.agent.id,
+      agentSecret: agent.secret,
+      roots: { [ROOT_KEY]: root },
+      leaseSeconds: 120,
+      pollIntervalMs: 1000,
+      freshnessGate: {
+        toolPath: ALWAYS_READY_FRESHNESS_GATE_PATH,
+        pcloudLocalDatabasePath: 'unused-in-always-ready-stub.db',
+        topLevelFolderName: 'unused',
+        attestationStoreDirectory: 'unused-store',
+      },
+    }
     agentClient = createAgentApiClient({ baseUrl: '', agentId: agent.agent.id, secret: agent.secret, fetchImpl: injectFetch })
   }, 60_000)
 
