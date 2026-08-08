@@ -345,6 +345,32 @@ Son güncelleme: 2026-08-04
   4'ü gerçek spawn ile) + typecheck + build + lint hepsi temiz. File
   Agent'ın kendisi hâlâ Disabled/Stopped — bu yalnız kod wiring'i,
   gerçek makinede henüz çalıştırılmadı.
+- **Kullanıcının onayladığı 2 gerçek Apply tamamlandı: vehicle-probe +
+  attestation store ACL — uçtan uca CaseStatus=ready kanıtlandı
+  (HB-2026-172/173, 2026-08-08):** **Adım 1** — gerçek `hasarbotu-file-
+  agent` üzerinde `apply-file-agent-service-vehicle-probe.ps1 -Apply` 5
+  kez çalıştırıldı; 2 gerçek hata bulunup düzeltildi (`Start-Service` →
+  `sc.exe start`; `depend=''` → `depend='/'`, ikisi de sadece gerçek
+  servise karşı ortaya çıktı, her ikisinde de geri-yükleme yine de tam
+  ve bağımsızca doğrulandı). Görünüşteki "DB/ACL sorunu" kök-neden
+  analiziyle çözüldü: gerçek üretim DB-erişim mekanizması
+  (`withConsistentPcloudDatabase`) hep başarılıydı; hata attestation
+  deposunun o an henüz Apply edilmemiş ACL'inde, beklenen fail-closed
+  davranıştı (canlı `Get-Acl` ile bağımsız doğrulandı: sıfır erişim).
+  **Adım 2** — Adım 1'in güvenlik-kritik gereksinimleri (tam geri-
+  yükleme, gerçek kimlik, yazma-red) tamamen kanıtlandığı için yeni
+  `apply-file-agent-attestation-store-access.ps1` (+6 sentetik test,
+  ilk denemede 0 hata) yazılıp gerçek depoya (4 ACE, sıfır blocker)
+  Apply edildi — `Get-Acl` ile bağımsız doğrulandı (Traverse-only
+  ataların üzerinde, Traverse+Read/Synchronize deponun kendisinde,
+  hiçbir yazma biti yok; depodaki 80 mevcut attestation dosyasının
+  HEPSİ Read=evet/Write=hayır). **Sonuç:** Adım 2'nin hemen ardından
+  yapılan 5. vehicle-probe çalıştırması `CaseStatus=ready, exit=0` ile
+  uçtan uca zinciri kesin kanıtladı — gerçek `svc-hb-fileagent`
+  kimliğiyle. 4 yeni env değişkeni yazılmadı, gerçek File Agent enable/
+  start edilmedi, API bring-up/cutover yapılmadı, müşteri dosyalarına
+  dokunulmadı (kullanıcının açık yasağı). Sonraki aşama: API bring-up +
+  env + gerçek File Agent aktivasyonu — ayrı, açık kullanıcı kararları.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama

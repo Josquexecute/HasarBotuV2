@@ -7907,3 +7907,162 @@ edilmedi (gercek servis aktivasyonu ayri, acik bir karar -- HB-2026-
 UCUNDE). 4 yeni env degiskeninin (freshness gate config) gercek
 degerleri de henuz belirlenmedi/ayarlanmadi. Oncelik 7'ye (rolling
 reconciliation, D9 cutover kalan blockerlar) devam ediliyor.
+
+## 2026-08-08 - HB-2026-172: Kullanicinin acikca onayladigi Adim 1 -- `apply-file-agent-service-vehicle-probe.ps1 -Apply` GERCEK `hasarbotu-file-agent` uzerinde 5 kez calistirildi; 2 GERCEK hata bulunup duzeltildi, GERCEK kok neden analiziyle "olasi ACL sorunu" izlenimi cozuldu, uctan uca CaseStatus=ready dogrulandi
+
+Kullanici (uyurken birakilan onceki oturumdan devam eden, bu oturumun
+ILK acik talimati) SADECE iki GERCEK Apply islemini onayladi: (1) vehicle-
+probe Apply, (2) SADECE 1 tamamen basariliysa attestation deposu ACL
+Apply'i. Bu karar SADECE Adim 1'i kapsar.
+
+**GERCEK makinede bulunup duzeltilen 2 hata (senkron testle YAKALANAMAYAN,
+sadece gercek servis karsisinda ortaya cikan sinifta):**
+
+1. `Start-Service -ErrorAction Stop`, GERCEK WinSW-sarili probe'a karsi
+   `ServiceCommandException` firlatti (servisin kendisi GERCEKTEN
+   calisip durdu, geri-yukleme YINE de tam ve dogru calisti -- bagimsiz
+   `Get-CimInstance`/hash karsilastirmasiyla dogrulandi). Kok neden:
+   cmdlet'in kendi Running-bekleme toleransi, PowerShell+Node baslama
+   suresi olan GERCEK bir probe icin degil, sentetik testin neredeyse
+   ani `cmd.exe /c exit 0`'i icin yeterliydi. Duzeltme: `sc.exe start`
+   (fire-and-forget, 1056/ERROR_SERVICE_ALREADY_RUNNING tolere edilir),
+   sonucun kendi dosya-poll donguysune guvenilir.
+2. `sc.exe config $ServiceName depend= ''` bagimliligi GUVENILIR sekilde
+   TEMIZLEMEDI -- dokumante edilen sozdizimi `depend= /` (tek eğik
+   cizgi). Sentetik testin bagimlilik fixture'i (`EventLog`, HER ZAMAN
+   kurulu gercek bir servis) bu hatayi MASKELEDI -- temizleme sessizce
+   basarisiz olsa bile baslama basariliydi, cunku EventLog zaten
+   gercekten vardi. GERCEK `hasarbotu-file-agent` karsisinda (bagimliligi
+   `hasarbotu-api`, KURULU DEGIL) `SC_START_FAILED_1075` ile yakalandi.
+   Duzeltme: `depend= '/'` + exit-kodu kontrolu; sentetik testin
+   fixture'i de GERCEKTEN var olmayan bir servise (
+   `HasarBotuTestNonExistentDependency`) degistirilip SCM-seviyesi
+   (`sc.exe qc`) dogrulama eklendi -- bu sinif hata bir daha sessizce
+   geri gelemez.
+
+Her iki duzeltme de ONCE sentetik test suite'inde (4/4 -- TEST4 her
+zamanki gibi, bir tasarim kusuru degil, `cmd.exe`nin ani bitisi
+nedeniyle atlaniyor) kanitlandi, SONRA gercek makinede yeniden denendi.
+
+**"Olasi ACL sorunu" GERCEK kok-neden analiziyle cozuldu (bir bug
+DEGIL, tasarlanan fail-closed davranis):** Bagimlilik duzeltmelerinden
+sonraki GERCEK calistirmalarda `ProbeOverallSucceeded=false` gorulmeye
+devam etti. Ayirt etmek icin `file-agent-disposable-probe-inner.ps1`e
+`FreshnessGateProbe.GateStatus`/`GateErrorCode` yakalama eklendi (once
+sadece `CaseStatus` yakaliyordu, hata yolunda bu alan zaten `null`
+oldugundan neden GORULEMIYORDU). Sonuc: `GateErrorCode=
+SESSION0_FRESHNESS_GATE_RUNTIME_ERROR` (SafeError DEGIL, HAM
+Node.js dosya-sistemi hatasi) -- `pcloud-session0-freshness-gate.mjs`nin
+KENDI DB-erisim mekanizmasi (`withConsistentPcloudDatabase`, kopyala+
+yeniden-dene) BASARILI oldu (aksi halde `PCLOUD_DATABASE_SNAPSHOT_
+UNSTABLE` gibi bir SafeError donerdi); hata `readAttestationRecord`nin
+attestation deposunu OKUMA adiminda olustu -- HB-2026-169'daki, o ana
+kadar HENUZ APPLY EDILMEMIS ACL genislemesinin dogal, beklenen,
+fail-closed sonucu. Canli `icacls`/`Get-Acl` ile bagimsiz dogrulandi:
+`svc-hb-fileagent`nin o an depoda SIFIR erisimi vardi (yalniz
+`BUILTIN\Administrators`).
+
+Ayrica probe'un KENDI tanisal-amacli ham `[System.IO.File]::
+ReadAllBytes()` kontrolu (uretim kodu DEGIL, ekstra bir kanit katmani)
+data.db/-wal/-shm uzerinde 5/5 GERCEK calistirmada AYNI paylasim-
+ihlali (sharing violation, `IOException`, `UnauthorizedAccessException`
+DEGIL -- yani ACL degil) ile basarisiz oldu -- ayni sirada interaktif
+Administrator olarak AYNI dosyalar sorunsuz okundu. Bu, uretim
+mekanizmasini (copyFile+yeniden-dene, etkilenmedi, kanitlandi) YANSITMAYAN,
+dar kapsamli, tani-araci-ozgu bir bulgu olarak KAYDA GECIRILDI --
+duzeltilmedi (uretim kod yolunu etkilemiyor); ileride ayni teknik
+baska bir yerde kullanilirsa `FileShare.ReadWrite` denenmesi onerilir.
+
+**HB-2026-169 Apply'inden SONRA (asagidaki HB-2026-173) yapilan 5.
+GERCEK calistirma, uctan uca zinciri KESIN olarak kanitladi:**
+`CaseStatus="ready"`, `ExitCode=0`, `DbNoWriteProbe.WriteDenied=true`,
+`RestoredExactly=true` (5/5 ardisik tam geri-yukleme). Yani GERCEK
+`svc-hb-fileagent` kimligiyle: DB okunuyor, DB'ye YAZILAMIYOR,
+attestation deposu okunuyor, vaka `ready` olarak dogru sekilde
+belirleniyor -- hicbir P:\ bagimliligi olmadan.
+
+Degisen dosyalar: `deploy/windows-service/apply-file-agent-service-
+vehicle-probe.ps1` (2 gercek hata duzeltmesi), `.tests.ps1` (fixture
+sertlestirme + yeni SCM-seviyesi assertion), `file-agent-disposable-
+probe-inner.ps1` (GateStatus/GateErrorCode tanisal yakalama).
+
+Kesin gercek vaka kimligi/hostname/profil yolu/SID repo'ya ALINMADI
+(sadece Administrators-only `C:\ProgramData\HasarBotu\migration-
+preflight\` altinda, 5 ayri hash-dogrulanmis kanit dosyasinda).
+
+Test sonucu/Etki: Sentetik suite GERCEKTEN calistirildi, her duzeltmeden
+sonra 4/4 (TEST4 atlanan). GERCEK makinede 5 Apply calistirmasi (2
+basarisiz+duzeltildi, 1 yapisal basarili+DB-okuma bulgusu, 1 GateStatus
+tanisal, 1 nihai uctan-uca ready) -- hepsinde `RestoredExactly=true`,
+servis her seferinde bagimsiz olarak Disabled/Stopped + XML hash'i
+`11dc86f6...` ile birebir eslesir halde dogrulandi.
+
+## 2026-08-08 - HB-2026-173: Kullanicinin acikca onayladigi Adim 2 -- `apply-file-agent-attestation-store-access.ps1` (+ testler) yazildi, sentetik suite'te kanitlandi, GERCEK attestation deposu uzerinde Apply edildi (4 ACE), Read=evet/Write=hayir bagimsiz dogrulandi
+
+HB-2026-172'de Adim 1'in guvenlik-kritik gereksinimleri (tam geri-
+yukleme, GERCEK kimlik, yazma-red) tamamen kanitlanip kok-neden
+analiziyle "olasi ACL sorunu" bulgusunun aslinda beklenen, henuz-Apply-
+edilmemis-ACL fail-closed davranisi oldugu netlestikten sonra, Adim 2
+icin kullanicinin onayladigi kosul ("Yalniz 1 tamamen PASS ise") saglanmis
+sayildi.
+
+`apply-file-agent-pcloud-db-access.ps1` (HB-2026-164) ile AYNI 7 katmanli
+model mirror'landi (Administrators-only+hash-dogrulanmis rapor okuma,
+sert whitelist -- Traverse|Read|Synchronize DISI HERSEY reddedilir,
+preview script'i TAZE yeniden calistirip sapma kontrolu, her dugumun
+canli ACL'inin preview raporundaki taban ile SDDL-esitligi kontrolu,
+apply SADECE ekler/asla resetlemez, HATA -> tersten otomatik geri-
+yukleme, apply SONRASI gercek bir "gelecek dosya" mirasilik kaniti
+(depoya atilabilir bir dosya yaratilip Read ACE'in miras alindigi
+dogrulanip silinir) + SID-simulasyon tabanli Read=evet/Write=hayir
+kontrolu + geri-yukleme paketinin kendisinin hash-dogrulanmis yeniden-
+okumayla dogrulanmasi). Depo ozgu fark: sabit 3-dosyalik DB seti yerine,
+depo klasorunun KENDI ACL'i (zorunlu) + depoda O ANDA mevcut TUM
+attestation dosyalari (en iyi-caba, ama basarisizlik yine de rollback
+tetikler) icin SID-simulasyonu.
+
+Sentetik test (`apply-file-agent-attestation-store-access.tests.ps1`,
+6 test, `NT AUTHORITY\LOCAL SERVICE` hedef -- gercek svc-hb-fileagent'a
+DOKUNULMADI): ilk-calistirma (depo klasoru henuz yok) tam Apply+geri-
+yukleme, dry-run sifir mutasyon, kurcalanan ACE (WriteData enjekte)
+reddi, preview-sonrasi ACL sapmasi reddi, kimlik uyusmazligi reddi, VE
+depo ONCEDEN VAR olup icinde 2 mevcut dosya varken Apply'in bu mevcut
+dosyalarin IKISININ de Read=evet/Write=hayir gosterdigini dogrulayan
+6. test -- hepsi ILK calistirmada 0 hata ile gecti.
+
+**GERCEK Apply, gercek `C:\ProgramData\HasarBotu\pcloud-attestations`
+uzerinde:** Taze preview `grant_required`, tam olarak 4 planli ACE,
+sifir blocker. Apply basarili: 4 ACE uygulandi, gelecek-dosya mirasilik
+kaniti GERCEKTEN dogrulandi, depo klasoru SID-simulasyonu Read=evet/
+Write=hayir, depoda HALIHAZIRDA bulunan 80 mevcut attestation dosyasinin
+HEPSI ayri ayri Read=evet/Write=hayir ile dogrulandi (once yazilmis
+HB-2026-170 kanitlari dahil), geri-yukleme paketi hash-dogrulanmis
+yeniden-okumayla dogrulandi. Bagimsiz olarak `Get-Acl` ile ayrica
+dogrulandi: `C:\ProgramData` ve `C:\ProgramData\HasarBotu` uzerinde
+sadece `ExecuteFile, Synchronize` (Traverse) -- yazma biti YOK; depo
+klasorunun kendisinde `ExecuteFile, Synchronize` + `Read, Synchronize`
+-- yazma/silme/sahiplik biti YOK.
+
+**Sonuc: HB-2026-172'nin son satirindaki dogrulama artik tekrarlanmaya
+gerek kalmadan dogrudan bu Apply'in HEMEN ARDINDAN yapilan 5. vehicle-
+probe calistirmasiyla (bkz. HB-2026-172) KANITLANDI** -- `CaseStatus=
+ready`, uctan uca, GERCEK `svc-hb-fileagent` kimligiyle.
+
+Yeni dosyalar: `deploy/windows-service/apply-file-agent-attestation-
+store-access.ps1`, `.tests.ps1`.
+
+4 yeni File Agent env degiskeni YAZILMADI, gercek File Agent enable/
+start EDILMEDI, API bring-up/cutover YAPILMADI, musteri dosyalarina
+DOKUNULMADI -- kullanicinin acik yasagi.
+
+Kesin gercek hostname/profil yolu/SID repo'ya ALINMADI (sadece
+Administrators-only kanit dosyalarinda).
+
+Test sonucu/Etki: Sentetik suite GERCEKTEN calistirildi, 6/6 ilk
+denemede gecti. GERCEK makinede 1 preview + 1 Apply calistirildi, ikisi
+de basarili, `Get-Acl` ile bagimsiz olarak ayrica dogrulandi.
+
+Acik kalan: Sonraki asama kullanicinin kendi belirttigi gibi API
+bring-up + 4 env degiskeninin gercek degerleri + gercek File Agent
+enable/start/cutover olacak -- bunlarin HICBIRI bu paketin kapsaminda
+degil, ayri acik kullanici kararlari gerektirir.

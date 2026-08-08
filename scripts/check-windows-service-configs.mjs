@@ -877,6 +877,36 @@ try {
   errors.push(`Attestation deposu ACL önizleme tooling doğrulaması çalışmadı — ${error.message}`)
 }
 
+// HB-2026-173: attestation deposu icin APPLY + ROLLBACK araci --
+// apply-file-agent-pcloud-db-access.ps1 (HB-2026-164) ile ayni 7 katmanli
+// fail-closed model, depo klasoru icin uyarlanmis.
+try {
+  const storeApplyScript = await readFile(`${DEPLOY_DIR}apply-file-agent-attestation-store-access.ps1`, 'utf8')
+  assertContains(storeApplyScript, /PlannedMinimumAces/, 'apply-file-agent-attestation-store-access.ps1', 'yalniz preview raporunun urettigi exact ACE listesi kabul edilir')
+  assertNotContains(storeApplyScript, /\$AllowedRightsMask\s*=[^\n]*FullControl|\$AllowedRightsMask\s*=[^\n]*Modify\b/, 'apply-file-agent-attestation-store-access.ps1', 'izin verilen haklar maskesi hic FullControl/Modify icermez')
+  assertContains(storeApplyScript, /ForbiddenRightsMask/, 'apply-file-agent-attestation-store-access.ps1', 'yazma/silme/sahiplik/izin-degistirme bitleri acikca yasakli')
+  assertContains(storeApplyScript, /PLANNED_ACE_OUTSIDE_WHITELIST/, 'apply-file-agent-attestation-store-access.ps1', 'beyaz listedeki haklarin disina cikan ACE fail-closed reddedilir')
+  assertContains(storeApplyScript, /PREVIEW_DRIFT_SINCE_REPORT/, 'apply-file-agent-attestation-store-access.ps1', 'Apply oncesi ORIJINAL preview scripti TAZE yeniden calistirilir, sonuc raporla uyusmazsa fail-closed')
+  assertContains(storeApplyScript, /ACL_DRIFT_SINCE_PREVIEW_REPORT/, 'apply-file-agent-attestation-store-access.ps1', 'her dugumun taze ACL SDDL si rapor baseline iyle karsilastirilir, farkta fail-closed')
+  assertContains(storeApplyScript, /Restore-NodeSddl/, 'apply-file-agent-attestation-store-access.ps1', 'rollback tam SDDL geri yukler')
+  assertContains(storeApplyScript, /ContinuityInheritanceTest|ATTESTATION_STORE_CONTINUITY_INHERITANCE_NOT_CONFIRMED/, 'apply-file-agent-attestation-store-access.ps1', 'gelecek-dosya mirasiligi GERCEK bir dosya-olusturma + miras kanitiyla dogrulanir, simulasyon degil')
+  assertContains(storeApplyScript, /ExistingAttestationFileEffectiveAccessSimulation/, 'apply-file-agent-attestation-store-access.ps1', 'depoda o an mevcut TUM attestation dosyalari icin de Read=evet/Write=hayir simulasyonu calistirilir')
+  assertContains(storeApplyScript, /RollbackPackageVerified|ROLLBACK_PACKAGE_SCHEMA_INCOMPLETE/, 'apply-file-agent-attestation-store-access.ps1', 'rollback paketi hash-dogrulamali geri okuma ile hazir-olma acisindan dogrulanir')
+  assertNotContains(storeApplyScript, /LsaAddAccountRights|LsaRemoveAccountRights|SeBatchLogonRight\s*=|New-LocalUser|Set-LocalUser/, 'apply-file-agent-attestation-store-access.ps1', 'YENI bir LSA hakki/hesap asla verilmez')
+  assertNotContains(storeApplyScript, /Start-Service|Set-Service|SetEnvironmentVariable/, 'apply-file-agent-attestation-store-access.ps1', 'servis/env mutasyonu yok')
+
+  const storeApplyTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}apply-file-agent-attestation-store-access.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (storeApplyTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(storeApplyTests.stdout)) {
+    throw new Error(`apply-file-agent-attestation-store-access testleri başarısız — ${storeApplyTests.stderr || storeApplyTests.stdout}`)
+  }
+} catch (error) {
+  errors.push(`Attestation deposu ACL apply tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
 if (errors.length > 0) {
   console.error('WinSW servis config doğrulaması BAŞARISIZ:')
   for (const error of errors) console.error(`  - ${error}`)
