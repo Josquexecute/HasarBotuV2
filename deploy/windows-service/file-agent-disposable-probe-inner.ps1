@@ -67,7 +67,7 @@ $result = [ordered]@{
     RanAsIdentity = $null
     DbReadProbe = [ordered]@{ Attempted = $true; Succeeded = $false; FilesRead = @(); Detail = $null }
     DbNoWriteProbe = [ordered]@{ Attempted = $true; WriteDenied = $false; Detail = $null }
-    FreshnessGateProbe = [ordered]@{ Attempted = $true; Invoked = $false; CaseStatus = $null; ExitCode = $null; Detail = $null }
+    FreshnessGateProbe = [ordered]@{ Attempted = $true; Invoked = $false; CaseStatus = $null; GateStatus = $null; GateErrorCode = $null; ExitCode = $null; Detail = $null }
     OverallSucceeded = $false
 }
 
@@ -141,7 +141,16 @@ try {
             $result.FreshnessGateProbe.ExitCode = $gateExitCode
             try {
                 $gateReport = $gateOutput | ConvertFrom-Json
+                # Case-ready responses carry CaseStatus but no Status/ErrorCode;
+                # the gate's own error-path responses (see
+                # pcloud-session0-freshness-gate.mjs's catch block) carry
+                # Status='error' + ErrorCode but no CaseStatus -- capturing
+                # both shapes here (not just CaseStatus, which is null on the
+                # error path) is what lets a real run's evidence say WHY the
+                # gate failed instead of just THAT it failed.
                 $result.FreshnessGateProbe.CaseStatus = if ($null -ne $gateReport.PSObject.Properties['CaseStatus']) { $gateReport.CaseStatus } else { $null }
+                $result.FreshnessGateProbe.GateStatus = if ($null -ne $gateReport.PSObject.Properties['Status']) { $gateReport.Status } else { $null }
+                $result.FreshnessGateProbe.GateErrorCode = if ($null -ne $gateReport.PSObject.Properties['ErrorCode']) { $gateReport.ErrorCode } else { $null }
                 $result.FreshnessGateProbe.Detail = "Invoked as $($result.RanAsIdentity); exit=$gateExitCode."
             }
             catch {

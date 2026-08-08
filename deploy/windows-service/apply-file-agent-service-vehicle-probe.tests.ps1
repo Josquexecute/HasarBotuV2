@@ -81,9 +81,18 @@ try {
     [System.IO.Directory]::SetAccessControl((Join-Path $testDir 'logs'), $logsAcl)
     Copy-Item -LiteralPath $winswSourcePath -Destination $testExePath -Force
 
-    # Initial XML: harmless placeholder payload (cmd.exe /c exit 0), a
-    # benign always-present real dependency (EventLog) to prove strip+
-    # restore, LOCAL SERVICE account (built-in, no password needed).
+    # Initial XML: harmless placeholder payload (cmd.exe /c exit 0),
+    # LOCAL SERVICE account (built-in, no password needed). The
+    # dependency is a NON-EXISTENT service name (mirroring the real
+    # hasarbotu-file-agent -> hasarbotu-api dependency, which is not
+    # installed) -- deliberately NOT a real, always-present service like
+    # EventLog. A real, always-present dependency would mask a real
+    # clearing bug entirely (start would still succeed even if clearing
+    # silently failed) -- this exact gap was found via a real failure
+    # against the real service (SC_START_FAILED_1075, dependency not
+    # found, because `sc.exe config ... depend= ''` does NOT reliably
+    # clear dependencies -- the documented syntax is `depend= /`) and is
+    # now covered here so it cannot regress silently again.
     $initialXml = @"
 <service>
   <id>$testServiceName</id>
@@ -91,7 +100,7 @@ try {
   <description>Throwaway test service for apply-file-agent-service-vehicle-probe.tests.ps1 -- always uninstalled at the end of the test run.</description>
   <executable>cmd.exe</executable>
   <arguments>/c exit 0</arguments>
-  <depend>EventLog</depend>
+  <depend>HasarBotuTestNonExistentDependency</depend>
   <startmode>Manual</startmode>
   <onfailure action="none"/>
   <logpath>%BASE%\logs</logpath>
@@ -163,7 +172,9 @@ db.close()
     $xmlAfterApply = (Get-FileHash -LiteralPath $testXmlPath -Algorithm SHA256).Hash.ToLowerInvariant()
     Assert-True ($xmlAfterApply -eq $originalXmlHash) "TEST2: WinSW XML restored to the EXACT original bytes (hash match)"
     $xmlTextAfterApply = [System.IO.File]::ReadAllText($testXmlPath)
-    Assert-True ($xmlTextAfterApply -match '<depend>EventLog</depend>') "TEST2: original <depend>EventLog</depend> restored (was stripped for the probe run, then put back)"
+    Assert-True ($xmlTextAfterApply -match '<depend>HasarBotuTestNonExistentDependency</depend>') "TEST2: original (non-existent-service) dependency restored in XML (was stripped for the probe run, then put back)"
+    $scQcAfter2 = sc.exe qc $testServiceName
+    Assert-True (($scQcAfter2 -join "`n") -match 'HasarBotuTestNonExistentDependency') "TEST2: SCM-level DEPENDENCIES value (not just the XML) restored to the non-existent dependency -- proves the clearing bug (depend='''' vs depend=/) cannot regress silently"
     Assert-True ($xmlTextAfterApply -match '<executable>cmd\.exe</executable>') "TEST2: original <executable>cmd.exe</executable> restored (was repointed at the probe, then put back)"
 
     $svcAfterApply = Get-CimInstance -ClassName Win32_Service -Filter "Name='$testServiceName'"

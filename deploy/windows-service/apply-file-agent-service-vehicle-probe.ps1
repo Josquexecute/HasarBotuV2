@@ -350,12 +350,39 @@ try {
         & sc.exe config $ServiceName start= demand | Out-Null
         if ($LASTEXITCODE -ne 0) { Throw-SafeVehicleError 'SC_CONFIG_START_DEMAND_FAILED' }
         if (@($beforeSnapshot.DependOnService).Count -gt 0) {
-            & sc.exe config $ServiceName depend= '' | Out-Null
+            # sc.exe's documented syntax for CLEARING dependencies is a
+            # lone forward slash (depend= /) -- an empty string does NOT
+            # reliably clear the field (found via a REAL failure against
+            # the real hasarbotu-file-agent service: the synthetic test's
+            # own dependency, EventLog, is always installed, so the same
+            # bug never surfaced there -- clearing silently failed but
+            # start still succeeded because EventLog genuinely exists).
+            & sc.exe config $ServiceName depend= '/' | Out-Null
+            if ($LASTEXITCODE -ne 0) { Throw-SafeVehicleError 'SC_CONFIG_DEPEND_CLEAR_FAILED' }
         }
 
         # 3) Start -- exercises the account's real, already-stored SCM
         #    logon credential for real (no password reset, no new right).
-        Start-Service -Name $ServiceName -ErrorAction Stop
+        #    Uses sc.exe start (fire-and-forget) rather than the
+        #    Start-Service cmdlet: the latter's own internal wait-for-
+        #    Running logic threw ServiceCommandException on a REAL run
+        #    against the real WinSW-wrapped probe (found via a real
+        #    failure, not assumed) -- a genuinely short-lived probe (that
+        #    runs once and exits) can legitimately transition through
+        #    Running and back to Stopped faster than that cmdlet's
+        #    built-in tolerance expects, even though the service itself
+        #    started and ran successfully. What actually matters here is
+        #    whether the probe's OWN result file appears, not the precise
+        #    timing of the SCM status transition -- so this proceeds
+        #    straight to the existing result-file poll below regardless
+        #    of exactly when/whether Running was observed.
+        & sc.exe start $ServiceName | Out-Null
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1056) {
+            # 1056 = ERROR_SERVICE_ALREADY_RUNNING -- harmless race with a
+            # probe that starts and finishes very fast; anything else is
+            # a real start failure.
+            Throw-SafeVehicleError "SC_START_FAILED_$LASTEXITCODE"
+        }
 
         # 4) Poll for probe completion (bounded).
         $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
