@@ -189,6 +189,7 @@ describeDb('yerel poliçe OCR API + gerçek File Agent (gerçek PostgreSQL)', ()
       roots: { 'test-root': root },
       leaseSeconds: 120,
       pollIntervalMs: 1_000,
+      freshnessGate: undefined,
     }
     const inspectedFetch: typeof fetch = async (input, init) => {
       const response = await fetch(input, init)

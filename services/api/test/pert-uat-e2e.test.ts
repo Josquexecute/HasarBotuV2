@@ -154,6 +154,7 @@ describeDb('PERT uçtan uca UAT: rayiç -> fotoğraf/kanıt -> eksper kanaati ->
     agentConfig = {
       apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret,
       roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000,
+      freshnessGate: undefined,
     }
     agentClient = createAgentApiClient({
       baseUrl: '', agentId: agent.agent.id, secret: agent.secret, fetchImpl: injectFetch,

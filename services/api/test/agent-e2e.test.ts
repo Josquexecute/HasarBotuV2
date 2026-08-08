@@ -89,7 +89,7 @@ describeDb('File Agent uçtan uca doğrulama (gerçek DB + geçici dosya)', () =
     const regBody = reg.json() as { agent: { id: string }; secret: string }
 
     root = await mkdtemp(join(tmpdir(), 'hb-e2e-root-'))
-    agentConfig = { apiBaseUrl: '', agentId: regBody.agent.id, agentSecret: regBody.secret, roots: { 'baran-primary': root }, leaseSeconds: 120, pollIntervalMs: 1000 }
+    agentConfig = { apiBaseUrl: '', agentId: regBody.agent.id, agentSecret: regBody.secret, roots: { 'baran-primary': root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }
     client = createAgentApiClient({ baseUrl: '', agentId: regBody.agent.id, secret: regBody.secret, fetchImpl: injectFetch })
   }, 60_000)
 

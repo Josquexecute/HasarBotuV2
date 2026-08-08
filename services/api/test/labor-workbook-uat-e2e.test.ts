@@ -205,6 +205,7 @@ describeDb('İşçilik uçtan uca UAT: AI öneri -> kullanıcı düzeltmesi -> o
     agentConfig = {
       apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret,
       roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000,
+      freshnessGate: undefined,
     }
     agentClient = createAgentApiClient({
       baseUrl: '', agentId: agent.agent.id, secret: agent.secret, fetchImpl: injectFetch,

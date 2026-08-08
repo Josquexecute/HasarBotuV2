@@ -212,7 +212,7 @@ describeDb('Değer Kaybı uçtan uca UAT: hesaplama -> revizyon -> onay -> rapor
       await mkdir(join(absolute, directory), { recursive: true })
     }
     await writeFile(join(absolute, 'EVRAK', 'sentetik.txt'), 'uat-deger-kaybi', 'utf8')
-    agentConfig = { apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret, roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000 }
+    agentConfig = { apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret, roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }
     agentClient = createAgentApiClient({ baseUrl: '', agentId: agent.agent.id, secret: agent.secret, fetchImpl: injectFetch })
 
     for (const type of BASE_TYPES) await seedReadyDocument(type)

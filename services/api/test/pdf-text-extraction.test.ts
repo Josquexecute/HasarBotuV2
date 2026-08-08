@@ -73,7 +73,7 @@ describeDb('Kasko PDF metin çıkarımı API + gerçek File Agent (gerçek Postg
     app = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false, loginRateLimit: { limit: 1000, windowMs: 60_000 } } }); adminCookie = await login('p24-admin@test.local'); managerCookie = await login('p24-manager@test.local'); secretaryCookie = await login('p24-secretary@test.local'); otherCookie = await login('p24-other@test.local')
     const registered = await app.inject({ method: 'POST', url: AGENTS_ROUTE, headers: { cookie: adminCookie }, payload: { name: 'P24 Extraction Agent' } }); expect(registered.statusCode).toBe(201); const agent = registered.json() as { agent: { id: string }; secret: string }
     await app.listen({ host: '127.0.0.1', port: 0 }); const address = app.addresses()[0]!; baseUrl = `http://127.0.0.1:${address.port}`
-    agentConfig = { apiBaseUrl: baseUrl, agentId: agent.agent.id, agentSecret: agent.secret, roots: { 'test-root': root }, leaseSeconds: 120, pollIntervalMs: 1000 }; client = createAgentApiClient({ baseUrl, agentId: agent.agent.id, secret: agent.secret })
+    agentConfig = { apiBaseUrl: baseUrl, agentId: agent.agent.id, agentSecret: agent.secret, roots: { 'test-root': root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }; client = createAgentApiClient({ baseUrl, agentId: agent.agent.id, secret: agent.secret })
   }, 60_000)
 
   afterAll(async () => { if (app !== undefined) await app.close(); if (pool !== undefined) await closeDatabasePool(pool); if (root !== undefined) await rm(root, { recursive: true, force: true }) })

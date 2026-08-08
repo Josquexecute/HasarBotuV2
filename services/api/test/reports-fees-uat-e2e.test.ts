@@ -249,7 +249,7 @@ describeDb('Raporlar ve Ücretler uçtan uca UAT: gerçek kapanış → ücret o
     expect(registered.statusCode).toBe(201)
     const agent = registered.json() as { agent: { id: string }; secret: string }
     root = await mkdtemp(join(tmpdir(), 'hb-uat-raporlar-'))
-    agentConfig = { apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret, roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000 }
+    agentConfig = { apiBaseUrl: '', agentId: agent.agent.id, agentSecret: agent.secret, roots: { [ROOT_KEY]: root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }
     agentClient = createAgentApiClient({ baseUrl: '', agentId: agent.agent.id, secret: agent.secret, fetchImpl: injectFetch })
   }, 60_000)
 

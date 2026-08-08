@@ -133,6 +133,7 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
       roots: { 'test-primary': root },
       leaseSeconds: 120,
       pollIntervalMs: 1000,
+      freshnessGate: undefined,
     }
     agentClient = createAgentApiClient({ baseUrl: '', agentId: registered.agent.id, secret: registered.secret, fetchImpl: injectFetch })
   }, 60_000)

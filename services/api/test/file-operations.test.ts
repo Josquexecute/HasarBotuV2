@@ -197,6 +197,7 @@ describeDb('case file operations (gerçek PostgreSQL + sentetik geçici filesyst
       roots: { 'source-root': sourceRoot, 'archive-root': archiveRoot },
       leaseSeconds: 120,
       pollIntervalMs: 1000,
+      freshnessGate: undefined,
     }
     agentClient = createAgentApiClient({
       baseUrl: '',
