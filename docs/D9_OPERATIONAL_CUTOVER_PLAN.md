@@ -975,9 +975,13 @@ foreach ($name in @('HASARBOTU_AGENT_ID','HASARBOTU_AGENT_SECRET','HASARBOTU_AGE
   [Environment]::SetEnvironmentVariable($name, $null, 'Machine')
 }
 
-# 3) Agent kaydını iptal et (Adım 6b'nin tersi) -- ayrı, admin oturumuyla elle
-#    (API'de agent devre dışı bırakma/silme uç noktası varsa; yoksa yalnız
-#    secret File Agent'tan silindiği için pratikte zararsız kalır)
+# 3) Agent kaydını iptal et (Adım 6b'nin tersi) -- ayrı, admin oturumuyla elle.
+#    Uç nokta HB-2026-176/177'de kaynak+testle DOĞRULANDI (artık "varsa"
+#    değil, gerçek ve çalışır durumda): PATCH /api/v1/agents/:agentId
+#    {status:'disabled'} (bkz. services/api/src/agent/auth.ts, agent.status
+#    !== 'active' -> 403). register-file-agent-interactive.ps1'in kendi
+#    orphan-önleme yolu bu çağrıyı zaten yapar; gerçek AgentId için admin
+#    oturumuyla aynı çağrı elle tekrarlanabilir.
 
 # 4) Admin bootstrap GERİ ALINMAZ (Adım 6) -- idempotent tek-kullanımlıktır,
 #    yanlışsa DB'den elle silinip yeniden calıştırılması ayrı bir karardır
@@ -990,13 +994,27 @@ foreach ($name in @('DATABASE_URL','NODE_ENV','HASARBOTU_API_BASE_URL')) {
 # Kurulumu tamamen kaldırmak icin (opsiyonel, ayrı karar):
 #   C:\HasarBotu\services\api\hasarbotu-api.exe uninstall
 
-# 6) API deploy geri al (Adım 3'ün tersi)
-.\deploy\windows-service\deploy-service-artifacts.ps1 -Rollback -ServiceLabel 'api' `
-  -ApplyEvidenceReportPath '<apply raporu>' -ApplyEvidenceReportSha256 '<hash>'
+# 6) API deploy geri al (Adım 3'ün tersi) -- GERÇEK parametre sözleşmesi
+#    (deploy-service-artifacts.ps1'de -ApplyEvidenceReportPath/-Sha256 YOK;
+#    -TargetDir ZORUNLU, yedek bütünlüğü -RollbackBackupPath'teki
+#    .manifest.json sidecar'ından OTOMATİK doğrulanır, ayrı hash verilmez):
+.\deploy\windows-service\deploy-service-artifacts.ps1 -TargetDir 'C:\HasarBotu\services\api' -ServiceLabel 'api' `
+  -Rollback -RollbackBackupPath '<C:\ProgramData\HasarBotu\migration-preflight\pre-deploy-backups\ altındaki GERÇEK api-* yedek dizini>' -Apply
 
-# 7) Reference-data geri al (Adım 2'nin tersi)
-.\deploy\windows-service\provision-extra-data-references.ps1 -Rollback `
-  -ApplyEvidenceReportPath '<apply raporu>' -ApplyEvidenceReportSha256 '<hash>'
+# 7) Reference-data geri al (Adım 2'nin tersi) -- GERÇEK parametre sözleşmesi.
+#    -DataLabel HER ZAMAN zorunlu. -ServiceTargetDir bu modda Adım 6'daki
+#    servis dağıtım kökü DEĞİL: provision modunda "Hedef dizin" olarak
+#    yazdırılan GERÇEK çözümlenmiş veri dizinidir (bugün
+#    C:\HasarBotu\reference-data\value-loss\real-market-analysis\2026-07-01\1.0.0) --
+#    yanlışlıkla 'C:\HasarBotu\services\api' verilirse API dağıtımının
+#    ÜZERİNE yazar (kendi güvenli yedeğini alsa da). RepoRoot/
+#    DependencyClosureManifestPath olmadan bu betik o yolu KENDİSİ
+#    türetemez; script içindeki .EXAMPLE bloğu da bu parametreyi hiç
+#    göstermez (verilmezse SERVICE_TARGET_DIR_REQUIRED_FOR_ROLLBACK_TARGET_UNKNOWN
+#    ile fail-closed reddeder).
+.\deploy\windows-service\provision-extra-data-references.ps1 -DataLabel 'value-loss-reference-data' `
+  -ServiceTargetDir 'C:\HasarBotu\reference-data\value-loss\real-market-analysis\2026-07-01\1.0.0' `
+  -Rollback -RollbackBackupPath '<pre-deploy-backups altındaki GERÇEK value-loss-reference-data-* yedek dizini>' -Apply
 ```
 Her adımın kendi rollback mekanizması AYRI ayrı, sentetik testlerle
 kanıtlanmıştır (HB-2026-143/145 deploy/provision araçları; HB-2026-168
