@@ -8612,3 +8612,150 @@ Test sonucu: `node --test generate-file-operation-observation-bundle.test.mjs`
 17/17 PASS. `node --test deploy/windows-service/*.test.mjs` (tum dizin
 regresyon kontrolu) calistirildi. `node scripts/check-windows-service-configs.mjs`
 temiz.
+
+## 2026-08-09 - HB-2026-179..183: FINAL PRODUCTION READINESS AUDIT -- ilk gercek musteri islemi oncesi kapsamli, bagimsiz yeniden dogrulama; 1 kritik + 1 kozmetik gercek hata bulunup duzeltildi, geri kalan sistem tam PASS
+
+D9 cutover (HB-2026-177) sonrasi, ilk gercek musteri islemi oncesi
+`docs/`/kod/gercek makine durumunu GECMIS RAPORLARA GUVENMEDEN bagimsizca
+yeniden dogrulayan uzun, otonom bir denetim. Ozet (tam rapor sohbette,
+ayrintili kanit iz'i asagida):
+
+**KRITIK BULGU (B11) -- storage_roots tablosu bos, hicbir INSERT yolu YOK
+(HB-2026-179):** repo-capinda kaynak taramasi `storage_roots` (migration
+0006) icin hicbir insert yolu olmadigini buldu -- `storage/store.ts` ve
+`workspace/store.ts` yalniz SELECT eder, bos ise fail-closed
+`unknown_reference`/`unknown_root` doner. Gercek production DB'de gercek
+`baran-global` organizasyonu icin **0 satir** dogrulandi (salt-okunur
+sorgu) -- D9 yalniz File-Agent-tarafi `HASARBOTU_AGENT_ROOTS`i yazmis,
+DB-tarafi kaydini hic seed etmemis. Bu tablo `case_locations`,
+`case_workspace_provisionings`, `case_file_operations`/
+`case_lifecycle_operations`in (kaynak+hedef) FK'sini besledigi icin **ilk
+gercek vakanin workspace provisioning/konum atama/dosya islemi ilk
+adimda fail-closed reddedilecekti**. B9 (bootstrap-first-admin.mjs,
+HB-2026-147) ile AYNI desen: `bootstrap-storage-root.mjs` (+ 17 test, 7
+birim + 10 GERCEK PostgreSQL entegrasyonu, `hasarbotu_test` DB'sinde
+17/17 PASS) yazildi -- `@hasarbotu/contracts`in GERCEK
+`storageRootSchema.rootKey`/`.label` semasini yeniden kullanir, TOCTOU-
+guvenli, ayni (org,rootKey) icin ikinci cagri `already_exists` doner
+(hata degil -- tek-kullanimlik admin bootstrap'in aksine bir org'un
+omru boyunca birden fazla kok mesru olabilir), gercek eszamanli
+cakismaya karsi da `storage_roots_org_key_unique` ihlalini yakalar.
+**Gercek production DB'ye karsi yalniz salt-okunur onizleme calistirildi:**
+`Status:"ready"`, `OrganizationFound:true`, `AlreadyExists:false` --
+gercek `--apply` bu paket icinde CALISTIRILMADI (DB'ye veri yazma
+yasagi), kullanicinin ayri, acik onayini bekliyor. **Onerilen tam komut:**
+```powershell
+$pw = Get-Content "$env:USERPROFILE\.hasarbotu\hasarbotu_app.pass" -Raw
+$env:DATABASE_URL = "postgres://hasarbotu_app:$($pw.Trim())@127.0.0.1:5432/hasarbotu"
+node deploy\windows-service\bootstrap-storage-root.mjs --organization-code baran-global --root-key baran-global-primary --label "Baran Global Ekspertiz - Ana Depo" --apply
+```
+
+**KOZMETIK BULGU -- WinSW XML render'inde Turkce mojibake (HB-2026-182):**
+`install-services.ps1`nin `New-RenderedServiceConfig`i `Get-Content -Raw`
+kullaniyordu (bu makinede sistem kod sayfasi, UTF-8 DEGIL) -- gercek
+kurulu `C:\HasarBotu\services\api\hasarbotu-api.xml`de (bu ARACLA,
+GERCEKTEN bu oturumda HB-2026-175 Adim 5'te render edildi) dogrulandi:
+her Turkce karakter bozuk (`için`->`iÃ§in`). Ayni hata sinifi
+`setup-file-agent-service-account.ps1`de HB-2026-110'da zaten bulunup
+duzeltilmisti (o dosyada acik yorum var) ama `install-services.ps1`e HIC
+tasinmamisti. Onem: KOZMETIK -- tum islevsel WinSW alanlari (id,
+executable, depend, startmode, serviceaccount...) iki sablonda da salt
+ASCII, yalniz yorumlar+`<description>` etkileniyor; servis calismaya
+devam ediyor, dogrulandi (Running/Automatic, `/health` ok). Duzeltme
+`[System.IO.File]::ReadAllText(...,UTF8)`e gecirdi (ayni, onceden
+kanitlanmis desen) + regresyon testi eklendi
+(`install-services.tests.ps1` TEST 9, gercek sablonlara ve gercek kurulu
+dosyaya karsi). **Gercek kurulu `hasarbotu-api.xml` BILEREK
+degistirilmedi** (calisan gercek bir production dosyasi) -- duzeltme
+yalniz GELECEKTEKI kurulumlari kapsar.
+
+**Diger duzeltilen gercek hata:** `services/api/test/policy-ai.test.ts`nin
+"usage ve audit yalniz guvenli ozet tasir" testi `month=2026-07`
+sabit kodluyordu; gercek saat Agustos 2026'ya gectiginden test KENDI
+urettigi `ai_usage_ledger` satirlari artik Temmuz filtresine hic
+dusmuyordu (HB-2026-175'te "ilgisiz" diye kayda gecen 502/503 -- bu
+paket bagimsizca ayni imzayla yeniden uretip KOK NEDENINI tam
+tanimladi: sabit ay DEGIL, `new Date().toISOString().slice(0,7)`,
+route'un kendi varsayilaniyla BIREBIR ayni yontem) (HB-2026-181). Fix
+sonrasi izole 20/20 PASS, tam `api` suite'i 503/503 PASS.
+
+**D9 rollback runbook duzeltmesi (HB-2026-180):** §11.6 Adim 6/7
+rollback komutlari GERCEKTE var olmayan parametreler
+(`-ApplyEvidenceReportPath`/`-Sha256`) kullaniyordu; gercek `param()`
+bloklarina karsi dogrulanip `-TargetDir`/`-RollbackBackupPath`/`-Apply`
+(Adim 6) ve `-DataLabel`/`-ServiceTargetDir`/`-RollbackBackupPath`/
+`-Apply` (Adim 7, moda-ozgu `-ServiceTargetDir` anlami acikca not
+edildi) ile duzeltildi.
+
+**Bagimsizca yeniden dogrulanan (kod/gercek makine kaniti, onceki
+raporlara guvenilmeden):**
+- Deployed artifact == HEAD: `npm run build` GERCEKTEN calistirildi,
+  hem API (435 dosya) hem File Agent (60 dosya) `dist/`i SHA-256
+  bazinda `C:\HasarBotu\...`daki gercek kurulu dosyalarla birebir
+  (byte-birebir) eslesti -- sifir fark, sifir eksik/fazla dosya.
+- `npm run typecheck`/`lint`(13 onceden bilinen uyari, ayni
+  taban)/`build`/`check:deploy` -- hepsi GERCEKTEN calistirildi, temiz.
+- `npm test` (kok + tum workspace'ler, `hasarbotu_test` DB'siyle GERCEK
+  entegrasyon testleri dahil): **2234 test PASS, 6 skip (ortam
+  kosullu), 0 fail** (policy-ai duzeltmesinden SONRA).
+- `deploy/windows-service/*.tests.ps1` (13 dosya, dogrudan gercek
+  makinede) + `*.test.mjs` (15 dosya, `node --test`, bootstrap-first-
+  admin dahil GERCEK DB entegrasyonuyla): hepsi ayri ayri yeniden
+  calistirildi, **0 fail**.
+- Gercek servis durumu: `hasarbotu-api` (LocalSystem) ve
+  `hasarbotu-file-agent` (svc-hb-fileagent) ikisi de Running/Automatic;
+  `/health` gercek DB ping'iyle `ok`; agent DB kaydi `active`,
+  `last_seen_at` taze (rapor aninda ~1 dk).
+- ACL'ler: depolama koku (Administrators+user+svc-hb-fileagent, 3 ACE),
+  File Agent uygulama/logs dizini, attestation deposu, pCloud DB erisimi
+  -- hepsi belgelenen beklenen durumla BIREBIR (drift yok).
+- `generate-file-operation-observation-bundle.mjs`nin SQL'i gercek
+  `jobs`/`labor_workbook_apply_operations`/`agents`/`audit_events`
+  semasina karsi sutun sutun dogrulandi -- tam eslesme (organization_id/
+  secret_hash gibi kasitli disarida birakilan alanlar haric).
+  `resource_type='job'` audit dali `agent/store.ts`de gercekten
+  kullanildigi (satir 118) dogrulanarak olu-kod OLMADIGI kanitlandi.
+- `apply_labor_workbook` zinciri kaynaktan uctan uca izlendi (routes ->
+  store.approve -> jobs -> File Agent runOnce -> fail-closed freshness
+  gate (HER hata yolu ready=false) -> executor -> writer: onay+plan-hash
+  dogrulama -> kilit dosyasi (exclusive) -> TAZE re-preview -> yedek
+  (COPYFILE_EXCL + geri-okuma dogrulamasi) -> yalniz hedef sheet'i
+  yamalayan patch + `verifyArchiveScope` (mutasyon allowlist) -> gecici
+  dosyaya yaz -> tam preflight re-parse -> atomic replace ONCESI
+  kaynagin SON KEZ degismedigini dogrula (identity fence) -> `rename()`
+  atomic replace -> POST-replace hash dogrulama -> basarisizlikta
+  otomatik yedekten rollback -> sunucu tarafinda BAGIMSIZ
+  `RESULT_HASH_MISMATCH` kontrolu (agent'in ham iddiasina GUVENILMEZ) ->
+  audit zinciri). Her adim kaynaktan (dokumandan degil) dogrulandi.
+- AI saglayicilari (GEMINI_*/OPENAI_*) production'da tanimli DEGIL
+  (dogrulandi) -- belgelenen "bu cutover'a dahil degil" kararıyla
+  tutarli.
+- DB durumu oturum boyunca DEGISMEDI: 1 org, 1 user, 1 agent, 0 jobs,
+  0 cases, 6 audit_events, 0 storage_roots (basta ve sonda ayni) --
+  denetim gercekten salt-okunur kaldi.
+
+**Kayda gecen, DUZELTILMEYEN artik riskler (kucuk/orta, engelleyici
+degil):**
+- `hasarbotu-api` servisi LocalSystem altinda calisiyor, `C:\HasarBotu\
+  services\api` dizini File Agent'in aksine ozel/dar bir ACL almadi
+  (yalniz miras alinan varsayilan Windows izinleri -- `Authenticated
+  Users: Modify` dahil, ki `svc-hb-fileagent` de bu gruba dahil).
+  File Agent HB-2026-113..116'da ayni titizlikle sertlestirildi, API
+  hic almadi -- tek-operator makinede pratik risk dusuk ama tutarsiz.
+  Ayri bir sertlestirme paketi onerilir.
+- `apply-file-agent-service-vehicle-probe.ps1 -Rollback` modunun,
+  hedef servis su an GERCEKTEN Running oldugunda bunu reddeden bir
+  koruma yok (Apply modunda VAR: `SERVICE_NOT_STOPPED_REFUSING_TO_TOUCH`).
+  D9'un kendi rollback sirasi bu modu zaten kullanmiyor (elle Stop-
+  Service/Set-Service kullaniyor) ama arac tek basina yanlislikla
+  cagrilirsa gercek cutover'i geri alabilir.
+- `provision-extra-data-references.ps1 -Rollback`da `-ServiceTargetDir`
+  parametresinin anlami Provision modundakinden FARKLI (servis dagitim
+  koku degil, cozulmus veri dizini) -- D9 runbook'unda bu paket
+  icinde acikca not edildi (HB-2026-180) ama aracin kendisi bu ikiligi
+  ayri, daha net bir parametre adiyla ayirmiyor.
+
+Sonuc: **READY WITH KNOWN LIMITATION.** Tek gercek engelleyici (storage_
+roots) kod+test+salt-okunur onizleme ile tam hazir, yalniz kullanicinin
+tek onayini bekliyor -- bu Apply CALISTIRILMADAN ilk gercek workspace
+provisioning/konum atama/dosya islemi denemesi fail-closed reddedilecektir.
