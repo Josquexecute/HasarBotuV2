@@ -415,6 +415,24 @@ Son güncelleme: 2026-08-04
   ortaya çıkmayan bir test asimetrisi. **D9 burada durdu** — Adım 6b
   ve sonrası kullanıcının onayını bekliyor; gerçek `hasarbotu-api`
   şu an Running/Auto olarak kalıyor (geri alınmadı).
+- **Adım 6b için gerçek, test edilmiş araç yazıldı (henüz UYGULANMADI —
+  HB-2026-176, 2026-08-09):** `register-file-agent-interactive.ps1`
+  — kullanıcının chat'e yapıştırılan (hiç çalıştırılmamış) önceki
+  taslakta yakaladığı 2 gerçek eksiği kapatır: unmanaged parola
+  pointer'ı artık `finally` içinde kesin `ZeroFreeGlobalAllocUnicode`
+  ile serbest bırakılıyor; orphan-önleme iki katmanlı (kayıttan önce
+  Machine env yazma/okuma/silme yetkisi fail-closed kanıtlanır;
+  kayıttan sonra env yazımı başarısız olursa `PATCH
+  /api/v1/agents/:agentId {status:'disabled'}` ile — kaynak
+  (`agent/auth.ts`) VE mevcut committed testle (`agent-jobs.test.ts`,
+  "devre dışı agent 403 alır") doğrulanmış gerçek bir rollback —
+  agent güvenli devre dışı bırakılır). 11 test (gerçek
+  `@hasarbotu/contracts` şema/route sözleşme testleri + sentetik
+  rollback regresyon testleri) yazıldı ve PASS; test yazarken ayrı,
+  bağımsız bir mock-sunucu/`spawnSync` event-loop kilitlenmesi bulunup
+  düzeltildi (aracın kendisinde değil, test harness'inde). Registration
+  bu turda UYGULANMADI — kullanıcı yalnız çalıştıracağı tek PowerShell
+  komutunu bekliyor.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
