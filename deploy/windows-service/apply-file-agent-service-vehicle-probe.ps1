@@ -267,6 +267,18 @@ try {
     if ($Rollback) {
         $evidence = Read-HashVerifiedJson -Path $SnapshotEvidenceReportPath -ExpectedSha256 $SnapshotEvidenceReportSha256
         if ($evidence.SchemaVersion -ne 'hasarbotu-file-agent-service-vehicle-probe/1.0.0') { Throw-SafeVehicleError 'SNAPSHOT_EVIDENCE_SCHEMA_INVALID' }
+
+        # Same live-state guard as the Apply path (line ~295): a stale
+        # evidence report from BEFORE a real cutover must never be able to
+        # silently force a currently-Running service back to the probe's
+        # baseline (Disabled/dependency-stripped) StartMode. Checked against
+        # the evidence's OWN recorded ServiceName, not the -ServiceName
+        # parameter default (that parameter is not even part of the
+        # Rollback parameter set).
+        $rollbackTargetCheck = Get-CimInstance -ClassName Win32_Service -Filter "Name='$($evidence.Snapshot.ServiceName)'" -ErrorAction SilentlyContinue
+        if ($null -eq $rollbackTargetCheck) { Throw-SafeVehicleError 'ROLLBACK_TARGET_SERVICE_NOT_FOUND' }
+        if ($rollbackTargetCheck.State -ne 'Stopped') { Throw-SafeVehicleError 'SERVICE_NOT_STOPPED_REFUSING_ROLLBACK' }
+
         $snapshotForRestore = [ordered]@{
             ServiceName = $evidence.Snapshot.ServiceName
             StartMode = $evidence.Snapshot.StartMode

@@ -219,6 +219,30 @@ db.close()
         Write-Output "SKIPPED TEST4: cmd.exe /c exit 0 completed too fast to observe Running state (not a tool defect)."
     }
     sc.exe config $testServiceName start= disabled | Out-Null
+
+    Write-Output "`n=== TEST 5: -Rollback ALSO refuses a Running service (HB-2026-185 -- Apply already had this guard, -Rollback did not) ==="
+    # Reuses the still-valid snapshot evidence from TEST 3 -- the point of
+    # this test is that the guard fires from the RUNNING-state check alone,
+    # before the evidence is ever acted on, so which evidence is used
+    # (as long as it verifies) does not matter.
+    sc.exe config $testServiceName start= demand | Out-Null
+    Start-Service -Name $testServiceName -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 300
+    $runningState5 = (Get-CimInstance -ClassName Win32_Service -Filter "Name='$testServiceName'").State
+    if ($runningState5 -eq 'Running') {
+        $xmlBeforeTest5 = (Get-FileHash -LiteralPath $testXmlPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $out5 = & $toolPath -Rollback -SnapshotEvidenceReportPath $snapshotReportPath2 -SnapshotEvidenceReportSha256 $snapshotReportSha2 2>&1
+        $exitCode5 = $LASTEXITCODE
+        $json5 = $out5 | Out-String | ConvertFrom-Json
+        Assert-True ($exitCode5 -ne 0 -and $json5.Status -eq 'error' -and $json5.ErrorCode -eq 'SERVICE_NOT_STOPPED_REFUSING_ROLLBACK') "TEST5: -Rollback against a Running service is refused outright (got exit=$exitCode5 code=$($json5.ErrorCode))"
+        $xmlAfterTest5 = (Get-FileHash -LiteralPath $testXmlPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        Assert-True ($xmlAfterTest5 -eq $xmlBeforeTest5) "TEST5: refused rollback touched NOTHING (XML hash unchanged while the service was still running)"
+        Stop-Service -Name $testServiceName -Force -ErrorAction SilentlyContinue
+    }
+    else {
+        Write-Output "SKIPPED TEST5: cmd.exe /c exit 0 completed too fast to observe Running state (not a tool defect)."
+    }
+    sc.exe config $testServiceName start= disabled | Out-Null
 }
 finally {
     Remove-TestServiceIfPresent
