@@ -8810,3 +8810,25 @@ Etkisi:
 - Gercek production verisi/dosyasi MUTATE EDILMEDI -- tum testler `hasarbotu_test` veya `app.inject()`/mock-fetch harness'i uzerinden.
 
 Kaynak: 2026-08-09 tarihli kullanici talimati ("Paketleme oncesi yeni zorunlu ozellik: Kasko dosyalarina Zorunlu Kasko Kontrolu gate'i ekle").
+
+## 2026-08-09 - HB-2026-192..193: Paketleme oncesi son hardening turu -- npm audit (semver-safe), pdfjs-dist arastirmasi (degistirilmedi), pre-existing database test borcu bulunup duzeltildi
+
+Karar:
+
+1. `npm audit fix` (force YOK) calistirildi: fast-uri 3.1.4->3.1.5 + 4.1.1->4.1.2 (fastify/ajv transitive), nanoid 3.3.16->3.3.18 (vite/postcss, dev-only), undici 7.28.0->7.29.0 (electron/jsdom, dev-only). Yalniz `package-lock.json` degisti, hicbir `package.json` dokunulmadi -- hepsi zaten bildirilmis araliklar icinde patch surumleri. Ayri committe (HB-2026-193).
+2. `pdfjs-dist` (>=5.6.83 <6.2.108, GHSA-hq66-cqwq-w95j) FORCE UPGRADE EDILMEDI. Gercek, kod-seviyesinde arastirma: bu CVE `enableScripting` (varsayilan true) ile PDF-gomulu JavaScript calistirir; kurulu 6.1.200'un KENDI tip tanimlarinda (`node_modules/pdfjs-dist/types/`) `enableScripting` YALNIZ `PDFViewer` (`web/pdf_viewer.d.ts`) ve `AnnotationLayer` render parametrelerinde (`src/display/annotation_layer.d.ts`) var -- `DocumentInitParameters`de (yani `getDocument()`nin kendisinde) YOK, derleyici bunu dogruladi (`enableScripting` alani `DocumentInitParameters`e eklenmeye calisildiginda TS2353 hatasi verdi). Bu repo'nun 3 gercek kullanim noktasi (`pdf-parser-worker.ts`, `policy-ocr-worker.ts`: yalniz `getDocument`+`getTextContent`+`getOperatorList`+`getViewport`+temel `page.render()`; `report-pdf.ts`: yalniz `standard_fonts/*.ttf` dosya yolu) hicbir zaman `PDFViewer`/`AnnotationLayer` ORNEKLEMEZ -- CVE'nin calisma yolu bu kod tabaninda YAPISAL OLARAK ERISILEMEZ. `enableScripting:false`/`isEvalSupported:false`i `getDocument()`e eklemeye calisildi, ikisi de gecersiz alan oldugu icin derleyici reddetti (once denenip GERI ALINDI) -- pdf.js semver izlemez (build-numarali surumleme), API-uyum kaniti yok, kullanici acikca "guvenli kanitlanamiyorsa degistirme" dedigi icin dokunulmadi. Kalan tek `npm audit` bulgusu budur; DISCLOSED, FIX EDILMEDI.
+3. Bu turun "full test" calistirmasinda (ilk kez `packages/database`nin KENDI test suite'i, `npm run test --workspace @hasarbotu/database`, bu oturumda calistirildi) 52/74 test FAIL verdi -- **Kasko degisikligiyle ilgisiz, onceden var olan bir test borcu**: `packages/database/test/integration.test.ts` en son migration 0042 icin guncellenmis (git log kaniti), 0043/0044 icin HIC guncellenmemis. Dosyanin basinda 0044 icin ONCEDEN yazilmis bir "gizleme shim'i" vardi (migration adini `applied` listesinden suzer, `down` sayisina ekler) -- yalniz 0044'u biliyordu, 0045 (Kasko) eklenince sizdi. Shim, tek isim yerine `HIDDEN_MIGRATION_NAMES` dizisine genellestirildi (0044+0045); ayrica shim'in SUZEMEDIGI ayri bir gercek-tablo-adi listesine 2 yeni Kasko tablosu eklendi. 52 basarisizligin 51'i BU tek kok nedenin cascade hasariydi (paylasilan DB durumu, sirali testler) -- kok duzeltilince 74/74 PASS. HB-2026-192, ayri commit.
+
+Gerekce:
+
+Kullanicinin acikca istedigi "paketleme oncesi son hardening turu": (1) npm audit semver-safe once, force yasak, fast-uri/nanoid/undici ayri atomik committe; (2) pdfjs-dist kullanim yuzeyi/changelog/regresyon riski incelensin, guvenli kanitlanamiyorsa degistirilmesin, kalan advisory acik risk olarak raporlansin; (3) tam typecheck/lint/test/build/check:deploy calistirilsin. Test calistirmasi sirasinda bulunan onceden-var-olan database test borcu, "PASS" diyebilmek icin duzeltilmesi zorunlu bir engeldi (Kasko'nun kendisi bozmadi, ama Kasko onu ilk kez gorunur kildi).
+
+Etkisi:
+
+- `package-lock.json`: 4 paket (2 fast-uri konumu + nanoid + undici) patch surume tasindi, davranis degisikligi yok.
+- `services/file-agent/src/pdf-parser-worker.ts`, `policy-ocr-worker.ts`: DEGISIKLIK YOK (denendi, derleyici tarafindan reddedildi, geri alindi -- calisan koda dokunulmadi).
+- `packages/database/test/integration.test.ts`: `HIDDEN_MIGRATION_NAMES` dizisi + 2 yeni tablo adi eklendi; 74/74 PASS (onceden 52 FAIL, Kasko'dan bagimsiz onceden var olan borc).
+- Tam `npm test` (tum workspace'ler) zincir halinde YENIDEN calistirildi, ucdan uca: src 383/389 (6 skip), domain 768, contracts 324, database 74, desktop-bridge 10, **api 516 (78 dosya, tum Kasko E2E dahil)**, file-agent 110, desktop 75 -- HEPSI PASS, 0 basarisiz. Typecheck/lint/build/check:deploy de temiz yeniden calistirildi.
+- `deploy/windows-service/harden-api-service-directory-acl.ps1`: taze salt-okunur preview calistirildi -- canli dizinde drift YOK (Phase 1 ile birebir ayni: 2x Authenticated Users + 1x Users genis grant, aynen planlanan degisim). Gercek `-Apply` kullanicinin tek acik onayini bekliyor -- bu paket kapsaminda calistirilmadi.
+
+Kaynak: 2026-08-09 tarihli "Paketleme oncesi son hardening turu" kullanici talimati.
