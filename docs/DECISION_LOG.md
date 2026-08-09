@@ -8304,3 +8304,92 @@ duzeltmesini gozden gecirip yeniden onay vermesini bekliyor. Gercek
 `hasarbotu-api` servisi su an GERCEKTEN Running/Auto (Adim 5'ten beri)
 -- geri alinmadi, kullanicinin acik bir "rollback" talebi olmadan geri
 alinmayacak (bu, D9'un kendi ilerlemesidir, hatali bir durum degil).
+
+## 2026-08-09 - HB-2026-176: D9 Adim 6b icin `register-file-agent-interactive.ps1` -- gercek, test edilmis agent-kayit araci; registration bu turda UYGULANMADI, yalniz arac yazildi+test edildi+commit edildi
+
+Onceki turda sunulan (kullanici tarafindan hic calistirilmayan, yalniz
+chat'e yapistirilan) agent-registration PowerShell blogunda kullanici
+iki gercek eksik yakaladi: (1) `SecureStringToGlobalAllocUnicode`in
+dondurdugu unmanaged pointer hicbir zaman `ZeroFreeGlobalAllocUnicode`
+ile serbest birakilmiyordu -- duz metin parola process omru boyunca
+unmanaged bellekte kalabilirdi; (2) kayittan sonra env yazimi
+basarisiz olursa orphan agent (kullanilamaz tek-seferlik secret'li,
+DB'de aktif kalan bir satir) onlenmiyordu. Kullanici acikca istedi:
+once gercek API'nin agent delete/revoke/rollback sozlesmesini
+kaynak+testten dogrula; sonra gercek, test edilmis bir `.ps1` arac
+yaz+commit et; bu turda registration'i UYGULAMA.
+
+Kaynak+test dogrulamasi: `services/api/src/agent/routes.ts`taki
+`PATCH /api/v1/agents/:agentId {status:'disabled'}` gercek, var olan
+bir rota (hard delete degil, soft-disable). Etkili oldugu
+`services/api/src/agent/auth.ts` (satir 53-54:
+`if (agent.status !== 'active') { ...403 'Agent is disabled.' }`) ile
+VE mevcut, committed bir testle (`services/api/test/agent-jobs.test.ts`,
+`'devre disi agent 403 alir'`: agent kaydet -> disable et -> ayni
+secret'le claim dene -> 403 beklenir) dogrulandi. Bu testi bu oturumda
+BIZZAT calistiramadim (bu makinede `TEST_DATABASE_URL` icin yerel
+kimlik dosyasi yok) -- bu durustce boyle raporlandi, "calistirdim"
+denmedi.
+
+Yazilan arac (`deploy/windows-service/register-file-agent-interactive.ps1`,
+UTF-8 BOM, PS 5.1): iki katmanli orphan-onleme -- (1) kayittan ONCE
+hedef env kapsaminda (varsayilan Machine) yazma/okuma/silme yetkisi
+fail-closed kanitlanir (rastgele adli/degerli probe degiskeni);
+basarisizsa kayit hic denenmez; (2) kayittan SONRA env yazimi/okuma-
+geri-dogrulamasi basarisiz olursa yazilan degiskenler temizlenir VE
+AYNI admin WebSession'iyla PATCH ile disable cagirilir; disable de
+basarisiz olursa gercek agent ID (secret DEGIL) kritik blocker olarak
+raporlanir. Ayni isimde zaten AKTIF bir agent varsa (GET
+`/api/v1/agents` ile) kayit fail-closed reddedilir. Parola yalniz
+interaktif `Get-Credential` (SecureString); `-Credential` parametresi
+yalniz otomatik test icin (PSCredential nesnesi, duz metin argüman
+DEGIL). `SecureStringToGlobalAllocUnicode`in pointer'i `finally`
+icinde kesin `ZeroFreeGlobalAllocUnicode` ile serbest birakilir.
+Secret hicbir stdout/log/argv/audit kaydinda gorunmez; basari ciktisi
+yalniz `AgentId` + `CredentialsConfigured:true`. Normal
+`-SessionVariable`/`-WebSession` kullanilir (manuel Cookie header yok).
+Kritik `exit`/`finally` etkilesimi ONCEDEN 3 izole senaryoyla ampirik
+dogrulandi (ic ice fonksiyondan `exit` cagirmak saril enclosing
+`finally`i calistiriyor; ama `& script.ps1` ile cagrilan bir alt-
+script'in kendi `exit`i CAGIRANI sonlandirmiyor -- `$LASTEXITCODE`nin
+sarmalayicida acikca yakalanip yeniden `exit` edilmesi gerekiyor;
+test harness'i bu yuzden bu deseni kullaniyor).
+
+Testler (`register-file-agent-interactive.contract.test.mjs`, 11 test,
+`node --test`): GERCEK sozlesme testleri -- `@hasarbotu/contracts`in
+GERCEK zod semalarini (login/agent-register/agent-update + response
+semalari) ve route sabitlerini (`AUTH_LOGIN_ROUTE`/`AGENTS_ROUTE`/
+`AGENT_DETAIL_ROUTE`) hem statik (ps1'deki sabit string'lerle birebir)
+hem dinamik (her istek/yaniti `.parse()` ile dogrulayan minimal bir
+http mock sunucusu araciligiyla) dogrular; bu makinede
+`TEST_DATABASE_URL` olmadigi icin gercek DB-destekli Fastify app'i
+calistirilamadi -- bu acikca boyle belgelendi, "gercek DB'ye karsi
+test ettim" denmedi. Sentetik rollback regresyon testleri
+(`-ForcePreflightFailureForTesting`/`-ForceEnvWriteFailureForTesting`,
+yalniz test amacli) kismi-yazim (ID basarili/secret basarisiz),
+disable-basarili-rollback, disable-de-basarisiz-kritik-blocker ve
+beklenmeyen-PATCH-yaniti senaryolarini gercekci sekilde tetikleyip
+bagimsizca dogruluyor (env degiskenlerinin GERCEKTEN temizlendigi,
+agent'in mock sunucuda GERCEKTEN disabled oldugu).
+
+Test yazarken GERCEK bir kendi-kendine kilitlenme (deadlock) bulundu
+ve duzeltildi: ilk taslak, ayni Node surecinde calisan mock http
+sunucusuna karsi `spawnSync` ile PowerShell cagiriyordu --
+`spawnSync` event loop'u TAMAMEN bloke ettigi icin mock sunucu hicbir
+istegi kabul edemiyor, PowerShell alt-sureci suresiz bekliyordu (8
+test tam 30s timeout'a kadar hep boyle basarisiz oldu). Betigin
+KENDISI bagimsiz, elle (bash'ten dogrudan + ayri bir node mock sunucu
+sureciyle) dogrulanarak doğru calistigi kanitlandi; hata yalniz test
+harness'indeydi. `spawnSync` yerine async `spawn()`e gecilerek
+duzeltildi, tum 11 test 4s icinde gecti.
+
+Registration bu turda hic UYGULANMADI -- kullanicinin acik talimati
+("Bu turda registration Apply yapma"). Arac + testler + README +
+DECISION_LOG commit edildi; kullaniciya yalniz calistiracagi TEK
+PowerShell komutu verildi.
+
+Test sonucu: `node --test register-file-agent-interactive.contract.test.mjs`
+11/11 PASS. `node --test deploy/windows-service/*.test.mjs` (tum dizin,
+regresyon kontrolu) 116/116 PASS. `node scripts/check-windows-service-configs.mjs`
+temiz. Gercek Machine env bu turda HICBIR SEKILDE degistirilmedi (tum
+testler `-EnvScope Process`).
