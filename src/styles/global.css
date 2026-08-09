@@ -2148,6 +2148,23 @@ button {
 .document-module-state .button { margin-top: 4px; }
 .casco-document-stack { display: grid; gap: 12px; min-width: 0; }
 .casco-document-stack > .document-photo-workspace { height: auto; min-height: 390px; }
+.kasco-check-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 10px; list-style: none; }
+.kasco-check-row { display: flex; flex-direction: column; gap: 6px; min-height: 0; height: auto; padding: 10px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.kasco-check-row--resolved { border-left-color: var(--success); }
+.kasco-check-row--missing { border-left-color: var(--danger); }
+.kasco-check-row--control_required, .kasco-check-row--needs_review { border-left-color: var(--accent); }
+.kasco-check-row--not_applicable { border-left-color: var(--text-tertiary); }
+.kasco-check-row--resolved .requirement-row__title > svg { color: var(--success); }
+.kasco-check-row--missing .requirement-row__title > svg { color: var(--danger); }
+.kasco-check-row--control_required .requirement-row__title > svg,
+.kasco-check-row--needs_review .requirement-row__title > svg { color: var(--accent); }
+.kasco-check-row--not_applicable .requirement-row__title > svg { color: var(--text-tertiary); }
+.kasco-check-row p { margin: 0; color: var(--text-secondary); font-size: 10px; line-height: 15px; }
+.kasco-check-reason { color: var(--text-tertiary); font-style: italic; }
+.kasco-check-confirmed { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-muted); font-size: 10px; color: var(--text-secondary); }
+.kasco-check-ai-suggestion { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: var(--radius-sm); background: var(--accent-soft); font-size: 10px; color: var(--text-secondary); }
+.kasco-check-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.kasco-check-editor { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; border-top: 1px dashed var(--border); }
 .policy-analysis-module { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
 .policy-analysis-module > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border-bottom: 1px solid var(--border); }
 .policy-analysis-module h2, .policy-analysis-module h3, .policy-analysis-module p { margin: 0; }

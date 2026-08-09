@@ -48,6 +48,10 @@ const PolicyAnalysisWorkspace = lazy(async () => {
   const module = await import('./PolicyAnalysisWorkspace')
   return { default: module.PolicyAnalysisWorkspace }
 })
+const KascoMandatoryCheckModule = lazy(async () => {
+  const module = await import('./KascoMandatoryCheckModule')
+  return { default: module.KascoMandatoryCheckModule }
+})
 const TrafficValueLossApiModule = lazy(async () => {
   const module = await import('./TrafficValueLossApiModule')
   return { default: module.TrafficValueLossApiModule }
@@ -465,7 +469,7 @@ export function CaseDetailPage() {
               </section>
             </div>
           ) : activeTab === 'Evrak ve Fotoğraf' ? (
-            item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
+            item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/><KascoMandatoryCheckModule caseId={item.caseId} source={source} /></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
           ) : activeTab === 'İşçilik' ? source === 'api'
             ? (
               <div className="labor-stack">
