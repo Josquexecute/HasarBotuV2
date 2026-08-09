@@ -8536,3 +8536,79 @@ Sonraki mantikli adim: ilk gercek vaka File Agent'a atandiginda Adim
 10'un (freshness gate + file-operation) dogal gozlemi; sablon
 dosyasindaki `<serviceaccount>` dokumantasyon-hijyeni farkinin ayri,
 kucuk bir pakette cozulmesi (opsiyonel, zararsiz).
+
+## 2026-08-09 - HB-2026-178: Eski D8/D9 duplike task maddeleri tarihsel olarak kapatildi; ilk gercek File Agent isi icin salt-okunur production observation araci yazildi+test edildi+commit edildi (henuz UYGULANMADI -- gercek is yok)
+
+D9'un GERCEKTEN tamamlandigi (HB-2026-177) onaylandiktan sonra
+kullanicinin iki ayri talebi: (1) erken/duplike D9 task-listesi
+girdilerinin (§11'in nihai plani tarafindan supurulmus, gercekte
+tamamlanmis is) tarihsel olarak kapatilmasi; (2) ilk gercek File Agent
+isi icin, sentetik vaka OLUSTURMADAN, salt-okunur bir "observation
+paketi" hazirlanmasi.
+
+**Arac:** `deploy/windows-service/generate-file-operation-observation-bundle.mjs`
+(+ `.test.mjs`, 17 test) + `docs/FILE_OPERATION_OBSERVATION_RUNBOOK.md`.
+Gercek sema arastirmasi (Explore agent, 43 arac-cagrisi) sunu kanitladi:
+yazim-oncesi/sonrasi kimlik-hash citi (`source_workbook_hash`/
+`result_workbook_hash`) yalniz `labor_workbook_apply_operations`
+tablosunda (migration `0044_labor_workbook_apply_runtime.js`) KALICI
+olarak var -- bu yuzden arac BILINCLI olarak yalniz
+`target_type='labor_workbook_apply'` job'lariyla sinirlandi, baska bir
+tur verilirse yaniltici/eksik rapor uretmek yerine
+`UNSUPPORTED_TARGET_TYPE` ile acikca reddediyor. Freshness gate'in
+KENDI kararinin Postgres'te KALICI OLMADIGI da ayni arastirmayla
+dogrulandi (yalniz `case_not_fresh` hata kodu iz birakir) -- bu yuzden
+aracin "FreshnessObservation" bolumu TARIHSEL bir tekrar degil, rapor
+aninda BAGIMSIZCA yeniden hesaplanan GUNCEL bir durumdur; ciktida bu
+fark acikca belirtiliyor.
+
+Arac 5 bolum birlestirir: `Job` (jobs tablosu -- kuyruk durumu),
+`Agent` (agents tablosu, jobs.leased_by_agent_id uzerinden -- hangi
+agent, hala active mi, guncel last_seen_at), `Operation` +
+`HashFence` (labor_workbook_apply_operations -- pre/post hash,
+sunucunun agent'in ham iddiasina GUVENMEDEN kendi kayitli hash'iyle
+yaptigi dogrulamanin sonucu), `AuditEventChain` (audit_events,
+resource_type='labor_workbook_apply'/'job' ile filtrelenip
+occurred_at'e gore siralanmis), `IsolationCheck` (ayni org'da ayni
+±1 saatlik pencerede BASKA basarisiz/dead_letter job var mi VE onun
+target_id'si bu isle AYNI mi -- cross-case leak varsa needs_review,
+yoksa isolated; bu YENI bir enforcement mekanizmasi DEGIL, mevcut
+target_id-scoped kuyruk mimarisinin gozlemidir).
+
+**Test stratejisi (durustce belgelendi):** Postgres'e bagimli kisimlar
+(`assembleJobObservation`/`assembleIsolationCheck`/
+`buildObservationBundle`) bu makinede `TEST_DATABASE_URL` icin yerel
+kimlik dosyasi olmadigindan GERCEK bir veritabanina karsi
+CALISTIRILAMADI -- gercek `services/api/test/labor-workbook-uat-e2e.test.ts`
+akisini (550+ satir, tam Excel profili+onay+File Agent runOnce zinciri)
+yeniden kurmak yerine, SQL sorgu sirasini/parametrelerini VE sonuc-
+birlestirme mantigini deterministik olarak dogrulayan scriptlenmis bir
+sahte pool (`createScriptedPool`) kullanildi -- bu YAKLASIM bu oturumda
+GERCEKTEN calistirilip 17/17 PASS aldi, ama SQL'in gercek Postgres'e
+karsi sozdizimsel olarak da calistigini KANITLAMAZ (SQL, bu oturumda
+zaten okunmus gercek `store.ts`/`agent-jobs.test.ts` orneklerine yakin
+tutuldu, riski azaltmak icin). Freshness-gate sarmalayicisi ise GERCEK,
+DB-bagimsiz (SQLite+dosya sistemi) sentetik bir fixture'la (`pcloud-
+session0-freshness-gate.test.mjs` ile ayni desen) tam calistirilip
+dogrulandi -- hicbir kisitlama yok. CLI arguman dogrulamasi (--job-id
+eksik/bilinmeyen bayrak/kismi freshness-grubu/DATABASE_URL eksik) gercek
+alt-surec cagrilariyla dogrulandi, DB gerektirmiyor.
+
+**Musteri dosyalarinda/gercek DB'de sifir mutasyon.** Sentetik vaka
+YOK -- arac, ilk gercek is olustugunda operator tarafindan `--job-id`
+ile CALISTIRILACAK, bu turda hicbir gercek job'a karsi calistirilmadi
+(henuz gercek is yok). `docs/FILE_OPERATION_OBSERVATION_RUNBOOK.md`
+kullanim talimatini, cikti bolumlerinin nasil okunacagini ve
+basarisizlik senaryosunda ne yapilacagini belgeler.
+
+**Task listesi temizligi:** Eski, duplike D9 girdileri (#43-50, "Adım 0
+— taze D8 AfterSync PASS/0 doğrulaması" vb.) tarihsel not eklenerek
+completed olarak kapatildi -- is GERCEKTEN yapildi, yalniz sonraki
+§11 nihai plani (#100-109, #122-123) tarafindan farkli numaralarla
+takip edildi. Ilgisiz, hala acik bir ayri iz (#63, dosya restore) --
+bu paketin kapsami disinda oldugu icin DOKUNULMADI.
+
+Test sonucu: `node --test generate-file-operation-observation-bundle.test.mjs`
+17/17 PASS. `node --test deploy/windows-service/*.test.mjs` (tum dizin
+regresyon kontrolu) calistirildi. `node scripts/check-windows-service-configs.mjs`
+temiz.

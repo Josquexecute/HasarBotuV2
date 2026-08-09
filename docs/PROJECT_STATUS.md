@@ -471,6 +471,24 @@ Son güncelleme: 2026-08-04
   hazır ve doğrulandı ama HİÇBİRİ çalıştırılmadı (cutover başarılı
   olduğu için geri alınmadı). Müşteri dosyalarında plan dışı sıfır
   repair/delete. **D9 bu noktada TAMAMEN TAMAMLANDI.**
+- **İlk gerçek File Agent işi için salt-okunur observation aracı hazır
+  (henüz UYGULANMADI — HB-2026-178, 2026-08-09):**
+  `generate-file-operation-observation-bundle.mjs` (+17 test) —
+  `docs/FILE_OPERATION_OBSERVATION_RUNBOOK.md`. Sentetik vaka
+  oluşturmaz; yalnız `target_type='labor_workbook_apply'` job'ları
+  için (gerçek şema araştırmasıyla kalıcı pre/post hash çitinin —
+  `source_workbook_hash`/`result_workbook_hash` — yalnız bu türde var
+  olduğu doğrulandığı için bilinçli sınır) Job/Agent/Operation+
+  HashFence/AuditEventChain/IsolationCheck'i zaten var olan Postgres
+  kayıtlarından birleştirir, artı isteğe bağlı, rapor anında bağımsızca
+  yeniden hesaplanan güncel bir Session-0 freshness-gate sonucu.
+  Postgres'e bağımlı kısımlar bu makinede `TEST_DATABASE_URL` olmadığı
+  için scriptlenmiş sahte bir pool ile (17/17 PASS, gerçek sorgu
+  sırası/parametreleri + birleştirme mantığı doğrulandı) test edildi;
+  freshness-gate sarmalayıcısı GERÇEK, DB-bağımsız sentetik bir
+  fixture'la tam çalıştırıldı. Eski, duplike D9 task-listesi girdileri
+  (§11 nihai planı tarafından süpürülmüş, gerçekte tamamlanmış iş)
+  tarihsel olarak kapatıldı.
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
