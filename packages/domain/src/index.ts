@@ -149,6 +149,26 @@ export {
   type DocumentRequirementsEvaluation, type RecourseStatus,
 } from './document-requirements.js'
 export {
+  KASCO_CHECK_DERIVED_STATUSES,
+  KASCO_CHECK_RESULT_VALUES,
+  KASCO_DEFINITIVE_RESULTS,
+  KASCO_MANDATORY_CHECK_CODES,
+  KASCO_MANDATORY_CHECK_DEFINITIONS,
+  KASCO_NEEDS_INPUT_RESULTS,
+  evaluateKascoMandatoryCheckGate,
+  isKascoMandatoryCheckApplicable,
+  isKascoMandatoryCheckCode,
+  isValidResultForCheck,
+  type KascoCheckDerivedStatus,
+  type KascoCheckKind,
+  type KascoCheckResult,
+  type KascoMandatoryCheckCode,
+  type KascoMandatoryCheckDefinition,
+  type KascoMandatoryCheckEvaluation,
+  type KascoMandatoryCheckFact,
+  type KascoMandatoryCheckGateEvaluation,
+} from './kasco-mandatory-check.js'
+export {
   INSURER_SERVICE_AGREEMENT_STATUSES,
   SERVICE_AGREEMENT_EVALUATION_VERSION,
   SERVICE_ELIGIBILITY_STATUSES,
