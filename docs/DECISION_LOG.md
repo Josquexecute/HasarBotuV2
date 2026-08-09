@@ -8776,3 +8776,37 @@ COZULDU** -- ilk gercek vakanin workspace provisioning/konum atama/dosya
 islemi artik `unknown_root`/`unknown_reference` ile engellenmeyecek.
 Denetimin nihai sonucu bu guncellemeyle **READY** (bilinen, engelleyici
 olmayan artik risklerle) olarak kesinlesir.
+
+## 2026-08-09 - HB-2026-187..191: Zorunlu Kasko Kontrolu gate -- 7 zorunlu kontrol (surucu/ruhsat/ehliyet/police kimlik ve kloz dogrulamasi), evidence-first + fail-closed, Kasko kapanisini engeller
+
+Karar:
+
+1. Yeni, adanmis `kasco_mandatory_checks`/`kasco_mandatory_check_confirmations` semasi (migration 0045) -- mevcut `policy_analyses`/`policy_deductibles` (Paket 23) GENISLETILMEDI. Gerekce: 7 kontrol kapanis-engelleyen, sinirli bir kume; kontrol 1-4 (surucu/ruhsat/ehliyet/meslek kimlik karsilastirmasi) icin zaten hicbir tablo yok, policy_* tablolari acik-uclu kanonik alan cikarimi icindir, farkli bir kavram.
+2. Tek, birlesik 6-degerli sonuc sozlugu (`same/different/present/absent/unclear/unknown`); her kontrol kendi gecerli alt-kumesini bildirir (`comparison`: same/different/unknown; `presence`: present/absent/unclear) -- iki ayri enum kolonu yerine, mevcut `document_requirement_status` gibi tek esnek enum + baglamsal dogrulama deseniyle tutarli.
+3. "Farkli"/"yok" (olumsuz ama KESIN bulgular) `resolved` sayilir, `control_required` DEGIL -- yalniz gercek belirsizlik (`unclear`/`unknown`) gate'i bloke eder. Bir "farkli" bulgusunun operasyonel sonucu (orn. vekaletname) bu gate'in kapsami disinda.
+4. `needs_review`, saklanan bir alan DEGIL -- onayli kanitin `document_version_id`'si belgenin canli `current_version_id`'siyle okuma aninda karsilastirilarak turetilir (traffic_value_loss'un bayatlama mantigiyla ayni "her zaman tazeden turet" felsefesi; yeni bir arka-plan senkron isi veya saklanan bayatlik bayragi yok).
+5. "Police tamami okunmadan kloz yok sonucu verme" UC KATMANLI savunma: DB CHECK kisitlamasi (`kasco_mandatory_checks_definitive_requires_evidence` -- same/different/present/absent HER ZAMAN `confirmed_evidence_document_version_id IS NOT NULL` ister), zod `.refine()` (contracts katmani), domain evaluator (ayni kural).
+6. AI-onerisi URETIMI bu turda BILINCLI olarak KAPSAM DISI birakildi: `ai_suggested_*` alanlari semada/contractlarda var (ileriye-uyumlu) ama hicbir gercek mekanizma tarafindan doldurulmuyor. Kontrol 1-4 icin ruhsat/ehliyet OCR edilmiyor (mekanizma yok); kontrol 5-7 icin mevcut onayli `policy_analyses`/`policy_deductibles`/`policy_part_rules` gerceklerinden turetme teknik olarak mumkundu ama capraz-modul entegrasyon riski zaman baskisi altinda ertelendi -- uydurulmadi, acikca bos birakildi.
+7. Yeni Kasko gereksinimi, diger TUM gereksinimler (evrak, kapanis evraki, deger kaybi) ile AYNI `with_missing_requirements` override mekanizmasina katilir -- kodda hicbir gereksinim kosulsuz "sert blok" degil, yeni bir tane icat etmek mimari olarak tutarsiz olurdu.
+8. WRITE_ROLES=`admin/expert/case_manager` (storage/file-operations ile ayni), READ_ROLES=6 rolun tamami (labor-workbook-apply ile ayni) -- kanitli bir kimlik/kloz bulgusu kaydetmek fiziksel bir dosya islemiyle benzer sorumluluk tasir.
+9. Kullanicinin acik istegi disinda, mevcut kardes modullerle (PERT/Labor/vehicle-profile) TUTARLILIK icin iki ek koruma eklendi: (a) gate yanitina `permissions.canWrite` (rol VE `lifecycle_status==='open'`), (b) `confirmCheck`e kapali-dosya koruma (`case_closed` -> 409) -- ilk yazimda EKSIKTI, kardes modullerin hepsinde var, kapali bir Kasko dosyasinda kontrolun "onaylanabilir" kalmasi tutarsizlik olurdu.
+10. Onay gecmisinde/ana kontrol DTO'sunda `confirmedByUserId` yaninda `confirmedByDisplayName` (users JOIN) -- PERT/Labor'daki `createdByDisplayName` emsaliyle tutarli, UI'da ham UUID gostermemek icin.
+11. UI: yeni ust-seviye sekme ACILMADI (AGENTS.md'nin sabit 9 sekmesi korunur) -- "Evrak ve Fotoğraf" sekmesindeki mevcut `casco-document-stack`e (DocumentPhoto/PolicyPdfText/PolicyOcr/PolicyAnalysisWorkspace'in yaninda), yalniz Kasko dosyalarinda, `PolicyAnalysisWorkspace`den SONRA eklendi -- kontrollerin kanit kaynagi olan police/ruhsat/ehliyet akisinin dogal devami.
+
+Gerekce:
+
+Kullanicinin acikca istedigi, paketleme oncesi zorunlu yeni ozellik: her Kasko dosyasinda 7 kontrol (surucu-ruhsat, ehliyet 12. alan, police sahibi-ruhsat, meslek, esdeger parca, servis muafiyeti, rayic muafiyeti) evidence-first ve fail-closed olarak zorunlu kilinsin, belge eksikligi/belirsizlik control_required'a dussun, kaynak belge degisince ilgili kontrol needs_review olsun, gate tamamlanmadan Kasko kapanisi/nihai rapor engellensin, Trafik'e uygulanmasin, audit/history/provenance saklansin.
+
+Etkisi:
+
+- `packages/database/migrations/0045_kasco_mandatory_checks.js`: 2 yeni tablo (append-only guard mevcut trigger'i yeniden kullanir).
+- `packages/domain/src/kasco-mandatory-check.ts`: saf evaluator (`evaluateKascoMandatoryCheckGate`), DB/HTTP/AI/saat bagimliligi yok.
+- `packages/contracts/src/v1/kasco-mandatory-check/`: routes/dto/commands, zod tek dogruluk kaynagi.
+- `services/api/src/kasco-mandatory-check/`: store+routes, `services/api/src/case-lifecycle/store.ts`e kapanis-engelleyici olarak baglandi (`requirementSummary()`).
+- `src/data/kascoMandatoryCheckPort.ts` + `useKascoMandatoryCheckGate.ts` + `src/features/cases/KascoMandatoryCheckModule.tsx`: zod-`.parse()` tabanli adapter (pertPort/laborPort deseniyle ayni), 7-kontrol paneli + kanitli onay formu + gecmis.
+- Trafik dosyalarinda gate her zaman `applicable:false`, 7 kontrol `not_applicable`, ASLA engellemez (domain testiyle kanitlandi).
+- `traffic-value-loss-hardening.test.ts`teki sabit-kodlu rollback-count testi (0044'un "en yeni migration" oldugu varsayimi) 0045 eklenince kirildi -- count 2->3 + restored-migration-listesi guncellendi, gercek Postgres'te yeniden dogrulandi.
+- Test: domain 9 yeni test, contracts derlendi, API 13 yeni E2E test (gercek Postgres+HTTP, `kasco-mandatory-check.test.ts`) + kapanis-zincirine bagli 5 dosya/9 test yeniden PASS (2 UAT dosyasina yeni gate'i karsilayan fixture eklendi), frontend 4 yeni component testi + tam `src` suite yeniden PASS.
+- Gercek production verisi/dosyasi MUTATE EDILMEDI -- tum testler `hasarbotu_test` veya `app.inject()`/mock-fetch harness'i uzerinden.
+
+Kaynak: 2026-08-09 tarihli kullanici talimati ("Paketleme oncesi yeni zorunlu ozellik: Kasko dosyalarina Zorunlu Kasko Kontrolu gate'i ekle").

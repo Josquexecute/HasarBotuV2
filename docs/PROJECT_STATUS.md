@@ -8,6 +8,18 @@ Son güncelleme: 2026-08-09
 - Aşama: Dosya Envanteri — Migration 0042 paketi uçtan uca tamamlandı
 - Durum: **Case inventory export domain çekirdeği (2026-07-21, yalnız domain) artık persistence + API + UI ile tam. Migration 0042 (0041↔0043 arasındaki boşluk) `case_vehicle_owners`/`case_vehicle_owner_sets` ekler. `npm test` 2.101 başarılı / 6 ortam-koşullu skip.**
 
+## Zorunlu Kasko Kontrolü gate — uçtan uca tamamlandı (2026-08-09, HB-2026-187..191)
+
+Paketleme öncesi kullanıcı talimatıyla eklenen yeni zorunlu özellik: her Kasko dosyasında 7 kontrol (sürücü↔ruhsat, ehliyet 12. alan kısıtlamaları, poliçe sahibi↔ruhsat, meslek, eşdeğer parça klozu, servis muafiyeti, rayiç muafiyeti) evidence-first + fail-closed olarak zorunlu kılınır; tamamlanmadan Kasko dosyasının kapanışı/nihai raporu engellenir. Tam gerekçe ve 11 maddelik ürün kararı `docs/DECISION_LOG.md` HB-2026-187..191'de.
+
+- **Migration + domain (HB-2026-187):** `kasco_mandatory_checks`/`kasco_mandatory_check_confirmations` (append-only, mevcut trigger yeniden kullanıldı); saf evaluator `evaluateKascoMandatoryCheckGate` — Trafik'te her zaman `applicable:false`/`not_applicable`, asla engellemez. 9 yeni domain testi, tam paket suite'i (768 test) PASS.
+- **Contracts (HB-2026-188):** `@hasarbotu/contracts` v1 `kasco-mandatory-check` modülü (routes/dto/commands), zod tek doğruluk kaynağı; gate yanıtına `permissions.canWrite` alanı.
+- **API (HB-2026-189):** store+routes, `case-lifecycle/store.ts`e kapanış-engelleyici olarak bağlandı. Kardeş modüllerle (PERT/Labor) tutarlılık için ilk yazımda eksik olan iki koruma da eklendi: kapalı dosyada yazma reddi (`case_closed`→409) ve rol+lifecycle bazlı `canWrite`. 13 yeni gerçek Postgres+HTTP E2E testi (`kasco-mandatory-check.test.ts`), kapanış zincirine bağlı 5 dosya/9 test yeniden PASS (2 UAT dosyasına yeni gate'i karşılayan fixture eklendi). `traffic-value-loss-hardening.test.ts`teki migration-sayısına bağlı bir test (0044'ün "en yeni migration" varsayımı) 0045 eklenince kırıldı, düzeltilip yeniden doğrulandı.
+- **Frontend (HB-2026-190):** `KascoMandatoryCheckModule` — Kasko dosyalarında "Evrak ve Fotoğraf" sekmesindeki mevcut `casco-document-stack`e eklendi (yeni üst-seviye sekme YOK); 7 kontrol paneli, kanıt belgesi seçici (yalnız `ready`+hash/size doğrulanmış belgeler), kanıtlı onay formu, geçmiş paneli. Kesin sonuç (aynı/farklı/var/yok) istemci tarafında da kanıtsız engellenir. 4 yeni component testi, tam `src` suite'i (383 test) PASS, typecheck+lint temiz.
+- **Bilinçli kapsam dışı bırakılan (uydurulmadı, açıkça boş):** AI-öneri ÜRETİMİ bu turda yok — `ai_suggested_*` alanları şemada/UI'da ileriye-uyumlu ama hiçbir gerçek mekanizma doldurmuyor. Kontrol 1-4 için ruhsat/ehliyet OCR edilmiyor; kontrol 5-7 için mevcut `policy_analyses` gerçeklerinden türetme teknik olarak mümkündü, çapraz-modül entegrasyon riski nedeniyle ertelendi.
+- **Doğrulanamayan:** gerçek tarayıcıda canlı tıklama testi yapılmadı (üretim-dışı, API'ye bağlı bir yerel yığın kurmak bu paketin kapsamını aşardı) — typecheck/lint/component test + gerçek Postgres E2E kapsamı bunun yerine kullanıldı.
+- Gerçek production verisi/dosyası mutate edilmedi. Commit HB-2026-187..191 henüz **push edilmedi** (kullanıcı istemedi).
+
 ## FINAL PRODUCTION READINESS AUDIT — READY (2026-08-09, HB-2026-179..184)
 
 D9 cutover (HB-2026-177) sonrası, ilk gerçek müşteri işlemi öncesi yapılan kapsamlı, bağımsız yeniden doğrulama denetimi. Tam ayrıntı ve kanıt izi `docs/DECISION_LOG.md` HB-2026-179..184'te.
