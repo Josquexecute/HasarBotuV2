@@ -381,6 +381,43 @@ export {
 } from './v1/document-requirements/index.js'
 
 export {
+  // kasco mandatory check routes
+  CASE_KASCO_MANDATORY_CHECK_GATE_ROUTE,
+  CASE_KASCO_MANDATORY_CHECK_HISTORY_ROUTE,
+  CASE_KASCO_MANDATORY_CHECK_ROUTE,
+  // kasco mandatory check dto
+  KASCO_CHECK_RESULT_VALUES,
+  KASCO_MANDATORY_CHECK_CODES,
+  kascoCheckDerivedStatusSchema,
+  kascoCheckEvidenceSchema,
+  kascoCheckResultSchema,
+  kascoMandatoryCheckCodeSchema,
+  kascoMandatoryCheckGateResponseSchema,
+  kascoMandatoryCheckGateSchema,
+  kascoMandatoryCheckHistoryItemSchema,
+  kascoMandatoryCheckHistoryResponseSchema,
+  kascoMandatoryCheckResponseSchema,
+  kascoMandatoryCheckSchema,
+  type KascoCheckDerivedStatus,
+  type KascoCheckEvidence,
+  type KascoCheckResult,
+  type KascoMandatoryCheck,
+  type KascoMandatoryCheckCode,
+  type KascoMandatoryCheckGate,
+  type KascoMandatoryCheckGateResponse,
+  type KascoMandatoryCheckHistoryItem,
+  type KascoMandatoryCheckHistoryResponse,
+  type KascoMandatoryCheckResponse,
+  // kasco mandatory check commands
+  kascoMandatoryCheckConfirmRequestSchema,
+  kascoMandatoryCheckGateParamsSchema,
+  kascoMandatoryCheckParamsSchema,
+  type KascoMandatoryCheckConfirmRequest,
+  type KascoMandatoryCheckGateParams,
+  type KascoMandatoryCheckParams,
+} from './v1/kasco-mandatory-check/index.js'
+
+export {
   // audit routes
   AUDIT_EVENTS_ROUTE,
   // audit query
