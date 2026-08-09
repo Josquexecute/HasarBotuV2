@@ -8393,3 +8393,146 @@ Test sonucu: `node --test register-file-agent-interactive.contract.test.mjs`
 regresyon kontrolu) 116/116 PASS. `node scripts/check-windows-service-configs.mjs`
 temiz. Gercek Machine env bu turda HICBIR SEKILDE degistirilmedi (tum
 testler `-EnvScope Process`).
+
+## 2026-08-09 - HB-2026-177: D9 §11.5 Adim 7-11 GERCEKTEN tamamlandi -- File Agent artik GERCEK Running/Automatic, gercek agent kimligiyle API'ye basariyla kimlik dogruluyor; D9 cutover'in tamami (Adim 1-11) bu noktada TAMAMLANDI
+
+Kullanici, kendi terminalinde `register-file-agent-interactive.ps1`i
+calistirip GERCEK bir agent kaydi elde ettikten sonra (`Status:
+registered`, `CredentialsConfigured:true`) devam talimati verdi. Once
+istenen salt-okunur dogrulama yapildi: Machine-scope
+`HASARBOTU_AGENT_ID` degeri raporlanan AgentId ile birebir eslesiyor,
+`HASARBOTU_AGENT_SECRET` mevcut (43 karakter) -- deger hicbir zaman
+okunmadi/yazdirilmadi.
+
+**Taze on-kosul denetimi (§11'in TAMAMI icin):** `hasarbotu-api`
+Running/Auto, `/health` DB dahil `status:"ok"`; `hasarbotu-file-agent`
+Stopped/Disabled (beklenen); `DATABASE_URL`/`NODE_ENV`/
+`HASARBOTU_API_BASE_URL`/`ALLOW_INSECURE_LOOPBACK_COOKIES` Machine'de
+mevcut (HB-2026-175'ten). File Agent'in KENDI dagitilmis kodu STALE
+idi (taze `deploy-service-artifacts.ps1` onizlemesi `would_apply`
+dondu, `already_up_to_date` DEGIL) -- §11.5'in numarali listesinde
+ayri bir adim olarak yazilmamis olsa da, bu GERCEK ve gerekli bir
+on-kosuldu (API'nin Adim 3'uyle AYNI sinif): stale dist/ ile
+baslatmak, bu oturumda HB-2026-171'de File Agent TypeScript koduna
+baglanan freshness-gate fail-closed korumasini FIILEN devre disi
+birakirdi. Taze dependency closure (workspace-internal=2, harici=20,
+lockIntegrityOk hepsi true -- §11.1 ile birebir) hesaplanip
+`deploy-service-artifacts.ps1 -Apply` calistirildi: `Status:applied`,
+0 dogrulama uyusmazligi, 0 blocker, Administrators-only+hash'li yedek
+alindi. `smoke-test-deployed-service.mjs` -> `status:ok` (izole
+surecten gercek modul grafigi cozuldu). Deploy edilen `dist/`de
+`checkCaseFreshness`/`AgentConfigError` referanslari GERCEKTEN var
+oldugu grep ile dogrulandi -- yalniz "daha yeni" degil, DOGRU icerik.
+
+**Adim 7 (7 env degiskeni):** `HASARBOTU_AGENT_ROOTS`,
+`HASARBOTU_AGENT_FRESHNESS_GATE_TOOL_PATH` (repo checkout yolu,
+§11.2.1 karar A), `HASARBOTU_AGENT_PCLOUD_DB_PATH`
+(`%LOCALAPPDATA%\pCloud\data.db`), `HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER`,
+`HASARBOTU_AGENT_ATTESTATION_STORE` Machine'e yazildi (ID/SECRET zaten
+vardi). Yazmadan once tum 5 dosya/dizin yolu var oldugu VE attestation
+deposunun ACL'i (svc-hb-fileagent: Traverse + Read/Synchronize, yazma
+biti YOK) hala HB-2026-173 ile ayni oldugu salt-okunur dogrulandi.
+Yazdiktan sonra 7/7 degiskenin Machine'de mevcut oldugu (deger
+yazdirilmadan) dogrulandi.
+
+**Servis config drift kontrolu (gercek bir bulgu, dokumante edildi,
+BLOCKER DEGIL):** Kurulu WinSW XML'i ile repo'daki `.winsw.xml`
+sablonundan taze render edilen XML, [xml] DOM seviyesinde alan alan
+karsilastirildi (id/executable/arguments/workingdirectory/env/depend/
+startmode/stoptimeout/logpath/onfailure) -- HEPSI birebir eslesiyor.
+TEK fark: kurulu dosyada sablonun HIC icermedigi bir `<serviceaccount>`
+blogu var (`user=svc-hb-fileagent`). SCM registry'sinin kendisi
+(`ObjectName=.\svc-hb-fileagent`, `ImagePath` dogru,
+`DependOnService={hasarbotu-api}`) zaten dogru ve OTORITE kaynagi --
+WinSW bu XML alanini yalniz `install`/`configure` komutlarinda okur,
+sade `start`/`stop`ta degil, bu yuzden calisma zamanini ETKILEMEZ. Bu
+blok HB-2026-168'in vehicle-probe'undan ONCE zaten oradaydi (probe
+yalniz snapshot+restore yapar, kendisi eklemedi) -- muhtemelen
+HB-2026-118'in yari-basarisiz `ChangeServiceConfigW` denemesinin
+kalintisi, dokumante edilmemis ama zararsiz. Sablon dosyasi bu turda
+BILEREK degistirilmedi (kapsam disi, ayri bir dokumantasyon-hijyeni
+paketi).
+
+**Adim 8 (enable/start):** `Set-Service -StartupType Automatic` +
+`Start-Service`. Servis Running, gercek `node.exe dist\index.js`
+cocuk sureci (WinSW sarmalayici PID'inden AYRI) kararli, cokme-dongusu
+YOK (wrapper log'da tek bir start girisi, yeniden baslama yok).
+`.out.log`/`.err.log` BOS kaldi -- kaynak kod okumasiyla dogrulandi
+(`services/file-agent/src/index.ts`): uygulama yalniz `onCycleError`de
+`console.error` yazar, basarili/sessiz calismada HICBIR banner
+basmaz -- bu yuzden bos log = saglikli, `AgentConfigError` YOK (o,
+`loadAgentConfigFromEnv()`de SENKRON firlar ve sureci hemen
+coktururdu; surec kararli kaldi).
+
+**Adim 9 (service-context smoke) -- GERCEK, sentetik OLMAYAN kanit:**
+`agent.ts`nin `runOnce()`u HER dongude (is olsun/olmasin)
+`allConfiguredRootsReachable()` ile depolama kokunu GERCEKTEN
+problar -- bu, DB'de vaka olmasa bile her ~5sn'de bir GERCEK
+svc-hb-fileagent kimligiyle calisir. ~30 saniye/6+ dongu boyunca
+`.err.log` temiz kaldi -- depolama koku GERCEKTEN erisilebilir
+kaniti. Ayrica, halihazirda Machine env'de bulunan `DATABASE_URL`
+kullanilarak (deger hic yazdirilmadan, tek komutluk env ile) GECICI
+bir salt-okunur dogrulama script'i calistirilip HEMEN silindi:
+`agents` tablosunda gercek agent satiri `status:"active"`,
+`last_seen_at` 1-2 saniye taze -- servis GERCEKTEN, kendi kimligiyle,
+API'ye basariyla claim cagrisi yapiyor (API<->File Agent baglantisi
+KANITLANDI, varsayilmadi). pCloud DB/attestation deposu erisimi
+(freshness gate'in KENDISI) yalniz gercek bir `labor_workbook_apply`
+isinde tetiklenir -- DB'de henuz vaka yok (plan'in kendi §11.5 Adim 9
+notuyla tutarli, sentetik vaka ile ZORLANMADI, musteri verisi
+disiplini korundu). Bu spesifik zincir HB-2026-172/173'te AYNI
+kimlik/yollarla 5 kez GERCEKTEN kanitlanmisti; simdi yalniz ilk
+gercek vaka atamasinda (Adim 10, plan'in kendi tasarimiyla) dogal
+olarak tekrar gozlemlenecek.
+
+**Crash/restart dayaniklilik testi (ek, plan'in Adim 9-11'i icin
+istendi):** `Restart-Service` -- wrapper PID ve node.exe cocuk PID'i
+GERCEKTEN degisti (yeniden baslama gercekten oldu, sahte degil),
+loglar temiz kaldi, ve yeniden baslamadan 2 saniye sonra agent yine
+`last_seen_at` ile GERCEKTEN yeniden kimlik dogruladi (DB'den
+bagimsizca dogrulandi) -- servis, restart sonrasi da kendini
+GERCEKTEN toparliyor.
+
+**Adim 10 (file-operation smoke):** Plan'in kendi acik karariyla
+(§11.5) BILEREK ZORLANMADI -- sentetik/sahte bir vaka DB satiri
+yaratmak musteri verisi disiplinini bozar. Ilk GERCEK vaka File
+Agent'a atandiginda dogal olarak gozlemlenecek (freshness gate
+cagrisi + CaseStatus + kosullu is yurutme) -- kapsam disi birakildi,
+ATLANMADI/gizlenmedi, acikca boyle raporlaniyor.
+
+**Adim 11 (nihai dogrulama):** `hasarbotu-api`/`hasarbotu-file-agent`/
+`postgresql-x64-17` ucu de Running/Auto; `/health` `status:"ok"`; 7
+File Agent + 3 API env degiskeninin TAMAMI (10/10) Machine'de mevcut
+(degerler yazdirilmadan); `npm run check:deploy` (statik denetim)
+taze calistirildi, temiz. `P:\BARAN GLOBAL EKSPERTİZ` degismedi,
+silinmedi (14 gunluk tutma karari gecerli).
+
+**Rollback-hazirligi (calistirilmadi -- yalniz dogrulandi, cutover
+basarili oldugu icin geri alinmadi):** File Agent deploy'un
+Administrators-only+hash'li yedegi ve manifesti
+`C:\ProgramData\HasarBotu\migration-preflight\pre-deploy-backups\`
+altinda mevcut (ayni, 29/29 testle kanitlanmis
+`deploy-service-artifacts.ps1 -Rollback` mekanizmasi kullanilabilir).
+7 File Agent env degiskeninin `$null` ile temizlenmesi ve
+`Stop-Service`+`Set-Service -StartupType Disabled` mekanizmasi
+HB-2026-168'de 5/5 gercek makinede zaten kanitlanmisti. Agent kaydi
+icin `PATCH .../agents/:agentId {status:'disabled'}` yolu HB-2026-176'da
+kaynak+testle dogrulanmisti. §11.6'nin TAMAMI hazir ve kullanilabilir
+durumda; hicbiri bu turda calistirilmadi (cutover PASS oldu).
+
+**Musteri dosyalarinda plan disi hicbir repair/delete yapilmadi** --
+kullanicinin acik talimatiyla tutarli; bu turda GERCEK dosya
+yazma/silme islemi SIFIR (yalniz kod dagitimi, env yazimi, servis
+baslatma/restart, ve salt-okunur DB/log dogrulamalari).
+
+Test sonucu: `node scripts/check-windows-service-configs.mjs` temiz.
+Servisler: `hasarbotu-api` Running/Auto, `hasarbotu-file-agent`
+Running/Auto (yeni). `/health`: `status:"ok"`. 10/10 env degiskeni
+Machine'de mevcut. DB'den bagimsizca dogrulanan gercek agent
+`last_seen_at`: ilk baslatmada 1sn, restart sonrasi 2sn.
+
+**D9 operasyonel cutover'i (Adim 1-11, §11.5) bu noktada TAMAMLANDI.**
+Sonraki mantikli adim: ilk gercek vaka File Agent'a atandiginda Adim
+10'un (freshness gate + file-operation) dogal gozlemi; sablon
+dosyasindaki `<serviceaccount>` dokumantasyon-hijyeni farkinin ayri,
+kucuk bir pakette cozulmesi (opsiyonel, zararsiz).

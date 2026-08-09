@@ -433,6 +433,44 @@ Son güncelleme: 2026-08-04
   düzeltildi (aracın kendisinde değil, test harness'inde). Registration
   bu turda UYGULANMADI — kullanıcı yalnız çalıştıracağı tek PowerShell
   komutunu bekliyor.
+- **D9 OPERASYONEL CUTOVER TAMAMLANDI — Adım 1-11'in TAMAMI GERÇEKTEN
+  Apply edildi (HB-2026-177, 2026-08-09):** Kullanıcı
+  `register-file-agent-interactive.ps1`i çalıştırıp gerçek bir agent
+  kaydı elde etti (`Status:registered`) — Machine env'de ID eşleşmesi
+  ve secret varlığı salt-okunur doğrulandıktan sonra kaldığı yerden
+  devam edildi. File Agent'ın KENDİ dağıtılmış kodu stale bulundu (§11.5
+  numaralı listesinde ayrı bir adım değil ama API'nin Adım 3'üyle AYNI
+  sınıf gerçek bir ön koşul) — taze dependency closure + `deploy-
+  service-artifacts.ps1 -Apply` ile güncellendi, deploy edilen `dist/`de
+  freshness-gate wiring'in GERÇEKTEN var olduğu grep ile doğrulandı.
+  7 File Agent env değişkeni Machine'e yazıldı (10/10 toplam env
+  değişkeni artık mevcut). Servis config drift kontrolü: kurulu WinSW
+  XML'i şablonla [xml] DOM seviyesinde alan alan karşılaştırıldı — tüm
+  fonksiyonel alanlar (executable/arguments/depend/startmode/vb.)
+  birebir eşleşti; TEK fark (şablonda hiç olmayan bir
+  `<serviceaccount>` bloğu, muhtemelen HB-2026-118'in yarı-başarısız
+  `ChangeServiceConfigW` denemesinin kalıntısı) SCM registry'sinin
+  (otorite kaynağı, doğru) WinSW'nin yalnız `install`/`configure`te
+  okuduğu bu XML alanından bağımsız olduğu için ÇALIŞMA ZAMANINI
+  ETKİLEMEDİ — dokümante edildi, blocker sayılmadı. `hasarbotu-file-agent`
+  enable+start edildi: Running/Automatic, gerçek `node.exe` çocuk
+  süreci kararlı, çökme döngüsü yok. **Sentetik OLMAYAN, gerçek kanıt:**
+  `agent.ts`'in her döngüde (iş olsun/olmasın) çalışan depolama-kökü
+  sağlık probu ~30sn/6+ döngü boyunca hatasız kaldı; DB'den bağımsızca
+  doğrulanan gerçek `last_seen_at` (1sn, restart sonrası 2sn) servisin
+  KENDİ kimliğiyle API'ye gerçekten claim çağrısı yaptığını kanıtladı.
+  Controlled `Restart-Service` ile çökme/restart dayanıklılığı da
+  kanıtlandı (gerçek PID değişimi + restart sonrası yeniden
+  kimlik doğrulama). pCloud DB/attestation erişimi (freshness gate'in
+  kendisi) ve file-operation smoke, plan'ın kendi açık kararıyla İLK
+  GERÇEK vakaya kadar BİLEREK zorlanmadı (sentetik vaka verisi
+  yaratmak müşteri verisi disiplinini bozar) — kapsam dışı bırakıldı,
+  gizlenmedi. Nihai doğrulama: 3 servis Running/Auto, `/health` ok,
+  10/10 env mevcut, statik denetim temiz. Rollback mekanizmalarının
+  TAMAMI (deploy yedeği, env temizleme, servis durdurma, agent disable)
+  hazır ve doğrulandı ama HİÇBİRİ çalıştırılmadı (cutover başarılı
+  olduğu için geri alınmadı). Müşteri dosyalarında plan dışı sıfır
+  repair/delete. **D9 bu noktada TAMAMEN TAMAMLANDI.**
 - **Eski durum (artık çözüldü): `ADD_SYNC_DONE / MIGRATION_BLOCKED`.** Gerçek 600 saniyelik bakım
   kapısı, `D8BeforeSync` ve pCloud `Add new sync` bu makinede gerçekten
   çalıştırıldı (HB-2026-125–128, karar günlüğünde ayrıntılı değil ama
