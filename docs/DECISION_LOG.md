@@ -8759,3 +8759,20 @@ Sonuc: **READY WITH KNOWN LIMITATION.** Tek gercek engelleyici (storage_
 roots) kod+test+salt-okunur onizleme ile tam hazir, yalniz kullanicinin
 tek onayini bekliyor -- bu Apply CALISTIRILMADAN ilk gercek workspace
 provisioning/konum atama/dosya islemi denemesi fail-closed reddedilecektir.
+
+**Guncelleme (ayni oturum, 2026-08-09 16:10): kullanici tek onayi verdi,
+gercek `--apply` GERCEKTEN calistirildi.** `bootstrap-storage-root.mjs
+--organization-code baran-global --root-key baran-global-primary --label
+"Baran Global Ekspertiz - Ana Depo" --apply` -> `Status:"applied"`,
+`StorageRootId:019fe6a5-cce3-79d9-846a-d3ec640e92e6`. Bagimsiz, ayri bir
+salt-okunur sorguyla dogrulandi: `storage_roots` tablosunda tam 1 satir
+(org=baran-global, root_key=baran-global-primary, is_active=true),
+`audit_events`de `storage_root.created` kaydi dogru `details` ile mevcut,
+organizations/users/cases/jobs sayilari DEGISMEDI (yalniz bu tek satir
+eklendi). Kanit raporu Administrators-only ACL ile
+`C:\ProgramData\HasarBotu\migration-preflight\bootstrap-storage-root-
+2026-08-09T131053415Z-2837568e.json`e yazildi. **B11 artik tamamen
+COZULDU** -- ilk gercek vakanin workspace provisioning/konum atama/dosya
+islemi artik `unknown_root`/`unknown_reference` ile engellenmeyecek.
+Denetimin nihai sonucu bu guncellemeyle **READY** (bilinen, engelleyici
+olmayan artik risklerle) olarak kesinlesir.
