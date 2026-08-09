@@ -143,7 +143,13 @@ function New-RenderedServiceConfig {
         [string]$AppDirPath,
         [string]$OutputPath
     )
-    $xml = Get-Content -Raw -LiteralPath $TemplatePath
+    # Get-Content'in varsayilan kodlamasi (BOM'suz dosyada sistem kod
+    # sayfasi, ör. Turkce Windows'ta 1254) degil, ACIKCA UTF-8 okunur --
+    # aksi halde sablondaki Turkce karakterler ([ç/ş/ı/İ/ğ/ö]) bozulup
+    # ciktiya oyle yazilir (ayni sinif hata, bu depoda baska araclarda
+    # -ör. run-pcloud-case-reconciliation.ps1, pcloud-database-
+    # quiescence.ps1- daha once bulunup ayni sekilde duzeltildi).
+    $xml = [System.IO.File]::ReadAllText($TemplatePath, [System.Text.Encoding]::UTF8)
     $xml = $xml.Replace('__NODE_EXE__', $NodeExePath).Replace('__APP_DIR__', $AppDirPath)
     if ($xml.Contains('__NODE_EXE__') -or $xml.Contains('__APP_DIR__')) {
         throw "Yer tutucu çözümlenemedi: $TemplatePath"

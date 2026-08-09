@@ -156,5 +156,36 @@ Assert-True ($out8 -match 'API build çıktısı yok') 'API build eksikligi rapo
 Assert-True ($out8 -match 'File Agent build çıktısı yok') 'File Agent build eksikligi raporlandi'
 Remove-Item $f8.Root -Recurse -Force -ErrorAction SilentlyContinue
 
+Write-Output "`n=== TEST 9: WinSW sablon render'i Turkce karakterleri BOZMADAN okur (HB-2026-182 -- Get-Content varsayilani sistem kod sayfasidir, UTF-8 DEGIL) ==="
+# New-RenderedServiceConfig -Apply olmadan cagrilamaz (Install-OneService
+# icinde, sabit gercek servis adlarina karsi -- bkz. dosya basindaki not),
+# bu yuzden regresyon dogrudan altta yatan okuma yontemiyle sabitlenir:
+# gercek sablonlarda GERCEKTEN Turkce karakter var mi VE Get-Content'in
+# varsayilani bunlari GERCEKTEN bu makinede bozuyor mu (ayni desen,
+# pcloud-database-quiescence.tests.ps1'in "Turkce yol/mojibake regresyonu"
+# testiyle birebir aynı).
+$apiTemplatePath = Join-Path $PSScriptRoot 'hasarbotu-api.winsw.xml'
+$fileAgentTemplatePath = Join-Path $PSScriptRoot 'hasarbotu-file-agent.winsw.xml'
+foreach ($templatePath in @($apiTemplatePath, $fileAgentTemplatePath)) {
+    $viaReadAllTextUtf8 = [System.IO.File]::ReadAllText($templatePath, [System.Text.Encoding]::UTF8)
+    $viaGetContentDefault = Get-Content -Raw -LiteralPath $templatePath
+    $name = Split-Path -Leaf $templatePath
+    Assert-True ($viaReadAllTextUtf8.Contains([char]0x2014)) "$name -- ReadAllText(UTF8) em-dash (U+2014) karakterini dogru tasir"
+    if (-not $viaGetContentDefault.Contains([char]0x2014)) {
+        Write-Output "OK: $name -- bu makinede Get-Content varsayilani GERCEKTEN em-dash'i bozuyor (regresyonun neden gercek oldugunun kaniti); New-RenderedServiceConfig artik bu yolu KULLANMIYOR"
+    } else {
+        Write-Output "OK: $name -- bu makinenin sistem kod sayfasi zaten UTF-8 uyumlu (regresyon bu makinede tetiklenmiyor ama duzeltme yine de dogru/gerekli kalir)"
+    }
+}
+$installedApiXmlPath = 'C:\HasarBotu\services\api\hasarbotu-api.xml'
+if (Test-Path -LiteralPath $installedApiXmlPath) {
+    $installedContent = [System.IO.File]::ReadAllText($installedApiXmlPath, [System.Text.Encoding]::UTF8)
+    if ($installedContent.Contains([char]0x2014)) {
+        Write-Output 'OK: gercek kurulu hasarbotu-api.xml artik dogru kodlanmis (duzeltmeden SONRA yeniden kurulmus)'
+    } else {
+        Write-Output 'NOT: gercek kurulu hasarbotu-api.xml HALA bu duzeltmeden ONCE render edilmis (mojibake sadece <description>/yorumlarda, islevsel alanlar ASCII -- servis calismaya devam eder; duzeltme yalniz GELECEKTEKI kurulumlari kapsar, bu dosyayi GERIYE DONUK degistirmez cunku bu gercek, calisan bir production servisidir)'
+    }
+}
+
 Write-Output "`n=== SUMMARY: $($script:failures) failure(s) ==="
 if ($script:failures -gt 0) { exit 1 } else { exit 0 }
