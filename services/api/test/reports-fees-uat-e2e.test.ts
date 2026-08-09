@@ -27,6 +27,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
+import { KASCO_MANDATORY_CHECK_DEFINITIONS } from '@hasarbotu/domain'
 import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
 
@@ -141,6 +142,25 @@ describeDb('Raporlar ve Ücretler uçtan uca UAT: gerçek kapanış → ücret o
     )
     await pool.query('UPDATE documents SET current_version_id=$2,current_version_number=1 WHERE id=$1', [documentId, versionId])
     return versionId
+  }
+
+  /** Zorunlu Kasko Kontrolü'nün 7 kontrolünü de resolved yapar (kapanış
+   * bu gate'i artık requirements listesine katıyor -- bu UAT'ın konusu
+   * değil, yalnız ön koşul olarak hazırlanır). */
+  async function seedResolvedKascoMandatoryChecks(caseId: string, actorUserId: string, evidenceVersionId: string): Promise<void> {
+    const documentIdResult = await pool.query('SELECT document_id FROM document_versions WHERE id=$1', [evidenceVersionId])
+    const documentId = (documentIdResult.rows[0] as { document_id: string }).document_id
+    for (const definition of Object.values(KASCO_MANDATORY_CHECK_DEFINITIONS)) {
+      const result = definition.kind === 'comparison' ? 'same' : 'present'
+      await pool.query(
+        `INSERT INTO kasco_mandatory_checks
+           (id,organization_id,case_id,check_code,confirmed_result,confirmed_evidence_document_id,
+            confirmed_evidence_document_version_id,confirmed_evidence_page,confirmed_evidence_section,
+            confirmed_evidence_excerpt,confirmed_by_user_id,confirmed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,1,'UAT','uat-on-kosul-kaniti',$8,now())`,
+        [uuidv7(), orgAId, caseId, definition.code, result, documentId, evidenceVersionId, actorUserId],
+      )
+    }
   }
 
   async function seedReadyPhoto(caseId: string): Promise<void> {
@@ -299,6 +319,7 @@ describeDb('Raporlar ve Ücretler uçtan uca UAT: gerçek kapanış → ücret o
     for (const type of BASE_READY_DOCUMENT_TYPES) await seedReadyDocument(caseId, type)
     const expertReportVersionId = await seedReadyDocument(caseId, 'expert_report')
     await seedReadyPhoto(caseId)
+    await seedResolvedKascoMandatoryChecks(caseId, managerAId, expertReportVersionId)
 
     // 2) GERÇEK KAPANIŞ: plan → onay → gerçek Agent fiziksel taşıması.
     const closePlan = await app.inject({

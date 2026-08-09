@@ -23,6 +23,7 @@ import { insertIdempotent, type IdempotentRecord } from '../db/idempotency.js'
 import { withTransaction } from '../db/executor.js'
 import { evaluateCaseDocumentRequirements } from '../document-requirements/evaluation.js'
 import { enqueueLifecycleFileOperation } from '../file-operations/store.js'
+import { loadKascoMandatoryCheckGate } from '../kasco-mandatory-check/index.js'
 import { loadServiceProfile } from '../service-agreements/service.js'
 import { loadTrafficValueLossClosureSummaries } from '../traffic-value-loss/closure-store.js'
 
@@ -207,7 +208,31 @@ async function requirementSummary(
     relatedMetadataStatuses: [],
     requiresHumanReview: valueLossSummary.requiresHumanReview,
   }
-  const requirements = [...baseItems, ...closureItems, valueLossItem]
+  // Zorunlu Kasko Kontrolü: yalnız Kasko dosyasında (not_applicable, Trafik'i
+  // hiçbir zaman engellemez). Aynı requirements dizisine katılır -- kapanış
+  // normal modda missing/control_required'ı zaten engelliyor (aşağıdaki
+  // incomplete/blockers hesabı), ayrı bir kod yolu gerekmez.
+  // canWrite: kapanış planı salt-okunur bir değerlendirmedir, yetki önemsiz.
+  const kascoGate = await loadKascoMandatoryCheckGate(client, organizationId, caseId, false)
+  if (kascoGate === undefined) throw new Error('kasco_mandatory_check_gate_missing')
+  const kascoStatus: LifecycleRequirementItem['status'] = !kascoGate.applicable
+    ? 'not_applicable'
+    : kascoGate.missingCount > 0 ? 'missing' : (kascoGate.controlRequiredCount + kascoGate.needsReviewCount) > 0 ? 'control_required' : 'present'
+  const kascoMandatoryCheckItem: LifecycleRequirementItem = {
+    requirementCode: 'closure.kasco_mandatory_check',
+    sourceType: 'module',
+    canonicalType: 'kasco_mandatory_check',
+    status: kascoStatus,
+    reason: !kascoGate.applicable
+      ? 'Trafik dosyasında Zorunlu Kasko Kontrolü uygulanmaz.'
+      : kascoStatus === 'present'
+        ? 'Zorunlu Kasko Kontrolü (7 kontrol) tamamlandı.'
+        : `Zorunlu Kasko Kontrolü eksik: ${kascoGate.missingCount} kaydedilmedi, ${kascoGate.controlRequiredCount} kontrol bekliyor, ${kascoGate.needsReviewCount} yeniden inceleme gerekiyor.`,
+    matchedMetadataIds: [],
+    relatedMetadataStatuses: [],
+    requiresHumanReview: kascoStatus === 'control_required',
+  }
+  const requirements = [...baseItems, ...closureItems, valueLossItem, kascoMandatoryCheckItem]
   return {
     documentRuleVersion: base.ruleSetVersion,
     documentOverallStatus: base.overallStatus,
