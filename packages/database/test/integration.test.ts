@@ -16,17 +16,21 @@ import {
 
 /**
  * Önceki migration geri-al/yeniden-uygula testlerinin hedef sayımlarını korur.
- * Paket 65B migration'ı her çağrıda gerçekten çalışır; yalnız eski testlerin
- * beklediği isim listesinden süzülür ve `down` sayısına eklenir.
+ * Bu dizideki migration'lar her çağrıda gerçekten çalışır; yalnız eski
+ * testlerin beklediği isim listesinden süzülür ve `down` sayısına eklenir.
+ * Yeni bir migration eklenince (bu dosyanın kendisi güncellenmeden) buraya
+ * eklenir -- 52 sıralı testin tek tek güncellenmesi yerine.
  */
+const HIDDEN_MIGRATION_NAMES = ['0044_labor_workbook_apply_runtime', '0045_kasco_mandatory_checks']
+
 async function runMigrations(
   options: Parameters<typeof runMigrationsRaw>[0],
 ): ReturnType<typeof runMigrationsRaw> {
   const adjusted = options.direction === 'down' && options.count !== undefined
-    ? { ...options, count: options.count + 1 }
+    ? { ...options, count: options.count + HIDDEN_MIGRATION_NAMES.length }
     : options
   return (await runMigrationsRaw(adjusted))
-    .filter((migration) => migration.name !== '0044_labor_workbook_apply_runtime')
+    .filter((migration) => !HIDDEN_MIGRATION_NAMES.includes(migration.name))
 }
 
 /**
@@ -166,6 +170,8 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'insurer_service_agreements',
       'insurers',
       'jobs',
+      'kasco_mandatory_check_confirmations',
+      'kasco_mandatory_checks',
       'labor_ai_provider_receipts',
       'labor_ai_suggestion_runs',
       'labor_allocation_applications',
