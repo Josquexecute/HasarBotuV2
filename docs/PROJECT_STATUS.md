@@ -1,6 +1,19 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-08-09
+Son güncelleme: 2026-08-10
+
+## Windows NSIS installer — sıfırdan kuruldu, gerçek install/launch/uninstall doğrulandı (2026-08-10, HB-2026-195)
+
+Kullanıcının 3 soruluk onayıyla (electron-builder+NSIS/imzasız/sürüm 0.1.0), depoda daha önce hiç var olmayan paketleme altyapısı kuruldu. Tam gerekçe ve ölçülen sonuçlar `docs/DECISION_LOG.md` HB-2026-195'te.
+
+- **Artifact:** `apps/desktop/release/HasarBotu-Setup-0.1.0.exe` (~102,7 MB, `.gitignore`e eklenen `release/` altında, commit edilmez).
+- **İmzasız** (`Get-AuthenticodeSignature` ile doğrulandı — `NotSigned`), kullanıcının kararıyla tutarlı.
+- **Gerçek uçtan uca smoke:** kurulan uygulama, tamamen ayrı geçici bir yerel API'ye (port 3101, `hasarbotu_test`) karşı gerçekten çalıştırıldı — köprü doğru `index.html`i sundu, `/api/v1/cases` proxy'si gerçek 401 döndürdü. Gerçek `hasarbotu-api`/`hasarbotu-file-agent` Windows Service'lerine hiç dokunulmadı (kurulum/test boyunca `Running`/`Automatic` kaldıkları doğrulandı).
+- **Kurulum/kaldırma:** 4 kez gerçek çalıştırıldı (kurulum→doğrulama→kaldırma→temiz doğrulama→üzerine yeniden kurulum→son kaldırma), hepsi başarılı.
+- **ÖNEMLİ bulgu (bu makinede, salt-okunur keşif):** `HasarBotu - Baran Ekspertiz 0.6.10` adlı, `C:\Program Files\`te kurulu, **hâlâ çalışan** ayrı bir uygulama bulundu — neredeyse kesinlikle gerçek, kullanımda olan V1 sistemi. V2 paketiyle isim/konum/registry hiçbir yerde çakışmadı; V1 süreçleri test boyunca kesintisiz çalıştı. **Açık risk (bu paketin kapsamı dışında):** V2 gerçekten dağıtılırsa iki "HasarBotu" aynı Start Menu'de görünecek — isim ayrımı ayrı bir ürün kararı gerektirir.
+- Typecheck/lint/test/build/check:deploy tam yeniden çalıştırıldı: 2.260 test, 0 başarısız (paketleme öncesiyle birebir aynı).
+- "10 commit" sohbet metnindeki bir sayım hatasıydı (gerçek: 9, `git log` ile doğrulandı) — hiçbir committed dosyaya yazılmamıştı, düzeltilecek kayıt yoktu.
+- Gerçek production DB/storage/env/ACL/service yapılandırması bozulmadı; kullanıcı verisi migrate/delete/reset edilmedi.
 
 ## Mevcut sürüm ve aşama
 
