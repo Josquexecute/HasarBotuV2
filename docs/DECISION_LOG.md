@@ -8903,3 +8903,5 @@ Etkisi:
 - **Acik kalan (kullanicinin bilgisinde, ayri adim):** 71 dosya (cogunlukla Agustos, yeni/eksik evrakli) tur kaniti olmadigi icin olusturulmadi. Evrak/fotograf/rapor dosyalarinin gercek V2 belge kayitlarina baglanmasi bu adimin kapsaminda DEGIL -- yalniz dosya KAYDI olusturuldu.
 
 Kaynak: 2026-08-10 tarihli kullanici talimati ("HAYIR ESKİ PROGRAMIMI KAPATTIM, bütün hepsi yenisinde de gözüksün istiyorum" / "ne yap ne et hepsini hallet") + iki ayri onizleme-onay turu.
+
+**Guncelleme (ayni oturum, 2026-08-10): ikinci tur -- ZABIT/KTT belge kanitiyla 40 dosya daha cozulup olusturuldu.** Kalan 31 dosyanin (tumu Agustos, cogu gercekten ic dolu -- 5 ila 76 dosya arasi, "bos yeni klasor" degil) turunu ne V1 onbellegi ne dosya-adi kaniti belirleyebildi; TAHMIN URETILMEDI. Toplam durum (bagimsiz sorguyla dogrulandi): **164 gercek dosya, 0 cakisan ofis numarasi, 164 audit_events kaydi.** Kalan 31 icin kullanicidan tur bilgisi istendi (uydurma yerine).

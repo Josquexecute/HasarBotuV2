@@ -2,11 +2,11 @@
 
 Son güncelleme: 2026-08-10
 
-## İlk gerçek "V1 aktarımı" — 124 gerçek dosya V2'de oluşturuldu (2026-08-10, HB-2026-197)
+## İlk gerçek "V1 aktarımı" — 164 gerçek dosya V2'de oluşturuldu (2026-08-10, HB-2026-197)
 
-Kullanıcının açık onayıyla, gerçek fiziksel klasör yapısı (`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ\2026\`, 195 gerçek dosya klasörü, KAPALI arşivler dahil) taranarak **124 dosya türü (trafik/kasko) kesin belirlenip gerçekten oluşturuldu** — V2'nin kendi, zaten test edilmiş dosya oluşturma mantığı üzerinden (ofis numarası doğru/sıralı atandı, audit kaydı yazıldı). Bağımsız sorguyla doğrulandı: 124 kayıt, 0 çakışan ofis numarası, 124 audit kaydı. Tam gerekçe `docs/DECISION_LOG.md` HB-2026-197'de.
+Kullanıcının açık onayıyla, gerçek fiziksel klasör yapısı (`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ\2026\`, 195 gerçek dosya klasörü, KAPALI arşivler dahil) taranarak, iki turda **164 dosya türü (trafik/kasko) kesin belirlenip gerçekten oluşturuldu** — V2'nin kendi, zaten test edilmiş dosya oluşturma mantığı üzerinden (ofis numarası doğru/sıralı atandı, audit kaydı yazıldı). Bağımsız sorguyla doğrulandı: 164 kayıt, 0 çakışan ofis numarası, 164 audit kaydı. Tam gerekçe `docs/DECISION_LOG.md` HB-2026-197'de.
 
-**Açık kalan:** 71 dosya (çoğunlukla Ağustos, yeni/eksik evraklı) için tür kanıtı yoktu — uydurulmadı, oluşturulmadı. Evrak/fotoğraf/rapor dosyalarının gerçek V2 belge kayıtlarına bağlanması bu adımın kapsamında değil, yalnız dosya kaydı oluşturuldu. V1'in kendi verisine hiç yazma/silme yapılmadı.
+**Açık kalan:** 31 dosya (tümü Ağustos, çoğu gerçekten içerik dolu) için tür kanıtı bulunamadı — uydurulmadı, oluşturulmadı. Kullanıcıdan tür bilgisi istendi. Evrak/fotoğraf/rapor dosyalarının gerçek V2 belge kayıtlarına bağlanması bu adımın kapsamında değil, yalnız dosya kaydı oluşturuldu. V1'in kendi verisine hiç yazma/silme yapılmadı.
 
 ## Depo GitHub'a yüklendi — private, "tüm hakları saklıdır" lisansıyla (2026-08-10, HB-2026-196)
 
