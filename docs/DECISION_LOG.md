@@ -8859,3 +8859,24 @@ Etkisi (gercek, calistirilarak dogrulandi -- rapor edilmedi, olculdu):
 - Sohbette "10 commit" denildi ama gercekte 9'du (git log ile dogrulandi, `6a2f6b6..3f65177`) -- bu sayi HICBIR committed dosyaya yazilmamisti (yalniz sohbet metninde), duzeltilecek bir kayit yoktu; bu HB-2026-195 girdisi dogru sayimi tasir.
 
 Kaynak: 2026-08-09/10 tarihli "final Windows production paketlemesi" kullanici talimati + 3 soruluk onay.
+
+## 2026-08-10 - HB-2026-196: Depo GitHub'a yuklendi -- PRIVATE, "tum haklari saklidir" lisansiyla, kullanicinin 3 soruluk onayiyla
+
+Karar:
+
+1. Kullanicinin "github hesabim... buna... tasarim yap... kendi lisansimizla github yukleyelim" talimati, geri donusu zor bir islem (kod push, herkese/hesaba acik hale getirme) oldugu icin ONCE 3 net soruyla netlestirildi: (a) **private** (public degil -- depoda gercek sirket adi, ic mimari, ACL/servis hesabi gibi guvenlik sertlestirme detaylari var), (b) **"tum haklari saklidir"** (all rights reserved) lisansi, telif sahibi Baran Global Ekspertiz, (c) depo adi **HasarBotuV2**.
+2. `LICENSE` (kok dizin) eklendi: standart kapali-kaynak "tum haklari saklidir" metni + garanti reddi. `README.md` yeniden yazildi -- eski surum yalniz AI-arac yonetisimi icindi (bootstrap doneminden kalma), yeni surum gercek proje tanitimi (modul tablosu, mimari diyagram, teknoloji yigini, depo yapisi, gelistirme/paketleme komutlari, durum baglantilari) + KORUNAN AI-arac yonetisim bolumu.
+3. Push ONCESI guvenlik taramasi: tum izlenen dosyalarda yaygin secret desenleri (`AIzaSy`, `sk-`, `ghp_`, private key blocklari, hardcoded password) + tracked `.env`/`.pem`/`.key`/`.pass` dosyasi aranip SIFIR gercek bulgu dogrulandi (yalniz acikca "sentetik-parola" adli test fixture'lari, zaten bilinen desen).
+4. `gh repo create HasarBotuV2 --private` ile depo olusturuldu, TUM yerel dallar (56+ `foundation/package-*` + `main` + digerleri) ve korunan `v0.1.0-ui-baseline` tag'i `git push --all`/`git push --tags` ile GERCEKTEN push edildi -- hicbiri filtrelenmedi/atlanmadi (tam yedekleme niyeti). Varsayilan dal, en guncel calisma dalina (`foundation/package-56-ai-evidence-enrichment`, yeni LICENSE/README'i tasiyan) ayarlandi ki depo sayfasi acilinca eski/bos README yerine yeni tanitim gorunsun.
+
+Gerekce:
+
+Kullanicinin acikca istedigi, geri donusu zor bir islem oldugu icin (CLAUDE.md: "Kullanici acikca istemedikce remote ekleme, push... yapma") once netlestirilip sonra uygulandi.
+
+Etkisi:
+
+- Depo: `https://github.com/Josquexecute/HasarBotuV2` (PRIVATE, dogrulandi: `gh repo view --json visibility` -> `PRIVATE`).
+- Yerel `git remote`e `origin` eklendi (onceden remote yoktu).
+- **Ileri urun riski (bu islemin kapsami disinda, disclosed, HB-2026-195'te de not edildi):** bu makinede ZATEN calisan ayri bir uygulama (`HasarBotu - Baran Ekspertiz 0.6.10`, muhtemelen V1) var -- GitHub deposu adi ("HasarBotuV2") bu urunle karistirilmamali; V1'in KENDI kaynak kodu bu depoya dahil DEGIL, yalniz bu depodaki (V2) calisma kopyasi push edildi.
+
+Kaynak: 2026-08-10 tarihli kullanici talimati + 3 soruluk onay (private/lisans/depo adi).

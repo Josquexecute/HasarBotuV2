@@ -2,6 +2,12 @@
 
 Son güncelleme: 2026-08-10
 
+## Depo GitHub'a yüklendi — private, "tüm hakları saklıdır" lisansıyla (2026-08-10, HB-2026-196)
+
+Kullanıcının 3 soruluk onayıyla: `https://github.com/Josquexecute/HasarBotuV2` (**private**, doğrulandı). Kök dizine `LICENSE` (tüm hakları saklıdır, Baran Global Ekspertiz) eklendi; `README.md` gerçek proje tanıtımına yeniden yazıldı (eski sürüm yalnız AI-araç yönetişimiydi). Push öncesi tüm izlenen dosyalarda secret taraması yapıldı, sıfır gerçek bulgu. Tüm yerel dallar (56+) ve korunan `v0.1.0-ui-baseline` tag'i eksiksiz push edildi; varsayılan dal yeni README'i taşıyan güncel çalışma dalına ayarlandı. Ayrıntı `docs/DECISION_LOG.md` HB-2026-196'da.
+
+**Not:** bu makinede zaten çalışan, bu depoyla İLGİSİZ ayrı bir uygulama var (`HasarBotu - Baran Ekspertiz 0.6.10`, muhtemelen gerçek V1 sistemi) — bkz. HB-2026-195. Onun kaynak kodu bu depoya dahil değil.
+
 ## Windows NSIS installer — sıfırdan kuruldu, gerçek install/launch/uninstall doğrulandı (2026-08-10, HB-2026-195)
 
 Kullanıcının 3 soruluk onayıyla (electron-builder+NSIS/imzasız/sürüm 0.1.0), depoda daha önce hiç var olmayan paketleme altyapısı kuruldu. Tam gerekçe ve ölçülen sonuçlar `docs/DECISION_LOG.md` HB-2026-195'te.
