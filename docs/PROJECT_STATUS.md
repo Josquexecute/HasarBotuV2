@@ -2,6 +2,12 @@
 
 Son güncelleme: 2026-08-10
 
+## İlk gerçek "V1 aktarımı" — 124 gerçek dosya V2'de oluşturuldu (2026-08-10, HB-2026-197)
+
+Kullanıcının açık onayıyla, gerçek fiziksel klasör yapısı (`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ\2026\`, 195 gerçek dosya klasörü, KAPALI arşivler dahil) taranarak **124 dosya türü (trafik/kasko) kesin belirlenip gerçekten oluşturuldu** — V2'nin kendi, zaten test edilmiş dosya oluşturma mantığı üzerinden (ofis numarası doğru/sıralı atandı, audit kaydı yazıldı). Bağımsız sorguyla doğrulandı: 124 kayıt, 0 çakışan ofis numarası, 124 audit kaydı. Tam gerekçe `docs/DECISION_LOG.md` HB-2026-197'de.
+
+**Açık kalan:** 71 dosya (çoğunlukla Ağustos, yeni/eksik evraklı) için tür kanıtı yoktu — uydurulmadı, oluşturulmadı. Evrak/fotoğraf/rapor dosyalarının gerçek V2 belge kayıtlarına bağlanması bu adımın kapsamında değil, yalnız dosya kaydı oluşturuldu. V1'in kendi verisine hiç yazma/silme yapılmadı.
+
 ## Depo GitHub'a yüklendi — private, "tüm hakları saklıdır" lisansıyla (2026-08-10, HB-2026-196)
 
 Kullanıcının 3 soruluk onayıyla: `https://github.com/Josquexecute/HasarBotuV2` (**private**, doğrulandı). Kök dizine `LICENSE` (tüm hakları saklıdır, Baran Global Ekspertiz) eklendi; `README.md` gerçek proje tanıtımına yeniden yazıldı (eski sürüm yalnız AI-araç yönetişimiydi). Push öncesi tüm izlenen dosyalarda secret taraması yapıldı, sıfır gerçek bulgu. Tüm yerel dallar (56+) ve korunan `v0.1.0-ui-baseline` tag'i eksiksiz push edildi; varsayılan dal yeni README'i taşıyan güncel çalışma dalına ayarlandı. Ayrıntı `docs/DECISION_LOG.md` HB-2026-196'da.

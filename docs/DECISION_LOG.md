@@ -8880,3 +8880,26 @@ Etkisi:
 - **Ileri urun riski (bu islemin kapsami disinda, disclosed, HB-2026-195'te de not edildi):** bu makinede ZATEN calisan ayri bir uygulama (`HasarBotu - Baran Ekspertiz 0.6.10`, muhtemelen V1) var -- GitHub deposu adi ("HasarBotuV2") bu urunle karistirilmamali; V1'in KENDI kaynak kodu bu depoya dahil DEGIL, yalniz bu depodaki (V2) calisma kopyasi push edildi.
 
 Kaynak: 2026-08-10 tarihli kullanici talimati + 3 soruluk onay (private/lisans/depo adi).
+
+## 2026-08-10 - HB-2026-197: Ilk gercek "V1 aktarimi" -- 124 gercek dosya V2'ye olusturuldu, kullanicinin acik onayiyla, gercek/dogrulanmis dosya olusturma mantigi uzerinden
+
+Karar:
+
+1. Kullanici "dosyalarim gozukmuyor" bulgusunun ardindan, kapattigi V1 uygulamasindaki TUM verisinin V2'de de gorunmesini istedi. Arastirma V1'in kendi yerel onbelleginin (`AppData\Roaming\Baran Ekspertiz\local-cache\cases\`, 53 kayit) EKSIK oldugunu gosterdi -- gercek, TEK dogru kaynak fiziksel klasor yapisinin kendisiydi (`C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ\2026\`, P:\ ile birebir senkron, 195 gercek dosya klasoru -- KAPALI <ay> arsivleri dahil).
+2. Her klasorun KENDI `_HASARBOTU\takip.json` dosyasi (135/195 klasorde mevcut) en guvenilir kaynak olarak kullanildi -- V1'in yerel onbellegi ve dosya-adi kanitindan (K/T + RUHSAT/POLIÇE/EHLIYET kisaltma deseni dahil) once. UÇ katmanli tur tespiti: (1) klasorun kendi takip.json'i, (2) V1 yerel onbellegi, (3) EVRAK/HASAR/OLAY YERI/ONARIM alt klasorlerindeki gercek dosya adlari. Hicbir zaman TAHMIN uretilmedi -- kanit yoksa 'unknown' kaldi.
+3. **124/195 dosya turu (trafik/kasko) kesin belirlendi ve GERÇEKTEN olusturuldu.** Kalan 71'i (cogunlukla Agustos -- yeni, henuz evraki tam olmayan dosyalar) icin kanit yoktu; hicbiri tahminle olusturulmadi, ayri bir sonraki adima birakildi.
+4. Olusturma, RAW SQL DEGIL, `services/api/src/cases/write-store.ts`teki GERÇEK, zaten test edilmis `createCasesWriteStore().createCase()` fonksiyonu DOGRUDAN (ayni pakette calisan bir betikten) cagrilarak yapildi -- ayni ofis-numarasi atama mantigi (`office_counters`, atomic, firma+yil sirali), ayni referans dogrulamasi, ayni audit kaydi (`case.created`), ayni idempotency izi. HTTP/oturum gerekmedi; gercek kullanicinin (Omer Faruk, `019fe084-...`) kimligi actor olarak kullanildi.
+5. **Bilerek TASINMAYAN alanlar (dogru, kanitlanmis varsayilan):** V1'in ofis numaralari GUVENILMEDI (ayni numara 5 farkli dosyada tekrarlaniyordu -- V2 kendi, DOGRU, sirali numarayi atadi). Sorumlu/eksper/raportor atanmadi ("Baran Gurbuz"/"Berfin Kapar" icin henuz gercek V2 hesabi yok -- hesap acmak ayri bir karar, uydurulmadi). Butun dosyalar `workflow_stage: 'new_notification'`den baslar (V1'in zengin durum modeli V2'ninkiyle birebir eslesmiyor).
+
+Gerekce:
+
+Kullanicinin acikca istedigi ("ne yap ne et hepsini hallet"), gercek is verisini kaybetmeden/bozmadan V1'deki TUM gercek dosyalarin V2'de de calisilabilir olmasi. AGENTS.md §7 "Kritik islem standardi" (Planla->Onizle->Onay->Uygula->Dogrula->Kesinlestir->Audit) V1 aktarimi icin ACIKÇA zorunlu tutuluyor -- iki ayri onizleme + onay turu (once 62'lik ilk kesif, sonra 124'luk tam kapsam) bu sirayla yapildi.
+
+Etkisi:
+
+- V2 `cases` tablosunda 124 GERÇEK, salt-okunur dogrulanmis kayit (`office_number` cakismasi YOK, `audit_events`de 124 'case.created' kaydi -- bagimsiz sorguyla dogrulandi).
+- V1'in kendi verisine (local-cache, gercek P:\/C:\HasarBotuStorage klasorleri) HIÇBIR yazma/silme YAPILMADI -- yalniz okundu.
+- Gecici betikler (`scratch-*.mjs`) calisma sonrasi silindi, hicbir kalici kod degisikligi/commit YOK -- bu saf bir veri islemidir.
+- **Acik kalan (kullanicinin bilgisinde, ayri adim):** 71 dosya (cogunlukla Agustos, yeni/eksik evrakli) tur kaniti olmadigi icin olusturulmadi. Evrak/fotograf/rapor dosyalarinin gercek V2 belge kayitlarina baglanmasi bu adimin kapsaminda DEGIL -- yalniz dosya KAYDI olusturuldu.
+
+Kaynak: 2026-08-10 tarihli kullanici talimati ("HAYIR ESKİ PROGRAMIMI KAPATTIM, bütün hepsi yenisinde de gözüksün istiyorum" / "ne yap ne et hepsini hallet") + iki ayri onizleme-onay turu.
