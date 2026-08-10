@@ -13,10 +13,14 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { useSession } from '../app/sessionContext'
+import type { OperationalAlertDataPort } from '../data/operationalAlertPort'
+import { useOperationalAlerts } from '../data/useOperationalAlerts'
 
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
+  /** Test enjeksiyonu için; verilmezse gerçek HTTP adaptörü kullanılır. */
+  operationalAlertPort?: OperationalAlertDataPort
 }
 
 const ROLE_LABELS: Readonly<Record<string, string>> = {
@@ -52,18 +56,23 @@ const navigation: readonly {
   { to: '/kapanan-dosyalar', label: 'Kapanan Dosyalar', icon: FolderArchive },
   { to: '/raporlar-ve-ucretler', label: 'Raporlar ve Ücretler', icon: ChartNoAxesCombined },
   { to: '/mevzuat-ve-ai', label: 'Mevzuat ve AI Yardımcısı', icon: Scale },
-  { to: '/bildirimler', label: 'Bildirimler', icon: Bell, badge: '7' },
+  { to: '/bildirimler', label: 'Bildirimler', icon: Bell },
   { to: '/yonetim', label: 'Yönetim', icon: ShieldCheck },
   { to: '/ayarlar', label: 'Ayarlar', icon: Settings },
 ]
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, operationalAlertPort }: SidebarProps) {
   // Kimlik yalnız gerçek oturumdan gelir; mock modda prototip kimliği korunur.
   const { mode, user } = useSession()
   const displayName = user?.displayName ?? (mode === 'mock' ? 'Ömer Faruk Kaya' : 'Oturum bekleniyor')
   const roleLabel = user === null
     ? (mode === 'mock' ? 'Eksper' : 'Kimlik doğrulanmadı')
     : roleLabelOf(user.roles)
+
+  // Bildirimler rozeti: gerçek API sayısı dışında hiçbir şey göstermez --
+  // yükleniyor/mock/hata durumunda rozet YOK (sahte veya bayat sayı yok).
+  const { alerts } = useOperationalAlerts(operationalAlertPort)
+  const bildirimBadge = alerts !== null && alerts.totalCount > 0 ? String(alerts.totalCount) : undefined
 
   return (
     <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`}>
@@ -81,19 +90,22 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <nav className="sidebar__nav" aria-label="Ana navigasyon">
-        {navigation.map(({ to, label, icon: Icon, badge, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) => `nav-item${isActive ? ' nav-item--active' : ''}`}
-            title={collapsed ? label : undefined}
-          >
-            <Icon size={18} aria-hidden="true" />
-            {!collapsed && <span className="nav-item__label">{label}</span>}
-            {badge && <span className="nav-item__badge">{badge}</span>}
-          </NavLink>
-        ))}
+        {navigation.map(({ to, label, icon: Icon, badge, end }) => {
+          const resolvedBadge = to === '/bildirimler' ? bildirimBadge : badge
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) => `nav-item${isActive ? ' nav-item--active' : ''}`}
+              title={collapsed ? label : undefined}
+            >
+              <Icon size={18} aria-hidden="true" />
+              {!collapsed && <span className="nav-item__label">{label}</span>}
+              {resolvedBadge && <span className="nav-item__badge">{resolvedBadge}</span>}
+            </NavLink>
+          )
+        })}
       </nav>
 
       <div className="sidebar__footer">

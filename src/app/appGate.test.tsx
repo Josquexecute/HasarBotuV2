@@ -104,7 +104,7 @@ describe('App oturum kapisi (api mod)', () => {
     expect(screen.queryByRole('heading', { name: 'Ayarlar' })).not.toBeInTheDocument()
   })
 
-  it('giristen sonra /ayarlar organizasyon kapsamli hicbir ek istek yapmadan acilir (tek istek: oturum bootstrap)', async () => {
+  it('giristen sonra /ayarlar sayfanin KENDI icin ek istek yapmadan acilir (oturum bootstrap + kabuk genelindeki bildirim rozeti)', async () => {
     window.history.replaceState({}, '', '/ayarlar')
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const calls: string[] = []
@@ -113,7 +113,7 @@ describe('App oturum kapisi (api mod)', () => {
       return {
         ok: true,
         status: 200,
-        json: async () => SESSION,
+        json: async () => (String(input).includes('/operational-alerts') ? { schemaVersion: 'operational-alert/1.0.0', totalCount: 0, evaluatedAt: '2026-08-10T00:00:00.000Z', alerts: [] } : SESSION),
         headers: { get: () => null },
       } as unknown as Response
     }) as unknown as typeof fetch)
@@ -121,8 +121,11 @@ describe('App oturum kapisi (api mod)', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument()
-    expect(calls).toHaveLength(1)
-    expect(calls[0]).toContain('/api/v1/auth/session')
+    // Sidebar her rotada aynı, gerçek Bildirimler rozetini sorar (Paket 56 düzeltmesi:
+    // önceden sabit kodlu "7" idi) -- /ayarlar sayfasının KENDİ içeriği hâlâ ek istek yapmaz.
+    expect(calls).toHaveLength(2)
+    expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)
+    expect(calls.some((call) => call.includes('/api/v1/operational-alerts'))).toBe(true)
   })
 
   it('kimliksiz erisim /mevzuat-ve-ai rotasini da login ekraninin arkasinda tutar', async () => {
@@ -136,7 +139,7 @@ describe('App oturum kapisi (api mod)', () => {
     expect(screen.queryByRole('heading', { name: 'Mevzuat ve AI Yardımcısı' })).not.toBeInTheDocument()
   })
 
-  it('giristen sonra /mevzuat-ve-ai dürüst boş durumu hiçbir ek istek yapmadan gösterir (tek istek: oturum bootstrap)', async () => {
+  it('giristen sonra /mevzuat-ve-ai dürüst boş durumu SAYFANIN KENDİ içeriği için ek istek yapmadan gösterir (oturum bootstrap + kabuk genelindeki bildirim rozeti)', async () => {
     window.history.replaceState({}, '', '/mevzuat-ve-ai')
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const calls: string[] = []
@@ -145,7 +148,7 @@ describe('App oturum kapisi (api mod)', () => {
       return {
         ok: true,
         status: 200,
-        json: async () => SESSION,
+        json: async () => (String(input).includes('/operational-alerts') ? { schemaVersion: 'operational-alert/1.0.0', totalCount: 0, evaluatedAt: '2026-08-10T00:00:00.000Z', alerts: [] } : SESSION),
         headers: { get: () => null },
       } as unknown as Response
     }) as unknown as typeof fetch)
@@ -153,8 +156,11 @@ describe('App oturum kapisi (api mod)', () => {
     render(<App />)
 
     expect(await screen.findByText('Mevzuat kaynak kütüphanesi henüz yapılandırılmadı.')).toBeInTheDocument()
-    expect(calls).toHaveLength(1)
-    expect(calls[0]).toContain('/api/v1/auth/session')
+    // Sidebar her rotada aynı, gerçek Bildirimler rozetini sorar (Paket 56 düzeltmesi:
+    // önceden sabit kodlu "7" idi) -- /mevzuat-ve-ai sayfasının KENDİ içeriği hâlâ ek istek yapmaz.
+    expect(calls).toHaveLength(2)
+    expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)
+    expect(calls.some((call) => call.includes('/api/v1/operational-alerts'))).toBe(true)
   })
 })
 
