@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, shell as electronShell } from 'electron'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseDesktopConfig, DesktopConfigError } from './config.js'
 import { runStartupGate, type GateChoice, type GateMessage } from './gate.js'
@@ -13,8 +14,10 @@ import { DesktopStartupAbortedError, guardWebContents, startDesktopShell } from 
  * veren kod `config.ts`, `security.ts`, `external.ts`, `downloads.ts`,
  * `compatibility.ts` ve `gate.ts`tedir.
  *
- * Bu pakette code signing, installer ve otomatik güncelleme YOKTUR
- * (kullanıcı talimatı; Paket 21/22 dağıtım kararları).
+ * Windows NSIS installer'ı var (`apps/desktop/package.json`daki `build`
+ * alanı, `electron-builder`) ama code signing ve otomatik güncelleme
+ * HÂLÂ YOKTUR (kullanıcı talimatı; imzasız ilk dahili sürüm, Paket 21/22
+ * dağıtım kararlarının bir sonraki dilimi).
  *
  * DİKKAT — ESM giriş noktasında ÜST DÜZEY `await` KULLANILMAZ. Electron,
  * giriş modülünün değerlendirmesi bitmeden `ready` olayını yaymaz; üst düzey
@@ -25,10 +28,15 @@ import { DesktopStartupAbortedError, guardWebContents, startDesktopShell } from 
 
 /**
  * Paketlenmemiş çalıştırmada UI build çıktısı repo kökündeki `dist`tir
- * (`apps/desktop/dist/main` → repo kökü). Paketlenmiş dağıtımda bu yol
- * `HASARBOTU_ASSET_ROOT` ile açıkça verilir; varsayım yapılmaz.
+ * (`apps/desktop/dist/main` → repo kökü). Paketlenmiş (NSIS) dağıtımda
+ * `electron-builder`in `extraResources` kuralı aynı `dist/`i
+ * `process.resourcesPath/dist`e kopyalar (bkz. `package.json`daki `build`
+ * alanı) -- `app.isPackaged` burada sabit kod-yolu SEÇER, rastgele bir yol
+ * kabul etmez. `HASARBOTU_ASSET_ROOT` ortam değişkeni her iki modda da
+ * (`parseDesktopConfig` üzerinden) öncelik taşımaya devam eder.
  */
 function defaultAssetRoot(): string {
+  if (app.isPackaged) return join(process.resourcesPath, 'dist')
   return fileURLToPath(new URL('../../../../dist/', import.meta.url))
 }
 

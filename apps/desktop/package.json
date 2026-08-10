@@ -1,9 +1,10 @@
 {
   "name": "@hasarbotu/desktop",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "HasarBotu V2 ince Electron kabuğu (ADR-Q06): güvenli BrowserWindow + loopback aynı-origin köprüsü",
+  "author": "HasarBotu",
   "engines": {
     "node": ">=24 <25"
   },
@@ -13,7 +14,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
     "lint": "eslint .",
     "test": "npm run build && vitest run --config vitest.config.ts",
-    "start": "electron ."
+    "start": "electron .",
+    "package:win": "electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@hasarbotu/contracts": "*",
@@ -24,6 +26,42 @@
     "@hasarbotu/database": "*",
     "@hasarbotu/domain": "*",
     "@types/node": "24.13.3",
-    "electron": "43.2.0"
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.hasarbotu.desktop",
+    "productName": "HasarBotu",
+    "copyright": "Copyright (c) 2026 HasarBotu",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "!dist/**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "../../dist",
+        "to": "dist",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "HasarBotu-Setup-${version}.${ext}"
+    }
   }
 }

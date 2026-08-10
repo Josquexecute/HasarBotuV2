@@ -7,6 +7,9 @@ coverage/
 .vite/
 *.tsbuildinfo
 
+# electron-builder packaged installer output (apps/desktop)
+release/
+
 # Logs and diagnostics
 logs/
 *.log
