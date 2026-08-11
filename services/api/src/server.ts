@@ -11,6 +11,7 @@ import {
   createGeminiPolicyProvider,
   createOpenAiPolicyProvider,
   createPolicyAiProviderRegistry,
+  GEMINI_POLICY_PROVIDER_ID,
   type PolicyAiProviderAdapter,
   type PolicyAiProviderRegistry,
 } from './policy-ai/index.js'
@@ -97,6 +98,13 @@ export async function startServer(): Promise<void> {
     pool = createDatabasePool({ config: parseDatabaseUrl(config.databaseUrl) })
   }
 
+  // Paket 55 icin de policy-ai/email-ai ile AYNI kural: registry SUNUCU
+  // burada acikca kurup gecirmezse, buildApp kendi (yalniz test/gelistirme
+  // amacli) determinist varsayilanina duser. `config.geminiLaborAllocationProvider`
+  // tanimsizsa bu registry BOS doner (fail-closed) -- sahte "AI" cevabi degil,
+  // acik `provider_disabled` sonucu uretir (bkz. labor-allocation-ai/store.ts).
+  const laborAllocationProviders = createConfiguredLaborAllocationProviderRegistry(config)
+
   const app = buildApp({
     logLevel: config.logLevel,
     ...(pool !== undefined
@@ -105,6 +113,14 @@ export async function startServer(): Promise<void> {
           auth: { pool, cookieSecure: config.cookieSecure },
           policyAiProviders: createConfiguredPolicyAiProviderRegistry(config),
           emailAiProviders: createConfiguredEmailAiProviderRegistry(config),
+          laborAllocationProviders,
+          // Registry bos ise providerId'yi hic gecirme: store kendi
+          // (kayitta hic bulunmayan) varsayilanini arar ve ayni sekilde
+          // fail-closed `provider_disabled` uretir -- registry ile providerId
+          // her zaman AYNI kaynaktan (config) turer, birbirinden kopmaz.
+          ...(config.geminiLaborAllocationProvider === undefined
+            ? {}
+            : { laborAllocationProviderId: GEMINI_POLICY_PROVIDER_ID }),
         }
       : {}),
   })

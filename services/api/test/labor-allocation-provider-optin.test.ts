@@ -12,6 +12,7 @@ import {
 import {
   ConfigError,
   buildApp,
+  createConfiguredLaborAllocationProviderRegistry,
   createGeminiLaborAllocationProvider,
   createLaborAllocationProviderRegistry,
   fixedClock,
@@ -78,6 +79,46 @@ describe('sağlayıcı kaydı ve yapılandırma sınırları', () => {
       GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED: 'true',
       GEMINI_LABOR_ALLOCATION_MODEL: 'gemini-2.5-flash',
     })).toThrow(ConfigError)
+  })
+
+  /**
+   * HB-2026-198 — kök neden: `server.ts`'in gerçek `startServer()` giriş
+   * noktası `createConfiguredLaborAllocationProviderRegistry`'yi tanımlıyor
+   * ama `buildApp()` çağrısına hiç geçirmiyordu; sonuç olarak production'da
+   * `laborAllocationProviders` seçeneği hep `undefined` kalıyor ve
+   * `buildApp()`'in KENDİ (yalnız test amaçlı) `createDeterministicLaborAllocationProviderRegistry()`
+   * varsayılanı sessizce devreye giriyordu — `NODE_ENV=production`'da
+   * deterministik sağlayıcıları açıkça yasaklayan config kapısı (yukarıdaki
+   * "üretimde deterministik sağlayıcı yapılandırması reddedilir" testi) bu
+   * yolla tamamen atlanıyordu. Bu iki test, düzeltilmiş `server.ts`
+   * kompozisyonunun `parseConfig` çıktısından TAM OLARAK ürettiği registry'yi
+   * doğrudan, ağ çağrısı yapmadan sınar.
+   */
+  it('server kompozisyonu: hiç opt-in yokken registry BOŞ kalır (sahte determinist devreye girmez)', () => {
+    const config = parseConfig({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://user:pw@127.0.0.1:5432/hasarbotu',
+    })
+    expect(createConfiguredLaborAllocationProviderRegistry(config).list()).toHaveLength(0)
+  })
+
+  it('server kompozisyonu: opt-in açıkken registry TAM OLARAK gerçek Gemini adaptörünü içerir, secret sızdırmaz', () => {
+    const secret = 'sentetik-server-wiring-anahtari-198'
+    const config = parseConfig({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://user:pw@127.0.0.1:5432/hasarbotu',
+      GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED: 'true',
+      GEMINI_API_KEY: secret,
+      GEMINI_LABOR_ALLOCATION_MODEL: 'gemini-2.5-flash',
+    })
+    const descriptors = createConfiguredLaborAllocationProviderRegistry(config).list()
+    expect(descriptors).toHaveLength(1)
+    expect(descriptors[0]).toMatchObject({
+      providerId: 'gemini-generate-content',
+      modelId: 'gemini-2.5-flash',
+      externalProvider: true,
+    })
+    expect(JSON.stringify(descriptors)).not.toContain(secret)
   })
 })
 
@@ -209,6 +250,53 @@ describeDb('organization opt-in olmadan egress yapılmaz', () => {
     })
     expect(response.statusCode).toBe(409)
     expect(calls).toBe(0)
+    await app.close()
+  })
+
+  it('server.ts kompozisyonu birebir: hiç yapılandırma yokken analiz eninde sonunda provider_disabled\'a düşer, sahte çıktı asla review_required\'a geçmez (HB-2026-198 regresyon kilidi)', async () => {
+    // `parseConfig({})` + `createConfiguredLaborAllocationProviderRegistry` --
+    // `server.ts`'in gerçek `startServer()` içinde ürettiği TAM ikili budur.
+    // Düzeltmeden ÖNCE bu registry hiç geçirilmiyordu ve `buildApp()` kendi
+    // determinist (yalnız test amaçlı, `controlRequired:true` sabit) sahte
+    // çıktısını üretiyordu -- kullanıcı bunu gerçek bir AI cevabı sanabilirdi.
+    const config = parseConfig({})
+    const registry = createConfiguredLaborAllocationProviderRegistry(config)
+    expect(registry.list()).toHaveLength(0)
+
+    const app = buildApp({
+      clock: fixedClock('2026-07-18T10:30:00.000Z'),
+      loggerEnabled: false,
+      auth: { pool, cookieSecure: false, loginRateLimit: { limit: 100, windowMs: 60_000 } },
+      laborAllocationProviders: registry,
+      // server.ts da aynı şekilde: config.geminiLaborAllocationProvider
+      // tanımsızken laborAllocationProviderId hiç geçirilmez.
+    })
+    const login = await app.inject({
+      method: 'POST', url: AUTH_LOGIN_ROUTE, payload: { email: 'p55@test.local', password: PASSWORD },
+    })
+    const cookie = String(login.headers['set-cookie']).split(';')[0] as string
+
+    const response = await app.inject({
+      method: 'POST', url: `/api/v1/cases/${caseId}/labor-allocation-ai/analyze`,
+      headers: { cookie },
+      payload: { expectedSheetVersion: 1, damageDescription: 'Ön darbe.', confirmedEgress: true },
+    })
+    expect(response.statusCode).toBe(200)
+    const runId = (response.json() as { run: { id: string; status: string } }).run.id
+
+    // Paket 62'den beri analiz ARKA PLANDA yürür (fire-and-forget); ilk yanıt
+    // hâlâ 'queued' olabilir. Nihai/terminal duruma geçene kadar yoklarız --
+    // eski (düzeltme öncesi) kodda bu asla 'provider_disabled'a düşmez,
+    // determinist sahte çıktıyla 'review_required'a giderdi.
+    let status = (response.json() as { run: { status: string } }).run.status
+    for (let attempt = 0; attempt < 60 && status === 'queued'; attempt += 1) {
+      await new Promise((resolve) => { setTimeout(resolve, 25) })
+      const poll = await app.inject({
+        method: 'GET', url: `/api/v1/cases/${caseId}/labor-allocation-ai/${runId}`, headers: { cookie },
+      })
+      status = (poll.json() as { run: { status: string } }).run.status
+    }
+    expect(status).toBe('provider_disabled')
     await app.close()
   })
 })

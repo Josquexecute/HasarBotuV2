@@ -11,6 +11,7 @@ export {
 } from './app.js'
 export {
   createConfiguredEmailAiProviderRegistry,
+  createConfiguredLaborAllocationProviderRegistry,
   createConfiguredPolicyAiProviderRegistry,
   startServer,
 } from './server.js'
