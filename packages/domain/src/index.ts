@@ -935,3 +935,15 @@ export {
   type ValueLossWorkbookSheetView,
   type ValueLossWorkbookView,
 } from './value-loss-rule-snapshot.js'
+export {
+  decideV1FieldBackfill,
+  deriveV1ClosedState,
+  mapV1ClaimType,
+  parseV1PlateFolderName,
+  v1FolderPlateSearchKey,
+  type V1ClaimType,
+  type V1ClosedStateResult,
+  type V1ClosedStateSignals,
+  type V1FieldBackfillDecision,
+  type V1PlateFolderName,
+} from './v1-import.js'
