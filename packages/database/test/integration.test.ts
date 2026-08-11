@@ -21,7 +21,7 @@ import {
  * Yeni bir migration eklenince (bu dosyanın kendisi güncellenmeden) buraya
  * eklenir -- 52 sıralı testin tek tek güncellenmesi yerine.
  */
-const HIDDEN_MIGRATION_NAMES = ['0044_labor_workbook_apply_runtime', '0045_kasco_mandatory_checks']
+const HIDDEN_MIGRATION_NAMES = ['0044_labor_workbook_apply_runtime', '0045_kasco_mandatory_checks', '0046_v1_import_provenance']
 
 async function runMigrations(
   options: Parameters<typeof runMigrationsRaw>[0],
@@ -218,6 +218,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'traffic_value_loss_versions',
       'user_roles',
       'users',
+      'v1_import_records',
     ])
     const roles = await pool.query('SELECT count(*)::int AS n FROM roles')
     expect((roles.rows[0] as { n: number }).n).toBe(6)
