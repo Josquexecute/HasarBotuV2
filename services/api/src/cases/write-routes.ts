@@ -51,7 +51,10 @@ function sendValidation(reply: FastifyReply, requestId: string, path: string, co
 /**
  * Cases yazma uclari (Paket 09): olusturma zorunlu Idempotency-Key ile,
  * guncelleme expectedVersion optimistic locking ile calisir. Her basarili
- * yazma A1 audit kaydi uretir; kapanis/yeniden acma bu pakette YOKTUR.
+ * yazma A1 audit kaydi uretir. Kapanis/yeniden acma komutlari bu pakette
+ * DEGIL, `case-lifecycle` modulundedir; ancak PATCH burada da kapali
+ * dosyada diger tum modullerle (case-operations/labor/pert/email-drafts)
+ * ayni fail-closed sozlesmeyle reddedilir (bkz. updateCase `case_closed`).
  */
 export function registerCasesWriteRoutes(app: FastifyInstance, options: CasesWriteRoutesOptions): void {
   const authStore = createAuthStore(options.pool)
@@ -157,6 +160,9 @@ export function registerCasesWriteRoutes(app: FastifyInstance, options: CasesWri
         return reply
           .code(409)
           .send(failureBody('version_conflict', 'Case was modified by another operation.', requestId))
+      }
+      if (outcome.kind === 'case_closed') {
+        return reply.code(409).send(failureBody('conflict', 'Closed cases cannot be updated.', requestId))
       }
       return caseDetailResponseSchema.parse({ case: outcome.item })
     } catch (error) {

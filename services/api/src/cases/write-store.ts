@@ -30,6 +30,7 @@ export type UpdateOutcome =
   | { readonly kind: 'ok'; readonly item: CaseListItem }
   | { readonly kind: 'not_found' }
   | { readonly kind: 'version_conflict' }
+  | { readonly kind: 'case_closed' }
 
 export interface IdempotentRecord {
   readonly requestHash: string
@@ -250,7 +251,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const current = await client.query(
-          `SELECT version, follow_up_date, loss_date, notification_date
+          `SELECT version, follow_up_date, loss_date, notification_date, lifecycle_status
            FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE`,
           [caseId, actor.organizationId],
         )
@@ -259,10 +260,18 @@ export function createCasesWriteStore(pool: pg.Pool) {
           follow_up_date: Date | null
           loss_date: Date | null
           notification_date: Date | null
+          lifecycle_status: 'open' | 'closed'
         } | undefined
         if (existing === undefined) {
           await client.query('ROLLBACK')
           return { kind: 'not_found' }
+        }
+        // Kapali dosyada temel alanlar da (sorumlu/servis/takip tarihi vb.)
+        // diger tum modullerle (case-operations, labor, pert, email-drafts)
+        // ayni fail-closed sozlesmeye tabidir -- kismi/alan-bazli istisna yok.
+        if (existing.lifecycle_status !== 'open') {
+          await client.query('ROLLBACK')
+          return { kind: 'case_closed' }
         }
         if (existing.version !== input.expectedVersion) {
           await client.query('ROLLBACK')

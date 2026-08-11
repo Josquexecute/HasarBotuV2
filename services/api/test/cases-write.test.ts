@@ -300,6 +300,38 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect(row.rows[0]).toMatchObject({ workflow_stage: 'reporting', version: 2 })
   })
 
+  it('kapali dosyada PATCH 409 case_closed doner, alanlar EZILMEZ, audit yazilmaz', async () => {
+    const created = await createCase('34 LLL 444')
+    const caseId = created.body.case?.id as string
+    await pool.query(
+      "UPDATE cases SET lifecycle_status='closed',workflow_stage='closed' WHERE id=$1",
+      [caseId],
+    )
+
+    const attempt = await app.inject({
+      method: 'PATCH',
+      url: `${CASES_ROUTE}/${caseId}`,
+      headers: { cookie },
+      payload: { expectedVersion: 1, responsibleUserId: userId, followUpDate: '2026-09-01' },
+    })
+    expect(attempt.statusCode).toBe(409)
+    expect((attempt.json() as { error: { code: string } }).error.code).toBe('conflict')
+
+    // Diger tum modullerle (case-operations/labor/pert/email-drafts) ayni
+    // fail-closed sozlesme: alanlar EZILMEZ, surum ilerlemez.
+    const row = await pool.query(
+      'SELECT responsible_user_id, follow_up_date, version FROM cases WHERE id = $1',
+      [caseId],
+    )
+    expect(row.rows[0]).toMatchObject({ responsible_user_id: null, follow_up_date: null, version: 1 })
+
+    const auditCount = await pool.query(
+      "SELECT count(*)::int AS n FROM audit_events WHERE action = 'case.updated' AND resource_id = $1",
+      [caseId],
+    )
+    expect(auditCount.rows[0].n).toBe(0)
+  })
+
   it('sinirlar: bos guncelleme 400; baska org dosyasi 404; oturumsuz 401; plaka/tur degistirilemez (strict)', async () => {
     const created = await createCase('34 JJJ 222')
     const caseId = created.body.case?.id as string
