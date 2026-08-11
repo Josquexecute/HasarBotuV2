@@ -1,6 +1,14 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-08-10
+Son güncelleme: 2026-08-11
+
+## SYSTEM_PRODUCT_INVENTORY_REPORT denetiminde bulunan 2 gerçek kusur düzeltildi (2026-08-11, HB-2026-198)
+
+- **labor-allocation-ai Gemini wiring:** `server.ts` artık `createConfiguredLaborAllocationProviderRegistry()`'yi gerçekten `buildApp()`'e bağlıyor (+doğru `providerId`); önceden sessizce devredeki test-fixture (`deterministic-success`, sabit `controlRequired:true`, %55 güven) yerine artık ya gerçek Gemini ya da dürüst `provider_disabled`. `labor-ai` (ayrı, Paket 44 modülü) kapsam dışı bırakıldı — hiç config yüzeyi yok, ayrı geliştirme kararı gerektirir.
+- **Kapalı dosyada temel `cases` PATCH guard eksikti, düzeltildi:** `updateCase()` artık `lifecycle_status` kontrol ediyor, diğer 10+ modülle (case-operations/labor/pert/email-drafts/kasco-mandatory-check/...) aynı 409 `case_closed` sözleşmesi.
+- **Rapor** (`docs/SYSTEM_PRODUCT_INVENTORY_REPORT.md`) yalnız etkilenen bölümlerde (§4,6,16.3,24,28,29,30,31,33) güncellendi; yedekleme konusu "en somut risk" yanlış sınıflandırmasından **"bilinçli manuel operasyonel politika, production blocker DEĞİL"**e düzeltildi — kullanıcı talimatıyla otomatik/zamanlanmış yedekleme özelliği bilerek EKLENMEDİ.
+- **Gerçek tam doğrulama (bu oturumda çalıştırıldı):** typecheck (tüm workspace) 0 hata; lint 0 hata (13 önceden var olan, değişmemiş dosyalardaki uyarı); build (UI+7 paket) başarılı, bundle bütçesi geçti; check:deploy geçti; `npm audit` değişmedi (tek disclosed `pdfjs-dist`, yapısal erişilemez). **Tam test suite gerçek `hasarbotu_test` PostgreSQL'e karşı, 8 workspace: 2.267 test PASS, 6 ortam-koşullu skip, 0 başarısız** (önceki taban 2.260 + HB-196/197 sonrası 3 doğal artış + bu paketin 4 yeni testi).
+- Yalnız `services/api/src/{server,index,cases/write-store,cases/write-routes}.ts` + 2 test dosyası + rapor değişti; production secret okunmadı/yazılmadı, gerçek AI sağlayıcısına çağrı yapılmadı, gerçek production DB/servise dokunulmadı. Tam gerekçe `docs/DECISION_LOG.md` HB-2026-198'de.
 
 ## İlk gerçek "V1 aktarımı" — 164 gerçek dosya V2'de oluşturuldu (2026-08-10, HB-2026-197)
 
