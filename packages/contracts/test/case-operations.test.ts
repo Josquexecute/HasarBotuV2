@@ -50,6 +50,7 @@ describe('case operations contracts', () => {
         createdByUserId: userId,
         createdByDisplayName: 'Sentetik Kullanıcı',
         createdAt: '2026-07-16T10:00:00.000Z',
+        legacySource: null,
       }],
       tasks: [{
         id,
@@ -69,6 +70,7 @@ describe('case operations contracts', () => {
         createdByDisplayName: 'Sentetik Kullanıcı',
         createdAt: '2026-07-16T10:00:00.000Z',
         updatedAt: '2026-07-16T10:00:00.000Z',
+        legacySource: null,
       }],
       followUpHistory: [{
         id,

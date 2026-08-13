@@ -1,7 +1,8 @@
 import { pathToFileURL } from 'node:url'
 import path from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { createInterface } from 'node:readline/promises'
-import { applyV1Import, planV1Import } from '@hasarbotu/api'
+import { applyV1Remediation, planV1Remediation } from '@hasarbotu/api'
 import { closeDatabasePool, createDatabasePool, parseDatabaseUrl } from '@hasarbotu/database'
 
 // HB-2026-198 sonrasi bulunan kritik kusurun kalici duzeltmesi: V1 gercek
@@ -43,18 +44,46 @@ function readDatabaseConfig() {
   }
 }
 
-function parseArguments(argv) {
-  const result = { apply: false, root: null, actorEmail: null }
+export function parseArguments(argv) {
+  const result = { apply: false, summaryOnly: false, root: null, actorEmail: null, expectedPlanHash: null, resolutionFile: null }
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--apply') { result.apply = true; continue }
+    if (arg === '--summary-only') { result.summaryOnly = true; continue }
     if (arg === '--root') { result.root = argv[i + 1] ?? null; i += 1; continue }
     if (arg === '--actor-email') { result.actorEmail = argv[i + 1] ?? null; i += 1; continue }
-    fail(`ARGUMENT_UNKNOWN:${arg}`)
+    if (arg === '--expected-plan-hash') { result.expectedPlanHash = argv[i + 1] ?? null; i += 1; continue }
+    if (arg === '--resolution-file') { result.resolutionFile = argv[i + 1] ?? null; i += 1; continue }
+    fail('ARGUMENT_UNKNOWN')
   }
   if (result.root === null || result.root.length === 0) fail('ROOT_REQUIRED')
-  if (result.actorEmail === null || result.actorEmail.length === 0) fail('ACTOR_EMAIL_REQUIRED')
+  if (result.apply && (result.actorEmail === null || result.actorEmail.length === 0)) fail('ACTOR_EMAIL_REQUIRED_FOR_APPLY')
+  if (result.apply && !/^[0-9a-f]{64}$/u.test(result.expectedPlanHash ?? '')) fail('EXPECTED_PLAN_HASH_REQUIRED_FOR_APPLY')
   return result
+}
+
+export async function readResolutionManifest(filePath) {
+  if (filePath === null) return undefined
+  let parsed
+  try { parsed = JSON.parse(await readFile(filePath, 'utf8')) } catch { fail('RESOLUTION_MANIFEST_INVALID') }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)
+    || parsed.schemaVersion !== 'hasarbotu-v1-resolution/1.0.0') fail('RESOLUTION_MANIFEST_INVALID')
+  const allowed = new Set(['schemaVersion', 'cases', 'claimTypes', 'users', 'experts', 'services'])
+  if (Object.keys(parsed).some((key) => !allowed.has(key))) fail('RESOLUTION_MANIFEST_INVALID')
+  const isRecord = (value) => value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value))
+  if (!isRecord(parsed.cases) || !isRecord(parsed.claimTypes) || !isRecord(parsed.users)
+    || !isRecord(parsed.experts) || !isRecord(parsed.services)) fail('RESOLUTION_MANIFEST_INVALID')
+  const validEntries = (value, keyPattern, valuePredicate) => value === undefined
+    || Object.entries(value).every(([key, item]) => keyPattern.test(key) && valuePredicate(item))
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+  if (!validEntries(parsed.cases, /^[0-9a-f]{64}$/u, (value) => typeof value === 'string' && uuid.test(value))
+    || !validEntries(parsed.claimTypes, /^[0-9a-f]{64}$/u, (value) => value === 'traffic' || value === 'casco')
+    || !validEntries(parsed.users, /^[0-9a-f]{16}$/u, (value) => typeof value === 'string' && uuid.test(value))
+    || !validEntries(parsed.experts, /^[0-9a-f]{16}$/u, (value) => typeof value === 'string' && uuid.test(value))
+    || !validEntries(parsed.services, /^[0-9a-f]{16}$/u, (value) => typeof value === 'string' && uuid.test(value))) {
+    fail('RESOLUTION_MANIFEST_INVALID')
+  }
+  return parsed
 }
 
 async function resolveSingleOrganization(pool) {
@@ -68,30 +97,74 @@ async function resolveActor(pool, organizationId, email) {
     "SELECT id::text FROM users WHERE organization_id=$1 AND lower(email)=lower($2) AND status='active'",
     [organizationId, email],
   )
-  if (result.rows.length !== 1) fail(`ACTOR_NOT_FOUND_OR_NOT_UNIQUE:${email}`)
+  if (result.rows.length !== 1) fail('ACTOR_NOT_FOUND_OR_NOT_UNIQUE')
   return result.rows[0].id
 }
 
 function summarizePlan(plan) {
+  const referenceMappings = new Map()
+  for (const entry of plan.entries) {
+    for (const [kind, resolution] of [['responsible', entry.responsible], ['expert', entry.expert], ['service', entry.service]]) {
+      if (resolution.state !== 'unresolved' && resolution.state !== 'ambiguous') continue
+      referenceMappings.set(`${kind}:${resolution.sourceNameToken}`, {
+        Kind: kind,
+        SourceNameToken: resolution.sourceNameToken,
+        State: resolution.state,
+        MatchCount: resolution.matchCount,
+        RequiredValue: kind === 'service' ? 'serviceId' : 'userId',
+      })
+    }
+  }
   return {
-    SchemaVersion: 'hasarbotu-v1-import/1.0.0',
-    OrganizationId: plan.organizationId,
-    Root: plan.rootPath,
+    SchemaVersion: 'hasarbotu-v1-remediation-preview/2.0.0',
+    MappingVersion: plan.mappingVersion,
+    IdentityVersion: plan.identityVersion,
+    SchemaReady: plan.schemaReady,
     GeneratedAt: plan.generatedAt,
+    SourceManifestHash: plan.sourceManifestHash,
+    PlanHash: plan.planHash,
     Summary: plan.summary,
+    HumanResolutionTemplate: {
+      SchemaVersion: 'hasarbotu-v1-resolution-template/1.0.0',
+      CaseTargets: plan.entries
+        .filter((entry) => entry.targetState === 'human_ambiguous')
+        .map((entry) => ({
+          PathToken: entry.pathToken,
+          SourceIdentity: entry.sourceIdentity,
+          Candidates: entry.candidateCaseEvidence,
+          RequiredValue: 'targetCaseId',
+        })),
+      ClaimTypes: plan.entries
+        .filter((entry) => entry.targetState === 'human_claim_type')
+        .map((entry) => ({ PathToken: entry.pathToken, SourceIdentity: entry.sourceIdentity, RequiredValue: 'traffic_or_casco' })),
+      ReferenceMappings: [...referenceMappings.values()],
+    },
     Entries: plan.entries.map((entry) => ({
-      RelativePath: entry.folder.relativePath,
-      Action: entry.action,
-      Reasons: entry.reasons,
-      ClaimType: entry.claimType,
-      Closed: entry.closed,
-      ClosedConflicting: entry.closedConflicting,
-      MatchedCaseId: entry.matchedCaseId,
-      MatchedCaseCandidateCount: entry.matchedCaseCandidateCount,
-      FieldBackfills: entry.fieldBackfills.map((f) => ({ Field: f.field, Decision: f.decision.kind })),
-      NewNotes: entry.notes.filter((n) => !n.alreadyImported).length,
-      NewTasks: entry.tasks.filter((t) => !t.alreadyImported).length,
-      UnmatchedTaskAssignees: entry.tasks.filter((t) => !t.alreadyImported && t.assignedUserId === null && t.assignedSourceName.length > 0).map((t) => t.assignedSourceName),
+      PathToken: entry.pathToken,
+      SourceIdentity: entry.sourceIdentity,
+      SourceHash: entry.sourceHash,
+      TargetState: entry.targetState,
+      TargetCaseId: entry.targetCaseId,
+      CandidateCases: entry.candidateCaseEvidence,
+      CaseType: entry.caseType,
+      Evidence: entry.evidence,
+      Fields: entry.fields.map((field) => ({ Field: field.field, State: field.state })),
+      NotesMissing: entry.notes.filter((item) => !item.alreadyImported && !item.duplicateContentCandidate && item.text.trim().length > 0).length,
+      OpenTasksMissing: entry.tasks.filter((item) => !item.alreadyImported && !item.duplicateContentCandidate
+        && item.title.trim().length > 0 && item.dueDate !== null && !item.completed).length,
+      CompletedTasksMissing: entry.tasks.filter((item) => !item.alreadyImported && !item.duplicateContentCandidate
+        && item.title.trim().length > 0 && item.dueDate !== null && item.completed && item.sourceCompletedAt !== null).length,
+      HistoricalClosure: entry.shouldCloseHistorically,
+      FollowUpHistory: entry.needsFollowUpHistory,
+      RawRevision: entry.needsRawRevision,
+      Alias: entry.needsAlias,
+      MoveRenameReconciliations: entry.legacyRecordsToReconcile.filter((item) => item.evidenceCode === 'native_item_unique').length,
+      Resolution: {
+        Responsible: entry.responsible,
+        Expert: entry.expert,
+        Service: entry.service,
+      },
+      Blockers: entry.blockers,
     })),
   }
 }
@@ -100,14 +173,17 @@ async function main() {
   let pool
   try {
     const args = parseArguments(process.argv.slice(2))
+    const resolutions = await readResolutionManifest(args.resolutionFile)
     const config = readDatabaseConfig()
-    pool = createDatabasePool({ config })
+    pool = createDatabasePool({ config, ...(args.apply ? {} : { max: 1 }) })
+    if (!args.apply) await pool.query('SET default_transaction_read_only=on')
 
     const organization = await resolveSingleOrganization(pool)
-    const plan = await planV1Import(pool, organization.id, args.root)
+    const plan = await planV1Remediation(pool, organization.id, args.root, { resolutions })
 
     if (!args.apply) {
-      emit({ Mode: 'preview', OrganizationCode: organization.code, ...summarizePlan(plan) }, 0)
+      const preview = { Mode: 'preview', OrganizationCode: organization.code, ...summarizePlan(plan) }
+      emit(args.summaryOnly ? { ...preview, Entries: undefined } : preview, 0)
       return
     }
 
@@ -116,21 +192,35 @@ async function main() {
       return
     }
 
+    if (!plan.schemaReady) {
+      emit({ Mode: 'apply', Status: 'blocked', Blockers: ['V1_REMEDIATION_SCHEMA_NOT_APPLIED'], PlanHash: plan.planHash }, 2)
+      return
+    }
+    if (plan.summary.duplicatesThatWouldBeCreated !== 0) {
+      emit({ Mode: 'apply', Status: 'blocked', Blockers: ['DUPLICATE_RISK_NOT_ZERO'], PlanHash: plan.planHash }, 2)
+      return
+    }
+    if (args.expectedPlanHash !== plan.planHash) {
+      emit({ Mode: 'apply', Status: 'blocked', Blockers: ['EXPECTED_PLAN_HASH_MISMATCH'], PlanHash: plan.planHash }, 2)
+      return
+    }
     const actorUserId = await resolveActor(pool, organization.id, args.actorEmail)
 
     process.stdout.write('--- HasarBotu V2 — V1 aktarim APPLY ---\n')
     process.stdout.write(`Organizasyon: ${organization.code}\n`)
-    process.stdout.write(`Yeni dosya: ${plan.summary.toCreate}, backfill: ${plan.summary.toBackfill}, `)
-    process.stdout.write(`yeni not: ${plan.summary.notesToImport}, yeni gorev: ${plan.summary.tasksToImport}\n`)
-    process.stdout.write(`Celiski/atlanan (DOKUNULMAYACAK): ${plan.summary.conflicts + plan.summary.unknownClaimType + plan.summary.unparseableFolderName + plan.summary.malformedOrUnsupportedJson}\n\n`)
+    process.stdout.write(`Plan hash: ${plan.planHash}\n`)
+    process.stdout.write(`Yeni dosya: ${plan.summary.actionable.casesToCreate}, backfill: ${plan.summary.actionable.casesToBackfill}, `)
+    process.stdout.write(`yeni not: ${plan.summary.actionable.notesToCreate}, acik gorev: ${plan.summary.actionable.tasksToCreate}, `)
+    process.stdout.write(`tamamlanmis gorev: ${plan.summary.actionable.completedTasksToCreate}, tarihsel kapanis: ${plan.summary.actionable.closuresToImport}\n`)
+    process.stdout.write(`Insan karari gereken: ${Object.values(plan.summary.humanRequired).reduce((sum, value) => sum + value, 0)}\n\n`)
     const rl = createInterface({ input: process.stdin, output: process.stdout })
     let confirmation
     try {
-      confirmation = await rl.question('Devam etmek icin tam olarak "UYGULA" yazin: ')
+      confirmation = await rl.question(`Devam etmek icin tam olarak "UYGULA ${plan.planHash}" yazin: `)
     } finally {
       rl.close()
     }
-    if (confirmation.trim() !== 'UYGULA') {
+    if (confirmation.trim() !== `UYGULA ${plan.planHash}`) {
       emit({ Mode: 'apply', Status: 'cancelled_by_user' }, 2)
       return
     }
@@ -138,15 +228,20 @@ async function main() {
     // TOCTOU: onaydan SONRA plan TAZE yeniden hesaplanir -- kullanicinin
     // onay yazma suresi icinde baska bir islem gercek durumu degistirmis
     // olabilir; apply HER ZAMAN kendi taze planiyla calisir.
-    const freshPlan = await planV1Import(pool, organization.id, args.root)
-    const result = await applyV1Import(
+    const freshPlan = await planV1Remediation(pool, organization.id, args.root, { resolutions })
+    if (freshPlan.planHash !== plan.planHash) {
+      emit({ Mode: 'apply', Status: 'blocked', Blockers: ['PLAN_DRIFT_AFTER_CONFIRMATION'], PlanHash: freshPlan.planHash }, 2)
+      return
+    }
+    const result = await applyV1Remediation(
       pool,
       { organizationId: organization.id, actorUserId, requestId: `v1-import-${Date.now()}` },
       freshPlan,
+      { resolutions },
     )
     emit({ Mode: 'apply', Status: 'applied', Result: result }, result.failed > 0 ? 1 : 0)
   } catch (error) {
-    emit({ Status: 'error', ErrorCode: error instanceof SafeError ? error.safeCode : 'V1_IMPORT_RUNTIME_ERROR', Message: error instanceof Error ? error.message : String(error) }, 1)
+    emit({ Status: 'error', ErrorCode: error instanceof SafeError ? error.safeCode : 'V1_IMPORT_RUNTIME_ERROR' }, 1)
   } finally {
     if (pool !== undefined) await closeDatabasePool(pool).catch(() => undefined)
   }

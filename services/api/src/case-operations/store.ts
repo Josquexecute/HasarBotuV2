@@ -43,6 +43,9 @@ interface NoteRow {
   created_by_user_id: string
   created_by_display_name: string
   created_at: Date
+  legacy_source_present: boolean
+  legacy_source_author_name: string | null
+  legacy_source_occurred_at: Date | null
 }
 
 interface TaskRow {
@@ -62,13 +65,17 @@ interface TaskRow {
   created_by_display_name: string
   created_at: Date
   updated_at: Date
+  legacy_source_present: boolean
+  legacy_source_assignee_name: string | null
+  legacy_source_occurred_at: Date | null
+  legacy_source_completed_at: Date | null
 }
 
 interface FollowUpRow {
   id: string
   previous_follow_up_date: Date | string | null
   new_follow_up_date: Date | string | null
-  source: 'case_create' | 'case_update'
+  source: 'case_create' | 'case_update' | 'v1_historical_import'
   case_version: number
   actor_user_id: string
   actor_display_name: string
@@ -96,15 +103,25 @@ export class CaseOperationReferenceError extends Error {
 }
 
 const NOTE_SELECT = `
-  n.id,n.note_type,n.subject,n.body,n.created_by_user_id,
-  creator.display_name AS created_by_display_name,n.created_at`
+  n.id,n.note_type,n.subject,left(COALESCE(NULLIF(v1m.source_item_snapshot->>'text',''),n.body),5000) AS body,n.created_by_user_id,
+  creator.display_name AS created_by_display_name,COALESCE(v1m.source_occurred_at,n.created_at) AS created_at,
+  v1m.id IS NOT NULL AS legacy_source_present,v1m.source_author_name AS legacy_source_author_name,
+  v1m.source_occurred_at AS legacy_source_occurred_at`
 
 const TASK_SELECT = `
   t.id,t.title,t.priority,t.status,t.assigned_user_id,
   assignee.display_name AS assigned_user_display_name,t.due_date,t.resolution_note,
   t.resolved_by_user_id,resolver.display_name AS resolved_by_display_name,t.resolved_at,
   t.version,t.created_by_user_id,creator.display_name AS created_by_display_name,
-  t.created_at,t.updated_at`
+  COALESCE(v1m.source_occurred_at,t.created_at) AS created_at,t.updated_at,
+  v1m.id IS NOT NULL AS legacy_source_present,v1m.source_assignee_name AS legacy_source_assignee_name,
+  v1m.source_occurred_at AS legacy_source_occurred_at,v1m.source_completed_at AS legacy_source_completed_at`
+
+const NOTE_METADATA_JOIN = `LEFT JOIN v1_import_item_metadata v1m
+  ON v1m.organization_id=n.organization_id AND v1m.target_type='case_note' AND v1m.target_id=n.id`
+
+const TASK_METADATA_JOIN = `LEFT JOIN v1_import_item_metadata v1m
+  ON v1m.organization_id=t.organization_id AND v1m.target_type='case_task' AND v1m.target_id=t.id`
 
 function localDate(value: Date | string): string {
   if (typeof value === 'string') return value.slice(0, 10)
@@ -127,6 +144,11 @@ function noteDto(row: NoteRow): CaseNoteDto {
     createdByUserId: row.created_by_user_id,
     createdByDisplayName: row.created_by_display_name,
     createdAt: row.created_at.toISOString(),
+    legacySource: row.legacy_source_present ? {
+      historical: true,
+      authorName: row.legacy_source_author_name,
+      occurredAt: row.legacy_source_occurred_at?.toISOString() ?? null,
+    } : null,
   })
 }
 
@@ -149,6 +171,12 @@ function taskDto(row: TaskRow, asOfDate: string): CaseTaskDto {
     createdByDisplayName: row.created_by_display_name,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
+    legacySource: row.legacy_source_present ? {
+      historical: true,
+      assigneeName: row.legacy_source_assignee_name,
+      occurredAt: row.legacy_source_occurred_at?.toISOString() ?? null,
+      completedAt: row.legacy_source_completed_at?.toISOString() ?? null,
+    } : null,
   })
 }
 
@@ -212,8 +240,9 @@ export function createCaseOperationsStore(pool: pg.Pool) {
           `SELECT ${NOTE_SELECT}
            FROM case_notes n
            JOIN users creator ON creator.organization_id=n.organization_id AND creator.id=n.created_by_user_id
+           ${NOTE_METADATA_JOIN}
            WHERE n.organization_id=$1 AND n.case_id::text=$2
-           ORDER BY n.created_at DESC,n.id DESC LIMIT 1000`,
+           ORDER BY COALESCE(v1m.source_occurred_at,n.created_at) DESC,n.id DESC LIMIT 1000`,
           [organizationId, caseId],
         ),
         pool.query(
@@ -222,6 +251,7 @@ export function createCaseOperationsStore(pool: pg.Pool) {
            JOIN users creator ON creator.organization_id=t.organization_id AND creator.id=t.created_by_user_id
            LEFT JOIN users assignee ON assignee.organization_id=t.organization_id AND assignee.id=t.assigned_user_id
            LEFT JOIN users resolver ON resolver.organization_id=t.organization_id AND resolver.id=t.resolved_by_user_id
+           ${TASK_METADATA_JOIN}
            WHERE t.organization_id=$1 AND t.case_id::text=$2
            ORDER BY CASE t.status WHEN 'open' THEN 0 ELSE 1 END,t.due_date,t.created_at DESC,t.id
            LIMIT 1000`,
@@ -284,7 +314,8 @@ export function createCaseOperationsStore(pool: pg.Pool) {
            )
            SELECT ${NOTE_SELECT}
            FROM inserted n
-           JOIN users creator ON creator.organization_id=n.organization_id AND creator.id=n.created_by_user_id`,
+           JOIN users creator ON creator.organization_id=n.organization_id AND creator.id=n.created_by_user_id
+           ${NOTE_METADATA_JOIN}`,
           [
             noteId,
             actor.organizationId,
@@ -375,6 +406,7 @@ export function createCaseOperationsStore(pool: pg.Pool) {
            JOIN users creator ON creator.organization_id=t.organization_id AND creator.id=t.created_by_user_id
            LEFT JOIN users assignee ON assignee.organization_id=t.organization_id AND assignee.id=t.assigned_user_id
            LEFT JOIN users resolver ON resolver.organization_id=t.organization_id AND resolver.id=t.resolved_by_user_id
+           ${TASK_METADATA_JOIN}
            WHERE t.organization_id=$1 AND t.case_id=$2 AND t.id=$3`,
           [actor.organizationId, caseId, taskId],
         )
@@ -472,6 +504,7 @@ export function createCaseOperationsStore(pool: pg.Pool) {
            JOIN users creator ON creator.organization_id=t.organization_id AND creator.id=t.created_by_user_id
            LEFT JOIN users assignee ON assignee.organization_id=t.organization_id AND assignee.id=t.assigned_user_id
            LEFT JOIN users resolver ON resolver.organization_id=t.organization_id AND resolver.id=t.resolved_by_user_id
+           ${TASK_METADATA_JOIN}
            WHERE t.organization_id=$1 AND t.case_id::text=$2 AND t.id::text=$3`,
           [actor.organizationId, caseId, taskId],
         )

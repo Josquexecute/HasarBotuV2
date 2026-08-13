@@ -16,6 +16,19 @@ import {
 
 const displayNameSchema = z.string().min(1).max(160)
 
+const v1LegacyNoteSourceSchema = z.strictObject({
+  historical: z.literal(true),
+  authorName: z.string().min(1).max(160).nullable(),
+  occurredAt: utcDateTimeSchema.nullable(),
+})
+
+const v1LegacyTaskSourceSchema = z.strictObject({
+  historical: z.literal(true),
+  assigneeName: z.string().min(1).max(160).nullable(),
+  occurredAt: utcDateTimeSchema.nullable(),
+  completedAt: utcDateTimeSchema.nullable(),
+})
+
 export const caseOperationsParamsSchema = z.strictObject({
   caseId: caseIdSchema,
 })
@@ -33,6 +46,7 @@ export const caseNoteSchema = z.strictObject({
   createdByUserId: userIdSchema,
   createdByDisplayName: displayNameSchema,
   createdAt: utcDateTimeSchema,
+  legacySource: v1LegacyNoteSourceSchema.nullable(),
 })
 
 export const caseTaskSchema = z.strictObject({
@@ -53,13 +67,14 @@ export const caseTaskSchema = z.strictObject({
   createdByDisplayName: displayNameSchema,
   createdAt: utcDateTimeSchema,
   updatedAt: utcDateTimeSchema,
+  legacySource: v1LegacyTaskSourceSchema.nullable(),
 })
 
 export const caseFollowUpHistoryItemSchema = z.strictObject({
   id: idSchema,
   previousFollowUpDate: localDateSchema.nullable(),
   newFollowUpDate: localDateSchema.nullable(),
-  source: z.enum(['case_create', 'case_update']),
+  source: z.enum(['case_create', 'case_update', 'v1_historical_import']),
   caseVersion: entityVersionSchema,
   actorUserId: userIdSchema,
   actorDisplayName: displayNameSchema,

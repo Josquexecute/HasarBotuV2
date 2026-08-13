@@ -16,6 +16,7 @@ const note = {
   createdByUserId: USER_ID,
   createdByDisplayName: 'Sentetik Kullanıcı',
   createdAt: '2026-07-16T10:00:00.000Z',
+  legacySource: null,
 }
 const task = {
   id: TASK_ID,
@@ -35,6 +36,7 @@ const task = {
   createdByDisplayName: 'Sentetik Kullanıcı',
   createdAt: '2026-07-16T10:00:00.000Z',
   updatedAt: '2026-07-16T10:00:00.000Z',
+  legacySource: null,
 }
 const workspace = {
   caseId: CASE_ID,

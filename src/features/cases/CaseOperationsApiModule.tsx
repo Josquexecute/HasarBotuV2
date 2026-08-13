@@ -266,7 +266,7 @@ export function CaseOperationsApiModule({
             {workspace.data.notes.length === 0 && <p className="case-operations__empty">Henüz not veya görüşme kaydı yok.</p>}
             {workspace.data.notes.map((note) => (
               <article className="long-note" key={note.id}>
-                <div><strong>{note.subject ?? noteTypeLabels[note.noteType]}</strong><span>{formatDateTime(note.createdAt)} · {note.createdByDisplayName}</span></div>
+                <div><strong>{note.subject ?? noteTypeLabels[note.noteType]}</strong><span>{formatDateTime(note.legacySource?.occurredAt ?? note.createdAt)} · {note.legacySource?.authorName ?? note.createdByDisplayName}{note.legacySource !== null ? ' · V1 tarihsel kayıt' : ''}</span></div>
                 <p>{note.body}</p>
               </article>
             ))}
@@ -292,7 +292,7 @@ export function CaseOperationsApiModule({
             {openTasks.map((task) => (
               <article className={`case-task-card case-task-card--${task.dueStatus}`} key={task.id}>
                 <div className="case-task-card__head"><strong>{task.title}</strong><span>{dueLabels[task.dueStatus]}</span></div>
-                <div className="case-task-card__meta"><span>{formatDate(task.dueDate)}</span><span>{priorityLabels[task.priority]} öncelik</span><span>{task.assignedUserDisplayName ?? 'Atanmamış'}</span><span>Sürüm {task.version}</span></div>
+                <div className="case-task-card__meta"><span>{formatDate(task.dueDate)}</span><span>{priorityLabels[task.priority]} öncelik</span><span>{task.legacySource?.assigneeName ?? task.assignedUserDisplayName ?? 'Atanmamış'}</span><span>Sürüm {task.version}</span>{task.legacySource !== null && <span>V1 tarihsel kayıt</span>}</div>
                 {canWrite && resolution?.taskId !== task.id && <div className="case-task-card__actions"><button className="button button--secondary" type="button" onClick={() => setResolution({ taskId: task.id, action: 'complete', text: '' })}><CheckCircle2 size={14} /> Tamamla</button><button className="button button--secondary" type="button" onClick={() => setResolution({ taskId: task.id, action: 'cancel', text: '' })}><XCircle size={14} /> İptal Et</button></div>}
                 {resolution?.taskId === task.id && (
                   <div className="case-task-card__resolution">
@@ -306,7 +306,7 @@ export function CaseOperationsApiModule({
               <article className="case-task-card case-task-card--resolved" key={task.id}>
                 <div className="case-task-card__head"><strong>{task.title}</strong><span>{task.status === 'completed' ? 'Tamamlandı' : 'İptal edildi'}</span></div>
                 <p>{task.resolutionNote}</p>
-                <small>{task.resolvedByDisplayName} · {task.resolvedAt === null ? '—' : formatDateTime(task.resolvedAt)}</small>
+                <small>{task.legacySource !== null ? 'V1 tarihsel kayıt' : task.resolvedByDisplayName} · {(task.legacySource?.completedAt ?? task.resolvedAt) === null ? '—' : formatDateTime((task.legacySource?.completedAt ?? task.resolvedAt) as string)}</small>
               </article>
             ))}
           </div>
@@ -327,7 +327,7 @@ export function CaseOperationsApiModule({
             <article key={history.id}>
               <span>{formatDateTime(history.changedAt)}</span>
               <strong>{history.previousFollowUpDate === null ? 'Takip yok' : formatDate(history.previousFollowUpDate)} → {history.newFollowUpDate === null ? 'Takip temizlendi' : formatDate(history.newFollowUpDate)}</strong>
-              <small>{history.actorDisplayName} · dosya sürümü {history.caseVersion}</small>
+              <small>{history.source === 'v1_historical_import' ? 'V1 tarihsel aktarım' : history.actorDisplayName} · dosya sürümü {history.caseVersion}</small>
             </article>
           ))}
         </div>

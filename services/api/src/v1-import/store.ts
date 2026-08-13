@@ -403,8 +403,12 @@ export async function planV1Import(
     upToDate: entries.filter((e) => e.action === 'up_to_date').length,
     skippedClosedCase: entries.filter((e) => e.action === 'skipped_closed_case').length,
     conflicts: entries.filter((e) => e.action === 'conflict_ambiguous_plate' || e.action === 'conflict_field_values').length,
-    notesToImport: entries.reduce((sum, e) => sum + e.notes.filter((n) => !n.alreadyImported).length, 0),
-    tasksToImport: entries.reduce((sum, e) => sum + e.tasks.filter((t) => !t.alreadyImported).length, 0),
+    notesToImport: entries
+      .filter((entry) => entry.action === 'create_case' || entry.action === 'backfill_existing')
+      .reduce((sum, entry) => sum + entry.notes.filter((note) => !note.alreadyImported).length, 0),
+    tasksToImport: entries
+      .filter((entry) => entry.action === 'create_case' || entry.action === 'backfill_existing')
+      .reduce((sum, entry) => sum + entry.tasks.filter((task) => !task.alreadyImported).length, 0),
   }
 
   return { organizationId, rootPath, generatedAt: new Date().toISOString(), summary, entries }
@@ -614,6 +618,11 @@ export async function applyV1Import(
   actor: { readonly organizationId: string; readonly actorUserId: string; readonly requestId: string },
   plan: V1ImportPlan,
 ): Promise<V1ImportApplyResult> {
+  // 0046 uygulayicisi source_relative_path tabanliydi ve klasor move/rename
+  // sonrasinda duplicate uretebiliyordu. Kalici remediation runner'i bu
+  // fonksiyondan AYRIDIR; eski writer fail-closed tutulur.
+  throw new Error('v1_legacy_apply_disabled_use_remediation')
+  /* c8 ignore start -- tarihsel uygulayici yalniz forensic referansidir. */
   const audit = createAuditService()
   const outcomes: V1ImportApplyOutcome[] = []
 
@@ -633,12 +642,12 @@ export async function applyV1Import(
       const outcome = await applyFolderEntry(client, audit, actor, entry)
       await client.query('COMMIT')
       outcomes.push(outcome)
-    } catch (error) {
+    } catch {
       await client.query('ROLLBACK').catch(() => undefined)
       outcomes.push({
         relativePath: entry.folder.relativePath, action: entry.action, caseId: entry.matchedCaseId,
         notesCreated: 0, tasksCreated: 0, fieldsBackfilled: [],
-        error: error instanceof Error ? error.message : 'unknown_error',
+        error: 'v1_legacy_apply_failed',
       })
     } finally {
       client.release()
@@ -654,6 +663,7 @@ export async function applyV1Import(
     failed: outcomes.filter((o) => o.error !== null).length,
     outcomes,
   }
+  /* c8 ignore stop */
 }
 
 async function recordProvenance(

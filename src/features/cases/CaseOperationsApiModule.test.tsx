@@ -27,6 +27,7 @@ const note = {
   createdByUserId: USER_ID,
   createdByDisplayName: 'Sentetik Kullanıcı',
   createdAt: '2026-07-16T10:00:00.000Z',
+  legacySource: null,
 }
 const task = {
   id: TASK_ID,
@@ -46,6 +47,7 @@ const task = {
   createdByDisplayName: 'Sentetik Kullanıcı',
   createdAt: '2026-07-16T10:00:00.000Z',
   updatedAt: '2026-07-16T10:00:00.000Z',
+  legacySource: null,
 }
 const workspace = {
   caseId: CASE_ID,
@@ -156,5 +158,41 @@ describe('Case Operations gerçek API modülü', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('mock kayıt gösterilmedi'))
     expect(screen.queryByText(/Ön panel ve sol şasi/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Yeniden dene/ })).toBeInTheDocument()
+  })
+
+  it('V1 tarihsel yazar, zaman, görev ve takip kaynağını görünür kılar', async () => {
+    const operations: CaseOperationsPort = {
+      load: vi.fn().mockResolvedValue({
+        ...workspace,
+        notes: [{
+          ...note,
+          legacySource: { historical: true, authorName: 'V1 Yazar', occurredAt: '2026-06-01T08:00:00.000Z' },
+        }],
+        tasks: [{
+          ...task,
+          status: 'completed' as const,
+          resolutionNote: 'V1 tarihsel tamamlanma kaydı',
+          resolvedAt: '2026-06-02T09:00:00.000Z',
+          legacySource: { historical: true, assigneeName: 'V1 Sorumlu', occurredAt: '2026-06-01T08:00:00.000Z', completedAt: '2026-06-02T09:00:00.000Z' },
+        }],
+        followUpHistory: [{ ...workspace.followUpHistory[0], source: 'v1_historical_import' as const }],
+      }),
+      createNote: vi.fn(), createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn(),
+    }
+    render(
+      <CaseOperationsApiModule
+        item={{ ...item, lifecycleStatus: 'closed' }}
+        source="api"
+        onUnauthorized={vi.fn()}
+        onUpdated={vi.fn()}
+        onReloadCase={vi.fn()}
+        operationsPort={operations}
+        commandPort={{ createCase: vi.fn(), updateCase: vi.fn() }}
+        referencePort={references()}
+      />,
+    )
+    await waitFor(() => expect(screen.getByText('V1 Yazar', { exact: false })).toBeInTheDocument())
+    expect(screen.getAllByText('V1 tarihsel kayıt', { exact: false }).length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('V1 tarihsel aktarım', { exact: false })).toBeInTheDocument()
   })
 })

@@ -17,3 +17,19 @@ export {
   type V1SidecarReadResult,
   type V1TaskPlanItem,
 } from './store.js'
+export {
+  V1_REMEDIATION_MAPPING_VERSION,
+  applyV1Remediation,
+  planV1Remediation,
+  type V1ExplicitResolutionManifest,
+  type V1RemediationApplyResult,
+  type V1RemediationEntry,
+  type V1RemediationFieldItem,
+  type V1RemediationNoteItem,
+  type V1RemediationOptions,
+  type V1RemediationPlan,
+  type V1RemediationSummary,
+  type V1RemediationTaskItem,
+  type V1ResolutionEvidence,
+  type V1ResolvedReference,
+} from './remediation.js'

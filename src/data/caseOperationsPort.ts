@@ -11,6 +11,11 @@ export interface CaseNoteRecord {
   readonly createdByUserId: string
   readonly createdByDisplayName: string
   readonly createdAt: string
+  readonly legacySource: {
+    readonly historical: true
+    readonly authorName: string | null
+    readonly occurredAt: string | null
+  } | null
 }
 
 export interface CaseTaskRecord {
@@ -31,13 +36,19 @@ export interface CaseTaskRecord {
   readonly createdByDisplayName: string
   readonly createdAt: string
   readonly updatedAt: string
+  readonly legacySource: {
+    readonly historical: true
+    readonly assigneeName: string | null
+    readonly occurredAt: string | null
+    readonly completedAt: string | null
+  } | null
 }
 
 export interface CaseFollowUpHistoryRecord {
   readonly id: string
   readonly previousFollowUpDate: string | null
   readonly newFollowUpDate: string | null
-  readonly source: 'case_create' | 'case_update'
+  readonly source: 'case_create' | 'case_update' | 'v1_historical_import'
   readonly caseVersion: number
   readonly actorUserId: string
   readonly actorDisplayName: string
@@ -136,9 +147,14 @@ function exact(value: Record<string, unknown>, keys: readonly string[]): void {
 
 function parseNote(value: unknown): CaseNoteRecord {
   const item = record(value)
-  exact(item, ['id', 'noteType', 'subject', 'body', 'createdByUserId', 'createdByDisplayName', 'createdAt'])
+  exact(item, ['id', 'noteType', 'subject', 'body', 'createdByUserId', 'createdByDisplayName', 'createdAt', 'legacySource'])
   const noteType = stringValue(item.noteType)
   if (noteType !== 'internal' && noteType !== 'contact') throw new CaseOperationsError('unavailable', 'case operations response invalid')
+  const legacySource = item.legacySource === null ? null : record(item.legacySource)
+  if (legacySource !== null) {
+    exact(legacySource, ['historical', 'authorName', 'occurredAt'])
+    if (legacySource.historical !== true) throw new CaseOperationsError('unavailable', 'case operations response invalid')
+  }
   return {
     id: stringValue(item.id),
     noteType,
@@ -147,6 +163,11 @@ function parseNote(value: unknown): CaseNoteRecord {
     createdByUserId: stringValue(item.createdByUserId),
     createdByDisplayName: stringValue(item.createdByDisplayName),
     createdAt: stringValue(item.createdAt),
+    legacySource: legacySource === null ? null : {
+      historical: true,
+      authorName: nullableString(legacySource.authorName),
+      occurredAt: nullableString(legacySource.occurredAt),
+    },
   }
 }
 
@@ -155,7 +176,7 @@ function parseTask(value: unknown): CaseTaskRecord {
   exact(item, [
     'id', 'title', 'priority', 'status', 'assignedUserId', 'assignedUserDisplayName',
     'dueDate', 'dueStatus', 'resolutionNote', 'resolvedByUserId', 'resolvedByDisplayName',
-    'resolvedAt', 'version', 'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt',
+    'resolvedAt', 'version', 'createdByUserId', 'createdByDisplayName', 'createdAt', 'updatedAt', 'legacySource',
   ])
   const priority = stringValue(item.priority)
   const status = stringValue(item.status)
@@ -164,6 +185,11 @@ function parseTask(value: unknown): CaseTaskRecord {
       !['open', 'completed', 'cancelled'].includes(status) ||
       !['overdue', 'today', 'upcoming', 'scheduled'].includes(dueStatus)) {
     throw new CaseOperationsError('unavailable', 'case operations response invalid')
+  }
+  const legacySource = item.legacySource === null ? null : record(item.legacySource)
+  if (legacySource !== null) {
+    exact(legacySource, ['historical', 'assigneeName', 'occurredAt', 'completedAt'])
+    if (legacySource.historical !== true) throw new CaseOperationsError('unavailable', 'case operations response invalid')
   }
   return {
     id: stringValue(item.id),
@@ -183,6 +209,12 @@ function parseTask(value: unknown): CaseTaskRecord {
     createdByDisplayName: stringValue(item.createdByDisplayName),
     createdAt: stringValue(item.createdAt),
     updatedAt: stringValue(item.updatedAt),
+    legacySource: legacySource === null ? null : {
+      historical: true,
+      assigneeName: nullableString(legacySource.assigneeName),
+      occurredAt: nullableString(legacySource.occurredAt),
+      completedAt: nullableString(legacySource.completedAt),
+    },
   }
 }
 
@@ -193,7 +225,7 @@ function parseFollowUp(value: unknown): CaseFollowUpHistoryRecord {
     'actorUserId', 'actorDisplayName', 'changedAt',
   ])
   const source = stringValue(item.source)
-  if (source !== 'case_create' && source !== 'case_update') {
+  if (source !== 'case_create' && source !== 'case_update' && source !== 'v1_historical_import') {
     throw new CaseOperationsError('unavailable', 'case operations response invalid')
   }
   return {
