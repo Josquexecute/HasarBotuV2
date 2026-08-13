@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu Frontend UAT"
+  short_description: "Masaüstü frontend UAT ve görsel kabul"
+  default_prompt: "Use $hasarbotu-frontend-uat to validate this desktop UI change."

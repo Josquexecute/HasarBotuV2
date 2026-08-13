@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu İşçilik"
+  short_description: "İşçilik AI ve workbook güvenli iş akışı"
+  default_prompt: "Use $hasarbotu-labor to work on this labor or workbook task."

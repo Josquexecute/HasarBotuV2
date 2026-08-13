@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu Üretim Güvenliği"
+  short_description: "Üretim işlemleri için ortak güvenlik sınırları"
+  default_prompt: "Use $hasarbotu-production-safety to assess this HasarBotu production task safely."

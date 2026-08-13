@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu Production Readiness"
+  short_description: "Üretim hazır oluş kanıtlarını bağımsız denetleme"
+  default_prompt: "Use $hasarbotu-production-readiness to audit production readiness."

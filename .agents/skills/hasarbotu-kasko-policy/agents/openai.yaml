@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu Kasko Poliçesi"
+  short_description: "Kasko poliçe kanıtı ve zorunlu kontroller"
+  default_prompt: "Use $hasarbotu-kasko-policy to work on this Kasko policy task."

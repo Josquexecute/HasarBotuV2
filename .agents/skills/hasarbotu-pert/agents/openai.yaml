@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu PERT"
+  short_description: "PERT değerlendirme ve insan onayı sınırları"
+  default_prompt: "Use $hasarbotu-pert to implement or review this PERT flow."

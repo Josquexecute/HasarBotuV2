@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu V1 Aktarımı"
+  short_description: "V1 verisini güvenli ve idempotent aktarma"
+  default_prompt: "Use $hasarbotu-v1-migration to plan or verify this V1 import task."

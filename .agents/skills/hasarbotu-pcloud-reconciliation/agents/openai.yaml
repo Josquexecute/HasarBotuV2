@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu pCloud Uzlaştırma"
+  short_description: "Vaka bazlı pCloud uzlaştırma güvenliği"
+  default_prompt: "Use $hasarbotu-pcloud-reconciliation to assess this pCloud reconciliation task."

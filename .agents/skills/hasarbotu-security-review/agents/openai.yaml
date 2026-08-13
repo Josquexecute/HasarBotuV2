@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu Güvenlik İncelemesi"
+  short_description: "HasarBotu sınırlarına uygun güvenlik denetimi"
+  default_prompt: "Use $hasarbotu-security-review to review this change for security risks."

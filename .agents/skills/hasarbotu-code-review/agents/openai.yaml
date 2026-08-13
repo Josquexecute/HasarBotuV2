@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu Kod İncelemesi"
+  short_description: "Kanıta dayalı kapsam kontrollü kod inceleme"
+  default_prompt: "Use $hasarbotu-code-review to review this HasarBotu change."

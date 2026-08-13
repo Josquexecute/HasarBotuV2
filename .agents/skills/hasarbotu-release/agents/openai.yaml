@@ -1,0 +1,4 @@
+interface:
+  display_name: "HasarBotu Release"
+  short_description: "Release hazırlığı ve dağıtım kapıları"
+  default_prompt: "Use $hasarbotu-release to prepare and verify this release safely."
