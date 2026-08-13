@@ -8965,3 +8965,33 @@ Etkisi:
 - **Kalan acik risk:** 5 plaka-belirsiz + 46 claimType-bilinmiyor + 1 ayristirilamayan-ad + 61 sidecar-yok klasor Apply ile OTOMATIK cozulmez -- tasarim geregi (bkz. Karar 3-4). Gercek Apply hala TETIKLENMEDI, kullanicinin tek onayi bekleniyor.
 
 Kaynak: 2026-08-11 tarihli kullanici talimati ("KRİTİK PRODUCTION BLOCKER bulundu. Paketlemeyi/kullanımı durdur...").
+
+## HB-2026-200 — V1 remediation stable identity, eksiksiz provenance ve migration-only historical closure
+
+Tarih: 2026-08-13
+
+Karar:
+
+- V1 kaynak kimligi artik `source_relative_path` degildir. Kaynak kimligi V1'in `caseKey` ve `metadata.createdAt` alanlarinin kanonik, path-bagimsiz fingerprint'idir; note/task kimligi bu kaynak kimligi, item turu ve V1 native item ID ile uretilir.
+- Her kaynak revision'i icin hash, raw JSON snapshot, schema/mapping surumu ve path alias/history append-only source-level provenance tablolarinda saklanir. Raw JSON item basina kopyalanmaz.
+- Preview actionable, blocked, auto-resolved ve human-required sayaclarini ayirir. Blocked kaynagin note/task adedi actionable sayilmaz; apply ayni planner semantigini kullanir.
+- Claim type'i bos kaynak yalniz benzersiz, makinece dogrulanabilir mevcut V2 hedefi bulunduysa auto-resolve edilir. Cok adayli kaynak kendiliginden secilmez; token'li resolution manifest gerekir.
+- Responsible/expert/service cozumlemesi yalniz normalize edilmis exact-unique eslesmeyle otomatik yapilir. Placeholder kullanici/servis uretilmez; eslesmeyen veya belirsiz adlar provenance'da korunur ve human resolution olarak raporlanir.
+- Historical note source zamani/yazari item metadata'sinda korunur. Acik ve tamamlanmis task'lar source durumu/zamaniyla, `event_source=v1_historical_import` ve source evidence tasiyan `case_task_events` kayitlariyla idempotent aktarilir. Follow-up backfill historical import history kaydi uretir.
+- KAPALI V1 kaynaklari normal guncel closure gate'lerine retroaktif sokulmaz. Yalniz remediation servisi icinden erisilen `historical_close` operasyonu kullanilir; public close/reopen API gate'leri degismez, source evidence audit/provenance'da tutulur ve kaynak kapanis zamani yoksa tarih uydurulmaz.
+- Eski path-bagimli `v1_import_records` kayitlari stable source/item kimliklerine reconciliation tablosuyla baglanir. Mevcut dogru row'lar yeniden uretilmez; moved/renamed replay duplicate olusturmaz.
+- Legacy apply yolu fail-closed devre disidir. Yeni apply; schema hazirligi, sifir duplicate, fresh plan hash, actor, interactive exact confirmation ve TOCTOU re-plan gerektirir. Varsayilan davranis salt-okunur preview'dir.
+
+Production durumu ve sinir:
+
+- Bu karar kapsaminda production DB write, migration apply, remediation apply, deploy, servis/env/ACL degisikligi, V1 sidecar yazma/tasima/silme veya restore yapilmadi.
+- Son salt-okunur preview production schema'sinin henuz remediation migration'ini icermedigini (`schemaReady=false`) ve apply'in bu nedenle fail-closed kalmasi gerektigini dogruladi.
+- Production apply ancak migration/deploy icin ayri yetki, fresh preview hash'i, sifir duplicate ve unresolved manifest kararlarinin tamamlanmasindan sonra ayrica onaylanabilir.
+
+Kanit:
+
+- Tasarim ve operasyon runbook'u: `docs/V1_REMEDIATION_RUNBOOK.md`.
+- Gercek PostgreSQL E2E; moved/renamed replay, legitimate identical note, deterministic unknown-type resolution, gercek ambiguity, raw snapshot, completed task/event, follow-up history, historical closure, TOCTOU, partial-production reconciliation, malformed/missing source ve permission boundary senaryolarini kapsar.
+- Production preview yalniz read-only session ile calistirildi; raw V1 JSON, isimler, not icerigi, secret veya mutlak kaynak yolu stdout'a basilmadi.
+
+Kaynak: 2026-08-13 tarihli kullanici talimati ("V1→V2 import forensic raporu kabul edildi. POST-APPLY VERDICT = NEEDS REMEDIATION.").

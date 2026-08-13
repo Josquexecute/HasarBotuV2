@@ -1,6 +1,55 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-08-11
+Son güncelleme: 2026-08-13
+
+## V1 remediation v2 — production-safe kod ve salt-okunur production preview hazır; production migration/deploy/apply YAPILMADI (2026-08-13, HB-2026-200)
+
+- 0046'nın path-tabanlı writer'ı fail-closed devre dışı bırakıldı. Kalıcı kimlik
+  artık path içermez: source=`caseKey+metadata.createdAt`, item=`stable source +
+  tür + V1 native ID`. Gerçek V1 envanterinde source birleşimi 150/150
+  benzersiz, `caseKey` tek başına benzersiz değildir; 501 note ID ve 77 task ID
+  benzersizdir. Move/rename ve aynı metinli meşru duplicate testleri geçmiştir.
+- Additive 0047 migration tasarlandı: immutable source/revision/alias,
+  legacy-0046 reconciliation, item-level tarihsel metadata, historical follow-up
+  ve migration-only historical closure. Migration bu görevde production'a
+  uygulanmadı; production şeması preview anında bilinçli olarak `SchemaReady=false`tir.
+- Notes özgün yazar/zamanla, tamamlanmış görevler completion zamanı ve
+  `created/completed` event'leriyle, follow-up ise sahte normal kullanıcı edit'i
+  üretmeden `v1_historical_import` history olarak taşınır. API ve masaüstü UI
+  V1 tarihsel kaynağı açıkça gösterir; eski body-prefix canonical provenance
+  kabul edilmez.
+- Fiziksel `KAPALI <ay>` lineage migration-only `historical_close` üretir;
+  güncel Kasko/değer-kaybı closure gate'leri geçmiş veriye retroaktif
+  çalıştırılmaz. V1'de gerçek kapanış zamanı olmadığından tarih uydurulmaz.
+  Normal public close/reopen/File Agent akışında bypass eklenmemiştir.
+- **Production salt-okunur preview (2026-08-13):** current 167 case / 368 note /
+  12 task / 470 provenance. Safe remediation: 117 note, 0 açık task, 59
+  tamamlanmış task, 57 first-class alan, 89 historical closure, 138 follow-up
+  history, 130 task event (12 mevcut görev event backfill'i + yeni tarihsel
+  görevlerin created/completed event'leri), 148 raw source/provenance, 27 move/rename
+  reconciliation. Auto-resolved: 46 unknown claim type, 1 ambiguous target;
+  user/expert/service exact auto-match 0. Human-required: 4 claim type, 5 target,
+  148 responsible source kaydı, 148 expert source kaydı, 20 service source kaydı
+  (benzersiz mapping kararı sırasıyla 3/1/5). **Apply edilirse business-data
+  duplicate: 0.** Final preview'da missing-sidecar 104'tür. Arka arkaya iki
+  final preview aynı source manifest ve plan hash'ini üretmiştir. Preview
+  bağlantısı DB seviyesinde read-only yapılmıştır.
+- Önceki forensic sayı ile güncel preview arasındaki fark freshness'tir:
+  güncel source ağacı önceki apply zamanından sonra büyümüş/değişmiştir. Bu
+  nedenle önceki 100 blocked note artık deterministic target ile çözülürken
+  güncel plan toplam 117 missing note ve önceki 79 yerine 89 actionable KAPALI
+  kaynak göstermektedir. Plan hash'i source manifest ve DB durumu değişince
+  değişir; eski plan apply edilemez.
+- Gerçek doğrulama: root typecheck geçti; lint 0 hata/13 önceden var olan uyarı;
+  production build + bundle bütçesi geçti (başlangıç 426.198 bayt); check:deploy
+  geçti; gerçek `hasarbotu_test` ile tam zincir **2.298 PASS / 6 ortam-koşullu
+  UI skip / 0 fail** (UI 387, domain 787, contracts 324, database 76,
+  desktop-bridge 10, API 529, File Agent 110, desktop 75). İlk build denemesi
+  yanlışlıkla `NODE_ENV=test` ile yapıldığı için bundle kapısında reddedildi;
+  environment temizlenip production build yeniden çalıştırıldı ve geçti.
+- Ayrıntılı alan matrisi ve gelecek onaylı operasyon sırası:
+  `docs/V1_REMEDIATION_RUNBOOK.md`. Production DB write/migration/deploy/service
+  değişikliği/V1 source write/restore/push yapılmadı.
 
 ## KRİTİK production blocker düzeltildi — V1 plaka klasörü sidecar verisi artık V2'ye kalıcı/idempotent şekilde taşınıyor; Apply UYGULANMADI (2026-08-11, HB-2026-199)
 
