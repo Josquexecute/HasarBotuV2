@@ -936,9 +936,13 @@ export {
   type ValueLossWorkbookView,
 } from './value-loss-rule-snapshot.js'
 export {
+  V1_IDENTITY_VERSION,
+  buildV1SourceIdentityMaterial,
+  buildV1StableItemIdentityMaterial,
   decideV1FieldBackfill,
   deriveV1ClosedState,
   mapV1ClaimType,
+  normalizeV1ResolutionName,
   parseV1PlateFolderName,
   v1FolderPlateSearchKey,
   type V1ClaimType,
@@ -946,4 +950,6 @@ export {
   type V1ClosedStateSignals,
   type V1FieldBackfillDecision,
   type V1PlateFolderName,
+  type V1SourceIdentityMaterialResult,
+  type V1StableItemType,
 } from './v1-import.js'

@@ -1,10 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildV1SourceIdentityMaterial,
+  buildV1StableItemIdentityMaterial,
   decideV1FieldBackfill,
   deriveV1ClosedState,
   mapV1ClaimType,
   parseV1PlateFolderName,
 } from '../src/v1-import.js'
+
+describe('V1 stable identity', () => {
+  it('path icermeyen caseKey + createdAt materyali uretir', () => {
+    const first = buildV1SourceIdentityMaterial({ caseKey: 'case-1', createdAt: '2026-07-01T10:00:00+03:00' })
+    const moved = buildV1SourceIdentityMaterial({ caseKey: 'case-1', createdAt: '2026-07-01T07:00:00.000Z' })
+    expect(first).toEqual(moved)
+    expect(first.ok && first.material).not.toContain('KAPALI')
+  })
+
+  it('caseKey veya createdAt eksikse tahmin etmez', () => {
+    expect(buildV1SourceIdentityMaterial({ caseKey: '', createdAt: '2026-07-01T00:00:00Z' })).toMatchObject({ ok: false, reason: 'case_key_missing' })
+    expect(buildV1SourceIdentityMaterial({ caseKey: 'case-1', createdAt: '' })).toMatchObject({ ok: false, reason: 'created_at_missing_or_invalid' })
+  })
+
+  it('ayni metinli mesru iki notu native ID ile ayri tutar', () => {
+    const a = buildV1StableItemIdentityMaterial('a'.repeat(64), 'note', 'note-1')
+    const b = buildV1StableItemIdentityMaterial('a'.repeat(64), 'note', 'note-2')
+    expect(a).not.toBe(b)
+    expect(buildV1StableItemIdentityMaterial('a'.repeat(64), 'note', '')).toBeNull()
+  })
+})
 
 describe('parseV1PlateFolderName', () => {
   it('duz plaka klasor adini kabul eder', () => {

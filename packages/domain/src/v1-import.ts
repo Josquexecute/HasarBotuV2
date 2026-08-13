@@ -56,6 +56,72 @@ export function parseV1PlateFolderName(folderName: string): V1PlateFolderName | 
 
 export type V1ClaimType = CaseType | 'unknown'
 
+export const V1_IDENTITY_VERSION = 'v1-source-identity/1.0.0' as const
+
+export type V1SourceIdentityMaterialResult =
+  | {
+      readonly ok: true
+      readonly kind: 'case_key_created_at'
+      readonly version: typeof V1_IDENTITY_VERSION
+      /** Hash girdisidir; log/audit/UI'ya ham olarak yazilmaz. */
+      readonly material: string
+    }
+  | {
+      readonly ok: false
+      readonly reason: 'case_key_missing' | 'created_at_missing_or_invalid'
+    }
+
+function canonicalIdentityPart(value: string): string {
+  return value.trim().normalize('NFC')
+}
+
+/**
+ * Gercek V1 envanterinde `caseKey` tek basina benzersiz degildir (ayni plaka
+ * icin tekrar eder). Buna karsilik `caseKey + metadata.createdAt` 150/150
+ * kaynakta tekildir ve klasor yolu/tasi-ma durumu icermez. Bu fonksiyon hash
+ * URETMEZ; yalniz versiyonlu kanonik materyali olusturur.
+ */
+export function buildV1SourceIdentityMaterial(input: {
+  readonly caseKey: string | null | undefined
+  readonly createdAt: string | null | undefined
+}): V1SourceIdentityMaterialResult {
+  const caseKey = canonicalIdentityPart(input.caseKey ?? '')
+  if (caseKey.length === 0) return { ok: false, reason: 'case_key_missing' }
+  const createdAt = canonicalIdentityPart(input.createdAt ?? '')
+  if (createdAt.length === 0 || !Number.isFinite(Date.parse(createdAt))) {
+    return { ok: false, reason: 'created_at_missing_or_invalid' }
+  }
+  return {
+    ok: true,
+    kind: 'case_key_created_at',
+    version: V1_IDENTITY_VERSION,
+    material: JSON.stringify([V1_IDENTITY_VERSION, caseKey, new Date(createdAt).toISOString()]),
+  }
+}
+
+export type V1StableItemType = 'case' | 'field' | 'note' | 'task' | 'vehicle_profile' | 'closure' | 'follow_up'
+
+/**
+ * Note/task metni identity'ye girmez: ayni metinli iki mesru oge, V1 native
+ * ID'leri farkliysa birbirine dedupe edilmez. Klasor yolu hicbir zaman girdi
+ * degildir.
+ */
+export function buildV1StableItemIdentityMaterial(
+  stableSourceIdentity: string,
+  itemType: V1StableItemType,
+  nativeItemId: string,
+): string | null {
+  const source = canonicalIdentityPart(stableSourceIdentity)
+  const itemId = canonicalIdentityPart(nativeItemId)
+  if (source.length === 0 || itemId.length === 0) return null
+  return JSON.stringify([V1_IDENTITY_VERSION, source, itemType, itemId])
+}
+
+/** Exact-unique user/service resolution icin ortak, locale-aware anahtar. */
+export function normalizeV1ResolutionName(value: string): string {
+  return value.trim().normalize('NFC').toLocaleLowerCase('tr-TR').replace(/\s+/gu, ' ')
+}
+
 /**
  * V1 `claimType` metnini V2 `CaseType`'a esler. Bos/tanimsiz/"unknown" HER
  * ZAMAN `'unknown'` doner -- asla varsayilan olarak 'traffic' veya 'casco'

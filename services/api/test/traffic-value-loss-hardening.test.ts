@@ -726,7 +726,7 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
       databaseUrl: config.url,
       direction: 'down',
       // 0046 V1 aktarim provenance en yeni migration'dır; 0043 rollback guard'ına ulaş.
-      count: 4,
+      count: 5,
       quiet: true,
     })).rejects.toThrow('real market value loss revisions must be removed before rollback')
     const migrationState = await pool.query(
@@ -740,7 +740,12 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
     )).rows[0].n)).toBe(1)
     const restored = await runMigrations({ databaseUrl: config.url, quiet: true })
     expect(restored.map((migration) => migration.name))
-      .toEqual(['0044_labor_workbook_apply_runtime', '0045_kasco_mandatory_checks', '0046_v1_import_provenance'])
+      .toEqual([
+        '0044_labor_workbook_apply_runtime',
+        '0045_kasco_mandatory_checks',
+        '0046_v1_import_provenance',
+        '0047_v1_import_remediation',
+      ])
   }, 40_000)
 
   it('JSONB snapshot/provenance/minor-unit değerlerini veri kaybı olmadan saklar ve rollback atomiktir', async () => {

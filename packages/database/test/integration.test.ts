@@ -21,7 +21,12 @@ import {
  * Yeni bir migration eklenince (bu dosyanın kendisi güncellenmeden) buraya
  * eklenir -- 52 sıralı testin tek tek güncellenmesi yerine.
  */
-const HIDDEN_MIGRATION_NAMES = ['0044_labor_workbook_apply_runtime', '0045_kasco_mandatory_checks', '0046_v1_import_provenance']
+const HIDDEN_MIGRATION_NAMES = [
+  '0044_labor_workbook_apply_runtime',
+  '0045_kasco_mandatory_checks',
+  '0046_v1_import_provenance',
+  '0047_v1_import_remediation',
+]
 
 async function runMigrations(
   options: Parameters<typeof runMigrationsRaw>[0],
@@ -218,7 +223,12 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'traffic_value_loss_versions',
       'user_roles',
       'users',
+      'v1_import_item_metadata',
+      'v1_import_record_reconciliations',
       'v1_import_records',
+      'v1_import_source_aliases',
+      'v1_import_source_revisions',
+      'v1_import_sources',
     ])
     const roles = await pool.query('SELECT count(*)::int AS n FROM roles')
     expect((roles.rows[0] as { n: number }).n).toBe(6)
@@ -227,6 +237,67 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
   it('ayni migration ikinci kez uygulanmaz (tekrar guvenligi)', async () => {
     const applied = await runMigrations({ databaseUrl: config.url, quiet: true })
     expect(applied).toEqual([])
+  })
+
+  it('0047 remediation migrationini geri alir ve yeniden uygular', async () => {
+    const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 1 })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0047_v1_import_remediation'])
+    const absent = await pool.query("SELECT to_regclass('public.v1_import_sources') IS NULL AS absent")
+    expect(absent.rows).toEqual([{ absent: true }])
+
+    const reapplied = await runMigrationsRaw({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0047_v1_import_remediation'])
+    const present = await pool.query("SELECT to_regclass('public.v1_import_sources') IS NOT NULL AS present")
+    expect(present.rows).toEqual([{ present: true }])
+  })
+
+  it('0047 stable identity uniqueness ve immutable raw revision sinirlarini zorlar', async () => {
+    const organizationId = uuidv7()
+    const sourceId = uuidv7()
+    const revisionId = uuidv7()
+    const sourceIdentity = 'a'.repeat(64)
+    await pool.query('BEGIN')
+    try {
+      await pool.query("INSERT INTO organizations (id,code,name) VALUES ($1,'v1-remediation-db','V1 Remediation DB')", [organizationId])
+      await pool.query(
+        `INSERT INTO v1_import_sources
+          (id,organization_id,stable_source_identity,identity_kind,identity_version,first_discovered_at)
+         VALUES ($1,$2,$3,'case_key_created_at','v1-source-identity/1.0.0',now())`,
+        [sourceId, organizationId, sourceIdentity],
+      )
+      await pool.query(
+        `INSERT INTO v1_import_source_revisions
+          (id,organization_id,stable_source_identity,source_file_hash,source_schema_version,mapping_version,raw_snapshot,discovered_at)
+         VALUES ($1,$2,$3,$4,1,'v1-remediation/2.0.0','{}'::jsonb,now())`,
+        [revisionId, organizationId, sourceIdentity, 'b'.repeat(64)],
+      )
+      await expect(pool.query(
+        `INSERT INTO v1_import_source_revisions
+          (id,organization_id,stable_source_identity,source_file_hash,source_schema_version,mapping_version,raw_snapshot,discovered_at)
+         VALUES ($1,$2,$3,$4,1,'v1-remediation/2.0.0','{}'::jsonb,now())`,
+        [uuidv7(), organizationId, sourceIdentity, 'b'.repeat(64)],
+      )).rejects.toMatchObject({ code: '23505' })
+      await pool.query('ROLLBACK')
+
+      await pool.query('BEGIN')
+      await pool.query("INSERT INTO organizations (id,code,name) VALUES ($1,'v1-remediation-db-2','V1 Remediation DB 2')", [organizationId])
+      await pool.query(
+        `INSERT INTO v1_import_sources
+          (id,organization_id,stable_source_identity,identity_kind,identity_version,first_discovered_at)
+         VALUES ($1,$2,$3,'case_key_created_at','v1-source-identity/1.0.0',now())`,
+        [sourceId, organizationId, sourceIdentity],
+      )
+      await pool.query(
+        `INSERT INTO v1_import_source_revisions
+          (id,organization_id,stable_source_identity,source_file_hash,source_schema_version,mapping_version,raw_snapshot,discovered_at)
+         VALUES ($1,$2,$3,$4,1,'v1-remediation/2.0.0','{}'::jsonb,now())`,
+        [revisionId, organizationId, sourceIdentity, 'b'.repeat(64)],
+      )
+      await expect(pool.query("UPDATE v1_import_source_revisions SET raw_snapshot='{\"changed\":true}'::jsonb WHERE id=$1", [revisionId]))
+        .rejects.toMatchObject({ code: '23001' })
+    } finally {
+      await pool.query('ROLLBACK')
+    }
   })
 
   it('0044 güvenli workbook apply tablosunu ve mevcut job allowlist uzantısını kurar', async () => {
