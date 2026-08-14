@@ -127,6 +127,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
   let organizationId: string
   let actorUserId: string
   let responsibleUserId: string
+  let omerUserId: string
   let serviceId: string
   let root: string | undefined
   let officeSequence = 20_000
@@ -151,14 +152,17 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     organizationId = uuidv7()
     actorUserId = uuidv7()
     responsibleUserId = uuidv7()
+    omerUserId = uuidv7()
     serviceId = uuidv7()
     await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3)', [organizationId, 'v1-remediation-test', 'V1 Remediation Test'])
     await pool.query(
       `INSERT INTO users (id,organization_id,email,display_name,password_hash) VALUES
-       ($1,$3,'actor@test.local','Sentetik Aktor',$4),($2,$3,'responsible@test.local','Sentetik Sorumlu',$4)`,
-      [actorUserId, responsibleUserId, organizationId, await hashPassword(PASSWORD)],
+       ($1,$4,'actor@test.local','Sentetik Aktor',$5),($2,$4,'responsible@test.local','Sentetik Sorumlu',$5),
+       ($3,$4,'omerfaruk.isleyen@baranekspertiz.com','Ömer Faruk',$5)`,
+      [actorUserId, responsibleUserId, omerUserId, organizationId, await hashPassword(PASSWORD)],
     )
     await pool.query("INSERT INTO user_roles (user_id,role_id) SELECT $1,id FROM roles WHERE code='admin'", [actorUserId])
+    await pool.query("INSERT INTO user_roles (user_id,role_id) SELECT $1,id FROM roles WHERE code='expert'", [responsibleUserId])
     await pool.query(
       "INSERT INTO service_centers (id,organization_id,name,center_type,service_type) VALUES ($1,$2,'Sentetik Servis','ozel','private')",
       [serviceId, organizationId],
@@ -201,7 +205,10 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     expect(plan.summary.blocked.unknownClaimType).toBe(1)
     expect(plan.summary.blocked.ambiguousCase).toBe(1)
     expect(plan.summary.blocked.malformed).toBe(1)
-    expect(plan.summary.blocked.missingSidecar).toBe(1)
+    expect(plan.summary.blocked.missingSidecar).toBe(0)
+    expect(plan.summary.nonBlockingLegacy.missingSidecar).toBe(1)
+    expect(plan.entries.find((entry) => entry.targetState === 'missing_sidecar')?.missingSidecarClassification)
+      .toMatchObject({ state: 'non_blocking_no_historical_payload', existingV2CaseCount: 0 })
     expect(plan.summary.blocked.other).toBe(1)
     expect(plan.summary.duplicatesThatWouldBeCreated).toBe(0)
   })
@@ -291,6 +298,66 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     expect(moved.summary.duplicatesThatWouldBeCreated).toBe(0)
   })
 
+  it('claim evidence hiyerarsisi bagimsiz corroboration kullanir, KTT/genel Trafik policesini tek basina tur saymaz', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    await writeSource(root, '2026/Agustos 2026/34EVA101', {
+      caseKey: 'corroborated-traffic', createdAt: '2026-08-05T08:00:00Z', claimType: 'trafik',
+    }, ['EVRAK/K RUHSAT.jpg', 'EVRAK/M Trafik Poliçe.pdf', 'EVRAK/KTT.jpg'])
+    await writeSource(root, '2026/Agustos 2026/34EVA102', {
+      caseKey: 'context-only', createdAt: '2026-08-05T09:00:00Z', claimType: '',
+    }, ['EVRAK/Trafik Poliçesi.pdf', 'EVRAK/ZABIT.jpg', 'EVRAK/BEYAN.jpg'])
+    const plan = await planV1Remediation(pool, organizationId, root)
+    const byKey = new Map(plan.entries.map((entry) => [entry.rawSnapshot?.caseIdentity?.caseKey, entry]))
+    expect(byKey.get('corroborated-traffic')).toMatchObject({
+      targetState: 'create', caseType: 'traffic',
+      claimTypeResolution: { resolutionReason: 'sidecar_corroborated_over_conflicting_ruhsat' },
+    })
+    expect(byKey.get('context-only')).toMatchObject({
+      targetState: 'human_claim_type', caseType: null,
+      claimTypeResolution: { resolutionReason: 'no_deterministic_evidence' },
+    })
+  })
+
+  it('legacy responsible/expert/service degerlerini yanlis hesaba baglamadan non-blocking korur', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    await writeSource(root, '2026/Agustos 2026/34REF101', {
+      caseKey: 'omer-email-identity', createdAt: '2026-08-06T08:00:00Z', responsible: 'Ömer Faruk İşleyen',
+      expert: 'Baran Gürbüz', service: 'GÜNEY',
+    })
+    await writeSource(root, '2026/Agustos 2026/34REF102', {
+      caseKey: 'unassigned-sentinel', createdAt: '2026-08-06T09:00:00Z', responsible: 'Atanmadı', expert: 'Baran Gürbüz',
+    })
+    await writeSource(root, '2026/Agustos 2026/34REF103', {
+      caseKey: 'legacy-user', createdAt: '2026-08-06T10:00:00Z', responsible: 'Enes Özmen', expert: 'Baran Gürbüz',
+    })
+    const plan = await planV1Remediation(pool, organizationId, root)
+    const byKey = new Map(plan.entries.map((entry) => [entry.rawSnapshot?.caseIdentity?.caseKey, entry]))
+    expect(byKey.get('omer-email-identity')?.responsible).toMatchObject({
+      state: 'auto_resolved', targetId: omerUserId, resolutionReason: 'exact_email_identity',
+    })
+    expect(byKey.get('unassigned-sentinel')?.responsible).toMatchObject({
+      state: 'legacy_unassigned', targetId: null, resolutionReason: 'unassigned_sentinel',
+    })
+    expect(byKey.get('legacy-user')?.responsible).toMatchObject({ state: 'legacy_only', targetId: null })
+    expect(byKey.get('legacy-user')?.responsible.targetId).not.toBe(omerUserId)
+    expect(plan.entries.every((entry) => entry.expert.targetId !== omerUserId)).toBe(true)
+    expect(plan.summary.blockingHumanDecisions).toEqual({ claimType: 0, ambiguousTarget: 0 })
+    expect(plan.summary.autoResolved).toMatchObject({ users: 1, unassignedResponsible: 1, servicesPlanned: 0 })
+    expect(plan.summary.nonBlockingLegacy).toMatchObject({ responsibleNames: 1, expertNames: 1, serviceNames: 1 })
+
+    const duplicateOne = uuidv7()
+    const duplicateTwo = uuidv7()
+    await pool.query(
+      `INSERT INTO service_centers (id,organization_id,name,center_type,service_type) VALUES
+       ($1,$3,'GÜNEY','ozel','private'),($2,$3,'güney','ozel','private')`,
+      [duplicateOne, duplicateTwo, organizationId],
+    )
+    const ambiguousService = await planV1Remediation(pool, organizationId, root)
+    expect(ambiguousService.entries.find((entry) => entry.rawSnapshot?.caseIdentity?.caseKey === 'omer-email-identity')?.service)
+      .toMatchObject({ state: 'ambiguous_legacy', targetId: null, matchCount: 2 })
+    expect(ambiguousService.summary.autoResolved.servicesPlanned).toBe(0)
+  })
+
   it('ilk import; raw revision, historical note/task zamanlari, completed task, events, follow-up ve first-class alanlari korur', async () => {
     root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
     await writeSource(root, '2026/Temmuz 2026/34FFF666', {
@@ -347,7 +414,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     )
     expect(taskEvents.rows).toHaveLength(3)
     expect(taskEvents.rows.every((event) => event.event_source === 'v1_historical_import'
-      && event.source_identity !== null && event.source_evidence?.mappingVersion === 'v1-remediation/2.1.0')).toBe(true)
+      && event.source_identity !== null && event.source_evidence?.mappingVersion === 'v1-remediation/2.2.0')).toBe(true)
     const raw = await pool.query('SELECT raw_snapshot FROM v1_import_source_revisions WHERE organization_id=$1', [organizationId])
     expect(raw.rows[0].raw_snapshot.portalChecklist).toHaveLength(1)
     expect(raw.rows[0].raw_snapshot.assignment.raportor).toBe('Sentetik Raportor')
@@ -461,6 +528,76 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     expect(byIdentity.get('ambiguous-true')?.targetState).toBe('human_ambiguous')
     expect(plan.summary.autoResolved.unknownClaimTypes).toBeGreaterThanOrEqual(1)
     expect(plan.summary.autoResolved.ambiguousCases).toBeGreaterThanOrEqual(1)
+  })
+
+  it('exact identifier ile baglanan kardes source sonrasi tek kalan candidate bire-bir eliminasyonla cozulur', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const exact = await insertCase('34SIB101', 'traffic', 'NOTICE-SIBLING')
+    const remaining = await insertCase('34SIB101', 'traffic')
+    await writeSource(root, '2026/Haziran 2026/34SIB101', {
+      caseKey: 'sibling-exact', createdAt: '2026-06-10T08:00:00Z', claimNoticeNo: 'NOTICE-SIBLING',
+    })
+    await writeSource(root, '2026/Haziran 2026/34SIB101 - 2', {
+      caseKey: 'sibling-remaining', createdAt: '2026-06-11T08:00:00Z',
+    })
+    const plan = await planV1Remediation(pool, organizationId, root)
+    const byKey = new Map(plan.entries.map((entry) => [entry.rawSnapshot?.caseIdentity?.caseKey, entry]))
+    expect(byKey.get('sibling-exact')?.targetCaseId).toBe(exact)
+    expect(byKey.get('sibling-remaining')).toMatchObject({ targetCaseId: remaining, targetState: 'existing' })
+    expect(byKey.get('sibling-remaining')?.evidence).toContainEqual({
+      code: 'sibling_source_candidate_elimination', verifiableValue: remaining,
+    })
+  })
+
+  it('kanitlanmis eski import ay bloklari ambiguous targeti cozer; ayni ayda iki aday fail-closed kalir', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const occurredAt = '2026-08-10T14:28:06.000Z'
+    const insertHistoricalCase = async (plate: string, sequence: number): Promise<string> => {
+      const id = uuidv7()
+      await pool.query(
+        `INSERT INTO cases
+          (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,created_at,updated_at)
+         VALUES ($1,$2,2026,$3,$4,'traffic','new_notification',$5,$6,$7,$7)`,
+        [id, organizationId, sequence, `2026/${sequence}`, plate.replace(/(\d{2})([A-Z]+)(\d+)/u, '$1 $2 $3'), plate, occurredAt],
+      )
+      await pool.query(
+        `INSERT INTO audit_events (id,organization_id,actor_user_id,action,resource_type,resource_id,request_id,occurred_at,details)
+         VALUES ($1,$2,$3,'case.created','case',$4,$5,$6,'{}'::jsonb)`,
+        [uuidv7(), organizationId, actorUserId, id, uuidv7(), occurredAt],
+      )
+      return id
+    }
+    const mayAnchors = [41_000, 41_001, 41_003, 41_004, 41_005, 41_006]
+    const juneAnchors = [41_010, 41_011, 41_013, 41_014, 41_015, 41_016]
+    for (const [index, sequence] of mayAnchors.entries()) {
+      const plate = `34L${String.fromCharCode(65 + index)}A${100 + index}`
+      await insertHistoricalCase(plate, sequence)
+      await writeSource(root, `2026/Mayis 2026/${plate}`, { caseKey: `anchor-may-${index}`, createdAt: `2026-05-${10 + index}T08:00:00Z` })
+    }
+    for (const [index, sequence] of juneAnchors.entries()) {
+      const plate = `34L${String.fromCharCode(65 + index)}B${200 + index}`
+      await insertHistoricalCase(plate, sequence)
+      await writeSource(root, `2026/Haziran 2026/${plate}`, { caseKey: `anchor-june-${index}`, createdAt: `2026-06-${10 + index}T08:00:00Z` })
+    }
+    const mayTarget = await insertHistoricalCase('34LZZ999', 41_002)
+    const juneTarget = await insertHistoricalCase('34LZZ999', 41_012)
+    await writeSource(root, '2026/Mayis 2026/34LZZ999', { caseKey: 'lineage-may', createdAt: '2026-05-20T08:00:00Z' })
+    await writeSource(root, '2026/Haziran 2026/34LZZ999', { caseKey: 'lineage-june', createdAt: '2026-06-20T08:00:00Z' })
+
+    const plan = await planV1Remediation(pool, organizationId, root)
+    const byKey = new Map(plan.entries.map((entry) => [entry.rawSnapshot?.caseIdentity?.caseKey, entry]))
+    expect(byKey.get('lineage-may')).toMatchObject({ targetCaseId: mayTarget, targetState: 'existing' })
+    expect(byKey.get('lineage-june')).toMatchObject({ targetCaseId: juneTarget, targetState: 'existing' })
+    expect(byKey.get('lineage-may')?.evidence.some((item) => item.code === 'initial_import_month_lineage')).toBe(true)
+
+    const sameMonthLeft = await insertHistoricalCase('34LYY888', 41_007)
+    const sameMonthRight = await insertHistoricalCase('34LYY888', 41_008)
+    await writeSource(root, '2026/Mayis 2026/34LYY888', { caseKey: 'same-month-left', createdAt: '2026-05-21T08:00:00Z' })
+    await writeSource(root, '2026/Mayis 2026/34LYY888 - 2', { caseKey: 'same-month-right', createdAt: '2026-05-22T08:00:00Z' })
+    const failClosed = await planV1Remediation(pool, organizationId, root)
+    expect([sameMonthLeft, sameMonthRight]).toHaveLength(2)
+    expect(failClosed.entries.filter((entry) => entry.rawSnapshot?.caseIdentity?.caseKey?.startsWith('same-month-'))
+      .every((entry) => entry.targetState === 'human_ambiguous')).toBe(true)
   })
 
   it('source preview sonrasi degisirse TOCTOU fail-closed olur ve mutation yapmaz', async () => {

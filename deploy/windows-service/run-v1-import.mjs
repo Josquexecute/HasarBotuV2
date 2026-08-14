@@ -105,7 +105,7 @@ function summarizePlan(plan) {
   const referenceMappings = new Map()
   for (const entry of plan.entries) {
     for (const [kind, resolution] of [['responsible', entry.responsible], ['expert', entry.expert], ['service', entry.service]]) {
-      if (resolution.state !== 'unresolved' && resolution.state !== 'ambiguous') continue
+      if (resolution.state !== 'legacy_only' && resolution.state !== 'ambiguous_legacy') continue
       referenceMappings.set(`${kind}:${resolution.sourceNameToken}`, {
         Kind: kind,
         SourceNameToken: resolution.sourceNameToken,
@@ -116,7 +116,7 @@ function summarizePlan(plan) {
     }
   }
   return {
-    SchemaVersion: 'hasarbotu-v1-remediation-preview/2.1.0',
+    SchemaVersion: 'hasarbotu-v1-remediation-preview/2.2.0',
     MappingVersion: plan.mappingVersion,
     IdentityVersion: plan.identityVersion,
     SchemaReady: plan.schemaReady,
@@ -142,7 +142,18 @@ function summarizePlan(plan) {
           ClaimTypeResolution: entry.claimTypeResolution,
           RequiredValue: 'traffic_or_casco',
         })),
+      ReferenceMappings: [],
+    },
+    NonBlockingLegacy: {
       ReferenceMappings: [...referenceMappings.values()],
+      MissingSidecars: {
+        Total: plan.entries.filter((entry) => entry.targetState === 'missing_sidecar').length,
+        ExistingV2Case: plan.entries.filter((entry) => (entry.missingSidecarClassification?.existingV2CaseCount ?? 0) > 0).length,
+        NoExistingV2Case: plan.entries.filter((entry) => entry.targetState === 'missing_sidecar'
+          && entry.missingSidecarClassification?.existingV2CaseCount === 0).length,
+        CreatedAfterInitialImport: plan.entries.filter((entry) => entry.missingSidecarClassification?.filesystemFreshness === 'created_after_initial_import').length,
+        PreexistingOrUnknown: plan.entries.filter((entry) => entry.missingSidecarClassification?.filesystemFreshness === 'preexisting_or_unknown').length,
+      },
     },
     Entries: plan.entries.map((entry) => ({
       PathToken: entry.pathToken,

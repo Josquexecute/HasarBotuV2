@@ -56,14 +56,28 @@ export function parseV1PlateFolderName(folderName: string): V1PlateFolderName | 
 
 export type V1ClaimType = CaseType | 'unknown'
 
-export type V1ClaimTypeFilenameEvidenceKind = 'k_ruhsat' | 'm_ruhsat' | 's_ruhsat'
+export type V1ClaimTypeFilenameEvidenceKind =
+  | 'k_ruhsat'
+  | 'm_ruhsat'
+  | 's_ruhsat'
+  | 'kasko_claim_policy'
+  | 'kasko_policy_context'
+  | 'm_traffic_policy'
+  | 'traffic_policy_context'
+  | 'ktt_context'
+  | 'accident_report_context'
+  | 'statement_context'
 
 export type V1ClaimTypeEvidenceDecisionReason =
   | 'k_ruhsat'
   | 'm_ruhsat'
+  | 'kasko_policy'
+  | 'm_traffic_policy'
   | 'sidecar_claim_type'
+  | 'sidecar_corroborated_over_conflicting_ruhsat'
   | 'conflicting_k_m_evidence'
   | 'sidecar_filename_evidence_conflict'
+  | 'conflicting_claim_document_evidence'
   | 'no_deterministic_evidence'
 
 export interface V1ClaimTypeEvidenceDecision {
@@ -176,6 +190,12 @@ export function classifyV1ClaimTypeEvidenceFilename(filename: string): V1ClaimTy
   if (normalized.startsWith('kruhsat')) return 'k_ruhsat'
   if (normalized.startsWith('mruhsat')) return 'm_ruhsat'
   if (normalized.startsWith('sruhsat')) return 's_ruhsat'
+  if (normalized.includes('kasko') && normalized.includes('police')) return 'kasko_policy_context'
+  if (normalized.startsWith('m') && normalized.includes('trafik') && normalized.includes('police')) return 'm_traffic_policy'
+  if (normalized.includes('trafik') && normalized.includes('police')) return 'traffic_policy_context'
+  if (normalized.includes('ktt')) return 'ktt_context'
+  if (normalized.includes('zabit')) return 'accident_report_context'
+  if (normalized.includes('beyan')) return 'statement_context'
   return null
 }
 
@@ -184,7 +204,12 @@ export function classifyV1ClaimTypeEvidenceFilename(filename: string): V1ClaimTy
  * - K Ruhsat => Kasko
  * - M Ruhsat => Trafik
  * - S Ruhsat tek basina karar DEGILDIR
- * - K + M veya sidecar ile K/M celiskisi fail-closed insan kararidir.
+ * - K + M fail-closed insan kararidir.
+ * - Acik Kasko policesi Kasko'yu, `M Trafik Policesi` Trafik'i destekler.
+ * - Genel Trafik policesi, KTT, Zabit ve Beyan Kasko rucu dosyasinda da
+ *   bulunabildigi icin TEK BASINA claim type belirlemez.
+ * - Sidecar ile yalniz bir ruhsat etiketi celisiyorsa, sidecar ayni yonde
+ *   bagimsiz claim-specific belgeyle desteklenmedikce fail-closed kalir.
  *
  * K/M yoksa bilinen sidecar tipi kullanilir; sidecar da unknown ise cagiran
  * taraf mevcut-case/provenance/numara gibi DIGER deterministik kanitlari
@@ -203,7 +228,35 @@ export function decideV1ClaimTypeFromEvidence(input: {
       sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
     }
   }
-  const filenameCaseType: CaseType | null = hasK ? 'casco' : hasM ? 'traffic' : null
+  const hasCascoPolicy = kinds.includes('kasko_claim_policy')
+  const hasMTrafficPolicy = kinds.includes('m_traffic_policy')
+  if (hasCascoPolicy && hasMTrafficPolicy) {
+    return {
+      state: 'human_required', caseType: null, reason: 'conflicting_claim_document_evidence',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    }
+  }
+  const cascoSupported = hasK || hasCascoPolicy
+  const trafficSupported = hasM || hasMTrafficPolicy
+  if (input.sidecarClaimType === 'traffic' && hasK && !hasM && hasMTrafficPolicy && !hasCascoPolicy) {
+    return {
+      state: 'resolved', caseType: 'traffic', reason: 'sidecar_corroborated_over_conflicting_ruhsat',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    }
+  }
+  if (input.sidecarClaimType === 'casco' && hasM && !hasK && hasCascoPolicy && !hasMTrafficPolicy) {
+    return {
+      state: 'resolved', caseType: 'casco', reason: 'sidecar_corroborated_over_conflicting_ruhsat',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    }
+  }
+  if (cascoSupported && trafficSupported) {
+    return {
+      state: 'human_required', caseType: null, reason: 'conflicting_claim_document_evidence',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    }
+  }
+  const filenameCaseType: CaseType | null = cascoSupported ? 'casco' : trafficSupported ? 'traffic' : null
   if (filenameCaseType !== null && input.sidecarClaimType !== 'unknown' && input.sidecarClaimType !== filenameCaseType) {
     return {
       state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict',
@@ -212,7 +265,8 @@ export function decideV1ClaimTypeFromEvidence(input: {
   }
   if (filenameCaseType !== null) {
     return {
-      state: 'resolved', caseType: filenameCaseType, reason: hasK ? 'k_ruhsat' : 'm_ruhsat',
+      state: 'resolved', caseType: filenameCaseType,
+      reason: hasCascoPolicy ? 'kasko_policy' : hasMTrafficPolicy ? 'm_traffic_policy' : hasK ? 'k_ruhsat' : 'm_ruhsat',
       sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
     }
   }

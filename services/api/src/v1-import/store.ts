@@ -63,6 +63,8 @@ export interface V1DiscoveredFolder {
   readonly parsedName: V1PlateFolderName | null
   readonly hasJson: boolean
   readonly hasTxt: boolean
+  /** NTFS/filesystem kaniti; tarihsel vaka tarihi olarak YORUMLANMAZ. */
+  readonly directoryCreatedAt: string | null
 }
 
 export interface V1ClaimTypePathEvidence {
@@ -146,6 +148,9 @@ async function pushDiscovered(
   const sidecarDir = join(absolutePath, SIDECAR_DIR)
   const hasJson = await fileExists(join(sidecarDir, JSON_FILENAME))
   const hasTxt = await fileExists(join(sidecarDir, TXT_FILENAME))
+  const directoryCreatedAt = await stat(absolutePath)
+    .then((metadata) => Number.isFinite(metadata.birthtimeMs) ? metadata.birthtime.toISOString() : null)
+    .catch(() => null)
   results.push({
     absolutePath,
     relativePath: relative(rootPath, absolutePath).split('\\').join('/'),
@@ -155,6 +160,7 @@ async function pushDiscovered(
     parsedName: parseV1PlateFolderName(folderName),
     hasJson,
     hasTxt,
+    directoryCreatedAt,
   })
 }
 

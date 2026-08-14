@@ -91,6 +91,12 @@ describe('V1 claim type ruhsat evidence', () => {
     ['M Ruhsat', 'm_ruhsat'],
     ['m__ruhsat-men.PNG', 'm_ruhsat'],
     ['S-Ruhsat.tiff', 's_ruhsat'],
+    ['KASKO POLİÇESİ.pdf', 'kasko_policy_context'],
+    ['M Trafik_Poliçe.jpg', 'm_traffic_policy'],
+    ['Trafik Poliçesi.pdf', 'traffic_policy_context'],
+    ['KTT 1.jpg', 'ktt_context'],
+    ['ZABIT.jpeg', 'accident_report_context'],
+    ['Beyan.pdf', 'statement_context'],
   ] as const)('%s varyasyonunu %s olarak normalize eder', (filename, expected) => {
     expect(classifyV1ClaimTypeEvidenceFilename(filename)).toBe(expected)
   })
@@ -124,6 +130,27 @@ describe('V1 claim type ruhsat evidence', () => {
       .toMatchObject({ state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict' })
     expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'casco', evidenceKinds: ['m_ruhsat'] }))
       .toMatchObject({ state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict' })
+  })
+
+  it('sidecar Trafik, tek K Ruhsat ve bagimsiz M Trafik police ile desteklenirse Trafik cozer', () => {
+    expect(decideV1ClaimTypeFromEvidence({
+      sidecarClaimType: 'traffic', evidenceKinds: ['k_ruhsat', 'm_traffic_policy', 'ktt_context'],
+    })).toMatchObject({
+      state: 'resolved', caseType: 'traffic', reason: 'sidecar_corroborated_over_conflicting_ruhsat',
+    })
+  })
+
+  it('Kasko policesi ile Trafik claim belgesi birlikteyse fail-closed kalir', () => {
+    expect(decideV1ClaimTypeFromEvidence({
+      sidecarClaimType: 'traffic', evidenceKinds: ['k_ruhsat', 'kasko_claim_policy', 'm_traffic_policy'],
+    })).toMatchObject({ state: 'human_required', reason: 'conflicting_claim_document_evidence' })
+  })
+
+  it('genel Trafik policesi, KTT, Zabit ve Beyan tek basina claim type belirlemez', () => {
+    expect(decideV1ClaimTypeFromEvidence({
+      sidecarClaimType: 'unknown',
+      evidenceKinds: ['traffic_policy_context', 'ktt_context', 'accident_report_context', 'statement_context'],
+    })).toMatchObject({ state: 'human_required', reason: 'no_deterministic_evidence' })
   })
 })
 
