@@ -32,9 +32,41 @@ reddedilir.
 identity, path token, candidate case ID/type/lifecycle ve identifier-match
 bayraklarını üretir. Gerçek karar dosyası şu sürümdedir:
 `hasarbotu-v1-resolution/1.0.0`. Target ID veya claim type kullanıcı tarafından
-seçilmeden ambiguous/unknown kayıt işlenmez. Kullanıcı/eksper/servis için yalnız
-normalize edilmiş benzersiz exact match veya açık token→ID mapping kabul edilir;
-placeholder oluşturulmaz.
+seçilmeden gerçek ambiguous/unknown kayıt işlenmez.
+
+Claim-type evidence hiyerarşisi:
+
+- Dosya adı case-insensitive, Türkçe karakter/aksan, boşluk, tire, alt çizgi ve
+  uzantı farklarına toleranslı normalize edilir; klasör recursive taranır.
+- `K Ruhsat` Kasko, `M Ruhsat` Trafik kanıtıdır. `S Ruhsat` tek başına karar
+  üretmez. K+M çatışması fail-closed'dur.
+- Genel Kasko/Trafik poliçesi, KTT, zabıt ve beyan başka claim bağlamında da
+  bulunabildiği için context evidence olarak saklanır; tek başına tür üretmez.
+  Yalnız açıkça rol-bağlı claim belgesi sidecar'ı bağımsız doğrulayabilir.
+- Sidecar ile decisive evidence çatışırsa insan kararı gerekir. Inventory hash,
+  evidence fingerprint, relative path ve normalize evidence kind provenance'da
+  saklanır; source değişirse plan hash/TOCTOU kontrolü değişir.
+
+Çok adaylı target çözümünde stable/native provenance ve exact claim/notification/
+office identifier önceliklidir. Bunlardan biri kardeş source'u tek hedefe bağlar
+ve geriye tek source/tek candidate kalırsa bijective elimination kullanılabilir.
+Eski ilk-import lineage'i yalnız doğrulanmış import zaman penceresi, `case.created`
+audit'i, yoğun tek import kümesi, ay başına en az üç benzersiz source/case anchor'ı,
+çakışmayan office-sequence ay blokları ve tek zorunlu target ile kabul edilir.
+Sıra benzerliği tek başına kanıt değildir.
+
+Kullanıcı/eksper için yalnız normalized exact display veya source tam kimliğiyle
+aynı unique e-posta local-part eşleşmesi otomatik kabul edilir. `Atanmadı`
+NULL/unassigned'dır. V2 hesabı olmayan ya da ambiguous legacy adlar yanlış hesaba
+bağlanmaz; FK NULL kalır, raw/source-level provenance'da korunur ve blocker olmaz.
+Service için exact unique master eşleşmesi kullanılabilir. Eşleşme yoksa V1 adı
+legacy provenance'da korunur; V1 adı zorunlu service type'ı kanıtlamadığı ve
+normalize unique constraint bulunmadığı için otomatik master row yaratılmaz.
+Placeholder kullanıcı veya servis oluşturulmaz.
+
+Missing-sidecar klasör için veri uydurulmaz. Historical payload olmadığı için
+remediation blocker'ı değildir; preview yalnız mevcut V2 case adedini ve filesystem
+freshness sınıfını raporlar. Filesystem birth time vaka tarihi olarak yorumlanmaz.
 
 ## Alan kapsamı
 
@@ -43,9 +75,9 @@ placeholder oluşturulmaz.
 | `notes` | A | Native ID ile idempotent note; özgün yazar/zaman item metadata ve API/UI'da görünür. |
 | açık `todos` | A | Task + `created` event; özgün oluşturma/atanan isim metadata'da, event kaynağı `v1_historical_import`. |
 | tamamlanmış `todos` | A | `completed` task, özgün completion zamanı, `created` + `completed` event; ikisi de historical source/evidence taşır. |
-| `assignment.sorumlu` | A | Exact unique/manifest ile `responsible_user_id`; aksi halde unresolved + raw. |
-| `assignment.eksper` | A | Exact unique/manifest ile `expert_user_id`; aksi halde unresolved + raw. |
-| `service.name` | A | Exact unique/manifest ile `service_center_id`; aksi halde unresolved + raw. |
+| `assignment.sorumlu` | A/B | Exact unique identity ile `responsible_user_id`; `Atanmadı` NULL; V2 hesabı yoksa FK NULL + immutable legacy ad. |
+| `assignment.eksper` | A/B | Yalnız gerçek expert-role kullanıcıya exact unique eşleşir; aksi halde FK NULL + immutable legacy ad. |
+| `service.name` | A/B | Exact unique mevcut master'a eşleşir; service type kanıtı yoksa row yaratılmaz, FK NULL + immutable legacy ad. |
 | `assignment.takipTarihi/sonIslemTarihi` | A | Güvenli current backfill + `v1_historical_import` follow-up history. |
 | `caseIdentity.claimNoticeNo` | A | `notification_form_number`; eşleşmede deterministic identifier kanıtı. |
 | `caseIdentity.dosyaNo` | A | `insurer_claim_number`; gerçek mevcut envanterde dolu örnek yoktur. |

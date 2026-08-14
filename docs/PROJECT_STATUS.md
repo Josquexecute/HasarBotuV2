@@ -1,6 +1,47 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-08-13
+Son güncelleme: 2026-08-15
+
+## V1 remediation deterministic resolution v2.2 — blocker listesi minimuma indirildi; production apply YAPILMADI (2026-08-15, HB-2026-201)
+
+- Claim-type kanıt hiyerarşisi kalıcılaştırıldı: recursive/normalize edilmiş `K Ruhsat`
+  Kasko, `M Ruhsat` Trafik kanıtıdır; `S Ruhsat`, genel poliçe, KTT, zabıt ve
+  beyan tek başına tür üretmez. K+M ve sidecar/decisive-evidence çatışması
+  fail-closed kalır. Her karar dosya inventory hash'i ve evidence fingerprint'i
+  taşır.
+- Eski tek-seferlik importun git kayıtları, `case.created` audit zamanları ve
+  office sequence ay blokları birlikte doğrulandı. Yalnız doğrulanmış ilk-import
+  zaman penceresi, en az üç benzersiz anchor ve tek zorunlu target koşulunda
+  `initial_import_month_lineage` kullanılır. Exact identifier ile bağlanan kardeş
+  source sonrası tek source/tek candidate kalması da bijective elimination olarak
+  kanıtlanır; aynı ayda ayırt edilemeyen çift fail-closed kalır.
+- Responsible resolution exact normalized display adı veya exact e-posta local
+  identity ile benzersizse otomatik yapılır. `Atanmadı` NULL/unassigned'dır.
+  V2 hesabı olmayan responsible/expert ve eşleşmeyen service değerleri yanlış
+  kullanıcıya bağlanmaz; first-class FK NULL kalır, immutable legacy provenance
+  korunur ve remediation'ı bloke etmez. V1 service adı zorunlu service type'ı
+  kanıtlamadığı ve normalize unique identity bulunmadığı için otomatik service
+  master kaydı planlanmaz.
+- Missing-sidecar kaynak veri uydurmaz ve historical payload olmadığı için blocker
+  değildir; yalnız mevcut V2 case adedi ve filesystem freshness sınıfı raporlanır.
+- **İki ardışık production salt-okunur preview:** current 167 case / 368 note /
+  12 task / 470 provenance; source manifest
+  `b3495c5ef83a424cd2e2132150f995d7efa16d0d6754caf23ae70eb6e7f7f083`, plan
+  `53d831c1f83f79d8bc4021b470e9cd414a4ae7d3369c93f307bf9588dd813fa6`;
+  ikisi de birebir eşleşti. Auto-resolved: 52 claim type, 4 ambiguous source,
+  123 responsible, 5 unassigned. Non-blocking legacy: 27 responsible/1 ad,
+  155 expert/1 ad, 20 service/5 ad ve 111 missing sidecar. Blocking: 5 claim
+  type ve aynı iki candidate arasında kalan 2 source. Safe remediation: 9 create,
+  139 backfill, 144 note, 0 açık task, 61 tamamlanmış task, 94 closure, 172 alan,
+  145 follow-up history, 134 task event, 155 raw provenance, 29 move/rename;
+  duplicate 0. Production şeması halen `SchemaReady=false`.
+- Tam gate: 2.325 PASS / 6 koşullu UI skip / 0 fail; typecheck PASS; lint 0 hata /
+  13 önceden var olan uyarı; production build/bundle PASS; check:deploy PASS.
+  İlk root denemeleri bir hatalı Vitest seçeneği, dış ortam `NODE_ENV=production`
+  ve bir kez Electron sonuç dosyası yarışına takıldı; doğru ortam/komutla tam root
+  zinciri yeniden çalıştırılıp sıfır hata ile tamamlandı.
+- Production DB write/migration/remediation apply/deploy/service-env-ACL değişikliği,
+  V1 source write/move/delete, restore veya push yapılmadı.
 
 ## V1 remediation v2 — production-safe kod ve salt-okunur production preview hazır; production migration/deploy/apply YAPILMADI (2026-08-13, HB-2026-200)
 

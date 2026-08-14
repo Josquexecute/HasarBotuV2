@@ -8995,3 +8995,57 @@ Kanit:
 - Production preview yalniz read-only session ile calistirildi; raw V1 JSON, isimler, not icerigi, secret veya mutlak kaynak yolu stdout'a basilmadi.
 
 Kaynak: 2026-08-13 tarihli kullanici talimati ("V1→V2 import forensic raporu kabul edildi. POST-APPLY VERDICT = NEEDS REMEDIATION.").
+
+## HB-2026-201 — V1 remediation deterministic resolution ve blocking/non-blocking ayrimi
+
+Tarih: 2026-08-15
+
+Karar:
+
+- Claim-type resolver recursive ve normalize edilmis dosya adi evidence'i kullanir.
+  `K Ruhsat` Kasko, `M Ruhsat` Trafik kanitidir; `S Ruhsat`, genel police, KTT,
+  zabit ve beyan tek basina tur belirlemez. K+M veya sidecar/decisive-evidence
+  celiskisi fail-closed kalir. Evidence inventory hash/fingerprint ve mapping
+  provenance'a girer; source degisimi TOCTOU plan hash'ini degistirir.
+- Eski ilk-import target lineage'i yalniz git/dokuman kaydi ile dogrulanan import
+  zaman penceresindeki `case.created` audit kumesi, ay basina en az uc unique
+  anchor, cakismayan office-sequence ay bloklari ve tek zorunlu target kosuluyla
+  otomatik kabul edilir. Exact identifier ile baglanan kardes source sonrasi tek
+  source/tek candidate kalmasi da bire-bir kume eliminasyonudur. Ayni ayda kalan
+  iki source/candidate siraya bakilarak tahmin edilmez.
+- Responsible exact normalized display veya exact e-posta local identity ile
+  benzersizse auto-resolve edilir. `Atanmadi` sentinel'i NULL/unassigned'dir.
+  V2 hesabi olmayan responsible/expert yanlis hesaba baglanmaz; first-class FK
+  NULL ve immutable legacy ad korunur. Bu kayitlar human blocker degildir.
+- Service center yaratmak icin V1 adindan kanitlanamayan zorunlu service type
+  uydurulmaz. Exact unique mevcut master yoksa FK NULL kalir ve legacy service adi
+  provenance'da korunur. Normalize duplicate veya ambiguous master sessiz secilmez.
+- Missing-sidecar, historical payload olmadigi icin migration blocker'i degildir.
+  Mevcut V2 case adedi ve filesystem freshness yalniz siniflandirma kanitidir;
+  filesystem tarihi vaka tarihi olarak kullanilmaz.
+- Preview human-required alanini yalniz yanlis secimin case/type bagini bozabilecegi
+  gercek blocking kararlara ayirir. Legacy first-class entity eksigi non-blocking
+  provenance olarak raporlanir.
+
+Kanit ve sonuc:
+
+- Iki ardisik production read-only preview ayni source manifest
+  `b3495c5ef83a424cd2e2132150f995d7efa16d0d6754caf23ae70eb6e7f7f083` ve plan
+  `53d831c1f83f79d8bc4021b470e9cd414a4ae7d3369c93f307bf9588dd813fa6`
+  hash'ini uretti; `duplicatesThatWouldBeCreated=0`.
+- Current production sayilari 167 case / 368 note / 12 task / 470 provenance.
+  Auto-resolved 52 claim type, 4 ambiguous source, 123 responsible ve 5 unassigned;
+  blocking 5 claim type + 2 ambiguous source; user/expert/service/missing-sidecar
+  blocker'i sifirdir. 27 responsible, 155 expert, 20 service ve 111 missing-sidecar
+  kaydi non-blocking legacy sinifindadir.
+- Safe remediation 9 create, 139 backfill, 144 note, 0 acik task, 61 tamamlanmis
+  task, 94 historical closure, 172 alan, 145 follow-up history, 134 task event,
+  155 raw provenance ve 29 move/rename reconciliation planlar. Schema halen
+  `SchemaReady=false` oldugu icin apply fail-closed'dur.
+- Gercek test PostgreSQL ile odakli V1 E2E 15/15 ve tam root zinciri 2325 PASS /
+  6 kosullu UI skip / 0 fail; typecheck, production build/bundle ve check:deploy
+  PASS; lint 0 hata/13 mevcut uyari.
+- Production DB write/migration/remediation apply/deploy/service-env-ACL degisikligi,
+  V1 source write/move/delete, restore veya push yapilmadi.
+
+Kaynak: 2026-08-15 tarihli kullanici talimati ("human_required SON CARE olsun").
