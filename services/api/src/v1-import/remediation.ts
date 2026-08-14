@@ -3,6 +3,7 @@ import type pg from 'pg'
 import {
   buildV1SourceIdentityMaterial,
   buildV1StableItemIdentityMaterial,
+  decideV1ClaimTypeFromEvidence,
   decideV1FieldBackfill,
   mapV1ClaimType,
   normalizeV1ResolutionName,
@@ -10,19 +11,29 @@ import {
   validateCaseVehicleProfile,
   V1_IDENTITY_VERSION,
   type CaseType,
+  type V1ClaimType,
+  type V1ClaimTypeEvidenceDecisionReason,
 } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
-import { discoverV1Folders, readV1Sidecar, type V1DiscoveredFolder } from './store.js'
+import {
+  discoverV1Folders,
+  readV1ClaimTypeFolderEvidence,
+  readV1Sidecar,
+  type V1ClaimTypePathEvidence,
+  type V1DiscoveredFolder,
+} from './store.js'
 import type { V1TakipJsonV1 } from './schema.js'
 
-export const V1_REMEDIATION_MAPPING_VERSION = 'v1-remediation/2.0.0' as const
+export const V1_REMEDIATION_MAPPING_VERSION = 'v1-remediation/2.1.0' as const
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u
 const HARD_ENTRY_BLOCKERS = new Set([
   'stable_identity_evidence_missing',
   'stable_identity_collision',
   'target_plate_mismatch',
   'case_type_conflict',
+  'claim_type_evidence_scan_failed',
+  'conflicting_claim_type_evidence',
   'duplicate_content_needs_human_resolution',
   'duplicate_task_candidate_needs_human_resolution',
 ])
@@ -116,6 +127,18 @@ export interface V1ResolutionEvidence {
   readonly verifiableValue: string
 }
 
+export interface V1ClaimTypeResolution {
+  readonly scanState: 'complete' | 'failed'
+  readonly inventoryHash: string | null
+  readonly evidenceFingerprint: string | null
+  readonly sidecarClaimType: V1ClaimType
+  readonly evidence: readonly V1ClaimTypePathEvidence[]
+  readonly deterministicReason: V1ClaimTypeEvidenceDecisionReason | 'evidence_scan_failed'
+  readonly resolutionReason: V1ClaimTypeEvidenceDecisionReason | 'explicit_mapping' | 'existing_case_deterministic' | 'evidence_scan_failed'
+  readonly caseType: CaseType | null
+  readonly humanRequired: boolean
+}
+
 export interface V1ResolvedReference {
   readonly sourceNameToken: string
   readonly targetId: string | null
@@ -184,6 +207,7 @@ export interface V1RemediationEntry {
   readonly targetState: 'existing' | 'create' | 'human_claim_type' | 'human_ambiguous' | 'human_identity' | 'malformed' | 'missing_sidecar' | 'unparseable'
   readonly caseType: CaseType | null
   readonly caseTypeAutoResolved: boolean
+  readonly claimTypeResolution: V1ClaimTypeResolution | null
   readonly evidence: readonly V1ResolutionEvidence[]
   readonly candidateCaseIds: readonly string[]
   readonly candidateCaseEvidence: readonly V1CandidateCaseEvidence[]
@@ -199,6 +223,7 @@ export interface V1RemediationEntry {
   readonly needsRawRevision: boolean
   readonly needsAlias: boolean
   readonly needsVehicleProfile: boolean
+  readonly needsClaimTypeEvidenceProvenance: boolean
   readonly legacyRecordsToReconcile: readonly { readonly recordId: string; readonly stableItemIdentity: string; readonly evidenceCode: string }[]
   readonly blockers: readonly string[]
 }
@@ -247,6 +272,7 @@ export interface V1RemediationSummary {
     readonly unresolvedService: number
     readonly malformed: number
     readonly missingSidecar: number
+    readonly conflictingEvidence: number
     readonly other: number
   }
   readonly autoResolved: {
@@ -350,6 +376,7 @@ function planHashPayload(plan: Omit<V1RemediationPlan, 'generatedAt' | 'planHash
       targetCaseId: entry.targetCaseId,
       targetState: entry.targetState,
       caseType: entry.caseType,
+      claimTypeResolution: entry.claimTypeResolution,
       candidateCaseEvidence: entry.candidateCaseEvidence,
       fields: entry.fields,
       notes: entry.notes.map((note) => ({
@@ -381,6 +408,7 @@ function planHashPayload(plan: Omit<V1RemediationPlan, 'generatedAt' | 'planHash
       needsRawRevision: entry.needsRawRevision,
       needsAlias: entry.needsAlias,
       needsVehicleProfile: entry.needsVehicleProfile,
+      needsClaimTypeEvidenceProvenance: entry.needsClaimTypeEvidenceProvenance,
       legacyRecordsToReconcile: entry.legacyRecordsToReconcile,
       blockers: entry.blockers,
     })),
@@ -394,7 +422,13 @@ export async function planV1Remediation(
   options: V1RemediationOptions = {},
 ): Promise<V1RemediationPlan> {
   const folders = await discoverV1Folders(rootPath)
-  const sidecars = await Promise.all(folders.map(async (folder) => ({ folder, sidecar: await readV1Sidecar(folder) })))
+  const sidecars = await Promise.all(folders.map(async (folder) => ({
+    folder,
+    sidecar: await readV1Sidecar(folder),
+    claimTypeFolderEvidence: folder.hasJson
+      ? await readV1ClaimTypeFolderEvidence(folder)
+      : { scanState: 'complete' as const, inventoryHash: hash('[]'), evidenceFingerprint: hash('[]'), evidence: [] },
+  })))
   const schemaCheck = await pool.query<{ ready: boolean }>("SELECT to_regclass('public.v1_import_sources') IS NOT NULL AS ready")
   const schemaReady = schemaCheck.rows[0]?.ready === true
 
@@ -502,17 +536,18 @@ export async function planV1Remediation(
   }
 
   const entries: V1RemediationEntry[] = []
-  for (const { folder, sidecar } of sidecars) {
+  for (const { folder, sidecar, claimTypeFolderEvidence } of sidecars) {
     const token = pathToken(folder.relativePath)
-    const baseFingerprint = hash(`${folder.relativePath}\n${sidecar.jsonHash ?? ''}\n${sidecar.txtHash ?? ''}`)
+    const baseFingerprint = hash(`${folder.relativePath}\n${sidecar.jsonHash ?? ''}\n${sidecar.txtHash ?? ''}\n${claimTypeFolderEvidence.scanState}\n${claimTypeFolderEvidence.inventoryHash ?? ''}`)
     if (folder.parsedName === null) {
       entries.push({
         folder, pathToken: token, sourceIdentity: null, sourceIdentityState: 'missing_evidence', sourceHash: sidecar.jsonHash,
         sourceManifestFingerprint: baseFingerprint, rawSnapshot: null, schemaVersion: null, sourceWriteId: null, sourceRevision: null,
-        targetCaseId: null, targetState: 'unparseable', caseType: null, caseTypeAutoResolved: false, evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
+        targetCaseId: null, targetState: 'unparseable', caseType: null, caseTypeAutoResolved: false, claimTypeResolution: null,
+        evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
         responsible: emptyReference(), expert: emptyReference(), service: emptyReference(), fields: [], notes: [], tasks: [],
         shouldCloseHistorically: false, sourceClosureAt: null, needsFollowUpHistory: false, needsRawRevision: false, needsAlias: false,
-        needsVehicleProfile: false, legacyRecordsToReconcile: [], blockers: ['unparseable_folder_name'],
+        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, legacyRecordsToReconcile: [], blockers: ['unparseable_folder_name'],
       })
       continue
     }
@@ -520,10 +555,11 @@ export async function planV1Remediation(
       entries.push({
         folder, pathToken: token, sourceIdentity: null, sourceIdentityState: 'missing_evidence', sourceHash: null,
         sourceManifestFingerprint: baseFingerprint, rawSnapshot: null, schemaVersion: null, sourceWriteId: null, sourceRevision: null,
-        targetCaseId: null, targetState: 'missing_sidecar', caseType: null, caseTypeAutoResolved: false, evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
+        targetCaseId: null, targetState: 'missing_sidecar', caseType: null, caseTypeAutoResolved: false, claimTypeResolution: null,
+        evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
         responsible: emptyReference(), expert: emptyReference(), service: emptyReference(), fields: [], notes: [], tasks: [],
         shouldCloseHistorically: false, sourceClosureAt: null, needsFollowUpHistory: false, needsRawRevision: false, needsAlias: false,
-        needsVehicleProfile: false, legacyRecordsToReconcile: [], blockers: ['missing_sidecar'],
+        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, legacyRecordsToReconcile: [], blockers: ['missing_sidecar'],
       })
       continue
     }
@@ -531,10 +567,11 @@ export async function planV1Remediation(
       entries.push({
         folder, pathToken: token, sourceIdentity: null, sourceIdentityState: 'missing_evidence', sourceHash: sidecar.jsonHash,
         sourceManifestFingerprint: baseFingerprint, rawSnapshot: null, schemaVersion: null, sourceWriteId: null, sourceRevision: null,
-        targetCaseId: null, targetState: 'malformed', caseType: null, caseTypeAutoResolved: false, evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
+        targetCaseId: null, targetState: 'malformed', caseType: null, caseTypeAutoResolved: false, claimTypeResolution: null,
+        evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
         responsible: emptyReference(), expert: emptyReference(), service: emptyReference(), fields: [], notes: [], tasks: [],
         shouldCloseHistorically: false, sourceClosureAt: null, needsFollowUpHistory: false, needsRawRevision: false, needsAlias: false,
-        needsVehicleProfile: false, legacyRecordsToReconcile: [], blockers: ['malformed_or_unsupported_json'],
+        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, legacyRecordsToReconcile: [], blockers: ['malformed_or_unsupported_json'],
       })
       continue
     }
@@ -546,7 +583,17 @@ export async function planV1Remediation(
     const allPlateCandidates = byPlate.get(plateKey) ?? []
     const sourceClaimType = mapV1ClaimType(data.claimType)
     const explicitClaimType = sourceIdentity === null ? undefined : options.resolutions?.claimTypes?.[sourceIdentity]
-    const effectiveClaimType = explicitClaimType ?? (sourceClaimType === 'unknown' ? null : sourceClaimType)
+    const deterministicClaimTypeDecision = claimTypeFolderEvidence.scanState === 'complete'
+      ? decideV1ClaimTypeFromEvidence({
+          sidecarClaimType: sourceClaimType,
+          evidenceKinds: claimTypeFolderEvidence.evidence.map((item) => item.kind),
+        })
+      : null
+    const unresolvedClaimTypeEvidenceConflict = explicitClaimType === undefined
+      && deterministicClaimTypeDecision?.state === 'human_required'
+      && ['conflicting_k_m_evidence', 'sidecar_filename_evidence_conflict'].includes(deterministicClaimTypeDecision.reason)
+    const effectiveClaimType = explicitClaimType
+      ?? (deterministicClaimTypeDecision?.state === 'resolved' ? deterministicClaimTypeDecision.caseType : null)
     const typeCandidates = effectiveClaimType === null ? allPlateCandidates : allPlateCandidates.filter((candidate) => candidate.caseType === effectiveClaimType)
     const evidence: V1ResolutionEvidence[] = []
     const provenanceTargets = new Set<string>()
@@ -605,11 +652,21 @@ export async function planV1Remediation(
 
     let targetState: V1RemediationEntry['targetState']
     let caseType: CaseType | null = effectiveClaimType
-    let caseTypeAutoResolved = false
+    let caseTypeAutoResolved = explicitClaimType === undefined && sourceClaimType === 'unknown'
+      && deterministicClaimTypeDecision?.state === 'resolved'
+      && ['k_ruhsat', 'm_ruhsat'].includes(deterministicClaimTypeDecision.reason)
     const blockers: string[] = []
     if (sourceIdentity === null || collision) {
       targetState = 'human_identity'
       blockers.push(sourceIdentity === null ? 'stable_identity_evidence_missing' : 'stable_identity_collision')
+    } else if (claimTypeFolderEvidence.scanState === 'failed') {
+      targetState = 'human_claim_type'
+      targetCaseId = null
+      blockers.push('claim_type_evidence_scan_failed')
+    } else if (unresolvedClaimTypeEvidenceConflict) {
+      targetState = 'human_claim_type'
+      targetCaseId = null
+      blockers.push('conflicting_claim_type_evidence')
     } else if (targetCaseId !== null) {
       targetState = 'existing'
       const target = byCaseId.get(targetCaseId)
@@ -636,6 +693,29 @@ export async function planV1Remediation(
     } else {
       targetState = 'human_ambiguous'
       blockers.push('ambiguous_target')
+    }
+
+    const resolutionReason: V1ClaimTypeResolution['resolutionReason'] = claimTypeFolderEvidence.scanState === 'failed'
+      ? 'evidence_scan_failed'
+      : explicitClaimType !== undefined
+        ? 'explicit_mapping'
+        : deterministicClaimTypeDecision?.state === 'resolved'
+          ? deterministicClaimTypeDecision.reason
+          : caseTypeAutoResolved
+            ? 'existing_case_deterministic'
+            : deterministicClaimTypeDecision?.reason ?? 'no_deterministic_evidence'
+    const claimTypeResolution: V1ClaimTypeResolution = {
+      scanState: claimTypeFolderEvidence.scanState,
+      inventoryHash: claimTypeFolderEvidence.inventoryHash,
+      evidenceFingerprint: claimTypeFolderEvidence.evidenceFingerprint,
+      sidecarClaimType: sourceClaimType,
+      evidence: claimTypeFolderEvidence.evidence,
+      deterministicReason: claimTypeFolderEvidence.scanState === 'failed'
+        ? 'evidence_scan_failed'
+        : deterministicClaimTypeDecision?.reason ?? 'no_deterministic_evidence',
+      resolutionReason,
+      caseType,
+      humanRequired: targetState === 'human_claim_type',
     }
 
     const target = targetCaseId === null ? null : byCaseId.get(targetCaseId) ?? null
@@ -725,6 +805,14 @@ export async function planV1Remediation(
       evidenceSource: 'other', evidenceReference: 'V1 historical import',
     })
     const needsVehicleProfile = (targetState === 'create' || (target !== null && !target.vehicleProfileExists)) && vehicleValidation?.valid === true
+    const hasDecisiveFilenameEvidence = claimTypeFolderEvidence.evidence.some((item) => item.kind === 'k_ruhsat' || item.kind === 'm_ruhsat')
+    const claimTypeEvidenceStableItemIdentity = sourceIdentity !== null && claimTypeFolderEvidence.evidenceFingerprint !== null
+      ? itemIdentity(sourceIdentity, 'field', `field:claimTypeEvidence:${claimTypeFolderEvidence.evidenceFingerprint}`)
+      : null
+    const needsClaimTypeEvidenceProvenance = targetState === 'existing' && targetCaseId !== null
+      && hasDecisiveFilenameEvidence && claimTypeEvidenceStableItemIdentity !== null
+      && !records.some((record) => record.itemType === 'field_backfill'
+        && record.stableSourceIdentity === sourceIdentity && record.stableItemIdentity === claimTypeEvidenceStableItemIdentity)
 
     if (sourceIdentity !== null && targetCaseId !== null) {
       for (const legacy of records) {
@@ -752,7 +840,8 @@ export async function planV1Remediation(
       folder, pathToken: token, sourceIdentity, sourceIdentityState: collision ? 'collision' : sourceIdentity === null ? 'missing_evidence' : 'resolved',
       sourceHash: sidecar.jsonHash, sourceManifestFingerprint: baseFingerprint, rawSnapshot: data, schemaVersion: sidecar.jsonParse.schemaVersion,
       sourceWriteId: data.metadata?.writeId?.trim() || null, sourceRevision: data.metadata?.revision ?? null,
-      targetCaseId, targetState, caseType, caseTypeAutoResolved, evidence, candidateCaseIds: allPlateCandidates.map((candidate) => candidate.id),
+      targetCaseId, targetState, caseType, caseTypeAutoResolved, claimTypeResolution, evidence,
+      candidateCaseIds: allPlateCandidates.map((candidate) => candidate.id),
       candidateCaseEvidence: allPlateCandidates.map((candidate) => ({
         caseId: candidate.id,
         caseType: candidate.caseType,
@@ -768,7 +857,7 @@ export async function planV1Remediation(
       responsible, expert, service, fields, notes, tasks, shouldCloseHistorically, sourceClosureAt, needsFollowUpHistory,
       needsRawRevision: sourceIdentity !== null && !revisionKeys.has(`${sourceIdentity}|${sidecar.jsonHash}`),
       needsAlias: sourceIdentity !== null && !aliasKeys.has(`${sourceIdentity}|${folder.relativePath}`),
-      needsVehicleProfile, legacyRecordsToReconcile, blockers: [...new Set(blockers)],
+      needsVehicleProfile, needsClaimTypeEvidenceProvenance, legacyRecordsToReconcile, blockers: [...new Set(blockers)],
     })
   }
 
@@ -787,6 +876,7 @@ export async function planV1Remediation(
       casesToBackfill: actionableEntries.filter((entry) => entry.targetState === 'existing' && (
         entry.fields.some((field) => field.state === 'missing') || entry.notes.some(noteNeedsCreate)
         || entry.tasks.some(taskNeedsCreate) || entry.shouldCloseHistorically || entry.needsFollowUpHistory || entry.needsVehicleProfile
+        || entry.needsClaimTypeEvidenceProvenance
       )).length,
       notesToCreate: plannedNotes.length,
       tasksToCreate: plannedTasks.filter((task) => !task.completed).length,
@@ -807,7 +897,7 @@ export async function planV1Remediation(
         return taskSum + (task.completed ? 2 : 1)
       }, 0), 0),
       rawSnapshotsAndProvenance: entries.filter((entry) => entry.sourceIdentityState === 'resolved'
-        && (entry.needsRawRevision || entry.needsAlias)).length,
+        && (entry.needsRawRevision || entry.needsAlias || entry.needsClaimTypeEvidenceProvenance)).length,
       moveRenameReconciliations,
     },
     blocked: {
@@ -818,6 +908,7 @@ export async function planV1Remediation(
       unresolvedService: entries.filter((entry) => ['unresolved', 'ambiguous'].includes(entry.service.state)).length,
       malformed: entries.filter((entry) => entry.targetState === 'malformed' || entry.targetState === 'unparseable').length,
       missingSidecar: entries.filter((entry) => entry.targetState === 'missing_sidecar').length,
+      conflictingEvidence: entries.filter((entry) => entry.blockers.includes('conflicting_claim_type_evidence')).length,
       other: entries.filter((entry) => entry.targetState === 'human_identity'
         || entry.blockers.includes('duplicate_content_needs_human_resolution')
         || entry.blockers.includes('duplicate_task_candidate_needs_human_resolution')
@@ -876,6 +967,7 @@ export interface V1RemediationApplyResult {
   readonly followUpHistoryCreated: number
   readonly historicalClosures: number
   readonly vehicleProfilesCreated: number
+  readonly claimTypeEvidenceRecorded: number
   readonly failed: number
 }
 
@@ -951,7 +1043,8 @@ export async function applyV1Remediation(
   const totals = {
     planHash: approvedPlan.planHash, sourcesRecorded: 0, aliasesRecorded: 0, legacyRecordsReconciled: 0,
     casesCreated: 0, fieldsBackfilled: 0, notesCreated: 0, tasksCreated: 0, completedTasksCreated: 0,
-    taskEventsCreated: 0, followUpHistoryCreated: 0, historicalClosures: 0, vehicleProfilesCreated: 0, failed: 0,
+    taskEventsCreated: 0, followUpHistoryCreated: 0, historicalClosures: 0, vehicleProfilesCreated: 0,
+    claimTypeEvidenceRecorded: 0, failed: 0,
   }
 
   for (const entry of fresh.entries) {
@@ -1035,11 +1128,34 @@ export async function applyV1Remediation(
             entry.expert.targetId, entry.service.targetId, followUp],
         )
         const stableCaseItem = itemIdentity(entry.sourceIdentity, 'case', 'case')
+        const hasDecisiveClaimTypeEvidence = entry.claimTypeResolution?.evidence
+          .some((item) => item.kind === 'k_ruhsat' || item.kind === 'm_ruhsat') === true
         await insertStableProvenance(client, actor, entry, stableRevisionId, 'case', 'case', stableCaseItem, 'case', caseId, 'created', caseId)
+        if (hasDecisiveClaimTypeEvidence && entry.claimTypeResolution?.evidenceFingerprint != null) {
+          const nativeId = `field:claimTypeEvidence:${entry.claimTypeResolution.evidenceFingerprint}`
+          const stableEvidenceItem = itemIdentity(entry.sourceIdentity, 'field', nativeId)
+          const inserted = await insertStableProvenance(
+            client, actor, entry, stableRevisionId, 'field_backfill', nativeId, stableEvidenceItem,
+            'case', caseId, 'backfilled', caseId,
+            { source: 'v1_historical_import', claimTypeResolution: entry.claimTypeResolution },
+          )
+          totals.claimTypeEvidenceRecorded += inserted ? 1 : 0
+        }
         totals.casesCreated += 1
       }
 
       if (actionable && caseId !== null) {
+        if (entry.needsClaimTypeEvidenceProvenance && entry.claimTypeResolution?.evidenceFingerprint != null) {
+          const nativeId = `field:claimTypeEvidence:${entry.claimTypeResolution.evidenceFingerprint}`
+          const stableEvidenceItem = itemIdentity(entry.sourceIdentity, 'field', nativeId)
+          const inserted = await insertStableProvenance(
+            client, actor, entry, stableRevisionId, 'field_backfill', nativeId, stableEvidenceItem,
+            'case', caseId, 'backfilled', caseId,
+            { source: 'v1_historical_import', claimTypeResolution: entry.claimTypeResolution },
+          )
+          totals.claimTypeEvidenceRecorded += inserted ? 1 : 0
+          entryChanged = inserted || entryChanged
+        }
         for (const field of entry.fields) {
           if (field.state !== 'missing' || field.value === null) continue
           const column = field.field === 'notificationFormNumber' ? 'notification_form_number'
@@ -1257,7 +1373,8 @@ export async function applyV1Remediation(
           organizationId: actor.organizationId, actorUserId: actor.actorUserId, requestId: actor.requestId,
           action: 'v1_remediation.applied', entityType: 'case', entityId: caseId,
           details: { stableSourceIdentity: entry.sourceIdentity, mappingVersion: V1_REMEDIATION_MAPPING_VERSION,
-            historical: true, sourceHash: entry.sourceHash },
+            historical: true, sourceHash: entry.sourceHash,
+            claimTypeResolution: entry.claimTypeResolution?.evidence.length === 0 ? undefined : entry.claimTypeResolution },
         })
       }
       await client.query('COMMIT')

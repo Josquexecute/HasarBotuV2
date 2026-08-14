@@ -56,6 +56,24 @@ export function parseV1PlateFolderName(folderName: string): V1PlateFolderName | 
 
 export type V1ClaimType = CaseType | 'unknown'
 
+export type V1ClaimTypeFilenameEvidenceKind = 'k_ruhsat' | 'm_ruhsat' | 's_ruhsat'
+
+export type V1ClaimTypeEvidenceDecisionReason =
+  | 'k_ruhsat'
+  | 'm_ruhsat'
+  | 'sidecar_claim_type'
+  | 'conflicting_k_m_evidence'
+  | 'sidecar_filename_evidence_conflict'
+  | 'no_deterministic_evidence'
+
+export interface V1ClaimTypeEvidenceDecision {
+  readonly state: 'resolved' | 'human_required'
+  readonly caseType: CaseType | null
+  readonly reason: V1ClaimTypeEvidenceDecisionReason
+  readonly sidecarClaimType: V1ClaimType
+  readonly evidenceKinds: readonly V1ClaimTypeFilenameEvidenceKind[]
+}
+
 export const V1_IDENTITY_VERSION = 'v1-source-identity/1.0.0' as const
 
 export type V1SourceIdentityMaterialResult =
@@ -134,6 +152,80 @@ export function mapV1ClaimType(rawClaimType: unknown): V1ClaimType {
   if (normalized === 'trafik') return 'traffic'
   if (normalized === 'kasko') return 'casco'
   return 'unknown'
+}
+
+/**
+ * Ruhsat kaniti dosya adindan okunur; uzanti, buyuk/kucuk harf, Turkce
+ * karakter ve bosluk/tire/alt-cizgi farklari karari degistirmez. Sonuc
+ * yalniz ASCII harf/rakamdan olusur ve log/provenance'a ham dosya adi yerine
+ * kanonik siniflandirma yapabilmek icin kullanilir.
+ */
+export function normalizeV1ClaimTypeEvidenceFilename(filename: string): string {
+  const basename = filename.trim().replace(/\.[^.]+$/u, '')
+  return basename
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/gu, 'i')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .replace(/[^a-z0-9]/gu, '')
+}
+
+/** Yalniz dosya ADINI siniflandirir; dosya icerigi okunmaz. */
+export function classifyV1ClaimTypeEvidenceFilename(filename: string): V1ClaimTypeFilenameEvidenceKind | null {
+  const normalized = normalizeV1ClaimTypeEvidenceFilename(filename)
+  if (normalized.startsWith('kruhsat')) return 'k_ruhsat'
+  if (normalized.startsWith('mruhsat')) return 'm_ruhsat'
+  if (normalized.startsWith('sruhsat')) return 's_ruhsat'
+  return null
+}
+
+/**
+ * Dogrulanmis domain kurali:
+ * - K Ruhsat => Kasko
+ * - M Ruhsat => Trafik
+ * - S Ruhsat tek basina karar DEGILDIR
+ * - K + M veya sidecar ile K/M celiskisi fail-closed insan kararidir.
+ *
+ * K/M yoksa bilinen sidecar tipi kullanilir; sidecar da unknown ise cagiran
+ * taraf mevcut-case/provenance/numara gibi DIGER deterministik kanitlari
+ * inceleyebilir. Bu fonksiyon o kanitlari tahmin etmez.
+ */
+export function decideV1ClaimTypeFromEvidence(input: {
+  readonly sidecarClaimType: V1ClaimType
+  readonly evidenceKinds: readonly V1ClaimTypeFilenameEvidenceKind[]
+}): V1ClaimTypeEvidenceDecision {
+  const kinds = [...new Set(input.evidenceKinds)].sort()
+  const hasK = kinds.includes('k_ruhsat')
+  const hasM = kinds.includes('m_ruhsat')
+  if (hasK && hasM) {
+    return {
+      state: 'human_required', caseType: null, reason: 'conflicting_k_m_evidence',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    }
+  }
+  const filenameCaseType: CaseType | null = hasK ? 'casco' : hasM ? 'traffic' : null
+  if (filenameCaseType !== null && input.sidecarClaimType !== 'unknown' && input.sidecarClaimType !== filenameCaseType) {
+    return {
+      state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    }
+  }
+  if (filenameCaseType !== null) {
+    return {
+      state: 'resolved', caseType: filenameCaseType, reason: hasK ? 'k_ruhsat' : 'm_ruhsat',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    }
+  }
+  if (input.sidecarClaimType !== 'unknown') {
+    return {
+      state: 'resolved', caseType: input.sidecarClaimType, reason: 'sidecar_claim_type',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    }
+  }
+  return {
+    state: 'human_required', caseType: null, reason: 'no_deterministic_evidence',
+    sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+  }
 }
 
 export interface V1ClosedStateSignals {

@@ -102,11 +102,21 @@ function takipJson(input: SourceInput): string {
   })
 }
 
-async function writeSource(root: string, relativeFolder: string, input: SourceInput | string | null): Promise<string> {
+async function writeSource(
+  root: string,
+  relativeFolder: string,
+  input: SourceInput | string | null,
+  evidenceFiles: readonly string[] = [],
+): Promise<string> {
   const folder = join(root, relativeFolder)
   await mkdir(join(folder, '_HASARBOTU'), { recursive: true })
   if (input !== null) {
     await writeFile(join(folder, '_HASARBOTU', 'takip.json'), typeof input === 'string' ? input : takipJson(input), 'utf8')
+  }
+  for (const evidenceFile of evidenceFiles) {
+    const target = join(folder, evidenceFile)
+    await mkdir(dirname(target), { recursive: true })
+    await writeFile(target, 'sentetik-ruhsat-evidence', 'utf8')
   }
   return folder
 }
@@ -196,6 +206,91 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     expect(plan.summary.duplicatesThatWouldBeCreated).toBe(0)
   })
 
+  it('ruhsat filename evidence recursive taranir; K/M cozulur, S/conflict fail-closed kalir ve provenance korunur', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const month = '2026/Ağustos 2026'
+    const kFolder = await writeSource(root, `${month}/34KAA101`, {
+      caseKey: 'claim-evidence-k', createdAt: '2026-08-01T07:00:00Z', claimType: '',
+    }, ['EVRAK/ALT/K_RÜHSAT.PDF'])
+    await writeSource(root, `${month}/34MAA202`, {
+      caseKey: 'claim-evidence-m', createdAt: '2026-08-02T07:00:00Z', claimType: '',
+    }, ['EVRAK/M-Ruhsat'])
+    await writeSource(root, `${month}/34SAA303`, {
+      caseKey: 'claim-evidence-s', createdAt: '2026-08-03T07:00:00Z', claimType: '',
+    }, ['EVRAK/S_RUHSAT.jpg'])
+    await writeSource(root, `${month}/34CAA404`, {
+      caseKey: 'claim-evidence-km', createdAt: '2026-08-04T07:00:00Z', claimType: '',
+    }, ['EVRAK/K RUHSAT.jpeg', 'EVRAK/M_RUHSAT.png'])
+    await writeSource(root, `${month}/34DAA505`, {
+      caseKey: 'claim-evidence-sidecar-conflict', createdAt: '2026-08-05T07:00:00Z', claimType: 'trafik',
+    }, ['EVRAK/K-RUHSAT.tiff'])
+
+    const plan = await planV1Remediation(pool, organizationId, root)
+    const byFolder = new Map(plan.entries.map((entry) => [entry.folder.folderName, entry]))
+    expect(byFolder.get('34KAA101')).toMatchObject({
+      targetState: 'create', caseType: 'casco', caseTypeAutoResolved: true,
+      claimTypeResolution: { resolutionReason: 'k_ruhsat', humanRequired: false },
+    })
+    expect(byFolder.get('34KAA101')?.claimTypeResolution?.evidence).toEqual([
+      { kind: 'k_ruhsat', sourceRelativePath: `${month}/34KAA101/EVRAK/ALT/K_RÜHSAT.PDF` },
+    ])
+    expect(byFolder.get('34MAA202')).toMatchObject({
+      targetState: 'create', caseType: 'traffic', caseTypeAutoResolved: true,
+      claimTypeResolution: { resolutionReason: 'm_ruhsat', humanRequired: false },
+    })
+    expect(byFolder.get('34SAA303')).toMatchObject({
+      targetState: 'human_claim_type', caseType: null,
+      claimTypeResolution: { resolutionReason: 'no_deterministic_evidence', humanRequired: true },
+    })
+    expect(byFolder.get('34CAA404')).toMatchObject({
+      targetState: 'human_claim_type', blockers: ['conflicting_claim_type_evidence'],
+      claimTypeResolution: { deterministicReason: 'conflicting_k_m_evidence', humanRequired: true },
+    })
+    expect(byFolder.get('34DAA505')).toMatchObject({
+      targetState: 'human_claim_type', blockers: ['conflicting_claim_type_evidence'],
+      claimTypeResolution: { deterministicReason: 'sidecar_filename_evidence_conflict', humanRequired: true },
+    })
+    expect(plan.summary.actionable.casesToCreate).toBe(2)
+    expect(plan.summary.autoResolved.unknownClaimTypes).toBe(2)
+    expect(plan.summary.blocked.unknownClaimType).toBe(3)
+    expect(plan.summary.blocked.conflictingEvidence).toBe(2)
+
+    const result = await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'claim-evidence-apply' }, plan)
+    expect(result).toMatchObject({ casesCreated: 2, claimTypeEvidenceRecorded: 2, failed: 0 })
+    const created = await pool.query<{ plate_normalized: string; case_type: string }>(
+      "SELECT plate_normalized,case_type FROM cases WHERE organization_id=$1 AND plate_normalized IN ('34KAA101','34MAA202') ORDER BY plate_normalized",
+      [organizationId],
+    )
+    expect(created.rows).toEqual([
+      { plate_normalized: '34KAA101', case_type: 'casco' },
+      { plate_normalized: '34MAA202', case_type: 'traffic' },
+    ])
+    const provenance = await pool.query<{ field_diffs: { claimTypeResolution?: { evidence?: unknown[] } } }>(
+      "SELECT field_diffs FROM v1_import_records WHERE organization_id=$1 AND item_type='field_backfill' AND source_item_id LIKE 'field:claimTypeEvidence:%'",
+      [organizationId],
+    )
+    expect(provenance.rows).toHaveLength(2)
+    expect(provenance.rows.every((row) => (row.field_diffs.claimTypeResolution?.evidence?.length ?? 0) > 0)).toBe(true)
+
+    const replay = await planV1Remediation(pool, organizationId, root)
+    expect(replay.summary.actionable.casesToCreate).toBe(0)
+    expect(replay.summary.duplicatesThatWouldBeCreated).toBe(0)
+    expect(replay.entries.find((entry) => entry.folder.folderName === '34KAA101')?.needsClaimTypeEvidenceProvenance).toBe(false)
+
+    const movedParent = join(root, month, 'KAPALI AĞUSTOS 2026')
+    await mkdir(movedParent, { recursive: true })
+    await rename(kFolder, join(movedParent, '34KAA101 - YENI'))
+    const moved = await planV1Remediation(pool, organizationId, root)
+    const movedEntry = moved.entries.find((entry) => entry.folder.folderName === '34KAA101 - YENI')
+    expect(movedEntry).toMatchObject({ caseType: 'casco', targetState: 'existing' })
+    expect(movedEntry?.sourceIdentity).toBe(byFolder.get('34KAA101')?.sourceIdentity)
+    expect(movedEntry?.claimTypeResolution?.evidenceFingerprint)
+      .toBe(byFolder.get('34KAA101')?.claimTypeResolution?.evidenceFingerprint)
+    expect(movedEntry?.claimTypeResolution?.evidence[0]?.sourceRelativePath)
+      .toContain('KAPALI AĞUSTOS 2026/34KAA101 - YENI/EVRAK/ALT/K_RÜHSAT.PDF')
+    expect(moved.summary.duplicatesThatWouldBeCreated).toBe(0)
+  })
+
   it('ilk import; raw revision, historical note/task zamanlari, completed task, events, follow-up ve first-class alanlari korur', async () => {
     root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
     await writeSource(root, '2026/Temmuz 2026/34FFF666', {
@@ -238,8 +333,9 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
       `SELECT
         (SELECT count(*)::int FROM case_task_events WHERE case_id=$1) AS events,
         (SELECT count(*)::int FROM case_follow_up_history WHERE case_id=$1 AND source='v1_historical_import') AS followups,
-        (SELECT count(*)::int FROM v1_import_source_revisions WHERE organization_id=$2) AS revisions,
-        (SELECT count(*)::int FROM v1_import_item_metadata WHERE organization_id=$2) AS metadata,
+        (SELECT count(*)::int FROM v1_import_source_revisions r WHERE r.organization_id=$2
+          AND r.stable_source_identity IN (SELECT stable_source_identity FROM v1_import_records WHERE case_id=$1)) AS revisions,
+        (SELECT count(*)::int FROM v1_import_item_metadata WHERE organization_id=$2 AND case_id=$1) AS metadata,
         (SELECT count(*)::int FROM case_vehicle_profiles WHERE case_id=$1) AS profiles`,
       [caseId, organizationId],
     )
@@ -251,7 +347,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     )
     expect(taskEvents.rows).toHaveLength(3)
     expect(taskEvents.rows.every((event) => event.event_source === 'v1_historical_import'
-      && event.source_identity !== null && event.source_evidence?.mappingVersion === 'v1-remediation/2.0.0')).toBe(true)
+      && event.source_identity !== null && event.source_evidence?.mappingVersion === 'v1-remediation/2.1.0')).toBe(true)
     const raw = await pool.query('SELECT raw_snapshot FROM v1_import_source_revisions WHERE organization_id=$1', [organizationId])
     expect(raw.rows[0].raw_snapshot.portalChecklist).toHaveLength(1)
     expect(raw.rows[0].raw_snapshot.assignment.raportor).toBe('Sentetik Raportor')
@@ -379,6 +475,19 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     await expect(applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'toctou' }, plan))
       .rejects.toThrow('v1_remediation_plan_stale')
     const count = await pool.query("SELECT count(*)::int AS n FROM cases WHERE organization_id=$1 AND plate_normalized='34NNN444'", [organizationId])
+    expect(count.rows[0].n).toBe(0)
+  })
+
+  it('ruhsat evidence dosya adi preview sonrasi degisirse TOCTOU fail-closed olur', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const folder = await writeSource(root, '2026/Agustos 2026/34RNA445', {
+      caseKey: 'case-ruhsat-toctou', createdAt: '2026-08-01T08:00:00Z', claimType: '',
+    }, ['EVRAK/M RUHSAT.jpg'])
+    const plan = await planV1Remediation(pool, organizationId, root)
+    await rename(join(folder, 'EVRAK', 'M RUHSAT.jpg'), join(folder, 'EVRAK', 'S RUHSAT.jpg'))
+    await expect(applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'ruhsat-toctou' }, plan))
+      .rejects.toThrow('v1_remediation_plan_stale')
+    const count = await pool.query("SELECT count(*)::int AS n FROM cases WHERE organization_id=$1 AND plate_normalized='34RNA445'", [organizationId])
     expect(count.rows[0].n).toBe(0)
   })
 

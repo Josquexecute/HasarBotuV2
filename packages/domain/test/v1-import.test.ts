@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   buildV1SourceIdentityMaterial,
   buildV1StableItemIdentityMaterial,
+  classifyV1ClaimTypeEvidenceFilename,
+  decideV1ClaimTypeFromEvidence,
   decideV1FieldBackfill,
   deriveV1ClosedState,
   mapV1ClaimType,
+  normalizeV1ClaimTypeEvidenceFilename,
   parseV1PlateFolderName,
 } from '../src/v1-import.js'
 
@@ -77,6 +80,50 @@ describe('mapV1ClaimType', () => {
     expect(mapV1ClaimType(42)).toBe('unknown')
     expect(mapV1ClaimType('trafik ')).toBe('traffic') // trim edilir
     expect(mapV1ClaimType('gecersiz-deger')).toBe('unknown')
+  })
+})
+
+describe('V1 claim type ruhsat evidence', () => {
+  it.each([
+    ['K RUHSAT.pdf', 'k_ruhsat'],
+    ['k_ruhsat.jpg', 'k_ruhsat'],
+    ['K-RÜHSAT.JPEG', 'k_ruhsat'],
+    ['M Ruhsat', 'm_ruhsat'],
+    ['m__ruhsat-men.PNG', 'm_ruhsat'],
+    ['S-Ruhsat.tiff', 's_ruhsat'],
+  ] as const)('%s varyasyonunu %s olarak normalize eder', (filename, expected) => {
+    expect(classifyV1ClaimTypeEvidenceFilename(filename)).toBe(expected)
+  })
+
+  it('uzanti/separator/Turkce karakterleri kanoniklestirir', () => {
+    expect(normalizeV1ClaimTypeEvidenceFilename(' K_RÜHSAT - Ön.JPG ')).toBe('kruhsaton')
+  })
+
+  it('K Ruhsat kanitini Kasko olarak cozer', () => {
+    expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'unknown', evidenceKinds: ['k_ruhsat'] }))
+      .toMatchObject({ state: 'resolved', caseType: 'casco', reason: 'k_ruhsat' })
+  })
+
+  it('M Ruhsat kanitini S olmadan da Trafik olarak cozer', () => {
+    expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'unknown', evidenceKinds: ['m_ruhsat'] }))
+      .toMatchObject({ state: 'resolved', caseType: 'traffic', reason: 'm_ruhsat' })
+  })
+
+  it('S Ruhsat tek basina karar vermez', () => {
+    expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'unknown', evidenceKinds: ['s_ruhsat'] }))
+      .toMatchObject({ state: 'human_required', caseType: null, reason: 'no_deterministic_evidence' })
+  })
+
+  it('K ve M birlikteyse fail-closed insan karari ister', () => {
+    expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'unknown', evidenceKinds: ['k_ruhsat', 'm_ruhsat'] }))
+      .toMatchObject({ state: 'human_required', caseType: null, reason: 'conflicting_k_m_evidence' })
+  })
+
+  it('sidecar tipi ile filename evidence celisirse fail-closed insan karari ister', () => {
+    expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'traffic', evidenceKinds: ['k_ruhsat'] }))
+      .toMatchObject({ state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict' })
+    expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'casco', evidenceKinds: ['m_ruhsat'] }))
+      .toMatchObject({ state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict' })
   })
 })
 

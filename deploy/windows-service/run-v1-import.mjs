@@ -116,7 +116,7 @@ function summarizePlan(plan) {
     }
   }
   return {
-    SchemaVersion: 'hasarbotu-v1-remediation-preview/2.0.0',
+    SchemaVersion: 'hasarbotu-v1-remediation-preview/2.1.0',
     MappingVersion: plan.mappingVersion,
     IdentityVersion: plan.identityVersion,
     SchemaReady: plan.schemaReady,
@@ -136,7 +136,12 @@ function summarizePlan(plan) {
         })),
       ClaimTypes: plan.entries
         .filter((entry) => entry.targetState === 'human_claim_type')
-        .map((entry) => ({ PathToken: entry.pathToken, SourceIdentity: entry.sourceIdentity, RequiredValue: 'traffic_or_casco' })),
+        .map((entry) => ({
+          PathToken: entry.pathToken,
+          SourceIdentity: entry.sourceIdentity,
+          ClaimTypeResolution: entry.claimTypeResolution,
+          RequiredValue: 'traffic_or_casco',
+        })),
       ReferenceMappings: [...referenceMappings.values()],
     },
     Entries: plan.entries.map((entry) => ({
@@ -147,6 +152,7 @@ function summarizePlan(plan) {
       TargetCaseId: entry.targetCaseId,
       CandidateCases: entry.candidateCaseEvidence,
       CaseType: entry.caseType,
+      ClaimTypeResolution: entry.claimTypeResolution,
       Evidence: entry.evidence,
       Fields: entry.fields.map((field) => ({ Field: field.field, State: field.state })),
       NotesMissing: entry.notes.filter((item) => !item.alreadyImported && !item.duplicateContentCandidate && item.text.trim().length > 0).length,

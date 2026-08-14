@@ -3,12 +3,14 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import type pg from 'pg'
 import {
+  classifyV1ClaimTypeEvidenceFilename,
   decideV1FieldBackfill,
   deriveV1ClosedState,
   mapV1ClaimType,
   parseV1PlateFolderName,
   plateSearchKey,
   type V1ClaimType,
+  type V1ClaimTypeFilenameEvidenceKind,
   type V1FieldBackfillDecision,
   type V1PlateFolderName,
 } from '@hasarbotu/domain'
@@ -61,6 +63,21 @@ export interface V1DiscoveredFolder {
   readonly parsedName: V1PlateFolderName | null
   readonly hasJson: boolean
   readonly hasTxt: boolean
+}
+
+export interface V1ClaimTypePathEvidence {
+  readonly kind: V1ClaimTypeFilenameEvidenceKind
+  /** Yapilandirilan V1 kokune goreli POSIX yol; mutlak storage yolu degildir. */
+  readonly sourceRelativePath: string
+}
+
+export interface V1ClaimTypeFolderEvidence {
+  readonly scanState: 'complete' | 'failed'
+  /** Tum dosya-adlari envanteri; preview/apply arasinda ad ekleme/silme/rename TOCTOU citi. */
+  readonly inventoryHash: string | null
+  /** Yalniz ruhsat evidence yollarindan, case-folder move/rename'den bagimsiz fingerprint. */
+  readonly evidenceFingerprint: string | null
+  readonly evidence: readonly V1ClaimTypePathEvidence[]
 }
 
 async function listSubdirectories(path: string): Promise<string[]> {
@@ -139,6 +156,53 @@ async function pushDiscovered(
     hasJson,
     hasTxt,
   })
+}
+
+/**
+ * Bir V1 vaka klasorunun dosya adlarini recursive ve salt-okunur tarar.
+ * Symlink/junction takip edilmez; evidence yalniz gercek dosya girdisinden
+ * uretilir. Herhangi bir alt klasor okunamazsa partial sonuca guvenilmez ve
+ * scan tamamen `failed` olur.
+ */
+export async function readV1ClaimTypeFolderEvidence(folder: V1DiscoveredFolder): Promise<V1ClaimTypeFolderEvidence> {
+  const inventory: string[] = []
+  const evidenceWithCasePath: Array<V1ClaimTypePathEvidence & { readonly caseRelativePath: string }> = []
+  async function walk(absoluteDirectory: string): Promise<void> {
+    const entries = await readdir(absoluteDirectory, { withFileTypes: true })
+    entries.sort((left, right) => left.name.localeCompare(right.name, 'tr-TR'))
+    for (const entry of entries) {
+      const absoluteEntry = join(absoluteDirectory, entry.name)
+      const caseRelativePath = relative(folder.absolutePath, absoluteEntry).split('\\').join('/')
+      if (entry.isDirectory()) {
+        await walk(absoluteEntry)
+        continue
+      }
+      inventory.push(`${entry.isFile() ? 'file' : 'other'}:${caseRelativePath}`)
+      if (!entry.isFile()) continue
+      const kind = classifyV1ClaimTypeEvidenceFilename(entry.name)
+      if (kind === null) continue
+      evidenceWithCasePath.push({
+        kind,
+        sourceRelativePath: `${folder.relativePath}/${caseRelativePath}`,
+        caseRelativePath,
+      })
+    }
+  }
+  try {
+    await walk(folder.absolutePath)
+  } catch {
+    return { scanState: 'failed', inventoryHash: null, evidenceFingerprint: null, evidence: [] }
+  }
+  inventory.sort()
+  evidenceWithCasePath.sort((left, right) => left.caseRelativePath.localeCompare(right.caseRelativePath, 'tr-TR'))
+  return {
+    scanState: 'complete',
+    inventoryHash: sha256Hex(JSON.stringify(inventory)),
+    evidenceFingerprint: sha256Hex(JSON.stringify(evidenceWithCasePath.map((item) => ({
+      kind: item.kind, caseRelativePath: item.caseRelativePath,
+    })))),
+    evidence: evidenceWithCasePath.map(({ kind, sourceRelativePath }) => ({ kind, sourceRelativePath })),
+  }
 }
 
 // ---------------------------------------------------------------------------
