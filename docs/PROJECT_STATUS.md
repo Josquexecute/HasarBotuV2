@@ -2,6 +2,41 @@
 
 Son güncelleme: 2026-08-15
 
+## V1 remediation v2.3 — source quarantine güvenli apply'dan ayrıldı; production apply YAPILMADI (2026-08-15, HB-2026-202)
+
+- Claim-type hiyerarşisi nihai domain kararına geçirildi: `K Ruhsat` authoritative
+  Kasko, `M Ruhsat` authoritative Trafik; sidecar daha düşük öncelikli historical
+  metadata'dır. K/M yoksa explicit Kasko veya ZMSS/Trafik poliçesi PDF metni,
+  gerektiğinde pinned Türkçe modelle offline OCR kullanılır. Ham belge metni
+  plan/log'a alınmaz; ücretli API/AI/internet çağrısı yoktur. K+M veya karşıt
+  explicit belge rolleri source-level quarantine üretir.
+- Global human blocker kaldırıldı. Deterministik kaynaklar `SAFE APPLY`, yalnız
+  kendi içeriği uygulanmayan belirsiz/çelişkili/bozuk kaynaklar `SOURCE QUARANTINE`
+  olarak ayrılır. Additive 0048 migration append-only quarantine ve resolution
+  tablolarını, tenant FK/idempotency/immutable trigger'larını ve ham path/snapshot
+  göstermeyen admin reporting view'ını ekler. Production'a uygulanmamıştır.
+- Kalan iki unknown source'tan biri explicit ZMSS/Trafik poliçesi PDF metniyle,
+  diğeri offline OCR'da explicit Trafik poliçesi rolüyle deterministik çözüldü.
+  Üç K Ruhsat kaynağı Kasko olarak çözüldü; mevcut ters tipli candidate case'e
+  bağlanmaları engellenerek source-level `case_type_conflict` target quarantine'ına
+  alındı. Ayırt edilemeyen iki aynı-plaka source tahmin edilmeden
+  `ambiguous_target` quarantine'ında kaldı.
+- Son salt-okunur production planı: current 167 case / 368 note / 12 task /
+  470 provenance. Safe remediation: 11 create, 139 backfill, 145 note, 0 açık
+  task, 61 tamamlanmış task, 94 historical closure, 172 field mapping,
+  147 follow-up history, 134 task event, 155 raw provenance ve 29 move/rename
+  reconciliation. Quarantine: 5 target / 0 claim-type unresolved / 0 genuine
+  evidence conflict / 0 malformed. Duplicate tahmini 0; production şeması 0047
+  ve 0048 uygulanmadığı için bilinçli olarak `SchemaReady=false`.
+- Gerçek PostgreSQL dahil tam root zinciri 2.333 PASS / 6 koşullu UI skip / 0 fail;
+  typecheck PASS; lint 0 hata / 13 mevcut uyarı; production build/bundle PASS;
+  check:deploy PASS. Son iki ardışık production salt-okunur preview aynı
+  source-manifest `5cfb469b4e1156b9ad0d302fc46e00b5ec806e67c4a92983b5f8afe13dd2b696`
+  ve plan `e231649436e0f04285f87c37c8fcba7ebdfc66941b491e5216eec7c1dae33576`
+  hash'ini üretti.
+- Production DB write/migration/remediation apply/deploy/service-env-ACL değişikliği,
+  V1 source write/move/delete, restore veya push yapılmadı.
+
 ## V1 remediation deterministic resolution v2.2 — blocker listesi minimuma indirildi; production apply YAPILMADI (2026-08-15, HB-2026-201)
 
 - Claim-type kanıt hiyerarşisi kalıcılaştırıldı: recursive/normalize edilmiş `K Ruhsat`

@@ -28,24 +28,44 @@ uygulayabileceği işlemleri sayar. Blocked source içindeki note/task sayılar�
 toplama girmez. `duplicatesThatWouldBeCreated` sıfır değilse apply fail-closed
 reddedilir.
 
-`HumanResolutionTemplate` ham isim/path/note içeriği göstermeden stable source
-identity, path token, candidate case ID/type/lifecycle ve identifier-match
-bayraklarını üretir. Gerçek karar dosyası şu sürümdedir:
-`hasarbotu-v1-resolution/1.0.0`. Target ID veya claim type kullanıcı tarafından
-seçilmeden gerçek ambiguous/unknown kayıt işlenmez.
+Plan iki bağımsız sonuç kümesi üretir:
+
+- `SAFE APPLY`: deterministik target/type bulunan kaynakların uygulanabilir
+  işlemleri.
+- `SOURCE QUARANTINE`: yalnız kendi kaynağı uygulanmayan
+  `claim_type_unresolved`, `ambiguous_target`, `genuine_evidence_conflict` ve
+  `malformed_source` kayıtları.
+
+Quarantine birkaç belirsiz kaynağın bütün güvenli remediation planını bloke
+etmesine izin vermez. CLI ham isim/path/not içeriği yerine yalnız token,
+stable source identity, neden ve güvenli evidence özetini gösterir. Quarantine
+append-only source/revision/alias provenance ile kaydedilir; public/admin raporu
+ham snapshot veya path açığa çıkarmadan durumunu gösterir. Daha sonra deterministik
+kanıt veya açık reconciliation oluşursa ayrı append-only resolution kaydıyla
+çözülebilir. Quarantine sessiz başarı sayılmaz ve yanlış case'e alan/not/görev
+bağlamaz.
 
 Claim-type evidence hiyerarşisi:
 
 - Dosya adı case-insensitive, Türkçe karakter/aksan, boşluk, tire, alt çizgi ve
   uzantı farklarına toleranslı normalize edilir; klasör recursive taranır.
-- `K Ruhsat` Kasko, `M Ruhsat` Trafik kanıtıdır. `S Ruhsat` tek başına karar
-  üretmez. K+M çatışması fail-closed'dur.
-- Genel Kasko/Trafik poliçesi, KTT, zabıt ve beyan başka claim bağlamında da
-  bulunabildiği için context evidence olarak saklanır; tek başına tür üretmez.
-  Yalnız açıkça rol-bağlı claim belgesi sidecar'ı bağımsız doğrulayabilir.
-- Sidecar ile decisive evidence çatışırsa insan kararı gerekir. Inventory hash,
-  evidence fingerprint, relative path ve normalize evidence kind provenance'da
-  saklanır; source değişirse plan hash/TOCTOU kontrolü değişir.
+- `K Ruhsat` authoritative Kasko, `M Ruhsat` authoritative Trafik kanıtıdır.
+  `S Ruhsat` tek başına karar üretmez. K+M gerçek evidence çatışmasıdır ve
+  kaynak quarantine'a alınır.
+- Sidecar historical metadata'dır ve K/M fiziksel belge kanıtından düşük
+  önceliktedir. Yalnız K veya yalnız M varsa karşıt sidecar değeri authoritative
+  kararı değiştirmez; çatışma provenance'da korunur. K/M yoksa geçerli sidecar
+  kullanılabilir.
+- K/M ve kullanılabilir sidecar yoksa bütün PDF'ler yerel `pdfjs-dist` ile
+  okunur. Açık Kasko ürün/poliçe rolü veya ZMSS/Trafik poliçesi rolü tek anlamlı
+  kanıttır. PDF sonuç vermezse görüntüler pinned Türkçe Tesseract modeliyle
+  offline OCR edilir. Ücretli API/AI/internet çağrısı yapılmaz; düşük güvenli OCR,
+  genel KTT/zabıt/beyan veya bağlamsız kelime claim type üretmez.
+- Karşıt explicit Kasko ve Trafik belge içeriği birlikte bulunursa kaynak
+  quarantine'a alınır. Inventory hash, kanıt dosyalarının case-relative yolları,
+  dosya hash'leri, extraction yöntemi/sürümü, normalize evidence kind/marker ve
+  güven skoru provenance'da saklanır. Ham belge metni plan/log'a girmez. Belge
+  içeriği değişirse manifest/plan hash'i değişir ve TOCTOU apply'ı reddeder.
 
 Çok adaylı target çözümünde stable/native provenance ve exact claim/notification/
 office identifier önceliklidir. Bunlardan biri kardeş source'u tek hedefe bağlar
@@ -106,17 +126,18 @@ zamanı diye kullanılmaz. Normal reopen/file-operation gate'leri bypass edilmez
 ## Production sırası
 
 1. Güncel kod için tam test/typecheck/lint/build/check:deploy kanıtını doğrula.
-2. 0047 migration preview/backup/runbook onayını ayrı al; migration'ı uygula ve
-   şema/constraint'leri bağımsız doğrula.
+2. 0047 ve 0048 migration preview/backup/runbook onayını ayrı al; migration'ları
+   uygula ve şema/constraint/view/append-only trigger'ları bağımsız doğrula.
 3. Aynı commit'i deploy etmek için ayrı onay/deploy/verify sürecini tamamla.
-4. CLI'ı `--summary-only` olmadan salt-okunur çalıştır; generated
-   `HumanResolutionTemplate` için kullanıcı kararlarını resolution manifestine
-   yaz. Ham müşteri verisini loglama.
-5. Manifest ile yeni preview al. `SchemaReady=true`, human-required kabul edilen
-   kapsam ve `duplicatesThatWouldBeCreated=0` doğrulanmadan apply yok.
+4. CLI'ı iki kez salt-okunur çalıştır. Her iki çalıştırmada `SchemaReady=true`,
+   aynı source manifest/plan hash'i, aynı safe/quarantine dağılımı ve
+   `duplicatesThatWouldBeCreated=0` doğrulanmadan apply yok. Ham müşteri verisini
+   loglama.
+5. Quarantine token/neden listesini ayrıca doğrula; quarantine'daki source için
+   hiçbir case/note/task/field mutasyonu planlanmadığını kontrol et.
 6. Kullanıcı exact plan hash'i onayladıktan sonra gerçek TTY'da:
 
-   `node deploy/windows-service/run-v1-import.mjs --root "$env:HASARBOTU_V1_ROOT" --resolution-file "$env:HASARBOTU_V1_RESOLUTION_FILE" --actor-email "$env:HASARBOTU_ACTOR_EMAIL" --expected-plan-hash "<64_HEX_PLAN_HASH>" --apply`
+   `node deploy/windows-service/run-v1-import.mjs --root "$env:HASARBOTU_V1_ROOT" --actor-email "$env:HASARBOTU_ACTOR_EMAIL" --expected-plan-hash "<64_HEX_PLAN_HASH>" --apply`
 
 7. Apply sonrası bağımsız DB sayımı, API/UI görünürlüğü, lifecycle sorgusu ve
    ikinci preview zero-duplicate doğrulaması yap.

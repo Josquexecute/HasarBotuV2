@@ -9049,3 +9049,55 @@ Kanit ve sonuc:
   V1 source write/move/delete, restore veya push yapilmadi.
 
 Kaynak: 2026-08-15 tarihli kullanici talimati ("human_required SON CARE olsun").
+
+## HB-2026-202 — V1 remediation safe apply ve source quarantine ayrımı
+
+Tarih: 2026-08-15
+
+Karar:
+
+- Bu karar HB-2026-201'in sidecar/decisive-evidence çatışmasını global human
+  blocker sayan bölümünü geçersiz kılar. `K Ruhsat` authoritative Kasko,
+  `M Ruhsat` authoritative Trafik kanıtıdır; sidecar daha düşük öncelikli
+  historical metadata'dır. Tek K/M ile sidecar çatışırsa authoritative fiziksel
+  kanıt uygulanır, sidecar çatışması provenance'da korunur. K+M gerçek çatışmadır.
+- K/M ve kullanılabilir sidecar yoksa yalnız explicit Kasko ürün/poliçe rolü veya
+  ZMSS/Trafik poliçesi rolü deterministik tür üretir. PDF metni yerel çıkarılır;
+  gerekirse pinned Türkçe modelle offline OCR yapılır. Genel KTT/beyan/zabıt,
+  düşük güvenli OCR veya bağlamsız kelime karar üretmez. Karşıt explicit belge
+  rolleri fail-closed kalır.
+- Remediation global human blocker kullanmaz. Deterministik kaynaklar `SAFE APPLY`,
+  yalnız kendi işlemleri uygulanmayan `claim_type_unresolved`, `ambiguous_target`,
+  `genuine_evidence_conflict` ve `malformed_source` kaynakları `SOURCE QUARANTINE`
+  olur. Quarantine başka source'ların uygulanmasını engellemez, sessiz başarı
+  sayılmaz ve yanlış case'e veri bağlamaz.
+- Quarantine ve sonradan çözümleme additive 0048 şemasında append-only, tenant
+  bağlı, idempotent ve immutable saklanır. Admin reporting view yalnız güvenli
+  token/neden/durum/evidence özetini gösterir; raw JSON ve kaynak path'i açmaz.
+  Deterministik yeni kanıt veya açık reconciliation daha sonra append-only
+  resolution oluşturabilir.
+- Kullanıcı/expert/service legacy politikası değişmez: deterministik unique kullanıcı
+  eşleşmesi kullanılabilir, `Atanmadı` NULL'dır; karşılığı olmayan adlar yanlış
+  hesaba/master'a bağlanmaz, legacy provenance'da korunur ve global blocker olmaz.
+
+Kanit ve sonuc:
+
+- Gerçek production V1 kaynaklarında iki son unknown claim type, explicit poliçe
+  rolü taşıyan yerel PDF text/offline OCR kanıtıyla Trafik olarak çözüldü. Ham
+  müşteri içeriği veya absolute path loglanmadı.
+- Current production 167 case / 368 note / 12 task / 470 provenance'dır. Safe plan
+  11 create, 139 backfill, 145 note, 61 completed task, 94 closure, 172 field,
+  147 follow-up history, 134 task event, 155 raw provenance ve 29 move/rename
+  reconciliation içerir; open task 0 ve duplicate tahmini 0'dır.
+- Beş source yalnız target seviyesinde quarantine'dadır: üç `case_type_conflict`
+  ve iki gerçek `ambiguous_target`. Claim-type unresolved, genuine evidence
+  conflict ve malformed quarantine sayıları sıfırdır. Production schema 0047/0048
+  uygulanmadığı için apply fail-closed kalır.
+- Son iki ardışık production salt-okunur preview source-manifest
+  `5cfb469b4e1156b9ad0d302fc46e00b5ec806e67c4a92983b5f8afe13dd2b696` ve plan
+  `e231649436e0f04285f87c37c8fcba7ebdfc66941b491e5216eec7c1dae33576`
+  hash'lerinde birebir eşleşti.
+- Production DB write, migration, remediation apply, deploy, servis/env/ACL veya
+  V1 source mutasyonu yapılmadı.
+
+Kaynak: 2026-08-15 tarihli kullanıcı talimatı ("Nihai ürün kararı").
