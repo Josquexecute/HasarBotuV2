@@ -5,6 +5,7 @@ import { DATA_SOURCE_STORAGE_KEY, type CaseReferenceDataPort } from '../../data/
 import { ReferenceDataError } from '../../data/referenceHttpAdapter'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
 import type { UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
+import type { V1ImportQuarantineDataPort } from '../../data/v1ImportQuarantinePort'
 import { ManagementPage } from './ManagementPage'
 
 const references = {
@@ -148,6 +149,25 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     } as UsersDataPort
   }
 
+  function makeQuarantinePort(items = Array.from({ length: 5 }, (_, index) => ({
+    id: `11111111-1111-4111-8111-11111111111${index}`,
+    sourceToken: `0123456789abcde${index}`,
+    sourceRelativePath: `2026/Mayis/SENTETIK-Q-${index + 1}`,
+    reason: 'ambiguous_target' as const,
+    reasonCode: index < 3 ? 'case_type_conflict' : 'ambiguous_target',
+    status: 'unresolved' as const,
+    mappingVersion: 'v1-remediation/2.3.0',
+    evidenceSummary: { detectedCaseType: null, resolutionReason: null, sidecarConflictPreserved: false, evidenceCount: 0, evidenceKinds: [] },
+    candidateCount: 0,
+    candidateTargets: [],
+    createdAt: `2026-08-15T10:00:0${index}Z`,
+    resolution: null,
+  }))): V1ImportQuarantineDataPort {
+    return {
+      list: vi.fn().mockResolvedValue({ items, page: 1, pageSize: 100, totalItems: items.length, totalPages: items.length === 0 ? 0 : 1 }),
+    }
+  }
+
   it('admin oturumunda gerçek rol tablosu görünür ve rol değişikliği gerçek PATCH çağırır', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const usersPort = makeUsersPort()
@@ -187,5 +207,34 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     expect(await screen.findByText('Gerçek Eksper')).toBeInTheDocument()
     expect(screen.queryByText('Kullanıcı ve Rol Yönetimi')).not.toBeInTheDocument()
     expect(usersPort.list).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'V1 Aktarım Karantinası' })).not.toBeInTheDocument()
+  })
+
+  it('admin karantina sekmesinde 5 kaydi salt-okunur ve kompakt gorur', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const quarantinePort = makeQuarantinePort()
+    const user = userEvent.setup()
+    render(
+      <SessionContext.Provider value={adminSession()}>
+        <ManagementPage port={makePort()} usersPort={makeUsersPort()} quarantinePort={quarantinePort} />
+      </SessionContext.Provider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'V1 Aktarım Karantinası' }))
+    expect(await screen.findByText('5 çözümlenmemiş kaynak · salt okunur')).toBeInTheDocument()
+    expect(screen.getAllByText('Hedef dosya belirsiz')).toHaveLength(5)
+    expect(screen.getByText('2026/Mayis/SENTETIK-Q-1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /çöz|sil|düzenle/i })).not.toBeInTheDocument()
+  })
+
+  it('admin karantina sekmesinde bos durumu acikca gosterir', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const user = userEvent.setup()
+    render(
+      <SessionContext.Provider value={adminSession()}>
+        <ManagementPage port={makePort()} usersPort={makeUsersPort()} quarantinePort={makeQuarantinePort([])} />
+      </SessionContext.Provider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'V1 Aktarım Karantinası' }))
+    expect(await screen.findByText('Çözümlenmemiş V1 aktarım kaydı bulunmuyor.')).toBeInTheDocument()
   })
 })

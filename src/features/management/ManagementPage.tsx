@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from 'react'
-import { CheckCircle2, FileCog, Plus, RefreshCw, ShieldCheck, Store, UserRoundCog, UsersRound, X } from 'lucide-react'
+import { CheckCircle2, FileCog, Plus, RefreshCw, ShieldAlert, ShieldCheck, Store, UserRoundCog, UsersRound, X } from 'lucide-react'
 import { managementServices, managementUsers } from '../../mocks/workspaces'
 import { LoadingState } from '../../components/StateViews'
 import { getConfiguredDataSource, type CaseReferenceDataPort, type CaseReferenceWorkspace, type DataSourceKind } from '../../data/ports'
@@ -7,6 +7,8 @@ import { useCaseReferences } from '../../data/useCaseReferences'
 import { useSession } from '../../app/sessionContext'
 import { useUsers } from '../../data/useUsers'
 import type { RoleCodeRecord, UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
+import { useV1ImportQuarantines } from '../../data/useV1ImportQuarantines'
+import type { V1ImportQuarantineDataPort } from '../../data/v1ImportQuarantinePort'
 const LaborExcelProfilesModule = lazy(async () => {
   const module = await import('./LaborExcelProfilesModule')
   return { default: module.LaborExcelProfilesModule }
@@ -51,6 +53,7 @@ const PERMISSION_MATRIX: readonly PermissionMatrixRow[] = [
   { resource: 'Mali tutar görüntüleme', roles: ['admin', 'expert', 'case_manager', 'accounting'], note: 'Diğer rollerde tutarlar gizlenir' },
   { resource: 'Envanterde telefon dışa aktarımı', roles: ['admin', 'expert', 'case_manager'], note: 'PII sütunları' },
   { resource: 'Audit kayıtlarını görüntüleme', roles: ['admin'], note: 'Yalnız yönetici' },
+  { resource: 'V1 aktarım karantinasını görüntüleme', roles: ['admin'], note: 'Salt okunur · çözüm aksiyonu yok' },
   { resource: 'Kullanıcı ve rol yönetimi', roles: ['admin'], note: 'Kendi yönetici rolü kaldırılamaz' },
   { resource: 'File Agent kaydı ve güncellemesi', roles: ['admin'], note: 'Yalnız yönetici' },
 ]
@@ -96,7 +99,7 @@ function PermissionMatrixPanel() {
 }
 
 type ManagementTab =
-  | 'Kullanıcılar' | 'Servisler' | 'Excel Şablonları' | 'Belge Kuralları' | 'Erişim ve Yetki'
+  | 'Kullanıcılar' | 'Servisler' | 'V1 Aktarım Karantinası' | 'Excel Şablonları' | 'Belge Kuralları' | 'Erişim ve Yetki'
 
 const SERVICE_TYPE_LABELS: Readonly<Record<string, string>> = {
   authorized: 'Yetkili',
@@ -328,9 +331,67 @@ function ReferenceServices({ references }: { references: CaseReferenceWorkspace 
   )
 }
 
-export function ManagementPage({ port, usersPort }: {
+const QUARANTINE_REASON_LABELS = {
+  claim_type_unresolved: 'Dosya türü çözülemedi',
+  ambiguous_target: 'Hedef dosya belirsiz',
+  genuine_evidence_conflict: 'Belge kanıtı çelişkili',
+  malformed_source: 'Kaynak biçimi bozuk',
+} as const
+
+function formatQuarantineDate(value: string): string {
+  return new Intl.DateTimeFormat('tr-TR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+}
+
+function ManagementQuarantineContent({ port }: { readonly port?: V1ImportQuarantineDataPort }) {
+  const { page, status, reload } = useV1ImportQuarantines(port)
+  if (status !== 'ok' || page === null) {
+    const message = status === 'loading'
+      ? 'V1 aktarım karantinası yükleniyor…'
+      : status === 'forbidden'
+        ? 'Bu görünüm yalnız yöneticilere açıktır.'
+        : status === 'unauthorized'
+          ? 'Oturum gerekli; karantina kayıtları gösterilmez.'
+          : 'Karantina raporlama servisine ulaşılamıyor.'
+    return (
+      <section className="office-table-panel">
+        <header className="panel-heading"><div><h2>V1 Aktarım Karantinası</h2><span>Salt okunur görünüm</span></div><ShieldAlert size={18} /></header>
+        <div className="management-state"><p role={status === 'loading' ? 'status' : 'alert'}>{message}</p><button className="button" type="button" onClick={reload}><RefreshCw size={15} /> Yeniden dene</button></div>
+      </section>
+    )
+  }
+  return (
+    <section className="office-table-panel">
+      <header className="panel-heading">
+        <div><h2>V1 Aktarım Karantinası</h2><span>{page.totalItems} çözümlenmemiş kaynak · salt okunur</span></div>
+        <ShieldAlert size={18} />
+      </header>
+      {page.items.length === 0 ? <p className="management-empty">Çözümlenmemiş V1 aktarım kaydı bulunmuyor.</p> : (
+        <div className="table-scroll">
+          <table className="data-table quarantine-table">
+            <thead><tr><th>Neden</th><th>Kaynak</th><th>Aday hedef</th><th>Kanıt özeti</th><th>Tarih</th><th>Durum</th></tr></thead>
+            <tbody>{page.items.map((item) => (
+              <tr key={item.id}>
+                <td><strong>{QUARANTINE_REASON_LABELS[item.reason]}</strong><br /><small>{item.reasonCode}</small></td>
+                <td><strong>{item.sourceRelativePath}</strong><br /><small>Token: {item.sourceToken}</small></td>
+                <td>{item.candidateTargets.length === 0
+                  ? 'Aday yok'
+                  : item.candidateTargets.map((candidate) => `${candidate.officeCaseNumber} · ${candidate.caseType === 'traffic' ? 'Trafik' : 'Kasko'}`).join(', ')}</td>
+                <td>{item.evidenceSummary.detectedCaseType === null ? 'Tür belirlenemedi' : item.evidenceSummary.detectedCaseType === 'traffic' ? 'Trafik sinyali' : 'Kasko sinyali'} · {item.evidenceSummary.evidenceCount} kanıt</td>
+                <td>{formatQuarantineDate(item.createdAt)}</td>
+                <td><span className="status-pill status-pill--waiting">Çözümlenmedi</span></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
+export function ManagementPage({ port, usersPort, quarantinePort }: {
   readonly port?: CaseReferenceDataPort
   readonly usersPort?: UsersDataPort
+  readonly quarantinePort?: V1ImportQuarantineDataPort
 } = {}) {
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
   const { user } = useSession()
@@ -355,10 +416,11 @@ export function ManagementPage({ port, usersPort }: {
           </button>
         )}
       </section>
-      <nav className="workspace-tabs" aria-label="Yönetim bölümleri">{(['Kullanıcılar', 'Servisler', 'Excel Şablonları', 'Belge Kuralları', 'Erişim ve Yetki'] as const).map((tab) => <button key={tab} type="button" className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
+      <nav className="workspace-tabs" aria-label="Yönetim bölümleri">{(['Kullanıcılar', 'Servisler', ...(isAdmin && source === 'api' ? ['V1 Aktarım Karantinası' as const] : []), 'Excel Şablonları', 'Belge Kuralları', 'Erişim ve Yetki'] as const).map((tab) => <button key={tab} type="button" className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
       <div className="office-scroll management-content">
         {referenceTab && source === 'api' && <ManagementReferenceContent activeTab={activeTab} port={port} />}
         {showAdminUsers && source === 'api' && <ManagementUsersAdminContent port={usersPort} />}
+        {activeTab === 'V1 Aktarım Karantinası' && isAdmin && source === 'api' && <ManagementQuarantineContent port={quarantinePort} />}
         {activeTab === 'Kullanıcılar' && source === 'mock' && <section className="office-table-panel"><header className="panel-heading"><div><h2>Kullanıcı ve Sorumlu Listesi</h2><span>Başlangıçta herkes tüm dosyaları görebilir</span></div><UsersRound size={18} /></header><div className="table-scroll"><table className="data-table"><thead><tr><th>Kullanıcı</th><th>Rol</th><th>Atanmış Dosya</th><th>Durum</th><th>Operasyon Yetkisi</th></tr></thead><tbody>{managementUsers.map((user) => <tr key={user.id}><td><strong>{user.name}</strong></td><td>{user.role}</td><td>{user.assigned}</td><td><span className="status-pill status-pill--open">{user.status}</span></td><td>Görüntüle · Not · Görev</td></tr>)}</tbody></table></div></section>}
         {activeTab === 'Servisler' && source === 'mock' && <section className="office-table-panel"><header className="panel-heading"><div><h2>Servis Listesi</h2><span>Değişiklik geçmişi mock olarak korunur</span></div><Store size={18} /></header><div className="table-scroll"><table className="data-table"><thead><tr><th>Servis Adı</th><th>Tür</th><th>Telefon</th><th>Açık Dosya</th><th>Durum</th></tr></thead><tbody>{managementServices.map((service) => <tr key={service.id}><td><strong>{service.name}</strong></td><td>{service.kind}</td><td>{service.phone}</td><td>{service.openCases}</td><td><span className="status-pill status-pill--open">Aktif</span></td></tr>)}</tbody></table></div></section>}
         {/* Paket 60: şablon profilleri yalnız API modunda gerçek uçtan gelir. */}

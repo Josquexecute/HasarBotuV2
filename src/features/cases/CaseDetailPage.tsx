@@ -31,6 +31,7 @@ import type { CaseRecord } from '../../types/case'
 import { CaseEditModal } from './CaseEditModal'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
+import { CaseApiLegacyReferenceFields } from './CaseLegacyReferenceFields'
 
 const DocumentPhotoApiModule = lazy(async () => {
   const module = await import('./DocumentPhotoApiModule')
@@ -362,10 +363,10 @@ export function CaseDetailPage() {
                   <div><dt>Araç</dt><dd>{item.vehicle}</dd></div>
                   <div><dt>Hasar Dosya No</dt><dd>{item.claimNumber}</dd></div>
                   <div><dt>İhbar Föyü No</dt><dd>{item.noticeNumber}</dd></div>
-                  <div><dt>Servis</dt><dd>{item.service}</dd></div>
                   <div><dt>Tahmini Hasar</dt><dd>{source === 'api' ? 'Henüz bağlı değil' : formatCurrency(item.estimatedDamage)}</dd></div>
-                  <div><dt>Sorumlu</dt><dd>{item.assignee}</dd></div>
-                  <div><dt>Eksper</dt><dd>{item.expert}</dd></div>
+                  {source === 'api'
+                    ? <CaseApiLegacyReferenceFields item={item} />
+                    : <><div><dt>Servis</dt><dd>{item.service}</dd></div><div><dt>Sorumlu</dt><dd>{item.assignee}</dd></div><div><dt>Eksper</dt><dd>{item.expert}</dd></div></>}
                 </dl>
               </section>
               <section className="info-panel">

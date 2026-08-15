@@ -2025,6 +2025,7 @@ button {
 }
 .overview-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; margin: 0; }
 .overview-fields dd { white-space: normal; }
+.legacy-reference { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 10px; font-weight: 500; line-height: 1.35; }
 .overview-follow { display: block; margin: 6px 0; font-size: 18px; }
 .overview-follow--today { color: var(--warning); }
 .info-panel > p { color: var(--text-secondary); font-size: 11px; line-height: 16px; }
@@ -2859,6 +2860,8 @@ button {
 .management-state { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px; }
 .management-state p { margin: 0; color: var(--text-secondary); font-size: 12px; }
 .management-empty { margin: 10px 16px 14px; color: var(--text-secondary); font-size: 11px; }
+.quarantine-table { min-width: 980px; }
+.quarantine-table td { max-width: 280px; white-space: normal; overflow-wrap: anywhere; }
 
 /* Gerçek rol ataması ve yetki matrisi (HB-011) */
 .role-checkbox-group { display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: 380px; }

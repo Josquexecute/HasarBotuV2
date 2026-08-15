@@ -80,6 +80,12 @@ export interface CaseRecord {
   lossDate?: string | null
   notificationDate?: string | null
   lifecycleStatus?: 'open' | 'closed'
+  /** V1 immutable provenance'dan gelen tarihsel adlar; aktif V2 ilişkisi değildir. */
+  legacyReferences?: {
+    readonly responsibleNames: readonly string[]
+    readonly expertNames: readonly string[]
+    readonly serviceNames: readonly string[]
+  }
 }
 
 export type SortKey =

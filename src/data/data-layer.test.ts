@@ -99,17 +99,23 @@ describe('HttpApiAdapter esleme', () => {
 
   it('server pagination sayfalarinin tamamini toplar ve detail endpointini ayri okur', async () => {
     const second = { ...dto, id: 'case-2', officeCaseNumber: '2026/185', plate: '34 MPA 765' }
+    const secondDetail = {
+      ...second,
+      legacyReferences: { responsibleNames: ['Enes Özmen'], expertNames: ['Baran Gürbüz'], serviceNames: ['BABİL - VEDAT'] },
+    }
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('/cases/case-2')) return fetchResponding(200, { case: second })(input)
+      if (url.includes('/cases/case-2')) return fetchResponding(200, { case: secondDetail })(input)
       if (url.includes('page=2')) return fetchResponding(200, listBody([second], 2, 2, 2))(input)
       return fetchResponding(200, listBody([dto], 1, 2, 2))(input)
     }) as unknown as typeof fetch
     const adapter = createHttpCasesAdapter({ fetchImpl })
     expect((await adapter.listCases()).map((item) => item.caseId)).toEqual(['case-1', 'case-2'])
-    expect(await adapter.getCase('case-2')).toMatchObject({ caseId: 'case-2', plate: '34 MPA 765' })
+    expect(await adapter.getCase('case-2')).toMatchObject({
+      caseId: 'case-2', plate: '34 MPA 765', legacyReferences: secondDetail.legacyReferences,
+    })
     expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('page=2&pageSize=100'), expect.anything())
-    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case-2', expect.anything())
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case-2?includeLegacyReferences=true', expect.anything())
   })
 
   it('bozuk successful response contracts sinirinda fail-closed reddedilir', async () => {
@@ -204,7 +210,12 @@ describe('useCases kancasi (HB-2026-014)', () => {
 describe('tek case detail kancasi', () => {
   it('API listesinde olmasa bile kapali case detail endpointinden yuklenir', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
-    const closed = { ...dto, status: 'closed' as const, stage: 'closed' as const }
+    const closed = {
+      ...dto,
+      status: 'closed' as const,
+      stage: 'closed' as const,
+      legacyReferences: { responsibleNames: [], expertNames: [], serviceNames: [] },
+    }
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
       fetchResponding(200, { case: closed }) as never,
     )
@@ -212,7 +223,7 @@ describe('tek case detail kancasi', () => {
       const { result } = renderHook(() => useCase('case-1'))
       await waitFor(() => expect(result.current.status).toBe('ok'))
       expect(result.current.item).toMatchObject({ caseId: 'case-1', lifecycleStatus: 'closed', status: 'Kapalı' })
-      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-1', expect.anything())
+      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-1?includeLegacyReferences=true', expect.anything())
     } finally {
       fetchSpy.mockRestore()
     }

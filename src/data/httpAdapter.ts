@@ -1,4 +1,4 @@
-import type { CaseListItem, CaseStageDto } from '@hasarbotu/contracts'
+import type { CaseListItem, CaseStageDto, CaseLegacyReferences } from '@hasarbotu/contracts'
 import type { CaseRecord, CaseStage, CaseStatus, CaseType } from '../types/case'
 import type { CasePageQuery, CasePageResult, CasesDataPort } from './ports'
 
@@ -57,7 +57,10 @@ export function deriveStatus(
   return 'Açık'
 }
 
-export function mapCaseDtoToRecord(dto: CaseListItem, today: Date = new Date()): CaseRecord {
+export function mapCaseDtoToRecord(
+  dto: CaseListItem & { readonly legacyReferences?: CaseLegacyReferences },
+  today: Date = new Date(),
+): CaseRecord {
   const { followUp, followUpTone } = deriveFollowUp(dto.followUpDate, today)
   const caseType: CaseType = dto.caseType === 'traffic' ? 'Trafik' : 'Kasko'
   return {
@@ -92,6 +95,7 @@ export function mapCaseDtoToRecord(dto: CaseListItem, today: Date = new Date()):
     lossDate: dto.lossDate,
     notificationDate: dto.notificationDate,
     lifecycleStatus: dto.status,
+    ...(dto.legacyReferences === undefined ? {} : { legacyReferences: dto.legacyReferences }),
   }
 }
 
@@ -201,9 +205,9 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
     },
 
     async getCase(caseId: string): Promise<CaseRecord> {
-      const { caseDetailResponseSchema } = await import('@hasarbotu/contracts')
-      const parsed = caseDetailResponseSchema.safeParse(
-        await requestJson(`/api/v1/cases/${encodeURIComponent(caseId)}`),
+      const { caseDetailWithLegacyReferencesResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = caseDetailWithLegacyReferencesResponseSchema.safeParse(
+        await requestJson(`/api/v1/cases/${encodeURIComponent(caseId)}?includeLegacyReferences=true`),
       )
       if (!parsed.success) throw new HttpCasesError('unavailable', 'case detail response is invalid')
       return mapCaseDtoToRecord(parsed.data.case)
