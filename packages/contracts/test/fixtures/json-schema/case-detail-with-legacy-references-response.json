@@ -1,0 +1,415 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "case": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+        },
+        "caseType": {
+          "type": "string",
+          "enum": [
+            "traffic",
+            "casco"
+          ]
+        },
+        "officeCaseNumber": {
+          "type": "string",
+          "pattern": "^[2-9]\\d{3}\\/[1-9]\\d{0,14}$"
+        },
+        "notificationFormNumber": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?=.*[A-Za-z0-9])[^\\\\\u0000-\u001f-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "insurerClaimNumber": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?=.*[A-Za-z0-9])[^\\\\\u0000-\u001f-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "x-hasarbotu-runtime-validation": "plate-number-canonical-form"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed"
+          ]
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "new_notification",
+            "vehicle_or_service_pending",
+            "inspection_pending",
+            "damage_assessment",
+            "parts_and_labor",
+            "repair_approval_pending",
+            "under_repair",
+            "reporting",
+            "closing_documents",
+            "ready_to_close",
+            "closed"
+          ]
+        },
+        "responsibleUserId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expertUserId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "serviceId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "serviceProfile": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "serviceType": {
+                  "type": "string",
+                  "enum": [
+                    "authorized",
+                    "private",
+                    "glass",
+                    "mobile",
+                    "other"
+                  ]
+                },
+                "isActive": {
+                  "type": "boolean"
+                },
+                "agreement": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "eligible",
+                        "not_eligible",
+                        "control_required"
+                      ]
+                    },
+                    "agreementStatus": {
+                      "type": "string",
+                      "enum": [
+                        "agreed",
+                        "not_agreed",
+                        "control_required"
+                      ]
+                    },
+                    "serviceType": {
+                      "type": "string",
+                      "enum": [
+                        "authorized",
+                        "private",
+                        "glass",
+                        "mobile",
+                        "other"
+                      ]
+                    },
+                    "operation": {
+                      "type": "string",
+                      "enum": [
+                        "closure_documents",
+                        "deductible_assessment",
+                        "policy_assessment",
+                        "repair_authorization"
+                      ]
+                    },
+                    "evaluationDate": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "dateSource": {
+                      "type": "string",
+                      "enum": [
+                        "loss_date",
+                        "policy_date"
+                      ]
+                    },
+                    "isAuthorized": {
+                      "type": "boolean"
+                    },
+                    "isInsurerAgreed": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "ruleVersion": {
+                      "type": "string",
+                      "const": "2026.07.14.1"
+                    },
+                    "matchedAgreementIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "requiresHumanReview": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "agreementStatus",
+                    "serviceType",
+                    "operation",
+                    "evaluationDate",
+                    "dateSource",
+                    "isAuthorized",
+                    "isInsurerAgreed",
+                    "reason",
+                    "ruleVersion",
+                    "matchedAgreementIds",
+                    "requiresHumanReview"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "serviceType",
+                "isActive",
+                "agreement"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "insurerId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "followUpDate": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lossDate": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notificationDate": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastInterventionAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+              "x-hasarbotu-runtime-validation": "calendar-date-validity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        "updatedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+          "x-hasarbotu-runtime-validation": "calendar-date-validity"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "legacyReferences": {
+          "type": "object",
+          "properties": {
+            "responsibleNames": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              }
+            },
+            "expertNames": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              }
+            },
+            "serviceNames": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              }
+            }
+          },
+          "required": [
+            "responsibleNames",
+            "expertNames",
+            "serviceNames"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "caseType",
+        "officeCaseNumber",
+        "notificationFormNumber",
+        "insurerClaimNumber",
+        "plate",
+        "status",
+        "stage",
+        "responsibleUserId",
+        "expertUserId",
+        "serviceId",
+        "serviceProfile",
+        "insurerId",
+        "followUpDate",
+        "lossDate",
+        "notificationDate",
+        "lastInterventionAt",
+        "createdAt",
+        "updatedAt",
+        "version",
+        "legacyReferences"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "case"
+  ],
+  "additionalProperties": false
+}

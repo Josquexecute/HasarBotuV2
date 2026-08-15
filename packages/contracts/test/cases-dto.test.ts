@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   caseDetailParamsSchema,
+  caseDetailQuerySchema,
   caseDetailResponseSchema,
+  caseDetailWithLegacyReferencesResponseSchema,
   caseListItemSchema,
   caseListResponseSchema,
 } from '../src/index.js'
@@ -86,5 +88,26 @@ describe('Cases DTO sozlesmeleri', () => {
     expect(caseDetailParamsSchema.safeParse({ caseId: '' }).success).toBe(false)
     expect(caseDetailResponseSchema.safeParse({ case: validItem }).success).toBe(true)
     expect(caseDetailResponseSchema.safeParse({ case: validItem, extra: 1 }).success).toBe(false)
+  })
+
+  it('legacy referanslar yalniz opt-in detay sozlesmesinde bounded ve strict tasinir', () => {
+    const response = {
+      case: {
+        ...validItem,
+        legacyReferences: {
+          responsibleNames: ['Enes Özmen'],
+          expertNames: ['Baran Gürbüz'],
+          serviceNames: ['BABİL - VEDAT'],
+        },
+      },
+    }
+    expect(caseDetailQuerySchema.safeParse({}).success).toBe(true)
+    expect(caseDetailQuerySchema.safeParse({ includeLegacyReferences: 'true' }).success).toBe(true)
+    expect(caseDetailQuerySchema.safeParse({ includeLegacyReferences: 'false' }).success).toBe(false)
+    expect(caseDetailWithLegacyReferencesResponseSchema.safeParse(response).success).toBe(true)
+    expect(caseDetailResponseSchema.safeParse(response).success).toBe(false)
+    expect(caseDetailWithLegacyReferencesResponseSchema.safeParse({
+      case: { ...response.case, legacyReferences: { ...response.case.legacyReferences, rawSnapshot: {} } },
+    }).success).toBe(false)
   })
 })

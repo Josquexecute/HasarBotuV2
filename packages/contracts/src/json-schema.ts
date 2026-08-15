@@ -7,8 +7,11 @@ import { caseCreateRequestSchema, caseUpdateRequestSchema } from './v1/cases/com
 import {
   caseDetailParamsSchema,
   caseDetailResponseSchema,
+  caseDetailWithLegacyReferencesResponseSchema,
   caseListResponseSchema,
 } from './v1/cases/dto.js'
+import { v1ImportQuarantinesQuerySchema } from './v1/v1-import-quarantine/query.js'
+import { v1ImportQuarantinesResponseSchema } from './v1/v1-import-quarantine/dto.js'
 import { auditEventsQuerySchema } from './v1/audit/query.js'
 import { auditEventsResponseSchema } from './v1/audit/dto.js'
 import { caseLocationAssignRequestSchema } from './v1/storage/commands.js'
@@ -217,6 +220,7 @@ export const JSON_SCHEMA_TARGETS = {
   'cases-list-response': caseListResponseSchema,
   'case-detail-params': caseDetailParamsSchema,
   'case-detail-response': caseDetailResponseSchema,
+  'case-detail-with-legacy-references-response': caseDetailWithLegacyReferencesResponseSchema,
   'audit-events-query': auditEventsQuerySchema,
   'audit-events-response': auditEventsResponseSchema,
   'storage-roots-response': storageRootsResponseSchema,
@@ -358,6 +362,8 @@ export const JSON_SCHEMA_TARGETS = {
   'labor-workbook-apply-response': laborWorkbookApplyResponseSchema,
   'operational-alerts-query': operationalAlertsQuerySchema,
   'operational-alerts-response': operationalAlertsResponseSchema,
+  'v1-import-quarantines-query': v1ImportQuarantinesQuerySchema,
+  'v1-import-quarantines-response': v1ImportQuarantinesResponseSchema,
 } as const
 
 export type JsonSchemaName = keyof typeof JSON_SCHEMA_TARGETS

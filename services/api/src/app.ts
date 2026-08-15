@@ -40,6 +40,7 @@ import {
 } from './labor-allocation-ai/index.js'
 import { registerLaborWorkbookApplyRoutes } from './labor-workbook-apply/index.js'
 import { registerUserRoutes } from './users/index.js'
+import { registerV1ImportQuarantineRoutes } from './v1-import-quarantine/index.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -203,6 +204,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     })
     registerLaborWorkbookApplyRoutes(app, { pool: options.auth.pool })
     registerUserRoutes(app, { pool: options.auth.pool })
+    registerV1ImportQuarantineRoutes(app, { pool: options.auth.pool })
   }
 
   return app

@@ -4,7 +4,9 @@ import {
   CASES_ROUTE,
   CASE_DETAIL_ROUTE,
   caseDetailParamsSchema,
+  caseDetailQuerySchema,
   caseDetailResponseSchema,
+  caseDetailWithLegacyReferencesResponseSchema,
   caseListResponseSchema,
   casesQuerySchema,
   failureEnvelopeSchema,
@@ -73,9 +75,20 @@ export function registerCasesRoutes(app: FastifyInstance, options: CasesRoutesOp
       )
     }
 
+    const parsedQuery = caseDetailQuerySchema.safeParse(request.query)
+    if (!parsedQuery.success) {
+      return reply.code(400).send(
+        failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(parsedQuery.error, requestId) }),
+      )
+    }
+
     const detail = await casesStore.findById(session.user.organizationId, parsed.data.caseId)
     if (detail === undefined) {
       return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
+    }
+    if (parsedQuery.data.includeLegacyReferences === 'true') {
+      const legacyReferences = await casesStore.findLegacyReferences(session.user.organizationId, parsed.data.caseId)
+      return caseDetailWithLegacyReferencesResponseSchema.parse({ case: { ...detail, legacyReferences } })
     }
     return caseDetailResponseSchema.parse({ case: detail })
   })

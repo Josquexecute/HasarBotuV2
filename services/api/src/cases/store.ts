@@ -1,12 +1,15 @@
 import type pg from 'pg'
 import {
+  caseLegacyReferencesSchema,
   caseDetailSchema,
   caseListItemSchema,
+  type CaseLegacyReferences,
   type CaseDetail,
   type CaseListItem,
   type CasesQuery,
   type ServiceReference,
 } from '@hasarbotu/contracts'
+import { normalizeV1ResolutionName } from '@hasarbotu/domain'
 import { loadServiceProfiles } from '../service-agreements/service.js'
 
 /**
@@ -83,6 +86,98 @@ export const SELECT_FIELDS = `
   plate, lifecycle_status, workflow_stage, responsible_user_id, expert_user_id, service_center_id,
   insurer_id, follow_up_date, loss_date, notification_date, last_intervention_at, created_at, updated_at, version
 `
+
+interface LegacyReferenceRow {
+  responsible_name: string | null
+  expert_name: string | null
+  service_name: string | null
+}
+
+interface CurrentReferenceRow {
+  responsible_display_name: string | null
+  responsible_email: string | null
+  expert_display_name: string | null
+  expert_email: string | null
+  service_name: string | null
+}
+
+function compactIdentity(value: string): string {
+  return value.trim().toLocaleLowerCase('tr-TR').replace(/ı/gu, 'i').normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '').replace(/[^a-z0-9]/gu, '')
+}
+
+function safeLegacyNames(values: readonly (string | null)[]): string[] {
+  const byNormalized = new Map<string, string>()
+  for (const value of values) {
+    const trimmed = value?.trim() ?? ''
+    const hasControl = [...trimmed].some((character) => {
+      const code = character.codePointAt(0) ?? 0
+      return code <= 31 || (code >= 127 && code <= 159)
+    })
+    if (trimmed.length === 0 || trimmed.length > 160 || hasControl
+      || trimmed.startsWith('{') || trimmed.startsWith('[')) continue
+    if (compactIdentity(trimmed) === 'atanmadi') continue
+    const normalized = normalizeV1ResolutionName(trimmed)
+    if (!byNormalized.has(normalized)) byNormalized.set(normalized, trimmed)
+  }
+  return [...byNormalized.values()].sort((left, right) => left.localeCompare(right, 'tr-TR'))
+}
+
+function sameUserReference(legacyName: string, displayName: string | null, email: string | null): boolean {
+  if (displayName !== null && normalizeV1ResolutionName(legacyName) === normalizeV1ResolutionName(displayName)) return true
+  const localIdentity = email?.split('@', 1)[0] ?? ''
+  return localIdentity.length > 0 && compactIdentity(legacyName) === compactIdentity(localIdentity)
+}
+
+async function loadLegacyReferences(pool: pg.Pool, organizationId: string, caseId: string): Promise<CaseLegacyReferences> {
+  const [legacyResult, currentResult] = await Promise.all([
+    pool.query<LegacyReferenceRow>(
+      `WITH case_sources AS (
+         SELECT DISTINCT stable_source_identity
+           FROM v1_import_records
+          WHERE organization_id=$1 AND case_id=$2 AND stable_source_identity IS NOT NULL
+       ), latest_revisions AS (
+         SELECT DISTINCT ON (revision.stable_source_identity) revision.raw_snapshot
+           FROM v1_import_source_revisions revision
+           JOIN case_sources source ON source.stable_source_identity=revision.stable_source_identity
+          WHERE revision.organization_id=$1
+          ORDER BY revision.stable_source_identity,COALESCE(revision.source_revision,0) DESC,
+                   revision.recorded_at DESC,revision.id DESC
+       )
+       SELECT NULLIF(BTRIM(raw_snapshot #>> '{assignment,sorumlu}'),'') AS responsible_name,
+              NULLIF(BTRIM(raw_snapshot #>> '{assignment,eksper}'),'') AS expert_name,
+              NULLIF(BTRIM(raw_snapshot #>> '{service,name}'),'') AS service_name
+         FROM latest_revisions`,
+      [organizationId, caseId],
+    ),
+    pool.query<CurrentReferenceRow>(
+      `SELECT responsible.display_name AS responsible_display_name,responsible.email AS responsible_email,
+              expert.display_name AS expert_display_name,expert.email AS expert_email,
+              service.name AS service_name
+         FROM cases current_case
+         LEFT JOIN users responsible ON responsible.organization_id=current_case.organization_id
+          AND responsible.id=current_case.responsible_user_id
+         LEFT JOIN users expert ON expert.organization_id=current_case.organization_id
+          AND expert.id=current_case.expert_user_id
+         LEFT JOIN service_centers service ON service.organization_id=current_case.organization_id
+          AND service.id=current_case.service_center_id
+        WHERE current_case.organization_id=$1 AND current_case.id=$2`,
+      [organizationId, caseId],
+    ),
+  ])
+  const current = currentResult.rows[0] ?? {
+    responsible_display_name: null, responsible_email: null,
+    expert_display_name: null, expert_email: null, service_name: null,
+  }
+  const responsibleNames = safeLegacyNames(legacyResult.rows.map((row) => row.responsible_name))
+    .filter((name) => !sameUserReference(name, current.responsible_display_name, current.responsible_email))
+  const expertNames = safeLegacyNames(legacyResult.rows.map((row) => row.expert_name))
+    .filter((name) => !sameUserReference(name, current.expert_display_name, current.expert_email))
+  const serviceNames = safeLegacyNames(legacyResult.rows.map((row) => row.service_name))
+    .filter((name) => current.service_name === null
+      || normalizeV1ResolutionName(name) !== normalizeV1ResolutionName(current.service_name))
+  return caseLegacyReferencesSchema.parse({ responsibleNames, expertNames, serviceNames })
+}
 
 export interface CaseListResult {
   readonly items: readonly CaseListItem[]
@@ -170,6 +265,10 @@ export function createCasesStore(pool: pg.Pool) {
         operation: 'closure_documents',
       }]).then((items) => items.get(row.id) ?? null)
       return caseDetailSchema.parse(rowToDto(row, profile))
+    },
+
+    async findLegacyReferences(organizationId: string, caseId: string): Promise<CaseLegacyReferences> {
+      return loadLegacyReferences(pool, organizationId, caseId)
     },
   }
 }

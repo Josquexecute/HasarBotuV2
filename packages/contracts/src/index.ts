@@ -91,13 +91,21 @@ export {
   type CasesQueryInput,
   // cases dto
   caseDetailParamsSchema,
+  caseDetailQuerySchema,
   caseDetailResponseSchema,
   caseDetailSchema,
+  caseDetailWithLegacyReferencesResponseSchema,
+  caseDetailWithLegacyReferencesSchema,
+  caseLegacyReferencesSchema,
   caseListItemSchema,
   caseListResponseSchema,
   type CaseDetail,
   type CaseDetailParams,
+  type CaseDetailQuery,
   type CaseDetailResponse,
+  type CaseDetailWithLegacyReferences,
+  type CaseDetailWithLegacyReferencesResponse,
+  type CaseLegacyReferences,
   type CaseListItem,
   type CaseListResponse,
   // cases commands
@@ -484,3 +492,4 @@ export * from './v1/labor-workbook-apply/index.js'
 export * from './v1/case-vehicle-owners/index.js'
 export * from './v1/case-inventory/index.js'
 export * from './v1/users/index.js'
+export * from './v1/v1-import-quarantine/index.js'

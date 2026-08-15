@@ -60,6 +60,11 @@ if (entryScript !== undefined && resolve(entryScript) === fileURLToPath(import.m
 }
 export { requireSession, resolveSession } from './auth/guard.js'
 export { createCasesStore, registerCasesRoutes, type CasesStore } from './cases/index.js'
+export {
+  createV1ImportQuarantineStore,
+  registerV1ImportQuarantineRoutes,
+  type V1ImportQuarantineStore,
+} from './v1-import-quarantine/index.js'
 export { createDashboardStore, registerDashboardRoutes, type DashboardStore } from './dashboard/index.js'
 export { createFeeStore, registerFeeRoutes, type FeeStore } from './fees/index.js'
 export {

@@ -14,6 +14,7 @@ describe('JSON Schema uretimi', () => {
       'case-create-request',
       'case-detail-params',
       'case-detail-response',
+      'case-detail-with-legacy-references-response',
       'case-lifecycle-operation-response',
       'case-location-assign-request',
       'case-location-history-response',
@@ -153,6 +154,8 @@ describe('JSON Schema uretimi', () => {
       'traffic-value-loss-submit-request',
       'traffic-value-loss-version-create-request',
       'traffic-value-loss-versions-response',
+      'v1-import-quarantines-query',
+      'v1-import-quarantines-response',
       'workspace-plan-request',
       'workspace-provisioning-response',
     ])

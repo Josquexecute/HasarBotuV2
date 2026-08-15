@@ -62,6 +62,34 @@ export type CaseListItem = z.infer<typeof caseListItemSchema>
 export const caseDetailSchema = z.strictObject(caseDtoShape)
 export type CaseDetail = z.infer<typeof caseDetailSchema>
 
+const legacyReferenceNameSchema = z.string().trim().min(1).max(160)
+
+/**
+ * V1 aktariminda immutable source revision icinde korunmus tarihsel referanslar.
+ * Diziler, ayni case'e bagli birden fazla gercek V1 source varsa veri kaybini
+ * engeller. First-class V2 iliskileri bu alanlarla doldurulmaz.
+ */
+export const caseLegacyReferencesSchema = z.strictObject({
+  responsibleNames: z.array(legacyReferenceNameSchema).max(20),
+  expertNames: z.array(legacyReferenceNameSchema).max(20),
+  serviceNames: z.array(legacyReferenceNameSchema).max(20),
+})
+export type CaseLegacyReferences = z.infer<typeof caseLegacyReferencesSchema>
+
+/**
+ * Opt-in detail sozlesmesi. Varsayilan detail yaniti eski strict istemciler
+ * icin degismez; yeni istemci `includeLegacyReferences=true` ile bunu ister.
+ */
+export const caseDetailWithLegacyReferencesSchema = caseDetailSchema.extend({
+  legacyReferences: caseLegacyReferencesSchema,
+})
+export type CaseDetailWithLegacyReferences = z.infer<typeof caseDetailWithLegacyReferencesSchema>
+
+export const caseDetailQuerySchema = z.strictObject({
+  includeLegacyReferences: z.literal('true').optional(),
+})
+export type CaseDetailQuery = z.infer<typeof caseDetailQuerySchema>
+
 /** Liste yaniti govdesi: sayfalanmis ogeler + sayfa bilgisi. */
 export const caseListResponseSchema = z.strictObject({
   items: z.array(caseListItemSchema),
@@ -80,3 +108,8 @@ export const caseDetailResponseSchema = z.strictObject({
   case: caseDetailSchema,
 })
 export type CaseDetailResponse = z.infer<typeof caseDetailResponseSchema>
+
+export const caseDetailWithLegacyReferencesResponseSchema = z.strictObject({
+  case: caseDetailWithLegacyReferencesSchema,
+})
+export type CaseDetailWithLegacyReferencesResponse = z.infer<typeof caseDetailWithLegacyReferencesResponseSchema>
