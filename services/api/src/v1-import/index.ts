@@ -36,4 +36,6 @@ export {
   type V1RemediationTaskItem,
   type V1ResolutionEvidence,
   type V1ResolvedReference,
+  type V1SourceQuarantinePlan,
+  type V1SourceQuarantineReason,
 } from './remediation.js'

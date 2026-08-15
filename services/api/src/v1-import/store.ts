@@ -10,12 +10,13 @@ import {
   parseV1PlateFolderName,
   plateSearchKey,
   type V1ClaimType,
-  type V1ClaimTypeFilenameEvidenceKind,
+  type V1ClaimTypeEvidenceKind,
   type V1FieldBackfillDecision,
   type V1PlateFolderName,
 } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
+import { scanV1ClaimTypeDocumentEvidence } from './document-evidence.js'
 import { parseV1TakipJson, type V1TakipJsonParseResult, type V1TakipJsonV1 } from './schema.js'
 
 /**
@@ -68,9 +69,14 @@ export interface V1DiscoveredFolder {
 }
 
 export interface V1ClaimTypePathEvidence {
-  readonly kind: V1ClaimTypeFilenameEvidenceKind
+  readonly kind: V1ClaimTypeEvidenceKind
   /** Yapilandirilan V1 kokune goreli POSIX yol; mutlak storage yolu degildir. */
   readonly sourceRelativePath: string
+  readonly sourceFileHash?: string
+  readonly extractionMethod?: 'pdf_text' | 'local_ocr'
+  readonly extractionVersion?: string
+  readonly marker?: 'explicit_zmss_policy' | 'explicit_traffic_policy' | 'explicit_casco_policy'
+  readonly confidence?: number | null
 }
 
 export interface V1ClaimTypeFolderEvidence {
@@ -170,7 +176,10 @@ async function pushDiscovered(
  * uretilir. Herhangi bir alt klasor okunamazsa partial sonuca guvenilmez ve
  * scan tamamen `failed` olur.
  */
-export async function readV1ClaimTypeFolderEvidence(folder: V1DiscoveredFolder): Promise<V1ClaimTypeFolderEvidence> {
+export async function readV1ClaimTypeFolderEvidence(
+  folder: V1DiscoveredFolder,
+  options: { readonly includeDocumentContent?: boolean } = {},
+): Promise<V1ClaimTypeFolderEvidence> {
   const inventory: string[] = []
   const evidenceWithCasePath: Array<V1ClaimTypePathEvidence & { readonly caseRelativePath: string }> = []
   async function walk(absoluteDirectory: string): Promise<void> {
@@ -201,13 +210,44 @@ export async function readV1ClaimTypeFolderEvidence(folder: V1DiscoveredFolder):
   }
   inventory.sort()
   evidenceWithCasePath.sort((left, right) => left.caseRelativePath.localeCompare(right.caseRelativePath, 'tr-TR'))
+  const hasAuthoritativeRuhsat = evidenceWithCasePath.some((item) => item.kind === 'k_ruhsat' || item.kind === 'm_ruhsat')
+  let contentEvidence: Awaited<ReturnType<typeof scanV1ClaimTypeDocumentEvidence>>['evidence'] = []
+  if (options.includeDocumentContent === true && !hasAuthoritativeRuhsat) {
+    const contentScan = await scanV1ClaimTypeDocumentEvidence({
+      folderAbsolutePath: folder.absolutePath,
+      folderRelativePath: folder.relativePath,
+    })
+    if (contentScan.scanState === 'failed') {
+      return { scanState: 'failed', inventoryHash: sha256Hex(JSON.stringify(inventory)), evidenceFingerprint: null, evidence: [] }
+    }
+    contentEvidence = contentScan.evidence
+  }
+  const combined = [
+    ...evidenceWithCasePath.map((item) => ({ kind: item.kind, sourceRelativePath: item.sourceRelativePath, caseRelativePath: item.caseRelativePath })),
+    ...contentEvidence,
+  ]
   return {
     scanState: 'complete',
     inventoryHash: sha256Hex(JSON.stringify(inventory)),
-    evidenceFingerprint: sha256Hex(JSON.stringify(evidenceWithCasePath.map((item) => ({
+    evidenceFingerprint: sha256Hex(JSON.stringify(combined.map((item) => ({
       kind: item.kind, caseRelativePath: item.caseRelativePath,
+      sourceFileHash: 'sourceFileHash' in item ? item.sourceFileHash : null,
+      extractionMethod: 'extractionMethod' in item ? item.extractionMethod : null,
+      extractionVersion: 'extractionVersion' in item ? item.extractionVersion : null,
+      marker: 'marker' in item ? item.marker : null,
+      confidence: 'confidence' in item ? item.confidence : null,
     })))),
-    evidence: evidenceWithCasePath.map(({ kind, sourceRelativePath }) => ({ kind, sourceRelativePath })),
+    evidence: combined.map((item): V1ClaimTypePathEvidence => ({
+      kind: item.kind,
+      sourceRelativePath: item.sourceRelativePath,
+      ...('sourceFileHash' in item ? {
+        sourceFileHash: item.sourceFileHash,
+        extractionMethod: item.extractionMethod,
+        extractionVersion: item.extractionVersion,
+        marker: item.marker,
+        confidence: item.confidence,
+      } : {}),
+    })),
   }
 }
 

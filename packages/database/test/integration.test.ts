@@ -26,6 +26,7 @@ const HIDDEN_MIGRATION_NAMES = [
   '0045_kasco_mandatory_checks',
   '0046_v1_import_provenance',
   '0047_v1_import_remediation',
+  '0048_v1_import_source_quarantine',
 ]
 
 async function runMigrations(
@@ -224,9 +225,12 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'user_roles',
       'users',
       'v1_import_item_metadata',
+      'v1_import_quarantine_resolutions',
+      'v1_import_quarantine_status',
       'v1_import_record_reconciliations',
       'v1_import_records',
       'v1_import_source_aliases',
+      'v1_import_source_quarantines',
       'v1_import_source_revisions',
       'v1_import_sources',
     ])
@@ -239,14 +243,26 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     expect(applied).toEqual([])
   })
 
-  it('0047 remediation migrationini geri alir ve yeniden uygular', async () => {
+  it('0048 source quarantine migrationini geri alir ve yeniden uygular', async () => {
     const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 1 })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0047_v1_import_remediation'])
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0048_v1_import_source_quarantine'])
+    const absent = await pool.query("SELECT to_regclass('public.v1_import_source_quarantines') IS NULL AS absent")
+    expect(absent.rows).toEqual([{ absent: true }])
+
+    const reapplied = await runMigrationsRaw({ databaseUrl: config.url, quiet: true })
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0048_v1_import_source_quarantine'])
+    const present = await pool.query("SELECT to_regclass('public.v1_import_source_quarantines') IS NOT NULL AS present")
+    expect(present.rows).toEqual([{ present: true }])
+  })
+
+  it('0047 remediation migrationini 0048 ile birlikte geri alir ve yeniden uygular', async () => {
+    const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 2 })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0048_v1_import_source_quarantine', '0047_v1_import_remediation'])
     const absent = await pool.query("SELECT to_regclass('public.v1_import_sources') IS NULL AS absent")
     expect(absent.rows).toEqual([{ absent: true }])
 
     const reapplied = await runMigrationsRaw({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0047_v1_import_remediation'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0047_v1_import_remediation', '0048_v1_import_source_quarantine'])
     const present = await pool.query("SELECT to_regclass('public.v1_import_sources') IS NOT NULL AS present")
     expect(present.rows).toEqual([{ present: true }])
   })
@@ -297,6 +313,92 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
         .rejects.toMatchObject({ code: '23001' })
     } finally {
       await pool.query('ROLLBACK')
+    }
+  })
+
+  it('0048 quarantine tenant, idempotency, payload ve append-only sinirlarini zorlar', async () => {
+    const organizationId = uuidv7()
+    const otherOrganizationId = uuidv7()
+    const actorUserId = uuidv7()
+    const otherUserId = uuidv7()
+    const caseId = uuidv7()
+    const otherCaseId = uuidv7()
+    const sourceIdentity = 'c'.repeat(64)
+    const sourceId = uuidv7()
+    const revisionId = uuidv7()
+    const quarantineId = uuidv7()
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        "INSERT INTO organizations (id,code,name) VALUES ($1,'v1-q-main','V1 Q Main'),($2,'v1-q-other','V1 Q Other')",
+        [organizationId, otherOrganizationId],
+      )
+      await client.query(
+        `INSERT INTO users (id,organization_id,email,password_hash,display_name) VALUES
+         ($1,$3,'v1-q-main@test.local','x','V1 Q Main'),($2,$4,'v1-q-other@test.local','x','V1 Q Other')`,
+        [actorUserId, otherUserId, organizationId, otherOrganizationId],
+      )
+      await client.query(
+        `INSERT INTO cases
+          (id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized)
+         VALUES ($1,$3,2026,4801,'2026/4801','traffic','new_notification','34 Q 481','34Q481'),
+                ($2,$4,2026,4802,'2026/4802','traffic','new_notification','34 Q 482','34Q482')`,
+        [caseId, otherCaseId, organizationId, otherOrganizationId],
+      )
+      await client.query(
+        `INSERT INTO v1_import_sources
+          (id,organization_id,stable_source_identity,identity_kind,identity_version,first_discovered_at,created_by_user_id)
+         VALUES ($1,$2,$3,'case_key_created_at','v1-source-identity/1.0.0',now(),$4)`,
+        [sourceId, organizationId, sourceIdentity, actorUserId],
+      )
+      await client.query(
+        `INSERT INTO v1_import_source_revisions
+          (id,organization_id,stable_source_identity,source_file_hash,source_schema_version,mapping_version,raw_snapshot,discovered_at,recorded_by_user_id)
+         VALUES ($1,$2,$3,$4,1,'v1-remediation/2.3.0','{}'::jsonb,now(),$5)`,
+        [revisionId, organizationId, sourceIdentity, 'd'.repeat(64), actorUserId],
+      )
+      await client.query(
+        `INSERT INTO v1_import_source_quarantines
+          (id,organization_id,quarantine_identity,stable_source_identity,source_revision_id,source_path_token,
+           source_relative_path,source_file_hash,mapping_version,reason,reason_code,evidence,quarantined_by_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6,'2026/Agustos/34Q481',$7,'v1-remediation/2.3.0',
+                 'ambiguous_target','ambiguous_target','{}'::jsonb,$8)`,
+        [quarantineId, organizationId, 'e'.repeat(64), sourceIdentity, revisionId, 'f'.repeat(16), 'd'.repeat(64), actorUserId],
+      )
+      await client.query('SAVEPOINT duplicate_quarantine')
+      await expect(client.query(
+        `INSERT INTO v1_import_source_quarantines
+          (id,organization_id,quarantine_identity,stable_source_identity,source_revision_id,source_path_token,
+           source_relative_path,source_file_hash,mapping_version,reason,reason_code,evidence,quarantined_by_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6,'2026/Agustos/34Q481',$7,'v1-remediation/2.3.0',
+                 'ambiguous_target','ambiguous_target','{}'::jsonb,$8)`,
+        [uuidv7(), organizationId, 'e'.repeat(64), sourceIdentity, revisionId, 'f'.repeat(16), 'd'.repeat(64), actorUserId],
+      )).rejects.toMatchObject({ code: '23505' })
+      await client.query('ROLLBACK TO SAVEPOINT duplicate_quarantine')
+      await client.query('SAVEPOINT cross_tenant_resolution')
+      await expect(client.query(
+        `INSERT INTO v1_import_quarantine_resolutions
+          (id,organization_id,quarantine_id,target_case_id,resolved_case_type,resolution_kind,resolution_evidence,mapping_version,resolved_by_user_id)
+         VALUES ($1,$2,$3,$4,'traffic','explicit_reconciliation','{}'::jsonb,'v1-remediation/2.3.0',$5)`,
+        [uuidv7(), organizationId, quarantineId, otherCaseId, actorUserId],
+      )).rejects.toMatchObject({ code: '23503' })
+      await client.query('ROLLBACK TO SAVEPOINT cross_tenant_resolution')
+      await client.query(
+        `INSERT INTO v1_import_quarantine_resolutions
+          (id,organization_id,quarantine_id,target_case_id,resolved_case_type,resolution_kind,resolution_evidence,mapping_version,resolved_by_user_id)
+         VALUES ($1,$2,$3,$4,'traffic','explicit_reconciliation','{}'::jsonb,'v1-remediation/2.3.0',$5)`,
+        [uuidv7(), organizationId, quarantineId, caseId, actorUserId],
+      )
+      const status = await client.query('SELECT resolved FROM v1_import_quarantine_status WHERE organization_id=$1', [organizationId])
+      expect(status.rows).toEqual([{ resolved: true }])
+      await client.query('SAVEPOINT immutable_quarantine')
+      await expect(client.query("UPDATE v1_import_source_quarantines SET reason_code='changed' WHERE id=$1", [quarantineId]))
+        .rejects.toMatchObject({ code: '23001' })
+      await client.query('ROLLBACK TO SAVEPOINT immutable_quarantine')
+    } finally {
+      await client.query('ROLLBACK').catch(() => undefined)
+      client.release()
     }
   })
 

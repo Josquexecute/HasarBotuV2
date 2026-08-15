@@ -116,7 +116,7 @@ function summarizePlan(plan) {
     }
   }
   return {
-    SchemaVersion: 'hasarbotu-v1-remediation-preview/2.2.0',
+    SchemaVersion: 'hasarbotu-v1-remediation-preview/2.3.0',
     MappingVersion: plan.mappingVersion,
     IdentityVersion: plan.identityVersion,
     SchemaReady: plan.schemaReady,
@@ -124,26 +124,14 @@ function summarizePlan(plan) {
     SourceManifestHash: plan.sourceManifestHash,
     PlanHash: plan.planHash,
     Summary: plan.summary,
-    HumanResolutionTemplate: {
-      SchemaVersion: 'hasarbotu-v1-resolution-template/1.0.0',
-      CaseTargets: plan.entries
-        .filter((entry) => entry.targetState === 'human_ambiguous')
-        .map((entry) => ({
-          PathToken: entry.pathToken,
-          SourceIdentity: entry.sourceIdentity,
-          Candidates: entry.candidateCaseEvidence,
-          RequiredValue: 'targetCaseId',
-        })),
-      ClaimTypes: plan.entries
-        .filter((entry) => entry.targetState === 'human_claim_type')
-        .map((entry) => ({
-          PathToken: entry.pathToken,
-          SourceIdentity: entry.sourceIdentity,
-          ClaimTypeResolution: entry.claimTypeResolution,
-          RequiredValue: 'traffic_or_casco',
-        })),
-      ReferenceMappings: [],
-    },
+    Quarantined: plan.entries
+      .filter((entry) => entry.quarantine !== null)
+      .map((entry) => ({
+        Token: entry.quarantine.token,
+        SourceIdentity: entry.sourceIdentity,
+        Reason: entry.quarantine.reason,
+        ReasonCode: entry.quarantine.reasonCode,
+      })),
     NonBlockingLegacy: {
       ReferenceMappings: [...referenceMappings.values()],
       MissingSidecars: {
@@ -155,7 +143,16 @@ function summarizePlan(plan) {
         PreexistingOrUnknown: plan.entries.filter((entry) => entry.missingSidecarClassification?.filesystemFreshness === 'preexisting_or_unknown').length,
       },
     },
-    Entries: plan.entries.map((entry) => ({
+    Entries: plan.entries.map((entry) => entry.quarantine !== null ? {
+      PathToken: entry.pathToken,
+      SourceIdentity: entry.sourceIdentity,
+      TargetState: entry.targetState,
+      Quarantine: {
+        Token: entry.quarantine.token,
+        Reason: entry.quarantine.reason,
+        ReasonCode: entry.quarantine.reasonCode,
+      },
+    } : ({
       PathToken: entry.pathToken,
       SourceIdentity: entry.sourceIdentity,
       SourceHash: entry.sourceHash,
@@ -229,7 +226,7 @@ async function main() {
     process.stdout.write(`Yeni dosya: ${plan.summary.actionable.casesToCreate}, backfill: ${plan.summary.actionable.casesToBackfill}, `)
     process.stdout.write(`yeni not: ${plan.summary.actionable.notesToCreate}, acik gorev: ${plan.summary.actionable.tasksToCreate}, `)
     process.stdout.write(`tamamlanmis gorev: ${plan.summary.actionable.completedTasksToCreate}, tarihsel kapanis: ${plan.summary.actionable.closuresToImport}\n`)
-    process.stdout.write(`Insan karari gereken: ${Object.values(plan.summary.humanRequired).reduce((sum, value) => sum + value, 0)}\n\n`)
+    process.stdout.write(`Source quarantine: ${plan.summary.quarantine.total} (yeni kayit: ${plan.summary.quarantine.toRecord})\n\n`)
     const rl = createInterface({ input: process.stdin, output: process.stdout })
     let confirmation
     try {
@@ -256,7 +253,12 @@ async function main() {
       freshPlan,
       { resolutions },
     )
-    emit({ Mode: 'apply', Status: 'applied', Result: result }, result.failed > 0 ? 1 : 0)
+    emit({
+      Mode: 'apply',
+      Status: freshPlan.summary.quarantine.total > 0 ? 'safe_applied_with_source_quarantine' : 'applied',
+      Quarantine: freshPlan.summary.quarantine,
+      Result: result,
+    }, result.failed > 0 ? 1 : 0)
   } catch (error) {
     emit({ Status: 'error', ErrorCode: error instanceof SafeError ? error.safeCode : 'V1_IMPORT_RUNTIME_ERROR' }, 1)
   } finally {

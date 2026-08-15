@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildV1SourceIdentityMaterial,
   buildV1StableItemIdentityMaterial,
+  classifyV1ClaimTypeDocumentText,
   classifyV1ClaimTypeEvidenceFilename,
   decideV1ClaimTypeFromEvidence,
   decideV1FieldBackfill,
@@ -117,40 +118,60 @@ describe('V1 claim type ruhsat evidence', () => {
 
   it('S Ruhsat tek basina karar vermez', () => {
     expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'unknown', evidenceKinds: ['s_ruhsat'] }))
-      .toMatchObject({ state: 'human_required', caseType: null, reason: 'no_deterministic_evidence' })
+      .toMatchObject({ state: 'quarantined', caseType: null, reason: 'no_deterministic_evidence' })
   })
 
-  it('K ve M birlikteyse fail-closed insan karari ister', () => {
+  it('K ve M birlikteyse fail-closed quarantine eder', () => {
     expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'unknown', evidenceKinds: ['k_ruhsat', 'm_ruhsat'] }))
-      .toMatchObject({ state: 'human_required', caseType: null, reason: 'conflicting_k_m_evidence' })
+      .toMatchObject({ state: 'quarantined', caseType: null, reason: 'conflicting_k_m_evidence' })
   })
 
-  it('sidecar tipi ile filename evidence celisirse fail-closed insan karari ister', () => {
+  it('authoritative K/M sidecar tipini ezer ve historical celiskiyi korur', () => {
     expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'traffic', evidenceKinds: ['k_ruhsat'] }))
-      .toMatchObject({ state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict' })
+      .toMatchObject({ state: 'resolved', caseType: 'casco', reason: 'k_ruhsat', sidecarConflictPreserved: true })
     expect(decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'casco', evidenceKinds: ['m_ruhsat'] }))
-      .toMatchObject({ state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict' })
+      .toMatchObject({ state: 'resolved', caseType: 'traffic', reason: 'm_ruhsat', sidecarConflictPreserved: true })
   })
 
-  it('sidecar Trafik, tek K Ruhsat ve bagimsiz M Trafik police ile desteklenirse Trafik cozer', () => {
+  it('K Ruhsat dosya adi genel filename context sinyallerinden ustundur', () => {
     expect(decideV1ClaimTypeFromEvidence({
       sidecarClaimType: 'traffic', evidenceKinds: ['k_ruhsat', 'm_traffic_policy', 'ktt_context'],
     })).toMatchObject({
-      state: 'resolved', caseType: 'traffic', reason: 'sidecar_corroborated_over_conflicting_ruhsat',
+      state: 'resolved', caseType: 'casco', reason: 'k_ruhsat', sidecarConflictPreserved: true,
     })
   })
 
-  it('Kasko policesi ile Trafik claim belgesi birlikteyse fail-closed kalir', () => {
+  it('acik Kasko ve Trafik police icerigi birlikteyse fail-closed kalir', () => {
     expect(decideV1ClaimTypeFromEvidence({
-      sidecarClaimType: 'traffic', evidenceKinds: ['k_ruhsat', 'kasko_claim_policy', 'm_traffic_policy'],
-    })).toMatchObject({ state: 'human_required', reason: 'conflicting_claim_document_evidence' })
+      sidecarClaimType: 'traffic', evidenceKinds: ['casco_policy_content', 'traffic_policy_content'],
+    })).toMatchObject({ state: 'quarantined', reason: 'conflicting_claim_document_evidence' })
   })
 
   it('genel Trafik policesi, KTT, Zabit ve Beyan tek basina claim type belirlemez', () => {
     expect(decideV1ClaimTypeFromEvidence({
       sidecarClaimType: 'unknown',
       evidenceKinds: ['traffic_policy_context', 'ktt_context', 'accident_report_context', 'statement_context'],
-    })).toMatchObject({ state: 'human_required', reason: 'no_deterministic_evidence' })
+    })).toMatchObject({ state: 'quarantined', reason: 'no_deterministic_evidence' })
+  })
+
+  it('explicit ZMSS/Trafik ve Kasko policy metnini sabit markerlara indirger', () => {
+    expect(classifyV1ClaimTypeDocumentText({
+      text: 'Zorunlu Mali Sorumluluk Sigortasi Police No 123 Sigortali Test Net Prim 1',
+      extractionMethod: 'pdf_text', confidence: null,
+    })).toEqual({ kinds: ['traffic_policy_content'], markers: ['explicit_zmss_policy'] })
+    expect(classifyV1ClaimTypeDocumentText({
+      text: 'Kara Araclari Kasko Sigortasi Police No 123 Sigortali Test Brut Prim 1',
+      extractionMethod: 'pdf_text', confidence: null,
+    })).toEqual({ kinds: ['casco_policy_content'], markers: ['explicit_casco_policy'] })
+  })
+
+  it('dusuk-guvenli OCR ve genel olay metni claim type uretmez', () => {
+    expect(classifyV1ClaimTypeDocumentText({
+      text: 'Trafik Police No 123 Sigortali Test', extractionMethod: 'local_ocr', confidence: 79.99,
+    })).toEqual({ kinds: [], markers: [] })
+    expect(classifyV1ClaimTypeDocumentText({
+      text: 'Trafik kazasi beyan ve KTT', extractionMethod: 'pdf_text', confidence: null,
+    })).toEqual({ kinds: [], markers: [] })
   })
 })
 

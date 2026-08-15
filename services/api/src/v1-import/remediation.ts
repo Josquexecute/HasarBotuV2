@@ -25,7 +25,7 @@ import {
 } from './store.js'
 import type { V1TakipJsonV1 } from './schema.js'
 
-export const V1_REMEDIATION_MAPPING_VERSION = 'v1-remediation/2.2.0' as const
+export const V1_REMEDIATION_MAPPING_VERSION = 'v1-remediation/2.3.0' as const
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u
 const INITIAL_V1_CASE_IMPORT_STARTED_AT_MS = Date.parse('2026-08-10T14:20:00.000Z')
 const INITIAL_V1_CASE_IMPORT_COMPLETED_AT_MS = Date.parse('2026-08-10T14:34:00.000Z')
@@ -38,6 +38,10 @@ const HARD_ENTRY_BLOCKERS = new Set([
   'conflicting_claim_type_evidence',
   'duplicate_content_needs_human_resolution',
   'duplicate_task_candidate_needs_human_resolution',
+  'note_text_missing',
+  'task_title_missing',
+  'task_due_date_missing',
+  'completed_task_time_missing',
 ])
 
 function hash(value: string): string {
@@ -63,6 +67,22 @@ function safeDate(value: string): string | null {
 
 function pathToken(relativePath: string): string {
   return hash(relativePath).slice(0, 16)
+}
+
+function quarantineIdentity(input: {
+  readonly sourceIdentity: string | null
+  readonly sourceHash: string
+  readonly pathToken: string
+  readonly reason: V1SourceQuarantineReason
+  readonly reasonCode: string
+}): string {
+  return hash(canonicalJson({
+    version: 'v1-source-quarantine/1.0.0',
+    source: input.sourceIdentity ?? `path:${input.pathToken}`,
+    sourceHash: input.sourceHash,
+    reason: input.reason,
+    reasonCode: input.reasonCode,
+  }))
 }
 
 const TURKISH_MONTHS = new Map([
@@ -155,7 +175,23 @@ export interface V1ClaimTypeResolution {
   readonly deterministicReason: V1ClaimTypeEvidenceDecisionReason | 'evidence_scan_failed'
   readonly resolutionReason: V1ClaimTypeEvidenceDecisionReason | 'explicit_mapping' | 'existing_case_deterministic' | 'evidence_scan_failed'
   readonly caseType: CaseType | null
-  readonly humanRequired: boolean
+  readonly quarantined: boolean
+  readonly sidecarConflictPreserved: boolean
+}
+
+export type V1SourceQuarantineReason =
+  | 'claim_type_unresolved'
+  | 'ambiguous_target'
+  | 'genuine_evidence_conflict'
+  | 'malformed_source'
+
+export interface V1SourceQuarantinePlan {
+  readonly quarantineIdentity: string
+  readonly token: string
+  readonly reason: V1SourceQuarantineReason
+  readonly reasonCode: string
+  readonly evidenceHash: string
+  readonly alreadyRecorded: boolean
 }
 
 export interface V1ResolvedReference {
@@ -220,11 +256,14 @@ export interface V1RemediationEntry {
   readonly sourceHash: string | null
   readonly sourceManifestFingerprint: string
   readonly rawSnapshot: V1TakipJsonV1 | null
+  /** Yalniz parse edilemeyen sidecar icin DB raw provenance; plan/CLI ciktisina alinmaz. */
+  readonly rawSourceText: string | null
   readonly schemaVersion: number | null
   readonly sourceWriteId: string | null
   readonly sourceRevision: number | null
   readonly targetCaseId: string | null
-  readonly targetState: 'existing' | 'create' | 'human_claim_type' | 'human_ambiguous' | 'human_identity' | 'malformed' | 'missing_sidecar' | 'unparseable'
+  readonly targetState: 'existing' | 'create' | 'quarantined_claim_type' | 'quarantined_target' | 'quarantined_malformed' | 'missing_sidecar'
+  readonly quarantine: V1SourceQuarantinePlan | null
   readonly missingSidecarClassification: null | {
     readonly state: 'non_blocking_no_historical_payload'
     readonly existingV2CaseCount: number
@@ -249,6 +288,7 @@ export interface V1RemediationEntry {
   readonly needsAlias: boolean
   readonly needsVehicleProfile: boolean
   readonly needsClaimTypeEvidenceProvenance: boolean
+  readonly quarantineResolutionIds: readonly string[]
   readonly legacyRecordsToReconcile: readonly { readonly recordId: string; readonly stableItemIdentity: string; readonly evidenceCode: string }[]
   readonly blockers: readonly string[]
 }
@@ -289,16 +329,13 @@ export interface V1RemediationSummary {
     readonly rawSnapshotsAndProvenance: number
     readonly moveRenameReconciliations: number
   }
-  readonly blocked: {
-    readonly unknownClaimType: number
-    readonly ambiguousCase: number
-    readonly unresolvedUser: number
-    readonly unresolvedExpert: number
-    readonly unresolvedService: number
-    readonly malformed: number
-    readonly missingSidecar: number
-    readonly conflictingEvidence: number
-    readonly other: number
+  readonly quarantine: {
+    readonly total: number
+    readonly toRecord: number
+    readonly claimTypeUnresolved: number
+    readonly ambiguousTarget: number
+    readonly genuineEvidenceConflict: number
+    readonly malformedSource: number
   }
   readonly autoResolved: {
     readonly unknownClaimTypes: number
@@ -309,10 +346,6 @@ export interface V1RemediationSummary {
     readonly unassignedResponsible: number
     readonly servicesPlanned: number
   }
-  readonly blockingHumanDecisions: {
-    readonly claimType: number
-    readonly ambiguousTarget: number
-  }
   readonly nonBlockingLegacy: {
     readonly responsibleRecords: number
     readonly responsibleNames: number
@@ -321,14 +354,6 @@ export interface V1RemediationSummary {
     readonly serviceRecords: number
     readonly serviceNames: number
     readonly missingSidecar: number
-    readonly other: number
-  }
-  readonly humanRequired: {
-    readonly unresolvedClaimType: number
-    readonly ambiguousTarget: number
-    readonly userMapping: number
-    readonly expertMapping: number
-    readonly serviceMapping: number
     readonly other: number
   }
   readonly duplicatesThatWouldBeCreated: number
@@ -438,6 +463,7 @@ function planHashPayload(plan: Omit<V1RemediationPlan, 'generatedAt' | 'planHash
       sourceHash: entry.sourceHash,
       targetCaseId: entry.targetCaseId,
       targetState: entry.targetState,
+      quarantine: entry.quarantine,
       missingSidecarClassification: entry.missingSidecarClassification,
       caseType: entry.caseType,
       claimTypeResolution: entry.claimTypeResolution,
@@ -473,6 +499,7 @@ function planHashPayload(plan: Omit<V1RemediationPlan, 'generatedAt' | 'planHash
       needsAlias: entry.needsAlias,
       needsVehicleProfile: entry.needsVehicleProfile,
       needsClaimTypeEvidenceProvenance: entry.needsClaimTypeEvidenceProvenance,
+      quarantineResolutionIds: entry.quarantineResolutionIds,
       legacyRecordsToReconcile: entry.legacyRecordsToReconcile,
       blockers: entry.blockers,
     })),
@@ -486,14 +513,22 @@ export async function planV1Remediation(
   options: V1RemediationOptions = {},
 ): Promise<V1RemediationPlan> {
   const folders = await discoverV1Folders(rootPath)
-  const sidecars = await Promise.all(folders.map(async (folder) => ({
-    folder,
-    sidecar: await readV1Sidecar(folder),
-    claimTypeFolderEvidence: folder.hasJson
-      ? await readV1ClaimTypeFolderEvidence(folder)
-      : { scanState: 'complete' as const, inventoryHash: hash('[]'), evidenceFingerprint: hash('[]'), evidence: [] },
-  })))
-  const schemaCheck = await pool.query<{ ready: boolean }>("SELECT to_regclass('public.v1_import_sources') IS NOT NULL AS ready")
+  const sidecars = await Promise.all(folders.map(async (folder) => {
+    const sidecar = await readV1Sidecar(folder)
+    const includeDocumentContent = sidecar.jsonParse?.ok === true
+      && mapV1ClaimType(sidecar.jsonParse.data.claimType) === 'unknown'
+    return {
+      folder,
+      sidecar,
+      claimTypeFolderEvidence: folder.hasJson
+        ? await readV1ClaimTypeFolderEvidence(folder, { includeDocumentContent })
+        : { scanState: 'complete' as const, inventoryHash: hash('[]'), evidenceFingerprint: hash('[]'), evidence: [] },
+    }
+  }))
+  const schemaCheck = await pool.query<{ ready: boolean }>(`SELECT
+    to_regclass('public.v1_import_sources') IS NOT NULL
+    AND to_regclass('public.v1_import_source_quarantines') IS NOT NULL
+    AND to_regclass('public.v1_import_quarantine_resolutions') IS NOT NULL AS ready`)
   const schemaReady = schemaCheck.rows[0]?.ready === true
 
   const [usersResult, expertsResult, servicesResult, casesResult, recordsResult, currentResult, notesResult, tasksResult, followUpResult] = await Promise.all([
@@ -547,9 +582,14 @@ export async function planV1Remediation(
           'SELECT legacy_import_record_id::text,stable_source_identity,stable_item_identity FROM v1_import_record_reconciliations WHERE organization_id=$1', [organizationId]),
         pool.query<{ stable_source_identity: string; item_type: string; stable_item_identity: string; target_id: string }>(
           'SELECT stable_source_identity,item_type,stable_item_identity,target_id::text FROM v1_import_item_metadata WHERE organization_id=$1', [organizationId]),
+        pool.query<{ id: string; quarantine_identity: string; stable_source_identity: string | null; source_file_hash: string; mapping_version: string; reason: V1SourceQuarantineReason; resolved: boolean }>(
+          `SELECT q.id::text,q.quarantine_identity,q.stable_source_identity,q.source_file_hash,q.mapping_version,q.reason,(r.id IS NOT NULL) AS resolved
+             FROM v1_import_source_quarantines q
+             LEFT JOIN v1_import_quarantine_resolutions r ON r.organization_id=q.organization_id AND r.quarantine_id=q.id
+            WHERE q.organization_id=$1`, [organizationId]),
       ])
     : [
-        { rows: [] }, { rows: [] }, { rows: [] }, { rows: [] },
+        { rows: [] }, { rows: [] }, { rows: [] }, { rows: [] }, { rows: [] },
       ] as const
 
   const validUsers = new Set(usersResult.rows.map((row) => row.id))
@@ -586,6 +626,25 @@ export async function planV1Remediation(
   const reconciledByRecord = new Map(extra[2].rows.map((row) => [row.legacy_import_record_id, row]))
   const revisionKeys = new Set(extra[0].rows.map((row) => `${row.stable_source_identity}|${row.source_file_hash}`))
   const aliasKeys = new Set(extra[1].rows.map((row) => `${row.stable_source_identity}|${row.source_relative_path}`))
+  const recordedQuarantineIdentities = new Set(extra[4].rows.map((row) => `${row.quarantine_identity}|${row.mapping_version}`))
+  const buildQuarantine = (
+    sourceIdentity: string | null,
+    sourceHash: string,
+    token: string,
+    reason: V1SourceQuarantineReason,
+    reasonCode: string,
+    evidence: unknown,
+  ): V1SourceQuarantinePlan => {
+    const identity = quarantineIdentity({ sourceIdentity, sourceHash, pathToken: token, reason, reasonCode })
+    return {
+      quarantineIdentity: identity,
+      token: identity.slice(0, 16),
+      reason,
+      reasonCode,
+      evidenceHash: hash(canonicalJson(evidence)),
+      alreadyRecorded: recordedQuarantineIdentities.has(`${identity}|${V1_REMEDIATION_MAPPING_VERSION}`),
+    }
+  }
 
   const sourceNativeIdCounts = new Map<string, number>()
   for (const { sidecar } of sidecars) {
@@ -714,26 +773,14 @@ export async function planV1Remediation(
   const entries: V1RemediationEntry[] = []
   for (const { folder, sidecar, claimTypeFolderEvidence } of sidecars) {
     const token = pathToken(folder.relativePath)
-    const baseFingerprint = hash(`${folder.relativePath}\n${sidecar.jsonHash ?? ''}\n${sidecar.txtHash ?? ''}\n${claimTypeFolderEvidence.scanState}\n${claimTypeFolderEvidence.inventoryHash ?? ''}`)
-    if (folder.parsedName === null) {
-      entries.push({
-        folder, pathToken: token, sourceIdentity: null, sourceIdentityState: 'missing_evidence', sourceHash: sidecar.jsonHash,
-        sourceManifestFingerprint: baseFingerprint, rawSnapshot: null, schemaVersion: null, sourceWriteId: null, sourceRevision: null,
-        targetCaseId: null, targetState: 'unparseable', missingSidecarClassification: null, caseType: null, caseTypeAutoResolved: false, claimTypeResolution: null,
-        evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
-        responsible: emptyReference(), expert: emptyReference(), service: emptyReference(), fields: [], notes: [], tasks: [],
-        shouldCloseHistorically: false, sourceClosureAt: null, needsFollowUpHistory: false, needsRawRevision: false, needsAlias: false,
-        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, legacyRecordsToReconcile: [], blockers: ['unparseable_folder_name'],
-      })
-      continue
-    }
+    const baseFingerprint = hash(`${folder.relativePath}\n${sidecar.jsonHash ?? ''}\n${sidecar.txtHash ?? ''}\n${claimTypeFolderEvidence.scanState}\n${claimTypeFolderEvidence.inventoryHash ?? ''}\n${claimTypeFolderEvidence.evidenceFingerprint ?? ''}`)
     if (!folder.hasJson) {
-      const existingV2CaseCount = (byPlate.get(plateSearchKey(folder.parsedName.plate)) ?? []).length
+      const existingV2CaseCount = folder.parsedName === null ? 0 : (byPlate.get(plateSearchKey(folder.parsedName.plate)) ?? []).length
       const directoryCreatedAtMs = folder.directoryCreatedAt === null ? Number.NaN : Date.parse(folder.directoryCreatedAt)
       entries.push({
         folder, pathToken: token, sourceIdentity: null, sourceIdentityState: 'missing_evidence', sourceHash: null,
-        sourceManifestFingerprint: baseFingerprint, rawSnapshot: null, schemaVersion: null, sourceWriteId: null, sourceRevision: null,
-        targetCaseId: null, targetState: 'missing_sidecar',
+        sourceManifestFingerprint: baseFingerprint, rawSnapshot: null, rawSourceText: null, schemaVersion: null, sourceWriteId: null, sourceRevision: null,
+        targetCaseId: null, targetState: 'missing_sidecar', quarantine: null,
         missingSidecarClassification: {
           state: 'non_blocking_no_historical_payload', existingV2CaseCount,
           filesystemFreshness: Number.isFinite(directoryCreatedAtMs) && directoryCreatedAtMs > INITIAL_V1_CASE_IMPORT_COMPLETED_AT_MS
@@ -743,19 +790,23 @@ export async function planV1Remediation(
         evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
         responsible: emptyReference(), expert: emptyReference(), service: emptyReference(), fields: [], notes: [], tasks: [],
         shouldCloseHistorically: false, sourceClosureAt: null, needsFollowUpHistory: false, needsRawRevision: false, needsAlias: false,
-        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, legacyRecordsToReconcile: [], blockers: [],
+        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, quarantineResolutionIds: [], legacyRecordsToReconcile: [], blockers: [],
       })
       continue
     }
     if (sidecar.jsonParse?.ok !== true || sidecar.jsonHash === null) {
+      const sourceHash = sidecar.jsonHash ?? hash(sidecar.jsonRaw ?? 'unreadable-sidecar')
+      const quarantine = buildQuarantine(null, sourceHash, token, 'malformed_source', 'malformed_or_unsupported_json', {
+        pathToken: token, sourceHash, parseState: 'invalid',
+      })
       entries.push({
-        folder, pathToken: token, sourceIdentity: null, sourceIdentityState: 'missing_evidence', sourceHash: sidecar.jsonHash,
-        sourceManifestFingerprint: baseFingerprint, rawSnapshot: null, schemaVersion: null, sourceWriteId: null, sourceRevision: null,
-        targetCaseId: null, targetState: 'malformed', missingSidecarClassification: null, caseType: null, caseTypeAutoResolved: false, claimTypeResolution: null,
+        folder, pathToken: token, sourceIdentity: null, sourceIdentityState: 'missing_evidence', sourceHash,
+        sourceManifestFingerprint: baseFingerprint, rawSnapshot: null, rawSourceText: sidecar.jsonRaw, schemaVersion: null, sourceWriteId: null, sourceRevision: null,
+        targetCaseId: null, targetState: 'quarantined_malformed', quarantine, missingSidecarClassification: null, caseType: null, caseTypeAutoResolved: false, claimTypeResolution: null,
         evidence: [], candidateCaseIds: [], candidateCaseEvidence: [],
         responsible: emptyReference(), expert: emptyReference(), service: emptyReference(), fields: [], notes: [], tasks: [],
         shouldCloseHistorically: false, sourceClosureAt: null, needsFollowUpHistory: false, needsRawRevision: false, needsAlias: false,
-        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, legacyRecordsToReconcile: [], blockers: ['malformed_or_unsupported_json'],
+        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, quarantineResolutionIds: [], legacyRecordsToReconcile: [], blockers: ['malformed_or_unsupported_json'],
       })
       continue
     }
@@ -763,6 +814,28 @@ export async function planV1Remediation(
     const data = sidecar.jsonParse.data
     const sourceIdentity = precomputedIdentities.get(folder.relativePath) ?? null
     const collision = sourceIdentity !== null && (sourceIdentityCounts.get(sourceIdentity) ?? 0) > 1
+    if (folder.parsedName === null || sourceIdentity === null || collision) {
+      const reasonCode = folder.parsedName === null ? 'unparseable_folder_name'
+        : sourceIdentity === null ? 'stable_identity_evidence_missing' : 'stable_identity_collision'
+      const quarantineStableIdentity = sourceIdentity !== null && !collision ? sourceIdentity : null
+      const quarantine = buildQuarantine(quarantineStableIdentity, sidecar.jsonHash, token, 'malformed_source', reasonCode, {
+        pathToken: token, sourceHash: sidecar.jsonHash, sourceIdentityState: collision ? 'collision' : sourceIdentity === null ? 'missing' : 'resolved',
+      })
+      entries.push({
+        folder, pathToken: token, sourceIdentity, sourceIdentityState: collision ? 'collision' : sourceIdentity === null ? 'missing_evidence' : 'resolved',
+        sourceHash: sidecar.jsonHash, sourceManifestFingerprint: baseFingerprint, rawSnapshot: data,
+        rawSourceText: quarantineStableIdentity === null ? sidecar.jsonRaw : null,
+        schemaVersion: sidecar.jsonParse.schemaVersion, sourceWriteId: data.metadata?.writeId?.trim() || null,
+        sourceRevision: data.metadata?.revision ?? null, targetCaseId: null, targetState: 'quarantined_malformed', quarantine,
+        missingSidecarClassification: null, caseType: null, caseTypeAutoResolved: false, claimTypeResolution: null,
+        evidence: [], candidateCaseIds: [], candidateCaseEvidence: [], responsible: emptyReference(), expert: emptyReference(), service: emptyReference(),
+        fields: [], notes: [], tasks: [], shouldCloseHistorically: false, sourceClosureAt: null, needsFollowUpHistory: false,
+        needsRawRevision: quarantineStableIdentity !== null && !revisionKeys.has(`${quarantineStableIdentity}|${sidecar.jsonHash}`),
+        needsAlias: quarantineStableIdentity !== null && !aliasKeys.has(`${quarantineStableIdentity}|${folder.relativePath}`),
+        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, quarantineResolutionIds: [], legacyRecordsToReconcile: [], blockers: [reasonCode],
+      })
+      continue
+    }
     const plateKey = plateSearchKey(folder.parsedName.plate)
     const allPlateCandidates = byPlate.get(plateKey) ?? []
     const sourceClaimType = mapV1ClaimType(data.claimType)
@@ -774,8 +847,8 @@ export async function planV1Remediation(
         })
       : null
     const unresolvedClaimTypeEvidenceConflict = explicitClaimType === undefined
-      && deterministicClaimTypeDecision?.state === 'human_required'
-      && ['conflicting_k_m_evidence', 'sidecar_filename_evidence_conflict', 'conflicting_claim_document_evidence']
+      && deterministicClaimTypeDecision?.state === 'quarantined'
+      && ['conflicting_k_m_evidence', 'conflicting_claim_document_evidence']
         .includes(deterministicClaimTypeDecision.reason)
     const effectiveClaimType = explicitClaimType
       ?? (deterministicClaimTypeDecision?.state === 'resolved' ? deterministicClaimTypeDecision.caseType : null)
@@ -846,25 +919,22 @@ export async function planV1Remediation(
     let caseType: CaseType | null = effectiveClaimType
     let caseTypeAutoResolved = explicitClaimType === undefined && sourceClaimType === 'unknown'
       && deterministicClaimTypeDecision?.state === 'resolved'
-      && ['k_ruhsat', 'm_ruhsat', 'kasko_claim_policy', 'm_traffic_policy', 'sidecar_corroborated_over_conflicting_ruhsat']
+      && ['k_ruhsat', 'm_ruhsat', 'traffic_policy_content', 'casco_policy_content']
         .includes(deterministicClaimTypeDecision.reason)
     const blockers: string[] = []
-    if (sourceIdentity === null || collision) {
-      targetState = 'human_identity'
-      blockers.push(sourceIdentity === null ? 'stable_identity_evidence_missing' : 'stable_identity_collision')
-    } else if (claimTypeFolderEvidence.scanState === 'failed') {
-      targetState = 'human_claim_type'
+    if (claimTypeFolderEvidence.scanState === 'failed') {
+      targetState = 'quarantined_malformed'
       targetCaseId = null
       blockers.push('claim_type_evidence_scan_failed')
     } else if (unresolvedClaimTypeEvidenceConflict) {
-      targetState = 'human_claim_type'
+      targetState = 'quarantined_claim_type'
       targetCaseId = null
       blockers.push('conflicting_claim_type_evidence')
     } else if (targetCaseId !== null) {
       targetState = 'existing'
       const target = byCaseId.get(targetCaseId)
       if (target === undefined || target.plateKey !== plateKey) {
-        targetState = 'human_ambiguous'
+        targetState = 'quarantined_target'
         targetCaseId = null
         blockers.push('target_plate_mismatch')
       } else {
@@ -872,19 +942,19 @@ export async function planV1Remediation(
           caseType = target.caseType
           caseTypeAutoResolved = true
         } else if (caseType !== target.caseType) {
-          targetState = 'human_ambiguous'
+          targetState = 'quarantined_target'
           targetCaseId = null
           blockers.push('case_type_conflict')
         }
       }
     } else if (caseType === null) {
-      targetState = allPlateCandidates.length > 1 ? 'human_ambiguous' : 'human_claim_type'
-      blockers.push(targetState === 'human_ambiguous' ? 'ambiguous_target' : 'unknown_claim_type')
+      targetState = allPlateCandidates.length > 1 ? 'quarantined_target' : 'quarantined_claim_type'
+      blockers.push(targetState === 'quarantined_target' ? 'ambiguous_target' : 'unknown_claim_type')
     } else if (typeCandidates.length === 0 && provenanceTargets.size === 0) {
       targetState = 'create'
       evidence.push({ code: 'new_case', verifiableValue: sourceIdentity })
     } else {
-      targetState = 'human_ambiguous'
+      targetState = 'quarantined_target'
       blockers.push('ambiguous_target')
     }
 
@@ -908,7 +978,8 @@ export async function planV1Remediation(
         : deterministicClaimTypeDecision?.reason ?? 'no_deterministic_evidence',
       resolutionReason,
       caseType,
-      humanRequired: targetState === 'human_claim_type',
+      quarantined: targetState === 'quarantined_claim_type' || targetState === 'quarantined_malformed',
+      sidecarConflictPreserved: deterministicClaimTypeDecision?.sidecarConflictPreserved ?? false,
     }
 
     const target = targetCaseId === null ? null : byCaseId.get(targetCaseId) ?? null
@@ -982,6 +1053,15 @@ export async function planV1Remediation(
     if (notes.some((note) => note.duplicateContentCandidate)) blockers.push('duplicate_content_needs_human_resolution')
     if (tasks.some((task) => task.duplicateContentCandidate)) blockers.push('duplicate_task_candidate_needs_human_resolution')
 
+    const itemIntegrityBlocker = blockers.find((blocker) => [
+      'duplicate_content_needs_human_resolution', 'duplicate_task_candidate_needs_human_resolution',
+      'note_text_missing', 'task_title_missing', 'task_due_date_missing', 'completed_task_time_missing',
+    ].includes(blocker))
+    if (itemIntegrityBlocker !== undefined && (targetState === 'existing' || targetState === 'create')) {
+      targetState = 'quarantined_malformed'
+      targetCaseId = null
+    }
+
     const sourceClosed = folder.physicallyUnderKapali
     // Gercek semada kapanis zamani yoktur; tracking audit yalniz created/updated
     // aksiyonlari tasir. metadata.updatedAt kapanis zamani diye UYDURULMAZ.
@@ -999,7 +1079,7 @@ export async function planV1Remediation(
     })
     const needsVehicleProfile = (targetState === 'create' || (target !== null && !target.vehicleProfileExists)) && vehicleValidation?.valid === true
     const hasDecisiveFilenameEvidence = claimTypeFolderEvidence.evidence.some((item) =>
-      ['k_ruhsat', 'm_ruhsat', 'kasko_claim_policy', 'm_traffic_policy'].includes(item.kind))
+      ['k_ruhsat', 'm_ruhsat', 'traffic_policy_content', 'casco_policy_content'].includes(item.kind))
     const claimTypeEvidenceStableItemIdentity = sourceIdentity !== null && claimTypeFolderEvidence.evidenceFingerprint !== null
       ? itemIdentity(sourceIdentity, 'field', `field:claimTypeEvidence:${claimTypeFolderEvidence.evidenceFingerprint}`)
       : null
@@ -1030,11 +1110,30 @@ export async function planV1Remediation(
       }
     }
 
+    let quarantine: V1SourceQuarantinePlan | null = null
+    if (targetState.startsWith('quarantined_')) {
+      const reason: V1SourceQuarantineReason = targetState === 'quarantined_target'
+        ? 'ambiguous_target'
+        : targetState === 'quarantined_malformed'
+          ? 'malformed_source'
+          : unresolvedClaimTypeEvidenceConflict
+            ? 'genuine_evidence_conflict'
+            : 'claim_type_unresolved'
+      const reasonCode = blockers[0] ?? (reason === 'claim_type_unresolved' ? 'no_deterministic_evidence' : reason)
+      quarantine = buildQuarantine(sourceIdentity, sidecar.jsonHash, token, reason, reasonCode, {
+        sourceIdentity, sourceHash: sidecar.jsonHash, reason, reasonCode,
+        claimTypeReason: claimTypeResolution.deterministicReason,
+        claimTypeEvidenceFingerprint: claimTypeResolution.evidenceFingerprint,
+        candidateCaseIds: allPlateCandidates.map((candidate) => candidate.id).sort(),
+        blockers: [...new Set(blockers)].sort(),
+      })
+    }
+
     entries.push({
       folder, pathToken: token, sourceIdentity, sourceIdentityState: collision ? 'collision' : sourceIdentity === null ? 'missing_evidence' : 'resolved',
-      sourceHash: sidecar.jsonHash, sourceManifestFingerprint: baseFingerprint, rawSnapshot: data, schemaVersion: sidecar.jsonParse.schemaVersion,
+      sourceHash: sidecar.jsonHash, sourceManifestFingerprint: baseFingerprint, rawSnapshot: data, rawSourceText: null, schemaVersion: sidecar.jsonParse.schemaVersion,
       sourceWriteId: data.metadata?.writeId?.trim() || null, sourceRevision: data.metadata?.revision ?? null,
-      targetCaseId, targetState, missingSidecarClassification: null, caseType, caseTypeAutoResolved, claimTypeResolution, evidence,
+      targetCaseId, targetState, quarantine, missingSidecarClassification: null, caseType, caseTypeAutoResolved, claimTypeResolution, evidence,
       candidateCaseIds: allPlateCandidates.map((candidate) => candidate.id),
       candidateCaseEvidence: allPlateCandidates.map((candidate) => ({
         caseId: candidate.id,
@@ -1051,7 +1150,11 @@ export async function planV1Remediation(
       responsible, expert, service, fields, notes, tasks, shouldCloseHistorically, sourceClosureAt, needsFollowUpHistory,
       needsRawRevision: sourceIdentity !== null && !revisionKeys.has(`${sourceIdentity}|${sidecar.jsonHash}`),
       needsAlias: sourceIdentity !== null && !aliasKeys.has(`${sourceIdentity}|${folder.relativePath}`),
-      needsVehicleProfile, needsClaimTypeEvidenceProvenance, legacyRecordsToReconcile, blockers: [...new Set(blockers)],
+      needsVehicleProfile, needsClaimTypeEvidenceProvenance,
+      quarantineResolutionIds: quarantine === null
+        ? extra[4].rows.filter((row) => row.stable_source_identity === sourceIdentity && !row.resolved).map((row) => row.id).sort()
+        : [],
+      legacyRecordsToReconcile, blockers: [...new Set(blockers)],
     })
   }
 
@@ -1059,7 +1162,7 @@ export async function planV1Remediation(
   const plannedNotes = actionableEntries.flatMap((entry) => entry.notes.filter(noteNeedsCreate))
   const plannedTasks = actionableEntries.flatMap((entry) => entry.tasks.filter(taskNeedsCreate))
   const moveRenameReconciliations = entries.reduce((sum, entry) => sum + entry.legacyRecordsToReconcile.filter((item) => item.evidenceCode === 'native_item_unique').length, 0)
-  const duplicateCount = entries.reduce((sum, entry) => sum
+  const duplicateCount = actionableEntries.reduce((sum, entry) => sum
     + entry.notes.filter((note) => !note.alreadyImported && note.duplicateContentCandidate).length
     + entry.tasks.filter((task) => !task.alreadyImported && task.duplicateContentCandidate).length, 0)
   const current = currentResult.rows[0] as { cases: number; notes: number; tasks: number; provenance: number }
@@ -1094,26 +1197,18 @@ export async function planV1Remediation(
         if (!taskNeedsCreate(task)) return taskSum
         return taskSum + (task.completed ? 2 : 1)
       }, 0), 0),
-      rawSnapshotsAndProvenance: entries.filter((entry) => entry.sourceIdentityState === 'resolved'
-        && (entry.needsRawRevision || entry.needsAlias || entry.needsClaimTypeEvidenceProvenance)).length,
+      rawSnapshotsAndProvenance: entries.filter((entry) => (entry.sourceIdentityState === 'resolved'
+        && (entry.needsRawRevision || entry.needsAlias || entry.needsClaimTypeEvidenceProvenance))
+        || (entry.quarantine !== null && !entry.quarantine.alreadyRecorded)).length,
       moveRenameReconciliations,
     },
-    blocked: {
-      unknownClaimType: entries.filter((entry) => entry.targetState === 'human_claim_type').length,
-      ambiguousCase: entries.filter((entry) => entry.targetState === 'human_ambiguous').length,
-      unresolvedUser: 0,
-      unresolvedExpert: 0,
-      unresolvedService: 0,
-      malformed: entries.filter((entry) => entry.targetState === 'malformed' || entry.targetState === 'unparseable').length,
-      missingSidecar: 0,
-      conflictingEvidence: entries.filter((entry) => entry.blockers.includes('conflicting_claim_type_evidence')).length,
-      other: entries.filter((entry) => entry.targetState === 'human_identity'
-        || entry.blockers.includes('duplicate_content_needs_human_resolution')
-        || entry.blockers.includes('duplicate_task_candidate_needs_human_resolution')
-        || entry.blockers.includes('note_text_missing')
-        || entry.blockers.includes('task_title_missing')
-        || entry.blockers.includes('task_due_date_missing')
-        || entry.blockers.includes('completed_task_time_missing')).length,
+    quarantine: {
+      total: entries.filter((entry) => entry.quarantine !== null).length,
+      toRecord: entries.filter((entry) => entry.quarantine !== null && !entry.quarantine.alreadyRecorded).length,
+      claimTypeUnresolved: entries.filter((entry) => entry.quarantine?.reason === 'claim_type_unresolved').length,
+      ambiguousTarget: entries.filter((entry) => entry.quarantine?.reason === 'ambiguous_target').length,
+      genuineEvidenceConflict: entries.filter((entry) => entry.quarantine?.reason === 'genuine_evidence_conflict').length,
+      malformedSource: entries.filter((entry) => entry.quarantine?.reason === 'malformed_source').length,
     },
     autoResolved: {
       unknownClaimTypes: entries.filter((entry) => entry.caseTypeAutoResolved).length,
@@ -1128,10 +1223,6 @@ export async function planV1Remediation(
       // zorunlu domain alanini uydurarak master row yaratmak planlanmaz.
       servicesPlanned: 0,
     },
-    blockingHumanDecisions: {
-      claimType: entries.filter((entry) => entry.targetState === 'human_claim_type').length,
-      ambiguousTarget: entries.filter((entry) => entry.targetState === 'human_ambiguous').length,
-    },
     nonBlockingLegacy: {
       responsibleRecords: entries.filter((entry) => legacyStates.has(entry.responsible.state)).length,
       responsibleNames: uniqueLegacyTokens((entry) => entry.responsible),
@@ -1141,20 +1232,6 @@ export async function planV1Remediation(
       serviceNames: uniqueLegacyTokens((entry) => entry.service),
       missingSidecar: entries.filter((entry) => entry.targetState === 'missing_sidecar').length,
       other: entries.filter((entry) => entry.responsible.state === 'legacy_unassigned').length,
-    },
-    humanRequired: {
-      unresolvedClaimType: entries.filter((entry) => entry.targetState === 'human_claim_type').length,
-      ambiguousTarget: entries.filter((entry) => entry.targetState === 'human_ambiguous').length,
-      userMapping: 0,
-      expertMapping: 0,
-      serviceMapping: 0,
-      other: entries.filter((entry) => entry.targetState === 'human_identity'
-        || entry.blockers.includes('duplicate_content_needs_human_resolution')
-        || entry.blockers.includes('duplicate_task_candidate_needs_human_resolution')
-        || entry.blockers.includes('note_text_missing')
-        || entry.blockers.includes('task_title_missing')
-        || entry.blockers.includes('task_due_date_missing')
-        || entry.blockers.includes('completed_task_time_missing')).length,
     },
     duplicatesThatWouldBeCreated: duplicateCount,
   }
@@ -1185,6 +1262,8 @@ export interface V1RemediationApplyResult {
   readonly historicalClosures: number
   readonly vehicleProfilesCreated: number
   readonly claimTypeEvidenceRecorded: number
+  readonly quarantinesRecorded: number
+  readonly quarantineResolutionsRecorded: number
   readonly failed: number
 }
 
@@ -1261,12 +1340,15 @@ export async function applyV1Remediation(
     planHash: approvedPlan.planHash, sourcesRecorded: 0, aliasesRecorded: 0, legacyRecordsReconciled: 0,
     casesCreated: 0, fieldsBackfilled: 0, notesCreated: 0, tasksCreated: 0, completedTasksCreated: 0,
     taskEventsCreated: 0, followUpHistoryCreated: 0, historicalClosures: 0, vehicleProfilesCreated: 0,
-    claimTypeEvidenceRecorded: 0, failed: 0,
+    claimTypeEvidenceRecorded: 0, quarantinesRecorded: 0, quarantineResolutionsRecorded: 0, failed: 0,
   }
 
   for (const entry of fresh.entries) {
-    if (entry.sourceIdentityState !== 'resolved' || entry.sourceIdentity === null
-      || entry.rawSnapshot === null || entry.sourceHash === null || entry.schemaVersion === null) continue
+    if (entry.targetState === 'missing_sidecar' || entry.sourceHash === null) continue
+    const stablePayload = entry.sourceIdentityState === 'resolved' && entry.sourceIdentity !== null
+      && entry.rawSnapshot !== null && entry.schemaVersion !== null
+    const malformedPayload = entry.quarantine !== null && entry.rawSourceText !== null
+    if (!stablePayload && !malformedPayload) continue
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -1274,42 +1356,78 @@ export async function applyV1Remediation(
       const businessMutationBaseline = totals.casesCreated + totals.fieldsBackfilled + totals.notesCreated
         + totals.tasksCreated + totals.completedTasksCreated + totals.taskEventsCreated
         + totals.followUpHistoryCreated + totals.historicalClosures + totals.vehicleProfilesCreated
-      await client.query(
-        `INSERT INTO v1_import_sources
-          (id,organization_id,stable_source_identity,identity_kind,identity_version,first_discovered_at,created_by_user_id)
-         VALUES ($1,$2,$3,'case_key_created_at',$4,$5,$6) ON CONFLICT DO NOTHING`,
-        [uuidv7(), actor.organizationId, entry.sourceIdentity, V1_IDENTITY_VERSION, fresh.generatedAt, actor.actorUserId],
-      )
-      const revisionId = uuidv7()
-      const revisionInsert = await client.query(
-        `INSERT INTO v1_import_source_revisions
-          (id,organization_id,stable_source_identity,source_file_hash,source_schema_version,source_write_id,source_revision,
-           mapping_version,raw_snapshot,discovered_at,recorded_by_user_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)
-         ON CONFLICT DO NOTHING RETURNING id::text`,
-        [revisionId, actor.organizationId, entry.sourceIdentity, entry.sourceHash, entry.schemaVersion, entry.sourceWriteId,
-          entry.sourceRevision, V1_REMEDIATION_MAPPING_VERSION, JSON.stringify(entry.rawSnapshot), fresh.generatedAt, actor.actorUserId],
-      )
-      entryChanged = revisionInsert.rowCount === 1
-      let stableRevisionId = revisionInsert.rows[0] === undefined ? null : String((revisionInsert.rows[0] as { id: string }).id)
-      if (stableRevisionId === null) {
-        const existing = await client.query<{ id: string }>(
-          `SELECT id::text FROM v1_import_source_revisions
-            WHERE organization_id=$1 AND stable_source_identity=$2 AND source_file_hash=$3 AND mapping_version=$4`,
-          [actor.organizationId, entry.sourceIdentity, entry.sourceHash, V1_REMEDIATION_MAPPING_VERSION],
+      let stableRevisionId: string | null = null
+      if (stablePayload) {
+        await client.query(
+          `INSERT INTO v1_import_sources
+            (id,organization_id,stable_source_identity,identity_kind,identity_version,first_discovered_at,created_by_user_id)
+           VALUES ($1,$2,$3,'case_key_created_at',$4,$5,$6) ON CONFLICT DO NOTHING`,
+          [uuidv7(), actor.organizationId, entry.sourceIdentity, V1_IDENTITY_VERSION, fresh.generatedAt, actor.actorUserId],
         )
-        stableRevisionId = existing.rows[0]?.id ?? null
+        const revisionId = uuidv7()
+        const revisionInsert = await client.query(
+          `INSERT INTO v1_import_source_revisions
+            (id,organization_id,stable_source_identity,source_file_hash,source_schema_version,source_write_id,source_revision,
+             mapping_version,raw_snapshot,discovered_at,recorded_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)
+           ON CONFLICT DO NOTHING RETURNING id::text`,
+          [revisionId, actor.organizationId, entry.sourceIdentity, entry.sourceHash, entry.schemaVersion, entry.sourceWriteId,
+            entry.sourceRevision, V1_REMEDIATION_MAPPING_VERSION, JSON.stringify(entry.rawSnapshot), fresh.generatedAt, actor.actorUserId],
+        )
+        entryChanged = revisionInsert.rowCount === 1
+        stableRevisionId = revisionInsert.rows[0] === undefined ? null : String((revisionInsert.rows[0] as { id: string }).id)
+        if (stableRevisionId === null) {
+          const existing = await client.query<{ id: string }>(
+            `SELECT id::text FROM v1_import_source_revisions
+              WHERE organization_id=$1 AND stable_source_identity=$2 AND source_file_hash=$3 AND mapping_version=$4`,
+            [actor.organizationId, entry.sourceIdentity, entry.sourceHash, V1_REMEDIATION_MAPPING_VERSION],
+          )
+          stableRevisionId = existing.rows[0]?.id ?? null
+        }
+        if (stableRevisionId === null) throw new Error('v1_source_revision_unavailable')
+        if (entry.needsRawRevision) totals.sourcesRecorded += 1
+        const alias = await client.query(
+          `INSERT INTO v1_import_source_aliases
+            (id,organization_id,stable_source_identity,source_relative_path,source_file_hash,discovered_at,recorded_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING id`,
+          [uuidv7(), actor.organizationId, entry.sourceIdentity, entry.folder.relativePath, entry.sourceHash, fresh.generatedAt, actor.actorUserId],
+        )
+        totals.aliasesRecorded += alias.rowCount ?? 0
+        entryChanged = (alias.rowCount ?? 0) > 0 || entryChanged
       }
-      if (stableRevisionId === null) throw new Error('v1_source_revision_unavailable')
-      if (entry.needsRawRevision) totals.sourcesRecorded += 1
-      const alias = await client.query(
-        `INSERT INTO v1_import_source_aliases
-          (id,organization_id,stable_source_identity,source_relative_path,source_file_hash,discovered_at,recorded_by_user_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING id`,
-        [uuidv7(), actor.organizationId, entry.sourceIdentity, entry.folder.relativePath, entry.sourceHash, fresh.generatedAt, actor.actorUserId],
-      )
-      totals.aliasesRecorded += alias.rowCount ?? 0
-      entryChanged = (alias.rowCount ?? 0) > 0 || entryChanged
+
+      if (entry.quarantine !== null) {
+        const quarantineId = uuidv7()
+        const inserted = await client.query<{ id: string }>(
+          `INSERT INTO v1_import_source_quarantines
+            (id,organization_id,quarantine_identity,stable_source_identity,source_revision_id,source_path_token,
+             source_relative_path,source_file_hash,mapping_version,reason,reason_code,evidence,raw_source_text,quarantined_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14)
+           ON CONFLICT DO NOTHING RETURNING id::text`,
+          [quarantineId, actor.organizationId, entry.quarantine.quarantineIdentity,
+            stablePayload ? entry.sourceIdentity : null, stablePayload ? stableRevisionId : null, entry.pathToken,
+            entry.folder.relativePath, entry.sourceHash, V1_REMEDIATION_MAPPING_VERSION, entry.quarantine.reason,
+            entry.quarantine.reasonCode, JSON.stringify({
+              evidenceHash: entry.quarantine.evidenceHash,
+              claimTypeResolution: entry.claimTypeResolution,
+              candidateCaseIds: entry.candidateCaseIds,
+              blockerCodes: entry.blockers,
+            }), stablePayload ? null : entry.rawSourceText, actor.actorUserId],
+        )
+        totals.quarantinesRecorded += inserted.rowCount ?? 0
+        if (inserted.rowCount === 1) await audit.record(client, {
+          organizationId: actor.organizationId, actorUserId: actor.actorUserId, requestId: actor.requestId,
+          action: 'v1_remediation.quarantined', entityType: 'v1_import_source_quarantine', entityId: inserted.rows[0]?.id ?? quarantineId,
+          details: { quarantineIdentity: entry.quarantine.quarantineIdentity, sourcePathToken: entry.pathToken,
+            reason: entry.quarantine.reason, reasonCode: entry.quarantine.reasonCode, mappingVersion: V1_REMEDIATION_MAPPING_VERSION },
+        })
+        await client.query('COMMIT')
+        continue
+      }
+
+      if (!stablePayload || stableRevisionId === null || entry.sourceIdentity === null || entry.rawSnapshot === null) {
+        throw new Error('v1_actionable_source_payload_unavailable')
+      }
       for (const reconciliation of entry.legacyRecordsToReconcile) {
         const inserted = await client.query(
           `INSERT INTO v1_import_record_reconciliations
@@ -1346,7 +1464,7 @@ export async function applyV1Remediation(
         )
         const stableCaseItem = itemIdentity(entry.sourceIdentity, 'case', 'case')
         const hasDecisiveClaimTypeEvidence = entry.claimTypeResolution?.evidence
-          .some((item) => item.kind === 'k_ruhsat' || item.kind === 'm_ruhsat') === true
+          .some((item) => ['k_ruhsat', 'm_ruhsat', 'traffic_policy_content', 'casco_policy_content'].includes(item.kind)) === true
         await insertStableProvenance(client, actor, entry, stableRevisionId, 'case', 'case', stableCaseItem, 'case', caseId, 'created', caseId)
         if (hasDecisiveClaimTypeEvidence && entry.claimTypeResolution?.evidenceFingerprint != null) {
           const nativeId = `field:claimTypeEvidence:${entry.claimTypeResolution.evidenceFingerprint}`
@@ -1362,6 +1480,29 @@ export async function applyV1Remediation(
       }
 
       if (actionable && caseId !== null) {
+        if (entry.caseType === null) throw new Error('v1_actionable_case_type_unavailable')
+        for (const quarantineId of entry.quarantineResolutionIds) {
+          const resolutionKind = options.resolutions?.cases?.[entry.sourceIdentity] !== undefined
+            || options.resolutions?.claimTypes?.[entry.sourceIdentity] !== undefined
+            ? 'explicit_reconciliation' : 'deterministic_replan'
+          const resolution = await client.query(
+            `INSERT INTO v1_import_quarantine_resolutions
+              (id,organization_id,quarantine_id,target_case_id,resolved_case_type,resolution_kind,resolution_evidence,
+               mapping_version,resolved_by_user_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) ON CONFLICT DO NOTHING RETURNING id`,
+            [uuidv7(), actor.organizationId, quarantineId, caseId, entry.caseType, resolutionKind,
+              JSON.stringify({ stableSourceIdentity: entry.sourceIdentity, planHash: fresh.planHash,
+                evidenceCodes: entry.evidence.map((item) => item.code), claimTypeResolution: entry.claimTypeResolution }),
+              V1_REMEDIATION_MAPPING_VERSION, actor.actorUserId],
+          )
+          totals.quarantineResolutionsRecorded += resolution.rowCount ?? 0
+          if (resolution.rowCount === 1) await audit.record(client, {
+            organizationId: actor.organizationId, actorUserId: actor.actorUserId, requestId: actor.requestId,
+            action: 'v1_remediation.quarantine_resolved', entityType: 'case', entityId: caseId,
+            details: { quarantineId, stableSourceIdentity: entry.sourceIdentity, resolutionKind,
+              mappingVersion: V1_REMEDIATION_MAPPING_VERSION },
+          })
+        }
         if (entry.needsClaimTypeEvidenceProvenance && entry.claimTypeResolution?.evidenceFingerprint != null) {
           const nativeId = `field:claimTypeEvidence:${entry.claimTypeResolution.evidenceFingerprint}`
           const stableEvidenceItem = itemIdentity(entry.sourceIdentity, 'field', nativeId)

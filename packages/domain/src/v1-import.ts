@@ -60,7 +60,6 @@ export type V1ClaimTypeFilenameEvidenceKind =
   | 'k_ruhsat'
   | 'm_ruhsat'
   | 's_ruhsat'
-  | 'kasko_claim_policy'
   | 'kasko_policy_context'
   | 'm_traffic_policy'
   | 'traffic_policy_context'
@@ -68,24 +67,35 @@ export type V1ClaimTypeFilenameEvidenceKind =
   | 'accident_report_context'
   | 'statement_context'
 
+export type V1ClaimTypeContentEvidenceKind =
+  | 'traffic_policy_content'
+  | 'casco_policy_content'
+
+export type V1ClaimTypeEvidenceKind = V1ClaimTypeFilenameEvidenceKind | V1ClaimTypeContentEvidenceKind
+
 export type V1ClaimTypeEvidenceDecisionReason =
   | 'k_ruhsat'
   | 'm_ruhsat'
-  | 'kasko_policy'
-  | 'm_traffic_policy'
+  | 'traffic_policy_content'
+  | 'casco_policy_content'
   | 'sidecar_claim_type'
-  | 'sidecar_corroborated_over_conflicting_ruhsat'
   | 'conflicting_k_m_evidence'
-  | 'sidecar_filename_evidence_conflict'
   | 'conflicting_claim_document_evidence'
   | 'no_deterministic_evidence'
 
 export interface V1ClaimTypeEvidenceDecision {
-  readonly state: 'resolved' | 'human_required'
+  readonly state: 'resolved' | 'quarantined'
   readonly caseType: CaseType | null
   readonly reason: V1ClaimTypeEvidenceDecisionReason
   readonly sidecarClaimType: V1ClaimType
-  readonly evidenceKinds: readonly V1ClaimTypeFilenameEvidenceKind[]
+  readonly evidenceKinds: readonly V1ClaimTypeEvidenceKind[]
+  /** Historical sidecar fiziksel/icerik evidence kararindan farkliysa kaybolmaz. */
+  readonly sidecarConflictPreserved: boolean
+}
+
+export interface V1ClaimTypeDocumentTextDecision {
+  readonly kinds: readonly V1ClaimTypeContentEvidenceKind[]
+  readonly markers: readonly ('explicit_zmss_policy' | 'explicit_traffic_policy' | 'explicit_casco_policy')[]
 }
 
 export const V1_IDENTITY_VERSION = 'v1-source-identity/1.0.0' as const
@@ -199,17 +209,49 @@ export function classifyV1ClaimTypeEvidenceFilename(filename: string): V1ClaimTy
   return null
 }
 
+function normalizeV1ClaimDocumentText(text: string): string {
+  return text.toLocaleLowerCase('tr-TR').replace(/ı/gu, 'i').normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '').replace(/[^a-z0-9]+/gu, ' ').trim()
+}
+
+/**
+ * Yerel PDF text/OCR ciktisini yalniz sabit, machine-verifiable policy
+ * marker'larina indirger. Ham belge metni karar/provenance'a tasinmaz.
+ * Dusuk kaliteli OCR otomatik claim type uretmez.
+ */
+export function classifyV1ClaimTypeDocumentText(input: {
+  readonly text: string
+  readonly extractionMethod: 'pdf_text' | 'local_ocr'
+  readonly confidence: number | null
+}): V1ClaimTypeDocumentTextDecision {
+  if (input.extractionMethod === 'local_ocr' && (input.confidence === null || input.confidence < 80)) {
+    return { kinds: [], markers: [] }
+  }
+  const text = normalizeV1ClaimDocumentText(input.text)
+  const policyStructure = /(police no|police numarasi|sigortali|sigorta ettiren|net prim|brut prim)/u.test(text)
+  const zmss = /(^| )zmss( |$)|zorunlu mali sorumluluk|motorlu araclar zorunlu mali sorumluluk|zorunlu trafik sigortasi/u.test(text)
+  const trafficPolicy = /(trafik.{0,60}(police|sigorta)|(police|sigorta).{0,60}trafik)/u.test(text)
+  const cascoPolicy = /(kasko.{0,60}(police|sigorta)|(police|sigorta).{0,60}kasko|kara araclari kasko)/u.test(text)
+  const markers: Array<'explicit_zmss_policy' | 'explicit_traffic_policy' | 'explicit_casco_policy'> = []
+  if (policyStructure && zmss) markers.push('explicit_zmss_policy')
+  else if (policyStructure && trafficPolicy) markers.push('explicit_traffic_policy')
+  if (policyStructure && cascoPolicy) markers.push('explicit_casco_policy')
+  const kinds: V1ClaimTypeContentEvidenceKind[] = []
+  if (markers.includes('explicit_zmss_policy') || markers.includes('explicit_traffic_policy')) kinds.push('traffic_policy_content')
+  if (markers.includes('explicit_casco_policy')) kinds.push('casco_policy_content')
+  return { kinds, markers }
+}
+
 /**
  * Dogrulanmis domain kurali:
  * - K Ruhsat => Kasko
  * - M Ruhsat => Trafik
  * - S Ruhsat tek basina karar DEGILDIR
- * - K + M fail-closed insan kararidir.
- * - Acik Kasko policesi Kasko'yu, `M Trafik Policesi` Trafik'i destekler.
- * - Genel Trafik policesi, KTT, Zabit ve Beyan Kasko rucu dosyasinda da
- *   bulunabildigi icin TEK BASINA claim type belirlemez.
- * - Sidecar ile yalniz bir ruhsat etiketi celisiyorsa, sidecar ayni yonde
- *   bagimsiz claim-specific belgeyle desteklenmedikce fail-closed kalir.
+ * - K + M gercek evidence conflict'tir ve source quarantine edilir.
+ * - K/M yoksa acik ZMSS/Trafik veya Kasko policy ICERIGI kullanilir.
+ * - Dosya adindaki genel police/KTT/Zabit/Beyan yalniz context'tir.
+ * - Sidecar historical metadata'dir; K/M ve acik belge iceriginden dusuk
+ *   onceliklidir. Celiski karari engellemez, provenance'da korunur.
  *
  * K/M yoksa bilinen sidecar tipi kullanilir; sidecar da unknown ise cagiran
  * taraf mevcut-case/provenance/numara gibi DIGER deterministik kanitlari
@@ -217,68 +259,50 @@ export function classifyV1ClaimTypeEvidenceFilename(filename: string): V1ClaimTy
  */
 export function decideV1ClaimTypeFromEvidence(input: {
   readonly sidecarClaimType: V1ClaimType
-  readonly evidenceKinds: readonly V1ClaimTypeFilenameEvidenceKind[]
+  readonly evidenceKinds: readonly V1ClaimTypeEvidenceKind[]
 }): V1ClaimTypeEvidenceDecision {
   const kinds = [...new Set(input.evidenceKinds)].sort()
   const hasK = kinds.includes('k_ruhsat')
   const hasM = kinds.includes('m_ruhsat')
   if (hasK && hasM) {
     return {
-      state: 'human_required', caseType: null, reason: 'conflicting_k_m_evidence',
-      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+      state: 'quarantined', caseType: null, reason: 'conflicting_k_m_evidence',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds, sidecarConflictPreserved: false,
     }
   }
-  const hasCascoPolicy = kinds.includes('kasko_claim_policy')
-  const hasMTrafficPolicy = kinds.includes('m_traffic_policy')
-  if (hasCascoPolicy && hasMTrafficPolicy) {
+  if (hasK || hasM) {
+    const caseType: CaseType = hasK ? 'casco' : 'traffic'
     return {
-      state: 'human_required', caseType: null, reason: 'conflicting_claim_document_evidence',
+      state: 'resolved', caseType, reason: hasK ? 'k_ruhsat' : 'm_ruhsat',
       sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+      sidecarConflictPreserved: input.sidecarClaimType !== 'unknown' && input.sidecarClaimType !== caseType,
     }
   }
-  const cascoSupported = hasK || hasCascoPolicy
-  const trafficSupported = hasM || hasMTrafficPolicy
-  if (input.sidecarClaimType === 'traffic' && hasK && !hasM && hasMTrafficPolicy && !hasCascoPolicy) {
+  const hasCascoPolicy = kinds.includes('casco_policy_content')
+  const hasTrafficPolicy = kinds.includes('traffic_policy_content')
+  if (hasCascoPolicy && hasTrafficPolicy) {
     return {
-      state: 'resolved', caseType: 'traffic', reason: 'sidecar_corroborated_over_conflicting_ruhsat',
-      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+      state: 'quarantined', caseType: null, reason: 'conflicting_claim_document_evidence',
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds, sidecarConflictPreserved: false,
     }
   }
-  if (input.sidecarClaimType === 'casco' && hasM && !hasK && hasCascoPolicy && !hasMTrafficPolicy) {
+  if (hasCascoPolicy || hasTrafficPolicy) {
+    const caseType: CaseType = hasCascoPolicy ? 'casco' : 'traffic'
     return {
-      state: 'resolved', caseType: 'casco', reason: 'sidecar_corroborated_over_conflicting_ruhsat',
+      state: 'resolved', caseType, reason: hasCascoPolicy ? 'casco_policy_content' : 'traffic_policy_content',
       sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
-    }
-  }
-  if (cascoSupported && trafficSupported) {
-    return {
-      state: 'human_required', caseType: null, reason: 'conflicting_claim_document_evidence',
-      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
-    }
-  }
-  const filenameCaseType: CaseType | null = cascoSupported ? 'casco' : trafficSupported ? 'traffic' : null
-  if (filenameCaseType !== null && input.sidecarClaimType !== 'unknown' && input.sidecarClaimType !== filenameCaseType) {
-    return {
-      state: 'human_required', caseType: null, reason: 'sidecar_filename_evidence_conflict',
-      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
-    }
-  }
-  if (filenameCaseType !== null) {
-    return {
-      state: 'resolved', caseType: filenameCaseType,
-      reason: hasCascoPolicy ? 'kasko_policy' : hasMTrafficPolicy ? 'm_traffic_policy' : hasK ? 'k_ruhsat' : 'm_ruhsat',
-      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+      sidecarConflictPreserved: input.sidecarClaimType !== 'unknown' && input.sidecarClaimType !== caseType,
     }
   }
   if (input.sidecarClaimType !== 'unknown') {
     return {
       state: 'resolved', caseType: input.sidecarClaimType, reason: 'sidecar_claim_type',
-      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+      sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds, sidecarConflictPreserved: false,
     }
   }
   return {
-    state: 'human_required', caseType: null, reason: 'no_deterministic_evidence',
-    sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds,
+    state: 'quarantined', caseType: null, reason: 'no_deterministic_evidence',
+    sidecarClaimType: input.sidecarClaimType, evidenceKinds: kinds, sidecarConflictPreserved: false,
   }
 }
 

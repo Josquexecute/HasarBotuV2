@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { createCanvas } from '@napi-rs/canvas'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type pg from 'pg'
 import {
@@ -106,7 +107,7 @@ async function writeSource(
   root: string,
   relativeFolder: string,
   input: SourceInput | string | null,
-  evidenceFiles: readonly string[] = [],
+  evidenceFiles: readonly (string | { readonly path: string; readonly content: string | Uint8Array })[] = [],
 ): Promise<string> {
   const folder = join(root, relativeFolder)
   await mkdir(join(folder, '_HASARBOTU'), { recursive: true })
@@ -114,11 +115,42 @@ async function writeSource(
     await writeFile(join(folder, '_HASARBOTU', 'takip.json'), typeof input === 'string' ? input : takipJson(input), 'utf8')
   }
   for (const evidenceFile of evidenceFiles) {
-    const target = join(folder, evidenceFile)
+    const target = join(folder, typeof evidenceFile === 'string' ? evidenceFile : evidenceFile.path)
     await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, 'sentetik-ruhsat-evidence', 'utf8')
+    if (typeof evidenceFile === 'string') await writeFile(target, 'sentetik-ruhsat-evidence', 'utf8')
+    else await writeFile(target, evidenceFile.content)
   }
   return folder
+}
+
+function syntheticTextPdf(text: string): Buffer {
+  const content = `BT /F1 14 Tf 50 750 Td (${text.replace(/[\\()]/gu, '\\$&')}) Tj ET`
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [4 0 R] /Count 1 >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>',
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+  ]
+  const parts = ['%PDF-1.4\n%synthetic\n']; const offsets = [0]
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(parts.join('')))
+    parts.push(`${index + 1} 0 obj\n${object}\nendobj\n`)
+  }
+  const xref = Buffer.byteLength(parts.join(''))
+  parts.push(`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`)
+  return Buffer.from(parts.join(''), 'ascii')
+}
+
+function syntheticTextPng(lines: readonly string[]): Buffer {
+  const canvas = createCanvas(1800, 520)
+  const context = canvas.getContext('2d')
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.fillStyle = '#000000'
+  context.font = 'bold 64px Arial'
+  lines.forEach((line, index) => context.fillText(line, 60, 100 + index * 115))
+  return canvas.toBuffer('image/png')
 }
 
 describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
@@ -183,8 +215,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     const month = '2026/Temmuz 2026'
     await writeSource(root, `${month}/34AAA111`, {
       caseKey: 'case-a', createdAt: '2026-07-01T07:00:00Z',
-      notes: [{ id: 'note-a', text: 'Actionable note' }, { id: 'note-empty', text: '' }],
-      todos: [{ id: 'task-empty', title: '', completed: false }],
+      notes: [{ id: 'note-a', text: 'Actionable note' }],
     })
     await writeSource(root, `${month}/34BBB222`, {
       caseKey: 'case-b', createdAt: '2026-07-02T07:00:00Z', claimType: '',
@@ -202,15 +233,32 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     const plan = await planV1Remediation(pool, organizationId, root)
     expect(plan.summary.actionable.notesToCreate).toBe(1)
     expect(plan.summary.actionable.tasksToCreate).toBe(0)
-    expect(plan.summary.blocked.unknownClaimType).toBe(1)
-    expect(plan.summary.blocked.ambiguousCase).toBe(1)
-    expect(plan.summary.blocked.malformed).toBe(1)
-    expect(plan.summary.blocked.missingSidecar).toBe(0)
+    expect(plan.summary.quarantine).toMatchObject({
+      total: 3, claimTypeUnresolved: 1, ambiguousTarget: 1, genuineEvidenceConflict: 0, malformedSource: 1,
+    })
     expect(plan.summary.nonBlockingLegacy.missingSidecar).toBe(1)
     expect(plan.entries.find((entry) => entry.targetState === 'missing_sidecar')?.missingSidecarClassification)
       .toMatchObject({ state: 'non_blocking_no_historical_payload', existingV2CaseCount: 0 })
-    expect(plan.summary.blocked.other).toBe(1)
     expect(plan.summary.duplicatesThatWouldBeCreated).toBe(0)
+  })
+
+  it('malformed source raw evidence olarak quarantine edilir; guvenli source apply yolunu bloke etmez', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const month = '2026/Temmuz 2026'
+    await writeSource(root, `${month}/34QAA101`, {
+      caseKey: 'safe-near-malformed', createdAt: '2026-07-03T08:00:00Z',
+    })
+    await writeSource(root, `${month}/34QAA102`, '{ malformed-but-preserved')
+    const plan = await planV1Remediation(pool, organizationId, root)
+    expect(plan.summary.actionable.casesToCreate).toBe(1)
+    expect(plan.summary.quarantine).toMatchObject({ total: 1, malformedSource: 1, toRecord: 1 })
+    const result = await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'malformed-quarantine' }, plan)
+    expect(result).toMatchObject({ casesCreated: 1, quarantinesRecorded: 1, failed: 0 })
+    const stored = await pool.query<{ stable_source_identity: string | null; raw_source_text: string | null; reason: string }>(
+      `SELECT stable_source_identity,raw_source_text,reason FROM v1_import_source_quarantines
+        WHERE organization_id=$1 AND reason='malformed_source' ORDER BY quarantined_at DESC LIMIT 1`, [organizationId],
+    )
+    expect(stored.rows[0]).toMatchObject({ stable_source_identity: null, raw_source_text: '{ malformed-but-preserved', reason: 'malformed_source' })
   })
 
   it('ruhsat filename evidence recursive taranir; K/M cozulur, S/conflict fail-closed kalir ve provenance korunur', async () => {
@@ -224,7 +272,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     }, ['EVRAK/M-Ruhsat'])
     await writeSource(root, `${month}/34SAA303`, {
       caseKey: 'claim-evidence-s', createdAt: '2026-08-03T07:00:00Z', claimType: '',
-    }, ['EVRAK/S_RUHSAT.jpg'])
+    }, ['EVRAK/S_RUHSAT.txt'])
     await writeSource(root, `${month}/34CAA404`, {
       caseKey: 'claim-evidence-km', createdAt: '2026-08-04T07:00:00Z', claimType: '',
     }, ['EVRAK/K RUHSAT.jpeg', 'EVRAK/M_RUHSAT.png'])
@@ -236,53 +284,68 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     const byFolder = new Map(plan.entries.map((entry) => [entry.folder.folderName, entry]))
     expect(byFolder.get('34KAA101')).toMatchObject({
       targetState: 'create', caseType: 'casco', caseTypeAutoResolved: true,
-      claimTypeResolution: { resolutionReason: 'k_ruhsat', humanRequired: false },
+      claimTypeResolution: { resolutionReason: 'k_ruhsat', quarantined: false },
     })
     expect(byFolder.get('34KAA101')?.claimTypeResolution?.evidence).toEqual([
       { kind: 'k_ruhsat', sourceRelativePath: `${month}/34KAA101/EVRAK/ALT/K_RÜHSAT.PDF` },
     ])
     expect(byFolder.get('34MAA202')).toMatchObject({
       targetState: 'create', caseType: 'traffic', caseTypeAutoResolved: true,
-      claimTypeResolution: { resolutionReason: 'm_ruhsat', humanRequired: false },
+      claimTypeResolution: { resolutionReason: 'm_ruhsat', quarantined: false },
     })
     expect(byFolder.get('34SAA303')).toMatchObject({
-      targetState: 'human_claim_type', caseType: null,
-      claimTypeResolution: { resolutionReason: 'no_deterministic_evidence', humanRequired: true },
+      targetState: 'quarantined_claim_type', caseType: null,
+      quarantine: { reason: 'claim_type_unresolved' },
+      claimTypeResolution: { resolutionReason: 'no_deterministic_evidence', quarantined: true },
     })
     expect(byFolder.get('34CAA404')).toMatchObject({
-      targetState: 'human_claim_type', blockers: ['conflicting_claim_type_evidence'],
-      claimTypeResolution: { deterministicReason: 'conflicting_k_m_evidence', humanRequired: true },
+      targetState: 'quarantined_claim_type', blockers: ['conflicting_claim_type_evidence'],
+      quarantine: { reason: 'genuine_evidence_conflict' },
+      claimTypeResolution: { deterministicReason: 'conflicting_k_m_evidence', quarantined: true },
     })
     expect(byFolder.get('34DAA505')).toMatchObject({
-      targetState: 'human_claim_type', blockers: ['conflicting_claim_type_evidence'],
-      claimTypeResolution: { deterministicReason: 'sidecar_filename_evidence_conflict', humanRequired: true },
+      targetState: 'create', caseType: 'casco',
+      claimTypeResolution: { deterministicReason: 'k_ruhsat', quarantined: false, sidecarConflictPreserved: true },
     })
-    expect(plan.summary.actionable.casesToCreate).toBe(2)
+    expect(plan.summary.actionable.casesToCreate).toBe(3)
     expect(plan.summary.autoResolved.unknownClaimTypes).toBe(2)
-    expect(plan.summary.blocked.unknownClaimType).toBe(3)
-    expect(plan.summary.blocked.conflictingEvidence).toBe(2)
+    expect(plan.summary.quarantine).toMatchObject({ total: 2, claimTypeUnresolved: 1, genuineEvidenceConflict: 1 })
 
     const result = await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'claim-evidence-apply' }, plan)
-    expect(result).toMatchObject({ casesCreated: 2, claimTypeEvidenceRecorded: 2, failed: 0 })
+    expect(result).toMatchObject({ casesCreated: 3, claimTypeEvidenceRecorded: 3, quarantinesRecorded: 2, failed: 0 })
     const created = await pool.query<{ plate_normalized: string; case_type: string }>(
-      "SELECT plate_normalized,case_type FROM cases WHERE organization_id=$1 AND plate_normalized IN ('34KAA101','34MAA202') ORDER BY plate_normalized",
+      "SELECT plate_normalized,case_type FROM cases WHERE organization_id=$1 AND plate_normalized IN ('34KAA101','34MAA202','34DAA505') ORDER BY plate_normalized",
       [organizationId],
     )
     expect(created.rows).toEqual([
+      { plate_normalized: '34DAA505', case_type: 'casco' },
       { plate_normalized: '34KAA101', case_type: 'casco' },
       { plate_normalized: '34MAA202', case_type: 'traffic' },
-    ])
+    ].sort((left, right) => left.plate_normalized.localeCompare(right.plate_normalized)))
     const provenance = await pool.query<{ field_diffs: { claimTypeResolution?: { evidence?: unknown[] } } }>(
       "SELECT field_diffs FROM v1_import_records WHERE organization_id=$1 AND item_type='field_backfill' AND source_item_id LIKE 'field:claimTypeEvidence:%'",
       [organizationId],
     )
-    expect(provenance.rows).toHaveLength(2)
+    expect(provenance.rows).toHaveLength(3)
     expect(provenance.rows.every((row) => (row.field_diffs.claimTypeResolution?.evidence?.length ?? 0) > 0)).toBe(true)
+    const quarantineRows = await pool.query<{ reason: string }>(
+      `SELECT reason FROM v1_import_source_quarantines
+        WHERE organization_id=$1 AND mapping_version='v1-remediation/2.3.0'
+          AND reason IN ('claim_type_unresolved','genuine_evidence_conflict') ORDER BY reason`, [organizationId],
+    )
+    expect(quarantineRows.rows.map((row) => row.reason)).toEqual(['claim_type_unresolved', 'genuine_evidence_conflict'])
+    const quarantineAudits = await pool.query(
+      "SELECT count(*)::int AS n FROM audit_events WHERE organization_id=$1 AND action='v1_remediation.quarantined'", [organizationId],
+    )
+    expect(quarantineAudits.rows[0].n).toBeGreaterThanOrEqual(2)
 
     const replay = await planV1Remediation(pool, organizationId, root)
     expect(replay.summary.actionable.casesToCreate).toBe(0)
+    expect(replay.summary.quarantine).toMatchObject({ total: 2, toRecord: 0 })
     expect(replay.summary.duplicatesThatWouldBeCreated).toBe(0)
     expect(replay.entries.find((entry) => entry.folder.folderName === '34KAA101')?.needsClaimTypeEvidenceProvenance).toBe(false)
+    const replayApply = await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'claim-evidence-replay' }, replay)
+    expect(replayApply).toMatchObject({ casesCreated: 0, quarantinesRecorded: 0, failed: 0 })
 
     const movedParent = join(root, month, 'KAPALI AĞUSTOS 2026')
     await mkdir(movedParent, { recursive: true })
@@ -298,25 +361,86 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     expect(moved.summary.duplicatesThatWouldBeCreated).toBe(0)
   })
 
-  it('claim evidence hiyerarsisi bagimsiz corroboration kullanir, KTT/genel Trafik policesini tek basina tur saymaz', async () => {
+  it('authoritative K Ruhsat sidecar/context sinyalini ezer; genel context tek basina tur saymaz', async () => {
     root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
     await writeSource(root, '2026/Agustos 2026/34EVA101', {
       caseKey: 'corroborated-traffic', createdAt: '2026-08-05T08:00:00Z', claimType: 'trafik',
     }, ['EVRAK/K RUHSAT.jpg', 'EVRAK/M Trafik Poliçe.pdf', 'EVRAK/KTT.jpg'])
     await writeSource(root, '2026/Agustos 2026/34EVA102', {
       caseKey: 'context-only', createdAt: '2026-08-05T09:00:00Z', claimType: '',
-    }, ['EVRAK/Trafik Poliçesi.pdf', 'EVRAK/ZABIT.jpg', 'EVRAK/BEYAN.jpg'])
+    }, ['EVRAK/Trafik Poliçesi.txt', 'EVRAK/ZABIT.txt', 'EVRAK/BEYAN.txt'])
     const plan = await planV1Remediation(pool, organizationId, root)
     const byKey = new Map(plan.entries.map((entry) => [entry.rawSnapshot?.caseIdentity?.caseKey, entry]))
     expect(byKey.get('corroborated-traffic')).toMatchObject({
-      targetState: 'create', caseType: 'traffic',
-      claimTypeResolution: { resolutionReason: 'sidecar_corroborated_over_conflicting_ruhsat' },
+      targetState: 'create', caseType: 'casco',
+      claimTypeResolution: { resolutionReason: 'k_ruhsat', sidecarConflictPreserved: true },
     })
     expect(byKey.get('context-only')).toMatchObject({
-      targetState: 'human_claim_type', caseType: null,
+      targetState: 'quarantined_claim_type', caseType: null,
       claimTypeResolution: { resolutionReason: 'no_deterministic_evidence' },
     })
   })
+
+  it('yerel PDF text evidence explicit Trafik/Kasko policeyi cozer; celiski ve kanitsiz source quarantine kalir', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const month = '2026/Agustos 2026'
+    const trafficPdf = syntheticTextPdf('ZORUNLU MALI SORUMLULUK SIGORTASI POLICE NO 123 SIGORTALI TEST NET PRIM 1')
+    const cascoPdf = syntheticTextPdf('KARA ARACLARI KASKO SIGORTASI POLICE NO 456 SIGORTALI TEST BRUT PRIM 2')
+    const genericPdf = syntheticTextPdf('POLICE NO 789 SIGORTALI TEST NET PRIM 3')
+    const trafficPng = syntheticTextPng(['TRAFIK SIGORTASI', 'POLICE NO 321', 'SIGORTALI TEST', 'NET PRIM 4'])
+    await writeSource(root, `${month}/34PDF101`, {
+      caseKey: 'pdf-traffic', createdAt: '2026-08-07T08:00:00Z', claimType: '',
+    }, [
+      { path: 'EVRAK/policy.pdf', content: trafficPdf },
+      { path: 'EVRAK/empty-scan.pdf', content: new Uint8Array() },
+      { path: 'HASAR/unreadable.jpg', content: 'not-an-image' },
+    ])
+    await writeSource(root, `${month}/34PDF102`, {
+      caseKey: 'pdf-casco', createdAt: '2026-08-07T09:00:00Z', claimType: '',
+    }, [{ path: 'EVRAK/policy.pdf', content: cascoPdf }])
+    await writeSource(root, `${month}/34PDF103`, {
+      caseKey: 'pdf-conflict', createdAt: '2026-08-07T10:00:00Z', claimType: '',
+    }, [{ path: 'EVRAK/traffic.pdf', content: trafficPdf }, { path: 'EVRAK/casco.pdf', content: cascoPdf }])
+    await writeSource(root, `${month}/34PDF104`, {
+      caseKey: 'pdf-unresolved', createdAt: '2026-08-07T11:00:00Z', claimType: '',
+    }, [{ path: 'EVRAK/policy.pdf', content: genericPdf }])
+    await writeSource(root, `${month}/34PDF105`, {
+      caseKey: 'ocr-traffic', createdAt: '2026-08-07T12:00:00Z', claimType: '',
+    }, [{ path: 'EVRAK/policy.png', content: trafficPng }])
+
+    const plan = await planV1Remediation(pool, organizationId, root)
+    const byKey = new Map(plan.entries.map((entry) => [entry.rawSnapshot?.caseIdentity?.caseKey, entry]))
+    expect(byKey.get('pdf-traffic')).toMatchObject({
+      targetState: 'create', caseType: 'traffic',
+      claimTypeResolution: { resolutionReason: 'traffic_policy_content' },
+    })
+    expect(byKey.get('pdf-casco')).toMatchObject({
+      targetState: 'create', caseType: 'casco',
+      claimTypeResolution: { resolutionReason: 'casco_policy_content' },
+    })
+    expect(byKey.get('pdf-conflict')).toMatchObject({
+      targetState: 'quarantined_claim_type', quarantine: { reason: 'genuine_evidence_conflict' },
+    })
+    expect(byKey.get('pdf-unresolved')).toMatchObject({
+      targetState: 'quarantined_claim_type', quarantine: { reason: 'claim_type_unresolved' },
+    })
+    expect(byKey.get('ocr-traffic')).toMatchObject({
+      targetState: 'create', caseType: 'traffic',
+      claimTypeResolution: { resolutionReason: 'traffic_policy_content' },
+    })
+    expect(byKey.get('ocr-traffic')?.claimTypeResolution?.evidence[0]).toMatchObject({ extractionMethod: 'local_ocr' })
+    const evidence = byKey.get('pdf-traffic')?.claimTypeResolution?.evidence[0]
+    expect(evidence).toMatchObject({ kind: 'traffic_policy_content', extractionMethod: 'pdf_text' })
+    expect(evidence?.sourceFileHash).toMatch(/^[0-9a-f]{64}$/u)
+    expect(JSON.stringify(evidence)).not.toContain('ZORUNLU')
+
+    const result = await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'pdf-evidence' }, plan)
+    expect(result).toMatchObject({ casesCreated: 3, quarantinesRecorded: 2, failed: 0 })
+    const quarantines = await pool.query<{ reason: string }>(
+      'SELECT reason FROM v1_import_source_quarantines WHERE organization_id=$1 ORDER BY reason', [organizationId],
+    )
+    expect(quarantines.rows.map((row) => row.reason)).toEqual(expect.arrayContaining(['claim_type_unresolved', 'genuine_evidence_conflict']))
+  }, 30_000)
 
   it('legacy responsible/expert/service degerlerini yanlis hesaba baglamadan non-blocking korur', async () => {
     root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
@@ -341,7 +465,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     expect(byKey.get('legacy-user')?.responsible).toMatchObject({ state: 'legacy_only', targetId: null })
     expect(byKey.get('legacy-user')?.responsible.targetId).not.toBe(omerUserId)
     expect(plan.entries.every((entry) => entry.expert.targetId !== omerUserId)).toBe(true)
-    expect(plan.summary.blockingHumanDecisions).toEqual({ claimType: 0, ambiguousTarget: 0 })
+    expect(plan.summary.quarantine.total).toBe(0)
     expect(plan.summary.autoResolved).toMatchObject({ users: 1, unassignedResponsible: 1, servicesPlanned: 0 })
     expect(plan.summary.nonBlockingLegacy).toMatchObject({ responsibleNames: 1, expertNames: 1, serviceNames: 1 })
 
@@ -414,7 +538,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     )
     expect(taskEvents.rows).toHaveLength(3)
     expect(taskEvents.rows.every((event) => event.event_source === 'v1_historical_import'
-      && event.source_identity !== null && event.source_evidence?.mappingVersion === 'v1-remediation/2.2.0')).toBe(true)
+      && event.source_identity !== null && event.source_evidence?.mappingVersion === 'v1-remediation/2.3.0')).toBe(true)
     const raw = await pool.query('SELECT raw_snapshot FROM v1_import_source_revisions WHERE organization_id=$1', [organizationId])
     expect(raw.rows[0].raw_snapshot.portalChecklist).toHaveLength(1)
     expect(raw.rows[0].raw_snapshot.assignment.raportor).toBe('Sentetik Raportor')
@@ -504,7 +628,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     expect(cases.rows.map((row) => row.case_type)).toEqual(['casco', 'traffic'])
   })
 
-  it('unknown type unique existing case ile auto-resolve olur; gercek unknown ve gercek ambiguous human kalir; exact notice ambiguous hedefi cozer', async () => {
+  it('unknown type unique existing case ile auto-resolve olur; gercek unknown/ambiguous source quarantine kalir; exact notice hedefi cozer', async () => {
     root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
     const uniqueId = await insertCase('34JJJ000', 'casco')
     await writeSource(root, '2026/Haziran 2026/34JJJ000', {
@@ -523,11 +647,53 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     const plan = await planV1Remediation(pool, organizationId, root)
     const byIdentity = new Map(plan.entries.map((entry) => [entry.rawSnapshot?.caseIdentity?.caseKey, entry]))
     expect(byIdentity.get('unknown-unique')).toMatchObject({ targetCaseId: uniqueId, caseType: 'casco', caseTypeAutoResolved: true })
-    expect(byIdentity.get('unknown-true')?.targetState).toBe('human_claim_type')
+    expect(byIdentity.get('unknown-true')?.targetState).toBe('quarantined_claim_type')
     expect(byIdentity.get('ambiguous-exact')).toMatchObject({ targetCaseId: exactTarget, targetState: 'existing' })
-    expect(byIdentity.get('ambiguous-true')?.targetState).toBe('human_ambiguous')
+    expect(byIdentity.get('ambiguous-true')?.targetState).toBe('quarantined_target')
     expect(plan.summary.autoResolved.unknownClaimTypes).toBeGreaterThanOrEqual(1)
     expect(plan.summary.autoResolved.ambiguousCases).toBeGreaterThanOrEqual(1)
+  })
+
+  it('ambiguous source yalniz kendisini quarantine eder ve explicit reconciliation append-only resolution uretir', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const chosenCaseId = await insertCase('34QRN101')
+    await insertCase('34QRN101')
+    await writeSource(root, '2026/Haziran 2026/34QRN101', {
+      caseKey: 'quarantine-reconcile', createdAt: '2026-06-09T07:00:00Z',
+      notes: [{ id: 'quarantine-note', text: 'Yalniz secilen case icin' }],
+    })
+    const quarantined = await planV1Remediation(pool, organizationId, root)
+    const source = quarantined.entries[0]!
+    expect(source).toMatchObject({ targetState: 'quarantined_target', quarantine: { reason: 'ambiguous_target' } })
+    expect(quarantined.summary.actionable.notesToCreate).toBe(0)
+    await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'quarantine-first' }, quarantined)
+    const beforeResolution = await pool.query(
+      `SELECT count(*)::int AS quarantines,
+              (SELECT count(*)::int FROM case_notes WHERE organization_id=$1 AND case_id=$2) AS notes
+         FROM v1_import_source_quarantines WHERE organization_id=$1 AND stable_source_identity=$3`,
+      [organizationId, chosenCaseId, source.sourceIdentity],
+    )
+    expect(beforeResolution.rows[0]).toMatchObject({ quarantines: 1, notes: 0 })
+
+    const options = {
+      resolutions: {
+        schemaVersion: 'hasarbotu-v1-resolution/1.0.0' as const,
+        cases: { [source.sourceIdentity!]: chosenCaseId },
+      },
+    }
+    const resolvedPlan = await planV1Remediation(pool, organizationId, root, options)
+    expect(resolvedPlan.entries[0]).toMatchObject({ targetState: 'existing', targetCaseId: chosenCaseId })
+    expect(resolvedPlan.entries[0]?.quarantineResolutionIds).toHaveLength(1)
+    const applied = await applyV1Remediation(
+      pool, { organizationId, actorUserId, requestId: 'quarantine-resolved' }, resolvedPlan, options,
+    )
+    expect(applied).toMatchObject({ notesCreated: 1, quarantineResolutionsRecorded: 1, failed: 0 })
+    const status = await pool.query<{ resolved: boolean; resolution_kind: string }>(
+      `SELECT resolved,resolution_kind FROM v1_import_quarantine_status
+        WHERE organization_id=$1 AND quarantine_identity=$2`,
+      [organizationId, source.quarantine?.quarantineIdentity],
+    )
+    expect(status.rows).toEqual([{ resolved: true, resolution_kind: 'explicit_reconciliation' }])
   })
 
   it('exact identifier ile baglanan kardes source sonrasi tek kalan candidate bire-bir eliminasyonla cozulur', async () => {
@@ -597,7 +763,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     const failClosed = await planV1Remediation(pool, organizationId, root)
     expect([sameMonthLeft, sameMonthRight]).toHaveLength(2)
     expect(failClosed.entries.filter((entry) => entry.rawSnapshot?.caseIdentity?.caseKey?.startsWith('same-month-'))
-      .every((entry) => entry.targetState === 'human_ambiguous')).toBe(true)
+      .every((entry) => entry.targetState === 'quarantined_target')).toBe(true)
   })
 
   it('source preview sonrasi degisirse TOCTOU fail-closed olur ve mutation yapmaz', async () => {
@@ -621,10 +787,29 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
       caseKey: 'case-ruhsat-toctou', createdAt: '2026-08-01T08:00:00Z', claimType: '',
     }, ['EVRAK/M RUHSAT.jpg'])
     const plan = await planV1Remediation(pool, organizationId, root)
-    await rename(join(folder, 'EVRAK', 'M RUHSAT.jpg'), join(folder, 'EVRAK', 'S RUHSAT.jpg'))
+    await rename(join(folder, 'EVRAK', 'M RUHSAT.jpg'), join(folder, 'EVRAK', 'S RUHSAT.txt'))
     await expect(applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'ruhsat-toctou' }, plan))
       .rejects.toThrow('v1_remediation_plan_stale')
     const count = await pool.query("SELECT count(*)::int AS n FROM cases WHERE organization_id=$1 AND plate_normalized='34RNA445'", [organizationId])
+    expect(count.rows[0].n).toBe(0)
+  })
+
+  it('claim document icerigi preview sonrasi degisirse file hash TOCTOU fail-closed olur', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const folder = await writeSource(root, '2026/Agustos 2026/34DOC446', {
+      caseKey: 'case-document-toctou', createdAt: '2026-08-01T09:00:00Z', claimType: '',
+    }, [{
+      path: 'EVRAK/policy.pdf',
+      content: syntheticTextPdf('ZORUNLU MALI SORUMLULUK SIGORTASI POLICE NO 1 SIGORTALI TEST NET PRIM 1'),
+    }])
+    const plan = await planV1Remediation(pool, organizationId, root)
+    await writeFile(
+      join(folder, 'EVRAK', 'policy.pdf'),
+      syntheticTextPdf('KARA ARACLARI KASKO SIGORTASI POLICE NO 2 SIGORTALI TEST BRUT PRIM 2'),
+    )
+    await expect(applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'document-toctou' }, plan))
+      .rejects.toThrow('v1_remediation_plan_stale')
+    const count = await pool.query("SELECT count(*)::int AS n FROM cases WHERE organization_id=$1 AND plate_normalized='34DOC446'", [organizationId])
     expect(count.rows[0].n).toBe(0)
   })
 
