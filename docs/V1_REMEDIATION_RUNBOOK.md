@@ -1,7 +1,32 @@
 # V1 Import Remediation Runbook
 
-Durum: Kod ve salt-okunur production preview hazırdır. Production migration,
-deploy veya remediation apply henüz yapılmamıştır.
+Durum: Production migration 0047/0048, onaylı V1 remediation data apply ve
+visibility API deploy'u 2026-08-15 tarihinde tamamlandı. Beş source bilinçli
+olarak unresolved quarantine'dadır; bunlar güvenli source'ların uygulanmasını
+engellemedi. Rollback gerekmedi.
+
+## Production kapanış kaydı — 2026-08-15
+
+- Final onaylı plan ve source-manifest hash'leri servisler kapalıyken yeniden
+  doğrulandı; apply sonucu 13 case create, 140 backfill, 162 note, 61 completed
+  task, 96 historical closure, 175 field mapping, 149 follow-up history, 134
+  task event, 158 raw provenance ve 31 move/rename reconciliation oldu.
+- Apply sonrası production toplamları 180 case, 530 note, 73 task, 1029
+  `v1_import_records`, 505 audit event ve 96 closed case'tir. İki ardışık replay
+  sıfır actionable işlem, sıfır yeni quarantine ve sıfır duplicate üretti.
+- Beş quarantine kaydı unresolved ve append-only olarak görünürdür. Quarantine
+  source'larına case/note/task/alan/lifecycle mutation uygulanmadı. Gelecekteki
+  manual resolution ayrı, açık reconciliation işi olacaktır.
+- Historical responsible/expert/service adları first-class kullanıcı/servis FK'si
+  değildir. Case detail bunları yalnız opt-in `legacyReferences` alanında güvenli
+  biçimde gösterir; tam raw snapshot client'a açılmaz. `Atanmadı` gösterilmez.
+- `GET /api/v1/v1-import/quarantines` yalnız mevcut admin izniyle çalışan,
+  tenant-scoped, sayfalı ve salt-okunur reporting ucudur. Resolution/edit/delete
+  endpoint'i yoktur.
+- Visibility deployment'ı yalnız API artefaktını değiştirdi; schema/data migration
+  veya File Agent artefakt deploy'u yapılmadı. API ve değiştirilmemiş File Agent
+  yeniden Running duruma getirildi; health, agent auth/last_seen, storage root ve
+  problemli job kontrolleri geçti.
 
 ## Kalıcı kimlik ve provenance
 

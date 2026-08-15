@@ -2,6 +2,34 @@
 
 Son güncelleme: 2026-08-15
 
+## V1 migration operasyonel kapanış — production COMPLETED (2026-08-15, HB-2026-203)
+
+- 0047/0048 production'da uygulanmış ve migration HEAD
+  `0048_v1_import_source_quarantine` olarak doğrulanmıştır. Onaylı remediation
+  data apply tamamlandı; rollback gerekmedi. Güncel production: 180 case, 530
+  note, 73 task, 1029 provenance, 505 audit, 96 historical closed case ve 5
+  unresolved quarantine. İki idempotency replay sıfır aksiyon ve duplicate=0
+  verdi.
+- Backward-compatible case detail opt-in contract'ı `legacyReferences` ile V1
+  responsible/expert/service adlarını raw snapshot açmadan gösterir. First-class
+  FK'ler legacy string ile doldurulmaz; eşleşen current identity tekrarlanmaz,
+  `Atanmadı` NULL kalır.
+- Admin-only, tenant-scoped ve salt-okunur quarantine reporting API'si ile Yönetim
+  ekranındaki kompakt read-only liste eklendi. Beş unresolved source görünürdür;
+  mutation/auto-resolve/edit/delete akışı eklenmedi.
+- Gerçek PostgreSQL dahil tam root test zinciri 2.350 PASS / 6 koşullu UI skip /
+  0 fail; typecheck PASS; lint 0 hata / 13 mevcut uyarı; production build, bundle
+  ve check:deploy PASS. Focused API E2E 4/4, contracts 330/330; focused UI 31/31.
+- Yalnız API artefaktı production'a deploy edildi. Bağımsız manifest doğrulaması
+  hedefin 6.730 yönetilen dosya / 164.737.709 bayt ile source'a birebir eşit
+  olduğunu gösterdi. File Agent artefaktı değişmedi; API ve File Agent Running,
+  API health ok, agent heartbeat/storage-root/job kontrolleri PASS.
+- Güvenli mevcut authenticated production tarayıcı oturumu bulunmadığı için pozitif
+  HTTP admin/case-detail smoke yapılmadı. Aynı deployed store'larla read-only
+  production integration, HTTP 401, API E2E 403/admin ve leak kontrolleri geçti;
+  pozitif manual-login ve görsel boyut smoke'u 0.1.3 UAT maddesidir ve File Agent
+  operasyonunu bloke etmez.
+
 ## V1 remediation v2.3 — source quarantine güvenli apply'dan ayrıldı; production apply YAPILMADI (2026-08-15, HB-2026-202)
 
 - Claim-type hiyerarşisi nihai domain kararına geçirildi: `K Ruhsat` authoritative

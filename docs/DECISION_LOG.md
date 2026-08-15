@@ -9101,3 +9101,54 @@ Kanit ve sonuc:
   V1 source mutasyonu yapılmadı.
 
 Kaynak: 2026-08-15 tarihli kullanıcı talimatı ("Nihai ürün kararı").
+
+## HB-2026-203 — V1 remediation production data apply ve visibility katmanı operasyonel olarak kapatıldı
+
+Tarih: 2026-08-15
+
+Karar:
+
+- Onaylı, hash-fenced remediation production apply tamamlandı. Sonuç 13 case
+  create, 140 case backfill, 162 note, 61 completed task, 96 migration-only
+  historical closure, 175 field mapping, 149 follow-up history, 134 task event,
+  158 source-level raw provenance ve 31 move/rename reconciliation'dır. Beş
+  unresolved source quarantine'da kaldı; apply kapsamına alınmadı. İki replay
+  sıfır actionable işlem ve sıfır duplicate üretti. Rollback gerekmedi.
+- Historical responsible/expert/service string'leri first-class V2 kimliği
+  değildir. Case detail'in varsayılan cevabı değiştirilmedi; yalnız
+  `includeLegacyReferences=true` isteğinde safe `legacyReferences` projection'ı
+  eklenir. Projection immutable source revision snapshot'ından yalnız üç isim
+  alanını türetir, raw snapshot/hash/diğer payload'ı açmaz, `Atanmadı`yı eler ve
+  current kullanıcı/e-posta-local/service kimliğiyle aynı değeri tekrar etmez.
+- `GET /api/v1/v1-import/quarantines` mevcut admin-only izin modeliyle çalışan,
+  tenant-scoped, deterministik sıralı ve sayfalı salt-okunur reporting ucudur.
+  Güvenli token/path/reason/status/evidence summary/candidate projection'ı döner;
+  raw source veya mutation/resolve/edit/delete endpoint'i yoktur.
+- Yönetim ekranına admin-only read-only quarantine listesi; case detail'e
+  legacy-only ve current/legacy conflict'i açıkça ayıran kompakt görünüm eklendi.
+  Legacy metin aktif kullanıcı/servis gibi gösterilmez.
+- Visibility deployment'ı schema veya business data değişikliği gerektirmedi.
+  Yalnız API artefaktı deploy edildi; File Agent artefaktı birebir aynı kaldı.
+  API health ve deployed runtime closure, production read-only legacy/quarantine
+  store smoke, File Agent auth/last_seen/storage-root/job kontrolleri geçti.
+
+Kanit:
+
+- Production toplamları: 180 case, 530 note, 73 task, 1029 provenance, 505 audit,
+  96 closed case, 149 V1 follow-up history, 134 V1 task event, 158 source revision,
+  5 unresolved quarantine ve 0 resolution.
+- Deterministik legacy doğrulaması: 123/123 Ömer kaynağı doğru mevcut hesaba bağlı;
+  23 Enes kaynağında wrong-user FK 0; 6 `Atanmadı` kaynağında responsible FK NULL;
+  152 Baran kaynağında wrong-expert FK 0; 18 historical service kaynağında
+  yanlış service FK 0. Client projection raw snapshot sızdırmadı.
+- Tam root zinciri 2.350 PASS / 6 koşullu UI skip / 0 fail; typecheck PASS; lint
+  0 hata / 13 mevcut uyarı; build, bundle ve check:deploy PASS. Production HTTP
+  `/health` ok ve quarantine unauthenticated 401; güvenli authenticated browser
+  session bulunmadığı için pozitif HTTP smoke, deployed store read-only integration
+  + API E2E admin/403 kanıtıyla tamamlandı ve manual-login UAT ayrı bırakıldı.
+- API deploy aracı final JSON'u yazmadan ortam komut süresi doldu; hedefteki
+  yönetilen 6.730 dosyanın source manifestiyle birebir `already_up_to_date`
+  olduğu ve yeni rollback yedeğinin manifest bütünlüğü ayrı salt-okunur
+  önizlemelerle doğrulandı. Otomatik rollback yapılmadı.
+
+Kaynak: 2026-08-15 tarihli kullanıcı talimatı ("V1→V2 production remediation DATA APPLY kabul edildi.").
