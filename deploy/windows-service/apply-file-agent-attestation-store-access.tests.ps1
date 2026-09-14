@@ -26,10 +26,12 @@ $targetSid = ([System.Security.Principal.NTAccount]$targetAccountName).Translate
 $previewScriptPath = Join-Path $PSScriptRoot 'preview-file-agent-attestation-store-access.ps1'
 $applyScriptPath = Join-Path $PSScriptRoot 'apply-file-agent-attestation-store-access.ps1'
 $adminOnlyDir = 'C:\ProgramData\HasarBotu\migration-preflight'
+# The preview emits canonical paths; do not compare those with a raw 8.3 TEMP alias.
+$fixtureTempRoot = [System.IO.Path]::GetFullPath($env:TEMP)
 
 function New-SyntheticFixtureRoot {
     param([bool]$PreCreateStore = $false, [int]$ExistingFileCount = 0)
-    $root = Join-Path $env:TEMP ("hasarbotu-fa-attest-apply-fixture-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+    $root = Join-Path $fixtureTempRoot ("hasarbotu-fa-attest-apply-fixture-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
     $storePath = Join-Path $root 'Ancestor1\Ancestor2\attestations'
     if ($PreCreateStore) {
         New-Item -ItemType Directory -Path $storePath -Force | Out-Null

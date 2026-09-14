@@ -20,10 +20,11 @@ function Assert-True {
 $targetAccountName = 'NT AUTHORITY\LOCAL SERVICE'
 $targetSid = ([System.Security.Principal.NTAccount]$targetAccountName).Translate([System.Security.Principal.SecurityIdentifier]).Value
 $scriptPath = Join-Path $PSScriptRoot 'preview-file-agent-pcloud-db-access.ps1'
+$fixtureTempRoot = [System.IO.Path]::GetFullPath($env:TEMP)
 
 function New-SyntheticPCloudTree {
     param([bool]$GrantTraverseAtLocal, [bool]$IncludeWalShm = $true, [bool]$ExplicitDenyAtUser = $false)
-    $root = Join-Path $env:TEMP ("hasarbotu-fa-pcloud-acl-fixture-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+    $root = Join-Path $fixtureTempRoot ("hasarbotu-fa-pcloud-acl-fixture-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
     $userDir = Join-Path $root 'FakeProfile'
     $appDataDir = Join-Path $userDir 'AppData'
     $localDir = Join-Path $appDataDir 'Local'

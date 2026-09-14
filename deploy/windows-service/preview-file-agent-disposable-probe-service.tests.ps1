@@ -17,16 +17,23 @@ function Assert-True {
 $scriptPath = Join-Path $PSScriptRoot 'preview-file-agent-disposable-probe-service.ps1'
 $adminOnlyDir = 'C:\ProgramData\HasarBotu\migration-preflight'
 
-Write-Output '=== TEST 1: real machine run -- structural preconditions verified_ok, the two genuine unresolved items (result-directory ACL, second-service logon credential) honestly flagged, never silently skipped ==='
+Write-Output '=== TEST 1: real machine run -- structural checks preserve actual prerequisite readiness; missing production prerequisites stay blocked ==='
 $out1 = & $scriptPath 2>&1
 $json1 = $out1 | Out-String | ConvertFrom-Json
 Assert-True ($json1.ReadOnly -eq $true) "TEST1: wrapper declares ReadOnly=true"
 $innerScriptEntry1 = @($json1.PreconditionsSummary | Where-Object { $_.Name -eq 'inner_probe_script' })
 Assert-True ($innerScriptEntry1.Count -eq 1 -and $innerScriptEntry1[0].Status -eq 'verified_ok') "TEST1: inner_probe_script verified_ok (real file, parses cleanly, structurally safe)"
 $winswEntry1 = @($json1.PreconditionsSummary | Where-Object { $_.Name -eq 'winsw_and_service_id' })
-Assert-True ($winswEntry1.Count -eq 1 -and $winswEntry1[0].Status -eq 'verified_ok') "TEST1: winsw_and_service_id verified_ok (WinSW present, probe id distinct + free)"
+$expectedWinswStatus = if ([System.IO.File]::Exists('C:\Tools\WinSW-x64.exe') -and $null -eq (Get-Service -Name 'hasarbotu-file-agent-probe' -ErrorAction SilentlyContinue)) { 'verified_ok' } else { 'blocked_structural' }
+Assert-True ($winswEntry1.Count -eq 1 -and $winswEntry1[0].Status -eq $expectedWinswStatus) 'TEST1: WinSW readiness matches independent file/service inspection'
+if ($expectedWinswStatus -ne 'verified_ok') { Write-Output 'SKIP: positive WinSW readiness requires the real WinSW binary and a free probe service id.' }
 $dbEntry1 = @($json1.PreconditionsSummary | Where-Object { $_.Name -eq 'pcloud_db_access' })
-Assert-True ($dbEntry1.Count -eq 1 -and $dbEntry1[0].Status -eq 'verified_ok') "TEST1: pcloud_db_access verified_ok (real fresh re-check of HB-2026-165 grant)"
+$dbPreviewScript = Join-Path $PSScriptRoot 'preview-file-agent-pcloud-db-access.ps1'
+$independentDbPreview = (& $dbPreviewScript -ServiceAccountName 'svc-hb-fileagent' 2>&1 | Out-String | ConvertFrom-Json)
+$dbPreviewHasError = $null -ne $independentDbPreview.PSObject.Properties['Status'] -and $independentDbPreview.Status -eq 'error'
+$expectedDbStatus = if (-not $dbPreviewHasError -and $independentDbPreview.OverallStatus -eq 'already_sufficient') { 'verified_ok' } else { 'blocked_structural' }
+Assert-True ($dbEntry1.Count -eq 1 -and $dbEntry1[0].Status -eq $expectedDbStatus) 'TEST1: composed DB readiness preserves the independently observed ACL preflight result'
+if ($expectedDbStatus -ne 'verified_ok') { Write-Output 'SKIP: positive pCloud DB readiness requires the real service account, DB path and grants.' }
 $gateEntry1 = @($json1.PreconditionsSummary | Where-Object { $_.Name -eq 'freshness_gate_library' })
 Assert-True ($gateEntry1.Count -eq 1 -and $gateEntry1[0].Status -eq 'verified_ok') "TEST1: freshness_gate_library verified_ok (module present, its own test suite passes fresh)"
 $resultDirEntry1 = @($json1.PreconditionsSummary | Where-Object { $_.Name -eq 'result_directory_acl_plan' })

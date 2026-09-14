@@ -1,0 +1,13 @@
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+body { display: grid; place-items: center; }
+button { width: 56px; height: 56px; display: grid; place-items: center; padding: 0; border: 1px solid #708098; border-radius: 18px; background: #202c3be8; box-shadow: 0 2px 4px #0005; cursor: grab; touch-action: none; user-select: none; transition: background 120ms; }
+button:hover { background: #304259; }
+button:active { cursor: grabbing; }
+button:focus-visible { outline: 2px solid #71b6ff; outline-offset: 1px; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+.ring { width: 34px; height: 34px; border: 3px solid #a9bacf; border-radius: 50%; display: grid; place-items: center; }
+.core { width: 22px; height: 22px; border-radius: 50%; background: #f0f5fb; box-shadow: inset 0 0 0 2px #d2dfef; }
+@media (prefers-color-scheme: dark) { button { background: #101418ed; border-color: #65768a; } button:hover { background: #243345; } }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }

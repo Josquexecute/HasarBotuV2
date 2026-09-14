@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -17,6 +18,14 @@ import { fileURLToPath } from 'node:url'
  */
 
 const DEPLOY_DIR = fileURLToPath(new URL('../deploy/windows-service/', import.meta.url))
+
+// .NET expands Windows 8.3 paths while fixture strings otherwise keep the alias.
+// Canonicalize only this test process's temporary root and its child processes.
+if (process.platform === 'win32') {
+  const testTempDirectory = realpathSync.native(tmpdir())
+  process.env.TEMP = testTempDirectory
+  process.env.TMP = testTempDirectory
+}
 
 const SELF_CLOSING_OR_DECL = /^(\?xml|br|hr|img)/i
 

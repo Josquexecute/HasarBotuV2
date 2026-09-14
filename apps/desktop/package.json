@@ -41,7 +41,7 @@
     "files": [
       "dist/**/*",
       "package.json",
-      "!dist/**/*.map"
+      "!**/*.map"
     ],
     "extraResources": [
       {

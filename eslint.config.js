@@ -35,7 +35,9 @@ export default tseslint.config(
   // yalin `dist` YALNIZ kok `dist/`i disliyor, workspace `dist` klasorlerini
   // disarida birakmiyordu. `**/dist/**` her seviyedeki uretilmis ciktiyi kapsar.
   // Kaynak dosya kapsami degismez; yalniz build ciktisi lint disi kalir.
-  { ignores: ['**/dist/**', '**/coverage/**'] },
+  // Yerel araç/yedekler ve installer çıktısı kaynak değildir; yedekteki
+  // eslint.config.js de ikinci bir TypeScript config kökü oluşturmamalıdır.
+  { ignores: ['**/dist/**', '**/coverage/**', '**/release/**', '.local/**'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

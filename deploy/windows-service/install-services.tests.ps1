@@ -57,6 +57,7 @@ function New-Fixture {
 $scriptPath = Join-Path $PSScriptRoot 'install-services.ps1'
 $realFileAgentService = Get-Service -Name 'hasarbotu-file-agent' -ErrorAction SilentlyContinue
 $realApiService = Get-Service -Name 'hasarbotu-api' -ErrorAction SilentlyContinue
+$realPostgresService = Get-Service -Name 'postgresql-x64-17' -ErrorAction SilentlyContinue
 
 Write-Output '=== TEST 1: -Services verilmezse (varsayilan) hem ApiDir hem FileAgentDir eksikse ikisi de sikayet edilir (davranis DEGISMEDI) ==='
 $f1 = New-Fixture
@@ -71,7 +72,12 @@ $f2 = New-Fixture -WithFileAgentDist $false
 $out2 = & $scriptPath -ApiDir $f2.ApiDir -WinSwExe $f2.WinSwExe -Services Api *>&1 | Out-String
 Assert-True ($out2 -notmatch 'FileAgentDir verilmedi') 'FileAgentDir eksikligi HICBIR ZAMAN sikayet edilmedi'
 Assert-True ($out2 -notmatch 'File Agent build') 'File Agent build ciktisi hic kontrol edilmedi (dist yok ama secilmedigi icin sikayet yok)'
-if ($null -eq $realApiService) {
+if ($null -eq $realApiService -and $null -eq $realPostgresService) {
+    Assert-True ($LASTEXITCODE -eq 1) 'PostgreSQL Windows servisi yokken API onizlemesi fail-closed kalir'
+    Assert-True ($out2 -match 'postgresql-x64-17') 'Eksik PostgreSQL servis bagimliligi acikca bildirilir'
+    Write-Output 'SKIP: API preview success requires the PostgreSQL Windows service; portable test PostgreSQL is not a registered service.'
+}
+elseif ($null -eq $realApiService) {
     # "File Agent SEÇİLMEDİ" mesajı yalnız "steps" bloğunda basılır (issues=0
     # olduğunda ulaşılır); bu makinede API zaten kuruluysa idempotency
     # blocker'ı bu bloğa hiç ulaşılmadan zaten test ediyor (Test 5), o yüzden

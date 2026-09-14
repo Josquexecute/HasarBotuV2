@@ -1,6 +1,16 @@
 # HasarBotu V2 — Proje Durumu
 
-Son güncelleme: 2026-08-15
+Son güncelleme: 2026-09-13
+
+## Yerel geliştirme ve GitHub hazırlığı — 2026-09-13
+
+- Windows genelindeki yardımcı düğme, ayrı Electron penceresi ve güvenli
+  preload/session ile eklendi. Kullanım: [Windows yardımcısı](./DESKTOP_ASSISTANT.md).
+- Bu bilgisayarda sentetik PostgreSQL/API/File Agent test ortamı hazırlandı;
+  production başka bilgisayardadır. Kaynak sürümü 0.1.2 olarak korunur.
+- Mevcut GitHub deposunun geçmişi kaynak klasörüne geri bağlandı. Güncel
+  kapılar, gönderim kapsamı ve kalan kabul: [son kontrol raporu](./FINAL_VERIFICATION.md).
+  Aşağıdaki production kaydı tarihsel durumdur; yeni production deploy yapılmadı.
 
 ## V1 migration operasyonel kapanış — production COMPLETED (2026-08-15, HB-2026-203)
 

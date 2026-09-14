@@ -73,8 +73,9 @@ export function loadAgentConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Ag
       if (typeof value !== 'string' || value.length === 0) throw new Error(`invalid root path for ${key}`)
       roots[key] = value
     }
-  } catch (error) {
-    throw new AgentConfigError(`invalid HASARBOTU_AGENT_ROOTS: ${(error as Error).message}`)
+  } catch {
+    // JSON.parse diagnostics can quote environment values, including local paths.
+    throw new AgentConfigError('invalid HASARBOTU_AGENT_ROOTS: expected a JSON object with non-empty string paths')
   }
 
   const leaseSeconds = Number(env.HASARBOTU_AGENT_LEASE_SECONDS ?? '120')

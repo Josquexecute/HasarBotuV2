@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, shell as electronShell } from 'electron'
+import { app, dialog, shell as electronShell } from 'electron'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseDesktopConfig, DesktopConfigError } from './config.js'
 import { runStartupGate, type GateChoice, type GateMessage } from './gate.js'
 import { probeApiReadiness } from './readiness.js'
 import { DesktopStartupAbortedError, guardWebContents, startDesktopShell } from './shell.js'
+import { startDesktopAssistant } from './assistant.js'
 
 /**
  * Masaüstü kabuğunun giriş noktası (D2, D3).
@@ -46,6 +47,7 @@ function defaultAssetRoot(): string {
  * karşılaştırma origin'ini taşır.
  */
 let shellOrigin: string | undefined
+let mainWindow: Electron.BrowserWindow | undefined
 
 /**
  * Kapının kullanıcıya sorusu. Modal pencere henüz YOKTUR (pencere kapıdan
@@ -81,6 +83,10 @@ async function bootstrap(): Promise<void> {
       openExternal: (url) => electronShell.openExternal(url),
     })
     shellOrigin = shell.origin
+    mainWindow = shell.window
+    await startDesktopAssistant({ shell, assetRoot: config.assetRoot, userDataPath: app.getPath('userData'), quit: () => app.quit() })
+    // Closing the main window still exits; minimizing leaves the assistant available.
+    shell.window.once('closed', () => app.quit())
   } catch (error) {
     if (error instanceof DesktopStartupAbortedError) {
       // Kullanıcının kendi kararı; hata değil.
@@ -112,9 +118,10 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => { app.quit() })
 
   app.on('second-instance', () => {
-    const [existing] = BrowserWindow.getAllWindows()
-    if (existing === undefined) return
+    const existing = mainWindow
+    if (existing === undefined || existing.isDestroyed()) return
     if (existing.isMinimized()) existing.restore()
+    existing.show()
     existing.focus()
   })
 

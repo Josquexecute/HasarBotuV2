@@ -63,12 +63,13 @@ AI bu uygulamada yalnız **karar desteği** sağlar. Dosya kapatma, klasör taş
                                         └──────────┬────────────┘
                                                    ▼
                                         ┌───────────────────┐
-                                        │   pCloud / P:\      │
-                                        │   PDF, Excel, foto   │
+                                        │   Yerel depolama    │
+                                        │   PDF, Excel, foto  │
                                         └───────────────────┘
 ```
 
 - **Veritabanı**: PostgreSQL tek doğruluk kaynağı; fiziksel dosyalara yalnız göreli yol tutulur.
+- **Depolama**: aktif dosyalar yerel storage üzerindedir; pCloud yedek/arşiv içindir, canlı çalışma kökü değildir.
 - **Dosya Agent**: kritik klasör taşıma/yeniden adlandırma işlemlerini plan → önizle → onay → uygula → doğrula → kesinleştir → audit modeliyle yürütür.
 - **API**: kimlik doğrulama, RBAC (6 rol), audit trail, tüm iş kuralları.
 - **Masaüstü**: iş mantığı taşımayan ince Electron kabuğu; tek origin, sıkı CSP, sandbox açık.
@@ -115,9 +116,13 @@ HasarBotuV2/
 
 ## 🚀 Geliştirme
 
+Node.js **24.x** gerekir (`>=24 <25`). Kilit dosyasını korumak için temiz
+kurulumda `npm ci` kullanılır. Bu bilgisayarın hazırlığı ve test aşamasına
+geçiş için [yerel geliştirme kılavuzuna](./docs/LOCAL_DEVELOPMENT.md) bakın.
+
 ```bash
 # Bağımlılıkları kur (workspace paketlerini de derler)
-npm install
+npm ci
 
 # Frontend geliştirme sunucusu
 npm run dev
@@ -148,6 +153,8 @@ npm run package:win
 Proje aktif geliştirme aşamasındadır. Güncel ilerleme, kilitlenmiş kararlar ve açık riskler için:
 
 - [`docs/PROJECT_STATUS.md`](./docs/PROJECT_STATUS.md) — güncel durum
+- [`docs/FINAL_VERIFICATION.md`](./docs/FINAL_VERIFICATION.md) — son kontrol ve GitHub aktarım kapsamı
+- [`docs/DESKTOP_ASSISTANT.md`](./docs/DESKTOP_ASSISTANT.md) — Windows genelindeki yardımcı düğme
 - [`docs/DECISION_LOG.md`](./docs/DECISION_LOG.md) — kalıcı kararlar ve gerekçeleri
 - [`docs/ROADMAP.md`](./docs/ROADMAP.md) — yol haritası
 

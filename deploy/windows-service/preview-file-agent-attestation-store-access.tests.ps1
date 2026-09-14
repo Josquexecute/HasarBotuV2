@@ -17,9 +17,11 @@ function Assert-True {
 $scriptPath = Join-Path $PSScriptRoot 'preview-file-agent-attestation-store-access.ps1'
 $adminOnlyDir = 'C:\ProgramData\HasarBotu\migration-preflight'
 $targetAccountName = 'NT AUTHORITY\LOCAL SERVICE'
+# Match the preview's canonical paths even when TEMP contains a Windows 8.3 alias.
+$fixtureTempRoot = [System.IO.Path]::GetFullPath($env:TEMP)
 
 Write-Output '=== TEST 1: attestation store folder does NOT exist yet -> still plans Traverse+Read into it, zero mutation ==='
-$missingStore1 = Join-Path $env:TEMP ("hasarbotu-attest-acl-test-missing-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+$missingStore1 = Join-Path $fixtureTempRoot ("hasarbotu-attest-acl-test-missing-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $out1 = & $scriptPath -ServiceAccountName $targetAccountName -AttestationStoreDirectory $missingStore1 2>&1
 $json1 = $out1 | Out-String | ConvertFrom-Json
 Assert-True ($json1.OverallStatus -eq 'grant_required') "TEST1: OverallStatus=grant_required for a not-yet-created store (got: $($json1.OverallStatus))"
@@ -29,7 +31,7 @@ Assert-True ($storeEntry1.Count -eq 1 -and $storeEntry1[0].Reason -eq 'NODE_NOT_
 Assert-True ($json1.PlannedAceCount -ge 2) "TEST1: at least Traverse+Read planned for the store folder itself (got: $($json1.PlannedAceCount))"
 
 Write-Output "`n=== TEST 2: synthetic ancestor chain WITH correct Traverse grants + store folder with Read+Synchronize -> already_sufficient ==="
-$syntheticRoot2 = Join-Path $env:TEMP ("hasarbotu-attest-acl-test-root-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+$syntheticRoot2 = Join-Path $fixtureTempRoot ("hasarbotu-attest-acl-test-root-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $syntheticStore2 = Join-Path $syntheticRoot2 'attestations'
 New-Item -ItemType Directory -Path $syntheticStore2 -Force | Out-Null
 $targetSid = ([System.Security.Principal.NTAccount]$targetAccountName).Translate([System.Security.Principal.SecurityIdentifier]).Value
@@ -54,7 +56,7 @@ Assert-True ($storeEntry2.Count -eq 1 -and $storeEntry2[0].CurrentlyGranted -eq 
 Remove-Item -LiteralPath $syntheticRoot2 -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Output "`n=== TEST 3: planned ACEs never contain a write/delete/ownership bit ==="
-$out3 = & $scriptPath -ServiceAccountName $targetAccountName -AttestationStoreDirectory (Join-Path $env:TEMP ("hasarbotu-attest-acl-test-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))) 2>&1
+$out3 = & $scriptPath -ServiceAccountName $targetAccountName -AttestationStoreDirectory (Join-Path $fixtureTempRoot ("hasarbotu-attest-acl-test-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))) 2>&1
 $json3 = $out3 | Out-String | ConvertFrom-Json
 $reportPath3 = Join-Path $adminOnlyDir $json3.Report.FileName
 $fullReport3 = Get-Content -Raw -LiteralPath $reportPath3 | ConvertFrom-Json

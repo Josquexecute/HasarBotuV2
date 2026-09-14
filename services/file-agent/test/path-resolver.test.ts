@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -88,7 +88,16 @@ describe('assertRealPathUnderRoot (symlink/junction kaçışı)', () => {
 
   it('gerçek yolu root altındaki dosya için kabul eder', async () => {
     const real = await assertRealPathUnderRoot(root, join(root, 'inside.txt'))
-    expect(isUnderRoot(root, real)).toBe(true)
+    // Windows TEMP may contain an 8.3 alias; the result is a canonical realpath.
+    expect(real).toBe(await realpath(join(root, 'inside.txt')))
+    expect(isUnderRoot(await realpath(root), real)).toBe(true)
+  })
+
+  it('root bir junction/alias olduğunda kanonik kökün içindeki yolu kabul eder', async () => {
+    const rootAlias = join(base, 'root-alias')
+    await symlink(root, rootAlias, 'junction')
+    await expect(assertRealPathUnderRoot(rootAlias, join(rootAlias, 'inside.txt')))
+      .resolves.toBe(await realpath(join(root, 'inside.txt')))
   })
 
   it('junction/symlink ile root dışına kaçışı reddeder', async () => {

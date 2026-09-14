@@ -1,6 +1,6 @@
 # HasarBotu V2 — Teknik Mimari
 
-## Hedef yapı
+## Güncel yapı
 
 ```text
 Windows Uygulaması / Web Arayüzü
@@ -18,41 +18,35 @@ Windows Uygulaması / Web Arayüzü
             ├── Audit Log
             └── Kural Sürümleri
 
-Her Windows Cihazı
-            │
-            ▼
-    Yerel pCloud Kökü
-            │
-            └── PDF / Excel / Fotoğraflar
-
-Ana Dosya Agent
-            │
-            ▼
-Kritik klasör taşıma / yeniden adlandırma
+API iş kuyruğu
+      │
+      ▼
+File Agent → Yerel aktif depolama → PDF / Excel / Fotoğraflar
+                  │
+                  └── pCloud yedek / arşiv
 ```
 
-## Önerilen repository yapısı
+PostgreSQL iş verisinin ana kaynağıdır. Kritik fiziksel dosya işlemlerini
+yalnız File Agent yürütür. pCloud canlı çalışma kökü değildir.
+
+## Repository yapısı
 
 ```text
 apps/
   desktop/
-  web/
+
+packages/
+  domain/
+  contracts/
+  database/
+  desktop-bridge/
+  config/
+
+services/
   api/
   file-agent/
 
-packages/
-  ui/
-  domain/
-  database/
-  rules/
-  ai/
-  shared/
-```
-
-UI prototip aşamasında daha hafif yapı kullanılabilir:
-
-```text
-src/
+src/                       # React/Vite arayüzü
   app/
   components/
   features/
@@ -65,7 +59,8 @@ src/
 ## Kaynak doğruluk
 
 - PostgreSQL: iş verisi
-- pCloud: fiziksel dosyalar
+- Yerel storage: aktif fiziksel dosyalar
+- pCloud: yedek ve arşiv
 - Göreceli yol: veritabanındaki dosya referansı
 - `caseId`: vaka ana kimliği
 - Plaka: arama/eşleştirme alanı

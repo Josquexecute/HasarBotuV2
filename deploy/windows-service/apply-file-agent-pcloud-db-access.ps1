@@ -226,22 +226,55 @@ function Get-NodeAclSnapshot {
     }
 }
 
+function Get-InheritableAceFingerprint {
+    param([System.Security.AccessControl.RawSecurityDescriptor]$Descriptor)
+    return (@($Descriptor.DiscretionaryAcl | Where-Object { ([int]$_.AceFlags -band 3) -ne 0 } | ForEach-Object {
+        $bytes = [byte[]]::new($_.BinaryLength)
+        $_.GetBinaryForm($bytes, 0)
+        [Convert]::ToBase64String($bytes)
+    }) -join '|')
+}
+
 function Restore-NodeSddl {
-    # Exact rollback primitive: rebuild a fresh security object from a
-    # PREVIOUSLY-RECORDED Sddl string and apply it wholesale -- restores
-    # the precise pre-change state rather than attempting to identify and
-    # remove only the ACEs this tool itself added.
+    # Apply changes only the DACL. Reassigning an unchanged SYSTEM/TrustedInstaller
+    # owner during rollback can fail even when the caller can restore the DACL.
+    # Preserve that owner, reject owner drift, and restore the recorded DACL exactly.
     param([string]$Path, [bool]$IsDirectory, [string]$Sddl)
-    if ($IsDirectory) {
-        if ($Path -match '^[A-Za-z]:$') { $Path = "$Path\" }
-        $security = [System.Security.AccessControl.DirectorySecurity]::new()
-        $security.SetSecurityDescriptorSddlForm($Sddl)
-        [System.IO.Directory]::SetAccessControl($Path, $security)
+    if ($Path -match '^[A-Za-z]:$') { $Path = "$Path\" }
+    $security = if ($IsDirectory) { [System.IO.Directory]::GetAccessControl($Path) } else { [System.IO.File]::GetAccessControl($Path) }
+    $recorded = [System.Security.AccessControl.RawSecurityDescriptor]::new($Sddl)
+    if ($security.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $recorded.Owner.Value) {
+        Throw-SafeApplyError 'ROLLBACK_OWNER_DRIFT'
     }
-    else {
-        $security = [System.Security.AccessControl.FileSecurity]::new()
-        $security.SetSecurityDescriptorSddlForm($Sddl)
-        [System.IO.File]::SetAccessControl($Path, $security)
+    if ($security.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access -bor [System.Security.AccessControl.AccessControlSections]::Owner) -eq $Sddl) { return }
+    $current = [System.Security.AccessControl.RawSecurityDescriptor]::new($security.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access))
+    $autoInherited = ($recorded.ControlFlags -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherited) -ne 0
+    # Propagate only when inherited rights actually change. Traversal-only ancestor
+    # grants do not require rewriting descendants or their auto-inheritance flags.
+    if ($autoInherited -or ($IsDirectory -and (Get-InheritableAceFingerprint $current) -ne (Get-InheritableAceFingerprint $recorded))) {
+        $security.SetSecurityDescriptorSddlForm($Sddl, [System.Security.AccessControl.AccessControlSections]::Access)
+        if ($IsDirectory) { [System.IO.Directory]::SetAccessControl($Path, $security) }
+        else { [System.IO.File]::SetAccessControl($Path, $security) }
+    }
+    if ($autoInherited) { return }
+    # SetFileSecurity performs no propagation and clears AI. Use it only for a
+    # baseline without AI; SetAccessControl always normalizes that flag to present.
+    if (-not ('HasarBotu.PCloudAclNative' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+namespace HasarBotu {
+    public static class PCloudAclNative {
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetFileSecurityW(string path, uint information, byte[] descriptor);
+    }
+}
+'@
+    }
+    $descriptor = [byte[]]::new($recorded.BinaryLength)
+    $recorded.GetBinaryForm($descriptor, 0)
+    if (-not [HasarBotu.PCloudAclNative]::SetFileSecurityW($Path, 4, $descriptor)) {
+        Throw-SafeApplyError "ROLLBACK_DACL_WRITE_FAILED_$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
     }
 }
 

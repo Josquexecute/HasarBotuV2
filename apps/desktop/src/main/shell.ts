@@ -85,7 +85,7 @@ function preloadPath(): string {
  * Oturum (session) sertleştirmesi. Pencere YÜKLENMEDEN ÖNCE uygulanır ki
  * ilk doküman isteği bile politikasız kalmasın.
  */
-function hardenSession(session: Session): void {
+export function hardenSession(session: Session): void {
   session.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = withSecurityHeaders(details.responseHeaders, details.resourceType)
     // `undefined` = bu yanıt bizim ilgi alanımızda değil; başlıklar aynen kalır.
