@@ -146,39 +146,6 @@ npm run package:win
 
 `apps/desktop/release/HasarBotu-Setup-<sürüm>.exe` çıktısı üretilir (imzasız, NSIS, kullanıcı bazlı kurulum).
 
----
-
-## 📊 Durum
-
-Proje aktif geliştirme aşamasındadır. Güncel ilerleme, kilitlenmiş kararlar ve açık riskler için:
-
-- [`docs/PROJECT_STATUS.md`](./docs/PROJECT_STATUS.md) — güncel durum
-- [`docs/FINAL_VERIFICATION.md`](./docs/FINAL_VERIFICATION.md) — son kontrol ve GitHub aktarım kapsamı
-- [`docs/DESKTOP_ASSISTANT.md`](./docs/DESKTOP_ASSISTANT.md) — Windows genelindeki yardımcı düğme
-- [`docs/DECISION_LOG.md`](./docs/DECISION_LOG.md) — kalıcı kararlar ve gerekçeleri
-- [`docs/ROADMAP.md`](./docs/ROADMAP.md) — yol haritası
-
----
-
-## 🤖 Yapay Zekâ Geliştirme Araçları için Yönetişim
-
-Bu depo, Codex, Claude Code, Gemini CLI, GitHub Copilot, Cursor, Windsurf ve benzeri AI kodlama araçlarının **aynı ürün kurallarına** göre çalışmasını sağlayacak şekilde yapılandırılmıştır.
-
-**Talimat önceliği:**
-
-1. `AGENTS.md`
-2. `docs/DECISIONS.md`
-3. `docs/PRODUCT_REQUIREMENTS.md`
-4. `docs/DOMAIN_RULES.md`
-5. `docs/ARCHITECTURE.md`
-6. `docs/UI_SPEC.md`
-7. `docs/SECURITY_AND_AI_POLICY.md`
-8. `docs/TESTING_AND_ACCEPTANCE.md`
-9. Göreve özel kullanıcı talimatı
-10. Araç özel köprü dosyaları
-
-Çelişki varsa tahmin yürütülmez; değişiklik yapılmadan önce kullanıcıya bildirilir.
-
 **Araç köprüleri:**
 
 | Araç | Köprü dosyası |
