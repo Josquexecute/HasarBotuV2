@@ -11,3 +11,5 @@ Mevcut manuel API ve düzenleme kuralları korunur. Birleşik oluşturma, mevcut
 Dağıtımda `0049_eksist_sources` migration'ı uygulanmalıdır. Etkin bir depolama kökü ve çalışan File Agent gereklidir. Yükleme sınırı 10 MB / 10 PDF sayfasıdır. OCR worker'ı süre ve bellek sınırıyla, kurulu Türkçe dil verisiyle çalışır. Belgeler veritabanında kaynak kanıtı olarak saklanır; dosya sistemine kullanıcı kaynaklı yol yazılmaz.
 
 Regresyon testleri: `packages/domain/test/eksist.test.ts`, `services/api/test/eksist.test.ts`, `src/features/cases/CaseCreateModal.eksist.test.tsx` ve `src/features/cases/CaseCreateModal.eksist.integration.test.tsx`. Gerçek API/File Agent testleri `_test` ile biten ayrı bir `TEST_DATABASE_URL` gerektirir. API test paketi test şemasını sıfırlar; üretim bağlantısı kullanmayın. Örnek belge testi `eksist/` içindeki yerel örnekleri okur ve gerçek Eksist hesabına bağlanmaz.
+
+20 Eylül 2026 pilot bulguları, kurulu ortam engelleri ve yedekleme/geri dönüş prosedürü: [Eksist pilot doğrulaması](EKSIST_PILOT_2026-09-20.md). Yerel kontroller geçti; kurulu V2 ortamı ve pCloud sync bulunmadığından dağıtım kabulü henüz verilmedi.
