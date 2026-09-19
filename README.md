@@ -146,19 +146,6 @@ npm run package:win
 
 `apps/desktop/release/HasarBotu-Setup-<sürüm>.exe` çıktısı üretilir (imzasız, NSIS, kullanıcı bazlı kurulum).
 
-**Araç köprüleri:**
-
-| Araç | Köprü dosyası |
-|---|---|
-| Codex ve genel ajanlar | `AGENTS.md` |
-| Claude Code | `CLAUDE.md` |
-| Gemini CLI | `GEMINI.md` |
-| GitHub Copilot | `.github/copilot-instructions.md` |
-| Cursor | `.cursor/rules/hasarbotu-v2.mdc` |
-| Windsurf | `.windsurfrules` |
-
-Bu köprü dosyaları ana kuralları tekrar tanımlamaz; `AGENTS.md` ve `docs/` altındaki belgeleri kaynak kabul eder.
-
 ---
 
 ## 📄 Lisans
