@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu Değer Kaybı"
-  short_description: "Değer kaybı kural, kanıt ve onay güvenliği"
-  default_prompt: "Use $hasarbotu-value-loss to handle this value-loss task safely."

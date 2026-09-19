@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu E-posta"
-  short_description: "E-posta taslak, AI ve egress güvenliği"
-  default_prompt: "Use $hasarbotu-email to handle this email draft or handoff task."

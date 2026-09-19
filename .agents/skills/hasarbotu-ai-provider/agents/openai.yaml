@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu AI Sağlayıcısı"
-  short_description: "AI egress, bütçe ve kanıt güvenliği"
-  default_prompt: "Use $hasarbotu-ai-provider to implement or review this AI provider flow."

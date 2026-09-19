@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu File Agent"
-  short_description: "File Agent işlerini güvenli yürütme"
-  default_prompt: "Use $hasarbotu-file-agent to inspect or change this File Agent flow."

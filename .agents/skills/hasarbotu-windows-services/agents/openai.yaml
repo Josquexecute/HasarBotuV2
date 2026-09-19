@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu Windows Servisleri"
-  short_description: "Windows servis dağıtım ve işletim güvenliği"
-  default_prompt: "Use $hasarbotu-windows-services to plan or verify this Windows service task."

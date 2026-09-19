@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu PostgreSQL"
-  short_description: "PostgreSQL şema ve operasyon güvenliği"
-  default_prompt: "Use $hasarbotu-postgres to handle this PostgreSQL task safely."

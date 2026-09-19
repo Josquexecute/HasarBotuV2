@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu Test Kapısı"
-  short_description: "Kapsama göre doğru doğrulama kapılarını seçme"
-  default_prompt: "Use $hasarbotu-test-gate to select and run the right verification gates."

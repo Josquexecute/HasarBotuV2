@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu Karar Günlüğü"
-  short_description: "Karar ve proje durumu kayıt disiplini"
-  default_prompt: "Use $hasarbotu-decision-log to record this verified repository decision."

@@ -1,4 +1,0 @@
-interface:
-  display_name: "HasarBotu API E2E"
-  short_description: "Gerçek PostgreSQL tabanlı API E2E doğrulaması"
-  default_prompt: "Use $hasarbotu-api-e2e to verify this API flow end to end."
