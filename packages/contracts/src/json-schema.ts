@@ -144,23 +144,6 @@ import {
   emailAiRunsResponseSchema,
 } from './v1/email-ai/dto.js'
 import {
-  laborSheetCreateRequestSchema,
-  laborSheetReviseRequestSchema,
-} from './v1/labor/commands.js'
-import {
-  laborSheetResponseSchema,
-  laborSheetWorkspaceResponseSchema,
-} from './v1/labor/dto.js'
-import {
-  laborAiPlanRequestSchema,
-  laborAiStartRequestSchema,
-} from './v1/labor-ai/commands.js'
-import {
-  laborAiPlanResponseSchema,
-  laborAiRunResponseSchema,
-  laborAiRunsResponseSchema,
-} from './v1/labor-ai/dto.js'
-import {
   pertAssessmentCreateRequestSchema,
   pertAssessmentReviseRequestSchema,
 } from './v1/pert/commands.js'
@@ -169,10 +152,6 @@ import {
   pertAssessmentWorkspaceResponseSchema,
 } from './v1/pert/dto.js'
 import {
-  laborDictionaryQuerySchema,
-  laborDictionaryResponseSchema,
-} from './v1/labor-dictionary/dto.js'
-import {
   operationalAlertsQuerySchema,
   operationalAlertsResponseSchema,
 } from './v1/operational-alerts/dto.js'
@@ -180,30 +159,6 @@ import {
   caseVehicleProfileResponseSchema,
   caseVehicleProfileSaveRequestSchema,
 } from './v1/case-vehicle-profile/dto.js'
-import {
-  laborExcelProfileSaveRequestSchema,
-  laborExcelProfilesResponseSchema,
-  laborExcelProfileStatusRequestSchema,
-  laborExcelProfileCandidatesResponseSchema,
-  laborExcelProjectionResponseSchema,
-} from './v1/labor-excel-profile/dto.js'
-import {
-  laborAllocationAnalyzeRequestSchema,
-  laborAllocationApplicationsResponseSchema,
-  laborAllocationApplyPreviewRequestSchema,
-  laborAllocationApplyPreviewResponseSchema,
-  laborAllocationApplyRequestSchema,
-  laborAllocationApplyResponseSchema,
-  laborAllocationRunResponseSchema,
-  laborAllocationWorkspaceResponseSchema,
-} from './v1/labor-allocation-ai/dto.js'
-import {
-  laborWorkbookApplyApproveRequestSchema,
-  laborWorkbookApplyPreviewRequestSchema,
-} from './v1/labor-workbook-apply/commands.js'
-import {
-  laborWorkbookApplyResponseSchema,
-} from './v1/labor-workbook-apply/dto.js'
 
 /**
  * JSON Schema uretim hedefleri. Zod 4 yerlesik `z.toJSONSchema` ile uretilir;
@@ -327,39 +282,12 @@ export const JSON_SCHEMA_TARGETS = {
   'email-ai-plan-response': emailAiPlanResponseSchema,
   'email-ai-run-response': emailAiRunResponseSchema,
   'email-ai-runs-response': emailAiRunsResponseSchema,
-  'labor-sheet-create-request': laborSheetCreateRequestSchema,
-  'labor-sheet-revise-request': laborSheetReviseRequestSchema,
-  'labor-sheet-response': laborSheetResponseSchema,
-  'labor-sheet-workspace-response': laborSheetWorkspaceResponseSchema,
-  'labor-ai-plan-request': laborAiPlanRequestSchema,
-  'labor-ai-start-request': laborAiStartRequestSchema,
-  'labor-ai-plan-response': laborAiPlanResponseSchema,
-  'labor-ai-run-response': laborAiRunResponseSchema,
-  'labor-ai-runs-response': laborAiRunsResponseSchema,
   'pert-assessment-create-request': pertAssessmentCreateRequestSchema,
   'pert-assessment-revise-request': pertAssessmentReviseRequestSchema,
   'pert-assessment-response': pertAssessmentResponseSchema,
   'pert-assessment-workspace-response': pertAssessmentWorkspaceResponseSchema,
-  'labor-excel-profile-save-request': laborExcelProfileSaveRequestSchema,
-  'labor-excel-profiles-response': laborExcelProfilesResponseSchema,
-  'labor-excel-profile-status-request': laborExcelProfileStatusRequestSchema,
-  'labor-excel-profile-candidates-response': laborExcelProfileCandidatesResponseSchema,
-  'labor-excel-projection-response': laborExcelProjectionResponseSchema,
-  'labor-dictionary-query': laborDictionaryQuerySchema,
-  'labor-dictionary-response': laborDictionaryResponseSchema,
   'case-vehicle-profile-response': caseVehicleProfileResponseSchema,
   'case-vehicle-profile-save-request': caseVehicleProfileSaveRequestSchema,
-  'labor-allocation-analyze-request': laborAllocationAnalyzeRequestSchema,
-  'labor-allocation-applications-response': laborAllocationApplicationsResponseSchema,
-  'labor-allocation-apply-preview-request': laborAllocationApplyPreviewRequestSchema,
-  'labor-allocation-apply-preview-response': laborAllocationApplyPreviewResponseSchema,
-  'labor-allocation-apply-request': laborAllocationApplyRequestSchema,
-  'labor-allocation-apply-response': laborAllocationApplyResponseSchema,
-  'labor-allocation-run-response': laborAllocationRunResponseSchema,
-  'labor-allocation-workspace-response': laborAllocationWorkspaceResponseSchema,
-  'labor-workbook-apply-preview-request': laborWorkbookApplyPreviewRequestSchema,
-  'labor-workbook-apply-approve-request': laborWorkbookApplyApproveRequestSchema,
-  'labor-workbook-apply-response': laborWorkbookApplyResponseSchema,
   'operational-alerts-query': operationalAlertsQuerySchema,
   'operational-alerts-response': operationalAlertsResponseSchema,
   'v1-import-quarantines-query': v1ImportQuarantinesQuerySchema,

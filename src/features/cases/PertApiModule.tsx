@@ -214,7 +214,7 @@ export function PertApiModule({ item, source, onUnauthorized, port }: Props) {
 
         {!editing && (
           current === null
-            ? <p className="labor-empty">Bu dosya için henüz PERT değerlendirmesi oluşturulmadı. AI önerisi, eksper kanaati ve merkez kararı ayrı alanlardır; hiçbir sonuç açık onay olmadan kesinleşmez.</p>
+            ? <p className="assessment-empty">Bu dosya için henüz PERT değerlendirmesi oluşturulmadı. AI önerisi, eksper kanaati ve merkez kararı ayrı alanlardır; hiçbir sonuç açık onay olmadan kesinleşmez.</p>
             : (
               <div className="pert-decisions">
                 <section className="decision-card">
@@ -224,7 +224,7 @@ export function PertApiModule({ item, source, onUnauthorized, port }: Props) {
                     <div><dt>Rayiç Değer</dt><dd>{formatMinor(current.marketValueMinor)}</dd></div>
                     <div><dt>Hasar / Rayiç</dt><dd>{current.damageRatioPercent === null ? '—' : `%${current.damageRatioPercent}`}</dd></div>
                   </dl>
-                  {current.structuralNote !== null && <p className="labor-empty">Yapısal: {current.structuralNote}</p>}
+                  {current.structuralNote !== null && <p className="assessment-empty">Yapısal: {current.structuralNote}</p>}
                 </section>
                 <section className="decision-card">
                   <span className="eyebrow">Eksper kanaati</span>
@@ -241,7 +241,7 @@ export function PertApiModule({ item, source, onUnauthorized, port }: Props) {
         )}
 
         {editing && (
-          <div className="labor-editor pert-editor">
+          <div className="assessment-editor pert-editor">
             <div className="pert-editor__grid">
               <label className="form-field"><span>Süreç durumu</span>
                 <select value={workflowStatus} onChange={(event) => setWorkflowStatus(event.target.value as PertWorkflowStatusRecord)}>
@@ -286,11 +286,11 @@ export function PertApiModule({ item, source, onUnauthorized, port }: Props) {
                 <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Örnek: Eksper kanaati verildi" maxLength={500} />
               </label>
             )}
-            <label className="email-draft-confirm labor-confirm">
+            <label className="email-draft-confirm assessment-confirm">
               <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
               <span>Durum, ekonomik veriler, kanaat ve merkez kararını kontrol ettim; değerlendirmenin sürümlü olarak kaydedilmesini onaylıyorum.</span>
             </label>
-            <div className="labor-editor__actions">
+            <div className="assessment-editor__actions">
               <button className="button button--primary" type="button" onClick={save} disabled={busy !== '' || !confirmed}><Save size={15} /> {assessment === null ? 'Değerlendirmeyi Kaydet' : 'Yeni Sürümü Kaydet'}</button>
               <button className="button" type="button" onClick={() => { setEditing(false); setError(''); setNotice('') }} disabled={busy !== ''}>Vazgeç</button>
             </div>
@@ -298,18 +298,18 @@ export function PertApiModule({ item, source, onUnauthorized, port }: Props) {
         )}
 
         {!editing && canWrite && (
-          <div className="labor-editor__actions">
+          <div className="assessment-editor__actions">
             <button className="button button--primary" type="button" onClick={startEdit}>
               {assessment === null ? 'PERT Değerlendirmesi Oluştur' : 'Değerlendirmeyi Düzenle'}
             </button>
           </div>
         )}
         {!editing && !canWrite && (
-          <p className="labor-empty">{data.lifecycleStatus === 'closed' ? 'Kapalı dosyanın PERT değerlendirmesi salt okunurdur.' : 'PERT değerlendirmesini düzenleme yetkiniz yok.'}</p>
+          <p className="assessment-empty">{data.lifecycleStatus === 'closed' ? 'Kapalı dosyanın PERT değerlendirmesi salt okunurdur.' : 'PERT değerlendirmesini düzenleme yetkiniz yok.'}</p>
         )}
       </section>
 
-      <aside className="info-panel labor-side">
+      <aside className="info-panel assessment-side">
         <header><h2>Değerlendirme Bilgisi</h2><Scale size={16} /></header>
         {assessment === null
           ? <p>Değerlendirme kullanıcı tarafından oluşturulur. Eşik veya otomatik karar yoktur; oran yalnız türetilmiş bilgidir ve karar alanları insan onaylıdır.</p>
@@ -320,8 +320,8 @@ export function PertApiModule({ item, source, onUnauthorized, port }: Props) {
                 <div><dt>Durum</dt><dd>{STATUS_LABELS[assessment.currentVersion.workflowStatus]}</dd></div>
                 <div><dt>Kaydeden</dt><dd>{assessment.currentVersion.createdByDisplayName}</dd></div>
               </dl>
-              <h3 className="labor-side__title"><History size={14} /> Sürüm Geçmişi</h3>
-              <ul className="labor-history">
+              <h3 className="assessment-side__title"><History size={14} /> Sürüm Geçmişi</h3>
+              <ul className="assessment-history">
                 {assessment.versions.map((version) => (
                   <li key={version.id}>
                     <strong>Sürüm {version.assessmentVersion}</strong> · {STATUS_LABELS[version.workflowStatus]}

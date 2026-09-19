@@ -3,7 +3,6 @@ import { byteSizeSchema, sha256HexSchema } from '../documents/dto.js'
 import { fileOperationStrategySchema } from '../file-operations/dto.js'
 import { pdfExtractionResultSummarySchema } from '../pdf-text-extractions/dto.js'
 import { policyOcrResultSummarySchema } from '../policy-ocr/dto.js'
-import { idSchema, relativePathSchema, utcDateTimeSchema } from '../../common/primitives.js'
 
 /**
  * Agent iş sonucu bildirimi (Paket 14).
@@ -37,57 +36,6 @@ export const fileOperationResultSchema = z.strictObject({
 })
 export type FileOperationResult = z.infer<typeof fileOperationResultSchema>
 
-export const laborWorkbookPreviewResultSummarySchema = z.strictObject({
-  kind: z.literal('preview'),
-  operationId: idSchema,
-  version: z.literal('labor-workbook-write-plan/2.0.0'),
-  planHash: sha256HexSchema,
-  createdAt: utcDateTimeSchema,
-  relativeWorkbookPath: relativePathSchema,
-  sourceSha256: sha256HexSchema,
-  sourceSize: byteSizeSchema,
-  sourceModifiedIso: utcDateTimeSchema,
-  targetSheetName: z.string().min(1).max(120),
-  targetWorksheetPart: relativePathSchema,
-  observations: z.array(z.strictObject({
-    cell: z.string().regex(/^D(?:[2-9]|[1-9]\d{1,6})$/),
-    previousValue: z.string().max(240).nullable(),
-    newValue: z.string().min(1).max(240),
-    sourceRowHash: sha256HexSchema,
-  })).min(1).max(5_000),
-  changes: z.array(z.strictObject({
-    cell: z.string().regex(/^D(?:[2-9]|[1-9]\d{1,6})$/),
-    previousValue: z.string().max(240).nullable(),
-    newValue: z.string().min(1).max(240),
-    sourceRowHash: sha256HexSchema,
-  })).min(1).max(5_000),
-})
-
-export const laborWorkbookApplyResultSummarySchema = z.strictObject({
-  kind: z.literal('apply'),
-  operationId: idSchema,
-  version: z.literal('labor-workbook-write/1.0.0'),
-  planHash: sha256HexSchema,
-  relativeWorkbookPath: relativePathSchema,
-  targetSheetName: z.string().min(1).max(120),
-  cells: z.array(z.string().regex(/^D(?:[2-9]|[1-9]\d{1,6})$/)).min(1).max(5_000),
-  startSha256: sha256HexSchema,
-  resultSha256: sha256HexSchema,
-  backupFileName: z.string().min(1).max(255)
-    .regex(/^[^/\\:]+[.]bak[.]xlsx$/i)
-    .refine(
-      (value) => [...value].every((character) => character.charCodeAt(0) >= 0x20),
-      { error: 'backup_file_name_control_character' },
-    ),
-})
-
-export const laborWorkbookResultSummarySchema = z.discriminatedUnion('kind', [
-  laborWorkbookPreviewResultSummarySchema,
-  laborWorkbookApplyResultSummarySchema,
-])
-export type LaborWorkbookResultSummary =
-  z.infer<typeof laborWorkbookResultSummarySchema>
-
 export const jobResultRequestSchema = z.strictObject({
   outcome: z.enum(RESULT_OUTCOMES),
   observedHash: sha256HexSchema.optional(),
@@ -101,28 +49,9 @@ export const jobResultRequestSchema = z.strictObject({
   fileOperation: fileOperationResultSchema.optional(),
   pdfExtraction: pdfExtractionResultSummarySchema.optional(),
   policyOcr: policyOcrResultSummarySchema.optional(),
-  laborWorkbook: laborWorkbookResultSummarySchema.optional(),
 })
 export type JobResultRequest = z.infer<typeof jobResultRequestSchema>
 export type JobResultRequestInput = z.input<typeof jobResultRequestSchema>
-
-export const laborWorkbookAuditEventRequestSchema = z.strictObject({
-  phase: z.enum(['started', 'completed', 'failed']),
-  version: z.literal('labor-workbook-write/1.0.0'),
-  planHash: sha256HexSchema,
-  relativeWorkbookPath: relativePathSchema,
-  targetSheetName: z.string().min(1).max(120),
-  cells: z.array(z.string().regex(/^D(?:[2-9]|[1-9]\d{1,6})$/)).min(1).max(5_000),
-  approvedByUserId: idSchema,
-  approvedAt: utcDateTimeSchema,
-  startSha256: sha256HexSchema,
-  resultSha256: sha256HexSchema.nullable(),
-  backupFileName: z.string().min(1).max(255).nullable(),
-  errorCode: z.string().min(1).max(64).regex(/^[A-Z0-9_]+$/).nullable(),
-  occurredAt: utcDateTimeSchema,
-})
-export type LaborWorkbookAuditEventRequest =
-  z.infer<typeof laborWorkbookAuditEventRequestSchema>
 
 export const JOB_PROGRESS_PHASES = ['applying', 'verifying', 'cleanup', 'rendering', 'preprocessing', 'recognizing', 'normalizing', 'validating', 'ocr'] as const
 export const jobHeartbeatRequestSchema = z.strictObject({

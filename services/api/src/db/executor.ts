@@ -17,7 +17,9 @@ export type Queryable = pg.Pool | pg.PoolClient
 export async function withTransaction<T>(
   pool: pg.Pool,
   fn: (client: pg.PoolClient) => Promise<T>,
+  existingClient?: pg.PoolClient,
 ): Promise<T> {
+  if (existingClient !== undefined) return fn(existingClient)
   const client = await pool.connect()
   try {
     await client.query('BEGIN')

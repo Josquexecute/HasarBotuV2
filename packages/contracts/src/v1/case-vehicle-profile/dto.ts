@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import {
   CASE_VEHICLE_PROFILE_SCHEMA_VERSION,
-  MAX_LABOR_REVISION_REASON_LENGTH,
+  MAX_VEHICLE_REVISION_REASON_LENGTH,
   MAX_VEHICLE_CHASSIS_PREFIX_LENGTH,
   MAX_VEHICLE_EVIDENCE_REFERENCE_LENGTH,
   MAX_VEHICLE_MODEL_YEAR,
@@ -45,7 +45,7 @@ export const caseVehicleProfileSaveRequestSchema = z.strictObject({
   fields: caseVehicleProfileFieldsSchema,
   /** İlk sürümde null; sonraki sürümlerde beklenen mevcut sürüm. */
   expectedVersion: entityVersionSchema.nullable().default(null),
-  reason: boundedText(MAX_LABOR_REVISION_REASON_LENGTH).nullable().default(null),
+  reason: boundedText(MAX_VEHICLE_REVISION_REASON_LENGTH).nullable().default(null),
   confirmed: z.literal(true),
 })
 
@@ -63,7 +63,7 @@ export const caseVehicleProfileVersionSchema = z.strictObject({
   engineCode: z.string().min(2).max(24).nullable(),
   evidenceSource: z.enum(VEHICLE_EVIDENCE_SOURCES),
   evidenceReference: z.string().min(1).max(MAX_VEHICLE_EVIDENCE_REFERENCE_LENGTH).nullable(),
-  revisionReason: z.string().min(1).max(MAX_LABOR_REVISION_REASON_LENGTH).nullable(),
+  revisionReason: z.string().min(1).max(MAX_VEHICLE_REVISION_REASON_LENGTH).nullable(),
   createdByUserId: userIdSchema,
   createdAt: utcDateTimeSchema,
 })

@@ -5,7 +5,7 @@ export type CaseStage =
   | 'Araç / Servis Bekleniyor'
   | 'Ekspertiz Bekliyor'
   | 'Hasar Tespiti'
-  | 'Parça ve İşçilik'
+  | 'Onarım Takibi'
   | 'Onarım Onayı Bekleniyor'
   | 'Onarımda'
   | 'Raporlama'

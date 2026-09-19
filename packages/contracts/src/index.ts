@@ -156,7 +156,6 @@ export {
   AGENT_JOB_RESULT_ROUTE,
   AGENT_JOB_EXTRACTION_CHUNKS_ROUTE,
   AGENT_JOB_OCR_CHUNKS_ROUTE,
-  AGENT_JOB_LABOR_WORKBOOK_AUDIT_ROUTE,
   AGENTS_ROUTE,
   AGENT_DETAIL_ROUTE,
   AGENT_ID_HEADER,
@@ -174,8 +173,6 @@ export {
   fileOperationCleanupJobPayloadSchema,
   pdfTextExtractionJobPayloadSchema,
   policyOcrJobPayloadSchema,
-  laborWorkbookPreviewJobPayloadSchema,
-  laborWorkbookApplyJobPayloadSchema,
   claimedJobSchema,
   claimResponseSchema,
   heartbeatResponseSchema,
@@ -190,8 +187,6 @@ export {
   type JobStatus,
   type JobTargetType,
   type JobPayload,
-  type LaborWorkbookPreviewJobPayload,
-  type LaborWorkbookApplyJobPayload,
   type ClaimedJob,
   type ClaimResponse,
   type HeartbeatResponse,
@@ -206,10 +201,6 @@ export {
   RESULT_OUTCOMES,
   FILE_OPERATION_RESULT_PHASES,
   fileOperationResultSchema,
-  laborWorkbookPreviewResultSummarySchema,
-  laborWorkbookApplyResultSummarySchema,
-  laborWorkbookResultSummarySchema,
-  laborWorkbookAuditEventRequestSchema,
   jobResultRequestSchema,
   agentRegisterRequestSchema,
   agentUpdateRequestSchema,
@@ -217,8 +208,6 @@ export {
   type FileOperationResult,
   type JobResultRequest,
   type JobResultRequestInput,
-  type LaborWorkbookAuditEventRequest,
-  type LaborWorkbookResultSummary,
   type AgentRegisterRequest,
   type AgentUpdateRequest,
   JOB_PROGRESS_PHASES,
@@ -480,16 +469,11 @@ export * from './v1/case-operations/index.js'
 export * from './v1/fees/index.js'
 export * from './v1/email-drafts/index.js'
 export * from './v1/email-ai/index.js'
-export * from './v1/labor/index.js'
-export * from './v1/labor-ai/index.js'
 export * from './v1/pert/index.js'
-export * from './v1/labor-dictionary/index.js'
 export * from './v1/operational-alerts/index.js'
-export * from './v1/labor-allocation-ai/index.js'
 export * from './v1/case-vehicle-profile/index.js'
-export * from './v1/labor-excel-profile/index.js'
-export * from './v1/labor-workbook-apply/index.js'
 export * from './v1/case-vehicle-owners/index.js'
 export * from './v1/case-inventory/index.js'
 export * from './v1/users/index.js'
 export * from './v1/v1-import-quarantine/index.js'
+export * from './v1/eksist.js'

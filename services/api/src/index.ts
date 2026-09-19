@@ -11,7 +11,6 @@ export {
 } from './app.js'
 export {
   createConfiguredEmailAiProviderRegistry,
-  createConfiguredLaborAllocationProviderRegistry,
   createConfiguredPolicyAiProviderRegistry,
   startServer,
 } from './server.js'
@@ -74,20 +73,6 @@ export {
   type CaseVehicleProfileStore,
 } from './case-vehicle-profile/index.js'
 export {
-  LABOR_ALLOCATION_PROVIDER_OUTPUT_JSON_SCHEMA,
-  LABOR_ALLOCATION_RETRY_BACKOFF_MS,
-  LaborAllocationError,
-  LaborAllocationProviderExecutionError,
-  createDeterministicLaborAllocationProviderRegistry,
-  createGeminiLaborAllocationProvider,
-  createLaborAllocationProviderRegistry,
-  createLaborAllocationStore,
-  registerLaborAllocationRoutes,
-  type LaborAllocationProviderAdapter,
-  type LaborAllocationProviderRegistry,
-  type LaborAllocationStore,
-} from './labor-allocation-ai/index.js'
-export {
   createOperationalAlertStore,
   registerOperationalAlertRoutes,
   type OperationalAlertStore,
@@ -104,17 +89,6 @@ export {
   type EmailAiProviderResponse,
   type EmailAiProviderRegistry,
 } from './email-ai/index.js'
-export {
-  createDeterministicLaborAiProviderRegistry,
-  createLaborAiProviderRegistry,
-  createGeminiLaborAiProvider,
-  type DeterministicLaborAiProviderRegistry,
-  type LaborAiProviderAdapter,
-  type LaborAiProviderDescriptor,
-  type LaborAiProviderRequest,
-  type LaborAiProviderResponse,
-  type LaborAiProviderRegistry,
-} from './labor-ai/index.js'
 export {
   createTrafficValueLossReportStore,
   createTrafficValueLossStore,

@@ -9,10 +9,6 @@ import {
   validateCaseVehicleProfile,
   type CaseVehicleProfileInput,
 } from '../src/case-vehicle-profile.js'
-import {
-  normalizeLaborDamageRegion,
-  normalizeLaborPartCode,
-} from '../src/labor-sheet.js'
 
 function input(overrides: Partial<CaseVehicleProfileInput> = {}): CaseVehicleProfileInput {
   return {
@@ -118,24 +114,5 @@ describe('dış sağlayıcıya çıkan araç profili', () => {
       'brand', 'chassisPrefix', 'engineCode', 'evidenceSource',
       'model', 'modelYear', 'variant', 'vehicleClass',
     ])
-  })
-})
-
-describe('işçilik satırı kanıt alanları', () => {
-  it('parça kodu kanonik büyük harfe çevrilir', () => {
-    expect(normalizeLaborPartCode(' rn-7701 ab ')).toBe('RN-7701AB')
-    expect(normalizeLaborPartCode('7701.478.104')).toBe('7701.478.104')
-    expect(normalizeLaborPartCode('')).toBeNull()
-    // Serbest açıklama parça kodu değildir.
-    expect(normalizeLaborPartCode('ön tampon kaplaması')).toBeNull()
-    expect(normalizeLaborPartCode('A'.repeat(41))).toBeNull()
-  })
-
-  it('hasar bölgesi sınırlandırılmış serbest metindir', () => {
-    expect(normalizeLaborDamageRegion('  Ön   sol çamurluk ')).toBe('Ön sol çamurluk')
-    expect(normalizeLaborDamageRegion('')).toBeNull()
-    expect(normalizeLaborDamageRegion('a'.repeat(81))).toBeNull()
-    // Uydurma enum yoktur: ofis kendi terimini yazabilir.
-    expect(normalizeLaborDamageRegion('Arka tavan kuşağı')).toBe('Arka tavan kuşağı')
   })
 })

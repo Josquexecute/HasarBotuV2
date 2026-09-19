@@ -14,7 +14,7 @@ const STAGE_LABELS: Record<CaseStageDto, CaseStage> = {
   vehicle_or_service_pending: 'Araç / Servis Bekleniyor',
   inspection_pending: 'Ekspertiz Bekliyor',
   damage_assessment: 'Hasar Tespiti',
-  parts_and_labor: 'Parça ve İşçilik',
+  parts_and_labor: 'Onarım Takibi',
   repair_approval_pending: 'Onarım Onayı Bekleniyor',
   under_repair: 'Onarımda',
   reporting: 'Raporlama',

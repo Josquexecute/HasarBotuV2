@@ -4,6 +4,7 @@ import { registerHealthRoute } from './routes/index.js'
 import { registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
 import { registerCasesRoutes } from './cases/routes.js'
 import { registerCasesWriteRoutes } from './cases/write-routes.js'
+import { registerEksistRoutes } from './eksist/routes.js'
 import { registerAuditRoutes } from './audit/index.js'
 import { registerStorageRoutes } from './storage/index.js'
 import { registerDocumentRoutes } from './documents/index.js'
@@ -24,21 +25,11 @@ import { registerCaseOperationsRoutes } from './case-operations/index.js'
 import { registerFeeRoutes } from './fees/index.js'
 import { registerEmailDraftRoutes } from './email-drafts/index.js'
 import { registerEmailAiRoutes, type EmailAiProviderRegistry } from './email-ai/index.js'
-import { registerLaborRoutes } from './labor/index.js'
-import { registerLaborAiRoutes, type LaborAiProviderRegistry } from './labor-ai/index.js'
 import { registerPertRoutes } from './pert/index.js'
-import { registerLaborDictionaryRoutes } from './labor-dictionary/index.js'
 import { registerOperationalAlertRoutes } from './operational-alerts/index.js'
 import { registerCaseVehicleProfileRoutes } from './case-vehicle-profile/index.js'
 import { registerCaseVehicleOwnersRoutes } from './case-vehicle-owners/index.js'
 import { registerCaseInventoryRoutes } from './case-inventory/index.js'
-import { registerLaborExcelProfileRoutes } from './labor-excel-profile/index.js'
-import {
-  createDeterministicLaborAllocationProviderRegistry,
-  registerLaborAllocationRoutes,
-  type LaborAllocationProviderRegistry,
-} from './labor-allocation-ai/index.js'
-import { registerLaborWorkbookApplyRoutes } from './labor-workbook-apply/index.js'
 import { registerUserRoutes } from './users/index.js'
 import { registerV1ImportQuarantineRoutes } from './v1-import-quarantine/index.js'
 import { systemClock, type Clock } from './clock.js'
@@ -87,11 +78,6 @@ export interface BuildAppOptions {
   readonly policyAiProviders?: PolicyAiProviderRegistry
   /** Paket 42 e-posta AI provider kaydı. Varsayılan boştur; e-posta çekirdeği AI olmadan çalışır. */
   readonly emailAiProviders?: EmailAiProviderRegistry
-  /** Paket 44 işçilik AI provider kaydı. Varsayılan boştur; İşçilik çekirdeği AI olmadan çalışır. */
-  readonly laborAiProviders?: LaborAiProviderRegistry
-  /** Paket 54: dağıtım AI sağlayıcı kaydı; testler kontrollü harness enjekte eder. */
-  readonly laborAllocationProviders?: LaborAllocationProviderRegistry
-  readonly laborAllocationProviderId?: string
 }
 
 /**
@@ -133,6 +119,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerAuthRoutes(app, options.auth)
     registerCasesRoutes(app, { pool: options.auth.pool })
     registerCasesWriteRoutes(app, { pool: options.auth.pool })
+    registerEksistRoutes(app, { pool: options.auth.pool })
     registerAuditRoutes(app, { pool: options.auth.pool })
     registerStorageRoutes(app, { pool: options.auth.pool })
     registerDocumentRoutes(app, { pool: options.auth.pool })
@@ -172,18 +159,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       clock: options.clock ?? systemClock,
       providers: options.emailAiProviders ?? { get: () => undefined, list: () => [] },
     })
-    registerLaborRoutes(app, {
-      pool: options.auth.pool,
-    })
-    registerLaborAiRoutes(app, {
-      pool: options.auth.pool,
-      clock: options.clock ?? systemClock,
-      providers: options.laborAiProviders ?? { get: () => undefined, list: () => [] },
-    })
     registerPertRoutes(app, {
-      pool: options.auth.pool,
-    })
-    registerLaborDictionaryRoutes(app, {
       pool: options.auth.pool,
     })
     registerOperationalAlertRoutes(app, {
@@ -193,16 +169,6 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerCaseVehicleProfileRoutes(app, { pool: options.auth.pool })
     registerCaseVehicleOwnersRoutes(app, { pool: options.auth.pool })
     registerCaseInventoryRoutes(app, { pool: options.auth.pool, clock: options.clock ?? systemClock })
-    registerLaborExcelProfileRoutes(app, { pool: options.auth.pool })
-    registerLaborAllocationRoutes(app, {
-      pool: options.auth.pool,
-      providers: options.laborAllocationProviders
-        ?? createDeterministicLaborAllocationProviderRegistry(),
-      ...(options.laborAllocationProviderId === undefined
-        ? {}
-        : { providerId: options.laborAllocationProviderId }),
-    })
-    registerLaborWorkbookApplyRoutes(app, { pool: options.auth.pool })
     registerUserRoutes(app, { pool: options.auth.pool })
     registerV1ImportQuarantineRoutes(app, { pool: options.auth.pool })
   }

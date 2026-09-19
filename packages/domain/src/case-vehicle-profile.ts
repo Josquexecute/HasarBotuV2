@@ -31,6 +31,7 @@ export const VEHICLE_CLASSES = [
 ] as const
 export type VehicleClass = (typeof VEHICLE_CLASSES)[number]
 
+export const MAX_VEHICLE_REVISION_REASON_LENGTH = 500
 export const MAX_VEHICLE_TEXT_LENGTH = 60
 export const MAX_VEHICLE_EVIDENCE_REFERENCE_LENGTH = 120
 /** Şasi PREFIX'i: WMI+VDS aralığı. 17 haneli tam VIN kabul edilmez. */

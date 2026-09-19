@@ -48,7 +48,7 @@ const STAGE_CODES: Record<CaseStage, string> = {
   'Araç / Servis Bekleniyor': 'vehicle_or_service_pending',
   'Ekspertiz Bekliyor': 'inspection_pending',
   'Hasar Tespiti': 'damage_assessment',
-  'Parça ve İşçilik': 'parts_and_labor',
+  'Onarım Takibi': 'parts_and_labor',
   'Onarım Onayı Bekleniyor': 'repair_approval_pending',
   Onarımda: 'under_repair',
   Raporlama: 'reporting',

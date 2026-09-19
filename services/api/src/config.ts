@@ -61,13 +61,6 @@ export interface ApiConfig {
    * ile kaydedilir. API key hiçbir DTO/log/audit yüzeyine taşınmaz.
    */
   readonly geminiPolicyProvider?: GeminiPolicyProviderConfig
-  /**
-   * Paket 55: işçilik dağıtımı için Gemini opt-in'i. Ayrı bayrakla açılır ki
-   * poliçe analizi açık diye dağıtım egress'i kendiliğinden açılmasın.
-   */
-  readonly geminiLaborAllocationProvider?: GeminiPolicyProviderConfig
-  /** Deterministik dağıtım harness'i yalnız açık izinle kullanılabilir. */
-  readonly laborAllocationAllowDeterministicProviders: boolean
 }
 
 /** Yapilandirma hatasi: alan adi + kural tasir, deger tasimaz. */
@@ -200,53 +193,6 @@ function parseGeminiPolicyProvider(env: Readonly<Record<string, string | undefin
   }
 }
 
-/**
- * Paket 55 — Gemini işçilik dağıtım sağlayıcısı opt-in'i. Anahtar YALNIZ süreç
- * ortamından okunur; hiçbir zaman veritabanına yazılmaz. Opt-in yoksa adapter
- * hiç kurulmaz ve dış çağrı imkânsızdır.
- */
-function parseGeminiLaborAllocationProvider(
-  env: Readonly<Record<string, string | undefined>>,
-): GeminiPolicyProviderConfig | undefined {
-  const enabled = env.GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED
-  if (enabled === undefined || enabled === 'false') return undefined
-  if (enabled !== 'true') {
-    throw new ConfigError('GEMINI_LABOR_ALLOCATION_PROVIDER_ENABLED', 'expected true or false.')
-  }
-  const apiKey = normalizeGeminiApiKey(env.GEMINI_API_KEY)
-  if (apiKey === null) {
-    throw new ConfigError('GEMINI_API_KEY', 'expected a non-empty server secret within the safe length limit.')
-  }
-  return {
-    apiKey,
-    modelId: parseGeminiModel(env.GEMINI_LABOR_ALLOCATION_MODEL),
-    maximumInputCharacters: 50_000,
-    maximumOutputSize: 100_000,
-    maximumOutputTokens: env.GEMINI_LABOR_ALLOCATION_MAX_OUTPUT_TOKENS === undefined
-      ? 8_192
-      : parsePositiveInteger(
-        'GEMINI_LABOR_ALLOCATION_MAX_OUTPUT_TOKENS',
-        env.GEMINI_LABOR_ALLOCATION_MAX_OUTPUT_TOKENS,
-        100_000,
-      ),
-  }
-}
-
-/**
- * Deterministik harness üretimde sessizce devreye giremez: yalnız bu bayrak
- * açıkça `true` iken kayda eklenir.
- */
-function parseDeterministicAllocationAllowed(
-  env: Readonly<Record<string, string | undefined>>,
-): boolean {
-  const raw = env.LABOR_ALLOCATION_ALLOW_DETERMINISTIC_PROVIDERS
-  if (raw === undefined || raw === 'false') return false
-  if (raw !== 'true') {
-    throw new ConfigError('LABOR_ALLOCATION_ALLOW_DETERMINISTIC_PROVIDERS', 'expected true or false.')
-  }
-  return true
-}
-
 function parseOpenAiPolicyProvider(env: Readonly<Record<string, string | undefined>>): OpenAiPolicyProviderConfig | undefined {
   const fields = [env.OPENAI_API_KEY, env.OPENAI_POLICY_MODEL, env.OPENAI_POLICY_INPUT_COST_MINOR_PER_MILLION, env.OPENAI_POLICY_OUTPUT_COST_MINOR_PER_MILLION, env.OPENAI_POLICY_MAX_OUTPUT_TOKENS]
   if (fields.every((value) => value === undefined || value.length === 0)) return undefined
@@ -277,14 +223,6 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
   }
   const openAiPolicyProvider = parseOpenAiPolicyProvider(env)
   const geminiPolicyProvider = parseGeminiPolicyProvider(env)
-  const geminiLaborAllocationProvider = parseGeminiLaborAllocationProvider(env)
-  const laborAllocationAllowDeterministicProviders = parseDeterministicAllocationAllowed(env)
-  if (nodeEnv === 'production' && laborAllocationAllowDeterministicProviders) {
-    throw new ConfigError(
-      'LABOR_ALLOCATION_ALLOW_DETERMINISTIC_PROVIDERS',
-      'deterministic labor allocation providers are not allowed in production.',
-    )
-  }
   const host = parseHost(env.HOST)
   return {
     host,
@@ -292,10 +230,8 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
     logLevel: parseLogLevel(env.LOG_LEVEL),
     nodeEnv,
     cookieSecure: parseCookieSecure(env, nodeEnv, host),
-    laborAllocationAllowDeterministicProviders,
     ...(databaseUrl !== undefined ? { databaseUrl } : {}),
     ...(openAiPolicyProvider !== undefined ? { openAiPolicyProvider } : {}),
     ...(geminiPolicyProvider !== undefined ? { geminiPolicyProvider } : {}),
-    ...(geminiLaborAllocationProvider !== undefined ? { geminiLaborAllocationProvider } : {}),
   }
 }

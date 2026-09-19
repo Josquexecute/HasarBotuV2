@@ -13,7 +13,6 @@ const REQUIRED_LAZY_CHUNKS = [
   'TrafficValueLossApiModule-',
   'CaseOperationsApiModule-',
   'EmailDraftApiModule-',
-  'LaborApiModule-',
   'PertApiModule-',
 ]
 

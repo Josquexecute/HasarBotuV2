@@ -14,7 +14,7 @@
 
 ## 📋 Genel Bakış
 
-HasarBotu V2, **Baran Global Ekspertiz** için geliştirilen; trafik ve kasko dosyalarının ihbar aşamasından kapanışa kadar tüm sürecini yöneten profesyonel bir operasyon uygulamasıdır. Dosya takibi, evrak/fotoğraf doğrulaması, işçilik hesaplaması, ağır hasar (PERT) değerlendirmesi, değer kaybı hesabı ve raporlama tek bir çatı altında toplanır.
+HasarBotu V2, **Baran Global Ekspertiz** için geliştirilen; trafik ve kasko dosyalarının ihbar aşamasından kapanışa kadar tüm sürecini yöneten profesyonel bir operasyon uygulamasıdır. Dosya takibi, evrak/fotoğraf doğrulaması, ağır hasar (PERT) değerlendirmesi, değer kaybı hesabı ve raporlama tek bir çatı altında toplanır.
 
 Uygulama **yalnız iki dosya türünü** yönetir: **Trafik** ve **Kasko**. Değer Kaybı, Trafik dosyasında zorunlu, Kasko dosyasında isteğe bağlı bir modüldür — ayrı bir dosya türü değildir.
 
@@ -24,10 +24,9 @@ Uygulama **yalnız iki dosya türünü** yönetir: **Trafik** ve **Kasko**. Değ
 |---|---|
 | **Durum Panosu** | Operasyonel özet ve uyarılar |
 | **Dosyalar** | Kompakt, özelleştirilebilir dosya listesi ve hızlı detay paneli |
-| **Dosya Detayı** | Özet, Operasyon, Evrak/Fotoğraf, İşçilik, Ağır Hasar, Değer Kaybı, Raporlar, E-postalar, Geçmiş sekmeleri |
+| **Dosya Detayı** | Özet, Operasyon, Evrak/Fotoğraf, Ağır Hasar, Değer Kaybı, Raporlar, E-postalar, Geçmiş sekmeleri |
 | **Koşullu Evrak Kontrolü** | Dosya türüne göre otomatik zorunlu/opsiyonel evrak değerlendirmesi |
 | **Zorunlu Kasko Kontrolü** | Kasko dosyalarında 7 zorunlu, kanıt tabanlı kontrol; tamamlanmadan kapanış engellenir |
-| **AI İşçilik / Excel** | Föy analizi, kanıt tabanlı öneri, kullanıcı onaylı uygulama |
 | **Ağır Hasar / PERT** | Kullanıcı kontrollü ekonomik değerlendirme |
 | **Değer Kaybı** | Sürümlü, kanıtlı hesap ve rapor üretimi |
 | **Mevzuat ve AI Yardımcısı** | Poliçe analizi, kanıt referanslı kural yorumlama |
@@ -35,7 +34,7 @@ Uygulama **yalnız iki dosya türünü** yönetir: **Trafik** ve **Kasko**. Değ
 
 ### 🔒 AI güvenlik sınırı
 
-AI bu uygulamada yalnız **karar desteği** sağlar. Dosya kapatma, klasör taşıma, Excel'e yazma, kapanma ücreti onayı, PERT/Değer Kaybı kesinleştirmesi gibi hiçbir kritik işlem kullanıcı onayı olmadan gerçekleşmez. Her AI sonucu mümkün olduğunda **sonuç + gerekçe + kaynak belge + sayfa + güven seviyesi** ile birlikte sunulur.
+AI bu uygulamada yalnız **karar desteği** sağlar. Dosya kapatma, klasör taşıma, kapanma ücreti onayı, PERT/Değer Kaybı kesinleştirmesi gibi hiçbir kritik işlem kullanıcı onayı olmadan gerçekleşmez. Her AI sonucu mümkün olduğunda **sonuç + gerekçe + kaynak belge + sayfa + güven seviyesi** ile birlikte sunulur.
 
 ---
 
@@ -157,3 +156,7 @@ Bu yazılım **Baran Global Ekspertiz**'in özel mülkiyetindedir. Tüm hakları
 **© 2026 Baran Global Ekspertiz** — Tüm hakları saklıdır.
 
 </div>
+
+İşçilik föyü, AI dağıtımı/öğrenmesi ve işçilik Excel şablonu/yazımı kaldırılmıştır.
+Eski veritabanı migration’ları ve kayıtları korunur; eski işçilik işleri artık agent tarafından alınmaz.
+Değer kaybındaki onarım bedeli, poliçe kapsam alanları ve genel Excel dışa aktarma korunur.

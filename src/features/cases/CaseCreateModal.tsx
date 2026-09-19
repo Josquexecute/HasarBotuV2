@@ -6,6 +6,11 @@ import { CaseCommandError, createHttpCaseCommandAdapter, type CaseCommandPort, t
 import type { CaseReferenceDataPort } from '../../data/ports'
 import { useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseStageCode } from '../../types/case'
+import type { QuickCaseCreate } from '@hasarbotu/contracts'
+import { matchEksistReference } from '@hasarbotu/domain'
+import { createEksistPort, type EksistPort, type EksistSource, type QuickCreation } from '../../data/eksistPort'
+import { createHttpWorkspaceCommandAdapter, type WorkspaceCommandPort, type WorkspaceRootRecord } from '../../data/workspacePort'
+import { EksistImportPanel } from './EksistImportPanel'
 import {
   CASE_STAGE_OPTIONS,
   commandErrorMessage,
@@ -23,6 +28,8 @@ interface CaseCreateModalProps {
   readonly onUnauthorized: () => void
   readonly commandPort?: CaseCommandPort
   readonly referencePort?: CaseReferenceDataPort
+  readonly eksistPort?: EksistPort
+  readonly workspacePort?: WorkspaceCommandPort
 }
 
 interface StableAttempt {
@@ -34,12 +41,12 @@ function FieldError({ message }: { readonly message?: string }) {
   return message === undefined ? null : <span className="form-field__error">{message}</span>
 }
 
-export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandPort, referencePort }: CaseCreateModalProps) {
+export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandPort, referencePort, eksistPort, workspacePort }: CaseCreateModalProps) {
   const navigate = useNavigate()
   const commands = useMemo(() => commandPort ?? createHttpCaseCommandAdapter(), [commandPort])
   const submittingRef = useRef(false)
   const attemptRef = useRef<StableAttempt | null>(null)
-  const [caseType, setCaseType] = useState<'traffic' | 'casco'>('traffic')
+  const [caseType, setCaseType] = useState<'traffic' | 'casco' | ''>('traffic')
   const [plate, setPlate] = useState('')
   const [notificationFormNumber, setNotificationFormNumber] = useState('')
   const [insurerClaimNumber, setInsurerClaimNumber] = useState('')
@@ -60,6 +67,72 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
   const [submitting, setSubmitting] = useState(false)
   const [generalError, setGeneralError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({})
+  const canProvision = currentUser.roles.some(role => ['admin', 'expert', 'case_manager'].includes(role))
+  const quickMode = canProvision && (commandPort === undefined || eksistPort !== undefined)
+  const eksist = useMemo(() => eksistPort ?? createEksistPort(), [eksistPort])
+  const workspace = useMemo(() => workspacePort ?? createHttpWorkspaceCommandAdapter(), [workspacePort])
+  const [roots, setRoots] = useState<readonly WorkspaceRootRecord[]>([])
+  const [rootKey, setRootKey] = useState('')
+  const [source, setSource] = useState<EksistSource | null>(null)
+  const [reference, setReference] = useState('')
+  const [unresolved, setUnresolved] = useState<Record<string, string>>({})
+  const [brand, setBrand] = useState(''), [model, setModel] = useState(''), [modelYear, setModelYear] = useState('')
+  const [vehicleClass, setVehicleClass] = useState('')
+  const [creation, setCreation] = useState<QuickCreation | null>(null)
+  const [locked, setLocked] = useState(false)
+  const [extracting, setExtracting] = useState(false)
+  const quickAttempt = useRef<{ input: QuickCaseCreate; key: string } | null>(null)
+  const destination = useRef<'detail' | 'list'>('detail')
+
+  useEffect(() => {
+    if (!quickMode) return
+    let cancelled = false
+    workspace.listActiveRoots().then(items => { if (!cancelled) { setRoots(items); if (items.length === 1) setRootKey(items[0]!.rootKey) } }).catch(() => { if (!cancelled) setGeneralError('Çalışma klasörü kökleri yüklenemedi. Formu yeniden açıp deneyin.') })
+    return () => { cancelled = true }
+  }, [quickMode, workspace])
+
+  useEffect(() => {
+    if (!creation) return
+    if (creation.provisioning?.status === 'ready' && !creation.duplicate) {
+      onClose()
+      navigate(destination.current === 'list' ? '/dosyalar' : `/dosyalar/${creation.case.caseId}`, { replace: true, state: { creationResult: { caseId: creation.case.caseId, officeNumber: creation.case.officeNumber, plate: creation.case.plate } } })
+      return
+    }
+    if (!creation.provisioning || !['queued', 'approved', 'applying', 'verifying'].includes(creation.provisioning.status)) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      workspace.readPlan(creation.case.caseId, creation.provisioning!.id).then(provisioning => { if (!cancelled) setCreation({ ...creation, provisioning }) }).catch(() => {
+        if (!cancelled) { setGeneralError('Dosya kaydedildi; klasör durumu okunamadı. Yeniden deneme aynı kaydı kullanır.'); setCreation({ ...creation, provisioning: null }) }
+      })
+    }, 1000)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [creation, workspace, navigate, onClose])
+
+  function imported(value: EksistSource) {
+    const data = value.extraction, refs = referenceData.references
+    setSource(value); setReference(data.reference); setPlate(data.plate); setInsurerClaimNumber(data.claimNumber); setLossDate(data.lossDate)
+    setCaseType(data.caseType ?? ''); setBrand(data.brand); setModel(data.model); setModelYear(data.modelYear); setVehicleClass(data.vehicleClass)
+    const issues: Record<string, string> = {}
+    if (!data.caseType) issues.caseType = 'Ürün eşleşmedi. Dosya türünü seçin.'
+    const matches = [
+      { field: 'insurerId', value: data.insurer, options: refs?.insurers ?? [], set: setInsurerId },
+      { field: 'serviceId', value: data.service, options: refs?.services ?? [], set: setServiceId },
+      { field: 'expertUserId', value: data.expert, options: (refs?.experts ?? []).map(item => ({ id: item.id, name: item.displayName })), set: setExpertUserId },
+    ]
+    for (const item of matches) {
+      const matched = matchEksistReference(item.value, item.options, item.field === 'insurerId')
+      item.set(matched ?? '')
+      if (item.value && !matched) issues[item.field] = `Kaynak: ${item.value}. Mevcut kaydı seçin veya eşleştirmeden saklayın.`
+    }
+    const conflictFields: Record<string, string> = { urun: 'caseType', plaka: 'plate', hasardosyano: 'insurerClaimNumber', hasarzamani: 'lossDate', hasartarihi: 'lossDate', talepislemrefno: 'reference', sigortasirketi: 'insurerId', tamirhaneadunvan: 'serviceId', eksperadsoyad: 'expertUserId', marka: 'brand', aractipi: 'model', modelyili: 'modelYear', aractarifegrubu: 'vehicleClass' }
+    for (const conflict of data.conflicts) if (conflictFields[conflict]) issues[conflictFields[conflict]!] = 'Kaynakta birden fazla değer var. Alanı kontrol ederek düzeltin.'
+    setUnresolved(issues); setFieldErrors(issues)
+  }
+
+  function resolved(field: string) {
+    setUnresolved(previous => { const next = { ...previous }; delete next[field]; return next })
+    setFieldErrors(previous => { const next = { ...previous }; delete next[field]; return next })
+  }
 
   useEffect(() => {
     if (referenceData.status === 'unauthorized') onUnauthorized()
@@ -67,9 +140,12 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (submittingRef.current) return
+    if (submittingRef.current || extracting) return
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
+    destination.current = submitter?.value === 'list' ? 'list' : 'detail'
 
     const canonicalPlate = normalizePlateInput(plate)
+    if (caseType === '') { setFieldErrors({ ...unresolved, caseType: 'Dosya türünü seçin.' }); return }
     if (canonicalPlate === '') {
       setFieldErrors({ plate: 'Plaka zorunludur.' })
       return
@@ -88,6 +164,31 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
       ...(followUpDate === '' ? {} : { followUpDate }),
       ...(lossDate === '' ? {} : { lossDate }),
       ...(notificationDate === '' ? {} : { notificationDate }),
+    }
+    if (quickMode) {
+      if (!quickAttempt.current) {
+        const errors: Record<string, string> = { ...unresolved }
+        if (!notificationDate) errors.notificationDate = 'Çalışma klasörü için ihbar tarihi zorunludur. Atama tarihi ihbar tarihi değildir.'
+        if (!rootKey) errors.storageRootKey = 'Çalışma klasörü konumunu seçin.'
+        if (source && !/^[A-Za-z0-9/-]{1,80}$/.test(reference.trim())) errors.reference = 'Eksist talep referansını kontrol edin.'
+        const hasVehicle = Boolean(brand.trim() && model.trim() && modelYear && vehicleClass)
+        if (modelYear && (!/^\d{4}$/.test(modelYear) || Number(modelYear) < 1950 || Number(modelYear) > 2100)) errors.modelYear = 'Geçerli model yılı girin veya isteğe bağlı alanı boş bırakın.'
+        if (Object.keys(errors).length) { setFieldErrors(errors); return }
+        quickAttempt.current = { key: makeSubmissionKey(), input: { case: { ...input, workflowStage: workflowStage as Exclude<CaseStageCode, 'closed'>, notificationDate }, storageRootKey: rootKey,
+          ...(source ? { source: { id: source.id, reference: reference.trim(), ...(!hasVehicle ? { vehicleDraft: { brand, model, modelYear, vehicleClass } } : {}) } } : {}),
+          ...(hasVehicle ? { vehicle: { brand: brand.trim(), model: model.trim(), modelYear: Number(modelYear), vehicleClass: vehicleClass as NonNullable<QuickCaseCreate['vehicle']>['vehicleClass'], variant: null, chassisPrefix: null, engineCode: null, evidenceSource: 'insurer_record', evidenceReference: source ? `Eksist ${reference.trim()}` : null } } : {}),
+        } }
+      }
+      submittingRef.current = true; setSubmitting(true); setLocked(true); setGeneralError('')
+      const attempt = quickAttempt.current!
+      try { setCreation(await eksist.create(attempt.input, attempt.key)) }
+      catch (error) {
+        const safe = error instanceof CaseCommandError ? error : new CaseCommandError('unavailable', 'Unknown failure')
+        setGeneralError(commandErrorMessage(safe)); setFieldErrors(commandFieldMessages(safe))
+        if (safe.kind === 'validation' || safe.kind === 'unknown_reference') { quickAttempt.current = null; setLocked(false) }
+        if (safe.kind === 'unauthorized') onUnauthorized()
+      } finally { submittingRef.current = false; setSubmitting(false) }
+      return
     }
     const fingerprint = JSON.stringify(input)
     try {
@@ -141,26 +242,43 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
           <div className="modal__body case-form-scroll">
             <div className="case-form-note"><CheckCircle2 size={16} /><span>Ofis dosya numarası backend tarafından otomatik atanır. Çift gönderim aynı idempotency anahtarıyla korunur.</span></div>
             {generalError && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{generalError}</span></div>}
+            {creation && <div role="status" className="case-form-note">{creation.duplicate ? 'Bu Eksist talebi zaten aktarılmış. Yeni dosya oluşturulmadı.' : `Dosya ${creation.case.officeNumber} kaydedildi.`} {creation.provisioning?.status === 'ready' ? 'Çalışma klasörü doğrulandı.' : creation.provisioning?.status === 'failed' ? `Klasör oluşturulamadı (${creation.provisioning.lastErrorCode ?? 'hata'}). Yeniden deneme aynı dosya ve klasörü kullanır.` : 'Çalışma klasörü henüz doğrulanmadı; işlem tamamlanmış sayılmıyor.'}
+              {creation.duplicate && <button type="button" onClick={() => { onClose(); navigate(`/dosyalar/${creation.case.caseId}`) }}>Mevcut dosyayı aç</button>}
+            </div>}
+            {quickMode && <EksistImportPanel port={eksist} onImported={imported} disabled={locked || submitting || referenceData.status !== 'ok'} onUnauthorized={onUnauthorized} onBusyChange={setExtracting} />}
             {referenceData.status === 'loading' && <div className="case-form-note" role="status"><LoaderCircle className="spin" size={16} /><span>Aktif referans listeleri yükleniyor…</span></div>}
             {(referenceData.status === 'unavailable' || referenceData.status === 'unauthorized') && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{referenceData.status === 'unauthorized' ? 'Referanslar için yeniden giriş gerekli.' : 'Referans listeleri yüklenemedi; sahte seçenek kullanılmadı.'}</span><button className="button button--secondary" type="button" onClick={referenceData.reload}>Yeniden Dene</button></div>}
-            <div className="case-form-grid">
-              <label className="form-field"><span>Dosya türü *</span><select value={caseType} onChange={(event) => setCaseType(event.target.value as 'traffic' | 'casco')}><option value="traffic">Trafik</option><option value="casco">Kasko</option></select><FieldError message={fieldErrors.caseType} /></label>
-              <label className="form-field"><span>Plaka *</span><input autoFocus value={plate} onChange={(event) => setPlate(event.target.value)} onBlur={() => setPlate(normalizePlateInput(plate))} placeholder="34 MPA 764" autoComplete="off" aria-invalid={fieldErrors.plate !== undefined} /><FieldError message={fieldErrors.plate} /></label>
+            <fieldset disabled={locked || submitting || extracting} className="case-form-grid" onChange={event => { const field = (event.target as HTMLElement).closest('label')?.getAttribute('data-field'); if (field) resolved(field) }}>
+              <label className="form-field" data-field="caseType"><span>Dosya türü *</span><select value={caseType} onChange={(event) => setCaseType(event.target.value as 'traffic' | 'casco')}><option value="" disabled>Seçin</option><option value="traffic">Trafik</option><option value="casco">Kasko</option></select><FieldError message={fieldErrors.caseType} /></label>
+              <label className="form-field" data-field="plate"><span>Plaka *</span><input autoFocus value={plate} onChange={(event) => setPlate(event.target.value)} onBlur={() => setPlate(normalizePlateInput(plate))} placeholder="34 MPA 764" autoComplete="off" aria-invalid={fieldErrors.plate !== undefined} /><FieldError message={fieldErrors.plate} /></label>
               <label className="form-field"><span>İhbar numarası</span><input value={notificationFormNumber} onChange={(event) => setNotificationFormNumber(event.target.value)} autoComplete="off" aria-invalid={fieldErrors.notificationFormNumber !== undefined} /><FieldError message={fieldErrors.notificationFormNumber} /></label>
-              <label className="form-field"><span>Hasar dosya numarası</span><input value={insurerClaimNumber} onChange={(event) => setInsurerClaimNumber(event.target.value)} autoComplete="off" aria-invalid={fieldErrors.insurerClaimNumber !== undefined} /><FieldError message={fieldErrors.insurerClaimNumber} /></label>
+              <label className="form-field" data-field="insurerClaimNumber"><span>Hasar dosya numarası</span><input value={insurerClaimNumber} onChange={(event) => setInsurerClaimNumber(event.target.value)} autoComplete="off" aria-invalid={fieldErrors.insurerClaimNumber !== undefined} /><FieldError message={fieldErrors.insurerClaimNumber} /></label>
               <label className="form-field"><span>İlk workflow aşaması *</span><select value={workflowStage} onChange={(event) => setWorkflowStage(event.target.value as CaseStageCode)}>{CASE_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><FieldError message={fieldErrors.workflowStage} /></label>
               <label className="form-field"><span>Takip tarihi</span><input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} aria-invalid={fieldErrors.followUpDate !== undefined} /><small>LocalDate olarak gönderilir; saat içermez.</small><FieldError message={fieldErrors.followUpDate} /></label>
               <label className="form-field"><span>Sorumlu</span><select value={responsibleUserId} onChange={(event) => setResponsibleUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.users.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.responsibleUserId} /></label>
-              <label className="form-field"><span>Sigorta şirketi</span><select value={insurerId} onChange={(event) => setInsurerId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.insurers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.insurerId} /></label>
-              <label className="form-field"><span>Servis</span><select aria-label="Servis" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{serviceOptionLabel(option)}</option>)}</select><small>{serviceEvaluationSummary(referenceData.references?.services.find((option) => option.id === serviceId))}</small><FieldError message={fieldErrors.serviceId} /></label>
-              <label className="form-field"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} /></label>
-              <label className="form-field"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><small>LocalDate; saat içermez.</small><FieldError message={fieldErrors.lossDate} /></label>
+              <label className="form-field" data-field="insurerId"><span>Sigorta şirketi</span><select value={insurerId} onChange={(event) => setInsurerId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.insurers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.insurerId} />{unresolved.insurerId && <button type="button" onClick={() => { setInsurerId(''); resolved('insurerId') }}>Eşleştirmeden kaynakta sakla</button>}</label>
+              <label className="form-field" data-field="serviceId"><span>Servis</span><select aria-label="Servis" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{serviceOptionLabel(option)}</option>)}</select><small>{serviceEvaluationSummary(referenceData.references?.services.find((option) => option.id === serviceId))}</small><FieldError message={fieldErrors.serviceId} />{unresolved.serviceId && <button type="button" onClick={() => { setServiceId(''); resolved('serviceId') }}>Eşleştirmeden kaynakta sakla</button>}</label>
+              <label className="form-field" data-field="expertUserId"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} />{unresolved.expertUserId && <button type="button" onClick={() => { setExpertUserId(''); resolved('expertUserId') }}>Eşleştirmeden kaynakta sakla</button>}</label>
+              <label className="form-field" data-field="lossDate"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><small>LocalDate; saat içermez.</small><FieldError message={fieldErrors.lossDate} /></label>
               <label className="form-field"><span>İhbar tarihi</span><input type="date" value={notificationDate} onChange={(event) => setNotificationDate(event.target.value)} aria-invalid={fieldErrors.notificationDate !== undefined} /><small>Hasar tarihinden önce olamaz.</small><FieldError message={fieldErrors.notificationDate} /></label>
-            </div>
+              {quickMode && <label className="form-field"><span>Çalışma klasörü konumu *</span><select value={rootKey} onChange={event => setRootKey(event.target.value)}><option value="">Seçin</option>{roots.map(root => <option key={root.rootKey} value={root.rootKey}>{root.label}</option>)}</select><FieldError message={fieldErrors.storageRootKey} /></label>}
+              {source && <>
+                <label className="form-field" data-field="reference"><span>Eksist talep referansı *</span><input value={reference} onChange={event => setReference(event.target.value)} /><FieldError message={fieldErrors.reference} /></label>
+                <label className="form-field" data-field="brand"><span>Marka</span><input value={brand} maxLength={60} onChange={event => setBrand(event.target.value)} /><FieldError message={fieldErrors.brand} /></label>
+                <label className="form-field" data-field="model"><span>Model</span><input value={model} maxLength={60} onChange={event => setModel(event.target.value)} /><FieldError message={fieldErrors.model} /></label>
+                <label className="form-field" data-field="modelYear"><span>Model yılı</span><input value={modelYear} onChange={event => setModelYear(event.target.value)} /><FieldError message={fieldErrors.modelYear} /></label>
+                <label className="form-field" data-field="vehicleClass"><span>Araç sınıfı</span><select value={vehicleClass} onChange={event => setVehicleClass(event.target.value)}><option value="">Seçilmedi</option><option value="passenger_car">Otomobil</option><option value="light_commercial">Hafif ticari</option><option value="heavy_commercial">Ağır ticari</option><option value="motorcycle">Motosiklet</option><option value="trailer">Römork</option><option value="other">Diğer</option></select><FieldError message={fieldErrors.vehicleClass} /></label>
+                {!(brand.trim() && model.trim() && modelYear && vehicleClass) && <p className="case-form-note">Araç profili eksik. Mevcut bilgiler kaynakla saklanacak; kaydı engellemez ve sonradan tamamlanabilir.</p>}
+              </>}
+            </fieldset>
+            {source && <details><summary>Kaynak ve ek bilgiler ({source.method === 'ocr' ? 'OCR — alanları kontrol edin' : 'Eksist'})</summary><p>Sigortalı, atama tarihi, tam şasi/motor ve poliçe bilgileri kaynakta korunur. Maskeli kimlik ve yalnız yıl içeren vade tamamlanmış veri sayılmaz.</p><pre style={{ whiteSpace: 'pre-wrap' }}>{source.text}</pre></details>}
           </div>
           <footer className="modal__footer">
             <button className="button button--secondary" type="button" onClick={onClose} disabled={submitting}>İptal</button>
-            <button className="button button--primary" type="submit" disabled={submitting || referenceData.status !== 'ok'}>{submitting ? <><LoaderCircle className="spin" size={16} /> Kaydediliyor…</> : <><FilePlus2 size={16} /> Dosyayı Oluştur</>}</button>
+            {quickMode ? <>
+              <button className="button button--secondary" type="submit" value="list" disabled={submitting || extracting || referenceData.status !== 'ok' || Boolean(creation?.provisioning && ['queued','approved','applying','verifying'].includes(creation.provisioning.status)) || creation?.duplicate}>Kaydet ve kapat</button>
+              <button className="button button--primary" type="submit" value="detail" disabled={submitting || extracting || referenceData.status !== 'ok' || Boolean(creation?.provisioning && ['queued','approved','applying','verifying'].includes(creation.provisioning.status)) || creation?.duplicate}>{submitting ? 'Kaydediliyor…' : locked ? 'Aynı kaydı yeniden dene' : 'Kaydet ve detayını aç'}</button>
+            </> : <button className="button button--primary" type="submit" disabled={submitting || extracting || referenceData.status !== 'ok'}>{submitting ? <><LoaderCircle className="spin" size={16} /> Kaydediliyor…</> : <><FilePlus2 size={16} /> Dosyayı Oluştur</>}</button>}
           </footer>
         </form>
       </section>

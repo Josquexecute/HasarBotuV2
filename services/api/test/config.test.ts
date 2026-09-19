@@ -21,7 +21,6 @@ describe('parseConfig', () => {
       // development'ta cookieSecure her zaman false (mevcut davranış).
       cookieSecure: false,
       // Paket 55: deterministik dağıtım sağlayıcıları varsayılan olarak KAPALI.
-      laborAllocationAllowDeterministicProviders: false,
     })
     expect(DEFAULT_HOST).toBe('127.0.0.1')
     expect(DEFAULT_PORT).toBe(3100)
@@ -46,7 +45,6 @@ describe('parseConfig', () => {
       // (opt-in hiç istenmediği için host kontrolüne hiç girilmez).
       cookieSecure: true,
       databaseUrl: 'postgres://app:pw@127.0.0.1:5432/hasarbotu',
-      laborAllocationAllowDeterministicProviders: false,
     })
     expect(parseConfig({ PORT: '1' }).port).toBe(1)
     expect(parseConfig({ PORT: '65535' }).port).toBe(65_535)

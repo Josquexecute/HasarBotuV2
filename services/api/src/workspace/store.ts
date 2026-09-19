@@ -121,6 +121,7 @@ export function createWorkspaceStore(pool: pg.Pool) {
       caseId: string,
       input: WorkspacePlanRequest,
       idempotency: IdempotencyInput,
+      transaction?: pg.PoolClient,
     ): Promise<PlanOutcome> {
       return withTransaction(pool, async (client): Promise<PlanOutcome> => {
         const caseResult = await client.query(
@@ -202,7 +203,7 @@ export function createWorkspaceStore(pool: pg.Pool) {
           caseId,
         })
         return { kind: 'ok', provisioning }
-      })
+      }, transaction)
     },
 
     async approvePlan(
@@ -210,6 +211,7 @@ export function createWorkspaceStore(pool: pg.Pool) {
       caseId: string,
       planId: string,
       idempotency: IdempotencyInput,
+      transaction?: pg.PoolClient,
     ): Promise<ApproveOutcome> {
       return withTransaction(pool, async (client): Promise<ApproveOutcome> => {
         const selected = await client.query(
@@ -292,7 +294,7 @@ export function createWorkspaceStore(pool: pg.Pool) {
           caseId,
         })
         return { kind: 'ok', provisioning }
-      })
+      }, transaction)
     },
   }
 }

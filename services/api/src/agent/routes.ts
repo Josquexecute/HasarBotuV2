@@ -8,7 +8,6 @@ import {
   AGENT_JOB_RESULT_ROUTE,
   AGENT_JOB_EXTRACTION_CHUNKS_ROUTE,
   AGENT_JOB_OCR_CHUNKS_ROUTE,
-  AGENT_JOB_LABOR_WORKBOOK_AUDIT_ROUTE,
   agentParamsSchema,
   agentRegisterRequestSchema,
   agentRegisterResponseSchema,
@@ -22,7 +21,6 @@ import {
   jobParamsSchema,
   jobResultRequestSchema,
   jobResultResponseSchema,
-  laborWorkbookAuditEventRequestSchema,
   pdfExtractionChunkRequestSchema,
   pdfExtractionChunkResponseSchema,
   policyOcrChunkRequestSchema,
@@ -97,34 +95,6 @@ export function registerAgentRoutes(app: FastifyInstance, options: AgentRoutesOp
     if (outcome.kind === 'not_leaseholder') return reply.code(403).send(failureBody('forbidden', 'Job is leased by another agent.', requestId))
     if (outcome.kind === 'conflict') return reply.code(409).send(failureBody('conflict', 'Job lease is not held or has expired.', requestId))
     return jobResultResponseSchema.parse({ jobId: params.data.jobId, status: outcome.status, lastErrorCode: outcome.lastErrorCode })
-  })
-
-  app.post(AGENT_JOB_LABOR_WORKBOOK_AUDIT_ROUTE, async (request, reply) => {
-    const requestId = String(request.id)
-    const agent = await requireAgent(agentStore, request, reply)
-    if (agent === undefined) return
-    const params = jobParamsSchema.safeParse(request.params)
-    const body = laborWorkbookAuditEventRequestSchema.safeParse(request.body)
-    if (!params.success || !body.success) {
-      const zod = !params.success ? params.error : body.error
-      return reply.code(400).send(failureEnvelopeSchema.parse({
-        ok: false,
-        error: zodErrorToApiError(zod as never, requestId),
-      }))
-    }
-    const accepted = await agentStore.recordLaborWorkbookAudit(
-      agent,
-      params.data.jobId,
-      body.data,
-    )
-    if (!accepted) {
-      return reply.code(409).send(failureBody(
-        'conflict',
-        'Workbook audit was rejected.',
-        requestId,
-      ))
-    }
-    return reply.code(204).send()
   })
 
   app.post(AGENT_JOB_EXTRACTION_CHUNKS_ROUTE, async (request, reply) => {

@@ -70,7 +70,7 @@ function mapVersion(row: Record<string, unknown>) {
 }
 
 async function loadCase(
-  pool: pg.Pool,
+  pool: pg.Pool | pg.PoolClient,
   organizationId: string,
   caseId: string,
 ): Promise<{ closed: boolean }> {
@@ -88,8 +88,9 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
     organizationId: string,
     caseId: string,
     canEdit: boolean,
+    executor: pg.Pool | pg.PoolClient = pool,
   ): Promise<CaseVehicleProfileResponse> {
-    const profile = await pool.query(
+    const profile = await executor.query(
       'SELECT id::text,current_version_id::text,version FROM case_vehicle_profiles WHERE organization_id=$1 AND case_id=$2',
       [organizationId, caseId],
     )
@@ -100,7 +101,7 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
         permissions: { canEdit },
       })
     }
-    const versions = await pool.query(
+    const versions = await executor.query(
       `SELECT ${VERSION_COLUMNS} FROM case_vehicle_profile_versions
         WHERE organization_id=$1 AND profile_id=$2
         ORDER BY profile_version DESC LIMIT 200`,
@@ -133,8 +134,9 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
         expectedVersion: number | null
         reason: string | null
       },
+      transaction?: pg.PoolClient,
     ): Promise<CaseVehicleProfileResponse> {
-      const caseRow = await loadCase(pool, actor.organizationId, caseId)
+      const caseRow = await loadCase(transaction ?? pool, actor.organizationId, caseId)
       if (caseRow.closed) throw new CaseVehicleProfileError('CASE_CLOSED', 409)
       const validation = validateCaseVehicleProfile({
         brand: input.fields.brand,
@@ -152,9 +154,9 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
       }
       const profile = validation.profile
 
-      const client = await pool.connect()
+      const client = transaction ?? await pool.connect()
       try {
-        await client.query('BEGIN')
+        if (transaction === undefined) await client.query('BEGIN')
         const existing = await client.query(
           `SELECT id::text,current_version_id::text,version FROM case_vehicle_profiles
             WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`,
@@ -207,14 +209,14 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
           'UPDATE case_vehicle_profiles SET current_version_id=$2,version=$3,updated_at=now() WHERE id=$1',
           [profileId, versionId, nextVersion],
         )
-        await client.query('COMMIT')
+        if (transaction === undefined) await client.query('COMMIT')
       } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined)
+        if (transaction === undefined) await client.query('ROLLBACK').catch(() => undefined)
         throw error
       } finally {
-        client.release()
+        if (transaction === undefined) client.release()
       }
-      return read(actor.organizationId, caseId, true)
+      return read(actor.organizationId, caseId, true, transaction ?? pool)
     },
   }
 }

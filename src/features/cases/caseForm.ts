@@ -7,7 +7,7 @@ export const CASE_STAGE_OPTIONS: readonly { value: CaseStageCode; label: CaseSta
   { value: 'vehicle_or_service_pending', label: 'Araç / Servis Bekleniyor' },
   { value: 'inspection_pending', label: 'Ekspertiz Bekliyor' },
   { value: 'damage_assessment', label: 'Hasar Tespiti' },
-  { value: 'parts_and_labor', label: 'Parça ve İşçilik' },
+  { value: 'parts_and_labor', label: 'Onarım Takibi' },
   { value: 'repair_approval_pending', label: 'Onarım Onayı Bekleniyor' },
   { value: 'under_repair', label: 'Onarımda' },
   { value: 'reporting', label: 'Raporlama' },

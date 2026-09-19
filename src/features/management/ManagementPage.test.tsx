@@ -98,12 +98,14 @@ describe('ManagementPage', () => {
     const port = makePort()
     render(<ManagementPage port={port} />)
     expect(await screen.findByText('Ömer Faruk Kaya')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Excel Şablonları' })).not.toBeInTheDocument()
     await waitFor(() => expect(port.getCaseReferences).not.toHaveBeenCalled())
   })
 
   it('kural ve yetki bölümleri her iki modda kilitli proje kuralı olarak kalır', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     render(<ManagementPage port={makePort()} />)
+    expect(screen.queryByRole('button', { name: 'Excel Şablonları' })).not.toBeInTheDocument()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Belge Kuralları' }))
     expect(screen.getByText('Yalnız iki dosya türü vardır')).toBeInTheDocument()

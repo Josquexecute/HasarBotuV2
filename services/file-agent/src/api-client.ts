@@ -5,7 +5,6 @@ import {
   AGENT_JOB_RESULT_ROUTE,
   AGENT_JOB_EXTRACTION_CHUNKS_ROUTE,
   AGENT_JOB_OCR_CHUNKS_ROUTE,
-  AGENT_JOB_LABOR_WORKBOOK_AUDIT_ROUTE,
   AGENT_SECRET_HEADER,
   claimResponseSchema,
   heartbeatResponseSchema,
@@ -17,7 +16,6 @@ import {
   type JobResultResponse,
   type PdfExtractionChunkRequest,
   type PolicyOcrChunkRequest,
-  type LaborWorkbookAuditEventRequest,
 } from '@hasarbotu/contracts'
 
 /**
@@ -101,30 +99,6 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
       })
       if (!response.ok) throw new AgentApiError(response.status, 'OCR chunk report failed')
       policyOcrChunkResponseSchema.parse(await response.json())
-    },
-
-    /** Writer audit fazını synchronous kaydeder; reddedilirse writer rollback yapar. */
-    async reportLaborWorkbookAudit(
-      jobId: string,
-      event: LaborWorkbookAuditEventRequest,
-    ): Promise<void> {
-      const response = await fetchImpl(url(
-        AGENT_JOB_LABOR_WORKBOOK_AUDIT_ROUTE.replace(
-          ':jobId',
-          encodeURIComponent(jobId),
-        ),
-      ), {
-        method: 'POST',
-        headers: {
-          ...authHeaders,
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(event),
-      })
-      if (!response.ok) {
-        throw new AgentApiError(response.status, 'workbook audit report failed')
-      }
     },
   }
 }

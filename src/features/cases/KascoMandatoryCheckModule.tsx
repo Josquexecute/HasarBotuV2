@@ -68,7 +68,7 @@ function evidenceSummary(evidence: KascoCheckEvidenceRecord | null): string | nu
 }
 
 function CheckHistoryPanel({ items }: { items: readonly KascoMandatoryCheckHistoryItemRecord[] }) {
-  if (items.length === 0) return <p className="labor-empty">Henüz onay geçmişi yok.</p>
+  if (items.length === 0) return <p className="assessment-empty">Henüz onay geçmişi yok.</p>
   return (
     <div className="table-scroll metadata-table-scroll">
       <table className="data-table metadata-table">
@@ -297,11 +297,11 @@ export function KascoMandatoryCheckModule({ caseId, source }: { caseId: string; 
               </div>
               {historyOpenCode === check.checkCode && (
                 historyLoading && historyByCode[check.checkCode] === undefined
-                  ? <p className="labor-empty">Geçmiş yükleniyor…</p>
+                  ? <p className="assessment-empty">Geçmiş yükleniyor…</p>
                   : <CheckHistoryPanel items={historyByCode[check.checkCode] ?? []} />
               )}
               {isOpen && (
-                <div className="labor-editor kasco-check-editor">
+                <div className="assessment-editor kasco-check-editor">
                   {check.aiSuggestedResult !== null && (
                     <button className="button button--secondary" type="button" onClick={() => applyAiSuggestion(check)}>
                       <Sparkles size={13} /> AI önerisini forma al
@@ -335,11 +335,11 @@ export function KascoMandatoryCheckModule({ caseId, source }: { caseId: string; 
                   <label className="form-field"><span>Not / gerekçe (opsiyonel)</span>
                     <input value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} maxLength={2000} placeholder="Örnek: Meslek bilgisi poliçede yok, sigortalıya soruldu" />
                   </label>
-                  <label className="email-draft-confirm labor-confirm">
+                  <label className="email-draft-confirm assessment-confirm">
                     <input type="checkbox" checked={form.confirmed} onChange={(event) => setForm((current) => ({ ...current, confirmed: event.target.checked }))} />
                     <span>Sonucu ve kanıtı kontrol ettim; kaydedilmesini onaylıyorum.</span>
                   </label>
-                  <div className="labor-editor__actions">
+                  <div className="assessment-editor__actions">
                     <button className="button button--primary" type="button" onClick={() => void submit(check)} disabled={busy}><CheckCircle2 size={15} /> Kaydet</button>
                     <button className="button" type="button" onClick={closeEditor} disabled={busy}>Vazgeç</button>
                   </div>

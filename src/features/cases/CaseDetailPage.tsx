@@ -18,7 +18,6 @@ import {
   RefreshCw,
   Save,
   Scale,
-  Wrench,
   X,
 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router'
@@ -30,6 +29,7 @@ import { LoadingState } from '../../components/StateViews'
 import type { CaseRecord } from '../../types/case'
 import { CaseEditModal } from './CaseEditModal'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
+import { EksistSources } from './EksistSources'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
 import { CaseApiLegacyReferenceFields } from './CaseLegacyReferenceFields'
 
@@ -70,16 +70,6 @@ const EmailDraftApiModule = lazy(async () => {
   return { default: module.EmailDraftApiModule }
 })
 
-const LaborApiModule = lazy(async () => {
-  const module = await import('./LaborApiModule')
-  return { default: module.LaborApiModule }
-})
-
-const LaborAllocationAiModule = lazy(async () => {
-  const module = await import('./LaborAllocationAiModule')
-  return { default: module.LaborAllocationAiModule }
-})
-
 const CaseVehicleOwnersModule = lazy(async () => {
   const module = await import('./CaseVehicleOwnersModule')
   return { default: module.CaseVehicleOwnersModule }
@@ -98,7 +88,6 @@ const tabs = [
   'Özet',
   'Operasyon',
   'Evrak ve Fotoğraf',
-  'İşçilik',
   'Ağır Hasar',
   'Değer Kaybı',
   'Raporlar ve Ücretler',
@@ -112,7 +101,6 @@ const tabDescriptions: Record<Tab, string> = {
   Özet: 'Dosyanın operasyonel durumu, kritik uyarıları ve son hareketleri.',
   Operasyon: 'Not, görev, görüşme ve takip kayıtlarının çalışma alanı.',
   'Evrak ve Fotoğraf': 'Koşullu evrak kontrolü ile belge ve fotoğraf metadata alanı.',
-  İşçilik: 'Parça ve işçilik kalemleri için onay öncesi taslak görünüm.',
   'Ağır Hasar': 'PERT değerlendirmesi için veri ve kanaat ayrımı.',
   'Değer Kaybı': 'Trafik dosyası için zorunlu değer kaybı hazırlık durumu.',
   'Raporlar ve Ücretler': 'Rapor ve kapanma ücreti kontrol alanı.',
@@ -158,16 +146,6 @@ function CloseCaseModal({ onClose }: { onClose: () => void }) {
       </section>
     </div>
   )
-}
-
-function WorkmanshipModule({ item, onNotice }: { item: CaseRecord; onNotice: (message: string) => void }) {
-  const rows = [
-    { name: 'Ön tampon kaplama', action: 'Değişim', part: 18400, labor: 2200 },
-    { name: 'Sol ön çamurluk', action: 'Onarım + boya', part: 0, labor: 6750 },
-    { name: 'Ön panel', action: 'Ölçüm / düzeltme', part: 0, labor: 4800 },
-    { name: 'Far bağlantı ayağı', action: 'Onarım', part: 0, labor: 1650 },
-  ]
-  return <div className="module-workspace"><section className="info-panel module-workspace__main"><header><h2>Parça ve İşçilik Dağılımı</h2><span className="status-pill status-pill--review">Taslak</span></header><div className="table-scroll module-table-scroll"><table className="data-table module-table"><thead><tr><th>Kalem</th><th>İşlem</th><th>Parça</th><th>İşçilik</th></tr></thead><tbody>{rows.map((row) => <tr key={row.name}><td>{row.name}</td><td>{row.action}</td><td>{formatCurrency(row.part)}</td><td>{formatCurrency(row.labor)}</td></tr>)}</tbody></table></div></section><aside className="info-panel"><header><h2>AI İşçilik Önerisi</h2><Wrench size={16} /></header><p>Mock öneri, benzer anonim dosya kalemlerine göre hazırlanmıştır. Excel’e veya dosyaya yazmaz.</p><dl className="detail-list"><div><dt>Parça Toplamı</dt><dd>{formatCurrency(18400)}</dd></div><div><dt>İşçilik Toplamı</dt><dd>{formatCurrency(15400)}</dd></div><div><dt>Güven</dt><dd>Orta</dd></div></dl><button className="button button--primary button--block" type="button" onClick={() => onNotice(`${item.plate} işçilik önerisi mock taslağa alındı.`)}>Öneriyi Taslağa Al</button></aside></div>
 }
 
 function HeavyDamageModule({ item }: { item: CaseRecord }) {
@@ -227,8 +205,6 @@ export function CaseDetailPage() {
     const saved = window.sessionStorage.getItem('hasarbotu-active-case-tab')
     return tabs.includes(saved as Tab) ? saved as Tab : 'Özet'
   })
-  /** İşçilik föyü her kaydedildiğinde artar; AI dağıtım modülünü tazeler. */
-  const [laborSheetEpoch, setLaborSheetEpoch] = useState(0)
   const [closeModalOpen, setCloseModalOpen] = useState(false)
   const [prototypeNotice, setPrototypeNotice] = useState('')
   const [assistantAnswer, setAssistantAnswer] = useState('')
@@ -406,11 +382,12 @@ export function CaseDetailPage() {
                 <button className="text-button" type="button" onClick={() => setActiveTab('Operasyon')}>Operasyon kayıtlarına git <ChevronRight size={14} /></button>
               </section>
               {source === 'api' && (
+                <><EksistSources caseId={item.caseId} />
                 <WorkspaceProvisioningPanel
                   caseId={item.caseId}
                   notificationDate={item.notificationDate ?? null}
                   onUnauthorized={session.reportUnauthorized}
-                />
+                /></>
               )}
             </div>
           ) : activeTab === 'Operasyon' && source === 'api' ? (
@@ -430,7 +407,7 @@ export function CaseDetailPage() {
                 <header><h2>Notlar ve Görüşmeler</h2><NotebookPen size={16} /></header>
                 <article className="long-note">
                   <div><strong>Servis Görüşmesi</strong><span>Bugün, 11:45 · Ahmet Yılmaz</span></div>
-                  <p>Servis yetkilisiyle yapılan görüşmede aracın söküm işleminin tamamlandığı, ön panel ve sol şasi ucunda ölçüm gerektiği bildirildi. Parça listesi kesinleşmeden işçilik dağılımının onaya gönderilmemesi, ölçüm sonuçlarının fotoğraf ve servis formuyla birlikte dosyaya eklenmesi istendi. Mağdura gün içinde bilgi verilecek; sigorta şirketi onarım onayı için güncel tahmini hasar tutarı ve gerekçeli servis notu bekliyor.</p>
+                  <p>Servis yetkilisiyle yapılan görüşmede aracın söküm işleminin tamamlandığı, ön panel ve sol şasi ucunda ölçüm gerektiği bildirildi. ölçüm sonuçlarının fotoğraf ve servis formuyla birlikte dosyaya eklenmesi istendi. Mağdura gün içinde bilgi verilecek; sigorta şirketi onarım onayı için güncel tahmini hasar tutarı ve gerekçeli servis notu bekliyor.</p>
                 </article>
                 <article className="long-note">
                   <div><strong>İç Not</strong><span>Dün, 16:20 · Sistem</span></div>
@@ -471,28 +448,7 @@ export function CaseDetailPage() {
             </div>
           ) : activeTab === 'Evrak ve Fotoğraf' ? (
             item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/><KascoMandatoryCheckModule caseId={item.caseId} source={source} /></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
-          ) : activeTab === 'İşçilik' ? source === 'api'
-            ? (
-              <div className="labor-stack">
-                <LaborApiModule
-                  item={item}
-                  source={source}
-                  onUnauthorized={session.reportUnauthorized}
-                  onSheetChanged={() => setLaborSheetEpoch((current) => current + 1)}
-                />
-                {/*
-                  Föy kaydedildiğinde AI dağıtım modülü yeniden kurulur: eski
-                  öneri ve kaynak föy sürümü stale kalmaz.
-                */}
-                <LaborAllocationAiModule
-                  key={laborSheetEpoch}
-                  caseId={item.caseId}
-                  onSheetApplied={() => setLaborSheetEpoch((current) => current + 1)}
-                />
-              </div>
-            )
-            : <WorkmanshipModule item={item} onNotice={setPrototypeNotice} />
-            : activeTab === 'Ağır Hasar' ? source === 'api'
+          ) : activeTab === 'Ağır Hasar' ? source === 'api'
               ? <PertApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
               : <HeavyDamageModule item={item} />
               : activeTab === 'Değer Kaybı' ? source === 'api'

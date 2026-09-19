@@ -25,7 +25,6 @@ Kilit ürün kuralı `isValueLossRequired` ile saf biçimde temsil edilir: Trafi
 2. `vehicle_or_service_pending`
 3. `inspection_pending`
 4. `damage_assessment`
-5. `parts_and_labor`
 6. `repair_approval_pending`
 7. `under_repair`
 8. `reporting`

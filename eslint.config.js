@@ -19,10 +19,6 @@ import tseslint from 'typescript-eslint'
  * `eslint-disable` yorumu kullanilmaz.
  */
 const SET_STATE_IN_EFFECT_EXCEPTIONS = [
-  // LaborAllocationAiModule: gecen sure sayaci. Deger `Date.now()` ile olculur;
-  // render'a tasinirsa `react-hooks/purity` ihlal edilir. Ilk olcum efektte
-  // senkron yazilmazsa sayac bir saniye boyunca yanlis deger gosterir.
-  'src/features/cases/LaborAllocationAiModule.tsx',
   // CasesPage: fetch sonrasi sayfa kelepcelemesi. `totalPages` ancak yanit
   // geldikten sonra bilinir. Render'da turetmek, istenen sayfayi kalici olarak
   // duzeltmedigi icin toplam sayfa sayisi yeniden buyudugunde kullaniciyi

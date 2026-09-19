@@ -7,10 +7,6 @@ import { provisionCaseWorkspace } from './workspace-provisioner.js'
 import { executeFileOperation } from './file-operation-executor.js'
 import { extractPdfText, type PdfTextExtractionResult } from './pdf-text-extractor.js'
 import { extractPolicyOcr, type PolicyOcrExtractionResult } from './policy-ocr-extractor.js'
-import {
-  executeLaborWorkbookApply,
-  executeLaborWorkbookPreview,
-} from './labor-workbook-executor.js'
 import { probeRootHealth } from './root-health.js'
 import { checkCaseFreshness } from './freshness-gate-client.js'
 
@@ -56,33 +52,7 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
 
   let result
   try {
-    if (job.payload.kind === 'labor_workbook_preview'
-      || job.payload.kind === 'labor_workbook_apply') {
-      const rootAbsolute = config.roots[job.payload.storageRootKey]
-      if (rootAbsolute === undefined) {
-        result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
-      } else if (job.payload.kind === 'labor_workbook_preview') {
-        result = await executeLaborWorkbookPreview(rootAbsolute, job.payload)
-      } else {
-        // D9/HB-2026-171: kritik (yazan) işlem -- KESİNLEŞTİRMEDEN (apply)
-        // önce fail-closed freshness gate. Yalnız BU vakayı engeller;
-        // yapılandırılmamışsa da (freshnessGate=undefined) reddedilir,
-        // sessizce atlanmaz.
-        const freshness = await checkCaseFreshness(config.freshnessGate, rootAbsolute, job.payload.relativePath)
-        if (!freshness.ready) {
-          result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }
-        } else {
-          await client.heartbeat(job.id, 'applying')
-          result = await executeLaborWorkbookApply(
-            rootAbsolute,
-            job.payload,
-            config.agentId,
-            client,
-            job.id,
-          )
-        }
-      }
-    } else if (job.payload.kind === 'policy_ocr') {
+    if (job.payload.kind === 'policy_ocr') {
       const rootAbsolute = config.roots[job.payload.storageRootKey]
       if (rootAbsolute === undefined) result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
       else {
@@ -157,9 +127,6 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
     ...('fileOperation' in result && result.fileOperation !== undefined ? { fileOperation: result.fileOperation } : {}),
     ...((result as PdfTextExtractionResult).pdfExtraction !== undefined ? { pdfExtraction: (result as PdfTextExtractionResult).pdfExtraction } : {}),
     ...((result as PolicyOcrExtractionResult).policyOcr !== undefined ? { policyOcr: (result as PolicyOcrExtractionResult).policyOcr } : {}),
-    ...('laborWorkbook' in result
-      ? { laborWorkbook: result.laborWorkbook }
-      : {}),
   }
   const reported = await client.reportResult(job.id, reportInput)
   return { kind: 'reported', jobId: job.id, outcome: result.outcome, reported }

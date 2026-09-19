@@ -31,6 +31,26 @@ const CLOSED_CASE = {
 }
 
 describe('CaseDetailPage gercek API dogruluk siniri', () => {
+  it('kaldırılmış İşçilik sekmesi kaydedilmiş olsa da özeti açar ve işçilik isteği yapmaz', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    window.sessionStorage.setItem('hasarbotu-active-case-tab', 'İşçilik')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
+      const body = String(input).includes('case-closed-38?')
+        ? { case: CLOSED_CASE }
+        : { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } }
+      return { ok: true, status: 200, json: async () => body } as Response
+    }) as typeof fetch)
+    render(<MemoryRouter initialEntries={['/dosyalar/case-closed-38']}>
+      <Routes><Route path="/dosyalar/:caseId" element={<CaseDetailPage />} /></Routes>
+    </MemoryRouter>)
+    await waitFor(() => expect(screen.getByText('34 API 380')).toBeInTheDocument(), { timeout: 15_000 })
+    expect(screen.queryByRole('button', { name: 'İşçilik' })).not.toBeInTheDocument()
+    expect(window.sessionStorage.getItem('hasarbotu-active-case-tab')).toBe('Özet')
+    expect(screen.getByRole('button', { name: 'Ağır Hasar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Değer Kaybı' })).toBeInTheDocument()
+    expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/labor'))).toBe(false)
+  })
+
   it('kapali case listede olmasa bile detail endpointinden acilir ve bagli olmayan modullerde mock gostermez', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     window.sessionStorage.setItem('hasarbotu-active-case-tab', 'Geçmiş')
@@ -148,7 +168,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
 
     // Sürüm 4 -> 6 sunucudan geldiği anda override anahtarı uyuşmaz ve düşer;
     // ekran bayat "Hasar Tespiti" override'ını değil taze sunucu aşamasını gösterir.
-    await waitFor(() => expect(screen.getByText('Parça ve İşçilik')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Onarım Takibi')).toBeInTheDocument())
     expect(screen.queryByText('Hasar Tespiti')).not.toBeInTheDocument()
     expect(fetchSpy).toHaveBeenCalledWith(`/api/v1/cases/${CASE_ID}`, expect.objectContaining({ method: 'PATCH' }))
   })

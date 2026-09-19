@@ -116,6 +116,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
       actor: ActorContext,
       input: CaseCreateRequest,
       idempotency: { scope: string; key: string; requestHash: string; buildResponse: (item: CaseListItem) => unknown },
+      onCreated?: (client: pg.PoolClient, caseId: string) => Promise<void>,
     ): Promise<CaseListItem | null> {
       const plateResult = parsePlateNumber(input.plate)
       if (!plateResult.ok) throw new ReferenceCheckError('plate')
@@ -226,6 +227,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
             caseId,
           ],
         )
+        await onCreated?.(client, caseId)
         await client.query('COMMIT')
         return item
       } catch (error) {

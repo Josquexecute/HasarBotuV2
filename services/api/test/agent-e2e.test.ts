@@ -132,4 +132,46 @@ describeDb('File Agent uçtan uca doğrulama (gerçek DB + geçici dosya)', () =
     expect(result.kind).toBe('reported')
     expect(await docStatus(versionId)).toBe('missing')
   })
+
+  it('işçilik uçları kaldırılmıştır; eski yazım işi atlanırken belge doğrulama çalışır', async () => {
+    for (const [method, route] of [
+      ['GET', `/cases/${caseId}/labor-sheet`],
+      ['POST', `/cases/${caseId}/labor-sheet`],
+      ['GET', `/cases/${caseId}/labor-allocation-ai`],
+      ['POST', `/cases/${caseId}/labor-allocation-ai/analyze`],
+      ['GET', `/cases/${caseId}/labor-ai-suggestions`],
+      ['POST', `/cases/${caseId}/labor-ai-suggestions/plan`],
+      ['POST', `/cases/${caseId}/labor-workbook-applies/preview`],
+      ['POST', `/cases/${caseId}/labor-workbook-applies/${uuidv7()}/approve`],
+      ['GET', '/labor-dictionary'],
+      ['GET', '/labor-excel-profiles'],
+      ['POST', `/agent/jobs/${uuidv7()}/labor-workbook-audit`],
+    ] as const) {
+      const response = await app.inject({ method, url: `/api/v1${route}`, headers: { cookie } })
+      expect(response.statusCode).toBe(404)
+    }
+    const jobId = uuidv7()
+    await pool.query(
+      `INSERT INTO jobs (id,organization_id,type,target_type,target_id,payload,next_attempt_at)
+       SELECT $1,organization_id,'apply_labor_workbook','labor_workbook_apply',$2,
+         '{"kind":"labor_workbook_apply"}'::jsonb,now()-interval '1 day'
+       FROM cases WHERE id=$3`,
+      [jobId, uuidv7(), caseId],
+    )
+    const content = Buffer.from('retained document verification')
+    await writeFile(join(root, 'EVRAK', 'retained.pdf'), content)
+    const versionId = await registerDoc('EVRAK/retained.pdf', sha256(content), content.length)
+    expect((await runOnce(client, agentConfig)).kind).toBe('reported')
+    expect(await docStatus(versionId)).toBe('ready')
+    expect((await pool.query('SELECT status,attempt_count FROM jobs WHERE id=$1', [jobId])).rows[0])
+      .toMatchObject({ status: 'pending', attempt_count: 0 })
+    expect(await client.claim()).toBeNull()
+
+    // An agent from the previous release must not renew or finalize a retired write.
+    await pool.query(`UPDATE jobs SET status='leased',leased_by_agent_id=$2,
+      lease_expires_at=now()+interval '1 hour' WHERE id=$1`, [jobId, agentConfig.agentId])
+    expect(await client.heartbeat(jobId)).toBe(false)
+    await expect(client.reportResult(jobId, { outcome: 'failed', errorCode: 'retired' })).rejects.toThrow()
+    expect((await pool.query('SELECT status FROM jobs WHERE id=$1', [jobId])).rows[0].status).toBe('leased')
+  })
 })
