@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkCaseFreshness } from '../src/freshness-gate-client.js'
 import type { FreshnessGateConfig } from '../src/config.js'
+import { runOnce } from '../src/agent.js'
+import type { AgentApiClient } from '../src/api-client.js'
 
 // Real end-to-end test (HB-2026-171): actually spawns the REAL,
 // unmodified deploy/windows-service/pcloud-session0-freshness-gate.mjs
@@ -100,6 +102,28 @@ describe('checkCaseFreshness (real spawn of pcloud-session0-freshness-gate.mjs)'
     const result = await checkCaseFreshness(gateConfig(), targetRoot, '00AAA000')
     expect(result.ready).toBe(true)
     expect(result.caseStatus).toBe('ready')
+  })
+
+  it('real gate provisions an absent workspace and resumes a lost result without duplicating folders', async () => {
+    await buildCaseFixture('existing', 9001, 111, 'unrelated content')
+    const payload = { kind: 'workspace' as const, storageRootKey: 'main', relativePath: 'new/year/case', requiredSubdirectories: ['EVRAK', 'HASAR', 'OLAY YERİ', 'ONARIM', 'DEĞER KAYBI'] as const }
+    const config = { apiBaseUrl: '', agentId: 'test', agentSecret: 'test', roots: { main: targetRoot }, leaseSeconds: 30, pollIntervalMs: 1, freshnessGate: gateConfig() }
+    const reports: unknown[] = []
+    let loseResult = true
+    const client = { claim: async () => ({ id: 'same-job', payload }), heartbeat: async () => ({}), reportResult: async (_id: string, input: unknown) => {
+      reports.push(input)
+      if (loseResult) { loseResult = false; throw new Error('lost result') }
+      return { acknowledged: true }
+    } } as unknown as AgentApiClient
+    await expect(runOnce(client, config)).rejects.toThrow('lost result')
+    expect(await runOnce(client, config)).toMatchObject({ kind: 'reported', outcome: 'verified' })
+    expect(reports).toEqual([{ outcome: 'verified' }, { outcome: 'verified' }])
+    const { readdir } = await import('node:fs/promises')
+    expect((await readdir(join(targetRoot, payload.relativePath))).sort()).toEqual([...payload.requiredSubdirectories].sort())
+    // Directory provisioning readiness must never confer content freshness.
+    expect((await checkCaseFreshness(gateConfig(), targetRoot, payload.relativePath)).ready).toBe(false)
+    await writeFile(join(targetRoot, payload.relativePath, 'unverified.pdf'), 'new content')
+    expect((await checkCaseFreshness(gateConfig(), targetRoot, payload.relativePath, { operation: 'workspace' })).ready).toBe(false)
   })
 
   it('attestation olmayan gercek bir vaka icin fail-closed ready=false doner (asla sessizce ready degil)', async () => {

@@ -115,7 +115,7 @@ describe('HttpApiAdapter esleme', () => {
       caseId: 'case-2', plate: '34 MPA 765', legacyReferences: secondDetail.legacyReferences,
     })
     expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('page=2&pageSize=100'), expect.anything())
-    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case-2?includeLegacyReferences=true', expect.anything())
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case-2?includeLegacyReferences=true&includeEksist=true', expect.anything())
   })
 
   it('bozuk successful response contracts sinirinda fail-closed reddedilir', async () => {
@@ -223,7 +223,7 @@ describe('tek case detail kancasi', () => {
       const { result } = renderHook(() => useCase('case-1'))
       await waitFor(() => expect(result.current.status).toBe('ok'))
       expect(result.current.item).toMatchObject({ caseId: 'case-1', lifecycleStatus: 'closed', status: 'Kapalı' })
-      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-1?includeLegacyReferences=true', expect.anything())
+      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-1?includeLegacyReferences=true&includeEksist=true', expect.anything())
     } finally {
       fetchSpy.mockRestore()
     }

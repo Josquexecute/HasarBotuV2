@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import type pg from 'pg'
 import type { CaseCreateRequest, CaseUpdateRequest, CaseListItem } from '@hasarbotu/contracts'
-import { parsePlateNumber, plateSearchKey } from '@hasarbotu/domain'
+import { parsePlateNumber, plateSearchKey, matchEksistReference } from '@hasarbotu/domain'
+import { eksistCaseDataSchema, localDateSchema } from '@hasarbotu/contracts'
 import { uuidv7 } from '@hasarbotu/database'
 import { rowToDto, SELECT_FIELDS, toLocalDateString, type CaseRow } from './store.js'
 import { createAuditService } from '../audit/service.js'
@@ -129,6 +130,8 @@ export function createCasesWriteStore(pool: pg.Pool) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        const today = await client.query<{ today: string }>("SELECT to_char(transaction_timestamp() AT TIME ZONE 'Europe/Istanbul','YYYY-MM-DD') AS today")
+        input = { ...input, followUpDate: localDateSchema.parse(today.rows[0]!.today) }
         await assertReferences(client, actor.organizationId, input)
 
         const counter = await client.query(
@@ -280,6 +283,22 @@ export function createCasesWriteStore(pool: pg.Pool) {
           return { kind: 'version_conflict' }
         }
 
+        if (input.followUpDate !== undefined) throw new ReferenceCheckError('followUpDate', 'automatic_field_readonly')
+        const imported = await client.query("SELECT reviewed_fields->'automatic' AS automatic FROM eksist_sources WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic' FOR UPDATE", [actor.organizationId, caseId])
+        let eksist = imported.rowCount ? eksistCaseDataSchema.parse(imported.rows[0].automatic) : undefined
+        if (imported.rowCount) {
+          for (const field of ['notificationFormNumber', 'insurerId', 'expertUserId'] as const) {
+            if (input[field] !== undefined) throw new ReferenceCheckError(field, 'eksist_source_readonly')
+          }
+          if (input.serviceId !== undefined) throw new ReferenceCheckError('serviceId', 'use_service_revision')
+        }
+        if (input.serviceRevision) {
+          if (!eksist) throw new ReferenceCheckError('serviceRevision', 'eksist_source_required')
+          const services = await client.query<{ id: string; name: string }>('SELECT id,name FROM service_centers WHERE organization_id=$1 AND is_active', [actor.organizationId])
+          input = { ...input, serviceId: matchEksistReference(input.serviceRevision.name, services.rows) }
+          eksist = { ...eksist, serviceName: input.serviceRevision!.name, serviceRevised: true }
+          await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic'", [actor.organizationId, caseId, JSON.stringify(eksist)])
+        }
         await assertReferences(client, actor.organizationId, input)
         const currentLossDate = existing.loss_date === null ? null : toLocalDateString(existing.loss_date)
         const currentNotificationDate = existing.notification_date === null ? null : toLocalDateString(existing.notification_date)
@@ -302,7 +321,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         }
         const sets: string[] = []
         const params: unknown[] = []
-        const changedFields: string[] = []
+        const changedFields: string[] = input.serviceRevision ? ['serviceRevision'] : []
         for (const [field, column] of Object.entries(columnByField)) {
           const value = (input as Record<string, unknown>)[field]
           if (value === undefined) continue
@@ -325,39 +344,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
           dateSource: 'loss_date',
           operation: 'closure_documents',
         })
-        const item = rowToDto(updatedRow, serviceProfile)
-        const previousFollowUpDate = existing.follow_up_date === null ? null : toLocalDateString(existing.follow_up_date)
-        const followUpChanged = input.followUpDate !== undefined && input.followUpDate !== previousFollowUpDate
-        if (followUpChanged) {
-          await client.query(
-            `INSERT INTO case_follow_up_history
-               (id,organization_id,case_id,previous_follow_up_date,new_follow_up_date,source,case_version,actor_user_id)
-             VALUES ($1,$2,$3,$4,$5,'case_update',$6,$7)`,
-            [
-              uuidv7(),
-              actor.organizationId,
-              caseId,
-              previousFollowUpDate,
-              input.followUpDate,
-              item.version,
-              actor.actorUserId,
-            ],
-          )
-          await audit.record(client, {
-            organizationId: actor.organizationId,
-            actorUserId: actor.actorUserId,
-            requestId: actor.requestId,
-            action: 'case.follow_up_changed',
-            entityType: 'case',
-            entityId: item.id,
-            details: {
-              previousFollowUpDate,
-              newFollowUpDate: input.followUpDate,
-              caseVersion: item.version,
-            },
-          })
-        }
-
+        const item = { ...rowToDto(updatedRow, serviceProfile), ...(eksist ? { eksist } : {}) }
         await audit.record(client, {
           organizationId: actor.organizationId,
           actorUserId: actor.actorUserId,

@@ -55,13 +55,12 @@ describeLive('Auth + komut gercek API uctan uca', () => {
     const updated = await commands.updateCase(traffic.caseId, {
       expectedVersion: 1,
       workflowStage: 'inspection_pending',
-      followUpDate: '2026-07-20',
     })
     expect(updated).toMatchObject({
       caseId: traffic.caseId,
       version: 2,
       stage: 'Ekspertiz Bekliyor',
-      followUpDate: '2026-07-20',
+      followUpDate: traffic.followUpDate,
     })
     await expect(
       commands.updateCase(traffic.caseId, { expectedVersion: 1, workflowStage: 'reporting' }),

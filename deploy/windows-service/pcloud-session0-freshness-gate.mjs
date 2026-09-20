@@ -1,8 +1,9 @@
-import { stat } from 'node:fs/promises'
+import { lstat, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { withConsistentPcloudDatabase } from './pcloud-maintenance-window-gate.mjs'
 import {
+  CONFLICT_NAME_PATTERN,
   fileSha256,
   findAllConflictNames,
   getCurrentFileRow,
@@ -109,18 +110,90 @@ function enumerateDbFilesUnderFolder(database, folderId) {
   }))
 }
 
+async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath }) {
+  const parts = caseRelativePath.split(/[\\/]/)
+  assert(parts.every(part => part && part !== '.' && part !== '..' && !/[<>:"|?*\x00-\x1f]/.test(part) && !/[. ]$/.test(part)), 'CASE_RELATIVE_PATH_INVALID')
+  const nameKey = name => name.normalize('NFC').toUpperCase()
+  // Reject aliases/reparse points in ancestors as well as inside the case.
+  for (let current = path.resolve(targetCaseRoot); ; current = path.dirname(current)) {
+    const info = await lstat(current).catch(error => { if (error.code === 'ENOENT') return null; throw error })
+    if (info) assert(info.isDirectory() && !info.isSymbolicLink(), 'WORKSPACE_PATH_CONFLICT')
+    if (current === path.dirname(current)) break
+  }
+  async function hasLocalContent(directory) {
+    const entries = await readdir(directory, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error })
+    let content = false
+    const names = new Set()
+    for (const entry of entries) {
+      assert(!entry.isSymbolicLink() && !CONFLICT_NAME_PATTERN.test(entry.name) && !names.has(nameKey(entry.name)), 'WORKSPACE_PATH_CONFLICT')
+      names.add(nameKey(entry.name))
+      if (!entry.isDirectory() || await hasLocalContent(path.join(directory, entry.name))) content = true
+    }
+    return content
+  }
+  const localContent = await hasLocalContent(targetCaseRoot)
+  const remoteContent = await withConsistentPcloudDatabase(databasePath, database => {
+    let folderId = resolveTopLevelFolderId(database, topLevelFolderName)
+    // Folder tasks (including pending deletes/moves) cannot be treated as an
+    // empty, stable namespace. Unrelated cases do not block provisioning.
+    const fstaskColumns = database.prepare('PRAGMA table_info(fstask)').all().map(row => row.name)
+    const hasUploadTasks = database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='upload_tasks'").get() !== undefined
+    function assertIdle(id) {
+      assert(getTaskReferenceCount(database, id) === 0, 'WORKSPACE_SYNC_PENDING')
+      for (const column of ['folderid', 'sfolderid']) {
+        if (fstaskColumns.includes(column)) assert(database.prepare(`SELECT count(*) AS n FROM fstask WHERE ${column} = ?`).get(BigInt(id)).n === 0, 'WORKSPACE_SYNC_PENDING')
+      }
+      if (hasUploadTasks) assert(database.prepare('SELECT count(*) AS n FROM upload_tasks WHERE parentfid = ?').get(BigInt(id)).n === 0, 'WORKSPACE_SYNC_PENDING')
+    }
+    for (const part of parts) {
+      assertIdle(folderId)
+      const files = database.prepare('SELECT name FROM file WHERE parentfolderid = ?').all(BigInt(folderId))
+      assert(!files.some(row => nameKey(row.name) === nameKey(part)), 'WORKSPACE_PATH_CONFLICT')
+      const folders = database.prepare('SELECT CAST(id AS TEXT) AS id, name FROM folder WHERE parentfolderid = ?').all(BigInt(folderId)).filter(row => nameKey(row.name) === nameKey(part))
+      assert(folders.length <= 1 && (!folders.length || folders[0].name === part), 'WORKSPACE_PATH_CONFLICT')
+      if (!folders.length) return false
+      folderId = folders[0].id
+    }
+    assert(findAllConflictNames(database, folderId).length === 0, 'WORKSPACE_PATH_CONFLICT')
+    const subtree = database.prepare(`WITH RECURSIVE tree(id) AS (SELECT ? UNION ALL SELECT folder.id FROM folder JOIN tree ON folder.parentfolderid=tree.id) SELECT CAST(id AS TEXT) AS id FROM tree`).all(BigInt(folderId))
+    for (const row of subtree) {
+      assertIdle(row.id)
+      const names = database.prepare('SELECT name FROM folder WHERE parentfolderid = ?').all(BigInt(row.id)).map(entry => nameKey(entry.name))
+      assert(new Set(names).size === names.length, 'WORKSPACE_PATH_CONFLICT')
+    }
+    return enumerateDbFilesUnderFolder(database, folderId).length > 0
+  })
+  return !localContent && !remoteContent
+}
+
 export async function determineSessionSafeCaseStatus({
   targetCaseRoot,
   databasePath,
   topLevelFolderName,
   caseRelativePath,
   attestationStoreDirectory,
+  operation,
 }) {
   assert(typeof targetCaseRoot === 'string' && targetCaseRoot.length > 0, 'TARGET_CASE_ROOT_REQUIRED')
   assert(typeof databasePath === 'string' && databasePath.length > 0, 'DATABASE_PATH_REQUIRED')
   assert(typeof topLevelFolderName === 'string' && topLevelFolderName.length > 0, 'TOP_LEVEL_FOLDER_NAME_REQUIRED')
   assert(typeof caseRelativePath === 'string' && caseRelativePath.length > 0, 'CASE_RELATIVE_PATH_REQUIRED')
   assert(typeof attestationStoreDirectory === 'string' && attestationStoreDirectory.length > 0, 'ATTESTATION_STORE_DIRECTORY_REQUIRED')
+  assert(operation === undefined || operation === 'workspace', 'OPERATION_INVALID')
+
+  // Provisioning only adds directories. An absent/empty tree has no content
+  // revision to attest. Check both inventories before allowing this limited
+  // operation; any existing content still uses the unchanged freshness gate.
+  if (operation === 'workspace') {
+    const empty = await checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath })
+    if (empty) return {
+      SchemaVersion: 'hasarbotu-pcloud-session0-freshness-gate/1.0.0',
+      GeneratedAtUtc: new Date().toISOString(), CaseRelativePath: caseRelativePath,
+      CaseStatus: 'ready', Operation: 'workspace', Reason: 'EMPTY_WORKSPACE_CREATE_OR_RESUME',
+      Entries: [], ConflictNamesFound: [],
+      Summary: { TotalFiles: 0, ReadyCount: 0, SyncingCount: 0, UnknownCount: 0, ConflictCount: 0 },
+    }
+  }
 
   const targetStat = await stat(targetCaseRoot).catch(() => null)
   assert(targetStat && targetStat.isDirectory(), 'TARGET_CASE_ROOT_NOT_FOUND')
@@ -281,6 +354,7 @@ function parseArguments(argv) {
     '--case-relative-path',
     '--pcloud-db',
     '--attestation-store',
+    '--operation',
   ])
   const values = new Map()
   for (let index = 0; index < argv.length; index += 2) {
@@ -290,13 +364,14 @@ function parseArguments(argv) {
     assert(!values.has(key), 'ARGUMENT_DUPLICATE')
     values.set(key, value)
   }
-  for (const key of allowed) assert(values.has(key), 'ARGUMENT_MISSING')
+  for (const key of allowed) if (key !== '--operation') assert(values.has(key), 'ARGUMENT_MISSING')
   return {
     targetCaseRoot: values.get('--target-root'),
     topLevelFolderName: values.get('--top-level-folder-name'),
     caseRelativePath: values.get('--case-relative-path'),
     databasePath: values.get('--pcloud-db'),
     attestationStoreDirectory: values.get('--attestation-store'),
+    operation: values.get('--operation'),
   }
 }
 

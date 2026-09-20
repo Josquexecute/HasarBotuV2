@@ -53,7 +53,7 @@ describe.skipIf(!testUrl)('UI → real API → isolated PostgreSQL → real File
       <Route path="/dosyalar" element={<p>DOĞRULANDI LİSTE</p>} /><Route path="/dosyalar/:id" element={<p>DOĞRULANDI DETAY</p>} />
     </Routes></MemoryRouter>)
     await waitFor(() => expect(screen.getByRole('button', { name: button })).toBeEnabled())
-    fireEvent.change(screen.getByLabelText('Eksist metni veya panodan görsel'), { target: { value: `Talep İşlem Ref No: ${button === 'Kaydet ve kapat' ? '88001' : '88002'}\nÜrün: Trafik\nPlaka: 034 - TR2491` } })
+    fireEvent.change(screen.getByLabelText('Eksist metni veya panodan görsel'), { target: { value: `Talep İşlem Ref No: ${button === 'Kaydet ve kapat' ? '88001' : '88002'}\nÜrün: Trafik\nPlaka: 034 - TR2491\nSigorta Şirketi: Sentetik Sigorta\nEksper Ad-Soyad: Sentetik Eksper\nEksper Atama Tarihi: 18.09.2026 12:00\nMarka: TEST\nAraç Tipi: MODEL\nModel Yılı: 2020\nAraç Tarife Grubu: OTOMOBİL\nMotor No: ENGINE12345\nŞasi No: WVWZZZ3CZEE144172` } })
     await userEvent.click(screen.getByRole('button', { name: 'Metni forma aktar' }))
     await screen.findByLabelText('Eksist talep referansı *')
     fireEvent.change(screen.getByLabelText(/İhbar tarihi/), { target: { value: '2026-09-19' } })

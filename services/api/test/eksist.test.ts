@@ -122,6 +122,9 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
 
 
   async function source(text: string, cookie = cookieA) {
+    for (const [label, value] of Object.entries({ 'Sigorta Şirketi': 'Sentetik Sigorta A.Ş.', 'Eksper Ad-Soyad': 'Sentetik Eksper', 'Eksper Atama Tarihi': '18.09.2026 09:30:00', 'Tamirhane Ad / Ünvan': 'Sentetik Servis', 'Marka': 'VOLKSWAGEN', 'Araç Tipi': 'PASSAT', 'Model Yılı': '2014', 'Araç Tarife Grubu': 'OTOMOBİL', 'Motor No': 'CAYZ46629', 'Şasi No': 'WVWZZZ3CZEE144172' })) {
+      if (!text.includes(`${label}:`)) text += `\n${label}: ${value}`
+    }
     const response = await app.inject({ method: 'POST', url: '/api/v1/eksist/sources', headers: { cookie }, payload: { kind: 'text', text } })
     expect(response.statusCode).toBe(201)
     return response.json() as { id: string }
@@ -214,15 +217,78 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     const bad = await app.inject({ method: 'POST', url: '/api/v1/eksist/sources', headers: { cookie: cookieA }, payload: { kind: 'pdf', name: 'source.pdf', base64: Buffer.from('<script>bad</script>').toString('base64') } })
     expect(bad.statusCode).toBe(400)
   }, 30_000)
-  it('retains an incomplete optional vehicle draft without blocking creation', async () => {
+  it('rejects incomplete source vehicle data and rolls back even when the client supplies a draft', async () => {
     const src = await source('Talep İşlem Ref No: partial-1\nMarka: VOLKSWAGEN')
     const vehicleDraft = { brand: 'VOLKSWAGEN', model: 'User correction', modelYear: '', vehicleClass: '' }
     const response = await quick({ ...manual, source: { id: src.id, reference: 'partial-1', vehicleDraft } })
-    expect(response.statusCode).toBe(202)
-    const saved = await pool.query('SELECT reviewed_fields FROM eksist_sources WHERE id=$1', [src.id])
-    expect(saved.rows[0].reviewed_fields.vehicleDraft).toEqual(vehicleDraft)
-    expect((await pool.query('SELECT 1 FROM case_vehicle_profiles WHERE case_id=$1', [response.json().case.id])).rowCount).toBe(0)
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.fieldErrors).toContainEqual(expect.objectContaining({ code: 'eksist_vehicle_incomplete' }))
+    const saved = await pool.query('SELECT case_id,reviewed_fields FROM eksist_sources WHERE id=$1', [src.id])
+    expect(saved.rows[0].case_id).toBeNull()
+    expect(saved.rows[0].reviewed_fields).not.toHaveProperty('automatic')
   })
+  it('persists authoritative source fields and full identifiers; locks fields and saves only explicit service revisions', async () => {
+    const src = await source('Talep İşlem Ref No: automatic-1\nPlaka: 034 - AB1234\nEksper Levha No: E12345\nRenk: MAVİ')
+    const response = await quick({ ...manual, case: { ...manual.case, notificationFormNumber: 'tampered', insurerId: uuidv7(), expertUserId: uuidv7(), followUpDate: '2000-01-01' }, source: { id: src.id, reference: 'automatic-1' }, vehicle: { brand: 'FAKE', model: 'FAKE', modelYear: 2000, vehicleClass: 'passenger_car', evidenceSource: 'insurer_record' } })
+    expect(response.statusCode).toBe(202)
+    const item = response.json().case
+    const today = (await pool.query("SELECT to_char(now() AT TIME ZONE 'Europe/Istanbul','YYYY-MM-DD') AS today")).rows[0].today
+    expect(item.followUpDate).toBe(today)
+    expect(item.notificationFormNumber).toBe('18.09.2026 09:30:00')
+    expect(item.eksist).toMatchObject({ insurerName: 'Sentetik Sigorta A.Ş.', expertName: 'Sentetik Eksper', expertLicenseNumber: 'E12345', serviceName: 'Sentetik Servis', vehicleFields: { 'Şasi No': 'WVWZZZ3CZEE144172', 'Motor No': 'CAYZ46629', 'Renk': 'MAVİ' } })
+    expect((await pool.query('SELECT brand FROM case_vehicle_profile_versions WHERE case_id=$1', [item.id])).rows[0].brand).toBe('VOLKSWAGEN')
+    const patch = (fields: Record<string, unknown>, version = item.version) => app.inject({ method: 'PATCH', url: `/api/v1/cases/${item.id}`, headers: { cookie: cookieA }, payload: { expectedVersion: version, ...fields } })
+    for (const fields of [{ followUpDate: null }, { insurerId: null }, { expertUserId: null }, { notificationFormNumber: 'changed' }, { serviceId: null }]) {
+      expect((await patch(fields)).statusCode).toBe(400)
+    }
+    const revised = await patch({ serviceRevision: { name: 'Revize Servis' } })
+    expect(revised.statusCode).toBe(200)
+    expect(revised.json().case.eksist).toMatchObject({ serviceName: 'Revize Servis', serviceRevised: true })
+    expect((await patch({ serviceRevision: { name: 'Stale revision' } })).statusCode).toBe(409)
+    const read = await app.inject({ url: `/api/v1/cases/${item.id}?includeEksist=true`, headers: { cookie: cookieA } })
+    expect(read.statusCode).toBe(200)
+    expect(read.json().case.eksist).toMatchObject({ serviceName: 'Revize Servis', expertName: 'Sentetik Eksper' })
+    const evidence = (await pool.query('SELECT raw_text,reviewed_fields FROM eksist_sources WHERE id=$1', [src.id])).rows[0]
+    expect(evidence.raw_text).toContain('Tamirhane Ad / Ünvan: Sentetik Servis')
+    expect(evidence.reviewed_fields.automatic).toEqual(read.json().case.eksist)
+  })
+  it('uses the server registration day for manual creation and refuses subsequent date changes', async () => {
+    const response = await quick({ ...manual, case: { ...manual.case, followUpDate: '2000-01-01' } })
+    expect(response.statusCode).toBe(202)
+    const item = response.json().case
+    expect(item.followUpDate).toBe((await pool.query("SELECT to_char(created_at AT TIME ZONE 'Europe/Istanbul','YYYY-MM-DD') AS today FROM cases WHERE id=$1", [item.id])).rows[0].today)
+    const updated = await app.inject({ method: 'PATCH', url: `/api/v1/cases/${item.id}`, headers: { cookie: cookieA }, payload: { expectedVersion: item.version, followUpDate: '2000-01-02' } })
+    expect(updated.statusCode).toBe(400)
+  })
+  it('rejects unreviewed OCR atomically and preserves original I/İ evidence with an audited correction', async () => {
+    const src = await source('Talep İşlem Ref No: OCRREVIEW\nPlaka: 034 - TR2491\nEksper Ad-Soyad: SENTETİK EKSPER')
+    // Isolate the trust boundary: the stored extraction method, never a browser flag.
+    await pool.query("UPDATE eksist_sources SET extraction_method='ocr' WHERE id=$1", [src.id])
+    const input = { ...manual, source: { id: src.id, reference: 'OCRREVIEW' } }
+    const before = (await pool.query('SELECT count(*)::int AS n FROM cases')).rows[0].n
+    const rejected = await quick(input)
+    expect(rejected.statusCode).toBe(400)
+    expect(rejected.json().error.fieldErrors).toContainEqual(expect.objectContaining({ path: 'expertUserId', code: 'eksist_expert_review_required' }))
+    expect((await pool.query('SELECT count(*)::int AS n FROM cases')).rows[0].n).toBe(before)
+    expect((await pool.query('SELECT case_id FROM eksist_sources WHERE id=$1', [src.id])).rows[0].case_id).toBeNull()
+    expect((await quick({ ...input, source: { ...input.source, expertReview: { name: 'SENTETIK EKSPER', confirmed: false } } })).statusCode).toBe(400)
+    const key = uuidv7(), reviewed = { ...input, source: { ...input.source, expertReview: { name: 'SENTETIK EKSPER', confirmed: true } } }
+    const correctExpertId = uuidv7()
+    for (const [id, name] of [[correctExpertId, 'SENTETIK EKSPER'], [uuidv7(), 'SENTETİK EKSPER']]) {
+      await pool.query('INSERT INTO users(id,organization_id,email,display_name,password_hash) VALUES($1,$2,$3,$4,$5)', [id, orgA, `${id}@test.local`, name, await hashPassword(PASSWORD)])
+      await pool.query("INSERT INTO user_roles(user_id,role_id) VALUES($1,(SELECT id FROM roles WHERE code='expert'))", [id])
+    }
+    const accepted = await quick(reviewed, key)
+    expect(accepted.statusCode).toBe(202)
+    expect(accepted.json().case.eksist.expertName).toBe('SENTETIK EKSPER')
+    expect(accepted.json().case.expertUserId).toBe(correctExpertId)
+    const row = (await pool.query('SELECT raw_text,reviewed_fields FROM eksist_sources WHERE id=$1', [src.id])).rows[0]
+    expect(row.raw_text).toContain('SENTETİK EKSPER')
+    expect(row.reviewed_fields.expertReview).toMatchObject({ name: 'SENTETIK EKSPER', confirmed: true, reviewedByUserId: expect.any(String) })
+    expect((await quick(reviewed, key)).json().case.id).toBe(accepted.json().case.id)
+  })
+
+
 })
 
 describe('real Eksist evidence extraction (offline)', () => {

@@ -94,7 +94,7 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
       if (rootAbsolute === undefined) {
         result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
       } else if (job.payload.kind === 'workspace') {
-        const freshness = await checkCaseFreshness(config.freshnessGate, rootAbsolute, job.payload.relativePath)
+        const freshness = await checkCaseFreshness(config.freshnessGate, rootAbsolute, job.payload.relativePath, { operation: 'workspace' })
         if (!freshness.ready) {
           result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }
         } else {

@@ -250,21 +250,21 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
       method: 'PATCH',
       url: `${CASES_ROUTE}/${caseId}`,
       headers: { cookie },
-      payload: { expectedVersion: 1, workflowStage: 'reporting', followUpDate: '2026-08-01', serviceId },
+      payload: { expectedVersion: 1, workflowStage: 'reporting', insurerClaimNumber: 'CLAIM', serviceId },
     })
     expect(update.statusCode).toBe(200)
     const updated = update.json() as { case: { version: number; stage: string; followUpDate: string } }
     expect(caseDetailResponseSchema.safeParse(updated).success).toBe(true)
-    expect(updated.case).toMatchObject({ version: 2, stage: 'reporting', followUpDate: '2026-08-01' })
+    expect(updated.case).toMatchObject({ version: 2, stage: 'reporting', insurerClaimNumber: 'CLAIM' })
 
     const clear = await app.inject({
       method: 'PATCH',
       url: `${CASES_ROUTE}/${caseId}`,
       headers: { cookie },
-      payload: { expectedVersion: 2, followUpDate: null },
+      payload: { expectedVersion: 2, insurerClaimNumber: null },
     })
     expect((clear.json() as { case: { followUpDate: string | null; version: number } }).case).toMatchObject({
-      followUpDate: null,
+      insurerClaimNumber: null,
       version: 3,
     })
 
@@ -273,7 +273,7 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
       [caseId],
     )
     expect((audit.rows[0] as { details: { changedFields: string[] } }).details.changedFields).toEqual(
-      expect.arrayContaining(['workflowStage', 'followUpDate', 'serviceId']),
+      expect.arrayContaining(['workflowStage', 'insurerClaimNumber', 'serviceId']),
     )
   })
 
@@ -323,7 +323,8 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
       'SELECT responsible_user_id, follow_up_date, version FROM cases WHERE id = $1',
       [caseId],
     )
-    expect(row.rows[0]).toMatchObject({ responsible_user_id: null, follow_up_date: null, version: 1 })
+    expect(row.rows[0]).toMatchObject({ responsible_user_id: null, version: 1 })
+    expect(row.rows[0].follow_up_date).not.toBeNull()
 
     const auditCount = await pool.query(
       "SELECT count(*)::int AS n FROM audit_events WHERE action = 'case.updated' AND resource_id = $1",

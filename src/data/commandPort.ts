@@ -28,6 +28,7 @@ export interface CaseCreateInput {
 }
 
 export interface CaseUpdateInput {
+  readonly serviceRevision?: { readonly name: string }
   readonly expectedVersion: number
   readonly workflowStage?: string
   readonly followUpDate?: string | null

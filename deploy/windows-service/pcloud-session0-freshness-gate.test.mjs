@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -118,6 +118,60 @@ test('determineSessionSafeCaseStatus: ready/syncing/unknown/conflict dogru sinif
   assert.equal(report.CaseStatus, 'conflict')
   assert.equal(report.Summary.TotalFiles, 4)
   assert.equal(report.Summary.ReadyCount, 1)
+})
+
+test('workspace intent: absent and partially created empty trees can resume; normal freshness stays closed', async context => {
+  const fixture = await buildFixture(context)
+  const args = { ...fixture, caseRelativePath: 'new/case', targetCaseRoot: path.join(fixture.temporaryRoot, 'new/case'), operation: 'workspace' }
+  assert.equal((await determineSessionSafeCaseStatus(args)).CaseStatus, 'ready')
+  await mkdir(path.join(args.targetCaseRoot, 'EVRAK'), { recursive: true })
+  assert.equal((await determineSessionSafeCaseStatus(args)).CaseStatus, 'ready')
+  await assert.rejects(determineSessionSafeCaseStatus({ ...args, operation: undefined }))
+  await writeFile(path.join(args.targetCaseRoot, 'unverified.pdf'), 'content')
+  await assert.rejects(determineSessionSafeCaseStatus(args), /PCLOUD_CASE_FOLDER_NOT_FOUND/)
+})
+
+test('workspace intent refuses cloud-only content, path collisions and pending folder tasks', async context => {
+  const fixture = await buildFixture(context)
+  const targetCaseRoot = path.join(fixture.temporaryRoot, 'missing')
+  await assert.rejects(determineSessionSafeCaseStatus({ ...fixture, targetCaseRoot, operation: 'workspace' }))
+  const db = new DatabaseSync(fixture.databasePath)
+  try {
+  db.exec("INSERT INTO file VALUES(7000,100,'collision',1,1,0,1,1)")
+  for (const caseRelativePath of ['collision/child', '00aaa000', '../escape']) {
+    await assert.rejects(determineSessionSafeCaseStatus({ ...fixture, targetCaseRoot, caseRelativePath, operation: 'workspace' }))
+  }
+  db.exec('INSERT INTO task VALUES(2,100,0,0)')
+  await assert.rejects(determineSessionSafeCaseStatus({ ...fixture, targetCaseRoot, caseRelativePath: 'new-case', operation: 'workspace' }), /WORKSPACE_SYNC_PENDING/)
+  } finally { db.close() }
+})
+
+test('workspace intent resumes an empty cloud tree but denies its queued filesystem/upload work', async context => {
+  const fixture = await buildFixture(context)
+  const args = { ...fixture, caseRelativePath: 'empty', targetCaseRoot: path.join(fixture.temporaryRoot, 'empty'), operation: 'workspace' }
+  await mkdir(path.join(args.targetCaseRoot, 'EVRAK'), { recursive: true })
+  const db = new DatabaseSync(fixture.databasePath)
+  try {
+    db.exec("INSERT INTO folder VALUES(400,100,'empty',0,1,1,0); INSERT INTO folder VALUES(401,400,'EVRAK',0,1,1,0); ALTER TABLE fstask ADD COLUMN folderid INTEGER; ALTER TABLE fstask ADD COLUMN sfolderid INTEGER; CREATE TABLE upload_tasks(parentfid INTEGER)")
+    assert.equal((await determineSessionSafeCaseStatus(args)).CaseStatus, 'ready')
+    assert.equal((await determineSessionSafeCaseStatus({ ...args, operation: undefined })).CaseStatus, 'unknown')
+    db.exec('INSERT INTO fstask(id,fileid,folderid,sfolderid) VALUES(99,0,401,0)')
+    await assert.rejects(determineSessionSafeCaseStatus(args), /WORKSPACE_SYNC_PENDING/)
+    db.exec('DELETE FROM fstask; INSERT INTO upload_tasks VALUES(400)')
+    await assert.rejects(determineSessionSafeCaseStatus(args), /WORKSPACE_SYNC_PENDING/)
+    db.exec("DELETE FROM upload_tasks; INSERT INTO folder VALUES(402,400,'evrak',0,1,1,0)")
+    await assert.rejects(determineSessionSafeCaseStatus(args), /WORKSPACE_PATH_CONFLICT/)
+  } finally { db.close() }
+})
+
+test('workspace intent rejects reparse points and local conflict names before any create permission', async context => {
+  const fixture = await buildFixture(context)
+  const targetCaseRoot = path.join(fixture.temporaryRoot, 'linked')
+  await symlink(fixture.targetCaseRoot, targetCaseRoot, process.platform === 'win32' ? 'junction' : 'dir')
+  await assert.rejects(determineSessionSafeCaseStatus({ ...fixture, targetCaseRoot, caseRelativePath: 'new', operation: 'workspace' }), /WORKSPACE_PATH_CONFLICT/)
+  const emptyRoot = path.join(fixture.temporaryRoot, 'empty-conflict')
+  await mkdir(path.join(emptyRoot, 'EVRAK (conflicted copy)'), { recursive: true })
+  await assert.rejects(determineSessionSafeCaseStatus({ ...fixture, targetCaseRoot: emptyRoot, caseRelativePath: 'new', operation: 'workspace' }), /WORKSPACE_PATH_CONFLICT/)
 })
 
 test('determineSessionSafeCaseStatus: hicbir engelleyici dosya yoksa CaseStatus=ready', async (context) => {

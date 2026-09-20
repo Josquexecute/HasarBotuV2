@@ -36,12 +36,12 @@ export function CaseLegacyReferenceFields({ item, references }: {
   const responsible = item.responsibleUserId === null || item.responsibleUserId === undefined
     ? null
     : references?.users.find((entry) => entry.id === item.responsibleUserId)?.displayName ?? 'V2 ataması mevcut'
-  const expert = item.expertUserId === null || item.expertUserId === undefined
+  const expert = item.eksist?.expertName ?? (item.expertUserId === null || item.expertUserId === undefined
     ? null
     : references?.experts.find((entry) => entry.id === item.expertUserId)?.displayName
       ?? references?.users.find((entry) => entry.id === item.expertUserId)?.displayName
-      ?? 'V2 ataması mevcut'
-  const service = item.serviceProfile?.name
+      ?? 'V2 ataması mevcut')
+  const service = item.eksist?.serviceName ?? item.serviceProfile?.name
     ?? (item.serviceId === null || item.serviceId === undefined
       ? null
       : references?.services.find((entry) => entry.id === item.serviceId)?.name ?? 'V2 servisi mevcut')

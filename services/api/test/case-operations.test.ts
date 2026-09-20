@@ -302,31 +302,31 @@ describeDb('Paket 37 case not, görev ve takip geçmişi gerçek API', () => {
     })
   })
 
-  it('takip tarihi optimistic update ile append-only geçmiş ve atomik audit üretir', async () => {
+  it('takip tarihinin manuel değişmesini reddeder ve geçmişi korur', async () => {
     const updated = await app.inject({
       method: 'PATCH',
       url: CASE_DETAIL_ROUTE.replace(':caseId', caseId),
       headers: { cookie: managerCookie },
       payload: { expectedVersion: 1, followUpDate: '2026-07-22' },
     })
-    expect(updated.statusCode).toBe(200)
+    expect(updated.statusCode).toBe(400)
     const workspace = await app.inject({
       method: 'GET',
       url: operationsUrl(),
       headers: { cookie: managerCookie },
     })
     const body = caseOperationsResponseSchema.parse(workspace.json())
-    expect(body.followUpHistory.map((item) => item.newFollowUpDate)).toEqual(['2026-07-22', '2026-07-18'])
+    expect(body.followUpHistory.map((item) => item.newFollowUpDate)).toEqual(['2026-07-18'])
     expect(body.followUpHistory[0]).toMatchObject({
-      previousFollowUpDate: '2026-07-18',
-      source: 'case_update',
-      caseVersion: 2,
+      previousFollowUpDate: null,
+      source: 'case_create',
+      caseVersion: 1,
     })
     const audit = await pool.query(
       "SELECT count(*)::int AS n FROM audit_events WHERE action='case.follow_up_changed' AND resource_id=$1",
       [caseId],
     )
-    expect(audit.rows).toEqual([{ n: 1 }])
+    expect(audit.rows).toEqual([{ n: 0 }])
   })
 
   it('kapalı dosyada yazmayı conflict ile durdurur ve response/audit sızıntısı üretmez', async () => {

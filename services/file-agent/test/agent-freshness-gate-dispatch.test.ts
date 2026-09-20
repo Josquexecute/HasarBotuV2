@@ -68,7 +68,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
 
     const result = await runOnce(client, baseConfig())
 
-    expect(checkCaseFreshness).toHaveBeenCalledWith(baseConfig().freshnessGate, root, '00AAA000')
+    expect(checkCaseFreshness).toHaveBeenCalledWith(baseConfig().freshnessGate, root, '00AAA000', { operation: 'workspace' })
     expect(result.kind).toBe('reported')
     expect(reportResult).toHaveBeenCalledWith('job-1', expect.objectContaining({ outcome: 'failed', errorCode: 'case_not_fresh' }))
     // Gercek, bagimsiz dogrulama: workspace klasoru GERCEKTEN olusmadi.
@@ -119,7 +119,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
 
     await runOnce(client, config)
 
-    expect(checkCaseFreshness).toHaveBeenCalledWith(undefined, root, '00CCC000')
+    expect(checkCaseFreshness).toHaveBeenCalledWith(undefined, root, '00CCC000', { operation: 'workspace' })
     expect(reportResult).toHaveBeenCalledWith('job-3', expect.objectContaining({ outcome: 'failed', errorCode: 'case_not_fresh' }))
     await expect(stat(join(root, '00CCC000'))).rejects.toThrow()
   })

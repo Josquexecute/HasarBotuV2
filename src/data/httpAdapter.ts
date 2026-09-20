@@ -69,18 +69,18 @@ export function mapCaseDtoToRecord(
     officeNumber: dto.officeCaseNumber,
     noticeNumber: dto.notificationFormNumber ?? '—',
     claimNumber: dto.insurerClaimNumber ?? '—',
-    company: '—',
+    company: dto.eksist?.insurerName ?? '—',
     type: caseType,
     status: deriveStatus(dto, today),
     stage: STAGE_LABELS[dto.stage],
     missingDocuments: 0,
     assignee: '—',
-    expert: '—',
-    service: dto.serviceProfile?.name ?? '—',
+    expert: dto.eksist?.expertName ?? '—',
+    service: dto.eksist?.serviceName ?? dto.serviceProfile?.name ?? '—',
     followUp,
     followUpTone,
     lastAction: dto.lastInterventionAt ?? '—',
-    vehicle: '—',
+    vehicle: dto.eksist ? ['Marka', 'Araç Tipi', 'Model Yılı'].map(label => dto.eksist!.vehicleFields[label]).filter(Boolean).join(' · ') : '—',
     insured: '—',
     estimatedDamage: 0,
     notes: [],
@@ -95,6 +95,7 @@ export function mapCaseDtoToRecord(
     lossDate: dto.lossDate,
     notificationDate: dto.notificationDate,
     lifecycleStatus: dto.status,
+    ...(dto.eksist ? { eksist: dto.eksist } : {}),
     ...(dto.legacyReferences === undefined ? {} : { legacyReferences: dto.legacyReferences }),
   }
 }
@@ -148,7 +149,7 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
       // hemen reddederek global "oturum sona erdi" kapisini tetikler.
       const [{ caseListResponseSchema }, firstPagePayload] = await Promise.all([
         import('@hasarbotu/contracts'),
-        requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100`),
+        requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100&includeEksist=true`),
       ])
       let pagePayload = firstPagePayload
       while (true) {
@@ -162,7 +163,7 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
         result.push(...parsed.data.items.map((item) => mapCaseDtoToRecord(item)))
         if (page >= parsed.data.pageInfo.totalPages) return result
         page += 1
-        pagePayload = await requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100`)
+        pagePayload = await requestJson(`/api/v1/cases?status=${status}&page=${page}&pageSize=100&includeEksist=true`)
       }
     },
 
@@ -172,6 +173,7 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
      */
     async listCasePage(query: CasePageQuery): Promise<CasePageResult> {
       const search = new URLSearchParams()
+      search.set('includeEksist', 'true')
       search.set('page', String(query.page))
       search.set('pageSize', String(query.pageSize))
       if (query.status !== undefined) search.set('status', query.status)
@@ -207,7 +209,7 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
     async getCase(caseId: string): Promise<CaseRecord> {
       const { caseDetailWithLegacyReferencesResponseSchema } = await import('@hasarbotu/contracts')
       const parsed = caseDetailWithLegacyReferencesResponseSchema.safeParse(
-        await requestJson(`/api/v1/cases/${encodeURIComponent(caseId)}?includeLegacyReferences=true`),
+        await requestJson(`/api/v1/cases/${encodeURIComponent(caseId)}?includeLegacyReferences=true&includeEksist=true`),
       )
       if (!parsed.success) throw new HttpCasesError('unavailable', 'case detail response is invalid')
       return mapCaseDtoToRecord(parsed.data.case)

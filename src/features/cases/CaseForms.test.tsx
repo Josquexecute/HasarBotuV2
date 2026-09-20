@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { localDateSchema } from '@hasarbotu/contracts'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
@@ -191,20 +192,34 @@ function renderEdit(port: CaseCommandPort, options: Partial<Parameters<typeof Ca
 }
 
 describe('CaseEditModal optimistic locking akışı', () => {
+  it('keeps imported fields readonly and submits service changes only through the pencil dialog', async () => {
+    const eksist = { sourceId: 'source-1', assignmentDate: localDateSchema.parse('2026-09-18'), assignmentDateText: '18.09.2026 09:30:00', insurerName: 'Kaynak Sigorta', expertName: 'Kaynak Eksper', expertLicenseNumber: 'E12345', corporateExpertLicenseNumber: '', serviceName: 'Kaynak Servis', serviceRevised: false, vehicleFields: {} }
+    const update = vi.fn().mockResolvedValue(record({ version: 2, eksist: { ...eksist, serviceName: 'Yeni Servis', serviceRevised: true } }))
+    renderEdit(commandPort({ update }), { item: record({ eksist }) })
+    const user = userEvent.setup()
+    for (const label of ['İhbar numarası', 'Sigorta şirketi', 'Eksper', 'Servis']) expect(screen.getByLabelText(label)).toHaveAttribute('readonly')
+    await user.click(screen.getByRole('button', { name: 'Servisi revize et' }))
+    await user.clear(screen.getByLabelText('Servis adı'))
+    await user.type(screen.getByLabelText('Servis adı'), 'Yeni Servis')
+    await user.click(screen.getByRole('button', { name: 'Revizyonu uygula' }))
+    expect(update).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, serviceRevision: { name: 'Yeni Servis' } }))
+  })
   it('yalnız desteklenen alanları expectedVersion ile günceller ve server version sonucunu taşır', async () => {
     const update = vi.fn().mockResolvedValue(record({ version: 2, workflowStage: 'inspection_pending', stage: 'Ekspertiz Bekliyor' }))
     const props = renderEdit(commandPort({ update }))
     const user = userEvent.setup()
     await user.selectOptions(screen.getByLabelText('Workflow aşaması'), 'inspection_pending')
-    await user.type(screen.getByLabelText(/^Takip tarihi/), '2026-07-20')
+    expect(screen.getByLabelText(/^Takip tarihi/)).toHaveAttribute('readonly')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
     expect(update).toHaveBeenCalledWith('case-created', expect.objectContaining({
       expectedVersion: 1,
       workflowStage: 'inspection_pending',
-      followUpDate: '2026-07-20',
     }))
+    expect(update.mock.calls[0]![1]).not.toHaveProperty('followUpDate')
     expect(props.onUpdated).toHaveBeenCalledWith(expect.objectContaining({ version: 2 }))
   })
 

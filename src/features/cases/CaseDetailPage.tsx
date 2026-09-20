@@ -349,7 +349,7 @@ export function CaseDetailPage() {
                 <header><h2>Bugünkü Takip</h2><CalendarClock size={16} /></header>
                 <strong className={`overview-follow overview-follow--${item.followUpTone}`}>{item.followUp}</strong>
                 <p>{source === 'api' ? 'Takip tarihi gerçek case metadata kaydından gösterilir.' : 'Servisten işlem durumu ve eksik evrak dönüşü alınacak.'}</p>
-                <button className="text-button" type="button" onClick={() => setActiveTab('Operasyon')}>Takibi düzenle <ChevronRight size={14} /></button>
+                <button className="text-button" type="button" onClick={() => setActiveTab('Operasyon')}>Takip geçmişini gör <ChevronRight size={14} /></button>
               </section>
               <section className="info-panel">
                 <header><h2>Evrak Durumu</h2><FileCheck2 size={16} /></header>
@@ -396,10 +396,6 @@ export function CaseDetailPage() {
               source={source}
               onUnauthorized={session.reportUnauthorized}
               onReloadCase={reloadCase}
-              onUpdated={(updated) => {
-                setCaseOverride(updated)
-                setPrototypeNotice(`Takip tarihi kaydedildi · yeni sürüm ${updated.version ?? '—'}`)
-              }}
             />
           ) : activeTab === 'Operasyon' ? (
             <div className="module-workspace">

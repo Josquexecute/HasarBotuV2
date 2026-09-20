@@ -29,6 +29,7 @@ export type CaseStageCode =
   | 'closed'
 
 export interface CaseRecord {
+  eksist?: import('@hasarbotu/contracts').EksistCaseData
   caseId: string
   plate: string
   officeNumber: string

@@ -1,5 +1,10 @@
 # Eksist pilot doğrulaması ve devreye alma hazırlığı
 
+> Bu bilgisayarda sonradan hazırlanan izole V2 servisleri, gerçek pCloud eşlemesi,
+> kurulu OCR/HTTP kontrolleri ve açık freshness/UI engelleri için
+> [yerel pilot devam raporuna](EKSIST_PILOT_LOCAL_2026-09-20.md) bakın.
+> Aşağıdaki rapor önceki denetimin tarihsel sonucudur.
+
 20 Eylül 2026 · Kaynak commit: `8ad31b076bf4847af7d3dd135c10f22a33b1340f`
 
 **Sonuç: PARTIAL. Kurulu ortam pilotu ve dağıtım kapısı BLOCKED.**

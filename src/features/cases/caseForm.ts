@@ -54,6 +54,7 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
 }
 
 function fieldMessage(error: CaseCommandFieldError): string {
+  if (error.code === 'eksist_expert_review_required') return 'OCR eksper adında I/İ hatası olabilir. Adı orijinal belgeyle karşılaştırıp doğrulayın veya kaynak metni aktarın.'
   if (error.code === 'unknown_reference') return 'Bu kayıt organizasyonunuzda bulunamadı.'
   if (error.code === 'inactive_or_ineligible_reference') return 'Bu kayıt pasif veya bu alan için uygun değil.'
   if (error.code === 'notification_before_loss_date') return 'İhbar tarihi hasar tarihinden önce olamaz.'

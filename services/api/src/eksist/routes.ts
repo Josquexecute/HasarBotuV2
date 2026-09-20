@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
-import { caseDetailResponseSchema, eksistUploadSchema, quickCaseCreateSchema, idempotencyKeySchema, zodErrorToApiError } from '@hasarbotu/contracts'
+import { caseDetailResponseSchema, caseVehicleProfileFieldsSchema, eksistUploadSchema, quickCaseCreateSchema, idempotencyKeySchema, zodErrorToApiError } from '@hasarbotu/contracts'
 import { parseEksist } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { requireAnyRole, requireSession } from '../auth/guard.js'
@@ -14,6 +14,7 @@ import { createAuditService } from '../audit/service.js'
 import { failureBody } from '../errors/failure.js'
 import { extractEksist } from './extract.js'
 import { withTransaction } from '../db/executor.js'
+import { applyEksistSource, withEksistData } from './automatic.js'
 
 const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const
 const SCOPE = 'cases.quick-create'
@@ -66,22 +67,31 @@ export function registerEksistRoutes(app: FastifyInstance, { pool }: { pool: pg.
       caseId = caseDetailResponseSchema.parse(replay.responseBody).case.id
     } else {
       try {
-        const item = await cases.createCase(actor, input.case, { scope: SCOPE, key: key.data, requestHash, buildResponse: item => caseDetailResponseSchema.parse({ case: item }) }, async (client, createdId) => {
+        const caseInput = { ...input.case }
+        if (input.source) {
+          delete caseInput.insurerId; delete caseInput.expertUserId; delete caseInput.serviceId; delete caseInput.notificationFormNumber
+        }
+        const item = await cases.createCase(actor, caseInput, { scope: SCOPE, key: key.data, requestHash, buildResponse: item => caseDetailResponseSchema.parse({ case: item }) }, async (client, createdId) => {
+          let vehicle = input.vehicle
           if (input.source) {
             // Locks the source and reference independently: re-upload and concurrent requests cannot fork a case.
             await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`eksist:${organizationId}:${input.source.reference.toUpperCase()}`])
-            const selected = await client.query('SELECT case_id,source_hash FROM eksist_sources WHERE organization_id=$1 AND id::text=$2 FOR UPDATE', [organizationId, input.source.id])
+            const selected = await client.query('SELECT case_id,source_hash,raw_text,extraction_method FROM eksist_sources WHERE organization_id=$1 AND id::text=$2 FOR UPDATE', [organizationId, input.source.id])
             if (!selected.rowCount) throw new ReferenceCheckError('source.id')
             const sourceHash = (selected.rows[0] as { source_hash: string }).source_hash
             await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`eksist-hash:${organizationId}:${sourceHash}`])
             const previous = await client.query('SELECT case_id FROM eksist_sources WHERE organization_id=$1 AND (request_reference=$2 OR source_hash=$3) AND case_id IS NOT NULL', [organizationId, input.source.reference.toUpperCase(), sourceHash])
             const existing = (selected.rows[0] as { case_id: string | null }).case_id ?? (previous.rows[0] as { case_id: string } | undefined)?.case_id
             if (existing) throw new ExistingSource(existing)
-            await client.query('UPDATE eksist_sources SET case_id=$3,request_reference=$4,reviewed_fields=$5::jsonb WHERE organization_id=$1 AND id::text=$2', [organizationId, input.source.id, createdId, input.source.reference.toUpperCase(), JSON.stringify({ vehicleDraft: input.source.vehicleDraft ?? null })])
+            const automatic = await applyEksistSource(client, organizationId, createdId, input.source.id, String(selected.rows[0].raw_text), input.source.serviceRevision, { method: String(selected.rows[0].extraction_method), ...(input.source.expertReview ? { expertReview: input.source.expertReview } : {}) })
+            const extracted = parseEksist(String(selected.rows[0].raw_text))
+            const profile = caseVehicleProfileFieldsSchema.safeParse({ brand: extracted.brand, model: extracted.model, modelYear: Number(extracted.modelYear), vehicleClass: extracted.vehicleClass, evidenceSource: 'insurer_record', evidenceReference: `Eksist ${input.source.reference}` })
+            vehicle = profile.success ? profile.data : undefined
+            await client.query('UPDATE eksist_sources SET case_id=$3,request_reference=$4,reviewed_fields=$5::jsonb WHERE organization_id=$1 AND id::text=$2', [organizationId, input.source.id, createdId, input.source.reference.toUpperCase(), JSON.stringify({ automatic, vehicleDraft: input.source.vehicleDraft ?? null, ...(input.source.expertReview ? { expertReview: { ...input.source.expertReview, reviewedByUserId: session.user.id } } : {}) })])
             await audit.record(client, { ...actor, action: 'eksist.source_linked', entityType: 'case', entityId: createdId, details: { sourceId: input.source.id } })
           }
-          if (input.vehicle) {
-            await createCaseVehicleProfileStore(pool).save({ organizationId, userId: session.user.id }, createdId, { fields: input.vehicle, expectedVersion: null, reason: null }, client)
+          if (vehicle) {
+            await createCaseVehicleProfileStore(pool).save({ organizationId, userId: session.user.id }, createdId, { fields: vehicle, expectedVersion: null, reason: null }, client)
             await audit.record(client, { ...actor, action: 'case.vehicle_profile_created', entityType: 'case', entityId: createdId, details: { source: input.source ? 'eksist' : 'manual' } })
           }
           const plan = await workspace.createPlan(actor, createdId, { storageRootKey: input.storageRootKey }, { key: uuidv7(), requestHash }, client)
@@ -107,7 +117,8 @@ export function registerEksistRoutes(app: FastifyInstance, { pool }: { pool: pg.
       const retried = await workspace.approvePlan(actor, caseId!, provisioning.id, { key: uuidv7(), requestHash })
       if (retried.kind === 'ok') provisioning = retried.provisioning
     }
-    return reply.code(provisioning?.status === 'ready' ? 200 : 202).send({ case: detail, provisioning: provisioning ?? null, duplicate })
+    const enriched = detail ? (await withEksistData(pool, organizationId, [detail]))[0] : detail
+    return reply.code(provisioning?.status === 'ready' ? 200 : 202).send({ case: enriched, provisioning: provisioning ?? null, duplicate })
   })
 
   app.get<{ Params: { caseId: string } }>('/api/v1/cases/:caseId/eksist-sources', async (request, reply) => {

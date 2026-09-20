@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
   CalendarClock,
@@ -11,7 +11,6 @@ import {
   XCircle,
 } from 'lucide-react'
 import { CaseOperationsError, type CaseOperationsPort, type CaseTaskRecord } from '../../data/caseOperationsPort'
-import { CaseCommandError, createHttpCaseCommandAdapter, type CaseCommandPort } from '../../data/commandPort'
 import type { CaseReferenceDataPort, DataSourceKind } from '../../data/ports'
 import { useCaseOperations } from '../../data/useCaseOperations'
 import { useCaseReferences } from '../../data/useCaseReferences'
@@ -21,10 +20,8 @@ interface Props {
   readonly item: CaseRecord
   readonly source: DataSourceKind
   readonly onUnauthorized: () => void
-  readonly onUpdated: (item: CaseRecord) => void
   readonly onReloadCase: () => void
   readonly operationsPort?: CaseOperationsPort
-  readonly commandPort?: CaseCommandPort
   readonly referencePort?: CaseReferenceDataPort
 }
 
@@ -75,12 +72,6 @@ function safeErrorMessage(error: unknown): string {
     if (error.kind === 'conflict') return 'Kayıt başka bir işlemle değişti. Güncel veriyi yükleyin.'
     return 'Operasyon servisine ulaşılamadı. Sahte veri gösterilmedi.'
   }
-  if (error instanceof CaseCommandError) {
-    if (error.kind === 'unauthorized') return 'Oturum süresi doldu. Yeniden giriş yapın.'
-    if (error.kind === 'version_conflict') return 'Dosya başka bir işlemle değişti. Güncel veriyi yükleyin.'
-    if (error.kind === 'validation') return 'Takip tarihi doğrulanamadı.'
-    return 'Takip tarihi güncellenemedi.'
-  }
   return 'İşlem güvenli biçimde tamamlanamadı.'
 }
 
@@ -88,14 +79,11 @@ export function CaseOperationsApiModule({
   item,
   source,
   onUnauthorized,
-  onUpdated,
   onReloadCase,
   operationsPort,
-  commandPort,
   referencePort,
 }: Props) {
   const workspace = useCaseOperations(item.caseId, source, true, operationsPort)
-  const commands = useMemo(() => commandPort ?? createHttpCaseCommandAdapter(), [commandPort])
   const references = useCaseReferences(referencePort)
   const busyRef = useRef(false)
   const [busy, setBusy] = useState('')
@@ -113,7 +101,6 @@ export function CaseOperationsApiModule({
     action: 'complete' | 'cancel'
     text: string
   } | null>(null)
-  const [followUpDate, setFollowUpDate] = useState(item.followUpDate ?? '')
 
   const run = async (label: string, operation: () => Promise<void>) => {
     if (busyRef.current) return
@@ -125,14 +112,8 @@ export function CaseOperationsApiModule({
       await operation()
     } catch (caught) {
       setError(safeErrorMessage(caught))
-      setConflict(
-        (caught instanceof CaseOperationsError && caught.kind === 'conflict') ||
-        (caught instanceof CaseCommandError && caught.kind === 'version_conflict'),
-      )
-      if (
-        (caught instanceof CaseOperationsError && caught.kind === 'unauthorized') ||
-        (caught instanceof CaseCommandError && caught.kind === 'unauthorized')
-      ) onUnauthorized()
+      setConflict(caught instanceof CaseOperationsError && caught.kind === 'conflict')
+      if (caught instanceof CaseOperationsError && caught.kind === 'unauthorized') onUnauthorized()
     } finally {
       busyRef.current = false
       setBusy('')
@@ -187,22 +168,6 @@ export function CaseOperationsApiModule({
         await workspace.port.cancelTask(item.caseId, task.id, task.version, resolution.text.trim())
       }
       setResolution(null)
-      workspace.reload()
-    })
-  }
-
-  const updateFollowUp = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (item.version === undefined) {
-      setError('Dosya sürümü yüklenemedi. Güncel veriyi alın.')
-      return
-    }
-    void run('follow-up', async () => {
-      const updated = await commands.updateCase(item.caseId, {
-        expectedVersion: item.version as number,
-        followUpDate: followUpDate === '' ? null : followUpDate,
-      })
-      onUpdated(updated)
       workspace.reload()
     })
   }
@@ -315,12 +280,7 @@ export function CaseOperationsApiModule({
 
       <section className="info-panel case-operations__follow-up">
         <header><h2>Takip Tarihi Geçmişi</h2><CalendarClock size={16} /></header>
-        {canWrite && (
-          <form className="case-operations__follow-form" onSubmit={updateFollowUp}>
-            <label><span>Yeni takip tarihi</span><input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} /></label>
-            <button className="button button--primary" type="submit" disabled={busy !== '' || followUpDate === (item.followUpDate ?? '')}>{busy === 'follow-up' ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} Takibi Kaydet</button>
-          </form>
-        )}
+        <p>Takip tarihi kay?t g?n?nde otomatik atan?r; elle de?i?tirilemez.</p>
         <div className="case-follow-up-history">
           {workspace.data.followUpHistory.length === 0 && <p className="case-operations__empty">Takip tarihi değişikliği bulunmuyor.</p>}
           {workspace.data.followUpHistory.map((history) => (

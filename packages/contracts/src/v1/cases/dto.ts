@@ -17,6 +17,7 @@ import {
 } from '../../common/primitives.js'
 import { pageInfoSchema } from '../../common/pagination.js'
 import { serviceReferenceSchema } from '../references/dto.js'
+import { eksistCaseDataSchema } from '../eksist-case.js'
 
 /**
  * Wire DTO alan bicimi.
@@ -27,6 +28,7 @@ import { serviceReferenceSchema } from '../references/dto.js'
  * - Sunum alani veya Turkce sabit etiket yoktur.
  */
 const caseDtoShape = {
+  eksist: eksistCaseDataSchema.optional(),
   id: caseIdSchema,
   caseType: caseTypeSchema,
   officeCaseNumber: officeCaseNumberSchema,
@@ -87,6 +89,7 @@ export type CaseDetailWithLegacyReferences = z.infer<typeof caseDetailWithLegacy
 
 export const caseDetailQuerySchema = z.strictObject({
   includeLegacyReferences: z.literal('true').optional(),
+  includeEksist: z.literal('true').optional(),
 })
 export type CaseDetailQuery = z.infer<typeof caseDetailQuerySchema>
 

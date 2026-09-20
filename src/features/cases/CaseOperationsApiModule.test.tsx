@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { CaseOperationsPort } from '../../data/caseOperationsPort'
-import type { CaseCommandPort } from '../../data/commandPort'
 import type { CaseReferenceDataPort } from '../../data/ports'
 import { CaseOperationsError } from '../../data/caseOperationsPort'
 import { mockCases } from '../../mocks/cases'
@@ -79,7 +78,7 @@ function references(): CaseReferenceDataPort {
 }
 
 describe('Case Operations gerçek API modülü', () => {
-  it('not, görev, zorunlu sonuç ve takip tarihi akışlarını kullanıcı kontrollü çalıştırır', async () => {
+  it('not ve görev işlemlerini çalıştırır; otomatik takip tarihi için düzenleyici sunmaz', async () => {
     const operations: CaseOperationsPort = {
       load: vi.fn().mockResolvedValue(workspace),
       createNote: vi.fn().mockResolvedValue(note),
@@ -87,21 +86,14 @@ describe('Case Operations gerçek API modülü', () => {
       completeTask: vi.fn().mockResolvedValue({ ...task, status: 'completed', version: 2, resolutionNote: 'Görev tamamlandı.', resolvedByUserId: USER_ID, resolvedByDisplayName: 'Sentetik Kullanıcı', resolvedAt: '2026-07-16T11:00:00.000Z' }),
       cancelTask: vi.fn(),
     }
-    const commands: CaseCommandPort = {
-      createCase: vi.fn(),
-      updateCase: vi.fn().mockResolvedValue({ ...item, version: 2, followUpDate: '2026-07-22' }),
-    }
     const user = userEvent.setup()
-    const onUpdated = vi.fn()
     render(
       <CaseOperationsApiModule
         item={item}
         source="api"
         onUnauthorized={vi.fn()}
-        onUpdated={onUpdated}
         onReloadCase={vi.fn()}
         operationsPort={operations}
-        commandPort={commands}
         referencePort={references()}
       />,
     )
@@ -124,15 +116,8 @@ describe('Case Operations gerçek API modülü', () => {
     await user.click(screen.getByRole('button', { name: 'Onayla' }))
     await waitFor(() => expect(operations.completeTask).toHaveBeenCalledWith(CASE_ID, TASK_ID, 1, 'Görev tamamlandı.'))
 
-    const followUp = screen.getByLabelText('Yeni takip tarihi')
-    await user.clear(followUp)
-    await user.type(followUp, '2026-07-22')
-    await user.click(screen.getByRole('button', { name: /Takibi Kaydet/ }))
-    await waitFor(() => expect(commands.updateCase).toHaveBeenCalledWith(CASE_ID, {
-      expectedVersion: 1,
-      followUpDate: '2026-07-22',
-    }))
-    expect(onUpdated).toHaveBeenCalledWith(expect.objectContaining({ version: 2, followUpDate: '2026-07-22' }))
+    expect(screen.queryByLabelText('Yeni takip tarihi')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Takibi Kaydet/ })).not.toBeInTheDocument()
   })
 
   it('API kesintisinde mock not/görev göstermeden güvenli hata ve retry sunar', async () => {
@@ -148,10 +133,8 @@ describe('Case Operations gerçek API modülü', () => {
         item={item}
         source="api"
         onUnauthorized={vi.fn()}
-        onUpdated={vi.fn()}
         onReloadCase={vi.fn()}
         operationsPort={operations}
-        commandPort={{ createCase: vi.fn(), updateCase: vi.fn() }}
         referencePort={references()}
       />,
     )
@@ -184,10 +167,8 @@ describe('Case Operations gerçek API modülü', () => {
         item={{ ...item, lifecycleStatus: 'closed' }}
         source="api"
         onUnauthorized={vi.fn()}
-        onUpdated={vi.fn()}
         onReloadCase={vi.fn()}
         operationsPort={operations}
-        commandPort={{ createCase: vi.fn(), updateCase: vi.fn() }}
         referencePort={references()}
       />,
     )

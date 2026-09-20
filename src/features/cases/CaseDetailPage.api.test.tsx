@@ -56,7 +56,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     window.sessionStorage.setItem('hasarbotu-active-case-tab', 'Geçmiş')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
       const url = String(input)
-      const body = url.endsWith('/api/v1/cases/case-closed-38?includeLegacyReferences=true')
+      const body = url.endsWith('/api/v1/cases/case-closed-38?includeLegacyReferences=true&includeEksist=true')
         ? { case: CLOSED_CASE }
         : { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } }
       return { ok: true, status: 200, json: async () => body } as Response
@@ -75,7 +75,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     await waitFor(() => expect(screen.getByText('34 API 380')).toBeInTheDocument(), { timeout: 15_000 })
     expect(screen.getByText('Bu modül henüz gerçek API verisine bağlı değildir; mock kayıt gösterilmez.')).toBeInTheDocument()
     expect(screen.queryByText('Servis görüşmesi notu eklendi')).not.toBeInTheDocument()
-    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-closed-38?includeLegacyReferences=true', expect.anything())
+    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-closed-38?includeLegacyReferences=true&includeEksist=true', expect.anything())
   })
 
   it('yerel case override, dosya sunucuda yeniden yüklenip sürüm değiştiğinde mutabakatla geri gelmez', async () => {
@@ -118,7 +118,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
       if (method === 'PATCH' && url.endsWith(`/api/v1/cases/${CASE_ID}`)) {
         return { ok: true, status: 200, json: async () => ({ case: patchedDto }) } as Response
       }
-      if (url.endsWith(`/api/v1/cases/${CASE_ID}?includeLegacyReferences=true`)) {
+      if (url.endsWith(`/api/v1/cases/${CASE_ID}?includeLegacyReferences=true&includeEksist=true`)) {
         getCallCount += 1
         const body = {
           ...(getCallCount === 1 ? initialDto : refreshedDto),

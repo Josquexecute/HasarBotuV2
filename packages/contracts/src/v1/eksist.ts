@@ -13,6 +13,8 @@ export const quickCaseCreateSchema = z.strictObject({
   source: z.strictObject({
     id: idSchema,
     reference: z.string().trim().regex(/^[A-Za-z0-9/-]{1,80}$/),
+    serviceRevision: z.strictObject({ name: z.string().trim().min(1).max(500) }).optional(),
+    expertReview: z.strictObject({ name: z.string().trim().min(1).max(500), confirmed: z.literal(true) }).optional(),
     vehicleDraft: z.strictObject({ brand: z.string().max(500), model: z.string().max(500), modelYear: z.string().max(50), vehicleClass: z.string().max(100) }).optional(),
   }).optional(),
   vehicle: caseVehicleProfileFieldsSchema.optional(),

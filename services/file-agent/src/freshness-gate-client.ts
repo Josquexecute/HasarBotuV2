@@ -28,7 +28,7 @@ export async function checkCaseFreshness(
   freshnessGate: FreshnessGateConfig | undefined,
   rootAbsolute: string,
   relativePath: string,
-  options: { readonly timeoutMs?: number } = {},
+  options: { readonly timeoutMs?: number; readonly operation?: 'workspace' } = {},
 ): Promise<FreshnessCheckResult> {
   if (freshnessGate === undefined) {
     return { ready: false, caseStatus: 'unknown', reason: 'freshness_gate_not_configured' }
@@ -51,6 +51,7 @@ export async function checkCaseFreshness(
         '--case-relative-path', relativePath,
         '--pcloud-db', freshnessGate.pcloudLocalDatabasePath,
         '--attestation-store', freshnessGate.attestationStoreDirectory,
+        ...(options.operation ? ['--operation', options.operation] : []),
       ], { stdio: ['ignore', 'pipe', 'pipe'] })
 
       const timer = setTimeout(() => {
