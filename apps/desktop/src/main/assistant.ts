@@ -95,6 +95,15 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   const menu = Menu.buildFromTemplate([
     { label: 'HasarBotu’yu aç', click: () => showMain() },
     { type: 'separator' },
+    { label: 'Hızlı not', click: () => {
+      showMain()
+      const main = options.shell.window
+      if (main.isDestroyed() || !main.webContents.getURL().startsWith(`${options.shell.origin}/`)) return
+      // Constant DOM notification preserves the current route and selected case.
+      void main.webContents.executeJavaScript("window.dispatchEvent(new Event('hasarbotu:quick-note'))").catch(() => {
+        console.error('desktop assistant could not open quick note')
+      })
+    } },
     { label: 'Dosyalar', click: () => showMain('/dosyalar') },
     { label: 'Bildirimler', click: () => showMain('/bildirimler') },
     { label: 'Ayarlar', click: () => showMain('/ayarlar') },

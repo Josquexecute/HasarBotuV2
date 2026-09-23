@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from '../app/sessionContext'
+import { NOTE_SAVED_EVENT } from '../app/activeCase'
 import {
   CaseOperationsError,
   createHttpCaseOperationsAdapter,
@@ -40,6 +41,14 @@ export function useCaseOperations(
   const [token, setToken] = useState(0)
   const reload = useCallback(() => setToken((value) => value + 1), [])
   const active = source === 'api' && enabled
+  useEffect(() => {
+    if (!active) return
+    const refresh = (event: Event) => {
+      if ((event as CustomEvent<{ caseId: string }>).detail?.caseId === caseId) reload()
+    }
+    window.addEventListener(NOTE_SAVED_EVENT, refresh)
+    return () => window.removeEventListener(NOTE_SAVED_EVENT, refresh)
+  }, [active, caseId, reload])
   // Yükleme durumu efektte senkron sıfırlanmaz; istek anahtarı değişince RENDER
   // sırasında türetilir. Anahtarı tutmayan geç yanıt yok sayılır.
   const requestKey = `${caseId}#${token}`

@@ -37,7 +37,11 @@ const EMPTY: CaseVehicleProfileFieldsRecord = {
   evidenceReference: null,
 }
 
-export function CaseVehicleProfileModule({ caseId, port }: {
+export function CaseVehicleProfileModule(props: { readonly caseId: string; readonly port?: CaseVehicleProfileDataPort }) {
+  return <VehicleProfileForm key={props.caseId} {...props} />
+}
+
+function VehicleProfileForm({ caseId, port }: {
   readonly caseId: string
   readonly port?: CaseVehicleProfileDataPort
 }) {
@@ -114,7 +118,7 @@ export function CaseVehicleProfileModule({ caseId, port }: {
       <div className="dashboard-state" role="alert">
         <AlertTriangle size={24} />
         <strong>Araç profili alınamadı</strong>
-        <span>API veya ağ bağlantısını kontrol edin. Sahte veri gösterilmiyor.</span>
+        <span>Bağlantıyı kontrol edip dosyayı yeniden açın.</span>
       </div>
     )
   }
@@ -129,7 +133,6 @@ export function CaseVehicleProfileModule({ caseId, port }: {
         <h3><Car size={16} aria-hidden="true" /> Araç Profili</h3>
         <small>
           {record.version === null ? 'Henüz kaydedilmedi' : `Sürüm ${record.version}`}
-          {' · '}Kullanıcı girişi; otomatik belge çıkarımı yok
         </small>
       </header>
 
@@ -150,13 +153,6 @@ export function CaseVehicleProfileModule({ caseId, port }: {
             onChange={(event) => setFields({ ...fields, modelYear: Number(event.target.value) })}
           />
         </label>
-        <label className="field">
-          <span>Varyant</span>
-          <input
-            value={fields.variant ?? ''}
-            onChange={(event) => setFields({ ...fields, variant: event.target.value || null })}
-          />
-        </label>
         <label className="select-field">
           <span className="select-field__label">Araç sınıfı</span>
           <select
@@ -168,6 +164,24 @@ export function CaseVehicleProfileModule({ caseId, port }: {
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
+        </label>
+        {isRevision && (
+          <label className="field">
+            <span>Değişiklik gerekçesi</span>
+            <input value={reason} onChange={(event) => setReason(event.target.value)} />
+          </label>
+        )}
+      </div>
+
+      <details className="vehicle-profile__technical">
+        <summary>Teknik bilgiler</summary>
+        <div className="vehicle-profile__grid">
+        <label className="field">
+          <span>Varyant</span>
+          <input
+            value={fields.variant ?? ''}
+            onChange={(event) => setFields({ ...fields, variant: event.target.value || null })}
+          />
         </label>
         <label className="field">
           <span>Şasi ön eki</span>
@@ -210,13 +224,8 @@ export function CaseVehicleProfileModule({ caseId, port }: {
           />
           <small>Yalnız dosyada saklanır; AI sağlayıcısına gönderilmez.</small>
         </label>
-        {isRevision && (
-          <label className="field">
-            <span>Değişiklik gerekçesi</span>
-            <input value={reason} onChange={(event) => setReason(event.target.value)} />
-          </label>
-        )}
-      </div>
+        </div>
+      </details>
 
       {errorKind !== null && (
         <p className="allocation-panel__error" role="alert">

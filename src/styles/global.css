@@ -99,7 +99,7 @@ button {
 
 .app-shell {
   display: flex;
-  min-width: 1024px;
+  min-width: 0;
   background: var(--bg-app);
 }
 
@@ -1344,18 +1344,17 @@ button {
   background: transparent;
 }
 
-.case-table th:nth-child(1) { width: 42px; }
-.case-table th:nth-child(2) { width: 160px; }
-.case-table th:nth-child(3) { width: 130px; }
-.case-table th:nth-child(4) { width: 135px; }
-.case-table th:nth-child(5) { width: 148px; }
-.case-table th:nth-child(6) { width: 130px; }
-.case-table th:nth-child(7) { width: 170px; }
-.case-table th:nth-child(8) { width: 65px; }
-.case-table th:nth-child(9) { width: 125px; }
-.case-table th:nth-child(10) { width: 155px; }
-.case-table th:nth-child(11) { width: 125px; }
-.case-table th:nth-child(12) { width: 105px; }
+.case-table th:nth-child(1) { width: 160px; }
+.case-table th:nth-child(2) { width: 130px; }
+.case-table th:nth-child(3) { width: 135px; }
+.case-table th:nth-child(4) { width: 148px; }
+.case-table th:nth-child(5) { width: 130px; }
+.case-table th:nth-child(6) { width: 170px; }
+.case-table th:nth-child(7) { width: 65px; }
+.case-table th:nth-child(8) { width: 125px; }
+.case-table th:nth-child(9) { width: 155px; }
+.case-table th:nth-child(10) { width: 125px; }
+.case-table th:nth-child(11) { width: 105px; }
 
 .case-table tbody tr {
   cursor: pointer;
@@ -1368,8 +1367,6 @@ button {
 
 .case-table td > small { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: 10px; }
 .case-table td > strong { display: block; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.cell-check { text-align: center !important; }
-.cell-check input { accent-color: var(--accent); }
 .mono { font-family: Consolas, "Courier New", monospace; font-size: 11px; }
 .truncate-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stage-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -72,8 +72,8 @@ export interface DesktopShell {
 }
 
 /** Kabul edilmiş masaüstü yönü: 1366×768 alt sınırında çalışabilir olmalı. */
-const MINIMUM_WIDTH = 1_280
-const MINIMUM_HEIGHT = 720
+const MINIMUM_WIDTH = 360
+const MINIMUM_HEIGHT = 480
 const DEFAULT_WIDTH = 1_600
 const DEFAULT_HEIGHT = 900
 

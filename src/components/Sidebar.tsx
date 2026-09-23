@@ -19,6 +19,7 @@ import { useOperationalAlerts } from '../data/useOperationalAlerts'
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
+  onNavigate?: () => void
   /** Test enjeksiyonu için; verilmezse gerçek HTTP adaptörü kullanılır. */
   operationalAlertPort?: OperationalAlertDataPort
 }
@@ -61,7 +62,7 @@ const navigation: readonly {
   { to: '/ayarlar', label: 'Ayarlar', icon: Settings },
 ]
 
-export function Sidebar({ collapsed, onToggle, operationalAlertPort }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort }: SidebarProps) {
   // Kimlik yalnız gerçek oturumdan gelir; mock modda prototip kimliği korunur.
   const { mode, user } = useSession()
   const displayName = user?.displayName ?? (mode === 'mock' ? 'Ömer Faruk Kaya' : 'Oturum bekleniyor')
@@ -96,6 +97,7 @@ export function Sidebar({ collapsed, onToggle, operationalAlertPort }: SidebarPr
             <NavLink
               key={to}
               to={to}
+              onClick={onNavigate}
               end={end}
               className={({ isActive }) => `nav-item${isActive ? ' nav-item--active' : ''}`}
               title={collapsed ? label : undefined}

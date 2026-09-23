@@ -58,6 +58,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
       const url = String(input)
       const body = url.endsWith('/api/v1/cases/case-closed-38?includeLegacyReferences=true&includeEksist=true')
         ? { case: CLOSED_CASE }
+        : url.endsWith('/operations') ? { caseId: CLOSED_CASE.id, asOfDate: '2026-09-22', notes: [], tasks: [], followUpHistory: [], permissions: { canWrite: false, canCompleteTasks: false } }
         : { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } }
       return { ok: true, status: 200, json: async () => body } as Response
     }) as typeof fetch)
@@ -73,7 +74,9 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     // Contracts paketi büyüdükçe ilk dinamik import + Zod şema kurulumu 1 sn'lik
     // varsayılanı aşabiliyor; kapı süreye değil gerçek yükleme sonucuna bakmalı.
     await waitFor(() => expect(screen.getByText('34 API 380')).toBeInTheDocument(), { timeout: 15_000 })
-    expect(screen.getByText('Bu modül henüz gerçek API verisine bağlı değildir; mock kayıt gösterilmez.')).toBeInTheDocument()
+    expect(await screen.findByText('Henüz not veya görüşme kaydı yok.')).toBeInTheDocument()
+    expect(screen.getByText('Kapalı dosya salt okunurdur.')).toBeInTheDocument()
+    expect(screen.queryByText('Dosya Asistanı')).not.toBeInTheDocument()
     expect(screen.queryByText('Servis görüşmesi notu eklendi')).not.toBeInTheDocument()
     expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-closed-38?includeLegacyReferences=true&includeEksist=true', expect.anything())
   })

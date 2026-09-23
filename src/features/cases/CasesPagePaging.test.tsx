@@ -102,7 +102,7 @@ const referencePort = {
 
 /** Plaka hem satirda hem hizli detay panelinde gorunur; sorgular tabloya sinirlanir. */
 function rowPlates(): string[] {
-  return [...document.querySelectorAll('tbody tr td:nth-child(2) .plate')]
+  return [...document.querySelectorAll('tbody tr .plate')]
     .map((node) => node.textContent ?? '')
 }
 

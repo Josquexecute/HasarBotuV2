@@ -1,3 +1,4 @@
+import { useActiveCase, QUICK_NOTE_EVENT } from '../../app/activeCase'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -143,6 +144,7 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
         <button className="button button--primary button--block" type="button" onClick={() => navigate(`/dosyalar/${item.caseId}`)}>
           <ExternalLink size={16} /> Tam Dosyayı Aç
         </button>
+        {source === 'api' && <button className="button button--secondary" type="button" onClick={() => window.dispatchEvent(new Event(QUICK_NOTE_EVENT))}><NotebookPen size={15} /> Hızlı Not</button>}
         {source === 'mock' && <div>
           <button className="button button--secondary" type="button" onClick={() => onMockAction(`${item.plate} için mock not alanı hazırlandı.`)}><NotebookPen size={15} /> Not Ekle</button>
           <button className="button button--secondary" type="button" onClick={() => onMockAction(`${item.plate} için takip planlama önizlemesi açıldı.`)}><SlidersHorizontal size={15} /> Takip Ayarla</button>
@@ -215,7 +217,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
   const [sortKey, setSortKey] = useState<SortKey>('lastAction')
   const [direction, setDirection] = useState<SortDirection>('asc')
   const [filtersOpen, setFiltersOpen] = useState(true)
-  const [detailOpen, setDetailOpen] = useState(true)
+  const [detailOpen, setDetailOpen] = useState(() => window.innerWidth >= 1024)
   const [selectedId, setSelectedId] = useState(cases[0]?.caseId ?? '')
   const [activePage, setActivePage] = useState(1)
   const [prototypeNotice, setPrototypeNotice] = useState('')
@@ -313,6 +315,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
   const totalPages = source === 'api' ? (casePage?.totalPages ?? 0) : 3
 
   const selectedCase = visibleCases.find((item) => item.caseId === selectedId) ?? visibleCases[0]
+  useActiveCase(selectedCase, source)
   const hasFilters = query !== '' || typeFilter !== 'Tümü' || stageFilter !== 'Tümü' || statusFilter !== 'Tümü' || assigneeFilter !== 'Tümü' || serviceFilter !== 'Tümü' || followUpFilter !== 'Tümü'
 
   // Uyarı isteğinde yalnız AKTİF SAYFA kimlikleri gönderilir. Sayfa boyutu
@@ -428,7 +431,6 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
               <table className="case-table">
                 <thead>
                   <tr>
-                    <th className="cell-check"><input type="checkbox" aria-label="Tüm dosyaları seç" /></th>
                     <th><button type="button" onClick={() => handleSort('plate')}>Plaka / Dosya No <SortIcon column="plate" sortKey={sortKey} direction={direction} /></button></th>
                     <th>İhbar Föyü No</th>
                     <th>Hasar Dosya No</th>
@@ -448,15 +450,15 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                   {visibleCases.map((item) => (
                     <tr
                       key={item.caseId}
-                      className={selectedCase?.caseId === item.caseId && detailOpen ? 'is-selected' : ''}
+                      className={selectedCase?.caseId === item.caseId ? 'is-selected' : ''}
                       tabIndex={0}
                       onClick={() => { setSelectedId(item.caseId); setDetailOpen(true) }}
                       onDoubleClick={() => navigate(`/dosyalar/${item.caseId}`)}
                       onKeyDown={(event) => {
+                        if (event.key === ' ') { event.preventDefault(); setSelectedId(item.caseId); setDetailOpen(true) }
                         if (event.key === 'Enter') navigate(`/dosyalar/${item.caseId}`)
                       }}
                     >
-                      <td className="cell-check"><input type="checkbox" aria-label={`${item.plate} dosyasını seç`} onClick={(event) => event.stopPropagation()} /></td>
                       <td><span className="plate plate--table">{item.plate}</span><small>{item.officeNumber}</small></td>
                       <td className="mono">{item.noticeNumber}</td>
                       <td className="mono">{item.claimNumber}</td>

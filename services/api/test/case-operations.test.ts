@@ -192,6 +192,21 @@ describeDb('Paket 37 case not, görev ve takip geçmişi gerçek API', () => {
     expect(audit.rows).toHaveLength(1)
     expect(audit.rows[0]?.details).not.toContain(payload.body)
     expect(audit.rows[0]?.details).not.toContain(payload.subject)
+
+    // A lost commit response followed by a service restart must preserve both the note and replay identity.
+    await app.close()
+    app = buildApp({
+      clock: fixedClock('2026-07-16T10:30:00.000Z'),
+      loggerEnabled: false,
+      auth: { pool, cookieSecure: false, loginRateLimit: { limit: 100, windowMs: 60_000 } },
+    })
+    const afterRestart = await app.inject({ method: 'GET', url: operationsUrl(), headers: { cookie: managerCookie } })
+    expect(afterRestart.statusCode).toBe(200)
+    expect(caseOperationsResponseSchema.parse(afterRestart.json()).notes).toContainEqual(caseNoteResponseSchema.parse(first.json()).note)
+    const restartedReplay = await app.inject({ method: 'POST', url: notesUrl(), headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: key }, payload })
+    expect(restartedReplay.statusCode).toBe(201)
+    expect(restartedReplay.json()).toEqual(first.json())
+    expect((await pool.query('SELECT count(*)::int AS n FROM case_notes WHERE case_id=$1', [caseId])).rows).toEqual([{ n: 1 }])
   })
 
   it('görev oluşturma, aktif tenant referansı, stale locking, zorunlu sonuç ve replay uygular', async () => {

@@ -63,6 +63,32 @@ function makePort(initial: CaseVehicleProfileRecord): CaseVehicleProfileDataPort
 }
 
 describe('CaseVehicleProfileModule', () => {
+  it('ana görünümde teknik alanları gizler ve normal düzenlemede mevcut değerleri korur', async () => {
+    const record = { ...savedRecord, current: { ...savedRecord.current!, variant: 'Korunacak varyant' } }
+    const port = makePort(record)
+    render(<CaseVehicleProfileModule caseId={CASE_ID} port={port} />)
+    await screen.findByText('Araç Profili')
+    expect(screen.getByText('Teknik bilgiler').closest('details')).not.toHaveAttribute('open')
+    await userEvent.clear(screen.getByLabelText('Model'))
+    await userEvent.type(screen.getByLabelText('Model'), 'Yeni Model')
+    await userEvent.type(screen.getByLabelText('Değişiklik gerekçesi'), 'Model düzeltildi')
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni sürüm kaydet' }))
+    expect(port.save).toHaveBeenCalledWith(CASE_ID, expect.objectContaining({ fields: expect.objectContaining({
+      model: 'Yeni Model', variant: 'Korunacak varyant', engineCode: 'K9K-628', chassisPrefix: 'NM4BJ12', evidenceReference: 'Ruhsat s.1', evidenceSource: 'registration_document',
+    }) }))
+  })
+
+  it('profili olmayan başka dosyaya geçerken eski teknik alanları taşımaz', async () => {
+    const port = makePort(savedRecord)
+    vi.mocked(port.read).mockResolvedValueOnce(savedRecord).mockResolvedValueOnce({ ...emptyRecord, caseId: 'case-b' })
+    const view = render(<CaseVehicleProfileModule caseId={CASE_ID} port={port} />)
+    await screen.findByDisplayValue('Sentetik Marka')
+    view.rerender(<CaseVehicleProfileModule caseId="case-b" port={port} />)
+    await screen.findByText('Henüz kaydedilmedi')
+    expect(screen.getByLabelText('Marka')).toHaveValue('')
+    expect(screen.getByLabelText('Motor kodu')).toHaveValue('')
+    expect(screen.getByLabelText('Şasi ön eki')).toHaveValue('')
+  })
   it('ilk kayıtta sürüm gerekçesi istemez ve expectedVersion null gönderir', async () => {
     const port = makePort(emptyRecord)
     render(<CaseVehicleProfileModule caseId={CASE_ID} port={port} />)
@@ -74,6 +100,7 @@ describe('CaseVehicleProfileModule', () => {
 
     await user.type(screen.getByLabelText('Marka'), 'Sentetik Marka')
     await user.type(screen.getByLabelText('Model'), 'Örnek Model')
+    await user.click(screen.getByText('Teknik bilgiler'))
     await user.type(screen.getByLabelText('Şasi ön eki'), 'NM4BJ12')
     await user.click(screen.getByRole('button', { name: 'Araç profilini kaydet' }))
 
@@ -104,7 +131,7 @@ describe('CaseVehicleProfileModule', () => {
 
     await screen.findByText('Araç Profili')
     // Başlıktaki mevcut sürüm bilgisi; geçmiş listesindeki satırdan ayrı sorgulanır.
-    expect(screen.getByText(/Sürüm 1 · Kullanıcı girişi/)).toBeInTheDocument()
+    expect(screen.getAllByText('Sürüm 1').length).toBeGreaterThan(0)
     expect(screen.getByLabelText('Marka')).toHaveValue('Sentetik Marka')
     expect(screen.getByText(/Sürüm geçmişi \(1\)/)).toBeInTheDocument()
 
@@ -127,7 +154,7 @@ describe('CaseVehicleProfileModule', () => {
     }
     render(<CaseVehicleProfileModule caseId={CASE_ID} port={port} />)
     expect(await screen.findByText('Araç profili alınamadı')).toBeInTheDocument()
-    expect(screen.getByText(/Sahte veri gösterilmiyor/)).toBeInTheDocument()
+    expect(screen.getByText('Bağlantıyı kontrol edip dosyayı yeniden açın.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Marka')).not.toBeInTheDocument()
   })
 

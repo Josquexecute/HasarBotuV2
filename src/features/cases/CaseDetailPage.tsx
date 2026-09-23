@@ -2,7 +2,6 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
-  Bot,
   CalendarClock,
   CheckCircle2,
   ChevronLeft,
@@ -13,8 +12,6 @@ import {
   Mail,
   NotebookPen,
   PanelRight,
-  PanelRightClose,
-  PanelRightOpen,
   RefreshCw,
   Save,
   Scale,
@@ -24,6 +21,7 @@ import { useLocation, useNavigate, useParams } from 'react-router'
 import { formatCurrency } from '../../mocks/cases'
 import { useCase } from '../../data/useCase'
 import { useCases } from '../../data/useCases'
+import { useActiveCase, NOTE_SAVED_EVENT, QUICK_NOTE_EVENT } from '../../app/activeCase'
 import { useSession } from '../../app/sessionContext'
 import { LoadingState } from '../../components/StateViews'
 import type { CaseRecord } from '../../types/case'
@@ -97,17 +95,6 @@ const tabs = [
 
 type Tab = (typeof tabs)[number]
 
-const tabDescriptions: Record<Tab, string> = {
-  Özet: 'Dosyanın operasyonel durumu, kritik uyarıları ve son hareketleri.',
-  Operasyon: 'Not, görev, görüşme ve takip kayıtlarının çalışma alanı.',
-  'Evrak ve Fotoğraf': 'Koşullu evrak kontrolü ile belge ve fotoğraf metadata alanı.',
-  'Ağır Hasar': 'PERT değerlendirmesi için veri ve kanaat ayrımı.',
-  'Değer Kaybı': 'Trafik dosyası için zorunlu değer kaybı hazırlık durumu.',
-  'Raporlar ve Ücretler': 'Rapor ve kapanma ücreti kontrol alanı.',
-  'E-postalar': 'Dosya bağlamında kullanıcı onaylı taslaklar.',
-  Geçmiş: 'Değişiklik ve işlem geçmişi.',
-}
-
 const mockPhotoIndexes = Array.from({ length: 108 }, (_, index) => index + 1)
 const mockPhotoSource = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
   <svg xmlns="http://www.w3.org/2000/svg" width="240" height="150" viewBox="0 0 240 150">
@@ -176,20 +163,13 @@ function HistoryModule({ item }: { item: CaseRecord }) {
   return <section className="info-panel history-panel"><header><h2>Dosya Geçmişi</h2><History size={16} /></header><div className="audit-timeline">{events.map(([date, action, actor]) => <article key={`${date}-${action}`}><i /><time>{date}</time><div><strong>{action}</strong><span>{actor}</span></div></article>)}</div></section>
 }
 
-function ApiModuleUnavailable({ title, guidance }: { title: string; guidance: string }) {
-  return (
-    <section className="info-panel">
-      <header><h2>{title}</h2><AlertTriangle size={16} /></header>
-      <div className="assistant-note">
-        <AlertTriangle size={15} />
-        <span>Bu modül henüz gerçek API verisine bağlı değildir; mock kayıt gösterilmez.</span>
-      </div>
-      <p>{guidance}</p>
-    </section>
-  )
+export function CaseDetailPage() {
+  const { caseId } = useParams()
+  const location = useLocation()
+  return <CaseDetail key={`${caseId}#${location.search}`} />
 }
 
-export function CaseDetailPage() {
+function CaseDetail() {
   const { cases } = useCases()
   const { caseId } = useParams()
   const {
@@ -202,13 +182,12 @@ export function CaseDetailPage() {
   const location = useLocation()
   const session = useSession()
   const [activeTab, setActiveTab] = useState<Tab>(() => {
+    if (new URLSearchParams(location.search).get('tab') === 'operations') return 'Operasyon'
     const saved = window.sessionStorage.getItem('hasarbotu-active-case-tab')
     return tabs.includes(saved as Tab) ? saved as Tab : 'Özet'
   })
   const [closeModalOpen, setCloseModalOpen] = useState(false)
   const [prototypeNotice, setPrototypeNotice] = useState('')
-  const [assistantAnswer, setAssistantAnswer] = useState('')
-  const [assistantOpen, setAssistantOpen] = useState(true)
   const [photoMode, setPhotoMode] = useState<'normal' | 'stress'>('normal')
   const [editModalOpen, setEditModalOpen] = useState(false)
   // Yerel override, ait oldugu case ve temel kayit surumuyle birlikte tutulur.
@@ -222,6 +201,14 @@ export function CaseDetailPage() {
   const caseOverride = override.key === overrideKey ? override.value : null
   const setCaseOverride = useCallback((value: CaseRecord | null) => setOverride({ key: overrideKey, value }), [overrideKey])
   const item = caseOverride?.caseId === caseId ? caseOverride : baseItem
+  useActiveCase(dataStatus === 'ok' || source === 'mock' ? item : null, source)
+  useEffect(() => {
+    const showNotes = (event: Event) => {
+      if ((event as CustomEvent<{ caseId: string }>).detail?.caseId === caseId) setActiveTab('Operasyon')
+    }
+    window.addEventListener(NOTE_SAVED_EVENT, showNotes)
+    return () => window.removeEventListener(NOTE_SAVED_EVENT, showNotes)
+  }, [caseId])
   const canChangeLifecycle = session.user?.roles.some((role) => ['admin', 'expert', 'case_manager'].includes(role)) === true
   const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
   const creationResult = (location.state as {
@@ -237,11 +224,10 @@ export function CaseDetailPage() {
       if (event.key !== 'Escape') return
       if (editModalOpen) setEditModalOpen(false)
       else if (closeModalOpen) setCloseModalOpen(false)
-      else if (assistantOpen) setAssistantOpen(false)
     }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [assistantOpen, closeModalOpen, editModalOpen])
+  }, [closeModalOpen, editModalOpen])
 
   if (source === 'api' && dataStatus !== 'ok' && dataStatus !== 'not_found') {
     const message = dataStatus === 'loading'
@@ -301,10 +287,7 @@ export function CaseDetailPage() {
               <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('UI taslağı yerel mock durumda saklandı.')}><Save size={15} /> Taslağı Kaydet</button>
             </>
           ) : null}
-          <button className="button button--secondary" type="button" onClick={() => setAssistantOpen((value) => !value)}>
-            {assistantOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
-            {assistantOpen ? 'Asistanı kapat' : 'Asistanı aç'}
-          </button>
+          {source === 'api' && <button className="button button--secondary" type="button" onClick={() => window.dispatchEvent(new Event(QUICK_NOTE_EVENT))}><NotebookPen size={15} /> Hızlı Not</button>}
           {(source === 'mock' || canChangeLifecycle) && <button className="button button--danger-ghost" type="button" onClick={() => setCloseModalOpen(true)}>{source === 'api' && item.lifecycleStatus === 'closed' ? 'Dosyayı Yeniden Aç' : 'Dosyayı Kapat'}</button>}
         </div>
       </section>
@@ -312,7 +295,7 @@ export function CaseDetailPage() {
       {creationResult?.caseId === item.caseId && (
         <div className="case-created-banner" role="status">
           <CheckCircle2 size={17} />
-          <span><strong>Dosya oluşturuldu.</strong> Backend sonucu: {creationResult.officeNumber} · {creationResult.caseId}</span>
+          <span><strong>Dosya oluşturuldu.</strong> {creationResult.officeNumber}</span>
         </div>
       )}
 
@@ -322,11 +305,11 @@ export function CaseDetailPage() {
         ))}
       </nav>
 
-      <div className={`case-detail-content${assistantOpen ? '' : ' case-detail-content--assistant-closed'}`}>
+      <div className="case-detail-content case-detail-content--assistant-closed">
         <section className="case-module">
           <header className="module-heading">
-            <div><span className="eyebrow">{item.officeNumber}</span><h1>{activeTab}</h1><p>{tabDescriptions[activeTab]}</p></div>
-            <span className="mock-label">{source === 'mock' ? 'Mock prototip' : 'Gerçek API'}</span>
+            <div><span className="eyebrow">{item.officeNumber}</span><h1>{activeTab}</h1></div>
+            {source === 'mock' && <span className="mock-label">Mock prototip</span>}
           </header>
 
           <Suspense fallback={<LoadingState label={`${activeTab} modülü hazırlanıyor`} />}>
@@ -457,28 +440,12 @@ export function CaseDetailPage() {
                     ? <EmailDraftApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
                     : <EmailsModule item={item} onNotice={setPrototypeNotice} />
                     : source === 'api'
-                      ? <ApiModuleUnavailable title="Geçmiş" guidance="Gerçek not, görev ve takip geçmişi için Operasyon sekmesini kullanın." />
+                      ? <CaseOperationsApiModule key={item.caseId} item={item} source={source} onReloadCase={reloadCase} onUnauthorized={session.reportUnauthorized} />
                       : <HistoryModule item={item} />}
           </Suspense>
         </section>
 
-        {assistantOpen && <aside className="assistant-rail">
-          <header><Bot size={17} /><div><strong>Dosya Asistanı</strong><span>{source === 'api' ? 'Gerçek veri bağlantısı bekleniyor' : 'Karar desteği · mock'}</span></div></header>
-          <div className="assistant-rail__body">
-            {source === 'api' ? (
-              <div className="assistant-note"><AlertTriangle size={15} /><span>Genel dosya asistanı gerçek API’ye henüz bağlı değildir; mock yanıt üretilmez. Kasko poliçe ve Değer Kaybı için bağlı modülleri kullanın.</span></div>
-            ) : (
-              <>
-                <span className="assistant-rail__label">Hızlı sorular</span>
-                <button type="button" onClick={() => setAssistantAnswer(item.missingDocuments ? `${item.missingDocuments} eksik evrak görünüyor; kullanıcı kontrolü gerekli.` : 'Mock kural kontrolünde eksik evrak görünmüyor.')}>Eksik evrak var mı?</button>
-                <button type="button" onClick={() => setAssistantAnswer('Onarım onayı gerekliliği dosya türü, olay belgesi ve hasar eşiğiyle birlikte kontrol edilmelidir.')}>Onarım onayı gerekiyor mu?</button>
-                <button type="button" onClick={() => setAssistantAnswer('Muafiyet bilgisi için poliçe belgesi ve kaynak sayfa kullanıcı tarafından doğrulanmalıdır.')}>Bu dosyada muafiyet var mı?</button>
-                {assistantAnswer && <div className="assistant-answer" aria-live="polite"><strong>Mock yanıt</strong><span>{assistantAnswer}</span></div>}
-                <div className="assistant-note"><AlertTriangle size={15} /><span>AI önerileri kullanıcı onayı olmadan dosyada değişiklik yapamaz.</span></div>
-              </>
-            )}
-          </div>
-        </aside>}
+
       </div>
 
       {closeModalOpen && (source === 'mock'
