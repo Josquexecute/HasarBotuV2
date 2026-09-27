@@ -200,16 +200,17 @@ describe('HasarBotu V2 UI prototipi', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('100+ mock fotoğrafı lazy yükler ve Dosya Asistanı panelini açıp kapatır', async () => {
+  it('100+ mock fotoğrafı lazy yükler ve hızlı not panelini açıp kapatır', async () => {
     window.history.replaceState({}, '', '/dosyalar/case-2026-184')
     const user = userEvent.setup()
     render(<App />)
 
-    expect(screen.getByText('Dosya Asistanı')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Asistanı kapat' }))
     expect(screen.queryByText('Dosya Asistanı')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Asistanı aç' }))
-    expect(screen.getByText('Dosya Asistanı')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Touch Assistant — hızlı not' }))
+    expect(screen.getByRole('dialog', { name: 'Touch Assistant' })).toBeInTheDocument()
+    expect(screen.getByText('Not eklemek için sunucu oturumu gerekir.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Hızlı notu kapat' }))
+    expect(screen.queryByRole('dialog', { name: 'Touch Assistant' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Evrak ve Fotoğraf' }))
     expect(screen.getAllByRole('img', { name: /Mock hasar fotoğrafı/ })).toHaveLength(12)

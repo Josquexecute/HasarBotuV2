@@ -96,7 +96,8 @@ export function TouchAssistant({ target, port }: { target: ActiveCase | null; po
     if (!open) return
     const previous = document.activeElement as HTMLElement | null
     const button = trigger.current
-    panel.current?.querySelector<HTMLElement>('textarea, button')?.focus()
+    const focusTarget = panel.current?.querySelector<HTMLElement>('textarea') ?? panel.current?.querySelector<HTMLElement>('button')
+    focusTarget?.focus()
     return () => { if (previous?.isConnected) previous.focus(); else button?.focus() }
   }, [open])
   return <>
