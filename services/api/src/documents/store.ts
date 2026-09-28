@@ -24,6 +24,7 @@ import { uuidv7 } from '@hasarbotu/database'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
 import { enqueueVerifyJob } from '../agent/enqueue.js'
+import { resolveFileLocations } from '../storage/file-location.js'
 import { findIdempotent, insertIdempotent, isIdempotencyRace } from '../db/idempotency.js'
 
 /**
@@ -520,7 +521,7 @@ export function createDocumentsStore(pool: pg.Pool) {
          ORDER BY version_number DESC`,
         [organizationId, documentId],
       )
-      const versions = (versionsRes.rows as VersionRow[]).map(versionToDto)
+      const versions = (await resolveFileLocations(pool, organizationId, versionsRes.rows as VersionRow[])).map(versionToDto)
       return documentDetailSchema.parse({ ...documentToDto(docRow), versions })
     },
 
@@ -536,7 +537,7 @@ export function createDocumentsStore(pool: pg.Pool) {
          ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`,
         [organizationId, caseId, query.pageSize, offset],
       )
-      return { items: (res.rows as PhotoRow[]).map(photoToDto), totalItems }
+      return { items: (await resolveFileLocations(pool, organizationId, res.rows as PhotoRow[])).map(photoToDto), totalItems }
     },
 
     async getPhoto(organizationId: string, photoId: string): Promise<Photo | undefined> {
@@ -544,7 +545,7 @@ export function createDocumentsStore(pool: pg.Pool) {
         `SELECT ${PHOTO_FIELDS} FROM photos WHERE organization_id = $1 AND id::text = $2`,
         [organizationId, photoId],
       )
-      const row = res.rows[0] as PhotoRow | undefined
+      const [row] = await resolveFileLocations(pool, organizationId, res.rows as PhotoRow[])
       return row === undefined ? undefined : photoToDto(row)
     },
   }

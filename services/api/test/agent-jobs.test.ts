@@ -222,6 +222,56 @@ describeDb('File Agent iş kuyruğu ve doğrulama (gerçek veritabanı)', () => 
     expect(r2.body.status).toBe('dead_letter')
   })
 
+  it.each([
+    ['document_version', 'result'], ['document_version', 'lease'],
+    ['photo', 'result'], ['photo', 'lease'],
+  ] as const)('exhausted %s verification becomes failed after %s failure', async (target, failure) => {
+    let targetId: string
+    if (target === 'document_version') {
+      targetId = (await registerDoc(managerCookie, caseAId)).versionId
+    } else {
+      const registered = await app.inject({ method: 'POST', url: `/api/v1/cases/${caseAId}/photos`,
+        headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+        payload: { sourceType: 'upload', originalFileName: 'audit.jpg', mimeType: 'image/jpeg', byteSize: 5,
+          contentHash: hex('audit'), storageRootKey: 'baran-primary', relativePath: `HASAR/${uuidv7()}.jpg` } })
+      expect(registered.statusCode).toBe(201)
+      targetId = registered.json().photo.id as string
+    }
+    const claimed = await claim()
+    const jobId = claimed.body.job!.id
+    expect(claimed.body.job?.targetId).toBe(targetId)
+    await pool.query('UPDATE jobs SET max_attempts=1 WHERE id=$1', [jobId])
+    if (failure === 'lease') {
+      await pool.query("UPDATE jobs SET lease_expires_at=now()-interval '1 second' WHERE id=$1", [jobId])
+      expect((await claim()).body.job).toBeNull()
+    } else {
+      expect((await report(jobId, { outcome: 'failed', errorCode: 'access_denied' })).body.status).toBe('dead_letter')
+    }
+    const table = target === 'photo' ? 'photos' : 'document_versions'
+    expect((await pool.query(`SELECT status,hash_verified,size_verified FROM ${table} WHERE id=$1`, [targetId])).rows[0])
+      .toEqual({ status: 'failed', hash_verified: false, size_verified: false })
+    const errorCode = failure === 'lease' ? 'attempts_exhausted' : 'access_denied'
+    expect((await pool.query('SELECT status,last_error_code FROM jobs WHERE id=$1', [jobId])).rows[0])
+      .toEqual({ status: 'dead_letter', last_error_code: errorCode })
+    expect((await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action='job.dead_letter' AND resource_id=$1", [jobId])).rows[0])
+      .toEqual({ n: 1 })
+    expect((await report(jobId, { outcome: 'failed', errorCode: 'access_denied' })).body.status).toBe('dead_letter')
+    expect((await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action='job.dead_letter' AND resource_id=$1", [jobId])).rows[0])
+      .toEqual({ n: 1 })
+  })
+
+  it.each(['result', 'lease'])('exhausted %s job does not overwrite a previously verified document', async failure => {
+    const { versionId } = await registerDoc(managerCookie, caseAId)
+    const jobId = (await claim()).body.job!.id
+    await pool.query('UPDATE jobs SET max_attempts=1 WHERE id=$1', [jobId])
+    await pool.query("UPDATE document_versions SET status='ready',hash_verified=true,size_verified=true,verified_at=now() WHERE id=$1", [versionId])
+    if (failure === 'lease') {
+      await pool.query("UPDATE jobs SET lease_expires_at=now()-interval '1 second' WHERE id=$1", [jobId])
+      await claim()
+    } else await report(jobId, { outcome: 'failed', errorCode: 'access_denied' })
+    expect((await pool.query('SELECT status FROM document_versions WHERE id=$1', [versionId])).rows[0]).toEqual({ status: 'ready' })
+  })
+
   it('idempotent sonuç: terminal iş yeniden bildirilince aynı durum, ikinci uygulama yok', async () => {
     const { versionId, hash, size } = await registerDoc(managerCookie, caseAId)
     const claimed = await claim()

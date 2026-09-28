@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,7 +20,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
-import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
+import { createAgentApiClient, executeFileOperation, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
 
 // HB-2026-175: HB-2026-171'in fail-closed freshness-gate dispatch kapısı
@@ -434,6 +434,74 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     )
     expect(leak.rows[0]).toEqual({ n: 0 })
   })
+
+  it.each(['manual', 'stale', 'exhausted-result', 'exhausted-lease'] as const)(
+    'terminal Agent failure propagates to lifecycle: %s', async (failure) => {
+      const seeded = await seedCase(`34 AUD ${100 + ['manual', 'stale', 'exhausted-result', 'exhausted-lease'].indexOf(failure)}`, true)
+      const planned = caseLifecycleOperationResponseSchema.parse((await planClose(seeded.caseId, {
+        expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal',
+      })).json()).operation
+      expect((await approve(seeded.caseId, planned)).statusCode).toBe(202)
+      const job = await agentClient.claim()
+      expect(job?.payload.kind).toBe('file_operation')
+      if (job === null || job.payload.kind !== 'file_operation') throw new Error('expected lifecycle job')
+      const errorCode = failure === 'manual' ? 'manual_drift_detected'
+        : failure === 'stale' ? 'source_changed_since_plan'
+          : failure === 'exhausted-result' ? 'access_denied' : 'attempts_exhausted'
+      if (failure === 'exhausted-lease') {
+        // Crash after the real move, before the result reaches the API.
+        expect(await executeFileOperation(agentConfig.roots, job.payload)).toMatchObject({ outcome: 'verified' })
+        await pool.query("UPDATE jobs SET attempt_count=max_attempts,lease_expires_at=now()-interval '1 second' WHERE id=$1", [job.id])
+        expect(await agentClient.claim()).toBeNull()
+      } else {
+        if (failure === 'manual') {
+          const destination = join(root, ...planned.destination.relativePath.split('/'))
+          await mkdir(destination, { recursive: true })
+          await writeFile(join(destination, 'foreign.txt'), 'unrelated contents')
+        } else if (failure === 'stale') {
+          const changedAt = new Date(Date.parse(job.payload.plannedAt) + 5_000)
+          await utimes(join(root, ...seeded.openPath.split('/'), 'EVRAK', 'sentetik.txt'), changedAt, changedAt)
+        } else await pool.query('UPDATE jobs SET attempt_count=max_attempts WHERE id=$1', [job.id])
+        const result = failure === 'exhausted-result' ? { outcome: 'failed' as const, errorCode }
+          : await executeFileOperation(agentConfig.roots, job.payload)
+        expect(result).toMatchObject({ outcome: 'failed', errorCode })
+        expect(await agentClient.reportResult(job.id, result)).toMatchObject({ status: 'dead_letter' })
+      }
+      const response = await app.inject({ method: 'GET',
+        url: `/api/v1/cases/${seeded.caseId}/lifecycle-operations/${planned.id}`, headers: { cookie: adminCookie } })
+      // An expired final lease may have moved files before losing its report.
+      const status = failure === 'manual' || failure === 'exhausted-lease' ? 'manual_recovery_required' : 'failed'
+      expect(caseLifecycleOperationResponseSchema.parse(response.json()).operation).toMatchObject({ status, failureReasonCode: errorCode })
+      expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0])
+        .toEqual({ lifecycle_status: 'open' })
+      if (failure === 'exhausted-lease') {
+        await expect(access(join(root, ...seeded.openPath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+        await expect(access(join(root, ...planned.destination.relativePath.split('/')))).resolves.toBeUndefined()
+      } else await expect(access(join(root, ...seeded.openPath.split('/')))).resolves.toBeUndefined()
+      expect((await pool.query('SELECT count(*)::int AS n FROM audit_events WHERE action=$1 AND resource_id=$2',
+        [`case_lifecycle.${status}`, planned.id])).rows[0]).toEqual({ n: 1 })
+      const next = await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' })
+      // Failed moves retain their destination reservation until reconciled.
+      expect(next.statusCode).toBe(failure === 'stale' ? 201 : 409)
+    }, 60_000,
+  )
+
+  it('transient Agent failure retries the same close operation and completes the move', async () => {
+    const seeded = await seedCase('34 AUD 104', true)
+    const planned = caseLifecycleOperationResponseSchema.parse((await planClose(seeded.caseId, {
+      expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal',
+    })).json()).operation
+    expect((await approve(seeded.caseId, planned)).statusCode).toBe(202)
+    const job = await agentClient.claim()
+    if (job === null) throw new Error('expected lifecycle job')
+    expect(await agentClient.reportResult(job.id, { outcome: 'failed', errorCode: 'file_locked' })).toMatchObject({ status: 'pending' })
+    expect((await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' })).statusCode).toBe(409)
+    await pool.query('UPDATE jobs SET next_attempt_at=now() WHERE id=$1', [job.id])
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0]).toEqual({ lifecycle_status: 'closed' })
+    await expect(access(join(root, ...seeded.openPath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(access(join(root, ...planned.destination.relativePath.split('/')))).resolves.toBeUndefined()
+  }, 60_000)
 
   it('fiziksel move sonrasi case snapshot degisirse lifecycle kapanmaz ve manual recovery gorunur olur', async () => {
     const seeded = await seedCase('34 MAN 021', true)

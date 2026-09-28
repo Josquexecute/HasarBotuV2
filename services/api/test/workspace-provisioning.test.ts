@@ -1,4 +1,5 @@
-import { access, mkdtemp, rm } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +11,7 @@ import {
   AUTH_LOGIN_ROUTE,
   CASES_ROUTE,
   IDEMPOTENCY_KEY_HEADER,
+  caseLifecycleOperationResponseSchema,
   workspaceProvisioningResponseSchema,
 } from '@hasarbotu/contracts'
 import {
@@ -22,6 +24,7 @@ import {
 } from '@hasarbotu/database'
 import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
+import { resolveFileLocations } from '../src/storage/file-location.js'
 
 // HB-2026-175: bkz. case-lifecycle.test.ts'deki aynı sabitin açıklaması.
 const ALWAYS_READY_FRESHNESS_GATE_PATH = fileURLToPath(new URL('./fixtures/always-ready-freshness-gate.mjs', import.meta.url))
@@ -247,6 +250,86 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     expect(after.status).toBe('stale')
     const location = await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [caseId])
     expect((location.rows[0] as { relative_path: string }).relative_path).toBe('manual/location')
+  })
+
+  it('isolated workflow: create, provision, verify, close, recover queued verification, reopen', async () => {
+    const caseId = await createCase(cookieA, '34 AUD 200')
+    const workspace = workspaceProvisioningResponseSchema.parse((await plan(caseId)).json()).provisioning
+    expect((await approve(caseId, workspace.id)).statusCode).toBe(202)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    const content = Buffer.from('isolated-workflow-evidence')
+    const contentHash = createHash('sha256').update(content).digest('hex')
+    const documentPath = `${workspace.relativePath}/EVRAK/audit.pdf`
+    const photoPath = `${workspace.relativePath}/HASAR/audit.jpg`
+    await writeFile(join(root, ...documentPath.split('/')), content)
+    await writeFile(join(root, ...photoPath.split('/')), content)
+    const doc = await app.inject({ method: 'POST', url: `/api/v1/cases/${caseId}/documents`,
+      headers: { cookie: cookieA, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { documentType: 'ruhsat', sourceType: 'upload', originalFileName: 'audit.pdf', mimeType: 'application/pdf',
+        byteSize: content.length, contentHash, storageRootKey: 'test-primary', relativePath: documentPath } })
+    expect(doc.statusCode).toBe(201)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    const command = (url: string, payload: Record<string, unknown>) => app.inject({ method: 'POST', url,
+      headers: { cookie: cookieA, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload })
+    const close = await command(`/api/v1/cases/${caseId}/lifecycle/close/plan`, {
+      expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'with_missing_requirements', reason: 'Sentetik denetim dosyası',
+    })
+    expect(close.statusCode).toBe(201)
+    const closeOp = caseLifecycleOperationResponseSchema.parse(close.json()).operation
+    expect((await command(`/api/v1/cases/${caseId}/lifecycle/close/${closeOp.id}/approve`, { expectedVersion: closeOp.version, approved: true })).statusCode).toBe(202)
+    // The upload is queued behind the move: its registered path will become historical.
+    const photo = await command(`/api/v1/cases/${caseId}/photos`, { sourceType: 'upload', originalFileName: 'audit.jpg', mimeType: 'image/jpeg',
+      byteSize: content.length, contentHash, storageRootKey: 'test-primary', relativePath: photoPath })
+    expect(photo.statusCode).toBe(201)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', outcome: 'verified' })
+    const photoId = photo.json().photo.id as string
+    const documentId = doc.json().document.id as string
+    const closedPhoto = (await app.inject({ method: 'GET', url: `/api/v1/photos/${photoId}`, headers: { cookie: cookieA } })).json().photo
+    expect(closedPhoto).toMatchObject({ status: 'ready', relativePath: `${closeOp.destination.relativePath}/HASAR/audit.jpg` })
+    const closedDoc = (await app.inject({ method: 'GET', url: `/api/v1/documents/${documentId}`, headers: { cookie: cookieA } })).json().document
+    expect(closedDoc.versions[0].relativePath).toBe(`${closeOp.destination.relativePath}/EVRAK/audit.pdf`)
+    expect(await readFile(join(root, ...closedPhoto.relativePath.split('/')))).toEqual(content)
+    await expect(access(join(root, ...workspace.relativePath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+    const reopen = await command(`/api/v1/cases/${caseId}/lifecycle/reopen/plan`, {
+      expectedCaseVersion: 2, expectedLocationVersion: 2, reason: 'Sentetik kurtarma denetimi', targetWorkflowStage: 'reporting',
+    })
+    expect(reopen.statusCode).toBe(201)
+    const reopenOp = caseLifecycleOperationResponseSchema.parse(reopen.json()).operation
+    expect((await command(`/api/v1/cases/${caseId}/lifecycle/reopen/${reopenOp.id}/approve`, { expectedVersion: reopenOp.version, approved: true })).statusCode).toBe(202)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    const reopenedPhoto = (await app.inject({ method: 'GET', url: `/api/v1/photos/${photoId}`, headers: { cookie: cookieA } })).json().photo
+    expect(reopenedPhoto.relativePath).toBe(photoPath)
+    expect(await readFile(join(root, ...reopenedPhoto.relativePath.split('/')))).toEqual(content)
+    expect((await pool.query('SELECT relative_path FROM photos WHERE id=$1', [photoId])).rows[0]).toEqual({ relative_path: photoPath })
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [caseId])).rows[0]).toEqual({ lifecycle_status: 'open' })
+  }, 60_000)
+
+  it('file paths follow cross-root move history without rewriting later uploads, neighboring paths or another tenant', async () => {
+    const caseId = await createCase(cookieA, '34 AUD 201')
+    const otherCaseId = await createCase(cookieA, '34 AUD 202')
+    for (const [fromRoot, fromPath, toRoot, toPath, at, source] of [
+      ['test-primary', 'folder/CAR', 'archive', 'closed/CAR', '2026-08-01', 'system'],
+      ['archive', 'closed/CAR', 'test-primary', 'reopened/CAR', '2026-08-02', 'system'],
+      ['test-primary', 'reopened/CAR', 'test-primary', 'manual/CAR', '2026-08-03', 'manual'],
+    ]) {
+      await pool.query(`INSERT INTO case_location_history
+        (id,organization_id,case_id,previous_storage_root_key,previous_relative_path,storage_root_key,relative_path,occurred_at,verification_status,source)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'verified',$9)`, [uuidv7(), orgA, caseId, fromRoot, fromPath, toRoot, toPath, at, source])
+    }
+    const original = { case_id: caseId, storage_root_key: 'test-primary', relative_path: 'folder/CAR/EVRAK/a.pdf', created_at: new Date('2026-07-01') }
+    const files = [original,
+      { ...original, storage_root_key: 'archive', relative_path: 'closed/CAR/HASAR/a.jpg', created_at: new Date('2026-08-01T12:00:00Z') },
+      { ...original, created_at: new Date('2026-08-04') },
+      { ...original, relative_path: 'folder/CAR-2/EVRAK/a.pdf' },
+      { ...original, case_id: otherCaseId },
+    ]
+    expect((await resolveFileLocations(pool, orgA, files)).map(file => [file.storage_root_key, file.relative_path])).toEqual([
+      ['test-primary', 'reopened/CAR/EVRAK/a.pdf'], ['test-primary', 'reopened/CAR/HASAR/a.jpg'],
+      ['test-primary', original.relative_path], ['test-primary', 'folder/CAR-2/EVRAK/a.pdf'], ['test-primary', original.relative_path],
+    ])
+    expect(await resolveFileLocations(pool, orgB, [original])).toEqual([original])
+    expect(original.relative_path).toBe('folder/CAR/EVRAK/a.pdf')
   })
 
   it('eksik notificationDate güvenli validation, bilinmeyen vaka 404 ve mutlak yol/secret sızıntısı yoktur', async () => {

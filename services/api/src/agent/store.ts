@@ -10,6 +10,7 @@ import {
 import { uuidv7 } from '@hasarbotu/database'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
+import { resolveFileLocations } from '../storage/file-location.js'
 import { generateAgentSecret, hashAgentSecret } from './auth.js'
 import {
   finalizePdfExtraction,
@@ -191,10 +192,13 @@ export function createAgentStore(pool: pg.Pool) {
 
         const nextAttempt = job.attempt_count + 1
         if (nextAttempt > job.max_attempts) {
+          const ctx: ApplyContext = { client, organizationId: agent.organizationId, agentId: agent.id, requestId: `job-${job.id}` }
           await client.query(
-            "UPDATE jobs SET status = 'dead_letter', leased_by_agent_id = NULL, lease_expires_at = NULL, updated_at = now() WHERE id = $1",
+            "UPDATE jobs SET status = 'dead_letter', last_error_code = 'attempts_exhausted', leased_by_agent_id = NULL, lease_expires_at = NULL, updated_at = now() WHERE id = $1",
             [job.id],
           )
+          await markVerificationExhausted(ctx, job)
+          await recordJobAudit(ctx, job, 'job.dead_letter', { errorCode: 'attempts_exhausted' })
           if (job.type === 'provision_case_workspace') {
             await client.query(
               "UPDATE case_workspace_provisionings SET status='failed', last_error_code='attempts_exhausted', updated_at=now() WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled')",
@@ -203,20 +207,23 @@ export function createAgentStore(pool: pg.Pool) {
           }
           if (job.target_type === 'file_operation') {
             const isCleanup = job.type === 'cleanup_moved_workspace'
+            // A lost final lease gives no proof that the filesystem is unchanged.
+            const status = isCleanup || job.status === 'leased' ? 'manual_recovery_required' : 'failed'
             const changed = await client.query(
               `UPDATE case_file_operations SET status=$3,cleanup_state=CASE WHEN $4 THEN 'blocked' ELSE cleanup_state END,
                failure_reason_code='attempts_exhausted',updated_at=now()
                WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled')`,
-              [job.target_id, agent.organizationId, isCleanup ? 'manual_recovery_required' : 'failed', isCleanup],
+              [job.target_id, agent.organizationId, status, status === 'manual_recovery_required'],
             )
             if (changed.rowCount !== 0) {
               await audit.record(client, {
                 organizationId: agent.organizationId,
-                action: isCleanup ? 'file_operation.manual_recovery_required' : 'file_operation.failed',
+                action: `file_operation.${status}`,
                 entityType: 'case_file_operation',
                 entityId: job.target_id,
                 details: { jobId: job.id, agentId: agent.id, errorCode: 'attempts_exhausted' },
               })
+              await markLinkedLifecycleFailure(ctx, { id: job.target_id }, status, 'attempts_exhausted', job.id)
             }
           }
           if (job.target_type === 'document_text_extraction') {
@@ -307,7 +314,11 @@ export function createAgentStore(pool: pg.Pool) {
         if (claimed.target_type === 'document_ocr_run') {
           await markPolicyOcrStarted(client, agent.organizationId, claimed.target_id, claimed.id, agent.id)
         }
-        return claimedJobToDto(claimed)
+        const dto = claimedJobToDto(claimed)
+        const fileLocation = await resolveJobFileLocation(client, claimed)
+        return fileLocation === undefined ? dto : claimedJobSchema.parse({
+          ...dto, payload: { ...dto.payload, storageRootKey: fileLocation.storage_root_key, relativePath: fileLocation.relative_path },
+        })
       })
     },
 
@@ -507,6 +518,8 @@ export function createAgentStore(pool: pg.Pool) {
               })
             }
             if (manual || stale) {
+              await markLinkedLifecycleFailure(ctx, { id: job.target_id },
+                manual ? 'manual_recovery_required' : 'failed', errorCode, job.id)
               await client.query(
                 "UPDATE jobs SET status='dead_letter',last_error_code=$2,leased_by_agent_id=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1",
                 [job.id, errorCode],
@@ -515,6 +528,7 @@ export function createAgentStore(pool: pg.Pool) {
             }
           }
           if (job.attempt_count >= job.max_attempts) {
+            await markVerificationExhausted(ctx, job)
             await client.query(
               "UPDATE jobs SET status = 'dead_letter', last_error_code = $2, leased_by_agent_id = NULL, lease_expires_at = NULL, updated_at = now() WHERE id = $1",
               [job.id, errorCode],
@@ -534,6 +548,11 @@ export function createAgentStore(pool: pg.Pool) {
                 entityId: job.target_id,
                 details: { jobId: job.id, agentId: agent.id, errorCode: 'attempts_exhausted' },
               })
+            }
+            if (job.target_type === 'file_operation') {
+              const isCleanup = job.type === 'cleanup_moved_workspace'
+              await markLinkedLifecycleFailure(ctx, { id: job.target_id },
+                isCleanup ? 'manual_recovery_required' : 'failed', isCleanup ? 'attempts_exhausted' : errorCode, job.id)
             }
             return { kind: 'ok', status: 'dead_letter', lastErrorCode: errorCode }
           }
@@ -573,6 +592,36 @@ interface AppliedResult {
   /** İşin nihai durumu: doğrulama başarıyla tamamlandıysa succeeded; içerik
    *  uyuşmazlığı gibi kesin başarısızlıkta failed. */
   readonly jobStatus: 'succeeded' | 'failed'
+}
+
+async function resolveJobFileLocation(client: pg.PoolClient, job: JobRow) {
+  let source: string
+  switch (job.target_type) {
+    case 'photo': source = 'photos WHERE id::text=$1'; break
+    case 'document_version': source = 'document_versions WHERE id::text=$1'; break
+    case 'document_text_extraction':
+      source = 'document_versions WHERE id=(SELECT document_version_id FROM document_text_extractions WHERE id::text=$1 AND organization_id=$2)'
+      break
+    case 'document_ocr_run':
+      source = 'document_versions WHERE id=(SELECT document_version_id FROM document_ocr_runs WHERE id::text=$1 AND organization_id=$2)'
+      break
+    default: return undefined
+  }
+  const files = await client.query<{ case_id: string; storage_root_key: string; relative_path: string; created_at: Date }>(
+    `SELECT case_id,storage_root_key,relative_path,created_at FROM ${source} AND organization_id=$2`,
+    [job.target_id, job.organization_id],
+  )
+  return (await resolveFileLocations(client, job.organization_id, files.rows))[0]
+}
+
+/** A terminal verification job must not leave its pending upload waiting forever. */
+async function markVerificationExhausted(ctx: ApplyContext, job: JobRow): Promise<void> {
+  if (job.target_type !== 'document_version' && job.target_type !== 'photo') return
+  const table = job.target_type === 'photo' ? 'photos' : 'document_versions'
+  await ctx.client.query(
+    `UPDATE ${table} SET status='failed' WHERE id::text=$1 AND organization_id=$2 AND status='pending'`,
+    [job.target_id, ctx.organizationId],
+  )
 }
 
 /**
@@ -782,7 +831,7 @@ interface FileOperationApplyRow {
 
 async function markLinkedLifecycleFailure(
   ctx: ApplyContext,
-  operation: FileOperationApplyRow,
+  operation: Pick<FileOperationApplyRow, 'id'>,
   status: 'failed' | 'manual_recovery_required',
   errorCode: string,
   jobId: string,
