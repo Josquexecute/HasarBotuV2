@@ -53,6 +53,38 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
 
   const roots = () => ({ 'source-root': sourceRoot, 'destination-root': destinationRoot })
 
+  it('requires manual recovery when the source is missing, even if a destination exists', async () => {
+    const payload = applyPayload()
+    await nodeFileSystemAdapter.rename(join(sourceRoot, sourceRelative), join(sourceRoot, payload.destination.relativePath))
+    await writeFile(join(sourceRoot, payload.destination.relativePath, 'unrelated.txt'), 'unrelated')
+    const result = await executeFileOperation(roots(), payload)
+    expect(result).toMatchObject({ outcome: 'failed', errorCode: 'source_evidence_missing', fileOperation: { phase: 'manual_recovery_required' } })
+  })
+
+  it('recovers only the recorded operation and rejects a changed destination', async () => {
+    const payload = applyPayload()
+    expect((await executeFileOperation(roots(), payload)).outcome).toBe('verified')
+    expect(await executeFileOperation(roots(), payload)).toMatchObject({ outcome: 'verified', fileOperation: { safeOutcomeCode: 'recovered_after_rename' } })
+    expect(await executeFileOperation(roots(), { ...payload, operationId: '01900000-0000-7000-8000-000000000099' })).toMatchObject({ outcome: 'failed', errorCode: 'source_evidence_missing' })
+    await writeFile(join(sourceRoot, payload.destination.relativePath, 'unrelated.txt'), 'unrelated')
+    expect(await executeFileOperation(roots(), payload)).toMatchObject({ outcome: 'failed', errorCode: 'source_evidence_missing' })
+  })
+
+  it('does not publish a staged copy after ownership is lost during copying', async () => {
+    const controller = new AbortController()
+    const payload = applyPayload({ strategy: 'staged_copy', destination: { storageRootKey: 'destination-root', relativePath: 'target' } })
+    const fs: FileSystemAdapter = {
+      ...nodeFileSystemAdapter,
+      async copyFileStreaming(source, destination, signal) {
+        await nodeFileSystemAdapter.copyFileStreaming(source, destination, signal)
+        controller.abort(new Error('job_lease_lost'))
+      },
+    }
+    await executeFileOperation(roots(), payload, fs, { signal: controller.signal, check: () => controller.signal.throwIfAborted() })
+    await expect(access(join(destinationRoot, 'target'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readFile(join(sourceRoot, sourceRelative, 'not.txt'), 'utf8')).toBe('sentetik-not')
+  })
+
   it('D4 fail-closed: kaynak kök erişilemezken HİÇBİR fiziksel adım denemez', async () => {
     await rm(sourceRoot, { recursive: true, force: true })
     const result = await executeFileOperation(roots(), applyPayload())

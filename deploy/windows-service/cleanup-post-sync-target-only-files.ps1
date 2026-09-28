@@ -209,7 +209,7 @@ try {
         Throw-SafeCleanupError 'FORENSICS_REPORT_SCHEMA_INVALID'
     }
 
-    $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue
+    $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $nodeCommand) { Throw-SafeCleanupError 'NODE_RUNTIME_NOT_FOUND' }
     $statePath = Join-Path $PSScriptRoot 'pcloud-stale-target-file-state.mjs'
     if (-not [System.IO.File]::Exists($statePath)) { Throw-SafeCleanupError 'STALE_TARGET_STATE_TOOL_NOT_FOUND' }

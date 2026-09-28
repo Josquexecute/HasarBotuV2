@@ -48,9 +48,22 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
     }
   }
 
+  it('does not create a workspace or report success after losing the lease', async () => {
+    vi.mocked(checkCaseFreshness).mockResolvedValue({ ready: true, caseStatus: 'ready' })
+    const reportResult = vi.fn()
+    const client = {
+      claim: vi.fn().mockResolvedValue({ id: 'lost-job', leaseExpiresAt: new Date(Date.now() + 120_000).toISOString(), payload: { kind: 'workspace', storageRootKey: 'test-root', relativePath: 'lost-workspace', requiredSubdirectories: ['EVRAK'] } }),
+      heartbeat: vi.fn().mockResolvedValue(false), reportResult,
+    } as unknown as AgentApiClient
+    await expect(runOnce(client, baseConfig())).rejects.toThrow('job_lease_lost')
+    expect(reportResult).not.toHaveBeenCalled()
+    await expect(stat(join(root, 'lost-workspace'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('workspace isi: freshness NOT-READY ise provisionCaseWorkspace HIC calismaz (klasor GERCEKTEN olusmaz), case_not_fresh raporlanir', async () => {
     vi.mocked(checkCaseFreshness).mockResolvedValue({ ready: false, caseStatus: 'unknown', reason: 'case_status_unknown' })
     const job = {
+      leaseExpiresAt: new Date(Date.now() + 120_000).toISOString(),
       id: 'job-1',
       payload: {
         kind: 'workspace',
@@ -62,7 +75,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
     const reportResult = vi.fn().mockResolvedValue({ acknowledged: true })
     const client = {
       claim: vi.fn().mockResolvedValue(job),
-      heartbeat: vi.fn(),
+      heartbeat: vi.fn().mockImplementation(async () => ({ leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() })),
       reportResult,
     } as unknown as AgentApiClient
 
@@ -78,6 +91,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
   it('workspace isi: freshness READY ise provisionCaseWorkspace GERCEKTEN calisir, klasor GERCEKTEN olusur', async () => {
     vi.mocked(checkCaseFreshness).mockResolvedValue({ ready: true, caseStatus: 'ready' })
     const job = {
+      leaseExpiresAt: new Date(Date.now() + 120_000).toISOString(),
       id: 'job-2',
       payload: {
         kind: 'workspace',
@@ -88,7 +102,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
     }
     const client = {
       claim: vi.fn().mockResolvedValue(job),
-      heartbeat: vi.fn(),
+      heartbeat: vi.fn().mockImplementation(async () => ({ leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() })),
       reportResult: vi.fn().mockResolvedValue({ acknowledged: true }),
     } as unknown as AgentApiClient
 
@@ -102,6 +116,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
     vi.mocked(checkCaseFreshness).mockResolvedValue({ ready: false, caseStatus: 'unknown', reason: 'freshness_gate_not_configured' })
     const config: AgentConfig = { ...baseConfig(), freshnessGate: undefined }
     const job = {
+      leaseExpiresAt: new Date(Date.now() + 120_000).toISOString(),
       id: 'job-3',
       payload: {
         kind: 'workspace',
@@ -113,7 +128,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
     const reportResult = vi.fn().mockResolvedValue({ acknowledged: true })
     const client = {
       claim: vi.fn().mockResolvedValue(job),
-      heartbeat: vi.fn(),
+      heartbeat: vi.fn().mockImplementation(async () => ({ leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() })),
       reportResult,
     } as unknown as AgentApiClient
 
@@ -132,6 +147,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
     })
     await mkdir(join(root, 'kaynak-vaka'), { recursive: true })
     const job = {
+      leaseExpiresAt: new Date(Date.now() + 120_000).toISOString(),
       id: 'job-4',
       payload: {
         kind: 'file_operation',
@@ -149,7 +165,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
     const reportResult = vi.fn().mockResolvedValue({ acknowledged: true })
     const client = {
       claim: vi.fn().mockResolvedValue(job),
-      heartbeat: vi.fn(),
+      heartbeat: vi.fn().mockImplementation(async () => ({ leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() })),
       reportResult,
     } as unknown as AgentApiClient
 

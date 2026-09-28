@@ -20,7 +20,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
-import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { buildApp, hashPassword } from '../src/index.js'
 
 /**
  * UAT-tarzı uçtan uca doğrulama: Bildirimler için gerçek uyarı üretimi →
@@ -55,7 +55,6 @@ import { buildApp, fixedClock, hashPassword } from '../src/index.js'
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
 const PASSWORD = 'uat-bildirim-sentetik-guclu-parola-27'
-const NOW = '2026-07-27T09:00:00.000Z'
 
 /** Trafik dosyası için zorunlu evrak kümesi; eksiltilerek eksik evrak üretilir. */
 const READY_TRAFFIC_DOCUMENTS = [
@@ -73,6 +72,7 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
   let config: DatabaseConfig
   let pool: pg.Pool
   let app: FastifyInstance
+  let evaluatedAt = new Date().toISOString()
   let orgAId: string
   let orgBId: string
   let managerAId: string
@@ -151,7 +151,7 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
     await seedUser(orgAId, 'uat-bildirim-readonly-a@test.local', 'read_only')
 
     app = buildApp({
-      clock: fixedClock(NOW),
+      clock: { nowUtcIso: () => evaluatedAt },
       loggerEnabled: false,
       auth: { pool, cookieSecure: false, loginRateLimit: { limit: 500, windowMs: 60_000 } },
     })
@@ -172,8 +172,7 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
   })
 
   it('gerçek uyarı üretimi, liste/yenileme, ilgili dosyaya navigasyon ve tenant/yetki izolasyonu zincirini tek akışta doğrular', async () => {
-    // 1) GERÇEK CASE OLUŞTURMA (org A) — geçmiş takip tarihiyle overdue_follow_up
-    //    uyarısı için gerçek zemin.
+    // Takip tarihi sunucuda otomatik atanır; istemci tarihiyle geçmişe çekilemez.
     const createdA = await app.inject({
       method: 'POST', url: CASES_ROUTE,
       headers: { cookie: managerACookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
@@ -184,6 +183,8 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
     })
     expect(createdA.statusCode, createdA.payload).toBe(201)
     const caseA = caseDetailResponseSchema.parse(createdA.json()).case
+    expect(caseA.followUpDate).not.toBeNull()
+    expect(caseA.followUpDate).not.toBe('2026-07-20')
 
     // 2) GERÇEK GÖREV OLUŞTURMA — geçmiş bitiş tarihiyle overdue_task uyarısı.
     const createdTask = await app.inject({
@@ -216,6 +217,15 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
     expect(createdB.statusCode, createdB.payload).toBe(201)
     const caseB = caseDetailResponseSchema.parse(createdB.json()).case
 
+    // Kaydedilen tarihte uyarı yoktur; ertesi gün gerçek kayıt gecikmiş olur.
+    const latestFollowUp = [caseA.followUpDate!, caseB.followUpDate!].sort().at(-1)!
+    evaluatedAt = `${latestFollowUp}T09:00:00.000Z`
+    const onDueDate = operationalAlertsResponseSchema.parse((await app.inject({
+      method: 'GET', url: OPERATIONAL_ALERTS_ROUTE, headers: { cookie: managerBCookie },
+    })).json())
+    expect(onDueDate.alerts.some((alert) => alert.type === 'overdue_follow_up')).toBe(false)
+    evaluatedAt = new Date(Date.parse(evaluatedAt) + 86_400_000).toISOString()
+
     // 4) BİLDİRİM LİSTESİ (org A görünümü) — gerçek türetilmiş uyarılar.
     const rawFirst = await app.inject({
       method: 'GET', url: OPERATIONAL_ALERTS_ROUTE, headers: { cookie: managerACookie },
@@ -236,7 +246,7 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
       (alert) => alert.type === 'overdue_follow_up' && alert.caseId === caseA.id,
     )
     expect(overdueFollowUp).toMatchObject({
-      severity: 'medium', plate: '34 BIL 0001', sourceDate: '2026-07-20',
+      severity: 'medium', plate: '34 BIL 0001', sourceDate: caseA.followUpDate,
       caseDetailPath: `/dosyalar/${caseA.id}`,
     })
     const missingDocuments = listA.alerts.filter(

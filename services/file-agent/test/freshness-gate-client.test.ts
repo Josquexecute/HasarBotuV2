@@ -110,7 +110,7 @@ describe('checkCaseFreshness (real spawn of pcloud-session0-freshness-gate.mjs)'
     const config = { apiBaseUrl: '', agentId: 'test', agentSecret: 'test', roots: { main: targetRoot }, leaseSeconds: 30, pollIntervalMs: 1, freshnessGate: gateConfig() }
     const reports: unknown[] = []
     let loseResult = true
-    const client = { claim: async () => ({ id: 'same-job', payload }), heartbeat: async () => ({}), reportResult: async (_id: string, input: unknown) => {
+    const client = { claim: async () => ({ id: 'same-job', payload, leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() }), heartbeat: async () => ({ leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() }), reportResult: async (_id: string, input: unknown) => {
       reports.push(input)
       if (loseResult) { loseResult = false; throw new Error('lost result') }
       return { acknowledged: true }

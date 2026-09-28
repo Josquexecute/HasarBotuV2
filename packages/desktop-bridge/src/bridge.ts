@@ -1,4 +1,5 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { request as httpsRequest } from 'node:https'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { join, relative, resolve, sep, extname, isAbsolute } from 'node:path'
@@ -48,6 +49,11 @@ export interface DesktopBridge {
 }
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 30_000
+export const EKSIST_UPSTREAM_TIMEOUT_MS = 120_000
+
+export function upstreamTimeoutFor(pathname: string, defaultTimeout: number): number {
+  return pathname === '/api/v1/eksist/sources' ? Math.max(defaultTimeout, EKSIST_UPSTREAM_TIMEOUT_MS) : defaultTimeout
+}
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8',
@@ -69,6 +75,8 @@ function contentTypeFor(filePath: string): string {
 
 /** Güvenli, gövdesiz hata yanıtı. Ham hata/dosya yolu istemciye taşınmaz. */
 function sendStatus(response: ServerResponse, status: number): void {
+  if (response.destroyed || response.writableEnded) return
+  if (response.headersSent) { response.destroy(); return }
   response.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' })
   response.end(String(status))
 }
@@ -108,7 +116,7 @@ function forwardToApi(
   response: ServerResponse,
   timeoutMs: number,
 ): void {
-  const upstream = httpRequest(
+  const upstream = (apiUrl.protocol === 'https:' ? httpsRequest : httpRequest)(
     {
       protocol: apiUrl.protocol,
       hostname: apiUrl.hostname,
@@ -118,6 +126,10 @@ function forwardToApi(
       headers: buildUpstreamHeaders(clientRequest.headers, upstreamHost),
     },
     (upstreamResponse) => {
+      upstreamResponse.on('error', () => sendStatus(response, 502))
+      upstreamResponse.on('aborted', () => sendStatus(response, 502))
+      response.once('close', () => upstreamResponse.destroy())
+      if (response.destroyed) { upstreamResponse.destroy(); return }
       // `set-cookie` dizi olarak, HİÇ dokunulmadan aktarılır.
       response.writeHead(
         upstreamResponse.statusCode ?? 502,
@@ -140,6 +152,10 @@ function forwardToApi(
     else response.destroy()
   })
 
+  clientRequest.once('aborted', () => upstream.destroy())
+  clientRequest.once('error', () => upstream.destroy())
+  response.once('close', () => upstream.destroy())
+
   clientRequest.pipe(upstream)
 }
 
@@ -151,11 +167,14 @@ function forwardToApi(
  */
 export async function startDesktopBridge(options: DesktopBridgeOptions): Promise<DesktopBridge> {
   const apiUrl = new URL(options.apiOrigin)
+  if (apiUrl.protocol !== 'http:' && apiUrl.protocol !== 'https:') throw new Error('unsupported API protocol')
   const upstreamHost = apiUrl.host
   const timeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
   const assetRoot = options.assetRoot === undefined ? undefined : resolve(options.assetRoot)
 
   const server: Server = createServer((clientRequest, response) => {
+    clientRequest.on('error', () => sendStatus(response, 400))
+    response.on('error', () => response.destroy())
     void (async () => {
       const address = server.address()
       const listeningPort = typeof address === 'object' && address !== null ? address.port : 0
@@ -167,7 +186,7 @@ export async function startDesktopBridge(options: DesktopBridgeOptions): Promise
 
       const pathname = new URL(clientRequest.url ?? '/', 'http://127.0.0.1').pathname
       if (isApiPath(pathname)) {
-        forwardToApi(apiUrl, upstreamHost, clientRequest, response, timeoutMs)
+        forwardToApi(apiUrl, upstreamHost, clientRequest, response, upstreamTimeoutFor(pathname, timeoutMs))
         return
       }
 
@@ -186,13 +205,20 @@ export async function startDesktopBridge(options: DesktopBridgeOptions): Promise
         sendStatus(response, 404)
         return
       }
-      response.writeHead(200, { 'content-type': contentTypeFor(file) })
       if (method === 'HEAD') {
+        response.writeHead(200, { 'content-type': contentTypeFor(file) })
         response.end()
         return
       }
-      createReadStream(file).pipe(response)
-    })()
+      const stream = createReadStream(file)
+      stream.on('error', () => sendStatus(response, 500))
+      response.once('close', () => stream.destroy())
+      stream.once('open', () => {
+        if (response.destroyed) { stream.destroy(); return }
+        response.writeHead(200, { 'content-type': contentTypeFor(file) })
+        stream.pipe(response)
+      })
+    })().catch(() => sendStatus(response, 500))
   })
 
   server.listen(options.port ?? 0, '127.0.0.1')

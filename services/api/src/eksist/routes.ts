@@ -29,28 +29,39 @@ export function registerEksistRoutes(app: FastifyInstance, { pool }: { pool: pg.
     const parsed = eksistUploadSchema.safeParse(request.body)
     if (!parsed.success) return reply.code(400).send({ ok: false, error: zodErrorToApiError(parsed.error, String(request.id)) })
     const input = parsed.data
-    let text: string, method: string, mime = 'text/plain', bytes: Buffer | null = null
-    if (input.kind === 'text') { text = input.text; method = 'clipboard' }
-    else {
-      if (input.base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.base64)) return reply.code(400).send(failureBody('validation_error', 'Invalid file encoding.', String(request.id)))
-      bytes = Buffer.from(input.base64, 'base64')
-      if (bytes.length > 10_000_000) return reply.code(413).send(failureBody('validation_error', 'File exceeds 10 MB.', String(request.id)))
-      const pdf = bytes.subarray(0, 5).toString() === '%PDF-'
-      const png = bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
-      const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
-      if (input.kind === 'pdf' ? !pdf : !(png || jpeg)) return reply.code(400).send(failureBody('validation_error', 'Only PDF, PNG and JPEG files are accepted.', String(request.id)))
-      mime = pdf ? 'application/pdf' : png ? 'image/png' : 'image/jpeg'
-      try { ({ text, method } = await extractEksist(input.kind, bytes)) }
-      catch (error) { return reply.code(error instanceof Error && error.message === 'extraction_busy' ? 429 : 422).send(failureBody('validation_error', 'Text could not be read. Try clipboard text or a clearer document.', String(request.id))) }
-    }
-    const extraction = parseEksist(text), id = uuidv7()
-    await withTransaction(pool, async client => {
+    // Content identity survives a lost response and renderer restart. Scope it
+    // to the authenticated user; simultaneous retries share the same result.
+    const sourceScope = `eksist.sources:${session.user.id}`
+    const requestHash = hashRequestBody(input)
+    const result = await withTransaction(pool, async client => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`${session.user.organizationId}:${sourceScope}:${requestHash}`])
+      const replay = await client.query('SELECT response_body FROM idempotency_keys WHERE organization_id=$1 AND scope=$2 AND idem_key=$3', [session.user.organizationId, sourceScope, requestHash])
+      if (replay.rows[0]) return { status: 201, body: replay.rows[0].response_body as unknown }
+      let text: string, method: string, mime = 'text/plain', bytes: Buffer | null = null
+      if (input.kind === 'text') { text = input.text; method = 'clipboard' }
+      else {
+        if (input.base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.base64)) return { status: 400, body: failureBody('validation_error', 'Invalid file encoding.', String(request.id)) }
+        bytes = Buffer.from(input.base64, 'base64')
+        if (bytes.length > 10_000_000) return { status: 413, body: failureBody('validation_error', 'File exceeds 10 MB.', String(request.id)) }
+        const pdf = bytes.subarray(0, 5).toString() === '%PDF-'
+        const png = bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
+        const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+        if (input.kind === 'pdf' ? !pdf : !(png || jpeg)) return { status: 400, body: failureBody('validation_error', 'Only PDF, PNG and JPEG files are accepted.', String(request.id)) }
+        mime = pdf ? 'application/pdf' : png ? 'image/png' : 'image/jpeg'
+        try { ({ text, method } = await extractEksist(input.kind, bytes)) }
+        catch (error) { return { status: error instanceof Error && error.message === 'extraction_busy' ? 429 : 422, body: failureBody('validation_error', 'Text could not be read. Try clipboard text or a clearer document.', String(request.id)) } }
+      }
+      const extraction = parseEksist(text), id = uuidv7()
       await client.query(`INSERT INTO eksist_sources (id,organization_id,input_kind,display_name,mime_type,source_bytes,source_hash,raw_text,extraction_method,extracted_fields,created_by_user_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)`,
-      [id, session.user.organizationId, input.kind, input.kind === 'text' ? 'Eksist kaynak metni' : input.name, mime, bytes, sha(bytes ?? text), text, method, JSON.stringify(extraction), session.user.id])
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)`,
+        [id, session.user.organizationId, input.kind, input.kind === 'text' ? 'Eksist kaynak metni' : input.name, mime, bytes, sha(bytes ?? text), text, method, JSON.stringify(extraction), session.user.id])
       await audit.record(client, { organizationId: session.user.organizationId, actorUserId: session.user.id, requestId: String(request.id), action: 'eksist.source_read', entityType: 'eksist_source', entityId: id, details: { kind: input.kind, method, sourceHash: sha(bytes ?? text) } })
+      const body = { id, extraction, method, text }
+      await client.query(`INSERT INTO idempotency_keys (id,organization_id,scope,idem_key,request_hash,response_status,response_body)
+        VALUES ($1,$2,$3,$4,$4,201,$5::jsonb)`, [uuidv7(), session.user.organizationId, sourceScope, requestHash, JSON.stringify(body)])
+      return { status: 201, body }
     })
-    return reply.code(201).send({ id, extraction, method, text })
+    return reply.code(result.status).send(result.body)
   })
 
   app.post('/api/v1/cases/quick-create', async (request, reply) => {

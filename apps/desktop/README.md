@@ -101,3 +101,9 @@ ESM giriş noktasında **üst düzey `await` kullanılmaz**. Electron, giriş
 modülünün değerlendirmesi bitmeden `ready` olayını yaymaz; üst düzey
 `await app.whenReady()` yazılırsa uygulama sessizce kilitlenir. Bu davranış
 gerçek Electron 43 ile gözlendi (bkz. `docs/DECISION_LOG.md` → HB-2026-105).
+
+## Kalıcı yerel depolama
+
+Masaüstü başlangıcı ilk seçilen köprü portunu `userData/bridge-origins` altında API origin'i bazında saklar. Sonraki açılışlar aynı portu kullanır; port doluysa uygulama hata bildirir ve farklı bir porta geçmez. Kaydedilmiş portla çelişen `HASARBOTU_BRIDGE_PORT` değeri kabul edilmez. Chromium oturum bölümü de API bazında ayrıdır; hızlı not anahtarları kullanıcı bazında ayrılmaya devam eder.
+
+Bu değişiklikten önce rastgele portlarda bırakılmış depolama otomatik taşınmaz. Eski taslak gerekiyorsa önceki sürümün ilgili origin'indeki metin ayrıca kurtarılmalıdır.

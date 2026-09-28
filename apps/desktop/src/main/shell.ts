@@ -1,5 +1,6 @@
 import { BrowserWindow, shell as electronShell, type Session } from 'electron'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 import { startDesktopBridge, type DesktopBridge } from '@hasarbotu/desktop-bridge'
 import {
   CONTENT_SECURITY_POLICY,
@@ -11,6 +12,7 @@ import {
 } from './security.js'
 import { resolveExternalOpen } from './external.js'
 import { resolveDownload, sanitizeDownloadFilename } from './downloads.js'
+import { startPersistentBridge } from './persistent-bridge.js'
 
 /**
  * İnce Electron kabuğu (ADR-Q06, Paket 21 / D2).
@@ -44,6 +46,7 @@ export interface DesktopShellOptions {
   readonly assetRoot: string
   /** Köprünün dinleyeceği loopback portu; `0` boş port seçtirir. */
   readonly bridgePort?: number
+  readonly userDataPath?: string
   /** Pencere görünür açılsın mı? Otomatik doğrulamada `false` kullanılır. */
   readonly show?: boolean
   /**
@@ -188,11 +191,14 @@ export async function startDesktopShell(options: DesktopShellOptions): Promise<D
   const openExternal: OpenExternalFn = options.openExternal
     ?? ((url) => electronShell.openExternal(url))
 
-  const bridge: DesktopBridge = await startDesktopBridge({
+  const bridgeOptions = {
     apiOrigin: options.apiOrigin,
     assetRoot: options.assetRoot,
     ...(options.bridgePort === undefined ? {} : { port: options.bridgePort }),
-  })
+  }
+  const bridge: DesktopBridge = options.userDataPath === undefined
+    ? await startDesktopBridge(bridgeOptions)
+    : await startPersistentBridge(bridgeOptions, options.userDataPath)
 
   // Kapı pencereden ÖNCE çalışır: uyumsuz ya da erişilemez bir API'ye karşı
   // yarım çalışan bir pencere açılmaz.
@@ -223,6 +229,7 @@ export async function startDesktopShell(options: DesktopShellOptions): Promise<D
       autoHideMenuBar: true,
       webPreferences: {
         ...SECURE_WEB_PREFERENCES,
+        partition: `persist:hasarbotu-${createHash('sha256').update(new URL(options.apiOrigin).origin).digest('hex')}`,
         preload: preloadPath(),
       },
     })

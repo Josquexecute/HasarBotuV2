@@ -16,6 +16,7 @@ import {
   type JobResultResponse,
   type PdfExtractionChunkRequest,
   type PolicyOcrChunkRequest,
+  type HeartbeatResponse,
 } from '@hasarbotu/contracts'
 
 /**
@@ -56,16 +57,16 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
     },
 
     /** Lease uzatır. 409 (lease kaybı) sessizce false döner. */
-    async heartbeat(jobId: string, phase?: 'applying' | 'verifying' | 'cleanup' | 'rendering' | 'preprocessing' | 'recognizing' | 'normalizing' | 'validating' | 'ocr'): Promise<boolean> {
+    async heartbeat(jobId: string, phase?: 'applying' | 'verifying' | 'cleanup' | 'rendering' | 'preprocessing' | 'recognizing' | 'normalizing' | 'validating' | 'ocr'): Promise<HeartbeatResponse | false> {
       const response = await fetchImpl(url(AGENT_JOB_HEARTBEAT_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
+        signal: AbortSignal.timeout(10_000),
         method: 'POST',
         headers: { ...authHeaders, accept: 'application/json', ...(phase === undefined ? {} : { 'content-type': 'application/json' }) },
         ...(phase === undefined ? {} : { body: JSON.stringify({ phase }) }),
       })
       if (response.status === 409) return false
       if (!response.ok) throw new AgentApiError(response.status, 'heartbeat failed')
-      heartbeatResponseSchema.parse(await response.json())
-      return true
+      return heartbeatResponseSchema.parse(await response.json())
     },
 
     /** Sonuç bildirir (idempotent). */

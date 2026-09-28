@@ -42,12 +42,13 @@ function safeNumber(value: unknown): number {
 }
 
 async function loadCase(
-  pool: pg.Pool,
+  pool: pg.Pool | pg.PoolClient,
   organizationId: string,
   caseId: string,
+  lock = false,
 ): Promise<{ closed: boolean }> {
   const result = await pool.query(
-    'SELECT lifecycle_status FROM cases WHERE organization_id=$1 AND id=$2',
+    `SELECT lifecycle_status FROM cases WHERE organization_id=$1 AND id=$2${lock ? ' FOR UPDATE' : ''}`,
     [organizationId, caseId],
   )
   const row = result.rows[0] as Record<string, unknown> | undefined
@@ -105,8 +106,6 @@ export function createCaseVehicleOwnersStore(pool: pg.Pool) {
         expectedSetVersion: number | null
       },
     ): Promise<CaseVehicleOwnersResponse> {
-      const caseRow = await loadCase(pool, actor.organizationId, caseId)
-      if (caseRow.closed) throw new CaseVehicleOwnersError('CASE_CLOSED', 409)
       const ownerInputs: readonly CaseVehicleOwnerInput[] = input.owners.map((owner) => ({
         name: owner.name,
         phone: owner.phone,
@@ -118,6 +117,8 @@ export function createCaseVehicleOwnersStore(pool: pg.Pool) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        const caseRow = await loadCase(client, actor.organizationId, caseId, true)
+        if (caseRow.closed) throw new CaseVehicleOwnersError('CASE_CLOSED', 409)
         const existing = await client.query(
           'SELECT current_set_version FROM case_vehicle_owner_sets WHERE organization_id=$1 AND case_id=$2 FOR UPDATE',
           [actor.organizationId, caseId],

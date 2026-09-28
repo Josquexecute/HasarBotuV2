@@ -190,6 +190,57 @@ foreach ($fileResult in $fullApplyReport6.ExistingAttestationFileEffectiveAccess
 }
 Remove-Item $f6.Root -Recurse -Force -ErrorAction SilentlyContinue
 
+Write-Output "`n=== TEST 7: rollback preserves owner and a DACL without auto-inheritance ==="
+# Load only the real rollback functions, without running the command entry point.
+$parseErrors = $null
+$tokens = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($applyScriptPath, [ref]$tokens, [ref]$parseErrors)
+$ast.FindAll({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -in @('Throw-SafeApplyError', 'Get-InheritableAceFingerprint', 'Restore-NodeSddl')
+}, $false) | ForEach-Object { Invoke-Expression $_.Extent.Text }
+Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public static class AttestationAclTestNative {
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetFileSecurityW(string path, uint information, byte[] descriptor);
+}
+'@
+$f7 = New-SyntheticFixtureRoot
+try {
+    $sections = [System.Security.AccessControl.AccessControlSections]::Access -bor [System.Security.AccessControl.AccessControlSections]::Owner
+    $baseline = [System.Security.AccessControl.RawSecurityDescriptor]::new(
+        [IO.Directory]::GetAccessControl($f7.Root).GetSecurityDescriptorSddlForm($sections))
+    $baseline.SetFlags($baseline.ControlFlags -band (-bnot [System.Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInherited))
+    $bytes = [byte[]]::new($baseline.BinaryLength)
+    $baseline.GetBinaryForm($bytes, 0)
+    if (-not [AttestationAclTestNative]::SetFileSecurityW($f7.Root, 4, $bytes)) { throw 'TEST_BASELINE_DACL_WRITE_FAILED' }
+    $before = [IO.Directory]::GetAccessControl($f7.Root).GetSecurityDescriptorSddlForm($sections)
+    $acl = [IO.Directory]::GetAccessControl($f7.Root)
+    $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+        [System.Security.Principal.SecurityIdentifier]::new($targetSid),
+        [System.Security.AccessControl.FileSystemRights]::Traverse,
+        [System.Security.AccessControl.AccessControlType]::Allow))
+    [IO.Directory]::SetAccessControl($f7.Root, $acl)
+    Restore-NodeSddl -Path $f7.Root -IsDirectory $true -Sddl $before
+    Assert-True ([IO.Directory]::GetAccessControl($f7.Root).GetSecurityDescriptorSddlForm($sections) -eq $before) 'TEST7: exact owner and DACL flags restored, including absent AI'
+
+    Write-Output "`n=== TEST 8: owner drift is rejected without changing permissions ==="
+    $driftedSnapshot = [System.Security.AccessControl.RawSecurityDescriptor]::new($before)
+    $driftedSnapshot.Owner = [System.Security.Principal.SecurityIdentifier]::new($targetSid)
+    $errorCode = $null
+    try { Restore-NodeSddl -Path $f7.Root -IsDirectory $true -Sddl $driftedSnapshot.GetSddlForm($sections) }
+    catch { $errorCode = $_.Exception.Data['SafeCode'] }
+    Assert-True ($errorCode -eq 'ROLLBACK_OWNER_DRIFT') 'TEST8: owner drift fails closed with the expected code'
+    Assert-True ([IO.Directory]::GetAccessControl($f7.Root).GetSecurityDescriptorSddlForm($sections) -eq $before) 'TEST8: rejected rollback leaves owner and DACL unchanged'
+}
+finally {
+    $resolvedFixture = [IO.Path]::GetFullPath($f7.Root)
+    if (-not $resolvedFixture.StartsWith($fixtureTempRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'TEST_CLEANUP_OUTSIDE_TEMP' }
+    Remove-Item -LiteralPath $resolvedFixture -Recurse -Force
+}
+
 Write-Output "`n=== SUMMARY: $script:failures failure(s) ==="
 if ($script:failures -gt 0) { exit 1 }
 exit 0

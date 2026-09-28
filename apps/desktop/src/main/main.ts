@@ -74,6 +74,7 @@ async function bootstrap(): Promise<void> {
     const config = parseDesktopConfig(process.env, { assetRoot: defaultAssetRoot() })
     const shell = await startDesktopShell({
       ...config,
+      userDataPath: app.getPath('userData'),
       // Kapı köprü origin'ini alır ama API'yi DOĞRUDAN sorgular: `/health`
       // sürümlü `/api/v1` tabanının dışındadır ve köprü yalnız `/api/*` iletir.
       startupGate: () => runStartupGate({
@@ -88,6 +89,9 @@ async function bootstrap(): Promise<void> {
     // Closing the main window still exits; minimizing leaves the assistant available.
     shell.window.once('closed', () => app.quit())
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+      dialog.showErrorBox('HasarBotu V2', 'Uygulamanın kayıtlı yerel portu başka bir işlem tarafından kullanılıyor. İlgili işlemi kapatıp yeniden deneyin. Taslakları korumak için port değiştirilmedi.')
+    }
     if (error instanceof DesktopStartupAbortedError) {
       // Kullanıcının kendi kararı; hata değil.
       app.exit(0)

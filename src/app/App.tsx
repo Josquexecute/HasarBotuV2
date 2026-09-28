@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { AppShell } from '../components/AppShell'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -15,7 +15,7 @@ import { SettingsPage } from '../features/settings/SettingsPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { SessionProvider } from './session'
 import { useSession } from './sessionContext'
-import { usePersistentState } from './usePersistentState'
+import { PERSISTENCE_ERROR_EVENT, usePersistentState } from './usePersistentState'
 
 const CaseDetailPage = lazy(async () => {
   const module = await import('../features/cases/CaseDetailPage')
@@ -88,6 +88,12 @@ function AppGate(props: AppGateProps) {
 }
 
 export function App() {
+  const [persistenceFailed, setPersistenceFailed] = useState(false)
+  useEffect(() => {
+    const notify = () => setPersistenceFailed(true)
+    window.addEventListener(PERSISTENCE_ERROR_EVENT, notify)
+    return () => window.removeEventListener(PERSISTENCE_ERROR_EVENT, notify)
+  }, [])
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>('hasarbotu-theme', 'light')
   const [density, setDensity] = usePersistentState<'compact' | 'comfortable'>('hasarbotu-density', 'compact')
   const [collapsed, setCollapsed] = usePersistentState('hasarbotu-sidebar-collapsed', false)
@@ -95,6 +101,7 @@ export function App() {
   return (
     <ErrorBoundary>
       <div data-theme={theme} data-density={density} className="theme-root">
+        {persistenceFailed && <p role="alert">Ayarlar bu cihazda saklanamadı. Değişiklikler yalnız bu oturumda geçerli.</p>}
         <BrowserRouter>
           <SessionProvider>
             <AppGate

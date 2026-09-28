@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "includeEksist": {
+      "type": "string",
+      "const": "true"
+    },
     "search": {
       "type": "string",
       "minLength": 1,

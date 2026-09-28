@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
@@ -14,6 +14,8 @@ import {
   type DatabaseConfig,
 } from '@hasarbotu/database'
 import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { createCaseVehicleOwnersStore } from '../src/case-vehicle-owners/store.js'
+import { createCaseVehicleProfileStore } from '../src/case-vehicle-profile/store.js'
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -95,6 +97,52 @@ describeDb('Dosya Envanteri — araç sahibi mini-yakalama gerçek API', () => {
   afterAll(async () => {
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
+  })
+
+  const profileInput = {
+    fields: { brand: 'Test', model: 'Model', modelYear: 2024, variant: null, vehicleClass: 'passenger_car' as const, chassisPrefix: null, engineCode: null, evidenceSource: 'user_statement' as const, evidenceReference: null },
+    expectedVersion: null, reason: null,
+  }
+  const ownersInput = { owners: [{ name: 'Test Owner', phone: null }], expectedSetVersion: null }
+  let raceSequence = 9900
+  async function newRaceCase(): Promise<string> {
+    const id = uuidv7()
+    await pool.query(`INSERT INTO cases (id,organization_id,office_year,office_sequence,office_number,case_type,lifecycle_status,workflow_stage,plate,plate_normalized,expert_user_id,notification_date,version)
+      VALUES ($1::uuid,$2,2026,$4,$5,'traffic','open','reporting','34 TEST 99','34TEST99',$3,'2026-07-18',1)`, [id, organizationId, expertUserId, raceSequence++, id])
+    return id
+  }
+  function saveRace(kind: string, id: string) {
+    const actor = { organizationId, userId: expertUserId }
+    return kind === 'owners'
+      ? createCaseVehicleOwnersStore(pool).save(actor, id, ownersInput)
+      : createCaseVehicleProfileStore(pool).save(actor, id, profileInput)
+  }
+  it.each(['owners', 'profile'])('%s waits for closure and refuses to write once closed', async kind => {
+    const id = await newRaceCase()
+    const closer = await pool.connect()
+    let writing: Promise<unknown> | undefined
+    try {
+      await closer.query('BEGIN')
+      await closer.query('SELECT id FROM cases WHERE id=$1 FOR UPDATE', [id])
+      writing = saveRace(kind, id).catch(error => error as unknown)
+      // Observe a real database lock wait, rather than relying on a sleep.
+      await vi.waitFor(async () => {
+        const blocked = await pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT lifecycle_status FROM cases%'")
+        expect(blocked.rowCount).toBeGreaterThan(0)
+      })
+      await closer.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed' WHERE id=$1", [id])
+      await closer.query('COMMIT')
+      expect(await writing).toMatchObject({ code: 'CASE_CLOSED', status: 409 })
+      const table = kind === 'owners' ? 'case_vehicle_owner_sets' : 'case_vehicle_profiles'
+      expect((await pool.query(`SELECT 1 FROM ${table} WHERE case_id=$1`, [id])).rowCount).toBe(0)
+    } finally { await closer.query('ROLLBACK'); closer.release(); await writing }
+  })
+
+  it.each(['owners', 'profile'])('serializes simultaneous first %s saves into success and 409', async kind => {
+    const id = await newRaceCase()
+    const results = await Promise.allSettled([saveRace(kind, id), saveRace(kind, id)])
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.find(result => result.status === 'rejected')).toMatchObject({ reason: { status: 409, code: kind === 'owners' ? 'OWNERS_SET_VERSION_CONFLICT' : 'PROFILE_VERSION_CONFLICT' } })
   })
 
   it('401, tenant 404, sekreterlik yazma reddi ve boş liste durumunu uygular', async () => {

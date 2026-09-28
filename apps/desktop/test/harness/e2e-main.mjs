@@ -44,6 +44,8 @@ async function pollUntil(read, isDone, timeoutMs = 30_000) {
 /** GPU/pencere yönetimi olmayan ortamlarda kararlı koşum. */
 app.disableHardwareAcceleration()
 app.enableSandbox()
+// Keep the process alive while the last window closes and results are written.
+app.on('window-all-closed', () => {})
 
 const result = { mode, consoleMessages: [], loadFailures: [], openedExternally: [], downloads: [] }
 

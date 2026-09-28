@@ -19,7 +19,7 @@ export interface CreatePoolOptions {
  */
 export function createDatabasePool(options: CreatePoolOptions): pg.Pool {
   const { config } = options
-  return new pg.Pool({
+  const pool = new pg.Pool({
     host: config.host,
     port: config.port,
     database: config.database,
@@ -29,6 +29,10 @@ export function createDatabasePool(options: CreatePoolOptions): pg.Pool {
     connectionTimeoutMillis: options.connectionTimeoutMillis ?? DEFAULT_CONNECTION_TIMEOUT_MS,
     idleTimeoutMillis: options.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
   })
+  // pg-pool removes the broken idle client. Never log the raw error: it may
+  // contain connection details. Health checks still query the actual database.
+  pool.on('error', () => console.error('database_pool_idle_connection_error'))
+  return pool
 }
 
 /** Havuzdaki tum baglantilari kapatir; graceful shutdown yolunda cagrilir. */

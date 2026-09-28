@@ -1,6 +1,7 @@
 import type { JobResultRequestInput, JobResultResponse } from '@hasarbotu/contracts'
 import type { AgentApiClient } from './api-client.js'
 import { AgentApiError } from './api-client.js'
+import { maintainJobLease } from './job-lease.js'
 import type { AgentConfig } from './config.js'
 import { verifyTarget } from './verifier.js'
 import { provisionCaseWorkspace } from './workspace-provisioner.js'
@@ -45,20 +46,18 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
   const job = await client.claim()
   if (job === null) return { kind: 'no_work' }
 
-  const heartbeatMs = Math.max(1000, Math.floor((config.leaseSeconds * 1000) / 3))
-  const heartbeat = setInterval(() => {
-    void client.heartbeat(job.id).catch(() => undefined)
-  }, heartbeatMs)
+  const lease = maintainJobLease(client, job.id, job.leaseExpiresAt)
 
   let result
   try {
+    lease.check()
     if (job.payload.kind === 'policy_ocr') {
       const rootAbsolute = config.roots[job.payload.storageRootKey]
       if (rootAbsolute === undefined) result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
       else {
         result = await extractPolicyOcr(rootAbsolute, job.payload, {
-          onHeartbeat: async (phase) => { await client.heartbeat(job.id, phase) },
-          onChunk: async (chunk) => { await client.reportPolicyOcrChunk(job.id, chunk) },
+          onHeartbeat: async (phase) => { await lease.heartbeat(phase) },
+          onChunk: async (chunk) => { lease.check(); await client.reportPolicyOcrChunk(job.id, chunk) },
         })
       }
     } else if (job.payload.kind === 'pdf_text_extraction') {
@@ -66,8 +65,8 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
       if (rootAbsolute === undefined) result = { outcome: 'failed' as const, errorCode: 'unknown_root_mapping' }
       else {
         result = await extractPdfText(rootAbsolute, job.payload, {
-          onHeartbeat: async () => { await client.heartbeat(job.id, 'applying') },
-          onChunk: async (chunk) => { await client.reportExtractionChunk(job.id, chunk) },
+          onHeartbeat: async () => { await lease.heartbeat('applying') },
+          onChunk: async (chunk) => { lease.check(); await client.reportExtractionChunk(job.id, chunk) },
         })
       }
     } else if (job.payload.kind === 'file_operation' || job.payload.kind === 'file_operation_cleanup') {
@@ -85,8 +84,8 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
         if (!sourceFreshness.ready || !destinationFreshness.ready) {
           result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }
         } else {
-          await client.heartbeat(job.id, job.payload.kind === 'file_operation' ? 'applying' : 'cleanup')
-          result = await executeFileOperation(config.roots, job.payload)
+          await lease.heartbeat(job.payload.kind === 'file_operation' ? 'applying' : 'cleanup')
+          result = await executeFileOperation(config.roots, job.payload, undefined, lease)
         }
       }
     } else {
@@ -98,10 +97,11 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
         if (!freshness.ready) {
           result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }
         } else {
-          await client.heartbeat(job.id, 'applying')
+          await lease.heartbeat('applying')
           result = await provisionCaseWorkspace(rootAbsolute, job.payload, {
+            beforeCreate: () => lease.check(),
             onVerifying: async () => {
-              await client.heartbeat(job.id, 'verifying')
+              await lease.heartbeat('verifying')
             },
           })
         }
@@ -109,27 +109,28 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
         result = await verifyTarget(rootAbsolute, job.payload)
       }
     }
-  } finally {
-    clearInterval(heartbeat)
-  }
 
-  const reportInput: JobResultRequestInput = {
-    outcome: result.outcome,
-    ...('observedHash' in result && result.observedHash !== undefined
-      ? { observedHash: result.observedHash }
-      : {}),
-    ...('observedSize' in result && result.observedSize !== undefined
-      ? { observedSize: result.observedSize }
-      : {}),
-    ...('errorCode' in result && result.errorCode !== undefined
-      ? { errorCode: result.errorCode }
-      : {}),
-    ...('fileOperation' in result && result.fileOperation !== undefined ? { fileOperation: result.fileOperation } : {}),
-    ...((result as PdfTextExtractionResult).pdfExtraction !== undefined ? { pdfExtraction: (result as PdfTextExtractionResult).pdfExtraction } : {}),
-    ...((result as PolicyOcrExtractionResult).policyOcr !== undefined ? { policyOcr: (result as PolicyOcrExtractionResult).policyOcr } : {}),
+    lease.check()
+    const reportInput: JobResultRequestInput = {
+      outcome: result.outcome,
+      ...('observedHash' in result && result.observedHash !== undefined
+        ? { observedHash: result.observedHash }
+        : {}),
+      ...('observedSize' in result && result.observedSize !== undefined
+        ? { observedSize: result.observedSize }
+        : {}),
+      ...('errorCode' in result && result.errorCode !== undefined
+        ? { errorCode: result.errorCode }
+        : {}),
+      ...('fileOperation' in result && result.fileOperation !== undefined ? { fileOperation: result.fileOperation } : {}),
+      ...((result as PdfTextExtractionResult).pdfExtraction !== undefined ? { pdfExtraction: (result as PdfTextExtractionResult).pdfExtraction } : {}),
+      ...((result as PolicyOcrExtractionResult).policyOcr !== undefined ? { policyOcr: (result as PolicyOcrExtractionResult).policyOcr } : {}),
+    }
+    const reported = await client.reportResult(job.id, reportInput)
+    return { kind: 'reported', jobId: job.id, outcome: result.outcome, reported }
+  } finally {
+    lease.stop()
   }
-  const reported = await client.reportResult(job.id, reportInput)
-  return { kind: 'reported', jobId: job.id, outcome: result.outcome, reported }
 }
 
 /** Sürekli döngü: iş varken hemen devam eder, boş kuyrukta/depoda poll aralığı bekler. */

@@ -38,6 +38,17 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
   let orgB: string
   let cookieA: string
   let cookieB: string
+
+  it('replays concurrent source uploads and retries with one persisted source', async () => {
+    const payload = { kind: 'text', text: 'Eksist idempotency regression source' }
+    const upload = () => app.inject({ method: 'POST', url: '/api/v1/eksist/sources', headers: { cookie: cookieA }, payload })
+    const responses = await Promise.all([upload(), upload()])
+    const replay = await upload()
+    expect(responses.map(response => response.statusCode)).toEqual([201, 201])
+    expect(responses[0]!.json()).toEqual(responses[1]!.json())
+    expect(replay.json()).toEqual(responses[0]!.json())
+    expect((await pool.query('SELECT count(*)::int AS n FROM eksist_sources WHERE raw_text=$1', [payload.text])).rows).toEqual([{ n: 1 }])
+  })
   let root: string
   let agentConfig: AgentConfig
   let agentClient: ReturnType<typeof createAgentApiClient>

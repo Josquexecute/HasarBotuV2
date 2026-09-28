@@ -73,9 +73,10 @@ async function loadCase(
   pool: pg.Pool | pg.PoolClient,
   organizationId: string,
   caseId: string,
+  lock = false,
 ): Promise<{ closed: boolean }> {
   const result = await pool.query(
-    'SELECT lifecycle_status FROM cases WHERE organization_id=$1 AND id=$2',
+    `SELECT lifecycle_status FROM cases WHERE organization_id=$1 AND id=$2${lock ? ' FOR UPDATE' : ''}`,
     [organizationId, caseId],
   )
   const row = result.rows[0] as Record<string, unknown> | undefined
@@ -136,8 +137,6 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
       },
       transaction?: pg.PoolClient,
     ): Promise<CaseVehicleProfileResponse> {
-      const caseRow = await loadCase(transaction ?? pool, actor.organizationId, caseId)
-      if (caseRow.closed) throw new CaseVehicleProfileError('CASE_CLOSED', 409)
       const validation = validateCaseVehicleProfile({
         brand: input.fields.brand,
         model: input.fields.model,
@@ -157,6 +156,8 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
       const client = transaction ?? await pool.connect()
       try {
         if (transaction === undefined) await client.query('BEGIN')
+        const caseRow = await loadCase(client, actor.organizationId, caseId, true)
+        if (caseRow.closed) throw new CaseVehicleProfileError('CASE_CLOSED', 409)
         const existing = await client.query(
           `SELECT id::text,current_version_id::text,version FROM case_vehicle_profiles
             WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`,

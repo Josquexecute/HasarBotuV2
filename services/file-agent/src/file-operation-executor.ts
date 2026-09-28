@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, type Dirent, type Stats } from 'node:fs'
-import { lstat, mkdir, readdir, realpath, rename, rmdir, unlink } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rmdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import type {
@@ -42,7 +42,9 @@ export interface FileSystemAdapter {
   unlink(path: string): Promise<void>
   rmdir(path: string): Promise<void>
   hashFile(path: string): Promise<{ hash: string; size: number }>
-  copyFileStreaming(source: string, destination: string): Promise<void>
+  copyFileStreaming(source: string, destination: string, signal?: AbortSignal): Promise<void>
+  readText(path: string): Promise<string>
+  writeEvidence(path: string, content: string): Promise<void>
 }
 
 export const nodeFileSystemAdapter: FileSystemAdapter = {
@@ -54,8 +56,13 @@ export const nodeFileSystemAdapter: FileSystemAdapter = {
   unlink,
   rmdir,
   hashFile: streamSha256,
-  async copyFileStreaming(source, destination) {
-    await pipeline(createReadStream(source), createWriteStream(destination, { flags: 'wx' }))
+  readText: path => readFile(path, 'utf8'),
+  async writeEvidence(path, content) {
+    const file = await open(path, 'wx', 0o600)
+    try { await file.writeFile(content, 'utf8'); await file.sync() } finally { await file.close() }
+  },
+  async copyFileStreaming(source, destination, signal) {
+    await pipeline(createReadStream(source), createWriteStream(destination, { flags: 'wx' }), { signal })
   },
 }
 
@@ -189,6 +196,44 @@ function sameManifest(left: WorkspaceManifest, right: WorkspaceManifest): boolea
     && left.fileCount === right.fileCount
     && left.directoryCount === right.directoryCount
     && left.totalBytes === right.totalBytes
+}
+
+function operationEvidence(payload: ApplyPayload, manifest: WorkspaceManifest): string {
+  return JSON.stringify({
+    operationId: payload.operationId, operationVersion: payload.operationVersion,
+    source: payload.source, destination: payload.destination,
+    manifestHash: manifest.manifestHash, fileCount: manifest.fileCount,
+    directoryCount: manifest.directoryCount, totalBytes: manifest.totalBytes,
+  })
+}
+
+function evidenceRelativePath(payload: ApplyPayload): string {
+  return `.hasarbotu-operations/${payload.operationId}-${payload.operationVersion}.json`
+}
+
+async function matchesEvidence(fs: FileSystemAdapter, root: string, payload: ApplyPayload, manifest: WorkspaceManifest): Promise<boolean> {
+  const path = resolveUnderRoot(root, evidenceRelativePath(payload))
+  try {
+    await assertOrdinaryDirectory(fs, (await rootContext(fs, root)).rootReal, join(path, '..'))
+    const metadata = await fs.lstat(path)
+    if (metadata.isSymbolicLink() || !metadata.isFile()) return false
+    return await fs.readText(path) === operationEvidence(payload, manifest)
+  } catch (error) {
+    if (errno(error) === 'ENOENT') return false
+    throw error
+  }
+}
+
+async function persistEvidence(fs: FileSystemAdapter, root: string, payload: ApplyPayload, manifest: WorkspaceManifest): Promise<boolean> {
+  const relativePath = evidenceRelativePath(payload)
+  await ensureParentChain(fs, root, (await rootContext(fs, root)).rootReal, relativePath)
+  try {
+    await fs.writeEvidence(resolveUnderRoot(root, relativePath), operationEvidence(payload, manifest))
+    return true
+  } catch (error) {
+    if (errno(error) !== 'EEXIST') throw error
+    return matchesEvidence(fs, root, payload, manifest)
+  }
 }
 
 function manifestResult(
@@ -333,7 +378,9 @@ async function applyOperation(
     if (sourceKind === 'missing') {
       if (destinationKind === 'directory' && payload.strategy === 'atomic_rename') {
         const recovered = await buildWorkspaceManifest(fs, destinationRoot, payload.destination.relativePath)
-        return manifestResult('destination_verified', 'atomic_rename', recovered, 'recovered_after_rename')
+        return await matchesEvidence(fs, destinationRoot, payload, recovered)
+          ? manifestResult('destination_verified', 'atomic_rename', recovered, 'recovered_after_rename')
+          : manualRecovery('atomic_rename', 'source_evidence_missing')
       }
       return payload.strategy === 'staged_copy' && destinationKind === 'directory'
         ? manualRecovery('staged_copy', 'source_missing_after_copy')
@@ -369,6 +416,7 @@ async function applyOperation(
     }
 
     await ensureParentChain(fs, destinationRoot, (await rootContext(fs, destinationRoot)).rootReal, payload.destination.relativePath)
+    if (!(await persistEvidence(fs, destinationRoot, payload, sourceManifest))) return manualRecovery('atomic_rename', 'source_evidence_mismatch')
     try {
       if (caseOnlyLogicalRename) {
         const temporaryAbsolute = resolveUnderRoot(sourceRoot, payload.temporaryRelativePath)
@@ -453,7 +501,22 @@ export async function executeFileOperation(
   roots: Readonly<Record<string, string>>,
   payload: ApplyPayload | CleanupPayload,
   fs: FileSystemAdapter = nodeFileSystemAdapter,
+  ownership?: { readonly check: () => void; readonly signal: AbortSignal },
 ): Promise<FileOperationExecutionResult> {
+  if (ownership !== undefined) {
+    const original = fs
+    const guard = async <T>(action: () => Promise<T>): Promise<T> => { ownership.check(); return action() }
+    fs = {
+      ...original,
+      mkdir: path => guard(() => original.mkdir(path)),
+      rename: (source, destination) => guard(() => original.rename(source, destination)),
+      unlink: path => guard(() => original.unlink(path)),
+      rmdir: path => guard(() => original.rmdir(path)),
+      copyFileStreaming: (source, destination) => guard(() => original.copyFileStreaming(source, destination, ownership.signal)),
+      writeEvidence: (path, content) => guard(() => original.writeEvidence(path, content)),
+    }
+    ownership.check()
+  }
   return payload.kind === 'file_operation'
     ? applyOperation(roots, payload, fs)
     : cleanupOperation(roots, payload, fs)
