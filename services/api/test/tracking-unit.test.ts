@@ -3,6 +3,7 @@ import { generateKeyPairSync,sign } from 'node:crypto'
 import { applicationNumberSchema } from '@hasarbotu/contracts'
 import { decryptToken,encryptToken,parseGoogleConfig,validateGoogleClaims,createGoogleProvider } from '../src/tracking/google.js'
 import { parseSbmMessage, type GmailMessage } from '../src/tracking/sbm.js'
+import { sbmFixture,sbmNumber } from '../test-support/sbm-fixtures.js'
 
 const claims = { iss: 'https://accounts.google.com',sub: 'google-sub',aud: 'client',exp: 2_000_000_000,iat: 1_700_000_000,nonce: 'nonce',email: 'employee@baranekspertiz.com',email_verified: true,hd: 'baranekspertiz.com' }
 const now = 1_800_000_000_000
@@ -52,6 +53,54 @@ describe('Google and SBM trust boundaries',() => {
     const signature = sign('RSA-SHA256',Buffer.from(`${header}.${payload}`),privateKey).toString('base64url')
     expect((await provider.identity(`${header}.${payload}.${signature}`,'nonce',true)).sub).toBe('google-sub')
     await expect(provider.identity(`${header}.${encode({ ...claims,sub: 'attacker' })}.${signature}`,'nonce',true)).rejects.toThrow('signature')
+  })
+})
+
+describe('SBM real-template regressions (anonymized)',() => {
+  const senders = ['sbm@sbm.org.tr']
+  function changeHtml(transform: (html: string) => string) {
+    const message = sbmFixture('agreement')
+    const part = message.payload.parts![0] as { body: { data: string } }
+    part.body.data = Buffer.from(transform(Buffer.from(part.body.data,'base64url').toString('utf8'))).toString('base64url')
+    return message
+  }
+  it('reads the real nested HTML agreement and retains the actual outcome, not just completed',() => {
+    expect(parseSbmMessage(sbmFixture('agreement'),senders)).toMatchObject({ applicationNumber: sbmNumber,status: 'completed',reason: null,
+      text: 'Sonuç: MUTABAKAT - ŞİRKETLER ARASI MUTABAKAT (SON DURUM)' })
+  })
+  it('extracts the KTT number from the entry notice, ignoring insurer code 906 without completing it',() => {
+    expect(parseSbmMessage(sbmFixture('entry'),senders)).toMatchObject({ applicationNumber: sbmNumber,status: null,reason: 'non_result_notification' })
+  })
+  it('rejects different numbers in subject and body',() => {
+    expect(parseSbmMessage(changeHtml((html) => html.replace(sbmNumber,'000987654321')),senders)).toMatchObject({ applicationNumber: null,reason: 'ambiguous_number' })
+  })
+  it('does not complete from the subject alone',() => {
+    expect(parseSbmMessage(changeHtml(() => '<p>Detaylar sistemdedir.</p>'),senders)).toMatchObject({ applicationNumber: sbmNumber,status: null,reason: 'ambiguous_result' })
+  })
+  it.each(['KOMİSYON KARARI','İPTAL','MUTABAKAT SAĞLANAMADI'])('requires review of an unverified outcome: %s',(outcome) => {
+    const m = changeHtml((html) => html.replace('MUTABAKAT - ŞİRKETLER ARASI MUTABAKAT (SON DURUM)',outcome))
+    expect(parseSbmMessage(m,senders)).toMatchObject({ status: null,reason: 'unsupported_result' })
+  })
+  it('queues contradictory results even when the known agreement is also present',() => {
+    expect(parseSbmMessage(changeHtml((html) => `${html}<p>Durum: İptal edildi</p>`),senders).reason).toBe('ambiguous_result')
+    expect(parseSbmMessage(changeHtml((html) => `${html}<p>${sbmNumber} nolu KTT İPTAL şeklinde sonuçlanmıştır.</p>`),senders).reason).toBe('unsupported_result')
+  })
+  it('rejects an untrusted copy of the exact real template',() => {
+    const m = sbmFixture('agreement')
+    m.payload.headers[2]!.value = 'mx.google.com; dmarc=fail header.from=sbm.org.tr'
+    expect(parseSbmMessage(m,senders).reason).toBe('untrusted_sender')
+    expect(parseSbmMessage(sbmFixture('agreement'),[]).reason).toBe('untrusted_sender')
+  })
+  it('keeps canonical result text across insignificant HTML spacing changes',() => {
+    const original = parseSbmMessage(sbmFixture('agreement'),senders)
+    const changed = parseSbmMessage(changeHtml((html) => html.replace('MUTABAKAT -','MUTABAKAT   -')),senders)
+    expect(changed.reason).toBeNull();expect(changed.text).toBe(original.text)
+    expect(changed.evidenceHash).not.toBe(original.evidenceHash)
+  })
+  it('does not extract a valid suffix from an oversized number',() => {
+    const m = changeHtml((html) => html.replaceAll(sbmNumber,'1'.repeat(129)))
+    m.payload.headers[1]!.value = m.payload.headers[1]!.value.replaceAll(sbmNumber,'1'.repeat(129))
+    expect(parseSbmMessage(m,senders)).toMatchObject({ applicationNumber: null,reason: 'ambiguous_number' })
   })
 })
 

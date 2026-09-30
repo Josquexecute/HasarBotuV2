@@ -11,7 +11,7 @@ Bu dosya uygulama ve doğrulama kaydıdır. Gerçek hesap/e-posta ile sınanmaya
 | 5 | Bağımsız Tramer sorumlusu ve kişisel iş listesi | Sekretere ayrı görev; dosya sorumlusu değişmez; yetkisiz/kiracı dışı atama reddi | İzole testler geçti |
 | 6 | Başvuru numarası metin ve benzersiz | Baştaki sıfırlar; JS sayısal hassasiyetini aşan numara; eşzamanlı aynı numarada tek kabul | İzole testler geçti |
 | 7 | Dört Tramer durumu | Numara → sonuç bekleniyor; terminal duruma otomatik geri dönüş yok; geç sonuç kontrol kuyruğunda | İzole testler geçti |
-| 8 | Numara ile SBM sonucu eşleştirme | Sentetik Türkçe/HTML/plain MIME; gönderen/DMARC kontrolü; belirsizlik, eşleşmeme, çelişki; insan kontrolü | Gerçek SBM örnekleri yok; otomasyon varsayılan kapalı |
+| 8 | Numara ile SBM sonucu eşleştirme | Gerçek KTT giriş ihbarı ve şirketler arası mutabakat örnekleri; numara/sonuç ayrıştırma; gönderen/DMARC kontrolü; belirsizlik, eşleşmeme, çelişki | İki gerçek EML ve anonim şablonların izole testleri geçti; diğer gerçek sonuç türleri ve canlı Gmail pilotu açık; otomasyon kapalı |
 | 9 | Kalıcı bildirim ve uygulama içi uyarı | UI kapalıyken gerçek HTTP üzerinden kayıt; API yeniden başlatma; özel okunma/sunulma durumu; dosya bağlantısı | İzole API/DB ve ekran testleri geçti |
 | 10 | Bağımsız merkezi takip ve kesinti kurtarma | API Gmail işçisi; File Agent klasör tarayıcısı; kalıcı mesaj kayıtları; tam tarama; servis son başarı/yanıt süresi | Yerel süreç/HTTP testleri geçti; gerçek Windows servis dağıtımı açık |
 | 11 | Bekleyen işler ve geçmiş | Aktör, zaman, numara, kaynak hesap, durum geçişleri; mevcut append-only audit | İzole testler geçti |
@@ -45,7 +45,7 @@ Bu dosya uygulama ve doğrulama kaydıdır. Gerçek hesap/e-posta ile sınanmaya
 - API'ye ulaşmayan gözlem onaylanmış sayılmaz. Yeniden başlatmada tarama yeniden yapılır; aynı içerik yeni bildirim üretmez. A → B → A gerçek değişiklikleri ayrı revizyonlardır.
 - Gmail worker yalnız tanımlı gönderenleri, tüm sayfalarıyla yeniden uzlaştırır; mesaj/hesap kimliği kalıcı tutulur. Böylece süresi dolan bir history cursor nedeniyle sonuç atlanmaz. Büyük posta kutularında tam tarama süresi ve kota tüketimi pilotta ölçülmelidir.
 - Aynı numara ve normalize sonuç farklı hesaplardan gelirse tek durum değişikliği/bildirim yapılır; her hesap için mesaj kaydı korunur. Çelişkili veya terminal işlemi değiştiren sonuçlar kontrol kuyruğunda kalır.
-- Gönderen tam adresi ve Gmail `Authentication-Results` DMARC doğrulaması uygun değilse otomatik uygulama yoktur. Gerçek SBM şablonları ve gerekli sonuç ayrıntıları henüz örneklenmedi; sentetik ayrıştırıcı testleri gerçek şablon kanıtı değildir.
+- Gönderen tam adresi ve Gmail `Authentication-Results` DMARC doğrulaması uygun değilse otomatik uygulama yoktur. 2026-09-30 tarihinde verilen iki EML'de gönderen `sbm@sbm.org.tr` ve DMARC başarılıdır. Doğrulanan sonuç `MUTABAKAT - ŞİRKETLER ARASI MUTABAKAT (SON DURUM)` olarak ayrıntısıyla saklanır. KTT giriş ihbarı sonuç sayılmaz; kontrol listesinde açık bir gerekçeyle görünür. Diğer gerçek sonuç türleri henüz örneklenmedi.
 - Bildirim alıcısı olay anındaki dosya sorumlusudur. Sorumlusu olmayan dosyanın olayı saklanır ve sorumlu tanımlanınca görünür. Uyarıyı kapatmak okundu işaretlemek değildir.
 
 ## Doğrulama kaydı
@@ -54,9 +54,9 @@ Bu dosya uygulama ve doğrulama kaydıdır. Gerçek hesap/e-posta ile sınanmaya
 - Fiziksel Windows takip testleri: `services/file-agent/test/document-tracker.test.ts`.
 - Ekran testleri: `src/features/tracking/TrackingWorkspace.test.tsx`; masaüstü Google host sınırı: `apps/desktop/test/external.test.ts`.
 - Ayrı PostgreSQL veritabanı: `tracking_test`, yalnız yerel test kümesi. Üretim/pilot verisi kullanılmadı.
-- Gerçek Google hesabı, gerçek SBM e-postaları ve üretim Windows servis pilotu tamamlanmadığı için toplam durum **PARTIAL**.
+- Gerçek Google hesabı, canlı Gmail takibi, diğer SBM sonuç türleri ve üretim Windows servis pilotu tamamlanmadığı için toplam durum **PARTIAL**.
 
-### Son test ve build sonuçları
+### 2026-09-29 test ve build sonuçları
 
 | Katman | Başarılı test |
 |---|---:|
@@ -83,7 +83,16 @@ Bu dosya uygulama ve doğrulama kaydıdır. Gerçek hesap/e-posta ile sınanmaya
 
 1. Gerçek kurumsal Google çalışan hesabıyla giriş, mevcut kayıt/rol ve dosya sorumluluklarının kontrolü. İlk bağlantıda yerel kullanıcı e-postası doğrulanmış kurumsal Google e-postasıyla eşleşmelidir; otomatik yeni çalışan oluşturulmaz.
 2. Gerçek Google Cloud OAuth istemcisi, Gmail API ve izin ekranı kurulumu; gerçek posta hesabında izin verme/iptal/yeniden bağlama pilotu. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, `SBM_SENDER_ADDRESSES` bu oturumda Process/User/Machine ortamlarının hiçbirinde tanımlı değildi.
-3. Gerçek SBM sonuç örneklerinden kabul/red/iptal, baştaki sıfırlar, farklı alıcı hesapları ve çelişkili sonuç örneklerinin anonimleştirilmiş fixture'lara dönüştürülmesi; ayrıştırıcının gerçek sonuç alanlarına uyarlanması. **Otomatik SBM uygulaması etkinleştirilmedi.**
+3. KTT giriş ihbarı ve şirketler arası mutabakat örnekleri 2026-09-30 tarihinde anonim fixture'lara dönüştürüldü; ayrıştırıcı bu sonuç alanına uyarlandı. Gerçek iptal, komisyon kararı ve diğer sonuç biçimleri hâlâ gerekli. Baştaki sıfırlar, farklı hesaplardan mükerrer sonuç ve çelişkiler türetilmiş test verileriyle doğrulandı. **Otomatik SBM uygulaması etkinleştirilmedi.**
 4. Hedef Windows servis hesabıyla gerçek klasörlere erişim ve yeniden başlatma/kesinti pilotu. Yazıcısını kapatıp sonra yeniden açan kopyalama kaynaklarında atomik nihai adlandırma sözleşmesinin doğrulanması.
+
+### 2026-09-30 gerçek SBM örnekleri
+
+- Kullanıcının `sbm/` klasöründeki iki özgün EML'si MIME/transfer encoding çözülerek Gmail `format=full` yapısına dönüştürüldü. Gerçek konu, HTML gövde ve gönderen doğrulama başlıklarıyla **2/2** ayrıştırma kontrolü geçti. Bu kontrol canlı Gmail erişimi değildir.
+- KTT numarası konu ve gövdeden metin olarak okunur; şirket kodu numara sayılmaz. Konu/gövde numaraları farklıysa, sonuçlar çelişiyorsa veya sonuç biçimi bilinmiyorsa otomatik uygulama engellenir. Yalnız “Sonuçlandı” konusu tamamlanma için yeterli değildir.
+- `services/api/test-support/sbm-fixtures.ts`: başvuru numarası değiştirilmiş, alıcı ve taşıma kimlikleri çıkarılmış şablonlar. Özgün e-postalar değiştirilmedi; `/sbm/` Git dışında bırakıldı.
+- **45/45** API ayrıştırma/izole PostgreSQL testi, **5/5** ilgili ekran testi geçti. 12 yeni regresyon testi eklendi. Gerçek şablondan türetilmiş iki posta kutusu akışında giriş ihbarı durumu değiştirmedi; mutabakat tek durum değişikliği ve yalnız dosya sorumlusuna tek bildirim üretti; tekrar tarama ve ikinci hesap mükerrer bildirim üretmedi.
+- API typecheck, hedefli lint, API build ve `git diff --check` geçti. Önceki 1.992 testin tamamı bu değişiklikte yeniden çalıştırılmadı.
+- İzole test PostgreSQL kümesi çalışma sonunda durduruldu. Üretim verisi, Google ayarları ve `SBM_AUTOMATIC_ENABLED` değiştirilmedi. Genel durum **PARTIAL**.
 
 Google uygulama sınırları için kullanılan birincil kaynaklar: [OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect), [OAuth sunucu akışı](https://developers.google.com/identity/protocols/oauth2/web-server), [Gmail senkronizasyonu](https://developers.google.com/workspace/gmail/api/guides/sync).

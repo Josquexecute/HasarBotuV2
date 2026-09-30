@@ -11,6 +11,7 @@ import { buildApp,hashPassword } from '../src/index.js'
 import { ingestSbmResult,observeFile,reconcileFiles } from '../src/tracking/store.js'
 import { encryptToken,GMAIL_SCOPE,GoogleProviderError,validateGoogleClaims,type GoogleConfig,type GoogleProvider } from '../src/tracking/google.js'
 import { syncMailboxes } from '../src/tracking/mail-worker.js'
+import { sbmFixture,sbmNumber } from '../test-support/sbm-fixtures.js'
 
 const url = process.env.TEST_DATABASE_URL
 const describeDb = url ? describe : describe.skip
@@ -75,6 +76,37 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     ownerCookie = await login('owner@baranekspertiz.com');operatorCookie = await login('operator@baranekspertiz.com');managerCookie = await login('manager@baranekspertiz.com');otherCookie = await login('other@baranekspertiz.com')
   },60_000)
   afterAll(async () => { await app?.close();await pool?.end() })
+
+  it('processes the supplied KTT templates through mailbox sync, matching by text number and notifying only the owner once',async () => {
+    const id = await createCase();await submit(id,sbmNumber)
+    const connections = [await connection('template-one@baranekspertiz.com'),await connection('template-two@baranekspertiz.com')]
+    let messages = [sbmFixture('entry')]
+    const gmail = vi.fn<GoogleProvider['gmail']>().mockImplementation(async (_token,path) => {
+      if (path.startsWith('messages?')) return { messages: messages.map(({ id }) => ({ id })) }
+      const message = messages.find((m) => path === `messages/${m.id}?format=full`)
+      if (!message) throw new Error('Unexpected fixture message request')
+      return message
+    })
+    const config = { ...google,sbmSenders: ['sbm@sbm.org.tr'],automaticSbmEnabled: true }
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    const pending = await snapshot(ownerCookie,id)
+    expect(pending.tramer[0]?.status).toBe('result_pending');expect(pending.notifications).toHaveLength(0)
+    expect((await pool.query('SELECT reason FROM sbm_messages WHERE connection_id=ANY($1::uuid[])', [connections])).rows)
+      .toEqual([{ reason: 'non_result_notification' },{ reason: 'non_result_notification' }])
+
+    messages = [...messages,sbmFixture('agreement')]
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    const done = await snapshot(ownerCookie,id)
+    expect(done.tramer[0]).toMatchObject({ applicationNumber: sbmNumber,status: 'completed',resultText: 'Sonuç: MUTABAKAT - ŞİRKETLER ARASI MUTABAKAT (SON DURUM)' })
+    expect(done.notifications).toHaveLength(1)
+    expect((await snapshot(operatorCookie,id)).notifications).toHaveLength(0)
+    expect(done.history.filter((h) => h.action === 'tracking.sbm_result')).toHaveLength(1)
+    expect(done.history.find((h) => h.action === 'tracking.sbm_result')?.details.sourceAccount).toMatch(/^template-(one|two)@/)
+    expect((await pool.query("SELECT status FROM sbm_messages WHERE connection_id=ANY($1::uuid[]) AND provider_message_id='agreement' ORDER BY status", [connections])).rows)
+      .toEqual([{ status: 'applied' },{ status: 'duplicate' }])
+    expect(gmail.mock.calls.filter(([,path]) => path === 'messages/agreement?format=full')).toHaveLength(2)
+  })
 
   it('preserves long text numbers and independent assignment; concurrent duplicate numbers have one winner',async () => {
     const a = await createCase(),b = await createCase()
