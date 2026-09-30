@@ -18,6 +18,7 @@
  * kullanılan bir hedefe karşılık gelir; spekülatif giriş yoktur.
  */
 export const EXTERNAL_HOST_ALLOWLIST: readonly string[] = [
+  'accounts.google.com',
   // E-posta hazırlama: Gmail web compose bağlantısı.
   'mail.google.com',
   // Değer Kaybı kural kaynakları (mevzuat).

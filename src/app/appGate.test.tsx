@@ -113,7 +113,7 @@ describe('App oturum kapisi (api mod)', () => {
       return {
         ok: true,
         status: 200,
-        json: async () => (String(input).includes('/operational-alerts') ? { schemaVersion: 'operational-alert/1.0.0', totalCount: 0, evaluatedAt: '2026-08-10T00:00:00.000Z', alerts: [] } : SESSION),
+        json: async () => (String(input).includes('/tracking/notifications/pending') ? { notifications: [] } : String(input).includes('/operational-alerts') ? { schemaVersion: 'operational-alert/1.0.0', totalCount: 0, evaluatedAt: '2026-08-10T00:00:00.000Z', alerts: [] } : SESSION),
         headers: { get: () => null },
       } as unknown as Response
     }) as unknown as typeof fetch)
@@ -123,7 +123,9 @@ describe('App oturum kapisi (api mod)', () => {
     expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument()
     // Sidebar her rotada aynı, gerçek Bildirimler rozetini sorar (Paket 56 düzeltmesi:
     // önceden sabit kodlu "7" idi) -- /ayarlar sayfasının KENDİ içeriği hâlâ ek istek yapmaz.
-    expect(calls).toHaveLength(2)
+    // Kalıcı gelen kutusu artık uygulama kabuğunda yeni bildirimleri de yoklar.
+    expect(calls).toHaveLength(3)
+    expect(calls.some((call) => call.includes('/api/v1/tracking/notifications/pending'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/operational-alerts'))).toBe(true)
   })
@@ -148,7 +150,7 @@ describe('App oturum kapisi (api mod)', () => {
       return {
         ok: true,
         status: 200,
-        json: async () => (String(input).includes('/operational-alerts') ? { schemaVersion: 'operational-alert/1.0.0', totalCount: 0, evaluatedAt: '2026-08-10T00:00:00.000Z', alerts: [] } : SESSION),
+        json: async () => (String(input).includes('/tracking/notifications/pending') ? { notifications: [] } : String(input).includes('/operational-alerts') ? { schemaVersion: 'operational-alert/1.0.0', totalCount: 0, evaluatedAt: '2026-08-10T00:00:00.000Z', alerts: [] } : SESSION),
         headers: { get: () => null },
       } as unknown as Response
     }) as unknown as typeof fetch)
@@ -158,7 +160,8 @@ describe('App oturum kapisi (api mod)', () => {
     expect(await screen.findByText('Mevzuat kaynak kütüphanesi henüz yapılandırılmadı.')).toBeInTheDocument()
     // Sidebar her rotada aynı, gerçek Bildirimler rozetini sorar (Paket 56 düzeltmesi:
     // önceden sabit kodlu "7" idi) -- /mevzuat-ve-ai sayfasının KENDİ içeriği hâlâ ek istek yapmaz.
-    expect(calls).toHaveLength(2)
+    expect(calls).toHaveLength(3)
+    expect(calls.some((call) => call.includes('/api/v1/tracking/notifications/pending'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/operational-alerts'))).toBe(true)
   })

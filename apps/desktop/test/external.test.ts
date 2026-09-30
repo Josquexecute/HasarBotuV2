@@ -24,6 +24,12 @@ describe('resolveExternalOpen — allowlist', () => {
     }
   })
 
+  it('opens the exact Google OAuth host but rejects lookalike hosts',() => {
+    expect(resolveExternalOpen('https://accounts.google.com/o/oauth2/v2/auth?state=test').action).toBe('open-external')
+    expect(resolveExternalOpen('https://accounts.google.com.attacker.example/').action).toBe('deny')
+    expect(resolveExternalOpen('http://accounts.google.com/').action).toBe('deny')
+  })
+
   it('allowlist dışındaki host\'u reddeder', () => {
     for (const url of [
       'https://ornek.gecersiz.example/',
@@ -88,6 +94,7 @@ describe('resolveExternalOpen — allowlist', () => {
 
   it('allowlist yalnız repository\'de gerçekten kullanılan host\'ları içerir', () => {
     expect([...EXTERNAL_HOST_ALLOWLIST].sort()).toEqual([
+      'accounts.google.com',
       'mail.google.com',
       'resmigazete.gov.tr',
       'seddk.gov.tr',
@@ -96,3 +103,4 @@ describe('resolveExternalOpen — allowlist', () => {
     ])
   })
 })
+// Google OAuth runs in the system browser; application sessions stay in the desktop.

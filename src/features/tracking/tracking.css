@@ -1,0 +1,11 @@
+.tracking-workspace { display: grid; gap: 14px; margin-block: 16px; min-width: 0; }
+.tracking-workspace details { padding: 14px; border: 1px solid var(--border-color, #b8c4ce); border-radius: 8px; }
+.tracking-workspace summary { cursor: pointer; font-weight: 600; padding-block: 4px; }
+.tracking-row { display: grid; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--border-color, #b8c4ce); overflow-wrap: anywhere; }
+.tracking-workspace form, .tracking-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.tracking-workspace label { display: grid; gap: 5px; margin-block: 8px; }
+.tracking-workspace input, .tracking-workspace select, .tracking-workspace textarea { max-width: 100%; min-height: 36px; padding: 6px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--border-color, #b8c4ce); border-radius: 5px; }
+.tracking-workspace option { color: #111827; background: white; }
+.tracking-workspace dl { margin: 0; }.tracking-workspace dt { font-weight: 600; }.tracking-workspace dd { margin: 0 0 6px; }
+.google-connect { display: grid; gap: 8px; margin-block: 12px; }
+.tracking-popup { position: fixed; right: 20px; bottom: 20px; z-index: 1000; max-width: min(420px, calc(100vw - 40px)); padding: 18px; border: 1px solid #2f6bc5; border-radius: 10px; background: #fff; color: #182333; box-shadow: 0 4px 22px #0003; display: grid; gap: 10px; }

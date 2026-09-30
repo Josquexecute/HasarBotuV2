@@ -85,3 +85,4 @@ const entryScript = process.argv[1]
 if (entryScript !== undefined && resolve(entryScript) === fileURLToPath(import.meta.url)) {
   void main()
 }
+export { createDocumentTracker, createTrackingClient } from './document-tracker.js'

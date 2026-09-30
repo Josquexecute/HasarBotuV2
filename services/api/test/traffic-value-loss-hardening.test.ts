@@ -725,8 +725,8 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
     await expect(runMigrations({
       databaseUrl: config.url,
       direction: 'down',
-      // 0049 Eksist sources en yeni migration'dır; 0043 rollback guard'ına ulaş.
-      count: 7,
+      // 0050 takip migration'ı dahil geri alarak 0043 rollback guard'ına ulaş.
+      count: 8,
       quiet: true,
     })).rejects.toThrow('real market value loss revisions must be removed before rollback')
     const migrationState = await pool.query(
@@ -747,6 +747,7 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
         '0047_v1_import_remediation',
         '0048_v1_import_source_quarantine',
         '0049_eksist_sources',
+        '0050_tracking',
       ])
   }, 40_000)
 

@@ -1,4 +1,5 @@
 import { parseDatabaseUrl } from '@hasarbotu/database'
+import { parseGoogleConfig, type GoogleConfig } from './tracking/google.js'
 import {
   GEMINI_FREE_TIER_FALLBACK_MODEL_ID,
   GEMINI_FREE_TIER_MODEL_ID,
@@ -33,6 +34,7 @@ export const MIN_PORT = 1
 export const MAX_PORT = 65_535
 
 export interface ApiConfig {
+  readonly google?: GoogleConfig
   readonly host: string
   readonly port: number
   readonly logLevel: LogLevel
@@ -216,6 +218,8 @@ function parseOpenAiPolicyProvider(env: Readonly<Record<string, string | undefin
  * gercek process ortamina bagimli olmadan acik nesnelerle calisir.
  */
 export function parseConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
+  let google: GoogleConfig | undefined
+  try { google = parseGoogleConfig(env) } catch { throw new ConfigError('GOOGLE_* / SBM_*', 'incomplete or invalid Google tracking configuration.') }
   const nodeEnv = parseNodeEnv(env.NODE_ENV)
   const databaseUrl = parseOptionalDatabaseUrl(env.DATABASE_URL)
   if (nodeEnv === 'production' && databaseUrl === undefined) {
@@ -226,6 +230,7 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
   const host = parseHost(env.HOST)
   return {
     host,
+    ...(google ? { google } : {}),
     port: parsePort(env.PORT),
     logLevel: parseLogLevel(env.LOG_LEVEL),
     nodeEnv,

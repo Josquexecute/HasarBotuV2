@@ -32,8 +32,8 @@ export async function evaluateCaseDocumentRequirements(
   const row = caseResult.rows[0] as CaseRow | undefined
   if (row === undefined) return undefined
   const docs = await exec.query(
-    `SELECT dv.id,d.document_type,dv.status,dv.hash_verified,dv.size_verified,dv.verified_at
-     FROM documents d JOIN document_versions dv ON dv.id=d.current_version_id
+    `SELECT d.id,d.document_type,d.status,d.hash_verified,d.size_verified,d.verified_at
+     FROM tracking_requirement_documents d
      WHERE d.organization_id=$1 AND d.case_id::text=$2`,
     [organizationId, caseId],
   )

@@ -5,6 +5,7 @@ import {
   parseDatabaseUrl,
 } from '@hasarbotu/database'
 import type pg from 'pg'
+import { startMailWorker } from './tracking/mail-worker.js'
 import { buildApp } from './app.js'
 import { ConfigError, parseConfig, type ApiConfig } from './config.js'
 import {
@@ -77,6 +78,7 @@ export async function startServer(): Promise<void> {
   }
 
   const app = buildApp({
+    ...(config.google ? { google: config.google } : {}),
     logLevel: config.logLevel,
     ...(pool !== undefined
       ? {
@@ -88,6 +90,8 @@ export async function startServer(): Promise<void> {
       : {}),
   })
 
+  const stopMailWorker = pool && config.google ? startMailWorker(pool,config.google,() => app.log.error('mail tracking cycle failed')) : undefined
+  app.addHook('onClose',async () => { await stopMailWorker?.() })
   let shuttingDown = false
   const shutdown = (signal: 'SIGINT' | 'SIGTERM'): void => {
     if (shuttingDown) return

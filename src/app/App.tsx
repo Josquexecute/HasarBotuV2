@@ -16,6 +16,7 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { SessionProvider } from './session'
 import { useSession } from './sessionContext'
 import { PERSISTENCE_ERROR_EVENT, usePersistentState } from './usePersistentState'
+const TrackingPopup = lazy(async () => ({ default: (await import('../features/tracking/TrackingPopup')).TrackingPopup }))
 
 const CaseDetailPage = lazy(async () => {
   const module = await import('../features/cases/CaseDetailPage')
@@ -81,6 +82,7 @@ function AppGate(props: AppGateProps) {
       onDensityToggle={props.onDensityToggle}
     >
       <Suspense fallback={<LoadingState label="Görünüm hazırlanıyor" />}>
+        {session.mode === 'api' && <TrackingPopup />}
         <AppRoutes theme={props.theme} density={props.density} collapsed={props.collapsed} onThemeChange={props.onThemeChange} onDensityChange={props.onDensityChange} onSidebarChange={props.onSidebarChange} />
       </Suspense>
     </AppShell>

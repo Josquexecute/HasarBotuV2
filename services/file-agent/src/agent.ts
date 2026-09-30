@@ -10,6 +10,7 @@ import { extractPdfText, type PdfTextExtractionResult } from './pdf-text-extract
 import { extractPolicyOcr, type PolicyOcrExtractionResult } from './policy-ocr-extractor.js'
 import { probeRootHealth } from './root-health.js'
 import { checkCaseFreshness } from './freshness-gate-client.js'
+import { startDocumentTracker } from './document-tracker.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -144,6 +145,8 @@ export async function runLoop(
   } = {},
 ): Promise<void> {
   const { signal } = options
+  const stopTracker = config.trackingEnabled ? startDocumentTracker(config,signal,() => options.onCycleError?.('agent_cycle_failed')) : undefined
+  try {
   while (signal === undefined || !signal.aborted) {
     try {
       const result = await runOnce(client, config)
@@ -156,4 +159,5 @@ export async function runLoop(
       await new Promise((resolvePromise) => setTimeout(resolvePromise, config.pollIntervalMs))
     }
   }
+  } finally { await stopTracker?.() }
 }

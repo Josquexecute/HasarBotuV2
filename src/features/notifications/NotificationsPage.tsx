@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { BellRing, CheckCheck, ChevronDown, CircleAlert, ExternalLink, FileWarning, ShieldAlert } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { initialNotifications, type NotificationType } from '../../mocks/workspaces'
@@ -6,6 +6,7 @@ import { BackendUnavailableState, LoadingState } from '../../components/StateVie
 import type { OperationalAlertDataPort, OperationalAlertSeverityRecord, OperationalAlertTypeRecord } from '../../data/operationalAlertPort'
 import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
 import { useOperationalAlerts } from '../../data/useOperationalAlerts'
+const TrackingWorkspace = lazy(async () => ({ default: (await import('../tracking/TrackingWorkspace')).TrackingWorkspace }))
 const notificationIcons: Record<NotificationType, typeof FileWarning> = {
   'Eksik Evrak': FileWarning,
   'Geciken Takip': CircleAlert,
@@ -184,6 +185,7 @@ export function NotificationsPage({ port }: { port?: OperationalAlertDataPort } 
 
   return (
     <main className="page office-page notifications-page">
+      {source === 'api' && <Suspense fallback={<LoadingState label="Takip yükleniyor" />}><TrackingWorkspace /></Suspense>}
       {source === 'mock' ? <NotificationsMockContent /> : <OperationalAlertContent port={port} />}
     </main>
   )

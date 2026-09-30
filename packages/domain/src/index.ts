@@ -698,3 +698,4 @@ export {
   type V1StableItemType,
 } from './v1-import.js'
 export * from './eksist.js'
+export { isTemporaryTrackedFile } from './tracked-file.js'

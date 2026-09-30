@@ -28,6 +28,7 @@ const HIDDEN_MIGRATION_NAMES = [
   '0047_v1_import_remediation',
   '0048_v1_import_source_quarantine',
   '0049_eksist_sources',
+  '0050_tracking',
 ]
 
 async function runMigrations(
@@ -150,6 +151,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'case_vehicle_profiles',
       'case_workspace_provisionings',
       'cases',
+      'document_observations',
       'document_ocr_blocks',
       'document_ocr_lines',
       'document_ocr_pages',
@@ -174,6 +176,8 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'email_handoffs',
       'fee_record_versions',
       'fee_records',
+      'google_identities',
+      'google_oauth_states',
       'idempotency_keys',
       'insurer_service_agreements',
       'insurers',
@@ -193,6 +197,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'labor_sheet_versions',
       'labor_sheets',
       'labor_workbook_apply_operations',
+      'mail_connections',
       'office_counters',
       'organizations',
       'pert_assessment_versions',
@@ -215,15 +220,21 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
       'policy_service_rules',
       'policy_source_references',
       'roles',
+      'sbm_messages',
       'service_centers',
       'sessions',
       'storage_roots',
+      'tracked_files',
+      'tracking_health',
+      'tracking_notifications',
+      'tracking_requirement_documents',
       'traffic_value_loss_approval_events',
       'traffic_value_loss_assessments',
       'traffic_value_loss_comparables',
       'traffic_value_loss_evidence',
       'traffic_value_loss_reports',
       'traffic_value_loss_versions',
+      'tramer_requests',
       'user_roles',
       'users',
       'v1_import_item_metadata',
@@ -246,36 +257,36 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
   })
 
   it('0049 Eksist kaynak tablosunu geri alir ve yeniden uygular', async () => {
-    const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 1 })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0049_eksist_sources'])
+    const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 2 })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0050_tracking','0049_eksist_sources'])
     expect((await pool.query("SELECT to_regclass('public.eksist_sources') IS NULL AS absent")).rows)
       .toEqual([{ absent: true }])
     const reapplied = await runMigrationsRaw({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0049_eksist_sources'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0049_eksist_sources','0050_tracking'])
     expect((await pool.query("SELECT to_regclass('public.eksist_sources') IS NOT NULL AS present")).rows)
       .toEqual([{ present: true }])
   })
 
   it('0048 source quarantine migrationini geri alir ve yeniden uygular', async () => {
-    const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 2 })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0049_eksist_sources', '0048_v1_import_source_quarantine'])
+    const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 3 })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0050_tracking','0049_eksist_sources', '0048_v1_import_source_quarantine'])
     const absent = await pool.query("SELECT to_regclass('public.v1_import_source_quarantines') IS NULL AS absent")
     expect(absent.rows).toEqual([{ absent: true }])
 
     const reapplied = await runMigrationsRaw({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0048_v1_import_source_quarantine', '0049_eksist_sources'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0048_v1_import_source_quarantine', '0049_eksist_sources','0050_tracking'])
     const present = await pool.query("SELECT to_regclass('public.v1_import_source_quarantines') IS NOT NULL AS present")
     expect(present.rows).toEqual([{ present: true }])
   })
 
   it('0047 remediation migrationini 0048 ile birlikte geri alir ve yeniden uygular', async () => {
-    const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 3 })
-    expect(rolledBack.map((migration) => migration.name)).toEqual(['0049_eksist_sources', '0048_v1_import_source_quarantine', '0047_v1_import_remediation'])
+    const rolledBack = await runMigrationsRaw({ databaseUrl: config.url, quiet: true, direction: 'down', count: 4 })
+    expect(rolledBack.map((migration) => migration.name)).toEqual(['0050_tracking','0049_eksist_sources', '0048_v1_import_source_quarantine', '0047_v1_import_remediation'])
     const absent = await pool.query("SELECT to_regclass('public.v1_import_sources') IS NULL AS absent")
     expect(absent.rows).toEqual([{ absent: true }])
 
     const reapplied = await runMigrationsRaw({ databaseUrl: config.url, quiet: true })
-    expect(reapplied.map((migration) => migration.name)).toEqual(['0047_v1_import_remediation', '0048_v1_import_source_quarantine', '0049_eksist_sources'])
+    expect(reapplied.map((migration) => migration.name)).toEqual(['0047_v1_import_remediation', '0048_v1_import_source_quarantine', '0049_eksist_sources','0050_tracking'])
     const present = await pool.query("SELECT to_regclass('public.v1_import_sources') IS NOT NULL AS present")
     expect(present.rows).toEqual([{ present: true }])
   })

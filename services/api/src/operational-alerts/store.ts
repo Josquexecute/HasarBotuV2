@@ -153,17 +153,15 @@ export function createOperationalAlertStore(pool: pg.Pool) {
 
         const documentsResult = await pool.query(
           filtered
-            ? `SELECT d.case_id::text,dv.id,d.document_type,dv.status,dv.hash_verified,
-                      dv.size_verified,dv.verified_at
-                 FROM documents d
-                 JOIN document_versions dv ON dv.id=d.current_version_id
+            ? `SELECT d.case_id::text,d.id,d.document_type,d.status,d.hash_verified,
+                      d.size_verified,d.verified_at
+                 FROM tracking_requirement_documents d
                 WHERE d.organization_id=$1 AND d.case_id=ANY($2::uuid[])`
-            : `SELECT d.case_id::text,dv.id,d.document_type,dv.status,dv.hash_verified,
-                      dv.size_verified,dv.verified_at
-                 FROM documents d
+            : `SELECT d.case_id::text,d.id,d.document_type,d.status,d.hash_verified,
+                      d.size_verified,d.verified_at
+                 FROM tracking_requirement_documents d
                  JOIN cases c ON c.organization_id=d.organization_id AND c.id=d.case_id
                              AND c.lifecycle_status='open'
-                 JOIN document_versions dv ON dv.id=d.current_version_id
                 WHERE d.organization_id=$1`,
           filtered ? [organizationId, scopedCaseIds] : [organizationId],
         )

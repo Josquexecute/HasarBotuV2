@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { lazy, Suspense, useState, type FormEvent } from 'react'
 import { LogIn } from 'lucide-react'
 import { HttpAuthError } from '../../data/authPort'
 import { useSession } from '../../app/sessionContext'
+const GoogleConnectButton = lazy(async () => ({ default: (await import('../tracking/GoogleConnectButton')).GoogleConnectButton }))
 
 /**
  * Login ekrani (Paket 10): yalniz `api` modda ve oturum yokken gosterilir.
@@ -96,6 +97,7 @@ export function LoginPage() {
           <LogIn size={16} /> {submitting ? 'Giriş yapılıyor…' : 'Giriş Yap'}
         </button>
 
+        <Suspense fallback={null}><GoogleConnectButton purpose="login" /></Suspense>
         <p className="login-card__foot">Oturum güvenli çerezle sunucuda tutulur; parola tarayıcıda saklanmaz.</p>
       </form>
     </div>

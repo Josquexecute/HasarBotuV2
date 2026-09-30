@@ -374,12 +374,12 @@ function CaseDetail() {
               )}
             </div>
           ) : activeTab === 'Operasyon' && source === 'api' ? (
-            <CaseOperationsApiModule
+            <><TrackingWorkspace key={item.caseId} caseId={item.caseId} /><CaseOperationsApiModule
               item={item}
               source={source}
               onUnauthorized={session.reportUnauthorized}
               onReloadCase={reloadCase}
-            />
+            /></>
           ) : activeTab === 'Operasyon' ? (
             <div className="module-workspace">
               <section className="info-panel module-workspace__main">
@@ -486,3 +486,4 @@ function CaseDetail() {
     </main>
   )
 }
+import { TrackingWorkspace } from '../tracking/TrackingWorkspace'

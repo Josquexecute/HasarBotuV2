@@ -1,4 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify'
+import { registerTrackingRoutes } from './tracking/routes.js'
+import { registerGoogleRoutes } from './tracking/google-routes.js'
+import type { GoogleConfig, GoogleProvider } from './tracking/google.js'
 import { errorHandler, notFoundHandler } from './errors/index.js'
 import { registerHealthRoute } from './routes/index.js'
 import { registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
@@ -56,6 +59,8 @@ export const DEFAULT_BODY_LIMIT_BYTES = 1_048_576
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 
 export interface BuildAppOptions {
+  readonly google?: GoogleConfig
+  readonly googleProvider?: GoogleProvider
   /** Zaman kaynagi; testler sabit clock enjekte eder. Varsayilan: sistem saati. */
   readonly clock?: Clock
   /** Pino log seviyesi. Varsayilan: `info`. */
@@ -116,6 +121,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       : {}),
   })
   if (options.auth !== undefined) {
+    registerTrackingRoutes(app, { pool: options.auth.pool, googleEnabled: options.google !== undefined, automaticSbmEnabled: options.google?.automaticSbmEnabled ?? false })
+    registerGoogleRoutes(app, { pool: options.auth.pool, cookieSecure: options.auth.cookieSecure, ...(options.google ? { config: options.google } : {}), ...(options.googleProvider ? { provider: options.googleProvider } : {}) })
     registerAuthRoutes(app, options.auth)
     registerCasesRoutes(app, { pool: options.auth.pool })
     registerCasesWriteRoutes(app, { pool: options.auth.pool })
