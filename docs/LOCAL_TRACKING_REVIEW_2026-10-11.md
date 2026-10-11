@@ -2,6 +2,10 @@
 
 **İnceleme paketi PASS; gerçek eşlemelerin uygulanması ve tam kullanım PARTIAL.**
 
+**Güncel durum:** gerçek hesap eşlemeleri **379/379 PASS**. Aşağıdaki ilk
+inceleme ve ara uygulama bölümleri tarihçedir. Kaynak/konum istisnaları,
+servis eşlemeleri ve reboot kabulü nedeniyle genel geçiş hâlâ PARTIAL.
+
 [Genişletme raporundaki](LOCAL_TRACKING_EXPANSION_2026-10-11.md) açık maddeler,
 11 Ekim 2026 11:34 Türkiye saati itibarıyla yeniden salt okunur incelendi.
 İşlem yalnız `hasarbotu_local_tracking_20261011_test` ortamında yapıldı.
@@ -121,3 +125,82 @@ ucu, yetki/validasyon ve UI hash kontrolü PASS. Üç servis Running/Automatic;
 378 takip konumu, 25.570 gözlem ve 25.570 bildirim korunuyor. Arayüz:
 `http://127.0.0.1:3147`. Açık uygulamada yeni düğme görünmüyorsa sayfayı
 yenileyin veya masaüstü uygulamasını yeniden açın.
+
+## Gerçek hesaplar kaydedildikten sonra — 11 Ekim 2026
+
+Üç gerçek hesap aktif ve gerekli rollerle doğrulandı. Kaynak eksper adıyla
+kaydedilen hesap adının aynı kişi olduğu kullanıcı tarafından ayrıca
+doğrulandı. Kullanıcının seçtiği mevcut hesap rolleri değiştirilmedi.
+
+379 vaka için gerçek hesap kimlikleriyle eşleme planı hazırlandı. 343 vakada
+kaynakta açık sorumlu kanıtı bulunur; 36 belirsiz sorumlu ayrı listede kalır.
+Eksper eşlemesi 379 vaka için doğrulandı. Plan, uygulama öncesi tam vaka
+snapshot'ı ve sonuçlar korumalı inceleme paketinde tutulur.
+
+**81 açık vaka uygulandı:** mevcut sürüm kontrollü API PATCH kullanıldı;
+81/81 yanıt, API GET readback ve `case.updated` audit kaydı doğrulandı.
+Bu kapsamda sorumlusu belirsiz 3 açık vakanın test gözlemcisi ataması null
+olarak temizlendi. Diğer vaka alanları ve lifecycle geçmişi değişmedi.
+
+**298 kapalı vaka uygulanmadı:** mevcut kapalı vaka sözleşmesi atama
+güncellemelerini de 409 ile reddeder. Bu kapı gerçek HTTP isteğiyle
+doğrulandı. Dosyalar yeniden açılmadı veya doğrudan SQL ile güncellenmedi.
+Bekleyen eşlemeler [ayrı kapalı dosya listesinde](C:/HasarBotuPilot/local-tracking-20261011/private/review-20261011/KAPALI_DOSYA_ESLEME_BEKLEYENLER.md).
+Belirsiz sorumluların 33 kapalı vakasında test gözlemcisi teknik ataması
+henüz korunur; bu hesap gerçek sorumlu kabul edilmez.
+
+385/385 kaynak sidecar hash'i uygulama öncesi aynıydı. Vaka sayısı,
+378 takip konumu, 25.570 gözlem/bildirim ve lifecycle geçmişi sayıları
+uygulama öncesi değerleriyle aynı. Üretim ve kaynak dosyalara yazılmadı.
+Bu adımda kaynak kodu değişmedi; build tekrarı gerekmedi.
+
+Sonraki uygulama işi, kapalı dosyanın kapanış geçmişini koruyan ve açık
+plan/onay, gerçek hesap/rol, kaynak hash ve sürüm kontrollerini kullanan
+kontrollü geçmiş atama düzeltme akışıdır. Mevcut genel PATCH'in kapalı
+dosya kilidi korunmalıdır. Servis eşlemeleri ve reboot kabulü de bekliyor.
+Genel durum **PARTIAL**; kanıt:
+`.local/local-tracking-20261011/real-account-mapping-summary.json`.
+
+## Kapalı dosya eşlemeleri tamamlandı — 11 Ekim 2026
+
+Kullanıcı bütün gerçek dosyaların eksperinin aynı kişi olduğunu ve
+sorumluların kaynaklarına göre farklı kalabileceğini doğruladı; kapalı
+dosya düzeltmesine devam edilmesini istedi.
+
+V1 tarihî atama düzeltmesi ayrı bir yönetici aracı olarak eklendi.
+[İşletim açıklaması](V1_ASSIGNMENT_REMEDIATION.md) ve
+`deploy/windows-service/run-v1-assignment-remediation.mjs` kalıcıdır.
+Araç tam plan onayı, aktif yönetici/tenant, gerçek hesap rolleri, kaynak
+hash/provenance ve vaka sürümü kontrollerini kullanır. Tek transaction
+içinde yalnız sorumlu/eksper, sürüm ve güncelleme tarihi değişir; audit
+hatasında bütün işlem geri alınır. Genel PATCH'in kapalı dosya kilidi korunur.
+
+298/298 kapalı vaka tamamlandı. Önceki 81 açık vakayla birlikte **379/379
+gerçek kaydın eksperi ortak hesap**, sorumlu dağılımı **317 + 26 + 36 belirsiz**.
+Belirsiz 36 vakada sorumlu null olarak tutulur; gerçek vakalarda test
+gözlemcisi ataması kalmadı. Üç karantina kaynağı da ayrı belirsiz listede
+korunur. Hesapların kullanıcı tarafından seçilmiş rolleri değiştirilmedi.
+
+Doğrulama:
+
+- API/aktarim/yetki/lifecycle testleri **64/64 PASS**, CLI sınırları **3/3 PASS**;
+  skip yok. Typecheck ve değişen kodun ESLint kontrolü PASS.
+- Node **24.21.0** ile tam `npm run build` PASS.
+- 298/298 kapalı atama ve audit; çalışan servis üzerinden **379/379 GET** PASS.
+- 298 kapanış, tarih/aktör ve diğer vaka alanları birebir korundu;
+  lifecycle geçmişi sayısı 298 olarak kaldı. Kaynak **385/385 SHA-256** aynı.
+- Aynı onaylı plan tekrar uygulandığında güncellenen vaka **0**; audit ve
+  sürümler çoğalmadı. Normal kapalı PATCH hâlâ **409**.
+- 380 toplam vaka (1 önceki sentetik kayıt dahil), 378 takip konumu,
+  25.570 gözlem ve 25.570 bildirim korunuyor. Kaynak dosyalar ve üretim
+  değiştirilmedi; mevcut yerel arayüz API'den yeni atamaları okuyor.
+
+Kapalı eşleme bekleyen liste 0 olarak güncellendi. Plan, işlem öncesi
+tam vaka snapshot'ı ve sonuçlar korumalı inceleme paketinde tutulur.
+Git'e kişisel hasar verisi eklenmedi. Kanıtlar:
+`.local/local-tracking-20261011/closed-assignment-validation.json` ve
+`closed-assignment-http-validation.json`.
+
+Bu görev **PASS**. Genel geçişte 165 kayıtsız klasör, 5 sorunlu kaynak,
+1 çoklu takip konumu, 5 gerçek servis eşlemesi ve Windows reboot kabulü
+bekliyor; bunlar bu atama düzeltmesiyle çözülmüş sayılmaz.

@@ -1,5 +1,9 @@
 export { parseV1TakipJson, v1TakipJsonV1Schema, type V1TakipJsonParseResult, type V1TakipJsonV1 } from './schema.js'
 export {
+  applyV1AssignmentRemediation, planV1AssignmentRemediation, v1AssignmentManifestSchema,
+  type V1AssignmentManifest, type V1AssignmentPlan,
+} from './assignment-remediation.js'
+export {
   applyV1Import,
   discoverV1Folders,
   planV1Import,

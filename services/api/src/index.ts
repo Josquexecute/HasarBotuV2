@@ -141,3 +141,7 @@ export {
   type V1TakipJsonV1,
   type V1TaskPlanItem,
 } from './v1-import/index.js'
+export {
+  applyV1AssignmentRemediation, planV1AssignmentRemediation, v1AssignmentManifestSchema,
+  type V1AssignmentManifest, type V1AssignmentPlan,
+} from './v1-import/assignment-remediation.js'
