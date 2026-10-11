@@ -1,8 +1,17 @@
-export const ASSISTANT_SIZE = 64
+export const ASSISTANT_SIZE = 120
 export const ASSISTANT_MARGIN = 8
 
 export interface Point { readonly x: number; readonly y: number }
 export interface WorkArea extends Point { readonly width: number; readonly height: number }
+
+/** Publish only relative gaze, never global desktop coordinates. */
+export function assistantGaze(cursor: Point, position: Point): Point {
+  const center = { x: position.x + ASSISTANT_SIZE / 2, y: position.y + ASSISTANT_SIZE / 2 }
+  const dx = cursor.x - center.x
+  const dy = cursor.y - center.y
+  const scale = Math.max(ASSISTANT_SIZE, Math.hypot(dx, dy))
+  return { x: dx / scale, y: dy / scale }
+}
 
 export function parseAssistantPosition(value: unknown): Point | undefined {
   if (typeof value !== 'object' || value === null) return undefined

@@ -6,14 +6,16 @@ import { startDesktopAssistant } from '../../dist/main/assistant.js'
 
 const checks = []
 const check = (name, pass) => { checks.push({ name, pass: Boolean(pass) }); if (!pass) throw new Error(name) }
-const until = async (predicate) => {
+const until = async (predicate, description = 'assistant condition') => {
   const deadline = Date.now() + 5000
   while (!(await predicate())) {
-    if (Date.now() > deadline) throw new Error('assistant condition timed out')
+    if (Date.now() > deadline) throw new Error(`${description} timed out`)
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
 }
 app.enableSandbox()
+// Keep the harness alive until the result file has finished writing.
+app.on('window-all-closed', () => {})
 void app.whenReady().then(async () => {
   let shell
   let assistant
@@ -22,17 +24,24 @@ void app.whenReady().then(async () => {
     const options = { shell, assetRoot: process.env.HB_ASSISTANT_ASSETS, userDataPath: app.getPath('userData'), quit: () => {} }
     assistant = await startDesktopAssistant(options)
     const win = assistant.window
+    await win.webContents.executeJavaScript('window.rendererErrors = []; window.addEventListener("error", event => window.rendererErrors.push(event.message)); undefined')
+    // Gaze animation must not depend on the host's accessibility preference.
+    win.webContents.debugger.attach('1.3')
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
+    await until(() => win.webContents.executeJavaScript('!matchMedia("(prefers-reduced-motion: reduce)").matches'))
     check(`native always-on-top window (actual: ${win.isAlwaysOnTop()})`, win.isAlwaysOnTop())
     check('independent window', !win.getParentWindow())
-    check('fixed 64 DIP control', win.getBounds().width === 64 && win.getBounds().height === 64 && !win.isResizable())
+    check('fixed 120 DIP character', win.getBounds().width === 120 && win.getBounds().height === 120 && !win.isResizable())
     const surface = await win.webContents.executeJavaScript('({ node: typeof require, process: typeof process, ready: !document.querySelector("button").disabled, keys: Object.keys(window.hasarbotuAssistant) })')
-    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'cancel,drag,menu,move,press,release')
+    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'cancel,drag,menu,move,onGaze,press,release')
+    await until(() => win.webContents.executeJavaScript('(()=>{ const c=document.querySelector("canvas"); return c && c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((v,i)=>i%4===3 && v>0) })()'))
+    check('upstream Mochi actually renders in sandbox canvas', true)
     check('main renderer keeps privilege-free preload', await shell.window.webContents.executeJavaScript('typeof window.hasarbotuAssistant === "undefined" && Object.keys(window.hasarbotuDesktop).sort().join(",") === "isDesktopShell,platform"'))
     const prefs = win.webContents.getLastWebPreferences()
     check('sandbox isolation and web security', prefs.sandbox && prefs.contextIsolation && prefs.webSecurity && !prefs.nodeIntegration)
     check('helper session isolated from authenticated main app', win.webContents.session !== shell.window.webContents.session)
     shell.window.webContents.setZoomFactor(1.5)
-    check('main zoom does not resize helper content', await win.webContents.executeJavaScript('innerWidth === 64'))
+    check('main zoom does not resize helper content', await win.webContents.executeJavaScript('innerWidth === 120'))
     shell.window.webContents.setZoomFactor(1)
     const headers = await fetch(win.webContents.getURL())
     check('assistant HTML available from bridge', headers.status === 200)
@@ -50,7 +59,7 @@ void app.whenReady().then(async () => {
     // Exercise real preload -> IPC -> native movement with a deterministic cursor.
     // Physical mouse acceptance is separate from this integration test.
     const originalCursor = screen.getCursorScreenPoint
-    let cursor = { x: saved.x + 32, y: saved.y + 32 }
+    let cursor = { x: saved.x + 60, y: saved.y + 60 }
     const input = async (expectedCommand) => {
       let received = false
       const markReceived = (_event, command) => { if (command === expectedCommand) received = true }
@@ -63,6 +72,30 @@ void app.whenReady().then(async () => {
     }
     try {
       screen.getCursorScreenPoint = () => cursor
+      await win.webContents.executeJavaScript('window.gazeOff = window.hasarbotuAssistant.onGaze((value) => { window.gaze = value }); undefined')
+      await until(() => win.webContents.executeJavaScript('window.gaze?.x === 0 && window.gaze?.y === 0'))
+      check('native cursor reaches renderer as relative gaze', true)
+      await win.webContents.executeJavaScript('window.gazeOff(); window.gaze = undefined')
+      await new Promise((resolve) => setTimeout(resolve, 180))
+      check('gaze subscription can be removed', await win.webContents.executeJavaScript('window.gaze === undefined'))
+      await win.webContents.executeJavaScript(`window.eyeCenter = () => {
+        const c = document.querySelector('canvas')
+        const p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+        let sum = 0, count = 0
+        for (let i = 0; i < p.length; i += 4) {
+          if (p[i] < 50 && p[i + 1] < 50 && p[i + 2] < 50 && p[i + 3] > 200) {
+            sum += (i / 4) % c.width
+            count++
+          }
+        }
+        return count ? sum / count / devicePixelRatio : 60
+      }; undefined`)
+      cursor = { x: saved.x - 800, y: saved.y + 60 }
+      await until(() => win.webContents.executeJavaScript('window.eyeCenter() < 55'), 'leftward gaze in canvas')
+      cursor = { x: saved.x + 800, y: saved.y + 60 }
+      await until(() => win.webContents.executeJavaScript('window.eyeCenter() > 65'), 'rightward gaze in canvas')
+      check('cursor movement visibly moves Mochi eyes left and right', true)
+      cursor = { x: saved.x + 60, y: saved.y + 60 }
       await input('press')
       cursor = { x: cursor.x - 96, y: cursor.y + 32 }
       await input('drag')
@@ -100,6 +133,39 @@ void app.whenReady().then(async () => {
       check(`theme ${theme} has no overflow`, await win.webContents.executeJavaScript('document.body.scrollWidth === innerWidth && document.body.scrollHeight === innerHeight'))
       await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, `assistant-${theme}.png`), (await win.webContents.capturePage()).toPNG())
     }
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+    await until(() => win.webContents.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches'))
+    // The media-query change event applies the neutral pose at the next render.
+    await win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))')
+    const still = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    check('reduced motion renders a still visible character', await win.webContents.executeJavaScript(`document.querySelector("canvas").toDataURL() === ${JSON.stringify(still)}`))
+    // Use a real Chromium scale change: CDP's synthetic DPR does not notify
+    // physical-pixel ResizeObservers, unlike zoom or moving between monitors.
+    const originalRatio = await win.webContents.executeJavaScript('devicePixelRatio')
+    win.webContents.setZoomFactor(2)
+    await until(() => win.webContents.executeJavaScript(`devicePixelRatio === ${originalRatio * 2} && document.querySelector("canvas").width === Math.round(120 * devicePixelRatio)`), 'scaled canvas resolution')
+    check('real Chromium scaling rebuilds the still canvas at native resolution', true)
+    win.webContents.setZoomFactor(1)
+    await until(() => win.webContents.executeJavaScript(`devicePixelRatio === ${originalRatio} && document.querySelector("canvas").width === Math.round(120 * devicePixelRatio)`))
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
+    await until(() => win.webContents.executeJavaScript('!matchMedia("(prefers-reduced-motion: reduce)").matches'))
+    const readCursor = screen.getCursorScreenPoint
+    let hiddenCursorReads = 0
+    try {
+      screen.getCursorScreenPoint = () => { hiddenCursorReads++; return readCursor() }
+      win.hide()
+      await until(() => win.webContents.executeJavaScript('document.hidden'))
+      const hiddenCanvas = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      check('hidden helper stops cursor polling', hiddenCursorReads === 0)
+      check('hidden helper stops drawing', await win.webContents.executeJavaScript(`document.querySelector("canvas").toDataURL() === ${JSON.stringify(hiddenCanvas)}`))
+      assistant.show()
+      await until(() => hiddenCursorReads > 0)
+      check('showing helper restarts gaze', true)
+    } finally { screen.getCursorScreenPoint = readCursor }
+    check('renderer interaction has no uncaught errors', await win.webContents.executeJavaScript('window.rendererErrors.length === 0'))
+    win.webContents.debugger.detach()
     assistant.dispose()
     check('dispose removes IPC listeners', ipcMain.listenerCount('hasarbotu:assistant') === 0)
     assistant = await startDesktopAssistant(options)

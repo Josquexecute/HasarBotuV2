@@ -13,4 +13,16 @@ contextBridge.exposeInMainWorld('hasarbotuAssistant', Object.freeze({
       ipcRenderer.send('hasarbotu:assistant', direction)
     }
   },
+  onGaze: (callback: unknown) => {
+    if (typeof callback !== 'function') throw new TypeError('Gaze callback must be a function')
+    const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      if (typeof value !== 'object' || value === null) return
+      const { x, y } = value as Record<string, unknown>
+      if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)
+        || Math.abs(x) > 1 || Math.abs(y) > 1) return
+      callback({ x, y })
+    }
+    ipcRenderer.on('hasarbotu:assistant-gaze', listener)
+    return () => ipcRenderer.removeListener('hasarbotu:assistant-gaze', listener)
+  },
 }))

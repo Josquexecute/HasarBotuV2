@@ -6,10 +6,11 @@
     <title>HasarBotu Yardımcı</title>
     <link rel="stylesheet" href="/desktop-assistant.css" />
     <script src="/desktop-assistant.js" defer></script>
+    <script src="/desktop-assistant-character.js" type="module"></script>
   </head>
   <body>
     <button id="assistant" type="button" aria-label="HasarBotu yardımcı menüsünü aç" aria-haspopup="menu" title="HasarBotu · Tıkla: menü · Sürükle: taşı · Ok tuşları: konumu değiştir" disabled>
-      <span aria-hidden="true" class="ring"><span class="core"></span></span>
+      <canvas id="mochi" width="120" height="120" aria-hidden="true"></canvas>
     </button>
   </body>
 </html>

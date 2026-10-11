@@ -2,7 +2,7 @@ import { BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, type IpcMainEv
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ASSISTANT_SIZE, clampAssistantPosition, isAssistantCommand, parseAssistantPosition, type Point } from './assistant-policy.js'
+import { ASSISTANT_SIZE, assistantGaze, clampAssistantPosition, isAssistantCommand, parseAssistantPosition, type Point } from './assistant-policy.js'
 import { SECURE_WEB_PREFERENCES } from './security.js'
 import { hardenSession, type DesktopShell } from './shell.js'
 
@@ -58,6 +58,20 @@ export async function startDesktopAssistant(options: AssistantOptions) {
 
   let tray: Tray | undefined
   let disposed = false
+  let gazeTimer: ReturnType<typeof setInterval> | undefined
+  const stopGaze = () => {
+    clearInterval(gazeTimer)
+    gazeTimer = undefined
+  }
+  const startGaze = () => {
+    stopGaze()
+    gazeTimer = setInterval(() => {
+      if (disposed || window.isDestroyed() || !window.isVisible()) return
+      window.webContents.send('hasarbotu:assistant-gaze', assistantGaze(screen.getCursorScreenPoint(), position))
+    }, 80)
+  }
+  window.on('show', startGaze)
+  window.on('hide', stopGaze)
   let drag: { cursor: Point; origin: Point; moved: boolean } | undefined
   let menuOpen = false
   const persist = () => {
@@ -160,6 +174,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   const dispose = () => {
     if (disposed) return
     disposed = true
+    stopGaze()
     assistantSession.removeListener('will-download', denyDownload)
     ipcMain.removeListener('hasarbotu:assistant', handleCommand)
     screen.removeListener('display-added', onDisplayChange)

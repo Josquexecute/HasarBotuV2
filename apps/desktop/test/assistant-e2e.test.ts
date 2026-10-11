@@ -15,7 +15,7 @@ it('Windows assistant: real Electron window, security, menu, navigation, persist
     const code = await new Promise<number | null>((resolve, reject) => {
       const child = spawn(require('electron') as string, [
         fileURLToPath(new URL('./harness/assistant-main.mjs', import.meta.url)), `--user-data-dir=${join(workspace, 'user-data')}`,
-      ], { env: { ...process.env, HB_ASSISTANT_ASSETS: fileURLToPath(new URL('../../../dist/', import.meta.url)), HB_ASSISTANT_RESULT: resultPath, HB_ASSISTANT_OUTPUT: workspace }, stdio: 'ignore' })
+      ], { env: { ...process.env, HB_ASSISTANT_ASSETS: fileURLToPath(new URL('../../../dist/', import.meta.url)), HB_ASSISTANT_RESULT: resultPath, HB_ASSISTANT_OUTPUT: process.env.HB_ASSISTANT_EVIDENCE ?? workspace }, stdio: 'ignore' })
       let timedOut = false
       const timer = setTimeout(() => { timedOut = true; child.kill() }, 60_000)
       child.once('error', (error) => { clearTimeout(timer); reject(error) })
