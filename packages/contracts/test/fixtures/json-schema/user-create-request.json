@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "email": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 254,
+      "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+    },
+    "password": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 128
+    },
+    "roles": {
+      "minItems": 1,
+      "maxItems": 6,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "expert",
+          "case_manager",
+          "secretary",
+          "accounting",
+          "read_only"
+        ]
+      }
+    }
+  },
+  "required": [
+    "displayName",
+    "email",
+    "password",
+    "roles"
+  ],
+  "additionalProperties": false
+}

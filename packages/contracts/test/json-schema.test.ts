@@ -127,6 +127,7 @@ describe('JSON Schema uretimi', () => {
       'traffic-value-loss-submit-request',
       'traffic-value-loss-version-create-request',
       'traffic-value-loss-versions-response',
+      'user-create-request',
       'v1-import-quarantines-query',
       'v1-import-quarantines-response',
       'workspace-plan-request',

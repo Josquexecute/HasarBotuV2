@@ -46,6 +46,7 @@ import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
  * yanlislikla devre disi birakilamaz.
  */
 export const REDACTED_LOG_PATHS = [
+  'req.body.password',
   'req.headers.authorization',
   'req.headers.cookie',
   'req.headers["set-cookie"]',

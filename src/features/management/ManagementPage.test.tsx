@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DATA_SOURCE_STORAGE_KEY, type CaseReferenceDataPort } from '../../data/ports'
 import { ReferenceDataError } from '../../data/referenceHttpAdapter'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
 import type { UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
+import { UsersError } from '../../data/usersPort'
 import type { V1ImportQuarantineDataPort } from '../../data/v1ImportQuarantinePort'
 import { ManagementPage } from './ManagementPage'
 
@@ -146,6 +147,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
   function makeUsersPort(overrides: Partial<UsersDataPort> = {}): UsersDataPort {
     return {
       list: vi.fn().mockResolvedValue(users),
+      create: vi.fn().mockResolvedValue({ id: 'usr-new', email: 'expert@example.test', displayName: 'Yeni Eksper', status: 'active', roles: ['expert'], version: 1 }),
       updateRoles: vi.fn().mockResolvedValue({ ...users[0], roles: ['secretary', 'expert'], version: 2 }),
       ...overrides,
     } as UsersDataPort
@@ -197,6 +199,43 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     expect(await screen.findByText('Roller güncellendi.')).toBeInTheDocument()
   })
 
+  it('admin manually creates a user with chosen roles and sees the persisted response', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const usersPort = makeUsersPort()
+    const user = userEvent.setup()
+    render(<SessionContext.Provider value={adminSession()}><ManagementPage usersPort={usersPort} /></SessionContext.Provider>)
+    await user.click(await screen.findByRole('button', { name: 'Kullanıcı Ekle' }))
+    const form = within(screen.getByRole('form', { name: 'Yeni kullanıcı' }))
+    expect(form.getByRole('button', { name: 'Kullanıcıyı Kaydet' })).toBeDisabled()
+    await user.type(form.getByLabelText('Ad Soyad'), 'Yeni Eksper')
+    await user.type(form.getByLabelText('Giriş E-postası'), 'expert@example.test')
+    await user.type(form.getByLabelText(/Başlangıç Parolası/), 'sentetik-parola-25')
+    await user.click(form.getByRole('checkbox', { name: 'Eksper' }))
+    await user.click(form.getByRole('button', { name: 'Kullanıcıyı Kaydet' }))
+    await waitFor(() => expect(usersPort.create).toHaveBeenCalledWith({ displayName: 'Yeni Eksper', email: 'expert@example.test', password: 'sentetik-parola-25', roles: ['expert'] }))
+    expect(await screen.findByText('Yeni Eksper')).toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Yeni kullanıcı' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Kullanıcı kaydedildi/)).toBeInTheDocument()
+  })
+
+  it('keeps the new-user draft and shows an actionable duplicate email error', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const usersPort = makeUsersPort({ create: vi.fn().mockRejectedValue(new UsersError('email_in_use', 'duplicate')) })
+    const user = userEvent.setup()
+    render(<SessionContext.Provider value={adminSession()}><ManagementPage usersPort={usersPort} /></SessionContext.Provider>)
+    await user.click(await screen.findByRole('button', { name: 'Kullanıcı Ekle' }))
+    const form = within(screen.getByRole('form', { name: 'Yeni kullanıcı' }))
+    await user.type(form.getByLabelText('Ad Soyad'), 'Yeni Eksper')
+    await user.type(form.getByLabelText('Giriş E-postası'), 'existing@example.test')
+    await user.type(form.getByLabelText(/Başlangıç Parolası/), 'sentetik-parola-25')
+    await user.click(form.getByRole('checkbox', { name: 'Eksper' }))
+    await user.click(form.getByRole('button', { name: 'Kullanıcıyı Kaydet' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bu e-posta adresiyle bir kullanıcı zaten kayıtlı')
+    expect(form.getByLabelText('Ad Soyad')).toHaveValue('Yeni Eksper')
+    expect(form.getByLabelText('Giriş E-postası')).toHaveValue('existing@example.test')
+    expect(screen.queryByText(/Kullanıcı kaydedildi/)).not.toBeInTheDocument()
+  })
+
   it('admin olmayan oturumda mevcut salt-okunur referans görünümü değişmeden kalır', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const usersPort = makeUsersPort()
@@ -209,6 +248,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     expect(await screen.findByText('Gerçek Eksper')).toBeInTheDocument()
     expect(screen.queryByText('Kullanıcı ve Rol Yönetimi')).not.toBeInTheDocument()
     expect(usersPort.list).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Kullanıcı Ekle' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'V1 Aktarım Karantinası' })).not.toBeInTheDocument()
   })
 

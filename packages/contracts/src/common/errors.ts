@@ -58,6 +58,7 @@ export const API_ERROR_CODES = [
   'closure_fee_source_invalid',
   'closure_fee_approval_blocked',
   'user_self_lockout_blocked',
+  'user_email_in_use',
   'manual_recovery_required',
   'rate_limited',
   'service_unavailable',

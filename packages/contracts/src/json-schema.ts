@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { failureEnvelopeSchema } from './common/envelope.js'
 import { healthResponseSchema } from './health/index.js'
 import { loginRequestSchema, sessionResponseSchema } from './v1/auth/index.js'
+import { userCreateRequestSchema } from './v1/users/index.js'
 import { casesQuerySchema } from './v1/cases/query.js'
 import { caseCreateRequestSchema, caseUpdateRequestSchema } from './v1/cases/commands.js'
 import {
@@ -169,6 +170,7 @@ export const JSON_SCHEMA_TARGETS = {
   'failure-envelope': failureEnvelopeSchema,
   'auth-login-request': loginRequestSchema,
   'auth-session-response': sessionResponseSchema,
+  'user-create-request': userCreateRequestSchema,
   'cases-query': casesQuerySchema,
   'case-create-request': caseCreateRequestSchema,
   'case-update-request': caseUpdateRequestSchema,

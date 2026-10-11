@@ -11,10 +11,18 @@ export interface UserSummaryRecord {
 
 export interface UsersDataPort {
   list(): Promise<readonly UserSummaryRecord[]>
+  create(input: UserCreateInput): Promise<UserSummaryRecord>
   updateRoles(
     userId: string,
     input: { roles: readonly RoleCodeRecord[]; expectedVersion: number },
   ): Promise<UserSummaryRecord>
+}
+
+export interface UserCreateInput {
+  readonly displayName: string
+  readonly email: string
+  readonly password: string
+  readonly roles: readonly RoleCodeRecord[]
 }
 
 export type UsersErrorKind =
@@ -22,6 +30,7 @@ export type UsersErrorKind =
   | 'forbidden'
   | 'not_found'
   | 'conflict'
+  | 'email_in_use'
   | 'self_lockout'
   | 'validation'
   | 'unavailable'
@@ -48,6 +57,7 @@ function errorKind(response: Response, body: unknown): UsersErrorKind {
   if (response.status === 409) {
     const code = (body as { error?: { code?: string } } | null)?.error?.code
     if (code === 'user_self_lockout_blocked') return 'self_lockout'
+    if (code === 'user_email_in_use') return 'email_in_use'
     return 'conflict'
   }
   if (response.status === 400 || response.status === 422) return 'validation'
@@ -82,6 +92,19 @@ export function createHttpUsersAdapter(options: UsersAdapterOptions = {}): Users
   }
 
   return {
+    async create(input) {
+      try {
+        const { userResponseSchema } = await import('@hasarbotu/contracts')
+        return userResponseSchema.parse(await request('/api/v1/users', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(input),
+        })).user as UserSummaryRecord
+      } catch (error) {
+        if (error instanceof UsersError) throw error
+        throw new UsersError('unavailable', 'user creation response invalid')
+      }
+    },
     async list() {
       try {
         const { usersResponseSchema } = await import('@hasarbotu/contracts')

@@ -5,7 +5,7 @@ import { getConfiguredDataSource, type CaseReferenceDataPort, type CaseReference
 import { useCaseReferences } from '../../data/useCaseReferences'
 import { useSession } from '../../app/sessionContext'
 import { useUsers } from '../../data/useUsers'
-import type { RoleCodeRecord, UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
+import type { RoleCodeRecord, UserCreateInput, UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
 import { useV1ImportQuarantines } from '../../data/useV1ImportQuarantines'
 import type { V1ImportQuarantineDataPort } from '../../data/v1ImportQuarantinePort'
 
@@ -158,7 +158,9 @@ function usersLoadMessage(status: string): string | null {
  * ayrı mesajlarla yüzeye çıkar.
  */
 function ManagementUsersAdminContent({ port }: { port?: UsersDataPort }) {
-  const { items, status, reload, updateRoles, savingUserId } = useUsers(true, port)
+  const { items, status, reload, updateRoles, savingUserId, createUser, creating } = useUsers(true, port)
+  const [showCreate, setShowCreate] = useState(false)
+  const [notice, setNotice] = useState('')
   const message = usersLoadMessage(status)
 
   if (status !== 'ok') {
@@ -183,8 +185,12 @@ function ManagementUsersAdminContent({ port }: { port?: UsersDataPort }) {
           <h2>Kullanıcı ve Rol Yönetimi</h2>
           <span>{items.length} gerçek kullanıcı · rol değişikliği anında etkili olur</span>
         </div>
-        <UsersRound size={18} />
+        <button className="button button--primary" type="button" disabled={creating || showCreate} onClick={() => { setShowCreate(true); setNotice('') }}>
+          <Plus size={15} /> Kullanıcı Ekle
+        </button>
       </header>
+      {showCreate && <UserCreateForm saving={creating} onCreate={createUser} onCancel={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); setNotice('Kullanıcı kaydedildi. Dosyalarda sorumlu veya eksper olarak seçebilirsiniz.') }} />}
+      {notice && <p className="management-empty" role="status">{notice}</p>}
       <div className="table-scroll">
         <table className="data-table">
           <thead><tr><th>Kullanıcı</th><th>Roller</th><th>Durum</th><th></th></tr></thead>
@@ -202,6 +208,53 @@ function ManagementUsersAdminContent({ port }: { port?: UsersDataPort }) {
       </div>
       {items.length === 0 && <p className="management-empty">Bu organizasyonda kayıtlı kullanıcı bulunamadı.</p>}
     </section>
+  )
+}
+
+function UserCreateForm({ saving, onCreate, onCancel, onCreated }: {
+  saving: boolean
+  onCreate: (input: UserCreateInput) => Promise<{ ok: true } | { ok: false; kind: string }>
+  onCancel: () => void
+  onCreated: () => void
+}) {
+  const [displayName, setDisplayName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [roles, setRoles] = useState<readonly RoleCodeRecord[]>([])
+  const [error, setError] = useState('')
+
+  const submit = async () => {
+    if (saving || !displayName.trim() || !roles.length) return
+    setError('')
+    const result = await onCreate({ displayName: displayName.trim(), email: email.trim(), password, roles })
+    if (result.ok) { setPassword(''); onCreated(); return }
+    if (result.kind === 'email_in_use') setError('Bu e-posta adresiyle bir kullanıcı zaten kayıtlı. Mevcut kullanıcıyı kontrol edin.')
+    else if (result.kind === 'validation') setError('Ad, geçerli e-posta, 10–128 karakterlik parola ve en az bir rol gereklidir.')
+    else if (result.kind === 'forbidden') setError('Kullanıcı ekleme yetkiniz yok.')
+    else if (result.kind === 'unauthorized') setError('Oturum sona erdi. Tekrar giriş yapın.')
+    else setError('Kullanıcı kaydedilemedi. Bilgilerinizi koruduk; bağlantıyı kontrol edip tekrar deneyin.')
+  }
+
+  return (
+    <form className="user-create-form" aria-label="Yeni kullanıcı" onSubmit={event => { event.preventDefault(); void submit() }}>
+      <h3>Yeni Kullanıcı</h3>
+      <fieldset disabled={saving}>
+        <div className="user-create-fields">
+          <label>Ad Soyad<input name="displayName" autoComplete="name" required maxLength={200} value={displayName} onChange={event => setDisplayName(event.target.value)} /></label>
+          <label>Giriş E-postası<input name="email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} /></label>
+          <label>Başlangıç Parolası<input name="password" type="password" autoComplete="new-password" required minLength={10} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} /><small>10–128 karakter. Kullanıcı girişte bu parolayı kullanır.</small></label>
+        </div>
+        <fieldset className="user-create-roles">
+          <legend>Roller — en az bir rol seçin</legend>
+          <div className="role-checkbox-group">{ALL_ROLES.map(role => <label key={role} className="role-checkbox"><input type="checkbox" checked={roles.includes(role)} onChange={() => setRoles(current => current.includes(role) ? current.filter(value => value !== role) : [...current, role])} />{ROLE_LABELS[role]}</label>)}</div>
+        </fieldset>
+        <div className="user-create-actions">
+          <button className="button button--primary" type="submit" disabled={!displayName.trim() || roles.length === 0}>{saving ? 'Kaydediliyor…' : 'Kullanıcıyı Kaydet'}</button>
+          <button className="button button--secondary" type="button" onClick={onCancel}>Vazgeç</button>
+        </div>
+      </fieldset>
+      {error && <p role="alert">{error}</p>}
+    </form>
   )
 }
 

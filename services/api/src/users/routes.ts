@@ -5,6 +5,7 @@ import {
   USER_ROLES_ROUTE,
   failureEnvelopeSchema,
   userParamsSchema,
+  userCreateRequestSchema,
   userResponseSchema,
   usersResponseSchema,
   userRolesUpdateRequestSchema,
@@ -38,6 +39,26 @@ export function registerUserRoutes(app: FastifyInstance, options: UserRoutesOpti
     if (session === undefined) return
     const items = await store.list(session.user.organizationId)
     return usersResponseSchema.parse({ items })
+  })
+
+  app.post(USERS_ROUTE, async (request, reply) => {
+    const requestId = String(request.id)
+    const session = await requireAnyRole(auth, request, reply, ADMIN_ROLES)
+    if (session === undefined) return
+    const body = userCreateRequestSchema.safeParse(request.body)
+    if (!body.success) {
+      return reply.code(400).send(failureEnvelopeSchema.parse({
+        ok: false, error: zodErrorToApiError(body.error, requestId),
+      }))
+    }
+    const outcome = await store.create(
+      { organizationId: session.user.organizationId, actorUserId: session.user.id, requestId },
+      body.data,
+    )
+    if (outcome.kind === 'email_in_use') {
+      return reply.code(409).send(failureBody('user_email_in_use', 'This email is already registered.', requestId))
+    }
+    return reply.code(201).send(userResponseSchema.parse({ user: outcome.user }))
   })
 
   app.patch(USER_ROLES_ROUTE, async (request, reply) => {

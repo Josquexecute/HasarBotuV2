@@ -1,6 +1,8 @@
 import type pg from 'pg'
-import { userSummarySchema, type RoleCode, type UserSummary } from '@hasarbotu/contracts'
+import { userSummarySchema, type RoleCode, type UserCreateRequest, type UserSummary } from '@hasarbotu/contracts'
+import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
+import { hashPassword } from '../auth/password.js'
 
 interface ActorContext {
   readonly organizationId: string
@@ -23,6 +25,10 @@ export type UpdateRolesOutcome =
   | { kind: 'self_lockout' }
   | { kind: 'ok'; user: UserSummary }
 
+export type CreateUserOutcome =
+  | { kind: 'email_in_use' }
+  | { kind: 'ok'; user: UserSummary }
+
 function rowToSummary(row: UserRow): UserSummary {
   return userSummarySchema.parse({
     id: row.id,
@@ -43,6 +49,43 @@ function rowToSummary(row: UserRow): UserSummary {
 export function createUsersStore(pool: pg.Pool) {
   const audit = createAuditService()
   return {
+    async create(actor: ActorContext, input: UserCreateRequest): Promise<CreateUserOutcome> {
+      const passwordHash = await hashPassword(input.password)
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const roles = [...new Set(input.roles)].sort()
+        const inserted = await client.query(
+          `INSERT INTO users (id,organization_id,email,display_name,password_hash)
+           VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (lower(email)) DO NOTHING
+           RETURNING id::text,email,display_name,status,version`,
+          [uuidv7(), actor.organizationId, input.email.toLowerCase(), input.displayName, passwordHash],
+        )
+        const row = inserted.rows[0] as Omit<UserRow, 'roles'> | undefined
+        if (row === undefined) {
+          await client.query('ROLLBACK')
+          return { kind: 'email_in_use' }
+        }
+        const assigned = await client.query(
+          'INSERT INTO user_roles (user_id,role_id) SELECT $1::uuid,id FROM roles WHERE code=ANY($2::text[])',
+          [row.id, roles],
+        )
+        if ((assigned.rowCount ?? 0) !== roles.length) throw new Error('User creation role catalog mismatch')
+        await audit.record(client, {
+          ...actor, action: 'user.created', entityType: 'user', entityId: row.id, details: { roles },
+        })
+        const user = rowToSummary({ ...row, roles })
+        await client.query('COMMIT')
+        return { kind: 'ok', user }
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
     async list(organizationId: string): Promise<UserSummary[]> {
       const result = await pool.query(
         `SELECT u.id::text,u.email,u.display_name,u.status,u.version,

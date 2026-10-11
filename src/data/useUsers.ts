@@ -5,6 +5,7 @@ import {
   createHttpUsersAdapter,
   type RoleCodeRecord,
   type UserSummaryRecord,
+  type UserCreateInput,
   type UsersDataPort,
   type UsersErrorKind,
 } from './usersPort'
@@ -25,6 +26,7 @@ export function useUsers(enabled: boolean, suppliedPort?: UsersDataPort) {
   const [items, setItems] = useState<readonly UserSummaryRecord[]>(NO_USERS)
   const [status, setStatus] = useState<UsersLoadStatus>('loading')
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     if (!enabled) return undefined
@@ -42,6 +44,19 @@ export function useUsers(enabled: boolean, suppliedPort?: UsersDataPort) {
     })
     return () => { cancelled = true }
   }, [enabled, port, reportUnauthorized, revision])
+
+  const createUser = useCallback(async (input: UserCreateInput): Promise<{ ok: true } | { ok: false; kind: UsersErrorKind }> => {
+    setCreating(true)
+    try {
+      const user = await port.create(input)
+      setItems(current => [...current, user].sort((a, b) => a.displayName.localeCompare(b.displayName, 'tr-TR')))
+      return { ok: true }
+    } catch (error) {
+      const kind = error instanceof UsersError ? error.kind : 'unavailable'
+      if (kind === 'unauthorized') reportUnauthorized()
+      return { ok: false, kind }
+    } finally { setCreating(false) }
+  }, [port, reportUnauthorized])
 
   const updateRoles = useCallback(async (
     userId: string,
@@ -65,6 +80,6 @@ export function useUsers(enabled: boolean, suppliedPort?: UsersDataPort) {
     }
   }, [port, reload, reportUnauthorized])
 
-  if (!enabled) return { items: NO_USERS, status: 'idle' as UsersLoadStatus, reload, updateRoles, savingUserId: null }
-  return { items, status, reload, updateRoles, savingUserId }
+  if (!enabled) return { items: NO_USERS, status: 'idle' as UsersLoadStatus, reload, updateRoles, createUser, creating: false, savingUserId: null }
+  return { items, status, reload, updateRoles, createUser, creating, savingUserId }
 }

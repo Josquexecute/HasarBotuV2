@@ -2460,6 +2460,18 @@ button {
 .role-checkbox input { margin: 0; accent-color: var(--accent); }
 .role-checkbox input:disabled + span, .role-checkbox input:disabled { cursor: not-allowed; opacity: 0.6; }
 .role-row-feedback { margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); }
+.user-create-form { margin: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; }
+.user-create-form h3 { margin: 0 0 14px; }
+.user-create-form fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
+.user-create-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 14px; }
+.user-create-fields label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.user-create-fields input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-primary); }
+.user-create-fields small { color: var(--text-secondary); }
+.user-create-form .user-create-roles { margin-top: 16px; }
+.user-create-roles legend { margin-bottom: 8px; font-size: 12px; }
+.user-create-roles .role-checkbox-group { max-width: none; }
+.user-create-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.user-create-form [role="alert"] { margin: 12px 0 0; }
 .permission-matrix td:first-child { white-space: normal; }
 .permission-matrix .role-cell { font-size: 11px; color: var(--text-secondary); }
 
