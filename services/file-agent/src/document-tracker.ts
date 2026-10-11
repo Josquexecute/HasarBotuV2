@@ -7,8 +7,10 @@ import { isTemporaryTrackedFile } from '@hasarbotu/domain'
 import { AGENT_ID_HEADER, AGENT_SECRET_HEADER, trackingLocationsSchema, type TrackingFile } from '@hasarbotu/contracts'
 import type { AgentConfig } from './config.js'
 import { assertRealPathUnderRoot, resolveUnderRoot } from './path-resolver.js'
+import { createWindowsFileHasher } from './windows-file-hasher.js'
 
 const execFileAsync = promisify(execFile)
+const TRACKING_METADATA_DIRECTORIES = new Set(['_HASARBOTU','_HASARBOTU_OFFICE'])
 // Windows sharing rules prevent reading a copy whose writer still holds the file open.
 const WINDOWS_HASH = `$ErrorActionPreference='Stop'; $s=$null; $h=$null; try { $s=[IO.File]::Open($env:HB_TRACKED_FILE,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read); $h=[Security.Cryptography.SHA256]::Create(); $bytes=$h.ComputeHash($s); @{hash=([BitConverter]::ToString($bytes).Replace('-','').ToLowerInvariant());size=$s.Length}|ConvertTo-Json -Compress } catch [IO.IOException] { exit 3 } finally { if($h){$h.Dispose()}; if($s){$s.Dispose()} }`
 
@@ -60,7 +62,7 @@ export function createTrackingClient(config: AgentConfig): TrackingClient {
   }
 }
 
-export function createDocumentTracker(client: TrackingClient, roots: Readonly<Record<string,string>>, options: { settleMs?: number;now?: () => number;hashFile?: typeof hashClosedFile;onError?: (code: string) => void } = {}) {
+export function createDocumentTracker(client: TrackingClient, roots: Readonly<Record<string,string>>, options: { settleMs?: number;now?: () => number;hashFile?: typeof hashClosedFile;onError?: (code: string) => void;onProgress?: () => Promise<void> } = {}) {
   const candidates = new Map<string,Candidate>()
   const now = options.now ?? Date.now
   const settleMs = options.settleMs ?? 30_000
@@ -79,6 +81,7 @@ export function createDocumentTracker(client: TrackingClient, roots: Readonly<Re
       if (stat.isDirectory()) {
         for (const entry of await readdir(path,{ withFileTypes: true })) {
           if (isTemporaryTrackedFile(entry.name) || entry.isSymbolicLink()) continue
+          if (entry.isDirectory() && TRACKING_METADATA_DIRECTORIES.has(entry.name.toUpperCase())) continue
           try { await walk(join(path,entry.name),`${relative}/${entry.name}`) }
           catch { complete = false;options.onError?.('tracking_file_unavailable') }
         }
@@ -121,6 +124,7 @@ export function createDocumentTracker(client: TrackingClient, roots: Readonly<Re
         for (const location of page.locations) {
           try { await scanLocation(location,seen,signal) }
           catch { options.onError?.('tracking_location_unavailable') }
+          if (!signal?.aborted) await options.onProgress?.()
         }
         if (page.nextCursor === cursor) throw new Error('Tracking cursor did not advance')
         cursor = page.nextCursor ?? undefined
@@ -132,13 +136,21 @@ export function createDocumentTracker(client: TrackingClient, roots: Readonly<Re
 
 export function startDocumentTracker(config: AgentConfig, signal?: AbortSignal, onError?: (code: string) => void) {
   let healthy = true
-  const tracker = createDocumentTracker(createTrackingClient(config),config.roots,{ onError: (code) => { healthy = false;onError?.(code) } })
+  let lastHealthAt = 0
+  const hasher = process.platform === 'win32' ? createWindowsFileHasher() : undefined
+  const tracker = createDocumentTracker(createTrackingClient(config),config.roots,{
+    ...(hasher ? { hashFile: hasher.hashFile } : {}),
+    onError: (code) => { healthy = false;onError?.(code) },
+    // Large trees can take longer than the API's three-minute stale threshold.
+    onProgress: async () => { if (Date.now()-lastHealthAt >= 60_000) await reportHealth(false,'scanning') },
+  })
   let timer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
   let running: Promise<void> = Promise.resolve()
   async function reportHealth(ok: boolean, phase: 'scanning' | 'complete' = 'complete') {
     const response = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/health`,{ method: 'POST',headers: { [AGENT_ID_HEADER]: config.agentId,[AGENT_SECRET_HEADER]: config.agentSecret,'content-type': 'application/json' },body: JSON.stringify({ ok,phase }),signal: AbortSignal.timeout(20_000) })
     if (!response.ok) throw new Error('Tracking health was not acknowledged')
+    lastHealthAt = Date.now()
   }
   const cycle = () => {
     healthy = true
@@ -151,5 +163,5 @@ export function startDocumentTracker(config: AgentConfig, signal?: AbortSignal, 
     })
   }
   cycle()
-  return async () => { stopped = true; if (timer) clearTimeout(timer); await running }
+  return async () => { stopped = true; if (timer) clearTimeout(timer); await running; await hasher?.close() }
 }

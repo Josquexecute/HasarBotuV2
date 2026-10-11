@@ -58,12 +58,17 @@ function ReviewRow({ item,run,busy }: { item: TrackingSnapshot['reviews'][number
   </article>
 }
 
+const ROW_BATCH_SIZE = 100
+
 export function TrackingWorkspace({ caseId }: { caseId?: string }) {
   const [data,setData] = useState<TrackingSnapshot | null>(null)
   const [error,setError] = useState('')
   const [busy,setBusy] = useState(false)
   const [assignee,setAssignee] = useState('')
   const [unreadOnly,setUnreadOnly] = useState(true)
+  const [documentLimit,setDocumentLimit] = useState(ROW_BATCH_SIZE)
+  const [notificationLimit,setNotificationLimit] = useState(ROW_BATCH_SIZE)
+  const visibleNotifications = data?.notifications.filter((n) => !unreadOnly || !n.readAt) ?? []
   const reload = useCallback(async () => { setData(await loadTracking(caseId)) },[caseId])
   useEffect(() => {
     const controller = new AbortController()
@@ -91,11 +96,13 @@ export function TrackingWorkspace({ caseId }: { caseId?: string }) {
         {!data.tramer.length && <p>Tramer işi bulunmuyor.</p>}
       </details>
       <details open><summary>{caseId ? 'Klasörde algılanan evraklar' : 'Kontrolümü bekleyen evraklar'} ({data.documents.length})</summary><p>Evrakın eklenmesi eksikliği kapatmaz. Dosya sorumlusu içeriği kontrol edip onaylamalıdır.</p>
-        {data.documents.map((item) => <DocumentRow key={`${item.id}:${item.status}`} item={item} run={run} busy={busy} />)}{!data.documents.length && <p>Kontrol kaydı bulunmuyor.</p>}
+        {data.documents.slice(0,documentLimit).map((item) => <DocumentRow key={`${item.id}:${item.status}`} item={item} run={run} busy={busy} />)}{!data.documents.length && <p>Kontrol kaydı bulunmuyor.</p>}
+        {data.documents.length > documentLimit && <button className="button button--secondary" onClick={() => setDocumentLimit((limit) => limit+ROW_BATCH_SIZE)}>Daha fazla evrak göster ({data.documents.length-documentLimit} kalan)</button>}
       </details>
       <details open><summary>Kalıcı bildirimler ({data.notifications.filter((n) => !n.readAt).length} okunmamış)</summary>
         <label><input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} /> Yalnız okunmamış</label>
-        {data.notifications.filter((n) => !unreadOnly || !n.readAt).map((n) => <article className="tracking-row" key={n.id}><CaseLink row={n} /><strong>{n.title}</strong><time>{new Date(n.createdAt).toLocaleString('tr-TR')}</time>{!n.readAt && <button className="button button--secondary" disabled={busy} onClick={() => { void run(() => trackingRequest(`tracking/notifications/${n.id}/read`,{})) }}>Okundu işaretle</button>}</article>)}
+        {visibleNotifications.slice(0,notificationLimit).map((n) => <article className="tracking-row" key={n.id}><CaseLink row={n} /><strong>{n.title}</strong><time>{new Date(n.createdAt).toLocaleString('tr-TR')}</time>{!n.readAt && <button className="button button--secondary" disabled={busy} onClick={() => { void run(() => trackingRequest(`tracking/notifications/${n.id}/read`,{})) }}>Okundu işaretle</button>}</article>)}
+        {visibleNotifications.length > notificationLimit && <button className="button button--secondary" onClick={() => setNotificationLimit((limit) => limit+ROW_BATCH_SIZE)}>Daha fazla bildirim göster ({visibleNotifications.length-notificationLimit} kalan)</button>}
       </details>
       {!caseId && <details><summary>SBM e-posta bağlantıları ve sonuç kontrolü</summary>
         <p>Merkezi takip: {data.services.length === 0 ? 'Henüz servis taraması kaydedilmemiş.' : ''}</p>

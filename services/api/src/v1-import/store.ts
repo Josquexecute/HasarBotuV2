@@ -107,7 +107,7 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 /**
- * V1 kok dizinini tarar: `<kok>/<yil>/<ay>/<plaka>` ve
+ * V1 kok dizinini tarar: `<kok>/<yil [OFİS|UZAKTAN]>/<ay>/<plaka>` ve
  * `<kok>/<yil>/<ay>/KAPALI .../<plaka>` desenlerini yurur. `_HASARBOTU`/
  * `_HASARBOTU_OFFICE` (vaka-DISI, ofis/ay seviyeli sidecar'lar) acikca
  * DISLANIR -- vaka klasoru gibi yanlis siniflandirilmaz.
@@ -116,7 +116,7 @@ export async function discoverV1Folders(rootPath: string): Promise<V1DiscoveredF
   const results: V1DiscoveredFolder[] = []
   const yearDirs = await listSubdirectories(rootPath)
   for (const year of yearDirs) {
-    if (!/^\d{4}$/u.test(year)) continue
+    if (!/^\d{4}(?: (?:OFİS|UZAKTAN))?$/u.test(year.toLocaleUpperCase('tr-TR'))) continue
     const yearPath = join(rootPath, year)
     const monthDirs = await listSubdirectories(yearPath)
     for (const month of monthDirs) {

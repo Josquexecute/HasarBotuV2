@@ -210,6 +210,31 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     root = undefined
   })
 
+  it('imports office-suffixed year folders with provenance and remains idempotent', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
+    const relativePath = '2026 OFİS/Temmuz 2026/34OFS987'
+    const source = await writeSource(root, relativePath, {
+      caseKey: 'office-suffixed-year', createdAt: '2026-07-01T07:00:00Z',
+      responsible: 'Sentetik Sorumlu',
+      notes: [{ id: 'office-note', text: 'Office folder provenance' }],
+    })
+    const before = await readFile(join(source, '_HASARBOTU/takip.json'), 'utf8')
+    const actor = { organizationId, actorUserId, requestId: 'office-suffixed-year' }
+    const plan = await planV1Remediation(pool, organizationId, root)
+    expect(plan.entries).toHaveLength(1)
+    expect(plan.entries[0]).toMatchObject({ targetState: 'create', folder: { relativePath } })
+    expect(await applyV1Remediation(pool, actor, plan)).toMatchObject({ casesCreated: 1, notesCreated: 1, failed: 0 })
+    const records = await pool.query(
+      `SELECT r.source_relative_path,c.plate,c.responsible_user_id FROM v1_import_records r
+       JOIN cases c ON c.id=r.case_id WHERE r.organization_id=$1 AND r.source_relative_path=$2 AND r.item_type='case'`,
+      [organizationId, relativePath],
+    )
+    expect(records.rows).toEqual([{ source_relative_path: relativePath, plate: '34 OFS 987', responsible_user_id: responsibleUserId }])
+    expect(await applyV1Remediation(pool, actor, await planV1Remediation(pool, organizationId, root)))
+      .toMatchObject({ casesCreated: 0, notesCreated: 0, failed: 0 })
+    expect(await readFile(join(source, '_HASARBOTU/takip.json'), 'utf8')).toBe(before)
+  })
+
   it('preview blocked oge notlarini actionable saymaz; malformed/missing/ambiguous kategorilerini ayirir', async () => {
     root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
     const month = '2026/Temmuz 2026'

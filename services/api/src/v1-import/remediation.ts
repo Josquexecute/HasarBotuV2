@@ -93,7 +93,7 @@ const TURKISH_MONTHS = new Map([
 function historicalMonthKey(folder: V1DiscoveredFolder): string | null {
   const normalized = compactIdentity(folder.monthFolder)
   const month = [...TURKISH_MONTHS].find(([name]) => normalized.includes(name))?.[1]
-  const year = /^\d{4}$/u.exec(folder.relativePath.split('/')[0] ?? '')?.[0]
+  const year = /^(\d{4})(?: (?:OFİS|UZAKTAN))?$/u.exec((folder.relativePath.split('/')[0] ?? '').toLocaleUpperCase('tr-TR'))?.[1]
   return month === undefined || year === undefined ? null : `${year}-${String(month).padStart(2, '0')}`
 }
 

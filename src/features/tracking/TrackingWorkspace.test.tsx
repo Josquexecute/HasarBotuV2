@@ -12,6 +12,29 @@ function install(data: TrackingSnapshot) {
   return vi.spyOn(globalThis,'fetch').mockImplementation(async (_url,options) => options?.method === 'POST' ? new Response(null,{ status: 204 }) : Response.json(data))
 }
 describe('tracking screens',() => {
+  it('loads large lists in batches without losing an existing review draft',async () => {
+    const data = structuredClone(base)
+    const time = new Date().toISOString()
+    data.documents = Array.from({ length: 201 },(_,index) => ({ id: `doc-${index}`,caseId: 'case',plate: '34 TEST 123',officeNumber: '1',fileName: `evrak-${index}.pdf`,relativePath: `case/evrak-${index}.pdf`,status: 'pending',documentType: null,observedAt: time,canReview: true }))
+    data.notifications = Array.from({ length: 101 },(_,index) => ({ id: `notice-${index}`,caseId: 'case',plate: '34 TEST 123',officeNumber: '1',title: `Bildirim ${index}`,kind: 'document',createdAt: time,readAt: null,presentedAt: null }))
+    const fetch = install(data)
+    render(<MemoryRouter><TrackingWorkspace /></MemoryRouter>)
+    await screen.findByText('Kontrolümü bekleyen evraklar (201)')
+    expect(screen.queryByText('evrak-100.pdf')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bildirim 100')).not.toBeInTheDocument()
+    const draft = screen.getAllByLabelText('Kontrol notu')[0]!
+    await userEvent.type(draft,'İnceleme taslağı')
+    await userEvent.click(screen.getByRole('button',{ name: 'Daha fazla evrak göster (101 kalan)' }))
+    expect(screen.getByText('evrak-100.pdf')).toBeInTheDocument()
+    expect(draft).toHaveValue('İnceleme taslağı')
+    await userEvent.click(screen.getByRole('button',{ name: 'Daha fazla evrak göster (1 kalan)' }))
+    expect(screen.getByText('evrak-200.pdf')).toBeInTheDocument()
+    expect(screen.queryByRole('button',{ name: /Daha fazla evrak/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button',{ name: 'Daha fazla bildirim göster (1 kalan)' }))
+    expect(screen.getByText('Bildirim 100')).toBeInTheDocument()
+    expect(fetch.mock.calls.every(([,options]) => options?.method !== 'POST')).toBe(true)
+  })
+
   it('keeps the application alive when the popup response is malformed',async () => {
     vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json({}))
     render(<MemoryRouter><TrackingPopup /></MemoryRouter>)
