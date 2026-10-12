@@ -31,3 +31,7 @@ export const trackingSnapshotSchema = z.object({
 })
 export type TrackingSnapshot = z.infer<typeof trackingSnapshotSchema>
 export const trackingPendingNotificationsSchema = z.object({ notifications: z.array(z.object({ id: z.string(),caseId: z.string(),plate: z.string(),title: z.string() })) })
+export const trackingInboxSchema = z.strictObject({
+  notifications: trackingSnapshotSchema.shape.notifications,
+  total: z.number().int().nonnegative(),unread: z.number().int().nonnegative(),page: z.number().int().positive(),
+})

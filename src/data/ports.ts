@@ -46,6 +46,7 @@ export interface NamedReferenceRecord {
 export interface UserReferenceRecord {
   readonly id: string
   readonly displayName: string
+  readonly roles?: readonly string[]
 }
 
 export interface ServiceReferenceRecord extends NamedReferenceRecord {

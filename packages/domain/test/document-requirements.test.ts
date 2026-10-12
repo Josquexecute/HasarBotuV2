@@ -7,6 +7,15 @@ const base = (caseType: 'traffic' | 'casco', documents: readonly DocumentRequire
 const evaluate = (input: DocumentRequirementFact) => evaluateDocumentRequirements(input, now, rules(input.caseType))
 const find = (v: ReturnType<typeof evaluateDocumentRequirements>, code: string) => v.requirements.find((x) => x.requirementCode === code)!
 describe('document requirements', () => {
+  it('applies configured requirements while retaining verification and incident boundaries',() => {
+    const configuration = { baseRequired: ['victim_traffic_policy'] as const,incidentEvidenceRequired: false,tramerWithoutReportRequired: false,recourseDocumentsRequired: false }
+    const input = base('traffic',[{ ...ready('unverified','victim_traffic_policy'),hashVerified: false }])
+    const result = evaluateDocumentRequirements(input,now,{ ...rules('traffic'),configuration })
+    expect(result.requirements).toHaveLength(1)
+    expect(result.requirements[0]).toMatchObject({ status: 'control_required',requiresHumanReview: true })
+    expect(result.alternativeGroups).toHaveLength(0)
+    expect(evaluateDocumentRequirements(input,now,{ ...rules('traffic'),configuration: { ...configuration,baseRequired: [] } }).requirements).toHaveLength(0)
+  })
   it('ready belgenin doğrulanmış olmasını zorunlu tutar ve deterministiktir', () => { const input = base('traffic',[ready('a','victim_traffic_policy')]); expect(evaluate(input)).toEqual(evaluate(input)); expect(find(evaluate(input),'traffic_victim_policy').status).toBe('present') })
   it.each([['pending','control_required'],['failed','control_required'],['missing','missing']] as const)('%s mevcut sayılmaz', (status, expected) => expect(find(evaluate(base('traffic',[{...ready('a','victim_traffic_policy'),status}])),'traffic_victim_policy').status).toBe(expected))
   it('zabıt KTT/Beyan ve Trameri uygulanamaz yapar', () => { const v=evaluate(base('traffic',[ready('z','accident_report')])); expect(find(v,'ktt').status).toBe('not_applicable'); expect(find(v,'tramer_result').status).toBe('not_applicable') })

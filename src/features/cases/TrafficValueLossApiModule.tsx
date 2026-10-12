@@ -1,3 +1,4 @@
+import { canUsePermission } from '../../app/permissions'
 import {
   AlertTriangle,
   Calculator,
@@ -235,9 +236,8 @@ export function TrafficValueLossApiModule({
   const hydratedVersionId = useRef<string | null>(null)
   const keys = useRef<Partial<Record<'create' | 'submit' | 'approve' | 'reject', string>>>({})
 
-  const roles = session.user?.roles ?? []
-  const canWrite = roles.some((role) => ['admin', 'expert', 'case_manager'].includes(role))
-  const canApprove = roles.some((role) => ['admin', 'expert'].includes(role))
+  const canWrite = canUsePermission(session.user,'analysis_write',['admin','expert','case_manager'])
+  const canApprove = canUsePermission(session.user,'analysis_approve',['admin','expert'])
   const readyDocuments = (documents.data?.documents ?? []).filter((document) => (
     document.status === 'ready' && document.hashVerified && document.sizeVerified && document.verifiedAt !== null
   ))

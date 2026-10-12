@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
+import { z } from 'zod'
 import {
   EXPERTS_REFERENCE_ROUTE,
   INSURERS_REFERENCE_ROUTE,
@@ -39,6 +40,12 @@ export function registerReferenceRoutes(app: FastifyInstance, options: { readonl
     if (result === undefined) return reply.code(404).send(failureBody('not_found', 'Insurer not found.', String(request.id)))
     return result
   })
-  app.get(USERS_REFERENCE_ROUTE, withSession((organizationId) => references.users(organizationId)))
+  app.get(USERS_REFERENCE_ROUTE,async (request,reply) => {
+    const session = await requireSession(authStore,request,reply)
+    if (!session) return
+    const query = z.object({ includeRoles: z.enum(['true','false']).default('false') }).strict().safeParse(request.query)
+    if (!query.success) return reply.code(400).send(failureBody('validation_error','Geçersiz referans sorgusu.',String(request.id)))
+    return references.users(session.user.organizationId,query.data.includeRoles === 'true')
+  })
   app.get(EXPERTS_REFERENCE_ROUTE, withSession((organizationId) => references.experts(organizationId)))
 }

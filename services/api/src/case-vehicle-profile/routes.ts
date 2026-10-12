@@ -1,3 +1,4 @@
+import { hasPermission } from '../auth/permissions.js'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type pg from 'pg'
 import {
@@ -55,7 +56,7 @@ export function registerCaseVehicleProfileRoutes(
         ok: false, error: zodErrorToApiError(params.error, requestId),
       }))
     }
-    const canEdit = session.user.roles.some((role) => (WRITE_ROLES as readonly string[]).includes(role))
+    const canEdit = session.user.roles.some((role) => (WRITE_ROLES as readonly string[]).includes(role)) && hasPermission(session.user,'case_write')
     try {
       return await store.read(
         { organizationId: session.user.organizationId, userId: session.user.id },

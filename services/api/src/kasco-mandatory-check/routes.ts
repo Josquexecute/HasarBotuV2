@@ -1,3 +1,4 @@
+import { hasPermission } from '../auth/permissions.js'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
@@ -63,7 +64,7 @@ export function registerKascoMandatoryCheckRoutes(app: FastifyInstance, options:
     if (!params.success) {
       return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
     }
-    const gate = await store.getGate(session.user.organizationId, params.data.caseId, canWrite(session.user.roles))
+    const gate = await store.getGate(session.user.organizationId, params.data.caseId, canWrite(session.user.roles) && hasPermission(session.user,'case_write'))
     if (gate === undefined) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
     return kascoMandatoryCheckGateResponseSchema.parse({ gate })
   })
@@ -76,7 +77,7 @@ export function registerKascoMandatoryCheckRoutes(app: FastifyInstance, options:
     if (!params.success) {
       return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
     }
-    const gate = await store.getGate(session.user.organizationId, params.data.caseId, canWrite(session.user.roles))
+    const gate = await store.getGate(session.user.organizationId, params.data.caseId, canWrite(session.user.roles) && hasPermission(session.user,'case_write'))
     if (gate === undefined) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
     const check = gate.checks.find((item) => item.checkCode === params.data.checkCode)
     if (check === undefined) return reply.code(404).send(failureBody('not_found', 'Check not found.', requestId))

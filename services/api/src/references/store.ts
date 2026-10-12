@@ -52,9 +52,9 @@ export function createReferenceStore(pool: pg.Pool) {
       })
     },
 
-    async users(organizationId: string): Promise<UsersReferenceResponse> {
+    async users(organizationId: string,includeRoles = false): Promise<UsersReferenceResponse> {
       const result = await pool.query(
-        `SELECT id, display_name AS "displayName"
+        `SELECT id, display_name AS "displayName"${includeRoles ? ', ARRAY(SELECT r.code FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=users.id ORDER BY r.code) AS roles' : ''}
          FROM users WHERE organization_id = $1 AND status = 'active' ORDER BY display_name, id`,
         [organizationId],
       )

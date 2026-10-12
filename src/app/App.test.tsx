@@ -114,8 +114,8 @@ describe('HasarBotu V2 UI prototipi', () => {
     await user.click(screen.getByRole('button', { name: 'Koyu temaya geç' }))
     expect(themeRoot).toHaveAttribute('data-theme', 'dark')
 
-    await user.click(screen.getByRole('button', { name: 'Kompakt' }))
-    expect(themeRoot).toHaveAttribute('data-density', 'comfortable')
+    expect(screen.queryByRole('button', { name: 'Kompakt' })).not.toBeInTheDocument()
+    expect(themeRoot).toHaveAttribute('data-density', 'compact')
 
     await user.click(screen.getByRole('button', { name: 'Menüyü daralt' }))
     expect(screen.getByRole('button', { name: 'Menüyü genişlet' })).toBeInTheDocument()

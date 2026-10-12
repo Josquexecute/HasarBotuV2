@@ -1,3 +1,4 @@
+import { hasPermission } from '../auth/permissions.js'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type pg from 'pg'
 import {
@@ -117,7 +118,7 @@ export function registerCaseOperationsRoutes(
       session.user.organizationId,
       params.data.caseId,
       now.slice(0, 10),
-      canWrite(session.user.roles),
+      canWrite(session.user.roles) && hasPermission(session.user,'operations_write'),
     )
     if (result === undefined) {
       return reply.code(404).send(failureBody('not_found', 'Case not found.', String(request.id)))

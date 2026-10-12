@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
 import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
@@ -31,6 +31,31 @@ const CLOSED_CASE = {
 }
 
 describe('CaseDetailPage gercek API dogruluk siniri', () => {
+  it('aynı dosyada bağlantıyla evrak ve operasyon sekmesine geçer, elle seçilen sekmeyi korur', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    window.sessionStorage.setItem('hasarbotu-active-case-tab', 'Özet')
+    vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const body = url.includes('case-closed-38?') ? { case: CLOSED_CASE }
+        : url.endsWith('/operations') ? { caseId: CLOSED_CASE.id, asOfDate: '2026-10-13', notes: [], tasks: [], followUpHistory: [], permissions: { canWrite: false, canCompleteTasks: false } }
+        : { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } }
+      return { ok: true, status: 200, json: async () => body } as Response
+    }) as typeof fetch)
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/dosyalar/case-closed-38?tab=documents']}>
+      <Link to="/dosyalar/case-closed-38?tab=operations">Operasyon bağlantısı</Link>
+      <Link to="/dosyalar/case-closed-38?tab=documents">Evrak bağlantısı</Link>
+      <Routes><Route path="/dosyalar/:caseId" element={<CaseDetailPage />} /></Routes>
+    </MemoryRouter>)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Evrak ve Fotoğraf' })).toHaveClass('is-active'), { timeout: 15_000 })
+    await user.click(screen.getByRole('button', { name: 'Özet' }))
+    expect(screen.getByRole('button', { name: 'Özet' })).toHaveClass('is-active')
+    await user.click(screen.getByRole('link', { name: 'Operasyon bağlantısı' }))
+    expect(screen.getByRole('button', { name: 'Operasyon' })).toHaveClass('is-active')
+    await user.click(screen.getByRole('link', { name: 'Evrak bağlantısı' }))
+    expect(screen.getByRole('button', { name: 'Evrak ve Fotoğraf' })).toHaveClass('is-active')
+  })
+
   it('kaldırılmış İşçilik sekmesi kaydedilmiş olsa da özeti açar ve işçilik isteği yapmaz', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     window.sessionStorage.setItem('hasarbotu-active-case-tab', 'İşçilik')

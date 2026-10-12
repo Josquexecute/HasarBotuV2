@@ -65,6 +65,21 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
     [auth],
   )
 
+  useEffect(() => {
+    if (mode !== 'api' || status !== 'authenticated') return
+    let cancelled = false
+    const refresh = () => {
+      void auth.bootstrap().then((current) => {
+        if (cancelled) return
+        setUser(current)
+        if (!current) setStatus('expired')
+      }).catch(() => { /* A focus refresh leaves the current session intact during a network outage; API checks remain authoritative. */ })
+    }
+    window.addEventListener('focus',refresh)
+    window.addEventListener('permissions-updated',refresh)
+    return () => { cancelled = true;window.removeEventListener('focus',refresh);window.removeEventListener('permissions-updated',refresh) }
+  },[auth,mode,status])
+
   const logout = useCallback(async () => {
     await auth.logout()
     setUser(null)

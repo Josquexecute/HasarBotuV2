@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { emailSchema, roleCodeSchema, ROLE_CODES } from '../auth/index.js'
 import { entityVersionSchema, idSchema } from '../../common/primitives.js'
 
-export const userStatusSchema = z.enum(['active', 'disabled'])
+export const userStatusSchema = z.enum(['active', 'disabled', 'pending'])
 
 export const userSummarySchema = z.strictObject({
   id: idSchema,

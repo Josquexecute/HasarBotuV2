@@ -6,6 +6,7 @@ import { BackendUnavailableState, LoadingState } from '../../components/StateVie
 import type { OperationalAlertDataPort, OperationalAlertSeverityRecord, OperationalAlertTypeRecord } from '../../data/operationalAlertPort'
 import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
 import { useOperationalAlerts } from '../../data/useOperationalAlerts'
+const TrackingInbox = lazy(async () => ({ default: (await import('./TrackingInbox')).TrackingInbox }))
 const TrackingWorkspace = lazy(async () => ({ default: (await import('../tracking/TrackingWorkspace')).TrackingWorkspace }))
 const notificationIcons: Record<NotificationType, typeof FileWarning> = {
   'Eksik Evrak': FileWarning,
@@ -103,14 +104,14 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
               <span className="heading-count">{alerts.totalCount} açık uyarı</span>
             )}
           </h1>
-          <p>Mevcut görev, takip ve evrak verisinden türetilen operasyonel uyarılar</p>
+          <p>Sorumlu olduğunuz dosyaların uyarıları</p>
         </div>
       </section>
       {status === 'loading' && <LoadingState label="Uyarılar yükleniyor" />}
       {(status === 'unavailable' || status === 'unauthorized' || status === 'forbidden') && (
         <BackendUnavailableState
           title="Operasyonel uyarılar şu anda alınamıyor."
-          detail="Uyarılar yalnız gerçek veriden türetilir; bağlantı kurulana kadar örnek bildirim gösterilmez."
+          detail="Bağlantıyı kontrol edip tekrar deneyin."
         />
       )}
       {status === 'ok' && items.length === 0 && (
@@ -182,11 +183,18 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
 /** `port` yalnız testler için enjekte edilir; uygulama gerçek HTTP adaptörünü kullanır. */
 export function NotificationsPage({ port }: { port?: OperationalAlertDataPort } = {}) {
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
+  const [section,setSection] = useState<'inbox' | 'alerts' | 'tracking'>(port ? 'alerts' : 'inbox')
 
   return (
     <main className="page office-page notifications-page">
-      {source === 'api' && <Suspense fallback={<LoadingState label="Takip yükleniyor" />}><TrackingWorkspace /></Suspense>}
-      {source === 'mock' ? <NotificationsMockContent /> : <OperationalAlertContent port={port} />}
+      {source === 'mock' ? <NotificationsMockContent /> : <>
+        <nav className="workspace-tabs" aria-label="Bildirim bölümleri">{([['inbox','Dosya bildirimleri'],['alerts','Görev ve evrak uyarıları'],['tracking','Tramer ve e-posta']] as const).map(([key,title]) => <button key={key} className={section === key ? 'is-active' : ''} onClick={() => setSection(key)}>{title}</button>)}</nav>
+        <div className="office-scroll">
+          {section === 'inbox' && <><section className="page-heading page-heading--compact"><div><h1>Bildirimler</h1></div></section><Suspense fallback={<LoadingState label="Bildirimler yükleniyor" />}><TrackingInbox /></Suspense></>}
+          {section === 'alerts' && <OperationalAlertContent port={port} />}
+          {section === 'tracking' && <Suspense fallback={<LoadingState label="Takip yükleniyor" />}><TrackingWorkspace /></Suspense>}
+        </div>
+      </>}
     </main>
   )
 }

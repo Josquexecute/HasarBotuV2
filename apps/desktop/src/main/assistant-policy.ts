@@ -1,4 +1,12 @@
 export const ASSISTANT_SIZE = 120
+export const ASSISTANT_MENU_ACTIONS = ['open','note','cases','notifications','settings','hide','reset','quit','close'] as const
+export type AssistantMenuAction = typeof ASSISTANT_MENU_ACTIONS[number]
+export const isAssistantMenuAction = (value: unknown): value is AssistantMenuAction => typeof value === 'string' && (ASSISTANT_MENU_ACTIONS as readonly string[]).includes(value)
+
+export function assistantMenuBounds(position: Point,area: WorkArea) {
+  const width = Math.min(360,area.width),height = Math.min(366,area.height)
+  return { x: Math.round(Math.max(area.x,Math.min(position.x-width-8,area.x+area.width-width))),y: Math.round(Math.max(area.y,Math.min(position.y,area.y+area.height-height))),width,height }
+}
 export const ASSISTANT_MARGIN = 8
 
 export interface Point { readonly x: number; readonly y: number }

@@ -23,7 +23,7 @@ export function CaseReferenceFilters({
   readonly port?: CaseReferenceDataPort
 }) {
   const { references, status } = useCaseReferences(port)
-  const users = references?.users ?? []
+  const users = (references?.users ?? []).filter((user) => user.roles?.includes('case_manager'))
   const services = references?.services ?? []
   const disabled = status !== 'ok'
 

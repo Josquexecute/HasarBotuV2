@@ -91,6 +91,7 @@ describeDb('salt okunur Cases uclari (gercek veritabani)', () => {
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',
       [userId, orgId, EMAIL, 'Okuyucu', await hashPassword(PASSWORD)],
     )
+    await pool.query("INSERT INTO user_roles(user_id,role_id) SELECT $1,id FROM roles WHERE code='read_only'",[userId])
     await pool.query(
       'INSERT INTO service_centers (id, organization_id, name, center_type, service_type, phone) VALUES ($1, $2, $3, $4, $5, $6)',
       [serviceId, orgId, 'Merkez Oto Servis', 'ozel', 'private', '0312 000 00 00'],
@@ -148,6 +149,16 @@ describeDb('salt okunur Cases uclari (gercek veritabani)', () => {
   it('oturumsuz istek 401 doner', async () => {
     const response = await app.inject({ method: 'GET', url: CASES_ROUTE })
     expect(response.statusCode).toBe(401)
+  })
+
+  it('normalizes Turkish characters, case and separators in identity and reference searches',async () => {
+    await pool.query('UPDATE users SET display_name=$2 WHERE id=$1',[userId,'Ömer Faruk İşleyen'])
+    await pool.query('UPDATE service_centers SET name=$2 WHERE id=$1',[serviceId,'Güney Özel Servis'])
+    for (const search of ['34mpa764','34 MPA 764','omerfarukisleyen','ÖMER FARUK İŞLEYEN','gUNEYoZELSERVIS','Güney Özel Servis','f20260988']) {
+      const response = await app.inject({ method: 'GET',url: `${CASES_ROUTE}?search=${encodeURIComponent(search)}`,headers: { cookie } })
+      expect(response.statusCode,response.payload).toBe(200)
+      expect(response.json().items.map((row: { id: string }) => row.id)).toEqual([caseIds.mpa])
+    }
   })
 
   it('varsayilan liste: sema uyumlu, updatedAt azalan sirali, pageInfo dogru', async () => {

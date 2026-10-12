@@ -65,11 +65,3 @@
   --info: #75a0ff;
   --shadow-panel: 0 3px 14px rgb(0 0 0 / 28%);
 }
-
-[data-density='comfortable'] {
-  --control-height: 38px;
-  --row-height: 58px;
-  --space-2: 10px;
-  --space-3: 14px;
-  --space-4: 18px;
-}

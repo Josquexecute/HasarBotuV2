@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { createDocumentTracker,createTrackingClient } from '@hasarbotu/file-agent'
 import { assertTestDatabaseUrl,createDatabasePool,runMigrations,uuidv7 } from '@hasarbotu/database'
 import { trackingSnapshotSchema } from '@hasarbotu/contracts'
+import { defaultRolePolicy } from '../src/auth/permissions.js'
 import { buildApp,hashPassword } from '../src/index.js'
 import { ingestSbmResult,observeFile,reconcileFiles } from '../src/tracking/store.js'
 import { encryptToken,GMAIL_SCOPE,GoogleProviderError,validateGoogleClaims,type GoogleConfig,type GoogleProvider } from '../src/tracking/google.js'
@@ -71,11 +72,43 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     operator = await user(org,'operator@baranekspertiz.com','secretary')
     manager = await user(org,'manager@baranekspertiz.com','admin')
     await user(otherOrg,'other@baranekspertiz.com','admin')
-    app = buildApp({ loggerEnabled: false,auth: { pool,cookieSecure: false,loginRateLimit: { limit: 100,windowMs: 60_000 } },google,googleProvider: provider })
+    app = buildApp({ loggerEnabled: false,auth: { pool,cookieSecure: false,loginRateLimit: { limit: 100,windowMs: 60_000 } },google: { ...google,signupOrganizationId: org },googleProvider: provider })
     await app.ready()
     ownerCookie = await login('owner@baranekspertiz.com');operatorCookie = await login('operator@baranekspertiz.com');managerCookie = await login('manager@baranekspertiz.com');otherCookie = await login('other@baranekspertiz.com')
   },60_000)
   afterAll(async () => { await app?.close();await pool?.end() })
+
+  it('dismisses more than twenty owned alerts without marking them read or affecting other owners',async () => {
+    const ownedCase = await createCase(),otherCase = await createCase()
+    await pool.query('UPDATE cases SET responsible_user_id=$2 WHERE id=$1',[otherCase,operator])
+    const ids = Array.from({ length: 45 },() => uuidv7())
+    for (const id of ids) await pool.query(`INSERT INTO tracking_notifications(id,organization_id,case_id,recipient_user_id,event_key,kind,title)
+      VALUES($1::uuid,$2,$3,$4,$1::text,'document','Backlog')`,[id,org,ownedCase,manager])
+    const otherId = uuidv7()
+    await pool.query(`INSERT INTO tracking_notifications(id,organization_id,case_id,recipient_user_id,event_key,kind,title)
+      VALUES($1::uuid,$2,$3,$4,$1::text,'document','Other')`,[otherId,org,otherCase,owner])
+    const pending = (as: string) => app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/pending',headers: { cookie: as } })
+    expect((await pending(ownerCookie)).json().notifications).toHaveLength(20)
+    expect((await pending(managerCookie)).json().notifications).toHaveLength(0)
+    const inbox = await app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/inbox',headers: { cookie: ownerCookie } })
+    expect(inbox.statusCode,inbox.payload).toBe(200)
+    expect(inbox.json()).toMatchObject({ total: 45,unread: 45,page: 1 })
+    expect(inbox.json().notifications).toHaveLength(45)
+    expect((await app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/inbox',headers: { cookie: managerCookie } })).json().total).toBe(0)
+    const dismissed = await app.inject({ method: 'POST',url: '/api/v1/tracking/notifications/dismiss',headers: { cookie: ownerCookie },payload: {} })
+    expect(dismissed.statusCode,dismissed.payload).toBe(204)
+    expect((await pending(ownerCookie)).json().notifications).toHaveLength(0)
+    expect((await snapshot(ownerCookie,ownedCase)).notifications).toHaveLength(45)
+    const rows = (await pool.query('SELECT read_at,presented_at FROM tracking_notifications WHERE id=ANY($1::uuid[])',[ids])).rows
+    expect(rows.every((r) => r.read_at === null && r.presented_at !== null)).toBe(true)
+    expect((await pending(operatorCookie)).json().notifications.map((r: { id: string }) => r.id)).toContain(otherId)
+    expect((await app.inject({ method: 'POST',url: `/api/v1/tracking/notifications/${otherId}/read`,headers: { cookie: ownerCookie },payload: {} })).statusCode).toBe(404)
+    const futureId = uuidv7()
+    await pool.query(`INSERT INTO tracking_notifications(id,organization_id,case_id,event_key,kind,title) VALUES($1::uuid,$2,$3,$1::text,'document','Future')`,[futureId,org,ownedCase])
+    expect((await pending(ownerCookie)).json().notifications.map((r: { id: string }) => r.id)).toContain(futureId)
+    expect((await pending(otherCookie)).json().notifications).toHaveLength(0)
+    expect((await pool.query("SELECT details FROM audit_events WHERE action='tracking.notifications_dismissed' AND actor_user_id=$1",[owner])).rows[0].details.count).toBe(45)
+  })
 
   it('processes the supplied KTT templates through mailbox sync, matching by text number and notifying only the owner once',async () => {
     const id = await createCase();await submit(id,sbmNumber)
@@ -240,7 +273,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     const before = await snapshot(ownerCookie)
     const notice = before.notifications.find((n) => !n.readAt)!
     await app.close()
-    app = buildApp({ loggerEnabled: false,auth: { pool,cookieSecure: false },google,googleProvider: provider });await app.ready()
+    app = buildApp({ loggerEnabled: false,auth: { pool,cookieSecure: false },google: { ...google,signupOrganizationId: org },googleProvider: provider });await app.ready()
     const pending = await app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/pending',headers: { cookie: ownerCookie } })
     expect(pending.json().notifications.some((n: { id: string }) => n.id === notice.id)).toBe(true)
     const path = `/api/v1/tracking/notifications/${notice.id}`
@@ -301,8 +334,8 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await pool.query('SELECT user_id FROM google_identities WHERE subject=$1', ['manager-google'])).rows[0].user_id).toBe(manager)
   })
 
-  it('rejects unregistered/disabled employees and revoked consent without creating identities',async () => {
-    for (const email of ['unknown@baranekspertiz.com','disabled@baranekspertiz.com']) {
+  it('rejects external/disabled employees and revoked consent without creating identities',async () => {
+    for (const email of ['unknown@outside.example','disabled@baranekspertiz.com']) {
       if (email.startsWith('disabled')) { const id = await user(org,email,'secretary');await pool.query("UPDATE users SET status='disabled' WHERE id=$1", [id]) }
       loginIdentity = { email,sub: email }
       const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
@@ -312,6 +345,32 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
     expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&error=access_denied` })).statusCode).toBe(400)
     expect((await pool.query('SELECT count(*)::int AS n FROM google_identities')).rows[0].n).toBe(1)
+    loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
+  })
+
+  it('registers verified corporate accounts pending approval and issues a session only after admin role assignment',async () => {
+    loginIdentity = { email: 'new.employee@baranekspertiz.com',sub: 'new-employee-google' }
+    async function googleLogin() {
+      const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
+      expect(start.statusCode,start.payload).toBe(200)
+      expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&code=fake` })).statusCode).toBe(200)
+      return app.inject({ method: 'POST',url: '/api/v1/google/complete',headers: { cookie: cookie(start) },payload: { flowId: start.json().flowId } })
+    }
+    const pending = await googleLogin()
+    expect(pending.json()).toEqual({ status: 'approval_required' })
+    expect(pending.headers['set-cookie']).toBeUndefined()
+    const newUser = (await pool.query('SELECT * FROM users WHERE email=$1',[loginIdentity.email])).rows[0]
+    expect(newUser).toMatchObject({ organization_id: org,status: 'pending',password_hash: null })
+    const listed = await app.inject({ method: 'GET',url: '/api/v1/users?includePending=true',headers: { cookie: managerCookie } })
+    expect(listed.statusCode,listed.payload).toBe(200)
+    expect(listed.json().items.find((u: { id: string }) => u.id === newUser.id)).toMatchObject({ status: 'pending',roles: [] })
+    const approval = await app.inject({ method: 'PATCH',url: `/api/v1/users/${newUser.id}/roles`,headers: { cookie: managerCookie },payload: { roles: ['case_manager'],expectedVersion: 1 } })
+    expect(approval.statusCode,approval.payload).toBe(200)
+    expect(approval.json().user).toMatchObject({ status: 'active',roles: ['case_manager'] })
+    const approved = await googleLogin()
+    expect(approved.json().status).toBe('complete')
+    expect((await app.inject({ method: 'GET',url: '/api/v1/auth/session',headers: { cookie: cookie(approved) } })).json().user.roles).toEqual(['case_manager'])
+    expect((await app.inject({ method: 'POST',url: '/api/v1/auth/login',payload: { email: loginIdentity.email,password } })).statusCode).toBe(401)
     loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
   })
 
@@ -327,6 +386,22 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     const done = await app.inject({ method: 'POST',url: '/api/v1/google/complete',headers: { cookie: `${managerCookie}; ${cookie(start)}` },payload: { flowId: start.json().flowId } })
     expect(done.json().status).toBe('complete');expect(done.headers['set-cookie']).toBeUndefined()
     loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
+  })
+
+  it('refuses a mailbox callback when its initiating user lost permission during consent',async () => {
+    loginIdentity = { email: 'revoked-flow@baranekspertiz.com',sub: 'revoked-flow' }
+    const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',headers: { cookie: ownerCookie },payload: { purpose: 'mail' } })
+    expect(start.statusCode,start.payload).toBe(200)
+    const policy = defaultRolePolicy()
+    await pool.query('INSERT INTO organization_role_policies(organization_id,version,permissions) VALUES($1,1,$2)',[org,JSON.stringify({ ...policy.permissions,tracking_write: ['admin'] })])
+    try {
+      const callback = await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&code=fake` })
+      expect(callback.statusCode,callback.payload).toBe(400)
+      expect((await pool.query("SELECT count(*)::int AS n FROM mail_connections WHERE subject='revoked-flow'")).rows[0].n).toBe(0)
+    } finally {
+      await pool.query('DELETE FROM organization_role_policies WHERE organization_id=$1',[org])
+      loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
+    }
   })
 
   it('records permission loss; catches up after recovery; processes messages only once',async () => {

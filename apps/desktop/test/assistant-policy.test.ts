@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { ASSISTANT_SIZE, assistantGaze, clampAssistantPosition, isAssistantCommand, parseAssistantPosition } from '../src/main/assistant-policy.js'
+import { ASSISTANT_SIZE, assistantGaze, assistantMenuBounds, clampAssistantPosition, isAssistantCommand, isAssistantMenuAction, parseAssistantPosition } from '../src/main/assistant-policy.js'
 
 describe('desktop assistant geometry and commands', () => {
+  it.each([{ x: 0,y: 0,width: 1366,height: 728 },{ x: -1536,y: -864,width: 1536,height: 824 },{ x: 0,y: 0,width: 320,height: 240 }])('keeps the menu within every monitor work area %j',(area) => {
+    for (const position of [{ x: -9999,y: -9999 },{ x: 9999,y: 9999 }]) {
+      const bounds = assistantMenuBounds(position,area)
+      expect(bounds.x).toBeGreaterThanOrEqual(area.x);expect(bounds.y).toBeGreaterThanOrEqual(area.y)
+      expect(bounds.x+bounds.width).toBeLessThanOrEqual(area.x+area.width);expect(bounds.y+bounds.height).toBeLessThanOrEqual(area.y+area.height)
+    }
+  })
+  it('accepts fixed UI menu actions and rejects paths, commands and objects',() => {
+    expect(isAssistantMenuAction('note')).toBe(true)
+    for (const action of ['https://example.invalid','exec','C:\\Windows',{},null]) expect(isAssistantMenuAction(action)).toBe(false)
+  })
   it.each([
     { x: 0, y: 0, width: 1366, height: 728 },
     { x: 0, y: 0, width: 1920, height: 1040 },

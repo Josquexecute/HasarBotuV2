@@ -10,12 +10,12 @@ import {
   type CanonicalDocumentType,
   type CaseTaskPriority,
   type DocumentMetadataStatus,
-  type DocumentRequirementRuleSet,
   type MissingDocumentFact,
   type OverdueFollowUpFact,
   type OverdueTaskFact,
 } from '@hasarbotu/domain'
 import { toLocalDateString } from '../cases/store.js'
+import { loadDocumentRequirementRules } from '../document-requirements/rules.js'
 
 /**
  * Operasyonel uyarılar salt okunurdur: yeni tablo, kuyruk veya arka plan işçisi
@@ -50,32 +50,6 @@ interface DocumentRow {
   verified_at: Date | null
 }
 
-interface RuleRow {
-  rule_set_id: string
-  version: string
-  effective_from: Date | string
-  effective_to: Date | string | null
-  case_type: 'traffic' | 'casco'
-  status: 'active' | 'retired'
-  source_reference: string
-}
-
-function dateOnly(value: Date | string): string {
-  return typeof value === 'string' ? value.slice(0, 10) : toLocalDateString(value)
-}
-
-function ruleFromRow(row: RuleRow): DocumentRequirementRuleSet {
-  return {
-    ruleSetId: row.rule_set_id,
-    version: row.version,
-    effectiveFrom: dateOnly(row.effective_from),
-    effectiveTo: row.effective_to === null ? null : dateOnly(row.effective_to),
-    caseType: row.case_type,
-    status: row.status,
-    sourceReference: row.source_reference,
-  }
-}
-
 export function createOperationalAlertStore(pool: pg.Pool) {
   return {
     async list(
@@ -83,23 +57,19 @@ export function createOperationalAlertStore(pool: pg.Pool) {
       asOfDate: string,
       evaluatedAt: string,
       caseIdFilter?: readonly string[],
+      responsibleUserId?: string,
     ): Promise<OperationalAlertsResponse> {
       // Tenant sınırı: yalnız oturumun organization'ındaki açık dosyalar.
       // İstemciden gelen `caseIdFilter` kapsamı YALNIZ DARALTIR; erişim kararı
       // her zaman sunucudaki organization koşuluyla verilir.
-      const filtered = caseIdFilter !== undefined
+      const filtered = caseIdFilter !== undefined || responsibleUserId !== undefined
       const casesResult = await pool.query(
-        filtered
-          ? `SELECT c.id::text,c.case_type,c.office_number,c.plate,c.follow_up_date,c.recourse_status
-               FROM cases c
-              WHERE c.organization_id=$1 AND c.lifecycle_status='open'
-                AND c.id=ANY($2::uuid[])
-              ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`
-          : `SELECT c.id::text,c.case_type,c.office_number,c.plate,c.follow_up_date,c.recourse_status
-               FROM cases c
-              WHERE c.organization_id=$1 AND c.lifecycle_status='open'
-              ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`,
-        filtered ? [organizationId, [...(caseIdFilter as readonly string[])]] : [organizationId],
+        `SELECT c.id::text,c.case_type,c.office_number,c.plate,c.follow_up_date,c.recourse_status
+           FROM cases c WHERE c.organization_id=$1 AND c.lifecycle_status='open' AND NOT c.is_archived
+           AND ($2::uuid[] IS NULL OR c.id=ANY($2::uuid[]))
+           AND ($3::uuid IS NULL OR c.responsible_user_id=$3)
+           ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`,
+        [organizationId,caseIdFilter === undefined ? null : [...caseIdFilter],responsibleUserId ?? null],
       )
       const caseRows = casesResult.rows as AlertCaseRow[]
       const caseById = new Map(caseRows.map((row) => [row.id, row]))
@@ -172,27 +142,13 @@ export function createOperationalAlertStore(pool: pg.Pool) {
           else current.push(document)
         }
 
-        const rulesResult = await pool.query(
-          `SELECT DISTINCT ON (rs.case_type)
-                  rs.id AS rule_set_id,rv.version,rv.effective_from,rv.effective_to,
-                  rs.case_type,rv.status,rv.source_reference
-             FROM document_rule_sets rs
-             JOIN document_rule_versions rv ON rv.rule_set_id=rs.id
-            WHERE rs.status='active' AND rv.status='active'
-              AND rv.effective_from <= $1::date
-              AND (rv.effective_to IS NULL OR rv.effective_to >= $1::date)
-            ORDER BY rs.case_type,rv.effective_from DESC,rv.version DESC`,
-          [asOfDate],
-        )
-        const rules = new Map(
-          (rulesResult.rows as RuleRow[]).map((row) => [row.case_type, ruleFromRow(row)]),
-        )
+        const rules = await loadDocumentRequirementRules(pool,organizationId,asOfDate)
         if (!rules.has('traffic') || !rules.has('casco')) {
           throw new Error('active_document_rule_version_not_found')
         }
 
         for (const caseRow of caseRows) {
-          const rule = rules.get(caseRow.case_type)
+          const rule = rules.get(caseRow.case_type)?.rule
           if (rule === undefined) throw new Error('active_document_rule_version_not_found')
           const evaluation = evaluateDocumentRequirements({
             caseType: caseRow.case_type,
@@ -226,7 +182,7 @@ export function createOperationalAlertStore(pool: pg.Pool) {
       const { alerts, caseSummaries } = deriveOperationalAlerts(
         { overdueTasks, overdueFollowUps, missingDocuments },
         asOfDate,
-        filtered ? caseRows.map((row) => row.id) : undefined,
+        caseIdFilter !== undefined ? caseRows.map((row) => row.id) : undefined,
       )
       return operationalAlertsResponseSchema.parse({
         schemaVersion: OPERATIONAL_ALERT_SCHEMA_VERSION,

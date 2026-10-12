@@ -16,6 +16,7 @@ export interface SessionUser {
   readonly email: string
   readonly displayName: string
   readonly roles: readonly string[]
+  readonly permissions?: readonly string[]
 }
 
 interface SessionResponseDto {
@@ -25,6 +26,7 @@ interface SessionResponseDto {
     email: string
     displayName: string
     roles: string[]
+    permissions?: string[]
   }
   expiresAt: string
 }
@@ -36,6 +38,7 @@ function toSessionUser(dto: SessionResponseDto): SessionUser {
     email: dto.user.email,
     displayName: dto.user.displayName,
     roles: dto.user.roles,
+    ...(dto.user.permissions ? { permissions: dto.user.permissions } : {}),
   }
 }
 

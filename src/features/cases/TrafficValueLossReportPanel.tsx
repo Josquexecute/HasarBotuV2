@@ -1,3 +1,4 @@
+import { canUsePermission } from '../../app/permissions'
 import { AlertTriangle, CheckCircle2, Download, Eye, FileText, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DataSourceKind } from '../../data/ports'
@@ -56,7 +57,7 @@ export function TrafficValueLossReportPanel({
   const setConfirmed = useCallback((value: boolean) => patchForm({ confirmed: value }), [patchForm])
   const setMessage = useCallback((value: string | null) => patchForm({ message: value }), [patchForm])
   const generateKey = useRef<string | null>(null)
-  const canGenerate = session.user?.roles.some((role) => ['admin', 'expert', 'case_manager'].includes(role)) === true
+  const canGenerate = canUsePermission(session.user,'analysis_write',['admin','expert','case_manager'])
   const existing = version === null ? undefined : state.reports.find((report) => report.assessmentVersionId === version.id)
 
   useEffect(() => {

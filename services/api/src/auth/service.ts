@@ -1,5 +1,6 @@
 import type pg from 'pg'
 import type { SessionUser } from '@hasarbotu/contracts'
+import { allowedPermissions,loadRolePolicy } from './permissions.js'
 import { equalizeVerifyTiming, verifyPassword } from './password.js'
 import { generateSessionToken, hashSessionToken } from './token.js'
 import type { AuthStore, AuthUserRow } from './store.js'
@@ -29,6 +30,7 @@ export function toSessionUser(user: AuthUserRow): SessionUser {
     email: user.email,
     displayName: user.displayName,
     roles: [...user.roles],
+    ...(user.permissions ? { permissions: [...user.permissions] } : {}),
   }
 }
 
@@ -92,6 +94,11 @@ export async function login(deps: AuthServiceDeps, input: LoginInput): Promise<L
     return { kind: 'invalid' }
   }
 
+  if (user.passwordHash === null) {
+    await equalizeVerifyTiming()
+    await deps.audit.record(deps.pool,{ ...base,action: 'auth.login_failed',details: { reason: 'google_only' } })
+    return { kind: 'invalid' }
+  }
   const passwordOk = await verifyPassword(user.passwordHash, input.password)
   if (!passwordOk) {
     // Sayac artisi + basarisiz-giris audit'i (ve gerekiyorsa kilit audit'i) atomik.
@@ -127,5 +134,5 @@ export async function login(deps: AuthServiceDeps, input: LoginInput): Promise<L
     await deps.audit.record(client, { ...base, action: 'auth.login_succeeded' })
   })
 
-  return { kind: 'ok', token, expiresAt, user: toSessionUser(user) }
+  return { kind: 'ok', token, expiresAt, user: toSessionUser({ ...user,permissions: allowedPermissions(await loadRolePolicy(deps.pool,user.organizationId),user.roles) }) }
 }

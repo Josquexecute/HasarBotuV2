@@ -4,7 +4,7 @@ export interface UserSummaryRecord {
   readonly id: string
   readonly email: string
   readonly displayName: string
-  readonly status: 'active' | 'disabled'
+  readonly status: 'active' | 'disabled' | 'pending'
   readonly roles: readonly RoleCodeRecord[]
   readonly version: number
 }
@@ -108,7 +108,7 @@ export function createHttpUsersAdapter(options: UsersAdapterOptions = {}): Users
     async list() {
       try {
         const { usersResponseSchema } = await import('@hasarbotu/contracts')
-        return usersResponseSchema.parse(await request('/api/v1/users')).items as UserSummaryRecord[]
+        return usersResponseSchema.parse(await request('/api/v1/users?includePending=true')).items as UserSummaryRecord[]
       } catch (error) {
         if (error instanceof UsersError) throw error
         throw new UsersError('unavailable', 'user list response invalid')

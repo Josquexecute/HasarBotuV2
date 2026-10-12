@@ -2,7 +2,7 @@ import { BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, type IpcMainEv
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ASSISTANT_SIZE, assistantGaze, clampAssistantPosition, isAssistantCommand, parseAssistantPosition, type Point } from './assistant-policy.js'
+import { ASSISTANT_SIZE, assistantGaze, assistantMenuBounds, clampAssistantPosition, isAssistantCommand, isAssistantMenuAction, parseAssistantPosition, type Point } from './assistant-policy.js'
 import { SECURE_WEB_PREFERENCES } from './security.js'
 import { hardenSession, type DesktopShell } from './shell.js'
 
@@ -17,6 +17,7 @@ interface AssistantOptions {
 export async function startDesktopAssistant(options: AssistantOptions) {
   const statePath = join(options.userDataPath, 'assistant-position.json')
   const url = `${options.shell.origin}/desktop-assistant.html`
+  const menuUrl = `${options.shell.origin}/desktop-assistant-menu.html`
   const primary = screen.getPrimaryDisplay().workArea
   let position: Point = { x: primary.x + primary.width - ASSISTANT_SIZE - 16, y: primary.y + Math.round(primary.height / 2) }
   try {
@@ -55,6 +56,18 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   window.webContents.on('will-attach-webview', (event) => event.preventDefault())
   window.webContents.setZoomFactor(1)
   void window.webContents.setVisualZoomLevelLimits(1, 1)
+
+  const menuWindow = new BrowserWindow({ width: 360,height: 366,title: 'HasarBotu Hızlı İşlemler',show: false,frame: false,
+    alwaysOnTop: true,skipTaskbar: true,resizable: false,minimizable: false,maximizable: false,fullscreenable: false,backgroundColor: '#121923',
+    webPreferences: { ...SECURE_WEB_PREFERENCES,partition: 'hasarbotu-assistant',preload: fileURLToPath(new URL('../preload/assistant-menu-preload.cjs',import.meta.url)) },
+  })
+  menuWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  menuWindow.webContents.on('will-navigate',(event) => event.preventDefault())
+  menuWindow.webContents.on('will-frame-navigate',(event) => event.preventDefault())
+  menuWindow.webContents.on('will-redirect',(event) => event.preventDefault())
+  menuWindow.webContents.on('will-attach-webview',(event) => event.preventDefault())
+  menuWindow.webContents.setZoomFactor(1)
+  void menuWindow.webContents.setVisualZoomLevelLimits(1,1)
 
   let tray: Tray | undefined
   let disposed = false
@@ -106,10 +119,9 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     // can drop WS_EX_TOPMOST. Keep this small work-area-clamped control above it.
     window.setAlwaysOnTop(true, 'pop-up-menu')
   }
-  const menu = Menu.buildFromTemplate([
-    { label: 'HasarBotu’yu aç', click: () => showMain() },
-    { type: 'separator' },
-    { label: 'Hızlı not', click: () => {
+  const actions = {
+    open: () => showMain(),
+    note: () => {
       showMain()
       const main = options.shell.window
       if (main.isDestroyed() || !main.webContents.getURL().startsWith(`${options.shell.origin}/`)) return
@@ -117,28 +129,45 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       void main.webContents.executeJavaScript("window.dispatchEvent(new Event('hasarbotu:quick-note'))").catch(() => {
         console.error('desktop assistant could not open quick note')
       })
-    } },
-    { label: 'Dosyalar', click: () => showMain('/dosyalar') },
-    { label: 'Bildirimler', click: () => showMain('/bildirimler') },
-    { label: 'Ayarlar', click: () => showMain('/ayarlar') },
-    { type: 'separator' },
-    { label: 'Yardımcıyı göster', click: show },
-    { label: 'Yardımcıyı gizle', click: () => { drag = undefined; window.hide() } },
-    { label: 'Konumu sıfırla', click: () => {
+    },
+    cases: () => showMain('/dosyalar'),notifications: () => showMain('/bildirimler'),settings: () => showMain('/ayarlar'),
+    hide: () => { drag = undefined;window.hide() },
+    reset: () => {
       const area = screen.getPrimaryDisplay().workArea
       move({ x: area.x + area.width - ASSISTANT_SIZE - 16, y: area.y + Math.round(area.height / 2) })
       persist()
       show()
-    } },
+    },
+    quit: options.quit,
+  }
+  const menu = Menu.buildFromTemplate([
+    { label: 'HasarBotu’yu aç',click: actions.open },{ type: 'separator' },
+    { label: 'Hızlı not',click: actions.note },{ label: 'Dosyalar',click: actions.cases },
+    { label: 'Bildirimler',click: actions.notifications },{ label: 'Ayarlar',click: actions.settings },
+    { type: 'separator' },{ label: 'Yardımcıyı göster',click: show },
+    { label: 'Yardımcıyı gizle',click: actions.hide },{ label: 'Konumu sıfırla',click: actions.reset },
     { type: 'separator' },
-    { label: 'HasarBotu’dan çık', click: options.quit },
+    { label: 'HasarBotu’dan çık', click: actions.quit },
   ])
   const openMenu = () => {
     drag = undefined
     if (menuOpen) return
     menuOpen = true
-    menu.popup({ window, callback: () => { menuOpen = false } })
+    menuWindow.setBounds(assistantMenuBounds(position,screen.getDisplayNearestPoint(position).workArea))
+    menuWindow.show()
+    menuWindow.setAlwaysOnTop(true,'pop-up-menu')
+    menuWindow.focus()
   }
+  const hideMenu = () => { menuOpen = false;if (!menuWindow.isDestroyed()) menuWindow.hide() }
+  const handleMenuAction = (event: IpcMainEvent,action: unknown) => {
+    if (disposed || event.sender !== menuWindow.webContents || event.senderFrame !== menuWindow.webContents.mainFrame
+      || event.senderFrame?.url !== menuUrl || !isAssistantMenuAction(action)) return
+    hideMenu()
+    if (action === 'close') return
+    actions[action]()
+  }
+  menuWindow.on('blur',hideMenu)
+  menuWindow.on('close',(event) => { event.preventDefault();hideMenu() })
   const updateDrag = () => {
     if (!drag) return
     const cursor = screen.getCursorScreenPoint()
@@ -170,26 +199,30 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       persist()
     }
   }
-  const onDisplayChange = () => { drag = undefined; move(position); persist() }
+  const onDisplayChange = () => { drag = undefined;hideMenu();move(position);persist() }
   const dispose = () => {
     if (disposed) return
     disposed = true
     stopGaze()
     assistantSession.removeListener('will-download', denyDownload)
     ipcMain.removeListener('hasarbotu:assistant', handleCommand)
+    ipcMain.removeListener('hasarbotu:assistant-menu',handleMenuAction)
     screen.removeListener('display-added', onDisplayChange)
     screen.removeListener('display-removed', onDisplayChange)
     screen.removeListener('display-metrics-changed', onDisplayChange)
     menu.closePopup()
     options.shell.window.removeListener('closed', dispose)
     tray?.destroy()
+    if (!menuWindow.isDestroyed()) menuWindow.destroy()
     if (!window.isDestroyed()) window.destroy()
   }
   window.on('closed', dispose)
+  menuWindow.on('closed',dispose)
   // Alt+F4 hides only the helper; the tray remains available to recover it.
   window.on('close', (event) => { event.preventDefault(); drag = undefined; window.hide() })
   options.shell.window.once('closed', dispose)
   ipcMain.on('hasarbotu:assistant', handleCommand)
+  ipcMain.on('hasarbotu:assistant-menu',handleMenuAction)
   screen.on('display-added', onDisplayChange)
   screen.on('display-removed', onDisplayChange)
   screen.on('display-metrics-changed', onDisplayChange)
@@ -200,9 +233,9 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     tray.setToolTip('HasarBotu · Yardımcı')
     tray.setContextMenu(menu)
     tray.on('double-click', () => showMain())
-    await window.loadURL(url)
+    await Promise.all([window.loadURL(url),menuWindow.loadURL(menuUrl)])
     await readyToShow
     show()
   } catch (error) { dispose(); throw error }
-  return { window, menu, show, dispose }
+  return { window, menu, menuWindow, show, dispose }
 }

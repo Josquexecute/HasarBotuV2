@@ -321,6 +321,15 @@ describeDb('Paket 52 operasyonel uyarı dosya filtresi', () => {
     expect(after.rows).toEqual(before.rows)
   })
 
+  it('does not return alerts from unassigned cases even when IDs are requested',async () => {
+    const caseId = noisyCaseIds[0]!
+    await pool.query('UPDATE cases SET responsible_user_id=NULL WHERE id=$1',[caseId])
+    try {
+      expect((await read(cookie,[caseId])).alerts).toHaveLength(0)
+      expect((await read(cookie,[caseId])).caseSummaries).toHaveLength(0)
+    } finally { await pool.query('UPDATE cases SET responsible_user_id=$2 WHERE id=$1',[caseId,userId]) }
+  })
+
   it('filtreli sonuç tekrarlı çağrılarda birebir aynıdır', async () => {
     const requested = noisyCaseIds.slice(0, 8)
     const first = await read(cookie, requested)

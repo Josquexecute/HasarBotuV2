@@ -152,6 +152,8 @@ export function registerFileOperationRoutes(app: FastifyInstance, options: FileO
       const outcome = kind === 'approve'
         ? await store.approve({ organizationId: session.user.organizationId, actorUserId: session.user.id, requestId }, params.data.caseId, params.data.operationId, { key, requestHash })
         : await store.cancel({ organizationId: session.user.organizationId, actorUserId: session.user.id, requestId }, params.data.caseId, params.data.operationId, { key, requestHash })
+      if (outcome.kind === 'replay') return reply.code(outcome.record.responseStatus).send(outcome.record.responseBody)
+      if (outcome.kind === 'idempotency_conflict') return reply.code(409).send(failureBody('idempotency_conflict','Idempotency key was used with a different request.',requestId))
       if (outcome.kind === 'not_found') return reply.code(404).send(failureBody('not_found', 'File operation not found.', requestId))
       if (outcome.kind === 'stale') return reply.code(409).send(failureBody('file_operation_stale', 'File operation is stale or terminal.', requestId))
       if (outcome.kind === 'conflict') return reply.code(409).send(failureBody('file_operation_conflict', 'File operation cannot be changed in its current state.', requestId))

@@ -142,8 +142,8 @@ export {
   type CaseWorkspaceSubdirectory,
 } from './case-workspace.js'
 export {
-  CANONICAL_DOCUMENT_TYPES, DOCUMENT_REQUIREMENT_LABELS, DOCUMENT_REQUIREMENT_RULE_SET_ID, DOCUMENT_REQUIREMENT_RULE_VERSION, DOCUMENT_REQUIREMENT_STATUSES,
-  defaultDocumentRequirementRuleSet, evaluateDocumentRequirements,
+  CANONICAL_DOCUMENT_TYPES, CANONICAL_DOCUMENT_LABELS, DOCUMENT_REQUIREMENT_LABELS, DOCUMENT_REQUIREMENT_RULE_SET_ID, DOCUMENT_REQUIREMENT_RULE_VERSION, DOCUMENT_REQUIREMENT_STATUSES,
+  defaultDocumentRequirementRuleSet, defaultDocumentRequirementConfiguration, evaluateDocumentRequirements,
   type AlternativeDocumentGroupResult, type CanonicalDocumentType, type DocumentMetadataStatus, type DocumentRequirementFact,
   type DocumentRequirementInputDocument, type DocumentRequirementResult, type DocumentRequirementRuleSet, type DocumentRequirementStatus,
   type DocumentRequirementsEvaluation, type RecourseStatus,
@@ -699,3 +699,5 @@ export {
 } from './v1-import.js'
 export * from './eksist.js'
 export { isTemporaryTrackedFile } from './tracked-file.js'
+export { normalizeSearchText, getSearchTokens, matchesSearchQuery } from './search.js'
+export { toOfficeDate } from './office-date.js'

@@ -1,0 +1,1 @@
+export const PERMISSION_CODES = ['case_read','case_write','operations_write','documents_write','lifecycle_write','folders_write','analysis_write','analysis_approve','fees_write','fees_approve','financial_read','inventory_export','tracking_write','audit_read','users_admin','agents_admin','office_admin'] as const

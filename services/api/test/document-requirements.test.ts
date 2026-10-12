@@ -140,7 +140,7 @@ describeDb('Paket 15 belge gereksinimleri (gerçek PostgreSQL)', () => {
   it('login, Trafik ready/KTT/Tramer ve salt-okunur snapshot-audit davranışı', async () => {
     const caseId = await seedCase(orgA, 'traffic', 'not_confirmed')
     await seedReadySet(orgA, caseId, [...TRAFFIC_BASE, 'ktt', 'tramer_result'])
-    const beforeAudit = await pool.query('SELECT count(*)::int AS n FROM audit_events')
+    const beforeAudit = await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action<>'request.rejected'")
     const beforeSnapshots = await pool.query('SELECT count(*)::int AS n FROM document_rule_evaluations')
     const response = await evaluate(cookieA, caseId)
     expect(response.statusCode).toBe(200)
@@ -151,7 +151,7 @@ describeDb('Paket 15 belge gereksinimleri (gerçek PostgreSQL)', () => {
     expect(requirement(response.body, 'statement').status).toBe('not_applicable')
     expect(response.body.alternativeGroups.find((group) => group.groupCode === 'incident_document')?.status).toBe('present')
     expect(response.body.ruleSetVersion).toBe('2026.07.14.1')
-    const afterAudit = await pool.query('SELECT count(*)::int AS n FROM audit_events')
+    const afterAudit = await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action<>'request.rejected'")
     const afterSnapshots = await pool.query('SELECT count(*)::int AS n FROM document_rule_evaluations')
     expect(afterAudit.rows[0]).toEqual(beforeAudit.rows[0])
     expect(afterSnapshots.rows[0]).toEqual(beforeSnapshots.rows[0])
@@ -274,7 +274,7 @@ describeDb('Paket 15 belge gereksinimleri (gerçek PostgreSQL)', () => {
     expect(loginResponse.status).toBe(200)
     const cookie = (loginResponse.headers.get('set-cookie') ?? '').split(';')[0]
     expect(cookie.length).toBeGreaterThan(0)
-    const beforeAudit = await pool.query('SELECT count(*)::int AS n FROM audit_events')
+    const beforeAudit = await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action<>'request.rejected'")
     const beforeSnapshots = await pool.query('SELECT count(*)::int AS n FROM document_rule_evaluations')
     const get = (caseId: string, authenticated = true) => fetch(
       `${address}/api/v1/cases/${caseId}/document-requirements`,
@@ -308,7 +308,7 @@ describeDb('Paket 15 belge gereksinimleri (gerçek PostgreSQL)', () => {
     expect(serialized).not.toContain('relativePath')
     expect(serialized).not.toContain('contentHash')
     expect(serialized).not.toContain(PASSWORD)
-    const afterAudit = await pool.query('SELECT count(*)::int AS n FROM audit_events')
+    const afterAudit = await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action<>'request.rejected'")
     const afterSnapshots = await pool.query('SELECT count(*)::int AS n FROM document_rule_evaluations')
     expect(afterAudit.rows[0]).toEqual(beforeAudit.rows[0])
     expect(afterSnapshots.rows[0]).toEqual(beforeSnapshots.rows[0])

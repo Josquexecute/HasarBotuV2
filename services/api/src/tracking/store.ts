@@ -1,3 +1,4 @@
+import { hasPermission } from '../auth/permissions.js'
 import type pg from 'pg'
 import { uuidv7 } from '@hasarbotu/database'
 import { isTemporaryTrackedFile } from '@hasarbotu/domain'
@@ -10,8 +11,8 @@ const audit = createAuditService()
 export class TrackingError extends Error {
   constructor(readonly status: 400 | 403 | 404 | 409, message: string) { super(message) }
 }
-export const canManageTracking = (session: SessionRow): boolean => session.user.roles.some((r) => ['admin','expert','case_manager'].includes(r))
-export const canWriteTracking = (session: SessionRow): boolean => session.user.roles.some((r) => ['admin','expert','case_manager','secretary'].includes(r))
+export const canManageTracking = (session: SessionRow): boolean => session.user.roles.some((r) => ['admin','expert','case_manager'].includes(r)) && hasPermission(session.user,'tracking_write')
+export const canWriteTracking = (session: SessionRow): boolean => session.user.roles.some((r) => ['admin','expert','case_manager','secretary'].includes(r)) && hasPermission(session.user,'tracking_write')
 
 async function record(exec: Queryable, organizationId: string, caseId: string, action: string, actorUserId: string | undefined, details: unknown) {
   await audit.record(exec, { organizationId, entityType: 'case', entityId: caseId, action: `tracking.${action}`, actorUserId, details })

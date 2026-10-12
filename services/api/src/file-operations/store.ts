@@ -8,7 +8,7 @@ import {
 } from '@hasarbotu/contracts'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
-import { withTransaction } from '../db/executor.js'
+import { withTransaction, type Queryable } from '../db/executor.js'
 import { insertIdempotent, type IdempotentRecord } from '../db/idempotency.js'
 
 export const FILE_OPERATION_PLAN_SCOPE = 'case.file_operation.plan'
@@ -100,6 +100,8 @@ export type FileOperationPlanOutcome =
 
 export type FileOperationCommandOutcome =
   | { readonly kind: 'ok'; readonly operation: FileOperation }
+  | { readonly kind: 'replay'; readonly record: IdempotentRecord }
+  | { readonly kind: 'idempotency_conflict' }
   | { readonly kind: 'not_found' }
   | { readonly kind: 'stale' }
   | { readonly kind: 'conflict' }
@@ -230,8 +232,8 @@ export async function enqueueLifecycleFileOperation(
 export function createFileOperationStore(pool: pg.Pool) {
   const audit = createAuditService()
 
-  async function findIdempotent(organizationId: string, scope: string, key: string): Promise<IdempotentRecord | undefined> {
-    const result = await pool.query(
+  async function findIdempotent(organizationId: string, scope: string, key: string,exec: Queryable = pool): Promise<IdempotentRecord | undefined> {
+    const result = await exec.query(
       'SELECT request_hash,response_status,response_body FROM idempotency_keys WHERE organization_id=$1 AND scope=$2 AND idem_key=$3',
       [organizationId, scope, key],
     )
@@ -399,6 +401,10 @@ export function createFileOperationStore(pool: pg.Pool) {
         )
         const row = selected.rows[0] as FileOperationRow | undefined
         if (row === undefined) return { kind: 'not_found' }
+        // The route's fast replay lookup can miss an in-flight command. Recheck
+        // after acquiring its row lock, before interpreting the advanced state.
+        const replay = await findIdempotent(actor.organizationId,FILE_OPERATION_APPROVE_SCOPE,idempotency.key,client)
+        if (replay) return replay.requestHash === idempotency.requestHash ? { kind: 'replay',record: replay } : { kind: 'idempotency_conflict' }
         if (TERMINAL_STATUSES.has(row.status)) return { kind: 'stale' }
         if (row.status !== 'planned') return { kind: 'conflict' }
 
@@ -545,6 +551,8 @@ export function createFileOperationStore(pool: pg.Pool) {
         )
         const row = selected.rows[0] as FileOperationRow | undefined
         if (row === undefined) return { kind: 'not_found' }
+        const replay = await findIdempotent(actor.organizationId,FILE_OPERATION_CANCEL_SCOPE,idempotency.key,client)
+        if (replay) return replay.requestHash === idempotency.requestHash ? { kind: 'replay',record: replay } : { kind: 'idempotency_conflict' }
         if (row.status === 'cancelled') return { kind: 'stale' }
         if (row.status !== 'planned' && row.status !== 'queued') return { kind: 'conflict' }
         if (row.status === 'queued') {

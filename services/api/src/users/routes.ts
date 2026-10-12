@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
+import { z } from 'zod'
 import {
   USERS_ROUTE,
   USER_ROLES_ROUTE,
@@ -37,7 +38,9 @@ export function registerUserRoutes(app: FastifyInstance, options: UserRoutesOpti
   app.get(USERS_ROUTE, async (request, reply) => {
     const session = await requireAnyRole(auth, request, reply, ADMIN_ROLES)
     if (session === undefined) return
-    const items = await store.list(session.user.organizationId)
+    const query = z.object({ includePending: z.enum(['true','false']).default('false') }).strict().safeParse(request.query)
+    if (!query.success) return reply.code(400).send(failureBody('validation_error','Geçersiz kullanıcı sorgusu.',String(request.id)))
+    const items = await store.list(session.user.organizationId,query.data.includePending === 'true')
     return usersResponseSchema.parse({ items })
   })
 

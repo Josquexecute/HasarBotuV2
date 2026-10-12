@@ -43,6 +43,7 @@ export type ServiceReference = z.infer<typeof serviceReferenceSchema>
 export const userReferenceSchema = z.strictObject({
   id: userIdSchema,
   displayName: referenceNameSchema,
+  roles: z.array(z.enum(['admin','expert','case_manager','secretary','accounting','read_only'])).optional(),
 })
 export type UserReference = z.infer<typeof userReferenceSchema>
 

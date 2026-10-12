@@ -1,3 +1,4 @@
+import { hasPermission } from '../auth/permissions.js'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
@@ -53,7 +54,7 @@ export function registerCaseInventoryRoutes(
       totalCount,
       maxRows: CASE_INVENTORY_MAX_ROWS,
       truncated: totalCount > CASE_INVENTORY_MAX_ROWS,
-      includesPhones: includesPhonesFor(session.user.roles),
+      includesPhones: includesPhonesFor(session.user.roles) && hasPermission(session.user,'inventory_export'),
     })
   })
 
@@ -67,7 +68,7 @@ export function registerCaseInventoryRoutes(
         ok: false, error: zodErrorToApiError(query.error, requestId),
       }))
     }
-    const includePhones = includesPhonesFor(session.user.roles)
+    const includePhones = includesPhonesFor(session.user.roles) && hasPermission(session.user,'inventory_export')
     const cellRows = await store.rows(session.user.organizationId, query.data, includePhones)
     const rows = cellRows.map((cells) => {
       const record: Record<string, string> = {}

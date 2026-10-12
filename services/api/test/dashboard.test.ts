@@ -141,6 +141,7 @@ describeDb('Durum Panosu gerçek API verileri', () => {
        VALUES ($1,$2,$3,$4,$5)`,
       [userId, organizationId, EMAIL, 'Pano Sorumlusu', await hashPassword(PASSWORD)],
     )
+    await pool.query("INSERT INTO user_roles(user_id,role_id) SELECT $1,id FROM roles WHERE code='case_manager'",[userId])
 
     caseIds.overdue = await seedCase(11, 'inspection_pending', '34 PNO 011', '2026-07-15')
     caseIds.control = await seedCase(12, 'damage_assessment', '34 PNO 012', '2026-07-16')

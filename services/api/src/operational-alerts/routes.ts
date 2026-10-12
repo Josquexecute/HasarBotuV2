@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
+import { toOfficeDate } from '@hasarbotu/domain'
 import {
   OPERATIONAL_ALERTS_ROUTE,
   failureEnvelopeSchema,
@@ -47,9 +48,10 @@ export function registerOperationalAlertRoutes(
     const evaluatedAt = options.clock.nowUtcIso()
     return store.list(
       session.user.organizationId,
-      evaluatedAt.slice(0, 10),
+      toOfficeDate(evaluatedAt),
       evaluatedAt,
       parsedQuery.data.caseIds,
+      session.user.id,
     )
   })
 }

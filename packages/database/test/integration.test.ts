@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -9,7 +9,8 @@ import {
   checkDatabaseHealth,
   closeDatabasePool,
   createDatabasePool,
-  runMigrations as runMigrationsRaw,
+  MIGRATIONS_DIR,
+  runMigrations as runMigrationsPackage,
   uuidv7,
   type DatabaseConfig,
 } from '../src/index.js'
@@ -31,6 +32,14 @@ const HIDDEN_MIGRATION_NAMES = [
   '0050_tracking',
   '0051_case_archive',
 ]
+
+// These tests exercise historical schema downgrades. Google-only pending accounts
+// introduced in 0052 deliberately cannot be converted back to password accounts.
+// Test the original reversible baseline here and the new transition separately.
+let legacyMigrationDirectory: string
+function runMigrationsRaw(options: Parameters<typeof runMigrationsPackage>[0]): ReturnType<typeof runMigrationsPackage> {
+  return runMigrationsPackage({ ...options, dir: options.dir ?? legacyMigrationDirectory })
+}
 
 async function runMigrations(
   options: Parameters<typeof runMigrationsRaw>[0],
@@ -61,6 +70,10 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
   }
 
   beforeAll(async () => {
+    legacyMigrationDirectory = mkdtempSync(join(tmpdir(), 'hb-legacy-migrations-'))
+    for (const file of readdirSync(MIGRATIONS_DIR).filter(name => /^\d{4}_.*\.js$/.test(name) && name.slice(0, 4) <= '0051')) {
+      copyFileSync(join(MIGRATIONS_DIR, file), join(legacyMigrationDirectory, file))
+    }
     config = assertTestDatabaseUrl(TEST_URL as string)
     pool = createDatabasePool({ config })
     await resetDatabase()
@@ -68,6 +81,7 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
 
   afterAll(async () => {
     if (pool !== undefined) await closeDatabasePool(pool)
+    if (legacyMigrationDirectory) rmSync(legacyMigrationDirectory, { recursive: true, force: true })
   })
 
   it('bos veritabanina ileri migration deterministik uygulanir', async () => {

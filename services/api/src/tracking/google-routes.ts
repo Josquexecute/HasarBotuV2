@@ -4,12 +4,14 @@ import { z } from 'zod'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuthStore } from '../auth/store.js'
 import { requireSession } from '../auth/guard.js'
+import { allowedPermissions,loadRolePolicy } from '../auth/permissions.js'
 import { buildSessionCookie, parseCookies } from '../auth/cookies.js'
 import { generateSessionToken, hashSessionToken } from '../auth/token.js'
 import { SESSION_TTL_SECONDS } from '../auth/service.js'
 import { createFixedWindowLimiter } from '../auth/rate-limit.js'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
+import { rememberAuthenticatedRequest } from '../audit/request-events.js'
 import { canManageTracking } from './store.js'
 import { createGoogleProvider, digest, encryptToken, GMAIL_SCOPE, randomToken, type GoogleConfig, type GoogleProvider } from './google.js'
 
@@ -59,15 +61,25 @@ export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.P
       const identity = await provider.identity(tokens.id_token,row.nonce,row.purpose === 'login')
       await withTransaction(pool,async (db) => {
         if (row.purpose === 'login') {
-          const user = (await db.query("SELECT * FROM users WHERE lower(email)=lower($1) AND status='active' FOR UPDATE", [identity.email])).rows[0]
-          if (!user) throw new Error('Employee not registered')
+          let user = (await db.query('SELECT * FROM users WHERE lower(email)=lower($1) FOR UPDATE', [identity.email])).rows[0]
+          if (!user && config.signupOrganizationId) {
+            const inserted = await db.query(`INSERT INTO users(id,organization_id,email,display_name,status)
+              VALUES($1,$2,lower($3),$4,'pending') ON CONFLICT(lower(email)) DO NOTHING RETURNING *`,
+            [uuidv7(),config.signupOrganizationId,identity.email,identity.email.split('@')[0]])
+            user = inserted.rows[0] ?? (await db.query('SELECT * FROM users WHERE lower(email)=lower($1) FOR UPDATE',[identity.email])).rows[0]
+            if (inserted.rowCount) await audit.record(db,{ organizationId: user.organization_id,actorUserId: user.id,
+              action: 'user.registration_requested',entityType: 'user',entityId: user.id,details: { provider: 'google' } })
+          }
+          if (!user || user.status === 'disabled') throw new Error('Employee not authorized')
           await db.query('INSERT INTO google_identities(subject,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [identity.sub,user.id])
           const linked = (await db.query('SELECT user_id FROM google_identities WHERE subject=$1', [identity.sub])).rows[0]
           if (linked?.user_id !== user.id) throw new Error('Identity conflict')
           await db.query('UPDATE google_oauth_states SET completed_user_id=$2,completed_at=now(),verifier=\'\' WHERE state_hash=$1', [row.state_hash,user.id])
         } else {
           const operator = await auth.findUserByEmail((await db.query('SELECT email FROM users WHERE id=$1', [row.user_id])).rows[0]?.email ?? '')
+          if (operator) rememberAuthenticatedRequest(request,operator)
           if (!operator || operator.status !== 'active' || !operator.roles.some((r) => ['admin','expert','case_manager'].includes(r))) throw new Error('Operator no longer authorized')
+          if (!allowedPermissions(await loadRolePolicy(db,operator.organizationId),operator.roles).includes('tracking_write')) throw new Error('Mailbox permission revoked')
           if (!tokens.scope?.split(' ').includes(GMAIL_SCOPE) || !tokens.refresh_token) throw new Error('Offline mail permission required')
           const profile = z.object({ emailAddress: z.string() }).parse(await provider.gmail(tokens.access_token,'profile'))
           if (profile.emailAddress.toLowerCase() !== identity.email.toLowerCase()) throw new Error('Mailbox identity mismatch')
@@ -98,8 +110,12 @@ export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.P
       if (row.error_code) return reply.code(400).send({ status: 'failed' })
       if (!row.completed_at) return { status: 'pending' }
       if (row.purpose === 'login') {
-        const user = (await db.query("SELECT * FROM users WHERE id=$1 AND status='active' FOR UPDATE", [row.completed_user_id])).rows[0]
-        if (!user) return reply.code(403).send({ status: 'failed' })
+        const user = (await db.query('SELECT * FROM users WHERE id=$1 FOR UPDATE', [row.completed_user_id])).rows[0]
+        if (user?.status === 'pending') {
+          await db.query('DELETE FROM google_oauth_states WHERE state_hash=$1',[row.state_hash])
+          return { status: 'approval_required' }
+        }
+        if (!user || user.status !== 'active') return reply.code(403).send({ status: 'failed' })
         const token = generateSessionToken()
         await auth.createSession({ tokenHash: hashSessionToken(token),userId: user.id,organizationId: user.organization_id,expiresAt: new Date(Date.now()+SESSION_TTL_SECONDS*1000) },db)
         await audit.record(db,{ organizationId: user.organization_id,actorUserId: user.id,action: 'auth.google_login' })

@@ -25,10 +25,8 @@ const CaseDetailPage = lazy(async () => {
 
 interface AppRoutesProps {
   theme: 'light' | 'dark'
-  density: 'compact' | 'comfortable'
   collapsed: boolean
   onThemeChange: (theme: 'light' | 'dark') => void
-  onDensityChange: (density: 'compact' | 'comfortable') => void
   onSidebarChange: (collapsed: boolean) => void
 }
 
@@ -43,8 +41,8 @@ function AppRoutes(props: AppRoutesProps) {
       <Route path="/mevzuat-ve-ai" element={<LegislationPage />} />
       <Route path="/bildirimler" element={<NotificationsPage />} />
       <Route path="/yonetim" element={<ManagementPage />} />
-      <Route path="/ayarlar" element={<SettingsPage theme={props.theme} density={props.density} collapsed={props.collapsed} onThemeChange={props.onThemeChange} onDensityChange={props.onDensityChange} onSidebarChange={props.onSidebarChange} />} />
-      <Route path="*" element={<PlaceholderPage title="Sayfa Bulunamadı" description="İstenen görünüm bu prototipte bulunmuyor." bullets={['Ana navigasyonu kullanın', 'Dosyalar ekranına dönebilirsiniz']} />} />
+      <Route path="/ayarlar" element={<SettingsPage theme={props.theme} collapsed={props.collapsed} onThemeChange={props.onThemeChange} onSidebarChange={props.onSidebarChange} />} />
+      <Route path="*" element={<PlaceholderPage title="Sayfa Bulunamadı" description="İstenen sayfa bulunamadı." bullets={['Ana navigasyonu kullanın', 'Dosyalar ekranına dönebilirsiniz']} />} />
     </Routes>
   )
 }
@@ -53,7 +51,6 @@ interface AppGateProps extends AppRoutesProps {
   collapsed: boolean
   onMenuToggle: () => void
   onThemeToggle: () => void
-  onDensityToggle: () => void
 }
 
 /**
@@ -76,14 +73,12 @@ function AppGate(props: AppGateProps) {
     <AppShell
       collapsed={props.collapsed}
       theme={props.theme}
-      density={props.density}
       onMenuToggle={props.onMenuToggle}
       onThemeToggle={props.onThemeToggle}
-      onDensityToggle={props.onDensityToggle}
     >
       <Suspense fallback={<LoadingState label="Görünüm hazırlanıyor" />}>
         {session.mode === 'api' && <TrackingPopup />}
-        <AppRoutes theme={props.theme} density={props.density} collapsed={props.collapsed} onThemeChange={props.onThemeChange} onDensityChange={props.onDensityChange} onSidebarChange={props.onSidebarChange} />
+        <AppRoutes theme={props.theme} collapsed={props.collapsed} onThemeChange={props.onThemeChange} onSidebarChange={props.onSidebarChange} />
       </Suspense>
     </AppShell>
   )
@@ -97,25 +92,21 @@ export function App() {
     return () => window.removeEventListener(PERSISTENCE_ERROR_EVENT, notify)
   }, [])
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>('hasarbotu-theme', 'light')
-  const [density, setDensity] = usePersistentState<'compact' | 'comfortable'>('hasarbotu-density', 'compact')
   const [collapsed, setCollapsed] = usePersistentState('hasarbotu-sidebar-collapsed', false)
 
   return (
     <ErrorBoundary>
-      <div data-theme={theme} data-density={density} className="theme-root">
+      <div data-theme={theme} data-density="compact" className="theme-root">
         {persistenceFailed && <p role="alert">Ayarlar bu cihazda saklanamadı. Değişiklikler yalnız bu oturumda geçerli.</p>}
         <BrowserRouter>
           <SessionProvider>
             <AppGate
               theme={theme}
-              density={density}
               collapsed={collapsed}
               onThemeChange={setTheme}
-              onDensityChange={setDensity}
               onSidebarChange={setCollapsed}
               onMenuToggle={() => setCollapsed((value) => !value)}
               onThemeToggle={() => setTheme((value) => value === 'light' ? 'dark' : 'light')}
-              onDensityToggle={() => setDensity((value) => value === 'compact' ? 'comfortable' : 'compact')}
             />
           </SessionProvider>
         </BrowserRouter>

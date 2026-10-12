@@ -1,6 +1,7 @@
 import type pg from 'pg'
 import { uuidv7 } from '@hasarbotu/database'
-import type { RoleCode } from '@hasarbotu/contracts'
+import type { RoleCode, PermissionCode } from '@hasarbotu/contracts'
+import { allowedPermissions,loadRolePolicy } from './permissions.js'
 import type { Queryable } from '../db/executor.js'
 
 /**
@@ -13,11 +14,12 @@ export interface AuthUserRow {
   readonly organizationId: string
   readonly email: string
   readonly displayName: string
-  readonly passwordHash: string
-  readonly status: 'active' | 'disabled'
+  readonly passwordHash: string | null
+  readonly status: 'active' | 'disabled' | 'pending'
   readonly failedLoginCount: number
   readonly lockedUntil: Date | null
   readonly roles: readonly RoleCode[]
+  readonly permissions?: readonly PermissionCode[]
 }
 
 export interface SessionRow {
@@ -39,8 +41,8 @@ interface RawUserRow {
   organization_id: string
   email: string
   display_name: string
-  password_hash: string
-  status: 'active' | 'disabled'
+  password_hash: string | null
+  status: 'active' | 'disabled' | 'pending'
   failed_login_count: number
   locked_until: Date | null
   roles: RoleCode[]
@@ -132,7 +134,8 @@ export function createAuthStore(pool: pg.Pool) {
       )
       const row = result.rows[0] as (RawUserRow & { session_expires_at: Date }) | undefined
       if (row === undefined) return undefined
-      return { user: mapUser(row), expiresAt: row.session_expires_at }
+      const user = mapUser(row)
+      return { user: { ...user,permissions: allowedPermissions(await loadRolePolicy(exec,user.organizationId),user.roles) }, expiresAt: row.session_expires_at }
     },
 
     /** Arşivlenmiş kayıtlar günlük vaka uçlarından erişilemez; tarihçe korunur. */

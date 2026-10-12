@@ -9,10 +9,8 @@ interface AppShellProps {
   children: ReactNode
   collapsed: boolean
   theme: 'light' | 'dark'
-  density: 'compact' | 'comfortable'
   onMenuToggle: () => void
   onThemeToggle: () => void
-  onDensityToggle: () => void
 }
 
 export function AppShell(props: AppShellProps) {
@@ -34,10 +32,8 @@ export function AppShell(props: AppShellProps) {
       <div className="app-shell__main">
         <Topbar
           theme={props.theme}
-          density={props.density}
           onMenuToggle={toggleMenu}
           onThemeToggle={props.onThemeToggle}
-          onDensityToggle={props.onDensityToggle}
         />
         <div className="workspace">{props.children}</div>
       </div>

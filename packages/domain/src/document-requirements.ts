@@ -17,6 +17,13 @@ export type RecourseStatus = 'confirmed' | 'not_confirmed' | 'unknown'
 export interface DocumentRequirementRuleSet {
   readonly ruleSetId: string; readonly version: string; readonly effectiveFrom: string; readonly effectiveTo: string | null
   readonly caseType: CaseType; readonly status: 'active' | 'retired'; readonly sourceReference: string
+  readonly configuration?: DocumentRequirementConfiguration
+}
+export interface DocumentRequirementConfiguration {
+  readonly baseRequired: readonly CanonicalDocumentType[]
+  readonly incidentEvidenceRequired: boolean
+  readonly tramerWithoutReportRequired: boolean
+  readonly recourseDocumentsRequired: boolean
 }
 export const DOCUMENT_REQUIREMENT_RULE_VERSION = '2026.07.14.1' as const
 export const DOCUMENT_REQUIREMENT_RULE_SET_ID = 'document-requirements-tr-canonical' as const
@@ -45,6 +52,9 @@ const trafficBase: readonly [string, CanonicalDocumentType][] = [
 const cascoBase: readonly [string, CanonicalDocumentType][] = [
   ['casco_policy', 'casco_policy'], ['sbm_heavy_damage', 'sbm_heavy_damage_result'], ['casco_registration', 'casco_vehicle_registration'], ['casco_driver_license', 'casco_driver_license'],
 ]
+export function defaultDocumentRequirementConfiguration(caseType: CaseType): DocumentRequirementConfiguration {
+  return { baseRequired: (caseType === 'traffic' ? trafficBase : cascoBase).map(([,type]) => type),incidentEvidenceRequired: true,tramerWithoutReportRequired: true,recourseDocumentsRequired: true }
+}
 
 function isVerifiedReady(document: DocumentRequirementInputDocument): boolean { return document.status === 'ready' && document.hashVerified && document.sizeVerified && document.verifiedAt !== null }
 export function defaultDocumentRequirementRuleSet(caseType: CaseType): DocumentRequirementRuleSet {
@@ -70,7 +80,9 @@ function anyGroup(groupCode: string, members: readonly DocumentRequirementResult
 export function evaluateDocumentRequirements(facts: DocumentRequirementFact, evaluatedAt: string, ruleSet: DocumentRequirementRuleSet): DocumentRequirementsEvaluation {
   if (ruleSet.caseType !== facts.caseType) throw new Error('rule_set_case_type_mismatch')
   const version = ruleSet.version
-  const requirements = (facts.caseType === 'traffic' ? trafficBase : cascoBase).map(([code, type]) => result(code, type, facts, evaluatedAt, version, 'base_required'))
+  const config = ruleSet.configuration ?? defaultDocumentRequirementConfiguration(facts.caseType)
+  const base = facts.caseType === 'traffic' ? trafficBase : cascoBase
+  const requirements = config.baseRequired.map((type) => result(base.find(([,item]) => item === type)?.[0] ?? `office_${type}`,type,facts,evaluatedAt,version,'base_required'))
   const rawAccident = result('accident_report', 'accident_report', facts, evaluatedAt, version, 'incident_document')
   const rawKtt = result('ktt', 'ktt', facts, evaluatedAt, version, 'incident_alternative')
   const rawStatement = result('statement', 'statement', facts, evaluatedAt, version, 'incident_alternative')
@@ -99,12 +111,12 @@ export function evaluateDocumentRequirements(facts: DocumentRequirementFact, eva
   const statement = reportPresent || statementSatisfiedByAlternative
     ? result('statement', 'statement', facts, evaluatedAt, version, 'incident_alternative', 'not_applicable', reportPresent ? 'Zabıt doğrulanmış olduğundan Beyan zorunlu değildir.' : 'KTT doğrulanmış olduğundan Beyan ayrıca zorunlu değildir.')
     : rawStatement
-  requirements.push(accident, ktt, statement)
-  const alternatives = [anyGroup('incident_document', [accident, ktt, statement])]
-  if (facts.caseType === 'traffic') {
+  if (config.incidentEvidenceRequired) requirements.push(accident, ktt, statement)
+  const alternatives = config.incidentEvidenceRequired ? [anyGroup('incident_document', [accident, ktt, statement])] : []
+  if (facts.caseType === 'traffic' && config.tramerWithoutReportRequired) {
     requirements.push(result('tramer_result', 'tramer_result', facts, evaluatedAt, version, 'tramer_condition', reportPresent ? 'not_applicable' : undefined, reportPresent ? 'Zabıt doğrulanmış olduğundan Tramer zorunlu değildir.' : undefined))
   }
-  if (facts.caseType === 'casco') {
+  if (facts.caseType === 'casco' && config.recourseDocumentsRequired) {
     const recourse = facts.recourseStatus ?? 'unknown'
     const extra: readonly [string, CanonicalDocumentType][] = [['recourse_opposing_registration','opposing_vehicle_registration'], ['recourse_opposing_driver_license','opposing_driver_license'], ['recourse_opposing_traffic_policy','opposing_traffic_policy'], ['recourse_tramer_result','tramer_result'], ['recourse_fault_ratio','fault_ratio']]
     if (recourse === 'confirmed') {
@@ -152,4 +164,11 @@ export const DOCUMENT_REQUIREMENT_LABELS: Readonly<Record<string, string>> = {
   recourse_fault_ratio: 'Kusur oranı',
   recourse_ktt: 'Rücu KTT',
   recourse_accident_report: 'Rücu Zabıt',
+}
+export const CANONICAL_DOCUMENT_LABELS: Readonly<Record<CanonicalDocumentType,string>> = {
+  victim_traffic_policy: 'Mağdur trafik poliçesi',insured_traffic_policy: 'Sigortalı trafik poliçesi',sbm_heavy_damage_result: 'SBM Ağır Hasar sonucu',
+  victim_registration: 'Mağdur ruhsat',insured_registration: 'Sigortalı ruhsat',victim_driver_license: 'Mağdur ehliyet',insured_driver_license: 'Sigortalı ehliyet',
+  casco_policy: 'Kasko poliçesi',casco_vehicle_registration: 'Kasko aracı ruhsatı',casco_driver_license: 'Kasko aracı ehliyeti',
+  accident_report: 'Zabıt',ktt: 'Kaza Tespit Tutanağı',statement: 'Beyan',tramer_result: 'Tramer sonucu',
+  opposing_vehicle_registration: 'Karşı araç ruhsatı',opposing_driver_license: 'Karşı araç ehliyeti',opposing_traffic_policy: 'Karşı araç trafik poliçesi',fault_ratio: 'Kusur oranı',
 }

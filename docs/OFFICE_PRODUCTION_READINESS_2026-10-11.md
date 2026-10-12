@@ -6,6 +6,14 @@ devam eder. Ofis evrak kökü `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ`.
 
 ## Gerçek ofis kurulumu — güncel durum
 
+13.10.2026 gerçek kullanım revizyonu iki bilgisayara **0.1.4** olarak kuruldu.
+Güncel canlı durum: **399 dosya, 1.454 not, 74 görev, üç hesap**, 53 migration.
+Bildirim sahipliği, şirket hesabı yönetici onayı, düzenlenebilir ofis kuralları/
+yetkiler ve tarihli işlem kayıtları etkin. Kaynak istisnaları ve yeniden başlatma
+kabulü halen açıktır. Son test/dağıtım/yedek kanıtları:
+[Gerçek kullanım düzenlemeleri — 13.10.2026](REAL_USE_REFINEMENTS_2026-10-13.md).
+Aşağıdaki ayrıntılı kurulum maddeleri önceki 0.1.3 kabulünün tarihsel kaydıdır.
+
 Ofiste canlı kurulum ve onaylanan veri birleştirmesi tamamlandı. Aşağıdaki
 hazırlık geçmişindeki aday veritabanı sayıları canlı sistemin sayıları değildir.
 
@@ -77,7 +85,13 @@ ham kaynaklar ve yedekler Git'e dahil edilmez.
 
 Açık kabul: tüm pCloud kaynaklarının tazelik doğrulaması ve ofis Windows
 yeniden başlatması sonrası otomatik açılış.
-Google/Gmail/SBM gibi harici sağlayıcılar yapılandırılmadı; tamamlanmış sayılmaz.
+12.10.2026 tarihinde kurumsal Google girişi ve salt okunur Gmail bağlantısı
+ofis sunucusunda kuruldu; ilk posta taraması ve kurulu masaüstü köprüsü
+doğrulandı. Kullanıcı gerçek kullanım testine Google hesabıyla giriş yaparak
+başladığını bildirdi; aynı giriş sunucunun denetim kaydında doğrulandı.
+76 mesaj inceleme listesinde; SBM otomatik uygulama kapalı.
+Güncel kabul, aktarım düzeltmesi ve kurtarma kanıtları:
+[Google ofis kurulumu](GOOGLE_OFFICE_SETUP_2026-10-12.md).
 
 ## Önceki hazırlık geçmişi
 

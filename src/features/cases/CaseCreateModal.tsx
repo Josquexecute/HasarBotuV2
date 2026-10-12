@@ -1,3 +1,4 @@
+import { canUsePermission } from '../../app/permissions'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, CheckCircle2, FilePlus2, LoaderCircle, Pencil, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
@@ -68,7 +69,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
   const [submitting, setSubmitting] = useState(false)
   const [generalError, setGeneralError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({})
-  const canProvision = currentUser.roles.some(role => ['admin', 'expert', 'case_manager'].includes(role))
+  const canProvision = canUsePermission(currentUser,'folders_write',['admin','expert','case_manager'])
   const quickMode = canProvision && (commandPort === undefined || eksistPort !== undefined)
   const eksist = useMemo(() => eksistPort ?? createEksistPort(), [eksistPort])
   const workspace = useMemo(() => workspacePort ?? createHttpWorkspaceCommandAdapter(), [workspacePort])

@@ -4,6 +4,8 @@ import { parseCookies, SESSION_COOKIE_NAME } from './cookies.js'
 import { hashSessionToken } from './token.js'
 import type { AuthStore, SessionRow } from './store.js'
 import type { RoleCode } from '@hasarbotu/contracts'
+import { hasPermission,permissionForRequest } from './permissions.js'
+import { rememberAuthenticatedRequest } from '../audit/request-events.js'
 
 /** Istekteki oturum cerezini cozer; aktif oturum yoksa undefined doner. */
 export async function resolveSession(
@@ -26,8 +28,7 @@ export function sendForbidden(reply: FastifyReply, requestId: string): void {
 }
 
 /**
- * Korunan uclar icin oturum zorunlulugu. Ilk asamada butun aktif kullanicilar
- * tam yetkilidir (DECISIONS); rol/permission matrisi ileri paketlerdedir.
+ * Korunan uçlarda aktif oturum ve güncel ofis yetkileri zorunludur.
  * Oturum bulunursa doner, bulunmazsa 401 gonderir ve undefined doner.
  */
 export async function requireSession(
@@ -38,6 +39,12 @@ export async function requireSession(
   const session = await resolveSession(store, request)
   if (session === undefined) {
     sendUnauthorized(reply, String(request.id))
+    return undefined
+  }
+  rememberAuthenticatedRequest(request,session.user)
+  const permission = permissionForRequest(request.routeOptions.url ?? '',request.method)
+  if (permission && (!hasPermission(session.user,permission) || !hasPermission(session.user,'case_read'))) {
+    sendForbidden(reply,String(request.id))
     return undefined
   }
   const caseId = (request.params as { caseId?: unknown } | undefined)?.caseId

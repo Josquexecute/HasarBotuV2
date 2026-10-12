@@ -8,6 +8,7 @@ import type { UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
 import { UsersError } from '../../data/usersPort'
 import type { V1ImportQuarantineDataPort } from '../../data/v1ImportQuarantinePort'
 import { ManagementPage } from './ManagementPage'
+import { PERMISSION_DEFINITIONS } from '@hasarbotu/contracts'
 
 const references = {
   insurers: [{ id: 'ins-1', name: 'Sentetik Sigorta' }],
@@ -103,15 +104,19 @@ describe('ManagementPage', () => {
     await waitFor(() => expect(port.getCaseReferences).not.toHaveBeenCalled())
   })
 
-  it('kural ve yetki bölümleri her iki modda kilitli proje kuralı olarak kalır', async () => {
+  it('loads real rule and permission policies and makes them read-only for non-admin users', async () => {
+    vi.spyOn(globalThis,'fetch').mockImplementation(async (input) => new Response(JSON.stringify(String(input).includes('document-rules') ? { items: [{ caseType: 'traffic',versionId: '019f5f00-0000-7000-8000-000000000011',configuration: { baseRequired: ['victim_traffic_policy'],incidentEvidenceRequired: true,tramerWithoutReportRequired: true,recourseDocumentsRequired: true } }] } : { version: 0,permissions: Object.fromEntries(PERMISSION_DEFINITIONS.map((item) => [item.code,item.roles])) }),{ status: 200 }))
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     render(<ManagementPage port={makePort()} />)
     expect(screen.queryByRole('button', { name: 'Excel Şablonları' })).not.toBeInTheDocument()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Belge Kuralları' }))
-    expect(screen.getByText('Yalnız iki dosya türü vardır')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Mağdur trafik poliçesi')).toBeChecked()
+    expect(screen.getByLabelText('Mağdur trafik poliçesi')).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Erişim ve Yetki' }))
-    expect(screen.getByText('AI Güvenlik Sınırı')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Not ve görev · Sorumlu')).toBeChecked()
+    expect(screen.getByLabelText('Not ve görev · Sorumlu')).toBeDisabled()
+    expect(screen.queryByRole('button',{ name: 'Yetkileri kaydet' })).not.toBeInTheDocument()
   })
 })
 

@@ -1,3 +1,4 @@
+import { hasPermission } from '../auth/permissions.js'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type pg from 'pg'
 import {
@@ -113,7 +114,7 @@ export function registerEmailAiRoutes(app: FastifyInstance, options: EmailAiRout
     const response = await store.list(
       session.user.organizationId,
       params.data.caseId,
-      canStart(session.user.roles),
+      canStart(session.user.roles) && hasPermission(session.user,'analysis_write'),
     )
     if (response === undefined) {
       return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))

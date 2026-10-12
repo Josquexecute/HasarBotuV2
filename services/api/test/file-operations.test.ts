@@ -2,7 +2,7 @@ import { access, mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
@@ -286,10 +286,21 @@ describeDb('case file operations (gerçek PostgreSQL + sentetik geçici filesyst
       operationType: 'rename_case_workspace', destinationStorageRootKey: 'source-root', destinationRelativePath: destination,
     })).json()).operation
     const approveKey = uuidv7()
-    const [first, replay] = await Promise.all([
-      approve(caseId, planned.id, approveKey),
-      approve(caseId, planned.id, approveKey),
-    ])
+    // Force both optimistic route lookups to miss the in-flight result. The
+    // transaction must replay after the row lock, not reject the advanced state.
+    const query = pool.query.bind(pool) as (text: string,values?: unknown[]) => Promise<pg.QueryResult>
+    let checks = 0,release!: () => void
+    const checkpoint = new Promise<void>((resolve) => { release = resolve })
+    const spy = vi.spyOn(pool,'query').mockImplementation((async (text: string,values?: unknown[]) => {
+      const result = await query(text,values)
+      if (text.startsWith('SELECT request_hash,response_status,response_body FROM idempotency_keys') && values?.[2] === approveKey) {
+        checks += 1
+        if (checks === 2) release()
+        await checkpoint
+      }
+      return result
+    }) as typeof pool.query)
+    const [first,replay] = await Promise.all([approve(caseId,planned.id,approveKey),approve(caseId,planned.id,approveKey)]).finally(() => spy.mockRestore())
     expect([first.statusCode, replay.statusCode]).toEqual([202, 202])
     expect(replay.json()).toEqual(first.json())
     const jobs = await pool.query("SELECT count(*)::int AS n FROM jobs WHERE target_type='file_operation' AND target_id=$1", [planned.id])

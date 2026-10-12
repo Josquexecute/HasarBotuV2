@@ -1,3 +1,4 @@
+import { canUsePermission } from '../../app/permissions'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle,
@@ -181,11 +182,14 @@ function CaseDetail() {
   const navigate = useNavigate()
   const location = useLocation()
   const session = useSession()
-  const [activeTab, setActiveTab] = useState<Tab>(() => {
-    if (new URLSearchParams(location.search).get('tab') === 'operations') return 'Operasyon'
+  const requestedTab = new URLSearchParams(location.search).get('tab')
+  const routeTab: Tab | undefined = requestedTab === 'operations' ? 'Operasyon' : requestedTab === 'documents' ? 'Evrak ve Fotoğraf' : undefined
+  const [tabSelection, setTabSelection] = useState<{ key: string;tab: Tab }>(() => {
     const saved = window.sessionStorage.getItem('hasarbotu-active-case-tab')
-    return tabs.includes(saved as Tab) ? saved as Tab : 'Özet'
+    return { key: location.key,tab: routeTab ?? (tabs.includes(saved as Tab) ? saved as Tab : 'Özet') }
   })
+  const activeTab = tabSelection.key === location.key ? tabSelection.tab : routeTab ?? tabSelection.tab
+  const setActiveTab = useCallback((tab: Tab) => setTabSelection({ key: location.key,tab }), [location.key])
   const [closeModalOpen, setCloseModalOpen] = useState(false)
   const [prototypeNotice, setPrototypeNotice] = useState('')
   const [photoMode, setPhotoMode] = useState<'normal' | 'stress'>('normal')
@@ -208,8 +212,8 @@ function CaseDetail() {
     }
     window.addEventListener(NOTE_SAVED_EVENT, showNotes)
     return () => window.removeEventListener(NOTE_SAVED_EVENT, showNotes)
-  }, [caseId])
-  const canChangeLifecycle = session.user?.roles.some((role) => ['admin', 'expert', 'case_manager'].includes(role)) === true
+  }, [caseId, setActiveTab])
+  const canChangeLifecycle = canUsePermission(session.user,'lifecycle_write',['admin','expert','case_manager'])
   const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
   const creationResult = (location.state as {
     creationResult?: { caseId: string; officeNumber: string; plate: string }

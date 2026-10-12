@@ -26,6 +26,11 @@ export function GoogleConnectButton({ purpose, onComplete }: { purpose: 'login' 
           else onComplete?.()
           return
         }
+        if (result.status === 'approval_required') {
+          setFlow(null)
+          setError('Hesabınız kaydedildi. Yönetici rol atadıktan sonra giriş yapabilirsiniz.')
+          return
+        }
         timer = setTimeout(() => { void poll() },2000)
       } catch {
         if (!stopped) { setError('Google bağlantısı tamamlanamadı. Hesap ve izinleri kontrol edip yeniden deneyin.');setFlow(null) }

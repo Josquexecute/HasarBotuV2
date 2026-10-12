@@ -1,3 +1,4 @@
+import { canUsePermission } from '../../app/permissions'
 import { useActiveCase, QUICK_NOTE_EVENT } from '../../app/activeCase'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -100,7 +101,7 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
         {source === 'api' ? (
           <section className="alert-panel alert-panel--warning">
             <AlertTriangle size={17} />
-            <div><strong>Evrak özeti bu listede hesaplanmıyor</strong><span>Gerçek kural sonucunu dosyanın Evrak ve Fotoğraf sekmesinde açın.</span></div>
+            <button className="button button--secondary" type="button" onClick={() => navigate(`/dosyalar/${item.caseId}?tab=documents`)}>Evrakları aç</button>
           </section>
         ) : item.missingDocuments > 0 ? (
           <section className="alert-panel alert-panel--warning">
@@ -120,7 +121,7 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
             <div><dt>Aşama</dt><dd>{item.stage}</dd></div>
             <div><dt>Takip</dt><dd className={`text-${item.followUpTone}`}>{item.followUp}</dd></div>
             <div><dt>Servis</dt><dd>{item.service}</dd></div>
-            <div><dt>Tahmini Hasar</dt><dd>{source === 'api' ? 'Henüz bağlı değil' : formatCurrency(item.estimatedDamage)}</dd></div>
+            <div><dt>Tahmini Hasar</dt><dd>{source === 'api' ? '—' : formatCurrency(item.estimatedDamage)}</dd></div>
           </dl>
         </section>
 
@@ -210,10 +211,10 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
   const [queryInput, setQueryInput] = useState<{ key: string; value: string }>({ key: '', value: queryParam })
   const [typeFilter, setTypeFilter] = useState<'Tümü' | CaseType>('Tümü')
   const [stageFilter, setStageFilter] = useState('Tümü')
-  const [statusFilter, setStatusFilter] = useState('Tümü')
+  const [statusFilter, setStatusFilter] = useState('Açık')
   const [assigneeFilter, setAssigneeFilter] = useState('Tümü')
   const [serviceFilter, setServiceFilter] = useState('Tümü')
-  const [followUpFilter, setFollowUpFilter] = useState('Tümü')
+  const followUpFilter = 'Tümü'
   const [sortKey, setSortKey] = useState<SortKey>('lastAction')
   const [direction, setDirection] = useState<SortDirection>('asc')
   const [filtersOpen, setFiltersOpen] = useState(true)
@@ -289,7 +290,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
       ])
       const matchesType = typeFilter === 'Tümü' || item.type === typeFilter
       const matchesStage = stageFilter === 'Tümü' || item.stage === stageFilter
-      const matchesStatus = statusFilter === 'Tümü' || item.status === statusFilter
+      const matchesStatus = statusFilter === 'Kapalı' ? item.status === 'Kapalı' : item.status !== 'Kapalı'
       const matchesAssignee = assigneeFilter === 'Tümü' || item.assignee === assigneeFilter
       const matchesService = serviceFilter === 'Tümü' || item.service === serviceFilter
       const matchesFollowUp = followUpFilter === 'Tümü' || item.followUpTone === followUpFilter
@@ -316,7 +317,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
 
   const selectedCase = visibleCases.find((item) => item.caseId === selectedId) ?? visibleCases[0]
   useActiveCase(selectedCase, source)
-  const hasFilters = query !== '' || typeFilter !== 'Tümü' || stageFilter !== 'Tümü' || statusFilter !== 'Tümü' || assigneeFilter !== 'Tümü' || serviceFilter !== 'Tümü' || followUpFilter !== 'Tümü'
+  const hasFilters = query !== '' || typeFilter !== 'Tümü' || stageFilter !== 'Tümü' || statusFilter !== 'Açık' || assigneeFilter !== 'Tümü' || serviceFilter !== 'Tümü'
 
   // Uyarı isteğinde yalnız AKTİF SAYFA kimlikleri gönderilir. Sayfa boyutu
   // sözleşmedeki `caseIds` sınırının altında olduğu için normal kullanımda
@@ -337,10 +338,9 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
     setQuery('')
     setTypeFilter('Tümü')
     setStageFilter('Tümü')
-    setStatusFilter('Tümü')
+    setStatusFilter('Açık')
     setAssigneeFilter('Tümü')
     setServiceFilter('Tümü')
-    setFollowUpFilter('Tümü')
     setSearchParams({})
   }
 
@@ -382,11 +382,11 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
           <button className={`button button--secondary${filtersOpen ? ' button--active' : ''}`} type="button" onClick={() => setFiltersOpen((value) => !value)}>
             <Filter size={15} /> Filtreler {hasFilters && <i className="button__indicator" />}
           </button>
-          <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('Sütun görünümü kompakt varsayılanlara sıfırlandı.')}><Columns3 size={15} /> Sütunlar</button>
+          {source === 'mock' && <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('Sütun görünümü kompakt varsayılanlara sıfırlandı.')}><Columns3 size={15} /> Sütunlar</button>}
           {!detailOpen && (
             <button className="button button--secondary" type="button" onClick={() => setDetailOpen(true)}><PanelRightOpen size={15} /> Hızlı Bakış</button>
           )}
-          <button className="button button--primary" type="button" onClick={() => setSearchParams({ yeni: 'true' })}>
+          <button className="button button--primary" type="button" disabled={source === 'api' && !canUsePermission(session.user,'case_write',['admin','expert','case_manager','secretary','accounting'])} onClick={() => setSearchParams({ yeni: 'true' })}>
             <FilePlus2 size={16} /> Yeni Dosya
           </button>
         </div>
@@ -401,9 +401,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
             {query && <button type="button" onClick={() => setQuery('')} aria-label="Aramayı temizle"><X size={14} /></button>}
           </label>
           <label className="select-field"><span className="select-field__label">Tür</span><select aria-label="Dosya türü" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'Tümü' | CaseType)}><option>Tümü</option><option>Trafik</option><option>Kasko</option></select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Durum</span><select aria-label="Dosya durumu" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>{source === 'api'
-            ? <><option>Tümü</option><option>Açık</option><option>Gecikmiş</option><option>Kapalı</option></>
-            : <><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.status))).map((status) => <option key={status}>{status}</option>)}</>}</select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Durum</span><select aria-label="Dosya durumu" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>Açık</option><option>Kapalı</option></select><ChevronDown size={14} /></label>
           {source === 'api' ? (
             <CaseReferenceFilters
               responsibleUserId={assigneeFilter}
@@ -418,8 +416,8 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
               <label className="select-field"><span className="select-field__label">Servis</span><select aria-label="Dosya servisi" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option>Tümü</option>{Array.from(new Set(cases.map((item) => item.service))).map((service) => <option key={service}>{service}</option>)}</select><ChevronDown size={14} /></label>
             </>
           )}
-          <label className="select-field"><span className="select-field__label">Takip</span><select aria-label="Takip tarihi durumu" value={followUpFilter} onChange={(event) => setFollowUpFilter(event.target.value)}><option value="Tümü">Tümü</option><option value="late">Geciken</option><option value="today">Bugün</option><option value="normal">Planlı</option></select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Sırala</span><select aria-label="Dosya sıralaması" value={sortKey} onChange={(event) => { setSortKey(event.target.value as SortKey); setDirection(event.target.value === 'lastAction' ? 'desc' : 'asc') }}><option value="lastAction">Son güncelleme</option><option value="followUp">Takip tarihi</option><option value="officeNumber">Dosya numarası</option><option value="plate">Plaka A–Z</option></select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Sırala</span><select aria-label="Dosya sıralaması" value={sortKey} onChange={(event) => { setSortKey(event.target.value as SortKey); setDirection(event.target.value === 'lastAction' ? 'desc' : 'asc') }}><option value="lastAction">Son güncelleme</option><option value="followUp">Takip tarihi</option><option value="officeNumber">Dosya numarası</option><option value="plate">Plaka</option></select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Yön</span><select aria-label="Sıralama yönü" value={direction} onChange={(event) => setDirection(event.target.value as SortDirection)}><option value="asc">Artan / eski önce</option><option value="desc">Azalan / yeni önce</option></select><ChevronDown size={14} /></label>
           {hasFilters && <button className="filterbar__clear" type="button" onClick={resetFilters}>Temizle</button>}
         </section>
       )}
@@ -491,7 +489,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
           </div>
           <footer className="table-footer">
             <span>{visibleCases.length} / {source === 'api' ? totalCount : '1.284'} dosya gösteriliyor</span>
-            <span className="table-footer__hint"><ListFilter size={13} />Sıralama: {sortKey} · {direction === 'asc' ? 'artan' : 'azalan'}</span>
+            <span className="table-footer__hint"><ListFilter size={13} />Sıralama: {{ lastAction: 'Son güncelleme',followUp: 'Takip tarihi',officeNumber: 'Dosya numarası',plate: 'Plaka' }[sortKey as 'lastAction' | 'followUp' | 'officeNumber' | 'plate'] ?? 'Seçili sütun'} · {direction === 'asc' ? 'artan' : 'azalan'}</span>
             {source === 'api' && alertStatus === 'loading' && (
               <span className="table-footer__hint">Uyarı göstergesi yükleniyor…</span>
             )}
@@ -531,7 +529,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
       </div>
 
       {showNewModal && source === 'mock' && <MockNewNoticeModal onClose={closeNewModal} />}
-      {showNewModal && source === 'api' && session.user !== null && (
+      {showNewModal && source === 'api' && session.user !== null && canUsePermission(session.user,'case_write',['admin','expert','case_manager','secretary','accounting']) && (
         <CaseCreateModal
           currentUser={session.user}
           onClose={closeNewModal}

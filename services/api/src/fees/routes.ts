@@ -1,3 +1,5 @@
+import { hasPermission } from '../auth/permissions.js'
+import type { AuthUserRow } from '../auth/store.js'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type pg from 'pg'
 import {
@@ -48,11 +50,11 @@ function hasRole(roles: readonly RoleCode[], allowed: readonly RoleCode[]): bool
   return roles.some((role) => allowed.includes(role))
 }
 
-function capabilities(roles: readonly RoleCode[]): FeeCapabilities {
+function capabilities(user: AuthUserRow): FeeCapabilities {
   return {
-    canCreateCandidate: hasRole(roles, CANDIDATE_ROLES),
-    canApprove: hasRole(roles, APPROVE_ROLES),
-    canView: hasRole(roles, FINANCIAL_READ_ROLES),
+    canCreateCandidate: hasRole(user.roles, CANDIDATE_ROLES) && hasPermission(user,'fees_write'),
+    canApprove: hasRole(user.roles, APPROVE_ROLES) && hasPermission(user,'fees_approve'),
+    canView: hasRole(user.roles, FINANCIAL_READ_ROLES) && hasPermission(user,'financial_read'),
   }
 }
 
@@ -132,7 +134,7 @@ export function registerFeeRoutes(app: FastifyInstance, options: FeeRoutesOption
     const response = await store.getCase(
       session.user.organizationId,
       params.data.caseId,
-      capabilities(session.user.roles),
+      capabilities(session.user),
     )
     if (response === undefined) {
       return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
@@ -149,7 +151,7 @@ export function registerFeeRoutes(app: FastifyInstance, options: FeeRoutesOption
     return store.list(
       session.user.organizationId,
       query.data,
-      capabilities(session.user.roles),
+      capabilities(session.user),
     )
   })
 
@@ -163,7 +165,7 @@ export function registerFeeRoutes(app: FastifyInstance, options: FeeRoutesOption
       session.user.organizationId,
       query.data,
       options.clock.nowUtcIso(),
-      capabilities(session.user.roles),
+      capabilities(session.user),
     )
   })
 
@@ -187,7 +189,7 @@ export function registerFeeRoutes(app: FastifyInstance, options: FeeRoutesOption
       params.data.caseId,
       body.data,
       { scope: FEE_CANDIDATE_SCOPE, key, requestHash },
-      capabilities(session.user.roles),
+      capabilities(session.user),
     )
     return sendOutcome(reply, outcome, requestId)
   })
@@ -214,7 +216,7 @@ export function registerFeeRoutes(app: FastifyInstance, options: FeeRoutesOption
       actorUserId: session.user.id,
       requestId,
     }
-    const caps = capabilities(session.user.roles)
+    const caps = capabilities(session.user)
     const outcome = kind === 'approve'
       ? await store.approve(
           actor,

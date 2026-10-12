@@ -76,6 +76,7 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
   let orgAId: string
   let orgBId: string
   let managerAId: string
+  let managerBId: string
   let managerACookie: string
   let managerBCookie: string
   let adminACookie: string
@@ -143,7 +144,7 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
       [orgAId, orgBId],
     )
     managerAId = await seedUser(orgAId, 'uat-bildirim-manager-a@test.local', 'case_manager')
-    await seedUser(orgBId, 'uat-bildirim-manager-b@test.local', 'case_manager')
+    managerBId = await seedUser(orgBId, 'uat-bildirim-manager-b@test.local', 'case_manager')
     await seedUser(orgAId, 'uat-bildirim-admin-a@test.local', 'admin')
     await seedUser(orgAId, 'uat-bildirim-expert-a@test.local', 'expert')
     await seedUser(orgAId, 'uat-bildirim-secretary-a@test.local', 'secretary')
@@ -177,7 +178,7 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
       method: 'POST', url: CASES_ROUTE,
       headers: { cookie: managerACookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
       payload: {
-        caseType: 'traffic', plate: '34 BIL 0001', workflowStage: 'reporting',
+        caseType: 'traffic', plate: '34 BIL 0001', workflowStage: 'reporting',responsibleUserId: managerAId,
         notificationDate: '2026-07-01', followUpDate: '2026-07-20',
       },
     })
@@ -210,7 +211,7 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
       method: 'POST', url: CASES_ROUTE,
       headers: { cookie: managerBCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
       payload: {
-        caseType: 'traffic', plate: '35 BIL 0002', workflowStage: 'reporting',
+        caseType: 'traffic', plate: '35 BIL 0002', workflowStage: 'reporting',responsibleUserId: managerBId,
         notificationDate: '2026-07-01', followUpDate: '2026-07-18',
       },
     })
@@ -311,16 +312,15 @@ describeDb('Bildirimler uçtan uca UAT: gerçek uyarı üretimi → liste → ye
     expect(listB.alerts.some((alert) => alert.type === 'overdue_follow_up')).toBe(true)
     expect(listB.alerts.some((alert) => alert.caseId === caseA.id)).toBe(false)
 
-    // 8) YETKİ İZOLASYONU — bu uçta kasıtlı olarak rol kısıtı yoktur
-    //    (auth/guard.ts: "ilk aşamada tüm aktif kullanıcılar tam yetkilidir").
-    //    Tüm gerçek roller kendi organizasyonunun uyarılarını okuyabilir.
+    // Only the current responsible owner receives a case's alerts, including
+    // when the requesting user has administrative or expert roles.
     for (const roleCookie of [adminACookie, expertACookie, secretaryACookie, accountingACookie, readOnlyACookie]) {
       const roleResponse = await app.inject({
         method: 'GET', url: OPERATIONAL_ALERTS_ROUTE, headers: { cookie: roleCookie },
       })
       expect(roleResponse.statusCode).toBe(200)
       const roleList = operationalAlertsResponseSchema.parse(roleResponse.json())
-      expect(roleList.alerts.some((alert) => alert.caseId === caseA.id)).toBe(true)
+      expect(roleList.alerts.some((alert) => alert.caseId === caseA.id)).toBe(false)
       expect(roleList.alerts.some((alert) => alert.caseId === caseB.id)).toBe(false)
     }
     // Oturumsuz erişim kesin reddedilir.

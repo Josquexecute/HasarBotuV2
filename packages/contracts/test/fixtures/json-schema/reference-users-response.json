@@ -17,6 +17,20 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "expert",
+                "case_manager",
+                "secretary",
+                "accounting",
+                "read_only"
+              ]
+            }
           }
         },
         "required": [

@@ -88,7 +88,7 @@ describe('CasesPage api modu durumlari', () => {
     // varsayılan 1 sn eşiği yetmeyebiliyor. Bu bir kapsam değil, zamanlama payı.
     expect((await screen.findAllByText('34 API 038', {}, { timeout: 15_000 })).length)
       .toBeGreaterThan(0)
-    expect(screen.getByText('Evrak özeti bu listede hesaplanmıyor')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Evrakları aç' })).toBeInTheDocument()
     expect(screen.queryByText('Zorunlu evraklar tam')).not.toBeInTheDocument()
     expect(screen.queryByText('₺0')).not.toBeInTheDocument()
   })

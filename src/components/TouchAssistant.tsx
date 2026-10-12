@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { NotebookPen, X } from 'lucide-react'
+import { Bell, Files, NotebookPen, X } from 'lucide-react'
 import { NOTE_SAVED_EVENT, QUICK_NOTE_EVENT, type ActiveCase } from '../app/activeCase'
 import { useSession } from '../app/sessionContext'
+import { canUsePermission } from '../app/permissions'
 import { CaseOperationsError, type CaseOperationsPort } from '../data/caseOperationsPort'
 import { useCaseOperations } from '../data/useCaseOperations'
 
@@ -11,6 +12,7 @@ interface Draft { body: string; key: string; attempted: boolean }
 function QuickNote({ target, port, onClose }: { target: ActiveCase; port?: CaseOperationsPort; onClose(): void }) {
   const session = useSession()
   const workspace = useCaseOperations(target.caseId, target.source, true, port)
+  const canWrite = workspace.data?.permissions.canWrite === true && (session.mode !== 'api' || canUsePermission(session.user,'operations_write',['admin','expert','case_manager','secretary']))
   const storageKey = `hasarbotu-quick-note:${session.user?.id ?? 'mock'}:${target.caseId}`
   const [draft, setDraft] = useState<Draft>(() => {
     try {
@@ -29,7 +31,7 @@ function QuickNote({ target, port, onClose }: { target: ActiveCase; port?: CaseO
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
-    if (lock.current || !draft.body.trim() || !workspace.data?.permissions.canWrite) return
+    if (lock.current || !draft.body.trim() || !canWrite) return
     lock.current = true
     setBusy(true)
     setError('')
@@ -74,11 +76,11 @@ function QuickNote({ target, port, onClose }: { target: ActiveCase; port?: CaseO
         try { localStorage.setItem(storageKey, JSON.stringify(next)) } catch { setError('Not taslağı bu cihazda saklanamadı. Metni kapatmadan önce kopyalayın.') }
       }} /></label>
       {workspace.status === 'loading' && <p role="status">Dosya kontrol ediliyor…</p>}
-      {workspace.status === 'ok' && !workspace.data?.permissions.canWrite && <p role="status">Bu dosyaya not ekleme yetkiniz yok.</p>}
+      {workspace.status === 'ok' && !canWrite && <p role="status">Bu dosyaya not ekleme yetkiniz yok.</p>}
       {!['ok', 'loading', 'idle'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button type="button" className="button button--secondary" onClick={workspace.reload}>Yeniden yükle</button></p>}
       {target.source !== 'api' && <p>Not eklemek için sunucu oturumu gerekir.</p>}
       {error && <p role="alert">{error}</p>}
-      <button className="button button--primary" type="submit" disabled={busy || !draft.body.trim() || !workspace.data?.permissions.canWrite}>{busy ? 'Kaydediliyor…' : draft.attempted ? 'Kaydı tekrar dene' : 'Notu kaydet'}</button>
+      <button className="button button--primary" type="submit" disabled={busy || !draft.body.trim() || !canWrite}>{busy ? 'Kaydediliyor…' : draft.attempted ? 'Kaydı tekrar dene' : 'Notu kaydet'}</button>
     </form>}
   </>
 }
@@ -111,9 +113,9 @@ export function TouchAssistant({ target, port }: { target: ActiveCase | null; po
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
       }
     }}>
-      <header><h2>Touch Assistant</h2><button className="icon-button" type="button" aria-label="Hızlı notu kapat" onClick={() => setOpen(false)}><X size={20} /></button></header>
+      <header><h2>Hızlı not</h2><button className="icon-button" type="button" aria-label="Hızlı notu kapat" onClick={() => setOpen(false)}><X size={20} /></button></header>
       {target ? <QuickNote key={target.caseId} target={target} port={port} onClose={() => setOpen(false)} /> : <p>Not eklemek için bir dosya açın veya listeden seçin.</p>}
-      <nav aria-label="Hızlı işlemler"><Link to="/dosyalar" onClick={() => setOpen(false)}>Dosyalar</Link><Link to="/bildirimler" onClick={() => setOpen(false)}>Bildirimler</Link></nav>
+      <nav className="assistant-shortcuts" aria-label="Hızlı işlemler"><Link to="/dosyalar" onClick={() => setOpen(false)}><Files size={20} /><span>Dosyalar<small>Ara ve görüntüle</small></span></Link><Link to="/bildirimler" onClick={() => setOpen(false)}><Bell size={20} /><span>Bildirimler<small>Size ait gelişmeler</small></span></Link></nav>
     </div></div>}
   </>
 }

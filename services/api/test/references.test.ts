@@ -57,6 +57,7 @@ describeDb('Paket 18 referans uçları (gerçek veritabanı)', () => {
        SELECT candidate, id FROM roles CROSS JOIN (VALUES ($1::uuid),($2::uuid)) AS x(candidate) WHERE code='expert'`,
       [expertUser, disabledExpert],
     )
+    await pool.query("INSERT INTO user_roles(user_id,role_id) SELECT $1,id FROM roles WHERE code='read_only'",[activeUser])
     insurerA = uuidv7(); insurerWithoutAgreement = uuidv7(); inactiveInsurer = uuidv7(); foreignInsurer = uuidv7()
     await pool.query(
       `INSERT INTO insurers (id,organization_id,name,is_active) VALUES

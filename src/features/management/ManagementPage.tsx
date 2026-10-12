@@ -1,4 +1,8 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
+const AuditLog = lazy(async () => ({ default: (await import('./AuditLog')).AuditLog }))
+const ServicesAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).ServicesAdministration }))
+const DocumentRulesAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).DocumentRulesAdministration }))
+const PermissionsAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).PermissionsAdministration }))
 import { CheckCircle2, FileCog, Plus, RefreshCw, ShieldAlert, ShieldCheck, Store, UserRoundCog, UsersRound, X } from 'lucide-react'
 import { managementServices, managementUsers } from '../../mocks/workspaces'
 import { getConfiguredDataSource, type CaseReferenceDataPort, type CaseReferenceWorkspace, type DataSourceKind } from '../../data/ports'
@@ -94,7 +98,7 @@ function PermissionMatrixPanel() {
 }
 
 type ManagementTab =
-  | 'Kullanıcılar' | 'Servisler' | 'V1 Aktarım Karantinası' | 'Belge Kuralları' | 'Erişim ve Yetki'
+  | 'Kullanıcılar' | 'Servisler' | 'V1 Aktarım Karantinası' | 'Belge Kuralları' | 'Erişim ve Yetki' | 'İşlem Kayıtları'
 
 const SERVICE_TYPE_LABELS: Readonly<Record<string, string>> = {
   authorized: 'Yetkili',
@@ -302,10 +306,10 @@ function UserRoleRow({ user, saving, onSave }: {
           ))}
         </div>
       </td>
-      <td><span className={`status-pill ${user.status === 'active' ? 'status-pill--open' : 'status-pill--waiting'}`}>{user.status === 'active' ? 'Aktif' : 'Pasif'}</span></td>
+      <td><span className={`status-pill ${user.status === 'active' ? 'status-pill--open' : 'status-pill--waiting'}`}>{user.status === 'active' ? 'Aktif' : user.status === 'pending' ? 'Onay bekliyor' : 'Pasif'}</span></td>
       <td>
         <button className="button button--secondary" type="button" disabled={!dirty || saving || draft.length === 0} onClick={save}>
-          {saving ? 'Kaydediliyor…' : 'Kaydet'}
+          {saving ? 'Kaydediliyor…' : user.status === 'pending' ? 'Onayla ve rol ata' : 'Kaydet'}
         </button>
         {feedback !== null && <p className="role-row-feedback" role="status">{feedback}</p>}
       </td>
@@ -444,10 +448,11 @@ export function ManagementPage({ port, usersPort, quarantinePort }: {
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
   const { user } = useSession()
   const isAdmin = user?.roles.includes('admin') ?? false
-  const [activeTab, setActiveTab] = useState<ManagementTab>('Kullanıcılar')
+
+  const [activeTab, setActiveTab] = useState<ManagementTab>(isAdmin && new URLSearchParams(window.location.search).get('bolum') === 'kayitlar' ? 'İşlem Kayıtları' : 'Kullanıcılar')
   const [notice, setNotice] = useState('')
   const showAdminUsers = activeTab === 'Kullanıcılar' && isAdmin
-  const referenceTab = (activeTab === 'Kullanıcılar' && !isAdmin) || activeTab === 'Servisler'
+  const referenceTab = (activeTab === 'Kullanıcılar' && !isAdmin) || (activeTab === 'Servisler' && !isAdmin)
 
   return (
     <main className="page office-page management-page">
@@ -455,7 +460,7 @@ export function ManagementPage({ port, usersPort, quarantinePort }: {
         <div>
           <h1>Yönetim</h1>
           <p>{source === 'api'
-            ? 'Kullanıcı ve servis listeleri gerçek referans verisinden gelir; kural ve yetki bölümleri kilitli proje kurallarıdır'
+            ? 'Hesaplar, servisler ve ofis kuralları'
             : 'Kullanıcı, servis, kural ve erişim altyapısının mock görünümü'}</p>
         </div>
         {source === 'mock' && (
@@ -464,15 +469,21 @@ export function ManagementPage({ port, usersPort, quarantinePort }: {
           </button>
         )}
       </section>
-      <nav className="workspace-tabs" aria-label="Yönetim bölümleri">{(['Kullanıcılar', 'Servisler', ...(isAdmin && source === 'api' ? ['V1 Aktarım Karantinası' as const] : []), 'Belge Kuralları', 'Erişim ve Yetki'] as const).map((tab) => <button key={tab} type="button" className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
+      <nav className="workspace-tabs" aria-label="Yönetim bölümleri">{(['Kullanıcılar', 'Servisler', ...(isAdmin && source === 'api' ? ['İşlem Kayıtları' as const,'V1 Aktarım Karantinası' as const] : []), 'Belge Kuralları', 'Erişim ve Yetki'] as const).map((tab) => <button key={tab} type="button" className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
       <div className="office-scroll management-content">
+        <Suspense fallback={<p role="status">Yükleniyor…</p>}>
+        {activeTab === 'Servisler' && isAdmin && source === 'api' && <ServicesAdministration />}
+        {activeTab === 'Belge Kuralları' && source === 'api' && <DocumentRulesAdministration canEdit={isAdmin} />}
+        {activeTab === 'Erişim ve Yetki' && source === 'api' && <PermissionsAdministration canEdit={isAdmin} />}
+        {activeTab === 'İşlem Kayıtları' && isAdmin && source === 'api' && <AuditLog />}
         {referenceTab && source === 'api' && <ManagementReferenceContent activeTab={activeTab} port={port} />}
         {showAdminUsers && source === 'api' && <ManagementUsersAdminContent port={usersPort} />}
         {activeTab === 'V1 Aktarım Karantinası' && isAdmin && source === 'api' && <ManagementQuarantineContent port={quarantinePort} />}
         {activeTab === 'Kullanıcılar' && source === 'mock' && <section className="office-table-panel"><header className="panel-heading"><div><h2>Kullanıcı ve Sorumlu Listesi</h2><span>Başlangıçta herkes tüm dosyaları görebilir</span></div><UsersRound size={18} /></header><div className="table-scroll"><table className="data-table"><thead><tr><th>Kullanıcı</th><th>Rol</th><th>Atanmış Dosya</th><th>Durum</th><th>Operasyon Yetkisi</th></tr></thead><tbody>{managementUsers.map((user) => <tr key={user.id}><td><strong>{user.name}</strong></td><td>{user.role}</td><td>{user.assigned}</td><td><span className="status-pill status-pill--open">{user.status}</span></td><td>Görüntüle · Not · Görev</td></tr>)}</tbody></table></div></section>}
         {activeTab === 'Servisler' && source === 'mock' && <section className="office-table-panel"><header className="panel-heading"><div><h2>Servis Listesi</h2><span>Değişiklik geçmişi mock olarak korunur</span></div><Store size={18} /></header><div className="table-scroll"><table className="data-table"><thead><tr><th>Servis Adı</th><th>Tür</th><th>Telefon</th><th>Açık Dosya</th><th>Durum</th></tr></thead><tbody>{managementServices.map((service) => <tr key={service.id}><td><strong>{service.name}</strong></td><td>{service.kind}</td><td>{service.phone}</td><td>{service.openCases}</td><td><span className="status-pill status-pill--open">Aktif</span></td></tr>)}</tbody></table></div></section>}
-        {activeTab === 'Belge Kuralları' && <div className="management-grid"><section className="info-panel"><header><h2>Trafik</h2><FileCog size={17} /></header><p>Ana dosya türlerinden biridir. Değer Kaybı süreci zorunludur.</p><ul className="rule-list"><li>Poliçeler, ruhsatlar ve ehliyetler</li><li>Zabıt yoksa KTT veya Beyan</li><li>Zabıt yoksa Tramer Sonucu</li></ul></section><section className="info-panel"><header><h2>Kasko</h2><FileCog size={17} /></header><p>Ana dosya türlerinden biridir. Değer Kaybı isteğe bağlıdır.</p><ul className="rule-list"><li>Kasko Poliçe, SBM Ağır Hasar</li><li>K Ruhsat ve K Ehliyet</li><li>Rüculu dosyada karşı araç evrakları</li></ul></section><section className="alert-panel alert-panel--warning management-grid__wide"><ShieldCheck size={17} /><div><strong>Yalnız iki dosya türü vardır</strong><span>Değer Kaybı bağımsız dosya türü olarak oluşturulamaz.</span></div></section></div>}
-        {activeTab === 'Erişim ve Yetki' && <div className="management-grid"><PermissionMatrixPanel /><section className="info-panel management-grid__wide"><header><h2>AI Güvenlik Sınırı</h2><ShieldCheck size={17} /></header><ul className="rule-list"><li>Dosya kapatamaz</li><li>Klasör taşıyamaz</li><li>E-posta gönderemez</li><li>PERT veya Değer Kaybı kararını kesinleştiremez</li></ul></section></div>}
+        {activeTab === 'Belge Kuralları' && source === 'mock' && <div className="management-grid"><section className="info-panel"><header><h2>Trafik</h2><FileCog size={17} /></header><p>Ana dosya türlerinden biridir. Değer Kaybı süreci zorunludur.</p><ul className="rule-list"><li>Poliçeler, ruhsatlar ve ehliyetler</li><li>Zabıt yoksa KTT veya Beyan</li><li>Zabıt yoksa Tramer Sonucu</li></ul></section><section className="info-panel"><header><h2>Kasko</h2><FileCog size={17} /></header><p>Ana dosya türlerinden biridir. Değer Kaybı isteğe bağlıdır.</p><ul className="rule-list"><li>Kasko Poliçe, SBM Ağır Hasar</li><li>K Ruhsat ve K Ehliyet</li><li>Rüculu dosyada karşı araç evrakları</li></ul></section><section className="alert-panel alert-panel--warning management-grid__wide"><ShieldCheck size={17} /><div><strong>Yalnız iki dosya türü vardır</strong><span>Değer Kaybı bağımsız dosya türü olarak oluşturulamaz.</span></div></section></div>}
+        {activeTab === 'Erişim ve Yetki' && source === 'mock' && <div className="management-grid"><PermissionMatrixPanel /><section className="info-panel management-grid__wide"><header><h2>AI Güvenlik Sınırı</h2><ShieldCheck size={17} /></header><ul className="rule-list"><li>Dosya kapatamaz</li><li>Klasör taşıyamaz</li><li>E-posta gönderemez</li><li>PERT veya Değer Kaybı kararını kesinleştiremez</li></ul></section></div>}
+        </Suspense>
       </div>
       {notice && <button className="prototype-toast" type="button" onClick={() => setNotice('')}><CheckCircle2 size={15} />{notice}<X size={14} /></button>}
     </main>

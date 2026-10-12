@@ -8,6 +8,7 @@ export interface GoogleConfig {
   encryptionKey: string
   sbmSenders: string[]
   automaticSbmEnabled: boolean
+  signupOrganizationId?: string
 }
 
 export function parseGoogleConfig(env: Readonly<Record<string,string | undefined>>): GoogleConfig | undefined {
@@ -23,7 +24,8 @@ export function parseGoogleConfig(env: Readonly<Record<string,string | undefined
   // This opt-in represents an operator's completed real-message validation, never a default.
   if (env.SBM_AUTOMATIC_ENABLED && !['true','false'].includes(env.SBM_AUTOMATIC_ENABLED)) throw new Error('Invalid SBM_AUTOMATIC_ENABLED')
   if (env.SBM_AUTOMATIC_ENABLED === 'true' && !sbmSenders.length) throw new Error('SBM_SENDER_ADDRESSES required for automatic processing')
-  return { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET!, redirectUri: redirect.href, encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY!, sbmSenders, automaticSbmEnabled: env.SBM_AUTOMATIC_ENABLED === 'true' }
+  const signupOrganizationId = env.GOOGLE_SIGNUP_ORGANIZATION_ID ? z.string().uuid().parse(env.GOOGLE_SIGNUP_ORGANIZATION_ID) : undefined
+  return { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET!, redirectUri: redirect.href, encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY!, sbmSenders, automaticSbmEnabled: env.SBM_AUTOMATIC_ENABLED === 'true',...(signupOrganizationId ? { signupOrganizationId } : {}) }
 }
 
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex')

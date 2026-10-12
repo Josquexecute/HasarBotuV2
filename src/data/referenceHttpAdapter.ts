@@ -51,10 +51,11 @@ function parseNamed(items: readonly unknown[]): CaseReferenceWorkspace['insurers
 
 function parseUsers(items: readonly unknown[]): CaseReferenceWorkspace['users'] {
   return items.map((item) => {
-    if (!objectWithKeys(item, ['id', 'displayName']) || !nonEmpty(item.id) || !nonEmpty(item.displayName)) {
+    if (!(objectWithKeys(item, ['id', 'displayName']) || objectWithKeys(item, ['id', 'displayName', 'roles'])) || !nonEmpty(item.id) || !nonEmpty(item.displayName) ||
+      ('roles' in item && (!Array.isArray(item.roles) || !item.roles.every((role) => typeof role === 'string' && ['admin','expert','case_manager','secretary','accounting','read_only'].includes(role))))) {
       throw new ReferenceDataError('unavailable', 'invalid user reference response')
     }
-    return { id: item.id, displayName: item.displayName }
+    return { id: item.id, displayName: item.displayName, ...('roles' in item ? { roles: item.roles as string[] } : {}) }
   })
 }
 
@@ -105,7 +106,7 @@ export function createHttpReferenceDataAdapter(options: ReferenceAdapterOptions 
       const [insurers, services, users, experts] = await Promise.all([
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/insurers`, headers),
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/services?${serviceQuery.toString()}`, headers),
-        fetchList(fetchImpl, `${baseUrl}/api/v1/references/users`, headers),
+        fetchList(fetchImpl, `${baseUrl}/api/v1/references/users?includeRoles=true`, headers),
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/experts`, headers),
       ])
       return {

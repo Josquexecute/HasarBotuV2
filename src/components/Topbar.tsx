@@ -1,13 +1,11 @@
-import { Bell, Grid2X2, LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
+import { Bell, LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 import { getSearchTokens } from '../utils/search'
 import { useSession } from '../app/sessionContext'
 
 interface TopbarProps {
   theme: 'light' | 'dark'
-  density: 'compact' | 'comfortable'
   onThemeToggle: () => void
-  onDensityToggle: () => void
   onMenuToggle: () => void
 }
 
@@ -29,7 +27,7 @@ function initialsOf(name: string): string {
   return letters.toLocaleUpperCase('tr')
 }
 
-export function Topbar({ theme, density, onThemeToggle, onDensityToggle, onMenuToggle }: TopbarProps) {
+export function Topbar({ theme, onThemeToggle, onMenuToggle }: TopbarProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const session = useSession()
@@ -75,10 +73,6 @@ export function Topbar({ theme, density, onThemeToggle, onDensityToggle, onMenuT
             <span className="connection-status"><i aria-hidden="true" />Bağlantı aktif</span>
           </>
         )}
-        <button className="topbar-action" type="button" onClick={onDensityToggle} title="Görünüm yoğunluğunu değiştir">
-          <Grid2X2 size={16} aria-hidden="true" />
-          <span>{density === 'compact' ? 'Kompakt' : 'Rahat'}</span>
-        </button>
         <button className="icon-button" type="button" onClick={onThemeToggle} aria-label={theme === 'light' ? 'Koyu temaya geç' : 'Açık temaya geç'}>
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
         </button>

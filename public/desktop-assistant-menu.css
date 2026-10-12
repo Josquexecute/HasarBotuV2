@@ -1,0 +1,21 @@
+:root { color-scheme: dark; font-family: 'Segoe UI',sans-serif; color: #edf2fc; background: #121923; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { padding: 16px; border: 1px solid #344052; border-radius: 12px; height: 100vh; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+header { display: flex; align-items: center; gap: 10px; }
+.brand { width: 36px; height: 36px; border-radius: 10px; background: #2d68d8; display: grid; place-items: center; font-weight: 800; font-size: 20px; }
+header strong,header span { display: block; }
+header span { color: #a7b4ca; font-size: 11px; margin-top: 2px; }
+button { font: inherit; color: inherit; cursor: pointer; border: 1px solid #344052; border-radius: 8px; background: #1b2533; }
+button:hover { background: #26374e; border-color: #668dcf; }
+button:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 2px; }
+.close { margin-left: auto; width: 30px; height: 30px; border: 0; background: transparent; font-size: 22px; }
+.open { display: flex; justify-content: space-between; padding: 10px 12px; font-size: 12px; background: #214174; border-color: #315994; }
+.shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.shortcuts button { text-align: left; padding: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+svg { width: 22px; height: 22px; fill: none; stroke: #95b8f7; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 3px; }
+.shortcuts strong { font-size: 12px; }
+.shortcuts small { font-size: 10px; color: #a7b4ca; }
+footer { display: flex; gap: 5px; margin-top: auto; border-top: 1px solid #344052; padding-top: 10px; }
+footer button { padding: 6px; font-size: 10px; background: transparent; border: 0; }
+footer .quit { margin-left: auto; color: #f3adb0; }

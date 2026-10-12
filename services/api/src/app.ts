@@ -1,5 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import { registerTrackingRoutes } from './tracking/routes.js'
+import { registerAdministrationRoutes } from './administration/routes.js'
+import { registerRequestAudit } from './audit/request-events.js'
 import { registerGoogleRoutes } from './tracking/google-routes.js'
 import type { GoogleConfig, GoogleProvider } from './tracking/google.js'
 import { errorHandler, notFoundHandler } from './errors/index.js'
@@ -122,6 +124,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       : {}),
   })
   if (options.auth !== undefined) {
+    registerRequestAudit(app,options.auth.pool)
+    registerAdministrationRoutes(app,{ pool: options.auth.pool })
     registerTrackingRoutes(app, { pool: options.auth.pool, googleEnabled: options.google !== undefined, automaticSbmEnabled: options.google?.automaticSbmEnabled ?? false })
     registerGoogleRoutes(app, { pool: options.auth.pool, cookieSecure: options.auth.cookieSecure, ...(options.google ? { config: options.google } : {}), ...(options.googleProvider ? { provider: options.googleProvider } : {}) })
     registerAuthRoutes(app, options.auth)

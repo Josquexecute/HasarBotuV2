@@ -23,15 +23,12 @@ import { SettingsPage } from './SettingsPage'
  */
 function SettingsHarness() {
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>('hasarbotu-theme', 'light')
-  const [density, setDensity] = usePersistentState<'compact' | 'comfortable'>('hasarbotu-density', 'compact')
   const [collapsed, setCollapsed] = usePersistentState('hasarbotu-sidebar-collapsed', false)
   return (
     <SettingsPage
       theme={theme}
-      density={density}
       collapsed={collapsed}
       onThemeChange={setTheme}
-      onDensityChange={setDensity}
       onSidebarChange={setCollapsed}
     />
   )
@@ -47,13 +44,10 @@ describe('SettingsPage — tema, tercih, kalıcılık', () => {
     const user = userEvent.setup()
     render(<SettingsHarness />)
 
-    await user.click(screen.getByRole('radio', { name: 'Gerçek siyah koyu tema' }))
+    await user.click(screen.getByRole('radio', { name: 'Koyu tema' }))
     expect(readPersisted('hasarbotu-theme')).toBe('dark')
-    expect(screen.getByRole('radio', { name: 'Gerçek siyah koyu tema' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Koyu tema' })).toBeChecked()
 
-    await user.click(screen.getByRole('radio', { name: 'Rahat' }))
-    expect(readPersisted('hasarbotu-density')).toBe('comfortable')
-    expect(screen.getByRole('radio', { name: 'Rahat' })).toBeChecked()
 
     await user.click(screen.getByRole('radio', { name: 'Daraltılmış' }))
     expect(readPersisted('hasarbotu-sidebar-collapsed')).toBe(true)
@@ -69,8 +63,7 @@ describe('SettingsPage — tema, tercih, kalıcılık', () => {
 
     render(<SettingsHarness />)
 
-    expect(screen.getByRole('radio', { name: 'Gerçek siyah koyu tema' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Rahat' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Koyu tema' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Daraltılmış' })).toBeChecked()
     expect(screen.getByLabelText('Varsayılan açılış sayfası')).toHaveValue('Dosyalar')
     expect(screen.getByText('Ofis Simülasyonu / Temmuz 2026')).toBeInTheDocument()
@@ -105,8 +98,7 @@ describe('SettingsPage — tema, tercih, kalıcılık', () => {
     const user = userEvent.setup()
     render(<SettingsHarness />)
 
-    await user.click(screen.getByRole('radio', { name: 'Gerçek siyah koyu tema' }))
-    await user.click(screen.getByRole('radio', { name: 'Rahat' }))
+    await user.click(screen.getByRole('radio', { name: 'Koyu tema' }))
     await user.click(screen.getByRole('radio', { name: 'Daraltılmış' }))
     await user.selectOptions(screen.getByLabelText('Varsayılan açılış sayfası'), 'Dosyalar')
     await user.click(screen.getByRole('button', { name: 'Mock Klasörü Değiştir' }))
@@ -114,14 +106,12 @@ describe('SettingsPage — tema, tercih, kalıcılık', () => {
     await user.click(screen.getByRole('button', { name: /Varsayılanlara Dön/ }))
 
     expect(screen.getByRole('radio', { name: 'Açık tema' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Kompakt' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Açık' })).toBeChecked()
     expect(screen.getByLabelText('Varsayılan açılış sayfası')).toHaveValue('Durum Panosu')
     expect(screen.getByText('Demo Çalışma Alanı / 2026')).toBeInTheDocument()
     expect(screen.getByText('Görünüm ayarları mock varsayılanlara döndürüldü.')).toBeInTheDocument()
 
     expect(readPersisted('hasarbotu-theme')).toBe('light')
-    expect(readPersisted('hasarbotu-density')).toBe('compact')
     expect(readPersisted('hasarbotu-sidebar-collapsed')).toBe(false)
     expect(readPersisted('hasarbotu-default-page')).toBe('Durum Panosu')
     expect(readPersisted('hasarbotu-mock-folder')).toBe('Demo Çalışma Alanı / 2026')

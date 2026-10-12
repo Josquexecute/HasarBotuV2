@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import { z } from 'zod'
-import { applicationNumberSchema, canonicalDocumentTypeSchema, trackingFileSchema, trackingSnapshotSchema, tramerCommandSchema } from '@hasarbotu/contracts'
+import { applicationNumberSchema, canonicalDocumentTypeSchema, trackingFileSchema, trackingSnapshotSchema, trackingInboxSchema, tramerCommandSchema } from '@hasarbotu/contracts'
 import { createAuthStore } from '../auth/store.js'
 import { requireSession } from '../auth/guard.js'
 import { requireAgent } from '../agent/auth.js'
@@ -10,13 +10,16 @@ import { failureBody } from '../errors/failure.js'
 import { canManageTracking, canWriteTracking, observeFile, reconcileFiles, reviewDocument, reviewSbm, TrackingError, tramerCommand } from './store.js'
 import { createAuditService } from '../audit/service.js'
 import { withTransaction } from '../db/executor.js'
+import { registerTrackingResponseCompression } from './response-compression.js'
 
 export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg.Pool; googleEnabled: boolean; automaticSbmEnabled: boolean }) {
   const { pool } = options
   const auth = createAuthStore(pool)
   const agents = createAgentStore(pool)
+  const audit = createAuditService()
   // Encapsulation keeps these errors local to this feature.
   void app.register(async (routes) => {
+    registerTrackingResponseCompression(routes)
     routes.setErrorHandler((error, request, reply) => {
       if (error instanceof TrackingError) return reply.code(error.status).send(failureBody(error.status === 403 ? 'forbidden' : error.status === 404 ? 'not_found' : error.status === 409 ? 'conflict' : 'validation_error',error.message,String(request.id)))
       if (error instanceof z.ZodError) return reply.code(400).send(failureBody('validation_error','İstek alanları geçersiz.',String(request.id)))
@@ -47,7 +50,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
           WHERE f.organization_id=$1 AND NOT c.is_archived AND f.available AND ($2::uuid IS NULL OR f.case_id=$2)
           AND ($2::uuid IS NOT NULL OR (c.responsible_user_id=$3 AND o.status='pending')) ORDER BY o.observed_at DESC`, [org,query.caseId ?? null,user]),
         pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",n.title,n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
-          FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE n.organization_id=$1 AND NOT c.is_archived AND n.recipient_user_id=$2
+          FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE n.organization_id=$1 AND NOT c.is_archived AND c.responsible_user_id=$2
           AND ($3::uuid IS NULL OR n.case_id=$3) ORDER BY (n.read_at IS NULL) DESC,n.created_at DESC`, [org,user,query.caseId ?? null]),
         pool.query(`SELECT id,email,status,last_success_at AS "lastSuccessAt",last_error AS "lastError" FROM mail_connections WHERE organization_id=$1 AND ($2 OR connected_by=$3) ORDER BY email`, [org,manage,user]),
         pool.query(`SELECT m.id,m.application_number AS "applicationNumber",m.result_text AS "resultText",m.reason,c.email,m.received_at AS "receivedAt"
@@ -91,9 +94,13 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       if (!session) return
       const { id,action } = z.object({ id: z.string().uuid(), action: z.enum(['read','presented']) }).parse(request.params)
       const column = action === 'read' ? 'read_at' : 'presented_at'
-      const result = await pool.query(`UPDATE tracking_notifications n SET ${column}=coalesce(n.${column},now()),recipient_user_id=coalesce(n.recipient_user_id,c.responsible_user_id)
-        FROM cases c WHERE n.case_id=c.id AND NOT c.is_archived AND n.id=$1 AND n.organization_id=$2 AND coalesce(n.recipient_user_id,c.responsible_user_id)=$3 RETURNING n.id`, [id,session.user.organizationId,session.user.id])
-      if (!result.rowCount) throw new TrackingError(404,'Bildirim bulunamadı.')
+      await withTransaction(pool,async (db) => {
+        const result = await db.query(`UPDATE tracking_notifications n SET ${column}=coalesce(n.${column},now())
+          FROM cases c WHERE n.case_id=c.id AND NOT c.is_archived AND n.id=$1 AND n.organization_id=$2 AND c.responsible_user_id=$3 RETURNING n.id`, [id,session.user.organizationId,session.user.id])
+        if (!result.rowCount) throw new TrackingError(404,'Bildirim bulunamadı.')
+        await audit.record(db,{ organizationId: session.user.organizationId,actorUserId: session.user.id,
+          action: `tracking.notification_${action}`,entityType: 'tracking_notification',entityId: id,requestId: String(request.id) })
+      })
       return reply.code(204).send()
     })
     routes.get('/api/v1/tracking/notifications/pending',async (request,reply) => {
@@ -101,9 +108,41 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       if (!session) return
       const rows = (await pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,n.title
         FROM tracking_notifications n JOIN cases c ON c.id=n.case_id
-        WHERE n.organization_id=$1 AND NOT c.is_archived AND (n.recipient_user_id=$2 OR (n.recipient_user_id IS NULL AND c.responsible_user_id=$2))
+        WHERE n.organization_id=$1 AND NOT c.is_archived AND c.responsible_user_id=$2
         AND n.read_at IS NULL AND n.presented_at IS NULL ORDER BY n.created_at LIMIT 20`, [session.user.organizationId,session.user.id])).rows
       return { notifications: rows }
+    })
+    routes.get('/api/v1/tracking/notifications/inbox',async (request,reply) => {
+      const session = await requireSession(auth,request,reply)
+      if (!session) return
+      const query = z.object({ page: z.coerce.number().int().min(1).max(100_000).default(1),read: z.enum(['all','unread','read']).default('unread') }).strict().parse(request.query)
+      const scope = 'n.organization_id=$1 AND c.responsible_user_id=$2 AND NOT c.is_archived'
+      const filter = `${scope} AND ($3='all' OR ($3='unread' AND n.read_at IS NULL) OR ($3='read' AND n.read_at IS NOT NULL))`
+      const params = [session.user.organizationId,session.user.id,query.read]
+      const [counts,rows] = await Promise.all([
+        pool.query(`SELECT count(*)::int AS total,(SELECT count(*)::int FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${scope} AND n.read_at IS NULL) AS unread
+          FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${filter}`,params),
+        pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",n.title,n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
+          FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${filter} ORDER BY n.created_at DESC,n.id DESC LIMIT 50 OFFSET $4`,[...params,(query.page-1)*50]),
+      ])
+      return trackingInboxSchema.parse(JSON.parse(JSON.stringify({ notifications: rows.rows,...counts.rows[0],page: query.page })))
+    })
+    routes.post('/api/v1/tracking/notifications/dismiss',async (request,reply) => {
+      const session = await requireSession(auth,request,reply)
+      if (!session) return
+      z.object({}).strict().parse(request.body)
+      await withTransaction(pool,async (db) => {
+        // Closing the popup dismisses the current backlog; unread inbox entries remain.
+        // A notification created after this transaction still opens a future popup.
+        const result = await db.query(`UPDATE tracking_notifications n SET presented_at=now()
+          FROM cases c WHERE n.case_id=c.id AND n.organization_id=$1
+          AND c.responsible_user_id=$2 AND NOT c.is_archived
+          AND n.presented_at IS NULL AND n.read_at IS NULL AND n.created_at<=now()`,
+        [session.user.organizationId,session.user.id])
+        if (result.rowCount) await audit.record(db,{ organizationId: session.user.organizationId,actorUserId: session.user.id,
+          action: 'tracking.notifications_dismissed',requestId: String(request.id),details: { count: result.rowCount } })
+      })
+      return reply.code(204).send()
     })
     routes.post('/api/v1/tracking/mail/:id/disconnect', async (request,reply) => {
       const session = await requireSession(auth,request,reply)

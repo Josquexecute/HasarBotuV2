@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { PERMISSION_CODES } from '../../common/permissions.js'
 import { API_V1_BASE } from '../../common/routes.js'
 import { idSchema, utcDateTimeSchema } from '../../common/primitives.js'
 
@@ -46,6 +47,7 @@ export const sessionUserSchema = z.strictObject({
   email: emailSchema,
   displayName: z.string().min(1).max(200).regex(/\S/),
   roles: z.array(roleCodeSchema).max(ROLE_CODES.length),
+  permissions: z.array(z.enum(PERMISSION_CODES)).optional(),
 })
 export type SessionUser = z.infer<typeof sessionUserSchema>
 

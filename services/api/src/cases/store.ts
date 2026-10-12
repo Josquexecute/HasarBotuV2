@@ -9,7 +9,7 @@ import {
   type CasesQuery,
   type ServiceReference,
 } from '@hasarbotu/contracts'
-import { normalizeV1ResolutionName } from '@hasarbotu/domain'
+import { getSearchTokens, normalizeV1ResolutionName } from '@hasarbotu/domain'
 import { loadServiceProfiles } from '../service-agreements/service.js'
 
 /**
@@ -203,16 +203,19 @@ export function createCasesStore(pool: pg.Pool) {
       if (query.followUpTo !== undefined) add('follow_up_date <= ?', query.followUpTo)
 
       if (query.search !== undefined) {
-        // Cok kelimeli arama: her kelime en az bir kimlik alaninda gecmelidir (AND).
-        for (const token of query.search.trim().split(/\s+/)) {
-          const plateToken = token.toUpperCase().replace(/[^A-Z0-9]/g, '')
+        const normalized = (expression: string) => `regexp_replace(translate(lower(normalize(coalesce(${expression},''),NFD)),'ı','i'),'[^a-z0-9]','','g')`
+        for (const token of getSearchTokens(query.search)) {
           params.push(`%${token}%`)
           const textParam = `$${params.length}`
-          params.push(`%${plateToken.length > 0 ? plateToken : token.toUpperCase()}%`)
-          const plateParam = `$${params.length}`
           where.push(
-            `(plate_normalized LIKE ${plateParam} OR office_number ILIKE ${textParam}` +
-              ` OR notification_form_number ILIKE ${textParam} OR insurer_claim_number ILIKE ${textParam})`,
+            `(${['plate','office_number','notification_form_number','insurer_claim_number'].map((field) => `${normalized(field)} LIKE ${textParam}`).join(' OR ')}
+              OR EXISTS (SELECT 1 FROM users search_user WHERE search_user.organization_id=cases.organization_id
+                AND search_user.id IN (cases.responsible_user_id,cases.expert_user_id)
+                AND (${normalized('search_user.display_name')} LIKE ${textParam} OR ${normalized('search_user.email')} LIKE ${textParam}))
+              OR EXISTS (SELECT 1 FROM service_centers search_service WHERE search_service.organization_id=cases.organization_id
+                AND search_service.id=cases.service_center_id AND ${normalized('search_service.name')} LIKE ${textParam})
+              OR EXISTS (SELECT 1 FROM insurers search_insurer WHERE search_insurer.organization_id=cases.organization_id
+                AND search_insurer.id=cases.insurer_id AND ${normalized('search_insurer.name')} LIKE ${textParam}))`,
           )
         }
       }
