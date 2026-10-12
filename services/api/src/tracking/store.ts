@@ -28,7 +28,7 @@ export async function tramerCommand(pool: pg.Pool, session: SessionRow, caseId: 
   if (!canWriteTracking(session)) throw new TrackingError(403, 'Bu işlem için yetkiniz yok.')
   return withTransaction(pool, async (db) => {
     const org = session.user.organizationId
-    const found = await db.query('SELECT id FROM cases WHERE organization_id=$1 AND id::text=$2 FOR UPDATE', [org,caseId])
+    const found = await db.query('SELECT id FROM cases WHERE organization_id=$1 AND id::text=$2 AND NOT is_archived FOR UPDATE', [org,caseId])
     if (!found.rowCount) throw new TrackingError(404, 'Dosya bulunamadı.')
     const active = (await db.query(`SELECT * FROM tramer_requests WHERE organization_id=$1 AND case_id=$2
       AND status IN ('entry_pending','result_pending') FOR UPDATE`, [org,caseId])).rows[0]
@@ -65,12 +65,30 @@ export async function tramerCommand(pool: pg.Pool, session: SessionRow, caseId: 
 
 export async function observeFile(pool: pg.Pool, organizationId: string, agentId: string, input: TrackingFile) {
   return withTransaction(pool, async (db) => {
-    const location = (await db.query(`SELECT * FROM case_locations WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`, [organizationId,input.caseId])).rows[0]
+    const location = (await db.query(`SELECT l.* FROM case_locations l JOIN cases c ON c.organization_id=l.organization_id AND c.id=l.case_id
+      WHERE l.organization_id=$1 AND l.case_id=$2 AND NOT c.is_archived FOR UPDATE OF l`, [organizationId,input.caseId])).rows[0]
     if (!location || location.version !== input.locationVersion || location.storage_root_key !== input.storageRootKey
       || !input.relativePath.startsWith(`${location.relative_path}/`)) throw new TrackingError(409,'Dosya konumu değişti; yeniden tarayın.')
     const fileName = input.relativePath.split('/').at(-1)!
     if (isTemporaryTrackedFile(fileName)) throw new TrackingError(400,'Geçici dosya işlenemez.')
     let tracked = (await db.query(`SELECT * FROM tracked_files WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 AND relative_path=$4 FOR UPDATE`, [organizationId,input.caseId,input.storageRootKey,input.relativePath])).rows[0]
+    if (!tracked) {
+      // Rebinding a workspace must not create a second document for unchanged
+      // bytes. A verification-only update may have followed the actual move.
+      const previousPath = (await db.query(`SELECT previous_relative_path FROM case_location_history
+        WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 AND relative_path=$4
+          AND previous_relative_path IS NOT NULL AND previous_relative_path<>relative_path
+        ORDER BY occurred_at DESC,id DESC LIMIT 1`, [organizationId,input.caseId,input.storageRootKey,location.relative_path])).rows[0]?.previous_relative_path as string | undefined
+      if (previousPath) {
+        const oldPath = `${previousPath}/${input.relativePath.slice(location.relative_path.length+1)}`
+        const relocated = (await db.query(`SELECT * FROM tracked_files
+          WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 AND relative_path=$4 AND current_hash=$5
+          FOR UPDATE`, [organizationId,input.caseId,input.storageRootKey,oldPath,input.contentHash])).rows[0]
+        if (relocated) {
+          tracked = (await db.query('UPDATE tracked_files SET relative_path=$2 WHERE id=$1 RETURNING *', [relocated.id,input.relativePath])).rows[0]
+        }
+      }
+    }
     if (tracked?.current_hash === input.contentHash && tracked.available) return { changed: false }
     const previous = tracked ? (await db.query('SELECT document_type FROM document_observations WHERE file_id=$1 AND revision=$2', [tracked.id,tracked.revision])).rows[0] : undefined
     if (tracked) {
@@ -93,7 +111,7 @@ export async function reviewDocument(pool: pg.Pool, session: SessionRow, id: str
   await withTransaction(pool, async (db) => {
     const row = (await db.query(`SELECT o.*,f.organization_id,f.case_id,f.revision AS current_revision,c.responsible_user_id
       FROM document_observations o JOIN tracked_files f ON f.id=o.file_id JOIN cases c ON c.id=f.case_id
-      WHERE o.id::text=$1 AND f.organization_id=$2 FOR UPDATE OF o,f,c`, [id,session.user.organizationId])).rows[0]
+      WHERE o.id::text=$1 AND f.organization_id=$2 AND NOT c.is_archived FOR UPDATE OF o,f,c`, [id,session.user.organizationId])).rows[0]
     if (!row) throw new TrackingError(404,'Evrak bulunamadı.')
     const location = (await db.query('SELECT storage_root_key,relative_path FROM case_locations WHERE organization_id=$1 AND case_id=$2', [row.organization_id,row.case_id])).rows[0]
     const file = (await db.query('SELECT * FROM tracked_files WHERE id=$1', [row.file_id])).rows[0]
@@ -107,12 +125,13 @@ export async function reviewDocument(pool: pg.Pool, session: SessionRow, id: str
 
 export async function reconcileFiles(pool: pg.Pool, organizationId: string, input: { caseId: string; locationVersion: number; scanStartedAt: string; paths: string[] }) {
   await withTransaction(pool,async (db) => {
-    const location = (await db.query('SELECT * FROM case_locations WHERE organization_id=$1 AND case_id=$2 FOR UPDATE', [organizationId,input.caseId])).rows[0]
+    const location = (await db.query(`SELECT l.* FROM case_locations l JOIN cases c ON c.organization_id=l.organization_id AND c.id=l.case_id
+      WHERE l.organization_id=$1 AND l.case_id=$2 AND NOT c.is_archived FOR UPDATE OF l`, [organizationId,input.caseId])).rows[0]
     if (!location || location.version !== input.locationVersion) throw new TrackingError(409,'Tarama sırasında konum değişti.')
     const removed = await db.query(`UPDATE tracked_files SET available=false WHERE organization_id=$1 AND case_id=$2 AND available
-      AND storage_root_key=$3 AND left(relative_path,length($4::text)+1)=$4||'/' AND NOT(relative_path=ANY($5::text[]))
-      AND EXISTS (SELECT 1 FROM document_observations o WHERE o.file_id=tracked_files.id AND o.revision=tracked_files.revision AND o.observed_at <= $6::timestamptz)
-      RETURNING *`, [organizationId,input.caseId,location.storage_root_key,location.relative_path,input.paths,input.scanStartedAt])
+      AND (storage_root_key<>$3 OR NOT(relative_path=ANY($4::text[])))
+      AND EXISTS (SELECT 1 FROM document_observations o WHERE o.file_id=tracked_files.id AND o.revision=tracked_files.revision AND o.observed_at <= $5::timestamptz)
+      RETURNING *`, [organizationId,input.caseId,location.storage_root_key,input.paths,input.scanStartedAt])
     for (const file of removed.rows) {
       await notify(db,organizationId,input.caseId,`document:${file.id}:${file.revision}:missing`,'document',`Evrak artık klasörde bulunmuyor: ${file.relative_path.split('/').at(-1)}`)
       await record(db,organizationId,input.caseId,'document_missing',undefined,{ fileName: file.relative_path.split('/').at(-1) })

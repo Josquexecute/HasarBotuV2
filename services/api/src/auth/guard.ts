@@ -40,6 +40,11 @@ export async function requireSession(
     sendUnauthorized(reply, String(request.id))
     return undefined
   }
+  const caseId = (request.params as { caseId?: unknown } | undefined)?.caseId
+  if (typeof caseId === 'string' && await store.isCaseArchived(session.user.organizationId, caseId)) {
+    void reply.code(404).send(failureBody('not_found', 'Case not found.', String(request.id)))
+    return undefined
+  }
   return session
 }
 

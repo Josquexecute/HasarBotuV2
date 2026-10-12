@@ -257,7 +257,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         await client.query('BEGIN')
         const current = await client.query(
           `SELECT version, follow_up_date, loss_date, notification_date, lifecycle_status
-           FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE`,
+           FROM cases WHERE id::text = $1 AND organization_id = $2 AND is_archived = false FOR UPDATE`,
           [caseId, actor.organizationId],
         )
         const existing = current.rows[0] as {

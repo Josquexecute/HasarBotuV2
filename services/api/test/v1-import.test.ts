@@ -897,4 +897,94 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     const after = await pool.query('SELECT count(*)::int AS n FROM v1_import_records WHERE organization_id=$1', [organizationId])
     expect(after.rows[0].n).toBe(before.rows[0].n)
   })
+
+  it('explicit identical-source selection imports one case and resolves both quarantines without changing either folder', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-canonical-'))
+    const canonicalPath = '2026/Temmuz 2026/KAPALI TEMMUZ/34CAN101'
+    const aliasPath = `${canonicalPath} ANADOLU`
+    const input = { caseKey: 'canonical-duplicate', createdAt: '2026-07-02T07:00:00Z', closed: true,
+      notes: [{ id: 'canonical-note', text: 'One historical note' }] }
+    const canonical = await writeSource(root, canonicalPath, input, ['M RUHSAT.jpeg'])
+    const alias = await writeSource(root, aliasPath, input, ['M RUHSAT.jpeg'])
+    const before = await readFile(join(canonical, '_HASARBOTU/takip.json'), 'utf8')
+    const actor = { organizationId, actorUserId, requestId: 'canonical-selection' }
+    const initial = await planV1Remediation(pool, organizationId, root)
+    expect(initial.summary.quarantine.total).toBe(2)
+    expect(await applyV1Remediation(pool, actor, initial)).toMatchObject({ casesCreated: 0, quarantinesRecorded: 2, failed: 0 })
+    const selected = initial.entries.find(entry => entry.folder.relativePath === canonicalPath)!
+    const duplicate = initial.entries.find(entry => entry.folder.relativePath === aliasPath)!
+    const options = { resolutions: {
+      schemaVersion: 'hasarbotu-v1-resolution/1.0.0' as const,
+      canonicalSources: { [selected.sourceIdentity!]: {
+        pathToken: selected.pathToken, sourceHash: selected.sourceHash!, aliasPathTokens: [duplicate.pathToken],
+      } },
+    } }
+    const plan = await planV1Remediation(pool, organizationId, root, options)
+    expect(plan.entries.find(entry => entry.pathToken === selected.pathToken)).toMatchObject({
+      targetState: 'create', sourceIdentityState: 'resolved', quarantineResolutionIds: expect.any(Array),
+    })
+    expect(plan.entries.find(entry => entry.pathToken === selected.pathToken)!.quarantineResolutionIds).toHaveLength(2)
+    expect(plan.entries.find(entry => entry.pathToken === duplicate.pathToken)).toMatchObject({ targetState: 'duplicate_alias', quarantine: null, notes: [], tasks: [] })
+    expect(plan.summary.actionable.casesToCreate).toBe(1)
+    expect(plan.summary.duplicatesThatWouldBeCreated).toBe(0)
+    expect(await applyV1Remediation(pool, actor, plan, options)).toMatchObject({
+      casesCreated: 1, notesCreated: 1, historicalClosures: 1, sourcesRecorded: 1, aliasesRecorded: 2,
+      quarantineResolutionsRecorded: 2, failed: 0,
+    })
+    const resolved = await pool.query(`SELECT s.resolution_kind FROM v1_import_quarantine_status s
+      JOIN v1_import_source_quarantines q ON q.quarantine_identity=s.quarantine_identity AND q.organization_id=s.organization_id
+      WHERE s.organization_id=$1 AND q.source_relative_path=ANY($2)`, [organizationId, [canonicalPath, aliasPath]])
+    expect(resolved.rows).toEqual([{ resolution_kind: 'explicit_reconciliation' }, { resolution_kind: 'explicit_reconciliation' }])
+    const auditBefore = (await pool.query('SELECT count(*)::int count FROM audit_events WHERE organization_id=$1', [organizationId])).rows
+    const replay = await planV1Remediation(pool, organizationId, root, options)
+    expect(await applyV1Remediation(pool, actor, replay, options)).toMatchObject({
+      casesCreated: 0, notesCreated: 0, historicalClosures: 0, sourcesRecorded: 0, aliasesRecorded: 0, quarantineResolutionsRecorded: 0, failed: 0,
+    })
+    expect((await pool.query('SELECT count(*)::int count FROM audit_events WHERE organization_id=$1', [organizationId])).rows).toEqual(auditBefore)
+    expect(await readFile(join(canonical, '_HASARBOTU/takip.json'), 'utf8')).toBe(before)
+    expect(await readFile(join(alias, '_HASARBOTU/takip.json'), 'utf8')).toBe(before)
+  })
+
+  it('canonical selection rejects changed snapshots, incomplete alias groups and stale approval before writing', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-canonical-'))
+    const path = '2026/Temmuz 2026/34CAN202'
+    const input = { caseKey: 'canonical-guards', createdAt: '2026-07-03T07:00:00Z' }
+    await writeSource(root, path, input, ['M RUHSAT.jpeg'])
+    const alias = await writeSource(root, `${path} COPY`, input)
+    const initial = await planV1Remediation(pool, organizationId, root)
+    const selected = initial.entries.find(entry => entry.folder.relativePath === path)!
+    const duplicate = initial.entries.find(entry => entry.folder.relativePath !== path)!
+    const selection = { pathToken: selected.pathToken, sourceHash: selected.sourceHash!, aliasPathTokens: [duplicate.pathToken] }
+    const options = { resolutions: { schemaVersion: 'hasarbotu-v1-resolution/1.0.0' as const, canonicalSources: { [selected.sourceIdentity!]: selection } } }
+    const approved = await planV1Remediation(pool, organizationId, root, options)
+    await expect(applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'different-selection' }, approved)).rejects.toThrow('v1_remediation_plan_stale')
+    await expect(planV1Remediation(pool, organizationId, root, { resolutions: { ...options.resolutions,
+      canonicalSources: { [selected.sourceIdentity!]: { ...selection, aliasPathTokens: [] } },
+    } })).rejects.toThrow('v1_canonical_source_selection_invalid')
+    const before = (await pool.query('SELECT count(*)::int count FROM cases WHERE organization_id=$1', [organizationId])).rows
+    await writeFile(join(alias, '_HASARBOTU/takip.json'), takipJson({ ...input, notes: [{ id: 'changed-note', text: 'Changed snapshot' }] }))
+    await expect(applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'stale-selection' }, approved, options)).rejects.toThrow('v1_canonical_source_selection_invalid')
+    expect((await pool.query('SELECT count(*)::int count FROM cases WHERE organization_id=$1', [organizationId])).rows).toEqual(before)
+    await writeFile(join(alias, '_HASARBOTU/takip.json'), takipJson(input))
+    await writeSource(root, `${path} NEW COPY`, input)
+    await expect(planV1Remediation(pool, organizationId, root, options)).rejects.toThrow('v1_canonical_source_selection_invalid')
+  })
+
+  it('canonical selection keeps conflicting claim-type evidence quarantined', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-canonical-'))
+    const path = '2026/Temmuz 2026/34CAN303'
+    const input = { caseKey: 'canonical-conflict', createdAt: '2026-07-04T07:00:00Z', claimType: '' }
+    await writeSource(root, path, input, ['K RUHSAT.jpeg', 'M RUHSAT.jpeg'])
+    await writeSource(root, `${path} COPY`, input)
+    const initial = await planV1Remediation(pool, organizationId, root)
+    const selected = initial.entries.find(entry => entry.folder.relativePath === path)!
+    const duplicate = initial.entries.find(entry => entry.folder.relativePath !== path)!
+    const options = { resolutions: { schemaVersion: 'hasarbotu-v1-resolution/1.0.0' as const,
+      canonicalSources: { [selected.sourceIdentity!]: { pathToken: selected.pathToken, sourceHash: selected.sourceHash!, aliasPathTokens: [duplicate.pathToken] } },
+    } }
+    const plan = await planV1Remediation(pool, organizationId, root, options)
+    expect(plan.entries.find(entry => entry.pathToken === selected.pathToken)!.quarantine).not.toBeNull()
+    expect(plan.summary.actionable.casesToCreate).toBe(0)
+    expect(await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'canonical-conflict' }, plan, options)).toMatchObject({ casesCreated: 0, quarantineResolutionsRecorded: 0, failed: 0 })
+  })
 })

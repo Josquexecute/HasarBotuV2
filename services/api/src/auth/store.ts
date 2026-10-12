@@ -135,6 +135,15 @@ export function createAuthStore(pool: pg.Pool) {
       return { user: mapUser(row), expiresAt: row.session_expires_at }
     },
 
+    /** Arşivlenmiş kayıtlar günlük vaka uçlarından erişilemez; tarihçe korunur. */
+    async isCaseArchived(organizationId: string, caseId: string): Promise<boolean> {
+      const result = await pool.query(
+        'SELECT 1 FROM cases WHERE organization_id=$1 AND id::text=$2 AND is_archived=true',
+        [organizationId, caseId],
+      )
+      return result.rowCount === 1
+    },
+
     /** Oturumu iptal eder; zaten iptal edilmisse etkisizdir (idempotent). */
     async revokeSession(tokenHash: string, exec: Queryable = pool): Promise<boolean> {
       const result = await exec.query(

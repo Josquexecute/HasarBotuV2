@@ -722,11 +722,15 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
       headers: { cookie: otherCookie },
     })).statusCode).toBe(404)
 
+    const rollbackNames = (await pool.query<{ name: string }>(
+      `SELECT name FROM pgmigrations
+       WHERE name >= '0043_traffic_value_loss_real_market_revision' ORDER BY name`,
+    )).rows.map((row) => row.name)
     await expect(runMigrations({
       databaseUrl: config.url,
       direction: 'down',
-      // 0050 takip migration'ı dahil geri alarak 0043 rollback guard'ına ulaş.
-      count: 8,
+      // Include every applied migration down to the 0043 rollback guard.
+      count: rollbackNames.length,
       quiet: true,
     })).rejects.toThrow('real market value loss revisions must be removed before rollback')
     const migrationState = await pool.query(
@@ -740,15 +744,7 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
     )).rows[0].n)).toBe(1)
     const restored = await runMigrations({ databaseUrl: config.url, quiet: true })
     expect(restored.map((migration) => migration.name))
-      .toEqual([
-        '0044_labor_workbook_apply_runtime',
-        '0045_kasco_mandatory_checks',
-        '0046_v1_import_provenance',
-        '0047_v1_import_remediation',
-        '0048_v1_import_source_quarantine',
-        '0049_eksist_sources',
-        '0050_tracking',
-      ])
+      .toEqual(rollbackNames.filter((name) => name !== '0043_traffic_value_loss_real_market_revision'))
   }, 40_000)
 
   it('JSONB snapshot/provenance/minor-unit değerlerini veri kaybı olmadan saklar ve rollback atomiktir', async () => {

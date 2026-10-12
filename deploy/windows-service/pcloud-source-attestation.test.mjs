@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -7,6 +7,8 @@ import test from 'node:test'
 import {
   attestationFileNameFor,
   buildAttestationRecords,
+  buildAttestationRecordsBatch,
+  findCasesNeedingAttestation,
   readAttestationRecord,
   resolveTopLevelFolderId,
   writeAttestationRecord,
@@ -52,6 +54,128 @@ async function buildFixture(context) {
 
   return { temporaryRoot, topLevelFolderName, caseRelativePath, sourceCaseRoot, databasePath, fileABytes, fileBBytes }
 }
+
+test('batch attestation preserves real file hashes across two source cases', async (context) => {
+  const fixture = await buildFixture(context)
+  const secondRoot = path.join(fixture.temporaryRoot, 'KAYNAK', '00BBB000')
+  await mkdir(secondRoot)
+  await writeFile(path.join(secondRoot, 'ikinci.pdf'), 'ikinci')
+  const database = new DatabaseSync(fixture.databasePath)
+  database.exec("INSERT INTO folder VALUES(202,100,'00BBB000',0,1,1,0); INSERT INTO file VALUES(5003,202,'ikinci.pdf',6,42,0,1,1);")
+  database.close()
+  const records = await buildAttestationRecordsBatch({
+    cases: [{ sourceCaseRoot: fixture.sourceCaseRoot, caseRelativePath: fixture.caseRelativePath },
+      { sourceCaseRoot: secondRoot, caseRelativePath: '00BBB000' }],
+    databasePath: fixture.databasePath, topLevelFolderName: fixture.topLevelFolderName, attestedBy: 'test-admin',
+  })
+  assert.equal(records.length, 3)
+  const original = await buildAttestationRecords({ ...fixture, attestedBy: 'test-admin' })
+  for (const item of original) assert.equal(records.find((row) => row.FileId === item.FileId).Sha256, item.Sha256)
+  assert.equal(records.find((row) => row.FileId === '5003').RelativePath, '00BBB000\\ikinci.pdf')
+})
+
+test('batch final fence rejects an earlier file revision changed while later files are hashing', async (context) => {
+  const fixture = await buildFixture(context)
+  process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER = '1'
+  context.after(() => { delete process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER })
+  const promise = buildAttestationRecordsBatch({ cases: [fixture], databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName, attestedBy: 'test-admin' })
+  await new Promise((resolve) => { setTimeout(resolve, 150) })
+  const database = new DatabaseSync(fixture.databasePath)
+  database.exec('UPDATE file SET hash=42 WHERE id=5002')
+  database.close()
+  await assert.rejects(promise, /IDENTITY_FENCE_REVISION_CHANGED_DURING_HASH/)
+})
+
+test('batch final fence rejects a source size change before returning any records', async (context) => {
+  const fixture = await buildFixture(context)
+  process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER = '1'
+  context.after(() => { delete process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER })
+  const promise = buildAttestationRecordsBatch({ cases: [fixture], databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName, attestedBy: 'test-admin' })
+  await new Promise((resolve) => { setTimeout(resolve, 150) })
+  await writeFile(path.join(fixture.sourceCaseRoot, 'EVRAK', 'poliçe.pdf'), 'size changed')
+  await assert.rejects(promise, /IDENTITY_FENCE_SOURCE_SIZE_CHANGED_DURING_HASH/)
+})
+
+test('batch rejects an unbounded or duplicate scope', async (context) => {
+  const fixture = await buildFixture(context)
+  const settings = { databasePath: fixture.databasePath, topLevelFolderName: fixture.topLevelFolderName, attestedBy: 'test-admin' }
+  await assert.rejects(buildAttestationRecordsBatch({ ...settings, cases: Array(21).fill(fixture) }), /ATTESTATION_BATCH_CASES_INVALID/)
+  await assert.rejects(buildAttestationRecordsBatch({ ...settings, cases: [fixture, fixture] }), /ATTESTATION_BATCH_DUPLICATE_CASE/)
+})
+
+test('batch source read failure names the file and returns no partial proof', async (context) => {
+  const fixture = await buildFixture(context)
+  process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER = '1'
+  context.after(() => { delete process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER })
+  const pending = buildAttestationRecordsBatch({ cases: [fixture], databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName, attestedBy: 'test-admin' })
+  await new Promise((resolve) => { setTimeout(resolve, 50) })
+  await rm(path.join(fixture.sourceCaseRoot, 'ruhsat.pdf'))
+  await assert.rejects(pending, (error) => error.safeCode === 'SOURCE_FILE_READ_FAILED'
+    && error.fileSystemCode === 'ENOENT' && error.sourceRelativePath === path.win32.join(fixture.caseRelativePath, 'ruhsat.pdf'))
+})
+
+test('refresh selection reuses verified source proofs and selects a changed revision', async (context) => {
+  const fixture = await buildFixture(context)
+  const targetCaseRoot = path.join(fixture.temporaryRoot, 'target')
+  await cp(fixture.sourceCaseRoot, targetCaseRoot, { recursive: true })
+  const store = path.join(fixture.temporaryRoot, 'proofs')
+  const cases = [{ ...fixture, targetCaseRoot }]
+  const args = { cases, databasePath: fixture.databasePath, topLevelFolderName: fixture.topLevelFolderName, attestationStoreDirectory: store }
+  assert.deepEqual((await findCasesNeedingAttestation(args)).casesToRefresh, cases)
+  for (const record of await buildAttestationRecords({ ...fixture, attestedBy: 'test-admin' })) await writeAttestationRecord(store, record)
+  assert.equal((await findCasesNeedingAttestation(args)).casesToRefresh.length, 0)
+  // Target edits never become a replacement source-of-truth attestation.
+  await writeFile(path.join(targetCaseRoot, 'ruhsat.pdf'), 'different-target-bytes')
+  assert.equal((await findCasesNeedingAttestation(args)).casesToRefresh.length, 0)
+  const database = new DatabaseSync(fixture.databasePath)
+  database.exec('UPDATE file SET hash=42 WHERE id=5002')
+  database.close()
+  assert.deepEqual((await findCasesNeedingAttestation(args)).casesToRefresh, cases)
+})
+
+test('refresh selection keeps held and refreshable case identities separate', async (context) => {
+  const fixture = await buildFixture(context)
+  const targetCaseRoot = path.join(fixture.temporaryRoot, 'target')
+  await cp(fixture.sourceCaseRoot, targetCaseRoot, { recursive: true })
+  const valid = { ...fixture, targetCaseRoot }
+  const missing = { ...fixture, caseRelativePath: 'MISSING', targetCaseRoot: path.join(fixture.temporaryRoot, 'missing') }
+  const report = await findCasesNeedingAttestation({ cases: [missing, valid], databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName, attestationStoreDirectory: path.join(fixture.temporaryRoot, 'proofs') })
+  assert.deepEqual(report.casesToRefresh, [valid])
+  assert.equal(report.heldCases[0].caseRelativePath, 'MISSING')
+  await assert.rejects(findCasesNeedingAttestation({ cases: [{ ...fixture, targetCaseRoot: fixture.sourceCaseRoot }] }), /INDEPENDENT_SOURCE_ROOT_REQUIRED/)
+})
+
+test('refresh selection regenerates a corrupted proof from source rather than accepting it', async (context) => {
+  const fixture = await buildFixture(context)
+  const targetCaseRoot = path.join(fixture.temporaryRoot, 'target')
+  await cp(fixture.sourceCaseRoot, targetCaseRoot, { recursive: true })
+  const store = path.join(fixture.temporaryRoot, 'proofs')
+  const records = await buildAttestationRecords({ ...fixture, attestedBy: 'test-admin' })
+  for (const record of records) await writeAttestationRecord(store, record)
+  await writeFile(path.join(store, attestationFileNameFor(records[0].FileId, records[0].PCloudHash)), '{}')
+  const cases = [{ ...fixture, targetCaseRoot }]
+  const report = await findCasesNeedingAttestation({ cases, databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName, attestationStoreDirectory: store })
+  assert.deepEqual(report.casesToRefresh, cases)
+})
+
+test('refresh selection reports the unmatched source filename without producing a proof', async (context) => {
+  const fixture = await buildFixture(context)
+  const targetCaseRoot = path.join(fixture.temporaryRoot, 'target')
+  await cp(fixture.sourceCaseRoot, targetCaseRoot, { recursive: true })
+  const database = new DatabaseSync(fixture.databasePath)
+  database.exec('DELETE FROM file WHERE id=5002')
+  database.close()
+  const report = await findCasesNeedingAttestation({ cases: [{ ...fixture, targetCaseRoot }], databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName, attestationStoreDirectory: path.join(fixture.temporaryRoot, 'proofs') })
+  assert.equal(report.casesToRefresh.length, 0)
+  assert.equal(report.heldCases[0].code, 'PCLOUD_FILE_ROW_NOT_FOUND')
+  assert.equal(report.heldCases[0].sourceRelativePath, path.win32.join(fixture.caseRelativePath, 'EVRAK', 'poliçe.pdf'))
+})
 
 test('resolveTopLevelFolderId: parentfolderid=0 + name eslesmesiyle DB-yalniz cozer', async (context) => {
   const fixture = await buildFixture(context)

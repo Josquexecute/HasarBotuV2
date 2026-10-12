@@ -110,9 +110,17 @@ function resolveFileDbInfo(database, caseFolderId, relativePath) {
   const fileFolderId = fileDirParts.length === 0
     ? caseFolderId
     : resolveFolderIdByRelativeDirParts(database, caseFolderId, fileDirParts)
-  assert(fileFolderId !== null, 'PCLOUD_FILE_FOLDER_NOT_FOUND')
+  if (fileFolderId === null) {
+    const error = new SafeError('PCLOUD_FILE_FOLDER_NOT_FOUND')
+    error.sourceRelativePath = relativePath
+    throw error
+  }
   const row = getCurrentFileRow(database, fileFolderId, fileName)
-  assert(row, 'PCLOUD_FILE_ROW_NOT_FOUND')
+  if (!row) {
+    const error = new SafeError('PCLOUD_FILE_ROW_NOT_FOUND')
+    error.sourceRelativePath = relativePath
+    throw error
+  }
   return { fileId: row.id_text, pCloudHash: row.hash_text, dbSizeBytes: row.size }
 }
 
@@ -234,6 +242,139 @@ export async function buildAttestationRecords({
   }
 
   return records
+}
+
+/**
+ * Large office databases make a full SQLite snapshot per file prohibitive.
+ * Fence the complete batch before hashing and again after every hash has
+ * finished. Nothing is returned for persistence until every revision and
+ * source size passes the final fence; a change in an earlier file rejects
+ * the entire batch. The single-case operator entry point stays unchanged.
+ */
+export async function buildAttestationRecordsBatch({ cases, databasePath, topLevelFolderName, attestedBy }) {
+  assert(Array.isArray(cases) && cases.length > 0 && cases.length <= 20, 'ATTESTATION_BATCH_CASES_INVALID')
+  assert(typeof databasePath === 'string' && databasePath.length > 0, 'DATABASE_PATH_REQUIRED')
+  assert(typeof topLevelFolderName === 'string' && topLevelFolderName.length > 0, 'TOP_LEVEL_FOLDER_NAME_REQUIRED')
+  assert(typeof attestedBy === 'string' && attestedBy.length > 0, 'ATTESTED_BY_REQUIRED')
+  const paths = new Set()
+  const groups = []
+  for (const item of cases) {
+    assert(typeof item.sourceCaseRoot === 'string' && item.sourceCaseRoot.length > 0, 'SOURCE_CASE_ROOT_REQUIRED')
+    assert(typeof item.caseRelativePath === 'string' && item.caseRelativePath.length > 0, 'CASE_RELATIVE_PATH_REQUIRED')
+    assert(!paths.has(item.caseRelativePath), 'ATTESTATION_BATCH_DUPLICATE_CASE')
+    paths.add(item.caseRelativePath)
+    groups.push({ ...item, files: await enumerateFilesRecursive(item.sourceCaseRoot) })
+  }
+  function resolveGroups(database) {
+    const topId = resolveTopLevelFolderId(database, topLevelFolderName)
+    return groups.map((group) => {
+      const folderId = resolveFolderIdByRelativeDirParts(database, topId, group.caseRelativePath.split(/[\\/]+/).filter(Boolean))
+      assert(folderId !== null, 'PCLOUD_CASE_FOLDER_NOT_FOUND')
+      return group.files.map((file) => resolveFileDbInfo(database, folderId, file.relativePath))
+    })
+  }
+  const before = await withConsistentPcloudDatabase(databasePath, resolveGroups)
+  const records = []
+  for (const [groupIndex, group] of groups.entries()) {
+    for (const [fileIndex, file] of group.files.entries()) {
+      const info = before[groupIndex][fileIndex]
+      assert(Number(info.dbSizeBytes) === file.sizeBytes, 'SOURCE_SIZE_RACE_VS_PCLOUD_DB_DURING_ATTESTATION')
+      let sha256
+      try {
+        sha256 = await fileSha256(file.fullPath)
+      } catch (error) {
+        if (!['ENOENT', 'EACCES', 'EPERM', 'EIO'].includes(error?.code)) throw error
+        const failure = new SafeError('SOURCE_FILE_READ_FAILED')
+        failure.cause = error
+        failure.sourceRelativePath = path.win32.join(group.caseRelativePath, file.relativePath)
+        failure.fileSystemCode = error.code
+        throw failure
+      }
+      if (process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER === '1') {
+        await new Promise((resolve) => { setTimeout(resolve, 100) })
+      }
+      records.push({
+        SchemaVersion: ATTESTATION_RECORD_SCHEMA_VERSION,
+        FileId: info.fileId,
+        PCloudHash: info.pCloudHash,
+        RelativePath: path.win32.join(group.caseRelativePath, file.relativePath),
+        SizeBytes: file.sizeBytes,
+        Sha256: sha256,
+        AttestedAtUtc: new Date().toISOString(),
+        AttestedBy: attestedBy,
+      })
+    }
+  }
+  const after = await withConsistentPcloudDatabase(databasePath, resolveGroups)
+  for (const [groupIndex, group] of groups.entries()) {
+    for (const [fileIndex, file] of group.files.entries()) {
+      const original = before[groupIndex][fileIndex]
+      const current = after[groupIndex][fileIndex]
+      assert(current.fileId === original.fileId, 'IDENTITY_FENCE_FILE_ID_CHANGED_DURING_HASH')
+      assert(current.pCloudHash === original.pCloudHash, 'IDENTITY_FENCE_REVISION_CHANGED_DURING_HASH')
+      assert(Number(current.dbSizeBytes) === file.sizeBytes, 'IDENTITY_FENCE_DB_SIZE_CHANGED_DURING_HASH')
+      const source = await stat(file.fullPath).catch(() => null)
+      assert(source !== null, 'IDENTITY_FENCE_SOURCE_FILE_MISSING_AFTER_HASH')
+      assert(source.size === file.sizeBytes, 'IDENTITY_FENCE_SOURCE_SIZE_CHANGED_DURING_HASH')
+    }
+  }
+  return records
+}
+
+/** Select changed revisions without re-hashing unchanged source bytes. */
+export async function findCasesNeedingAttestation({ cases, databasePath, topLevelFolderName, attestationStoreDirectory }) {
+  const groups = []
+  const heldCases = []
+  const canonicalRoot = (root) => process.platform === 'win32' ? path.resolve(root).toUpperCase() : path.resolve(root)
+  for (const item of cases) {
+    assert(canonicalRoot(item.sourceCaseRoot) !== canonicalRoot(item.targetCaseRoot), 'INDEPENDENT_SOURCE_ROOT_REQUIRED')
+    try {
+      groups.push({ ...item, original: item, files: await enumerateFilesRecursive(item.targetCaseRoot) })
+    } catch (error) {
+      if (!['ENOENT', 'EACCES', 'EPERM'].includes(error?.code)) throw error
+      heldCases.push({ caseRelativePath: item.caseRelativePath, code: error.code })
+    }
+  }
+  const resolved = await withConsistentPcloudDatabase(databasePath, (database) => {
+    const topId = resolveTopLevelFolderId(database, topLevelFolderName)
+    return groups.map((group) => {
+      try {
+        const folderId = resolveFolderIdByRelativeDirParts(database, topId, group.caseRelativePath.split(/[\\/]+/).filter(Boolean))
+        assert(folderId !== null, 'PCLOUD_CASE_FOLDER_NOT_FOUND')
+        return group.files.map((file) => resolveFileDbInfo(database, folderId, file.relativePath))
+      } catch (error) {
+        if (!error?.safeCode) throw error
+        heldCases.push({ caseRelativePath: group.caseRelativePath, code: error.safeCode,
+          sourceRelativePath: error.sourceRelativePath ? path.win32.join(group.caseRelativePath, error.sourceRelativePath) : undefined })
+        return null
+      }
+    })
+  })
+  const casesToRefresh = []
+  let checkedFiles = 0
+  for (const [index, group] of groups.entries()) {
+    if (resolved[index] === null) continue
+    for (const [fileIndex, file] of group.files.entries()) {
+      const info = resolved[index][fileIndex]
+      let record
+      try {
+        record = await readAttestationRecord(attestationStoreDirectory, info.fileId, info.pCloudHash)
+      } catch (error) {
+        if (!error?.safeCode && !(error instanceof SyntaxError)) throw error
+        // A damaged proof must be regenerated from the independent source.
+        record = null
+      }
+      checkedFiles += 1
+      if (!record || !SHA256_HEX_PATTERN.test(record.Sha256)
+        || record.SizeBytes !== Number(info.dbSizeBytes)
+        || record.RelativePath !== path.win32.join(group.caseRelativePath, file.relativePath)) {
+        casesToRefresh.push(group.original)
+        // Select each case once; its complete source is fenced during refresh.
+        break
+      }
+    }
+  }
+  return { casesToRefresh, heldCases, checkedFiles }
 }
 
 /**

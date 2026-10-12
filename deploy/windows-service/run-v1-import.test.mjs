@@ -34,6 +34,7 @@ test('resolution manifest stable source/name token ve target bicimini zorlar', a
       users: { ['c'.repeat(16)]: '019f7000-0000-7000-8000-000000000002' },
       experts: {},
       services: {},
+      canonicalSources: { ['d'.repeat(64)]: { pathToken: 'e'.repeat(16), sourceHash: 'f'.repeat(64), aliasPathTokens: ['a'.repeat(16)] } },
     }), 'utf8')
     assert.equal((await readResolutionManifest(valid)).schemaVersion, 'hasarbotu-v1-resolution/1.0.0')
 
@@ -47,4 +48,20 @@ test('resolution manifest stable source/name token ve target bicimini zorlar', a
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test('canonical source manifest rejects missing hashes, duplicate aliases and unknown fields', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hb-v1-resolution-test-'))
+  try {
+    const file = join(root, 'invalid.json')
+    const valid = { pathToken: 'a'.repeat(16), sourceHash: 'b'.repeat(64), aliasPathTokens: ['c'.repeat(16)] }
+    for (const selection of [
+      { ...valid, sourceHash: '' }, { ...valid, aliasPathTokens: [] },
+      { ...valid, aliasPathTokens: ['c'.repeat(16), 'c'.repeat(16)] },
+      { ...valid, aliasPathTokens: [valid.pathToken] }, { ...valid, unsafe: true },
+    ]) {
+      await writeFile(file, JSON.stringify({ schemaVersion: 'hasarbotu-v1-resolution/1.0.0', canonicalSources: { ['d'.repeat(64)]: selection } }))
+      await assert.rejects(readResolutionManifest(file), error => error instanceof SafeError && error.safeCode === 'RESOLUTION_MANIFEST_INVALID')
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })

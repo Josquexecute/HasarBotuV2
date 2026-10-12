@@ -27,6 +27,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       if (!session) return
       const query = z.object({ caseId: z.string().uuid().optional() }).parse(request.query)
       const org = session.user.organizationId
+      if (query.caseId && await auth.isCaseArchived(org, query.caseId)) throw new TrackingError(404, 'Dosya bulunamadı.')
       const user = session.user.id
       const manage = canManageTracking(session)
       // Deliver events from cases that acquired an owner after the event occurred.
@@ -36,17 +37,17 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
         pool.query(`SELECT t.id,t.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",t.assigned_user_id AS "assignedUserId",u.display_name AS "assignedName",
           t.application_number AS "applicationNumber",t.status,t.result_text AS "resultText",t.version,((t.assigned_user_id=$3 OR $4) AND $5) AS "canEdit"
           FROM tramer_requests t JOIN cases c ON c.id=t.case_id JOIN users u ON u.id=t.assigned_user_id
-          WHERE t.organization_id=$1 AND ($2::uuid IS NULL OR t.case_id=$2)
+          WHERE t.organization_id=$1 AND NOT c.is_archived AND ($2::uuid IS NULL OR t.case_id=$2)
           AND ($2::uuid IS NOT NULL OR (t.assigned_user_id=$3 AND t.status IN ('entry_pending','result_pending')))
           ORDER BY t.created_at DESC`, [org,query.caseId ?? null,user,manage,canWriteTracking(session)]),
         pool.query(`SELECT o.id,f.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",o.file_name AS "fileName",f.relative_path AS "relativePath",o.status,o.document_type AS "documentType",o.observed_at AS "observedAt",
           (c.responsible_user_id=$3 AND o.status='pending') AS "canReview"
           FROM document_observations o JOIN tracked_files f ON f.id=o.file_id AND f.revision=o.revision JOIN cases c ON c.id=f.case_id
           JOIN case_locations l ON l.organization_id=f.organization_id AND l.case_id=f.case_id AND l.storage_root_key=f.storage_root_key AND left(f.relative_path,length(l.relative_path)+1)=l.relative_path||'/'
-          WHERE f.organization_id=$1 AND f.available AND ($2::uuid IS NULL OR f.case_id=$2)
+          WHERE f.organization_id=$1 AND NOT c.is_archived AND f.available AND ($2::uuid IS NULL OR f.case_id=$2)
           AND ($2::uuid IS NOT NULL OR (c.responsible_user_id=$3 AND o.status='pending')) ORDER BY o.observed_at DESC`, [org,query.caseId ?? null,user]),
         pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",n.title,n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
-          FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE n.organization_id=$1 AND n.recipient_user_id=$2
+          FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE n.organization_id=$1 AND NOT c.is_archived AND n.recipient_user_id=$2
           AND ($3::uuid IS NULL OR n.case_id=$3) ORDER BY (n.read_at IS NULL) DESC,n.created_at DESC`, [org,user,query.caseId ?? null]),
         pool.query(`SELECT id,email,status,last_success_at AS "lastSuccessAt",last_error AS "lastError" FROM mail_connections WHERE organization_id=$1 AND ($2 OR connected_by=$3) ORDER BY email`, [org,manage,user]),
         pool.query(`SELECT m.id,m.application_number AS "applicationNumber",m.result_text AS "resultText",m.reason,c.email,m.received_at AS "receivedAt"
@@ -91,7 +92,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       const { id,action } = z.object({ id: z.string().uuid(), action: z.enum(['read','presented']) }).parse(request.params)
       const column = action === 'read' ? 'read_at' : 'presented_at'
       const result = await pool.query(`UPDATE tracking_notifications n SET ${column}=coalesce(n.${column},now()),recipient_user_id=coalesce(n.recipient_user_id,c.responsible_user_id)
-        FROM cases c WHERE n.case_id=c.id AND n.id=$1 AND n.organization_id=$2 AND coalesce(n.recipient_user_id,c.responsible_user_id)=$3 RETURNING n.id`, [id,session.user.organizationId,session.user.id])
+        FROM cases c WHERE n.case_id=c.id AND NOT c.is_archived AND n.id=$1 AND n.organization_id=$2 AND coalesce(n.recipient_user_id,c.responsible_user_id)=$3 RETURNING n.id`, [id,session.user.organizationId,session.user.id])
       if (!result.rowCount) throw new TrackingError(404,'Bildirim bulunamadı.')
       return reply.code(204).send()
     })
@@ -100,7 +101,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       if (!session) return
       const rows = (await pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,n.title
         FROM tracking_notifications n JOIN cases c ON c.id=n.case_id
-        WHERE n.organization_id=$1 AND (n.recipient_user_id=$2 OR (n.recipient_user_id IS NULL AND c.responsible_user_id=$2))
+        WHERE n.organization_id=$1 AND NOT c.is_archived AND (n.recipient_user_id=$2 OR (n.recipient_user_id IS NULL AND c.responsible_user_id=$2))
         AND n.read_at IS NULL AND n.presented_at IS NULL ORDER BY n.created_at LIMIT 20`, [session.user.organizationId,session.user.id])).rows
       return { notifications: rows }
     })
@@ -122,7 +123,8 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       const { cursor } = z.object({ cursor: z.string().uuid().optional() }).parse(request.query)
       const rows = (await pool.query(`SELECT l.case_id AS "caseId",l.storage_root_key AS "storageRootKey",l.relative_path AS "relativePath",l.version,now() AS "scanStartedAt"
         FROM case_locations l JOIN storage_roots r ON r.organization_id=l.organization_id AND r.root_key=l.storage_root_key
-        WHERE l.organization_id=$1 AND r.is_active AND ($2::uuid IS NULL OR l.case_id>$2) ORDER BY l.case_id LIMIT 100`, [agent.organizationId,cursor ?? null])).rows
+        JOIN cases c ON c.organization_id=l.organization_id AND c.id=l.case_id
+        WHERE l.organization_id=$1 AND r.is_active AND NOT c.is_archived AND ($2::uuid IS NULL OR l.case_id>$2) ORDER BY l.case_id LIMIT 100`, [agent.organizationId,cursor ?? null])).rows
       return { locations: rows, nextCursor: rows.length === 100 ? rows.at(-1)?.caseId : null }
     })
     routes.post('/api/v1/tracking/agent/observations', async (request,reply) => {

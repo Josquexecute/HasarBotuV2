@@ -193,6 +193,49 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     await expect(observeFile(pool,otherOrg,'test-agent',input)).rejects.toMatchObject({ status: 409 })
   })
 
+  it('preserves document identity and approval across workspace relocation and retires unseen old paths',async () => {
+    const caseId = await createCase()
+    await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'relocation-root','Relocation root')", [uuidv7(),org])
+    const bind = (relativePath: string,expectedVersion?: number) => app.inject({ method: 'PUT',url: `/api/v1/cases/${caseId}/location`,headers: { cookie: managerCookie },payload: { storageRootKey: 'relocation-root',relativePath,source: 'manual',...(expectedVersion ? { expectedVersion } : {}) } })
+    expect((await bind('old-folder')).statusCode).toBe(200)
+    const input = { caseId,locationVersion: 1,storageRootKey: 'relocation-root',relativePath: 'old-folder/policy.pdf',contentHash: 'a'.repeat(64),byteSize: 200 }
+    await observeFile(pool,org,'test-agent',input)
+    await observeFile(pool,org,'test-agent',{ ...input,relativePath: 'old-folder/removed.pdf',contentHash: 'b'.repeat(64) })
+    const before = await snapshot(ownerCookie,caseId)
+    const original = before.documents.find(d=>d.fileName==='policy.pdf')!
+    expect((await app.inject({ method: 'POST',url: `/api/v1/tracking/documents/${original.id}/review`,headers: { cookie: ownerCookie },payload: { status: 'approved',documentType: 'victim_traffic_policy',note: 'Reviewed before move' } })).statusCode).toBe(204)
+    expect((await bind('new-folder',1)).statusCode).toBe(200)
+    expect((await bind('new-folder',2)).statusCode).toBe(200)
+    const moved = { ...input,locationVersion: 3,relativePath: 'new-folder/policy.pdf' }
+    expect(await observeFile(pool,org,'test-agent',moved)).toEqual({ changed: false })
+    const after = await snapshot(ownerCookie,caseId)
+    expect(after.documents.find(d=>d.fileName==='policy.pdf')).toMatchObject({ id: original.id,status: 'approved' })
+    expect((await pool.query('SELECT revision FROM tracked_files WHERE case_id=$1 AND relative_path=$2',[caseId,moved.relativePath])).rows[0].revision).toBe(1)
+    expect(after.notifications).toHaveLength(before.notifications.length)
+    await reconcileFiles(pool,org,{ caseId,locationVersion: 3,scanStartedAt: new Date().toISOString(),paths: [moved.relativePath] })
+    const remaining = await snapshot(ownerCookie,caseId)
+    expect(remaining.documents).toHaveLength(1)
+    expect(remaining.documents[0]?.id).toBe(original.id)
+    expect((await pool.query('SELECT count(*)::int n FROM document_observations o JOIN tracked_files f ON f.id=o.file_id WHERE f.case_id=$1',[caseId])).rows[0].n).toBe(2)
+    await observeFile(pool,org,'test-agent',{ ...moved,contentHash: 'c'.repeat(64) })
+    expect((await snapshot(ownerCookie,caseId)).documents[0]).toMatchObject({ status: 'pending' })
+    expect((await pool.query('SELECT revision FROM tracked_files WHERE case_id=$1 AND relative_path=$2',[caseId,moved.relativePath])).rows[0].revision).toBe(2)
+  })
+
+  it('retires the previous storage root even when its relative filename matches the new root',async () => {
+    const caseId = await createCase()
+    for (const rootKey of ['previous-source','current-source']) await pool.query('INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,$3,$3)',[uuidv7(),org,rootKey])
+    const bind = (storageRootKey: string,expectedVersion?: number) => app.inject({ method: 'PUT',url: `/api/v1/cases/${caseId}/location`,headers: { cookie: managerCookie },payload: { storageRootKey,relativePath: 'same-folder',source: 'manual',...(expectedVersion ? { expectedVersion } : {}) } })
+    expect((await bind('previous-source')).statusCode).toBe(200)
+    const input = { caseId,locationVersion: 1,storageRootKey: 'previous-source',relativePath: 'same-folder/policy.pdf',contentHash: 'a'.repeat(64),byteSize: 200 }
+    await observeFile(pool,org,'test-agent',input)
+    expect((await bind('current-source',1)).statusCode).toBe(200)
+    await observeFile(pool,org,'test-agent',{ ...input,locationVersion: 2,storageRootKey: 'current-source' })
+    await reconcileFiles(pool,org,{ caseId,locationVersion: 2,scanStartedAt: new Date().toISOString(),paths: [input.relativePath] })
+    expect((await snapshot(ownerCookie,caseId)).documents).toHaveLength(1)
+    expect((await pool.query('SELECT storage_root_key FROM tracked_files WHERE case_id=$1 AND available',[caseId])).rows).toEqual([{ storage_root_key: 'current-source' }])
+  })
+
   it('retains notifications with the desktop closed and across API restarts; read/presented states are private',async () => {
     const before = await snapshot(ownerCookie)
     const notice = before.notifications.find((n) => !n.readAt)!

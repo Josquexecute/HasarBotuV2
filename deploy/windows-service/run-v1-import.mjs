@@ -68,11 +68,11 @@ export async function readResolutionManifest(filePath) {
   try { parsed = JSON.parse(await readFile(filePath, 'utf8')) } catch { fail('RESOLUTION_MANIFEST_INVALID') }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)
     || parsed.schemaVersion !== 'hasarbotu-v1-resolution/1.0.0') fail('RESOLUTION_MANIFEST_INVALID')
-  const allowed = new Set(['schemaVersion', 'cases', 'claimTypes', 'users', 'experts', 'services'])
+  const allowed = new Set(['schemaVersion', 'cases', 'claimTypes', 'users', 'experts', 'services', 'canonicalSources'])
   if (Object.keys(parsed).some((key) => !allowed.has(key))) fail('RESOLUTION_MANIFEST_INVALID')
   const isRecord = (value) => value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value))
   if (!isRecord(parsed.cases) || !isRecord(parsed.claimTypes) || !isRecord(parsed.users)
-    || !isRecord(parsed.experts) || !isRecord(parsed.services)) fail('RESOLUTION_MANIFEST_INVALID')
+    || !isRecord(parsed.experts) || !isRecord(parsed.services) || !isRecord(parsed.canonicalSources)) fail('RESOLUTION_MANIFEST_INVALID')
   const validEntries = (value, keyPattern, valuePredicate) => value === undefined
     || Object.entries(value).every(([key, item]) => keyPattern.test(key) && valuePredicate(item))
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
@@ -80,7 +80,15 @@ export async function readResolutionManifest(filePath) {
     || !validEntries(parsed.claimTypes, /^[0-9a-f]{64}$/u, (value) => value === 'traffic' || value === 'casco')
     || !validEntries(parsed.users, /^[0-9a-f]{16}$/u, (value) => typeof value === 'string' && uuid.test(value))
     || !validEntries(parsed.experts, /^[0-9a-f]{16}$/u, (value) => typeof value === 'string' && uuid.test(value))
-    || !validEntries(parsed.services, /^[0-9a-f]{16}$/u, (value) => typeof value === 'string' && uuid.test(value))) {
+    || !validEntries(parsed.services, /^[0-9a-f]{16}$/u, (value) => typeof value === 'string' && uuid.test(value))
+    || !validEntries(parsed.canonicalSources, /^[0-9a-f]{64}$/u, (value) => value !== null
+      && typeof value === 'object' && !Array.isArray(value)
+      && Object.keys(value).length === 3 && Object.keys(value).every((key) => ['pathToken', 'sourceHash', 'aliasPathTokens'].includes(key))
+      && typeof value.pathToken === 'string' && /^[0-9a-f]{16}$/u.test(value.pathToken)
+      && typeof value.sourceHash === 'string' && /^[0-9a-f]{64}$/u.test(value.sourceHash)
+      && Array.isArray(value.aliasPathTokens) && value.aliasPathTokens.length > 0
+      && new Set(value.aliasPathTokens).size === value.aliasPathTokens.length
+      && value.aliasPathTokens.every((token) => typeof token === 'string' && /^[0-9a-f]{16}$/u.test(token) && token !== value.pathToken))) {
     fail('RESOLUTION_MANIFEST_INVALID')
   }
   return parsed

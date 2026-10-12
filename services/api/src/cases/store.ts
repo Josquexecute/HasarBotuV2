@@ -187,7 +187,7 @@ export interface CaseListResult {
 export function createCasesStore(pool: pg.Pool) {
   return {
     async list(organizationId: string, query: CasesQuery): Promise<CaseListResult> {
-      const where: string[] = ['organization_id = $1']
+      const where: string[] = ['organization_id = $1', 'is_archived = false']
       const params: unknown[] = [organizationId]
       const add = (clause: string, value: unknown): void => {
         params.push(value)
@@ -251,7 +251,7 @@ export function createCasesStore(pool: pg.Pool) {
 
     async findById(organizationId: string, caseId: string): Promise<CaseDetail | undefined> {
       const result = await pool.query(
-        `SELECT ${SELECT_FIELDS} FROM cases WHERE organization_id = $1 AND id::text = $2`,
+        `SELECT ${SELECT_FIELDS} FROM cases WHERE organization_id = $1 AND id::text = $2 AND is_archived = false`,
         [organizationId, caseId],
       )
       const row = result.rows[0] as CaseRow | undefined

@@ -204,3 +204,42 @@ Git'e kişisel hasar verisi eklenmedi. Kanıtlar:
 Bu görev **PASS**. Genel geçişte 165 kayıtsız klasör, 5 sorunlu kaynak,
 1 çoklu takip konumu, 5 gerçek servis eşlemesi ve Windows reboot kabulü
 bekliyor; bunlar bu atama düzeltmesiyle çözülmüş sayılmaz.
+
+## Klasör istisnaları ve reboot kabulü — 11 Ekim 2026
+
+Kullanıcı servis eşlemelerini kapsamdan çıkardı: servis yaratma/eşleme yapılmadı,
+tarihî kaynak servis adları korundu. Bu başlık artık geçiş engeli değildir.
+
+Çoklu konumda güncel kapalı klasör API üzerinden takibe bağlandı. 49 dolu
+evrakın hash'i doğrulandı; 1 sıfır bayt dosya ve eski boş klasör kaynakta korundu.
+Mevcut vaka alanları değişmedi; yeniden taramada bildirim çoğalmadı.
+
+Birebir aynı iki kaynak için [kontrollü ana kaynak seçimi](V1_CANONICAL_SOURCE_RESOLUTION.md)
+eklendi. 78/78 evrak yolu/boyutu/SHA-256 eşitliği yeniden doğrulandı. Tek gerçek
+vaka tarihî kapanışı, gerçek sorumlusu ve ortak eksperiyle aktarıldı; kopya alias
+olarak korundu. Önceki 380 vaka birebir aynı kaldı. Tekrar uygulama sıfır
+değişiklik yaptı; iki eski karantina append-only çözüm kayıtlarıyla kapandı.
+
+Güncel kapsam **380 gerçek vaka ve 380 takip konumu**. Ortak eksper 380;
+sorumlu dağılımı **318 + 26 + 36 belirsiz**. Belirsizler ayrı listede tutulur.
+**25.697 evrak + 1 Windows kısayolu** için toplam 25.698 gözlem/bildirim
+doğrulandı. Kısayol son taramada ayrıca bulundu; hash'i ölçülüp kaynak dosya
+sayımına eklendi. Takip kapsamına eklenen 127 evrakın hash'i ve 385/385
+değişmeyen sidecar doğrulandı; otomatik evrak kabulü yapılmadı.
+
+Windows **gerçek yeniden başlatma kabulü PASS**: önceki açılıştan daha yeni
+boot zamanı, üç hizmetin Automatic/Running/LocalService durumu, açılış sonrası
+başarılı tarama ve HTTP arayüz erişimi doğrulandı.
+
+API/aktarim/yetki/lifecycle testleri **67/67 PASS**, CLI **4/4 PASS**; skip yok.
+API typecheck, değişen kodun ESLint kontrolü ve Node **24.21.0** ile tam build
+PASS. Kaynaklar ve üretim değiştirilmedi; uygulama ayrı yerel test veritabanında.
+
+Korumalı inceleme paketi güncellendi: 171 istisnanın 3 kararı uygulandı;
+**165 kayıtsız klasör + 3 sorunlu kaynak** gerekçeli beklemede. İki kaynakta
+trafik/kasko kanıtı ayrıştırılmalı; bir kaynakta kesin dosya/ihbar kimliği
+bulunmalı. Kimliksiz klasörler yalnız plaka üzerinden bağlanmadı.
+
+Kanıtlar: `.local/local-tracking-20261011/folder-exceptions-summary.json`,
+`exception-tracking-validation.json`; kurulumda `evidence/boot-acceptance.json`.
+Bu uygulama adımı **PASS**; tüm kaynakların geçiş durumu **PARTIAL**.

@@ -110,6 +110,11 @@ export interface V1ExplicitResolutionManifest {
   readonly users?: Readonly<Record<string, string>>
   readonly experts?: Readonly<Record<string, string>>
   readonly services?: Readonly<Record<string, string>>
+  readonly canonicalSources?: Readonly<Record<string, {
+    readonly pathToken: string
+    readonly sourceHash: string
+    readonly aliasPathTokens: readonly string[]
+  }>>
 }
 
 export interface V1RemediationOptions {
@@ -163,6 +168,7 @@ export interface V1ResolutionEvidence {
     | 'sibling_source_candidate_elimination'
     | 'initial_import_month_lineage'
     | 'new_case'
+    | 'explicit_canonical_source'
   readonly verifiableValue: string
 }
 
@@ -262,7 +268,7 @@ export interface V1RemediationEntry {
   readonly sourceWriteId: string | null
   readonly sourceRevision: number | null
   readonly targetCaseId: string | null
-  readonly targetState: 'existing' | 'create' | 'quarantined_claim_type' | 'quarantined_target' | 'quarantined_malformed' | 'missing_sidecar'
+  readonly targetState: 'existing' | 'create' | 'duplicate_alias' | 'quarantined_claim_type' | 'quarantined_target' | 'quarantined_malformed' | 'missing_sidecar'
   readonly quarantine: V1SourceQuarantinePlan | null
   readonly missingSidecarClassification: null | {
     readonly state: 'non_blocking_no_historical_payload'
@@ -463,6 +469,7 @@ function planHashPayload(plan: Omit<V1RemediationPlan, 'generatedAt' | 'planHash
       sourceHash: entry.sourceHash,
       targetCaseId: entry.targetCaseId,
       targetState: entry.targetState,
+      evidence: entry.evidence,
       quarantine: entry.quarantine,
       missingSidecarClassification: entry.missingSidecarClassification,
       caseType: entry.caseType,
@@ -582,8 +589,8 @@ export async function planV1Remediation(
           'SELECT legacy_import_record_id::text,stable_source_identity,stable_item_identity FROM v1_import_record_reconciliations WHERE organization_id=$1', [organizationId]),
         pool.query<{ stable_source_identity: string; item_type: string; stable_item_identity: string; target_id: string }>(
           'SELECT stable_source_identity,item_type,stable_item_identity,target_id::text FROM v1_import_item_metadata WHERE organization_id=$1', [organizationId]),
-        pool.query<{ id: string; quarantine_identity: string; stable_source_identity: string | null; source_file_hash: string; mapping_version: string; reason: V1SourceQuarantineReason; resolved: boolean }>(
-          `SELECT q.id::text,q.quarantine_identity,q.stable_source_identity,q.source_file_hash,q.mapping_version,q.reason,(r.id IS NOT NULL) AS resolved
+        pool.query<{ id: string; quarantine_identity: string; stable_source_identity: string | null; source_relative_path: string; source_file_hash: string; mapping_version: string; reason: V1SourceQuarantineReason; resolved: boolean }>(
+          `SELECT q.id::text,q.quarantine_identity,q.stable_source_identity,q.source_relative_path,q.source_file_hash,q.mapping_version,q.reason,(r.id IS NOT NULL) AS resolved
              FROM v1_import_source_quarantines q
              LEFT JOIN v1_import_quarantine_resolutions r ON r.organization_id=q.organization_id AND r.quarantine_id=q.id
             WHERE q.organization_id=$1`, [organizationId]),
@@ -646,12 +653,6 @@ export async function planV1Remediation(
     }
   }
 
-  const sourceNativeIdCounts = new Map<string, number>()
-  for (const { sidecar } of sidecars) {
-    if (sidecar.jsonParse?.ok !== true) continue
-    for (const note of sidecar.jsonParse.data.notes) sourceNativeIdCounts.set(`note|${note.id}`, (sourceNativeIdCounts.get(`note|${note.id}`) ?? 0) + 1)
-    for (const todo of sidecar.jsonParse.data.todos) sourceNativeIdCounts.set(`task|${todo.id}`, (sourceNativeIdCounts.get(`task|${todo.id}`) ?? 0) + 1)
-  }
   const sourceIdentityCounts = new Map<string, number>()
   const precomputedIdentities = new Map<string, string | null>()
   for (const { folder, sidecar } of sidecars) {
@@ -665,13 +666,41 @@ export async function planV1Remediation(
     if (identity !== null) sourceIdentityCounts.set(identity, (sourceIdentityCounts.get(identity) ?? 0) + 1)
   }
 
+  // Manual selection only accepts an exhaustive group of identical snapshots.
+  // It never relaxes identity/claim-type checks for the selected source.
+  const duplicateAliasPaths = new Set<string>()
+  const selectedSourceGroups = new Map<string, Set<string>>()
+  for (const [identity, selection] of Object.entries(options.resolutions?.canonicalSources ?? {})) {
+    const group = sidecars.filter(({ folder }) => precomputedIdentities.get(folder.relativePath) === identity)
+    const selected = group.find(({ folder }) => pathToken(folder.relativePath) === selection.pathToken)
+    const aliases = group.filter(({ folder }) => pathToken(folder.relativePath) !== selection.pathToken)
+    if (selected?.folder.parsedName == null || aliases.length === 0
+      || !/^[0-9a-f]{64}$/u.test(selection.sourceHash)
+      || group.some(({ sidecar }) => sidecar.jsonHash !== selection.sourceHash)
+      || selection.aliasPathTokens.length !== aliases.length
+      || new Set(selection.aliasPathTokens).size !== aliases.length
+      || aliases.some(({ folder }) => !selection.aliasPathTokens.includes(pathToken(folder.relativePath)))
+      || group.some(({ folder }) => folder.parsedName !== null
+        && plateSearchKey(folder.parsedName.plate) !== plateSearchKey(selected.folder.parsedName!.plate))) {
+      throw new Error('v1_canonical_source_selection_invalid')
+    }
+    selectedSourceGroups.set(identity, new Set(group.map(({ folder }) => folder.relativePath)))
+    for (const { folder } of aliases) duplicateAliasPaths.add(folder.relativePath)
+  }
+  const sourceNativeIdCounts = new Map<string, number>()
+  for (const { folder, sidecar } of sidecars) {
+    if (sidecar.jsonParse?.ok !== true || duplicateAliasPaths.has(folder.relativePath)) continue
+    for (const note of sidecar.jsonParse.data.notes) sourceNativeIdCounts.set(`note|${note.id}`, (sourceNativeIdCounts.get(`note|${note.id}`) ?? 0) + 1)
+    for (const todo of sidecar.jsonParse.data.todos) sourceNativeIdCounts.set(`task|${todo.id}`, (sourceNativeIdCounts.get(`task|${todo.id}`) ?? 0) + 1)
+  }
+
   // Ayni plakaya ait birden cok source/case varsa, en az bir source exact
   // immutable numarayla tek hedefe baglandiktan sonra geriye TEK source ve
   // TEK candidate kalmasi bir tahmin degil, bire-bir kume eliminasyonudur.
   const siblingTargetHints = new Map<string, string>()
   const sidecarsByPlate = new Map<string, typeof sidecars>()
   for (const item of sidecars) {
-    if (item.folder.parsedName === null || item.sidecar.jsonParse?.ok !== true) continue
+    if (item.folder.parsedName === null || item.sidecar.jsonParse?.ok !== true || duplicateAliasPaths.has(item.folder.relativePath)) continue
     const key = plateSearchKey(item.folder.parsedName.plate)
     const list = sidecarsByPlate.get(key) ?? []
     list.push(item)
@@ -813,7 +842,26 @@ export async function planV1Remediation(
 
     const data = sidecar.jsonParse.data
     const sourceIdentity = precomputedIdentities.get(folder.relativePath) ?? null
-    const collision = sourceIdentity !== null && (sourceIdentityCounts.get(sourceIdentity) ?? 0) > 1
+    const selectedGroup = sourceIdentity === null ? undefined : selectedSourceGroups.get(sourceIdentity)
+    const selectionEvidence: V1ResolutionEvidence[] = selectedGroup === undefined || sourceIdentity === null ? [] : [{
+      code: 'explicit_canonical_source', verifiableValue: hash(canonicalJson(options.resolutions?.canonicalSources?.[sourceIdentity])),
+    }]
+    if (duplicateAliasPaths.has(folder.relativePath)) {
+      entries.push({
+        folder, pathToken: token, sourceIdentity, sourceIdentityState: 'resolved', sourceHash: sidecar.jsonHash,
+        sourceManifestFingerprint: baseFingerprint, rawSnapshot: data, rawSourceText: null,
+        schemaVersion: sidecar.jsonParse.schemaVersion, sourceWriteId: data.metadata?.writeId?.trim() || null,
+        sourceRevision: data.metadata?.revision ?? null, targetCaseId: null, targetState: 'duplicate_alias', quarantine: null,
+        missingSidecarClassification: null, caseType: null, caseTypeAutoResolved: false, claimTypeResolution: null,
+        evidence: selectionEvidence, candidateCaseIds: [], candidateCaseEvidence: [], responsible: emptyReference(), expert: emptyReference(), service: emptyReference(),
+        fields: [], notes: [], tasks: [], shouldCloseHistorically: false, sourceClosureAt: null, needsFollowUpHistory: false,
+        needsRawRevision: sourceIdentity !== null && !revisionKeys.has(`${sourceIdentity}|${sidecar.jsonHash}`),
+        needsAlias: sourceIdentity !== null && !aliasKeys.has(`${sourceIdentity}|${folder.relativePath}`),
+        needsVehicleProfile: false, needsClaimTypeEvidenceProvenance: false, quarantineResolutionIds: [], legacyRecordsToReconcile: [], blockers: [],
+      })
+      continue
+    }
+    const collision = sourceIdentity !== null && selectedGroup === undefined && (sourceIdentityCounts.get(sourceIdentity) ?? 0) > 1
     if (folder.parsedName === null || sourceIdentity === null || collision) {
       const reasonCode = folder.parsedName === null ? 'unparseable_folder_name'
         : sourceIdentity === null ? 'stable_identity_evidence_missing' : 'stable_identity_collision'
@@ -853,7 +901,7 @@ export async function planV1Remediation(
     const effectiveClaimType = explicitClaimType
       ?? (deterministicClaimTypeDecision?.state === 'resolved' ? deterministicClaimTypeDecision.caseType : null)
     const typeCandidates = effectiveClaimType === null ? allPlateCandidates : allPlateCandidates.filter((candidate) => candidate.caseType === effectiveClaimType)
-    const evidence: V1ResolutionEvidence[] = []
+    const evidence: V1ResolutionEvidence[] = [...selectionEvidence]
     const provenanceTargets = new Set<string>()
     const sourceItemIds = new Set([
       ...data.notes.map((note) => `note|${note.id}`),
@@ -1152,7 +1200,8 @@ export async function planV1Remediation(
       needsAlias: sourceIdentity !== null && !aliasKeys.has(`${sourceIdentity}|${folder.relativePath}`),
       needsVehicleProfile, needsClaimTypeEvidenceProvenance,
       quarantineResolutionIds: quarantine === null
-        ? extra[4].rows.filter((row) => row.stable_source_identity === sourceIdentity && !row.resolved).map((row) => row.id).sort()
+        ? extra[4].rows.filter((row) => !row.resolved && (row.stable_source_identity === sourceIdentity
+          || (selectedGroup?.has(row.source_relative_path) === true && row.source_file_hash === sidecar.jsonHash))).map((row) => row.id).sort()
         : [],
       legacyRecordsToReconcile, blockers: [...new Set(blockers)],
     })
@@ -1385,7 +1434,7 @@ export async function applyV1Remediation(
           stableRevisionId = existing.rows[0]?.id ?? null
         }
         if (stableRevisionId === null) throw new Error('v1_source_revision_unavailable')
-        if (entry.needsRawRevision) totals.sourcesRecorded += 1
+        totals.sourcesRecorded += revisionInsert.rowCount ?? 0
         const alias = await client.query(
           `INSERT INTO v1_import_source_aliases
             (id,organization_id,stable_source_identity,source_relative_path,source_file_hash,discovered_at,recorded_by_user_id)
@@ -1427,6 +1476,16 @@ export async function applyV1Remediation(
 
       if (!stablePayload || stableRevisionId === null || entry.sourceIdentity === null || entry.rawSnapshot === null) {
         throw new Error('v1_actionable_source_payload_unavailable')
+      }
+      if (entry.targetState === 'duplicate_alias') {
+        if (entryChanged) await audit.record(client, {
+          organizationId: actor.organizationId, actorUserId: actor.actorUserId, requestId: actor.requestId,
+          action: 'v1_remediation.alias_recorded', entityType: 'v1_import_source_revision', entityId: stableRevisionId,
+          details: { stableSourceIdentity: entry.sourceIdentity, sourcePathToken: entry.pathToken,
+            sourceHash: entry.sourceHash, selectionEvidence: entry.evidence, planHash: fresh.planHash },
+        })
+        await client.query('COMMIT')
+        continue
       }
       for (const reconciliation of entry.legacyRecordsToReconcile) {
         const inserted = await client.query(
@@ -1484,6 +1543,7 @@ export async function applyV1Remediation(
         for (const quarantineId of entry.quarantineResolutionIds) {
           const resolutionKind = options.resolutions?.cases?.[entry.sourceIdentity] !== undefined
             || options.resolutions?.claimTypes?.[entry.sourceIdentity] !== undefined
+            || options.resolutions?.canonicalSources?.[entry.sourceIdentity] !== undefined
             ? 'explicit_reconciliation' : 'deterministic_replan'
           const resolution = await client.query(
             `INSERT INTO v1_import_quarantine_resolutions
