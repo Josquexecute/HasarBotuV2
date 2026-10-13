@@ -47,6 +47,8 @@ export type CaseCreateRequestInput = z.input<typeof caseCreateRequestSchema>
 
 const caseUpdateFields = z.strictObject({
   expectedVersion: entityVersionSchema,
+  /** Only fills a pending classification; changing an established type is rejected. */
+  caseType: caseTypeSchema.optional(),
   workflowStage: openCaseStageSchema.optional(),
   followUpDate: localDateSchema.nullable().optional(),
   notificationFormNumber: notificationFormNumberSchema.nullable().optional(),
@@ -61,6 +63,7 @@ const caseUpdateFields = z.strictObject({
 })
 
 export const CASE_UPDATABLE_FIELDS = [
+  'caseType',
   'workflowStage',
   'followUpDate',
   'notificationFormNumber',

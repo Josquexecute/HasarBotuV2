@@ -372,9 +372,15 @@ export async function findCasesNeedingAttestation({ cases, databasePath, topLeve
         record = null
       }
       checkedFiles += 1
+      const expectedRelativePath = path.win32.join(group.caseRelativePath, file.relativePath)
+      // Windows filename casing can differ between P: and the local mirror.
+      // FileId/revision, record integrity and size must still match exactly.
+      const sameRelativePath = record?.RelativePath === expectedRelativePath
+        || (process.platform === 'win32' && typeof record?.RelativePath === 'string'
+          && record.RelativePath.toUpperCase() === expectedRelativePath.toUpperCase())
       if (!record || !SHA256_HEX_PATTERN.test(record.Sha256)
         || record.SizeBytes !== Number(info.dbSizeBytes)
-        || record.RelativePath !== path.win32.join(group.caseRelativePath, file.relativePath)) {
+        || !sameRelativePath) {
         casesToRefresh.push(group.original)
         // Select each case once; its complete source is fenced during refresh.
         break

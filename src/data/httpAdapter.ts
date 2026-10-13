@@ -62,7 +62,7 @@ export function mapCaseDtoToRecord(
   today: Date = new Date(),
 ): CaseRecord {
   const { followUp, followUpTone } = deriveFollowUp(dto.followUpDate, today)
-  const caseType: CaseType = dto.caseType === 'traffic' ? 'Trafik' : 'Kasko'
+  const caseType: CaseType = dto.caseType === null ? 'Seçiniz' : dto.caseType === 'traffic' ? 'Trafik' : 'Kasko'
   return {
     caseId: dto.id,
     plate: dto.plate,

@@ -256,7 +256,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const current = await client.query(
-          `SELECT version, follow_up_date, loss_date, notification_date, lifecycle_status
+          `SELECT version, follow_up_date, loss_date, notification_date, lifecycle_status, case_type
            FROM cases WHERE id::text = $1 AND organization_id = $2 AND is_archived = false FOR UPDATE`,
           [caseId, actor.organizationId],
         )
@@ -266,15 +266,16 @@ export function createCasesWriteStore(pool: pg.Pool) {
           loss_date: Date | null
           notification_date: Date | null
           lifecycle_status: 'open' | 'closed'
+          case_type: 'traffic' | 'casco' | null
         } | undefined
         if (existing === undefined) {
           await client.query('ROLLBACK')
           return { kind: 'not_found' }
         }
-        // Kapali dosyada temel alanlar da (sorumlu/servis/takip tarihi vb.)
-        // diger tum modullerle (case-operations, labor, pert, email-drafts)
-        // ayni fail-closed sozlesmeye tabidir -- kismi/alan-bazli istisna yok.
-        if (existing.lifecycle_status !== 'open') {
+        const typeOnly = input.caseType !== undefined && Object.keys(input).every(key => key === 'caseType' || key === 'expectedVersion')
+        if (input.caseType !== undefined && existing.case_type !== null) throw new ReferenceCheckError('caseType', 'case_type_already_assigned')
+        // Archived historical folders may receive their first classification without reopening.
+        if (existing.lifecycle_status !== 'open' && !typeOnly) {
           await client.query('ROLLBACK')
           return { kind: 'case_closed' }
         }
@@ -308,6 +309,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         )
 
         const columnByField: Record<string, string> = {
+          caseType: 'case_type',
           workflowStage: 'workflow_stage',
           followUpDate: 'follow_up_date',
           notificationFormNumber: 'notification_form_number',
@@ -354,6 +356,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
           entityId: item.id,
           details: {
             changedFields,
+            ...(input.caseType === undefined ? {} : { previousCaseType: null, caseType: input.caseType, assignmentKind: 'user_classification' }),
             fromVersion: input.expectedVersion,
             toVersion: item.version,
             serviceEligibility: serviceProfile === null ? null : {

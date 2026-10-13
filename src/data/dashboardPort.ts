@@ -258,8 +258,8 @@ function parseDashboardResponse(value: unknown): DashboardSnapshotRecord {
   const items = value.items.map((raw): DashboardCaseRecord => {
     if (!isRecord(raw)) throw new Error('dashboard_response_invalid')
     assertExactKeys(raw, ITEM_KEYS)
-    const caseType = requiredString(raw.caseType)
-    if (caseType !== 'traffic' && caseType !== 'casco') throw new Error('dashboard_response_invalid')
+    const caseType = raw.caseType === null ? null : requiredString(raw.caseType)
+    if (caseType !== null && caseType !== 'traffic' && caseType !== 'casco') throw new Error('dashboard_response_invalid')
     const stageCode = requiredString(raw.stage) as DashboardOpenStageCode
     const stage = STAGE_LABELS[stageCode]
     if (stage === undefined || stage === 'Kapalı') throw new Error('dashboard_response_invalid')
@@ -276,7 +276,7 @@ function parseDashboardResponse(value: unknown): DashboardSnapshotRecord {
     if (typeof raw.requiresAction !== 'boolean') throw new Error('dashboard_response_invalid')
     return {
       caseId: requiredString(raw.caseId),
-      type: caseType === 'traffic' ? 'Trafik' : 'Kasko',
+      type: caseType === null ? 'Seçiniz' : caseType === 'traffic' ? 'Trafik' : 'Kasko',
       officeNumber: requiredString(raw.officeCaseNumber),
       plate: requiredString(raw.plate),
       stage,

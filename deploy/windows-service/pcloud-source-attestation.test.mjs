@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -30,7 +30,7 @@ test('temporary artifacts match tracking policy while permanent V1 tracking meta
   assert.ok(files.some(file => file.relativePath === '_HASARBOTU\\HASARBOTU_TAKIP_OZETI.txt'))
 })
 
-async function buildFixture(context) {
+async function buildFixture(context, { caseInsensitiveFileNames = false } = {}) {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'hasarbotu-attestation-test-'))
   context.after(async () => rm(temporaryRoot, { recursive: true, force: true }))
 
@@ -53,7 +53,7 @@ async function buildFixture(context) {
       flags INTEGER NOT NULL, ctime INTEGER NOT NULL, mtime INTEGER NOT NULL, subdircnt INTEGER NOT NULL
     );
     CREATE TABLE file (
-      id INTEGER PRIMARY KEY, parentfolderid INTEGER NOT NULL, name TEXT NOT NULL,
+      id INTEGER PRIMARY KEY, parentfolderid INTEGER NOT NULL, name TEXT ${caseInsensitiveFileNames ? 'COLLATE NOCASE' : ''} NOT NULL,
       size INTEGER NOT NULL, hash INTEGER NOT NULL, flags INTEGER NOT NULL,
       ctime INTEGER NOT NULL, mtime INTEGER NOT NULL
     );
@@ -149,6 +149,29 @@ test('refresh selection reuses verified source proofs and selects a changed revi
   const database = new DatabaseSync(fixture.databasePath)
   database.exec('UPDATE file SET hash=42 WHERE id=5002')
   database.close()
+  assert.deepEqual((await findCasesNeedingAttestation(args)).casesToRefresh, cases)
+})
+
+test('refresh selection reuses independently hashed proofs across Windows filename casing aliases', async (context) => {
+  const fixture = await buildFixture(context, { caseInsensitiveFileNames: true })
+  const targetCaseRoot = path.join(fixture.temporaryRoot, 'target')
+  await cp(fixture.sourceCaseRoot, targetCaseRoot, { recursive: true })
+  await rename(path.join(targetCaseRoot, 'ruhsat.pdf'), path.join(targetCaseRoot, 'rename-stage.tmp'))
+  await rename(path.join(targetCaseRoot, 'rename-stage.tmp'), path.join(targetCaseRoot, 'RUHSAT.PDF'))
+  const database = new DatabaseSync(fixture.databasePath)
+  database.exec("UPDATE file SET name='RUHSAT.PDF' WHERE id=5001")
+  database.close()
+  const records = await buildAttestationRecordsBatch({ cases: [fixture], databasePath: fixture.databasePath,
+    topLevelFolderName: fixture.topLevelFolderName, attestedBy: 'independent-source' })
+  const store = path.join(fixture.temporaryRoot, 'store')
+  for (const record of records) await writeAttestationRecord(store, record)
+  const cases = [{ ...fixture, targetCaseRoot }]
+  const args = { cases, databasePath: fixture.databasePath, topLevelFolderName: fixture.topLevelFolderName, attestationStoreDirectory: store }
+  const report = await findCasesNeedingAttestation(args)
+  assert.equal(report.heldCases.length, 0)
+  assert.equal(report.casesToRefresh.length, process.platform === 'win32' ? 0 : 1)
+  const current = records.find(record => record.FileId === '5001')
+  await writeAttestationRecord(store, { ...current, RelativePath: current.RelativePath.replace('00AAA000', '00BBB000') })
   assert.deepEqual((await findCasesNeedingAttestation(args)).casesToRefresh, cases)
 })
 

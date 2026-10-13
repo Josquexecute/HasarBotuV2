@@ -145,3 +145,11 @@ export {
   applyV1AssignmentRemediation, planV1AssignmentRemediation, v1AssignmentManifestSchema,
   type V1AssignmentManifest, type V1AssignmentPlan,
 } from './v1-import/assignment-remediation.js'
+export {
+  applyResponsibilityMaintenance, planResponsibilityMaintenance, responsibilityMaintenanceManifestSchema,
+  type ResponsibilityMaintenanceManifest, type ResponsibilityMaintenancePlan,
+} from './cases/responsibility-maintenance.js'
+export {
+  applyFolderRegistration, planFolderRegistration, folderRegistrationManifestSchema,
+  type FolderRegistrationManifest, type FolderRegistrationPlan,
+} from './cases/folder-registration.js'

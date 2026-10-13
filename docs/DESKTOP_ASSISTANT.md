@@ -8,8 +8,32 @@ reacts to pressing and hovering. This version has no audio or business-status
 animations. Reduced motion displays a neutral still pose. Hiding the helper
 stops cursor polling and rendering; closing the main window disposes it.
 
-Only normalized gaze reaches the isolated renderer. It receives neither screen
-coordinates nor access to the authenticated main window's session.
+Only normalized gaze reaches the isolated character renderer. It receives neither
+screen coordinates nor access to the authenticated main window's session.
+
+## Standalone case panel (desktop 0.1.6)
+
+Click the character or choose **Hızlı not / Dosyalar** from the tray to open the
+420 × 720 DIP panel, constrained to the display work area. The main window stays
+hidden while the panel searches plates or office numbers across open and closed
+cases, selects a case and saves notes through the existing authenticated API.
+
+**Geçmiş notlar** searches current and imported historical notes. **Süreçler**
+shows the current stage, owner, follow-up, tasks, follow-up history and Tramer /
+document review status. Selection persists per user. Existing quick-note drafts
+remain separate per user and case; viewing another tab does not discard them.
+
+The panel shares the main window's HttpOnly session, but exposes only fixed menu
+actions through its preload. Node integration, external navigation, new windows
+and downloads remain disabled. API permissions govern every read and write.
+If login is needed, **Giriş yap** opens the main window explicitly; focusing the
+panel afterwards refreshes its session. Focusing the main app reloads notes saved
+by the panel. Escape closes the panel.
+
+Regression coverage includes isolated PostgreSQL note persistence, starting the
+panel before login, hidden-main-window search and save, history, process status,
+selection after shell recreation, light/dark themes, viewport bounds at 150%
+zoom, read-only permissions, authorization failure and stale search responses.
 
 ## Upstream source
 

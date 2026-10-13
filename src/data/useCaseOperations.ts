@@ -47,7 +47,9 @@ export function useCaseOperations(
       if ((event as CustomEvent<{ caseId: string }>).detail?.caseId === caseId) reload()
     }
     window.addEventListener(NOTE_SAVED_EVENT, refresh)
-    return () => window.removeEventListener(NOTE_SAVED_EVENT, refresh)
+    // Another authenticated assistant window can write while this view is hidden.
+    window.addEventListener('focus', reload)
+    return () => { window.removeEventListener(NOTE_SAVED_EVENT, refresh); window.removeEventListener('focus', reload) }
   }, [active, caseId, reload])
   // Yükleme durumu efektte senkron sıfırlanmaz; istek anahtarı değişince RENDER
   // sırasında türetilir. Anahtarı tutmayan geç yanıt yok sayılır.

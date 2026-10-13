@@ -701,3 +701,5 @@ export * from './eksist.js'
 export { isTemporaryTrackedFile } from './tracked-file.js'
 export { normalizeSearchText, getSearchTokens, matchesSearchQuery } from './search.js'
 export { toOfficeDate } from './office-date.js'
+
+export { parseSourcePlateFolderName } from './source-plate-folder.js'

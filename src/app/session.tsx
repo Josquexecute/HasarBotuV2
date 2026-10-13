@@ -66,13 +66,14 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
   )
 
   useEffect(() => {
-    if (mode !== 'api' || status !== 'authenticated') return
+    if (mode !== 'api' || status === 'bootstrapping') return
     let cancelled = false
     const refresh = () => {
       void auth.bootstrap().then((current) => {
         if (cancelled) return
         setUser(current)
-        if (!current) setStatus('expired')
+        setStatus((previous) => current ? 'authenticated' : previous === 'anonymous' ? 'anonymous' : 'expired')
+        if (current) setNotice(null)
       }).catch(() => { /* A focus refresh leaves the current session intact during a network outage; API checks remain authoritative. */ })
     }
     window.addEventListener('focus',refresh)

@@ -9,7 +9,7 @@ import { useCaseOperations } from '../data/useCaseOperations'
 
 interface Draft { body: string; key: string; attempted: boolean }
 
-function QuickNote({ target, port, onClose }: { target: ActiveCase; port?: CaseOperationsPort; onClose(): void }) {
+export function QuickNote({ target, port, onClose, standalone = false }: { target: ActiveCase; port?: CaseOperationsPort; onClose(): void; standalone?: boolean }) {
   const session = useSession()
   const workspace = useCaseOperations(target.caseId, target.source, true, port)
   const canWrite = workspace.data?.permissions.canWrite === true && (session.mode !== 'api' || canUsePermission(session.user,'operations_write',['admin','expert','case_manager','secretary']))
@@ -69,7 +69,7 @@ function QuickNote({ target, port, onClose }: { target: ActiveCase; port?: CaseO
 
   return <>
     <p className="touch-assistant__target"><strong>{target.plate}</strong><span>{target.officeNumber}</span></p>
-    {saved ? <div role="status"><p>Not dosyaya kaydedildi.</p><Link className="button button--primary" to={`/dosyalar/${target.caseId}?tab=operations`} onClick={onClose}>Dosyada göster</Link></div> : <form onSubmit={(event) => void save(event)}>
+    {saved ? <div role="status"><p>Not dosyaya kaydedildi.</p>{standalone ? <button className="button button--primary" onClick={onClose}>Yeni not</button> : <Link className="button button--primary" to={`/dosyalar/${target.caseId}?tab=operations`} onClick={onClose}>Dosyada göster</Link>}</div> : <form onSubmit={(event) => void save(event)}>
       <label className="field"><span>Hızlı not</span><textarea autoFocus rows={5} maxLength={5000} value={draft.body} readOnly={busy || draft.attempted} onChange={(event) => {
         const next = { ...draft, body: event.target.value }
         setDraft(next)

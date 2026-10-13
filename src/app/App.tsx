@@ -17,6 +17,7 @@ import { SessionProvider } from './session'
 import { useSession } from './sessionContext'
 import { PERSISTENCE_ERROR_EVENT, usePersistentState } from './usePersistentState'
 const TrackingPopup = lazy(async () => ({ default: (await import('../features/tracking/TrackingPopup')).TrackingPopup }))
+const DesktopAssistantPanel = lazy(async () => ({ default: (await import('../features/assistant/DesktopAssistantPanel')).DesktopAssistantPanel }))
 
 const CaseDetailPage = lazy(async () => {
   const module = await import('../features/cases/CaseDetailPage')
@@ -61,6 +62,10 @@ interface AppGateProps extends AppRoutesProps {
  */
 function AppGate(props: AppGateProps) {
   const session = useSession()
+
+  if (window.location.pathname === '/touch-assistant') {
+    return <Suspense fallback={<LoadingState label="Asistan hazırlanıyor" />}><DesktopAssistantPanel /></Suspense>
+  }
 
   if (session.mode === 'api' && session.status === 'bootstrapping') {
     return <div className="login-screen"><LoadingState label="Oturum doğrulanıyor" /></div>

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SessionProvider } from './session'
 import { useSession } from './sessionContext'
@@ -82,6 +82,17 @@ describe('SessionProvider api mod bootstrap', () => {
 })
 
 describe('SessionProvider login/logout/expiry', () => {
+  it.each(['anonymous', 'expired'] as const)('detects a main-window login when an %s assistant regains focus', async (initial) => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const bootstrap = vi.fn().mockResolvedValueOnce(initial === 'anonymous' ? null : USER).mockResolvedValue(USER)
+    renderProvider(fakeAuth({ bootstrap }))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent(initial === 'anonymous' ? 'anonymous' : 'authenticated'))
+    if (initial === 'expired') await userEvent.click(screen.getByRole('button', { name: 'expire' }))
+    fireEvent(window, new Event('focus'))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'))
+    expect(screen.getByTestId('user')).toHaveTextContent(USER.displayName)
+    expect(bootstrap).toHaveBeenCalledTimes(2)
+  })
   it('login basarili -> authenticated', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const user = userEvent.setup()

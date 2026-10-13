@@ -30,7 +30,7 @@ import { eksistCaseDataSchema } from '../eksist-case.js'
 const caseDtoShape = {
   eksist: eksistCaseDataSchema.optional(),
   id: caseIdSchema,
-  caseType: caseTypeSchema,
+  caseType: caseTypeSchema.nullable(),
   officeCaseNumber: officeCaseNumberSchema,
   notificationFormNumber: notificationFormNumberSchema.nullable(),
   insurerClaimNumber: insurerClaimNumberSchema.nullable(),

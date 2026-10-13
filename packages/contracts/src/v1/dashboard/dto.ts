@@ -50,7 +50,7 @@ function uniqueArray<T extends z.ZodType>(schema: T, maximum: number, marker: st
 
 export const dashboardCaseItemSchema = z.strictObject({
   caseId: caseIdSchema,
-  caseType: caseTypeSchema,
+  caseType: caseTypeSchema.nullable(),
   officeCaseNumber: officeCaseNumberSchema,
   plate: plateNumberSchema,
   stage: dashboardOpenStageSchema,
@@ -63,7 +63,7 @@ export const dashboardCaseItemSchema = z.strictObject({
   version: entityVersionSchema,
   missingDocumentCount: boundedCountSchema,
   controlRequiredDocumentCount: boundedCountSchema,
-  documentRuleVersion: z.string().min(1).max(64),
+  documentRuleVersion: z.string().min(1).max(64).nullable(),
   pendingHumanApprovalCount: boundedCountSchema,
   pendingHumanApprovalKinds: uniqueArray(
     dashboardHumanApprovalKindSchema,

@@ -20,7 +20,7 @@ import { loadServiceProfiles } from '../service-agreements/service.js'
 
 export interface CaseRow {
   id: string
-  case_type: 'traffic' | 'casco'
+  case_type: 'traffic' | 'casco' | null
   office_number: string
   notification_form_number: string | null
   insurer_claim_number: string | null

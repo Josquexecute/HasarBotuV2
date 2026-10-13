@@ -1,4 +1,4 @@
-export type CaseType = 'Trafik' | 'Kasko'
+export type CaseType = 'Trafik' | 'Kasko' | 'Seçiniz'
 
 export type CaseStage =
   | 'Yeni İhbar'

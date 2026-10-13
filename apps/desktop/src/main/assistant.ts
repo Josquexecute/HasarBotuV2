@@ -13,11 +13,11 @@ interface AssistantOptions {
   readonly quit: () => void
 }
 
-/** A separate, narrowly privileged UI window; business operations still use the main app/API. */
+/** Separate UI windows; business operations use the existing authenticated API. */
 export async function startDesktopAssistant(options: AssistantOptions) {
   const statePath = join(options.userDataPath, 'assistant-position.json')
   const url = `${options.shell.origin}/desktop-assistant.html`
-  const menuUrl = `${options.shell.origin}/desktop-assistant-menu.html`
+  const menuUrl = `${options.shell.origin}/touch-assistant`
   const primary = screen.getPrimaryDisplay().workArea
   let position: Point = { x: primary.x + primary.width - ASSISTANT_SIZE - 16, y: primary.y + Math.round(primary.height / 2) }
   try {
@@ -57,9 +57,10 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   window.webContents.setZoomFactor(1)
   void window.webContents.setVisualZoomLevelLimits(1, 1)
 
-  const menuWindow = new BrowserWindow({ width: 360,height: 366,title: 'HasarBotu Hızlı İşlemler',show: false,frame: false,
+  const menuWindow = new BrowserWindow({ width: 420,height: 720,title: 'HasarBotu Hızlı İşlemler',show: false,frame: false,
     alwaysOnTop: true,skipTaskbar: true,resizable: false,minimizable: false,maximizable: false,fullscreenable: false,backgroundColor: '#121923',
-    webPreferences: { ...SECURE_WEB_PREFERENCES,partition: 'hasarbotu-assistant',preload: fileURLToPath(new URL('../preload/assistant-menu-preload.cjs',import.meta.url)) },
+    // Share HttpOnly authentication with the main app; the character stays isolated.
+    webPreferences: { ...SECURE_WEB_PREFERENCES,session: options.shell.window.webContents.session,preload: fileURLToPath(new URL('../preload/assistant-menu-preload.cjs',import.meta.url)) },
   })
   menuWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   menuWindow.webContents.on('will-navigate',(event) => event.preventDefault())
@@ -68,6 +69,10 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   menuWindow.webContents.on('will-attach-webview',(event) => event.preventDefault())
   menuWindow.webContents.setZoomFactor(1)
   void menuWindow.webContents.setVisualZoomLevelLimits(1,1)
+  const denyMenuDownload = (event: Electron.Event, _item: Electron.DownloadItem, contents: Electron.WebContents) => {
+    if (contents === menuWindow.webContents) event.preventDefault()
+  }
+  menuWindow.webContents.session.on('will-download', denyMenuDownload)
 
   let tray: Tray | undefined
   let disposed = false
@@ -121,16 +126,8 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   }
   const actions = {
     open: () => showMain(),
-    note: () => {
-      showMain()
-      const main = options.shell.window
-      if (main.isDestroyed() || !main.webContents.getURL().startsWith(`${options.shell.origin}/`)) return
-      // Constant DOM notification preserves the current route and selected case.
-      void main.webContents.executeJavaScript("window.dispatchEvent(new Event('hasarbotu:quick-note'))").catch(() => {
-        console.error('desktop assistant could not open quick note')
-      })
-    },
-    cases: () => showMain('/dosyalar'),notifications: () => showMain('/bildirimler'),settings: () => showMain('/ayarlar'),
+    note: () => openMenu(),
+    cases: () => openMenu(),notifications: () => showMain('/bildirimler'),settings: () => showMain('/ayarlar'),
     hide: () => { drag = undefined;window.hide() },
     reset: () => {
       const area = screen.getPrimaryDisplay().workArea
@@ -205,6 +202,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     disposed = true
     stopGaze()
     assistantSession.removeListener('will-download', denyDownload)
+    menuWindow.webContents.session.removeListener('will-download', denyMenuDownload)
     ipcMain.removeListener('hasarbotu:assistant', handleCommand)
     ipcMain.removeListener('hasarbotu:assistant-menu',handleMenuAction)
     screen.removeListener('display-added', onDisplayChange)

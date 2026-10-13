@@ -1,5 +1,7 @@
 # Bildirim merkezi ve kaynak engelleri — 13.10.2026
 
+Sonraki doğrulama: [Touch 0.1.6 ve 17/17 kaynak kabulü](TOUCH_ASSISTANT_AND_SOURCE_RECOVERY_2026-10-13.md). Aşağıdaki 0.1.5 raporu önceki kontrolün durumunu kaydeder.
+
 **Durum: PARTIAL.** Bildirim revizyonu tamamlandı; masaüstü **0.1.5** iki bilgisayara kuruldu. Kaynak kontrolündeki engelli dosya sayısı **25 → 17** düştü. Kalan kaynak eşleşmeleri, yeni V1 aktarım onayı ve Windows yeniden başlatma kabulü açık.
 
 ## Kullanım ve doğrulama
