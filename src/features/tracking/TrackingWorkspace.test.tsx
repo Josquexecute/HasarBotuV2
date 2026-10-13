@@ -74,7 +74,8 @@ describe('tracking screens',() => {
   it('shows persistent popup and dismisses it without marking the notification read',async () => {
     const fetch = vi.spyOn(globalThis,'fetch').mockImplementation(async (_url,options) => options?.method === 'POST' ? new Response(null,{ status: 204 }) : Response.json({ notifications: [{ id: 'notice',caseId: 'case',plate: '34 TEST 123',title: 'Evrak eklendi: rapor.pdf' }] }))
     render(<MemoryRouter><TrackingPopup /></MemoryRouter>)
-    await screen.findByText('34 TEST 123: Evrak eklendi: rapor.pdf')
+    await screen.findByText('Evrak eklendi: rapor.pdf')
+    expect(screen.getByText('34 TEST 123')).toBeInTheDocument()
     expect(screen.getByRole('link',{ name: 'Dosyayı aç' })).toHaveAttribute('href','/dosyalar/case')
     await userEvent.click(screen.getByRole('button',{ name: 'Uyarıyı kapat' }))
     await waitFor(() => expect(screen.queryByLabelText('Yeni bildirim')).not.toBeInTheDocument())

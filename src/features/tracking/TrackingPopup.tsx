@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { BellRing, X } from 'lucide-react'
 import { trackingPendingNotificationsSchema } from '@hasarbotu/contracts'
 import { trackingRequest } from './trackingApi'
 import './tracking.css'
@@ -48,8 +49,8 @@ export function TrackingPopup() {
     finally { dismissInProgress.current = false;setDismissing(false) }
   }
   return <aside className="tracking-popup" aria-label="Yeni bildirim" role="status">
-    <strong>{items.length === 20 ? '20 veya daha fazla' : items.length} yeni bildirim</strong><span>{first.plate}: {first.title}</span>
-    <Link to={`/dosyalar/${first.caseId}`}>Dosyayı aç</Link><Link to="/bildirimler">Tüm bildirimler</Link>
-    <button type="button" className="button button--secondary" disabled={dismissing} onClick={() => { void dismiss() }}>{dismissing ? 'Kapatılıyor…' : 'Uyarıyı kapat'}</button>{error && <span>{error}</span>}
+    <header className="tracking-popup__header"><span><BellRing size={16} />{items.length === 20 ? '20 veya daha fazla' : items.length} yeni bildirim</span><button type="button" aria-label={dismissing ? 'Kapatılıyor…' : 'Uyarıyı kapat'} disabled={dismissing} onClick={() => { void dismiss() }}><X size={17} /></button></header>
+    <strong>{first.plate}</strong><p>{first.title}</p>
+    <footer><Link to={`/dosyalar/${first.caseId}`}>Dosyayı aç</Link><Link to="/bildirimler">Tüm bildirimler</Link></footer>{error && <span>{error}</span>}
   </aside>
 }

@@ -6,11 +6,14 @@ devam eder. Ofis evrak kökü `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ`.
 
 ## Gerçek ofis kurulumu — güncel durum
 
-13.10.2026 gerçek kullanım revizyonu iki bilgisayara **0.1.4** olarak kuruldu.
+13.10.2026 bildirim revizyonu iki bilgisayara **0.1.5** olarak kuruldu.
 Güncel canlı durum: **399 dosya, 1.454 not, 74 görev, üç hesap**, 53 migration.
 Bildirim sahipliği, şirket hesabı yönetici onayı, düzenlenebilir ofis kuralları/
 yetkiler ve tarihli işlem kayıtları etkin. Kaynak istisnaları ve yeniden başlatma
-kabulü halen açıktır. Son test/dağıtım/yedek kanıtları:
+kabulü halen açıktır. Kaynak taramasında engelli dosyalar 25'ten 17'ye düştü.
+Son bildirim/kurulum/kaynak kanıtları:
+[Bildirim merkezi ve kaynak engelleri — 13.10.2026](NOTIFICATION_CENTER_AND_BLOCKERS_2026-10-13.md).
+Önceki API/yetki/yedek revizyonu:
 [Gerçek kullanım düzenlemeleri — 13.10.2026](REAL_USE_REFINEMENTS_2026-10-13.md).
 Aşağıdaki ayrıntılı kurulum maddeleri önceki 0.1.3 kabulünün tarihsel kaydıdır.
 

@@ -6,6 +6,8 @@ import { BackendUnavailableState, LoadingState } from '../../components/StateVie
 import type { OperationalAlertDataPort, OperationalAlertSeverityRecord, OperationalAlertTypeRecord } from '../../data/operationalAlertPort'
 import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
 import { useOperationalAlerts } from '../../data/useOperationalAlerts'
+import { NotificationCard } from './NotificationCard'
+import './notifications.css'
 const TrackingInbox = lazy(async () => ({ default: (await import('./TrackingInbox')).TrackingInbox }))
 const TrackingWorkspace = lazy(async () => ({ default: (await import('../tracking/TrackingWorkspace')).TrackingWorkspace }))
 const notificationIcons: Record<NotificationType, typeof FileWarning> = {
@@ -66,13 +68,7 @@ const ALERT_TYPE_LABELS: Record<OperationalAlertTypeRecord, string> = {
   missing_required_document: 'Eksik Evrak',
 }
 
-const ALERT_SEVERITY_LABELS: Record<OperationalAlertSeverityRecord, string> = {
-  high: 'Yüksek',
-  medium: 'Orta',
-  low: 'Düşük',
-}
-
-const ALERT_SEVERITY_TONES: Record<OperationalAlertSeverityRecord, string> = {
+const ALERT_SEVERITY_TONES: Record<OperationalAlertSeverityRecord, 'critical' | 'warning' | 'info'> = {
   high: 'critical',
   medium: 'warning',
   low: 'info',
@@ -96,17 +92,7 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
 
   return (
     <>
-      <section className="page-heading page-heading--compact">
-        <div>
-          <h1>
-            Bildirimler
-            {status === 'ok' && alerts !== null && (
-              <span className="heading-count">{alerts.totalCount} açık uyarı</span>
-            )}
-          </h1>
-          <p>Sorumlu olduğunuz dosyaların uyarıları</p>
-        </div>
-      </section>
+      {status === 'ok' && alerts !== null && <p className="notification-feed__count">{alerts.totalCount} açık uyarı</p>}
       {status === 'loading' && <LoadingState label="Uyarılar yükleniyor" />}
       {(status === 'unavailable' || status === 'unauthorized' || status === 'forbidden') && (
         <BackendUnavailableState
@@ -123,7 +109,7 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
       )}
       {status === 'ok' && items.length > 0 && (
         <>
-          <section className="filterbar" aria-label="Uyarı filtreleri">
+          <section className="notification-feed__toolbar" aria-label="Uyarı filtreleri">
             <label className="select-field">
               <span className="select-field__label">Tür</span>
               <select
@@ -140,37 +126,11 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
             </label>
             <span className="filterbar__context">{visible.length} uyarı gösteriliyor</span>
           </section>
-          <div className="notification-list" role="list">
+          <div className="notification-card-list" role="list">
             {visible.map((item) => {
               const Icon = alertIcons[item.type]
               return (
-                <article
-                  className={`notification-item notification-item--${ALERT_SEVERITY_TONES[item.severity]}`}
-                  key={item.dedupeKey}
-                  role="listitem"
-                >
-                  <div className="notification-item__main">
-                    <span className="notification-item__icon"><Icon size={18} /></span>
-                    <span>
-                      <span className="eyebrow">
-                        {ALERT_TYPE_LABELS[item.type]} · {ALERT_SEVERITY_LABELS[item.severity]} önem · {item.sourceDate}
-                      </span>
-                      <strong>{item.summary}</strong>
-                    </span>
-                  </div>
-                  <div className="notification-item__case">
-                    <span className="plate plate--table">{item.plate}</span>
-                    <small>{item.officeNumber}</small>
-                  </div>
-                  <button
-                    className="button button--secondary"
-                    type="button"
-                    onClick={() => navigate(item.caseDetailPath)}
-                    aria-label={`${item.plate} dosyasına git`}
-                  >
-                    <ExternalLink size={14} /> Dosyaya Git
-                  </button>
-                </article>
+                <NotificationCard key={item.dedupeKey} icon={Icon} label={`${ALERT_TYPE_LABELS[item.type]}${item.severity === 'high' ? ' · Öncelikli' : ''}`} plate={item.plate} officeNumber={item.officeNumber} title={item.summary} timestamp={item.sourceDate} tone={ALERT_SEVERITY_TONES[item.severity]} onOpen={() => navigate(item.caseDetailPath)} />
               )
             })}
           </div>
@@ -188,10 +148,11 @@ export function NotificationsPage({ port }: { port?: OperationalAlertDataPort } 
   return (
     <main className="page office-page notifications-page">
       {source === 'mock' ? <NotificationsMockContent /> : <>
-        <nav className="workspace-tabs" aria-label="Bildirim bölümleri">{([['inbox','Dosya bildirimleri'],['alerts','Görev ve evrak uyarıları'],['tracking','Tramer ve e-posta']] as const).map(([key,title]) => <button key={key} className={section === key ? 'is-active' : ''} onClick={() => setSection(key)}>{title}</button>)}</nav>
-        <div className="office-scroll">
-          {section === 'inbox' && <><section className="page-heading page-heading--compact"><div><h1>Bildirimler</h1></div></section><Suspense fallback={<LoadingState label="Bildirimler yükleniyor" />}><TrackingInbox /></Suspense></>}
-          {section === 'alerts' && <OperationalAlertContent port={port} />}
+        <div className="office-scroll notification-center">
+          <header className="notification-center__heading"><span className="notification-center__symbol"><BellRing size={24} /></span><div><h1>Bildirimler</h1><p>Dosyalarınızdan son gelişmeler</p></div></header>
+          <nav className="notification-center__tabs" aria-label="Bildirim bölümleri">{([['inbox','Gelen kutusu'],['alerts','Uyarılar'],['tracking','Tramer ve e-posta']] as const).map(([key,title]) => <button type="button" key={key} aria-pressed={section === key} onClick={() => setSection(key)}>{title}</button>)}</nav>
+          {section === 'inbox' && <Suspense fallback={<LoadingState label="Bildirimler yükleniyor" />}><TrackingInbox /></Suspense>}
+          {section === 'alerts' && <section className="notification-feed" aria-label="Dosya uyarıları"><OperationalAlertContent port={port} /></section>}
           {section === 'tracking' && <Suspense fallback={<LoadingState label="Takip yükleniyor" />}><TrackingWorkspace /></Suspense>}
         </div>
       </>}

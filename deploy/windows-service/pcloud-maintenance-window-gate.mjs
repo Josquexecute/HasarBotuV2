@@ -11,14 +11,12 @@ import {
 } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import { backup, DatabaseSync } from 'node:sqlite'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const MINIMUM_QUIET_SECONDS = 600
 const DEFAULT_POLL_SECONDS = 15
 const DEFAULT_MAXIMUM_SECONDS = 1800
-const DATABASE_SNAPSHOT_ATTEMPTS = 5
-const DATABASE_SNAPSHOT_RETRY_DELAY_MS = 250
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
 const DECIMAL_ID_PATTERN = /^[1-9][0-9]*$/
 
@@ -202,91 +200,98 @@ export async function loadGhostManifest(manifestPath, expectedSha256, sourceRoot
   }
 }
 
-async function statOptional(filePath) {
-  try {
-    const value = await stat(filePath, { bigint: true })
-    return {
-      size: value.size.toString(),
-      mtimeNs: value.mtimeNs.toString(),
+async function captureDatabaseDataFiles(databasePath) {
+  const result = []
+  // SHM is a disposable WAL index and reader lock state, not database data.
+  // Rebuild it in the private copy instead of importing the live client's locks.
+  for (const suffix of ['', '-wal', '-journal']) {
+    const filePath = databasePath + suffix
+    try {
+      const info = await stat(filePath, { bigint: true })
+      result.push({ suffix, stamp: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}` })
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+      result.push({ suffix, stamp: null })
     }
-  } catch (error) {
-    if (error?.code === 'ENOENT') return null
-    throw error
   }
+  return result
 }
 
-function databaseFilesStable(before, after) {
-  return before.length === after.length && before.every((value, index) => (
-    value.name === after[index].name
-    && value.stamp?.size === after[index].stamp?.size
-    && value.stamp?.mtimeNs === after[index].stamp?.mtimeNs
-  ))
-}
-
-async function captureDatabaseFiles(databasePath) {
-  const names = [
-    path.basename(databasePath),
-    `${path.basename(databasePath)}-wal`,
-    `${path.basename(databasePath)}-shm`,
-  ]
-  const directory = path.dirname(databasePath)
-  const values = []
-  for (const name of names) {
-    values.push({ name, stamp: await statOptional(path.join(directory, name)) })
+async function copyLockedDatabaseSnapshot(databasePath, directory) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const copyDirectory = await mkdtemp(path.join(directory, 'verified-copy-'))
+    let database
+    let retained = false
+    try {
+      const before = await captureDatabaseDataFiles(databasePath)
+      assert(before[0].stamp !== null, 'PCLOUD_LOCAL_DATABASE_NOT_FOUND')
+      const target = path.join(copyDirectory, path.basename(databasePath))
+      for (const file of before) if (file.stamp !== null) await copyFile(databasePath + file.suffix, target + file.suffix)
+      const after = await captureDatabaseDataFiles(databasePath)
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        if (attempt < 4) await sleep(250)
+        continue
+      }
+      database = new DatabaseSync(target, { readOnly: true, timeout: 0 })
+      assert(Object.values(database.prepare('PRAGMA quick_check').get())[0] === 'ok', 'PCLOUD_DATABASE_SNAPSHOT_INVALID')
+      retained = true
+      return database
+    } catch (error) {
+      if ([11, 26].includes(error?.errcode)) fail('PCLOUD_DATABASE_SNAPSHOT_INVALID')
+      throw error
+    } finally {
+      if (!retained) { database?.close(); await rm(copyDirectory, { recursive: true, force: true }) }
+    }
   }
-  return values
+  fail('PCLOUD_DATABASE_SNAPSHOT_UNSTABLE')
 }
 
 export async function withConsistentPcloudDatabase(databasePath, reader) {
-  for (let attempt = 1; attempt <= DATABASE_SNAPSHOT_ATTEMPTS; attempt += 1) {
-    const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'hasarbotu-pcloud-ro-'))
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'hasarbotu-pcloud-ro-'))
+  let source
+  let snapshot
+  let snapshotStrategy = 'online-backup'
+  try {
     try {
-      const before = await captureDatabaseFiles(databasePath)
-      assert(before[0].stamp !== null, 'PCLOUD_LOCAL_DATABASE_NOT_FOUND')
-      for (const entry of before) {
-        if (entry.stamp !== null) {
-          await copyFile(
-            path.join(path.dirname(databasePath), entry.name),
-            path.join(temporaryDirectory, entry.name),
-          )
-        }
-      }
-      const after = await captureDatabaseFiles(databasePath)
-      if (!databaseFilesStable(before, after)) {
-        // HB-2026-127: heavy sustained source reads (a full-tree hash pass)
-        // can leave pCloud's local DB/WAL momentarily busy right afterward.
-        // Retrying with zero backoff can exhaust all attempts before it
-        // settles; a short pause gives a real chance to observe a stable
-        // snapshot instead of failing closed on transient contention.
-        if (attempt < DATABASE_SNAPSHOT_ATTEMPTS) await sleep(DATABASE_SNAPSHOT_RETRY_DELAY_MS)
-        continue
-      }
-
-      const snapshotPath = path.join(temporaryDirectory, path.basename(databasePath))
-      const database = new DatabaseSync(snapshotPath, { readOnly: true, timeout: 0 })
-      try {
-        const quickCheck = database.prepare('PRAGMA quick_check').get()
-        assert(Object.values(quickCheck)[0] === 'ok', 'PCLOUD_DATABASE_SNAPSHOT_INVALID')
-        return reader(database)
-      } finally {
-        database.close()
-      }
+      await stat(databasePath)
     } catch (error) {
-      if (error?.safeCode === 'PCLOUD_LOCAL_DATABASE_NOT_FOUND') throw error
-      if (
-        error?.safeCode
-        && error.safeCode !== 'PCLOUD_DATABASE_SNAPSHOT_INVALID'
-      ) throw error
-      if (attempt === DATABASE_SNAPSHOT_ATTEMPTS) {
-        fail('PCLOUD_DATABASE_SNAPSHOT_UNSTABLE')
-      }
-      await sleep(DATABASE_SNAPSHOT_RETRY_DELAY_MS)
-    } finally {
-      await rm(temporaryDirectory, { recursive: true, force: true })
+      if (error?.code === 'ENOENT') fail('PCLOUD_LOCAL_DATABASE_NOT_FOUND')
+      throw error
     }
+    try {
+      source = new DatabaseSync(databasePath, { readOnly: true, timeout: 100 })
+      // Pin one SQLite read transaction. WAL writers can continue while the
+      // online backup reads a consistent revision, without racing DB/WAL copies.
+      source.exec('BEGIN')
+      source.prepare('SELECT count(*) FROM sqlite_schema').get()
+      const snapshotPath = path.join(temporaryDirectory, path.basename(databasePath))
+      await backup(source, snapshotPath, { rate: 512 })
+      source.exec('ROLLBACK')
+      source.close()
+      source = undefined
+      snapshot = new DatabaseSync(snapshotPath, { readOnly: true, timeout: 0 })
+      const quickCheck = snapshot.prepare('PRAGMA quick_check').get()
+      assert(Object.values(quickCheck)[0] === 'ok', 'PCLOUD_DATABASE_SNAPSHOT_INVALID')
+    } catch (error) {
+      if (error?.safeCode) throw error
+      if ([5, 6].includes(error?.errcode)) {
+        // Some pCloud builds retain an exclusive SQLite lock. They cannot be
+        // opened by the online API; use a verified DB/WAL copy with fresh locks.
+        snapshot?.close(); snapshot = undefined
+        source?.close(); source = undefined
+        snapshot = await copyLockedDatabaseSnapshot(databasePath, temporaryDirectory)
+        snapshotStrategy = 'verified-copy'
+      } else {
+        if ([11, 26].includes(error?.errcode)) fail('PCLOUD_DATABASE_SNAPSHOT_INVALID')
+        throw error
+      }
+    }
+    return await reader(snapshot, { strategy: snapshotStrategy })
+  } finally {
+    snapshot?.close()
+    source?.close()
+    await rm(temporaryDirectory, { recursive: true, force: true })
   }
-
-  fail('PCLOUD_DATABASE_SNAPSHOT_UNSTABLE')
 }
 
 export function getTextSetting(database, id, safeCode) {

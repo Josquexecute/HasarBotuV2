@@ -10,7 +10,7 @@ import {
   getTaskReferenceCount,
   resolveFolderIdByRelativeDirParts,
 } from './pcloud-post-sync-diff-forensics.mjs'
-import { enumerateFilesRecursive, readAttestationRecord, resolveTopLevelFolderId } from './pcloud-source-attestation.mjs'
+import { enumerateFilesRecursive, isTemporarySourceEntry, readAttestationRecord, resolveTopLevelFolderId } from './pcloud-source-attestation.mjs'
 
 // Session-0-safe per-case freshness gate (HB-2026-167, Karar 1 -- approved
 // architecture, replacing the P:\-dependent pcloud-case-reconciliation.mjs
@@ -107,7 +107,7 @@ function enumerateDbFilesUnderFolder(database, folderId) {
     fileId: row.id_text,
     pCloudHash: row.hash_text,
     dbSizeBytes: row.size,
-  }))
+  })).filter((entry) => !entry.relativePath.split(/[\\/]+/).some(isTemporarySourceEntry))
 }
 
 async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath }) {

@@ -8,4 +8,13 @@
 .tracking-workspace option { color: #111827; background: white; }
 .tracking-workspace dl { margin: 0; }.tracking-workspace dt { font-weight: 600; }.tracking-workspace dd { margin: 0 0 6px; }
 .google-connect { display: grid; gap: 8px; margin-block: 12px; }
-.tracking-popup { position: fixed; right: 20px; bottom: 20px; z-index: 1000; max-width: min(420px, calc(100vw - 40px)); padding: 18px; border: 1px solid #2f6bc5; border-radius: 10px; background: #fff; color: #182333; box-shadow: 0 4px 22px #0003; display: grid; gap: 10px; }
+.tracking-popup { position: fixed; right: 20px; top: 72px; z-index: 1000; width: min(370px, calc(100vw - 40px)); padding: 16px 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text-primary); box-shadow: 0 8px 30px #0003; display: grid; gap: 8px; }
+.tracking-popup__header, .tracking-popup__header > span { display: flex; align-items: center; gap: 8px; }
+.tracking-popup__header { justify-content: space-between; color: var(--text-secondary); font-size: 11px; }
+.tracking-popup__header svg { color: var(--accent); }
+.tracking-popup__header button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 9px; background: var(--surface-muted); cursor: pointer; }
+.tracking-popup strong { font-size: 14px; }
+.tracking-popup p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
+.tracking-popup footer { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 4px; }
+.tracking-popup footer a { padding-block: 5px; font-size: 11px; color: var(--accent); text-decoration: none; }
+.tracking-popup button:focus-visible, .tracking-popup a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

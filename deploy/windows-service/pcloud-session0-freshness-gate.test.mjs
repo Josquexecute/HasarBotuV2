@@ -120,6 +120,21 @@ test('determineSessionSafeCaseStatus: ready/syncing/unknown/conflict dogru sinif
   assert.equal(report.Summary.ReadyCount, 1)
 })
 
+test('temporary files on disk or only in metadata do not hide permanent file failures', async context => {
+  const fixture = await buildFixture(context)
+  await writeFile(path.join(fixture.targetCaseRoot, '~$draft.docx'), 'temporary')
+  const database = new DatabaseSync(fixture.databasePath)
+  try {
+    const folder = database.prepare('SELECT id FROM folder WHERE name=?').get(fixture.caseRelativePath)
+    database.prepare('INSERT INTO file(id,parentfolderid,name,size,hash,flags,ctime,mtime) VALUES(?,?,?,?,?,0,1,1)').run(99001, folder.id, '.takip.json.old.tmp', 0, 777)
+  } finally { database.close() }
+  const report = await determineSessionSafeCaseStatus(fixture)
+  assert.equal(report.Summary.TotalFiles, 4)
+  assert.equal(report.CaseStatus, 'conflict')
+  assert.ok(report.Entries.some(entry => entry.RelativePath === 'conflict.pdf' && entry.FileStatus === 'conflict'))
+  assert.ok(!report.Entries.some(entry => entry.RelativePath.includes('.tmp') || entry.RelativePath.startsWith('~$')))
+})
+
 test('workspace intent: absent and partially created empty trees can resume; normal freshness stays closed', async context => {
   const fixture = await buildFixture(context)
   const args = { ...fixture, caseRelativePath: 'new/case', targetCaseRoot: path.join(fixture.temporaryRoot, 'new/case'), operation: 'workspace' }

@@ -9,10 +9,26 @@ import {
   buildAttestationRecords,
   buildAttestationRecordsBatch,
   findCasesNeedingAttestation,
+  enumerateFilesRecursive,
   readAttestationRecord,
   resolveTopLevelFolderId,
   writeAttestationRecord,
 } from './pcloud-source-attestation.mjs'
+
+test('temporary artifacts match tracking policy while permanent V1 tracking metadata stays protected', async context => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'hb-source-temporary-'))
+  context.after(() => rm(directory, { recursive: true, force: true }))
+  await mkdir(path.join(directory, '_HASARBOTU'))
+  const { isTemporaryTrackedFile } = await import('../../packages/domain/dist/tracked-file.js')
+  const names = ['ruhsat.pdf', '~$rapor.docx', '.takip.json.123.tmp', 'report.tmp', 'report.partial', 'Thumbs.db', 'desktop.ini', 'final.docx', 'photo.JPG', 'takip.json', 'HASARBOTU_TAKIP_OZETI.txt']
+  for (const name of names) await writeFile(path.join(directory, name), name)
+  await writeFile(path.join(directory, '_HASARBOTU', 'takip.json'), '{}')
+  await writeFile(path.join(directory, '_HASARBOTU', 'HASARBOTU_TAKIP_OZETI.txt'), 'summary')
+  const files = await enumerateFilesRecursive(directory)
+  assert.deepEqual(files.filter(file => !file.relativePath.startsWith('_HASARBOTU')).map(file => file.relativePath).sort(), names.filter(name => !isTemporaryTrackedFile(name)).sort())
+  assert.ok(files.some(file => file.relativePath === '_HASARBOTU\\takip.json'))
+  assert.ok(files.some(file => file.relativePath === '_HASARBOTU\\HASARBOTU_TAKIP_OZETI.txt'))
+})
 
 async function buildFixture(context) {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'hasarbotu-attestation-test-'))

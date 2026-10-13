@@ -61,7 +61,8 @@ describe('NotificationsPage gerçek operasyonel uyarılar', () => {
 
     expect(await screen.findByText('Süresi geçmiş görev: Servisten onay al')).toBeInTheDocument()
     expect(screen.getByText('Eksik zorunlu evrak: Zabıt')).toBeInTheDocument()
-    expect(screen.getByText(/Geciken Görev · Yüksek önem · 2026-07-12/)).toBeInTheDocument()
+    expect(screen.getByText('Geciken Görev · Öncelikli')).toBeInTheDocument()
+    expect(screen.getByText('12 Temmuz 2026')).toHaveAttribute('datetime', '2026-07-12')
     expect(screen.getByText('34 P 4902')).toBeInTheDocument()
     expect(screen.getByText('2026/4903')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /dosyasına git/ })).toHaveLength(2)

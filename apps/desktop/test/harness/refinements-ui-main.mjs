@@ -50,8 +50,8 @@ void app.whenReady().then(async () => {
     const clickAria = (label) => evaluate(`document.querySelector(${JSON.stringify(`[aria-label="${label}"]`)}).click()`)
     const button = (label) => `Array.from(document.querySelectorAll('button')).find((item)=>item.textContent.trim()===${JSON.stringify(label)})`
     await until(() => evaluate('document.querySelectorAll(".case-table tbody tr").length>0 || document.querySelector("tbody")?.textContent.includes("34 TEST 001")'),'actual case list')
-    await until(() => evaluate(`${button('Uyarıyı kapat')} !== undefined`),'owned popup')
-    await evaluate(`${button('Uyarıyı kapat')}.click()`)
+    await until(() => evaluate('document.querySelector(\'button[aria-label="Uyarıyı kapat"]\') !== null'),'owned popup')
+    await clickAria('Uyarıyı kapat')
     await until(() => evaluate('!document.querySelector(".tracking-popup")'),'backlog dismissal')
     const dismissed = await pool.query('SELECT count(*)::int AS n FROM tracking_notifications WHERE case_id=$1 AND presented_at IS NOT NULL AND read_at IS NULL',[caseId])
     check('one dismissal closes all sixty notices while preserving the unread inbox',dismissed.rows[0].n === 60)
@@ -93,6 +93,20 @@ void app.whenReady().then(async () => {
     await until(() => evaluate('document.querySelectorAll(".notification-item").length===10'),'second inbox page')
     check('remaining owned notices are reachable through pagination',true)
     await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'notifications-inbox.png'),(await shell.window.webContents.capturePage()).toPNG())
+    async function notificationGeometry(label,width,zoom) {
+      shell.window.setSize(width,820);shell.window.webContents.setZoomFactor(zoom)
+      await until(() => evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))'),'notification paint')
+      const layout=await evaluate(`(()=>{const cards=Array.from(document.querySelectorAll('.notification-card')).slice(0,2).map(card=>card.getBoundingClientRect());return cards.length===2 && cards[0].right<=innerWidth && cards[1].top>=cards[0].bottom && document.body.scrollWidth<=innerWidth;})()`)
+      check(`${label}: notification cards stay in one column without horizontal overflow`,layout)
+      await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,`notifications-${label}.png`),(await shell.window.webContents.capturePage()).toPNG())
+    }
+    await notificationGeometry('dark',1280,1)
+    await notificationGeometry('narrow',390,1)
+    await notificationGeometry('zoom',1280,1.5)
+    shell.window.setSize(1280,820);shell.window.webContents.setZoomFactor(1)
+    await clickAria('Açık temaya geç')
+    await until(() => evaluate('document.querySelector(".theme-root").dataset.theme === "light"'),'notification light theme')
+    await notificationGeometry('light',1280,1)
   } catch (error) { checks.push({ name: error instanceof Error ? error.message : 'Unexpected UI acceptance error',pass: false }) }
   finally {
     await shell?.close();await api?.close();await pool?.end()

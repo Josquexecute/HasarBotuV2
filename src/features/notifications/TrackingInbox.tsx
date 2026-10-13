@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
+import { Bell, Check, FileText, RefreshCw } from 'lucide-react'
 import { trackingInboxSchema } from '@hasarbotu/contracts'
 import { trackingRequest } from '../tracking/trackingApi'
+import { NotificationCard } from './NotificationCard'
+import { groupNotifications } from './notification-time'
 
 type Inbox = ReturnType<typeof trackingInboxSchema.parse>
-const date = new Intl.DateTimeFormat('tr-TR',{ timeZone: 'Europe/Istanbul',dateStyle: 'short',timeStyle: 'short' })
+type Notice = Inbox['notifications'][number]
 export function TrackingInbox() {
+  const navigate = useNavigate()
   const [data,setData] = useState<Inbox | null>(null)
   const [page,setPage] = useState(1)
   const [read,setRead] = useState('unread')
@@ -13,6 +17,7 @@ export function TrackingInbox() {
   const [error,setError] = useState('')
   const [version,setVersion] = useState(0)
   const [saving,setSaving] = useState<string | null>(null)
+  const inFlight = useRef(false)
   useEffect(() => {
     const controller = new AbortController()
     void trackingRequest(`tracking/notifications/inbox?page=${page}&read=${read}`,undefined,controller.signal)
@@ -26,28 +31,36 @@ export function TrackingInbox() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   },[page,read,version])
-  async function markRead(id: string) {
-    if (saving) return
+  async function markRead(id: string): Promise<boolean> {
+    if (inFlight.current) return false
+    inFlight.current = true
     setSaving(id)
     try {
       await trackingRequest(`tracking/notifications/${id}/read`,{})
       setVersion((value) => value+1)
       window.dispatchEvent(new Event('tracking-updated'))
-    } catch (e) { setError(e instanceof Error ? e.message : 'Bildirim güncellenemedi.') }
-    finally { setSaving(null) }
+      return true
+    } catch (e) { setError(e instanceof Error ? e.message : 'Bildirim güncellenemedi.');return false }
+    finally { inFlight.current = false;setSaving(null) }
   }
-  return <section aria-label="Dosya bildirimleri">
-    <div className="filterbar"><label className="select-field"><span>Durum</span><select aria-label="Bildirim okuma durumu" value={read} onChange={(event) => { setRead(event.target.value);setPage(1);setLoading(true) }}><option value="unread">Okunmamış</option><option value="all">Tümü</option><option value="read">Okunmuş</option></select></label>
-      <span>{data?.unread ?? 0} okunmamış</span><button className="button button--secondary" onClick={() => { setLoading(true);setVersion((value) => value+1) }}>Yenile</button></div>
-    {error && <p role="alert">{error}</p>}
-    {loading ? <p role="status">Bildirimler yükleniyor…</p> : !error && <>
-      <div className="notification-list" role="list">{data?.notifications.map((item) => <article className={`notification-item${item.readAt ? ' is-read' : ''}`} key={item.id} role="listitem">
-        <div className="notification-item__main"><span><strong>{item.title}</strong><small>{item.kind === 'document' ? 'Evrak' : 'Tramer'} · <time dateTime={item.createdAt}>{date.format(new Date(item.createdAt))}</time></small></span></div>
-        <Link className="notification-item__case" to={`/dosyalar/${item.caseId}`}><strong>{item.plate}</strong><small>{item.officeNumber}</small></Link>
-        {!item.readAt && <button className="button button--secondary" disabled={saving !== null} onClick={() => { void markRead(item.id) }}>{saving === item.id ? 'Kaydediliyor…' : 'Okundu'}</button>}
-      </article>)}</div>
-      {data?.notifications.length === 0 && <p role="status">Bildirim yok.</p>}
-      <div className="table-footer"><span>{data?.total ?? 0} bildirim · Sayfa {page}</span><button className="button button--secondary" disabled={page <= 1} onClick={() => { setLoading(true);setPage(page-1) }}>Önceki</button><button className="button button--secondary" disabled={page*50 >= (data?.total ?? 0)} onClick={() => { setLoading(true);setPage(page+1) }}>Sonraki</button></div>
+  async function open(item: Notice) {
+    if (!item.readAt && !await markRead(item.id)) return
+    navigate(`/dosyalar/${item.caseId}${item.kind === 'document' ? '?tab=documents' : ''}`)
+  }
+  const groups = groupNotifications(data?.notifications ?? [], item => item.createdAt)
+  return <section className="notification-feed" aria-label="Dosya bildirimleri" aria-busy={loading}>
+    <div className="notification-feed__toolbar">
+      <div className="notification-segments" role="group" aria-label="Bildirim okuma durumu">{([['unread','Okunmamış'],['all','Tümü'],['read','Okunmuş']] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={read === value} onClick={() => { if (read === value) return;setRead(value);setPage(1);setLoading(true) }}>{label}{value === 'unread' && data !== null && <span>{data.unread}</span>}</button>)}</div>
+      <button className="notification-icon-button" type="button" aria-label="Bildirimleri yenile" disabled={loading || saving !== null} onClick={() => { setLoading(true);setVersion(value => value+1) }}><RefreshCw size={17} /></button>
+    </div>
+    {error && <p className="notification-feedback" role="alert">{error}<button className="text-button" type="button" onClick={() => { setLoading(true);setVersion(value => value+1) }}>Tekrar dene</button></p>}
+    {loading ? <p className="notification-feedback" role="status">Bildirimler yükleniyor…</p> : !error && <>
+      <div className="notification-feed__groups">{groups.map(group => <section className="notification-day" key={group.title} aria-label={group.title}>
+        <h2>{group.title}</h2><div className="notification-card-list" role="list">{group.items.map(item => <NotificationCard key={item.id} icon={item.kind === 'document' ? FileText : Bell} label={item.kind === 'document' ? 'Evrak' : 'Tramer'} plate={item.plate} officeNumber={item.officeNumber} title={item.title} timestamp={item.createdAt} read={!!item.readAt} onOpen={() => { void open(item) }} disabled={saving !== null}
+          action={!item.readAt && <button className="notification-read-button" type="button" disabled={saving !== null} onClick={() => { void markRead(item.id) }} aria-label={`${item.plate} bildirimini okundu işaretle`}><Check size={15} />{saving === item.id ? 'Kaydediliyor…' : 'Okundu'}</button>} />)}</div>
+      </section>)}</div>
+      {data?.notifications.length === 0 && <div className="notification-empty" role="status"><Check size={25} /><strong>{read === 'unread' ? 'Hepsi güncel' : 'Bildirim yok'}</strong><span>{read === 'unread' ? 'Okunmamış bildiriminiz bulunmuyor.' : 'Bu görünümde bildirim bulunmuyor.'}</span></div>}
+      {(data?.total ?? 0) > 0 && <div className="notification-pagination"><span>{data?.total} bildirim · {page} / {Math.max(1,Math.ceil((data?.total ?? 0)/50))}</span><div><button type="button" disabled={page <= 1 || saving !== null} onClick={() => { setLoading(true);setPage(page-1) }}>Önceki</button><button type="button" disabled={page*50 >= (data?.total ?? 0) || saving !== null} onClick={() => { setLoading(true);setPage(page+1) }}>Sonraki</button></div></div>}
     </>}
   </section>
 }

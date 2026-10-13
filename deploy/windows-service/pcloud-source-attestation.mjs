@@ -87,10 +87,17 @@ export function attestationFileNameFor(fileId, pCloudHash) {
  * pcloud-session0-freshness-gate.mjs (target-side gate evaluation) -- one
  * plain recursive file walk, no pCloud/DB dependency either way.
  */
+export function isTemporarySourceEntry(name) {
+  // Mirror the domain policy at this portable, dependency-free tool boundary.
+  return /^(?:~\$|\.|~)|(?:\.tmp|\.temp|\.part|\.partial|\.crdownload|\.download|\.swp|\.lock|~)$/i.test(name)
+    || /^(?:desktop\.ini|thumbs\.db)$/i.test(name)
+}
+
 export async function enumerateFilesRecursive(root, relativePrefix = '') {
   const entries = await readdir(path.join(root, relativePrefix), { withFileTypes: true })
   const results = []
   for (const entry of entries) {
+    if (isTemporarySourceEntry(entry.name)) continue
     const entryRelative = relativePrefix ? path.win32.join(relativePrefix, entry.name) : entry.name
     if (entry.isDirectory()) {
       results.push(...await enumerateFilesRecursive(root, entryRelative))
@@ -133,7 +140,7 @@ function resolveFileDbInfo(database, caseFolderId, relativePath) {
  * PRE identity fence: all of this case's DB rows are first resolved from
  * a SINGLE consistent DB snapshot (one withConsistentPcloudDatabase call
  * for the whole case, not one per file) -- both for efficiency (each
- * snapshot copies data.db + -wal + -shm) and correctness (every file's
+ * snapshot uses a pinned read transaction and SQLite online backup) and correctness (every file's
  * starting fileId/hash comes from the exact same point-in-time view).
  *
  * POST identity fence (mandatory, HB-2026-169 Oncelik 5): SHA-256
