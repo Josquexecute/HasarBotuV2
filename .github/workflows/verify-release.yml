@@ -1,0 +1,25 @@
+name: Yayınlanan özel sürümün bütünlüğünü doğrula
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-private-release:
+    if: ${{ !github.event.release.prerelease && !github.event.release.draft }}
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Yayınlanan paketi özel depodan indirip doğrula
+        run: node scripts/check-published-release.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,64 @@
+name: HasarBotu sürümünü doğrula ve taslak hazırla
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hasarbotu-desktop-release-main
+  cancel-in-progress: true
+
+jobs:
+  validate-and-draft:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      NODE_NO_WARNINGS: '1'
+      HASARBOTU_OFFICE_API_ORIGIN: ${{ vars.HASARBOTU_OFFICE_API_ORIGIN }}
+      HASARBOTU_OFFICE_LAN_IPV4: ${{ vars.HASARBOTU_OFFICE_LAN_IPV4 }}
+      HASARBOTU_OFFICE_LAN_HOSTNAME: ${{ vars.HASARBOTU_OFFICE_LAN_HOSTNAME }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Kilitli bağımlılıkları kur
+        run: npm ci
+      - name: Sürümün ve main kaydının uygunluğunu kontrol et
+        run: node scripts/create-release-draft.mjs --preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Ofis bağlantısını doğrula
+        run: node scripts/write-ci-distribution-profile.mjs
+      - name: TypeScript kontrolü
+        run: npm run typecheck
+      - name: Kod kontrolü
+        run: npm run lint
+      - name: Uygulamayı derle
+        run: npm run build
+      - name: Ayrı PostgreSQL test veritabanını aç
+        run: node scripts/ci-postgres.mjs start
+      - name: Gerçek Electron ve veritabanı dahil testleri çalıştır
+        run: node scripts/run-release-tests.mjs
+      - name: Windows x64 kurulumunu oluştur
+        run: npm run package:win --workspace @hasarbotu/desktop -- --publish never
+      - name: Gerçek paket açılışını ve ofis profilini doğrula
+        run: node scripts/smoke-desktop-package.mjs
+      - name: Doğrulanmış paketi ve açıklamayı taslak sürüme ekle
+        run: node scripts/create-release-draft.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Yalnız test PostgreSQL sürecini kapat
+        if: always()
+        run: node scripts/ci-postgres.mjs stop

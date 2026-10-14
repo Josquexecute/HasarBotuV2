@@ -1,11 +1,16 @@
 # Shared Windows releases
 
-For first installation, use the public [HasarBotu download](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
+The existing public 0.1.15 installer remains available from [HasarBotu download](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
+New GitHub releases are prepared only in the private `HasarBotuV2` repository and
+require repository access to download. See [the user-controlled GitHub workflow](GITHUB_RELEASE_WORKFLOW.md).
 The office distribution includes its HTTPS server configuration; office LAN clients
 do not need Tailscale. See [distribution and LAN operation](DESKTOP_DISTRIBUTION_2026-10-14.md)
 for packaging, Windows permission prompts and server address maintenance.
 The source repository remains private. GitHub provides initial installers;
 authenticated application updates continue through the office API below.
+Publishing a GitHub release does not automatically update this office feed or
+deploy backend services and database migrations. The same verified package must
+be published to the office update directory separately.
 
 Open **Ayarlar → Uygulama güncellemeleri**, select **Güncellemeleri kontrol et**,
 then **Güncelle ve yeniden başlat** when a newer release is available. The app

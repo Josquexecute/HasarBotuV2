@@ -4,6 +4,9 @@ Release **0.1.15** is available from one stable public link:
 [HasarBotu-Kurulum.exe](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
 The public `Josquexecute/HasarBotu-Downloads` repository contains installers,
 checksums and installation instructions. `Josquexecute/HasarBotuV2` remains private.
+New releases are now prepared **only in the private source repository**, following
+the user's distribution decision. See [the user-controlled release workflow](GITHUB_RELEASE_WORKFLOW.md).
+The existing public 0.1.15 link is retained; it is not updated by this workflow.
 
 ## First installation
 
@@ -31,6 +34,12 @@ profile and API configuration. See [shared releases](DESKTOP_UPDATES.md).
 
 ## Building and publishing
 
+The normal release path is now: push verified source to `main`, wait for the
+validated GitHub Actions draft, review it, then manually **Publish release**.
+Only users with access to the private repository can download new GitHub releases.
+No cross-repository token is required. Publication does not deploy the office API
+or advance the office's authenticated application update feed.
+
 Use Node 24 and the locked dependencies. Create an administrator-controlled JSON
 profile outside Git, containing exactly these four fields:
 
@@ -50,22 +59,16 @@ fails if it is absent or invalid. Its generated build file is ignored by Git.
 ```powershell
 $env:HASARBOTU_DISTRIBUTION_PROFILE = 'C:\protected\office-distribution.json'
 npm run build
-npm run package:win --workspace @hasarbotu/desktop
-node scripts/publish-desktop-github-release.mjs Josquexecute/HasarBotu-Downloads apps/desktop/release/HasarBotu-Setup-0.1.15.exe 0.1.15 release-notes.md
+npm run package:win --workspace @hasarbotu/desktop -- --publish never
 ```
 
-The GitHub publisher verifies executable version metadata, SHA-256, length, and
-both uploaded assets. It creates a **draft** and refuses replacing an existing
-artifact with different bytes. After package and installation acceptance, publish:
-
-```powershell
-gh release edit v0.1.15 --repo Josquexecute/HasarBotu-Downloads --draft=false --latest
-```
-
-Publish the same verified installer to the authenticated office update directory
+GitHub Actions verifies the installer and uploaded assets before completing its
+private draft. Source upload and the final publication remain user-controlled.
+After publication and package acceptance, publish the same verified installer to the authenticated office update directory
 with `scripts/publish-desktop-release.mjs` as documented in `DESKTOP_UPDATES.md`.
-The public asset name stays `HasarBotu-Kurulum.exe` across versions. Verify an
-anonymous download through the stable link, including its actual hash and length.
+The GitHub asset name stays `HasarBotu-Kurulum.exe` across versions. New private
+downloads require repository access; the published-release workflow checks the
+actual authenticated download against its approved hash and length.
 The installer currently has no Authenticode signature; SHA-256 verification is
 not a Windows publisher signature.
 
