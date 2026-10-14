@@ -142,7 +142,7 @@ describe('App oturum kapisi (api mod)', () => {
     expect(screen.queryByRole('heading', { name: 'Mevzuat ve AI Yardımcısı' })).not.toBeInTheDocument()
   })
 
-  it('giristen sonra /mevzuat-ve-ai dürüst boş durumu SAYFANIN KENDİ içeriği için ek istek yapmadan gösterir (oturum bootstrap + kabuk genelindeki bildirim rozeti)', async () => {
+  it('giristen sonra /mevzuat-ve-ai gerçek servisleri sorgular ve geçersiz yanıtı açıkça bildirir', async () => {
     window.history.replaceState({}, '', '/mevzuat-ve-ai')
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const calls: string[] = []
@@ -158,10 +158,9 @@ describe('App oturum kapisi (api mod)', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('Mevzuat kaynak kütüphanesi henüz yapılandırılmadı.')).toBeInTheDocument()
-    // Sidebar her rotada aynı, gerçek Bildirimler rozetini sorar (Paket 56 düzeltmesi:
-    // önceden sabit kodlu "7" idi) -- /mevzuat-ve-ai sayfasının KENDİ içeriği hâlâ ek istek yapmaz.
-    expect(calls).toHaveLength(4)
+    expect(await screen.findByText('Mevzuat servisine ulaşılamadı veya yanıt doğrulanamadı.')).toBeInTheDocument()
+    expect(calls).toHaveLength(7)
+    expect(calls.some(call => call.includes('/api/v1/legislation/library'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/me/assistant-appearance'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/tracking/notifications/pending'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)

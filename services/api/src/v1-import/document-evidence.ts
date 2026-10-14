@@ -6,8 +6,9 @@ import { classifyV1ClaimTypeDocumentText, type V1ClaimTypeContentEvidenceKind } 
 import { loadImage } from '@napi-rs/canvas'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 
-export const V1_CLAIM_DOCUMENT_EVIDENCE_VERSION = 'v1-claim-document-evidence/1.0.1' as const
+export const V1_CLAIM_DOCUMENT_EVIDENCE_VERSION = 'v1-claim-document-evidence/1.0.2' as const
 const MAX_FILES = 64
+const MAX_DISCOVERED_FILES = 4096
 const MAX_FILE_BYTES = 32 * 1024 * 1024
 const MAX_PDF_PAGES = 100
 const MAX_EXTRACTED_CHARACTERS = 1_000_000
@@ -47,7 +48,7 @@ async function listCandidates(folderAbsolutePath: string): Promise<Array<{ absol
       }
       if (!entry.isFile() || !CONTENT_EXTENSIONS.has(extname(entry.name).toLowerCase())) continue
       candidates.push({ absolutePath, caseRelativePath: relative(folderAbsolutePath, absolutePath).split('\\').join('/') })
-      if (candidates.length > MAX_FILES) throw new Error('claim_document_file_limit_exceeded')
+      if (candidates.length > MAX_DISCOVERED_FILES) throw new Error('claim_document_inventory_limit_exceeded')
     }
   }
   await walk(folderAbsolutePath)
@@ -91,6 +92,7 @@ export async function scanV1ClaimTypeDocumentEvidence(input: {
   let ocrWorker: Awaited<ReturnType<(typeof import('tesseract.js'))['createWorker']>> | undefined
   try {
     const candidates = await listCandidates(input.folderAbsolutePath)
+    if (candidates.filter(candidate => extname(candidate.absolutePath).toLowerCase() === '.pdf').length > MAX_FILES) throw new Error('claim_document_file_limit_exceeded')
     // Text-layer PDF, OCR'dan daha kesin ve cok daha ucuzdur. Tum PDF'ler
     // once taranir; en az bir explicit policy kaniti cikarsa PDF katmaninin
     // kendi celiskileri korunur, genel fotograf arsivi OCR'a sokulmaz.
@@ -102,6 +104,9 @@ export async function scanV1ClaimTypeDocumentEvidence(input: {
     const evidence: V1ClaimTypeDocumentEvidence[] = []
     let pdfEvidenceDetected = false
     for (const candidate of candidates) {
+      const extension = extname(candidate.absolutePath).toLowerCase()
+      if (extension !== '.pdf' && pdfEvidenceDetected) continue
+      if (extension !== '.pdf' && candidates.length > MAX_FILES) throw new Error('claim_document_file_limit_exceeded')
       const metadata = await stat(candidate.absolutePath)
       if (!metadata.isFile() || metadata.size > MAX_FILE_BYTES) throw new Error('claim_document_size_limit_exceeded')
       // Bos bir dosya claim turune dair belge icerigi tasiyamaz. Envanterde
@@ -111,8 +116,6 @@ export async function scanV1ClaimTypeDocumentEvidence(input: {
       // PDF.js transfers the ArrayBuffer to its worker, detaching this view.
       // Capture the source digest before extraction takes ownership of the bytes.
       const fileHash = hash(bytes)
-      const extension = extname(candidate.absolutePath).toLowerCase()
-      if (extension !== '.pdf' && pdfEvidenceDetected) continue
       let extractedText: string
       let confidence: number | null
       let extractionMethod: 'pdf_text' | 'local_ocr'

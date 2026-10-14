@@ -124,7 +124,7 @@ export interface V1RemediationOptions {
 interface CaseRow {
   readonly id: string
   readonly version: number
-  readonly caseType: CaseType
+  readonly caseType: CaseType | null
   readonly lifecycleStatus: 'open' | 'closed'
   readonly workflowStage: string
   readonly plateKey: string
@@ -210,7 +210,7 @@ export interface V1ResolvedReference {
 
 export interface V1CandidateCaseEvidence {
   readonly caseId: string
-  readonly caseType: CaseType
+  readonly caseType: CaseType | null
   readonly lifecycleStatus: 'open' | 'closed'
   readonly provenanceMatch: boolean
   readonly notificationNumberMatch: boolean
@@ -603,7 +603,7 @@ export async function planV1Remediation(
   const validExperts = new Set(expertsResult.rows.map((row) => row.id))
   const validServices = new Set(servicesResult.rows.map((row) => row.id))
   const cases: CaseRow[] = (casesResult.rows as Array<Record<string, unknown>>).map((row) => ({
-    id: String(row.id), version: Number(row.version), caseType: String(row.case_type) as CaseType,
+    id: String(row.id), version: Number(row.version), caseType: row.case_type === null ? null : String(row.case_type) as CaseType,
     lifecycleStatus: String(row.lifecycle_status) as 'open' | 'closed', workflowStage: String(row.workflow_stage),
     plateKey: String(row.plate_normalized), notificationFormNumber: row.notification_form_number === null ? null : String(row.notification_form_number),
     insurerClaimNumber: row.insurer_claim_number === null ? null : String(row.insurer_claim_number), officeNumber: String(row.office_number),
@@ -988,7 +988,12 @@ export async function planV1Remediation(
       } else {
         if (caseType === null) {
           caseType = target.caseType
-          caseTypeAutoResolved = true
+          caseTypeAutoResolved = target.caseType !== null
+          if (caseType === null) {
+            targetState = 'quarantined_claim_type'
+            targetCaseId = null
+            blockers.push('unknown_claim_type')
+          }
         } else if (caseType !== target.caseType) {
           targetState = 'quarantined_target'
           targetCaseId = null
@@ -1316,10 +1321,11 @@ export interface V1RemediationApplyResult {
   readonly failed: number
 }
 
-async function insertStableProvenance(
+export type V1ProvenanceSource = Pick<V1RemediationEntry, 'sourceHash' | 'sourceIdentity' | 'schemaVersion' | 'sourceWriteId' | 'sourceRevision'> & { folder: Pick<V1DiscoveredFolder, 'relativePath'> }
+export async function insertStableProvenance(
   client: pg.PoolClient,
   actor: { organizationId: string; actorUserId: string },
-  entry: V1RemediationEntry,
+  entry: V1ProvenanceSource,
   revisionId: string,
   itemType: 'case' | 'field_backfill' | 'note' | 'task' | 'vehicle_profile',
   nativeItemId: string,
@@ -1344,10 +1350,10 @@ async function insertStableProvenance(
   return inserted.rowCount === 1
 }
 
-async function insertItemMetadata(
+export async function insertItemMetadata(
   client: pg.PoolClient,
   actor: { organizationId: string; actorUserId: string },
-  entry: V1RemediationEntry,
+  entry: V1ProvenanceSource,
   args: {
     caseId: string; stableItemIdentity: string; itemType: 'note' | 'task' | 'follow_up' | 'closure' | 'vehicle_profile' | 'field';
     nativeItemId: string; targetType: 'case' | 'case_note' | 'case_task' | 'case_follow_up_history' | 'case_lifecycle_history' | 'case_vehicle_profile';

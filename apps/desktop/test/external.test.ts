@@ -96,8 +96,10 @@ describe('resolveExternalOpen — allowlist', () => {
     expect([...EXTERNAL_HOST_ALLOWLIST].sort()).toEqual([
       'accounts.google.com',
       'mail.google.com',
+      'mevzuat.gov.tr',
       'resmigazete.gov.tr',
       'seddk.gov.tr',
+      'www.mevzuat.gov.tr',
       'www.resmigazete.gov.tr',
       'www.seddk.gov.tr',
     ])

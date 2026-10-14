@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { BookOpenText, ChevronDown, ExternalLink, Search, Send, ShieldAlert, X } from 'lucide-react'
 import { legislationSources, type LegislationSource } from '../../mocks/workspaces'
-import { BackendUnavailableState } from '../../components/StateViews'
+const LegislationApiContent = lazy(async () => ({ default: (await import('./LegislationApiContent')).LegislationApiContent }))
 import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
 /**
  * Prototip mevzuat kütüphanesi ve mock soru–cevap. Yalnız açıkça seçilmiş mock
@@ -78,20 +78,7 @@ export function LegislationPage() {
 
   return (
     <main className="page office-page legislation-page">
-      {source === 'mock' ? <LegislationMockContent /> : (
-        <>
-          <section className="page-heading page-heading--compact">
-            <div>
-              <h1>Mevzuat ve AI Yardımcısı</h1>
-              <p>Kaynak kütüphanesi ve kaynaklı karar desteği</p>
-            </div>
-          </section>
-          <BackendUnavailableState
-            title="Mevzuat kaynak kütüphanesi henüz yapılandırılmadı."
-            detail="Gerçek kaynak kütüphanesi bağlanana kadar örnek mevzuat kaydı ve mock karar desteği gösterilmez."
-          />
-        </>
-      )}
+      {source === 'mock' ? <LegislationMockContent /> : <Suspense fallback={<p role="status">Kaynak kütüphanesi yükleniyor…</p>}><LegislationApiContent /></Suspense>}
     </main>
   )
 }

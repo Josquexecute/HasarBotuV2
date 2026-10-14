@@ -25,6 +25,8 @@ export const EXTERNAL_HOST_ALLOWLIST: readonly string[] = [
   'resmigazete.gov.tr',
   'www.resmigazete.gov.tr',
   'seddk.gov.tr',
+  'mevzuat.gov.tr',
+  'www.mevzuat.gov.tr',
   'www.seddk.gov.tr',
 ]
 

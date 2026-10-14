@@ -68,7 +68,8 @@ if (assistant && context) {
   const unsubscribe = assistant.onGaze(({ x, y }) => {
     if (reduced() || disposed) return
     bot.lookX = x
-    bot.lookY = y
+    // Screen Y grows downwards; the engine's pitch draws positive Y upwards.
+    bot.lookY = -y
   })
   const greetOnHover = () => {
     if (reduced()) return

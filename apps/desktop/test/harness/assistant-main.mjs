@@ -93,13 +93,13 @@ void app.whenReady().then(async () => {
       await win.webContents.executeJavaScript('window.gazeOff(); window.gaze = undefined')
       await new Promise((resolve) => setTimeout(resolve, 180))
       check('gaze subscription can be removed', await win.webContents.executeJavaScript('window.gaze === undefined'))
-      await win.webContents.executeJavaScript(`window.eyeCenter = () => {
+      await win.webContents.executeJavaScript(`window.eyeCenter = (axis = 'x') => {
         const c = document.querySelector('canvas')
         const p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
         let sum = 0, count = 0
         for (let i = 0; i < p.length; i += 4) {
           if (p[i] < 50 && p[i + 1] < 50 && p[i + 2] < 50 && p[i + 3] > 200) {
-            sum += (i / 4) % c.width
+            sum += axis === 'y' ? Math.floor((i / 4) / c.width) : (i / 4) % c.width
             count++
           }
         }
@@ -110,6 +110,14 @@ void app.whenReady().then(async () => {
       cursor = { x: saved.x + 800, y: saved.y + 60 }
       await until(() => win.webContents.executeJavaScript('window.eyeCenter() > 65'), 'rightward gaze in canvas')
       check('cursor movement visibly moves Mochi eyes left and right', true)
+      cursor = { x: saved.x + 60, y: saved.y - 800 }
+      await until(() => win.webContents.executeJavaScript('window.eyeCenter("y") < 56'), 'upward gaze in canvas')
+      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-gaze-up.png'), (await win.webContents.capturePage()).toPNG())
+      const upperEyeY = await win.webContents.executeJavaScript('window.eyeCenter("y")')
+      cursor = { x: saved.x + 60, y: saved.y + 800 }
+      await until(() => win.webContents.executeJavaScript(`window.eyeCenter("y") > ${upperEyeY + 12}`), 'downward gaze in canvas')
+      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-gaze-down.png'), (await win.webContents.capturePage()).toPNG())
+      check('cursor movement visibly moves Mochi eyes in the correct vertical direction', true)
       cursor = { x: saved.x + 60, y: saved.y + 60 }
       await input('press')
       cursor = { x: cursor.x - 96, y: cursor.y + 32 }

@@ -22,6 +22,8 @@ export function permissionForRequest(route: string,method: string): PermissionCo
   if (/\/administration\//.test(route)) return method === 'GET' ? undefined : 'office_admin'
   if (/\/agents(?:\/|$)/.test(route)) return 'agents_admin'
   if (/\/v1-import/.test(route)) return 'office_admin'
+  if (route === '/api/v1/legislation/ai-settings' && method === 'PUT') return 'office_admin'
+  if (route.startsWith('/api/v1/legislation/')) return 'case_read'
   if (['GET','HEAD','OPTIONS'].includes(method)) {
     if (/\/fee(?:\/|$)|^\/api\/v1\/fees(?:\/|$)/.test(route)) return 'financial_read'
     return 'case_read'

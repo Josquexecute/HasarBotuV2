@@ -1,19 +1,21 @@
 import { render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
 import { legislationSources } from '../../mocks/workspaces'
 import { LegislationPage } from './LegislationPage'
 
 afterEach(() => {
   window.localStorage.clear()
+  vi.unstubAllGlobals()
 })
 
 describe('LegislationPage veri kaynağı ayrımı', () => {
-  it('API modunda dürüst boş durum gösterir ve hiçbir örnek kaynak DOM\'a girmez', () => {
+  it('API erişim hatasını bildirir ve hiçbir örnek kaynak DOM\'a girmez', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })))
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const { container } = render(<LegislationPage />)
 
-    expect(screen.getByText('Mevzuat kaynak kütüphanesi henüz yapılandırılmadı.')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mevzuat servisine ulaşılamadı.')
     expect(screen.getByRole('heading', { name: 'Mevzuat ve AI Yardımcısı' })).toBeInTheDocument()
 
     // Sabit örnek mevzuat metinlerinin hiçbiri render edilmez.

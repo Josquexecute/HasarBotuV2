@@ -1947,6 +1947,13 @@ button {
 .qa-input > span, .settings-field > span { color: var(--text-secondary); font-size: 10px; font-weight: 700; }
 .qa-input textarea { width: 100%; min-height: 88px; resize: vertical; padding: 8px; color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); outline: 0; background: var(--surface-muted); }
 .qa-input textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent); }
+.qa-input input, .qa-input select { width: 100%; min-height: 32px; padding: 6px 8px; color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); }
+.legislation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.legislation-source-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; }
+.legislation-settings { padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.legislation-settings[open] { display: grid; gap: 10px; }
+.qa-answer blockquote { margin: 8px 0; padding: 8px; white-space: pre-wrap; border-left: 3px solid var(--accent); }
+.qa-answer small, .source-detail small { overflow-wrap: anywhere; }
 .qa-answer { width: 100%; padding: 11px; border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--accent-soft); }
 .qa-answer p { margin: 6px 0; font-size: 11px; line-height: 18px; }
 .reference-list { display: grid; gap: 4px; margin-top: 10px; }

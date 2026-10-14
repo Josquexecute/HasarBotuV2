@@ -39,6 +39,8 @@ import { registerCaseVehicleOwnersRoutes } from './case-vehicle-owners/index.js'
 import { registerCaseInventoryRoutes } from './case-inventory/index.js'
 import { registerUserRoutes } from './users/index.js'
 import { registerV1ImportQuarantineRoutes } from './v1-import-quarantine/index.js'
+import { registerLegislationRoutes } from './legislation/routes.js'
+import type { LegalProvider } from './legislation/provider.js'
 import { systemClock, type Clock } from './clock.js'
 import { API_SERVICE_NAME, API_VERSION } from './package-info.js'
 import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
@@ -51,6 +53,7 @@ import { DEFAULT_LOG_LEVEL, type LogLevel } from './config.js'
  */
 export const REDACTED_LOG_PATHS = [
   'req.body.password',
+  'req.body.apiKey',
   'req.headers.authorization',
   'req.headers.cookie',
   'req.headers["set-cookie"]',
@@ -64,6 +67,7 @@ export const DEFAULT_BODY_LIMIT_BYTES = 1_048_576
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 
 export interface BuildAppOptions {
+  readonly legislationProvider?: LegalProvider
   readonly desktopReleasesDirectory?: string
   readonly google?: GoogleConfig
   readonly googleProvider?: GoogleProvider
@@ -133,6 +137,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerGoogleRoutes(app, { pool: options.auth.pool, cookieSecure: options.auth.cookieSecure, ...(options.google ? { config: options.google } : {}), ...(options.googleProvider ? { provider: options.googleProvider } : {}) })
     registerAuthRoutes(app, options.auth)
     registerAssistantAppearanceRoutes(app, options.auth)
+    registerLegislationRoutes(app, { pool: options.auth.pool, ...(options.google ? { encryptionKey: options.google.encryptionKey } : {}), ...(options.legislationProvider ? { provider: options.legislationProvider } : {}) })
     registerDesktopUpdateRoutes(app, { pool: options.auth.pool, ...(options.desktopReleasesDirectory ? { directory: options.desktopReleasesDirectory } : {}) })
     registerCasesRoutes(app, { pool: options.auth.pool })
     registerCasesWriteRoutes(app, { pool: options.auth.pool })

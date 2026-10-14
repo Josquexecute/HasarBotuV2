@@ -267,7 +267,7 @@ function sha256Hex(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex')
 }
 
-export async function readV1Sidecar(folder: V1DiscoveredFolder): Promise<V1SidecarReadResult> {
+export async function readV1Sidecar(folder: Pick<V1DiscoveredFolder, 'absolutePath' | 'hasJson' | 'hasTxt'>): Promise<V1SidecarReadResult> {
   const sidecarDir = join(folder.absolutePath, SIDECAR_DIR)
   let jsonRaw: string | null = null
   let jsonHash: string | null = null

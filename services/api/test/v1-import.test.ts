@@ -987,4 +987,22 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     expect(plan.summary.actionable.casesToCreate).toBe(0)
     expect(await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'canonical-conflict' }, plan, options)).toMatchObject({ casesCreated: 0, quarantineResolutionsRecorded: 0, failed: 0 })
   })
+  it('keeps pending NULL classification as NULL and quarantines history without creating a fake type or duplicate case', async () => {
+    root = await mkdtemp(join(tmpdir(), 'hb-v1-pending-type-'))
+    const caseId = await insertCase('34PND999')
+    await pool.query('UPDATE cases SET case_type=NULL WHERE id=$1', [caseId])
+    await writeSource(root, '2026/Temmuz 2026/34PND999', {
+      caseKey: 'pending-type-source', createdAt: '2026-07-01T07:00:00Z', claimType: '',
+      notes: [{ id: 'pending-type-note', text: 'Pending historical note' }],
+    })
+    const plan = await planV1Remediation(pool, organizationId, root)
+    const entry = plan.entries[0]!
+    expect(entry).toMatchObject({ targetState: 'quarantined_claim_type', caseType: null, caseTypeAutoResolved: false })
+    expect(entry.candidateCaseEvidence).toContainEqual(expect.objectContaining({ caseId, caseType: null }))
+    expect(plan.summary.actionable.casesToCreate).toBe(0)
+    const result = await applyV1Remediation(pool, { organizationId, actorUserId, requestId: 'pending-type-guard' }, plan)
+    expect(result.notesCreated).toBe(0)
+    expect((await pool.query('SELECT case_type FROM cases WHERE id=$1', [caseId])).rows[0].case_type).toBeNull()
+  })
+
 })
