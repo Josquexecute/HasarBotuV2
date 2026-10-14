@@ -2,6 +2,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type pg from 'pg'
 import { assertTestDatabaseUrl, closeDatabasePool, createDatabasePool, runMigrations, uuidv7 } from '@hasarbotu/database'
 import { applyFolderRegistration, planFolderRegistration, type FolderRegistrationManifest } from '../src/cases/folder-registration.js'
+import { createCasesStore } from '../src/cases/store.js'
+import { createCasesWriteStore } from '../src/cases/write-store.js'
+import { casesQuerySchema } from '@hasarbotu/contracts'
+import { evaluateCaseDocumentRequirements } from '../src/document-requirements/evaluation.js'
+import { planFolderLocationReconciliation, applyFolderLocationReconciliation, type FolderLocationReconciliation } from '../src/cases/folder-location-reconciliation.js'
+import { planSourceFolderRelocation, applySourceFolderRelocation, type SourceFolderRelocation } from '../src/cases/source-folder-relocation.js'
 
 const testUrl = process.env.TEST_DATABASE_URL
 const describeDb = testUrl ? describe : describe.skip
@@ -66,6 +72,34 @@ describeDb('sidecarless physical folder registration', () => {
     expect(new Set(result.caseIds).size).toBe(2)
     const other = manifest(); other.folders[0]!.relativePath = input.folders[0]!.relativePath + ' - 3'
     await expect(planFolderRegistration(pool, org, other)).rejects.toThrow('folder_existing_plate_requires_reconciliation')
+    other.folders[0]!.existingPlateCaseIds = result.caseIds
+    other.folders[0]!.evidence.userIdentityDecision = 'Separately identified physical source folder; user requested every folder as a separate record'
+    const reconciled = await planFolderRegistration(pool, org, other)
+    other.folders[0]!.existingPlateCaseIds = [result.caseIds[0]!]
+    await expect(planFolderRegistration(pool, org, other)).rejects.toThrow('folder_existing_plate_requires_reconciliation')
+    expect((await applyFolderRegistration(pool, actor(), reconciled, reconciled.planHash, async () => {})).created).toBe(1)
+  })
+  it('keeps unclassified folders searchable and permits initial classification without reopening a historical folder', async () => {
+    const input = manifest(true)
+    input.folders[0]!.caseType = null
+    input.folders[0]!.evidence.kinds = []
+    const plan = await planFolderRegistration(pool, org, input)
+    const result = await applyFolderRegistration(pool, actor(), plan, plan.planHash, async () => {})
+    const id = result.caseIds[0]!
+    const store = createCasesStore(pool)
+    const list = await store.list(org, casesQuerySchema.parse({ caseType: 'unclassified' }))
+    expect(list.items.find(row => row.id === id)).toMatchObject({ caseType: null, status: 'closed' })
+    await expect(evaluateCaseDocumentRequirements(pool, org, id, new Date().toISOString())).rejects.toThrow('case_type_required')
+    const writes = createCasesWriteStore(pool)
+    expect(await writes.updateCase(actor(), id, { expectedVersion: 2, caseType: 'traffic' })).toEqual({ kind: 'version_conflict' })
+    expect(await writes.updateCase(actor(), id, { expectedVersion: 1, caseType: 'traffic', workflowStage: 'new_notification' })).toEqual({ kind: 'case_closed' })
+    expect(await writes.updateCase({ ...actor(), organizationId: uuidv7() }, id, { expectedVersion: 1, caseType: 'traffic' })).toEqual({ kind: 'not_found' })
+    const updated = await writes.updateCase(actor(), id, { expectedVersion: 1, caseType: 'traffic' })
+    expect(updated).toMatchObject({ kind: 'ok', item: { caseType: 'traffic', status: 'closed', stage: 'closed', version: 2 } })
+    await expect(writes.updateCase(actor(), id, { expectedVersion: 2, caseType: 'casco' })).rejects.toThrow('caseType')
+    expect((await pool.query('SELECT closed_at,follow_up_date FROM cases WHERE id=$1', [id])).rows[0]).toEqual({ closed_at: null, follow_up_date: null })
+    const audit = (await pool.query("SELECT details FROM audit_events WHERE resource_id=$1 AND action='case.updated'", [id])).rows[0].details
+    expect(audit).toMatchObject({ previousCaseType: null, caseType: 'traffic', assignmentKind: 'user_classification' })
   })
   it('requires a valid plate, safe unique path, source identity, observed closure and supported type evidence', async () => {
     const input = manifest()
@@ -114,5 +148,133 @@ describeDb('sidecarless physical folder registration', () => {
     try { await expect(applyFolderRegistration(pool, actor(), plan, plan.planHash, async () => {})).rejects.toThrow('synthetic_audit_failure') }
     finally { await pool.query('DROP TRIGGER reject_folder_audit ON audit_events; DROP FUNCTION reject_folder_audit()') }
     expect(await counts()).toEqual(before)
+  })
+
+  async function legacyBinding(closed = false, withLocation = false): Promise<FolderLocationReconciliation> {
+    next++
+    const id = uuidv7(), recordId = uuidv7(), sourceId = uuidv7(), identity = id.replaceAll('-', '').padEnd(64, 'a')
+    const relativePath = `2026/EKİM 2026/${closed ? 'KAPALI EKİM/' : ''}34BBB${next}`
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,plate,plate_normalized,lifecycle_status,workflow_stage)
+      VALUES($1,$2,2026,$3,$4,'traffic',$5,$6,$7,$8)`, [id, org, 1000 + next, `2026/${1000 + next}`, `34 BBB ${next}`, `34BBB${next}`, closed ? 'closed' : 'open', closed ? 'closed' : 'new_notification'])
+    await pool.query("INSERT INTO v1_import_sources(id,organization_id,stable_source_identity,identity_kind,identity_version) VALUES($1,$2,$3,'case_key_created_at','v1-source-identity/1.0.0')", [sourceId, org, identity])
+    await pool.query(`INSERT INTO v1_import_records(id,organization_id,case_id,source_relative_path,source_file_kind,source_file_hash,item_type,source_item_id,target_type,target_id,status)
+      VALUES($1,$2,$3,$4,'takip_json',$5,'case','case','case',$3,'created')`, [recordId, org, id, relativePath, 'c'.repeat(64)])
+    await pool.query(`INSERT INTO v1_import_record_reconciliations(id,organization_id,legacy_import_record_id,stable_source_identity,stable_item_identity,evidence,mapping_version,reconciled_by_user_id)
+      VALUES($1,$2,$3,$4,$5,'{}','v1-remediation/2.3.0',$6)`, [uuidv7(), org, recordId, identity, 'd'.repeat(64), admin])
+    let previousLocation = null
+    if (withLocation) {
+      previousLocation = { id: uuidv7(), storageRootKey: 'test-root', relativePath: `2026/EKİM 2026/34BBB${next}`, version: 1 }
+      await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path,verification_status,source) VALUES($1,$2,$3,'test-root',$4,'verified','imported')", [previousLocation.id, org, id, previousLocation.relativePath])
+    }
+    return { storageRootKey: 'test-root', decision: 'Reconcile an existing imported source using immutable V1 identity', bindings: [{ caseId: id, sourceFolderId: String(next), relativePath,
+      expectedCaseVersion: 1, physicallyClosed: closed, stableSourceIdentity: identity, sourceFileHash: 'c'.repeat(64), previousLocation }] }
+  }
+  it('binds an imported case and repairs an externally moved closed folder without changing cases or history', async () => {
+    const input = await legacyBinding(), closed = await legacyBinding(true, true)
+    input.bindings.push(...closed.bindings)
+    const ids = input.bindings.map(b => b.caseId)
+    const before = (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=ANY($1::uuid[]) ORDER BY id', [ids])).rows
+    const plan = await planFolderLocationReconciliation(pool, org, input)
+    const verify = vi.fn(async () => {})
+    expect(await applyFolderLocationReconciliation(pool, actor(), plan, plan.planHash, verify)).toEqual({ reconciled: 2, alreadyApplied: false })
+    expect(verify).toHaveBeenCalledTimes(2)
+    expect((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=ANY($1::uuid[]) ORDER BY id', [ids])).rows).toEqual(before)
+    const locations = (await pool.query('SELECT case_id,relative_path,verification_status,version FROM case_locations WHERE case_id=ANY($1::uuid[])', [ids])).rows
+    expect(locations.find(l => l.case_id === closed.bindings[0]!.caseId)).toMatchObject({ relative_path: closed.bindings[0]!.relativePath, verification_status: 'pending', version: 2 })
+    expect(await applyFolderLocationReconciliation(pool, actor(), plan, plan.planHash, verify)).toEqual({ reconciled: 0, alreadyApplied: true })
+    expect((await pool.query('SELECT 1 FROM case_notes WHERE case_id=ANY($1::uuid[])', [ids])).rowCount).toBe(0)
+    expect((await pool.query("SELECT 1 FROM jobs WHERE target_id IN (SELECT id FROM case_locations WHERE case_id=ANY($1::uuid[])) AND type='verify_case_location'", [ids])).rowCount).toBe(2)
+  })
+  it('rejects wrong identity, tenant, plate, lifecycle, location version and changed source before writing', async () => {
+    const input = await legacyBinding()
+    for (const patch of [{ stableSourceIdentity: 'f'.repeat(64) }, { relativePath: '2026/EKİM 2026/34ZZZ999' }, { expectedCaseVersion: 2 }, { physicallyClosed: true }, { previousLocation: { id: uuidv7(), storageRootKey: 'test-root', relativePath: input.bindings[0]!.relativePath, version: 1 } }]) {
+      await expect(planFolderLocationReconciliation(pool, org, { ...input, bindings: [{ ...input.bindings[0]!, ...patch }] })).rejects.toThrow()
+    }
+    await expect(planFolderLocationReconciliation(pool, uuidv7(), input)).rejects.toThrow()
+    const plan = await planFolderLocationReconciliation(pool, org, input), before = await counts()
+    await expect(applyFolderLocationReconciliation(pool, actor(), plan, '0'.repeat(64), async () => {})).rejects.toThrow('folder_binding_approval_mismatch')
+    await expect(applyFolderLocationReconciliation(pool, actor(), plan, plan.planHash, async () => { throw new Error('source_changed') })).rejects.toThrow('source_changed')
+    await expect(applyFolderLocationReconciliation(pool, { ...actor(), actorUserId: owner }, plan, plan.planHash, async () => {})).rejects.toThrow('folder_admin_required')
+    expect(await counts()).toEqual(before)
+  })
+  it('rolls back source bindings, jobs and locations if the final audit fails', async () => {
+    const input = await legacyBinding(), plan = await planFolderLocationReconciliation(pool, org, input), before = await counts()
+    await pool.query("CREATE FUNCTION reject_binding_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='cases.folder_locations_reconciled' THEN RAISE EXCEPTION 'synthetic_binding_audit_failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_binding_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION reject_binding_audit()")
+    try { await expect(applyFolderLocationReconciliation(pool, actor(), plan, plan.planHash, async () => {})).rejects.toThrow('synthetic_binding_audit_failure') }
+    finally { await pool.query('DROP TRIGGER reject_binding_audit ON audit_events; DROP FUNCTION reject_binding_audit()') }
+    expect(await counts()).toEqual(before)
+  })
+
+  async function relocation(registered = true): Promise<SourceFolderRelocation> {
+    if (!registered) {
+      const legacy = await legacyBinding(false, true), b = legacy.bindings[0]!
+      return { storageRootKey: legacy.storageRootKey, decision: 'Rebind moved V1 source; preserve open lifecycle', bindings: [{
+        caseId: b.caseId, sourceFolderId: b.sourceFolderId, expectedCaseVersion: b.expectedCaseVersion,
+        relativePath: b.relativePath.replace('/34BBB', '/KAPALI/34BBB'), physicallyClosed: true, expectedLifecycleStatus: 'open', previousLocation: b.previousLocation!,
+        identity: { kind: 'v1', stableSourceIdentity: b.stableSourceIdentity, sourceFileHash: b.sourceFileHash },
+      }] }
+    }
+    const input = manifest(), plan = await planFolderRegistration(pool, org, input)
+    const result = await applyFolderRegistration(pool, actor(), plan, plan.planHash, async () => {})
+    const location = (await pool.query('SELECT id,relative_path,version FROM case_locations WHERE case_id=$1', [result.caseIds[0]])).rows[0]
+    return { storageRootKey: 'test-root', decision: 'Rebind externally moved registered source; preserve open lifecycle', bindings: [{
+      caseId: result.caseIds[0]!, sourceFolderId: input.folders[0]!.sourceFolderId, relativePath: input.folders[0]!.relativePath.replace('/34AAA', '/KAPALI/34AAA'),
+      expectedCaseVersion: 1, expectedLifecycleStatus: 'open', physicallyClosed: true, identity: { kind: 'registered' },
+      previousLocation: { id: location.id, storageRootKey: 'test-root', relativePath: location.relative_path, version: location.version },
+    }] }
+  }
+  it('rebinds registered and immutable V1 sources atomically without closing open cases or inventing history', async () => {
+    const input = await relocation(), legacy = await relocation(false)
+    input.bindings.push(...legacy.bindings)
+    const before = (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows
+    const plan = await planSourceFolderRelocation(pool, org, input), verify = vi.fn(async () => {})
+    expect(await applySourceFolderRelocation(pool, actor(), plan, plan.planHash, verify)).toEqual({ relocated: 2, alreadyApplied: false })
+    expect(verify).toHaveBeenCalledTimes(2)
+    expect((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows).toEqual(before)
+    for (const b of input.bindings) {
+      expect((await pool.query('SELECT relative_path,version,verification_status FROM case_locations WHERE case_id=$1', [b.caseId])).rows[0]).toEqual({ relative_path: b.relativePath, version: 2, verification_status: 'pending' })
+      expect((await pool.query('SELECT source_folder_id,source_relative_path FROM case_folder_registrations WHERE case_id=$1', [b.caseId])).rows[0]).toEqual({ source_folder_id: b.sourceFolderId, source_relative_path: b.relativePath })
+      expect((await pool.query('SELECT 1 FROM case_notes WHERE case_id=$1', [b.caseId])).rowCount).toBe(0)
+    }
+    const countsBeforeReplay = await counts()
+    expect(await applySourceFolderRelocation(pool, actor(), plan, plan.planHash, verify)).toEqual({ relocated: 0, alreadyApplied: true })
+    expect(await counts()).toEqual(countsBeforeReplay)
+  })
+  it('rejects changed registered identity, stale location/case, incorrect plate/placement and cross-tenant input', async () => {
+    const input = await relocation(), b = input.bindings[0]!
+    for (const patch of [{ sourceFolderId: '9999999' }, { expectedCaseVersion: 2 }, { expectedLifecycleStatus: 'closed' as const },
+      { previousLocation: { ...b.previousLocation, version: 2 } }, { relativePath: '2026/KAPALI/34ZZZ999' }, { physicallyClosed: false }]) {
+      await expect(planSourceFolderRelocation(pool, org, { ...input, bindings: [{ ...b, ...patch }] })).rejects.toThrow()
+    }
+    await expect(planSourceFolderRelocation(pool, uuidv7(), input)).rejects.toThrow('folder_active_root_required')
+    const legacy = await relocation(false)
+    legacy.bindings[0]!.identity = { kind: 'v1', stableSourceIdentity: 'f'.repeat(64), sourceFileHash: 'c'.repeat(64) }
+    await expect(planSourceFolderRelocation(pool, org, legacy)).rejects.toThrow('folder_relocation_v1_identity_required')
+  })
+  it('rejects tampering, non-admin and changed live source without writes', async () => {
+    const input = await relocation(), plan = await planSourceFolderRelocation(pool, org, input), before = await counts()
+    await expect(applySourceFolderRelocation(pool, actor(), plan, '0'.repeat(64), async () => {})).rejects.toThrow('folder_relocation_approval_mismatch')
+    await expect(applySourceFolderRelocation(pool, { ...actor(), actorUserId: owner }, plan, plan.planHash, async () => {})).rejects.toThrow('folder_admin_required')
+    await expect(applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => { throw new Error('source_changed') })).rejects.toThrow('source_changed')
+    await pool.query('UPDATE case_locations SET version=version+1 WHERE id=$1', [input.bindings[0]!.previousLocation.id])
+    await expect(applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})).rejects.toThrow('folder_relocation_location_changed')
+    expect(await counts()).toEqual(before)
+  })
+  it('rolls back every relocation, registration and verification job if final audit fails', async () => {
+    const input = await relocation(), legacy = await relocation(false); input.bindings.push(...legacy.bindings)
+    const plan = await planSourceFolderRelocation(pool, org, input), before = await counts()
+    const locations = (await pool.query('SELECT to_jsonb(l) snapshot FROM case_locations l ORDER BY id')).rows
+    const registrations = (await pool.query('SELECT to_jsonb(r) snapshot FROM case_folder_registrations r ORDER BY id')).rows
+    await pool.query("CREATE FUNCTION reject_relocation_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='cases.source_folders_relocated' THEN RAISE EXCEPTION 'synthetic_relocation_audit_failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_relocation_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION reject_relocation_audit()")
+    try { await expect(applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})).rejects.toThrow('synthetic_relocation_audit_failure') }
+    finally { await pool.query('DROP TRIGGER reject_relocation_audit ON audit_events; DROP FUNCTION reject_relocation_audit()') }
+    expect(await counts()).toEqual(before)
+    expect((await pool.query('SELECT to_jsonb(l) snapshot FROM case_locations l ORDER BY id')).rows).toEqual(locations)
+    expect((await pool.query('SELECT to_jsonb(r) snapshot FROM case_folder_registrations r ORDER BY id')).rows).toEqual(registrations)
+  })
+  it('serializes concurrent source relocations and makes replay a no-op', async () => {
+    const input = await relocation(), plan = await planSourceFolderRelocation(pool, org, input)
+    const results = await Promise.all([1, 2].map(() => applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})))
+    expect(results.map(r => r.relocated).sort()).toEqual([0, 1])
   })
 })

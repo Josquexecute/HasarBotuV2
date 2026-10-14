@@ -427,7 +427,7 @@ function ManagementQuarantineContent({ port }: { readonly port?: V1ImportQuarant
                 <td><strong>{item.sourceRelativePath}</strong><br /><small>Token: {item.sourceToken}</small></td>
                 <td>{item.candidateTargets.length === 0
                   ? 'Aday yok'
-                  : item.candidateTargets.map((candidate) => `${candidate.officeCaseNumber} · ${candidate.caseType === 'traffic' ? 'Trafik' : 'Kasko'}`).join(', ')}</td>
+                  : item.candidateTargets.map((candidate) => `${candidate.officeCaseNumber} · ${candidate.caseType === null ? 'Seçiniz' : candidate.caseType === 'traffic' ? 'Trafik' : 'Kasko'}`).join(', ')}</td>
                 <td>{item.evidenceSummary.detectedCaseType === null ? 'Tür belirlenemedi' : item.evidenceSummary.detectedCaseType === 'traffic' ? 'Trafik sinyali' : 'Kasko sinyali'} · {item.evidenceSummary.evidenceCount} kanıt</td>
                 <td>{formatQuarantineDate(item.createdAt)}</td>
                 <td><span className="status-pill status-pill--waiting">Çözümlenmedi</span></td>

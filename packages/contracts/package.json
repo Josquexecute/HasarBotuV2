@@ -11,6 +11,22 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./desktop-release-schema": {
+      "types": "./dist/v1/desktop-release.d.ts",
+      "import": "./dist/v1/desktop-release.js"
+    },
+    "./desktop-update-state": {
+      "types": "./dist/v1/desktop-update-state.d.ts",
+      "import": "./dist/v1/desktop-update-state.js"
+    },
+    "./assistant-appearance": {
+      "types": "./dist/v1/assistant-appearance-values.d.ts",
+      "import": "./dist/v1/assistant-appearance-values.js"
+    },
+    "./assistant-appearance-schema": {
+      "types": "./dist/v1/assistant-appearance.d.ts",
+      "import": "./dist/v1/assistant-appearance.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"

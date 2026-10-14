@@ -82,10 +82,17 @@
             "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
           },
           "caseType": {
-            "type": "string",
-            "enum": [
-              "traffic",
-              "casco"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "traffic",
+                  "casco"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "officeCaseNumber": {

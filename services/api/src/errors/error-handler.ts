@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify'
 import { failureEnvelopeSchema, type ApiErrorCode, type FailureEnvelope } from '@hasarbotu/contracts'
+import { CaseTypeRequiredError } from '../cases/classification.js'
 
 /**
  * Merkezi guvenli hata isleyicisi.
@@ -13,6 +14,14 @@ import { failureEnvelopeSchema, type ApiErrorCode, type FailureEnvelope } from '
  */
 export function errorHandler(error: FastifyError, request: FastifyRequest, reply: FastifyReply): void {
   const requestId = String(request.id)
+  if (error instanceof CaseTypeRequiredError) {
+    void reply.code(409).send(failureEnvelopeSchema.parse({
+      ok: false,
+      error: { code: 'conflict', message: 'Önce dosya türünü Trafik veya Kasko olarak seçin.', requestId,
+        fieldErrors: [{ path: 'caseType', code: 'case_type_required', message: 'Dosya türü seçilmelidir.' }] },
+    }))
+    return
+  }
   const isClientError =
     typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500
   const statusCode = isClientError ? (error.statusCode as number) : 500

@@ -8,6 +8,8 @@ import { errorHandler, notFoundHandler } from './errors/index.js'
 import { registerHealthRoute } from './routes/index.js'
 import { registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
 import { registerCasesRoutes } from './cases/routes.js'
+import { registerAssistantAppearanceRoutes } from './assistant-appearance/routes.js'
+import { registerDesktopUpdateRoutes } from './desktop-updates/routes.js'
 import { registerCasesWriteRoutes } from './cases/write-routes.js'
 import { registerEksistRoutes } from './eksist/routes.js'
 import { registerAuditRoutes } from './audit/index.js'
@@ -62,6 +64,7 @@ export const DEFAULT_BODY_LIMIT_BYTES = 1_048_576
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 
 export interface BuildAppOptions {
+  readonly desktopReleasesDirectory?: string
   readonly google?: GoogleConfig
   readonly googleProvider?: GoogleProvider
   /** Zaman kaynagi; testler sabit clock enjekte eder. Varsayilan: sistem saati. */
@@ -129,6 +132,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerTrackingRoutes(app, { pool: options.auth.pool, googleEnabled: options.google !== undefined, automaticSbmEnabled: options.google?.automaticSbmEnabled ?? false })
     registerGoogleRoutes(app, { pool: options.auth.pool, cookieSecure: options.auth.cookieSecure, ...(options.google ? { config: options.google } : {}), ...(options.googleProvider ? { provider: options.googleProvider } : {}) })
     registerAuthRoutes(app, options.auth)
+    registerAssistantAppearanceRoutes(app, options.auth)
+    registerDesktopUpdateRoutes(app, { pool: options.auth.pool, ...(options.desktopReleasesDirectory ? { directory: options.desktopReleasesDirectory } : {}) })
     registerCasesRoutes(app, { pool: options.auth.pool })
     registerCasesWriteRoutes(app, { pool: options.auth.pool })
     registerEksistRoutes(app, { pool: options.auth.pool })

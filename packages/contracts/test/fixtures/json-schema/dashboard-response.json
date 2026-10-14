@@ -150,10 +150,17 @@
             "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
           },
           "caseType": {
-            "type": "string",
-            "enum": [
-              "traffic",
-              "casco"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "traffic",
+                  "casco"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "officeCaseNumber": {
@@ -263,9 +270,16 @@
             "maximum": 100000
           },
           "documentRuleVersion": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "pendingHumanApprovalCount": {
             "type": "integer",

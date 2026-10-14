@@ -54,6 +54,9 @@ describe('MockDataAdapter (acikca secilen development/demo kaynagi)', () => {
 })
 
 describe('HttpApiAdapter esleme', () => {
+  it('maps a pending classification to Seçiniz rather than Kasko', () => {
+    expect(mapCaseDtoToRecord({ ...dto, caseType: null }, TODAY).type).toBe('Seçiniz')
+  })
   it('DTO -> CaseRecord: tur/asama/takip turetilmis gorunumleri dogru', () => {
     const record = mapCaseDtoToRecord(dto, TODAY)
     expect(record).toMatchObject({

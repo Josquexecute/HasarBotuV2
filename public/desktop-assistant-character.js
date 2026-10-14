@@ -17,6 +17,8 @@ if (assistant && context) {
   let previousTime = performance.now()
   let lastDraw = 0
   let disposed = false
+  let personalReducedMotion = false
+  const reduced = () => motion.matches || personalReducedMotion
 
   const draw = () => {
     const size = canvas.clientWidth
@@ -28,7 +30,7 @@ if (assistant && context) {
     }
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, size, size)
-    const pose = motion.matches ? neutral : bot
+    const pose = reduced() ? neutral : bot
     pose.draw(context, size, size)
   }
   const sizeObserver = new ResizeObserver(() => {
@@ -36,7 +38,7 @@ if (assistant && context) {
   })
   const animate = (time) => {
     frame = undefined
-    if (disposed || document.hidden || motion.matches) return
+    if (disposed || document.hidden || reduced()) return
     // Idle still needs occasional updates for blinks; movement gets 30 fps.
     const interval = bot.busy ? 1000 / 30 : 1000 / 8
     if (time - lastDraw >= interval) {
@@ -56,7 +58,7 @@ if (assistant && context) {
     pause()
     if (disposed || document.hidden) return
     previousTime = performance.now()
-    if (motion.matches) {
+    if (reduced()) {
       // Use the neutral pose so a mid-blink or squash cannot get frozen.
       draw()
       return
@@ -64,27 +66,39 @@ if (assistant && context) {
     frame = window.requestAnimationFrame(animate)
   }
   const unsubscribe = assistant.onGaze(({ x, y }) => {
-    if (motion.matches || disposed) return
+    if (reduced() || disposed) return
     bot.lookX = x
     bot.lookY = y
   })
   const greetOnHover = () => {
-    if (motion.matches) return
+    if (reduced()) return
     window.clearTimeout(hoverTimer)
     hoverTimer = window.setTimeout(() => bot.triggerEmote('happy'), 1200)
   }
   const leave = () => window.clearTimeout(hoverTimer)
   const press = (event) => {
-    if (event.button === 0 && !motion.matches) bot.squash()
+    if (event.button === 0 && !reduced()) bot.squash()
   }
   const onVisibility = () => {
     if (document.hidden) pause()
     else resume()
   }
+  const unsubscribeAppearance = assistant.onAppearance(({ accentColor, characterColor, reduceMotion }) => {
+    personalReducedMotion = reduceMotion
+    // Match the preview's pastel palette; fixed dark eyes stay visible for every choice.
+    const color = characterColor.toLowerCase() === '#eff2fa' ? null : [1, 3, 5].map(i => (parseInt(characterColor.slice(i, i + 2), 16) * .4 + 153) / 255)
+    bot.bodyColor = color
+    neutral.bodyColor = color
+    canvas.style.filter = `drop-shadow(0 0 5px ${accentColor}80)`
+    button.style.setProperty('--assistant-focus', accentColor)
+    draw()
+    resume()
+  })
   const dispose = () => {
     disposed = true
     pause()
     unsubscribe()
+    unsubscribeAppearance()
     button.removeEventListener('pointerenter', greetOnHover)
     button.removeEventListener('pointerleave', leave)
     button.removeEventListener('pointerdown', press)

@@ -27,6 +27,9 @@ function state(overrides: Partial<CasesFilterState> = {}): CasesFilterState {
 }
 
 describe('buildCasesPageQuery', () => {
+  it('queries only folders awaiting classification when Seçiniz is selected', () => {
+    expect(buildCasesPageQuery(state({ typeFilter: 'Seçiniz' }), TODAY).caseType).toBe('unclassified')
+  })
   it('sayfa boyutu operasyonel uyarı caseIds sınırını aşmaz', () => {
     // Satır uyarı isteği aktif sayfa kimliklerini gönderir; sayfa boyutu 100'ü
     // aşarsa "bilinmiyor" satırlar oluşurdu.

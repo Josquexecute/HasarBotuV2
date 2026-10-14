@@ -25,7 +25,7 @@ import { loadDocumentRequirementRules } from '../document-requirements/rules.js'
 
 interface AlertCaseRow {
   id: string
-  case_type: 'traffic' | 'casco'
+  case_type: 'traffic' | 'casco' | null
   office_number: string
   plate: string
   follow_up_date: Date | null
@@ -148,6 +148,7 @@ export function createOperationalAlertStore(pool: pg.Pool) {
         }
 
         for (const caseRow of caseRows) {
+          if (caseRow.case_type === null) continue
           const rule = rules.get(caseRow.case_type)?.rule
           if (rule === undefined) throw new Error('active_document_rule_version_not_found')
           const evaluation = evaluateDocumentRequirements({

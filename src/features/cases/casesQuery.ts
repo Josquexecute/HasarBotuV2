@@ -38,9 +38,10 @@ export interface CasesFilterState {
   readonly page: number
 }
 
-const CASE_TYPE_CODES: Record<CaseType, 'traffic' | 'casco'> = {
+const CASE_TYPE_CODES: Record<CaseType, 'traffic' | 'casco' | 'unclassified'> = {
   Trafik: 'traffic',
   Kasko: 'casco',
+  Seçiniz: 'unclassified',
 }
 
 const STAGE_CODES: Record<CaseStage, string> = {

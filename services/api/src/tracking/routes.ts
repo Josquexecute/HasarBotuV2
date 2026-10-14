@@ -127,6 +127,23 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       ])
       return trackingInboxSchema.parse(JSON.parse(JSON.stringify({ notifications: rows.rows,...counts.rows[0],page: query.page })))
     })
+    routes.post('/api/v1/tracking/notifications/read-all',async (request,reply) => {
+      const session = await requireSession(auth,request,reply)
+      if (!session) return
+      z.object({}).strict().parse(request.body)
+      await withTransaction(pool,async (db) => {
+        // All pages of the current user's inbox, bounded by this transaction.
+        // New arrivals and existing read timestamps are preserved.
+        const result = await db.query(`UPDATE tracking_notifications n SET read_at=now()
+          FROM cases c WHERE n.case_id=c.id AND c.organization_id=n.organization_id
+          AND n.organization_id=$1 AND c.responsible_user_id=$2 AND NOT c.is_archived
+          AND n.read_at IS NULL AND n.created_at<=now()`,
+        [session.user.organizationId,session.user.id])
+        if (result.rowCount) await audit.record(db,{ organizationId: session.user.organizationId,actorUserId: session.user.id,
+          action: 'tracking.notifications_read_all',requestId: String(request.id),details: { count: result.rowCount } })
+      })
+      return reply.code(204).send()
+    })
     routes.post('/api/v1/tracking/notifications/dismiss',async (request,reply) => {
       const session = await requireSession(auth,request,reply)
       if (!session) return

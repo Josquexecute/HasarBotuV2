@@ -19,11 +19,17 @@ export const folderRegistrationManifestSchema = z.strictObject({
     relativePath: relativePathSchema,
     physicallyClosed: z.boolean(),
     caseType: z.enum(['traffic', 'casco']).nullable(),
+    historicalPayloadAvailable: z.boolean().optional(),
+    existingPlateCaseIds: z.array(idSchema).max(100).optional(),
     evidence: z.strictObject({
       inventoryHash: sha256,
       evidenceHash: sha256,
       kinds: z.array(z.enum(['k_ruhsat', 'm_ruhsat', 's_ruhsat', 'kasko_policy_context', 'm_traffic_policy', 'traffic_policy_context', 'ktt_context', 'accident_report_context', 'statement_context', 'traffic_policy_content', 'casco_policy_content'])),
       userTypeDecision: z.string().trim().min(1).max(1000).optional(),
+      contentReadFailed: z.boolean().optional(),
+      userIdentityDecision: z.string().trim().min(1).max(1000).optional(),
+      historicalFileHash: sha256.optional(),
+      sidecarClaimType: z.enum(['traffic', 'casco', 'unknown']).optional(),
     }),
   })).min(1).max(10_000),
 })
@@ -61,7 +67,9 @@ export async function planFolderRegistration(db: Queryable, organizationId: stri
     if (!parsedName) fail('folder_plate_required')
     const physicallyClosed = segments.slice(0, -1).some(s => s.toLocaleUpperCase('tr').startsWith('KAPALI'))
     if (physicallyClosed !== folder.physicallyClosed) fail('folder_lifecycle_evidence_mismatch')
-    const classification = decideV1ClaimTypeFromEvidence({ sidecarClaimType: 'unknown', evidenceKinds: folder.evidence.kinds })
+    if (folder.evidence.sidecarClaimType && folder.evidence.sidecarClaimType !== 'unknown'
+      && (!folder.historicalPayloadAvailable || !folder.evidence.historicalFileHash)) fail('folder_sidecar_type_hash_required')
+    const classification = decideV1ClaimTypeFromEvidence({ sidecarClaimType: folder.evidence.sidecarClaimType ?? 'unknown', evidenceKinds: folder.evidence.kinds })
     if (classification.caseType !== folder.caseType && !folder.evidence.userTypeDecision) fail('folder_type_evidence_required')
     const registered = await db.query(`SELECT r.case_id,c.plate_normalized FROM case_folder_registrations r
       JOIN cases c ON c.id=r.case_id AND c.organization_id=r.organization_id
@@ -75,15 +83,17 @@ export async function planFolderRegistration(db: Queryable, organizationId: stri
     if (bound.rowCount) fail('folder_location_already_bound')
     // A plate is not a case identity. Existing cases require explicit reconciliation;
     // distinct source folders within this new batch may legitimately share a plate.
-    const candidate = await db.query('SELECT 1 FROM cases WHERE organization_id=$1 AND plate_normalized=$2', [organizationId, plateSearchKey(parsedName!.plate)])
-    if (candidate.rowCount) fail('folder_existing_plate_requires_reconciliation')
+    const candidate = await db.query('SELECT id::text FROM cases WHERE organization_id=$1 AND plate_normalized=$2', [organizationId, plateSearchKey(parsedName!.plate)])
+    const candidateIds = candidate.rows.map(row => row.id as string).sort()
+    if (candidateIds.length && (!folder.evidence.userIdentityDecision
+      || JSON.stringify(candidateIds) !== JSON.stringify([...(folder.existingPlateCaseIds ?? [])].sort()))) fail('folder_existing_plate_requires_reconciliation')
     entries.push({ sourceFolderId: folder.sourceFolderId, plate: parsedName!.plate, caseId: null })
   }
   const payload = { organizationId, manifest, entries }
   return { ...payload, planHash: hash(payload) }
 }
 
-/** Caller must reread source identity, sidecar absence and evidence before the DB transaction. */
+/** Caller must reread source identity, sidecar state and evidence before the DB transaction. */
 export async function applyFolderRegistration(pool: pg.Pool, actor: Actor, plan: FolderRegistrationPlan, approvedHash: string,
   verifySource: (folder: Folder, storageRootKey: string) => Promise<void>) {
   const { planHash, ...payload } = plan
@@ -119,11 +129,13 @@ export async function applyFolderRegistration(pool: pg.Pool, actor: Actor, plan:
         VALUES($1,$2,$3,$4,$5,'pending','imported',$6,$7)`, [uuidv7(), actor.organizationId, caseId, fresh.manifest.storageRootKey, folder.relativePath, actor.actorUserId, actor.requestId])
       await client.query(`INSERT INTO case_folder_registrations(id,organization_id,case_id,storage_root_key,source_folder_id,source_relative_path,evidence,plan_hash,created_by_user_id)
         VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)`, [uuidv7(), actor.organizationId, caseId, fresh.manifest.storageRootKey, folder.sourceFolderId, folder.relativePath,
-        JSON.stringify({ ...folder.evidence, physicallyClosed: folder.physicallyClosed, historicalPayloadAvailable: false, closureTimeKnown: false, decision: fresh.manifest.decision }), approvedHash, actor.actorUserId])
+        JSON.stringify({ ...folder.evidence, existingPlateCaseIds: folder.existingPlateCaseIds ?? [], physicallyClosed: folder.physicallyClosed, historicalPayloadAvailable: folder.historicalPayloadAvailable ?? false,
+          historicalImportPending: folder.historicalPayloadAvailable ?? false, closureTimeKnown: false, decision: fresh.manifest.decision }), approvedHash, actor.actorUserId])
       await enqueueVerifyJob(client, { organizationId: actor.organizationId, type: 'verify_case_location', targetType: 'case_location', targetId: locationId, targetVersion: 1,
         payload: { storageRootKey: fresh.manifest.storageRootKey, relativePath: folder.relativePath, kind: 'directory', declaredHash: null, declaredSize: null } })
       await audit.record(client, { ...actor, action: 'case.created', entityType: 'case', entityId: caseId,
-        details: { source: 'folder_registration', sourceFolderId: folder.sourceFolderId, planDigest: approvedHash, historicalPayloadAvailable: false, observedLifecycleStatus: folder.physicallyClosed ? 'closed' : 'open' } })
+        details: { source: 'folder_registration', sourceFolderId: folder.sourceFolderId, planDigest: approvedHash,
+          historicalPayloadAvailable: folder.historicalPayloadAvailable ?? false, observedLifecycleStatus: folder.physicallyClosed ? 'closed' : 'open' } })
       await audit.record(client, { ...actor, action: 'case.location_assigned', entityType: 'case', entityId: caseId,
         details: { storageRootKey: fresh.manifest.storageRootKey, relativePath: folder.relativePath, verificationStatus: 'pending', source: 'imported', toVersion: 1 } })
       caseIds.push(caseId)

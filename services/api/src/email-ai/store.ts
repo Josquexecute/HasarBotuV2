@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { requireCaseType } from '../cases/classification.js'
 import type pg from 'pg'
 import {
   emailAiPlanResponseSchema,
@@ -214,7 +215,8 @@ async function readCase(
       WHERE organization_id=$1 AND id=$2${forUpdate ? ' FOR UPDATE' : ''}`,
     [organizationId, caseId],
   )
-  return result.rows[0] as CaseRow | undefined
+  const row = result.rows[0] as (Omit<CaseRow, 'case_type'> & { case_type: 'traffic' | 'casco' | null }) | undefined
+  return row === undefined ? undefined : { ...row, case_type: requireCaseType(row.case_type) }
 }
 
 async function loadPolicy(exec: Queryable, organizationId: string): Promise<ProviderPolicy> {

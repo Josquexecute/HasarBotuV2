@@ -16,7 +16,7 @@ const sourceTokenSchema = z.string().regex(/^[0-9a-f]{16}$/)
 
 export const v1ImportQuarantineCandidateSchema = z.strictObject({
   caseId: caseIdSchema,
-  caseType: caseTypeSchema,
+  caseType: caseTypeSchema.nullable(),
   officeCaseNumber: officeCaseNumberSchema,
   lifecycleStatus: caseStatusSchema,
   createdAt: utcDateTimeSchema,

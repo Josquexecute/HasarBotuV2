@@ -19,7 +19,7 @@ interface InventoryDbRow {
   plate: string
   insurer_name: string | null
   responsible_name: string | null
-  case_type: 'traffic' | 'casco'
+  case_type: 'traffic' | 'casco' | null
   case_status: string
   loss_date: string | null
   notification_date: string | null

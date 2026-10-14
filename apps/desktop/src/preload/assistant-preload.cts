@@ -25,4 +25,17 @@ contextBridge.exposeInMainWorld('hasarbotuAssistant', Object.freeze({
     ipcRenderer.on('hasarbotu:assistant-gaze', listener)
     return () => ipcRenderer.removeListener('hasarbotu:assistant-gaze', listener)
   },
+  onAppearance: (callback: unknown) => {
+    if (typeof callback !== 'function') throw new TypeError('Appearance callback must be a function')
+    const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      if (typeof value !== 'object' || value === null) return
+      const data = value as Record<string, unknown>
+      if (typeof data.accentColor !== 'string' || !/^#[a-f0-9]{6}$/i.test(data.accentColor)
+        || typeof data.characterColor !== 'string' || !/^#[a-f0-9]{6}$/i.test(data.characterColor)
+        || typeof data.reduceMotion !== 'boolean') return
+      callback({ accentColor: data.accentColor, characterColor: data.characterColor, reduceMotion: data.reduceMotion })
+    }
+    ipcRenderer.on('hasarbotu:assistant-appearance', listener)
+    return () => ipcRenderer.removeListener('hasarbotu:assistant-appearance', listener)
+  },
 }))

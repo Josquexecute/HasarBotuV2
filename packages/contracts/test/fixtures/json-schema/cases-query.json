@@ -12,10 +12,18 @@
       "maxLength": 120
     },
     "caseType": {
-      "type": "string",
-      "enum": [
-        "traffic",
-        "casco"
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "traffic",
+            "casco"
+          ]
+        },
+        {
+          "type": "string",
+          "const": "unclassified"
+        }
       ]
     },
     "status": {

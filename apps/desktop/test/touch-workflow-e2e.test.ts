@@ -43,6 +43,7 @@ run('production Electron UI: category layouts, native quick note, target selecti
     expect(code).toBe(0)
     const notes = await pool.query('SELECT case_id,body FROM case_notes ORDER BY created_at')
     expect(notes.rows).toEqual([{ case_id: caseId, body: 'Dokunmatik kalıcı not.' }, { case_id: otherCaseId, body: 'Seçili dosyaya not.' }])
+    expect((await pool.query('SELECT user_id,appearance FROM user_assistant_preferences')).rows).toEqual([{ user_id: userId, appearance: expect.objectContaining({ accentColor: '#15803d' }) }])
   } finally {
     await api.close()
     await pool.end()

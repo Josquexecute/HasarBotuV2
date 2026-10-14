@@ -31,6 +31,7 @@ import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
 import { EksistSources } from './EksistSources'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
 import { CaseApiLegacyReferenceFields } from './CaseLegacyReferenceFields'
+import { CaseTypeAssignment } from './CaseTypeAssignment'
 
 const DocumentPhotoApiModule = lazy(async () => {
   const module = await import('./DocumentPhotoApiModule')
@@ -292,9 +293,13 @@ function CaseDetail() {
             </>
           ) : null}
           {source === 'api' && <button className="button button--secondary" type="button" onClick={() => window.dispatchEvent(new Event(QUICK_NOTE_EVENT))}><NotebookPen size={15} /> Hızlı Not</button>}
-          {(source === 'mock' || canChangeLifecycle) && <button className="button button--danger-ghost" type="button" onClick={() => setCloseModalOpen(true)}>{source === 'api' && item.lifecycleStatus === 'closed' ? 'Dosyayı Yeniden Aç' : 'Dosyayı Kapat'}</button>}
+          {(source === 'mock' || canChangeLifecycle) && <button className="button button--danger-ghost" type="button" disabled={item.type === 'Seçiniz'} title={item.type === 'Seçiniz' ? 'Önce dosya türünü seçin.' : undefined} onClick={() => setCloseModalOpen(true)}>{source === 'api' && item.lifecycleStatus === 'closed' ? 'Dosyayı Yeniden Aç' : 'Dosyayı Kapat'}</button>}
         </div>
       </section>
+
+      {source === 'api' && item.type === 'Seçiniz' && <CaseTypeAssignment key={`${item.caseId}:${item.version}`} item={item}
+        canEdit={canUsePermission(session.user, 'case_write', ['admin', 'expert', 'case_manager'])}
+        onUpdated={() => reloadCase()} onUnauthorized={session.reportUnauthorized} />}
 
       {creationResult?.caseId === item.caseId && (
         <div className="case-created-banner" role="status">
@@ -317,7 +322,9 @@ function CaseDetail() {
           </header>
 
           <Suspense fallback={<LoadingState label={`${activeTab} modülü hazırlanıyor`} />}>
-            {activeTab === 'Özet' ? (
+            {source === 'api' && item.type === 'Seçiniz' && ['Evrak ve Fotoğraf', 'Ağır Hasar', 'Değer Kaybı', 'Raporlar ve Ücretler', 'E-postalar'].includes(activeTab)
+              ? <p role="status">Bu modülü kullanmak için dosya türünü Trafik veya Kasko olarak seçin.</p>
+              : activeTab === 'Özet' ? (
             <div className="overview-grid">
               <section className="info-panel overview-grid__main">
                 <header><h2>Dosya Özeti</h2><span className="status-pill status-pill--open">{item.status}</span></header>

@@ -41,7 +41,7 @@ export interface DashboardCaseRecord {
   readonly version: number
   readonly missingDocumentCount: number
   readonly controlRequiredDocumentCount: number
-  readonly documentRuleVersion: string
+  readonly documentRuleVersion: string | null
   readonly pendingHumanApprovalCount: number
   readonly pendingHumanApprovalKinds: readonly DashboardHumanApprovalKindRecord[]
   readonly manualRecoveryCount: number
@@ -292,7 +292,7 @@ function parseDashboardResponse(value: unknown): DashboardSnapshotRecord {
       version: count(raw.version),
       missingDocumentCount: count(raw.missingDocumentCount),
       controlRequiredDocumentCount: count(raw.controlRequiredDocumentCount),
-      documentRuleVersion: requiredString(raw.documentRuleVersion),
+      documentRuleVersion: nullableString(raw.documentRuleVersion),
       pendingHumanApprovalCount: count(raw.pendingHumanApprovalCount),
       pendingHumanApprovalKinds: uniqueEnumArray(raw.pendingHumanApprovalKinds, APPROVAL_KINDS),
       manualRecoveryCount: count(raw.manualRecoveryCount),

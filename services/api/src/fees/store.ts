@@ -1,4 +1,5 @@
 import type pg from 'pg'
+import { requireCaseType } from '../cases/classification.js'
 import {
   CLOSURE_FEE_CURRENCY,
   CLOSURE_FEE_RULE_VERSION,
@@ -189,7 +190,7 @@ async function sourceForCase(
   lockCase: boolean,
 ): Promise<SourceRow | undefined> {
   const result = await exec.query(
-    `SELECT c.lifecycle_status,c.version,d.document_type,dv.status,dv.hash_verified,
+    `SELECT c.case_type,c.lifecycle_status,c.version,d.document_type,dv.status,dv.hash_verified,
             dv.size_verified,dv.verified_at
      FROM cases c
      JOIN document_versions dv
@@ -200,7 +201,9 @@ async function sourceForCase(
      ${lockCase ? 'FOR UPDATE OF c' : ''}`,
     [organizationId, caseId, sourceDocumentVersionId],
   )
-  return result.rows[0] as SourceRow | undefined
+  const row = result.rows[0] as (SourceRow & { case_type: 'traffic' | 'casco' | null }) | undefined
+  if (row !== undefined) requireCaseType(row.case_type)
+  return row
 }
 
 function sourceEligibility(source: SourceRow) {
@@ -292,11 +295,12 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
       capabilities: FeeCapabilities,
     ): Promise<CaseClosureFeeResponse | undefined> {
       const caseResult = await pool.query(
-        'SELECT lifecycle_status FROM cases WHERE organization_id=$1 AND id=$2',
+        'SELECT case_type,lifecycle_status FROM cases WHERE organization_id=$1 AND id=$2',
         [organizationId, caseId],
       )
-      const caseRow = caseResult.rows[0] as { lifecycle_status: 'open' | 'closed' } | undefined
+      const caseRow = caseResult.rows[0] as { case_type: 'traffic' | 'casco' | null; lifecycle_status: 'open' | 'closed' } | undefined
       if (caseRow === undefined) return undefined
+      requireCaseType(caseRow.case_type)
       const feeResult = await pool.query(
         'SELECT id FROM fee_records WHERE organization_id=$1 AND case_id=$2',
         [organizationId, caseId],

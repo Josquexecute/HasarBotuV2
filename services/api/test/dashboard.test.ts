@@ -228,6 +228,17 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     if (pool !== undefined) await closeDatabasePool(pool)
   })
 
+  it('includes unclassified open folders without evaluating either type document rules', async () => {
+    const id = await seedCase(99, 'new_notification', '34 XYZ 999', null)
+    try {
+      await pool.query('UPDATE cases SET case_type=NULL WHERE id=$1', [id])
+      const response = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie } })
+      expect(response.statusCode).toBe(200)
+      const body = dashboardResponseSchema.parse(response.json())
+      expect(body.items.find(item => item.caseId === id)).toMatchObject({ caseType: null, documentRuleVersion: null, missingDocumentCount: 0, controlRequiredDocumentCount: 0 })
+    } finally { await pool.query('DELETE FROM cases WHERE id=$1', [id]) }
+  })
+
   it('oturumsuz istek 401 döner', async () => {
     const response = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE })
     expect(response.statusCode).toBe(401)

@@ -1,4 +1,5 @@
 import { BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, type IpcMainEvent } from 'electron'
+import { assistantAppearanceSchema, DEFAULT_ASSISTANT_APPEARANCE } from '@hasarbotu/contracts'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -77,12 +78,14 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   let tray: Tray | undefined
   let disposed = false
   let gazeTimer: ReturnType<typeof setInterval> | undefined
+  let appearance = DEFAULT_ASSISTANT_APPEARANCE
   const stopGaze = () => {
     clearInterval(gazeTimer)
     gazeTimer = undefined
   }
   const startGaze = () => {
     stopGaze()
+    if (appearance.reduceMotion) return
     gazeTimer = setInterval(() => {
       if (disposed || window.isDestroyed() || !window.isVisible()) return
       window.webContents.send('hasarbotu:assistant-gaze', assistantGaze(screen.getCursorScreenPoint(), position))
@@ -164,6 +167,18 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     actions[action]()
   }
   menuWindow.on('blur',hideMenu)
+  const handleAppearance = (event: Electron.IpcMainInvokeEvent, value: unknown) => {
+    const main = options.shell.window.webContents
+    const trustedMain = event.sender === main && event.senderFrame === main.mainFrame && event.senderFrame?.url.startsWith(options.shell.origin + '/')
+    const trustedMenu = event.sender === menuWindow.webContents && event.senderFrame === menuWindow.webContents.mainFrame && event.senderFrame?.url === menuUrl
+    const parsed = assistantAppearanceSchema.safeParse(value)
+    if (disposed || (!trustedMain && !trustedMenu) || !parsed.success) return false
+    appearance = parsed.data
+    if (appearance.reduceMotion) stopGaze()
+    else if (window.isVisible()) startGaze()
+    window.webContents.send('hasarbotu:assistant-appearance', appearance)
+    return true
+  }
   menuWindow.on('close',(event) => { event.preventDefault();hideMenu() })
   const updateDrag = () => {
     if (!drag) return
@@ -205,6 +220,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     menuWindow.webContents.session.removeListener('will-download', denyMenuDownload)
     ipcMain.removeListener('hasarbotu:assistant', handleCommand)
     ipcMain.removeListener('hasarbotu:assistant-menu',handleMenuAction)
+    ipcMain.removeHandler('hasarbotu:assistant-appearance')
     screen.removeListener('display-added', onDisplayChange)
     screen.removeListener('display-removed', onDisplayChange)
     screen.removeListener('display-metrics-changed', onDisplayChange)
@@ -221,6 +237,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   options.shell.window.once('closed', dispose)
   ipcMain.on('hasarbotu:assistant', handleCommand)
   ipcMain.on('hasarbotu:assistant-menu',handleMenuAction)
+  ipcMain.handle('hasarbotu:assistant-appearance', handleAppearance)
   screen.on('display-added', onDisplayChange)
   screen.on('display-removed', onDisplayChange)
   screen.on('display-metrics-changed', onDisplayChange)
@@ -233,6 +250,9 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     tray.on('double-click', () => showMain())
     await Promise.all([window.loadURL(url),menuWindow.loadURL(menuUrl)])
     await readyToShow
+    window.webContents.send('hasarbotu:assistant-appearance', appearance)
+    options.shell.window.webContents.send('hasarbotu:appearance-ready')
+    menuWindow.webContents.send('hasarbotu:appearance-ready')
     show()
   } catch (error) { dispose(); throw error }
   return { window, menu, menuWindow, show, dispose }

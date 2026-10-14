@@ -106,7 +106,7 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
         ) : item.missingDocuments > 0 ? (
           <section className="alert-panel alert-panel--warning">
             <strong>{item.missingDocuments} eksik evrak bulunuyor</strong>
-            <span>{item.type === 'Trafik' ? 'KTT / Beyan ve ruhsat kontrolü gerekiyor.' : 'Poliçe eki ve ruhsat kontrolü gerekiyor.'}</span>
+            <span>{item.type === 'Seçiniz' ? 'Dosya türünü Trafik veya Kasko olarak seçin.' : item.type === 'Trafik' ? 'KTT / Beyan ve ruhsat kontrolü gerekiyor.' : 'Poliçe eki ve ruhsat kontrolü gerekiyor.'}</span>
           </section>
         ) : (
           <section className="alert-panel alert-panel--success">
@@ -400,7 +400,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Plaka, dosya no, şirket, kişi veya servis ara..." />
             {query && <button type="button" onClick={() => setQuery('')} aria-label="Aramayı temizle"><X size={14} /></button>}
           </label>
-          <label className="select-field"><span className="select-field__label">Tür</span><select aria-label="Dosya türü" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'Tümü' | CaseType)}><option>Tümü</option><option>Trafik</option><option>Kasko</option></select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Tür</span><select aria-label="Dosya türü" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'Tümü' | CaseType)}><option>Tümü</option><option>Trafik</option><option>Kasko</option><option>Seçiniz</option></select><ChevronDown size={14} /></label>
           <label className="select-field"><span className="select-field__label">Durum</span><select aria-label="Dosya durumu" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>Açık</option><option>Kapalı</option></select><ChevronDown size={14} /></label>
           {source === 'api' ? (
             <CaseReferenceFilters

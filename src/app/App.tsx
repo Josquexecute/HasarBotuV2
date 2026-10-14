@@ -14,6 +14,7 @@ import { ReportsPage } from '../features/reports/ReportsPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { SessionProvider } from './session'
+import { AssistantAppearanceProvider } from '../features/assistant/AssistantAppearanceProvider'
 import { useSession } from './sessionContext'
 import { PERSISTENCE_ERROR_EVENT, usePersistentState } from './usePersistentState'
 const TrackingPopup = lazy(async () => ({ default: (await import('../features/tracking/TrackingPopup')).TrackingPopup }))
@@ -105,14 +106,16 @@ export function App() {
         {persistenceFailed && <p role="alert">Ayarlar bu cihazda saklanamadı. Değişiklikler yalnız bu oturumda geçerli.</p>}
         <BrowserRouter>
           <SessionProvider>
-            <AppGate
-              theme={theme}
-              collapsed={collapsed}
-              onThemeChange={setTheme}
-              onSidebarChange={setCollapsed}
-              onMenuToggle={() => setCollapsed((value) => !value)}
-              onThemeToggle={() => setTheme((value) => value === 'light' ? 'dark' : 'light')}
-            />
+            <AssistantAppearanceProvider>
+              <AppGate
+                theme={theme}
+                collapsed={collapsed}
+                onThemeChange={setTheme}
+                onSidebarChange={setCollapsed}
+                onMenuToggle={() => setCollapsed((value) => !value)}
+                onThemeToggle={() => setTheme((value) => value === 'light' ? 'dark' : 'light')}
+              />
+            </AssistantAppearanceProvider>
           </SessionProvider>
         </BrowserRouter>
       </div>

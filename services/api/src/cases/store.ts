@@ -194,7 +194,8 @@ export function createCasesStore(pool: pg.Pool) {
         where.push(clause.replace('?', `$${params.length}`))
       }
 
-      if (query.caseType !== undefined) add('case_type = ?', query.caseType)
+      if (query.caseType === 'unclassified') where.push('case_type IS NULL')
+      else if (query.caseType !== undefined) add('case_type = ?', query.caseType)
       if (query.status !== undefined) add('lifecycle_status = ?', query.status)
       if (query.stage !== undefined) add('workflow_stage = ?', query.stage)
       if (query.responsibleUserId !== undefined) add('responsible_user_id = ?', query.responsibleUserId)

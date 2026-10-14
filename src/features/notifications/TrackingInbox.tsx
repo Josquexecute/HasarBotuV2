@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Bell, Check, FileText, RefreshCw } from 'lucide-react'
+import { Bell, Check, CheckCheck, FileText, RefreshCw } from 'lucide-react'
 import { trackingInboxSchema } from '@hasarbotu/contracts'
 import { trackingRequest } from '../tracking/trackingApi'
 import { NotificationCard } from './NotificationCard'
@@ -47,11 +47,28 @@ export function TrackingInbox() {
     if (!item.readAt && !await markRead(item.id)) return
     navigate(`/dosyalar/${item.caseId}${item.kind === 'document' ? '?tab=documents' : ''}`)
   }
+  async function markAllRead() {
+    if (inFlight.current || loading || !data?.unread) return
+    inFlight.current = true
+    setSaving('all')
+    try {
+      await trackingRequest('tracking/notifications/read-all',{})
+      setError('')
+      setLoading(true)
+      setPage(1)
+      setVersion(value => value+1)
+      window.dispatchEvent(new Event('tracking-updated'))
+    } catch (e) { setError(e instanceof Error ? e.message : 'Bildirimler güncellenemedi.') }
+    finally { inFlight.current = false;setSaving(null) }
+  }
   const groups = groupNotifications(data?.notifications ?? [], item => item.createdAt)
-  return <section className="notification-feed" aria-label="Dosya bildirimleri" aria-busy={loading}>
+  return <section className="notification-feed" aria-label="Dosya bildirimleri" aria-busy={loading || saving !== null}>
     <div className="notification-feed__toolbar">
-      <div className="notification-segments" role="group" aria-label="Bildirim okuma durumu">{([['unread','Okunmamış'],['all','Tümü'],['read','Okunmuş']] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={read === value} onClick={() => { if (read === value) return;setRead(value);setPage(1);setLoading(true) }}>{label}{value === 'unread' && data !== null && <span>{data.unread}</span>}</button>)}</div>
-      <button className="notification-icon-button" type="button" aria-label="Bildirimleri yenile" disabled={loading || saving !== null} onClick={() => { setLoading(true);setVersion(value => value+1) }}><RefreshCw size={17} /></button>
+      <div className="notification-segments" role="group" aria-label="Bildirim okuma durumu">{([['unread','Okunmamış'],['all','Tümü'],['read','Okunmuş']] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={read === value} disabled={saving !== null} onClick={() => { if (read === value) return;setRead(value);setPage(1);setLoading(true) }}>{label}{value === 'unread' && data !== null && <span>{data.unread}</span>}</button>)}</div>
+      <div className="notification-feed__actions">
+        <button className="button button--secondary" type="button" disabled={loading || saving !== null || !data?.unread || !!error} onClick={() => { void markAllRead() }}><CheckCheck size={16} />{saving === 'all' ? 'Kaydediliyor…' : 'Tümünü okundu işaretle'}</button>
+        <button className="notification-icon-button" type="button" aria-label="Bildirimleri yenile" disabled={loading || saving !== null} onClick={() => { setLoading(true);setVersion(value => value+1) }}><RefreshCw size={17} /></button>
+      </div>
     </div>
     {error && <p className="notification-feedback" role="alert">{error}<button className="text-button" type="button" onClick={() => { setLoading(true);setVersion(value => value+1) }}>Tekrar dene</button></p>}
     {loading ? <p className="notification-feedback" role="status">Bildirimler yükleniyor…</p> : !error && <>

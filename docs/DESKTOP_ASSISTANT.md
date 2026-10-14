@@ -8,7 +8,7 @@ reacts to pressing and hovering. This version has no audio or business-status
 animations. Reduced motion displays a neutral still pose. Hiding the helper
 stops cursor polling and rendering; closing the main window disposes it.
 
-Only normalized gaze reaches the isolated character renderer. It receives neither
+Only normalized gaze and validated cosmetic appearance reach the isolated character renderer. It receives neither
 screen coordinates nor access to the authenticated main window's session.
 
 ## Standalone case panel (desktop 0.1.6)
@@ -24,7 +24,7 @@ document review status. Selection persists per user. Existing quick-note drafts
 remain separate per user and case; viewing another tab does not discard them.
 
 The panel shares the main window's HttpOnly session, but exposes only fixed menu
-actions through its preload. Node integration, external navigation, new windows
+actions and a validated appearance command through its preload. Node integration, external navigation, new windows
 and downloads remain disabled. API permissions govern every read and write.
 If login is needed, **Giriş yap** opens the main window explicitly; focusing the
 panel afterwards refreshes its session. Focusing the main app reloads notes saved
@@ -34,6 +34,26 @@ Regression coverage includes isolated PostgreSQL note persistence, starting the
 panel before login, hidden-main-window search and save, history, process status,
 selection after shell recreation, light/dark themes, viewport bounds at 150%
 zoom, read-only permissions, authorization failure and stale search responses.
+
+## Personal appearance (desktop 0.1.11)
+
+Choose **Görünümümü özelleştir** in Touch or **Ayarlar → Touch görünümüm**.
+Six palettes, custom accent and character colors, system/light/dark themes,
+normal/large text and reduced animation are supported. Character colors are
+softened to keep its eyes visible. Colors change the actual Canvas character
+without modifying the vendored drawing engine.
+
+Preferences belong to the authenticated account, including read-only users.
+`GET/PUT /api/v1/me/assistant-appearance` stores them in migration 0056's
+`user_assistant_preferences` table. Saves include the expected account and
+version; a stale save or account switch returns 409. No other user's preferences
+can be addressed. Logout immediately restores the default appearance. Focus and
+same-profile storage signals refresh other windows; older responses cannot undo
+a successful save. Appearance navigation keeps the selected case and note draft.
+
+Real Electron tests exercise palette saving through the API, visible panel styles,
+character pixels and preference recovery after a full restart. Updates are
+documented in [DESKTOP_UPDATES.md](DESKTOP_UPDATES.md).
 
 ## Upstream source
 

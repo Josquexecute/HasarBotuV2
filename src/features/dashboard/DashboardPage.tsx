@@ -139,7 +139,8 @@ function WorkflowCard({ item }: { readonly item: DashboardCaseRecord }) {
           {item.controlRequiredDocumentCount > 0 && <span title="Kontrol gereken evrak"><ShieldAlert size={12} />{item.controlRequiredDocumentCount}</span>}
           {item.pendingHumanApprovalCount > 0 && <span title="Bekleyen insan onayı"><UserRoundCheck size={12} />{item.pendingHumanApprovalCount}</span>}
           {item.openTaskCount > 0 && <span title="Açık görev"><ClipboardList size={12} />{item.openTaskCount}</span>}
-          {item.missingDocumentCount + item.controlRequiredDocumentCount + item.pendingHumanApprovalCount + item.openTaskCount === 0 && (
+          {item.type === 'Seçiniz' && <span>Dosya türü seçilmeli</span>}
+          {item.type !== 'Seçiniz' && item.missingDocumentCount + item.controlRequiredDocumentCount + item.pendingHumanApprovalCount + item.openTaskCount === 0 && (
             <span className="text-success"><CheckCircle2 size={12} />Kontrol yok</span>
           )}
         </span>

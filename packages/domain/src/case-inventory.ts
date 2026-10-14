@@ -211,7 +211,7 @@ export interface CaseInventoryRow {
   readonly plate: string
   readonly insurerName: string | null
   readonly responsibleName: string | null
-  readonly caseType: 'traffic' | 'casco'
+  readonly caseType: 'traffic' | 'casco' | null
   readonly caseStatus: string
   readonly accidentDate: string | null
   readonly notificationDate: string | null
@@ -225,8 +225,8 @@ export interface CaseInventoryRow {
 }
 
 /** Dosya türü kodunu Türkçe etikete çevirir. */
-export function caseTypeLabel(caseType: 'traffic' | 'casco'): string {
-  return caseType === 'traffic' ? 'Trafik' : 'Kasko'
+export function caseTypeLabel(caseType: 'traffic' | 'casco' | null): string {
+  return caseType === null ? 'Seçiniz' : caseType === 'traffic' ? 'Trafik' : 'Kasko'
 }
 
 /**

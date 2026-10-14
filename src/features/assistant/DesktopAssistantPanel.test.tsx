@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { AssistantCaseSearch, DesktopAssistantPanel } from './DesktopAssistantPanel'
+import { AssistantAppearanceProvider } from './AssistantAppearanceProvider'
 import { mockCases } from '../../mocks/cases'
 import { HttpCasesError } from '../../data/httpAdapter'
 import type { CasePageResult, CasesDataPort } from '../../data/ports'
@@ -134,7 +135,7 @@ describe('standalone Touch case workspace', () => {
     expect(screen.queryByText(/0 dosya/)).not.toBeInTheDocument()
   })
   it('keeps unauthenticated data hidden and native commands unavailable in a normal browser', () => {
-    render(<DesktopAssistantPanel />)
+    render(<AssistantAppearanceProvider><DesktopAssistantPanel /></AssistantAppearanceProvider>)
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Giriş yap' })).toBeDisabled()
   })

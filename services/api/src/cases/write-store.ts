@@ -7,6 +7,7 @@ import { uuidv7 } from '@hasarbotu/database'
 import { rowToDto, SELECT_FIELDS, toLocalDateString, type CaseRow } from './store.js'
 import { createAuditService } from '../audit/service.js'
 import { loadServiceProfile } from '../service-agreements/service.js'
+import { requireCaseType } from './classification.js'
 
 /**
  * Cases yazma katmani (Paket 09) — kritik islem modeli:
@@ -283,6 +284,8 @@ export function createCasesWriteStore(pool: pg.Pool) {
           await client.query('ROLLBACK')
           return { kind: 'version_conflict' }
         }
+
+        if (input.workflowStage !== undefined) requireCaseType(input.caseType ?? existing.case_type)
 
         if (input.followUpDate !== undefined) throw new ReferenceCheckError('followUpDate', 'automatic_field_readonly')
         const imported = await client.query("SELECT reviewed_fields->'automatic' AS automatic FROM eksist_sources WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic' FOR UPDATE", [actor.organizationId, caseId])

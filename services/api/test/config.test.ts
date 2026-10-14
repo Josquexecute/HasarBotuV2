@@ -12,6 +12,11 @@ import {
 } from '../src/index.js'
 
 describe('parseConfig', () => {
+  it('requires an absolute desktop release directory when configured', () => {
+    expect(parseConfig({ DESKTOP_RELEASES_DIR: process.cwd() }).desktopReleasesDirectory).toBe(process.cwd())
+    expect(() => parseConfig({ DESKTOP_RELEASES_DIR: 'relative/releases' })).toThrow(ConfigError)
+    expect(() => parseConfig({ DESKTOP_RELEASES_DIR: ' ' })).toThrow(ConfigError)
+  })
   it('bos ortamda guvenli varsayilanlari uretir', () => {
     expect(parseConfig({})).toEqual({
       host: DEFAULT_HOST,

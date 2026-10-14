@@ -1,4 +1,5 @@
 import { parseDatabaseUrl } from '@hasarbotu/database'
+import { isAbsolute } from 'node:path'
 import { parseGoogleConfig, type GoogleConfig } from './tracking/google.js'
 import {
   GEMINI_FREE_TIER_FALLBACK_MODEL_ID,
@@ -34,6 +35,7 @@ export const MIN_PORT = 1
 export const MAX_PORT = 65_535
 
 export interface ApiConfig {
+  readonly desktopReleasesDirectory?: string
   readonly google?: GoogleConfig
   readonly host: string
   readonly port: number
@@ -218,6 +220,8 @@ function parseOpenAiPolicyProvider(env: Readonly<Record<string, string | undefin
  * gercek process ortamina bagimli olmadan acik nesnelerle calisir.
  */
 export function parseConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
+  const desktopReleasesDirectory = env.DESKTOP_RELEASES_DIR?.trim()
+  if (desktopReleasesDirectory !== undefined && (!desktopReleasesDirectory || !isAbsolute(desktopReleasesDirectory))) throw new ConfigError('DESKTOP_RELEASES_DIR', 'expected an absolute directory path.')
   let google: GoogleConfig | undefined
   try { google = parseGoogleConfig(env) } catch { throw new ConfigError('GOOGLE_* / SBM_*', 'incomplete or invalid Google tracking configuration.') }
   const nodeEnv = parseNodeEnv(env.NODE_ENV)
@@ -229,6 +233,7 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
   const geminiPolicyProvider = parseGeminiPolicyProvider(env)
   const host = parseHost(env.HOST)
   return {
+    ...(desktopReleasesDirectory ? { desktopReleasesDirectory } : {}),
     host,
     ...(google ? { google } : {}),
     port: parsePort(env.PORT),

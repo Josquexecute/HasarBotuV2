@@ -9,7 +9,7 @@ import type { CaseRecord } from '../types/case'
 export interface CasePageQuery {
   readonly status?: 'open' | 'closed'
   readonly search?: string
-  readonly caseType?: 'traffic' | 'casco'
+  readonly caseType?: 'traffic' | 'casco' | 'unclassified'
   readonly stage?: string
   readonly responsibleUserId?: string
   readonly serviceId?: string

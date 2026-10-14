@@ -31,7 +31,7 @@ export const searchSchema = z
 const casesQueryObject = z.strictObject({
   includeEksist: z.literal('true').optional(),
   search: searchSchema.optional(),
-  caseType: caseTypeSchema.optional(),
+  caseType: caseTypeSchema.or(z.literal('unclassified')).optional(),
   status: caseStatusSchema.optional(),
   stage: caseStageSchema.optional(),
   responsibleUserId: userIdSchema.optional(),

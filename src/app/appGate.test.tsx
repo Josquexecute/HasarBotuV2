@@ -104,7 +104,7 @@ describe('App oturum kapisi (api mod)', () => {
     expect(screen.queryByRole('heading', { name: 'Ayarlar' })).not.toBeInTheDocument()
   })
 
-  it('giristen sonra /ayarlar sayfanin KENDI icin ek istek yapmadan acilir (oturum bootstrap + kabuk genelindeki bildirim rozeti)', async () => {
+  it('giristen sonra /ayarlar oturum, bildirimler ve kişisel Touch ayarlarıyla açılır', async () => {
     window.history.replaceState({}, '', '/ayarlar')
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const calls: string[] = []
@@ -124,7 +124,8 @@ describe('App oturum kapisi (api mod)', () => {
     // Sidebar her rotada aynı, gerçek Bildirimler rozetini sorar (Paket 56 düzeltmesi:
     // önceden sabit kodlu "7" idi) -- /ayarlar sayfasının KENDİ içeriği hâlâ ek istek yapmaz.
     // Kalıcı gelen kutusu artık uygulama kabuğunda yeni bildirimleri de yoklar.
-    expect(calls).toHaveLength(3)
+    expect(calls).toHaveLength(4)
+    expect(calls.some((call) => call.includes('/api/v1/me/assistant-appearance'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/tracking/notifications/pending'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/operational-alerts'))).toBe(true)
@@ -160,7 +161,8 @@ describe('App oturum kapisi (api mod)', () => {
     expect(await screen.findByText('Mevzuat kaynak kütüphanesi henüz yapılandırılmadı.')).toBeInTheDocument()
     // Sidebar her rotada aynı, gerçek Bildirimler rozetini sorar (Paket 56 düzeltmesi:
     // önceden sabit kodlu "7" idi) -- /mevzuat-ve-ai sayfasının KENDİ içeriği hâlâ ek istek yapmaz.
-    expect(calls).toHaveLength(3)
+    expect(calls).toHaveLength(4)
+    expect(calls.some((call) => call.includes('/api/v1/me/assistant-appearance'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/tracking/notifications/pending'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/operational-alerts'))).toBe(true)

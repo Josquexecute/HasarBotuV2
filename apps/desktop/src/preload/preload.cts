@@ -1,16 +1,15 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
 /**
  * Preload allowlist (D2).
  *
- * KASITLI OLARAK AYRICALIKSIZDIR. Renderer'a açılan yüzey yalnız iki VERİ
- * alanı içerir; hiçbir fonksiyon, hiçbir IPC kanalı ve `ipcRenderer`'ın
- * kendisi AÇILMAZ. Main tarafında da kayıtlı `ipcMain` handler'ı yoktur.
+ * Desktop information stays data-only. The user's appearance feature adds a
+ * separate, cosmetic-only surface; no generic IPC, URL, filesystem or Electron
+ * API is exposed. Main validates the sender frame and every appearance field.
  *
- * Gerekçe: UI, verisini bugün olduğu gibi göreli `/api/...` üzerinden alır
- * (HB-2026-103 aynı-origin köprüsü). Kabuğa bir çağrı yüzeyi eklemek, ince
- * kabuk kuralını (ADR-Q06) ve Paket 21'in geri alma stratejisini zayıflatır.
- * Yeni bir kanal ancak açık bir karar ve gerekçe ile eklenir.
+ * UI verisi göreli `/api/...` üzerinden gelir. Kullanıcının istediği renk
+ * ve güncelleme komutları ayrı, dar yüzeylerde main-frame doğrulamasıyla
+ * uygulanır; renderer kurulum yolu veya indirme adresi belirleyemez.
  *
  * `sandbox: true` olduğu için bu dosya CommonJS olmalıdır; kaynak `.cts`
  * yazılır ve `.cjs` olarak derlenir.
@@ -24,3 +23,23 @@ const surface = Object.freeze({
 })
 
 contextBridge.exposeInMainWorld('hasarbotuDesktop', surface)
+// Only trusted main-frame check/install commands; renderers supply no URLs or paths.
+contextBridge.exposeInMainWorld('hasarbotuUpdates', Object.freeze({
+  check: () => ipcRenderer.invoke('hasarbotu:update-check'),
+  install: () => ipcRenderer.invoke('hasarbotu:update-install'),
+  onState: (callback: unknown) => {
+    if (typeof callback !== 'function') throw new TypeError('Update callback must be a function')
+    const listener = (_event: unknown, value: unknown) => callback(value)
+    ipcRenderer.on('hasarbotu:update-state', listener)
+    return () => ipcRenderer.removeListener('hasarbotu:update-state', listener)
+  },
+}))
+contextBridge.exposeInMainWorld('hasarbotuAppearance', Object.freeze({
+  set: (value: unknown) => ipcRenderer.invoke('hasarbotu:assistant-appearance', value),
+  onReady: (callback: unknown) => {
+    if (typeof callback !== 'function') throw new TypeError('Appearance callback must be a function')
+    const listener = () => callback()
+    ipcRenderer.on('hasarbotu:appearance-ready', listener)
+    return () => ipcRenderer.removeListener('hasarbotu:appearance-ready', listener)
+  },
+}))

@@ -84,6 +84,11 @@ afterEach(() => {
 })
 
 describe('dashboard data port', () => {
+  it('shows pending classification without assigning a document rule version', async () => {
+    const pending = { ...response, items: [{ ...response.items[0], caseType: null, documentRuleVersion: null, missingDocumentCount: 0, controlRequiredDocumentCount: 0 }] }
+    const dashboard = await createHttpDashboardAdapter({ fetchImpl: fetchResponse(200, pending) }).loadDashboard()
+    expect(dashboard.items[0]).toMatchObject({ type: 'Seçiniz', documentRuleVersion: null, missingDocumentCount: 0 })
+  })
   it('gerçek API cevabını güvenli UI modeline dönüştürür', async () => {
     const dashboard = await createHttpDashboardAdapter({
       fetchImpl: fetchResponse(200, response),

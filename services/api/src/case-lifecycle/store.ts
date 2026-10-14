@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { requireCaseType } from '../cases/classification.js'
 import type pg from 'pg'
 import {
   caseLifecycleOperationSchema,
@@ -290,10 +291,11 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           [actor.organizationId, caseId],
         )
         const current = selected.rows[0] as {
-          version: number; case_type: 'traffic' | 'casco'; lifecycle_status: 'open' | 'closed'; workflow_stage: string; notification_date: Date | null;
+          version: number; case_type: 'traffic' | 'casco' | null; lifecycle_status: 'open' | 'closed'; workflow_stage: string; notification_date: Date | null;
           loss_date: Date | null; insurer_id: string | null; service_center_id: string | null
         } | undefined
         if (current === undefined) return { kind: 'not_found' }
+        const caseType = requireCaseType(current.case_type)
         if (current.lifecycle_status !== 'open') return { kind: 'lifecycle_conflict' }
         if (current.version !== input.expectedCaseVersion) return { kind: 'version_conflict' }
         const activeLifecycle = await client.query(
@@ -340,7 +342,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         const summary = await requirementSummary(
           client, actor.organizationId, caseId, new Date().toISOString(),
           current.service_center_id !== null, serviceProfile?.agreement ?? null,
-          current.case_type,
+          caseType,
         )
         const incomplete = summary.missingCount + summary.controlRequiredCount > 0
         const blockers = input.closeMode === 'normal' && incomplete ? ['requirements_incomplete'] : []
@@ -387,8 +389,9 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           `SELECT version,case_type,lifecycle_status,workflow_stage,service_center_id,insurer_id,loss_date FROM cases
            WHERE organization_id=$1 AND id::text=$2 FOR UPDATE`, [actor.organizationId, caseId],
         )
-        const current = selected.rows[0] as { version: number; case_type: 'traffic' | 'casco'; lifecycle_status: 'open' | 'closed'; workflow_stage: string; service_center_id: string | null; insurer_id: string | null; loss_date: Date | null } | undefined
+        const current = selected.rows[0] as { version: number; case_type: 'traffic' | 'casco' | null; lifecycle_status: 'open' | 'closed'; workflow_stage: string; service_center_id: string | null; insurer_id: string | null; loss_date: Date | null } | undefined
         if (current === undefined) return { kind: 'not_found' }
+        const caseType = requireCaseType(current.case_type)
         if (current.lifecycle_status !== 'closed') return { kind: 'lifecycle_conflict' }
         if (current.version !== input.expectedCaseVersion) return { kind: 'version_conflict' }
         const activeLifecycle = await client.query(
@@ -430,7 +433,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           operation: 'closure_documents',
         })
         const summary = await requirementSummary(client, actor.organizationId, caseId, new Date().toISOString(),
-          current.service_center_id !== null, serviceProfile?.agreement ?? null, current.case_type)
+          current.service_center_id !== null, serviceProfile?.agreement ?? null, caseType)
         const operationId = uuidv7()
         await client.query(
           `INSERT INTO case_lifecycle_operations

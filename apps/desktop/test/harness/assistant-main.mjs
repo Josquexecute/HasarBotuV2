@@ -3,6 +3,7 @@ import { writeFile, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { startDesktopShell } from '../../dist/main/shell.js'
 import { startDesktopAssistant } from '../../dist/main/assistant.js'
+import { startDesktopUpdates } from '../../dist/main/updates.js'
 
 const checks = []
 const check = (name, pass) => { checks.push({ name, pass: Boolean(pass) }); if (!pass) throw new Error(name) }
@@ -21,9 +22,23 @@ void app.whenReady().then(async () => {
   let assistant
   try {
     shell = await startDesktopShell({ apiOrigin: 'http://127.0.0.1:1', assetRoot: process.env.HB_ASSISTANT_ASSETS, show: false })
+    startDesktopUpdates(shell, 'http://127.0.0.1:1')
+    check('sandbox main preload can check updates; development install stays disabled', await shell.window.webContents.executeJavaScript('window.hasarbotuUpdates.check().then(state => !state.supported && state.phase === "disabled")'))
     const options = { shell, assetRoot: process.env.HB_ASSISTANT_ASSETS, userDataPath: app.getPath('userData'), quit: () => {} }
     assistant = await startDesktopAssistant(options)
     const win = assistant.window
+    check('isolated character cannot invoke installation', await win.webContents.executeJavaScript('typeof window.hasarbotuUpdates === "undefined"'))
+    const appearance = { scheme: 'dark', accentColor: '#15803d', characterColor: '#b9e7c8', textSize: 'large', reduceMotion: true }
+    await until(() => win.webContents.executeJavaScript('document.querySelector("canvas").style.filter.includes("drop-shadow")'), 'initial appearance ready')
+    const beforePalette = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+    check('trusted main frame can publish appearance', await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify(appearance)})`))
+    await until(() => win.webContents.executeJavaScript('document.querySelector("canvas").style.filter.includes("21, 128, 61")'), 'personalized character color')
+    const afterPalette = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+    check('appearance changes actual character pixels', beforePalette !== afterPalette)
+    check('malformed color payload is rejected', !(await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: 'url(file:///private)' })})`)))
+    check('character cannot publish appearance', await win.webContents.executeJavaScript('typeof window.hasarbotuAppearance === "undefined"'))
+    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-custom-appearance.png'), (await win.webContents.capturePage()).toPNG())
+    await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: '#635bff', characterColor: '#eff2fa', reduceMotion: false })})`)
     await win.webContents.executeJavaScript('window.rendererErrors = []; window.addEventListener("error", event => window.rendererErrors.push(event.message)); undefined')
     // Gaze animation must not depend on the host's accessibility preference.
     win.webContents.debugger.attach('1.3')
@@ -33,7 +48,7 @@ void app.whenReady().then(async () => {
     check('independent window', !win.getParentWindow())
     check('fixed 120 DIP character', win.getBounds().width === 120 && win.getBounds().height === 120 && !win.isResizable())
     const surface = await win.webContents.executeJavaScript('({ node: typeof require, process: typeof process, ready: !document.querySelector("button").disabled, keys: Object.keys(window.hasarbotuAssistant) })')
-    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'cancel,drag,menu,move,onGaze,press,release')
+    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'cancel,drag,menu,move,onAppearance,onGaze,press,release')
     await until(() => win.webContents.executeJavaScript('(()=>{ const c=document.querySelector("canvas"); return c && c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((v,i)=>i%4===3 && v>0) })()'))
     check('upstream Mochi actually renders in sandbox canvas', true)
     check('main renderer keeps privilege-free preload', await shell.window.webContents.executeJavaScript('typeof window.hasarbotuAssistant === "undefined" && Object.keys(window.hasarbotuDesktop).sort().join(",") === "isDesktopShell,platform"'))

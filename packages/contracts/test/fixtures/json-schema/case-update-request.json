@@ -7,6 +7,13 @@
       "minimum": 1,
       "maximum": 9007199254740991
     },
+    "caseType": {
+      "type": "string",
+      "enum": [
+        "traffic",
+        "casco"
+      ]
+    },
     "workflowStage": {
       "type": "string",
       "enum": [

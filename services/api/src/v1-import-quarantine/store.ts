@@ -23,7 +23,7 @@ interface QuarantineRow {
 
 interface CandidateRow {
   id: string
-  case_type: 'traffic' | 'casco'
+  case_type: 'traffic' | 'casco' | null
   office_number: string
   lifecycle_status: 'open' | 'closed'
   created_at: Date

@@ -52,6 +52,7 @@ const DEFAULT_UPSTREAM_TIMEOUT_MS = 30_000
 export const EKSIST_UPSTREAM_TIMEOUT_MS = 120_000
 
 export function upstreamTimeoutFor(pathname: string, defaultTimeout: number): number {
+  if (/^\/api\/v1\/desktop-updates\/artifacts\/[a-f0-9]{64}$/.test(pathname)) return Math.max(defaultTimeout, 300_000)
   return pathname === '/api/v1/eksist/sources' ? Math.max(defaultTimeout, EKSIST_UPSTREAM_TIMEOUT_MS) : defaultTimeout
 }
 

@@ -6,7 +6,7 @@ import { classifyV1ClaimTypeDocumentText, type V1ClaimTypeContentEvidenceKind } 
 import { loadImage } from '@napi-rs/canvas'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 
-export const V1_CLAIM_DOCUMENT_EVIDENCE_VERSION = 'v1-claim-document-evidence/1.0.0' as const
+export const V1_CLAIM_DOCUMENT_EVIDENCE_VERSION = 'v1-claim-document-evidence/1.0.1' as const
 const MAX_FILES = 64
 const MAX_FILE_BYTES = 32 * 1024 * 1024
 const MAX_PDF_PAGES = 100
@@ -108,6 +108,9 @@ export async function scanV1ClaimTypeDocumentEvidence(input: {
       // kalir; sonradan icerik kazanirsa yeni evidence/fingerprint uretilir.
       if (metadata.size === 0) continue
       const bytes = new Uint8Array(await readFile(candidate.absolutePath))
+      // PDF.js transfers the ArrayBuffer to its worker, detaching this view.
+      // Capture the source digest before extraction takes ownership of the bytes.
+      const fileHash = hash(bytes)
       const extension = extname(candidate.absolutePath).toLowerCase()
       if (extension !== '.pdf' && pdfEvidenceDetected) continue
       let extractedText: string
@@ -135,7 +138,6 @@ export async function scanV1ClaimTypeDocumentEvidence(input: {
       }
       const decision = classifyV1ClaimTypeDocumentText({ text: extractedText, extractionMethod, confidence })
       if (extension === '.pdf' && decision.kinds.length > 0) pdfEvidenceDetected = true
-      const fileHash = hash(bytes)
       for (const kind of decision.kinds) {
         const expectedMarker = kind === 'traffic_policy_content'
           ? decision.markers.find((marker) => marker === 'explicit_zmss_policy' || marker === 'explicit_traffic_policy')

@@ -1,11 +1,13 @@
 import { app, dialog, shell as electronShell } from 'electron'
 import { join } from 'node:path'
+import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { parseDesktopConfig, DesktopConfigError } from './config.js'
 import { runStartupGate, type GateChoice, type GateMessage } from './gate.js'
 import { probeApiReadiness } from './readiness.js'
 import { DesktopStartupAbortedError, guardWebContents, startDesktopShell } from './shell.js'
 import { startDesktopAssistant } from './assistant.js'
+import { startDesktopUpdates } from './updates.js'
 
 /**
  * Masaüstü kabuğunun giriş noktası (D2, D3).
@@ -16,9 +18,8 @@ import { startDesktopAssistant } from './assistant.js'
  * `compatibility.ts` ve `gate.ts`tedir.
  *
  * Windows NSIS installer'ı var (`apps/desktop/package.json`daki `build`
- * alanı, `electron-builder`) ama code signing ve otomatik güncelleme
- * HÂLÂ YOKTUR (kullanıcı talimatı; imzasız ilk dahili sürüm, Paket 21/22
- * dağıtım kararlarının bir sonraki dilimi).
+ * alanı, `electron-builder`). Kullanıcı başlatmalı güncelleme, kimlik
+ * doğrulanan API yayını ve dosya bütünlük denetimiyle `updates.ts`tedir.
  *
  * DİKKAT — ESM giriş noktasında ÜST DÜZEY `await` KULLANILMAZ. Electron,
  * giriş modülünün değerlendirmesi bitmeden `ready` olayını yaymaz; üst düzey
@@ -78,13 +79,22 @@ async function bootstrap(): Promise<void> {
       // Kapı köprü origin'ini alır ama API'yi DOĞRUDAN sorgular: `/health`
       // sürümlü `/api/v1` tabanının dışındadır ve köprü yalnız `/api/*` iletir.
       startupGate: () => runStartupGate({
-        probe: () => probeApiReadiness({ apiOrigin: config.apiOrigin }),
+        probe: async () => {
+          const result = await probeApiReadiness({ apiOrigin: config.apiOrigin })
+          // Record only credential-free configuration and the classified outcome.
+          // This makes startup/restart failures diagnosable without reading sessions.
+          await writeFile(join(app.getPath('userData'), 'startup-status.json'), JSON.stringify({
+            version: app.getVersion(), apiOrigin: config.apiOrigin, ...result, checkedAt: new Date().toISOString(),
+          })).catch(() => { console.error('desktop startup status could not be recorded') })
+          return result
+        },
         prompt: promptGate,
       }),
       openExternal: (url) => electronShell.openExternal(url),
     })
     shellOrigin = shell.origin
     mainWindow = shell.window
+    startDesktopUpdates(shell, config.apiOrigin)
     await startDesktopAssistant({ shell, assetRoot: config.assetRoot, userDataPath: app.getPath('userData'), quit: () => app.quit() })
     // Closing the main window still exits; minimizing leaves the assistant available.
     shell.window.once('closed', () => app.quit())

@@ -19,7 +19,7 @@ import { toLocalDateString } from '../cases/store.js'
 
 interface DashboardCaseRow {
   id: string
-  case_type: 'traffic' | 'casco'
+  case_type: 'traffic' | 'casco' | null
   office_number: string
   plate: string
   workflow_stage: (typeof DASHBOARD_OPEN_STAGES)[number]
@@ -247,9 +247,9 @@ export function createDashboardStore(pool: pg.Pool) {
       }
 
       const items = rows.map((row) => {
-        const rule = rules.get(row.case_type)
-        if (rule === undefined) throw new Error('active_document_rule_version_not_found')
-        const evaluation = evaluateDocumentRequirements({
+        const rule = row.case_type === null ? undefined : rules.get(row.case_type)
+        if (row.case_type !== null && rule === undefined) throw new Error('active_document_rule_version_not_found')
+        const evaluation = row.case_type === null || rule === undefined ? undefined : evaluateDocumentRequirements({
           caseType: row.case_type,
           recourseStatus: row.recourse_status,
           documents: (documentsByCase.get(row.id) ?? []).map((document) => ({
@@ -261,8 +261,8 @@ export function createDashboardStore(pool: pg.Pool) {
             verifiedAt: document.verified_at?.toISOString() ?? null,
           })),
         }, evaluatedAt, rule)
-        const missingDocumentCount = evaluation.requirements.filter((item) => item.status === 'missing').length
-        const controlRequiredDocumentCount = evaluation.requirements.filter((item) => item.status === 'control_required').length
+        const missingDocumentCount = evaluation?.requirements.filter((item) => item.status === 'missing').length ?? 0
+        const controlRequiredDocumentCount = evaluation?.requirements.filter((item) => item.status === 'control_required').length ?? 0
         const approvals = approvalsByCase.get(row.id) ?? []
         const pendingHumanApprovalKinds = DASHBOARD_HUMAN_APPROVAL_KINDS.filter((kind) =>
           approvals.some((approval) => approval.kind === kind),
@@ -313,7 +313,7 @@ export function createDashboardStore(pool: pg.Pool) {
           version: row.version,
           missingDocumentCount,
           controlRequiredDocumentCount,
-          documentRuleVersion: rule.version,
+          documentRuleVersion: rule?.version ?? null,
           pendingHumanApprovalCount,
           pendingHumanApprovalKinds,
           manualRecoveryCount,

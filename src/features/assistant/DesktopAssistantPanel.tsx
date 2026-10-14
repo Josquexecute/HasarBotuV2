@@ -9,6 +9,9 @@ import type { CaseRecord } from '../../types/case'
 import type { TrackingSnapshot } from '@hasarbotu/contracts'
 import { loadTracking } from '../tracking/trackingApi'
 import './desktop-assistant-panel.css'
+import { useAssistantAppearance } from './assistantAppearanceContext'
+import { appearanceStyle } from './appearance'
+import { AssistantAppearanceEditor } from './AssistantAppearanceEditor'
 
 type MenuAction = 'open' | 'notifications' | 'settings' | 'hide' | 'reset' | 'quit' | 'close'
 type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: MenuAction): void } }
@@ -172,16 +175,22 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations }: { case
 
 export function DesktopAssistantPanel() {
   const session = useSession()
+  const appearance = useAssistantAppearance()
+  const [showAppearance, setShowAppearance] = useState(false)
   const native = (window as AssistantWindow).hasarbotuAssistantMenu
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); choose('close') } }
     document.addEventListener('keydown', keydown)
     return () => document.removeEventListener('keydown', keydown)
   }, [])
-  return <main className="desktop-assistant-panel" aria-label="HasarBotu hızlı işlemler">
+  return <main className="desktop-assistant-panel" style={appearanceStyle(appearance.appearance, appearance.systemDark)} aria-label="HasarBotu hızlı işlemler">
     <header><div><strong>HasarBotu Touch</strong><small>{session.user?.displayName ?? 'Hızlı işlemler'}</small></div><button disabled={!native} onClick={() => choose('close')} aria-label="Menüyü kapat">×</button></header>
     <div className="assistant-content">
-      {session.status === 'bootstrapping' ? <p role="status">Oturum doğrulanıyor…</p> : session.status !== 'authenticated' ? <p role="status">Dosyaları görmek için hesabınızla giriş yapın. {session.notice}</p> : <AssistantCaseSearch key={session.user!.id} />}
+      {session.status === 'bootstrapping' ? <p role="status">Oturum doğrulanıyor…</p> : session.status !== 'authenticated' ? <p role="status">Dosyaları görmek için hesabınızla giriş yapın. {session.notice}</p> : <>
+        <button type="button" aria-expanded={showAppearance} onClick={() => setShowAppearance(value => !value)}>{showAppearance ? 'Dosya aramasına dön' : 'Görünümümü özelleştir'}</button>
+        <div hidden={!showAppearance}>{appearance.status === 'ready' ? <AssistantAppearanceEditor key={session.user!.id} appearance={appearance.appearance} systemDark={appearance.systemDark} onSave={appearance.save} onReload={appearance.reload} /> : <p role="status">{appearance.status === 'loading' ? 'Renkler yükleniyor…' : 'Renkler alınamadı.'} <button onClick={appearance.reload}>Tekrar dene</button></p>}</div>
+        <div hidden={showAppearance}><AssistantCaseSearch key={session.user!.id} /></div>
+      </>}
     </div>
     <nav className="assistant-native-actions" aria-label="Kısayollar"><button disabled={!native} onClick={() => choose('open')}>{session.status === 'authenticated' ? 'Uygulamayı aç' : 'Giriş yap'}</button><button disabled={!native} onClick={() => choose('notifications')}>Bildirimler</button><button disabled={!native} onClick={() => choose('settings')}>Ayarlar</button></nav>
     <footer><button disabled={!native} onClick={() => choose('hide')}>Gizle</button><button disabled={!native} onClick={() => choose('reset')}>Konumu sıfırla</button><button disabled={!native} onClick={() => choose('quit')}>Çıkış</button></footer>
