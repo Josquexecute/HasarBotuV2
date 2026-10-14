@@ -1,6 +1,6 @@
 {
   "name": "@hasarbotu/desktop",
-  "version": "0.1.13",
+  "version": "0.1.15",
   "private": true,
   "type": "module",
   "description": "HasarBotu V2 ince Electron kabuğu (ADR-Q06): güvenli BrowserWindow + loopback aynı-origin köprüsü",
@@ -15,7 +15,7 @@
     "lint": "eslint .",
     "test": "npm run build && vitest run --config vitest.config.ts",
     "start": "electron .",
-    "package:win": "electron-builder --win nsis --x64"
+    "package:win": "node ../../scripts/prepare-desktop-distribution.mjs && electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@hasarbotu/contracts": "*",
@@ -44,6 +44,15 @@
       "!**/*.map"
     ],
     "extraResources": [
+      {
+        "from": "build-resources/office-connection.json",
+        "to": "office-connection.json"
+      },
+      {
+        "from": "distribution",
+        "to": ".",
+        "filter": ["*.ps1", "*.psm1"]
+      },
       {
         "from": "../../dist",
         "to": "dist",

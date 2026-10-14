@@ -9,6 +9,7 @@ coverage/
 
 # electron-builder packaged installer output (apps/desktop)
 release/
+/apps/desktop/build-resources/office-connection.json
 
 # Logs and diagnostics
 logs/

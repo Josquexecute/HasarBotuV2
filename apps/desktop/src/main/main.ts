@@ -1,6 +1,6 @@
 import { app, dialog, shell as electronShell } from 'electron'
 import { join } from 'node:path'
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { parseDesktopConfig, DesktopConfigError } from './config.js'
 import { runStartupGate, type GateChoice, type GateMessage } from './gate.js'
@@ -8,6 +8,7 @@ import { probeApiReadiness } from './readiness.js'
 import { DesktopStartupAbortedError, guardWebContents, startDesktopShell } from './shell.js'
 import { startDesktopAssistant } from './assistant.js'
 import { startDesktopUpdates } from './updates.js'
+import { initializeOfficeConnection, readOfficeConnection } from './office-connection.js'
 
 /**
  * Masaüstü kabuğunun giriş noktası (D2, D3).
@@ -72,7 +73,15 @@ async function promptGate(message: GateMessage): Promise<GateChoice> {
 
 async function bootstrap(): Promise<void> {
   try {
-    const config = parseDesktopConfig(process.env, { assetRoot: defaultAssetRoot() })
+    const office = app.isPackaged ? readOfficeConnection(join(process.resourcesPath, 'office-connection.json')) : undefined
+    const config = parseDesktopConfig(process.env, { assetRoot: defaultAssetRoot(), ...(office ? { apiOrigin: office.apiOrigin } : {}) })
+    let connectionSetup: string | undefined
+    if (office && config.apiOrigin === office.apiOrigin && !(await probeApiReadiness({ apiOrigin: config.apiOrigin })).ready) {
+      const result = await initializeOfficeConnection(join(process.resourcesPath, 'initialize-office-connection.ps1'))
+      connectionSetup = result.status
+      await mkdir(app.getPath('userData'), { recursive: true })
+      await writeFile(join(app.getPath('userData'), 'connection-setup-status.json'), JSON.stringify({ version: app.getVersion(), status: result.status, checkedAt: new Date().toISOString() }))
+    }
     const shell = await startDesktopShell({
       ...config,
       userDataPath: app.getPath('userData'),
@@ -88,7 +97,14 @@ async function bootstrap(): Promise<void> {
           })).catch(() => { console.error('desktop startup status could not be recorded') })
           return result
         },
-        prompt: promptGate,
+        prompt: (message, result) => promptGate(connectionSetup && result.outcome === 'unreachable' ? {
+          ...message,
+          detail: connectionSetup === 'approval_declined'
+            ? 'Ofis bağlantısını tanımlamak için Windows izin ekranı onaylanmalı. Uygulamayı yeniden açıp izni onaylayın.'
+            : connectionSetup === 'existing_dns_conflict'
+              ? 'Bilgisayarda ofis bağlantısıyla çakışan bir adres kaydı var. Ağ yöneticinizin kontrol etmesi gerekiyor.'
+              : 'Ofis ağına bağlanın. Ofis dışındaysanız Tailscale bağlantısını açıp yeniden deneyin.',
+        } : message),
       }),
       openExternal: (url) => electronShell.openExternal(url),
     })

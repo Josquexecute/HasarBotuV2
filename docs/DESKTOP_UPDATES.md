@@ -1,5 +1,12 @@
 # Shared Windows releases
 
+For first installation, use the public [HasarBotu download](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
+The office distribution includes its HTTPS server configuration; office LAN clients
+do not need Tailscale. See [distribution and LAN operation](DESKTOP_DISTRIBUTION_2026-10-14.md)
+for packaging, Windows permission prompts and server address maintenance.
+The source repository remains private. GitHub provides initial installers;
+authenticated application updates continue through the office API below.
+
 Open **Ayarlar → Uygulama güncellemeleri**, select **Güncellemeleri kontrol et**,
 then **Güncelle ve yeniden başlat** when a newer release is available. The app
 downloads and verifies the installer, closes normally, installs into its existing
@@ -17,7 +24,7 @@ Build and verify the x64 NSIS release before publishing. With Node 24 and built
 locked dependencies, run from the repository:
 
 ```powershell
-node scripts/publish-desktop-release.mjs apps/desktop/release/HasarBotu-Setup-0.1.11.exe C:/ProgramData/HasarBotu/desktop-releases 0.1.11 release-notes.txt
+node scripts/publish-desktop-release.mjs apps/desktop/release/HasarBotu-Setup-0.1.15.exe C:/ProgramData/HasarBotu/desktop-releases 0.1.15 release-notes.txt
 ```
 
 The Windows publisher verifies the executable's version resource and computes its

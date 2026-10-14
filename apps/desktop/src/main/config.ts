@@ -95,10 +95,10 @@ function parseAssetRoot(raw: string | undefined, fallback: string): string {
  */
 export function parseDesktopConfig(
   env: Readonly<Record<string, string | undefined>>,
-  defaults: { readonly assetRoot: string },
+  defaults: { readonly assetRoot: string; readonly apiOrigin?: string },
 ): DesktopConfig {
   return {
-    apiOrigin: parseApiOrigin(env.HASARBOTU_API_ORIGIN),
+    apiOrigin: parseApiOrigin(env.HASARBOTU_API_ORIGIN?.trim() || defaults.apiOrigin),
     assetRoot: parseAssetRoot(env.HASARBOTU_ASSET_ROOT, defaults.assetRoot),
     bridgePort: parseBridgePort(env.HASARBOTU_BRIDGE_PORT),
   }
