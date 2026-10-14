@@ -1,5 +1,11 @@
 # Plakalı klasör kapsamı — 14 Ekim 2026
 
+Son güncelleme: [otomatik yeni klasör keşfi](AUTOMATIC_FOLDER_DISCOVERY_2026-10-14.md)
+ofis sunucusunda etkinleştirildi. Mevcut 596 bağlantı başlangıç kapsamı olarak
+korunur; sonraki yeni plakalı klasörler pCloud kimliğiyle iki taramada doğrulanıp
+otomatik kaydedilir. Önceki yedi kaynak istisnası ve eski V1 geçmiş aktarımı bu
+otomasyon tarafından değiştirilmez.
+
 Son kontrol (0.1.13): **596/596 plakalı klasör**, **611 dosya**, **1.548 not**, **44 Seçiniz**, **0 sorumlusuz dosya**. 220 kayıtlı konumun güncel doğrulama işleri başarılıdır. Bu sürümde kaynakta yeni görünen dört klasör eklendi ve dokuz taşınma düzeltildi; eski dosyaların türleri, sorumluları ve mevcut notları korundu. Bir yeni dosyanın türü belge içeriğiyle belirlendi, üçü kullanıcı kararı gereği Seçiniz kaldı.
 
 V1 aktarımında 51 not, dört tamamlanmış görev ve beş tarihsel kapanış işlendi; tekrar planında uygulanabilir iş kalmadı. Yedi kaynak istisnası sürüyor. Üç geçersiz klasörün beş notu, eşleşen program dosyası kanıtlanamadığı için aktarılmadı. [Güncel kapsam ve sınırlamalar](LEGISLATION_AND_AI_2026-10-14.md) önceki sayılardan önceliklidir.
@@ -24,4 +30,7 @@ PDF.js kaynak tamponunu işçiye devredip ayırdığı için önceki içerik tar
 
 Kanıtlar (Git dışında): `.local/remaining-work-20261013/read-all-final-verified-office-proof.json`, `live-relocation-production-proof.json`, `live-new-folder-production-proof.json`, `final-one-folder-production-proof.json`, `read-all-final-restore-proof.json`. Son değişikliklerin yedeği 126 tablonun bütün satır ve özetleriyle geri yüklenerek doğrulandı; bağlı posta hesabının şifreli erişim bilgisi de kurtarılabildi. Korunan ayrıntılı kaynak ve aktarım kanıtları ofiste `C:/ProgramData/HasarBotu/office-management/remaining-work-20261013` altındadır.
 
-Bu doğrulama mevcut envanterin anlık kapsamıdır. Daha sonra eklenen klasörler aynı kimlik ve kaynak doğrulamalarından geçerek kaydedilmelidir.
+Bu doğrulama mevcut envanterin anlık kapsamıdır. Sonraki yeni klasörler artık
+otomatik keşif servisinin kimlik ve kaynak doğrulamalarından geçerek kaydedilir.
+Önceden kayıtlı klasörlerin dışarıdan taşınması ve tarihsel içerik aktarımı ayrı
+doğrulama işlemleridir.

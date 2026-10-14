@@ -8,6 +8,7 @@ import { casesQuerySchema } from '@hasarbotu/contracts'
 import { evaluateCaseDocumentRequirements } from '../src/document-requirements/evaluation.js'
 import { planFolderLocationReconciliation, applyFolderLocationReconciliation, type FolderLocationReconciliation } from '../src/cases/folder-location-reconciliation.js'
 import { planSourceFolderRelocation, applySourceFolderRelocation, type SourceFolderRelocation } from '../src/cases/source-folder-relocation.js'
+import { registerAutomaticFolders, type AutomaticFolderPolicy, type ObservedPlateFolder } from '../src/cases/automatic-folder-registration.js'
 
 const testUrl = process.env.TEST_DATABASE_URL
 const describeDb = testUrl ? describe : describe.skip
@@ -42,6 +43,65 @@ describeDb('sidecarless physical folder registration', () => {
       (SELECT count(*)::int FROM case_folder_registrations) registrations,(SELECT count(*)::int FROM case_location_history) locations,
       (SELECT count(*)::int FROM audit_events) audits,(SELECT coalesce(sum(last_sequence),0)::int FROM office_counters) sequence`)).rows[0]
   }
+  function automaticPolicy(): AutomaticFolderPolicy {
+    return { schemaVersion: 'hasarbotu-automatic-folders/1', organizationId: org, storageRootKey: 'test-root',
+      actorUserId: admin, responsibleUserId: owner, expertUserId: expert,
+      decision: 'Automatically register new distinct pCloud IDs; leave types pending and preserve old cases.', baselineSourceFolderIds: [] }
+  }
+  function observation(): ObservedPlateFolder {
+    const folder = manifest().folders[0]!
+    return { sourceFolderId: folder.sourceFolderId, relativePath: folder.relativePath, observationHash: 'd'.repeat(64), historicalPayloadAvailable: false }
+  }
+  it('automatically registers new sources as Seçiniz with assignments and real verification jobs', async () => {
+    const folder = { ...observation(), stableV1Identity: 'f'.repeat(64) }, verify = vi.fn(async () => {})
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), [folder], verify)).toMatchObject({ created: 1, deferred: 0 })
+    const row = (await pool.query('SELECT c.* FROM cases c JOIN case_folder_registrations r ON r.case_id=c.id WHERE r.source_folder_id=$1', [folder.sourceFolderId])).rows[0]
+    expect(row).toMatchObject({ case_type: null, responsible_user_id: owner, expert_user_id: expert, lifecycle_status: 'open' })
+    expect(verify).toHaveBeenCalledTimes(1)
+    const before = await counts()
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), [{ ...folder, relativePath: folder.relativePath.replace('EKİM', 'KAPALI EKİM') }], verify)).toMatchObject({ created: 0, existing: 1 })
+    expect(await counts()).toEqual(before)
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [row.id])).rows[0].lifecycle_status).toBe('open')
+  })
+  it('preserves baseline exceptions and existing paths without changing assignments or types', async () => {
+    const folder = observation(), policy = automaticPolicy(), before = await counts(), verify = vi.fn(async () => {})
+    policy.baselineSourceFolderIds.push(folder.sourceFolderId)
+    expect(await registerAutomaticFolders(pool, policy, [folder], verify)).toMatchObject({ created: 0, baseline: 1 })
+    expect(await counts()).toEqual(before)
+    expect(verify).not.toHaveBeenCalled()
+    policy.baselineSourceFolderIds = []
+    await registerAutomaticFolders(pool, policy, [folder], verify)
+    const registered = await counts()
+    expect(await registerAutomaticFolders(pool, policy, [{ ...folder, sourceFolderId: '90000' }], verify)).toMatchObject({ created: 0, existing: 1 })
+    expect(await counts()).toEqual(registered)
+  })
+  it('uses source identity rather than plate and serializes concurrent automatic retries', async () => {
+    const first = observation(), policy = automaticPolicy()
+    await registerAutomaticFolders(pool, policy, [first], async () => {})
+    const second = { ...first, sourceFolderId: '90001', relativePath: first.relativePath.replace('2026/', '2026 UZAKTAN/') }
+    expect(await registerAutomaticFolders(pool, policy, [second], async () => {})).toMatchObject({ created: 1 })
+    const third = observation(), before = await counts()
+    const results = await Promise.all([1, 2].map(() => registerAutomaticFolders(pool, policy, [third], async () => {})))
+    expect(results.reduce((total, result) => total + result.created, 0)).toBe(1)
+    expect((await counts()).cases).toBe(before.cases + 1)
+  })
+  it('defers changed sources and revoked assignments without partial writes', async () => {
+    const folder = observation(), policy = automaticPolicy(), before = await counts()
+    expect(await registerAutomaticFolders(pool, policy, [folder], async () => { throw new Error('source_changed') })).toMatchObject({ created: 0, deferred: 1, issues: [{ code: 'source_changed' }] })
+    expect(await counts()).toEqual(before)
+    await pool.query("UPDATE users SET status='disabled' WHERE id=$1", [owner])
+    try { expect(await registerAutomaticFolders(pool, policy, [folder], async () => {})).toMatchObject({ created: 0, deferred: 1 }) }
+    finally { await pool.query("UPDATE users SET status='active' WHERE id=$1", [owner]) }
+    expect(await counts()).toEqual(before)
+  })
+  it('validates the whole inventory before writes and honors cancellation', async () => {
+    const folder = observation(), before = await counts()
+    await expect(registerAutomaticFolders(pool, automaticPolicy(), [folder, folder], async () => {})).rejects.toThrow('automatic_folder_duplicate_inventory')
+    await expect(registerAutomaticFolders(pool, automaticPolicy(), [folder, { ...observation(), relativePath: '../escape' }], async () => {})).rejects.toThrow()
+    const controller = new AbortController(); controller.abort()
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), [folder], async () => {}, controller.signal)).toMatchObject({ created: 0 })
+    expect(await counts()).toEqual(before)
+  })
   it('creates searchable open and closed cases, queues real verification and invents no historical dates or notes', async () => {
     const input = manifest(), closed = manifest(true)
     input.folders.push(...closed.folders)
@@ -169,6 +229,14 @@ describeDb('sidecarless physical folder registration', () => {
     return { storageRootKey: 'test-root', decision: 'Reconcile an existing imported source using immutable V1 identity', bindings: [{ caseId: id, sourceFolderId: String(next), relativePath,
       expectedCaseVersion: 1, physicallyClosed: closed, stableSourceIdentity: identity, sourceFileHash: 'c'.repeat(64), previousLocation }] }
   }
+  it('defers a moved historical identity instead of creating a duplicate automatic case', async () => {
+    const binding = (await legacyBinding()).bindings[0]!, before = await counts()
+    const folder = { ...observation(), relativePath: binding.relativePath.replace('2026/', '2026 UZAKTAN/'),
+      historicalPayloadAvailable: true, stableV1Identity: binding.stableSourceIdentity }
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), [folder], async () => {})).toMatchObject({ created: 0, deferred: 1,
+      issues: [{ code: 'historical_case_reconciliation_required' }] })
+    expect(await counts()).toEqual(before)
+  })
   it('binds an imported case and repairs an externally moved closed folder without changing cases or history', async () => {
     const input = await legacyBinding(), closed = await legacyBinding(true, true)
     input.bindings.push(...closed.bindings)
