@@ -387,6 +387,11 @@ function renderModule(
 describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => {
   it('emsal ve kanıt girdisinden sürüm üretir, submit eder ve insan onayıyla kesinleştirir', async () => {
     const user = userEvent.setup()
+    // Paste scenario data in bulk; keyboard behavior is still exercised by the fault-rate field.
+    const fill = async (field: HTMLElement, value: string) => {
+      await user.click(field)
+      await user.paste(value)
+    }
     const port = mutablePort()
     const reportPort = mutableReportPort(() => {
       const input = vi.mocked(port.createVersion).mock.calls[0]?.[2]
@@ -397,22 +402,22 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     await screen.findByText(/1 doğrulanmış belge sürümü/)
     await user.selectOptions(screen.getByLabelText('Ağır / tam hasar'), 'no')
     await user.type(screen.getByLabelText('Kusur oranı (%)'), '75')
-    await user.type(screen.getByLabelText('Marka'), 'Sentetik')
-    await user.type(screen.getByLabelText('Model'), 'Model 33')
-    await user.type(screen.getByLabelText('Varyant'), 'Paket')
-    await user.type(screen.getByLabelText('Model yılı'), '2024')
-    await user.type(screen.getByLabelText('Kilometre'), '50000')
-    await user.type(screen.getByLabelText('Kullanım şekli'), 'Hususi')
-    await user.type(screen.getByLabelText('Kaza öncesi piyasa değeri'), '1000000')
-    await user.type(screen.getByLabelText('Rayiç giriş gerekçesi'), 'Onaylı rayiç analizi referansı kontrol edildi.')
-    await user.type(screen.getByLabelText('Onarım sonrası piyasa değeri'), '900000')
+    await fill(screen.getByLabelText('Marka'), 'Sentetik')
+    await fill(screen.getByLabelText('Model'), 'Model 33')
+    await fill(screen.getByLabelText('Varyant'), 'Paket')
+    await fill(screen.getByLabelText('Model yılı'), '2024')
+    await fill(screen.getByLabelText('Kilometre'), '50000')
+    await fill(screen.getByLabelText('Kullanım şekli'), 'Hususi')
+    await fill(screen.getByLabelText('Kaza öncesi piyasa değeri'), '1000000')
+    await fill(screen.getByLabelText('Rayiç giriş gerekçesi'), 'Onaylı rayiç analizi referansı kontrol edildi.')
+    await fill(screen.getByLabelText('Onarım sonrası piyasa değeri'), '900000')
     await user.selectOptions(screen.getByLabelText('Antika / koleksiyon araç'), 'no')
     await user.selectOptions(screen.getByLabelText('Önceki ağır hasar'), 'no')
-    await user.type(screen.getByPlaceholderText('Parça ara…'), 'SOL ÇAMURLUK')
+    await fill(screen.getByPlaceholderText('Parça ara…'), 'SOL ÇAMURLUK')
     await user.selectOptions(screen.getByLabelText('Katalog işlemi'), 'paint')
     await user.click(screen.getByRole('button', { name: /Katalogdan Ekle/ }))
-    await user.type(screen.getByLabelText('Parça kodu'), 'SOL_CAMURLUK')
-    await user.type(screen.getByLabelText('Parça adı'), 'Sol çamurluk')
+    await fill(screen.getByLabelText('Parça kodu'), 'SOL_CAMURLUK')
+    await fill(screen.getByLabelText('Parça adı'), 'Sol çamurluk')
     await user.selectOptions(screen.getByLabelText('Önceki hasar'), 'no')
     await user.click(screen.getByRole('checkbox', { name: /Ekspertiz raporu/ }))
     for (const support of ['Araç kimliği', 'Kilometre', 'Kullanım', 'Hasarlı parçalar', 'Önceki hasar', 'Kusur', 'Ağır/tam hasar']) {
@@ -424,9 +429,9 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     const references = screen.getAllByLabelText('Emsal kaynağı')
     const verified = screen.getAllByLabelText('Doğrulandı')
     for (let index = 0; index < 6; index += 1) {
-      await user.type(amounts[index], index < 3 ? String(1_020_000 - index * 10_000) : String(910_000 - (index - 3) * 10_000))
-      await user.type(mileages[index], String(49_000 + index * 300))
-      await user.type(references[index], `ref:sentetik-emsal-${index + 1}`)
+      await fill(amounts[index], index < 3 ? String(1_020_000 - index * 10_000) : String(910_000 - (index - 3) * 10_000))
+      await fill(mileages[index], String(49_000 + index * 300))
+      await fill(references[index], `ref:sentetik-emsal-${index + 1}`)
       await user.click(verified[index])
     }
 
@@ -435,7 +440,14 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     await user.click(screen.getByRole('button', { name: /Onaylanan Önizlemeyi Sürümle/ }))
     await waitFor(() => expect(port.createVersion).toHaveBeenCalledTimes(1))
     const input = vi.mocked(port.createVersion).mock.calls[0][2]
+    expect(input).toMatchObject({
+      vehicle: { make: 'Sentetik', model: 'Model 33', variant: 'Paket', modelYear: 2024, mileage: 50_000, usageType: 'Hususi' },
+      faultRateBasisPoints: 7_500,
+      preAccidentMarketValueMinor: 100_000_000,
+      postRepairMarketValueMinor: 90_000_000,
+    })
     expect(input.comparables).toHaveLength(6)
+    expect(input.comparables.map(comparable => comparable.amountMinor)).toEqual([102_000_000, 101_000_000, 100_000_000, 91_000_000, 90_000_000, 89_000_000])
     expect(input.realMarket?.parts[0]).toMatchObject({ operation: 'paint', paintMode: 'full' })
     expect(input.evidence.some((entry) => entry.documentVersionId === DOCUMENT_VERSION_ID && entry.sourceHash === 'a'.repeat(64))).toBe(true)
     expect(await screen.findByText('Yeni hesaplama taslağı ve sürümü oluşturuldu.')).toBeInTheDocument()
@@ -445,13 +457,13 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     await waitFor(() => expect(port.submit).toHaveBeenCalledTimes(1))
 
     await user.click(await screen.findByRole('checkbox', { name: /insan olarak inceledim/ }))
-    await user.type(screen.getByLabelText('Onay / red gerekçesi'), 'Kanıtlar insan tarafından kontrol edildi.')
+    await fill(screen.getByLabelText('Onay / red gerekçesi'), 'Kanıtlar insan tarafından kontrol edildi.')
     await user.click(screen.getByRole('button', { name: 'İnsan Onayı Ver' }))
     await waitFor(() => expect(port.approve).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('İnsan onaylı sonuç')).toBeInTheDocument()
     expect(screen.getByText('Hesap v1')).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('Nihai rapor notu (isteğe bağlı)'), 'Sentetik nihai rapor notu.')
+    await fill(screen.getByLabelText('Nihai rapor notu (isteğe bağlı)'), 'Sentetik nihai rapor notu.')
     await user.click(screen.getByRole('button', { name: 'Nihai Raporu Önizle' }))
     await waitFor(() => expect(reportPort.preview).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('Trafik Değer Kaybı Nihai Raporu')).toBeInTheDocument()

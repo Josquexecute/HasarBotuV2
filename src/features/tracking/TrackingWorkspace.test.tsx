@@ -1,5 +1,5 @@
 import { afterEach,describe,expect,it,vi } from 'vitest'
-import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react'
+import { cleanup,fireEvent,render,screen,waitFor,within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import type { TrackingSnapshot } from '@hasarbotu/contracts'
@@ -19,20 +19,26 @@ describe('tracking screens',() => {
     data.notifications = Array.from({ length: 101 },(_,index) => ({ id: `notice-${index}`,caseId: 'case',plate: '34 TEST 123',officeNumber: '1',title: `Bildirim ${index}`,kind: 'document',createdAt: time,readAt: null,presentedAt: null }))
     const fetch = install(data)
     render(<MemoryRouter><TrackingWorkspace /></MemoryRouter>)
-    await screen.findByText('Kontrolümü bekleyen evraklar (201)')
-    expect(screen.queryByText('evrak-100.pdf')).not.toBeInTheDocument()
-    expect(screen.queryByText('Bildirim 100')).not.toBeInTheDocument()
-    const draft = screen.getAllByLabelText('Kontrol notu')[0]!
+    await screen.findByText('Kontrolümü bekleyen evraklar (201)',{ selector: 'summary' })
+    expect(screen.getAllByText(/^evrak-\d+\.pdf$/,{ selector: 'strong' })).toHaveLength(100)
+    expect(screen.queryByText('evrak-100.pdf',{ selector: 'strong' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Bildirim 100',{ selector: 'strong' })).not.toBeInTheDocument()
+    // Scope label queries to one row instead of scanning every control in the large document list.
+    const draft = () => within(screen.getByText('evrak-0.pdf',{ selector: 'strong' }).closest('article')!).getByLabelText('Kontrol notu')
     // This test checks batching and draft retention, rather than rerendering hundreds of rows per keystroke.
-    fireEvent.change(draft,{ target: { value: 'İnceleme taslağı' } })
+    fireEvent.change(draft(),{ target: { value: 'İnceleme taslağı' } })
     await userEvent.click(screen.getByText('Daha fazla evrak göster (101 kalan)',{ selector: 'button' }))
-    expect(screen.getByText('evrak-100.pdf')).toBeInTheDocument()
-    expect(draft).toHaveValue('İnceleme taslağı')
+    expect(screen.getAllByText(/^evrak-\d+\.pdf$/,{ selector: 'strong' })).toHaveLength(200)
+    expect(screen.getByText('evrak-100.pdf',{ selector: 'strong' })).toBeInTheDocument()
+    expect(draft()).toHaveValue('İnceleme taslağı')
     await userEvent.click(screen.getByText('Daha fazla evrak göster (1 kalan)',{ selector: 'button' }))
-    expect(screen.getByText('evrak-200.pdf')).toBeInTheDocument()
+    expect(screen.getAllByText(/^evrak-\d+\.pdf$/,{ selector: 'strong' })).toHaveLength(201)
+    expect(screen.getByText('evrak-200.pdf',{ selector: 'strong' })).toBeInTheDocument()
+    expect(draft()).toHaveValue('İnceleme taslağı')
     expect(screen.queryByText(/Daha fazla evrak/,{ selector: 'button' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByText('Daha fazla bildirim göster (1 kalan)',{ selector: 'button' }))
-    expect(screen.getByText('Bildirim 100')).toBeInTheDocument()
+    expect(screen.getByText('Bildirim 100',{ selector: 'strong' })).toBeInTheDocument()
+    expect(screen.getAllByText(/^Bildirim \d+$/,{ selector: 'strong' })).toHaveLength(101)
     expect(fetch.mock.calls.every(([,options]) => options?.method !== 'POST')).toBe(true)
   })
 
