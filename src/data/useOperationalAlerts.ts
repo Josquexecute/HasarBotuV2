@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import { getConfiguredDataSource, type DataSourceKind } from './ports'
 import {
   createHttpOperationalAlertAdapter,
   OperationalAlertError,
+  OPERATIONAL_ALERT_CASE_FILTER_LIMIT,
   type OperationalAlertDataPort,
   type OperationalAlertsRecord,
 } from './operationalAlertPort'
@@ -29,6 +30,7 @@ export function useOperationalAlerts(
   const { reportUnauthorized } = useSession()
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
   const [reloadToken, setReloadToken] = useState(0)
+  const groups = useRef<{ port: OperationalAlertDataPort | undefined; token: number; results: Map<string, OperationalAlertsRecord> }>({ port, token: reloadToken, results: new Map() })
   // Dizi kimliği her render'da değiştiği için efekt kararlı bir anahtara bağlanır:
   // yalnız görünür satır kümesi gerçekten değiştiğinde yeniden yüklenir.
   const caseIdKey = caseIds === undefined ? null : caseIds.join(',')
@@ -64,9 +66,36 @@ export function useOperationalAlerts(
     if (!active) return undefined
     let cancelled = false
     const adapter = port ?? createHttpOperationalAlertAdapter()
-    adapter.list(caseIdKey === null ? undefined : caseIdKey.split(','))
+    const load = async () => {
+      if (caseIdKey === null) return adapter.list()
+      const ids = caseIdKey.split(',')
+      const batches: string[][] = []
+      for (let start = 0; start < ids.length; start += OPERATIONAL_ALERT_CASE_FILTER_LIMIT) batches.push(ids.slice(start, start + OPERATIONAL_ALERT_CASE_FILTER_LIMIT))
+      const previous = groups.current
+      const cached = previous.port === port && previous.token === reloadToken ? previous.results : new Map<string, OperationalAlertsRecord>()
+      const results = new Map<string, OperationalAlertsRecord>()
+      // Bound concurrency and reuse unchanged groups when scrolling appends more cases.
+      for (let start = 0; start < batches.length; start += 2) {
+        if (cancelled) return null
+        await Promise.all(batches.slice(start, start + 2).map(async batch => {
+          const key = batch.join(',')
+          results.set(key, cached.get(key) ?? await adapter.list(batch))
+        }))
+      }
+      if (cancelled) return null
+      groups.current = { port, token: reloadToken, results }
+      const responses = [...results.values()]
+      return {
+        schemaVersion: 'operational-alert/1.0.0' as const,
+        totalCount: responses.reduce((total, result) => total + result.totalCount, 0),
+        evaluatedAt: responses.map(result => result.evaluatedAt).sort()[0]!,
+        alerts: responses.flatMap(result => result.alerts),
+        caseSummaries: responses.flatMap(result => result.caseSummaries ?? []),
+      }
+    }
+    void load()
       .then((result) => {
-        if (cancelled) return
+        if (cancelled || result === null) return
         setLoaded({ key: requestKey, alerts: result, status: 'ok' })
       })
       .catch((error: unknown) => {
@@ -78,7 +107,7 @@ export function useOperationalAlerts(
     return () => {
       cancelled = true
     }
-  }, [active, caseIdKey, port, reportUnauthorized, requestKey])
+  }, [active, caseIdKey, port, reloadToken, reportUnauthorized, requestKey])
 
   if (!active) return { alerts: null, source, status: 'ok', reload }
   return { alerts: current.alerts, source, status: current.status, reload }

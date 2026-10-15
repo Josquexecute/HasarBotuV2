@@ -1,6 +1,6 @@
 import { canUsePermission } from '../../app/permissions'
 import { useActiveCase, QUICK_NOTE_EVENT } from '../../app/activeCase'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDown,
@@ -17,24 +17,24 @@ import {
   ListFilter,
   NotebookPen,
   PanelRightOpen,
+  RefreshCw,
   Search,
   SlidersHorizontal,
   X,
 } from 'lucide-react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { EmptyState } from '../../components/StateViews'
 import { formatCurrency } from '../../mocks/cases'
-import { OPERATIONAL_ALERT_CASE_FILTER_LIMIT, type OperationalAlertDataPort } from '../../data/operationalAlertPort'
+import { type OperationalAlertDataPort } from '../../data/operationalAlertPort'
 import { getConfiguredDataSource, type CaseReferenceDataPort, type CasesDataPort } from '../../data/ports'
-import { useCasePage } from '../../data/useCasePage'
+import { useInfiniteCasePages } from '../../data/useInfiniteCasePages'
+import { CaseListCacheContext, createCaseListCache } from '../../data/caseListCache'
 import { useCases } from '../../data/useCases'
 import { useOperationalAlerts } from '../../data/useOperationalAlerts'
 import { CaseReferenceFilters } from './CaseReferenceFilters'
 import { CaseRowAlertBadge } from './CaseRowAlertBadge'
 import {
   buildCasesPageQuery,
-  clampPage,
-  filterIdentity,
   isServerSortKey,
   type CasesFilterState,
 } from './casesQuery'
@@ -204,35 +204,45 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigationType = useNavigationType()
   const queryParam = searchParams.get('q') ?? ''
+  const queryKey = `${location.key}#${queryParam}`
+  const [localCache] = useState(createCaseListCache)
+  const sharedCache = useContext(CaseListCacheContext)
+  const cache = sharedCache ?? localCache
+  const scope = `${source}:${session.user?.organizationId ?? ''}:${session.user?.id ?? ''}`
+  const [saved] = useState(() => {
+    const prior = cache.read()
+    // The detail back button returns to /dosyalar without q. A fresh global search
+    // must instead take its query from the URL, even when it repeats an earlier q.
+    const returning = queryParam === '' || navigationType === 'POP' && prior?.view?.queryParam === queryParam
+    return prior?.scope === scope && prior.port === casesPort && returning ? prior : undefined
+  })
   // Arama kutusu URL'deki `q` ile senkronizedir. Senkronizasyon efektte
   // yazilmaz: girdi, ait oldugu navigasyon kimligiyle birlikte tutulur ve
   // anahtar degisince RENDER sirasinda URL degerine doner. Boylece global
   // aramadan gelen sorgu ayni render'da kutuda gorunur; onceden bir frame
   // boyunca onceki sorgu kaliyordu.
-  const [queryInput, setQueryInput] = useState<{ key: string; value: string }>({ key: '', value: queryParam })
-  const [typeFilter, setTypeFilter] = useState<'Tümü' | CaseType>('Tümü')
-  const [stageFilter, setStageFilter] = useState('Tümü')
-  const [statusFilter, setStatusFilter] = useState('Açık')
-  const [assigneeFilter, setAssigneeFilter] = useState('Tümü')
-  const [serviceFilter, setServiceFilter] = useState('Tümü')
+  const [queryInput, setQueryInput] = useState<{ key: string; value: string }>({ key: queryKey, value: saved?.view?.query ?? queryParam })
+  const [typeFilter, setTypeFilter] = useState<'Tümü' | CaseType>(saved?.view?.typeFilter ?? 'Tümü')
+  const [stageFilter, setStageFilter] = useState(saved?.view?.stageFilter ?? 'Tümü')
+  const [statusFilter, setStatusFilter] = useState(saved?.view?.statusFilter ?? 'Açık')
+  const [assigneeFilter, setAssigneeFilter] = useState(saved?.view?.assigneeFilter ?? 'Tümü')
+  const [serviceFilter, setServiceFilter] = useState(saved?.view?.serviceFilter ?? 'Tümü')
   const followUpFilter = 'Tümü'
-  const [sortKey, setSortKey] = useState<SortKey>('lastAction')
-  const [direction, setDirection] = useState<SortDirection>('asc')
-  const [filtersOpen, setFiltersOpen] = useState(true)
-  const [detailOpen, setDetailOpen] = useState(() => window.innerWidth >= 1024)
-  const [selectedId, setSelectedId] = useState(cases[0]?.caseId ?? '')
+  const [sortKey, setSortKey] = useState<SortKey>(saved?.view?.sortKey ?? 'lastAction')
+  const [direction, setDirection] = useState<SortDirection>(saved?.view?.direction ?? 'asc')
+  const [filtersOpen, setFiltersOpen] = useState(saved?.view?.filtersOpen ?? true)
+  const [detailOpen, setDetailOpen] = useState(() => saved?.view?.detailOpen ?? window.innerWidth >= 1024)
+  const [selectedId, setSelectedId] = useState(saved?.view?.selectedId ?? cases[0]?.caseId ?? '')
   const [activePage, setActivePage] = useState(1)
   const [prototypeNotice, setPrototypeNotice] = useState('')
   const showNewModal = searchParams.get('yeni') === 'true'
-  const queryKey = `${location.key}#${queryParam}`
   const query = queryInput.key === queryKey ? queryInput.value : queryParam
   const setQuery = useCallback((value: string) => setQueryInput({ key: queryKey, value }), [queryKey])
 
 
-  // API modunda filtre/sıralama/sayfalama SUNUCUDA uygulanır; istemci yalnız
-  // aktif sayfayı okur. Mock modda prototip davranışı (istemci filtresi ve
-  // sahte sayfalama) olduğu gibi korunur.
+  // Filtering and ordering remain on the server; scrolling requests only the next batch.
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const filterState: CasesFilterState = useMemo(() => ({
     query,
@@ -246,31 +256,44 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
     // yine de güvenli varsayılana düşülür.
     sortKey: isServerSortKey(sortKey) ? sortKey : 'lastAction',
     direction,
-    page: activePage,
-  }), [activePage, assigneeFilter, direction, followUpFilter, query, serviceFilter, sortKey, stageFilter, statusFilter, typeFilter])
+    page: 1,
+  }), [assigneeFilter, direction, followUpFilter, query, serviceFilter, sortKey, stageFilter, statusFilter, typeFilter])
   const serverQuery = useMemo(
     () => buildCasesPageQuery(filterState, today),
     [filterState, today],
   )
-  const { page: casePage, status: pageStatus } = useCasePage(serverQuery, casesPort)
-
-  // Filtre, arama veya sıralama değişince sayfa 1'e döner.
-  const filterKey = filterIdentity(filterState)
-  const previousFilterKey = useRef(filterKey)
+  const list = useInfiniteCasePages(serverQuery, casesPort, saved)
+  const { status: pageStatus, hasMore, moreStatus, loadMore, reload } = list
+  const scrollArea = useRef<HTMLDivElement>(null)
+  const sentinel = useRef<HTMLDivElement>(null)
+  const restoration = useRef({ key: list.queryKey, top: saved?.view?.scrollTop ?? 0, left: saved?.view?.scrollLeft ?? 0, done: false })
+  useLayoutEffect(() => {
+    const element = scrollArea.current
+    if (!element) return
+    if (restoration.current.key !== list.queryKey) {
+      restoration.current = { key: list.queryKey, top: 0, left: 0, done: false }
+      element.scrollTop = 0
+    }
+    if (pageStatus === 'ok' && !restoration.current.done) {
+      element.scrollTop = restoration.current.top
+      element.scrollLeft = restoration.current.left
+      restoration.current.done = true
+    }
+  }, [list.queryKey, pageStatus])
   useEffect(() => {
-    if (previousFilterKey.current === filterKey) return
-    previousFilterKey.current = filterKey
-    setActivePage(1)
-  }, [filterKey])
-
-  // Son sayfadaki kayıtlar silinir veya filtre dışı kalırsa geçerli son sayfaya dön.
-  // Karşılaştırma İSTENEN sayfa ile yapılır: yüklenmiş (eski) sayfa ile
-  // karşılaştırmak, uçuştaki sayfa değişimini geri alırdı.
+    if (source !== 'api' || pageStatus !== 'ok' || moreStatus !== 'ok' || !hasMore || !sentinel.current || !scrollArea.current || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) void loadMore()
+    }, { root: scrollArea.current, rootMargin: '0px 0px 320px 0px' })
+    observer.observe(sentinel.current)
+    return () => observer.disconnect()
+  }, [hasMore, loadMore, moreStatus, pageStatus, source])
   useEffect(() => {
-    if (source !== 'api' || casePage === null || pageStatus !== 'ok') return
-    const safePage = clampPage(activePage, casePage.totalPages)
-    if (safePage !== activePage) setActivePage(safePage)
-  }, [activePage, casePage, pageStatus, source])
+    cache.write({ scope, port: casesPort, queryKey: list.queryKey, pages: list.pages, view: {
+      queryParam, query, typeFilter, stageFilter, statusFilter, assigneeFilter, serviceFilter, sortKey, direction,
+      filtersOpen, detailOpen, selectedId, scrollTop: scrollArea.current?.scrollTop ?? 0, scrollLeft: scrollArea.current?.scrollLeft ?? 0,
+    } })
+  }, [assigneeFilter, cache, casesPort, detailOpen, direction, filtersOpen, list.pages, list.queryKey, query, queryParam, scope, selectedId, serviceFilter, sortKey, stageFilter, statusFilter, typeFilter])
 
   const mockFilteredCases = useMemo(() => {
     const result = cases.filter((item) => {
@@ -309,28 +332,25 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
     })
   }, [assigneeFilter, cases, direction, followUpFilter, query, serviceFilter, sortKey, stageFilter, statusFilter, typeFilter])
 
-  /** Ekranda render edilen satırlar: API modunda yalnız aktif sayfa. */
+  /** Loaded batches stay visible while the next one is being fetched. */
   const visibleCases = useMemo(
-    () => (source === 'api' ? (casePage?.items ?? []) : mockFilteredCases),
-    [casePage, mockFilteredCases, source],
+    () => (source === 'api' ? list.items : mockFilteredCases),
+    [list.items, mockFilteredCases, source],
   )
-  const totalCount = source === 'api' ? (casePage?.totalCount ?? 0) : mockFilteredCases.length
-  const totalPages = source === 'api' ? (casePage?.totalPages ?? 0) : 3
+  const totalCount = source === 'api' ? list.totalCount : mockFilteredCases.length
 
   const selectedCase = visibleCases.find((item) => item.caseId === selectedId) ?? visibleCases[0]
   const activateCase = useActiveCase(selectedCase, source)
   const hasFilters = query !== '' || typeFilter !== 'Tümü' || stageFilter !== 'Tümü' || statusFilter !== 'Açık' || assigneeFilter !== 'Tümü' || serviceFilter !== 'Tümü'
 
-  // Uyarı isteğinde yalnız AKTİF SAYFA kimlikleri gönderilir. Sayfa boyutu
-  // sözleşmedeki `caseIds` sınırının altında olduğu için normal kullanımda
-  // "bilinmiyor" uyarı durumu kalmaz. Mock modda hook API çağrısı yapmaz.
+  // The alert hook splits the loaded IDs into API-sized groups.
   const alertCaseIds = useMemo(
     () => (source === 'api'
-      ? visibleCases.slice(0, OPERATIONAL_ALERT_CASE_FILTER_LIMIT).map((item) => item.caseId)
+      ? visibleCases.map((item) => item.caseId)
       : undefined),
     [source, visibleCases],
   )
-  const { alerts: rowAlerts, status: alertStatus } = useOperationalAlerts(alertPort, alertCaseIds)
+  const { alerts: rowAlerts, status: alertStatus, reload: reloadAlerts } = useOperationalAlerts(alertPort, alertCaseIds)
   const alertSummaryByCase = useMemo(
     () => new Map((rowAlerts?.caseSummaries ?? []).map((summary) => [summary.caseId, summary])),
     [rowAlerts],
@@ -381,6 +401,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
           <p>Açık ekspertiz dosyaları · Tek tık hızlı bakış, çift tık tam dosya</p>
         </div>
         <div className="heading-actions">
+          {source === 'api' && <button className="button button--secondary" type="button" onClick={() => { reload(); reloadAlerts() }} disabled={pageStatus === 'loading'}><RefreshCw size={15} />Listeyi Yenile</button>}
           <button className={`button button--secondary${filtersOpen ? ' button--active' : ''}`} type="button" onClick={() => setFiltersOpen((value) => !value)}>
             <Filter size={15} /> Filtreler {hasFilters && <i className="button__indicator" />}
           </button>
@@ -426,8 +447,12 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
 
       <div className={`cases-workarea${detailOpen ? ' cases-workarea--detail' : ''}`}>
         <section className="case-list-panel">
-          <div className="table-scroll">
-            {visibleCases.length === 0 ? <EmptyState onReset={resetFilters} /> : (
+          <div className="table-scroll" ref={scrollArea} aria-label="Dosya listesi" onScroll={event => {
+            const element = event.currentTarget
+            cache.saveScroll(scope, element.scrollTop, element.scrollLeft)
+            if (typeof IntersectionObserver === 'undefined' && element.clientHeight > 0 && moreStatus === 'ok' && element.scrollHeight - element.scrollTop - element.clientHeight < 320) void loadMore()
+          }}>
+            {visibleCases.length === 0 ? (source !== 'api' || pageStatus === 'ok' ? <EmptyState onReset={resetFilters} /> : null) : (
               <table className="case-table">
                 <thead>
                   <tr>
@@ -490,6 +515,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                 </tbody>
               </table>
             )}
+            {source === 'api' && <div ref={sentinel} className="case-list-sentinel" aria-hidden="true" />}
           </div>
           <footer className="table-footer">
             <span>{visibleCases.length} / {source === 'api' ? totalCount : '1.284'} dosya gösteriliyor</span>
@@ -503,22 +529,11 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
               </span>
             )}
             {source === 'api' ? (
-              <div className="pagination">
-                <span className="table-footer__hint">
-                  Sayfa {casePage?.page ?? activePage} / {Math.max(1, totalPages)}
-                </span>
-                <button
-                  type="button"
-                  aria-label="Önceki sayfa"
-                  disabled={activePage <= 1 || pageStatus === 'loading'}
-                  onClick={() => setActivePage((page) => Math.max(1, page - 1))}
-                >‹</button>
-                <button
-                  type="button"
-                  aria-label="Sonraki sayfa"
-                  disabled={activePage >= totalPages || pageStatus === 'loading'}
-                  onClick={() => setActivePage((page) => Math.min(Math.max(1, totalPages), page + 1))}
-                >›</button>
+              <div className="case-list-loading" aria-live="polite">
+                {moreStatus === 'unavailable' && <span>Diğer dosyalar yüklenemedi. Yüklenen kayıtlar korunuyor.</span>}
+                {pageStatus === 'unavailable' ? <button className="button button--secondary" type="button" onClick={reload}>Yeniden dene</button>
+                  : hasMore ? <button className="button button--secondary" type="button" disabled={pageStatus !== 'ok' || moreStatus === 'loading'} onClick={() => void loadMore()}>{moreStatus === 'loading' ? 'Dosyalar yükleniyor…' : moreStatus === 'unavailable' ? 'Diğer dosyaları yeniden yükle' : 'Daha fazla dosya yükle'}</button>
+                  : pageStatus === 'ok' && visibleCases.length > 0 ? <span>Tüm dosyalar yüklendi.</span> : null}
               </div>
             ) : <div className="pagination">
               <button type="button" disabled={activePage === 1} onClick={() => setActivePage((page) => Math.max(1, page - 1))}>‹</button>

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { CaseListCacheContext, createCaseListCache } from '../data/caseListCache'
 import { ActiveCaseContext, type ActiveCase } from '../app/activeCase'
 import { TouchAssistant } from './TouchAssistant'
 import { StartupPage } from '../app/StartupPage'
@@ -14,6 +15,7 @@ interface AppShellProps {
 }
 
 export function AppShell(props: AppShellProps) {
+  const [caseListCache] = useState(createCaseListCache)
   const [activeCase, setActiveCase] = useState<ActiveCase | null>(null)
   const [narrow, setNarrow] = useState(() => window.innerWidth < 1024)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -25,6 +27,7 @@ export function AppShell(props: AppShellProps) {
   const toggleMenu = () => { if (narrow) setMenuOpen((value) => !value); else props.onMenuToggle() }
   return (
     <ActiveCaseContext.Provider value={setActiveCase}>
+    <CaseListCacheContext.Provider value={caseListCache}>
     <StartupPage />
     <div className={`app-shell${menuOpen ? ' app-shell--menu-open' : ''}`}>
       {narrow && menuOpen && <button className="sidebar-backdrop" type="button" aria-label="Menüyü kapat" onClick={() => setMenuOpen(false)} />}
@@ -39,6 +42,7 @@ export function AppShell(props: AppShellProps) {
       </div>
       <TouchAssistant target={activeCase} showTrigger={false} />
     </div>
+    </CaseListCacheContext.Provider>
     </ActiveCaseContext.Provider>
   )
 }

@@ -1300,6 +1300,9 @@ button {
   overflow: auto;
 }
 
+.case-list-sentinel { height: 1px; }
+.case-list-loading { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+
 .case-table {
   width: 100%;
   min-width: 1490px;

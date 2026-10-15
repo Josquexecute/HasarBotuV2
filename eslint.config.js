@@ -12,19 +12,7 @@ import tseslint from 'typescript-eslint'
  * override EDILMEZ. `set-state-in-effect` de dahil olmak uzere kurallar
  * `error` seviyesindedir (`incompatible-library` ve `unsupported-syntax`
  * upstream'in kasitli tercihiyle `warn`).
- *
- * Asagidaki iki dosya, tek tek kanitlanmis ve baska turlu cozulemeyen iki
- * bulgu icin `warn` seviyesinde birakilir. Bunlar kural gevsetmesi degil,
- * kapsami dosya ve gerekce ile sinirlanmis istisnalardir; kodda
- * `eslint-disable` yorumu kullanilmaz.
  */
-const SET_STATE_IN_EFFECT_EXCEPTIONS = [
-  // CasesPage: fetch sonrasi sayfa kelepcelemesi. `totalPages` ancak yanit
-  // geldikten sonra bilinir. Render'da turetmek, istenen sayfayi kalici olarak
-  // duzeltmedigi icin toplam sayfa sayisi yeniden buyudugunde kullaniciyi
-  // beklenmedik bir sayfaya siciratirdi; pagination davranisi korunur.
-  'src/features/cases/CasesPage.tsx',
-]
 
 export default tseslint.config(
   // Flat config'de global ignore deseni config dosyasinin dizinine goredir:
@@ -49,9 +37,5 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
-  },
-  {
-    files: SET_STATE_IN_EFFECT_EXCEPTIONS,
-    rules: { 'react-hooks/set-state-in-effect': 'warn' },
   },
 )
