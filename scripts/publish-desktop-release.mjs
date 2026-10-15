@@ -24,19 +24,27 @@ try {
 const release = desktopReleaseSchema.parse({ version, platform: 'win32', arch: 'x64', sha256: await hashFile(source), size: (await stat(source)).size, publishedAt: new Date().toISOString(), notes: await readFile(resolve(notesFile), 'utf8') })
 await mkdir(target, { recursive: true })
 const manifest = join(target, 'latest.json'), artifact = join(target, release.sha256 + '.exe')
-let previous
-try { previous = desktopReleaseSchema.parse(JSON.parse(await readFile(manifest, 'utf8'))) }
-catch (error) { if (error.code !== 'ENOENT') throw error }
-if (previous) {
-  const a = release.version.split('.').map(BigInt), b = previous.version.split('.').map(BigInt)
-  let comparison = 0
-  for (let i = 0; i < 3 && !comparison; i++) comparison = a[i] > b[i] ? 1 : a[i] < b[i] ? -1 : 0
-  if (comparison < 0 || comparison === 0 && previous.sha256 !== release.sha256) throw new Error('A release must not downgrade or replace an existing version')
+// Serialize manual and scheduled publishers before reading the current version.
+const lockFile = join(target, '.publish.lock'), lock = await open(lockFile, 'wx')
+try {
+  await lock.writeFile(JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }))
+  let previous
+  try { previous = desktopReleaseSchema.parse(JSON.parse(await readFile(manifest, 'utf8'))) }
+  catch (error) { if (error.code !== 'ENOENT') throw error }
+  if (previous) {
+    const a = release.version.split('.').map(BigInt), b = previous.version.split('.').map(BigInt)
+    let comparison = 0
+    for (let i = 0; i < 3 && !comparison; i++) comparison = a[i] > b[i] ? 1 : a[i] < b[i] ? -1 : 0
+    if (comparison < 0 || comparison === 0 && previous.sha256 !== release.sha256) throw new Error('A release must not downgrade or replace an existing version')
+  }
+  try { await copyFile(source, artifact, constants.COPYFILE_EXCL) }
+  catch (error) { if (error.code !== 'EEXIST') throw error }
+  if ((await stat(artifact)).size !== release.size || await hashFile(artifact) !== release.sha256) throw new Error('Published artifact integrity mismatch')
+  const temporary = manifest + '.' + process.pid + '.tmp'
+  try { await writeFile(temporary, JSON.stringify(release, null, 2) + '\n', { flag: 'wx' }); await rename(temporary, manifest) }
+  finally { await rm(temporary, { force: true }) }
+} finally {
+  await lock.close()
+  await rm(lockFile)
 }
-try { await copyFile(source, artifact, constants.COPYFILE_EXCL) }
-catch (error) { if (error.code !== 'EEXIST') throw error }
-if ((await stat(artifact)).size !== release.size || await hashFile(artifact) !== release.sha256) throw new Error('Published artifact integrity mismatch')
-const temporary = manifest + '.' + process.pid + '.tmp'
-try { await writeFile(temporary, JSON.stringify(release, null, 2) + '\n', { flag: 'wx' }); await rename(temporary, manifest) }
-finally { await rm(temporary, { force: true }) }
 console.log(JSON.stringify({ status: 'PASS', version: release.version, sha256: release.sha256, size: release.size }))

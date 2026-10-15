@@ -1,5 +1,5 @@
 import { afterEach,describe,expect,it,vi } from 'vitest'
-import { cleanup,render,screen,waitFor } from '@testing-library/react'
+import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import type { TrackingSnapshot } from '@hasarbotu/contracts'
@@ -23,14 +23,15 @@ describe('tracking screens',() => {
     expect(screen.queryByText('evrak-100.pdf')).not.toBeInTheDocument()
     expect(screen.queryByText('Bildirim 100')).not.toBeInTheDocument()
     const draft = screen.getAllByLabelText('Kontrol notu')[0]!
-    await userEvent.type(draft,'İnceleme taslağı')
-    await userEvent.click(screen.getByRole('button',{ name: 'Daha fazla evrak göster (101 kalan)' }))
+    // This test checks batching and draft retention, rather than rerendering hundreds of rows per keystroke.
+    fireEvent.change(draft,{ target: { value: 'İnceleme taslağı' } })
+    await userEvent.click(screen.getByText('Daha fazla evrak göster (101 kalan)',{ selector: 'button' }))
     expect(screen.getByText('evrak-100.pdf')).toBeInTheDocument()
     expect(draft).toHaveValue('İnceleme taslağı')
-    await userEvent.click(screen.getByRole('button',{ name: 'Daha fazla evrak göster (1 kalan)' }))
+    await userEvent.click(screen.getByText('Daha fazla evrak göster (1 kalan)',{ selector: 'button' }))
     expect(screen.getByText('evrak-200.pdf')).toBeInTheDocument()
-    expect(screen.queryByRole('button',{ name: /Daha fazla evrak/ })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button',{ name: 'Daha fazla bildirim göster (1 kalan)' }))
+    expect(screen.queryByText(/Daha fazla evrak/,{ selector: 'button' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByText('Daha fazla bildirim göster (1 kalan)',{ selector: 'button' }))
     expect(screen.getByText('Bildirim 100')).toBeInTheDocument()
     expect(fetch.mock.calls.every(([,options]) => options?.method !== 'POST')).toBe(true)
   })

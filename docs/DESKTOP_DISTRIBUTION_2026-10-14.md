@@ -1,5 +1,29 @@
 # Windows distribution and office HTTPS
 
+## Current office distribution: 0.1.16 (2026-10-15)
+
+Both existing computers and the authenticated office update feed use **0.1.16**.
+The verified installer is available in `HasarBotu-Kurulum-0.1.16` on both desktops.
+Use its `HasarBotu-Kurulum.exe` for new office installations. Its SHA-256 is
+`c2c03b7a0327703adf81fbdaba1f011eeecb52eadde3e910461cf798e38c983f`
+and its size is **102,670,167 bytes**. The fixed office artifact must not be rebuilt
+and replaced under the same version.
+
+This is a locally validated office release, not a completed GitHub Actions release.
+The first GitHub run stopped on two UI test timing/loading failures; the fixes and
+private GitHub-to-office transfer tooling are prepared as **0.1.17**, awaiting the
+user's source push and release publication. Automatic transfer additionally needs
+private-repository read access on the office computer; it is not enabled yet.
+See [release workflow](GITHUB_RELEASE_WORKFLOW.md) and [office transfer setup](OFFICE_GITHUB_RELEASE_SYNC.md).
+
+The installed clients retain their original profiles. Their packaged UI, office
+profile, actual production HTTPS connection and fresh isolated profiles were
+verified on both computers. Seven office services and automatic folder discovery
+are healthy. This check does not constitute a new Windows reboot or real Google
+account acceptance. Gemini credentials are still unconfigured.
+
+## Existing public download: 0.1.15
+
 Release **0.1.15** is available from one stable public link:
 [HasarBotu-Kurulum.exe](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
 The public `Josquexecute/HasarBotu-Downloads` repository contains installers,
@@ -109,7 +133,7 @@ the gateway, first remove managed client blocks (or arrange a replacement route)
 then stop/uninstall only `hasarbotu-lan-https` and remove its named firewall rule.
 Keep the API, agent, database and Tailscale services intact.
 
-## Validated release
+## Archived public release validation: 0.1.15
 
 Installer: **102,670,139 bytes**, SHA-256
 `e43f1b21f4536087a22ee3d8a42faee7585890a80b2552d6c3e60adad11485f1`.

@@ -1,5 +1,11 @@
 # Shared Windows releases
 
+The current authenticated office release is **0.1.16**. Existing users receive it
+through the update button below. New installations use `HasarBotu-Kurulum.exe`
+inside `HasarBotu-Kurulum-0.1.16` on the office desktop (also copied to the owner's
+desktop). That fixed package is verified separately from the forthcoming private
+GitHub 0.1.17 release.
+
 The existing public 0.1.15 installer remains available from [HasarBotu download](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
 New GitHub releases are prepared only in the private `HasarBotuV2` repository and
 require repository access to download. See [the user-controlled GitHub workflow](GITHUB_RELEASE_WORKFLOW.md).
@@ -10,7 +16,9 @@ The source repository remains private. GitHub provides initial installers;
 authenticated application updates continue through the office API below.
 Publishing a GitHub release does not automatically update this office feed or
 deploy backend services and database migrations. The same verified package must
-be published to the office update directory separately.
+be published to the office update directory separately, or by the
+[GitHub-to-office transfer task](OFFICE_GITHUB_RELEASE_SYNC.md) after its private
+repository authorization and activation. That task is not enabled yet.
 
 Open **Ayarlar → Uygulama güncellemeleri**, select **Güncellemeleri kontrol et**,
 then **Güncelle ve yeniden başlat** when a newer release is available. The app

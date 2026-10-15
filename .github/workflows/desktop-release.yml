@@ -55,6 +55,8 @@ jobs:
         run: npm run package:win --workspace @hasarbotu/desktop -- --publish never
       - name: Gerçek paket açılışını ve ofis profilini doğrula
         run: node scripts/smoke-desktop-package.mjs
+      - name: Ofis aktarımını gerçek Windows yayınlayıcısıyla doğrula
+        run: node --test scripts/office-release-sync.integration.test.mjs
       - name: Doğrulanmış paketi ve açıklamayı taslak sürüme ekle
         run: node scripts/create-release-draft.mjs
         env:

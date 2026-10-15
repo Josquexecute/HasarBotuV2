@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from './App'
 
@@ -134,6 +134,8 @@ describe('HasarBotu V2 UI prototipi', () => {
     expect(screen.queryByRole('article', { name: /34 MPA 764, Ekspertiz Bekliyor/ })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('article', { name: '55 SAM 605, Yeni İhbar, Kritik öncelik. Dosyayı aç.' }))
+    // Wait for the real lazy route import before asserting its rendered controls.
+    await act(async () => { await vi.dynamicImportSettled() })
     expect(await screen.findByRole('button', { name: 'Tek Dosyayı Yenile' })).toBeInTheDocument()
     expect(screen.getAllByText('55 SAM 605').length).toBeGreaterThan(0)
   })

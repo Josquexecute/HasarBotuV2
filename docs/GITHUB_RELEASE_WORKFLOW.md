@@ -4,12 +4,18 @@ Yeni sürümler şimdilik yalnız **özel** `Josquexecute/HasarBotuV2` deposunda
 hazırlanır. Kaynağı GitHub'a gönderme ve **Publish release** adımları kullanıcıya
 aittir; otomasyon kendiliğinden yayın yapmaz.
 
-## İlk yayın: 0.1.16
+## İlk özel GitHub yayını: 0.1.17
+
+0.1.16, yerel doğrulamadan geçen sabit ofis dağıtım paketidir. GitHub'daki ilk
+0.1.16 çalışması iki arayüz testinin süre/yükleme sorunuyla durduğu için hazır
+GitHub sürümü oluşmadı. Test düzeltmeleri ve otomatik aktarım aracı 0.1.17 olarak
+hazırlanır. Ofisin sabit 0.1.16 dosyası yeniden paketlenip aynı sürüm altında
+değiştirilmez.
 
 1. Doğrulanan değişiklikleri `main` dalına gönderin.
 2. GitHub **Actions → HasarBotu sürümünü doğrula ve taslak hazırla** çalışmasının
    başarılı olmasını bekleyin. Kontroller başarısızsa hazır sürüm oluşturulmaz.
-3. **Releases** sayfasındaki otomatik hazırlanmış **Draft: HasarBotu 0.1.16**
+3. **Releases** sayfasındaki otomatik hazırlanmış **Draft: HasarBotu 0.1.17**
    kaydını açın. Çalışma özetindeki bağlantı da bu taslağa gider.
 4. Başlığı ve açıklamayı inceleyin. Kurulum dosyası `HasarBotu-Kurulum.exe` ve
    `SHA256SUMS.txt` taslağa eklenmiş olmalıdır. Açıklamada **Paket yükleniyor**
@@ -19,7 +25,7 @@ aittir; otomasyon kendiliğinden yayın yapmaz.
 
 Boş bir **Create a new release** formu açmaya gerek yoktur. GitHub'ın o formu,
 etiket yazılınca değişiklik açıklamasını kendiliğinden doldurmaz. Burada açıklama,
-paket ve `v0.1.16` etiketi doğrulama sonrasında hazır taslakta birlikte hazırlanır.
+paket ve `v0.1.17` etiketi doğrulama sonrasında hazır taslakta birlikte hazırlanır.
 Etiket, test edilen `main` kaydına sabitlenir; daha sonra değişen `main` nedeniyle
 paketin başka kaynak koduyla eşleşmesi önlenir. Hazır etiketi değiştirmeyin.
 
@@ -28,7 +34,7 @@ paketin başka kaynak koduyla eşleşmesi önlenir. Hazır etiketi değiştirmey
 Önceki sürüm yayınlandıktan sonra yeni yayın için masaüstü sürümünü artırın:
 
 ```powershell
-npm version 0.1.17 --workspace @hasarbotu/desktop --no-git-tag-version
+npm version 0.1.18 --workspace @hasarbotu/desktop --no-git-tag-version
 ```
 
 `apps/desktop/package.json` ve `package-lock.json` değişikliklerini kaynakla birlikte
@@ -75,7 +81,10 @@ Uygulama içindeki güncelleme düğmesi de GitHub yerine ofisin kimlik doğrula
 güncelleme kaynağını kullanır. Kullanıcı yayını ve paket kabulü sonrasında aynı
 doğrulanmış dosya ayrıca [ofis güncelleme kaynağına](DESKTOP_UPDATES.md) aktarılır.
 Bu aktarım tamamlanana kadar mevcut ofis sürümü değişmez.
+[Otomatik ofis aktarım aracı](OFFICE_GITHUB_RELEASE_SYNC.md) bu adımı yapabilir;
+ofis bilgisayarında özel depo okuma yetkisi doğrulanarak ayrıca etkinleştirilmelidir.
 
-İlk gerçek GitHub Actions çalışması, bu dosyalar kullanıcı tarafından `main` dalına
-gönderildikten sonra yapılacaktır. Yerel kontrolün geçmesi, GitHub çalışmasının
-zaten gerçekleştiği anlamına gelmez.
+0.1.16 için ilk gerçek GitHub Actions çalışması iki arayüz testi nedeniyle durdu;
+hazır taslak veya yayın oluşturulmadı. 0.1.17 için düzeltilmiş dosyalar kullanıcı
+tarafından `main` dalına gönderilmelidir. Yerel kontrollerin geçmesi, bu yeni GitHub
+çalışmasının zaten gerçekleştiği anlamına gelmez.
