@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp,readFile,rm } from 'node:fs/promises'
+import { mkdir,mkdtemp,readFile,rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,6 +12,7 @@ test('real packaged UI: quick-note geometry, persistence, dark filters, owner in
   const workspace = await mkdtemp(join(tmpdir(),'hb-refinements-ui-'))
   const resultPath = join(workspace,'result.json')
   try {
+    await mkdir(process.env.HB_REFINEMENTS_EVIDENCE ?? workspace, { recursive: true })
     const exitCode = await new Promise<number | null>((resolve,reject) => {
       const child = spawn(require('electron') as string,[fileURLToPath(new URL('./harness/refinements-ui-main.mjs',import.meta.url)),`--user-data-dir=${join(workspace,'user-data')}`],{
         env: { ...process.env,HB_REFINEMENTS_ASSETS: fileURLToPath(new URL('../../../dist/',import.meta.url)),HB_REFINEMENTS_RESULT: resultPath,HB_REFINEMENTS_EVIDENCE: process.env.HB_REFINEMENTS_EVIDENCE ?? workspace },stdio: 'ignore',

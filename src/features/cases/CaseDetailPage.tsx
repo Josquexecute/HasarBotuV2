@@ -216,6 +216,7 @@ function CaseDetail() {
     return () => window.removeEventListener(NOTE_SAVED_EVENT, showNotes)
   }, [caseId, setActiveTab])
   const canChangeLifecycle = canUsePermission(session.user,'lifecycle_write',['admin','expert','case_manager'])
+  const canEditCase = canUsePermission(session.user, 'case_write', ['admin', 'expert', 'case_manager', 'secretary', 'accounting'])
   const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
   const creationResult = (location.state as {
     creationResult?: { caseId: string; officeNumber: string; plate: string }
@@ -287,7 +288,7 @@ function CaseDetail() {
             } else setPrototypeNotice(`${item.plate} mock verisi yenilendi.`)
           }}><RefreshCw size={15} /> Tek Dosyayı Yenile</button>
           {source === 'api' && item.lifecycleStatus !== 'closed' ? (
-            <button className="button button--primary" type="button" onClick={() => setEditModalOpen(true)}><Save size={15} /> Temel Bilgileri Düzenle</button>
+            <button className="button button--primary" type="button" disabled={!canEditCase} title={canEditCase ? undefined : 'Dosya düzenleme yetkiniz yok.'} onClick={() => setEditModalOpen(true)}><Save size={15} /> Temel Bilgileri Düzenle</button>
           ) : source === 'mock' ? (
             <>
               <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('Mock not düzenleyicisi hazırlandı.')}><NotebookPen size={15} /> Not Ekle</button>
@@ -476,7 +477,7 @@ function CaseDetail() {
               setPrototypeNotice(updated.lifecycleStatus === 'closed' ? 'Dosya güvenle kapatıldı.' : 'Dosya aynı kimlik ve ofis numarasıyla yeniden açıldı.')
             }}
           />)}
-      {editModalOpen && source === 'api' && session.user !== null && (
+      {editModalOpen && source === 'api' && canEditCase && session.user !== null && (
         <CaseEditModal
           item={item}
           currentUser={session.user}

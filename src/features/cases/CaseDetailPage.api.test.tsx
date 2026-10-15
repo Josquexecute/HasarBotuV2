@@ -31,6 +31,28 @@ const CLOSED_CASE = {
 }
 
 describe('CaseDetailPage gercek API dogruluk siniri', () => {
+  it.each([
+    { roles: ['read_only'] as const, permissions: ['case_read'] as const },
+    { roles: ['expert'] as const, permissions: ['case_read'] as const },
+  ])('disables editing when the current permissions forbid case writes: $roles', async ({ roles, permissions }) => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    window.sessionStorage.setItem('hasarbotu-active-case-tab', 'Özet')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => new Response(JSON.stringify(
+      String(input).includes('case-closed-38?')
+        ? { case: { ...CLOSED_CASE, status: 'open', stage: 'inspection_pending' } }
+        : { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } },
+    ), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const session: SessionContextValue = {
+      mode: 'api', status: 'authenticated', notice: null,
+      user: { id: 'reader', organizationId: 'org', email: 'reader@example.test', displayName: 'Reader', roles, permissions },
+      login: vi.fn(), logout: vi.fn(), reportUnauthorized: vi.fn(),
+    }
+    render(<SessionContext.Provider value={session}><MemoryRouter initialEntries={['/dosyalar/case-closed-38']}>
+      <Routes><Route path="/dosyalar/:caseId" element={<CaseDetailPage />} /></Routes>
+    </MemoryRouter></SessionContext.Provider>)
+    expect(await screen.findByRole('button', { name: 'Temel Bilgileri Düzenle' })).toBeDisabled()
+  })
+
   it('aynı dosyada bağlantıyla evrak ve operasyon sekmesine geçer, elle seçilen sekmeyi korur', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     window.sessionStorage.setItem('hasarbotu-active-case-tab', 'Özet')

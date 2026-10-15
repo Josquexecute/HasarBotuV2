@@ -48,7 +48,7 @@ function ApiModule({ caseId }: { caseId: string }) {
     <div className="policy-pdf-toolbar">
       <label>Doğrulanmış poliçe PDF’i<select value={data.selected?.documentVersionId ?? ''} onChange={(event) => data.selectSource(event.target.value)}>{data.sources.map((item) => <option key={item.documentVersionId} value={item.documentVersionId}>{item.displayName} · v{item.versionNumber}</option>)}</select></label>
       <label>Çıkarım sürümü<select value={current?.id ?? ''} onChange={(event) => data.selectExtraction(event.target.value)}><option value="">Henüz yok</option>{data.extractions.map((item) => <option key={item.id} value={item.id}>v{item.extractionVersion} · {STATUS_LABELS[item.status]}</option>)}</select></label>
-      <div className="policy-pdf-parser"><span>Parser</span><strong>pdfjs-dist 6.1.200</strong><small>pdf-text-normalization/1.0.0 · Unicode code point</small></div>
+      <div className="policy-pdf-parser"><span>Parser</span><strong>{current ? `${current.parserName} ${current.parserVersion}` : 'Henüz çıkarım yok'}</strong><small>{current ? `${current.normalizationVersion} · Unicode code point` : 'Kaynak seçip metin çıkarımını başlatın.'}</small></div>
     </div>
     {current === null ? <div className="policy-pdf-empty"><FileSearch /><strong>Metin çıkarımı henüz yok</strong><span>İşlem kullanıcı komutuyla ve idempotent kuyruk işi olarak başlatılır.</span></div> : <>
       <div className="policy-pdf-summary">

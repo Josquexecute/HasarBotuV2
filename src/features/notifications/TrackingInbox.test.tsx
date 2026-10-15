@@ -16,6 +16,15 @@ function renderInbox() {
 beforeEach(() => { request.mockReset() })
 
 describe('notification card actions', () => {
+  it('adds a newly received Tramer result to an already open inbox',async () => {
+    request.mockResolvedValueOnce({ notifications: [],total: 0,unread: 0,page: 1 })
+      .mockResolvedValue({ ...inbox,notifications: [{ ...item,kind: 'tramer',title: 'Tramer sonuçlandı — 000310' }] })
+    renderInbox()
+    await screen.findByText('Hepsi güncel')
+    fireEvent(window,new Event('tracking-received'))
+    expect(await screen.findByText('Tramer sonuçlandı — 000310')).toBeInTheDocument()
+    expect(screen.queryByText('Hepsi güncel')).not.toBeInTheDocument()
+  })
   it('marks a notification read once before opening the actual document tab', async () => {
     let complete: () => void = () => undefined
     const pending = new Promise<void>(resolve => { complete = resolve })

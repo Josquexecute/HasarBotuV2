@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
+import { rmSync } from 'node:fs'
 import {
   AUTH_LOGIN_ROUTE,
   IDEMPOTENCY_KEY_HEADER,
@@ -17,11 +18,15 @@ import {
   assertTestDatabaseUrl,
   closeDatabasePool,
   createDatabasePool,
-  runMigrations,
+  runMigrations as runMigrationsPackage,
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
 import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { createHistoricalMigrationDirectory } from '../test-support/historical-migrations.js'
+
+let migrationDirectory: string
+const runMigrations = (options: Parameters<typeof runMigrationsPackage>[0]) => runMigrationsPackage({ ...options, dir: migrationDirectory })
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -381,6 +386,7 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
   }
 
   beforeAll(async () => {
+    migrationDirectory = createHistoricalMigrationDirectory('0058')
     config = assertTestDatabaseUrl(TEST_URL as string)
     pool = createDatabasePool({ config })
     await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
@@ -409,6 +415,7 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
   afterAll(async () => {
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
+    if (migrationDirectory) rmSync(migrationDirectory, { recursive: true, force: true })
   })
 
   it('preview hash canonical, tenant/case bağlı ve stale/missing hash için fail-closed çalışır', async () => {

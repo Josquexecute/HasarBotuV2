@@ -1,4 +1,5 @@
 import { hasPermission } from '../auth/permissions.js'
+import { createHash } from 'node:crypto'
 import type pg from 'pg'
 import { uuidv7 } from '@hasarbotu/database'
 import { inferTrackedDocumentType, isTemporaryTrackedFile } from '@hasarbotu/domain'
@@ -25,10 +26,22 @@ async function notify(exec: Queryable, organizationId: string, caseId: string, e
     ON CONFLICT (organization_id,event_key) DO NOTHING`, [uuidv7(),organizationId,caseId,eventKey,kind,title])
 }
 
+async function lockApplicationNumber(db: Queryable, organizationId: string, number: string) {
+  // Saving a number and receiving its first result must not both miss each other.
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`tramer-number:${organizationId}:${number}`])
+}
+
+async function notifySbmReview(db: Queryable, request: { id: string; organization_id: string; case_id: string }, result: SbmResult) {
+  if (['untrusted_sender','ambiguous_number','non_result_notification'].includes(result.reason ?? '')) return
+  const fingerprint = createHash('sha256').update(JSON.stringify([result.status,result.text.normalize('NFC').replace(/\s+/g,' ').trim()])).digest('hex')
+  await notify(db,request.organization_id,request.case_id,`tramer:${request.id}:review:${fingerprint}`,'tramer',`Tramer için SBM bildirimi alındı; kontrol bekliyor — ${result.applicationNumber}`)
+}
+
 export async function tramerCommand(pool: pg.Pool, session: SessionRow, caseId: string, input: TramerCommand) {
   if (!canWriteTracking(session)) throw new TrackingError(403, 'Bu işlem için yetkiniz yok.')
   return withTransaction(pool, async (db) => {
     const org = session.user.organizationId
+    if (input.action === 'number') await lockApplicationNumber(db,org,input.applicationNumber)
     const found = await db.query('SELECT id FROM cases WHERE organization_id=$1 AND id::text=$2 AND NOT is_archived FOR UPDATE', [org,caseId])
     if (!found.rowCount) throw new TrackingError(404, 'Dosya bulunamadı.')
     const active = (await db.query(`SELECT * FROM tramer_requests WHERE organization_id=$1 AND case_id=$2
@@ -56,6 +69,17 @@ export async function tramerCommand(pool: pg.Pool, session: SessionRow, caseId: 
         throw error
       }
       await record(db,org,caseId,'tramer_number_saved',session.user.id,{ applicationNumber: input.applicationNumber, previousStatus: active.status, status: 'result_pending' })
+      // Earlier receipts stay subject to human approval. Do not silently complete a
+      // newly registered request from an older message or overwrite a review in progress.
+      const receipts = await db.query(`SELECT * FROM sbm_messages WHERE organization_id=$1 AND application_number=$2
+        AND status='review' AND tramer_id IS NULL ORDER BY received_at,id FOR UPDATE SKIP LOCKED`, [org,input.applicationNumber])
+      for (const message of receipts.rows) {
+        const reason = message.reason === 'unmatched_number' ? 'number_registered_after_message' : message.reason
+        await db.query('UPDATE sbm_messages SET tramer_id=$2,reason=$3 WHERE id=$1', [message.id,active.id,reason])
+        await notifySbmReview(db,{ id: active.id,organization_id: org,case_id: caseId },{
+          applicationNumber: input.applicationNumber,status: message.result_status,text: message.result_text,evidenceHash: message.evidence_hash,reason,
+        })
+      }
     } else {
       await db.query("UPDATE tramer_requests SET status='cancelled',version=version+1,updated_at=now() WHERE id=$1", [active.id])
       await record(db,org,caseId,'tramer_cancelled',session.user.id,{ applicationNumber: active.application_number, previousStatus: active.status, status: 'cancelled', reason: input.reason })
@@ -153,6 +177,7 @@ export async function ingestSbmResult(pool: pg.Pool, input: { connectionId: stri
     const connection = (await db.query("SELECT * FROM mail_connections WHERE id=$1 AND status <> 'disconnected' FOR SHARE", [input.connectionId])).rows[0]
     if (!connection) throw new TrackingError(409,'E-posta bağlantısı kapalı.')
     const r = input.result
+    if (r.applicationNumber !== null) await lockApplicationNumber(db,connection.organization_id,r.applicationNumber)
     const id = uuidv7()
     const inserted = await db.query(`INSERT INTO sbm_messages(id,organization_id,connection_id,provider_message_id,application_number,result_status,result_text,evidence_hash,status,reason,received_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,'review',$9,$10) ON CONFLICT(connection_id,provider_message_id) DO NOTHING RETURNING id`,
@@ -170,6 +195,7 @@ export async function ingestSbmResult(pool: pg.Pool, input: { connectionId: stri
     }
     if (reason || !request || !r.status) {
       await db.query('UPDATE sbm_messages SET reason=$2,tramer_id=$3 WHERE id=$1', [id,reason ?? 'ambiguous_result',request?.id ?? null])
+      if (request) await notifySbmReview(db,request,{ ...r,reason: reason ?? 'ambiguous_result' })
       return
     }
     await applyResult(db,request,connection.email,id,r,undefined)

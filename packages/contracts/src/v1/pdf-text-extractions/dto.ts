@@ -5,6 +5,7 @@ import {
   PDF_TEXT_EXTRACTION_STATUSES,
   PDF_TEXT_OFFSET_UNIT,
   PDF_TEXT_PAGE_STATUSES,
+  PDF_TEXT_PARSER_VERSIONS,
   PDF_TEXT_SEGMENT_TYPES,
 } from '@hasarbotu/domain'
 import { caseIdSchema, entityVersionSchema, idSchema, utcDateTimeSchema } from '../../common/primitives.js'
@@ -17,7 +18,7 @@ export const pdfTextPageStatusSchema = z.enum(PDF_TEXT_PAGE_STATUSES)
 export const pdfTextSegmentTypeSchema = z.enum(PDF_TEXT_SEGMENT_TYPES)
 export const pdfTextOffsetUnitSchema = z.literal(PDF_TEXT_OFFSET_UNIT)
 export const pdfParserNameSchema = z.literal('pdfjs-dist')
-export const pdfParserVersionSchema = z.literal('6.1.200')
+export const pdfParserVersionSchema = z.enum(PDF_TEXT_PARSER_VERSIONS)
 export const pdfNormalizationVersionSchema = z.literal('pdf-text-normalization/1.0.0')
 
 export const pdfTextExtractionSchema = z.strictObject({

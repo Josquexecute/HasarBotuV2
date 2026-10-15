@@ -50,7 +50,7 @@ interface TextExtractionStore {
 
 interface ExtractionRow extends Record<string, unknown> {
   id:string;case_id:string;document_id:string;document_version_id:string;extraction_version:number;status:PdfTextExtraction['status'];
-  parser_name:'pdfjs-dist';parser_version:'6.1.200';normalization_version:'pdf-text-normalization/1.0.0';offset_unit:'unicode_code_point';
+  parser_name:'pdfjs-dist';parser_version:'6.1.200'|'6.2.108';normalization_version:'pdf-text-normalization/1.0.0';offset_unit:'unicode_code_point';
   source_hash:string;source_size:string;page_count:number;text_page_count:number;image_only_page_count:number;empty_page_count:number;
   failed_page_count:number;segment_count:number;raw_character_count:number;normalized_character_count:number;output_hash:string|null;
   failure_code:string|null;active_job_id:string|null;version:number;created_at:Date;started_at:Date|null;completed_at:Date|null;last_chunk_sequence:number;

@@ -228,6 +228,7 @@ export {
   PDF_TEXT_PAGE_STATUSES,
   PDF_TEXT_PARSER_NAME,
   PDF_TEXT_PARSER_VERSION,
+  PDF_TEXT_PARSER_VERSIONS,
   PDF_TEXT_SEGMENT_TYPES,
   buildPdfExtractionOutputHash,
   derivePdfExtractionStatus,

@@ -99,7 +99,10 @@
         },
         "parserVersion": {
           "type": "string",
-          "const": "6.1.200"
+          "enum": [
+            "6.1.200",
+            "6.2.108"
+          ]
         },
         "normalizationVersion": {
           "type": "string",

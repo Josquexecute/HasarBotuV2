@@ -22,7 +22,9 @@ export function usePolicyOcr(caseId: string) {
   const { reportUnauthorized } = useSession()
   const ocrRef = useRef(createHttpPolicyOcrAdapter())
   const pdfRef = useRef(createHttpPolicyPdfTextAdapter())
-  const keyRef = useRef<string | null>(null)
+  const keyRef = useRef<{ identity: string; value: string } | null>(null)
+  const runEpoch = useRef(0)
+  const invalidateRun = useCallback(() => { runEpoch.current++ }, [])
   const [source, setSource] = useState<PdfPolicySourceRecord | null>(null)
   const [extractions, setExtractions] = useState<readonly PdfTextExtractionRecord[]>([])
   const [selectedExtraction, setSelectedExtraction] = useState<PdfTextExtractionRecord | null>(null)
@@ -59,17 +61,25 @@ export function usePolicyOcr(caseId: string) {
   }, [reportUnauthorized, setStatus])
 
   const loadRun = useCallback(async (value: PolicyOcrRunRecord | null) => {
+    const generation = ++runEpoch.current
     setCurrent(value)
     setPages([])
     setElements([])
     setElementPage(1)
     setReference(null)
-    if (value !== null && readableStatuses.includes(value.status)) {
-      const [pageItems, elementItems] = await Promise.all([ocrRef.current.listPages(caseId, value.id), ocrRef.current.listElements(caseId, value.id)])
-      setPages(pageItems)
-      setElements(elementItems)
+    try {
+      if (value !== null && readableStatuses.includes(value.status)) {
+        const [pageItems, elementItems] = await Promise.all([ocrRef.current.listPages(caseId, value.id), ocrRef.current.listElements(caseId, value.id)])
+        if (runEpoch.current !== generation) return false
+        setPages(pageItems)
+        setElements(elementItems)
+      }
+      return runEpoch.current === generation
+    } catch (error) {
+      if (runEpoch.current === generation) fail(error)
+      return false
     }
-  }, [caseId])
+  }, [caseId, fail])
 
   useEffect(() => {
     let cancelled = false
@@ -86,11 +96,11 @@ export function usePolicyOcr(caseId: string) {
       const ocrRuns = await ocrRef.current.listRuns(caseId, selected)
       if (cancelled) return
       setRuns(ocrRuns)
-      await loadRun(ocrRuns[0] ?? null)
-      if (!cancelled) setStatus('ok')
+      const loaded = await loadRun(ocrRuns[0] ?? null)
+      if (!cancelled && loaded) setStatus('ok')
     }).catch((error) => { if (!cancelled) fail(error) })
-    return () => { cancelled = true }
-  }, [caseId, fail, loadRun, setStatus, version])
+    return () => { cancelled = true; invalidateRun() }
+  }, [caseId, fail, invalidateRun, loadRun, setStatus, version])
 
   useEffect(() => {
     if (selectedExtraction === null) return undefined
@@ -103,61 +113,88 @@ export function usePolicyOcr(caseId: string) {
 
   useEffect(() => {
     if (current === null || !activeStatuses.includes(current.status)) return
+    let cancelled = false
+    let inFlight = false
     const timer = setInterval(() => {
+      if (cancelled || inFlight) return
+      inFlight = true
+      const generation = runEpoch.current
       void ocrRef.current.getRun(caseId, current.id).then(async (value) => {
+        if (cancelled || runEpoch.current !== generation) return
         setRuns((items) => items.map((item) => item.id === value.id ? value : item))
         await loadRun(value)
-        if (!activeStatuses.includes(value.status)) setVersion((item) => item + 1)
-      }).catch(fail)
+      }).catch(error => { if (!cancelled) fail(error) }).finally(() => { inFlight = false })
     }, 1200)
-    return () => clearInterval(timer)
+    return () => { cancelled = true; clearInterval(timer) }
   }, [caseId, current, fail, loadRun])
 
   const create = useCallback(async () => {
     if (source === null || selectedExtraction === null || busy) return
+    let generation = runEpoch.current
     setBusy(true)
-    keyRef.current ??= crypto.randomUUID()
+    const identity = `${caseId}:${source.documentVersionId}:${selectedExtraction.id}:${language}:${renderProfile}`
+    if (keyRef.current?.identity !== identity) keyRef.current = { identity, value: crypto.randomUUID() }
     try {
-      const value = await ocrRef.current.createRun(caseId, source, selectedExtraction.id, language, renderProfile, keyRef.current)
+      const value = await ocrRef.current.createRun(caseId, source, selectedExtraction.id, language, renderProfile, keyRef.current.value)
+      if (runEpoch.current !== generation) return
       keyRef.current = null
       setRuns((items) => [value, ...items.filter((item) => item.id !== value.id)])
-      await loadRun(value)
-      setStatus('ok')
-    } catch (error) { fail(error) } finally { setBusy(false) }
+      const pending = loadRun(value)
+      generation = runEpoch.current
+      if (await pending) setStatus('ok')
+    } catch (error) { if (runEpoch.current === generation) fail(error) }
+    finally { if (runEpoch.current === generation) setBusy(false) }
   }, [busy, caseId, fail, language, loadRun, renderProfile, selectedExtraction, setStatus, source])
 
   const retryRun = useCallback(async () => {
     if (current === null || busy) return
+    let generation = runEpoch.current
     setBusy(true)
     try {
       const value = await ocrRef.current.retryRun(caseId, current, crypto.randomUUID())
+      if (runEpoch.current !== generation) return
       setRuns((items) => [value, ...items])
-      await loadRun(value)
-    } catch (error) { fail(error) } finally { setBusy(false) }
+      const pending = loadRun(value)
+      generation = runEpoch.current
+      await pending
+    } catch (error) { if (runEpoch.current === generation) fail(error) }
+    finally { if (runEpoch.current === generation) setBusy(false) }
   }, [busy, caseId, current, fail, loadRun])
 
   const makeReference = useCallback(async (item: PolicyOcrElementRecord) => {
     if (current === null || busy) return
+    const generation = runEpoch.current
     setBusy(true)
-    try { setReference(await ocrRef.current.createSourceReference(caseId, current, item, elements, crypto.randomUUID())) }
-    catch (error) { fail(error) }
-    finally { setBusy(false) }
+    try {
+      const value = await ocrRef.current.createSourceReference(caseId, current, item, elements, crypto.randomUUID())
+      if (runEpoch.current === generation) setReference(value)
+    } catch (error) { if (runEpoch.current === generation) fail(error) }
+    finally { if (runEpoch.current === generation) setBusy(false) }
   }, [busy, caseId, current, elements, fail])
 
   const changeElementPage = useCallback(async (nextPage: number) => {
     if (current === null || busy || nextPage < 1) return
+    const generation = runEpoch.current
     setBusy(true)
     try {
-      setElements(await ocrRef.current.listElements(caseId, current.id, nextPage))
+      const items = await ocrRef.current.listElements(caseId, current.id, nextPage)
+      if (runEpoch.current !== generation) return
+      setElements(items)
       setElementPage(nextPage)
-    } catch (error) { fail(error) } finally { setBusy(false) }
+    } catch (error) { if (runEpoch.current === generation) fail(error) }
+    finally { if (runEpoch.current === generation) setBusy(false) }
   }, [busy, caseId, current, fail])
 
   return {
     source, extractions, selectedExtraction, pdfPages, runs, current, pages, elements, elementPage, reference,
     language, renderProfile, status, busy, setLanguage, setRenderProfile, create,
     selectExtraction: (id: string) => setSelectedExtraction(extractions.find((item) => item.id === id) ?? null),
-    selectRun: (id: string) => { const value = runs.find((item) => item.id === id) ?? null; setBusy(true); void loadRun(value).catch(fail).finally(() => setBusy(false)) },
+    selectRun: (id: string) => {
+      const value = runs.find((item) => item.id === id) ?? null
+      setBusy(true)
+      const pending = loadRun(value), generation = runEpoch.current
+      void pending.finally(() => { if (runEpoch.current === generation) setBusy(false) })
+    },
     retryRun, makeReference, changeElementPage, retry: () => setVersion((item) => item + 1),
   }
 }

@@ -11,7 +11,7 @@ function response(status: number, body: unknown) { return new Response(JSON.stri
 afterEach(() => vi.restoreAllMocks())
 
 describe('Kasko PDF metin çıkarım görünümü', () => {
-  it('exact parser/sürüm, sayfa, segment ve server kaynak referansını gerçek API’den gösterir', async () => {
+  it.each(['6.1.200', '6.2.108'])('exact parser %s, sayfa, segment ve server kaynak referansını gerçek API’den gösterir', async (parserVersion) => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
       if (init?.method === 'POST' && url.endsWith('/source-reference')) return response(200, { sourceReference: { sourceKey: 'pdf-1-0', documentId: DOC, documentVersionId: VERSION, pageNumber: 1, sectionHeading: 'KASKO', clauseIdentifier: 'PDF-1', rawExcerpt: segment.text, locator: `pdf-text:${EXTRACTION}:${PAGE}:0-23`, sourceType: 'policy', confidence: 1, extractionLocator: { extractionId: EXTRACTION, pageId: PAGE, segmentId: SEGMENT, startOffset: 0, endOffset: 23 } } })
@@ -19,12 +19,12 @@ describe('Kasko PDF metin çıkarım görünümü', () => {
       if (url.endsWith(`/documents/${DOC}`)) return response(200, { document: { versions: [{ id: VERSION, versionNumber: 1, displayName: 'Sentetik Kasko Poliçesi', mimeType: 'application/pdf', extension: 'pdf', byteSize: 1000, status: 'ready', hashVerified: true, sizeVerified: true, verifiedAt: '2026-07-14T08:00:00.000Z' }] } })
       if (url.includes('/pages?')) return response(200, { items: [page] })
       if (url.includes('/segments?')) return response(200, { items: [segment] })
-      return response(200, { items: [extraction] })
+      return response(200, { items: [{ ...extraction, parserVersion }] })
     }) as never)
     const user = userEvent.setup(); render(<PolicyPdfTextApiModule caseId={CASE} source="api" />)
     expect(screen.getByRole('status')).toHaveTextContent('yükleniyor')
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Poliçe Metin Çıkarımı' })).toBeInTheDocument())
-    expect(screen.getByText('pdfjs-dist 6.1.200')).toBeInTheDocument(); expect(screen.getByText(/pdf-text-normalization\/1.0.0/)).toBeInTheDocument(); expect(screen.getAllByText('KASKO POLICE OZEL SART')).toHaveLength(2)
+    expect(screen.getByText(`pdfjs-dist ${parserVersion}`)).toBeInTheDocument(); expect(screen.getByText(/pdf-text-normalization\/1.0.0/)).toBeInTheDocument(); expect(screen.getAllByText('KASKO POLICE OZEL SART')).toHaveLength(2)
     await user.click(screen.getByRole('button', { name: /Sayfa 1 · title/ }))
     await waitFor(() => expect(screen.getByText('Kaynak referansı doğrulandı')).toBeInTheDocument())
     expect(screen.getByText(`pdf-text:${EXTRACTION}:${PAGE}:0-23`)).toBeInTheDocument(); expect(document.body.textContent).not.toMatch(/[A-Z]:\\|password|secret/i)

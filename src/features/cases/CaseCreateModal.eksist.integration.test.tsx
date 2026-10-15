@@ -58,7 +58,8 @@ describe.skipIf(!testUrl)('UI → real API → isolated PostgreSQL → real File
     await screen.findByLabelText('Eksist talep referansı *')
     fireEvent.change(screen.getByLabelText(/İhbar tarihi/), { target: { value: '2026-09-19' } })
     await userEvent.click(screen.getByRole('button', { name: button }))
-    await screen.findByText(/henüz doğrulanmadı/)
+    // Real parsing and database transactions can exceed jsdom's default one second.
+    await screen.findByText(/henüz doğrulanmadı/, {}, { timeout: 5000 })
     expect(screen.queryByText(/DOĞRULANDI/)).not.toBeInTheDocument()
     const client = createAgentApiClient({ baseUrl: '', agentId: config.agentId, secret: config.agentSecret, fetchImpl })
     const run = await runOnce(client, config)

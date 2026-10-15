@@ -159,7 +159,8 @@ try {
 
   assertContains(maintenanceGate, /MINIMUM_QUIET_SECONDS = 600/, 'pcloud-maintenance-window-gate.mjs', 'değiştirilemez en az 600 saniye kapısı')
   assertContains(maintenanceGate, /getTextSetting\(database, 'diffid'/, 'pcloud-maintenance-window-gate.mjs', 'pCloud diff cursor okuması')
-  assertContains(maintenanceGate, /\$\{path\.basename\(databasePath\)\}-wal/, 'pcloud-maintenance-window-gate.mjs', 'WAL dahil canlı DB snapshot')
+  assertContains(maintenanceGate, /await backup\(source, snapshotPath/, 'pcloud-maintenance-window-gate.mjs', 'canlı DB için tutarlı online snapshot')
+  assertContains(maintenanceGate, /\['', '-wal', '-journal'\]/, 'pcloud-maintenance-window-gate.mjs', 'kilitli DB kopyasında WAL ve journal dahil')
   assertContains(maintenanceGate, /compareEntryMaps/, 'pcloud-maintenance-window-gate.mjs', 'create/modify/delete fark sayacı')
   assertContains(maintenanceGate, /MAINTENANCE_WINDOW_RESET/, 'pcloud-maintenance-window-gate.mjs', 'yazar hareketinde süre sıfırlama raporu')
   assertContains(maintenanceGate, /PCLOUD_CHANGED_DURING_OBSERVATION/, 'pcloud-maintenance-window-gate.mjs', 'örnek içi uzak harekette fail-closed reset')

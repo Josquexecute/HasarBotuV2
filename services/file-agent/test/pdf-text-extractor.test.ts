@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { JobPayload, PdfExtractionChunkRequest } from '@hasarbotu/contracts'
 import { extractPdfText } from '../src/pdf-text-extractor.js'
@@ -49,7 +50,7 @@ const extractionId = '00000000-0000-4000-8000-000000000024'
 function payload(pdf: Buffer, overrides: Partial<Extract<JobPayload, { kind: 'pdf_text_extraction' }>> = {}): Extract<JobPayload, { kind: 'pdf_text_extraction' }> {
   return {
     kind: 'pdf_text_extraction', extractionId, extractionVersion: 1, storageRootKey: 'test-root', relativePath: 'EVRAK/policy.pdf',
-    declaredHash: createHash('sha256').update(pdf).digest('hex'), declaredSize: pdf.length, parserVersion: '6.1.200', normalizationVersion: 'pdf-text-normalization/1.0.0',
+    declaredHash: createHash('sha256').update(pdf).digest('hex'), declaredSize: pdf.length, parserVersion: '6.2.108', normalizationVersion: 'pdf-text-normalization/1.0.0',
     maxSourceBytes: 2_000_000, maxPages: 20, maxPageCharacters: 20_000, maxTotalCharacters: 100_000, timeoutMs: 20_000, workerMemoryMb: 192,
     ...overrides,
   }
@@ -68,11 +69,17 @@ describe('güvenli PDF metin çıkarıcı', () => {
     return { result, chunks }
   }
 
+  it('rejects a job for another parser version before publishing evidence', async () => {
+    const { result, chunks } = await run(syntheticPdf([{ kind: 'text', text: 'POLICE' }]), { parserVersion: '6.1.200' })
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'parser_version_mismatch' })
+    expect(chunks).toEqual([])
+  })
+
   it('metin katmanlı sentetik PDF için raw/normalized sayfa, segment ve exact parser sürümü üretir', async () => {
     const pdf = syntheticPdf([{ kind: 'text', text: 'KASKO POLICE OZEL SART' }])
     const first = await run(pdf)
     expect(first.result.outcome, JSON.stringify(first.result)).toBe('verified')
-    expect(first.result.pdfExtraction).toMatchObject({ status: 'ready', parserVersion: '6.1.200', normalizationVersion: 'pdf-text-normalization/1.0.0', pageCount: 1, textPageCount: 1, segmentCount: 1 })
+    expect(first.result.pdfExtraction).toMatchObject({ status: 'ready', parserVersion: createRequire(import.meta.url)('pdfjs-dist/package.json').version, normalizationVersion: 'pdf-text-normalization/1.0.0', pageCount: 1, textPageCount: 1, segmentCount: 1 })
     expect(first.chunks[0]?.pages[0]).toMatchObject({ pageNumber: 1, status: 'text', normalizedText: 'KASKO POLICE OZEL SART' })
     const second = await run(pdf)
     expect(second.result.pdfExtraction?.outputHash).toBe(first.result.pdfExtraction?.outputHash)

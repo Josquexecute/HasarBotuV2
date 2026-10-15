@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
 import { Worker } from 'node:worker_threads'
 import type { JobPayload, PdfExtractionChunkRequest, PdfExtractionResultSummary } from '@hasarbotu/contracts'
+import { PDF_TEXT_PARSER_VERSION } from '@hasarbotu/domain'
 import { assertRealPathUnderRoot, PathSafetyError, resolveUnderRoot } from './path-resolver.js'
 import { streamSha256 } from './verifier.js'
 import type { PdfParserWorkerInput, PdfParserWorkerMessage } from './pdf-parser-protocol.js'
@@ -130,6 +131,7 @@ export async function extractPdfText(
   payload: Payload,
   hooks: PdfTextExtractorHooks,
 ): Promise<PdfTextExtractionResult> {
+  if (payload.parserVersion !== PDF_TEXT_PARSER_VERSION) return { outcome: 'failed', errorCode: 'parser_version_mismatch' }
   let temporaryDirectory: string | undefined
   try {
     const candidate = resolveUnderRoot(rootAbsolute, payload.relativePath)

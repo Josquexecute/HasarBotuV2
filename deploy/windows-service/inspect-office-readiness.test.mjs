@@ -83,7 +83,8 @@ if (File.Exists(exitFile)) Environment.Exit(int.Parse(File.ReadAllText(exitFile)
       `Add-Type -TypeDefinition ([IO.File]::ReadAllText(${quote(sourceFile)})) -OutputAssembly ${quote(cli)} -OutputType ConsoleApplication`], base)
     assert.equal(compile.code, 0, compile.stderr)
     const env = { ...process.env, ProgramFiles: programDirectory, 'ProgramFiles(x86)': programDirectory,
-      PATH: `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}\\System32\\WindowsPowerShell\\v1.0` }
+      // Get-Command must resolve the fixture even when a real Tailscale is installed.
+      PATH: `${cliDirectory};${process.env.SystemRoot}\\System32;${process.env.SystemRoot}\\System32\\WindowsPowerShell\\v1.0` }
     const args = ['-ExpectedComputerName', process.env.COMPUTERNAME, '-StorageRoot', path.join(directory, 'evrak')]
     await writeFile(path.join(cliDirectory, 'status.json'), JSON.stringify({
       BackendState: 'Running', TailscaleIPs: ['100.79.207.106'], PrivateKey: 'SECRET_NOT_FOR_REPORT',

@@ -14,6 +14,52 @@ const segment: PdfTextSegmentRecord = { id: SEGMENT, extractionId: EXTRACTION, p
 function response(status: number, body: unknown) { return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }) }
 
 describe('Policy PDF Text HttpApiAdapter', () => {
+  it('keeps readable page text beyond page 100', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const pageNumber = Number(new URL(String(input), 'http://localhost').searchParams.get('page'))
+      return response(200, {
+        items: Array.from({ length: pageNumber === 1 ? 100 : 1 }, (_, index) => ({
+          id: `page-${pageNumber}-${index}`, pageNumber: (pageNumber - 1) * 100 + index + 1,
+          status: 'text', rawText: 'POLICE', normalizedText: 'POLICE', segmentCount: 1,
+        })), pageInfo: { page: pageNumber, totalPages: 2 },
+      })
+    })
+    const items = await createHttpPolicyPdfTextAdapter({ fetchImpl }).listPages(CASE, EXTRACTION)
+    expect(items).toHaveLength(101)
+    expect(items.at(-1)?.pageNumber).toBe(101)
+  })
+
+  it('reads every segment page rather than silently truncating evidence at 100 segments', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const page = Number(new URL(String(input), 'http://localhost').searchParams.get('page'))
+      return response(200, {
+        items: Array.from({ length: page === 3 ? 1 : 100 }, (_, index) => ({ ...segment, id: `segment-${(page - 1) * 100 + index}` })),
+        pageInfo: { page, pageSize: 100, totalItems: 201, totalPages: 3 },
+      })
+    })
+    const items = await createHttpPolicyPdfTextAdapter({ fetchImpl }).listSegments(CASE, EXTRACTION, 1)
+    expect(items).toHaveLength(201)
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+    expect(fetchImpl.mock.calls.every(([url]) => String(url).endsWith('&pageNumber=1'))).toBe(true)
+  })
+
+  it('finds policy sources beyond the first hundred documents', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.includes(`/documents/${DOC}`)) return response(200, { document: { versions: [{ ...source, id: VERSION, extension: 'pdf', hashVerified: true, sizeVerified: true }] } })
+      const page = Number(new URL(url, 'http://localhost').searchParams.get('page'))
+      return response(200, { items: page === 1 ? [{ id: 'other', documentType: 'ruhsat' }] : [{ id: DOC, documentType: 'casco_policy' }], pageInfo: { page, totalPages: 2 } })
+    })
+    expect(await createHttpPolicyPdfTextAdapter({ fetchImpl }).listSources(CASE)).toEqual([source])
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
+  it('rejects a repeating pagination response instead of looping indefinitely', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => response(200, { items: [], pageInfo: { page: 1, totalPages: 2 } }))
+    await expect(createHttpPolicyPdfTextAdapter({ fetchImpl }).listPages(CASE, EXTRACTION)).rejects.toMatchObject({ kind: 'unavailable' })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
   it('yalnız ready/hash/size/verified Kasko PDF sürümlerini kaynak listesine alır', async () => {
     const fetchImpl = vi.fn(async (input: string | URL | Request) => String(input).includes(`/documents/${DOC}`)
       ? response(200, { document: { versions: [{ id: VERSION, versionNumber: 2, displayName: 'Sentetik Poliçe', mimeType: 'application/pdf', extension: 'pdf', byteSize: 1000, status: 'ready', hashVerified: true, sizeVerified: true, verifiedAt: '2026-07-14T08:00:00.000Z' }, { id: 'pending', versionNumber: 1, displayName: 'Bekleyen', mimeType: 'application/pdf', extension: 'pdf', byteSize: 100, status: 'pending', hashVerified: false, sizeVerified: false, verifiedAt: null }] } })

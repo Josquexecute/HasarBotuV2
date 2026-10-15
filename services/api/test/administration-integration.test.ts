@@ -28,7 +28,8 @@ describeDb('office administration runtime effects (isolated PostgreSQL)',() => {
     org = uuidv7();foreignOrg = uuidv7()
     await pool.query("INSERT INTO organizations(id,code,name) VALUES($1,'administration-a','A'),($2,'administration-b','B')",[org,foreignOrg])
     await pool.query("INSERT INTO insurers(id,organization_id,name,is_active,version) VALUES($1,$2,'AK Sigorta A.Ş.',false,4)",[uuidv7(),org])
-    expect((await runMigrations({ databaseUrl: config.url,quiet: true })).map(item => item.name)).toEqual(['0059_active_insurer_catalog'])
+    expect((await runMigrations({ databaseUrl: config.url,quiet: true,count: 1 })).map(item => item.name)).toEqual(['0059_active_insurer_catalog'])
+    await runMigrations({ databaseUrl: config.url,quiet: true })
     app = buildApp({ loggerEnabled: false,auth: { pool,cookieSecure: false } });await app.ready()
     const admin = await addUser(org,'admin'),owner = await addUser(org,'case_manager'),foreign = await addUser(foreignOrg,'admin')
     manager = admin.id;adminCookie = admin.cookie;operator = owner.id;operatorCookie = owner.cookie;foreignCookie = foreign.cookie

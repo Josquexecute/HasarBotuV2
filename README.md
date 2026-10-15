@@ -73,7 +73,7 @@ AI bu uygulamada yalnız **karar desteği** sağlar. Dosya kapatma, klasör taş
 - **API**: kimlik doğrulama, RBAC (6 rol), audit trail, tüm iş kuralları.
 - **Masaüstü**: iş mantığı taşımayan ince Electron kabuğu; tek origin, sıkı CSP, sandbox açık.
 
-Ayrıntılı mimari kararları için `docs/ARCHITECTURE.md` ve `docs/DECISION_LOG.md`.
+Katman ayrıntıları için [API](./services/api/README.md), [masaüstü](./apps/desktop/README.md) ve [Windows servis](./deploy/windows-service/README.md) kılavuzlarına bakın.
 
 ---
 
@@ -117,7 +117,7 @@ HasarBotuV2/
 
 Node.js **24.x** gerekir (`>=24 <25`). Kilit dosyasını korumak için temiz
 kurulumda `npm ci` kullanılır. Bu bilgisayarın hazırlığı ve test aşamasına
-geçiş için [yerel geliştirme kılavuzuna](./docs/LOCAL_DEVELOPMENT.md) bakın.
+geçiş için [API geliştirme kılavuzuna](./services/api/README.md) bakın.
 
 ```bash
 # Bağımlılıkları kur (workspace paketlerini de derler)

@@ -190,6 +190,67 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await snapshot(ownerCookie,id)).tramer[0]?.status).toBe('completed')
   })
 
+  it('alerts the owner when automatic processing is disabled without claiming completion or duplicating accounts',async () => {
+    const id = await createCase();await submit(id,'000310')
+    const recipient = await user(org,'review-popup-owner@baranekspertiz.com','case_manager')
+    const recipientCookie = await login('review-popup-owner@baranekspertiz.com')
+    await pool.query('UPDATE cases SET responsible_user_id=$2 WHERE id=$1',[id,recipient])
+    const accounts = [await connection('review-alert-one@baranekspertiz.com'),await connection('review-alert-two@baranekspertiz.com')]
+    const result = { applicationNumber: '000310',status: 'completed' as const,text: 'Sonuç: Tamamlandı',evidenceHash: 'c'.repeat(64),reason: null }
+    for (const connectionId of accounts) await ingestSbmResult(pool,{ connectionId,messageId: 'review-alert',receivedAt: new Date(),result,automatic: false })
+    const data = await snapshot(recipientCookie,id)
+    expect(data.tramer[0]?.status).toBe('result_pending')
+    expect(data.notifications).toHaveLength(1)
+    expect(data.notifications[0]?.title).toContain('000310')
+    expect(data.notifications[0]?.title).toContain('kontrol bekliyor')
+    expect((await snapshot(operatorCookie,id)).notifications).toHaveLength(0)
+    const pending = await app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/pending',headers: { cookie: recipientCookie } })
+    expect(pending.statusCode).toBe(200)
+    expect(pending.json().notifications).toEqual([expect.objectContaining({ caseId: id,title: data.notifications[0]!.title })])
+    const inbox = await app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/inbox?read=all',headers: { cookie: recipientCookie } })
+    expect(inbox.json().notifications).toContainEqual(expect.objectContaining({ caseId: id,title: data.notifications[0]!.title,readAt: null }))
+  })
+
+  it('links an already received result when its number is saved and requires explicit review',async () => {
+    const id = await createCase(),c = await connection('early-result@baranekspertiz.com')
+    const result = { applicationNumber: '000311',status: 'completed' as const,text: 'Sonuç: Tamamlandı',evidenceHash: 'd'.repeat(64),reason: null }
+    await ingestSbmResult(pool,{ connectionId: c,messageId: 'before-number',receivedAt: new Date(),result,automatic: true })
+    await submit(id,'000311')
+    const data = await snapshot(ownerCookie,id)
+    expect(data.tramer[0]).toMatchObject({ applicationNumber: '000311',status: 'result_pending' })
+    expect(data.notifications).toHaveLength(1)
+    expect(data.notifications[0]?.title).toContain('kontrol bekliyor')
+    const message = (await pool.query('SELECT id,tramer_id,reason,status FROM sbm_messages WHERE connection_id=$1',[c])).rows[0]
+    expect(message).toMatchObject({ tramer_id: data.tramer[0]!.id,reason: 'number_registered_after_message',status: 'review' })
+    const applied = await app.inject({ method: 'POST',url: `/api/v1/tracking/sbm/${message.id}/review`,headers: { cookie: managerCookie },payload: { action: 'apply',applicationNumber: '000311',resultStatus: 'completed',note: 'Erken gelen sonuç doğrulandı.' } })
+    expect(applied.statusCode,applied.payload).toBe(204)
+    expect((await snapshot(ownerCookie,id)).tramer[0]?.status).toBe('completed')
+  })
+
+  it('never turns an entry notice or an untrusted message into an owner result alert',async () => {
+    const id = await createCase();await submit(id,'000312')
+    const c = await connection('non-result-alert@baranekspertiz.com')
+    for (const reason of ['non_result_notification','untrusted_sender']) await ingestSbmResult(pool,{ connectionId: c,messageId: reason,receivedAt: new Date(),automatic: true,result: { applicationNumber: '000312',status: null,text: reason,evidenceHash: 'e'.repeat(64),reason } })
+    const data = await snapshot(ownerCookie,id)
+    expect(data.tramer[0]?.status).toBe('result_pending')
+    expect(data.notifications).toHaveLength(0)
+  })
+
+  it('does not lose an alert when number registration and result ingestion happen concurrently',async () => {
+    const id = await createCase(),c = await connection('simultaneous-result@baranekspertiz.com')
+    expect((await command(id,{ action: 'assign',assignedUserId: operator })).statusCode).toBe(204)
+    const result = { applicationNumber: '000313',status: 'completed' as const,text: 'Sonuç: Tamamlandı',evidenceHash: 'f'.repeat(64),reason: null }
+    const [saved] = await Promise.all([
+      command(id,{ action: 'number',applicationNumber: '000313',expectedVersion: 1 },operatorCookie),
+      ingestSbmResult(pool,{ connectionId: c,messageId: 'simultaneous-result',receivedAt: new Date(),result,automatic: true }),
+    ])
+    expect(saved.statusCode,saved.payload).toBe(204)
+    const data = await snapshot(ownerCookie,id)
+    expect(data.notifications).toHaveLength(1)
+    expect(['completed','result_pending']).toContain(data.tramer[0]?.status)
+    expect((await pool.query('SELECT tramer_id FROM sbm_messages WHERE connection_id=$1',[c])).rows[0].tramer_id).toBe(data.tramer[0]!.id)
+  })
+
   it('infers new and existing photo types while preserving owner approval and document requirements',async () => {
     const caseId = await createCase()
     await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'photo-root','Photos')", [uuidv7(),org])

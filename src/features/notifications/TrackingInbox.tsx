@@ -19,6 +19,11 @@ export function TrackingInbox() {
   const [saving,setSaving] = useState<string | null>(null)
   const inFlight = useRef(false)
   useEffect(() => {
+    const refresh = () => setVersion((value) => value+1)
+    window.addEventListener('tracking-received',refresh)
+    return () => window.removeEventListener('tracking-received',refresh)
+  },[])
+  useEffect(() => {
     const controller = new AbortController()
     void trackingRequest(`tracking/notifications/inbox?page=${page}&read=${read}`,undefined,controller.signal)
       .then((response) => {

@@ -12,6 +12,17 @@ function install(data: TrackingSnapshot) {
   return vi.spyOn(globalThis,'fetch').mockImplementation(async (_url,options) => options?.method === 'POST' ? new Response(null,{ status: 204 }) : Response.json(data))
 }
 describe('tracking screens',() => {
+  it('refreshes the open case status when a new mailbox notification arrives',async () => {
+    const data = structuredClone(base)
+    data.tramer = [{ id: 'job',caseId: 'case',plate: '34 TEST 123',officeNumber: '1',assignedUserId: 'operator',assignedName: 'Tramer çalışanı',applicationNumber: '000310',status: 'result_pending',resultText: null,version: 2,canEdit: true }]
+    install(data)
+    render(<MemoryRouter><TrackingWorkspace caseId="case" /></MemoryRouter>)
+    await screen.findByText('Sonuç bekleniyor')
+    data.tramer[0] = { ...data.tramer[0]!,status: 'completed',resultText: 'Sonuç: Tamamlandı',version: 3 }
+    fireEvent(window,new Event('tracking-received'))
+    expect(await screen.findByText('Tamamlandı',{ selector: 'strong' })).toBeInTheDocument()
+    expect(screen.getByText('Sonuç: Tamamlandı')).toBeInTheDocument()
+  })
   it('loads large lists in batches without losing an existing review draft',async () => {
     const data = structuredClone(base)
     const time = new Date().toISOString()

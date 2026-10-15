@@ -96,3 +96,32 @@ Bu dosya uygulama ve doğrulama kaydıdır. Gerçek hesap/e-posta ile sınanmaya
 - İzole test PostgreSQL kümesi çalışma sonunda durduruldu. Üretim verisi, Google ayarları ve `SBM_AUTOMATIC_ENABLED` değiştirilmedi. Genel durum **PARTIAL**.
 
 Google uygulama sınırları için kullanılan birincil kaynaklar: [OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect), [OAuth sunucu akışı](https://developers.google.com/identity/protocols/oauth2/web-server), [Gmail senkronizasyonu](https://developers.google.com/workspace/gmail/api/guides/sync).
+
+### 2026-10-15 Tramer numarası ve sonuç uyarısı kabulü
+
+Yerel yazılım kabulü **PASS**, gerçek ofis/Gmail kabulü **PARTIAL**.
+
+Üç hata düzeltildi:
+
+- Otomasyon kapalıyken eşleşen sonuç yalnız kontrol kuyruğunda kalıyordu. Artık dosya sorumlusuna kalıcı ve uygulama içi **kontrol bekliyor** uyarısı gider; sonuç insan onayı olmadan tamamlandı sayılmaz. Farklı posta hesaplarındaki aynı sonuç tek kontrol bildirimi üretir.
+- Numara kaydedilmeden önce alınmış sonuç bir daha eşleştirilmiyordu. Numara kaydı mevcut bekleyen mesajları dosyaya bağlar ve kontrol uyarısı oluşturur. Numara kaydı ile mesaj alımı aynı anda olduğunda işlem kilidi eşleştirme aralığını korur. Önceden gelmiş sonuç açık insan onayıyla uygulanır.
+- Yeni sonuç uyarısı açık dosyadaki eski durumu yenilemiyordu. Yeni bildirim alımı açık takip alanını ve bildirim gelen kutusunu yeniler.
+
+Yeni regresyon testleri ilk iki hatada bildirimin hiç oluşmadığını, üçüncü hatada açık dosyanın eski durumda kaldığını düzeltmeden önce doğruladı. Önceki kontrol kuyruğu testi yalnız durum geçişini denetliyordu; bildirim üretimini ve erken gelen mesajı kapsamıyordu.
+
+Bu oturumdaki doğrulama:
+
+| Kontrol | Sonuç |
+|---|---|
+| API testlerinin tamamı; ayrı PostgreSQL test veritabanı | **617/617**, atlama yok |
+| Tramer/bildirim ekran testleri | **21/21**, atlama yok |
+| Gerçek Electron → HTTP API → PostgreSQL → posta işçisi → ekrandaki uyarı | **1/1**, 10 kabul kontrolü |
+| Build; API/desktop tip kontrolü; değişen kodun lint kontrolü | **PASS** |
+
+Gerçek Electron testinde uzun ve sıfırla başlayan numara ekrandan kaydedildi, sayfa yenilenince korundu, aynı numaralı sentetik posta normal zamanlayıcıyla doğru plaka ve dosya bağlantısını taşıyan uyarıya dönüştü, açık dosya tamamlandı durumuna geçti. Tekrar tarama mükerrer bildirim üretmedi. Masaüstü penceresi kapalıyken gelen ikinci sonuç yeniden açılışta gelen kutusunda görüldü. Sağlayıcı sentetiktir; canlı Gmail kabulü yerine geçmez.
+
+Kanıt: `.local/tramer-audit-20261015/`; `regression-red.log`, `open-status-red.log`, `api-all.log`, `ui-final.log`, `desktop-tramer-final.log`; görseller ve 10 kabul kontrolü `ui-evidence/` altındadır.
+
+Ofis API'sinin salt okunur `/health` ve `/api/v1/google/status` kontrolleri HTTP 200; Google entegrasyonu etkin. Bu bilgi bağlı posta hesabının izinlerini, son başarılı taramasını veya `SBM_AUTOMATIC_ENABLED` değerini doğrulamaz. Canlı hesapla numara → gerçek SBM sonucu → doğru sorumluya uyarı kabulü yapılmadı. Bu düzeltmeler ofis servisine dağıtılmadı; önceki Windows kurulum paketi bu değişiklikleri içermez.
+
+Uyarılar uygulama içindedir. Masaüstü tamamen kapalıyken merkezi API/posta işçisi çalışıyorsa sonuç saklanır ve uygulama yeniden açılınca gösterilir; anlık Windows sistem bildirimi bu akışta uygulanmış değildir. Desteklenmeyen veya çelişkili gerçek SBM sonuç biçimleri insan kontrolünde kalır; KTT giriş ihbarı sonuç uyarısı üretmez.

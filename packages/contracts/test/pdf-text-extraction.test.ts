@@ -32,6 +32,7 @@ describe('PDF metin çıkarım contracts', () => {
   it('response parser ve normalizasyon sürümünü sessizce genişletmez', () => {
     const base = { id: id('1'), caseId: id('2'), documentId: id('3'), documentVersionId: id('4'), extractionVersion: 1, status: 'ready', parserName: 'pdfjs-dist', parserVersion: '6.1.200', normalizationVersion: 'pdf-text-normalization/1.0.0', offsetUnit: 'unicode_code_point', sourceHash: hash, sourceSize: 100, pageCount: 1, textPageCount: 1, imageOnlyPageCount: 0, emptyPageCount: 0, failedPageCount: 0, segmentCount: 1, rawCharacterCount: 5, normalizedCharacterCount: 5, outputHash: hash, failureCode: null, activeJobId: null, version: 2, createdAt: '2026-07-14T08:00:00.000Z', startedAt: '2026-07-14T08:00:01.000Z', completedAt: '2026-07-14T08:00:02.000Z' }
     expect(pdfTextExtractionSchema.parse(base).parserVersion).toBe('6.1.200')
+    expect(pdfTextExtractionSchema.parse({ ...base, parserVersion: '6.2.108' }).parserVersion).toBe('6.2.108')
     expect(pdfTextExtractionSchema.safeParse({ ...base, parserVersion: 'latest' }).success).toBe(false)
   })
 })

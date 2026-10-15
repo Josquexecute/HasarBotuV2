@@ -12,6 +12,7 @@ export function TrackingPopup() {
   const [dismissing,setDismissing] = useState(false)
   const dismissInProgress = useRef(false)
   const generation = useRef(0)
+  const knownIds = useRef(new Set<string>())
   useEffect(() => {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout>
@@ -22,7 +23,12 @@ export function TrackingPopup() {
       const requestGeneration = generation.current
       try {
         const data = trackingPendingNotificationsSchema.parse(await trackingRequest('tracking/notifications/pending',undefined,controller.signal))
-        if (!controller.signal.aborted && requestGeneration === generation.current) { setItems(data.notifications);setError('') }
+        if (!controller.signal.aborted && requestGeneration === generation.current) {
+          const received = data.notifications.some((notice) => !knownIds.current.has(notice.id))
+          knownIds.current = new Set(data.notifications.map((notice) => notice.id))
+          setItems(data.notifications);setError('')
+          if (received) window.dispatchEvent(new Event('tracking-received'))
+        }
       } catch {
         if (!controller.signal.aborted) setError('Yeni bildirimler alınamıyor.')
       } finally {

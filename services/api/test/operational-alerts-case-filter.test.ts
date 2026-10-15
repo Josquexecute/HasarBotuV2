@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
+import { rmSync } from 'node:fs'
 import {
   AUTH_LOGIN_ROUTE,
   OPERATIONAL_ALERTS_ROUTE,
@@ -11,11 +12,15 @@ import {
   assertTestDatabaseUrl,
   closeDatabasePool,
   createDatabasePool,
-  runMigrations,
+  runMigrations as runMigrationsPackage,
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
 import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { createHistoricalMigrationDirectory } from '../test-support/historical-migrations.js'
+
+let migrationDirectory: string
+const runMigrations = (options: Parameters<typeof runMigrationsPackage>[0]) => runMigrationsPackage({ ...options, dir: migrationDirectory })
 
 /**
  * Paket 52 — `caseIds` filtresi, tenant sınırı ve 200 sınırı kaynaklı
@@ -137,6 +142,7 @@ describeDb('Paket 52 operasyonel uyarı dosya filtresi', () => {
   }
 
   beforeAll(async () => {
+    migrationDirectory = createHistoricalMigrationDirectory('0058')
     config = assertTestDatabaseUrl(TEST_URL as string)
     pool = createDatabasePool({ config })
     await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
@@ -209,6 +215,7 @@ describeDb('Paket 52 operasyonel uyarı dosya filtresi', () => {
   afterAll(async () => {
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
+    if (migrationDirectory) rmSync(migrationDirectory, { recursive: true, force: true })
   })
 
   it('filtresiz çağrı davranışı değişmez ve dosya özeti taşımaz', async () => {
