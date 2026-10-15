@@ -8,6 +8,8 @@ import { probeApiReadiness } from './readiness.js'
 import { DesktopStartupAbortedError, guardWebContents, startDesktopShell } from './shell.js'
 import { startDesktopAssistant } from './assistant.js'
 import { startDesktopUpdates } from './updates.js'
+import { startCaseFolders } from './case-folder.js'
+import { hideToTrayOnClose } from './window-lifecycle.js'
 import { initializeOfficeConnection, readOfficeConnection } from './office-connection.js'
 
 /**
@@ -74,7 +76,8 @@ async function promptGate(message: GateMessage): Promise<GateChoice> {
 async function bootstrap(): Promise<void> {
   try {
     const office = app.isPackaged ? readOfficeConnection(join(process.resourcesPath, 'office-connection.json')) : undefined
-    const config = parseDesktopConfig(process.env, { assetRoot: defaultAssetRoot(), ...(office ? { apiOrigin: office.apiOrigin } : {}) })
+    const restartOrigin = app.commandLine.getSwitchValue('hasarbotu-api-origin')
+    const config = parseDesktopConfig({ ...process.env, ...(restartOrigin ? { HASARBOTU_API_ORIGIN: restartOrigin } : {}) }, { assetRoot: defaultAssetRoot(), ...(office ? { apiOrigin: office.apiOrigin } : {}) })
     let connectionSetup: string | undefined
     if (office && config.apiOrigin === office.apiOrigin && !(await probeApiReadiness({ apiOrigin: config.apiOrigin })).ready) {
       const result = await initializeOfficeConnection(join(process.resourcesPath, 'initialize-office-connection.ps1'))
@@ -110,9 +113,10 @@ async function bootstrap(): Promise<void> {
     })
     shellOrigin = shell.origin
     mainWindow = shell.window
+    hideToTrayOnClose(app, shell.window)
     startDesktopUpdates(shell, config.apiOrigin)
-    await startDesktopAssistant({ shell, assetRoot: config.assetRoot, userDataPath: app.getPath('userData'), quit: () => app.quit() })
-    // Closing the main window still exits; minimizing leaves the assistant available.
+    const assistant = await startDesktopAssistant({ shell, assetRoot: config.assetRoot, userDataPath: app.getPath('userData'), quit: () => app.quit() })
+    startCaseFolders(shell, app.getPath('userData'), app.isPackaged ? join(process.resourcesPath, 'folder-roots.json') : join(app.getAppPath(), 'build-resources', 'folder-roots.json'), config.apiOrigin, assistant.menuWindow)
     shell.window.once('closed', () => app.quit())
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {

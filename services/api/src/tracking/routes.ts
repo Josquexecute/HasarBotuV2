@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import { z } from 'zod'
-import { applicationNumberSchema, canonicalDocumentTypeSchema, trackingFileSchema, trackingSnapshotSchema, trackingInboxSchema, tramerCommandSchema } from '@hasarbotu/contracts'
+import { applicationNumberSchema, inferTrackedDocumentType, trackedDocumentTypeSchema, trackingFileSchema, trackingSnapshotSchema, trackingInboxSchema, tramerCommandSchema } from '@hasarbotu/contracts'
 import { createAuthStore } from '../auth/store.js'
 import { requireSession } from '../auth/guard.js'
 import { requireAgent } from '../agent/auth.js'
@@ -44,7 +44,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
           AND ($2::uuid IS NOT NULL OR (t.assigned_user_id=$3 AND t.status IN ('entry_pending','result_pending')))
           ORDER BY t.created_at DESC`, [org,query.caseId ?? null,user,manage,canWriteTracking(session)]),
         pool.query(`SELECT o.id,f.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",o.file_name AS "fileName",f.relative_path AS "relativePath",o.status,o.document_type AS "documentType",o.observed_at AS "observedAt",
-          (c.responsible_user_id=$3 AND o.status='pending') AS "canReview"
+          l.relative_path AS "caseRelativePath",(c.responsible_user_id=$3 AND o.status='pending') AS "canReview"
           FROM document_observations o JOIN tracked_files f ON f.id=o.file_id AND f.revision=o.revision JOIN cases c ON c.id=f.case_id
           JOIN case_locations l ON l.organization_id=f.organization_id AND l.case_id=f.case_id AND l.storage_root_key=f.storage_root_key AND left(f.relative_path,length(l.relative_path)+1)=l.relative_path||'/'
           WHERE f.organization_id=$1 AND NOT c.is_archived AND f.available AND ($2::uuid IS NULL OR f.case_id=$2)
@@ -62,7 +62,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
         pool.query(`SELECT kind,CASE WHEN last_attempt_at < now()-interval '3 minutes' THEN 'stale' WHEN error_code IS NOT NULL AND error_code <> 'scan_in_progress' THEN 'error' ELSE 'running' END AS status,
           last_attempt_at AS "lastAttemptAt",last_success_at AS "lastSuccessAt" FROM tracking_health WHERE organization_id=$1 ORDER BY kind,source_id`, [org]),
       ])
-      return trackingSnapshotSchema.parse(JSON.parse(JSON.stringify({ tramer: tramer.rows, documents: documents.rows.map((r) => ({ ...r,canReview: r.canReview === true && canWriteTracking(session) })), notifications: notifications.rows, mailConnections: connections.rows, reviews: reviews.rows, users: users.rows, history: history.rows, services: services.rows, canManage: manage, googleEnabled: options.googleEnabled, automaticSbmEnabled: options.automaticSbmEnabled })))
+      return trackingSnapshotSchema.parse(JSON.parse(JSON.stringify({ tramer: tramer.rows, documents: documents.rows.map((r) => ({ ...r,documentType: r.documentType ?? inferTrackedDocumentType(r.relativePath.slice(r.caseRelativePath.length + 1)),canReview: r.canReview === true && canWriteTracking(session) })), notifications: notifications.rows, mailConnections: connections.rows, reviews: reviews.rows, users: users.rows, history: history.rows, services: services.rows, canManage: manage, googleEnabled: options.googleEnabled, automaticSbmEnabled: options.automaticSbmEnabled })))
     })
     routes.post('/api/v1/tracking/cases/:caseId/tramer', async (request,reply) => {
       const session = await requireSession(auth,request,reply)
@@ -75,7 +75,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       const session = await requireSession(auth,request,reply)
       if (!session) return
       const { id } = z.object({ id: z.string().uuid() }).parse(request.params)
-      const input = z.object({ status: z.enum(['approved','rejected']), documentType: canonicalDocumentTypeSchema, note: z.string().trim().max(2000) }).strict().parse(request.body)
+      const input = z.object({ status: z.enum(['approved','rejected']), documentType: trackedDocumentTypeSchema, note: z.string().trim().max(2000) }).strict().parse(request.body)
       await reviewDocument(pool,session,id,input)
       return reply.code(204).send()
     })

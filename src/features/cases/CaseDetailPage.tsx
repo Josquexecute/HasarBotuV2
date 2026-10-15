@@ -1,4 +1,5 @@
 import { canUsePermission } from '../../app/permissions'
+import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle,
@@ -278,6 +279,7 @@ function CaseDetail() {
         </div>
         <div className="case-detail-head__stage"><span>Aşama</span><strong>{item.stage}</strong></div>
         <div className="case-detail-head__actions">
+          <OpenCaseFolderButton caseId={item.caseId} />
           <button className="button button--secondary" type="button" onClick={() => {
             if (source === 'api') {
               reloadCase()
@@ -297,7 +299,7 @@ function CaseDetail() {
         </div>
       </section>
 
-      {source === 'api' && item.type === 'Seçiniz' && <CaseTypeAssignment key={`${item.caseId}:${item.version}`} item={item}
+      {source === 'api' && (item.type === 'Seçiniz' || item.lifecycleStatus === 'closed') && <CaseTypeAssignment key={`${item.caseId}:${item.version}`} item={item}
         canEdit={canUsePermission(session.user, 'case_write', ['admin', 'expert', 'case_manager'])}
         onUpdated={() => reloadCase()} onUnauthorized={session.reportUnauthorized} />}
 
@@ -385,12 +387,12 @@ function CaseDetail() {
               )}
             </div>
           ) : activeTab === 'Operasyon' && source === 'api' ? (
-            <><TrackingWorkspace key={item.caseId} caseId={item.caseId} /><CaseOperationsApiModule
+            <><CaseOperationsApiModule
               item={item}
               source={source}
               onUnauthorized={session.reportUnauthorized}
               onReloadCase={reloadCase}
-            /></>
+            /><TrackingWorkspace key={item.caseId} caseId={item.caseId} view="operations" /></>
           ) : activeTab === 'Operasyon' ? (
             <div className="module-workspace">
               <section className="info-panel module-workspace__main">
@@ -437,7 +439,7 @@ function CaseDetail() {
               </section>
             </div>
           ) : activeTab === 'Evrak ve Fotoğraf' ? (
-            item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/><KascoMandatoryCheckModule caseId={item.caseId} source={source} /></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />
+            <>{source === 'api' && <TrackingWorkspace key={item.caseId} caseId={item.caseId} view="documents" />}{item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/><KascoMandatoryCheckModule caseId={item.caseId} source={source} /></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />}</>
           ) : activeTab === 'Ağır Hasar' ? source === 'api'
               ? <PertApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
               : <HeavyDamageModule item={item} />
@@ -465,10 +467,9 @@ function CaseDetail() {
             item={item}
             onClose={() => setCloseModalOpen(false)}
             onUnauthorized={session.reportUnauthorized}
-            onReload={() => {
-              setCloseModalOpen(false)
-              reloadCase()
-              setPrototypeNotice('Yaşam döngüsü çakışması sonrası güncel veri yükleniyor.')
+            onReload={(updated) => {
+              setCaseOverride(updated)
+              setPrototypeNotice('Güncel dosya bilgileri yüklendi. Kapanış seçimi ve gerekçeniz korundu.')
             }}
             onUpdated={(updated) => {
               setCaseOverride(updated)

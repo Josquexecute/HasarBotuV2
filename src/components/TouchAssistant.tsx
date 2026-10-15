@@ -85,7 +85,7 @@ export function QuickNote({ target, port, onClose, standalone = false }: { targe
   </>
 }
 
-export function TouchAssistant({ target, port }: { target: ActiveCase | null; port?: CaseOperationsPort }) {
+export function TouchAssistant({ target, port, showTrigger = true }: { target: ActiveCase | null; port?: CaseOperationsPort; showTrigger?: boolean }) {
   const [open, setOpen] = useState(false)
   const panel = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -103,7 +103,7 @@ export function TouchAssistant({ target, port }: { target: ActiveCase | null; po
     return () => { if (previous?.isConnected) previous.focus(); else button?.focus() }
   }, [open])
   return <>
-    <button ref={trigger} className="touch-assistant-trigger button button--primary" type="button" aria-label="Touch Assistant — hızlı not" aria-expanded={open} onClick={() => setOpen((value) => !value)}><NotebookPen size={20} /><span>Hızlı not</span></button>
+    {showTrigger && <button ref={trigger} className="touch-assistant-trigger button button--primary" type="button" aria-label="Touch Assistant — hızlı not" aria-expanded={open} onClick={() => setOpen((value) => !value)}><NotebookPen size={20} /><span>Hızlı not</span></button>}
     {open && <div className="touch-assistant-backdrop"><div ref={panel} className="touch-assistant" role="dialog" aria-modal="true" aria-label="Touch Assistant" onKeyDown={(event) => {
       if (event.key === 'Escape') { event.stopPropagation(); setOpen(false) }
       if (event.key === 'Tab') {

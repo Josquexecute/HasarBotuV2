@@ -11,7 +11,7 @@ describe('desktop assistant geometry and commands', () => {
   })
   it('accepts fixed UI menu actions and rejects paths, commands and objects',() => {
     expect(isAssistantMenuAction('note')).toBe(true)
-    for (const action of ['https://example.invalid','exec','C:\\Windows',{},null]) expect(isAssistantMenuAction(action)).toBe(false)
+    for (const action of ['quit','https://example.invalid','exec','C:\\Windows',{},null]) expect(isAssistantMenuAction(action)).toBe(false)
   })
   it.each([
     { x: 0, y: 0, width: 1366, height: 728 },

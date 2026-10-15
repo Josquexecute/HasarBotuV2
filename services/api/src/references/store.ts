@@ -26,7 +26,7 @@ export function createReferenceStore(pool: pg.Pool) {
     async services(organizationId: string, query: ServicesReferenceQuery): Promise<ServicesReferenceResponse | undefined> {
       if (query.insurerId !== undefined) {
         const insurer = await pool.query(
-          'SELECT 1 FROM insurers WHERE organization_id=$1 AND id::text=$2 AND is_active=true',
+          'SELECT 1 FROM insurers WHERE organization_id=$1 AND id::text=$2',
           [organizationId, query.insurerId],
         )
         if (insurer.rowCount === 0) return undefined

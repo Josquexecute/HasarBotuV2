@@ -42,6 +42,7 @@ import { useSession } from '../../app/sessionContext'
 import type { CaseRecord, CaseType, SortKey } from '../../types/case'
 import { matchesSearchQuery } from '../../utils/search'
 import { CaseCreateModal } from './CaseCreateModal'
+import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
 
 type SortDirection = 'asc' | 'desc'
 
@@ -142,6 +143,7 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
       </div>
 
       <footer className="quick-detail__footer">
+        <OpenCaseFolderButton caseId={item.caseId} />
         <button className="button button--primary button--block" type="button" onClick={() => navigate(`/dosyalar/${item.caseId}`)}>
           <ExternalLink size={16} /> Tam Dosyayı Aç
         </button>
@@ -316,7 +318,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
   const totalPages = source === 'api' ? (casePage?.totalPages ?? 0) : 3
 
   const selectedCase = visibleCases.find((item) => item.caseId === selectedId) ?? visibleCases[0]
-  useActiveCase(selectedCase, source)
+  const activateCase = useActiveCase(selectedCase, source)
   const hasFilters = query !== '' || typeFilter !== 'Tümü' || stageFilter !== 'Tümü' || statusFilter !== 'Açık' || assigneeFilter !== 'Tümü' || serviceFilter !== 'Tümü'
 
   // Uyarı isteğinde yalnız AKTİF SAYFA kimlikleri gönderilir. Sayfa boyutu
@@ -440,6 +442,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                     {source === 'api' && <th>Uyarı</th>}
                     <th>{source === 'api' ? 'Sorumlu' : <button type="button" onClick={() => handleSort('assignee')}>Sorumlu <SortIcon column="assignee" sortKey={sortKey} direction={direction} /></button>}</th>
                     <th>Servis</th>
+                    <th>Klasör</th>
                     <th><button type="button" onClick={() => handleSort('followUp')}>Takip <SortIcon column="followUp" sortKey={sortKey} direction={direction} /></button></th>
                     <th><button type="button" onClick={() => handleSort('lastAction')}>Son İşlem <SortIcon column="lastAction" sortKey={sortKey} direction={direction} /></button></th>
                   </tr>
@@ -450,10 +453,10 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                       key={item.caseId}
                       className={selectedCase?.caseId === item.caseId ? 'is-selected' : ''}
                       tabIndex={0}
-                      onClick={() => { setSelectedId(item.caseId); setDetailOpen(true) }}
+                      onClick={() => { setSelectedId(item.caseId); setDetailOpen(true); activateCase(item) }}
                       onDoubleClick={() => navigate(`/dosyalar/${item.caseId}`)}
                       onKeyDown={(event) => {
-                        if (event.key === ' ') { event.preventDefault(); setSelectedId(item.caseId); setDetailOpen(true) }
+                        if (event.key === ' ') { event.preventDefault(); setSelectedId(item.caseId); setDetailOpen(true); activateCase(item) }
                         if (event.key === 'Enter') navigate(`/dosyalar/${item.caseId}`)
                       }}
                     >
@@ -479,6 +482,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                       )}
                       <td>{item.assignee}</td>
                       <td className="truncate-cell" title={item.service}>{item.service}</td>
+                      <td><OpenCaseFolderButton caseId={item.caseId} /></td>
                       <td><span className={`follow-up follow-up--${item.followUpTone}`}>{item.followUp}</span></td>
                       <td>{item.lastAction}</td>
                     </tr>

@@ -37,7 +37,7 @@ export function AppShell(props: AppShellProps) {
         />
         <div className="workspace">{props.children}</div>
       </div>
-      <TouchAssistant target={activeCase} />
+      <TouchAssistant target={activeCase} showTrigger={false} />
     </div>
     </ActiveCaseContext.Provider>
   )

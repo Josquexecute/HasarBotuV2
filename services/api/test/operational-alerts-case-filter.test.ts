@@ -70,7 +70,7 @@ describeDb('Paket 52 operasyonel uyarı dosya filtresi', () => {
     const url = caseIds === undefined
       ? OPERATIONAL_ALERTS_ROUTE
       : `${OPERATIONAL_ALERTS_ROUTE}?caseIds=${caseIds.join(',')}`
-    const response = await app.inject({ method: 'GET', url, headers: { cookie: sessionCookie } })
+    const response = await app.inject({ method: 'GET', url: `${url}${caseIds === undefined ? '?' : '&'}includeTotal=true`, headers: { cookie: sessionCookie } })
     expect(response.statusCode).toBe(200)
     return operationalAlertsResponseSchema.parse(response.json())
   }
@@ -214,8 +214,15 @@ describeDb('Paket 52 operasyonel uyarı dosya filtresi', () => {
   it('filtresiz çağrı davranışı değişmez ve dosya özeti taşımaz', async () => {
     const result = await read(cookie)
     expect(result.alerts).toHaveLength(200)
-    expect(result.totalCount).toBe(200)
+    expect(result.totalCount).toBe(363)
     expect(result.caseSummaries).toBeUndefined()
+  })
+  it('preserves the bounded response for older installed clients and validates the opt-in', async () => {
+    const legacy = await app.inject({ method: 'GET',url: OPERATIONAL_ALERTS_ROUTE,headers: { cookie } })
+    expect(legacy.statusCode).toBe(200)
+    expect(legacy.json().totalCount).toBe(200)
+    const invalid = await app.inject({ method: 'GET',url: `${OPERATIONAL_ALERTS_ROUTE}?includeTotal=invalid`,headers: { cookie } })
+    expect(invalid.statusCode).toBe(400)
   })
 
   it('genel liste 200 ile kırpıldığı için yanlış negatif üretir; filtreli çağrı üretmez', async () => {
@@ -315,9 +322,10 @@ describeDb('Paket 52 operasyonel uyarı dosya filtresi', () => {
     })
     expect(anonymous.statusCode).toBe(401)
 
-    const before = await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action NOT LIKE 'auth.%'")
+    // Denied requests from the preceding validation test audit asynchronously.
+    const before = await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action NOT LIKE 'auth.%' AND action<>'request.rejected'")
     await read(cookie, [noisyCaseIds[0]])
-    const after = await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action NOT LIKE 'auth.%'")
+    const after = await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action NOT LIKE 'auth.%' AND action<>'request.rejected'")
     expect(after.rows).toEqual(before.rows)
   })
 
@@ -336,5 +344,33 @@ describeDb('Paket 52 operasyonel uyarı dosya filtresi', () => {
     const second = await read(cookie, requested)
     expect(second.caseSummaries).toEqual(first.caseSummaries)
     expect(second.alerts).toEqual(first.alerts)
+  })
+  it('persists personal read acknowledgement beyond 200 without changing source data or other users', async () => {
+    const url = `${OPERATIONAL_ALERTS_ROUTE}?includeTotal=true&unreadOnly=true`
+    const unread = async () => {
+      const response = await app.inject({ method: 'GET', url, headers: { cookie } })
+      expect(response.statusCode).toBe(200)
+      return operationalAlertsResponseSchema.parse(response.json())
+    }
+    const before = await unread()
+    expect(before.totalCount).toBeGreaterThan(200)
+    const foreignBefore = await read(foreignCookie)
+    const denied = await app.inject({ method: 'POST', url: `${OPERATIONAL_ALERTS_ROUTE}/read-all` })
+    expect(denied.statusCode).toBe(401)
+    const response = await app.inject({ method: 'POST', url: `${OPERATIONAL_ALERTS_ROUTE}/read-all`, headers: { cookie } })
+    expect(response.statusCode).toBe(204)
+    expect((await unread()).totalCount).toBe(0)
+    expect((await pool.query('SELECT count(*)::int n FROM operational_alert_reads WHERE user_id=$1', [userId])).rows[0].n).toBe(before.totalCount)
+    expect((await read(cookie)).totalCount).toBe(before.totalCount)
+    expect(await read(foreignCookie)).toEqual(foreignBefore)
+    expect((await pool.query('SELECT count(*)::int n FROM operational_alert_reads WHERE user_id=$1', [foreignUserId])).rows[0].n).toBe(0)
+    // Changing an acknowledged source makes that warning unread again, without losing the others' state.
+    await pool.query("UPDATE cases SET follow_up_date='2026-07-11' WHERE id=$1", [noisyCaseIds[0]])
+    expect((await unread()).totalCount).toBe(1)
+    const store = (await import('../src/operational-alerts/store.js')).createOperationalAlertStore(pool)
+    expect((await store.list(organizationId, '2026-07-19', '2026-07-19T10:30:00.000Z', undefined, userId, 'unread')).totalCount).toBeGreaterThan(1)
+    await expect(runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })).rejects.toThrow('alert_reads_downgrade_would_lose_data')
+    expect((await pool.query('SELECT count(*)::int n FROM operational_alert_reads WHERE user_id=$1', [userId])).rows[0].n).toBe(before.totalCount)
+    expect(await runMigrations({ databaseUrl: config.url, quiet: true })).toEqual([])
   })
 })

@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSession } from '../../app/sessionContext'
+import { rememberAssistantCase, useAssistantCaseSelection } from '../../app/assistantCaseSelection'
 import { QuickNote } from '../../components/TouchAssistant'
+import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
 import { createHttpCasesAdapter, HttpCasesError } from '../../data/httpAdapter'
 import { useCaseOperations } from '../../data/useCaseOperations'
 import type { CasesDataPort, CasePageResult } from '../../data/ports'
@@ -11,9 +13,8 @@ import { loadTracking } from '../tracking/trackingApi'
 import './desktop-assistant-panel.css'
 import { useAssistantAppearance } from './assistantAppearanceContext'
 import { appearanceStyle } from './appearance'
-import { AssistantAppearanceEditor } from './AssistantAppearanceEditor'
 
-type MenuAction = 'open' | 'notifications' | 'settings' | 'hide' | 'reset' | 'quit' | 'close'
+type MenuAction = 'open' | 'notifications' | 'settings' | 'hide' | 'reset' | 'close'
 type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: MenuAction): void } }
 const choose = (action: MenuAction) => (window as AssistantWindow).hasarbotuAssistantMenu?.choose(action)
 const dateTime = (value: string | null) => value ? new Date(value).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }) : '—'
@@ -63,6 +64,7 @@ function CaseWorkspace({ item, cases, operations }: { item: CaseRecord; cases: C
   }, [cases, item.caseId, reportUnauthorized])
   const notes = workspace.data?.notes.filter((note) => `${note.subject ?? ''} ${note.body} ${note.legacySource?.authorName ?? note.createdByDisplayName}`.toLocaleLowerCase('tr-TR').includes(noteSearch.toLocaleLowerCase('tr-TR'))) ?? []
   return <section className="assistant-case" aria-label="Seçili dosya">
+    <OpenCaseFolderButton caseId={item.caseId} />
     <nav className="assistant-tabs" aria-label="Dosya görünümü">
       <button aria-pressed={tab === 'note'} onClick={() => setTab('note')}>Hızlı not</button>
       <button aria-pressed={tab === 'history'} onClick={() => setTab('history')}>Geçmiş notlar</button>
@@ -114,26 +116,26 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations }: { case
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState<{ text: string; page: number; version: number } | null>(null)
   const [result, setResult] = useState<{ key: typeof search; data: CasePageResult | null; error: boolean } | null>(null)
-  const [selected, setSelected] = useState<CaseRecord | null>(null)
-  const [selectionError, setSelectionError] = useState(() => {
-    try { localStorage.getItem(`hasarbotu-assistant-case:${session.user?.id ?? 'anonymous'}`); return false } catch { return true }
-  })
-  const selectionVersion = useRef(0)
-  const storageKey = `hasarbotu-assistant-case:${session.user?.id ?? 'anonymous'}`
+  const userId = session.user?.id ?? 'anonymous'
+  const selectedCaseId = useAssistantCaseSelection(userId)
+  const [selectionReload, setSelectionReload] = useState(0)
+  const selectionKey = `${userId}:${selectedCaseId ?? ''}:${selectionReload}`
+  const [selection, setSelection] = useState<{ key: string; item: CaseRecord | null; error: boolean } | null>(null)
+  const [selectionWriteError, setSelectionWriteError] = useState(false)
+  const selected = selection?.key === selectionKey ? selection.item : null
+  const selectionError = selectedCaseId === undefined || selectionWriteError || (selection?.key === selectionKey && selection.error)
   useEffect(() => {
+    if (!selectedCaseId) return
     let active = true
-    const generation = selectionVersion.current
-    let saved: string | null
-    try { saved = localStorage.getItem(storageKey) } catch { return }
-    if (saved) void cases.getCase(saved).then((item) => {
-      if (active && generation === selectionVersion.current) setSelected(item)
+    void cases.getCase(selectedCaseId).then((item) => {
+      if (active) setSelection({ key: selectionKey, item, error: false })
     }).catch((error: unknown) => {
-      if (!active || generation !== selectionVersion.current) return
-      setSelectionError(true)
+      if (!active) return
+      setSelection({ key: selectionKey, item: null, error: true })
       if (error instanceof HttpCasesError && error.kind === 'unauthorized') reportUnauthorized()
     })
     return () => { active = false }
-  }, [cases, storageKey, reportUnauthorized])
+  }, [cases, selectedCaseId, selectionKey, reportUnauthorized])
   useEffect(() => {
     if (!search) return
     let active = true
@@ -161,22 +163,20 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations }: { case
     {current?.data && <section className="assistant-results" aria-label="Arama sonuçları">
       <p role="status">{current.data.totalCount} dosya · Açık ve kapalı dosyalar</p>
       {current.data.items.map((item) => <button className="assistant-result" key={item.caseId} aria-pressed={selected?.caseId === item.caseId} onClick={() => {
-        selectionVersion.current++
-        setSelected(item)
-        setSelectionError(false)
-        try { localStorage.setItem(storageKey, item.caseId) } catch { setSelectionError(true) }
+        const saved = rememberAssistantCase(userId, item.caseId)
+        setSelectionWriteError(!saved)
+        if (saved) setSelection({ key: `${userId}:${item.caseId}:${selectionReload}`, item, error: false })
       }}><strong>{item.plate}</strong><span>{item.officeNumber} · {item.status} · {item.stage}</span></button>)}
       {current.data.totalPages > 1 && <nav className="assistant-pagination" aria-label="Arama sayfaları"><button disabled={search!.page <= 1} onClick={() => setSearch({ ...search!, page: search!.page - 1 })}>Önceki</button><span>{search!.page} / {current.data.totalPages}</span><button disabled={search!.page >= current.data.totalPages} onClick={() => setSearch({ ...search!, page: search!.page + 1 })}>Sonraki</button></nav>}
     </section>}
-    {selectionError && <p role="alert">Önceki seçim alınamadı veya bu cihazda saklanamadı. Dosyayı arayıp seçebilirsiniz.</p>}
-    {selected ? <CaseWorkspace key={selected.caseId} item={selected} cases={cases} operations={operations} /> : <p>Notları ve süreçleri görmek için bir dosya arayıp seçin.</p>}
+    {selectionError && <p role="alert">Dosya seçimi alınamadı veya bu cihazda saklanamadı. <button onClick={() => { setSelectionWriteError(false); setSelectionReload(value => value + 1) }}>Tekrar dene</button></p>}
+    {selected ? <CaseWorkspace key={selected.caseId} item={selected} cases={cases} operations={operations} /> : selectedCaseId && !selectionError ? <p role="status">Seçili dosya yükleniyor…</p> : <p>Programdan bir dosya seçin veya burada arayın.</p>}
   </>
 }
 
 export function DesktopAssistantPanel() {
   const session = useSession()
   const appearance = useAssistantAppearance()
-  const [showAppearance, setShowAppearance] = useState(false)
   const native = (window as AssistantWindow).hasarbotuAssistantMenu
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); choose('close') } }
@@ -187,12 +187,10 @@ export function DesktopAssistantPanel() {
     <header><div><strong>HasarBotu Touch</strong><small>{session.user?.displayName ?? 'Hızlı işlemler'}</small></div><button disabled={!native} onClick={() => choose('close')} aria-label="Menüyü kapat">×</button></header>
     <div className="assistant-content">
       {session.status === 'bootstrapping' ? <p role="status">Oturum doğrulanıyor…</p> : session.status !== 'authenticated' ? <p role="status">Dosyaları görmek için hesabınızla giriş yapın. {session.notice}</p> : <>
-        <button type="button" aria-expanded={showAppearance} onClick={() => setShowAppearance(value => !value)}>{showAppearance ? 'Dosya aramasına dön' : 'Görünümümü özelleştir'}</button>
-        <div hidden={!showAppearance}>{appearance.status === 'ready' ? <AssistantAppearanceEditor key={session.user!.id} appearance={appearance.appearance} systemDark={appearance.systemDark} onSave={appearance.save} onReload={appearance.reload} /> : <p role="status">{appearance.status === 'loading' ? 'Renkler yükleniyor…' : 'Renkler alınamadı.'} <button onClick={appearance.reload}>Tekrar dene</button></p>}</div>
-        <div hidden={showAppearance}><AssistantCaseSearch key={session.user!.id} /></div>
+        <AssistantCaseSearch key={session.user!.id} />
       </>}
     </div>
     <nav className="assistant-native-actions" aria-label="Kısayollar"><button disabled={!native} onClick={() => choose('open')}>{session.status === 'authenticated' ? 'Uygulamayı aç' : 'Giriş yap'}</button><button disabled={!native} onClick={() => choose('notifications')}>Bildirimler</button><button disabled={!native} onClick={() => choose('settings')}>Ayarlar</button></nav>
-    <footer><button disabled={!native} onClick={() => choose('hide')}>Gizle</button><button disabled={!native} onClick={() => choose('reset')}>Konumu sıfırla</button><button disabled={!native} onClick={() => choose('quit')}>Çıkış</button></footer>
+    <footer><button disabled={!native} onClick={() => choose('hide')}>Gizle</button><button disabled={!native} onClick={() => choose('reset')}>Konumu sıfırla</button></footer>
   </main>
 }

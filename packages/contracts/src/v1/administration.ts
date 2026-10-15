@@ -7,6 +7,9 @@ export { PERMISSION_CODES } from '../common/permissions.js'
 export const serviceEditSchema = z.strictObject({ name: z.string().trim().min(1).max(200),serviceType: z.enum(SERVICE_TYPES),phone: z.string().trim().max(50).nullable(),isActive: z.boolean() })
 export const managedServiceSchema = serviceEditSchema.extend({ id: z.string().uuid(),version: z.number().int().positive() })
 export const managedServicesSchema = z.strictObject({ items: z.array(managedServiceSchema) })
+export const insurerEditSchema = z.strictObject({ name: z.string().trim().min(1).max(200),isActive: z.boolean() })
+export const managedInsurerSchema = insurerEditSchema.extend({ id: z.string().uuid(),version: z.number().int().positive() })
+export const managedInsurersSchema = z.strictObject({ items: z.array(managedInsurerSchema) })
 export const documentRuleConfigurationSchema = z.strictObject({
   baseRequired: z.array(z.enum(CANONICAL_DOCUMENT_TYPES)).max(CANONICAL_DOCUMENT_TYPES.length)
     .refine((types) => new Set(types).size === types.length && types.every((type) => !['accident_report','ktt','statement','tramer_result','opposing_vehicle_registration','opposing_driver_license','opposing_traffic_policy','fault_ratio'].includes(type)), 'invalid_base_documents'),

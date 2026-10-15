@@ -4,12 +4,12 @@ import { join, resolve, sep } from 'node:path'
 import type pg from 'pg'
 import { z } from 'zod'
 import { idSchema, relativePathSchema, storageRootKeySchema } from '@hasarbotu/contracts'
-import { buildV1SourceIdentityMaterial, buildV1StableItemIdentityMaterial } from '@hasarbotu/domain'
+import { V1_IDENTITY_VERSION, buildV1SourceIdentityMaterial, buildV1StableItemIdentityMaterial } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
 import { readV1Sidecar } from './store.js'
-import { insertItemMetadata, insertStableProvenance, type V1ProvenanceSource } from './remediation.js'
+import { V1_REMEDIATION_MAPPING_VERSION, insertItemMetadata, insertStableProvenance, type V1ProvenanceSource } from './remediation.js'
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex')
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/)
@@ -65,8 +65,15 @@ export async function applyRegisteredV1Notes(pool: pg.Pool, actor: Actor, rootPa
         WHERE c.organization_id=$1 AND c.id=$2 AND NOT c.is_archived FOR UPDATE OF c,l,r`, [actor.organizationId, binding.caseId])).rows[0]
       if (!row || row.version !== binding.expectedCaseVersion || row.storage_root_key !== manifest.storageRootKey || row.relative_path !== binding.relativePath || row.source_folder_id !== binding.sourceFolderId) fail('registered_notes_binding_changed')
       const source = sources[index]!
-      const revision = (await db.query(`SELECT id FROM v1_import_source_revisions WHERE organization_id=$1 AND stable_source_identity=$2 AND source_file_hash=$3 ORDER BY recorded_at DESC LIMIT 1`, [actor.organizationId, binding.sourceIdentity, binding.sourceFileHash])).rows[0]
-      if (!revision) fail('registered_notes_archived_revision_required')
+      // Folder registration may precede the historical import. Archive the verified
+      // source in the same transaction instead of requiring a separate full import.
+      await db.query(`INSERT INTO v1_import_sources(id,organization_id,stable_source_identity,identity_kind,identity_version,first_discovered_at,created_by_user_id)
+        VALUES($1,$2,$3,'case_key_created_at',$4,now(),$5) ON CONFLICT DO NOTHING`, [uuidv7(), actor.organizationId, binding.sourceIdentity, V1_IDENTITY_VERSION, actor.actorUserId])
+      await db.query(`INSERT INTO v1_import_source_revisions(id,organization_id,stable_source_identity,source_file_hash,source_schema_version,source_write_id,source_revision,mapping_version,raw_snapshot,discovered_at,recorded_by_user_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,now(),$10) ON CONFLICT DO NOTHING`,
+      [uuidv7(), actor.organizationId, binding.sourceIdentity, binding.sourceFileHash, source.schemaVersion, source.sourceWriteId, source.sourceRevision, V1_REMEDIATION_MAPPING_VERSION, JSON.stringify(source.data), actor.actorUserId])
+      const revision = (await db.query(`SELECT id FROM v1_import_source_revisions WHERE organization_id=$1 AND stable_source_identity=$2 AND source_file_hash=$3 AND mapping_version=$4`, [actor.organizationId, binding.sourceIdentity, binding.sourceFileHash, V1_REMEDIATION_MAPPING_VERSION])).rows[0]
+      if (!revision) fail('registered_notes_source_revision_unavailable')
       // These provenance writers consume only source descriptors; the full import planner is deliberately not fabricated.
       const descriptor: V1ProvenanceSource = {
         folder: { relativePath: binding.relativePath },

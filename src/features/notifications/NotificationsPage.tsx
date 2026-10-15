@@ -1,9 +1,10 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useRef, useState } from 'react'
 import { BellRing, CheckCheck, ChevronDown, CircleAlert, ExternalLink, FileWarning, ShieldAlert } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { initialNotifications, type NotificationType } from '../../mocks/workspaces'
 import { BackendUnavailableState, LoadingState } from '../../components/StateViews'
-import type { OperationalAlertDataPort, OperationalAlertSeverityRecord, OperationalAlertTypeRecord } from '../../data/operationalAlertPort'
+import { createHttpOperationalAlertAdapter, OperationalAlertError, type OperationalAlertDataPort, type OperationalAlertSeverityRecord, type OperationalAlertTypeRecord } from '../../data/operationalAlertPort'
+import { useSession } from '../../app/sessionContext'
 import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
 import { useOperationalAlerts } from '../../data/useOperationalAlerts'
 import { NotificationCard } from './NotificationCard'
@@ -75,14 +76,17 @@ const ALERT_SEVERITY_TONES: Record<OperationalAlertSeverityRecord, 'critical' | 
 }
 
 /**
- * API modunda gerçek operasyonel uyarılar. Liste salt okunurdur: okundu,
- * ertelendi veya silindi durumu bu dilimde yoktur. Sayaç yalnız API sonucundan
- * hesaplanır; hata durumunda mock'a düşülmez.
+ * Kişisel okunmamış uyarılar; okuma onayı görev veya evrak silmez.
  */
 function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) {
   const navigate = useNavigate()
+  const { reportUnauthorized } = useSession()
+  const adapter = useMemo(() => port ?? createHttpOperationalAlertAdapter(), [port])
   const { alerts, status } = useOperationalAlerts(port)
   const [type, setType] = useState<'Tümü' | OperationalAlertTypeRecord>('Tümü')
+  const [busy, setBusy] = useState(false)
+  const [readError, setReadError] = useState('')
+  const readLock = useRef(false)
 
   const items = useMemo(() => alerts?.alerts ?? [], [alerts])
   const visible = useMemo(
@@ -92,7 +96,15 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
 
   return (
     <>
-      {status === 'ok' && alerts !== null && <p className="notification-feed__count">{alerts.totalCount} açık uyarı</p>}
+      {status === 'ok' && alerts !== null && <div className="notification-feed__toolbar"><p className="notification-feed__count">{alerts.totalCount} okunmamış uyarı</p><button type="button" className="button button--secondary" disabled={!adapter.markAllRead || busy || alerts.totalCount === 0} onClick={async () => {
+        if (!adapter.markAllRead || readLock.current) return
+        readLock.current = true; setBusy(true); setReadError('')
+        try { await adapter.markAllRead(); window.dispatchEvent(new Event('operational-alerts-updated')) }
+        catch (error) { setReadError('Uyarılar okundu işaretlenemedi. Tekrar deneyin.'); if (error instanceof OperationalAlertError && error.kind === 'unauthorized') reportUnauthorized() }
+        finally { readLock.current = false; setBusy(false) }
+      }}><CheckCheck size={15} />{busy ? 'İşleniyor…' : 'Tümünü Okundu İşaretle'}</button></div>}
+      {readError && <p role="alert">{readError}</p>}
+      <p>Okundu işaretlemek görevleri ve evrak gereksinimlerini değiştirmez. Yeni, değişen ve ertesi güne ait uyarılar yeniden görünür.</p>
       {status === 'loading' && <LoadingState label="Uyarılar yükleniyor" />}
       {(status === 'unavailable' || status === 'unauthorized' || status === 'forbidden') && (
         <BackendUnavailableState
@@ -103,8 +115,8 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
       {status === 'ok' && items.length === 0 && (
         <div className="state-view" role="status">
           <CheckCheck aria-hidden="true" />
-          <strong>Açık operasyonel uyarı yok.</strong>
-          <span>Süresi geçmiş görev/takip ve eksik zorunlu evrak bulunmuyor.</span>
+          <strong>Okunmamış operasyonel uyarı yok.</strong>
+          <span>Görev ve evrak durumlarını dosyanızdan takip edebilirsiniz.</span>
         </div>
       )}
       {status === 'ok' && items.length > 0 && (

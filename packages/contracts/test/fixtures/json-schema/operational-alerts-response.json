@@ -9,7 +9,7 @@
     "totalCount": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 200
+      "maximum": 9007199254740991
     },
     "evaluatedAt": {
       "type": "string",

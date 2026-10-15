@@ -262,6 +262,14 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     const evidence = (await pool.query('SELECT raw_text,reviewed_fields FROM eksist_sources WHERE id=$1', [src.id])).rows[0]
     expect(evidence.raw_text).toContain('Tamirhane Ad / Ünvan: Sentetik Servis')
     expect(evidence.reviewed_fields.automatic).toEqual(read.json().case.eksist)
+    const insurer = uuidv7()
+    await pool.query("INSERT INTO insurers(id,organization_id,name) VALUES($1,$2,'Revize Sigorta')",[insurer,item.organizationId ?? orgA])
+    const insurerRevision = await app.inject({ method: 'PATCH',url: `/api/v1/cases/${item.id}`,headers: { cookie: cookieA },payload: { expectedVersion: revised.json().case.version,insurerId: insurer } })
+    expect(insurerRevision.statusCode,insurerRevision.payload).toBe(200)
+    expect(insurerRevision.json().case).toMatchObject({ insurerId: insurer,eksist: { insurerName: 'Revize Sigorta',serviceName: 'Revize Servis' } })
+    const after = (await pool.query('SELECT raw_text,reviewed_fields FROM eksist_sources WHERE id=$1',[src.id])).rows[0]
+    expect(after.raw_text).toBe(evidence.raw_text)
+    expect(after.reviewed_fields.automatic.insurerName).toBe('Revize Sigorta')
   })
   it('uses the server registration day for manual creation and refuses subsequent date changes', async () => {
     const response = await quick({ ...manual, case: { ...manual.case, followUpDate: '2000-01-01' } })

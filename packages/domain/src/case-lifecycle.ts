@@ -196,6 +196,49 @@ export function buildClosedCaseWorkspacePath(notificationDate: string | null, op
   return { ok: true, value: `${yearText}/${monthFolder}/KAPALI ${monthName.toLocaleUpperCase('tr-TR')} ${year}/${workspaceName}` }
 }
 
+/** Imported folders already have a verified calendar location; do not invent a claim notification date. */
+export function buildClosedImportedCaseWorkspacePath(notificationDate: string | null, openRelativePath: string): ClosedWorkspacePathResult {
+  if (!parseRelativePath(openRelativePath).ok) return { ok: false, code: 'invalid_open_location' }
+  const parts = openRelativePath.split('/')
+  if (parts.length < 3 || parts.length > 5) return { ok: false, code: 'invalid_open_location' }
+  const upper = (value: string) => value.normalize('NFC').toLocaleUpperCase('tr-TR')
+  const sameMonth = (folder: string, month: string, year: number) => upper(folder).replace(/\s+/gu, '') === upper(`${month}${year}`)
+  const yearMatch = /^(\d{4})(?: OF[Iİ]S)?$/.exec(upper(parts[0]!))
+  if (!yearMatch) return { ok: false, code: 'invalid_open_location' }
+  const year = Number(yearMatch[1])
+  if (year < 2000 || year > 2100) return { ok: false, code: 'invalid_open_location' }
+  const closedIndex = parts.slice(0, -1).findIndex(part => /^KAPALI(?:\s|$)/u.test(upper(part)))
+  if (closedIndex !== -1) {
+    const month = TURKISH_MONTH_NAMES.find(name => sameMonth(parts[closedIndex - 1] ?? '', name, year))
+    if (closedIndex !== parts.length - 2 || !month || !['KAPALI DOSYALAR', `KAPALI ${upper(month)} ${year}`].includes(upper(parts[closedIndex]!))) return { ok: false, code: 'invalid_open_location' }
+    const open = parts.filter((_, index) => index !== closedIndex).join('/')
+    if (!buildClosedImportedCaseWorkspacePath(notificationDate, open).ok) return { ok: false, code: 'invalid_open_location' }
+    // A manually archived folder is verified in place after approval, never nested or moved again.
+    return { ok: true, value: openRelativePath }
+  }
+  if (parts.length > 4) return { ok: false, code: 'invalid_open_location' }
+  const closedFolder = (month: string) => yearMatch[0] === String(year) ? `KAPALI ${upper(month)} ${year}` : 'KAPALI DOSYALAR'
+  const parent = parts.at(-2)!, workspaceName = parts.at(-1)!
+  const month = TURKISH_MONTH_NAMES.find(name => sameMonth(parent, name, year))
+  if (month) return { ok: true, value: `${parts.slice(0, -1).join('/')}/${closedFolder(month)}/${workspaceName}` }
+  // A pending folder has no month of its own. An actual notification date is still required here.
+  if (parts.length === 3 && upper(parent).replace(/^_/, '') === 'EKSİK DOSYALAR') {
+    if (notificationDate === null) return { ok: false, code: 'notification_date_required' }
+    const datedMonth = TURKISH_MONTH_NAMES[Number(notificationDate.slice(5, 7)) - 1]
+    if (!datedMonth || Number(notificationDate.slice(0, 4)) !== year) return { ok: false, code: 'location_date_mismatch' }
+    return { ok: true, value: `${parts[0]}/${datedMonth} ${year}/${closedFolder(datedMonth)}/${workspaceName}` }
+  }
+  return { ok: false, code: 'invalid_open_location' }
+}
+
+/** Recover the open month location when a close operation verified an already archived import in place. */
+export function buildOpenImportedCaseWorkspacePath(closedRelativePath: string): ClosedWorkspacePathResult {
+  const checked = buildClosedImportedCaseWorkspacePath(null, closedRelativePath)
+  if (!checked.ok || checked.value !== closedRelativePath) return { ok: false, code: 'invalid_open_location' }
+  const parts = closedRelativePath.split('/')
+  return { ok: true, value: parts.filter((_, index) => index !== parts.length - 2).join('/') }
+}
+
 export function isOpenWorkflowStage(value: string): value is OpenCaseStage {
   return OPEN_CASE_STAGES.some((stage) => stage === value)
 }

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 const AuditLog = lazy(async () => ({ default: (await import('./AuditLog')).AuditLog }))
 const ServicesAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).ServicesAdministration }))
+const InsurersAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).InsurersAdministration }))
 const DocumentRulesAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).DocumentRulesAdministration }))
 const PermissionsAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).PermissionsAdministration }))
 import { CheckCircle2, FileCog, Plus, RefreshCw, ShieldAlert, ShieldCheck, Store, UserRoundCog, UsersRound, X } from 'lucide-react'
@@ -98,7 +99,7 @@ function PermissionMatrixPanel() {
 }
 
 type ManagementTab =
-  | 'Kullanıcılar' | 'Servisler' | 'V1 Aktarım Karantinası' | 'Belge Kuralları' | 'Erişim ve Yetki' | 'İşlem Kayıtları'
+  | 'Kullanıcılar' | 'Servisler' | 'Sigorta Şirketleri' | 'V1 Aktarım Karantinası' | 'Belge Kuralları' | 'Erişim ve Yetki' | 'İşlem Kayıtları'
 
 const SERVICE_TYPE_LABELS: Readonly<Record<string, string>> = {
   authorized: 'Yetkili',
@@ -469,10 +470,11 @@ export function ManagementPage({ port, usersPort, quarantinePort }: {
           </button>
         )}
       </section>
-      <nav className="workspace-tabs" aria-label="Yönetim bölümleri">{(['Kullanıcılar', 'Servisler', ...(isAdmin && source === 'api' ? ['İşlem Kayıtları' as const,'V1 Aktarım Karantinası' as const] : []), 'Belge Kuralları', 'Erişim ve Yetki'] as const).map((tab) => <button key={tab} type="button" className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
+      <nav className="workspace-tabs" aria-label="Yönetim bölümleri">{(['Kullanıcılar', 'Servisler', ...(isAdmin && source === 'api' ? ['Sigorta Şirketleri' as const,'İşlem Kayıtları' as const,'V1 Aktarım Karantinası' as const] : []), 'Belge Kuralları', 'Erişim ve Yetki'] as const).map((tab) => <button key={tab} type="button" className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}</nav>
       <div className="office-scroll management-content">
         <Suspense fallback={<p role="status">Yükleniyor…</p>}>
         {activeTab === 'Servisler' && isAdmin && source === 'api' && <ServicesAdministration />}
+        {activeTab === 'Sigorta Şirketleri' && isAdmin && source === 'api' && <InsurersAdministration />}
         {activeTab === 'Belge Kuralları' && source === 'api' && <DocumentRulesAdministration canEdit={isAdmin} />}
         {activeTab === 'Erişim ve Yetki' && source === 'api' && <PermissionsAdministration canEdit={isAdmin} />}
         {activeTab === 'İşlem Kayıtları' && isAdmin && source === 'api' && <AuditLog />}

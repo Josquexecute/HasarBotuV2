@@ -7,8 +7,10 @@ import { AssistantAppearanceProvider } from './AssistantAppearanceProvider'
 import { mockCases } from '../../mocks/cases'
 import { HttpCasesError } from '../../data/httpAdapter'
 import type { CasePageResult, CasesDataPort } from '../../data/ports'
+import type { CaseRecord } from '../../types/case'
 import type { CaseOperationsPort, CaseOperationsRecord, CaseNoteRecord } from '../../data/caseOperationsPort'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
+import { assistantCaseSelectionKey, rememberAssistantCase } from '../../app/assistantCaseSelection'
 import { loadTracking } from '../tracking/trackingApi'
 
 vi.mock('../tracking/trackingApi', () => ({ loadTracking: vi.fn(async () => ({ tramer: [], documents: [], users: [], history: [] })) }))
@@ -42,6 +44,67 @@ async function select() {
   await screen.findByRole('textbox', { name: 'Hızlı not' })
 }
 describe('standalone Touch case workspace', () => {
+  it('receives a main-window storage selection without requiring another search', async () => {
+    const api = setup()
+    localStorage.setItem(assistantCaseSelectionKey('anonymous'), first.caseId)
+    fireEvent(window, new StorageEvent('storage', { key: assistantCaseSelectionKey('anonymous'), newValue: first.caseId, storageArea: localStorage }))
+    await screen.findByRole('textbox', { name: 'Hızlı not' })
+    expect(screen.getByText(first.plate, { selector: '.touch-assistant__target strong' })).toBeInTheDocument()
+    expect(api.cases.listCasePage).not.toHaveBeenCalled()
+    const count = vi.mocked(api.cases.getCase).mock.calls.length
+    fireEvent(window, new StorageEvent('storage', { key: assistantCaseSelectionKey('another-user'), newValue: second.caseId, storageArea: localStorage }))
+    expect(api.cases.getCase).toHaveBeenCalledTimes(count)
+  })
+  it('hides the old target while a new main selection loads and restores each case draft', async () => {
+    const api = setup()
+    act(() => { rememberAssistantCase('anonymous', first.caseId) })
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Hızlı not' }), 'Birinci dosyanın taslağı')
+    let finish!: (item: CaseRecord) => void
+    vi.mocked(api.cases.getCase).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    act(() => { rememberAssistantCase('anonymous', second.caseId) })
+    expect(screen.queryByRole('textbox', { name: 'Hızlı not' })).not.toBeInTheDocument()
+    expect(screen.getByText('Seçili dosya yükleniyor…')).toBeInTheDocument()
+    await act(async () => finish(second))
+    expect(await screen.findByRole('textbox', { name: 'Hızlı not' })).toHaveValue('')
+    act(() => { rememberAssistantCase('anonymous', first.caseId) })
+    expect(await screen.findByRole('textbox', { name: 'Hızlı not' })).toHaveValue('Birinci dosyanın taslağı')
+  })
+  it('ignores a late previous selection response after a newer selection has loaded', async () => {
+    const api = setup()
+    let finish!: (item: CaseRecord) => void
+    vi.mocked(api.cases.getCase).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    act(() => { rememberAssistantCase('anonymous', first.caseId) })
+    act(() => { rememberAssistantCase('anonymous', second.caseId) })
+    await screen.findByRole('textbox', { name: 'Hızlı not' })
+    await act(async () => finish(first))
+    expect(screen.getByText(second.plate, { selector: '.touch-assistant__target strong' })).toBeInTheDocument()
+    expect(api.operations.createNote).not.toHaveBeenCalled()
+  })
+  it('reloads a selection changed while hidden on focus and retries failed loads without a search', async () => {
+    const api = setup()
+    vi.mocked(api.cases.getCase).mockRejectedValueOnce(new Error('offline'))
+    localStorage.setItem(assistantCaseSelectionKey('anonymous'), second.caseId)
+    fireEvent(window, new Event('focus'))
+    await screen.findByRole('button', { name: 'Tekrar dene' })
+    expect(screen.queryByRole('textbox', { name: 'Hızlı not' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Tekrar dene' }))
+    await screen.findByRole('textbox', { name: 'Hızlı not' })
+    expect(screen.getByText(second.plate, { selector: '.touch-assistant__target strong' })).toBeInTheDocument()
+    expect(api.cases.listCasePage).not.toHaveBeenCalled()
+  })
+  it('opens the currently selected case folder from Touch', async () => {
+    const open = vi.fn(async () => ({ opened: true }))
+    Object.defineProperty(window, 'hasarbotuCaseFolders', { value: { open }, configurable: true })
+    try {
+      setup()
+      await select()
+      await userEvent.click(screen.getByRole('button', { name: 'Klasörü Aç' }))
+      expect(open).toHaveBeenCalledExactlyOnceWith(first.caseId)
+      await userEvent.click(screen.getByRole('button', { name: /34 TEST 02/ }))
+      await userEvent.click(screen.getByRole('button', { name: 'Klasörü Aç' }))
+      expect(open).toHaveBeenLastCalledWith(second.caseId)
+    } finally { Reflect.deleteProperty(window, 'hasarbotuCaseFolders') }
+  })
   it('uses bounded server search covering open and closed cases, then writes only the selected case', async () => {
     const api = setup()
     expect(screen.getByRole('button', { name: 'Ara' })).toBeDisabled()
@@ -138,5 +201,7 @@ describe('standalone Touch case workspace', () => {
     render(<AssistantAppearanceProvider><DesktopAssistantPanel /></AssistantAppearanceProvider>)
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Giriş yap' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Çıkış' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Görünümümü özelleştir')).not.toBeInTheDocument()
   })
 })

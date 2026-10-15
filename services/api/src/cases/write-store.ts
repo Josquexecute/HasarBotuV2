@@ -274,8 +274,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
           return { kind: 'not_found' }
         }
         const typeOnly = input.caseType !== undefined && Object.keys(input).every(key => key === 'caseType' || key === 'expectedVersion')
-        if (input.caseType !== undefined && existing.case_type !== null) throw new ReferenceCheckError('caseType', 'case_type_already_assigned')
-        // Archived historical folders may receive their first classification without reopening.
+        // Historical classification corrections do not reopen or move the folder.
         if (existing.lifecycle_status !== 'open' && !typeOnly) {
           await client.query('ROLLBACK')
           return { kind: 'case_closed' }
@@ -291,7 +290,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         const imported = await client.query("SELECT reviewed_fields->'automatic' AS automatic FROM eksist_sources WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic' FOR UPDATE", [actor.organizationId, caseId])
         let eksist = imported.rowCount ? eksistCaseDataSchema.parse(imported.rows[0].automatic) : undefined
         if (imported.rowCount) {
-          for (const field of ['notificationFormNumber', 'insurerId', 'expertUserId'] as const) {
+          for (const field of ['notificationFormNumber', 'expertUserId'] as const) {
             if (input[field] !== undefined) throw new ReferenceCheckError(field, 'eksist_source_readonly')
           }
           if (input.serviceId !== undefined) throw new ReferenceCheckError('serviceId', 'use_service_revision')
@@ -304,6 +303,12 @@ export function createCasesWriteStore(pool: pg.Pool) {
           await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic'", [actor.organizationId, caseId, JSON.stringify(eksist)])
         }
         await assertReferences(client, actor.organizationId, input)
+        if (eksist && input.insurerId !== undefined) {
+          if (input.insurerId === null) throw new ReferenceCheckError('insurerId', 'insurer_required')
+          const insurer = (await client.query<{ name: string }>('SELECT name FROM insurers WHERE organization_id=$1 AND id=$2',[actor.organizationId,input.insurerId])).rows[0]!
+          eksist = { ...eksist,insurerName: insurer.name }
+          await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic'",[actor.organizationId,caseId,JSON.stringify(eksist)])
+        }
         const currentLossDate = existing.loss_date === null ? null : toLocalDateString(existing.loss_date)
         const currentNotificationDate = existing.notification_date === null ? null : toLocalDateString(existing.notification_date)
         assertDateOrder(
@@ -359,7 +364,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
           entityId: item.id,
           details: {
             changedFields,
-            ...(input.caseType === undefined ? {} : { previousCaseType: null, caseType: input.caseType, assignmentKind: 'user_classification' }),
+            ...(input.caseType === undefined ? {} : { previousCaseType: existing.case_type, caseType: input.caseType, assignmentKind: existing.case_type === null ? 'user_classification' : 'user_correction' }),
             fromVersion: input.expectedVersion,
             toVersion: item.version,
             serviceEligibility: serviceProfile === null ? null : {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArchiveRestore, CheckCircle2, ChevronDown, Search, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
+import { useActiveCase } from '../../app/activeCase'
 import type { CasesDataPort } from '../../data/ports'
 import type { ClosureFeeStatusRecord, ReportsFeesDataPort, TrafficValueLossClosureSummaryRecord } from '../../data/reportsFeesPort'
 import { useClosedCases } from '../../data/useClosedCases'
@@ -119,6 +120,7 @@ export function ClosedCasesPage({
   }, [query, reason, records, sort, type])
 
   const selected = selectedId === null ? null : filtered.find((item) => item.id === selectedId) ?? null
+  const activateCase = useActiveCase(selected, source)
 
   return (
     <main className="page office-page">
@@ -151,7 +153,7 @@ export function ClosedCasesPage({
             <table className="data-table">
               <thead><tr><th>Kapanış</th><th>Dosya No</th><th>Plaka</th><th>Tür</th><th>Sigorta Şirketi</th><th>Kapanış Sebebi</th><th>Eksper Ücreti</th><th>Değer Kaybı</th></tr></thead>
               <tbody>{filtered.map((item) => (
-                <tr key={item.id} tabIndex={0} className={selected?.id === item.id ? 'is-selected' : ''} onClick={() => setSelectedId(item.id)} onKeyDown={(event) => { if (event.key === 'Enter') setSelectedId(item.id) }}>
+                <tr key={item.id} tabIndex={0} className={selected?.id === item.id ? 'is-selected' : ''} onClick={() => { setSelectedId(item.id); activateCase(item) }} onKeyDown={(event) => { if (event.key === 'Enter') { setSelectedId(item.id); activateCase(item) } }}>
                   <td>{item.closedAt}</td><td className="mono">{item.officeNumber}</td><td><span className="plate plate--table">{item.plate}</span></td><td>{item.type}</td><td>{item.company}</td><td>{item.reason}</td><td><strong>{feeLabel(item.expertFee, item.feeStatus)}</strong></td><td>{item.valueLossStatus}</td>
                 </tr>
               ))}</tbody>

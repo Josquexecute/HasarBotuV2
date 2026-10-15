@@ -6,8 +6,8 @@ import { DOCUMENT_REQUIREMENT_LABELS } from './document-requirements.js'
  *
  * Uyarılar kalıcı mesaj kutusu değildir: mevcut görev, takip ve evrak kuralı
  * verisinden **deterministik türetilen salt okunur** bir listedir. Yeni olay
- * tablosu, kuyruk veya arka plan işçisi yoktur; okundu/silindi/ertelendi gibi
- * kullanıcı durumu bu dilimde bulunmaz.
+ * kuyruğu veya arka plan işçisi yoktur. Kişisel okuma onayı API katmanında
+ * tutulur; alan kuralları kaynak uyarıları okuma durumundan bağımsız üretir.
  */
 export const OPERATIONAL_ALERT_SCHEMA_VERSION = 'operational-alert/1.0.0' as const
 
@@ -251,6 +251,8 @@ export function collectOperationalAlerts(
 }
 
 export interface OperationalAlertDerivation {
+  /** Mükerrersiz toplam; liste sınırından bağımsızdır. */
+  readonly totalCount: number
   /** `MAX_OPERATIONAL_ALERTS` ile sınırlı liste. */
   readonly alerts: readonly OperationalAlert[]
   /** `summaryCaseIds` verildiğinde, KIRPILMAMIŞ listeden hesaplanan dosya özetleri. */
@@ -269,6 +271,6 @@ export function deriveOperationalAlerts(
 ): OperationalAlertDerivation {
   const ordered = buildOperationalAlerts(facts, asOfDate)
   const alerts = ordered.slice(0, MAX_OPERATIONAL_ALERTS)
-  if (summaryCaseIds === undefined) return { alerts }
-  return { alerts, caseSummaries: summarizeOperationalAlertsByCase(ordered, summaryCaseIds) }
+  if (summaryCaseIds === undefined) return { alerts, totalCount: ordered.length }
+  return { alerts, totalCount: ordered.length, caseSummaries: summarizeOperationalAlertsByCase(ordered, summaryCaseIds) }
 }

@@ -14,6 +14,7 @@ const expectedVersion = JSON.parse(await readFile('apps/desktop/package.json', '
 const expectedProfile = parseOfficeConnection(JSON.parse(await readFile(process.env.HASARBOTU_DISTRIBUTION_PROFILE, 'utf8')))
 const packagedProfile = parseOfficeConnection(JSON.parse(await readFile(join(directory, 'resources/office-connection.json'), 'utf8')))
 assert.deepEqual(packagedProfile, expectedProfile)
+assert.deepEqual(JSON.parse(await readFile(join(directory, 'resources/folder-roots.json'), 'utf8')), JSON.parse(await readFile('apps/desktop/build-resources/folder-roots.json', 'utf8')))
 let verifiedUiFiles = 0
 async function verifyUi(relative = '') {
   for (const entry of await readdir(join('dist', relative), { withFileTypes: true })) {
@@ -51,12 +52,11 @@ try {
   const page = await fetch(`http://127.0.0.1:${Number(stdout.trim())}/`)
   assert.equal(page.status, 200); assert.ok((await page.text()).includes('<div id="root">'))
   await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resolve('apps/desktop/test/harness/close-package-smoke.ps1'), '-ExpectedProcessId', String(child.pid)], { windowsHide: true })
-  let timer
-  try { assert.equal(await Promise.race([done, new Promise(finish => { timer = setTimeout(() => finish('timeout'), 5000) })]), 0) }
-  finally { clearTimeout(timer) }
+  assert.equal(child.exitCode, null)
   console.log(JSON.stringify({ status: 'PASS', version: expectedVersion, verifiedUiFiles, packagedProfileVerified: true,
-    actualPackagedStartup: true, bridgeServingPackagedUi: true, normalShutdown: true, isolatedFixture: true, realAccountAcceptance: false }))
+    actualPackagedStartup: true, bridgeServingPackagedUi: true, closeHidesToTray: true, isolatedFixture: true, realAccountAcceptance: false }))
 } finally {
   if (child.exitCode === null) child.kill()
+  await done
   await api.close()
 }

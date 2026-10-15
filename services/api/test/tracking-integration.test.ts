@@ -190,6 +190,27 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await snapshot(ownerCookie,id)).tramer[0]?.status).toBe('completed')
   })
 
+  it('infers new and existing photo types while preserving owner approval and document requirements',async () => {
+    const caseId = await createCase()
+    await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'photo-root','Photos')", [uuidv7(),org])
+    await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path) VALUES($1,$2,$3,'photo-root','case-photos')", [uuidv7(),org,caseId])
+    const names = ['OLAY YERİ/IMG001.jpg', 'VİTES.jpg', 'KM.jpg', 'HASAR/IMG001.jpg']
+    for (const [index,name] of names.entries()) await observeFile(pool,org,'test-agent',{ caseId,locationVersion: 1,storageRootKey: 'photo-root',relativePath: `case-photos/${name}`,contentHash: String(index+1).repeat(64),byteSize: 200 })
+    const stored = (await pool.query('SELECT o.id,o.document_type FROM document_observations o JOIN tracked_files f ON f.id=o.file_id WHERE f.case_id=$1 ORDER BY f.relative_path', [caseId])).rows
+    expect(new Set(stored.map(row => row.document_type))).toEqual(new Set(['accident_scene_photo','gear_photo','odometer_photo','damage_photo']))
+    await pool.query('UPDATE document_observations SET document_type=NULL WHERE id=ANY($1::uuid[])', [stored.map(row => row.id)])
+    const data = await snapshot(ownerCookie,caseId)
+    expect(new Set(data.documents.map(row => row.documentType))).toEqual(new Set(stored.map(row => row.document_type)))
+    expect(data.documents.every(row => row.status === 'pending')).toBe(true)
+    const photo = data.documents.find(row => row.documentType === 'odometer_photo')!
+    const payload = { status: 'approved',documentType: photo.documentType,note: '' }
+    expect((await app.inject({ method: 'POST',url: `/api/v1/tracking/documents/${photo.id}/review`,headers: { cookie: operatorCookie },payload })).statusCode).toBe(403)
+    expect((await app.inject({ method: 'POST',url: `/api/v1/tracking/documents/${photo.id}/review`,headers: { cookie: ownerCookie },payload })).statusCode).toBe(204)
+    expect((await snapshot(ownerCookie,caseId)).documents.find(row => row.id === photo.id)).toMatchObject({ documentType: 'odometer_photo',status: 'approved' })
+    const requirements = await app.inject({ method: 'GET',url: `/api/v1/cases/${caseId}/document-requirements`,headers: { cookie: ownerCookie } })
+    expect(requirements.statusCode).toBe(200)
+    expect(requirements.json().requirements.find((row: { canonicalDocumentType: string }) => row.canonicalDocumentType === 'victim_traffic_policy').status).toBe('missing')
+  })
   it('detects documents without fulfilling requirements; only owner approval fulfils them; changed content needs approval again',async () => {
     const caseId = await createCase()
     await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'tracking-root','Test root')", [uuidv7(),org])
@@ -270,8 +291,11 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
   })
 
   it('retains notifications with the desktop closed and across API restarts; read/presented states are private',async () => {
-    const before = await snapshot(ownerCookie)
-    const notice = before.notifications.find((n) => !n.readAt)!
+    // Pending delivers the oldest 20; the full snapshot sorts newest first.
+    const before = await app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/pending',headers: { cookie: ownerCookie } })
+    expect(before.statusCode).toBe(200)
+    const notice = before.json().notifications[0]
+    expect(notice).toBeDefined()
     await app.close()
     app = buildApp({ loggerEnabled: false,auth: { pool,cookieSecure: false },google: { ...google,signupOrganizationId: org },googleProvider: provider });await app.ready()
     const pending = await app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/pending',headers: { cookie: ownerCookie } })

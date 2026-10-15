@@ -1,7 +1,7 @@
 import { hasPermission } from '../auth/permissions.js'
 import type pg from 'pg'
 import { uuidv7 } from '@hasarbotu/database'
-import { isTemporaryTrackedFile } from '@hasarbotu/domain'
+import { inferTrackedDocumentType, isTemporaryTrackedFile } from '@hasarbotu/domain'
 import type { TrackingFile, TramerCommand } from '@hasarbotu/contracts'
 import { withTransaction, type Queryable } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
@@ -100,7 +100,7 @@ export async function observeFile(pool: pg.Pool, organizationId: string, agentId
     }
     const id = uuidv7()
     await db.query(`INSERT INTO document_observations(id,file_id,revision,content_hash,byte_size,file_name,document_type)
-      VALUES($1,$2,$3,$4,$5,$6,$7)`, [id,tracked.id,tracked.revision,input.contentHash,input.byteSize,fileName,previous?.document_type ?? null])
+      VALUES($1,$2,$3,$4,$5,$6,$7)`, [id,tracked.id,tracked.revision,input.contentHash,input.byteSize,fileName,previous?.document_type ?? inferTrackedDocumentType(input.relativePath.slice(location.relative_path.length + 1))])
     await notify(db,organizationId,input.caseId,`document:${id}`,'document',`Evrak ${tracked.revision === 1 ? 'eklendi' : 'değişti'}: ${fileName} — kontrol bekliyor`)
     await record(db,organizationId,input.caseId,'document_observed',undefined,{ agentId, observationId: id, fileName, revision: tracked.revision, contentHash: input.contentHash })
     return { changed: true }

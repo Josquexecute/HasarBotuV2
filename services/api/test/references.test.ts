@@ -118,7 +118,8 @@ describeDb('Paket 18 referans uçları (gerçek veritabanı)', () => {
       status: 'control_required', agreementStatus: 'control_required', isInsurerAgreed: null, requiresHumanReview: true,
     })
     expect((await app.inject({ method: 'GET', url: `${SERVICES_REFERENCE_ROUTE}?evaluationDate=2026-02-30`, headers: { cookie } })).statusCode).toBe(400)
-    expect((await app.inject({ method: 'GET', url: `${SERVICES_REFERENCE_ROUTE}?insurerId=${inactiveInsurer}&evaluationDate=2026-07-14`, headers: { cookie } })).statusCode).toBe(404)
+    // Historical cases retain their insurer context after removal from new selections.
+    expect((await app.inject({ method: 'GET', url: `${SERVICES_REFERENCE_ROUTE}?insurerId=${inactiveInsurer}&evaluationDate=2026-07-14`, headers: { cookie } })).statusCode).toBe(200)
     expect((await app.inject({ method: 'GET', url: `${SERVICES_REFERENCE_ROUTE}?insurerId=${foreignInsurer}&evaluationDate=2026-07-14`, headers: { cookie } })).statusCode).toBe(404)
   })
 })

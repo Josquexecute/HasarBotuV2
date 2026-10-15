@@ -49,6 +49,18 @@ export function useOperationalAlerts(
   }, [source])
 
   useEffect(() => {
+    if (!active) return
+    window.addEventListener('focus', reload)
+    window.addEventListener('tracking-updated', reload)
+    window.addEventListener('operational-alerts-updated', reload)
+    return () => {
+      window.removeEventListener('focus', reload)
+      window.removeEventListener('tracking-updated', reload)
+      window.removeEventListener('operational-alerts-updated', reload)
+    }
+  }, [active, reload])
+
+  useEffect(() => {
     if (!active) return undefined
     let cancelled = false
     const adapter = port ?? createHttpOperationalAlertAdapter()

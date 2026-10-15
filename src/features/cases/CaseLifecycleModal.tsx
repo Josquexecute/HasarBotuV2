@@ -9,7 +9,7 @@ interface Props {
   readonly onClose: () => void
   readonly onUpdated: (item: CaseRecord) => void
   readonly onUnauthorized: () => void
-  readonly onReload: () => void
+  readonly onReload: (item: CaseRecord) => void
   readonly port?: CaseLifecycleCommandPort
 }
 
@@ -24,14 +24,22 @@ function minorCurrency(value: number | null): string {
     : new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value / 100)
 }
 
-function safeError(error: unknown): string {
+function safeError(error: unknown, hasOperation: boolean): string {
   if (!(error instanceof LifecycleCommandError)) return 'İşlem güvenli biçimde tamamlanamadı.'
   switch (error.kind) {
     case 'unauthorized': return 'Oturumunuz sona erdi. Yeniden giriş yapın.'
     case 'forbidden': return 'Bu işlem için yönetici, eksper veya dosya sorumlusu rolü gerekir.'
     case 'validation': return 'Form bilgileri kabul edilmedi. Gerekçe ve seçimleri kontrol edin.'
     case 'not_found': return 'Dosya veya işlem bulunamadı.'
-    case 'conflict': return 'Dosya başka bir işlemle değişti. Güncel veriyi yeniden yükleyin.'
+    case 'conflict': {
+      if (error.code === 'version_conflict') return 'Dosya başka bir işlemle değişti. Güncel veriyi yükleyebilirsiniz; seçiminiz ve gerekçeniz korunur.'
+      if (error.code === 'destination_conflict') return 'Hedef klasör başka bir dosya veya işlem tarafından kullanılıyor. Hedef konumu kontrol edin.'
+      if (error.code === 'lifecycle_stale') return hasOperation
+        ? 'Önizlemeden sonra dosya, evrak veya klasör bilgileri değişmiş. Güncel verilerle yeniden önizleme oluşturun.'
+        : 'Dosyanın klasör konumu doğrulanmamış veya kapanış hedefi mevcut klasör yapısıyla uyumlu değil. Klasör konumunu ve ihbar tarihini kontrol edin.'
+      if (error.code === 'idempotency_conflict') return 'İşlem anahtarı başka bir istekle çakıştı. Önizlemeyi yeniden oluşturun.'
+      return 'Dosyanın açık/kapalı durumu veya devam eden bir işlem bu kapanışa izin vermiyor. Mevcut işlem durumunu kontrol edin.'
+    }
     case 'manual_recovery_required': return 'Fiziksel durum belirsiz; insan incelemesi gerekiyor.'
     case 'unavailable': return 'Sunucuya ulaşılamadı. Mock veriye geçilmedi.'
   }
@@ -46,12 +54,27 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
   const [operation, setOperation] = useState<LifecycleOperationRecord | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [canReload, setCanReload] = useState(false)
   const polling = useRef(false)
 
   const handleError = (error: unknown) => {
     const typed = error instanceof LifecycleCommandError ? error : null
     if (typed?.kind === 'unauthorized') onUnauthorized()
-    setMessage(safeError(error))
+    setCanReload(typed?.kind === 'conflict' && (typed.code === 'version_conflict' || typed.code === 'lifecycle_stale' && operation !== null))
+    setMessage(safeError(error, operation !== null))
+  }
+
+  const reloadLatest = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const latest = await commands.readCase(item.caseId)
+      if (latest.caseId !== item.caseId || latest.version === undefined) throw new LifecycleCommandError('unavailable','invalid case response')
+      onReload(latest)
+      setOperation(null);setCanReload(false)
+      setMessage(latest.lifecycleStatus === (isReopen ? 'closed' : 'open') ? '' : 'Dosyanın açık/kapalı durumu değişmiş. Bu pencereyi kapatıp dosyanın güncel durumunu kontrol edin.')
+    } catch (error) { handleError(error) }
+    finally { setBusy(false) }
   }
 
   const preview = async () => {
@@ -59,7 +82,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
     if ((isReopen || closeMode === 'with_missing_requirements') && reason.trim().length < 3) {
       return setMessage('Gerekçe en az 3 karakter olmalıdır.')
     }
-    setBusy(true); setMessage('')
+    setBusy(true); setMessage('');setCanReload(false)
     try {
       const locationVersion = await commands.readLocationVersion(item.caseId)
       const planned = isReopen
@@ -144,6 +167,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
               <dl className="case-lifecycle-paths">
                 <div><dt>Kaynak</dt><dd>{operation.source.storageRootKey} · {operation.source.relativePath}</dd></div>
                 <div><dt>Hedef</dt><dd>{operation.destination.storageRootKey} · {operation.destination.relativePath}</dd></div>
+                {operation.operationType === 'close' && operation.source.storageRootKey === operation.destination.storageRootKey && operation.source.relativePath === operation.destination.relativePath && <div><dt>Klasör zaten kapalı dosyalar içinde</dt><dd>Onaydan sonra içeriği bulunduğu yerde doğrulanır ve programdaki kapanış tamamlanır.</dd></div>}
                 <div><dt>Kural sürümleri</dt><dd>{operation.requirementSummary.documentRuleVersion} · {operation.requirementSummary.closureRuleVersion}</dd></div>
                 <div><dt>Servis koşulu</dt><dd>{operation.requirementSummary.serviceEligibility === null ? 'Servis atanmamış' : `${operation.requirementSummary.serviceEligibility.serviceType} · ${operation.requirementSummary.serviceEligibility.agreementStatus} · ${operation.requirementSummary.serviceEligibility.ruleVersion}`}</dd></div>
               </dl>
@@ -173,12 +197,12 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
               {operation.warnings.length > 0 && <div className="case-form-alert" role="status"><AlertTriangle size={17} /><span>Eksiklerle kapatma seçildi; gerekçe ve snapshot audit geçmişine yazılacak.</span></div>}
             </div>
           )}
-          {message && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{message}</span>{message.includes('değişti') && <button className="button button--secondary" type="button" onClick={onReload}><RefreshCw size={15} /> Güncel Veriyi Yükle</button>}</div>}
+          {message && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{message}</span>{canReload && <button className="button button--secondary" type="button" disabled={busy} onClick={() => void reloadLatest()}><RefreshCw size={15} /> Güncel Veriyi Yükle</button>}</div>}
         </div>
         <footer className="modal__footer">
           <button className="button button--secondary" type="button" onClick={() => { polling.current = false; onClose() }} disabled={busy}>{completed ? 'Kapat' : 'Vazgeç'}</button>
           {operation === null
-            ? <button className="button button--primary" type="button" onClick={preview} disabled={busy}>{busy ? 'Planlanıyor…' : 'Önizleme Oluştur'}</button>
+            ? <button className="button button--primary" type="button" onClick={preview} disabled={busy || item.lifecycleStatus !== (isReopen ? 'closed' : 'open')}>{busy ? 'Planlanıyor…' : 'Önizleme Oluştur'}</button>
             : operation.canApprove
               ? <button className="button button--danger" type="button" onClick={approve} disabled={busy || operation.blockers.length > 0}>{busy ? 'Kuyruğa alınıyor…' : isReopen ? 'Onayla ve Yeniden Aç' : 'Onayla ve Kapat'}</button>
               : null}

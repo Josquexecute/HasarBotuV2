@@ -24,6 +24,8 @@ describe('tracking screens',() => {
     expect(screen.queryByText('evrak-100.pdf',{ selector: 'strong' })).not.toBeInTheDocument()
     expect(screen.queryByText('Bildirim 100',{ selector: 'strong' })).not.toBeInTheDocument()
     // Scope label queries to one row instead of scanning every control in the large document list.
+    const firstRow = within(screen.getByText('evrak-0.pdf',{ selector: 'strong' }).closest('article')!)
+    await userEvent.click(firstRow.getByRole('button',{ name: 'Türü düzelt / not ekle' }))
     const draft = () => within(screen.getByText('evrak-0.pdf',{ selector: 'strong' }).closest('article')!).getByLabelText('Kontrol notu')
     // This test checks batching and draft retention, rather than rerendering hundreds of rows per keystroke.
     fireEvent.change(draft(),{ target: { value: 'İnceleme taslağı' } })
@@ -63,11 +65,23 @@ describe('tracking screens',() => {
     data.documents = [{ id: 'doc',caseId: 'case',plate: '34 TEST 123',officeNumber: '1',fileName: 'poliçe.pdf',relativePath: 'case/poliçe.pdf',status: 'pending',documentType: null,observedAt: new Date().toISOString(),canReview: true }]
     const fetch = install(data)
     render(<MemoryRouter><TrackingWorkspace caseId="case" /></MemoryRouter>)
-    expect(await screen.findByRole('button',{ name: 'Kontrol ettim, uygun' })).toBeDisabled()
+    expect(await screen.findByRole('button',{ name: 'Kontrol ettim, uygun' })).toBeEnabled()
     expect(fetch.mock.calls.every(([,options]) => options?.method !== 'POST')).toBe(true)
+    await userEvent.click(screen.getByRole('button',{ name: 'Türü düzelt / not ekle' }))
     await userEvent.selectOptions(screen.getByLabelText('Evrak türü'),'victim_traffic_policy')
     await userEvent.click(screen.getByRole('button',{ name: 'Kontrol ettim, uygun' }))
     await waitFor(() => expect(fetch.mock.calls.some(([url,options]) => String(url).endsWith('/documents/doc/review') && JSON.parse(String(options?.body)).status === 'approved')).toBe(true))
+  })
+  it('uses an inferred photo category without requiring a type selection',async () => {
+    const data = structuredClone(base)
+    data.documents = [{ id: 'photo',caseId: 'case',plate: '34 TEST 123',officeNumber: '1',fileName: 'KM.jpg',relativePath: 'case/KM.jpg',status: 'pending',documentType: 'odometer_photo',observedAt: new Date().toISOString(),canReview: true }]
+    const fetch = install(data)
+    render(<MemoryRouter><TrackingWorkspace caseId="case" view="documents" /></MemoryRouter>)
+    expect(await screen.findByText('KM fotoğrafı')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Evrak türü')).not.toBeInTheDocument()
+    expect(screen.queryByText('Tramer işlemleri')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button',{ name: 'Kontrol ettim, uygun' }))
+    await waitFor(() => expect(fetch.mock.calls.some(([url,options]) => String(url).endsWith('/documents/photo/review') && JSON.parse(String(options?.body)).documentType === 'odometer_photo')).toBe(true))
   })
   it('hides mutation controls for users without permission',async () => {
     const data = structuredClone(base)

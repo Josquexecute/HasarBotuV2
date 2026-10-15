@@ -197,7 +197,7 @@ describeDb('Paket 51 operasyonel uyarı ölçeklenme sınırları', () => {
     const result = await store.list(largeOrganizationId, AS_OF_DATE, EVALUATED_AT)
 
     expect(result.alerts.length).toBeLessThanOrEqual(MAX_ALERTS)
-    expect(result.totalCount).toBe(result.alerts.length)
+    expect(result.totalCount).toBeGreaterThan(result.alerts.length)
 
     const keys = result.alerts.map((item) => item.dedupeKey)
     expect(new Set(keys).size).toBe(keys.length)

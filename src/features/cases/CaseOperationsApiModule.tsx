@@ -110,6 +110,7 @@ export function CaseOperationsApiModule({
     setConflict(false)
     try {
       await operation()
+      window.dispatchEvent(new Event('operational-alerts-updated'))
     } catch (caught) {
       setError(safeErrorMessage(caught))
       setConflict(caught instanceof CaseOperationsError && caught.kind === 'conflict')
@@ -278,9 +279,9 @@ export function CaseOperationsApiModule({
         </section>
       </div>
 
-      <section className="info-panel case-operations__follow-up">
-        <header><h2>Takip Tarihi Geçmişi</h2><CalendarClock size={16} /></header>
-        <p>Takip tarihi kay?t g?n?nde otomatik atan?r; elle de?i?tirilemez.</p>
+      <details className="info-panel case-operations__follow-up">
+        <summary><CalendarClock size={16} /> Takip Tarihi Geçmişi ({workspace.data.followUpHistory.length})</summary>
+        <p>Takip tarihi kayıt gününde otomatik atanır; elle değiştirilemez.</p>
         <div className="case-follow-up-history">
           {workspace.data.followUpHistory.length === 0 && <p className="case-operations__empty">Takip tarihi değişikliği bulunmuyor.</p>}
           {workspace.data.followUpHistory.map((history) => (
@@ -291,7 +292,7 @@ export function CaseOperationsApiModule({
             </article>
           ))}
         </div>
-      </section>
+      </details>
     </div>
   )
 }

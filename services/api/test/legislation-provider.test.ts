@@ -27,7 +27,8 @@ describe('resmî mevzuat ve Gemini kaynak doğrulaması', () => {
     expect(options.body).not.toContain('34 ABC 123')
     expect(options.body).not.toContain('12345678901')
     expect(options.body).not.toContain('kisi@example.test')
-    expect(JSON.parse(String(options.body)).generationConfig.responseFormat.text.mimeType).toBe('application/json')
+    // GenerateContent TextResponseFormat uses an enum, unlike the HTTP content-type.
+    expect(JSON.parse(String(options.body)).generationConfig.responseFormat.text.mimeType).toBe('APPLICATION_JSON')
     expect(options.redirect).toBe('error')
   })
   it.each([

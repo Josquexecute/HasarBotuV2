@@ -24,9 +24,11 @@ describeDb('office administration runtime effects (isolated PostgreSQL)',() => {
     const config = assertTestDatabaseUrl(url!)
     pool = createDatabasePool({ config })
     await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public')
-    await runMigrations({ databaseUrl: config.url,quiet: true })
+    await runMigrations({ databaseUrl: config.url,quiet: true,count: 58 })
     org = uuidv7();foreignOrg = uuidv7()
     await pool.query("INSERT INTO organizations(id,code,name) VALUES($1,'administration-a','A'),($2,'administration-b','B')",[org,foreignOrg])
+    await pool.query("INSERT INTO insurers(id,organization_id,name,is_active,version) VALUES($1,$2,'AK Sigorta A.Ş.',false,4)",[uuidv7(),org])
+    expect((await runMigrations({ databaseUrl: config.url,quiet: true })).map(item => item.name)).toEqual(['0059_active_insurer_catalog'])
     app = buildApp({ loggerEnabled: false,auth: { pool,cookieSecure: false } });await app.ready()
     const admin = await addUser(org,'admin'),owner = await addUser(org,'case_manager'),foreign = await addUser(foreignOrg,'admin')
     manager = admin.id;adminCookie = admin.cookie;operator = owner.id;operatorCookie = owner.cookie;foreignCookie = foreign.cookie
@@ -34,6 +36,37 @@ describeDb('office administration runtime effects (isolated PostgreSQL)',() => {
     expect(created.statusCode,created.payload).toBe(201);caseId = created.json().case.id
   },60_000)
   afterAll(async () => { await app?.close();await pool?.end() })
+  it('seeds the official catalogue per office while preserving existing removals and revisions',async () => {
+    const rows = (await get('administration/insurers')).json().items
+    expect(rows).toHaveLength(45)
+    expect(rows.find((item: { name: string }) => item.name === 'AK Sigorta A.Ş.')).toMatchObject({ isActive: false,version: 4 })
+    expect((await get('references/insurers')).json().items).toHaveLength(44)
+    expect((await get('references/insurers',foreignCookie)).json().items).toHaveLength(45)
+    expect((await get('administration/insurers',operatorCookie)).statusCode).toBe(403)
+  })
+  it('creates, revises and removes insurers without breaking historical cases or losing concurrent edits',async () => {
+    const payload = { name: 'Sentetik Sigorta',isActive: true }
+    expect((await post('administration/insurers',payload,operatorCookie)).statusCode).toBe(403)
+    const created = await post('administration/insurers',payload)
+    expect(created.statusCode,created.payload).toBe(201)
+    const id = created.json().item.id
+    expect((await post('administration/insurers',{ ...payload,name: 'sentetik sigorta' })).statusCode).toBe(409)
+    const edited = await post(`administration/insurers/${id}`,{ name: 'Revize Sigorta',isActive: true,expectedVersion: 1 })
+    expect(edited.statusCode,edited.payload).toBe(200)
+    expect(edited.json().item).toMatchObject({ name: 'Revize Sigorta',version: 2 })
+    expect((await post(`administration/insurers/${id}`,{ ...payload,expectedVersion: 1 })).statusCode).toBe(409)
+    expect((await post(`administration/insurers/${id}/delete`,{ expectedVersion: 2 },foreignCookie)).statusCode).toBe(404)
+    const assigned = await app.inject({ method: 'PATCH',url: `/api/v1/cases/${caseId}`,headers: { cookie: adminCookie },payload: { expectedVersion: 1,insurerId: id } })
+    expect(assigned.statusCode,assigned.payload).toBe(200)
+    expect((await post(`administration/insurers/${id}/delete`,{ expectedVersion: 1 })).statusCode).toBe(409)
+    expect((await post(`administration/insurers/${id}/delete`,{ expectedVersion: 2 })).statusCode).toBe(200)
+    expect((await get('references/insurers')).json().items.some((item: { id: string }) => item.id === id)).toBe(false)
+    expect((await get(`cases/${caseId}`)).json().case.insurerId).toBe(id)
+    expect((await get(`references/services?insurerId=${id}`)).statusCode).toBe(200)
+    expect((await post(`administration/insurers/${id}`,{ ...payload,expectedVersion: 3 })).statusCode).toBe(200)
+    expect((await get('references/insurers')).json().items).toContainEqual({ id,name: payload.name })
+    expect((await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE resource_id=$1 AND action LIKE 'insurer.%'",[id])).rows[0].n).toBe(4)
+  })
   it('edits actual service references, preserves tenant scope and rejects stale versions',async () => {
     const payload = { name: 'Test Servis',serviceType: 'private',phone: '0312 000 00 00',isActive: true }
     expect((await post('administration/services',payload,operatorCookie)).statusCode).toBe(403)

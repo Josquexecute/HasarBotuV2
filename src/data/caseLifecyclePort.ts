@@ -66,7 +66,7 @@ export type LifecycleCommandErrorKind =
 
 export class LifecycleCommandError extends Error {
   readonly kind: LifecycleCommandErrorKind
-  constructor(kind: LifecycleCommandErrorKind, message: string) {
+  constructor(kind: LifecycleCommandErrorKind, message: string, readonly code?: string) {
     super(message)
     this.name = 'LifecycleCommandError'
     this.kind = kind
@@ -120,7 +120,7 @@ function errorFor(status: number, body: unknown): LifecycleCommandError {
   if (status === 404) return new LifecycleCommandError('not_found', 'case or operation not found')
   if (status === 400) return new LifecycleCommandError('validation', 'lifecycle request validation failed')
   if (code === 'manual_recovery_required') return new LifecycleCommandError('manual_recovery_required', 'manual recovery required')
-  if (status === 409) return new LifecycleCommandError('conflict', 'lifecycle request conflict')
+  if (status === 409) return new LifecycleCommandError('conflict', 'lifecycle request conflict', code)
   return new LifecycleCommandError('unavailable', `lifecycle endpoint HTTP ${status}`)
 }
 
@@ -178,12 +178,12 @@ export function createHttpCaseLifecycleCommandAdapter(options: AdapterOptions = 
       return readOperationBody(body)
     },
     async readCase(caseId) {
-      const response = await request(`/api/v1/cases/${encodeURIComponent(caseId)}`, { headers: { accept: 'application/json', ...headers } })
+      const response = await request(`/api/v1/cases/${encodeURIComponent(caseId)}?includeLegacyReferences=true&includeEksist=true`, { headers: { accept: 'application/json', ...headers } })
       const body = await jsonOf(response)
       if (!response.ok) throw errorFor(response.status, body)
-      const { caseDetailResponseSchema } = await import('@hasarbotu/contracts')
-      const parsed = caseDetailResponseSchema.safeParse(body)
-      if (!parsed.success) throw new LifecycleCommandError('unavailable', 'invalid case response')
+      const { caseDetailWithLegacyReferencesResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = caseDetailWithLegacyReferencesResponseSchema.safeParse(body)
+      if (!parsed.success || parsed.data.case.id !== caseId) throw new LifecycleCommandError('unavailable', 'invalid case response')
       return mapCaseDtoToRecord(parsed.data.case)
     },
   }

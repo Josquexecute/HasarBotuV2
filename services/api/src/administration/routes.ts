@@ -11,6 +11,7 @@ import { createAuditService } from '../audit/service.js'
 import { withTransaction } from '../db/executor.js'
 import { failureBody } from '../errors/failure.js'
 import { loadDocumentRequirementRules } from '../document-requirements/rules.js'
+import { insurerEditSchema,managedInsurerSchema,managedInsurersSchema } from '@hasarbotu/contracts'
 
 class AdministrationError extends Error {
   constructor(readonly status: 404 | 409,message: string) { super(message) }
@@ -30,6 +31,46 @@ export function registerAdministrationRoutes(app: FastifyInstance,{ pool }: { po
       const session = await requireAnyRole(auth,request,reply,['admin'])
       if (!session) return
       return managedServicesSchema.parse({ items: (await pool.query(`SELECT ${fields} FROM service_centers WHERE organization_id=$1 ORDER BY name,id`,[session.user.organizationId])).rows })
+    })
+    const insurerFields = 'id,name,is_active AS "isActive",version'
+    routes.get('/api/v1/administration/insurers',async (request,reply) => {
+      const session = await requireAnyRole(auth,request,reply,['admin'])
+      if (!session) return
+      return managedInsurersSchema.parse({ items: (await pool.query(`SELECT ${insurerFields} FROM insurers WHERE organization_id=$1 ORDER BY name,id`,[session.user.organizationId])).rows })
+    })
+    routes.post('/api/v1/administration/insurers',async (request,reply) => {
+      const session = await requireAnyRole(auth,request,reply,['admin'])
+      if (!session) return
+      const input = insurerEditSchema.parse(request.body),org = session.user.organizationId
+      const item = await withTransaction(pool,async db => {
+        await db.query('SELECT id FROM organizations WHERE id=$1 FOR UPDATE',[org])
+        if ((await db.query('SELECT 1 FROM insurers WHERE organization_id=$1 AND lower(btrim(name))=lower($2)',[org,input.name])).rowCount) throw new AdministrationError(409,'Bu sigorta şirketi zaten kayıtlı. Pasif kayıtları da kontrol edin.')
+        const row = (await db.query(`INSERT INTO insurers(id,organization_id,name,is_active) VALUES($1,$2,$3,$4) RETURNING ${insurerFields}`,[uuidv7(),org,input.name,input.isActive])).rows[0]
+        await audit.record(db,{ organizationId: org,actorUserId: session.user.id,requestId: String(request.id),action: 'insurer.created',entityType: 'insurer',entityId: row.id,details: { name: input.name,isActive: input.isActive } })
+        return managedInsurerSchema.parse(row)
+      })
+      return reply.code(201).send({ item })
+    })
+    for (const remove of [false,true]) routes.post(`/api/v1/administration/insurers/:id${remove ? '/delete' : ''}`,async (request,reply) => {
+      const session = await requireAnyRole(auth,request,reply,['admin'])
+      if (!session) return
+      const { id } = z.strictObject({ id: z.string().uuid() }).parse(request.params)
+      const versionSchema = z.strictObject({ expectedVersion: z.number().int().positive() })
+      const input = (remove ? versionSchema : insurerEditSchema.extend(versionSchema.shape)).parse(request.body)
+      const { expectedVersion,...editFields } = input
+      const org = session.user.organizationId
+      const item = await withTransaction(pool,async db => {
+        await db.query('SELECT id FROM organizations WHERE id=$1 FOR UPDATE',[org])
+        const before = (await db.query(`SELECT ${insurerFields} FROM insurers WHERE organization_id=$1 AND id=$2 FOR UPDATE`,[org,id])).rows[0]
+        if (!before) throw new AdministrationError(404,'Sigorta şirketi bulunamadı.')
+        if (before.version !== expectedVersion) throw new AdministrationError(409,'Sigorta şirketi değişmiş. Listeyi yenileyin.')
+        const edit = remove ? { name: before.name as string,isActive: false } : insurerEditSchema.parse(editFields)
+        if ((await db.query('SELECT 1 FROM insurers WHERE organization_id=$1 AND id<>$2 AND lower(btrim(name))=lower($3)',[org,id,edit.name])).rowCount) throw new AdministrationError(409,'Bu sigorta şirketi zaten kayıtlı.')
+        const row = (await db.query(`UPDATE insurers SET name=$3,is_active=$4,version=version+1 WHERE organization_id=$1 AND id=$2 RETURNING ${insurerFields}`,[org,id,edit.name,edit.isActive])).rows[0]
+        await audit.record(db,{ organizationId: org,actorUserId: session.user.id,requestId: String(request.id),action: remove ? 'insurer.deleted' : 'insurer.updated',entityType: 'insurer',entityId: id,details: { previousName: before.name,name: edit.name,isActive: edit.isActive,fromVersion: before.version,toVersion: row.version } })
+        return managedInsurerSchema.parse(row)
+      })
+      return { item }
     })
     routes.post('/api/v1/administration/services',async (request,reply) => {
       const session = await requireAnyRole(auth,request,reply,['admin'])

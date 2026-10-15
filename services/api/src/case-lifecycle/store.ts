@@ -15,6 +15,8 @@ import {
 } from '@hasarbotu/contracts'
 import {
   buildClosedCaseWorkspacePath,
+  buildClosedImportedCaseWorkspacePath,
+  buildOpenImportedCaseWorkspacePath,
   evaluateClosureRequirements,
   type ClosureMetadataCandidate,
 } from '@hasarbotu/domain'
@@ -304,10 +306,10 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         )
         if (activeLifecycle.rowCount !== 0) return { kind: 'lifecycle_conflict' }
         const locationResult = await client.query(
-          `SELECT id,storage_root_key,relative_path,verification_status,version FROM case_locations
+          `SELECT id,storage_root_key,relative_path,verification_status,version,source FROM case_locations
            WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`, [actor.organizationId, caseId],
         )
-        const location = locationResult.rows[0] as { id: string; storage_root_key: string; relative_path: string; verification_status: string; version: number } | undefined
+        const location = locationResult.rows[0] as { id: string; storage_root_key: string; relative_path: string; verification_status: string; version: number; source: string } | undefined
         if (location === undefined) return { kind: 'location_required' }
         if (location.verification_status !== 'verified') return { kind: 'location_not_verified' }
         if (location.version !== input.expectedLocationVersion) return { kind: 'version_conflict' }
@@ -324,7 +326,9 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
            AND status NOT IN ('ready','stale','cancelled')`, [actor.organizationId, caseId],
         )
         if (activeProvisioning.rowCount !== 0) return { kind: 'active_file_operation' }
-        const target = buildClosedCaseWorkspacePath(dateOnly(current.notification_date), location.relative_path)
+        const target = location.source === 'imported'
+          ? buildClosedImportedCaseWorkspacePath(dateOnly(current.notification_date), location.relative_path)
+          : buildClosedCaseWorkspacePath(dateOnly(current.notification_date), location.relative_path)
         if (!target.ok) return { kind: 'invalid_location' }
         const destinationConflict = await client.query(
           `SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2
@@ -366,7 +370,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           action: blockers.length > 0 ? 'case_lifecycle.close_blocked' : input.closeMode === 'with_missing_requirements' && incomplete
             ? 'case_lifecycle.close_with_missing_requirements' : 'case_lifecycle.close_planned',
           entityType: 'case_lifecycle_operation', entityId: operationId,
-          details: { caseId, closeMode: input.closeMode, missingCount: summary.missingCount, controlRequiredCount: summary.controlRequiredCount,
+          details: { caseId, closeMode: input.closeMode, archiveBasis: location.source === 'imported' ? 'verified_imported_location' : 'notification_date', missingCount: summary.missingCount, controlRequiredCount: summary.controlRequiredCount,
             source: { storageRootKey: location.storage_root_key, relativePath: location.relative_path },
             destination: { storageRootKey: location.storage_root_key, relativePath: target.value }, blockers, warnings,
             serviceEligibility: serviceProfile?.agreement ?? null,
@@ -414,6 +418,11 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         )
         const openLocation = prior.rows[0] as { source_storage_root_key: string; source_relative_path: string } | undefined
         if (openLocation === undefined) return { kind: 'invalid_location' }
+        if (openLocation.source_storage_root_key === location.storage_root_key && openLocation.source_relative_path === location.relative_path) {
+          const restored = buildOpenImportedCaseWorkspacePath(location.relative_path)
+          if (!restored.ok) return { kind: 'invalid_location' }
+          openLocation.source_relative_path = restored.value
+        }
         const activeFile = await client.query(
           `SELECT status FROM case_file_operations WHERE organization_id=$1 AND case_id=$2
            AND status NOT IN ('ready','stale','cancelled')`, [actor.organizationId, caseId],

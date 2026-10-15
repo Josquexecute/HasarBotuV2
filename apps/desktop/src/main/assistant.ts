@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, type IpcMainEvent } from 'electron'
+import { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, type IpcMainEvent } from 'electron'
 import { assistantAppearanceSchema, DEFAULT_ASSISTANT_APPEARANCE } from '@hasarbotu/contracts'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -215,6 +215,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   const dispose = () => {
     if (disposed) return
     disposed = true
+    app.removeListener('before-quit', dispose)
     stopGaze()
     assistantSession.removeListener('will-download', denyDownload)
     menuWindow.webContents.session.removeListener('will-download', denyMenuDownload)
@@ -235,6 +236,8 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   // Alt+F4 hides only the helper; the tray remains available to recover it.
   window.on('close', (event) => { event.preventDefault(); drag = undefined; window.hide() })
   options.shell.window.once('closed', dispose)
+  // Hide-on-close helper windows must not cancel an explicit app quit/update.
+  app.on('before-quit', dispose)
   ipcMain.on('hasarbotu:assistant', handleCommand)
   ipcMain.on('hasarbotu:assistant-menu',handleMenuAction)
   ipcMain.handle('hasarbotu:assistant-appearance', handleAppearance)

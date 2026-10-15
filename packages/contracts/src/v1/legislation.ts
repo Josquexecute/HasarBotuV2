@@ -29,7 +29,8 @@ export const legislationAnswerSchema = z.strictObject({
 })
 export const legislationHistorySchema = z.strictObject({ items: z.array(legislationAnswerSchema) })
 export const legislationAiSettingsSchema = z.strictObject({ organizationId: idSchema, version: z.number().int().nonnegative(), configured: z.boolean(), enabled: z.boolean(), model: z.string(), canConfigure: z.boolean(), encryptionAvailable: z.boolean() })
-export const legislationAiSettingsUpdateSchema = z.strictObject({ expectedOrganizationId: idSchema, expectedVersion: z.number().int().nonnegative(), enabled: z.boolean(), model: z.string().regex(/^gemini-[a-z0-9.-]{1,70}$/), apiKey: z.string().min(20).max(256).regex(/^[A-Za-z0-9_-]+$/).optional() })
+// Auth keys issued by AI Studio can contain periods and exceed legacy key lengths.
+export const legislationAiSettingsUpdateSchema = z.strictObject({ expectedOrganizationId: idSchema, expectedVersion: z.number().int().nonnegative(), enabled: z.boolean(), model: z.string().trim().regex(/^gemini-[a-z0-9.-]{1,70}$/), apiKey: z.string().trim().min(20).max(4096).regex(/^[A-Za-z0-9._-]+$/).optional() })
 export type LegislationSource = z.infer<typeof legislationSourceSchema>
 export type LegislationAnswer = z.infer<typeof legislationAnswerSchema>
 export type LegislationQuestion = z.infer<typeof legislationQuestionSchema>

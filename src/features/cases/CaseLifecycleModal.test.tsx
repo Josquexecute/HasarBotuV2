@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { CaseLifecycleCommandPort, LifecycleOperationRecord } from '../../data/caseLifecyclePort'
+import { useState } from 'react'
+import { LifecycleCommandError, type CaseLifecycleCommandPort, type LifecycleOperationRecord } from '../../data/caseLifecyclePort'
 import type { CaseRecord } from '../../types/case'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
 
@@ -29,6 +30,42 @@ const planned: LifecycleOperationRecord = {
 }
 
 describe('CaseLifecycleModal', () => {
+  it('refreshes a stale version without losing the missing-requirements mode or reason',async () => {
+    const reason = 'Eksik evraklar takip edilerek kapanış istendi.'
+    const port: CaseLifecycleCommandPort = {
+      readLocationVersion: vi.fn().mockResolvedValue(3),
+      planClose: vi.fn().mockRejectedValueOnce(new LifecycleCommandError('conflict','synthetic','version_conflict')).mockResolvedValueOnce({ ...planned,closeMode: 'with_missing_requirements',reason }),
+      planReopen: vi.fn(),approve: vi.fn(),readOperation: vi.fn(),readCase: vi.fn().mockResolvedValue({ ...item,version: 2 }),
+    }
+    const onClose = vi.fn()
+    function Workspace() {
+      const [current,setCurrent] = useState(item)
+      return <CaseLifecycleModal item={current} port={port} onClose={onClose} onUpdated={vi.fn()} onUnauthorized={vi.fn()} onReload={setCurrent} />
+    }
+    render(<Workspace />)
+    const user = userEvent.setup()
+    await user.click(screen.getByLabelText('Eksiklerle kapat'))
+    await user.type(screen.getByLabelText('Gerekçe'),reason)
+    await user.click(screen.getByRole('button',{ name: 'Önizleme Oluştur' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('seçiminiz ve gerekçeniz korunur')
+    await user.click(screen.getByRole('button',{ name: 'Güncel Veriyi Yükle' }))
+    await waitFor(() => expect(port.readCase).toHaveBeenCalledWith(item.caseId))
+    expect(screen.getByLabelText('Eksiklerle kapat')).toBeChecked()
+    expect(screen.getByLabelText('Gerekçe')).toHaveValue(reason)
+    expect(onClose).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button',{ name: 'Önizleme Oluştur' }))
+    await screen.findByRole('button',{ name: 'Onayla ve Kapat' })
+    expect(port.planClose).toHaveBeenLastCalledWith(item.caseId,{ expectedCaseVersion: 2,expectedLocationVersion: 3,closeMode: 'with_missing_requirements',reason })
+    expect(port.approve).not.toHaveBeenCalled()
+  })
+  it('reports invalid workspace and occupied targets without claiming the case version changed',async () => {
+    const port: CaseLifecycleCommandPort = { readLocationVersion: vi.fn().mockResolvedValue(1),planClose: vi.fn().mockRejectedValue(new LifecycleCommandError('conflict','internal detail','lifecycle_stale')),planReopen: vi.fn(),approve: vi.fn(),readOperation: vi.fn(),readCase: vi.fn() }
+    render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={vi.fn()} onUnauthorized={vi.fn()} onReload={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button',{ name: 'Önizleme Oluştur' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('klasör yapısıyla uyumlu değil')
+    expect(screen.queryByRole('button',{ name: 'Güncel Veriyi Yükle' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/başka bir işlemle değişti/)).not.toBeInTheDocument()
+  })
   it('close preview ve açık onaydan sonra server sonucuyla case kaydını yeniler', async () => {
     const user = userEvent.setup()
     const closed = { ...item, status: 'Kapalı' as const, stage: 'Kapalı' as const, lifecycleStatus: 'closed' as const, workflowStage: 'closed' as const, version: 2 }

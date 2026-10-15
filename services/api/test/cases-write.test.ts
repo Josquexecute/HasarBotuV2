@@ -333,7 +333,21 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect(auditCount.rows[0].n).toBe(0)
   })
 
-  it('sinirlar: bos guncelleme 400; baska org dosyasi 404; oturumsuz 401; plaka/tur degistirilemez (strict)', async () => {
+  it('corrects an assigned case type with version locking and an audit of the previous classification',async () => {
+    const created = await createCase('34 ABC 997')
+    const id = created.body.case?.id as string
+    const changed = await app.inject({ method: 'PATCH',url: `${CASES_ROUTE}/${id}`,headers: { cookie },payload: { expectedVersion: 1,caseType: 'traffic' } })
+    expect(changed.statusCode,changed.payload).toBe(200)
+    expect(changed.json().case).toMatchObject({ caseType: 'traffic',version: 2,status: 'open' })
+    const stale = await app.inject({ method: 'PATCH',url: `${CASES_ROUTE}/${id}`,headers: { cookie },payload: { expectedVersion: 1,caseType: 'traffic' } })
+    expect(stale.statusCode).toBe(409)
+    expect((await pool.query("SELECT details FROM audit_events WHERE resource_id=$1 AND action='case.updated'",[id])).rows[0].details).toMatchObject({ previousCaseType: 'casco',caseType: 'traffic',assignmentKind: 'user_correction',fromVersion: 1,toVersion: 2 })
+    const rules = await app.inject({ url: `${CASES_ROUTE}/${id}/document-requirements`,headers: { cookie } })
+    expect(rules.statusCode,rules.payload).toBe(200)
+    expect(JSON.stringify(rules.json())).toContain('traffic')
+  })
+
+  it('sinirlar: bos guncelleme 400; baska org dosyasi 404; oturumsuz 401; plaka degistirilemez (strict)', async () => {
     const created = await createCase('34 JJJ 222')
     const caseId = created.body.case?.id as string
 

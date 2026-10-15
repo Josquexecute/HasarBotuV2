@@ -1,6 +1,6 @@
 {
   "name": "@hasarbotu/desktop",
-  "version": "0.1.17",
+  "version": "0.1.25",
   "private": true,
   "type": "module",
   "description": "HasarBotu V2 ince Electron kabuğu (ADR-Q06): güvenli BrowserWindow + loopback aynı-origin köprüsü",
@@ -45,13 +45,20 @@
     ],
     "extraResources": [
       {
+        "from": "build-resources/folder-roots.json",
+        "to": "folder-roots.json"
+      },
+      {
         "from": "build-resources/office-connection.json",
         "to": "office-connection.json"
       },
       {
         "from": "distribution",
         "to": ".",
-        "filter": ["*.ps1", "*.psm1"]
+        "filter": [
+          "*.ps1",
+          "*.psm1"
+        ]
       },
       {
         "from": "../../dist",

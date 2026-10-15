@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { canonicalDocumentTypeSchema, type TrackingSnapshot } from '@hasarbotu/contracts'
+import { trackedDocumentTypeSchema, TRACKED_DOCUMENT_LABELS, type TrackingSnapshot } from '@hasarbotu/contracts'
 import { commandTramer, loadTracking, trackingRequest } from './trackingApi'
 import { GoogleConnectButton } from './GoogleConnectButton'
 import './tracking.css'
@@ -12,7 +12,6 @@ const historyLabels: Record<string,string> = { tramer_assigned: 'Tramer sorumlus
 const detailLabels: Record<string,string> = { applicationNumber: 'Başvuru numarası',sourceAccount: 'Sonucun geldiği hesap',previousStatus: 'Önceki durum',status: 'Yeni durum',resultText: 'Sonuç',fileName: 'Evrak',note: 'Kontrol notu',reason: 'Gerekçe' }
 const valueLabels: Record<string,string> = { ...statuses,pending: 'Kontrol bekliyor',approved: 'Onaylandı',rejected: 'Reddedildi' }
 const displayValue = (value: unknown) => valueLabels[String(value)] ?? String(value ?? '—')
-const documentLabels: Record<string,string> = { victim_traffic_policy: 'Mağdur trafik poliçesi',insured_traffic_policy: 'Sigortalı trafik poliçesi',sbm_heavy_damage_result: 'SBM ağır hasar sonucu',victim_registration: 'Mağdur ruhsat',insured_registration: 'Sigortalı ruhsat',victim_driver_license: 'Mağdur ehliyet',insured_driver_license: 'Sigortalı ehliyet',casco_policy: 'Kasko poliçesi',casco_vehicle_registration: 'Kasko ruhsat',casco_driver_license: 'Kasko ehliyet',accident_report: 'Zabıt',ktt: 'Kaza tespit tutanağı',statement: 'Beyan',tramer_result: 'Tramer sonucu',opposing_vehicle_registration: 'Karşı araç ruhsat',opposing_driver_license: 'Karşı sürücü ehliyet',opposing_traffic_policy: 'Karşı araç trafik poliçesi',fault_ratio: 'Kusur oranı' }
 type Run = (work: () => Promise<unknown>) => Promise<void>
 function CaseLink({ row }: { row: { caseId: string;plate: string;officeNumber: string } }) {
   return <Link to={`/dosyalar/${row.caseId}`}>{row.plate} · {row.officeNumber}</Link>
@@ -34,14 +33,16 @@ function TramerRow({ item,run,busy }: { item: TrackingSnapshot['tramer'][number]
   </article>
 }
 
-function DocumentRow({ item,run,busy }: { item: TrackingSnapshot['documents'][number];run: Run;busy: boolean }) {
-  const [type,setType] = useState(item.documentType ?? '')
+function DocumentRow({ item,run,busy,showCaseLink }: { item: TrackingSnapshot['documents'][number];run: Run;busy: boolean;showCaseLink: boolean }) {
+  const [type,setType] = useState(item.documentType ?? 'other_document')
+  const [editing,setEditing] = useState(false)
   const [note,setNote] = useState('')
-  return <article className="tracking-row"><CaseLink row={item} /><strong>{item.fileName}</strong><small>{item.relativePath}</small>
-    <span>{item.status === 'pending' ? 'Sorumlu kontrolü bekleniyor' : item.status === 'approved' ? 'Sorumlu onayladı' : 'Reddedildi'}</span>
-    {item.canReview && <><label>Evrak türü<select value={type} onChange={(e) => setType(e.target.value)}><option value="">Evrak türünü seçin</option>{canonicalDocumentTypeSchema.options.map((t) => <option key={t} value={t}>{documentLabels[t] ?? t}</option>)}</select></label>
-      <label>Kontrol notu<input value={note} maxLength={2000} onChange={(e) => setNote(e.target.value)} /></label>
-      <div className="tracking-actions">{(['approved','rejected'] as const).map((status) => <button key={status} className="button button--secondary" disabled={busy || !type} onClick={() => { void run(() => trackingRequest(`tracking/documents/${item.id}/review`,{ status,documentType: type,note })) }}>{status === 'approved' ? 'Kontrol ettim, uygun' : 'Uygun değil'}</button>)}</div>
+  return <article className="tracking-row tracking-document-row">
+    <div className="tracking-document-row__identity">{showCaseLink && <CaseLink row={item} />}<strong title={item.relativePath}>{item.fileName}</strong><span>{TRACKED_DOCUMENT_LABELS[type as keyof typeof TRACKED_DOCUMENT_LABELS] ?? type}</span></div>
+    <span className="tracking-document-row__status">{item.status === 'pending' ? 'Kontrol bekliyor' : item.status === 'approved' ? 'Onaylandı' : 'Reddedildi'}</span>
+    {item.canReview && <><div className="tracking-actions">{(['approved','rejected'] as const).map((status) => <button key={status} className="button button--secondary" disabled={busy || !type} onClick={() => { void run(() => trackingRequest(`tracking/documents/${item.id}/review`,{ status,documentType: type,note })) }}>{status === 'approved' ? 'Kontrol ettim, uygun' : 'Uygun değil'}</button>)}<button className="text-button" type="button" onClick={() => setEditing(value => !value)} aria-expanded={editing}>Türü düzelt / not ekle</button></div>
+      {editing && <div className="tracking-document-row__edit"><small>{item.relativePath}</small><label>Evrak türü<select value={type} onChange={(e) => setType(e.target.value)}>{trackedDocumentTypeSchema.options.map((t) => <option key={t} value={t}>{TRACKED_DOCUMENT_LABELS[t]}</option>)}</select></label>
+      <label>Kontrol notu<input value={note} maxLength={2000} onChange={(e) => setNote(e.target.value)} /></label></div>}
     </>}
   </article>
 }
@@ -60,7 +61,7 @@ function ReviewRow({ item,run,busy }: { item: TrackingSnapshot['reviews'][number
 
 const ROW_BATCH_SIZE = 100
 
-export function TrackingWorkspace({ caseId }: { caseId?: string }) {
+export function TrackingWorkspace({ caseId, view = 'all' }: { caseId?: string; view?: 'all' | 'operations' | 'documents' }) {
   const [data,setData] = useState<TrackingSnapshot | null>(null)
   const [error,setError] = useState('')
   const [busy,setBusy] = useState(false)
@@ -84,26 +85,26 @@ export function TrackingWorkspace({ caseId }: { caseId?: string }) {
   }
   const onConnected = useCallback(() => { void reload().catch(() => setError('Bağlantı listesi yenilenemedi.')) },[reload])
   return <section className="tracking-workspace" aria-label="Evrak ve Tramer takibi">
-    <div className="tracking-actions"><h2>Evrak ve Tramer takibi</h2><button className="button button--secondary" disabled={busy} onClick={() => { void run(reload) }}>Yenile</button></div>
+    <div className="tracking-actions"><h2>{view === 'documents' ? 'Klasör evrakları ve fotoğraflar' : view === 'operations' ? 'Tramer işlemleri' : 'Evrak ve Tramer takibi'}</h2><button className="button button--secondary" disabled={busy} onClick={() => { void run(reload) }}>Yenile</button></div>
     {error && <p role="alert">{error}</p>}{!data && !error && <p role="status">Takip yükleniyor…</p>}
     {data && <>
-      <details open><summary>{caseId ? 'Tramer işlemleri' : 'Bana atanan bekleyen Tramer işleri'} ({data.tramer.length})</summary>
+      {view !== 'documents' && <details open={!caseId || data.tramer.length > 0}><summary>{caseId ? 'Tramer işlemleri' : 'Bana atanan bekleyen Tramer işleri'} ({data.tramer.length})</summary>
         {caseId && data.canManage && <form onSubmit={(e) => { e.preventDefault();void run(() => commandTramer(caseId,{ action: 'assign',assignedUserId: assignee })) }}>
           <label>Tramer sorumlusu<select required value={assignee} onChange={(e) => setAssignee(e.target.value)}><option value="">Çalışan seçin</option>{data.users.map((u) => <option key={u.id} value={u.id}>{u.displayName}</option>)}</select></label>
           <button className="button button--primary" disabled={busy}>Tramer sorumlusunu ata</button>
         </form>}
         {data.tramer.map((item) => <TramerRow key={`${item.id}:${item.version}`} item={item} run={run} busy={busy} />)}
         {!data.tramer.length && <p>Tramer işi bulunmuyor.</p>}
-      </details>
-      <details open><summary>{caseId ? 'Klasörde algılanan evraklar' : 'Kontrolümü bekleyen evraklar'} ({data.documents.length})</summary><p>Evrakın eklenmesi eksikliği kapatmaz. Dosya sorumlusu içeriği kontrol edip onaylamalıdır.</p>
-        {data.documents.slice(0,documentLimit).map((item) => <DocumentRow key={`${item.id}:${item.status}`} item={item} run={run} busy={busy} />)}{!data.documents.length && <p>Kontrol kaydı bulunmuyor.</p>}
+      </details>}
+      {view !== 'operations' && <details open><summary>{caseId ? 'Klasörde algılanan evraklar' : 'Kontrolümü bekleyen evraklar'} ({data.documents.length})</summary><p>Tür, dosya ve alt klasör adından belirlenir; gerekirse düzeltebilirsiniz. İçerik kontrolünden sonra onaylayın.</p>
+        {data.documents.slice(0,documentLimit).map((item) => <DocumentRow key={`${item.id}:${item.status}`} item={item} run={run} busy={busy} showCaseLink={!caseId} />)}{!data.documents.length && <p>Kontrol kaydı bulunmuyor.</p>}
         {data.documents.length > documentLimit && <button className="button button--secondary" onClick={() => setDocumentLimit((limit) => limit+ROW_BATCH_SIZE)}>Daha fazla evrak göster ({data.documents.length-documentLimit} kalan)</button>}
-      </details>
-      <details open><summary>Kalıcı bildirimler ({data.notifications.filter((n) => !n.readAt).length} okunmamış)</summary>
+      </details>}
+      {view === 'all' && <details open={!caseId}><summary>Kalıcı bildirimler ({data.notifications.filter((n) => !n.readAt).length} okunmamış)</summary>
         <label><input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} /> Yalnız okunmamış</label>
         {visibleNotifications.slice(0,notificationLimit).map((n) => <article className="tracking-row" key={n.id}><CaseLink row={n} /><strong>{n.title}</strong><time>{new Date(n.createdAt).toLocaleString('tr-TR')}</time>{!n.readAt && <button className="button button--secondary" disabled={busy} onClick={() => { void run(() => trackingRequest(`tracking/notifications/${n.id}/read`,{})) }}>Okundu işaretle</button>}</article>)}
         {visibleNotifications.length > notificationLimit && <button className="button button--secondary" onClick={() => setNotificationLimit((limit) => limit+ROW_BATCH_SIZE)}>Daha fazla bildirim göster ({visibleNotifications.length-notificationLimit} kalan)</button>}
-      </details>
+      </details>}
       {!caseId && <details><summary>SBM e-posta bağlantıları ve sonuç kontrolü</summary>
         <p>Merkezi takip: {data.services.length === 0 ? 'Henüz servis taraması kaydedilmemiş.' : ''}</p>
         {data.services.map((s,index) => <p key={`${s.kind}:${index}`}>{s.kind === 'folder' ? 'Klasör takibi' : 'E-posta takibi'}: {s.status === 'running' ? 'Çalışıyor' : s.status === 'stale' ? 'Servisten güncel yanıt alınamıyor' : 'Son tarama tamamlanamadı'} · Son başarılı tarama: {s.lastSuccessAt ? new Date(s.lastSuccessAt).toLocaleString('tr-TR') : 'Henüz yok'}</p>)}
@@ -112,7 +113,7 @@ export function TrackingWorkspace({ caseId }: { caseId?: string }) {
         {data.mailConnections.map((c) => <article key={c.id} className="tracking-row"><strong>{c.email}</strong><span>{connectionStatuses[c.status]}</span><small>Son başarılı tarama: {c.lastSuccessAt ? new Date(c.lastSuccessAt).toLocaleString('tr-TR') : 'Henüz yok'}</small>{c.lastError && <p>{c.lastError}</p>}{data.canManage && c.status !== 'disconnected' && <button className="button button--secondary" disabled={busy} onClick={() => { void run(() => trackingRequest(`tracking/mail/${c.id}/disconnect`,{})) }}>Takip bağlantısını kes</button>}</article>)}
         {data.reviews.map((item) => <ReviewRow key={item.id} item={item} run={run} busy={busy} />)}
       </details>}
-      {caseId && <details><summary>Takip işlem geçmişi ({data.history.length})</summary>{data.history.map((h) => <article className="tracking-row" key={h.id}><strong>{historyLabels[h.action.replace('tracking.','')] ?? 'Takip işlemi'}</strong><span>{h.actor ?? 'Merkezi servis'} · {new Date(h.occurredAt).toLocaleString('tr-TR')}</span><dl>{Object.entries(h.details).filter(([key]) => key in detailLabels).map(([key,value]) => <div key={key}><dt>{detailLabels[key]}</dt><dd>{displayValue(value)}</dd></div>)}</dl></article>)}</details>}
+      {caseId && view !== 'documents' && <details><summary>Takip işlem geçmişi ({data.history.length})</summary>{data.history.map((h) => <article className="tracking-row" key={h.id}><strong>{historyLabels[h.action.replace('tracking.','')] ?? 'Takip işlemi'}</strong><span>{h.actor ?? 'Merkezi servis'} · {new Date(h.occurredAt).toLocaleString('tr-TR')}</span><dl>{Object.entries(h.details).filter(([key]) => key in detailLabels).map(([key,value]) => <div key={key}><dt>{detailLabels[key]}</dt><dd>{displayValue(value)}</dd></div>)}</dl></article>)}</details>}
     </>}
   </section>
 }

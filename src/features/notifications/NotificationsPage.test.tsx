@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { OperationalAlertError, type OperationalAlertDataPort, type OperationalAlertRecord, type OperationalAlertsRecord } from '../../data/operationalAlertPort'
 import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
 import { initialNotifications } from '../../mocks/workspaces'
@@ -71,14 +72,14 @@ describe('NotificationsPage gerçek operasyonel uyarılar', () => {
   it('sayaç yalnız API sonucundan hesaplanır', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     renderPage(stubPort([overdueTask, missingDocument]))
-    expect(await screen.findByText('2 açık uyarı')).toBeInTheDocument()
+    expect(await screen.findByText('2 okunmamış uyarı')).toBeInTheDocument()
   })
 
   it('boş sonuç gerçek boş durum olarak gösterilir', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const { container } = renderPage(stubPort([]))
 
-    expect(await screen.findByText('Açık operasyonel uyarı yok.')).toBeInTheDocument()
+    expect(await screen.findByText('Okunmamış operasyonel uyarı yok.')).toBeInTheDocument()
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
     expect(container.textContent ?? '').not.toContain(initialNotifications[0].title)
   })
@@ -112,7 +113,7 @@ describe('NotificationsPage gerçek operasyonel uyarılar', () => {
     renderPage(stubPort([overdueTask]))
 
     await screen.findByText(overdueTask.summary)
-    expect(screen.queryByRole('button', { name: /Tümünü Okundu İşaretle/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tümünü Okundu İşaretle/ })).toBeDisabled()
     expect(screen.queryByLabelText('Bildirim okuma durumu')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Okunmamış')).not.toBeInTheDocument()
   })
@@ -131,6 +132,31 @@ describe('NotificationsPage gerçek operasyonel uyarılar', () => {
 })
 
 describe('NotificationsPage veri kaynağı ayrımı', () => {
+  it('acknowledges all warnings, refreshes the count and prevents double submission', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const port = stubPort([overdueTask, missingDocument])
+    let finish!: () => void
+    port.markAllRead = vi.fn(() => new Promise<void>(resolve => { finish = resolve }))
+    renderPage(port)
+    const button = await screen.findByRole('button', { name: 'Tümünü Okundu İşaretle' })
+    await userEvent.dblClick(button)
+    expect(port.markAllRead).toHaveBeenCalledOnce()
+    port.list = async () => ({ schemaVersion: 'operational-alert/1.0.0', totalCount: 0, evaluatedAt: '2026-07-18T10:30:00.000Z', alerts: [] })
+    finish()
+    await screen.findByText('0 okunmamış uyarı')
+    expect(screen.queryByText(overdueTask.summary)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tümünü Okundu İşaretle' })).toBeDisabled()
+  })
+  it('retains warnings and allows retry when read acknowledgement fails', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const port = stubPort([overdueTask])
+    port.markAllRead = vi.fn(async () => { throw new Error('offline') })
+    renderPage(port)
+    await userEvent.click(await screen.findByRole('button', { name: 'Tümünü Okundu İşaretle' }))
+    await screen.findByRole('alert')
+    expect(screen.getByText(overdueTask.summary)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tümünü Okundu İşaretle' })).toBeEnabled()
+  })
   it('API modunda hiçbir örnek bildirim DOM\'a girmez', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const { container } = renderPage(stubPort([overdueTask]))

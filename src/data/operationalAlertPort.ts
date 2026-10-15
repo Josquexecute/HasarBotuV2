@@ -35,6 +35,7 @@ export interface OperationalAlertsRecord {
 export interface OperationalAlertDataPort {
   /** `caseIds` verilirse yanıt dosya başına özet taşır (200 kırpmasından bağımsız). */
   list(caseIds?: readonly string[]): Promise<OperationalAlertsRecord>
+  markAllRead?(): Promise<void>
 }
 
 /** Sözleşme sınırı; Dosyalar ekranı tek çağrıda bu kadar satır sorabilir. */
@@ -87,7 +88,7 @@ function mapError(status: number): OperationalAlertError {
 }
 
 /**
- * Salt okunur uyarı adaptörü. Hata durumunda MOCK'A DÜŞMEZ: çağıran taraf
+ * Uyarı adaptörü. Hata durumunda MOCK'A DÜŞMEZ: çağıran taraf
  * gerçek boş durum veya erişilemez durumu gösterir.
  */
 export function createHttpOperationalAlertAdapter(
@@ -100,8 +101,8 @@ export function createHttpOperationalAlertAdapter(
   return {
     async list(caseIds) {
       const suffix = caseIds === undefined || caseIds.length === 0
-        ? ''
-        : `?caseIds=${caseIds.map((value) => encodeURIComponent(value)).join(',')}`
+        ? '?includeTotal=true&unreadOnly=true'
+        : `?includeTotal=true&caseIds=${caseIds.map((value) => encodeURIComponent(value)).join(',')}`
       let response: Response
       try {
         response = await fetchImpl(`${baseUrl}/api/v1/operational-alerts${suffix}`, {
@@ -125,6 +126,15 @@ export function createHttpOperationalAlertAdapter(
         throw new OperationalAlertError('unavailable', 'operational alerts response invalid')
       }
       return parsed.data
+    },
+    async markAllRead() {
+      let response: Response
+      try {
+        response = await fetchImpl(`${baseUrl}/api/v1/operational-alerts/read-all`, {
+          method: 'POST', credentials: 'include', headers: { accept: 'application/json', ...headers },
+        })
+      } catch { throw new OperationalAlertError('unavailable', 'operational alerts endpoint unreachable') }
+      if (!response.ok) throw mapError(response.status)
     },
   }
 }

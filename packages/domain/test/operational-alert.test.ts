@@ -9,6 +9,7 @@ import {
   buildOverdueFollowUpAlert,
   buildOverdueTaskAlert,
   collectOperationalAlerts,
+  deriveOperationalAlerts,
   dedupeAndSortOperationalAlerts,
   normalizeOperationalAlerts,
   requirementLabel,
@@ -270,6 +271,13 @@ describe('dedupeAndSortOperationalAlerts', () => {
 })
 
 describe('collectOperationalAlerts', () => {
+  it('counts all unique alerts before limiting the preview, including totals above 200', () => {
+    const facts = { overdueTasks: [], overdueFollowUps: [], missingDocuments: Array.from({ length: 245 }, (_, index) => ({ caseId: `case-${index}`, plate: '34 ABC 123', officeNumber: '2026/1', requirementCode: 'ktt', evaluatedDate: AS_OF })) }
+    const result = deriveOperationalAlerts({ ...facts, missingDocuments: [...facts.missingDocuments, facts.missingDocuments[0]!] }, AS_OF)
+    expect(result.alerts).toHaveLength(200)
+    expect(result.totalCount).toBe(245)
+    expect(deriveOperationalAlerts({ ...facts, missingDocuments: facts.missingDocuments.slice(0, 7) }, AS_OF).totalCount).toBe(7)
+  })
   it('üç kaynağı birleştirir ve süresi gelmemiş kayıtları dışarıda bırakır', () => {
     const result = collectOperationalAlerts(
       {

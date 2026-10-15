@@ -92,8 +92,10 @@ export async function applySourceFolderRelocation(pool: pg.Pool, actor: Actor,
       const previous = binding.previousLocation, version = previous.version + 1
       await client.query(`UPDATE case_locations SET relative_path=$1,source='imported',verification_status='pending',version=version+1,updated_at=now()
         WHERE organization_id=$2 AND id=$3`, [binding.relativePath, actor.organizationId, previous.id])
-      await client.query(`INSERT INTO case_location_history(id,organization_id,case_id,storage_root_key,relative_path,verification_status,source,changed_by_user_id,request_id)
-        VALUES($1,$2,$3,$4,$5,'pending','imported',$6,$7)`, [uuidv7(), actor.organizationId, binding.caseId, plan.manifest.storageRootKey, binding.relativePath, actor.actorUserId, actor.requestId])
+      // Live identity + absent old path attest a completed physical move. Keep its path chain
+      // so immutable document versions and tracked-file approvals follow the same case.
+      await client.query(`INSERT INTO case_location_history(id,organization_id,case_id,storage_root_key,relative_path,previous_storage_root_key,previous_relative_path,verification_status,source,changed_by_user_id,request_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7,'pending','system',$8,$9)`, [uuidv7(), actor.organizationId, binding.caseId, plan.manifest.storageRootKey, binding.relativePath, previous.storageRootKey, previous.relativePath, actor.actorUserId, actor.requestId])
       const evidence = { identity: binding.identity, previousLocation: previous, decision: plan.manifest.decision, planDigest: approvedHash, physicallyClosed: binding.physicallyClosed, preservedLifecycleStatus: binding.expectedLifecycleStatus }
       if (binding.identity.kind === 'registered') {
         await client.query(`UPDATE case_folder_registrations SET source_relative_path=$1,evidence=evidence||jsonb_build_object('lastRelocation',$2::jsonb)

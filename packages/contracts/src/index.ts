@@ -1,3 +1,4 @@
+export { trackedDocumentTypeSchema, inferTrackedDocumentType, TRACKED_DOCUMENT_LABELS } from './v1/tracking.js'
 export {
   // primitives
   MAX_ID_LENGTH,

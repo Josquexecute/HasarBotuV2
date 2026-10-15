@@ -1,11 +1,28 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   DASHBOARD_ALERT_PREVIEW_LIMIT,
   countOperationalAlertsByType,
+  createHttpOperationalAlertAdapter,
   type OperationalAlertRecord,
 } from './operationalAlertPort'
 
 const CASE_ID = '11111111-1111-4111-8111-111111111111'
+
+it('opts in to the full count and retains the exact case filter', async () => {
+  const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ schemaVersion: 'operational-alert/1.0.0',totalCount: 245,evaluatedAt: '2026-10-15T00:00:00.000Z',alerts: [] }))
+  const adapter = createHttpOperationalAlertAdapter({ fetchImpl })
+  expect((await adapter.list()).totalCount).toBe(245)
+  expect(fetchImpl.mock.calls[0]?.[0]).toBe('/api/v1/operational-alerts?includeTotal=true&unreadOnly=true')
+  await adapter.list([CASE_ID])
+  expect(fetchImpl.mock.calls[1]?.[0]).toBe(`/api/v1/operational-alerts?includeTotal=true&caseIds=${CASE_ID}`)
+})
+it('acknowledges all alerts on the server and reports failures', async () => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(new Response(null, { status: 401 }))
+  const adapter = createHttpOperationalAlertAdapter({ fetchImpl })
+  await adapter.markAllRead!()
+  expect(fetchImpl).toHaveBeenCalledWith('/api/v1/operational-alerts/read-all', expect.objectContaining({ method: 'POST', credentials: 'include' }))
+  await expect(adapter.markAllRead!()).rejects.toMatchObject({ kind: 'unauthorized' })
+})
 
 function alert(overrides: Partial<OperationalAlertRecord> = {}): OperationalAlertRecord {
   return {

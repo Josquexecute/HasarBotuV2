@@ -8,6 +8,7 @@ import { assertTestDatabaseUrl, createDatabasePool, closeDatabasePool, runMigrat
 import { planV1Remediation, applyV1Remediation } from '../src/v1-import/remediation.js'
 import { applyRegisteredV1Notes, registeredNotesManifestSchema } from '../src/v1-import/registered-notes.js'
 import { hashPassword } from '../src/auth/password.js'
+import { buildV1SourceIdentityMaterial } from '@hasarbotu/domain'
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)('registered V1 notes independent of pending classification', () => {
   let pool: pg.Pool, root: string, org: string, actor: string
@@ -63,5 +64,26 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('registered V1 notes independent
     const metadata = (await pool.query("SELECT source_author_name,to_char(source_occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI') date FROM v1_import_item_metadata WHERE item_type='note'")).rows
     expect(metadata).toEqual([{ source_author_name: 'Historical author', date: '2026-07-02 01:00' }, { source_author_name: 'Historical author', date: '2026-07-02 01:00' }])
     expect((await pool.query('SELECT count(*)::int n FROM v1_import_quarantine_status WHERE NOT resolved')).rows[0].n).toBe(2)
+  })
+  it('restores notes for a newly registered insurer-suffixed source without requiring a previous historical import', async () => {
+    const caseId = uuidv7(), relativePath = '2026/Temmuz 2026/34TST200-AXA SİGORTA'
+    const data = { schemaVersion: 1, claimType: 'trafik', caseIdentity: { caseKey: '34TST200-AXA SİGORTA', plate: '34TST200-AXA SİGORTA' }, metadata: { createdAt: '2026-07-03T00:00:00Z' }, notes: [{ id: 'unarchived-note', text: 'Unarchived historical note', createdBy: 'Historical author', createdAt: '2026-07-04T09:00:00Z' }] }
+    const bytes = JSON.stringify(data)
+    await mkdir(join(root, relativePath, '_HASARBOTU'), { recursive: true })
+    await writeFile(join(root, relativePath, '_HASARBOTU/takip.json'), bytes)
+    await pool.query("INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized) VALUES($1,$2,2026,200,'2026/200','traffic','new_notification','34 TST 200','34TST200')", [caseId, org])
+    await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path,source,verification_status) VALUES($1,$2,$3,'synthetic-root',$4,'imported','pending')", [uuidv7(), org, caseId, relativePath])
+    await pool.query("INSERT INTO case_folder_registrations(id,organization_id,case_id,storage_root_key,source_folder_id,source_relative_path,evidence,plan_hash,created_by_user_id) VALUES($1,$2,$3,'synthetic-root','200',$4,'{}',$5,$6)", [uuidv7(), org, caseId, relativePath, 'a'.repeat(64), actor])
+    const identity = buildV1SourceIdentityMaterial({ caseKey: data.caseIdentity.caseKey, createdAt: data.metadata.createdAt })
+    if (!identity.ok) throw new Error('invalid fixture identity')
+    const sourceIdentity = sha(identity.material)
+    expect((await pool.query('SELECT id FROM v1_import_source_revisions WHERE stable_source_identity=$1', [sourceIdentity])).rowCount).toBe(0)
+    const input = registeredNotesManifestSchema.parse({ storageRootKey: 'synthetic-root', bindings: [{ caseId, expectedCaseVersion: 1, sourceFolderId: '200', relativePath, sourceIdentity, sourceFileHash: sha(bytes) }] })
+    const approved = sha(JSON.stringify({ organizationId: org, manifest: input }))
+    const run = () => applyRegisteredV1Notes(pool, { organizationId: org, actorUserId: actor, requestId: 'unarchived-source' }, root, input, approved, async () => {})
+    expect(await run()).toMatchObject({ notesCreated: 1, alreadyImported: 0 })
+    expect(await run()).toMatchObject({ notesCreated: 0, alreadyImported: 1 })
+    expect((await pool.query('SELECT body FROM case_notes WHERE case_id=$1', [caseId])).rows).toEqual([{ body: data.notes[0]!.text }])
+    expect((await pool.query('SELECT raw_snapshot FROM v1_import_source_revisions WHERE stable_source_identity=$1', [sourceIdentity])).rows[0].raw_snapshot.notes).toEqual(data.notes)
   })
 })

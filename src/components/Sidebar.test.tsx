@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionContext, type SessionContextValue } from '../app/sessionContext'
@@ -81,6 +81,17 @@ describe('Sidebar kullanıcı kartı', () => {
 
 describe('Sidebar Bildirimler rozeti', () => {
   afterEach(() => window.localStorage.clear())
+
+  it('shows totals above the list limit and refreshes after an operation', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const port = portReturning(alertsOf(245))
+    renderSidebar({}, port)
+    expect(await screen.findByText('245')).toBeInTheDocument()
+    vi.mocked(port.list).mockResolvedValue(alertsOf(4))
+    act(() => window.dispatchEvent(new Event('operational-alerts-updated')))
+    expect(await screen.findByText('4')).toBeInTheDocument()
+    expect(screen.queryByText('245')).not.toBeInTheDocument()
+  })
 
   it('API modunda gerçek açık uyarı sayısını gösterir', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')

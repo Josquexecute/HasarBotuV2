@@ -197,7 +197,9 @@ describe('CaseEditModal optimistic locking akışı', () => {
     const update = vi.fn().mockResolvedValue(record({ version: 2, eksist: { ...eksist, serviceName: 'Yeni Servis', serviceRevised: true } }))
     renderEdit(commandPort({ update }), { item: record({ eksist }) })
     const user = userEvent.setup()
-    for (const label of ['İhbar numarası', 'Sigorta şirketi', 'Eksper', 'Servis']) expect(screen.getByLabelText(label)).toHaveAttribute('readonly')
+    for (const label of ['İhbar numarası', 'Eksper', 'Servis']) expect(screen.getByLabelText(label)).toHaveAttribute('readonly')
+    await screen.findByRole('option',{ name: 'Güven Sigorta' })
+    expect(screen.getByLabelText('Sigorta şirketi')).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Servisi revize et' }))
     await user.clear(screen.getByLabelText('Servis adı'))
     await user.type(screen.getByLabelText('Servis adı'), 'Yeni Servis')
@@ -223,12 +225,22 @@ describe('CaseEditModal optimistic locking akışı', () => {
     expect(props.onUpdated).toHaveBeenCalledWith(expect.objectContaining({ version: 2 }))
   })
 
-  it('plaka, tür, ofis numarası ve lifecycle alanlarını değiştirilemez gösterir', () => {
+  it('plaka, ofis numarası ve lifecycle alanlarını değiştirilemez gösterir', () => {
     renderEdit(commandPort())
-    for (const label of ['Plaka', 'Dosya türü', 'Ofis dosya numarası', 'Yaşam döngüsü']) {
+    for (const label of ['Plaka', 'Ofis dosya numarası', 'Yaşam döngüsü']) {
       expect(screen.getByLabelText(label)).toHaveAttribute('readonly')
     }
     expect(screen.queryByRole('button', { name: 'Dosyayı Kapat' })).not.toBeInTheDocument()
+  })
+  it('sends a type correction and insurer choice with the existing case version',async () => {
+    const update = vi.fn().mockResolvedValue(record({ version: 2,type: 'Kasko',insurerId: 'insurer-1' }))
+    renderEdit(commandPort({ update }))
+    const user = userEvent.setup()
+    await screen.findByRole('option',{ name: 'Güven Sigorta' })
+    await user.selectOptions(screen.getByLabelText('Dosya türü'),'casco')
+    await user.selectOptions(screen.getByLabelText('Sigorta şirketi'),'insurer-1')
+    await user.click(screen.getByRole('button',{ name: 'Değişiklikleri Kaydet' }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('case-created',{ expectedVersion: 1,caseType: 'casco',insurerId: 'insurer-1' }))
   })
 
   it('stale expectedVersion 409 çatışmasını açıklar ve yeniden yükleme sunar', async () => {

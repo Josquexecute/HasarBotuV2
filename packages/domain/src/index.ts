@@ -59,6 +59,8 @@ export {
   CLOSURE_MODES,
   CLOSURE_REQUIREMENT_STATUSES,
   buildClosedCaseWorkspacePath,
+  buildClosedImportedCaseWorkspacePath,
+  buildOpenImportedCaseWorkspacePath,
   evaluateClosureRequirements,
   isOpenWorkflowStage,
   type CaseLifecycleOperationStatus,
@@ -699,7 +701,8 @@ export {
 } from './v1-import.js'
 export * from './eksist.js'
 export { isTemporaryTrackedFile } from './tracked-file.js'
+export * from './tracked-document.js'
 export { normalizeSearchText, getSearchTokens, matchesSearchQuery } from './search.js'
 export { toOfficeDate } from './office-date.js'
 
-export { parseSourcePlateFolderName } from './source-plate-folder.js'
+export { parseSourcePlateFolderName, matchSourceFolderInsurer } from './source-plate-folder.js'

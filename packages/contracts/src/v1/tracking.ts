@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { TRACKED_DOCUMENT_TYPES } from '@hasarbotu/domain'
+export { inferTrackedDocumentType, TRACKED_DOCUMENT_LABELS } from '@hasarbotu/domain'
+export const trackedDocumentTypeSchema = z.enum(TRACKED_DOCUMENT_TYPES)
 
 export const applicationNumberSchema = z.string().regex(/^[0-9]{1,128}$/)
 export const tramerStatusSchema = z.enum(['entry_pending', 'result_pending', 'completed', 'cancelled'])

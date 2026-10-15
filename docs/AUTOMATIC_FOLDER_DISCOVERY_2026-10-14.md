@@ -26,7 +26,16 @@ server and can find the new record. Existing role permissions still apply.
 Registration uses stable **pCloud folder IDs**, not plates alone. Repeated scans
 and service restarts do not create duplicates. Separate source folders can
 legitimately share a plate; their records are not merged. A folder associated with
-an existing case location is skipped. A recognized V1 identity already attached
+an existing case location is skipped for creation. With the optional administrator
+configuration `trackRegisteredMoves: true`, registered source IDs (including the
+baseline) are also checked for moved directories. Two consistent observations,
+an unchanged folder ID, an absent old directory and no active file operation
+allow the existing audited relocation transaction to update only the location.
+Notes, assignments, types and lifecycle states remain intact. Completed-move
+history keeps document paths and tracked-file approvals connected to the case.
+An existing old directory, conflicting identity or active operation is deferred.
+The status includes `relocated`, `relocationSettling` and `relocationDeferred`.
+A recognized V1 identity already attached
 to another case is deferred for reconciliation rather than duplicated.
 
 The 596 already linked source folders form the approved initial baseline.

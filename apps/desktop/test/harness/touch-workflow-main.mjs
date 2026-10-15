@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { startDesktopShell } from '../../dist/main/shell.js'
 import { startDesktopAssistant } from '../../dist/main/assistant.js'
+import { hideToTrayOnClose } from '../../dist/main/window-lifecycle.js'
 
 const output = process.env.HB_TOUCH_OUTPUT
 const checks = []
@@ -26,7 +27,8 @@ const fill = async (selector, value, textarea = false) => evaluate(`(() => {
 const screenshot = async (name) => writeFile(join(output, `${name}.png`), (await shell.window.webContents.capturePage()).toPNG())
 async function boot() {
   shell = await startDesktopShell({ apiOrigin: process.env.HB_TOUCH_API, assetRoot: process.env.HB_TOUCH_ASSETS, userDataPath: app.getPath('userData'), show: false })
-  helper = await startDesktopAssistant({ shell, assetRoot: process.env.HB_TOUCH_ASSETS, userDataPath: app.getPath('userData'), quit: () => {} })
+  hideToTrayOnClose(app, shell.window)
+  helper = await startDesktopAssistant({ shell, assetRoot: process.env.HB_TOUCH_ASSETS, userDataPath: app.getPath('userData'), quit: () => app.quit() })
   helper.window.hide()
   await until('!!document.querySelector(".login-card, .app-shell")')
   if (await evaluate('!!document.querySelector(".login-card")')) {
@@ -60,6 +62,13 @@ app.on('window-all-closed', () => { /* The test recreates the shell in the same 
 void app.whenReady().then(async () => {
   try {
     await boot()
+    shell.window.show()
+    const initialRoute = await evaluate('location.href')
+    shell.window.close()
+    await delay(100)
+    check('main X hides to the tray and keeps Touch alive', !shell.window.isDestroyed() && !shell.window.isVisible() && !shell.window.isMinimized() && !helper.window.isDestroyed())
+    helper.menu.items.find(item => item.label === 'HasarBotu’yu aç').click()
+    check('tray open restores the same main window and route', shell.window.isVisible() && await evaluate('location.href') === initialRoute)
     const pages = [['/', 'dashboard'], ['/dosyalar', 'cases'], ['/kapanan-dosyalar', 'closed'], ['/raporlar-ve-ucretler', 'reports'], ['/mevzuat-ve-ai', 'legislation'], ['/bildirimler', 'notifications'], ['/yonetim', 'management'], ['/ayarlar', 'settings']]
     for (const width of [1440, 390]) {
       shell.window.setContentSize(width, 900)
@@ -79,6 +88,12 @@ void app.whenReady().then(async () => {
     await navigate(`/dosyalar/${process.env.HB_TOUCH_CASE}`)
     await until('!!document.querySelector(".vehicle-profile")')
     check('technical vehicle fields initially collapsed', await evaluate('!document.querySelector(".vehicle-profile__technical").open'))
+    await evaluate('[...document.querySelectorAll(".case-detail-head__actions button")].find(button => button.textContent === "Dosyayı Kapat").click()')
+    await until('!!document.querySelector(".modal--case-lifecycle")')
+    check('full case header opens the real close preview dialog', await evaluate('!![...document.querySelectorAll(".modal--case-lifecycle button")].find(button => button.textContent === "Önizleme Oluştur")'))
+    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))')
+    await screenshot('case-close-dialog')
+    await click('.modal--case-lifecycle [aria-label="Pencereyi kapat"]')
     for (const tab of ['Özet', 'Operasyon', 'Evrak ve Fotoğraf', 'Ağır Hasar', 'Değer Kaybı', 'Raporlar ve Ücretler', 'E-postalar', 'Geçmiş']) {
       await evaluate(`[...document.querySelectorAll('.case-tabs button')].find(el => el.textContent === ${JSON.stringify(tab)}).click()`)
       await until(`document.querySelector('.module-heading h1')?.textContent === ${JSON.stringify(tab)}`)
@@ -94,6 +109,13 @@ void app.whenReady().then(async () => {
       while (!await menuEval(code)) { if (Date.now() > deadline) throw new Error(`Assistant condition timed out: ${code}`); await delay(80) }
     }
     await menuUntil('!!document.querySelector(".assistant-search input")')
+    await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 01")')
+    check('main full-case selection reaches Touch without a second search', await menuEval('document.querySelector(".assistant-search input").value === "" && document.querySelectorAll(".assistant-result").length === 0'))
+    await navigate(`/dosyalar/${process.env.HB_TOUCH_OTHER_CASE}`)
+    await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 02")')
+    check('changing the main full case updates the existing Touch window', true)
+    await shell.window.loadURL(previousRoute)
+    await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 01")')
     await menuEval('(()=>{ const input=document.querySelector(".assistant-search input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"34 TEST");input.dispatchEvent(new Event("input",{bubbles:true})) })()')
     await menuEval('document.querySelector(".assistant-search").requestSubmit()')
     await menuUntil('document.querySelectorAll(".assistant-result").length === 2')
@@ -105,15 +127,20 @@ void app.whenReady().then(async () => {
     await menuEval('document.querySelector(".assistant-case form").requestSubmit()')
     await menuUntil('document.body.textContent.includes("Not dosyaya kaydedildi.")')
     check('native assistant saves the note without opening the main app', !shell.window.isVisible())
-    await menuEval('[...document.querySelectorAll("button")].find(button=>button.textContent==="Görünümümü özelleştir").click()')
-    await menuUntil('!!document.querySelector(".assistant-appearance-editor")')
-    await menuEval('[...document.querySelectorAll(".assistant-palette-presets button")].find(button=>button.textContent==="Yeşil").click()')
-    await menuEval('document.querySelector(".assistant-appearance-editor").requestSubmit()')
-    await menuUntil('document.body.textContent.includes("Touch görünümünüz hesabınıza kaydedildi.")')
+    check('Touch has a folder shortcut and no appearance editor or exit', await menuEval('!![...document.querySelectorAll("button")].find(button=>button.textContent.includes("Klasörü Aç")) && !document.querySelector(".assistant-appearance-editor") && ![...document.querySelectorAll("button")].some(button=>button.textContent === "Çıkış" || button.textContent === "Görünümümü özelleştir")'))
+    await navigate('/ayarlar')
+    shell.window.show()
+    await until('!!document.querySelector(".assistant-appearance-editor")')
+    await evaluate('[...document.querySelectorAll(".assistant-palette-presets button")].find(button=>button.textContent==="Yeşil").click()')
+    await evaluate('document.querySelector(".assistant-appearance-editor").requestSubmit()')
+    await until('document.body.textContent.includes("Touch görünümünüz hesabınıza kaydedildi.")')
+    await menuUntil('document.querySelector(".desktop-assistant-panel").style.getPropertyValue("--accent") === "#15803d"')
     check('personal palette changes actual panel styles after API save', await menuEval('document.querySelector(".desktop-assistant-panel").style.getPropertyValue("--accent") === "#15803d"'))
     const mainSessionResponse = await shell.window.webContents.session.fetch(`${shell.origin}/api/v1/me/assistant-appearance`, { credentials: 'include', redirect: 'error' })
     check('main-process update transport retains the authenticated HttpOnly session', mainSessionResponse.ok && (await mainSessionResponse.json()).appearance.accentColor === '#15803d')
-    await menuEval('[...document.querySelectorAll("button")].find(button=>button.textContent==="Dosya aramasına dön").click()')
+    await navigate(`/dosyalar/${process.env.HB_TOUCH_CASE}?tab=operations`)
+    shell.window.hide()
+    helper.menu.items.find((item) => item.label === 'Hızlı not').click()
     await menuEval('[...document.querySelectorAll(".assistant-tabs button")].find(button=>button.textContent==="Geçmiş notlar").click()')
     await menuUntil('!![...document.querySelectorAll(".assistant-entry")].find(entry=>entry.textContent.includes("Dokunmatik kalıcı not."))')
     check('native assistant reads committed note history', true)
@@ -137,20 +164,34 @@ void app.whenReady().then(async () => {
     shell.window.focus()
     await until('document.querySelector(".case-operations__notes")?.textContent.includes("Dokunmatik kalıcı not.")')
     check('saved note immediately visible in case details', true)
+    await navigate('/bildirimler')
+    await evaluate('[...document.querySelectorAll("button")].find(button=>button.textContent==="Uyarılar").click()')
+    await until('!![...document.querySelectorAll("button")].find(button=>button.textContent.includes("Tümünü Okundu İşaretle") && !button.disabled)')
+    await evaluate('[...document.querySelectorAll("button")].find(button=>button.textContent.includes("Tümünü Okundu İşaretle")).click()')
+    await until('document.body.textContent.includes("0 okunmamış uyarı")')
+    check('all warnings read through actual UI and API', true)
     await navigate('/dosyalar')
     await until('document.querySelectorAll(".case-table tbody tr").length === 2')
     await evaluate("[...document.querySelectorAll('.case-table tbody tr')].find(el => el.textContent.includes('34 TEST 02')).click()")
-    await click('.touch-assistant-trigger')
+    await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 02")')
+    check('main list row selection automatically updates Touch', true)
+    await menuEval('[...document.querySelectorAll(".assistant-result")].find(button=>button.textContent.includes("34 TEST 01")).click()')
+    await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 01")')
+    await evaluate("[...document.querySelectorAll('.case-table tbody tr')].find(el => el.textContent.includes('34 TEST 02')).click()")
+    await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 02")')
+    check('reselecting the same main row overrides a manual Touch search selection', true)
+    check('floating quick note is removed', await evaluate('document.querySelector(".touch-assistant-trigger") === null'))
+    await evaluate("[...document.querySelectorAll('.quick-detail__footer button')].find(button => button.textContent.trim() === 'Hızlı Not').click()")
     check('list selection supplies the second case', await evaluate('document.querySelector(".touch-assistant").textContent.includes("34 TEST 02")'))
     await saveNote('Seçili dosyaya not.')
     await shell.close()
     await boot()
     helper.menu.items.find((item) => item.label === 'Hızlı not').click()
-    await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 01")')
+    await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 02")')
     await menuUntil('document.querySelector(".desktop-assistant-panel").style.getPropertyValue("--accent") === "#15803d"')
     check('account palette reloads after complete Electron restart', true)
     await menuEval('[...document.querySelectorAll(".assistant-tabs button")].find(button=>button.textContent==="Geçmiş notlar").click()')
-    await menuUntil('!![...document.querySelectorAll(".assistant-entry")].find(entry=>entry.textContent.includes("Dokunmatik kalıcı not."))')
+    await menuUntil('!![...document.querySelectorAll(".assistant-entry")].find(entry=>entry.textContent.includes("Seçili dosyaya not."))')
     check('native assistant restores selection and server history after shell restart', true)
     await menuEval('document.querySelector("header button").click()')
     await navigate(`/dosyalar/${process.env.HB_TOUCH_CASE}?tab=operations`)
@@ -161,9 +202,8 @@ void app.whenReady().then(async () => {
     checks.push({ name: error instanceof Error ? error.message : 'Unexpected failure', pass: false })
     if (shell && !shell.window.isDestroyed()) await screenshot('failure')
   } finally {
-    helper?.dispose()
-    await shell?.close()
     await writeFile(join(output, 'results.json'), JSON.stringify({ checks }, null, 2))
-    app.exit(checks.every((item) => item.pass) ? 0 : 1)
+    if (checks.every(item => item.pass) && helper) helper.menu.items.find(item => item.label === 'HasarBotu’dan çık').click()
+    else { helper?.dispose(); await shell?.close(); app.exit(1) }
   }
 })

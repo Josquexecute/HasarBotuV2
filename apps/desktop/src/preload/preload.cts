@@ -23,6 +23,9 @@ const surface = Object.freeze({
 })
 
 contextBridge.exposeInMainWorld('hasarbotuDesktop', surface)
+contextBridge.exposeInMainWorld('hasarbotuCaseFolders', Object.freeze({
+  open: (caseId: unknown) => ipcRenderer.invoke('hasarbotu:open-case-folder', caseId),
+}))
 // Only trusted main-frame check/install commands; renderers supply no URLs or paths.
 contextBridge.exposeInMainWorld('hasarbotuUpdates', Object.freeze({
   check: () => ipcRenderer.invoke('hasarbotu:update-check'),

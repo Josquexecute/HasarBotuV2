@@ -1,5 +1,5 @@
 export const ASSISTANT_SIZE = 120
-export const ASSISTANT_MENU_ACTIONS = ['open','note','cases','notifications','settings','hide','reset','quit','close'] as const
+export const ASSISTANT_MENU_ACTIONS = ['open','note','cases','notifications','settings','hide','reset','close'] as const
 export type AssistantMenuAction = typeof ASSISTANT_MENU_ACTIONS[number]
 export const isAssistantMenuAction = (value: unknown): value is AssistantMenuAction => typeof value === 'string' && (ASSISTANT_MENU_ACTIONS as readonly string[]).includes(value)
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtemp, mkdir, cp, symlink, readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, cp, symlink, readFile, rename, rmdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -9,7 +9,7 @@ import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/databas
 import { startAutomaticFolderDiscovery } from './automatic-folder-discovery.mjs'
 import { writeFile } from 'node:fs/promises'
 
-test('real background scans discover a later folder and preserve its case after restart', { skip: !process.env.TEST_DATABASE_URL, timeout: 60_000 }, async () => {
+test('real background scans discover folders, follow stable identity moves and preserve existing cases', { skip: !process.env.TEST_DATABASE_URL, timeout: 90_000 }, async () => {
   const database = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL)
   const pool = new pg.Pool({ connectionString: database.url })
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
@@ -32,7 +32,7 @@ test('real background scans discover a later folder and preserve its case after 
   }
   await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'test-root','Synthetic')", [uuidv7(), org])
   const statusFile = join(directory, 'status.json'), configFile = join(directory, 'config.json')
-  await writeFile(configFile, JSON.stringify({ intervalMs: 15_000, runtimeDirectory: runtime, sourceRoot: source, pcloudDatabasePath: sqlitePath,
+  await writeFile(configFile, JSON.stringify({ intervalMs: 15_000, runtimeDirectory: runtime, sourceRoot: source, yearFolder: '2026', pcloudDatabasePath: sqlitePath,
     statusFile, topLevelFolderName: 'SyntheticCompany', policy: { schemaVersion: 'hasarbotu-automatic-folders/1', organizationId: org,
       storageRootKey: 'test-root', actorUserId: admin, responsibleUserId: owner, expertUserId: expert, baselineSourceFolderIds: [],
       decision: 'Explicitly authorized automatic registration of new source IDs, with unknown types pending.' } }))
@@ -64,6 +64,40 @@ test('real background scans discover a later folder and preserve its case after 
     await startAutomaticFolderDiscovery(configFile, { once: true })
     assert.deepEqual((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c')).rows, preserved)
     assert.equal(sqlite.prepare('SELECT count(*) n FROM folder').get().n, 4)
+    const enabled = JSON.parse(await readFile(configFile, 'utf8'))
+    enabled.trackRegisteredMoves = true
+    enabled.policy.baselineSourceFolderIds = ['103']
+    await writeFile(configFile, JSON.stringify(enabled))
+    const old = join(source, '2026/EKİM 2026/34AUT123')
+    const moved = join(source, '2026/_EKSİK DOSYALAR/34AUT123')
+    await mkdir(join(source, '2026/_EKSİK DOSYALAR'))
+    await rename(old, moved)
+    sqlite.exec("INSERT INTO folder VALUES(104,101,'_EKSİK DOSYALAR'); UPDATE folder SET parentfolderid=104 WHERE id=103")
+    // A remaining old directory makes identity ambiguous; never silently switch it.
+    await mkdir(old)
+    await startAutomaticFolderDiscovery(configFile, { once: true })
+    assert.equal(JSON.parse(await readFile(statusFile, 'utf8')).relocationDeferred, 1)
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations')).rows[0].relative_path, '2026/EKİM 2026/34AUT123')
+    await rmdir(old)
+    const moves = new AbortController()
+    const moveDeadline = setTimeout(() => moves.abort(), 25_000)
+    let relocated = false
+    try {
+      await startAutomaticFolderDiscovery(configFile, { signal: moves.signal, onStatus: text => {
+        if (JSON.parse(text).relocated === 1) { relocated = true; moves.abort() }
+      } })
+    } finally { clearTimeout(moveDeadline); moves.abort() }
+    assert.equal(relocated, true)
+    assert.deepEqual((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c')).rows, preserved)
+    assert.deepEqual((await pool.query('SELECT relative_path,version FROM case_locations')).rows, [{ relative_path: '2026/_EKSİK DOSYALAR/34AUT123', version: 2 }])
+    assert.equal((await pool.query('SELECT source_folder_id FROM case_folder_registrations')).rows[0].source_folder_id, '103')
+    assert.equal((await pool.query("SELECT count(*)::int n FROM jobs WHERE type='verify_case_location'")).rows[0].n, 2)
+    assert.equal((await pool.query('SELECT previous_relative_path FROM case_location_history ORDER BY occurred_at DESC,id DESC LIMIT 1')).rows[0].previous_relative_path, '2026/EKİM 2026/34AUT123')
+    await mkdir(join(source, '2025/EKİM 2025/34OLD125'), { recursive: true })
+    sqlite.exec("INSERT INTO folder VALUES(105,100,'2025'),(106,105,'EKİM 2025'),(107,106,'34OLD125')")
+    await startAutomaticFolderDiscovery(configFile, { once: true })
+    await startAutomaticFolderDiscovery(configFile, { once: true })
+    assert.equal((await pool.query('SELECT count(*)::int n FROM cases')).rows[0].n, 1)
     const unavailableConfig = JSON.parse(await readFile(configFile, 'utf8'))
     unavailableConfig.sourceRoot = join(directory, 'unavailable-source')
     await writeFile(configFile, JSON.stringify(unavailableConfig))

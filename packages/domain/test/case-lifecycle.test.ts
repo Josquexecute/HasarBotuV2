@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { buildClosedCaseWorkspacePath, evaluateClosureRequirements, isOpenWorkflowStage } from '../src/index.js'
+import { buildClosedCaseWorkspacePath, buildClosedImportedCaseWorkspacePath, buildOpenImportedCaseWorkspacePath, evaluateClosureRequirements, isOpenWorkflowStage } from '../src/index.js'
 
 describe('case lifecycle domain', () => {
+  it('uses the verified imported office month without fabricating a notification date or merging insurer labels',() => {
+    expect(buildClosedImportedCaseWorkspacePath(null,'2026 OFİS/Ekim 2026/27TST025')).toEqual({ ok: true,value: '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/27TST025' })
+    expect(buildClosedImportedCaseWorkspacePath(null,'2026 OFİS/Ekim2026/27TST025')).toEqual({ ok: true,value: '2026 OFİS/Ekim2026/KAPALI DOSYALAR/27TST025' })
+    expect(buildClosedImportedCaseWorkspacePath(null,'2026 OFİS/AXA/EKİM 2026/34ABC123-AXA SİGORTA')).toEqual({ ok: true,value: '2026 OFİS/AXA/EKİM 2026/KAPALI DOSYALAR/34ABC123-AXA SİGORTA' })
+    expect(buildClosedImportedCaseWorkspacePath('2026-07-14','2026 OFİS/Ekim 2026/27TST025')).toEqual({ ok: true,value: '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/27TST025' })
+  })
+  it('does not guess the month for pending folders or accept traversal and unknown archive paths',() => {
+    expect(buildClosedImportedCaseWorkspacePath(null,'2026 OFİS/_EKSİK DOSYALAR/27TST025')).toEqual({ ok: false,code: 'notification_date_required' })
+    expect(buildClosedImportedCaseWorkspacePath('2026-10-15','2026 OFİS/_EKSİK DOSYALAR/27TST025')).toEqual({ ok: true,value: '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/27TST025' })
+    for (const path of ['../2026 OFİS/Ekim 2026/27TST025','2026 OFİS/Arşiv/27TST025','2026 OFİS/Ekim 2026/KAPALI ARŞİV/27TST025','2026 OFİS/Ekim 2025/27TST025']) expect(buildClosedImportedCaseWorkspacePath(null,path).ok).toBe(false)
+  })
+  it('verifies a manually archived import in place and recovers its original month for reopening',() => {
+    for (const marker of ['KAPALI DOSYALAR','KAPALI EKİM 2026']) {
+      const closed = `2026 OFİS/Ekim 2026/${marker}/27TST025`
+      expect(buildClosedImportedCaseWorkspacePath(null,closed)).toEqual({ ok: true,value: closed })
+      expect(buildOpenImportedCaseWorkspacePath(closed)).toEqual({ ok: true,value: '2026 OFİS/Ekim 2026/27TST025' })
+    }
+    expect(buildOpenImportedCaseWorkspacePath('2026 OFİS/Ekim 2026/27TST025').ok).toBe(false)
+  })
   it('notificationDate ile uyumlu acik yolu deterministik kapali ay yoluna cevirir', () => {
     expect(buildClosedCaseWorkspacePath('2026-07-14', '2026/Temmuz 2026/34MPA764')).toEqual({
       ok: true,

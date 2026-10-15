@@ -83,10 +83,10 @@ function LegalWorkspace({ account }: { account: string }) {
     try {
       const config = await port.saveSettings({ expectedOrganizationId: settings.organizationId, expectedVersion: settings.version, model, enabled, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) }, abort.signal)
       if (!alive.current) return
-      setSettings(config);setLibrary(value => value ? { ...value, aiEnabled: config.enabled } : value)
+      setSettings(config);setLibrary(value => value ? { ...value, aiEnabled: config.enabled } : value);setApiKey('')
       setNotice('Gemini ayarları kaydedildi. Bağlantıyı kaynaklı AI yanıtıyla deneyin.')
     } catch (reason) { onFailure(reason) }
-    finally { if (alive.current) { setApiKey('');setSaving(false) } }
+    finally { if (alive.current) setSaving(false) }
   }
   return <>
     <section className="page-heading page-heading--compact"><div><h1>Mevzuat ve AI Yardımcısı</h1><p>Resmî kaynak kütüphanesi ve kaynaklı inceleme desteği</p></div>{library && <span className="connection-status"><i />{library.sources.length} resmî kaynak</span>}</section>
@@ -121,7 +121,7 @@ function LegalWorkspace({ account }: { account: string }) {
               <details><summary>Dayanak alıntıları ve sürümler</summary>{answer.citations.map(c => <div key={c.id}><a href={c.url} target="_blank" rel="noopener noreferrer">{c.title} · {c.locatorKind === 'page' ? 'Sayfa' : 'Ek'} {c.page}</a><blockquote>{c.excerpt}</blockquote><small>SHA256: {c.contentHash}</small></div>)}</details>
               <small>{new Date(answer.createdAt).toLocaleString('tr')} · Kütüphane {answer.libraryVersion.slice(0, 12)}</small>
             </article>}
-            <div className="legal-warning"><span>Güncel kaynak görüntüsü, eski olay ve poliçe tarihleri için tek başına yeterli değildir. Uygulanacak sürümü ve dosya evrakını kontrol ederek karar verin.</span></div>
+            <details className="form-hint"><summary>Tarih ve sürüm bilgilendirmesi</summary><p>Güncel kaynak görüntüsü, eski olay ve poliçe tarihleri için tek başına yeterli değildir. Uygulanacak sürümü ve dosya evrakını kontrol ederek karar verin.</p></details>
             {history.length > 0 && <details><summary>Geçmiş incelemelerim ({history.length})</summary><div className="reference-list">{history.map(item => <button type="button" key={item.id} disabled={busy} onClick={() => { setAnswer(item);setQuestion(item.question);setEventDate(item.eventDate ?? '') }}>{item.question} · {new Date(item.createdAt).toLocaleDateString('tr')}</button>)}</div></details>}
             {settings?.canConfigure && <details className="legislation-settings"><summary>Gemini bağlantı ayarları</summary><p>Anahtar ofis sunucusunda şifrelenir. Kaydedildikten sonra gösterilmez.</p>
               <label className="qa-input"><span>Gemini API anahtarı {settings.configured ? '(değiştirmek için)' : ''}</span><input type="password" autoComplete="new-password" spellCheck={false} value={apiKey} onChange={e => setApiKey(e.target.value)} disabled={saving || !settings.encryptionAvailable} /></label>

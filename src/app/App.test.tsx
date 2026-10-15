@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from './App'
+import { QUICK_NOTE_EVENT } from './activeCase'
 
 describe('HasarBotu V2 UI prototipi', () => {
   it('üst aramadaki sorguyu Enter ile Dosyalar ekranına ve liste aramasına aktarır', async () => {
@@ -208,7 +209,8 @@ describe('HasarBotu V2 UI prototipi', () => {
     render(<App />)
 
     expect(screen.queryByText('Dosya Asistanı')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Touch Assistant — hızlı not' }))
+    expect(screen.queryByRole('button', { name: 'Touch Assistant — hızlı not' })).not.toBeInTheDocument()
+    act(() => window.dispatchEvent(new Event(QUICK_NOTE_EVENT)))
     expect(screen.getByRole('dialog', { name: 'Touch Assistant' })).toBeInTheDocument()
     expect(screen.getByText('Not eklemek için sunucu oturumu gerekir.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Hızlı notu kapat' }))

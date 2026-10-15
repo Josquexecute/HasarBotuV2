@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { managedServicesSchema,managedDocumentRulesSchema,rolePolicySchema,PERMISSION_DEFINITIONS,type RolePolicy,type DocumentRuleConfiguration } from '@hasarbotu/contracts'
 import { CANONICAL_DOCUMENT_TYPES,CANONICAL_DOCUMENT_LABELS } from '@hasarbotu/domain'
 import { trackingRequest } from '../tracking/trackingApi'
+import { managedInsurersSchema } from '@hasarbotu/contracts'
 
 const ROLES = ['admin','expert','case_manager','secretary','accounting','read_only'] as const
 const ROLE_LABELS = ['Yönetici','Eksper','Sorumlu','Sekreter','Muhasebe','Okuyucu']
@@ -20,6 +21,49 @@ function useAdministration<T>(path: string,schema: { parse(value: unknown): T })
     return () => controller.abort()
   },[path,schema,version])
   return { data,error,reload: () => setVersion((value) => value+1) }
+}
+type Insurer = ReturnType<typeof managedInsurersSchema.parse>['items'][number]
+export function InsurersAdministration() {
+  const { data,error,reload } = useAdministration('insurers',managedInsurersSchema)
+  const [editing,setEditing] = useState<Insurer | 'new' | null>(null)
+  const [removing,setRemoving] = useState<Insurer | null>(null)
+  const [showDeleted,setShowDeleted] = useState(false)
+  const [busy,setBusy] = useState(false)
+  const [actionError,setActionError] = useState('')
+  const [notice,setNotice] = useState('')
+  async function remove() {
+    if (!removing || busy) return
+    setBusy(true);setActionError('')
+    try {
+      await trackingRequest(`administration/insurers/${removing.id}/delete`,{ expectedVersion: removing.version })
+      setNotice(`${removing.name} seçim listesinden kaldırıldı. Geçmiş dosya kayıtları korundu.`)
+      setRemoving(null);reload()
+    } catch (e) { setActionError(e instanceof Error ? e.message : 'Şirket silinemedi.') }
+    finally { setBusy(false) }
+  }
+  return <section className="office-table-panel" aria-label="Sigorta şirketleri yönetimi"><header className="panel-heading"><h2>Sigorta Şirketleri</h2><div className="tracking-actions"><button className="button button--secondary" disabled={busy} onClick={reload}>Yenile</button><button className="button button--primary" disabled={busy || !!removing} onClick={() => { setEditing('new');setNotice('') }}>Sigorta şirketi ekle</button></div></header>
+    <p>Şirketleri düzenleyebilir veya seçim listesinden silebilirsiniz. Geçmiş dosyalardaki bağlantılar korunur.</p>
+    <label><input type="checkbox" checked={showDeleted} onChange={event => setShowDeleted(event.target.checked)} /> Silinen şirketleri göster</label>
+    {(error || actionError) && <p role="alert">{actionError || error}</p>}{notice && <p role="status">{notice}</p>}
+    {!data && !error && <p role="status">Sigorta şirketleri yükleniyor…</p>}
+    {editing && <InsurerForm key={editing === 'new' ? editing : `${editing.id}:${editing.version}`} item={editing === 'new' ? undefined : editing} onCancel={() => setEditing(null)} onSaved={() => { setEditing(null);setNotice('Sigorta şirketi kaydedildi.');reload() }} />}
+    {removing && <div role="alertdialog" aria-label="Sigorta şirketini sil"><p>{removing.name} seçim listesinden kaldırılsın mı? Geçmiş dosyalardaki kayıtları korunacaktır.</p><div className="tracking-actions"><button className="button button--primary" disabled={busy} onClick={() => void remove()}>{busy ? 'Siliniyor…' : 'Silmeyi onayla'}</button><button className="button button--secondary" disabled={busy} onClick={() => { setRemoving(null);setActionError('') }}>Vazgeç</button></div></div>}
+    <div className="table-scroll"><table className="data-table"><thead><tr><th>Sigorta şirketi</th><th>Durum</th><th>İşlemler</th></tr></thead><tbody>{data?.items.filter(item => showDeleted || item.isActive).map(item => <tr key={item.id}><td>{item.name}</td><td>{item.isActive ? 'Aktif' : 'Silinmiş'}</td><td><div className="tracking-actions"><button className="button button--secondary" disabled={busy || !!removing} aria-label={`${item.name} şirketini düzenle`} onClick={() => { setEditing(item);setNotice('') }}>Düzenle</button>{item.isActive && <button className="button button--secondary" disabled={busy || !!editing || !!removing} aria-label={`${item.name} şirketini sil`} onClick={() => { setRemoving(item);setActionError('');setNotice('') }}>Sil</button>}</div></td></tr>)}</tbody></table></div>
+  </section>
+}
+function InsurerForm({ item,onCancel,onSaved }: { item?: Insurer;onCancel(): void;onSaved(): void }) {
+  const [name,setName] = useState(item?.name ?? '')
+  const [active,setActive] = useState(item?.isActive ?? true)
+  const [busy,setBusy] = useState(false)
+  const [error,setError] = useState('')
+  async function save() {
+    if (busy) return
+    setBusy(true);setError('')
+    try { await trackingRequest(`administration/insurers${item ? `/${item.id}` : ''}`,{ name: name.trim(),isActive: active,...(item ? { expectedVersion: item.version } : {}) });onSaved() }
+    catch (e) { setError(e instanceof Error ? e.message : 'Şirket kaydedilemedi.') }
+    finally { setBusy(false) }
+  }
+  return <form className="administration-form" aria-label="Sigorta şirketi düzenleme" onSubmit={event => { event.preventDefault();void save() }}><h3>{item ? 'Şirketi düzenle' : 'Yeni sigorta şirketi'}</h3><fieldset disabled={busy}><label className="settings-field"><span>Şirket adı</span><input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label><label><input type="checkbox" checked={active} onChange={event => setActive(event.target.checked)} /> Aktif</label></fieldset>{error && <p role="alert">{error}</p>}<div className="tracking-actions"><button className="button button--primary" disabled={busy || !name.trim()}>{busy ? 'Kaydediliyor…' : 'Şirketi kaydet'}</button><button className="button button--secondary" type="button" disabled={busy} onClick={onCancel}>Vazgeç</button></div></form>
 }
 export function ServicesAdministration() {
   const { data,error,reload } = useAdministration('services',managedServicesSchema)

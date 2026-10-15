@@ -9,6 +9,7 @@ import { evaluateCaseDocumentRequirements } from '../src/document-requirements/e
 import { planFolderLocationReconciliation, applyFolderLocationReconciliation, type FolderLocationReconciliation } from '../src/cases/folder-location-reconciliation.js'
 import { planSourceFolderRelocation, applySourceFolderRelocation, type SourceFolderRelocation } from '../src/cases/source-folder-relocation.js'
 import { registerAutomaticFolders, type AutomaticFolderPolicy, type ObservedPlateFolder } from '../src/cases/automatic-folder-registration.js'
+import { resolveFileLocations } from '../src/storage/file-location.js'
 
 const testUrl = process.env.TEST_DATABASE_URL
 const describeDb = testUrl ? describe : describe.skip
@@ -62,6 +63,16 @@ describeDb('sidecarless physical folder registration', () => {
     expect(await registerAutomaticFolders(pool, automaticPolicy(), [{ ...folder, relativePath: folder.relativePath.replace('EKİM', 'KAPALI EKİM') }], verify)).toMatchObject({ created: 0, existing: 1 })
     expect(await counts()).toEqual(before)
     expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [row.id])).rows[0].lifecycle_status).toBe('open')
+  })
+  it('registers the same plate for different insurers as separate source identities', async () => {
+    const axa = uuidv7(), allianz = uuidv7()
+    await pool.query("INSERT INTO insurers(id,organization_id,name) VALUES($1,$3,'AXA Sigorta'),($2,$3,'Allianz Sigorta')", [axa,allianz,org])
+    const folders = ['AXA SİGORTA', 'ALLIANZ'].map(name => ({ ...observation(), relativePath: `2026/EKİM 2026/34TST999-${name}` }))
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), folders, async () => {})).toMatchObject({ created: 2, deferred: 0 })
+    const rows = (await pool.query("SELECT id::text,insurer_id::text FROM cases WHERE organization_id=$1 AND plate_normalized='34TST999' ORDER BY insurer_id", [org])).rows
+    expect(rows).toHaveLength(2)
+    expect(new Set(rows.map(row => row.id)).size).toBe(2)
+    expect(new Set(rows.map(row => row.insurer_id))).toEqual(new Set([axa,allianz]))
   })
   it('preserves baseline exceptions and existing paths without changing assignments or types', async () => {
     const folder = observation(), policy = automaticPolicy(), before = await counts(), verify = vi.fn(async () => {})
@@ -156,7 +167,7 @@ describeDb('sidecarless physical folder registration', () => {
     expect(await writes.updateCase({ ...actor(), organizationId: uuidv7() }, id, { expectedVersion: 1, caseType: 'traffic' })).toEqual({ kind: 'not_found' })
     const updated = await writes.updateCase(actor(), id, { expectedVersion: 1, caseType: 'traffic' })
     expect(updated).toMatchObject({ kind: 'ok', item: { caseType: 'traffic', status: 'closed', stage: 'closed', version: 2 } })
-    await expect(writes.updateCase(actor(), id, { expectedVersion: 2, caseType: 'casco' })).rejects.toThrow('caseType')
+    expect(await writes.updateCase(actor(), id, { expectedVersion: 2, caseType: 'casco' })).toMatchObject({ kind: 'ok',item: { caseType: 'casco',status: 'closed',version: 3 } })
     expect((await pool.query('SELECT closed_at,follow_up_date FROM cases WHERE id=$1', [id])).rows[0]).toEqual({ closed_at: null, follow_up_date: null })
     const audit = (await pool.query("SELECT details FROM audit_events WHERE resource_id=$1 AND action='case.updated'", [id])).rows[0].details
     expect(audit).toMatchObject({ previousCaseType: null, caseType: 'traffic', assignmentKind: 'user_classification' })
@@ -303,6 +314,9 @@ describeDb('sidecarless physical folder registration', () => {
       expect((await pool.query('SELECT relative_path,version,verification_status FROM case_locations WHERE case_id=$1', [b.caseId])).rows[0]).toEqual({ relative_path: b.relativePath, version: 2, verification_status: 'pending' })
       expect((await pool.query('SELECT source_folder_id,source_relative_path FROM case_folder_registrations WHERE case_id=$1', [b.caseId])).rows[0]).toEqual({ source_folder_id: b.sourceFolderId, source_relative_path: b.relativePath })
       expect((await pool.query('SELECT 1 FROM case_notes WHERE case_id=$1', [b.caseId])).rowCount).toBe(0)
+      const files = await resolveFileLocations(pool, org, [{ case_id: b.caseId, storage_root_key: b.previousLocation.storageRootKey,
+        relative_path: `${b.previousLocation.relativePath}/evidence.pdf`, created_at: new Date('2026-01-01T00:00:00Z') }])
+      expect(files[0]!.relative_path).toBe(`${b.relativePath}/evidence.pdf`)
     }
     const countsBeforeReplay = await counts()
     expect(await applySourceFolderRelocation(pool, actor(), plan, plan.planHash, verify)).toEqual({ relocated: 0, alreadyApplied: true })

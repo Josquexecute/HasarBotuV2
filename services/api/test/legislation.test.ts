@@ -9,7 +9,7 @@ import type { LegalProvider } from '../src/legislation/provider.js'
 describe.skipIf(!process.env.TEST_DATABASE_URL)('legislation live database routes', () => {
   let pool: pg.Pool, app: FastifyInstance, failCitation = false
   const users: { id: string; org: string; cookie: string }[] = [], encryptionKey = 'e'.repeat(64)
-  const root = '/api/v1/legislation', key = 'synthetic-test-only-key-do-not-use', claim = uuidv7()
+  const root = '/api/v1/legislation', key = 'AQ.synthetic-test-only.' + 'do-not-use_'.repeat(40), claim = uuidv7()
   const provider: LegalProvider = async (_input, evidence) => ({ statements: [{ text: 'Kaynak hükmü incelenmelidir.', citations: [{ id: failCitation ? 'made-up' : evidence[0]!.id, quote: evidence[0]!.excerpt.slice(0, 100) }] }], missingInformation: [] })
   beforeAll(async () => {
     const config = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL!)

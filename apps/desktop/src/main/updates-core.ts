@@ -72,25 +72,32 @@ export async function writeUpdateHelper(options: { directory: string; installer:
   const path = join(options.directory, 'install-and-restart.ps1')
   const script = [
     '$ErrorActionPreference = \'Stop\'',
-    '$completion = @{ installerExitCode = -1; error = $null }',
+    '$completion = @{ installerExitCode = -1; error = $null; taskCleanupError = $null; helperProcessId = $PID }',
     'try {',
     `try { Wait-Process -Id ${options.pid} -Timeout 60 -ErrorAction Stop } catch { if (Get-Process -Id ${options.pid} -ErrorAction SilentlyContinue) { throw 'Application did not close normally' } }`,
     `$installerPath = ${psLiteral(options.installer)}`,
     `$installTarget = ${psLiteral(options.installDirectory)}`,
     `$installedExecutable = ${psLiteral(options.executable)}`,
-    '$result = Start-Process -FilePath $installerPath -ArgumentList @("/S", ("/D=" + $installTarget)) -WindowStyle Hidden -Wait -PassThru',
+    // Wait only for NSIS, not its descendant processes or a restarted application.
+    '$result = Start-Process -FilePath $installerPath -ArgumentList @("/S", ("/D=" + $installTarget)) -WindowStyle Hidden -PassThru',
+    '$result.WaitForExit()',
     '$completion.installerExitCode = $result.ExitCode',
     'if ($result.ExitCode -ne 0) { throw "Installer failed: $($result.ExitCode)" }',
     `$savedProfile = ${psLiteral(options.userDataPath)}`,
-    '$restart = [Diagnostics.ProcessStartInfo]::new()',
-    '$restart.FileName = $installedExecutable; $restart.WorkingDirectory = $installTarget',
-    `$restart.Arguments = '--user-data-dir="' + $savedProfile + '"'`,
-    '$restart.UseShellExecute = $false; $restart.CreateNoWindow = $true',
-    `$restart.EnvironmentVariables['HASARBOTU_API_ORIGIN'] = ${psLiteral(options.apiOrigin)}`,
-    '$restarted = [Diagnostics.Process]::Start($restart); $completion.restartedProcessId = $restarted.Id',
+    `$restartArguments = '--user-data-dir="' + $savedProfile + '" --hasarbotu-api-origin=' + ${psLiteral(options.apiOrigin)}`,
+    // Explorer owns the restarted GUI: closing the update console/task cannot kill it.
+    // Forward the non-secret connection explicitly; Explorer does not inherit our environment.
+    '$shellWindows = (New-Object -ComObject Shell.Application).Windows()',
+    '$desktopHandle = 0; $desktop = $shellWindows.FindWindowSW(0, 0, 8, [ref]$desktopHandle, 1)',
+    'if (-not $desktop) { throw "Windows desktop shell is unavailable for restart" }',
+    '$desktopShell = $desktop.Document.Application',
+    '$desktopShell.ShellExecute($installedExecutable, $restartArguments, $installTarget, "open", 1)',
+    '$completion.restartRequested = $true',
     '} catch { $completion.error = $_.Exception.Message } finally {',
+    // A task registered by an elevated app can deny deletion to its Limited principal.
+    // Cleanup diagnostics must not replace a successful install or the original error.
+    `try { Unregister-ScheduledTask -TaskName ${psLiteral(options.taskName)} -Confirm:$false -ErrorAction Stop } catch { $completion.taskCleanupError = $_.Exception.Message }`,
     `$completion.finishedAt = [DateTime]::UtcNow.ToString('o'); $completion | ConvertTo-Json | Set-Content -LiteralPath ${psLiteral(join(options.directory, 'install-result.json'))} -Encoding UTF8`,
-    `Unregister-ScheduledTask -TaskName ${psLiteral(options.taskName)} -Confirm:$false`,
     '}',
   ].join('\r\n')
   await writeFile(path, script, 'utf8')
@@ -105,10 +112,10 @@ export async function scheduleUpdateHelper(helper: string, taskName: string): Pr
     `$arguments='-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $env:HB_UPDATE_HELPER_PATH + '"'`,
     "$action=New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'powershell.exe') -Argument $arguments",
     'Register-ScheduledTask -TaskName $env:HB_UPDATE_TASK_NAME -Action $action -Principal $principal -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 10)) | Out-Null',
-    'try { Start-ScheduledTask -TaskName $env:HB_UPDATE_TASK_NAME } catch { Unregister-ScheduledTask -TaskName $env:HB_UPDATE_TASK_NAME -Confirm:$false; throw }',
+    'try { Start-ScheduledTask -TaskName $env:HB_UPDATE_TASK_NAME } catch { $startError = $_; try { Unregister-ScheduledTask -TaskName $env:HB_UPDATE_TASK_NAME -Confirm:$false -ErrorAction Stop } catch { Write-Warning ("Update task cleanup failed: " + $_.Exception.Message) }; throw $startError }',
   ].join('; ')
   await new Promise<void>((resolve, reject) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command],
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', command],
       { windowsHide: true, timeout: 30_000, env: { ...process.env, HB_UPDATE_HELPER_PATH: helper, HB_UPDATE_TASK_NAME: taskName } },
       error => error ? reject(new Error('Windows güncelleme görevi başlatılamadı. Uygulama açık bırakıldı.')) : resolve())
   })

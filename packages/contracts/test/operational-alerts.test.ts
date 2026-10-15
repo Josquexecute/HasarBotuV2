@@ -134,6 +134,7 @@ describe('operational alerts contracts', () => {
   })
 
   it('sürüm etiketi sabittir ve sayaç negatif olamaz', () => {
+    expect(operationalAlertsResponseSchema.parse(response({ totalCount: 245 })).totalCount).toBe(245)
     expect(() => operationalAlertsResponseSchema.parse(response({ schemaVersion: 'operational-alert/9.9.9' })))
       .toThrow()
     expect(() => operationalAlertsResponseSchema.parse(response({ totalCount: -1 }))).toThrow()

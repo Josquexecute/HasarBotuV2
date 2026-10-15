@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type pg from 'pg'
 import { z } from 'zod'
 import { idSchema, relativePathSchema, storageRootKeySchema } from '@hasarbotu/contracts'
-import { decideV1ClaimTypeFromEvidence, parseSourcePlateFolderName, plateSearchKey, type PlateNumber } from '@hasarbotu/domain'
+import { decideV1ClaimTypeFromEvidence, matchSourceFolderInsurer, parseSourcePlateFolderName, plateSearchKey, type PlateNumber } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
 import { enqueueVerifyJob } from '../agent/enqueue.js'
@@ -40,7 +40,7 @@ interface Queryable { query: pg.Pool['query'] }
 export interface FolderRegistrationPlan {
   organizationId: string
   manifest: FolderRegistrationManifest
-  entries: { sourceFolderId: string; plate: PlateNumber; caseId: string | null }[]
+  entries: { sourceFolderId: string; plate: PlateNumber; caseId: string | null; insurerId: string | null }[]
   planHash: string
 }
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -61,6 +61,7 @@ export async function planFolderRegistration(db: Queryable, organizationId: stri
     if (!account.rowCount) fail('folder_active_assignment_required')
   }
   const entries: FolderRegistrationPlan['entries'] = []
+  const insurers = (await db.query<{ id: string; name: string }>('SELECT id::text,name FROM insurers WHERE organization_id=$1 AND is_active ORDER BY id', [organizationId])).rows
   for (const folder of manifest.folders) {
     const segments = folder.relativePath.split('/')
     const parsedName = parseSourcePlateFolderName(segments.at(-1)!)
@@ -76,7 +77,7 @@ export async function planFolderRegistration(db: Queryable, organizationId: stri
       WHERE r.organization_id=$1 AND r.storage_root_key=$2 AND r.source_folder_id=$3`, [organizationId, manifest.storageRootKey, folder.sourceFolderId])
     if (registered.rows[0]) {
       if (registered.rows[0].plate_normalized !== plateSearchKey(parsedName!.plate)) fail('folder_registered_plate_changed')
-      entries.push({ sourceFolderId: folder.sourceFolderId, plate: parsedName!.plate, caseId: registered.rows[0].case_id })
+      entries.push({ sourceFolderId: folder.sourceFolderId, plate: parsedName!.plate, caseId: registered.rows[0].case_id, insurerId: null })
       continue
     }
     const bound = await db.query('SELECT case_id FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2 AND lower(relative_path)=lower($3)', [organizationId, manifest.storageRootKey, folder.relativePath])
@@ -87,7 +88,7 @@ export async function planFolderRegistration(db: Queryable, organizationId: stri
     const candidateIds = candidate.rows.map(row => row.id as string).sort()
     if (candidateIds.length && (!folder.evidence.userIdentityDecision
       || JSON.stringify(candidateIds) !== JSON.stringify([...(folder.existingPlateCaseIds ?? [])].sort()))) fail('folder_existing_plate_requires_reconciliation')
-    entries.push({ sourceFolderId: folder.sourceFolderId, plate: parsedName!.plate, caseId: null })
+    entries.push({ sourceFolderId: folder.sourceFolderId, plate: parsedName!.plate, caseId: null, insurerId: matchSourceFolderInsurer(segments.at(-1)!, insurers)?.id ?? null })
   }
   const payload = { organizationId, manifest, entries }
   return { ...payload, planHash: hash(payload) }
@@ -120,9 +121,9 @@ export async function applyFolderRegistration(pool: pg.Pool, actor: Actor, plan:
       const sequence = (await client.query(`INSERT INTO office_counters(organization_id,office_year,last_sequence) VALUES($1,$2,1)
         ON CONFLICT(organization_id,office_year) DO UPDATE SET last_sequence=office_counters.last_sequence+1 RETURNING last_sequence`, [actor.organizationId, year])).rows[0].last_sequence
       await client.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,plate,plate_normalized,
-        lifecycle_status,workflow_stage,responsible_user_id,expert_user_id)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [caseId, actor.organizationId, year, sequence, `${year}/${sequence}`, folder.caseType,
-        fresh.entries[index]!.plate, plateSearchKey(fresh.entries[index]!.plate), folder.physicallyClosed ? 'closed' : 'open', folder.physicallyClosed ? 'closed' : 'new_notification', fresh.manifest.responsibleUserId, fresh.manifest.expertUserId])
+        lifecycle_status,workflow_stage,responsible_user_id,expert_user_id,insurer_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [caseId, actor.organizationId, year, sequence, `${year}/${sequence}`, folder.caseType,
+        fresh.entries[index]!.plate, plateSearchKey(fresh.entries[index]!.plate), folder.physicallyClosed ? 'closed' : 'open', folder.physicallyClosed ? 'closed' : 'new_notification', fresh.manifest.responsibleUserId, fresh.manifest.expertUserId, fresh.entries[index]!.insurerId])
       await client.query(`INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path,verification_status,source)
         VALUES($1,$2,$3,$4,$5,'pending','imported')`, [locationId, actor.organizationId, caseId, fresh.manifest.storageRootKey, folder.relativePath])
       await client.query(`INSERT INTO case_location_history(id,organization_id,case_id,storage_root_key,relative_path,verification_status,source,changed_by_user_id,request_id)

@@ -1,10 +1,13 @@
 import { contextBridge,ipcRenderer } from 'electron'
 
-const commands = new Set(['open','note','cases','notifications','settings','hide','reset','quit','close'])
+const commands = new Set(['open','note','cases','notifications','settings','hide','reset','close'])
 contextBridge.exposeInMainWorld('hasarbotuAssistantMenu',Object.freeze({
   choose: (command: unknown) => {
     if (typeof command === 'string' && commands.has(command)) ipcRenderer.send('hasarbotu:assistant-menu',command)
   },
+}))
+contextBridge.exposeInMainWorld('hasarbotuCaseFolders', Object.freeze({
+  open: (caseId: unknown) => ipcRenderer.invoke('hasarbotu:open-case-folder', caseId),
 }))
 contextBridge.exposeInMainWorld('hasarbotuAppearance', Object.freeze({
   set: (value: unknown) => ipcRenderer.invoke('hasarbotu:assistant-appearance', value),

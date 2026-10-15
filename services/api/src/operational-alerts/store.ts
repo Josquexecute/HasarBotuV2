@@ -1,11 +1,14 @@
 import type pg from 'pg'
+import { createHash } from 'node:crypto'
 import {
   operationalAlertsResponseSchema,
   type OperationalAlertsResponse,
 } from '@hasarbotu/contracts'
 import {
   OPERATIONAL_ALERT_SCHEMA_VERSION,
-  deriveOperationalAlerts,
+  buildOperationalAlerts,
+  summarizeOperationalAlertsByCase,
+  MAX_OPERATIONAL_ALERTS,
   evaluateDocumentRequirements,
   type CanonicalDocumentType,
   type CaseTaskPriority,
@@ -18,9 +21,8 @@ import { toLocalDateString } from '../cases/store.js'
 import { loadDocumentRequirementRules } from '../document-requirements/rules.js'
 
 /**
- * Operasyonel uyarılar salt okunurdur: yeni tablo, kuyruk veya arka plan işçisi
- * yoktur. Uyarılar her istekte mevcut görev, takip ve evrak kuralı verisinden
- * deterministik türetilir; audit yazmaz ve serbest not/belge içeriği taşımaz.
+ * Uyarılar kaynak veriden türetilir; kişisel okuma onayı kaynakları değiştirmez.
+ * İçerik/tarih değiştiğinde parmak izi değişir ve uyarı yeniden okunmamış olur.
  */
 
 interface AlertCaseRow {
@@ -51,13 +53,13 @@ interface DocumentRow {
 }
 
 export function createOperationalAlertStore(pool: pg.Pool) {
-  return {
-    async list(
+    async function evaluate(
       organizationId: string,
       asOfDate: string,
       evaluatedAt: string,
       caseIdFilter?: readonly string[],
       responsibleUserId?: string,
+      readMode: 'all' | 'unread' | 'mark_all_read' = 'all',
     ): Promise<OperationalAlertsResponse> {
       // Tenant sınırı: yalnız oturumun organization'ındaki açık dosyalar.
       // İstemciden gelen `caseIdFilter` kapsamı YALNIZ DARALTIR; erişim kararı
@@ -180,19 +182,39 @@ export function createOperationalAlertStore(pool: pg.Pool) {
       // satırlar arasında yanlış negatif üretemez. Erişilemeyen (tenant dışı,
       // kapalı veya olmayan) kimlik özete hiç girmez; istemci bunu "bilinmiyor"
       // olarak gösterir, "uyarı yok" olarak değil.
-      const { alerts, caseSummaries } = deriveOperationalAlerts(
-        { overdueTasks, overdueFollowUps, missingDocuments },
-        asOfDate,
-        caseIdFilter !== undefined ? caseRows.map((row) => row.id) : undefined,
-      )
+      let full = buildOperationalAlerts({ overdueTasks, overdueFollowUps, missingDocuments }, asOfDate)
+      if (readMode !== 'all') {
+        if (!responsibleUserId) throw new Error('alert_read_user_required')
+        const fingerprint = (alert: typeof full[number]) => createHash('sha256')
+          .update(JSON.stringify([alert.dedupeKey, alert.severity, alert.summary, alert.sourceDate])).digest('hex')
+        if (readMode === 'mark_all_read') {
+          // Acknowledge the FULL server snapshot, including alerts beyond the 200-row display limit.
+          await pool.query(`INSERT INTO operational_alert_reads (organization_id,user_id,case_id,dedupe_key,fingerprint,read_at)
+            SELECT $1,$2,x.case_id,x.dedupe_key,x.fingerprint,$4::timestamptz
+            FROM jsonb_to_recordset($3::jsonb) AS x(case_id uuid,dedupe_key text,fingerprint text)
+            ON CONFLICT (organization_id,user_id,dedupe_key) DO UPDATE SET fingerprint=EXCLUDED.fingerprint,read_at=EXCLUDED.read_at`,
+          [organizationId, responsibleUserId, JSON.stringify(full.map(alert => ({ case_id: alert.caseId, dedupe_key: alert.dedupeKey, fingerprint: fingerprint(alert) }))), evaluatedAt])
+          full = []
+        } else {
+          const reads = await pool.query<{ dedupe_key: string; fingerprint: string }>(
+            'SELECT dedupe_key,fingerprint FROM operational_alert_reads WHERE organization_id=$1 AND user_id=$2', [organizationId, responsibleUserId])
+          const byKey = new Map(reads.rows.map(row => [row.dedupe_key, row.fingerprint]))
+          full = full.filter(alert => byKey.get(alert.dedupeKey) !== fingerprint(alert))
+        }
+      }
+      const caseSummaries = caseIdFilter === undefined ? undefined : summarizeOperationalAlertsByCase(full, caseRows.map(row => row.id))
       return operationalAlertsResponseSchema.parse({
         schemaVersion: OPERATIONAL_ALERT_SCHEMA_VERSION,
         ...(caseSummaries === undefined ? {} : { caseSummaries }),
-        totalCount: alerts.length,
+        totalCount: full.length,
         evaluatedAt,
-        alerts,
+        alerts: full.slice(0, MAX_OPERATIONAL_ALERTS),
       })
-    },
+    }
+  return {
+    list: evaluate,
+    markAllRead: (organizationId: string, asOfDate: string, evaluatedAt: string, userId: string): Promise<OperationalAlertsResponse> =>
+      evaluate(organizationId, asOfDate, evaluatedAt, undefined, userId, 'mark_all_read'),
   }
 }
 

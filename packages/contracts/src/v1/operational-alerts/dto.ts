@@ -17,8 +17,7 @@ import {
 
 /**
  * Operasyonel uyarılar salt okunurdur ve mevcut kaynak veriden türetilir.
- * Bu yüzden istek gövdesi, yazma DTO'su veya kullanıcı durumu (okundu/ertelendi)
- * alanı yoktur.
+ * Okuma onayı kaynak görevleri, takip tarihlerini veya evrakları değiştirmez.
  */
 export const operationalAlertTypeSchema = z.enum(OPERATIONAL_ALERT_TYPES)
 export const operationalAlertSeveritySchema = z.enum(OPERATIONAL_ALERT_SEVERITIES)
@@ -46,6 +45,9 @@ export const operationalAlertSchema = z.strictObject({
 const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 
 export const operationalAlertsQuerySchema = z.strictObject({
+  /** Opt-in keeps installed clients with the original bounded-count schema compatible. */
+  includeTotal: z.boolean().optional(),
+  unreadOnly: z.boolean().optional(),
   caseIds: z
     .array(z.string().regex(UUID_PATTERN, { error: 'invalid_case_id' }))
     .min(1)
@@ -72,8 +74,8 @@ export const operationalAlertCaseSummarySchema = z.strictObject({
 
 export const operationalAlertsResponseSchema = z.strictObject({
   schemaVersion: z.literal(OPERATIONAL_ALERT_SCHEMA_VERSION),
-  /** Sayaç yalnız döndürülen gerçek uyarılardan hesaplanır. */
-  totalCount: z.number().int().min(0).max(MAX_OPERATIONAL_ALERTS),
+  /** Liste sınırından önce hesaplanan gerçek toplam. */
+  totalCount: z.number().int().min(0),
   evaluatedAt: utcDateTimeSchema,
   alerts: z.array(operationalAlertSchema).max(MAX_OPERATIONAL_ALERTS),
   caseSummaries: z

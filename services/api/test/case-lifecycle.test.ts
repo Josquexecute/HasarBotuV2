@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rename, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -273,6 +273,64 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
     if (root !== undefined) await rm(root, { recursive: true, force: true })
+  })
+
+  it('closes a verified imported office folder without inventing a notification date and moves files only after approval',async () => {
+    const seeded = await seedCase('27 TST 25',false)
+    const imported = '2026 OFİS/Ekim 2026/27TST25'
+    await mkdir(join(root,'2026 OFİS/Ekim 2026'),{ recursive: true })
+    await rename(join(root,...seeded.openPath.split('/')),join(root,...imported.split('/')))
+    await pool.query('UPDATE cases SET notification_date=NULL WHERE id=$1',[seeded.caseId])
+    await pool.query("UPDATE case_locations SET relative_path=$2,source='imported' WHERE case_id=$1",[seeded.caseId,imported])
+    const response = await planClose(seeded.caseId,{ expectedCaseVersion: 1,expectedLocationVersion: 1,closeMode: 'with_missing_requirements',reason: 'Sentetik eksik evraklı kapanış' })
+    expect(response.statusCode,response.payload).toBe(201)
+    const plan = caseLifecycleOperationResponseSchema.parse(response.json()).operation
+    expect(plan).toMatchObject({ status: 'approval_required',source: { relativePath: imported },destination: { relativePath: '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/27TST25' },blockers: [] })
+    expect((await pool.query('SELECT lifecycle_status,notification_date FROM cases WHERE id=$1',[seeded.caseId])).rows[0]).toMatchObject({ lifecycle_status: 'open',notification_date: null })
+    await expect(access(join(root,...imported.split('/'),'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
+    await expect(access(join(root,...plan.destination.relativePath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await approve(seeded.caseId,plan)).statusCode).toBe(202)
+    expect((await runOnce(agentClient,agentConfig)).kind).toBe('reported')
+    expect((await pool.query('SELECT lifecycle_status,notification_date,version FROM cases WHERE id=$1',[seeded.caseId])).rows[0]).toMatchObject({ lifecycle_status: 'closed',notification_date: null,version: 2 })
+    expect((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1',[seeded.caseId])).rows[0].relative_path).toBe(plan.destination.relativePath)
+    await expect(access(join(root,...plan.destination.relativePath.split('/'),'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
+    await expect(access(join(root,...imported.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('closes an already physically archived import only after approval, then really moves it back on reopen',async () => {
+    const seeded = await seedCase('27 TST 27',false)
+    const archived = '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/27TST27'
+    await mkdir(join(root,'2026 OFİS/Ekim 2026/KAPALI DOSYALAR'),{ recursive: true })
+    await rename(join(root,...seeded.openPath.split('/')),join(root,...archived.split('/')))
+    await pool.query('UPDATE cases SET notification_date=NULL WHERE id=$1',[seeded.caseId])
+    await pool.query("UPDATE case_locations SET relative_path=$2,source='imported' WHERE case_id=$1",[seeded.caseId,archived])
+    const response = await planClose(seeded.caseId,{ expectedCaseVersion: 1,expectedLocationVersion: 1,closeMode: 'with_missing_requirements',reason: 'Sentetik elle arşivlenen dosya' })
+    expect(response.statusCode,response.payload).toBe(201)
+    const plan = caseLifecycleOperationResponseSchema.parse(response.json()).operation
+    expect(plan.source).toEqual(plan.destination)
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1',[seeded.caseId])).rows[0].lifecycle_status).toBe('open')
+    expect((await approve(seeded.caseId,plan)).statusCode).toBe(202)
+    expect(await runOnce(agentClient,agentConfig)).toMatchObject({ kind: 'reported',reported: { status: 'succeeded' } })
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1',[seeded.caseId])).rows[0].lifecycle_status).toBe('closed')
+    await expect(access(join(root,...archived.split('/'),'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
+    const reopenResponse = await planReopen(seeded.caseId,{ expectedCaseVersion: 2,expectedLocationVersion: 2,reason: 'Sentetik tekrar inceleme',targetWorkflowStage: 'reporting' })
+    expect(reopenResponse.statusCode,reopenResponse.payload).toBe(201)
+    const reopen = caseLifecycleOperationResponseSchema.parse(reopenResponse.json()).operation
+    expect(reopen.destination.relativePath).toBe('2026 OFİS/Ekim 2026/27TST27')
+    expect((await approve(seeded.caseId,reopen)).statusCode).toBe(202)
+    expect(await runOnce(agentClient,agentConfig)).toMatchObject({ kind: 'reported',reported: { status: 'succeeded' } })
+    await expect(access(join(root,...archived.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(access(join(root,...reopen.destination.relativePath.split('/'),'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
+  })
+
+  it('retains verification and date gates for unverified imports and ordinary workspaces',async () => {
+    const seeded = await seedCase('27 TST 26',false)
+    await pool.query('UPDATE cases SET notification_date=NULL WHERE id=$1',[seeded.caseId])
+    const payload = { expectedCaseVersion: 1,expectedLocationVersion: 1,closeMode: 'with_missing_requirements',reason: 'Sentetik gerekçe' }
+    expect((await planClose(seeded.caseId,payload)).statusCode).toBe(409)
+    await pool.query("UPDATE case_locations SET source='imported',verification_status='pending',relative_path='2026 OFİS/Ekim 2026/27TST26' WHERE case_id=$1",[seeded.caseId])
+    expect((await planClose(seeded.caseId,payload)).statusCode).toBe(409)
+    expect((await pool.query('SELECT count(*)::int AS n FROM case_lifecycle_operations WHERE case_id=$1',[seeded.caseId])).rows[0].n).toBe(0)
   })
 
   it('normal close ve reopen ayni case/ofis numarasini koruyarak gercek Agent move ile tamamlanir', async () => {

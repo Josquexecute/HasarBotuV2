@@ -6,6 +6,16 @@ import { CaseCommandError, type CaseCommandPort } from '../../data/commandPort'
 import { CaseTypeAssignment } from './CaseTypeAssignment'
 
 describe('CaseTypeAssignment', () => {
+  it('corrects an existing closed classification without reopening the case',async () => {
+    const item = { ...mockCases[0]!,type: 'Trafik' as const,lifecycleStatus: 'closed' as const,version: 9 }
+    const updateCase = vi.fn().mockResolvedValue({ ...item,type: 'Kasko',version: 10 })
+    render(<CaseTypeAssignment item={item} canEdit onUpdated={vi.fn()} onUnauthorized={vi.fn()} commandPort={{ updateCase } as unknown as CaseCommandPort} />)
+    expect(screen.getByRole('combobox')).toHaveValue('traffic')
+    expect(screen.getByRole('button',{ name: 'Türü Kaydet' })).toBeDisabled()
+    await userEvent.selectOptions(screen.getByRole('combobox'),'casco')
+    await userEvent.click(screen.getByRole('button',{ name: 'Türü Kaydet' }))
+    expect(updateCase).toHaveBeenCalledExactlyOnceWith(item.caseId,{ expectedVersion: 9,caseType: 'casco' })
+  })
   it('requires an explicit choice and saves a closed folder with optimistic locking', async () => {
     const item = { ...mockCases[0]!, type: 'Seçiniz' as const, lifecycleStatus: 'closed' as const, version: 7 }
     const updated = { ...item, type: 'Kasko' as const, version: 8 }

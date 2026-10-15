@@ -158,7 +158,7 @@ describe('App oturum kapisi (api mod)', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('Mevzuat servisine ulaşılamadı veya yanıt doğrulanamadı.')).toBeInTheDocument()
+    expect(await screen.findByText('Mevzuat yanıtının biçimi program sürümüyle uyumlu değil. Programı güncelleyip yeniden yükleyin.')).toBeInTheDocument()
     expect(calls).toHaveLength(7)
     expect(calls.some(call => call.includes('/api/v1/legislation/library'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/me/assistant-appearance'))).toBe(true)

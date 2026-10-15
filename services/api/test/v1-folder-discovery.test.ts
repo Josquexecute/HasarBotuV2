@@ -24,6 +24,8 @@ describe('V1 folder discovery', () => {
     const paths = [
       '2026 OFİS/Ekim 2026/34ABC123',
       '2026 OFİS/Ekim 2026/34ABC123 - 2',
+      '2026 OFİS/Ekim 2026/34ABC123-AXA SİGORTA',
+      '2026 OFİS/Ekim 2026/34ABC123 ALLIANZ',
       '2026 OFİS/Ekim 2026/KAPALI EKİM 2026/06ABC123',
       '2026 UZAKTAN/Ekim 2026/35ABC123',
       '2026/Ekim 2026/16ABC123',
