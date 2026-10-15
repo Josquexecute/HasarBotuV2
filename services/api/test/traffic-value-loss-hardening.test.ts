@@ -418,6 +418,39 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
     if (migrationDirectory) rmSync(migrationDirectory, { recursive: true, force: true })
   })
 
+  it('Excel sıfır hasar ve ilk 1.000 km kurallarını önizleme, kayıt ve insan onayına taşır', async () => {
+    const seeded = await seedCase()
+    const base = request(seeded, 0)
+    if (base.realMarket === null) throw new Error('TEST_REAL_MARKET_REQUIRED')
+    const zero = trafficValueLossPreviewResponseSchema.parse((await preview(seeded, 0, {
+      realMarket: { ...base.realMarket, damageAmountMinor: 0 },
+    })).json())
+    expect(zero.evaluation).toMatchObject({ finalResultMinor: 0, damageCoefficient: { decimal: '0' } })
+
+    const overrides: Partial<TrafficValueLossPreviewRequest> = {
+      vehicle: { ...base.vehicle, mileage: 0 },
+      damageParts: [{ partCode: 'DK_1', partName: 'Tavan sacı', repairAction: 'repair', priorDamage: 'no' }],
+      comparables: base.comparables.map((item) => ({ ...item, mileage: 0 })),
+      realMarket: { ...base.realMarket, usageValue: 0, parts: base.realMarket.parts.map((part) => ({
+        ...part, operation: 'repair', partPriceAvailability: 'available',
+        newPartPriceMinor: 100_000, repairLaborMinor: 15_000,
+      })) },
+    }
+    const calculated = trafficValueLossPreviewResponseSchema.parse((await preview(seeded, 0, overrides)).json())
+    expect(calculated.evaluation).toMatchObject({
+      generalModifiers: { lowerBandProximity: { decimal: '0.05' }, multiplier: { decimal: '1.05' } },
+      canSubmitForApproval: true,
+    })
+    const created = await createDraft(seeded, 0, overrides)
+    expect(created.currentVersion.evaluation).toEqual(calculated.evaluation)
+    const approved = await approve(seeded, await submit(seeded, created))
+    expect(approved.currentVersion.evaluation).toEqual(calculated.evaluation)
+    expect(approved.currentVersion.humanApprovalStatus).toBe('approved')
+    const reportId = await generateReport(seeded, approved)
+    const report = await pool.query('SELECT content_snapshot FROM traffic_value_loss_reports WHERE id=$1', [reportId])
+    expect(report.rows[0].content_snapshot.damageParts[0].repairAction).toBe('repair')
+  })
+
   it('preview hash canonical, tenant/case bağlı ve stale/missing hash için fail-closed çalışır', async () => {
     const firstCase = await seedCase()
     const secondCase = await seedCase()

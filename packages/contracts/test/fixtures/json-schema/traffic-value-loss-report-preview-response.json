@@ -248,6 +248,7 @@
               "repairAction": {
                 "type": "string",
                 "enum": [
+                  "repair",
                   "repair_paint",
                   "replace_paint",
                   "paint",

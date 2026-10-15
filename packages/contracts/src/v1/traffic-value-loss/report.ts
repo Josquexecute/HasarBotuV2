@@ -44,7 +44,7 @@ export const trafficValueLossReportGenerateRequestSchema = trafficValueLossRepor
 const trafficValueLossReportDamagePartSchema = z.strictObject({
   partCode: trafficValueLossCodeSchema,
   partName: z.string().min(1).max(200),
-  repairAction: z.enum(['repair_paint', 'replace_paint', 'paint', 'replace', 'paintless_repair']),
+  repairAction: z.enum(['repair', 'repair_paint', 'replace_paint', 'paint', 'replace', 'paintless_repair']),
   priorDamage: z.enum(['yes', 'no', 'unknown']),
 })
 

@@ -76,6 +76,7 @@ function labelFor(value: string): string {
     market_comparable: 'Piyasa emsali',
     sbm_history: 'SBM geçmişi',
     expert_observation: 'Eksper gözlemi',
+    repair: 'Onarım',
     repair_paint: 'Onarım + boya',
     replace_paint: 'Değişim + boya',
     paint: 'Boya',

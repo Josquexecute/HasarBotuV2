@@ -51,7 +51,7 @@ export interface TrafficValueLossComparableInput {
 export interface TrafficValueLossDamagePartInput {
   readonly partCode: string
   readonly partName: string
-  readonly repairAction: 'repair_paint' | 'replace_paint' | 'paint' | 'replace' | 'paintless_repair'
+  readonly repairAction: 'repair' | 'repair_paint' | 'replace_paint' | 'paint' | 'replace' | 'paintless_repair'
   readonly priorDamage: 'yes' | 'no' | 'unknown'
 }
 
@@ -189,6 +189,9 @@ export interface TrafficValueLossVersionRecord {
     readonly canSubmitForApproval: boolean
     readonly eligibility?: 'eligible' | 'blocked' | 'control_required'
     readonly finalResultMinor?: number | null
+    readonly ageCoefficient?: { readonly decimal: string } | null
+    readonly usageCoefficient?: { readonly decimal: string } | null
+    readonly generalModifiers?: { readonly multiplier: { readonly decimal: string } }
     readonly rawResultMinor?: { readonly decimal: string } | null
     readonly capMinor?: { readonly decimal: string } | null
     readonly cappedResultMinor?: { readonly decimal: string } | null

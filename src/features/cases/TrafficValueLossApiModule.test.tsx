@@ -1,9 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { evaluateRealMarketValueLoss, parseLocalDate, type RealMarketValueLossInput, type ValueLossRuleSnapshot } from '@hasarbotu/domain'
+import snapshotJson from '../../../reference-data/value-loss/real-market-analysis/2026-07-01/1.0.0/snapshot.json'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
 import type { CaseDocumentsDataPort } from '../../data/ports'
-import type { TrafficValueLossAssessmentRecord, TrafficValueLossDataPort, TrafficValueLossDraftInput, TrafficValueLossVersionRecord } from '../../data/trafficValueLossPort'
+import type { TrafficValueLossAssessmentRecord, TrafficValueLossDataPort, TrafficValueLossDraftInput, TrafficValueLossPartCatalogRecord, TrafficValueLossVersionRecord } from '../../data/trafficValueLossPort'
 import type { TrafficValueLossReportContentRecord, TrafficValueLossReportDataPort, TrafficValueLossReportRecord } from '../../data/trafficValueLossReportPort'
 import { TrafficValueLossError } from '../../data/trafficValueLossPort'
 import { TrafficValueLossReportError } from '../../data/trafficValueLossReportPort'
@@ -385,9 +387,189 @@ function renderModule(
 }
 
 describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => {
+  it('gerçek motorla 0 km ilavesini sonuca taşır ve girdi değişince eski önizlemeyi kaydettirmez', async () => {
+    const user = userEvent.setup()
+    const snapshot = snapshotJson as unknown as ValueLossRuleSnapshot
+    const rule = snapshot.partRules.find((part) => part.vehicleGroupCode === 'A' && part.coefficients.replacement === '5')!
+    const port = mutablePort()
+    vi.mocked(port.partCatalog!).mockResolvedValue({
+      ruleIdentity: snapshot.identity, vehicleGroupCode: 'A', parts: [{
+        stableRuleId: rule.stableId, label: rule.sourceLabel,
+        supportedOperations: rule.operationCapabilities, coefficients: rule.coefficients,
+      }],
+    })
+    vi.mocked(port.preview!).mockImplementation(async (_caseId, _version, input) => {
+      const accident = parseLocalDate(item.lossDate!)
+      const evaluated = parseLocalDate(input.evaluatedOn)
+      if (!accident.ok || !evaluated.ok || !input.realMarket) throw new Error('TEST_INPUT')
+      return {
+        previewHash: 'b'.repeat(64), ruleSetId: 'real-market-analysis', ruleVersion: snapshot.identity,
+        evaluation: evaluateRealMarketValueLoss(snapshot, {
+          ...input.realMarket, caseType: 'traffic', accidentDate: accident.value, evaluatedOn: evaluated.value,
+          vehicleType: input.realMarket.vehicleType as RealMarketValueLossInput['vehicleType'],
+          modelYear: input.vehicle.modelYear, comparables: [], evidence: [],
+        }),
+      }
+    })
+    renderModule(port)
+    await screen.findByLabelText('Model yılı')
+    const fill = async (label: string, value: string) => { await user.click(screen.getByLabelText(label)); await user.paste(value) }
+    await fill('Model yılı', '2024')
+    await fill('Kilometre', '0')
+    await fill('Kaza öncesi piyasa değeri', '1000000')
+    await fill('Rayiç giriş gerekçesi', 'Emsal analizi')
+    await user.click(screen.getByPlaceholderText('Parça ara…'))
+    await user.paste(rule.sourceLabel)
+    await user.click(screen.getByRole('button', { name: /Katalogdan Ekle/ }))
+    await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
+    await waitFor(() => expect(port.preview).toHaveBeenCalledTimes(1))
+    const evaluation = (await vi.mocked(port.preview!).mock.results[0]!.value).evaluation
+    expect(evaluation.finalResultMinor).toBe(5_400_000)
+    expect(await screen.findByText(/Hesaplanan değer kaybı:.*54\.000/)).toBeInTheDocument()
+    expect(screen.getByText('Araç, kullanım, rayiç, hasar ve geçmiş hasar kanıtları eksiksiz doğrulanmalıdır.')).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: /Önizleme girdilerini/ }))
+    expect(screen.getByRole('button', { name: 'Onaylanan Önizlemeyi Sürümle' })).toBeEnabled()
+    await user.clear(screen.getByLabelText('Kilometre'))
+    await user.type(screen.getByLabelText('Kilometre'), '1001')
+    expect(screen.queryByRole('button', { name: 'Onaylanan Önizlemeyi Sürümle' })).not.toBeInTheDocument()
+    expect(screen.getByText('Girdiler değişti. Güncel sonuç için yeniden önizleme oluşturun.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
+    await waitFor(() => expect(port.preview).toHaveBeenCalledTimes(2))
+    expect((await vi.mocked(port.preview!).mock.results[1]!.value).evaluation.finalResultMinor).toBe(5_150_000)
+    expect(port.createVersion).not.toHaveBeenCalled()
+  })
+
+  it('traktörde saat gönderir, grup değişince eski parçaları temizler ve yinelenen işlemi engeller', async () => {
+    const user = userEvent.setup()
+    const port = mutablePort()
+    renderModule(port)
+    await screen.findByLabelText('Model yılı')
+    await user.click(screen.getByPlaceholderText('Parça ara…'))
+    await user.paste('SOL ÇAMURLUK')
+    await user.click(screen.getByRole('button', { name: /Katalogdan Ekle/ }))
+    await user.click(screen.getByPlaceholderText('Parça ara…'))
+    await user.paste('SOL ÇAMURLUK')
+    await user.click(screen.getByRole('button', { name: /Katalogdan Ekle/ }))
+    expect(await screen.findByText(/işlem zaten seçili/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Katalog parçasını kaldır' })).toHaveLength(1)
+    await user.selectOptions(screen.getByLabelText('Araç türü'), 'TRAKTÖR')
+    expect(screen.queryByRole('button', { name: 'Katalog parçasını kaldır' })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Çalışma saati'), '501')
+    expect(screen.getAllByLabelText('Emsal çalışma saati')).toHaveLength(3)
+    await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
+    await waitFor(() => expect(port.preview).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(port.preview!).mock.calls[0]![2]).toMatchObject({
+      vehicle: { mileage: null }, realMarket: { vehicleGroupCode: 'D', usageMetric: 'working_hours', usageValue: 501, parts: [] },
+    })
+  })
+
+  it('01.07.2026 öncesindeki dosyada eski yöntemin alanlarını ve altı emsali korur', async () => {
+    const user = userEvent.setup()
+    const port = mutablePort()
+    renderModule(port, { ...item, lossDate: '2026-06-30' })
+    expect(await screen.findByLabelText('Kusur oranı (%)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Onarım sonrası piyasa değeri')).toBeInTheDocument()
+    expect(screen.getByLabelText('Parça kodu')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('Emsal tutarı')).toHaveLength(6)
+    expect(screen.queryByLabelText('Araç türü')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
+    await waitFor(() => expect(port.preview).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(port.preview!).mock.calls[0]![2].realMarket).toBeNull()
+    expect(port.partCatalog).not.toHaveBeenCalled()
+  })
+
+  it('yalnız onarım seçimini rapor parçasına boya eklemeden aktarır', async () => {
+    const user = userEvent.setup()
+    const port = mutablePort()
+    renderModule(port)
+    await screen.findByLabelText('Model yılı')
+    await user.click(screen.getByPlaceholderText('Parça ara…'))
+    await user.paste('SOL ÇAMURLUK')
+    await user.selectOptions(screen.getByLabelText('Katalog işlemi'), 'repair')
+    await user.click(screen.getByRole('button', { name: /Katalogdan Ekle/ }))
+    await user.type(screen.getByLabelText('Yeni parça fiyatı'), '1000')
+    await user.type(screen.getByLabelText('Onarım işçiliği'), '150')
+    await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
+    await waitFor(() => expect(port.preview).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(port.preview!).mock.calls[0]![2].damageParts[0]).toMatchObject({ repairAction: 'repair' })
+    expect(vi.mocked(port.preview!).mock.calls[0]![2].realMarket!.parts[0]).toMatchObject({ operation: 'repair', paintMode: null })
+  })
+
+  it('emsal ortalamasına boş, çelişkili, eski veya kullanım aralığı dışındaki kayıtları katmaz', async () => {
+    const user = userEvent.setup()
+    const port = mutablePort()
+    renderModule(port)
+    await screen.findByLabelText('Kilometre')
+    await user.type(screen.getByLabelText('Kilometre'), '10000')
+    const fill = async (element: HTMLElement, value: string) => { await user.click(element); await user.paste(value) }
+    await fill(screen.getAllByLabelText('Emsal tutarı')[0]!, '1000000')
+    await fill(screen.getAllByLabelText('Emsal kilometresi')[0]!, '10000')
+    await user.click(screen.getAllByLabelText('Doğrulandı')[0]!)
+    await fill(screen.getAllByLabelText('Emsal tutarı')[1]!, '2000000')
+    await fill(screen.getAllByLabelText('Emsal kilometresi')[1]!, '11000')
+    await user.click(screen.getAllByLabelText('Doğrulandı')[1]!)
+    await user.click(screen.getAllByLabelText('Doğrulandı')[2]!)
+    const average = screen.getByRole('button', { name: 'Önceki emsal ortalaması' })
+    await user.click(average)
+    expect(screen.getByLabelText('Kaza öncesi piyasa değeri')).toHaveValue(1500000)
+    await user.click(screen.getAllByLabelText('Hesap dışı')[1]!)
+    await user.click(average)
+    expect(screen.getByLabelText('Kaza öncesi piyasa değeri')).toHaveValue(1000000)
+    await user.click(screen.getAllByLabelText('Hesap dışı')[1]!)
+    await user.click(screen.getAllByLabelText('Çelişkili')[1]!)
+    await user.click(average)
+    expect(screen.getByLabelText('Kaza öncesi piyasa değeri')).toHaveValue(1000000)
+    await user.click(screen.getAllByLabelText('Çelişkili')[1]!)
+    await user.clear(screen.getAllByLabelText('Emsal kilometresi')[1]!)
+    await fill(screen.getAllByLabelText('Emsal kilometresi')[1]!, '11001')
+    await user.click(average)
+    expect(screen.getByLabelText('Kaza öncesi piyasa değeri')).toHaveValue(1000000)
+    await user.clear(screen.getAllByLabelText('Emsal kilometresi')[1]!)
+    await fill(screen.getAllByLabelText('Emsal kilometresi')[1]!, '10000')
+    fireEvent.change(screen.getAllByLabelText('Emsal tarihi')[1]!, { target: { value: '2000-01-01' } })
+    expect(screen.getAllByLabelText('Emsal tarihi')[1]).toHaveValue('2000-01-01')
+    await user.click(average)
+    expect(screen.getByLabelText('Kaza öncesi piyasa değeri')).toHaveValue(1000000)
+    await user.click(screen.getAllByLabelText('Hesap dışı')[1]!)
+    await fill(screen.getByLabelText('Emsal dışlama gerekçesi'), 'Eski tarihli ilan')
+    await fill(screen.getAllByLabelText('Emsal kaynağı')[0]!, 'ref:emsal-1')
+    await fill(screen.getAllByLabelText('Emsal kaynağı')[1]!, 'ref:emsal-2')
+    await fill(screen.getByLabelText('Rayiç giriş gerekçesi'), 'Doğrulanmış emsal ortalaması')
+    await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
+    await screen.findByRole('checkbox', { name: /Önizleme girdilerini/ })
+    await user.click(screen.getByRole('checkbox', { name: /Önizleme girdilerini/ }))
+    await user.click(screen.getByRole('button', { name: 'Onaylanan Önizlemeyi Sürümle' }))
+    await screen.findByText('Yeni hesaplama taslağı ve sürümü oluşturuldu.')
+    expect(vi.mocked(port.createVersion).mock.calls[0]![2].comparables[1]).toMatchObject({ excluded: true, exclusionReason: 'Eski tarihli ilan' })
+    expect(screen.getAllByLabelText('Hesap dışı')[1]).toBeChecked()
+    expect(screen.getByLabelText('Emsal dışlama gerekçesi')).toHaveValue('Eski tarihli ilan')
+  })
+
+  it('geç dönen eski araç grubu kataloğunun yeni katalog seçimini ezmesini engeller', async () => {
+    const user = userEvent.setup()
+    const port = mutablePort()
+    const initial = await port.partCatalog!(CASE_ID, 'A')
+    let resolveC!: (value: TrafficValueLossPartCatalogRecord) => void
+    let resolveD!: (value: TrafficValueLossPartCatalogRecord) => void
+    const c = new Promise<TrafficValueLossPartCatalogRecord>((resolve) => { resolveC = resolve })
+    const d = new Promise<TrafficValueLossPartCatalogRecord>((resolve) => { resolveD = resolve })
+    vi.mocked(port.partCatalog!).mockImplementation(async (_caseId, group) => group === 'C' ? c : group === 'D' ? d : initial)
+    renderModule(port)
+    await screen.findByLabelText('Araç türü')
+    await user.selectOptions(screen.getByLabelText('Araç türü'), 'KAMYON')
+    await user.selectOptions(screen.getByLabelText('Araç türü'), 'TRAKTÖR')
+    const catalogD: TrafficValueLossPartCatalogRecord = { ...initial, vehicleGroupCode: 'D', parts: [{ ...initial.parts[0]!, label: 'TRAKTÖR KAPUTU' }] }
+    await act(async () => { resolveD(catalogD); await d })
+    await user.click(screen.getByLabelText('Parça kataloğunda ara'))
+    await user.paste('TRAKTÖR KAPUTU')
+    expect(screen.getByRole('button', { name: /Katalogdan Ekle/ })).toBeEnabled()
+    await act(async () => { resolveC({ ...initial, vehicleGroupCode: 'C' }); await c })
+    expect(screen.getByRole('button', { name: /Katalogdan Ekle/ })).toBeEnabled()
+  })
+
   it('emsal ve kanıt girdisinden sürüm üretir, submit eder ve insan onayıyla kesinleştirir', async () => {
     const user = userEvent.setup()
-    // Paste scenario data in bulk; keyboard behavior is still exercised by the fault-rate field.
+    // Paste scenario data in bulk while exercising the actual form controls.
     const fill = async (field: HTMLElement, value: string) => {
       await user.click(field)
       await user.paste(value)
@@ -401,7 +583,9 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
 
     await screen.findByText(/1 doğrulanmış belge sürümü/)
     await user.selectOptions(screen.getByLabelText('Ağır / tam hasar'), 'no')
-    await user.type(screen.getByLabelText('Kusur oranı (%)'), '75')
+    expect(screen.queryByLabelText('Kusur oranı (%)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Onarım sonrası piyasa değeri')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Parça kodu')).not.toBeInTheDocument()
     await fill(screen.getByLabelText('Marka'), 'Sentetik')
     await fill(screen.getByLabelText('Model'), 'Model 33')
     await fill(screen.getByLabelText('Varyant'), 'Paket')
@@ -410,15 +594,11 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     await fill(screen.getByLabelText('Kullanım şekli'), 'Hususi')
     await fill(screen.getByLabelText('Kaza öncesi piyasa değeri'), '1000000')
     await fill(screen.getByLabelText('Rayiç giriş gerekçesi'), 'Onaylı rayiç analizi referansı kontrol edildi.')
-    await fill(screen.getByLabelText('Onarım sonrası piyasa değeri'), '900000')
     await user.selectOptions(screen.getByLabelText('Antika / koleksiyon araç'), 'no')
     await user.selectOptions(screen.getByLabelText('Önceki ağır hasar'), 'no')
     await fill(screen.getByPlaceholderText('Parça ara…'), 'SOL ÇAMURLUK')
     await user.selectOptions(screen.getByLabelText('Katalog işlemi'), 'paint')
     await user.click(screen.getByRole('button', { name: /Katalogdan Ekle/ }))
-    await fill(screen.getByLabelText('Parça kodu'), 'SOL_CAMURLUK')
-    await fill(screen.getByLabelText('Parça adı'), 'Sol çamurluk')
-    await user.selectOptions(screen.getByLabelText('Önceki hasar'), 'no')
     await user.click(screen.getByRole('checkbox', { name: /Ekspertiz raporu/ }))
     for (const support of ['Araç kimliği', 'Kilometre', 'Kullanım', 'Hasarlı parçalar', 'Önceki hasar', 'Kusur', 'Ağır/tam hasar']) {
       await user.click(screen.getByRole('checkbox', { name: new RegExp(`^${support.replace('/', '\\/')}$`) }))
@@ -428,7 +608,7 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     const mileages = screen.getAllByLabelText('Emsal kilometresi')
     const references = screen.getAllByLabelText('Emsal kaynağı')
     const verified = screen.getAllByLabelText('Doğrulandı')
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < 3; index += 1) {
       await fill(amounts[index], index < 3 ? String(1_020_000 - index * 10_000) : String(910_000 - (index - 3) * 10_000))
       await fill(mileages[index], String(49_000 + index * 300))
       await fill(references[index], `ref:sentetik-emsal-${index + 1}`)
@@ -442,12 +622,13 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     const input = vi.mocked(port.createVersion).mock.calls[0][2]
     expect(input).toMatchObject({
       vehicle: { make: 'Sentetik', model: 'Model 33', variant: 'Paket', modelYear: 2024, mileage: 50_000, usageType: 'Hususi' },
-      faultRateBasisPoints: 7_500,
+      faultRateBasisPoints: null,
       preAccidentMarketValueMinor: 100_000_000,
-      postRepairMarketValueMinor: 90_000_000,
+      postRepairMarketValueMinor: null,
     })
-    expect(input.comparables).toHaveLength(6)
-    expect(input.comparables.map(comparable => comparable.amountMinor)).toEqual([102_000_000, 101_000_000, 100_000_000, 91_000_000, 90_000_000, 89_000_000])
+    expect(input.comparables).toHaveLength(3)
+    expect(input.comparables.map(comparable => comparable.amountMinor)).toEqual([102_000_000, 101_000_000, 100_000_000])
+    expect(input.damageParts).toEqual([{ partCode: 'DK_1', partName: 'SOL ÇAMURLUK', repairAction: 'paint', priorDamage: 'no' }])
     expect(input.realMarket?.parts[0]).toMatchObject({ operation: 'paint', paintMode: 'full' })
     expect(input.evidence.some((entry) => entry.documentVersionId === DOCUMENT_VERSION_ID && entry.sourceHash === 'a'.repeat(64))).toBe(true)
     expect(await screen.findByText('Yeni hesaplama taslağı ve sürümü oluşturuldu.')).toBeInTheDocument()
@@ -467,7 +648,7 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
     await user.click(screen.getByRole('button', { name: 'Nihai Raporu Önizle' }))
     await waitFor(() => expect(reportPort.preview).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('Trafik Değer Kaybı Nihai Raporu')).toBeInTheDocument()
-    expect(screen.getAllByText('real-market-analysis/2026-07-01/1.0.0').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('real-market-analysis/2026-07-01/1.0.0')).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: /bu önizlemeden nihai PDF/ }))
     await user.click(screen.getByRole('button', { name: 'Onayla ve Nihai PDF Oluştur' }))
     await waitFor(() => expect(reportPort.generate).toHaveBeenCalledTimes(1))
@@ -608,8 +789,7 @@ describe('TrafficValueLossApiModule kullanıcı kontrollü API akışı', () => 
       reject: vi.fn(),
     }
     renderModule(port)
-    expect(await screen.findByText('missing_vehicle_identity')).toBeInTheDocument()
-    expect(screen.getByText('Araç kimliği doğrulanmış kanıtla tamamlanmalıdır.')).toBeInTheDocument()
+    expect(await screen.findByText('Araç kimliği doğrulanmış kanıtla tamamlanmalıdır.')).toBeInTheDocument()
     expect(screen.getByText(/Belirsizlikler çözülmeden onaya gönderilemez/)).toBeInTheDocument()
     expect(port.submit).not.toHaveBeenCalled()
   })

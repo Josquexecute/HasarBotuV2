@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import type { DataSourceKind } from './ports'
 import {
@@ -81,6 +81,7 @@ export function useTrafficValueLoss(
   const port = useMemo(() => suppliedPort ?? createHttpTrafficValueLossAdapter(), [suppliedPort])
   const [busy, setBusy] = useState(false)
   const [requestVersion, setRequestVersion] = useState(0)
+  const catalogRequest = useRef(0)
   const active = source === 'api' && enabled
   // Yükleme kapsamındaki bütün dilimler (assessment, sürümler, current-approved,
   // önizleme, katalog, durum, hata mesajı) tek bir anahtarlı nesnede taşınır.
@@ -176,8 +177,16 @@ export function useTrafficValueLoss(
   const loadCatalog = useCallback(async (
     vehicleGroupCode: NonNullable<TrafficValueLossRealMarketInput['vehicleGroupCode']>,
   ) => {
-    if (port.partCatalog === undefined) throw new TrafficValueLossError('unavailable', 'part catalog endpoint unavailable')
-    patch({ catalog: await port.partCatalog(caseId, vehicleGroupCode) })
+    const request = ++catalogRequest.current
+    patch({ catalog: null, errorMessage: null })
+    try {
+      if (port.partCatalog === undefined) throw new TrafficValueLossError('unavailable', 'part catalog endpoint unavailable')
+      const result = await port.partCatalog(caseId, vehicleGroupCode)
+      if (request === catalogRequest.current) patch({ catalog: result })
+    } catch (error) {
+      if (request === catalogRequest.current) patch({ errorMessage: safeMessage(error) })
+      throw error
+    }
   }, [caseId, patch, port])
 
   return {

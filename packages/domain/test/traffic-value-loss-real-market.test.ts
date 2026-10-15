@@ -50,7 +50,7 @@ const comparables: TrafficValueLossComparable[] = Array.from({ length: 3 }, (_, 
   comparableKey: `pre-${index}`,
   side: 'pre_accident',
   amountMinor: 2_000_000 + index,
-  mileage: 0,
+  mileage: 1_001,
   observedAt: date('2026-07-09'),
   evidenceKey: 'market',
   excluded: false,
@@ -84,11 +84,11 @@ const valid: RealMarketValueLossInput = {
   vehicleGroupCode: 'A',
   modelYear: 2026,
   usageMetric: 'mileage',
-  usageValue: 0,
+  usageValue: 1_001,
   commercialOrRental: false,
   previousDamageCount: 0,
   marketValueMinor: 2_000_000,
-  damageAmountMinor: 0,
+  damageAmountMinor: 200_000,
   parts: [part()],
   eligibilityFacts: {
     antiqueOrCollector: false,
@@ -131,7 +131,7 @@ describe('Paket 66 gerçek piyasa değer kaybı motoru', () => {
   })
 
   it('exact 1.000 TRY sonucunu sıfıra düşürmeden ve ara yuvarlama yapmadan korur', () => {
-    const result = evaluateRealMarketValueLoss(snapshot, valid)
+    const result = evaluateRealMarketValueLoss(snapshot, { ...valid, marketValueMinor: 1_600_000 })
     expect(result.rawResultMinor).toMatchObject({
       numerator: '100000',
       denominator: '1',
@@ -178,7 +178,7 @@ describe('Paket 66 gerçek piyasa değer kaybı motoru', () => {
   it('kuruş hassasiyetini ara aşamada korur ve yalnız nihai 500 TRY ceiling uygular', () => {
     const result = evaluateRealMarketValueLoss(snapshot, {
       ...valid,
-      marketValueMinor: 2_000_020,
+      marketValueMinor: 1_600_020,
     })
     expect(result.rawResultMinor).toMatchObject({
       numerator: '100001',
@@ -199,7 +199,7 @@ describe('Paket 66 gerçek piyasa değer kaybı motoru', () => {
     expect(result.ageCoefficient).toMatchObject({ numerator: '9', denominator: '10' })
     expect(result.usageCoefficient).toMatchObject({ numerator: '9', denominator: '10' })
     expect(result.generalModifiers.multiplier).toMatchObject({ numerator: '97', denominator: '100' })
-    expect(result.rawResultMinor).toMatchObject({ numerator: '78570', denominator: '1' })
+    expect(result.rawResultMinor).toMatchObject({ numerator: '94284', denominator: '1' })
   })
 
   it('parça sunum sırasından bağımsız aynı canonical sonucu üretir', () => {
@@ -212,7 +212,10 @@ describe('Paket 66 gerçek piyasa değer kaybı motoru', () => {
   })
 
   it('sıfır hasarı kabul eder; sıfır/negatif para ve zorunlu alan eksikliğini kapalı kodlarla reddeder', () => {
-    expect(evaluateRealMarketValueLoss(snapshot, valid).reasonCodes).not.toContain('DAMAGE_AMOUNT_INVALID')
+    const zero = evaluateRealMarketValueLoss(snapshot, { ...valid, damageAmountMinor: 0 })
+    expect(zero.reasonCodes).not.toContain('DAMAGE_AMOUNT_INVALID')
+    expect(zero.damageCoefficient?.decimal).toBe('0')
+    expect(zero.finalResultMinor).toBe(0)
     const invalid = evaluateRealMarketValueLoss(snapshot, {
       ...valid,
       marketValueMinor: 0,
@@ -225,6 +228,59 @@ describe('Paket 66 gerçek piyasa değer kaybı motoru', () => {
       'DAMAGE_AMOUNT_INVALID',
       'USAGE_VALUE_MISSING',
     ]))
+  })
+
+  it.each(snapshot.vehicleMappings)('$vehicleType için J9 kilometre sınırlarını uygular', (mapping) => {
+    const boundaries = mapping.vehicleGroupCode === 'D' ? []
+      : ['A', 'F'].includes(mapping.vehicleGroupCode)
+        ? [0, 20_000, 50_000, 100_000, 150_000, 200_000, 300_000]
+        : [0, 50_000, 150_000, 300_000, 500_000, 750_000, 1_000_000]
+    const points = new Set([0, 1_000, 1_001, 501, 5_001, 21_001, 101_000, 201_000, 501_000, 751_000])
+    for (const boundary of boundaries) {
+      for (const offset of [-1, 0, 1_000, 1_001]) if (boundary + offset >= 0) points.add(boundary + offset)
+    }
+    for (const usageValue of points) {
+      const result = evaluateRealMarketValueLoss(snapshot, {
+        ...valid,
+        vehicleType: mapping.vehicleType as RealMarketValueLossInput['vehicleType'],
+        vehicleGroupCode: mapping.vehicleGroupCode,
+        usageMetric: mapping.vehicleGroupCode === 'D' ? 'working_hours' : 'mileage',
+        usageValue,
+      })
+      const expected = boundaries.some((boundary) => usageValue >= boundary && usageValue <= boundary + 1_000)
+      expect(result.generalModifiers.lowerBandProximity.decimal, `${mapping.vehicleType}: ${usageValue}`)
+        .toBe(expected ? '0.05' : '0')
+    }
+  })
+
+  it('D grubunda çalışma saati emsallerini doğrular ve kilometre yakınlık ilavesi uygulamaz', () => {
+    const rule = snapshot.partRules.find((item) => item.vehicleGroupCode === 'D' && item.coefficients.replacement !== null)!
+    const result = evaluateRealMarketValueLoss(snapshot, {
+      ...valid,
+      vehicleType: 'TRAKTÖR',
+      vehicleGroupCode: 'D',
+      usageMetric: 'working_hours',
+      usageValue: 501,
+      parts: [part({ stableRuleId: rule.stableId })],
+      comparables: comparables.map((item) => ({ ...item, mileage: 500 })),
+    })
+    expect(result.usageCoefficient?.decimal).toBe('0.95')
+    expect(result.generalModifiers.lowerBandProximity.decimal).toBe('0')
+    expect(result.qualifyingPreComparableCount).toBe(3)
+    expect(result.canSubmitForApproval).toBe(true)
+  })
+
+  it.each([
+    ['none', true, true],
+    ['previously_damaged', false, false],
+    ['previously_repaired_detachable', false, false],
+    ['previously_repaired_welded', true, false],
+  ] as const)('%s parça geçmişinde değişim ve boya istisnalarını korur', (priorPartState, replacementIncluded, paintIncluded) => {
+    const result = evaluateRealMarketValueLoss(snapshot, { ...valid, parts: [
+      part({ priorPartState }), part({ priorPartState, operation: 'paint', paintMode: 'full' }),
+    ] })
+    expect(result.partBreakdown.find((item) => item.operation === 'replacement')?.included).toBe(replacementIncluded)
+    expect(result.partBreakdown.find((item) => item.operation === 'paint')?.included).toBe(paintIncluded)
   })
 
   it('Number.MAX_SAFE_INTEGER girdide %30 tavanla güvenli minor-unit sonucu üretir', () => {

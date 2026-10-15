@@ -427,7 +427,8 @@ function hasVerifiedEvidence(input: RealMarketValueLossInput, fields: readonly s
 
 function qualifyingComparables(input: RealMarketValueLossInput): readonly TrafficValueLossComparable[] {
   const evaluated = Date.parse(`${input.evaluatedOn}T00:00:00Z`)
-  const mileage = input.usageMetric === 'mileage' ? input.usageValue : null
+  // D grubunda aynı kullanım karşılaştırması kilometre yerine çalışma saatiyle yapılır.
+  const mileage = input.usageValue
   return input.comparables.filter((item) => {
     if (item.side !== 'pre_accident' || item.excluded || item.mileage === null || mileage === null) return false
     const linkedEvidence = input.evidence.find((evidence) => evidence.evidenceKey === item.evidenceKey)
@@ -713,8 +714,15 @@ export function evaluateRealMarketValueLoss(
   const previousModifier = safeNonNegativeInteger(input.previousDamageCount)
     ? multiply(generalModifier(snapshot, 'G2'), rational(BigInt(Math.min(input.previousDamageCount, 5))))
     : ZERO
-  const lowerBandModifier = usageBand !== null && safeNonNegativeInteger(input.usageValue)
-    && usageBand.min > 0 && input.usageValue - usageBand.min <= 1_000
+  // J9: yalnız kilometre katsayısının değiştiği alt sınırlar ve ilk 1.000 km.
+  // Tablo başlıkları aynı katsayıyı birden fazla sütunda tekrar edebilir.
+  const nearMileageBoundary = input.usageMetric === 'mileage' && usageTable !== null
+    && safeNonNegativeInteger(input.usageValue)
+    && usageTable.bands.some((band, index, bands) =>
+      (index === 0 || band.coefficient !== bands[index - 1]?.coefficient)
+      && input.usageValue! >= band.min && input.usageValue! <= band.min + 1_000,
+    )
+  const lowerBandModifier = nearMileageBoundary
     ? generalModifier(snapshot, 'G3')
     : ZERO
   const generalMultiplier = add(add(add(ONE, commercialModifier), previousModifier), lowerBandModifier)
@@ -730,7 +738,9 @@ export function evaluateRealMarketValueLoss(
     : null
   const damageCoefficient = damageContribution === null
     ? null
-    : divide(add(partCoefficient, damageContribution), rational(100n))
+    : input.damageAmountMinor === 0
+      ? ZERO
+      : divide(add(partCoefficient, damageContribution), rational(100n))
   const multiplier = input.vehicleType === 'MOTORSİKLET'
     ? decimal('2.5')
     : input.vehicleType === 'OTOBÜS'

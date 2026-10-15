@@ -9,12 +9,20 @@ import {
   trafficValueLossReportPreviewRequestSchema,
   trafficValueLossPreviewRequestSchema,
   trafficValueLossVersionCreateRequestSchema,
+  trafficValueLossDamagePartInputSchema,
+  trafficValueLossReportContentSchema,
 } from '../src/index.js'
 
 const id = '019f7000-0000-7000-8000-000000000001'
 const hash = 'a'.repeat(64)
 
 describe('Trafik değer kaybı contracts', () => {
+  it.each(['repair', 'repair_paint', 'replace_paint', 'paint', 'replace', 'paintless_repair'])('%s işlemini girdi ve rapor arasında değiştirmeden taşır', (repairAction) => {
+    const part = { partCode: 'DK_1', partName: 'Tavan sacı', repairAction, priorDamage: 'no' }
+    expect(trafficValueLossDamagePartInputSchema.parse(part).repairAction).toBe(repairAction)
+    expect(trafficValueLossReportContentSchema.shape.damageParts.parse([part])[0]!.repairAction).toBe(repairAction)
+  })
+
   it('yeni real-market revision girdisini strict enum ve stable ID sınırlarıyla doğrular', () => {
     const result = trafficValueLossPreviewRequestSchema.safeParse({
       expectedVersion: 0,

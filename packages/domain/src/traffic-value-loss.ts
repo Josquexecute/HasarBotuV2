@@ -100,7 +100,7 @@ export const TRAFFIC_VALUE_LOSS_RULE_SOURCES: readonly TrafficValueLossRuleSourc
 export interface TrafficValueLossDamagePart {
   readonly partCode: string
   readonly partName: string
-  readonly repairAction: 'repair_paint' | 'replace_paint' | 'paint' | 'replace' | 'paintless_repair'
+  readonly repairAction: 'repair' | 'repair_paint' | 'replace_paint' | 'paint' | 'replace' | 'paintless_repair'
   readonly priorDamage: 'yes' | 'no' | 'unknown'
 }
 
