@@ -25,6 +25,10 @@ Use Node.js 24.x; run commands from the repository root.
 - `npm run build`: build the frontend and all workspaces; check frontend bundle boundaries.
 - `npm run package:win --workspace @hasarbotu/desktop`: produce the x64 NSIS installer after building.
 
+## Standing Release Requirement
+
+The user has authorized publishing completed user-facing changes to all office users as part of the task. After validation, increment the desktop version, build and smoke-test the Windows x64 installer, and publish the verified package to the existing authenticated office update feed. Verify that an older installed client sees the new version and that the authenticated artifact download matches its size and SHA-256. Preserve the previous manifest and immutable installer. Record the published version and verification results; a local build alone does not complete delivery. Follow `docs/DESKTOP_UPDATES.md`. Do not force installation on users' running clients or change repository visibility or public download channels without a separate instruction.
+
 ## Coding Style & Naming Conventions
 
 Follow existing TypeScript style: two-space indentation, single quotes, and no semicolons. Use PascalCase for React components/types, camelCase for functions/variables, and descriptive kebab-case module filenames. Preserve strict typing and explicit `.js` imports in backend TypeScript. ESLint includes React Hooks rules; no standalone formatter is configured.
