@@ -1,12 +1,13 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.32**, published on 2026-10-16.
+The current authenticated office release is **0.1.33**, published on 2026-10-16.
 Existing users receive it through the update button below. Its verified Windows
-x64 installer is 107,135,861 bytes, SHA-256
-`55338f7f52f19d1aeef5816a5a6fffddaa3c3ca9f0ffae5646508c9a250aadfe`.
-It includes automatic Kasko/Traffic notice sheets and the previous interface,
-update feedback and closure fixes. The matching API and notice-sheet database
-migration are deployed. See [notice sheets](NOTICE_SHEETS.md).
+x64 installer is 107,136,047 bytes, SHA-256
+`09dd75ad564a2f90fe5ff6ef5c7d91a620b191ef902612b67e4d120e37e6d7a8`.
+It preserves selected Touch character colors in the preview and Canvas renderer,
+adapts eye contrast, and corrects and expands the ready-made palettes. The prior
+automatic Kasko/Traffic notice sheets and their deployed API/database support
+remain included. See [notice sheets](NOTICE_SHEETS.md).
 
 The existing public 0.1.15 installer remains available from [HasarBotu download](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
 New GitHub releases are prepared only in the private `HasarBotuV2` repository and
@@ -123,3 +124,27 @@ Local deployment evidence: `.local/notice-sheet-deploy-20261016/`
 `office-acceptance-proof.json`, `office-feed-before-proof.json`,
 `office-feed-after-proof.json`, `publication-proof.json`). Actual claim PDFs remain
 private diagnostic artifacts and are excluded from Git.
+
+## Touch color publication · 2026-10-16
+
+Version 0.1.33 was published to the shared authenticated office update feed at
+19:48:04 UTC. The Windows publisher verified the executable version, exact length
+and SHA-256, preserved the previous 0.1.32 manifest and immutable installer, and
+replaced the manifest atomically. The API remained healthy; no service restart or
+database change was needed. Running clients retain control of installation.
+
+TypeScript, ESLint, the full build and bundle boundaries passed. Release validation
+recorded 2,712 passing tests, including real PostgreSQL, Electron, and the Windows
+publisher integration test. Six optional frontend live-connection tests were
+skipped because their configuration was not supplied. The new package actually
+started and served its packaged UI; all 58 packaged UI files matched the build,
+and the office connection profile was preserved. Character pixels were checked
+for 12 colors in animated and still modes.
+
+The installed 0.1.32 office client's final update check returned 401 because its
+account session was unavailable. Authenticated client visibility and streaming
+verification remain pending normal user login; authentication was not bypassed.
+Temporary diagnostic tasks and inspectors were removed. Local evidence:
+`.local/touch-colors-release-20261016/` (`preparation.json`,
+`hasarbotu-release-checks/summary.json`, `package-smoke.log`,
+`publication-proof.json`).
