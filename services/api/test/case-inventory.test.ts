@@ -140,6 +140,8 @@ describeDb('Dosya Envanteri — liste önizleme ve export gerçek API', () => {
     expect(expertSheet).toContain('Envanter Sahip')
     expect(expertSheet).toContain('05321112233')
     expect(expertSheet).toContain('02121234567')
+    expect(expertSheet).toContain('10.07.2026')
+    expect(expertSheet).toContain('11.07.2026')
     // Eksper raporu numarası hiçbir tabloda yok; tahmin edilmez, dürüstlükle "Eksik" kalır.
     expect(expertSheet).toContain('Eksik')
 
@@ -159,5 +161,27 @@ describeDb('Dosya Envanteri — liste önizleme ve export gerçek API', () => {
     expect(first.rowCount).toBe(2)
     expect(first.includesPhones).toBe(true)
     expect(JSON.stringify(auditRows.rows)).not.toContain('05321112233')
+  })
+
+  it('uses the office calendar and injected clock for report dates and overdue state', async () => {
+    const documentId = uuidv7(), versionId = uuidv7()
+    await pool.query('UPDATE cases SET follow_up_date=$2 WHERE id=$1', [trafficCaseId, '2026-07-18'])
+    await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'inventory-test-root','Synthetic root')", [uuidv7(), organizationId])
+    await pool.query("INSERT INTO documents(id,organization_id,case_id,document_type,current_version_number) VALUES($1,$2,$3,'expert_report',1)", [documentId, organizationId, trafficCaseId])
+    await pool.query(`INSERT INTO document_versions(id,organization_id,document_id,case_id,version_number,original_file_name,display_name,mime_type,byte_size,content_hash,storage_root_key,relative_path,source_type,created_at)
+      VALUES($1,$2,$3,$4,1,'report.pdf','Report','application/pdf',1,$5,'inventory-test-root','report.pdf','manual','2026-07-17T22:30:00Z')`,
+    [versionId, organizationId, documentId, trafficCaseId, 'a'.repeat(64)])
+    const exported = await app.inject({ method: 'GET', url: CASE_INVENTORY_EXPORT_ROUTE, headers: { cookie: expertCookie } })
+    expect(exported.statusCode).toBe(200)
+    const sheet = readSheetXml(exported.rawPayload)
+    expect(sheet).toContain('18.07.2026')
+    expect(sheet).not.toContain('Gecikmiş')
+    await pool.query('UPDATE cases SET follow_up_date=$2 WHERE id=$1', [trafficCaseId, '2026-07-17'])
+    const overdue = await app.inject({ method: 'GET', url: CASE_INVENTORY_EXPORT_ROUTE, headers: { cookie: expertCookie } })
+    expect(readSheetXml(overdue.rawPayload)).toContain('Gecikmiş')
+    const filtered = await app.inject({ method: 'GET', url: `${CASE_INVENTORY_EXPORT_ROUTE}?caseType=casco&status=closed`, headers: { cookie: expertCookie } })
+    expect(filtered.statusCode).toBe(200)
+    expect(readSheetXml(filtered.rawPayload)).toContain('2026/4702')
+    expect(readSheetXml(filtered.rawPayload)).not.toContain('2026/4701')
   })
 })

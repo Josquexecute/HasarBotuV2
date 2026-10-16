@@ -214,6 +214,52 @@ $json6b = $out6b | Out-String | ConvertFrom-Json
 Assert-True ($json6b.DeletedCount -eq 0) "Second apply run deletes nothing (already gone)"
 Remove-Item $f6.Root -Recurse -Force -ErrorAction SilentlyContinue
 
+Write-Output "`n=== TEST 7: outside paths and junctions cannot delete files outside the configured root ==="
+foreach ($variant in @('sibling', 'traversal', 'junction')) {
+    $fixture = New-CleanupTestFixture
+    try {
+        $outside = Join-Path $fixture.Root 'HEDEF-outside'
+        New-Item -ItemType Directory -Path $outside | Out-Null
+        $outsideFile = Join-Path $outside 'extra.jpg'
+        [System.IO.File]::Copy($fixture.OrphanPath, $outsideFile)
+        $candidate = $outsideFile
+        if ($variant -eq 'traversal') { $candidate = Join-Path $fixture.TargetRoot '..\HEDEF-outside\extra.jpg' }
+        if ($variant -eq 'junction') {
+            $link = Join-Path $fixture.TargetRoot 'linked'
+            New-Item -ItemType Junction -Path $link -Target $outside | Out-Null
+            $candidate = Join-Path $link 'extra.jpg'
+        }
+        $report = [System.IO.File]::ReadAllText($fixture.ReportPath) | ConvertFrom-Json
+        $entry = @($report.Entries | Where-Object { $_.Target.FullPath -eq $fixture.OrphanPath })[0]
+        $entry.Target.FullPath = $candidate
+        [System.IO.File]::WriteAllText($fixture.ReportPath, ($report | ConvertTo-Json -Depth 12), [System.Text.UTF8Encoding]::new($false))
+        $hash = (Get-FileHash -LiteralPath $fixture.ReportPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $output = & $cleanupScript -SourceRoot $fixture.SourceRoot -TargetRoot $fixture.TargetRoot -GhostExclusionManifestPath $fixture.ManifestPath -PCloudLocalDatabasePath $fixture.DbPath -ForensicsReportPath $fixture.ReportPath -ForensicsReportSha256 $hash -BackupDirectory (Join-Path $fixture.Root 'backups') -Apply 2>&1 | Out-String | ConvertFrom-Json
+        Assert-True ($output.DeletedCount -eq 0) "$variant cannot delete a file outside the root"
+        Assert-True ([System.IO.File]::Exists($outsideFile) -and (Get-FileHash -LiteralPath $outsideFile -Algorithm SHA256).Hash.ToLowerInvariant() -eq $fixture.OrphanSha256) "$variant preserves the outside file bytes"
+        $written = [System.IO.File]::ReadAllText((Join-Path 'C:\ProgramData\HasarBotu\migration-preflight' $output.Report.FileName)) | ConvertFrom-Json
+        Assert-True (@($written.Files | Where-Object { $_.Blockers -contains 'PATH_OUTSIDE_EXPECTED_ROOT' }).Count -gt 0) "$variant is rejected by the root safety check"
+    } finally {
+        $absolute = [System.IO.Path]::GetFullPath($fixture.Root)
+        if (-not $absolute.StartsWith([System.IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected cleanup test directory' }
+        Remove-Item -LiteralPath $fixture.Root -Recurse -Force
+    }
+}
+
+Write-Output "`n=== TEST 8: a backup inside the source root cannot mutate either tree ==="
+$fixture = New-CleanupTestFixture
+try {
+    $backup = Join-Path $fixture.SourceRoot 'backups'
+    $output = & $cleanupScript -SourceRoot $fixture.SourceRoot -TargetRoot $fixture.TargetRoot -GhostExclusionManifestPath $fixture.ManifestPath -PCloudLocalDatabasePath $fixture.DbPath -ForensicsReportPath $fixture.ReportPath -ForensicsReportSha256 $fixture.ReportHash -BackupDirectory $backup -Apply 2>&1 | Out-String | ConvertFrom-Json
+    Assert-True ($output.Status -eq 'error' -and $output.ErrorCode -eq 'BACKUP_DIRECTORY_INSIDE_SYNC_ROOT') 'a source-root backup is rejected'
+    Assert-True ((Get-FileHash -LiteralPath $fixture.OrphanPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $fixture.OrphanSha256) 'backup rejection preserves the target bytes'
+    Assert-True (-not (Test-Path -LiteralPath $backup)) 'backup rejection creates no source directory'
+} finally {
+    $absolute = [System.IO.Path]::GetFullPath($fixture.Root)
+    if (-not $absolute.StartsWith([System.IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected cleanup test directory' }
+    Remove-Item -LiteralPath $fixture.Root -Recurse -Force
+}
+
 Write-Output "`n=== SUMMARY: $script:failures failure(s) ==="
 if ($script:failures -gt 0) { exit 1 }
 exit 0

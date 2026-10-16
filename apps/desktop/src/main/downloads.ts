@@ -62,6 +62,7 @@ const WINDOWS_RESERVED_NAMES = new Set([
   'con', 'prn', 'aux', 'nul',
   'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
   'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+  'com¹', 'com²', 'com³', 'lpt¹', 'lpt²', 'lpt³',
 ])
 
 /** Windows dosya adında yasak karakterler. */
@@ -87,8 +88,8 @@ export const MAXIMUM_DOWNLOAD_FILENAME_LENGTH = 180
  * - Windows ayrılmış cihaz adları `_` ile öneklenir.
  * - Uzantı KORUNARAK toplam uzunluk sınırlanır.
  *
- * Uzantı değiştirilmez veya eklenmez: kabuk dosyanın türü hakkında karar
- * vermez, yalnız adı güvenli kılar.
+ * Uzantı korunur; tek başına uzunluk sınırını aşan bir uzantıda güvenli
+ * varsayılan ad kullanılır. Kabuk dosyanın türü hakkında karar vermez.
  */
 export function sanitizeDownloadFilename(raw: string): string {
   let value = ''
@@ -107,13 +108,15 @@ export function sanitizeDownloadFilename(raw: string): string {
   const stem = hasExtension ? value.slice(0, lastDot) : value
   const extension = hasExtension ? value.slice(lastDot) : ''
 
-  const safeStem = WINDOWS_RESERVED_NAMES.has(stem.toLowerCase()) ? `_${stem}` : stem
+  // Device names remain reserved before the FIRST dot, including NUL.tar.gz.
+  const base = value.split('.')[0]!.toLowerCase()
+  const safeStem = WINDOWS_RESERVED_NAMES.has(base) ? `_${stem}` : stem
   if (safeStem.length + extension.length <= MAXIMUM_DOWNLOAD_FILENAME_LENGTH) {
     return `${safeStem}${extension}`
   }
   // Uzantı, gövdeden feda edilerek korunur; uzantısı kesilmiş bir dosya adı
   // kullanıcıyı yanıltır.
   const room = MAXIMUM_DOWNLOAD_FILENAME_LENGTH - extension.length
-  if (room <= 0) return `${FALLBACK_DOWNLOAD_FILENAME}${extension.slice(0, MAXIMUM_DOWNLOAD_FILENAME_LENGTH)}`
+  if (room <= 0) return FALLBACK_DOWNLOAD_FILENAME
   return `${safeStem.slice(0, room)}${extension}`
 }

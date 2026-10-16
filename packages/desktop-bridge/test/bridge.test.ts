@@ -1,13 +1,14 @@
 import { createServer, type Server } from 'node:http'
 import { createServer as createHttpsServer, globalAgent } from 'node:https'
 import { createReadStream } from 'node:fs'
-import { readFile, mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, writeFile, rm, mkdir, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { once } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { expect, it, vi } from 'vitest'
 import { startDesktopBridge, upstreamTimeoutFor } from '../src/bridge.js'
+import { createTestTlsCertificate } from '../../../scripts/test-tls-certificate.mjs'
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>()
@@ -25,8 +26,7 @@ async function close(server: Server) {
 }
 
 it('proxies trusted HTTPS and rejects an untrusted certificate', async () => {
-  const cert = await readFile(new URL('./fixtures/localhost.crt', import.meta.url))
-  const key = await readFile(new URL('./fixtures/localhost.key', import.meta.url))
+  const { cert, key } = createTestTlsCertificate()
   const upstream = createHttpsServer({ cert, key }, (_req, res) => res.end('secure API'))
   const port = await listen(upstream)
   const bridge = await startDesktopBridge({ apiOrigin: `https://127.0.0.1:${port}` })
@@ -52,6 +52,38 @@ it('handles an asset becoming unreadable after stat and remains available', asyn
     })
     expect((await fetch(bridge.origin)).status).toBe(500)
     expect(await (await fetch(bridge.origin)).text()).toBe('working')
+  } finally { await bridge.close(); await rm(directory, { recursive: true, force: true }) }
+})
+
+it('does not serve assets through a junction outside the asset root', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'hb-asset-boundary-'))
+  const assets = join(directory, 'ui')
+  const outside = join(directory, 'private')
+  await mkdir(assets)
+  await mkdir(outside)
+  await writeFile(join(assets, 'index.html'), 'application')
+  await writeFile(join(outside, 'secret.json'), '{"private":true}')
+  await symlink(outside, join(assets, 'linked'), 'junction')
+  const bridge = await startDesktopBridge({ apiOrigin: 'http://127.0.0.1:1', assetRoot: assets })
+  try {
+    const response = await fetch(`${bridge.origin}/linked/secret.json`)
+    expect(response.status).toBe(404)
+    expect(await response.text()).not.toContain('private')
+    expect(await (await fetch(`${bridge.origin}/cases/123`)).text()).toBe('application')
+  } finally { await bridge.close(); await rm(directory, { recursive: true, force: true }) }
+})
+
+it('serves internal junctions and an asset root that is itself a junction', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'hb-asset-junction-'))
+  const assets = join(directory, 'ui')
+  const root = join(directory, 'root')
+  await mkdir(join(assets, 'resources'), { recursive: true })
+  await writeFile(join(assets, 'resources', 'app.js'), 'application')
+  await symlink(assets, root, 'junction')
+  await symlink(join(assets, 'resources'), join(assets, 'linked'), 'junction')
+  const bridge = await startDesktopBridge({ apiOrigin: 'http://127.0.0.1:1', assetRoot: root })
+  try {
+    expect(await (await fetch(`${bridge.origin}/linked/app.js`)).text()).toBe('application')
   } finally { await bridge.close(); await rm(directory, { recursive: true, force: true }) }
 })
 

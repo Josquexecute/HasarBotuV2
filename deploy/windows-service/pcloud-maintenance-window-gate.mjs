@@ -175,7 +175,16 @@ export async function loadGhostManifest(manifestPath, expectedSha256, sourceRoot
   assert(manifest?.policy?.wildcardsAllowed === false, 'GHOST_EXCLUSION_WILDCARD_POLICY_INVALID')
   assert(manifest?.policy?.extensionRulesAllowed === false, 'GHOST_EXCLUSION_EXTENSION_POLICY_INVALID')
   assert(manifest?.policy?.folderRulesAllowed === false, 'GHOST_EXCLUSION_FOLDER_POLICY_INVALID')
-  assert(windowsPathEqual(manifest?.sourceRoot, sourceRoot), 'GHOST_EXCLUSION_SOURCE_ROOT_MISMATCH')
+  let sameRoot = windowsPathEqual(manifest?.sourceRoot, sourceRoot)
+  if (!sameRoot) {
+    try {
+      // Windows 8.3 aliases and long paths can name the same directory.
+      // Compare exact filesystem identities rather than loosening path matching.
+      const [declared, actual] = await Promise.all([stat(manifest.sourceRoot, { bigint: true }), stat(sourceRoot, { bigint: true })])
+      sameRoot = declared.isDirectory() && actual.isDirectory() && declared.ino !== 0n && declared.dev === actual.dev && declared.ino === actual.ino
+    } catch { sameRoot = false }
+  }
+  assert(sameRoot, 'GHOST_EXCLUSION_SOURCE_ROOT_MISMATCH')
   assert(manifest?.entryCount === 10 && Array.isArray(manifest.entries) && manifest.entries.length === 10, 'GHOST_EXCLUSION_ENTRY_COUNT_INVALID')
 
   const excludedPaths = new Set()

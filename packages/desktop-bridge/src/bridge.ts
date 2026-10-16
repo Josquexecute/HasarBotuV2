@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
 import { join, relative, resolve, sep, extname, isAbsolute } from 'node:path'
 import { once } from 'node:events'
 import {
@@ -82,6 +82,22 @@ function sendStatus(response: ServerResponse, status: number): void {
   response.end(String(status))
 }
 
+function isContained(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate)
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+}
+
+async function resolveContainedFile(assetRoot: string, candidate: string): Promise<string | undefined> {
+  try {
+    const [realRoot, realCandidate] = await Promise.all([realpath(assetRoot), realpath(candidate)])
+    if (!isContained(realRoot, realCandidate)) return undefined
+    return (await stat(realCandidate)).isFile() ? realCandidate : undefined
+  } catch (error) {
+    if (['ENOENT', 'ENOTDIR', 'EACCES', 'ELOOP'].includes((error as NodeJS.ErrnoException).code ?? '')) return undefined
+    throw error
+  }
+}
+
 async function resolveAssetFile(
   assetRoot: string,
   urlPathname: string,
@@ -96,16 +112,14 @@ async function resolveAssetFile(
 
   // Leksik doğrulama yeterli sayılmaz; birleştirmeden SONRA kökün altında
   // kaldığı yeniden denetlenir (repo genelindeki root containment kuralı).
-  const rel = relative(assetRoot, candidate)
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel) || rel.startsWith(`..${sep}`))) {
-    return undefined
-  }
+  if (!isContained(assetRoot, candidate)) return undefined
 
-  const found = await stat(candidate).catch(() => undefined)
-  if (found?.isFile() === true) return candidate
+  // Junctions and symlinks must also remain within the real asset root.
+  // Stream the resolved path so replacing the original link cannot redirect it.
+  const found = await resolveContainedFile(assetRoot, candidate)
+  if (found !== undefined) return found
   if (shouldFallbackToIndex(parsed.segments)) {
-    const index = await stat(indexFile).catch(() => undefined)
-    if (index?.isFile() === true) return indexFile
+    return resolveContainedFile(assetRoot, indexFile)
   }
   return undefined
 }

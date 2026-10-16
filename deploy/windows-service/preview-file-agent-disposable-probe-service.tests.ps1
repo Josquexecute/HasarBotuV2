@@ -16,15 +16,16 @@ function Assert-True {
 
 $scriptPath = Join-Path $PSScriptRoot 'preview-file-agent-disposable-probe-service.ps1'
 $adminOnlyDir = 'C:\ProgramData\HasarBotu\migration-preflight'
+$winswPath = if ($env:HASARBOTU_TEST_WINSW_PATH) { $env:HASARBOTU_TEST_WINSW_PATH } else { 'C:\Tools\WinSW-x64.exe' }
 
 Write-Output '=== TEST 1: real machine run -- structural checks preserve actual prerequisite readiness; missing production prerequisites stay blocked ==='
-$out1 = & $scriptPath 2>&1
+$out1 = & $scriptPath -WinSwExePath $winswPath 2>&1
 $json1 = $out1 | Out-String | ConvertFrom-Json
 Assert-True ($json1.ReadOnly -eq $true) "TEST1: wrapper declares ReadOnly=true"
 $innerScriptEntry1 = @($json1.PreconditionsSummary | Where-Object { $_.Name -eq 'inner_probe_script' })
 Assert-True ($innerScriptEntry1.Count -eq 1 -and $innerScriptEntry1[0].Status -eq 'verified_ok') "TEST1: inner_probe_script verified_ok (real file, parses cleanly, structurally safe)"
 $winswEntry1 = @($json1.PreconditionsSummary | Where-Object { $_.Name -eq 'winsw_and_service_id' })
-$expectedWinswStatus = if ([System.IO.File]::Exists('C:\Tools\WinSW-x64.exe') -and $null -eq (Get-Service -Name 'hasarbotu-file-agent-probe' -ErrorAction SilentlyContinue)) { 'verified_ok' } else { 'blocked_structural' }
+$expectedWinswStatus = if ([System.IO.File]::Exists($winswPath) -and $null -eq (Get-Service -Name 'hasarbotu-file-agent-probe' -ErrorAction SilentlyContinue)) { 'verified_ok' } else { 'blocked_structural' }
 Assert-True ($winswEntry1.Count -eq 1 -and $winswEntry1[0].Status -eq $expectedWinswStatus) 'TEST1: WinSW readiness matches independent file/service inspection'
 if ($expectedWinswStatus -ne 'verified_ok') { Write-Output 'SKIP: positive WinSW readiness requires the real WinSW binary and a free probe service id.' }
 $dbEntry1 = @($json1.PreconditionsSummary | Where-Object { $_.Name -eq 'pcloud_db_access' })

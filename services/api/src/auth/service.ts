@@ -109,7 +109,7 @@ export async function login(deps: AuthServiceDeps, input: LoginInput): Promise<L
         action: 'auth.login_failed',
         details: { reason: 'wrong_password', failedLoginCount: counter.failedLoginCount },
       })
-      if (counter.lockedUntil !== null && counter.failedLoginCount === MAX_FAILED_LOGINS) {
+      if (counter.lockStarted) {
         await deps.audit.record(client, {
           ...base,
           action: 'auth.account_locked',
@@ -120,19 +120,36 @@ export async function login(deps: AuthServiceDeps, input: LoginInput): Promise<L
     return { kind: 'invalid' }
   }
 
-  const token = generateSessionToken()
-  const ttlSeconds = deps.sessionTtlSeconds ?? SESSION_TTL_SECONDS
-  const expiresAt = new Date(Date.now() + ttlSeconds * 1000)
   // Sayac sifirlama + oturum olusturma + basarili-giris audit'i atomik: yarim
   // oturum veya audit'siz oturum kalmaz.
-  await withTransaction(deps.pool, async (client) => {
-    if (user.failedLoginCount > 0) await deps.store.resetFailedLogins(user.id, client)
+  return withTransaction(deps.pool, async (client): Promise<LoginOutcome> => {
+    // Argon2 runs outside the lock. Recheck the account under the same lock
+    // used by failed logins and administration before issuing a session.
+    const current = await deps.store.lockUserForLogin(user.id, client)
+    const reason = current === undefined ? 'unknown_user'
+      : current.status !== 'active' ? 'disabled'
+      : current.passwordHash !== user.passwordHash ? 'credentials_changed'
+      : current.lockedUntil !== null && current.lockedUntil.getTime() > Date.now() ? 'locked'
+      : undefined
+    if (reason !== undefined || current === undefined) {
+      await deps.audit.record(client, {
+        organizationId: user.organizationId,
+        ...(current === undefined ? {} : { actorUserId: current.id }),
+        requestId: input.requestId,
+        action: 'auth.login_failed', details: { reason: reason ?? 'unknown_user' },
+      })
+      return { kind: 'invalid' }
+    }
+    const token = generateSessionToken()
+    const ttlSeconds = deps.sessionTtlSeconds ?? SESSION_TTL_SECONDS
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000)
+    if (current.failedLoginCount > 0) await deps.store.resetFailedLogins(current.id, client)
     await deps.store.createSession(
       { tokenHash: hashSessionToken(token), userId: user.id, organizationId: user.organizationId, expiresAt },
       client,
     )
     await deps.audit.record(client, { ...base, action: 'auth.login_succeeded' })
+    const permissions = allowedPermissions(await loadRolePolicy(client, current.organizationId), current.roles)
+    return { kind: 'ok', token, expiresAt, user: toSessionUser({ ...current, permissions }) }
   })
-
-  return { kind: 'ok', token, expiresAt, user: toSessionUser({ ...user,permissions: allowedPermissions(await loadRolePolicy(deps.pool,user.organizationId),user.roles) }) }
 }

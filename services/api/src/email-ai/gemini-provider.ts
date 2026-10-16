@@ -115,6 +115,7 @@ export function createGeminiEmailAiProvider(
     async execute(request: EmailAiProviderRequest, signal: AbortSignal): Promise<EmailAiProviderResponse> {
       const requestInit: RequestInit = {
         method: 'POST',
+        redirect: 'error',
         signal,
         headers: {
           'content-type': 'application/json',

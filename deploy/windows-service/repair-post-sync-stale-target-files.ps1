@@ -72,6 +72,7 @@ $ErrorActionPreference = 'Stop'
 # stops processing of the others.
 
 $AdministratorSidValue = 'S-1-5-32-544'
+Import-Module (Join-Path $PSScriptRoot 'storage-path-safety.psm1') -Force
 $ReportDirectory = 'C:\ProgramData\HasarBotu\migration-preflight'
 $LegacyForensicsSchemaVersion = 'hasarbotu-56aag629-hasar-version-forensics/1.0.0'
 $DiffForensicsSchemaVersion = 'pcloud-post-sync-diff-forensics/1.0.0'
@@ -451,6 +452,10 @@ try {
         $BackupDirectory = Join-Path $ReportDirectory (Join-Path 'pre-repair-backups' $backupTimestamp)
     }
     $backupDirectoryFullPath = [System.IO.Path]::GetFullPath($BackupDirectory)
+    if ((Test-StoragePathWithinRoot $backupDirectoryFullPath $source) -or (Test-StoragePathWithinRoot $backupDirectoryFullPath $target)) {
+        Throw-SafeRepairError 'BACKUP_DIRECTORY_INSIDE_SYNC_ROOT'
+    }
+    if (-not (Test-StoragePathWithoutReparsePoints $backupDirectoryFullPath)) { Throw-SafeRepairError 'BACKUP_DIRECTORY_REPARSE_POINT' }
 
     $outOfScopeEntries = @()
     $classificationBlockedEntries = @()
@@ -485,8 +490,8 @@ try {
     $results = @()
     foreach ($entry in $fileEntries) {
         $name = $entry.Name
-        $sourcePath = [string]$entry.Source.FullPath
-        $targetPath = [string]$entry.Target.FullPath
+        $sourcePath = [System.IO.Path]::GetFullPath([string]$entry.Source.FullPath)
+        $targetPath = [System.IO.Path]::GetFullPath([string]$entry.Target.FullPath)
         $expectedSourceSha256 = ([string]$entry.Source.Sha256).ToLowerInvariant()
         $expectedTargetSha256 = ([string]$entry.Target.Sha256).ToLowerInvariant()
 
@@ -497,8 +502,8 @@ try {
         $finalTargetSha256 = $null
         $identityRetryCount = 0
 
-        if (-not $sourcePath.StartsWith($source, [StringComparison]::OrdinalIgnoreCase) -or
-            -not $targetPath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase)) {
+        if (-not (Test-StoragePathWithinRoot $sourcePath $source) -or -not (Test-StoragePathWithinRoot $targetPath $target) -or
+            -not (Test-StoragePathWithoutReparsePoints $sourcePath $source) -or -not (Test-StoragePathWithoutReparsePoints $targetPath $target)) {
             $blockers.Add('PATH_OUTSIDE_EXPECTED_ROOT')
         }
         if (-not [System.IO.File]::Exists($sourcePath)) { $blockers.Add('SOURCE_FILE_NOT_FOUND') }

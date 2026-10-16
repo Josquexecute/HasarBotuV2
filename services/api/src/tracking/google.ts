@@ -71,7 +71,7 @@ export function createGoogleProvider(config: GoogleConfig, fetchImpl: typeof fet
   let keys: JsonWebKey[] = []
   let keysExpireAt = 0
   async function json(url: string, init: RequestInit = {}) {
-    const response = await fetchImpl(url,{ ...init, signal: AbortSignal.timeout(20_000) })
+    const response = await fetchImpl(url,{ ...init, redirect: 'error', signal: AbortSignal.timeout(20_000) })
     const body: unknown = await response.json()
     if (!response.ok) {
       const error = body as { error?: string | { status?: string } }

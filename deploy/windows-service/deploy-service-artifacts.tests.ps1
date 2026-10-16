@@ -476,7 +476,7 @@ $cf25 = New-ExtraDataReferenceClosureFixture
 $r25 = Invoke-DeployJson -Params @{ SourceDir = $f25.SourceDir; TargetDir = $f25.TargetDir; ServiceLabel = 'test25'; DependencyClosureManifestPath = $cf25.ClosureManifestPath; RepoRoot = $cf25.RepoRoot }
 Assert-True ($r25.ExitCode -eq 2) 'Exit code 2 (blocked)'
 Assert-True ((@($r25.Json.Blockers) -match 'Ek veri dosyası hedefte yok').Count -gt 0) 'Ek veri referansi eksikligi (hedefte yok) dogru raporlandi'
-Assert-True (@(@($r25.Json.Blockers) | Where-Object { $_ -match [regex]::Escape((Join-Path $f25.TargetDir 'extra-data.json')) }).Count -gt 0) 'Blocker mesaji GERCEK hesaplanan beklenen konumu iceriyor'
+Assert-True (@(@($r25.Json.Blockers) | Where-Object { $_ -match [regex]::Escape([System.IO.Path]::GetFullPath((Join-Path $f25.TargetDir 'extra-data.json'))) }).Count -gt 0) 'Blocker mesaji GERCEK hesaplanan beklenen konumu iceriyor'
 Remove-Item $f25.Root -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $cf25.RepoRoot -Recurse -Force -ErrorAction SilentlyContinue
 

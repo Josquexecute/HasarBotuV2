@@ -37,6 +37,12 @@ describe('köprü host denetimi (DNS rebinding)', () => {
 })
 
 describe('köprü başlık kuralları', () => {
+  it('removes headers named by Connection in both directions', () => {
+    const incoming = { Connection: ['keep-alive, X-Private', 'X-Other'], 'X-Private': 'secret', 'x-other': 'local', cookie: 'hb_session=abc' }
+    expect(buildUpstreamHeaders(incoming, 'api.example')).toEqual({ cookie: 'hb_session=abc', host: 'api.example' })
+    expect(buildDownstreamHeaders(incoming)).toEqual({ cookie: 'hb_session=abc' })
+  })
+
   it('cookie başlığını upstreame AYNEN taşır ve host yeniden yazar', () => {
     const headers = buildUpstreamHeaders(
       { host: '127.0.0.1:51234', cookie: 'hb_session=abc', connection: 'keep-alive' },

@@ -91,8 +91,18 @@ describe('sanitizeDownloadFilename', () => {
     expect(sanitizeDownloadFilename('CON.pdf')).toBe('_CON.pdf')
     expect(sanitizeDownloadFilename('nul')).toBe('_nul')
     expect(sanitizeDownloadFilename('COM1.xlsx')).toBe('_COM1.xlsx')
+    expect(sanitizeDownloadFilename('NUL.tar.gz')).toBe('_NUL.tar.gz')
+    expect(sanitizeDownloadFilename('COM¹.pdf')).toBe('_COM¹.pdf')
+    expect(sanitizeDownloadFilename('LPT².txt')).toBe('_LPT².txt')
+    expect(sanitizeDownloadFilename('lpt³.tar.gz')).toBe('_lpt³.tar.gz')
     // Ayrılmış AD değil, yalnız ayrılmış adla başlayan bir ad: dokunulmaz.
     expect(sanitizeDownloadFilename('CONTROL.pdf')).toBe('CONTROL.pdf')
+  })
+
+  it('keeps even an oversized extension within the filename limit', () => {
+    const result = sanitizeDownloadFilename(`rapor.${'a'.repeat(500)}`)
+    expect(result.length).toBeLessThanOrEqual(MAXIMUM_DOWNLOAD_FILENAME_LENGTH)
+    expect(result.length).toBeGreaterThan(0)
   })
 
   it('uzunluğu sınırlar ve UZANTIYI korur', () => {

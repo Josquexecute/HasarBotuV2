@@ -898,6 +898,53 @@ Assert-True ($json14.ClassificationBlockedCount -eq 5) "TEST14: the other 5 clas
 Assert-True ((Get-FileHash -LiteralPath $f14.ExtraTargetPath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f14.ExtraTargetSha256) "TEST14: unrelated extra-only.jpg still untouched"
 Remove-Item $f14.Root -Recurse -Force -ErrorAction SilentlyContinue
 
+Write-Output "`n=== TEST 15: outside paths and junctions cannot replace files outside the configured root ==="
+foreach ($variant in @('sibling', 'traversal', 'junction')) {
+    $fixture = New-RepairTestFixture
+    try {
+        $outside = Join-Path $fixture.Root 'HEDEF-outside'
+        New-Item -ItemType Directory -Path $outside | Out-Null
+        $outsideFile = Join-Path $outside 'foto.jpeg'
+        [System.IO.File]::Copy($fixture.TargetFilePath, $outsideFile)
+        $candidate = $outsideFile
+        if ($variant -eq 'traversal') { $candidate = Join-Path $fixture.TargetRoot '..\HEDEF-outside\foto.jpeg' }
+        if ($variant -eq 'junction') {
+            $link = Join-Path $fixture.TargetRoot 'linked'
+            New-Item -ItemType Junction -Path $link -Target $outside | Out-Null
+            $candidate = Join-Path $link 'foto.jpeg'
+        }
+        $report = [System.IO.File]::ReadAllText($fixture.ReportPath) | ConvertFrom-Json
+        $report.Files[0].Target.FullPath = $candidate
+        [System.IO.File]::WriteAllText($fixture.ReportPath, ($report | ConvertTo-Json -Depth 12), [System.Text.UTF8Encoding]::new($false))
+        $hash = (Get-FileHash -LiteralPath $fixture.ReportPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $output = & $repairScript -SourceRoot $fixture.SourceRoot -TargetRoot $fixture.TargetRoot -GhostExclusionManifestPath $fixture.ManifestPath -PCloudLocalDatabasePath $fixture.DbPath -ForensicsReportPath $fixture.ReportPath -ForensicsReportSha256 $hash -BackupDirectory (Join-Path $fixture.Root 'backups') -Apply 2>&1 | Out-String | ConvertFrom-Json
+        Assert-True ($output.AppliedCount -eq 0) "$variant cannot replace a file outside the root"
+        Assert-True ((Get-FileHash -LiteralPath $outsideFile -Algorithm SHA256).Hash.ToLowerInvariant() -eq $fixture.TargetSha256) "$variant preserves the outside file bytes"
+        $written = [System.IO.File]::ReadAllText((Join-Path 'C:\ProgramData\HasarBotu\migration-preflight' $output.Report.FileName)) | ConvertFrom-Json
+        Assert-True ($written.Files[0].Blockers -contains 'PATH_OUTSIDE_EXPECTED_ROOT') "$variant is rejected by the root safety check"
+    } finally {
+        $absolute = [System.IO.Path]::GetFullPath($fixture.Root)
+        if (-not $absolute.StartsWith([System.IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected repair test directory' }
+        Remove-Item -LiteralPath $fixture.Root -Recurse -Force
+    }
+}
+
+Write-Output "`n=== TEST 16: backups inside either sync root are rejected before writes ==="
+foreach ($side in @('SourceRoot', 'TargetRoot')) {
+    $fixture = New-RepairTestFixture
+    try {
+        $backup = Join-Path $fixture.$side 'backups'
+        $output = & $repairScript -SourceRoot $fixture.SourceRoot -TargetRoot $fixture.TargetRoot -GhostExclusionManifestPath $fixture.ManifestPath -PCloudLocalDatabasePath $fixture.DbPath -ForensicsReportPath $fixture.ReportPath -ForensicsReportSha256 $fixture.ReportHash -BackupDirectory $backup -Apply 2>&1 | Out-String | ConvertFrom-Json
+        Assert-True ($output.Status -eq 'error' -and $output.ErrorCode -eq 'BACKUP_DIRECTORY_INSIDE_SYNC_ROOT') "$side backup is rejected"
+        Assert-True ((Get-FileHash -LiteralPath $fixture.TargetFilePath -Algorithm SHA256).Hash.ToLowerInvariant() -eq $fixture.TargetSha256) "$side backup rejection preserves the target"
+        Assert-True (-not (Test-Path -LiteralPath $backup)) "$side backup rejection creates no backup directory"
+    } finally {
+        $absolute = [System.IO.Path]::GetFullPath($fixture.Root)
+        if (-not $absolute.StartsWith([System.IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected repair test directory' }
+        Remove-Item -LiteralPath $fixture.Root -Recurse -Force
+    }
+}
+
 Write-Output "`n=== SUMMARY: $script:failures failure(s) ==="
 if ($script:failures -gt 0) { exit 1 }
 exit 0

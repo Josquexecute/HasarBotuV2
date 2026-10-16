@@ -49,6 +49,17 @@ export const HOP_BY_HOP_HEADERS: readonly string[] = [
 
 const HOP_BY_HOP = new Set(HOP_BY_HOP_HEADERS)
 
+function connectionHeaders(headers: Readonly<Record<string, string | string[] | undefined>>): Set<string> {
+  const names = new Set(HOP_BY_HOP)
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() !== 'connection' || value === undefined) continue
+    for (const field of Array.isArray(value) ? value : [value]) {
+      for (const token of field.split(',')) names.add(token.trim().toLowerCase())
+    }
+  }
+  return names
+}
+
 /** İstek `/api` altında mı? `/apiX` gibi komşu yollar API sayılmaz. */
 export function isApiPath(pathname: string): boolean {
   return pathname === API_PATH_PREFIX || pathname.startsWith(`${API_PATH_PREFIX}/`)
@@ -87,10 +98,11 @@ export function buildUpstreamHeaders(
   upstreamHost: string,
 ): Record<string, string | string[]> {
   const headers: Record<string, string | string[]> = {}
+  const excluded = connectionHeaders(incoming)
   for (const [rawName, value] of Object.entries(incoming)) {
     if (value === undefined) continue
     const name = rawName.toLowerCase()
-    if (HOP_BY_HOP.has(name) || name === 'host') continue
+    if (excluded.has(name) || name === 'host') continue
     headers[name] = value
   }
   headers.host = upstreamHost
@@ -106,10 +118,11 @@ export function buildDownstreamHeaders(
   upstream: Readonly<Record<string, string | string[] | undefined>>,
 ): Record<string, string | string[]> {
   const headers: Record<string, string | string[]> = {}
+  const excluded = connectionHeaders(upstream)
   for (const [rawName, value] of Object.entries(upstream)) {
     if (value === undefined) continue
     const name = rawName.toLowerCase()
-    if (HOP_BY_HOP.has(name)) continue
+    if (excluded.has(name)) continue
     headers[name] = value
   }
   return headers

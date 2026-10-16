@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from 'node:fs/promises'
@@ -255,6 +256,8 @@ test('sentetik kaynak ve WAL dahil pCloud snapshot ayni exact ghost kokunu izler
   await writeFile(manifestPath, JSON.stringify(manifest))
   const manifestHash = digest(await readFile(manifestPath))
   const ghost = await loadGhostManifest(manifestPath, manifestHash, sourceRoot)
+  await loadGhostManifest(manifestPath, manifestHash, await realpath(sourceRoot))
+  await assert.rejects(loadGhostManifest(manifestPath, manifestHash, temporaryRoot), error => error.safeCode === 'GHOST_EXCLUSION_SOURCE_ROOT_MISMATCH')
 
   const databasePath = path.join(temporaryRoot, 'data.db')
   const database = new DatabaseSync(databasePath)

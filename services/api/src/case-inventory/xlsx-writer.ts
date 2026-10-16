@@ -21,6 +21,20 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;')
 }
 
+function escapeCellText(value: string): string {
+  // ST_Xstring preserves XML-invalid characters and CR. Escape literal
+  // _xHHHH_ sequences first so Excel cannot reinterpret user-entered text.
+  const literal = value.replace(/_(?=x[0-9a-f]{4}_)/gi, '_x005F_')
+  let encoded = ''
+  for (const character of literal) {
+    const code = character.codePointAt(0)!
+    const requiresEscape = (code < 32 && code !== 9 && code !== 10) || code === 0xfffe || code === 0xffff
+      || (code >= 0xd800 && code <= 0xdfff)
+    encoded += requiresEscape ? `_x${code.toString(16).toUpperCase().padStart(4, '0')}_` : character
+  }
+  return escapeXml(encoded)
+}
+
 const CONTENT_TYPES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
   + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
   + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
@@ -62,7 +76,7 @@ export function excelColumnLetter(index: number): string {
 function cellXml(columnIndex: number, rowNumber: number, value: string): string {
   const ref = `${excelColumnLetter(columnIndex)}${rowNumber}`
   if (value.length === 0) return `<c r="${ref}" t="inlineStr"/>`
-  return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`
+  return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeCellText(value)}</t></is></c>`
 }
 
 export function buildInventoryXlsx(input: {

@@ -26,7 +26,7 @@ if (-not $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Adm
     exit 0
 }
 
-$winswSourcePath = 'C:\Tools\WinSW-x64.exe'
+$winswSourcePath = if ($env:HASARBOTU_TEST_WINSW_PATH) { $env:HASARBOTU_TEST_WINSW_PATH } else { 'C:\Tools\WinSW-x64.exe' }
 if (-not (Test-Path -LiteralPath $winswSourcePath)) {
     Write-Output "SKIPPED: WinSW binary not found at $winswSourcePath on this machine."
     exit 0
@@ -46,6 +46,9 @@ $testAccountName = 'NT AUTHORITY\LOCAL SERVICE'
 $testDir = Join-Path 'C:\ProgramData' ("HasarBotuTestVehicleProbe-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $testExePath = Join-Path $testDir "$testServiceName.exe"
 $testXmlPath = Join-Path $testDir "$testServiceName.xml"
+if ($null -ne (Get-Service -Name $testServiceName -ErrorAction SilentlyContinue)) {
+    throw 'Disposable test service already exists; refusing to replace it.'
+}
 
 function Remove-TestServiceIfPresent {
     $existing = Get-CimInstance -ClassName Win32_Service -Filter "Name='$testServiceName'" -ErrorAction SilentlyContinue
@@ -205,9 +208,17 @@ db.close()
     Assert-True ($svcAfterRollback.StartMode -eq 'Disabled') "TEST3: StartMode restored to Disabled after standalone rollback"
 
     Write-Output "`n=== TEST 4: refuses to touch a Running service ==="
+    # The restored baseline has a missing dependency and an immediately exiting
+    # payload. Use a persistent, harmless payload so the Running guards execute.
+    [xml]$runningXml = $initialXml
+    $dependency = $runningXml.service.SelectSingleNode('depend')
+    [void]$runningXml.service.RemoveChild($dependency)
+    $runningXml.service.SelectSingleNode('executable').InnerText = [string](Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
+    $runningXml.service.SelectSingleNode('arguments').InnerText = '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 90'
+    $runningXml.Save($testXmlPath)
+    sc.exe config $testServiceName depend= / | Out-Null
     sc.exe config $testServiceName start= demand | Out-Null
-    Start-Service -Name $testServiceName -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 300
+    Start-Service -Name $testServiceName
     $runningState = (Get-CimInstance -ClassName Win32_Service -Filter "Name='$testServiceName'").State
     if ($runningState -eq 'Running') {
         $out4 = & $toolPath -ServiceName $testServiceName -Apply 2>&1
@@ -216,7 +227,7 @@ db.close()
         Stop-Service -Name $testServiceName -Force -ErrorAction SilentlyContinue
     }
     else {
-        Write-Output "SKIPPED TEST4: cmd.exe /c exit 0 completed too fast to observe Running state (not a tool defect)."
+        Assert-True $false 'TEST4: persistent test service must reach Running state'
     }
     sc.exe config $testServiceName start= disabled | Out-Null
 
@@ -226,8 +237,7 @@ db.close()
     # before the evidence is ever acted on, so which evidence is used
     # (as long as it verifies) does not matter.
     sc.exe config $testServiceName start= demand | Out-Null
-    Start-Service -Name $testServiceName -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 300
+    Start-Service -Name $testServiceName
     $runningState5 = (Get-CimInstance -ClassName Win32_Service -Filter "Name='$testServiceName'").State
     if ($runningState5 -eq 'Running') {
         $xmlBeforeTest5 = (Get-FileHash -LiteralPath $testXmlPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -240,12 +250,16 @@ db.close()
         Stop-Service -Name $testServiceName -Force -ErrorAction SilentlyContinue
     }
     else {
-        Write-Output "SKIPPED TEST5: cmd.exe /c exit 0 completed too fast to observe Running state (not a tool defect)."
+        Assert-True $false 'TEST5: persistent test service must reach Running state'
     }
     sc.exe config $testServiceName start= disabled | Out-Null
 }
 finally {
     Remove-TestServiceIfPresent
+    $resolvedTestDir = [System.IO.Path]::GetFullPath($testDir)
+    if (-not $resolvedTestDir.StartsWith('C:\ProgramData\HasarBotuTestVehicleProbe-', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Unsafe disposable test directory; refusing recursive cleanup.'
+    }
     Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 

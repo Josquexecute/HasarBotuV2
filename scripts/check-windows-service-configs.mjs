@@ -862,7 +862,7 @@ try {
   assertNotContains(vehicleScript, /LsaAddAccountRights/, 'apply-file-agent-service-vehicle-probe.ps1', 'YENI bir LSA hakki asla verilmez (yalniz aciklayici yorumda gecebilir, kod olarak asla)')
   assertContains(vehicleScript, /ADMINISTRATOR_REQUIRED/, 'apply-file-agent-service-vehicle-probe.ps1', 'admin-only kanit yazimi + gercek servis config mutasyonu icin Administrator gerektirir')
 
-  const winswExists = existsSync('C:\\Tools\\WinSW-x64.exe')
+  const winswExists = existsSync(process.env.HASARBOTU_TEST_WINSW_PATH || 'C:\\Tools\\WinSW-x64.exe')
   if (winswExists) {
     const vehicleTests = spawnSync(
       'powershell.exe',
@@ -926,6 +926,19 @@ try {
   }
 } catch (error) {
   errors.push(`Attestation deposu ACL apply tooling doğrulaması çalışmadı — ${error.message}`)
+}
+
+try {
+  const pathSafetyTests = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${DEPLOY_DIR}storage-path-safety.tests.ps1`],
+    { encoding: 'utf8' },
+  )
+  if (pathSafetyTests.status !== 0 || !/SUMMARY: 0 failure\(s\)/.test(pathSafetyTests.stdout)) {
+    throw new Error(pathSafetyTests.stderr || pathSafetyTests.stdout || pathSafetyTests.error?.message || 'Test process failed')
+  }
+} catch (error) {
+  errors.push(`Storage path safety tests failed: ${error.message}`)
 }
 
 if (errors.length > 0) {

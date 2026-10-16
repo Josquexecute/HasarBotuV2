@@ -36,7 +36,7 @@ export function registerCaseInventoryRoutes(
   options: CaseInventoryRoutesOptions,
 ): void {
   const auth = createAuthStore(options.pool)
-  const store = createCaseInventoryStore(options.pool)
+  const store = createCaseInventoryStore(options.pool, options.clock)
   const audit = createAuditService()
 
   app.get(CASE_INVENTORY_PREVIEW_ROUTE, async (request, reply) => {

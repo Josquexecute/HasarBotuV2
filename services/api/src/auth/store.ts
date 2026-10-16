@@ -73,6 +73,14 @@ export function createAuthStore(pool: pg.Pool) {
       return row === undefined ? undefined : mapUser(row)
     },
 
+    /** Serialize session creation with account, password, and lockout changes. */
+    async lockUserForLogin(userId: string, exec: Queryable): Promise<AuthUserRow | undefined> {
+      await exec.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [userId])
+      const result = await exec.query(`${USER_SELECT} WHERE u.id=$1 GROUP BY u.id`, [userId])
+      const row = result.rows[0] as RawUserRow | undefined
+      return row === undefined ? undefined : mapUser(row)
+    },
+
     /**
      * Basarisiz girisi sayar; esik asilirsa hesabi kilitler. Yeni sayaci
      * dondurur. `exec` verilirse (transaction istemcisi) UPDATE ile audit
@@ -83,20 +91,30 @@ export function createAuthStore(pool: pg.Pool) {
       maxFailures: number,
       lockMinutes: number,
       exec: Queryable = pool,
-    ): Promise<{ failedLoginCount: number; lockedUntil: Date | null }> {
+    ): Promise<{ failedLoginCount: number; lockedUntil: Date | null; lockStarted: boolean }> {
       const result = await exec.query(
-        `UPDATE users
-         SET failed_login_count = failed_login_count + 1,
-             locked_until = CASE WHEN failed_login_count + 1 >= $2
-                                 THEN now() + make_interval(mins => $3)
-                                 ELSE locked_until END,
+        `WITH previous AS (
+           SELECT id, failed_login_count, locked_until,
+                  coalesce(locked_until > now(), false) AS lock_active,
+                  locked_until IS NOT NULL AND locked_until <= now() AS lock_expired
+           FROM users WHERE id=$1 FOR UPDATE
+         )
+         UPDATE users u
+         SET failed_login_count = CASE WHEN p.lock_active THEN p.failed_login_count
+                                       WHEN p.lock_expired THEN 1
+                                       ELSE p.failed_login_count + 1 END,
+             locked_until = CASE WHEN p.lock_active THEN p.locked_until
+                                 WHEN p.lock_expired THEN NULL
+                                 WHEN p.failed_login_count + 1 >= $2 THEN now() + make_interval(mins => $3)
+                                 ELSE p.locked_until END,
              updated_at = now()
-         WHERE id = $1
-         RETURNING failed_login_count, locked_until`,
+         FROM previous p WHERE u.id=p.id
+         RETURNING u.failed_login_count, u.locked_until,
+                   (NOT p.lock_active AND NOT p.lock_expired AND p.failed_login_count + 1 >= $2) AS lock_started`,
         [userId, maxFailures, lockMinutes],
       )
-      const row = result.rows[0] as { failed_login_count: number; locked_until: Date | null }
-      return { failedLoginCount: row.failed_login_count, lockedUntil: row.locked_until }
+      const row = result.rows[0] as { failed_login_count: number; locked_until: Date | null; lock_started: boolean }
+      return { failedLoginCount: row.failed_login_count, lockedUntil: row.locked_until, lockStarted: row.lock_started }
     },
 
     async resetFailedLogins(userId: string, exec: Queryable = pool): Promise<void> {

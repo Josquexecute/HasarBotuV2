@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SessionProvider } from './session'
 import { useSession } from './sessionContext'
@@ -82,6 +82,51 @@ describe('SessionProvider api mod bootstrap', () => {
 })
 
 describe('SessionProvider login/logout/expiry', () => {
+  it('ignores an older focus response after newer permissions have arrived', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    let resolveOld!: (user: SessionUser | null) => void
+    const newer = { ...USER, displayName: 'Güncel Kullanıcı', roles: ['read_only'] as const }
+    const bootstrap = vi.fn().mockResolvedValueOnce(USER)
+      .mockImplementationOnce(() => new Promise<SessionUser | null>(resolve => { resolveOld = resolve }))
+      .mockResolvedValueOnce(newer)
+    renderProvider(fakeAuth({ bootstrap }))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'))
+    fireEvent(window, new Event('focus'))
+    fireEvent(window, new Event('permissions-updated'))
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent(newer.displayName))
+    await act(async () => { resolveOld(USER) })
+    expect(screen.getByTestId('user')).toHaveTextContent(newer.displayName)
+  })
+
+  it('does not restore a session when a focus response races with logout', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    let resolveFocus!: (user: SessionUser | null) => void
+    let resolveLogout!: () => void
+    const bootstrap = vi.fn().mockResolvedValueOnce(USER)
+      .mockImplementation(() => new Promise<SessionUser | null>(resolve => { resolveFocus = resolve }))
+    const logout = () => new Promise<void>(resolve => { resolveLogout = resolve })
+    renderProvider(fakeAuth({ bootstrap, logout }))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'))
+    fireEvent(window, new Event('focus'))
+    fireEvent.click(screen.getByRole('button', { name: 'logout' }))
+    await act(async () => { resolveLogout(); resolveFocus(USER) })
+    expect(screen.getByTestId('status')).toHaveTextContent('anonymous')
+    expect(screen.getByTestId('user')).toHaveTextContent('-')
+  })
+
+  it('ignores focus responses while a logout is still in progress', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    let resolveLogout!: () => void
+    const bootstrap = vi.fn().mockResolvedValue(USER)
+    renderProvider(fakeAuth({ bootstrap, logout: () => new Promise<void>(resolve => { resolveLogout = resolve }) }))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'))
+    fireEvent.click(screen.getByRole('button', { name: 'logout' }))
+    fireEvent(window, new Event('focus'))
+    await act(async () => { resolveLogout() })
+    expect(bootstrap).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('status')).toHaveTextContent('anonymous')
+  })
+
   it.each(['anonymous', 'expired'] as const)('detects a main-window login when an %s assistant regains focus', async (initial) => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const bootstrap = vi.fn().mockResolvedValueOnce(initial === 'anonymous' ? null : USER).mockResolvedValue(USER)

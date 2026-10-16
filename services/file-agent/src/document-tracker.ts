@@ -47,16 +47,16 @@ export function createTrackingClient(config: AgentConfig): TrackingClient {
   const headers = { [AGENT_ID_HEADER]: config.agentId,[AGENT_SECRET_HEADER]: config.agentSecret,'content-type': 'application/json' }
   return {
     async reconcile(input) {
-      const result = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/reconcile`,{ method: 'POST',headers,body: JSON.stringify(input),signal: AbortSignal.timeout(20_000) })
+      const result = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/reconcile`,{ method: 'POST',redirect: 'error',headers,body: JSON.stringify(input),signal: AbortSignal.timeout(20_000) })
       if (!result.ok) throw new Error('Tracking reconciliation not acknowledged')
     },
     async locations(cursor) {
-      const result = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/locations${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,{ headers,signal: AbortSignal.timeout(20_000) })
+      const result = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/locations${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,{ headers,redirect: 'error',signal: AbortSignal.timeout(20_000) })
       if (!result.ok) throw new Error('Tracking locations unavailable')
       return trackingLocationsSchema.parse(await result.json())
     },
     async report(input) {
-      const result = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/observations`,{ method: 'POST',headers,body: JSON.stringify(input),signal: AbortSignal.timeout(20_000) })
+      const result = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/observations`,{ method: 'POST',redirect: 'error',headers,body: JSON.stringify(input),signal: AbortSignal.timeout(20_000) })
       if (!result.ok) throw new Error('Tracking observation not acknowledged')
     },
   }
@@ -148,7 +148,7 @@ export function startDocumentTracker(config: AgentConfig, signal?: AbortSignal, 
   let stopped = false
   let running: Promise<void> = Promise.resolve()
   async function reportHealth(ok: boolean, phase: 'scanning' | 'complete' = 'complete') {
-    const response = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/health`,{ method: 'POST',headers: { [AGENT_ID_HEADER]: config.agentId,[AGENT_SECRET_HEADER]: config.agentSecret,'content-type': 'application/json' },body: JSON.stringify({ ok,phase }),signal: AbortSignal.timeout(20_000) })
+    const response = await fetch(`${config.apiBaseUrl}/api/v1/tracking/agent/health`,{ method: 'POST',redirect: 'error',headers: { [AGENT_ID_HEADER]: config.agentId,[AGENT_SECRET_HEADER]: config.agentSecret,'content-type': 'application/json' },body: JSON.stringify({ ok,phase }),signal: AbortSignal.timeout(20_000) })
     if (!response.ok) throw new Error('Tracking health was not acknowledged')
     lastHealthAt = Date.now()
   }

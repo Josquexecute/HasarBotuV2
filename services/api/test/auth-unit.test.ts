@@ -66,4 +66,31 @@ describe('sabit pencere hiz sinirlayici', () => {
     // farkli anahtar etkilenmez
     expect(limiter.consume('baska').allowed).toBe(true)
   })
+
+  it('bounds unique keys without evicting an active rate limit', () => {
+    let now = 1_000
+    const limiter = createFixedWindowLimiter({ limit: 1, windowMs: 100, maximumKeys: 2, now: () => now })
+    expect(limiter.consume('first').allowed).toBe(true)
+    now += 20
+    expect(limiter.consume('second').allowed).toBe(true)
+    expect(limiter.consume('overflow')).toEqual({ allowed: false, retryAfterMs: 80 })
+    expect(limiter.consume('first').allowed).toBe(false)
+    now += 80
+    expect(limiter.consume('overflow').allowed).toBe(true)
+    expect(limiter.consume('second').allowed).toBe(false)
+    expect(limiter.consume('another')).toEqual({ allowed: false, retryAfterMs: 20 })
+    now += 20
+    expect(limiter.consume('another').allowed).toBe(true)
+    expect(limiter.consume('overflow').allowed).toBe(false)
+  })
+
+  it.each([
+    { limit: 0, windowMs: 100 },
+    { limit: 1.5, windowMs: 100 },
+    { limit: 1, windowMs: 0 },
+    { limit: 1, windowMs: Infinity },
+    { limit: 1, windowMs: 100, maximumKeys: 0 },
+  ])('rejects invalid limits at construction: %j', options => {
+    expect(() => createFixedWindowLimiter(options)).toThrow(RangeError)
+  })
 })

@@ -74,6 +74,38 @@ function fixtureWorkbook(): Uint8Array {
 }
 
 describe('generic salt-okunur OOXML extractor', () => {
+  it('rejects huge declared ZIP entries before allocating their output', () => {
+    const bytes = zipSync({ 'oversized.xml': strToU8('<root/>') })
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    let centralOffset = -1
+    for (let offset = 0; offset <= bytes.length - 4; offset++) {
+      if (view.getUint32(offset, true) === 0x02014b50) { centralOffset = offset; break }
+    }
+    expect(centralOffset).toBeGreaterThan(0)
+    view.setUint32(centralOffset + 24, 0x7fffffff, true)
+    expect(() => extractOoxmlWorkbook(bytes)).toThrowError(expect.objectContaining({ code: 'OOXML_ZIP_LIMIT_EXCEEDED' }))
+  })
+
+  it('bounds ZIP entry counts before parsing XML', () => {
+    const files = Object.fromEntries(Array.from({ length: 4097 }, (_, index) => [`entry-${index}`, new Uint8Array()]))
+    expect(() => extractOoxmlWorkbook(zipSync(files))).toThrowError(expect.objectContaining({ code: 'OOXML_ZIP_LIMIT_EXCEEDED' }))
+  })
+
+  it('bounds XML node allocations even when the document is shallow and highly compressible', () => {
+    const bytes = zipSync({ '_rels/.rels': xml(`<Relationships>${'<x/>'.repeat(250_000)}</Relationships>`) })
+    expect(() => extractOoxmlWorkbook(bytes)).toThrowError(expect.objectContaining({ code: 'OOXML_XML_TOO_MANY_NODES' }))
+  })
+
+  it('rejects malformed attribute runs instead of repeatedly scanning every suffix', () => {
+    const bytes = zipSync({ '_rels/.rels': xml(`<Relationships ${'a'.repeat(10_000)}/>`) })
+    expect(() => extractOoxmlWorkbook(bytes)).toThrowError(expect.objectContaining({ code: 'OOXML_XML_NOT_WELL_FORMED' }))
+  })
+
+  it('rejects deep XML without overflowing the traversal call stack', () => {
+    const bytes = zipSync({ '_rels/.rels': xml('<node>'.repeat(300) + '</node>'.repeat(300)) })
+    expect(() => extractOoxmlWorkbook(bytes)).toThrowError(expect.objectContaining({ code: 'OOXML_XML_TOO_DEEP' }))
+  })
+
   it('package ve workbook relationship hedeflerini ada göre tahmin etmeden çözer', () => {
     const workbook = extractOoxmlWorkbook(fixtureWorkbook())
     expect(workbook.workbookPartName).toBe('xl/book/workbook.xml')

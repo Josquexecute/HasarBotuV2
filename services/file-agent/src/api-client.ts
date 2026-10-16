@@ -38,17 +38,30 @@ export interface AgentApiClientOptions {
   readonly agentId: string
   readonly secret: string
   readonly fetchImpl?: typeof fetch
+  readonly requestTimeoutMs?: number
 }
 
 export function createAgentApiClient(options: AgentApiClientOptions) {
   const fetchImpl = options.fetchImpl ?? fetch
   const authHeaders = { [AGENT_ID_HEADER]: options.agentId, [AGENT_SECRET_HEADER]: options.secret }
   const url = (route: string): string => `${options.baseUrl}${route}`
+  const request = async (route: string, init: RequestInit): Promise<Response> => {
+    try {
+      return await fetchImpl(url(route), {
+        ...init,
+        // Custom agent headers are not stripped by fetch on cross-origin redirects.
+        redirect: 'error',
+        signal: init.signal ?? AbortSignal.timeout(options.requestTimeoutMs ?? 30_000),
+      })
+    } catch {
+      throw new AgentApiError(0, 'API request failed')
+    }
+  }
 
   return {
     /** Sıradaki işi kilitler; uygun iş yoksa null. */
     async claim(): Promise<ClaimedJob | null> {
-      const response = await fetchImpl(url(AGENT_CLAIM_ROUTE), {
+      const response = await request(AGENT_CLAIM_ROUTE, {
         method: 'POST',
         headers: { ...authHeaders, accept: 'application/json' },
       })
@@ -58,7 +71,7 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
 
     /** Lease uzatır. 409 (lease kaybı) sessizce false döner. */
     async heartbeat(jobId: string, phase?: 'applying' | 'verifying' | 'cleanup' | 'rendering' | 'preprocessing' | 'recognizing' | 'normalizing' | 'validating' | 'ocr'): Promise<HeartbeatResponse | false> {
-      const response = await fetchImpl(url(AGENT_JOB_HEARTBEAT_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
+      const response = await request(AGENT_JOB_HEARTBEAT_ROUTE.replace(':jobId', encodeURIComponent(jobId)), {
         signal: AbortSignal.timeout(10_000),
         method: 'POST',
         headers: { ...authHeaders, accept: 'application/json', ...(phase === undefined ? {} : { 'content-type': 'application/json' }) },
@@ -71,7 +84,7 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
 
     /** Sonuç bildirir (idempotent). */
     async reportResult(jobId: string, result: JobResultRequestInput): Promise<JobResultResponse> {
-      const response = await fetchImpl(url(AGENT_JOB_RESULT_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
+      const response = await request(AGENT_JOB_RESULT_ROUTE.replace(':jobId', encodeURIComponent(jobId)), {
         method: 'POST',
         headers: { ...authHeaders, accept: 'application/json', 'content-type': 'application/json' },
         body: JSON.stringify(result),
@@ -82,7 +95,7 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
 
     /** Bounded page chunk; server re-normalizes and validates before append. */
     async reportExtractionChunk(jobId: string, chunk: PdfExtractionChunkRequest): Promise<void> {
-      const response = await fetchImpl(url(AGENT_JOB_EXTRACTION_CHUNKS_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
+      const response = await request(AGENT_JOB_EXTRACTION_CHUNKS_ROUTE.replace(':jobId', encodeURIComponent(jobId)), {
         method: 'POST',
         headers: { ...authHeaders, accept: 'application/json', 'content-type': 'application/json' },
         body: JSON.stringify(chunk),
@@ -93,7 +106,7 @@ export function createAgentApiClient(options: AgentApiClientOptions) {
 
     /** Offline OCR page chunk; text and geometry are contract-validated server-side. */
     async reportPolicyOcrChunk(jobId: string, chunk: PolicyOcrChunkRequest): Promise<void> {
-      const response = await fetchImpl(url(AGENT_JOB_OCR_CHUNKS_ROUTE.replace(':jobId', encodeURIComponent(jobId))), {
+      const response = await request(AGENT_JOB_OCR_CHUNKS_ROUTE.replace(':jobId', encodeURIComponent(jobId)), {
         method: 'POST',
         headers: { ...authHeaders, accept: 'application/json', 'content-type': 'application/json' },
         body: JSON.stringify(chunk),

@@ -63,6 +63,7 @@ $ErrorActionPreference = 'Stop'
 # reason; failure on one file never stops processing of the others.
 
 $AdministratorSidValue = 'S-1-5-32-544'
+Import-Module (Join-Path $PSScriptRoot 'storage-path-safety.psm1') -Force
 $ReportDirectory = 'C:\ProgramData\HasarBotu\migration-preflight'
 $DiffForensicsSchemaVersion = 'pcloud-post-sync-diff-forensics/1.0.0'
 
@@ -219,9 +220,10 @@ try {
         $BackupDirectory = Join-Path $ReportDirectory (Join-Path 'pre-delete-backups' $backupTimestamp)
     }
     $backupDirectoryFullPath = [System.IO.Path]::GetFullPath($BackupDirectory)
-    if ($backupDirectoryFullPath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase)) {
+    if ((Test-StoragePathWithinRoot $backupDirectoryFullPath $target) -or (Test-StoragePathWithinRoot $backupDirectoryFullPath $source)) {
         Throw-SafeCleanupError 'BACKUP_DIRECTORY_INSIDE_SYNC_ROOT'
     }
+    if (-not (Test-StoragePathWithoutReparsePoints $backupDirectoryFullPath)) { Throw-SafeCleanupError 'BACKUP_DIRECTORY_REPARSE_POINT' }
 
     $candidateEntries = Get-OrphanCandidateEntries $report
     if ($candidateEntries.Count -eq 0) { Throw-SafeCleanupError 'NO_EXTRA_ENTRIES_IN_FORENSICS_REPORT' }
@@ -234,7 +236,7 @@ try {
     $results = @()
     foreach ($entry in $candidateEntries) {
         $name = $entry.Name
-        $targetPath = [string]$entry.Target.FullPath
+        $targetPath = [System.IO.Path]::GetFullPath([string]$entry.Target.FullPath)
         $expectedTargetSha256 = ([string]$entry.Target.Sha256).ToLowerInvariant()
 
         $blockers = [System.Collections.Generic.List[string]]::new()
@@ -242,7 +244,7 @@ try {
         $backupPath = $null
         $backupSha256 = $null
 
-        if (-not $targetPath.StartsWith($target, [StringComparison]::OrdinalIgnoreCase)) {
+        if (-not (Test-StoragePathWithinRoot $targetPath $target) -or -not (Test-StoragePathWithoutReparsePoints $targetPath $target)) {
             $blockers.Add('PATH_OUTSIDE_EXPECTED_ROOT')
         }
         if (-not [System.IO.File]::Exists($targetPath)) { $blockers.Add('TARGET_FILE_NOT_FOUND') }

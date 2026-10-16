@@ -11,6 +11,15 @@ import { strFromU8, unzipSync } from 'fflate'
 
 export const OOXML_READONLY_EXTRACTOR_VERSION = 'ooxml-readonly-extractor/1.0.0' as const
 
+export const OOXML_ZIP_LIMITS = {
+  sourceBytes: 64 * 1024 * 1024,
+  entryBytes: 32 * 1024 * 1024,
+  totalBytes: 128 * 1024 * 1024,
+  entries: 4096,
+} as const
+const MAXIMUM_XML_DEPTH = 256
+const MAXIMUM_XML_NODES = 250_000
+
 interface XmlNode {
   readonly name: string
   readonly localName: string
@@ -100,8 +109,15 @@ function decodeXml(value: string): string {
 
 function parseAttributes(source: string): Readonly<Record<string, string>> {
   const attributes: Record<string, string> = {}
-  const pattern = /([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
-  for (const match of source.matchAll(pattern)) {
+  // Sticky matching avoids quadratic suffix scans on long malformed attributes.
+  const pattern = /\s+([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/y
+  while (pattern.lastIndex < source.length) {
+    const start = pattern.lastIndex
+    const match = pattern.exec(source)
+    if (match === null) {
+      if (source.slice(start).trim().length === 0) break
+      throw new OoxmlExtractorError('OOXML_XML_NOT_WELL_FORMED', 'XML özniteliği geçersiz')
+    }
     const name = match[1]
     if (name === undefined) continue
     attributes[name] = decodeXml(match[2] ?? match[3] ?? '')
@@ -121,6 +137,7 @@ function parseXml(xml: string): XmlNode {
     text: '',
   }
   const stack: XmlNode[] = [documentNode]
+  let nodeCount = 0
   const tokens = /<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<![^>]*>|<\/?[^>]+>|[^<]+/g
 
   for (const match of xml.matchAll(tokens)) {
@@ -158,6 +175,10 @@ function parseXml(xml: string): XmlNode {
     if (name === undefined) {
       throw new OoxmlExtractorError('OOXML_XML_NOT_WELL_FORMED', 'XML açılış etiketi geçersiz')
     }
+    nodeCount += 1
+    if (nodeCount > MAXIMUM_XML_NODES) {
+      throw new OoxmlExtractorError('OOXML_XML_TOO_MANY_NODES', 'XML düğüm sayısı sınırı aşıyor')
+    }
     const node: XmlNode = {
       name,
       localName: name.includes(':') ? (name.split(':').at(-1) as string) : name,
@@ -166,7 +187,12 @@ function parseXml(xml: string): XmlNode {
       text: '',
     }
     current.children.push(node)
-    if (!selfClosing) stack.push(node)
+    if (!selfClosing) {
+      if (stack.length >= MAXIMUM_XML_DEPTH) {
+        throw new OoxmlExtractorError('OOXML_XML_TOO_DEEP', 'XML iç içe düğüm sınırını aşıyor')
+      }
+      stack.push(node)
+    }
   }
 
   if (stack.length !== 1 || documentNode.children.length !== 1) {
@@ -236,9 +262,27 @@ export function resolveOoxmlRelationshipTarget(sourcePart: string, target: strin
 }
 
 function bytesToEntries(bytes: Uint8Array): Readonly<Record<string, Uint8Array>> {
+  if (bytes.length > OOXML_ZIP_LIMITS.sourceBytes) {
+    throw new OoxmlExtractorError('OOXML_ZIP_LIMIT_EXCEEDED', 'OOXML kaynak boyutu sınırı aşıyor')
+  }
+  let totalBytes = 0
+  let count = 0
   try {
-    return unzipSync(bytes)
-  } catch {
+    return unzipSync(bytes, {
+      // fflate calls this BEFORE allocating the decompression output buffer.
+      filter(entry) {
+        totalBytes += Math.max(entry.originalSize, entry.size)
+        count += 1
+        if (!Number.isSafeInteger(totalBytes) || entry.originalSize > OOXML_ZIP_LIMITS.entryBytes
+          || entry.size > OOXML_ZIP_LIMITS.entryBytes || totalBytes > OOXML_ZIP_LIMITS.totalBytes
+          || count > OOXML_ZIP_LIMITS.entries) {
+          throw new OoxmlExtractorError('OOXML_ZIP_LIMIT_EXCEEDED', 'OOXML açılmış paket sınırlarını aşıyor')
+        }
+        return true
+      },
+    })
+  } catch (error) {
+    if (error instanceof OoxmlExtractorError) throw error
     throw new OoxmlExtractorError('OOXML_ZIP_INVALID', 'OOXML ZIP paketi açılamadı')
   }
 }

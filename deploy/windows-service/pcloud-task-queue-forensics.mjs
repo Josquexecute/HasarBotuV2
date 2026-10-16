@@ -351,7 +351,7 @@ export async function runTaskQueueForensics(args) {
   let sampleIndex = 0
   while (true) {
     const capturedAtMs = Date.now()
-    // eslint-disable-next-line no-await-in-loop
+
     const sample = await captureSample(args.pcloudDatabasePath, ghost, ghostRootId, sampleIndex, capturedAtMs)
     samples.push(sample)
     updateTracker(tracker, sample)
@@ -359,7 +359,7 @@ export async function runTaskQueueForensics(args) {
     process.stderr.write(`QUEUE_SAMPLE_PROGRESS index=${sampleIndex} at=${new Date(capturedAtMs).toISOString()} distinctEntries=${tracker.size}\n`)
     const remainingMs = endsAtMs - Date.now()
     if (remainingMs <= 0) break
-    // eslint-disable-next-line no-await-in-loop
+
     await sleep(Math.min(args.sampleIntervalSeconds * 1000, remainingMs))
   }
 

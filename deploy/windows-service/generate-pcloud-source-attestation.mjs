@@ -63,9 +63,7 @@ async function main() {
     const records = await buildAttestationRecords(args)
     const written = []
     for (const record of records) {
-      // eslint-disable-next-line no-await-in-loop -- sequential, fail-closed
-      // writes (matches every other tool in this directory's throughput
-      // choice); each record is independently hash-verified on write.
+      // Sequential writes keep each record independently hash-verified on publication.
       const ref = await writeAttestationRecord(args.attestationStoreDirectory, record)
       written.push({ RelativePath: record.RelativePath, FileId: record.FileId, ...ref })
     }

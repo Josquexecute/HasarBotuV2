@@ -199,9 +199,7 @@ export async function buildAttestationRecords({
       'SOURCE_SIZE_RACE_VS_PCLOUD_DB_DURING_ATTESTATION',
     )
 
-    // eslint-disable-next-line no-await-in-loop -- sequential, fail-closed
-    // hashing (matches every other tool in this directory's throughput
-    // choice); each file's own POST fence immediately follows its hash.
+    // Keep hashing sequential so each file's POST fence immediately follows its hash.
     const sha256 = await fileSha256(file.fullPath)
 
     // Test-only, opt-in-only deterministic pause between hash completion
@@ -211,9 +209,7 @@ export async function buildAttestationRecords({
     // var; never triggered in production (same established pattern as
     // repair-post-sync-stale-target-files.ps1's own identity-fence sync
     // marker).
-    // eslint-disable-next-line no-await-in-loop
     if (process.env.HASARBOTU_TEST_IDENTITY_FENCE_SYNC_MARKER === '1') {
-      // eslint-disable-next-line no-await-in-loop
       await new Promise((resolve) => { setTimeout(resolve, 100) })
     }
 
@@ -221,7 +217,6 @@ export async function buildAttestationRecords({
     // from a FRESH DB snapshot taken AFTER hashing completed, and re-stat
     // the source file itself, closing the race window a slow hash of a
     // large file would otherwise leave open.
-    // eslint-disable-next-line no-await-in-loop
     const postDbInfo = await withConsistentPcloudDatabase(databasePath, (database) => {
       const topId = resolveTopLevelFolderId(database, topLevelFolderName)
       const caseFolderId = resolveFolderIdByRelativeDirParts(database, topId, caseRelativeParts)
@@ -231,7 +226,6 @@ export async function buildAttestationRecords({
     assert(postDbInfo.fileId === dbInfo.fileId, 'IDENTITY_FENCE_FILE_ID_CHANGED_DURING_HASH')
     assert(postDbInfo.pCloudHash === dbInfo.pCloudHash, 'IDENTITY_FENCE_REVISION_CHANGED_DURING_HASH')
     assert(Number(postDbInfo.dbSizeBytes) === file.sizeBytes, 'IDENTITY_FENCE_DB_SIZE_CHANGED_DURING_HASH')
-    // eslint-disable-next-line no-await-in-loop
     const postStat = await stat(file.fullPath).catch(() => null)
     assert(postStat !== null, 'IDENTITY_FENCE_SOURCE_FILE_MISSING_AFTER_HASH')
     assert(postStat.size === file.sizeBytes, 'IDENTITY_FENCE_SOURCE_SIZE_CHANGED_DURING_HASH')

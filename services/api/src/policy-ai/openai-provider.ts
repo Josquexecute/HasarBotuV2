@@ -117,6 +117,7 @@ export function createOpenAiPolicyProvider(
       try {
         response = await fetchImplementation(config.endpoint ?? DEFAULT_OPENAI_RESPONSES_ENDPOINT, {
           method: 'POST',
+          redirect: 'error',
           signal,
           headers: {
             authorization: `Bearer ${config.apiKey}`,

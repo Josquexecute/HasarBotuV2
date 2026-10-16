@@ -3,7 +3,8 @@ import {
   CASE_INVENTORY_MAX_ROWS,
   type CaseInventoryQuery,
 } from '@hasarbotu/contracts'
-import { buildInventoryCells, type CaseInventoryRow } from '@hasarbotu/domain'
+import { buildInventoryCells, toOfficeDate, type CaseInventoryRow } from '@hasarbotu/domain'
+import { systemClock, type Clock } from '../clock.js'
 
 /**
  * Dosya Envanteri — liste/export sorgu katmanı.
@@ -24,15 +25,10 @@ interface InventoryDbRow {
   loss_date: string | null
   notification_date: string | null
   expert_report_status: string | null
-  expert_report_date: Date | string | null
+  expert_report_date: string | null
   service_name: string | null
   service_phone: string | null
   owners: { name: string; phone: string | null }[] | null
-}
-
-function localDate(value: Date | string | null): string | null {
-  if (value === null) return null
-  return typeof value === 'string' ? value.slice(0, 10) : value.toISOString().slice(0, 10)
 }
 
 const WHERE_AND_PARAMS = (query: CaseInventoryQuery): { where: string; params: unknown[] } => {
@@ -71,7 +67,7 @@ const FROM_JOINS = `
   ) oa ON true
 `
 
-export function createCaseInventoryStore(pool: pg.Pool) {
+export function createCaseInventoryStore(pool: pg.Pool, clock: Clock = systemClock) {
   return {
     async count(organizationId: string, query: CaseInventoryQuery): Promise<number> {
       const { where, params } = WHERE_AND_PARAMS(query)
@@ -94,17 +90,18 @@ export function createCaseInventoryStore(pool: pg.Pool) {
            c.id AS case_id, c.office_number, c.plate, i.name AS insurer_name,
            r.display_name AS responsible_name, c.case_type,
            CASE WHEN c.lifecycle_status = 'closed' THEN 'Kapalı'
-                WHEN c.follow_up_date IS NOT NULL AND c.follow_up_date < CURRENT_DATE THEN 'Gecikmiş'
+                WHEN c.follow_up_date IS NOT NULL AND c.follow_up_date < $${params.length + 3}::date THEN 'Gecikmiş'
                 ELSE 'Açık' END AS case_status,
-           c.loss_date, c.notification_date,
-           er.report_status AS expert_report_status, er.report_date AS expert_report_date,
+           c.loss_date::text, c.notification_date::text,
+           er.report_status AS expert_report_status,
+           (er.report_date AT TIME ZONE 'Europe/Istanbul')::date::text AS expert_report_date,
            sc.name AS service_name, sc.phone AS service_phone,
            oa.owners
          ${FROM_JOINS}
          WHERE ${where}
          ORDER BY c.office_year, c.office_sequence
          LIMIT $${params.length + 2}`,
-        [organizationId, ...params, CASE_INVENTORY_MAX_ROWS],
+        [organizationId, ...params, CASE_INVENTORY_MAX_ROWS, toOfficeDate(clock.nowUtcIso())],
       )
       return (result.rows as InventoryDbRow[]).map((row) => {
         const inventoryRow: CaseInventoryRow = {
@@ -115,10 +112,10 @@ export function createCaseInventoryStore(pool: pg.Pool) {
           responsibleName: row.responsible_name,
           caseType: row.case_type,
           caseStatus: row.case_status,
-          accidentDate: localDate(row.loss_date),
-          notificationDate: localDate(row.notification_date),
+          accidentDate: row.loss_date,
+          notificationDate: row.notification_date,
           expertReportStatus: row.expert_report_status,
-          expertReportDate: localDate(row.expert_report_date),
+          expertReportDate: row.expert_report_date,
           // Ayrı bir "eksper rapor numarası" alanı hiçbir tabloda yok; tahmin
           // edilmez, dürüstlükle "Eksik" kalır (bkz. HB-2026-101).
           expertReportNumber: null,

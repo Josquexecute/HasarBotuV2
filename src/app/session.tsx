@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getConfiguredDataSource, type DataSourceKind } from '../data/ports'
 import { createHttpAuthAdapter, HttpAuthError, type AuthPort, type SessionUser } from '../data/authPort'
 import { SessionContext, type SessionContextValue, type SessionStatus } from './sessionContext'
@@ -26,14 +26,17 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
   const [status, setStatus] = useState<SessionStatus>(mode === 'api' ? 'bootstrapping' : 'mock')
   const [user, setUser] = useState<SessionUser | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const requestVersion = useRef(0)
+  const pendingMutation = useRef<number | null>(null)
 
   useEffect(() => {
     if (mode !== 'api') return
     let cancelled = false
+    const version = ++requestVersion.current
     auth
       .bootstrap()
       .then((session) => {
-        if (cancelled) return
+        if (cancelled || requestVersion.current !== version) return
         if (session === null) {
           setStatus('anonymous')
           return
@@ -42,7 +45,7 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
         setStatus('authenticated')
       })
       .catch((error: unknown) => {
-        if (cancelled) return
+        if (cancelled || requestVersion.current !== version) return
         setStatus('anonymous')
         setNotice(
           error instanceof HttpAuthError && error.kind === 'unavailable'
@@ -57,10 +60,17 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const session = await auth.login(email, password)
-      setUser(session)
-      setNotice(null)
-      setStatus('authenticated')
+      const version = ++requestVersion.current
+      pendingMutation.current = version
+      try {
+        const session = await auth.login(email, password)
+        if (requestVersion.current !== version) return
+        setUser(session)
+        setNotice(null)
+        setStatus('authenticated')
+      } finally {
+        if (pendingMutation.current === version) pendingMutation.current = null
+      }
     },
     [auth],
   )
@@ -69,8 +79,10 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
     if (mode !== 'api' || status === 'bootstrapping') return
     let cancelled = false
     const refresh = () => {
+      if (pendingMutation.current !== null) return
+      const version = ++requestVersion.current
       void auth.bootstrap().then((current) => {
-        if (cancelled) return
+        if (cancelled || requestVersion.current !== version) return
         setUser(current)
         setStatus((previous) => current ? 'authenticated' : previous === 'anonymous' ? 'anonymous' : 'expired')
         if (current) setNotice(null)
@@ -82,19 +94,25 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
   },[auth,mode,status])
 
   const logout = useCallback(async () => {
-    await auth.logout()
-    setUser(null)
-    setNotice(null)
-    setStatus('anonymous')
+    const version = ++requestVersion.current
+    pendingMutation.current = version
+    try {
+      await auth.logout()
+      if (requestVersion.current !== version) return
+      setUser(null)
+      setNotice(null)
+      setStatus('anonymous')
+    } finally {
+      if (pendingMutation.current === version) pendingMutation.current = null
+    }
   }, [auth])
 
   const reportUnauthorized = useCallback(() => {
-    setStatus((current) => {
-      if (current !== 'authenticated') return current
-      setUser(null)
-      return 'expired'
-    })
-  }, [])
+    if (status !== 'authenticated' || pendingMutation.current !== null) return
+    requestVersion.current += 1
+    setUser(null)
+    setStatus('expired')
+  }, [status])
 
   const value = useMemo<SessionContextValue>(
     () => ({ mode, status, user, notice, login, logout, reportUnauthorized }),

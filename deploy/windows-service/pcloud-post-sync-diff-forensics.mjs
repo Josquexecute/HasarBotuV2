@@ -327,12 +327,12 @@ export async function buildDiffForensicsReport(args) {
   const entries = []
   for (const diff of diffEntries) {
     const relativePath = diff.sourceEntry?.relativePath ?? diff.targetEntry?.relativePath
-    // eslint-disable-next-line no-await-in-loop
+
     const pcloudState = await withConsistentPcloudDatabase(args.pcloudDatabasePath, (database) => resolvePcloudFileState(database, rootId, relativePath))
     const currency = classifyCurrency(diff.classification, diff.sourceEntry, diff.targetEntry, pcloudState)
-    // eslint-disable-next-line no-await-in-loop
+
     const sourceLockOk = diff.sourceEntry ? await isNotLockedForWrite(diff.sourceEntry.fullPath) : null
-    // eslint-disable-next-line no-await-in-loop
+
     const targetLockOk = diff.targetEntry ? await isNotLockedForWrite(diff.targetEntry.fullPath) : null
 
     entries.push({
