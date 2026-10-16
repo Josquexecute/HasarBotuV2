@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_ASSISTANT_APPEARANCE } from '@hasarbotu/contracts'
@@ -7,7 +7,7 @@ import type { AssistantAppearancePort } from '../../data/assistantAppearancePort
 import { AssistantAppearanceProvider } from './AssistantAppearanceProvider'
 import { useAssistantAppearance } from './assistantAppearanceContext'
 import { AssistantAppearanceEditor } from './AssistantAppearanceEditor'
-import { contrastInk, softCharacterColor } from './appearance'
+import { contrastInk } from './appearance'
 
 const session = (id: string): SessionContextValue => ({ mode: 'api', status: 'authenticated', user: { id, displayName: id, email: `${id}@example.test`, roles: ['read_only'], organizationId: 'org' },
   notice: null, login: vi.fn(), logout: vi.fn(), reportUnauthorized: vi.fn() })
@@ -22,7 +22,7 @@ describe('Touch appearance', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Yeşil' }))
     await user.click(screen.getByRole('button', { name: 'Görünümü Kaydet' }))
-    expect(onSave).toHaveBeenCalledWith({ ...DEFAULT_ASSISTANT_APPEARANCE, accentColor: '#15803d', characterColor: '#b9e7c8' })
+    expect(onSave).toHaveBeenCalledWith({ ...DEFAULT_ASSISTANT_APPEARANCE, accentColor: '#15803d', characterColor: '#15803d' })
     expect(await screen.findByRole('status')).toHaveTextContent('hesabınıza kaydedildi')
   })
   it('discards a late result from the previous account', async () => {
@@ -52,6 +52,16 @@ describe('Touch appearance', () => {
   it('keeps readable text and character eyes for extreme colors', () => {
     expect(contrastInk('#ffffff')).toBe('#111111')
     expect(contrastInk('#000000')).toBe('#ffffff')
-    expect(softCharacterColor('#000000')).toBe('#999999')
   })
+  it.each(['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff', '#ff8000', '#808080', '#4a82b7', '#eff2fa'])(
+    'previews and saves the selected character color %s without whitening it', async (characterColor) => {
+      const onSave = vi.fn(async value => value)
+      render(<AssistantAppearanceEditor appearance={DEFAULT_ASSISTANT_APPEARANCE} systemDark={false} onSave={onSave} onReload={vi.fn()} />)
+      fireEvent.change(screen.getByLabelText('Karakter rengi'), { target: { value: characterColor } })
+      const character = screen.getByLabelText('Touch görünümü önizlemesi').querySelector('.assistant-character-preview')
+      expect(character).toHaveStyle({ backgroundColor: characterColor, color: contrastInk(characterColor) })
+      await userEvent.click(screen.getByRole('button', { name: 'Görünümü Kaydet' }))
+      expect(onSave).toHaveBeenCalledWith({ ...DEFAULT_ASSISTANT_APPEARANCE, characterColor })
+    },
+  )
 })

@@ -35,6 +35,33 @@ void app.whenReady().then(async () => {
     await until(() => win.webContents.executeJavaScript('document.querySelector("canvas").style.filter.includes("21, 128, 61")'), 'personalized character color')
     const afterPalette = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
     check('appearance changes actual character pixels', beforePalette !== afterPalette)
+    const colors = [
+      ['#000000', '#ffffff'], ['#ffffff', '#111111'], ['#ff0000', '#111111'],
+      ['#00ff00', '#111111'], ['#0000ff', '#ffffff'], ['#ffff00', '#111111'],
+      ['#00ffff', '#111111'], ['#ff00ff', '#111111'], ['#ff8000', '#111111'],
+      ['#808080', '#111111'], ['#4a82b7', '#111111'], ['#eff2fa', '#111111'],
+    ]
+    for (const reduceMotion of [true, false]) {
+      for (const [characterColor, eyeColor] of colors) {
+        await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, characterColor, reduceMotion })})`)
+        const [body, eyes] = [characterColor, eyeColor].map(color => [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)))
+        // Read the shipped Canvas output, including the animated and neutral engines.
+        await until(() => win.webContents.executeJavaScript(`(() => {
+          const canvas = document.querySelector('canvas')
+          const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+          const count = rgb => {
+            let matches = 0
+            for (let i = 0; i < pixels.length; i += 4) {
+              if (pixels[i] === rgb[0] && pixels[i + 1] === rgb[1] && pixels[i + 2] === rgb[2] && pixels[i + 3] === 255) matches++
+            }
+            return matches
+          }
+          return count(${JSON.stringify(body)}) > 500 && count(${JSON.stringify(eyes)}) > 10
+        })()`), `exact body and contrasting eyes ${characterColor}, reduced motion ${reduceMotion}`)
+        check(`exact body and contrasting eyes ${characterColor}, reduced motion ${reduceMotion}`, true)
+        if (reduceMotion) await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, `assistant-color-${characterColor.slice(1)}.png`), (await win.webContents.capturePage()).toPNG())
+      }
+    }
     check('malformed color payload is rejected', !(await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: 'url(file:///private)' })})`)))
     check('character cannot publish appearance', await win.webContents.executeJavaScript('typeof window.hasarbotuAppearance === "undefined"'))
     await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-custom-appearance.png'), (await win.webContents.capturePage()).toPNG())

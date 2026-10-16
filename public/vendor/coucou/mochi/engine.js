@@ -125,6 +125,7 @@ export class BotEngine {
     isMini = false;
     /** Solid body colour for mini bots / integration pills (null = Mochi gradient). */
     bodyColor = null;
+    eyeColor = null;
     // Animated state (BotEngine `s`)
     yaw = 0;
     pitch = 0;
@@ -842,7 +843,7 @@ export class BotEngine {
         }
         x.save();
         x.clip(body);
-        const ink = this.isMini ? MINI_INK : INK;
+        const ink = this.eyeColor ?? (this.isMini ? MINI_INK : INK);
         x.fillStyle = ink;
         x.strokeStyle = ink;
         for (const sd of [-1, 1]) {

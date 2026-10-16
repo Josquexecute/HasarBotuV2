@@ -20,6 +20,12 @@ for (const path of files) {
       const calls = source.match(/^.*Sound\.play.*\r?\n/gm) ?? []
       if (calls.length !== 4) throw new Error('Review upstream sound integration before regenerating')
       source = source.replace(/^import \{ Sound \} from .*\r?\n/m, '').replace(/^.*Sound\.play.*\r?\n/gm, '')
+      // Allow contrasting eyes on dark user-selected bodies without recoloring the body.
+      const bodyColor = 'bodyColor: RGB | null = null;'
+      const eyeInk = 'const ink = this.isMini ? MINI_INK : INK;'
+      if (source.split(bodyColor).length !== 2 || source.split(eyeInk).length !== 2) throw new Error('Review upstream character color integration before regenerating')
+      source = source.replace(bodyColor, `${bodyColor}\n  eyeColor: string | null = null;`)
+        .replace(eyeInk, 'const ink = this.eyeColor ?? (this.isMini ? MINI_INK : INK);')
     }
     let code = ts.transpileModule(source, {
       fileName: path,

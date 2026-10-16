@@ -86,10 +86,12 @@ if (assistant && context) {
   }
   const unsubscribeAppearance = assistant.onAppearance(({ accentColor, characterColor, reduceMotion }) => {
     personalReducedMotion = reduceMotion
-    // Match the preview's pastel palette; fixed dark eyes stay visible for every choice.
-    const color = characterColor.toLowerCase() === '#eff2fa' ? null : [1, 3, 5].map(i => (parseInt(characterColor.slice(i, i + 2), 16) * .4 + 153) / 255)
-    bot.bodyColor = color
-    neutral.bodyColor = color
+    const channels = [1, 3, 5].map(i => parseInt(characterColor.slice(i, i + 2), 16) / 255)
+    // Keep the chosen body color intact; adapt the eyes instead of whitening it.
+    const linear = channels.map(n => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4)
+    const luminance = linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722
+    bot.bodyColor = neutral.bodyColor = channels
+    bot.eyeColor = neutral.eyeColor = luminance > .179 ? '#111111' : '#ffffff'
     canvas.style.filter = `drop-shadow(0 0 5px ${accentColor}80)`
     button.style.setProperty('--assistant-focus', accentColor)
     draw()

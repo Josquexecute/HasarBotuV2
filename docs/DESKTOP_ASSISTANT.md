@@ -38,10 +38,10 @@ zoom, read-only permissions, authorization failure and stale search responses.
 ## Personal appearance (desktop 0.1.11)
 
 Choose **Görünümümü özelleştir** in Touch or **Ayarlar → Touch görünümüm**.
-Six palettes, custom accent and character colors, system/light/dark themes,
-normal/large text and reduced animation are supported. Character colors are
-softened to keep its eyes visible. Colors change the actual Canvas character
-without modifying the vendored drawing engine.
+Ten palettes, custom accent and character colors, system/light/dark themes,
+normal/large text and reduced animation are supported. The preview and Canvas
+body use the exact selected character color, including black and white. Eyes
+switch between light and dark ink for contrast; the body is never whitened.
 
 Preferences belong to the authenticated account, including read-only users.
 `GET/PUT /api/v1/me/assistant-appearance` stores them in migration 0056's
@@ -59,7 +59,8 @@ documented in [DESKTOP_UPDATES.md](DESKTOP_UPDATES.md).
 
 `public/vendor/coucou/` is generated from Louis-CFM/coucou revision
 `1dc314f632ff646b44191dbd4e89b042e07b3670`. It retains the original drawing and
-animation code, with audio calls removed because no audio player is integrated.
+animation code, with audio calls removed because no audio player is integrated
+and an optional eye-color override for contrasting eyes on custom body colors.
 Regenerate with Node 24 and `node scripts/vendor-coucou-mochi.mjs` (requires
 network access). Normal builds use the checked-in files and work offline.
 

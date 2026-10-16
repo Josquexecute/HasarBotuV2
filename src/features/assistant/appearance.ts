@@ -1,22 +1,23 @@
 import type { CSSProperties } from 'react'
 import type { AssistantAppearance } from '@hasarbotu/contracts'
 
-export const APPEARANCE_PRESETS = [
-  { name: 'Mor', accentColor: '#635bff', characterColor: '#d3ccff' },
-  { name: 'Mavi', accentColor: '#2563eb', characterColor: '#bdd7ff' },
-  { name: 'Yeşil', accentColor: '#15803d', characterColor: '#b9e7c8' },
-  { name: 'Turuncu', accentColor: '#c2410c', characterColor: '#ffd2ad' },
-  { name: 'Pembe', accentColor: '#be185d', characterColor: '#ffd2e5' },
-  { name: 'Gri', accentColor: '#475569', characterColor: '#dce2ea' },
-] as const
+export const APPEARANCE_PRESETS = ([
+  ['Mor', '#635bff'],
+  ['Mavi', '#2563eb'],
+  ['Yeşil', '#15803d'],
+  ['Turuncu', '#c2410c'],
+  ['Pembe', '#be185d'],
+  ['Gri', '#475569'],
+  ['Kırmızı', '#dc2626'],
+  ['Sarı', '#facc15'],
+  ['Siyah', '#000000'],
+  ['Beyaz', '#ffffff'],
+] as const).map(([name, color]) => ({ name, accentColor: color, characterColor: color }))
 
 export function contrastInk(color: string): string {
   const channels = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16) / 255).map(n => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4)
   const luminance = channels[0]! * .2126 + channels[1]! * .7152 + channels[2]! * .0722
   return luminance > .179 ? '#111111' : '#ffffff'
-}
-export function softCharacterColor(color: string): string {
-  return '#' + [1, 3, 5].map(i => Math.round(parseInt(color.slice(i, i + 2), 16) * .4 + 153).toString(16).padStart(2, '0')).join('')
 }
 export function appearanceStyle(appearance: AssistantAppearance, systemDark: boolean): CSSProperties {
   const dark = appearance.scheme === 'dark' || appearance.scheme === 'system' && systemDark

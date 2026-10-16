@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Palette } from 'lucide-react'
 import { DEFAULT_ASSISTANT_APPEARANCE, type AssistantAppearance } from '@hasarbotu/contracts/assistant-appearance'
 import { AssistantAppearanceError } from '../../data/assistantAppearancePort'
-import { APPEARANCE_PRESETS, appearanceStyle, softCharacterColor } from './appearance'
+import { APPEARANCE_PRESETS, appearanceStyle, contrastInk } from './appearance'
 import { useAssistantAppearance } from './assistantAppearanceContext'
 import './desktop-assistant-panel.css'
 
@@ -33,7 +33,7 @@ export function AssistantAppearanceEditor({ appearance, systemDark, onSave, onRe
       <label className="assistant-appearance-motion"><span>Animasyonları azalt</span><input type="checkbox" checked={draft.reduceMotion} onChange={e => set({ reduceMotion: e.target.checked })} /></label>
     </fieldset>
     </div>
-    <div className="assistant-appearance-preview" style={appearanceStyle(draft, systemDark)} aria-label="Touch görünümü önizlemesi"><small>Önizleme</small><span className="assistant-character-preview" style={{ background: softCharacterColor(draft.characterColor) }} aria-hidden="true">••</span><strong>HasarBotu Touch</strong><span>Notlarınız ve dosya aramanız</span><span className="assistant-appearance-preview__accent" style={{ background: draft.accentColor, color: 'var(--assistant-accent-ink)' }}>Renk önizlemesi</span></div>
+    <div className="assistant-appearance-preview" style={appearanceStyle(draft, systemDark)} aria-label="Touch görünümü önizlemesi"><small>Önizleme</small><span className="assistant-character-preview" style={{ backgroundColor: draft.characterColor, color: contrastInk(draft.characterColor) }} aria-hidden="true">••</span><strong>HasarBotu Touch</strong><span>Notlarınız ve dosya aramanız</span><span className="assistant-appearance-preview__accent" style={{ background: draft.accentColor, color: 'var(--assistant-accent-ink)' }}>Renk önizlemesi</span></div>
     </div>
     <div className="assistant-native-actions"><button type="submit" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Görünümü Kaydet'}</button><button type="button" disabled={busy} onClick={() => setDraft(DEFAULT_ASSISTANT_APPEARANCE)}>Varsayılanlar</button><button type="button" disabled={busy} onClick={onReload}>Yeniden yükle</button></div>
     {notice && <p role="status">{notice}</p>}
