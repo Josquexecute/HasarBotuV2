@@ -35,6 +35,13 @@ Notes, assignments, types and lifecycle states remain intact. Completed-move
 history keeps document paths and tracked-file approvals connected to the case.
 An existing old directory, conflicting identity or active operation is deferred.
 The status includes `relocated`, `relocationSettling` and `relocationDeferred`.
+When `yearFolder` is set, it limits creation of new cases. With move tracking
+enabled, registered IDs are also observed in other supported year/work-group
+folders under the same source root. This follows existing folders moved between
+office and remote groups without registering unrelated out-of-scope folders.
+`registeredMoveScanFolders` reports the wider inventory size. An identical plate,
+shared document or copied V1 sidecar does not authorize a move: the registered
+pCloud folder ID must remain unchanged and the old path must be absent.
 A recognized V1 identity already attached
 to another case is deferred for reconciliation rather than duplicated.
 

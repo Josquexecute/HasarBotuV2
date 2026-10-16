@@ -128,8 +128,12 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
       if (signal?.aborted) break
       try {
         await safeDirectory('')
-        const discovered = await discoverPlateFolders(config.sourceRoot, { yearFolder: config.yearFolder })
-        const ids = await resolveIds(discovered)
+        // The scope limits new cases; a registered folder can move into another year/work group.
+        if (config.trackRegisteredMoves && config.yearFolder !== undefined) await safeDirectory(config.yearFolder)
+        const moveInventory = await discoverPlateFolders(config.sourceRoot, { yearFolder: config.trackRegisteredMoves ? undefined : config.yearFolder })
+        const discovered = config.yearFolder === undefined ? moveInventory : moveInventory.filter(folder =>
+          folder.relativePath.split('/')[0].toLocaleUpperCase('tr') === config.yearFolder.toLocaleUpperCase('tr'))
+        const ids = await resolveIds(moveInventory)
         const cloudIds = [...ids.values()].filter(id => id !== null && id !== undefined).map(String)
         if (new Set(cloudIds).size !== cloudIds.length) throw new Error('automatic_folder_duplicate_inventory')
         const baseline = new Set(policy.baselineSourceFolderIds)
@@ -140,7 +144,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           JOIN case_locations l ON l.organization_id=c.organization_id AND l.case_id=c.id AND l.storage_root_key=r.storage_root_key
           WHERE r.organization_id=$1 AND r.storage_root_key=$2 AND NOT c.is_archived`,
           [policy.organizationId, policy.storageRootKey])).rows.map(row => [row.source_folder_id, row]))
-        const moves = await reconcileMoves(discovered, ids, registered)
+        const moves = await reconcileMoves(moveInventory, ids, registered)
         const observations = [], seen = new Set()
         let waitingForCloudIdentity = 0, settling = 0
         for (const folder of discovered) {
@@ -164,7 +168,8 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
             || (await observe(current, folder.sourceFolderId)).observationHash !== folder.observationHash) throw new Error('source_changed')
         }, signal)
         await saveStatus({ status: summary.deferred || moves.relocationDeferred || waitingForCloudIdentity ? 'ATTENTION' : 'PASS', ...summary, ...moves,
-          discovered: discovered.length, waitingForCloudIdentity, settling, sourceReadOnly: true, defaultCaseType: null })
+          discovered: discovered.length, registeredMoveScanFolders: config.trackRegisteredMoves ? moveInventory.length : 0,
+          waitingForCloudIdentity, settling, sourceReadOnly: true, defaultCaseType: null })
       } catch (error) {
         const diagnosticCode = error?.safeCode ?? error?.code ?? 'automatic_folder_cycle_failed'
         await saveStatus({ status: 'BLOCKED', code: /^[a-z0-9_]+$/i.test(diagnosticCode) ? diagnosticCode : 'automatic_folder_cycle_failed',
