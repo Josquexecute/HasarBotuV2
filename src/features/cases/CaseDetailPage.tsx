@@ -1,5 +1,6 @@
 import { canUsePermission } from '../../app/permissions'
 import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
+import { NoticeSheetButton } from './NoticeSheetButton'
 import { ModalFrame } from '../../components/ModalFrame'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import {
@@ -277,6 +278,7 @@ function CaseDetail() {
         </div>
         <div className="case-detail-head__stage"><span>Aşama</span><strong>{item.stage}</strong></div>
         <div className="case-detail-head__actions">
+          <NoticeSheetButton caseId={item.caseId} plate={item.plate} source={source} />
           <OpenCaseFolderButton caseId={item.caseId} />
           <button className="button button--secondary" type="button" onClick={() => {
             if (source === 'api') {

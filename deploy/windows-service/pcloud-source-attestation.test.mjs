@@ -202,6 +202,33 @@ test('refresh selection regenerates a corrupted proof from source rather than ac
   assert.deepEqual(report.casesToRefresh, cases)
 })
 
+test('direct pCloud refresh selects new revisions only under the explicitly configured source root', async (context) => {
+  const fixture = await buildFixture(context)
+  const cases = [{ ...fixture, targetCaseRoot: fixture.sourceCaseRoot }]
+  const store = path.join(fixture.temporaryRoot, 'proofs')
+  const args = { cases, databasePath: fixture.databasePath, topLevelFolderName: fixture.topLevelFolderName,
+    attestationStoreDirectory: store, directSourceRoot: path.dirname(fixture.sourceCaseRoot) }
+  assert.deepEqual((await findCasesNeedingAttestation(args)).casesToRefresh, cases)
+  const records = await buildAttestationRecordsBatch({ ...args, attestedBy: 'configured-direct-pcloud-source' })
+  for (const record of records) await writeAttestationRecord(store, record)
+  assert.equal((await findCasesNeedingAttestation(args)).casesToRefresh.length, 0)
+  const database = new DatabaseSync(fixture.databasePath)
+  database.exec('UPDATE file SET hash=42 WHERE id=5002')
+  database.close()
+  assert.deepEqual((await findCasesNeedingAttestation(args)).casesToRefresh, cases)
+})
+
+test('direct pCloud refresh cannot designate a different case directory as source evidence', async (context) => {
+  const fixture = await buildFixture(context)
+  const args = { cases: [{ ...fixture, targetCaseRoot: fixture.sourceCaseRoot }],
+    databasePath: fixture.databasePath, topLevelFolderName: fixture.topLevelFolderName,
+    directSourceRoot: path.dirname(fixture.sourceCaseRoot) }
+  await assert.rejects(findCasesNeedingAttestation({ ...args, directSourceRoot: 'relative-root' }), /DIRECT_SOURCE_ROOT_INVALID/)
+  await assert.rejects(findCasesNeedingAttestation({ ...args, cases: [{ ...args.cases[0], caseRelativePath: '../outside' }] }), /DIRECT_SOURCE_CASE_ROOT_MISMATCH/)
+  await assert.rejects(findCasesNeedingAttestation({ ...args, cases: [{ ...args.cases[0], sourceCaseRoot: path.join(fixture.temporaryRoot, 'other') }] }), /DIRECT_SOURCE_CASE_ROOT_MISMATCH/)
+  await assert.rejects(findCasesNeedingAttestation({ ...args, cases: [{ ...args.cases[0], targetCaseRoot: path.join(fixture.temporaryRoot, 'mirror') }] }), /DIRECT_SOURCE_CASE_ROOT_MISMATCH/)
+})
+
 test('refresh selection reports the unmatched source filename without producing a proof', async (context) => {
   const fixture = await buildFixture(context)
   const targetCaseRoot = path.join(fixture.temporaryRoot, 'target')

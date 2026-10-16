@@ -1,10 +1,12 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.16**. Existing users receive it
-through the update button below. New installations use `HasarBotu-Kurulum.exe`
-inside `HasarBotu-Kurulum-0.1.16` on the office desktop (also copied to the owner's
-desktop). That fixed package is verified separately from the forthcoming private
-GitHub 0.1.17 release.
+The current authenticated office release is **0.1.32**, published on 2026-10-16.
+Existing users receive it through the update button below. Its verified Windows
+x64 installer is 107,135,861 bytes, SHA-256
+`55338f7f52f19d1aeef5816a5a6fffddaa3c3ca9f0ffae5646508c9a250aadfe`.
+It includes automatic Kasko/Traffic notice sheets and the previous interface,
+update feedback and closure fixes. The matching API and notice-sheet database
+migration are deployed. See [notice sheets](NOTICE_SHEETS.md).
 
 The existing public 0.1.15 installer remains available from [HasarBotu download](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
 New GitHub releases are prepared only in the private `HasarBotuV2` repository and
@@ -36,6 +38,11 @@ administrator-owned directory. With Windows services, add it to the API wrapper'
 environment. Stop the dependent file-agent before restarting the API, then restart
 the agent after API health is ready. An unconfigured directory disables
 publication. A malformed manifest or damaged artifact returns 503.
+
+Building or installing a package locally does not advance the office feed.
+Before marking distribution complete, verify the authenticated latest endpoint,
+an older installed client's update-check state, and the streamed artifact's exact
+length and SHA-256.
 
 Build and verify the x64 NSIS release before publishing. With Node 24 and built
 locked dependencies, run from the repository:
@@ -71,3 +78,48 @@ registration, the app stays open and reports the failure. Completion and errors 
 
 Releases use the existing authenticated API connection and artifact integrity
 checks. This feature does not add Authenticode signing.
+
+## Office acceptance · 2026-10-16
+
+The feed had remained at 0.1.27 after 0.1.31 was installed locally. The tested
+publisher advanced it atomically to the same verified 0.1.31 installer; the previous
+manifest and immutable 0.1.27 artifact were preserved. No API restart was needed.
+
+- Running 0.1.27: production update IPC returned `available`, release `0.1.31`.
+- Running 0.1.31: production update IPC returned `current`, release `0.1.31`.
+- Both authenticated clients downloaded all 107,123,775 bytes with the exact
+  published SHA-256; HTTP 200.
+- Publication tests: 6/6 PASS, including the real Windows publisher, concurrent
+  publication lock, repeat publication and unchanged manifest after verification failure.
+- Temporary diagnostic listeners and the interactive verification task were removed.
+
+Local evidence: `.local/update-feed-20261016/` (`publication-proof.json`,
+`office-update-check-proof.json`, `local-update-check-proof.json`,
+`publication-tests.log`).
+
+## Notice-sheet deployment · 2026-10-16
+
+Version 0.1.32 is installed on the local Windows workstation and the office
+server desktop. Both installed application archives match the verified package.
+Existing profiles and connection settings were backed up and retained; the
+office account remained authenticated after the upgrade. The local workstation
+had no authenticated session before installation and requires normal login.
+
+The office API runtime was updated from the locked dependencies after a verified
+PostgreSQL backup. Additive migrations `0060_pdf_parser_version` and
+`0061_notice_sheets` were applied without rewriting migration history. The API,
+file-agent, folder discovery and HTTPS services are running and healthy.
+
+The authenticated feed advanced from 0.1.31 to 0.1.32 while preserving the previous
+manifest and installer. The running 0.1.31 client reported `available`; the updated
+0.1.32 client reported `current`. Both streamed the complete installer with its
+exact published size and SHA-256. On real office Traffic and Kasko cases, the
+installed application loaded and saved the existing notice values, invoked the
+print action and produced one A4 PDF each. No physical printer job was submitted.
+Temporary inspectors and deployment tasks were removed.
+
+Local deployment evidence: `.local/notice-sheet-deploy-20261016/`
+(`deployment-summary.json`, `office-installation-proof.json`,
+`office-acceptance-proof.json`, `office-feed-before-proof.json`,
+`office-feed-after-proof.json`, `publication-proof.json`). Actual claim PDFs remain
+private diagnostic artifacts and are excluded from Git.

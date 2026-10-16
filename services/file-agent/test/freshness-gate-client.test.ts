@@ -5,10 +5,12 @@ import { join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { utcDateTimeSchema } from '@hasarbotu/contracts'
 import { checkCaseFreshness } from '../src/freshness-gate-client.js'
 import type { FreshnessGateConfig } from '../src/config.js'
 import { runOnce } from '../src/agent.js'
 import type { AgentApiClient } from '../src/api-client.js'
+import { executeFileOperation } from '../src/file-operation-executor.js'
 
 // Real end-to-end test (HB-2026-171): actually spawns the REAL,
 // unmodified deploy/windows-service/pcloud-session0-freshness-gate.mjs
@@ -143,6 +145,33 @@ describe('checkCaseFreshness (real spawn of pcloud-session0-freshness-gate.mjs)'
     const { readFile, stat } = await import('node:fs/promises')
     expect(await readFile(join(targetRoot, payload.destination.relativePath, 'a.pdf'), 'utf8')).toBe(bytes)
     await expect(stat(join(targetRoot, payload.source.relativePath))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('recovers a moved source after the result was lost, with the real gate and persisted operation evidence', async () => {
+    const bytes = 'verified-before-the-reply-was-lost'
+    await buildCaseFixture('00REC000', 8011, 333, bytes)
+    await writeAttestation(8011, 333, '00REC000', bytes)
+    const payload = { kind: 'file_operation' as const, operationId: 'lost-reply-operation', operationVersion: 2,
+      operationType: 'rename_case_workspace' as const, source: { storageRootKey: 'main', relativePath: '00REC000' },
+      destination: { storageRootKey: 'main', relativePath: 'closed-case' }, strategy: 'atomic_rename' as const,
+      plannedAt: utcDateTimeSchema.parse(new Date(Date.now() + 60_000).toISOString()), stagingRelativePath: '.hasarbotu-staging/lost-reply', temporaryRelativePath: 'temporary-case' }
+    expect((await executeFileOperation({ main: targetRoot }, payload)).outcome).toBe('verified')
+    const database = new DatabaseSync(databasePath)
+    database.prepare("UPDATE folder SET name='closed-case' WHERE name='00REC000'").run()
+    database.close()
+    expect((await checkCaseFreshness(gateConfig(), targetRoot, '00REC000')).ready).toBe(false)
+    expect((await checkCaseFreshness(gateConfig(), targetRoot, 'closed-case')).ready).toBe(true)
+    const config = { apiBaseUrl: '', agentId: 'test', agentSecret: 'test', roots: { main: targetRoot }, leaseSeconds: 30, pollIntervalMs: 1, freshnessGate: gateConfig() }
+    let reported: unknown
+    const client = { claim: async () => ({ id: 'lost-reply-job', payload, leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() }),
+      heartbeat: async () => ({ leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() }),
+      reportResult: async (_id: string, result: unknown) => { reported = result; return { acknowledged: true } },
+    } as unknown as AgentApiClient
+    await runOnce(client, config)
+    expect(reported).toMatchObject({ outcome: 'verified', fileOperation: { phase: 'destination_verified', safeOutcomeCode: 'recovered_after_rename' } })
+    const unrelated = { ...payload, operationId: 'different-operation' }
+    await runOnce({ ...client, claim: async () => ({ id: 'unrelated-job', payload: unrelated, leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() }) } as unknown as AgentApiClient, config)
+    expect(reported).toMatchObject({ fileOperation: { phase: 'manual_recovery_required', safeOutcomeCode: 'source_evidence_missing' } })
   })
 
   it('attestation olmayan gercek bir vaka icin fail-closed ready=false doner (asla sessizce ready degil)', async () => {

@@ -9,6 +9,7 @@ import { useClosureFeeList, useValueLossClosureList } from '../../data/useReport
 import { formatCurrency } from '../../mocks/cases'
 import { closedCases } from '../../mocks/workspaces'
 import type { CaseType } from '../../types/case'
+import { NoticeSheetButton } from '../cases/NoticeSheetButton'
 
 type ClosedSort = 'closedAt' | 'officeNumber' | 'plate' | 'expertFee'
 
@@ -154,7 +155,7 @@ export function ClosedCasesPage({
               <thead><tr><th>Kapanış</th><th>Dosya No</th><th>Plaka</th><th>Tür</th><th>Sigorta Şirketi</th><th>Kapanış Sebebi</th><th>Eksper Ücreti</th><th>Değer Kaybı</th></tr></thead>
               <tbody>{filtered.map((item) => (
                 <tr key={item.id} tabIndex={0} className={selected?.id === item.id ? 'is-selected' : ''} onClick={() => { setSelectedId(item.id); activateCase(item) }} onKeyDown={(event) => { if (event.key === 'Enter') { setSelectedId(item.id); activateCase(item) } }}>
-                  <td>{item.closedAt}</td><td className="mono">{item.officeNumber}</td><td><span className="plate plate--table">{item.plate}</span></td><td>{item.type}</td><td>{item.company}</td><td>{item.reason}</td><td><strong>{feeLabel(item.expertFee, item.feeStatus)}</strong></td><td>{item.valueLossStatus}</td>
+                  <td>{item.closedAt}</td><td className="mono">{item.officeNumber}</td><td><span className="plate plate--table">{item.plate}</span> <NoticeSheetButton compact caseId={item.caseId} plate={item.plate} source={source} /></td><td>{item.type}</td><td>{item.company}</td><td>{item.reason}</td><td><strong>{feeLabel(item.expertFee, item.feeStatus)}</strong></td><td>{item.valueLossStatus}</td>
                 </tr>
               ))}</tbody>
             </table>

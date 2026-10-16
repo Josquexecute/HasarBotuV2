@@ -323,12 +323,25 @@ export async function buildAttestationRecordsBatch({ cases, databasePath, topLev
 }
 
 /** Select changed revisions without re-hashing unchanged source bytes. */
-export async function findCasesNeedingAttestation({ cases, databasePath, topLevelFolderName, attestationStoreDirectory }) {
+export async function findCasesNeedingAttestation({ cases, databasePath, topLevelFolderName, attestationStoreDirectory, directSourceRoot }) {
   const groups = []
   const heldCases = []
   const canonicalRoot = (root) => process.platform === 'win32' ? path.resolve(root).toUpperCase() : path.resolve(root)
+  if (directSourceRoot !== undefined) {
+    assert(typeof directSourceRoot === 'string' && path.isAbsolute(directSourceRoot), 'DIRECT_SOURCE_ROOT_INVALID')
+  }
   for (const item of cases) {
-    assert(canonicalRoot(item.sourceCaseRoot) !== canonicalRoot(item.targetCaseRoot), 'INDEPENDENT_SOURCE_ROOT_REQUIRED')
+    if (directSourceRoot === undefined) {
+      assert(canonicalRoot(item.sourceCaseRoot) !== canonicalRoot(item.targetCaseRoot), 'INDEPENDENT_SOURCE_ROOT_REQUIRED')
+    } else {
+      // Direct-drive installations hash the administrator-configured pCloud source
+      // itself. A local mirror can never opt in under a different case path.
+      const configuredRoot = canonicalRoot(directSourceRoot)
+      const configuredCase = canonicalRoot(path.resolve(directSourceRoot, item.caseRelativePath))
+      assert(!path.isAbsolute(item.caseRelativePath) && configuredCase.startsWith(configuredRoot + path.sep)
+        && canonicalRoot(item.sourceCaseRoot) === configuredCase
+        && canonicalRoot(item.targetCaseRoot) === configuredCase, 'DIRECT_SOURCE_CASE_ROOT_MISMATCH')
+    }
     try {
       groups.push({ ...item, original: item, files: await enumerateFilesRecursive(item.targetCaseRoot) })
     } catch (error) {

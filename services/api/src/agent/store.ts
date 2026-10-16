@@ -1130,11 +1130,19 @@ async function applyFileOperationResult(
   const location = locationResult.rows[0] as {
     id: string; storage_root_key: string; relative_path: string; verification_status: string; version: number
   } | undefined
+  // Folder discovery can reconcile a completed rename before its result arrives.
+  // Only the exact next verified destination revision and a recovered atomic
+  // rename (whose persisted manifest the Agent checked) can reuse that location.
+  const recoveredLocation = location !== undefined
+    && fileResult.strategy === 'atomic_rename' && fileResult.safeOutcomeCode === 'recovered_after_rename'
+    && location.version === operation.expected_location_version + 1
+    && location.storage_root_key === operation.destination_storage_root_key
+    && location.relative_path === operation.destination_relative_path
   if (location === undefined
     || location.id !== operation.expected_location_id
-    || location.version !== operation.expected_location_version
-    || location.storage_root_key !== operation.source_storage_root_key
-    || location.relative_path !== operation.source_relative_path
+    || (!recoveredLocation && (location.version !== operation.expected_location_version
+      || location.storage_root_key !== operation.source_storage_root_key
+      || location.relative_path !== operation.source_relative_path))
     || location.verification_status !== 'verified') {
     return markFileOperationManualRecovery(ctx, job, operation, 'location_changed_after_apply')
   }
@@ -1173,29 +1181,32 @@ async function applyFileOperationResult(
     },
   })
 
-  const switched = await ctx.client.query(
-    `UPDATE case_locations SET storage_root_key=$2,relative_path=$3,verification_status='verified',source='system',
+  let switchedVersion = location.version
+  if (!recoveredLocation) {
+    const switched = await ctx.client.query(
+      `UPDATE case_locations SET storage_root_key=$2,relative_path=$3,verification_status='verified',source='system',
      version=version+1,updated_at=now() WHERE id=$1 RETURNING version`,
-    [location.id, operation.destination_storage_root_key, operation.destination_relative_path],
-  )
-  const switchedVersion = (switched.rows[0] as { version: number }).version
-  await ctx.client.query(
-    `INSERT INTO case_location_history
+      [location.id, operation.destination_storage_root_key, operation.destination_relative_path],
+    )
+    switchedVersion = (switched.rows[0] as { version: number }).version
+    await ctx.client.query(
+      `INSERT INTO case_location_history
      (id,organization_id,case_id,storage_root_key,relative_path,previous_storage_root_key,previous_relative_path,
       verification_status,source,changed_by_user_id,request_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,'verified','system',$8,$9)`,
-    [
-      uuidv7(),
-      ctx.organizationId,
-      operation.case_id,
-      operation.destination_storage_root_key,
-      operation.destination_relative_path,
-      operation.source_storage_root_key,
-      operation.source_relative_path,
-      operation.approved_by_user_id,
-      ctx.requestId,
-    ],
-  )
+      [
+        uuidv7(),
+        ctx.organizationId,
+        operation.case_id,
+        operation.destination_storage_root_key,
+        operation.destination_relative_path,
+        operation.source_storage_root_key,
+        operation.source_relative_path,
+        operation.approved_by_user_id,
+        ctx.requestId,
+      ],
+    )
+  }
   await audit.record(ctx.client, {
     organizationId: ctx.organizationId,
     actorUserId: operation.approved_by_user_id ?? undefined,
@@ -1212,6 +1223,7 @@ async function applyFileOperationResult(
       strategy: fileResult.strategy,
       fromVersion: location.version,
       toVersion: switchedVersion,
+      ...(recoveredLocation ? { existingVerifiedDestination: true } : {}),
     },
   })
 

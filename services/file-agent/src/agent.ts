@@ -11,6 +11,8 @@ import { extractPolicyOcr, type PolicyOcrExtractionResult } from './policy-ocr-e
 import { probeRootHealth } from './root-health.js'
 import { checkCaseFreshness } from './freshness-gate-client.js'
 import { startDocumentTracker } from './document-tracker.js'
+import { lstat } from 'node:fs/promises'
+import { resolveUnderRoot } from './path-resolver.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -82,7 +84,19 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
           checkCaseFreshness(config.freshnessGate, sourceRootAbsolute, job.payload.source.relativePath),
           checkCaseFreshness(config.freshnessGate, destinationRootAbsolute, job.payload.destination.relativePath, { operation: 'file_destination' }),
         ])
-        if (!sourceFreshness.ready || !destinationFreshness.ready) {
+        // A rename may finish before its result reaches the API. The executor
+        // recovers only from matching persisted operation evidence and hashes.
+        const recoveringMovedSource = job.payload.kind === 'file_operation'
+          && !sourceFreshness.ready && destinationFreshness.ready
+          && await lstat(resolveUnderRoot(sourceRootAbsolute, job.payload.source.relativePath)).then(
+            () => false,
+            (error: NodeJS.ErrnoException) => {
+              if (error.code === 'ENOENT') return true
+              if (error.code === 'EACCES' || error.code === 'EPERM') return false
+              throw error
+            },
+          )
+        if ((!sourceFreshness.ready && !recoveringMovedSource) || !destinationFreshness.ready) {
           result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }
         } else {
           await lease.heartbeat(job.payload.kind === 'file_operation' ? 'applying' : 'cleanup')

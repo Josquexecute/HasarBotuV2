@@ -561,6 +561,40 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     await expect(access(join(root, ...planned.destination.relativePath.split('/')))).resolves.toBeUndefined()
   }, 60_000)
 
+  it.each(['verified_destination', 'unverified_destination', 'later_version', 'different_path'] as const)(
+    'lost move result after folder discovery: %s', async (state) => {
+      const seeded = await seedCase(`34 RCV ${200 + ['verified_destination', 'unverified_destination', 'later_version', 'different_path'].indexOf(state)}`, true)
+      const planned = caseLifecycleOperationResponseSchema.parse((await planClose(seeded.caseId, {
+        expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal',
+      })).json()).operation
+      expect((await approve(seeded.caseId, planned)).statusCode).toBe(202)
+      const job = await agentClient.claim()
+      if (job === null || job.payload.kind !== 'file_operation') throw new Error('expected lifecycle job')
+      expect(await executeFileOperation(agentConfig.roots, job.payload)).toMatchObject({ outcome: 'verified' })
+      // Discovery sees the same cloud folder at its new location before the
+      // move result reaches the API. This is one location revision, not a new move.
+      await pool.query(`UPDATE case_locations SET relative_path=$2,version=$3,verification_status=$4 WHERE case_id=$1`, [
+        seeded.caseId, state === 'different_path' ? 'unrelated/location' : planned.destination.relativePath,
+        state === 'later_version' ? 3 : 2, state === 'unverified_destination' ? 'pending' : 'verified',
+      ])
+      await pool.query("UPDATE jobs SET lease_expires_at=now()-interval '1 second' WHERE id=$1", [job.id])
+      expect((await runOnce(agentClient, agentConfig)).kind).toBe('reported')
+      const lifecycle = caseLifecycleOperationResponseSchema.parse((await app.inject({
+        method: 'GET', url: `/api/v1/cases/${seeded.caseId}/lifecycle-operations/${planned.id}`, headers: { cookie: adminCookie },
+      })).json()).operation
+      const current = (await pool.query('SELECT lifecycle_status,workflow_stage FROM cases WHERE id=$1', [seeded.caseId])).rows[0]
+      if (state === 'verified_destination') {
+        expect(lifecycle.status).toBe('closed')
+        expect(current).toEqual({ lifecycle_status: 'closed', workflow_stage: 'closed' })
+        expect((await pool.query('SELECT version FROM case_locations WHERE case_id=$1', [seeded.caseId])).rows[0]).toEqual({ version: 2 })
+        expect((await pool.query('SELECT status FROM jobs WHERE id=$1', [job.id])).rows[0]).toEqual({ status: 'succeeded' })
+      } else {
+        expect(lifecycle).toMatchObject({ status: 'manual_recovery_required', failureReasonCode: 'location_changed_after_apply' })
+        expect(current.lifecycle_status).toBe('open')
+      }
+    }, 60_000,
+  )
+
   it('fiziksel move sonrasi case snapshot degisirse lifecycle kapanmaz ve manual recovery gorunur olur', async () => {
     const seeded = await seedCase('34 MAN 021', true)
     const planned = caseLifecycleOperationResponseSchema.parse((await planClose(seeded.caseId, {
