@@ -80,7 +80,7 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
         // closed kontrol edilir -- biri bile taze değilse işlem yapılmaz.
         const [sourceFreshness, destinationFreshness] = await Promise.all([
           checkCaseFreshness(config.freshnessGate, sourceRootAbsolute, job.payload.source.relativePath),
-          checkCaseFreshness(config.freshnessGate, destinationRootAbsolute, job.payload.destination.relativePath),
+          checkCaseFreshness(config.freshnessGate, destinationRootAbsolute, job.payload.destination.relativePath, { operation: 'file_destination' }),
         ])
         if (!sourceFreshness.ready || !destinationFreshness.ready) {
           result = { outcome: 'failed' as const, errorCode: 'case_not_fresh' }

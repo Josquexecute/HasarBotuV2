@@ -257,7 +257,7 @@ describe('Kasko poliçe analiz uçtan uca çalışma alanı', () => {
     render(<PolicyAnalysisWorkspace caseId={CASE_ID} source="api" />)
     expect(await screen.findByRole('heading', { name: 'Kasko Poliçe Analiz Akışı' })).toBeInTheDocument()
     expect(await screen.findByText('Kasko poliçe analizi yok')).toBeInTheDocument()
-    await user.click(screen.getByLabelText(/yeni, onaysız Paket 23 taslak sürümüne uygulanmasını/))
+    await user.click(screen.getByLabelText(/yeni analiz taslağına aktarılmasını/))
     await user.click(screen.getByRole('button', { name: 'Onaylanan Adayları Uygula' }))
 
     await waitFor(() => expect(screen.getByText('Onaylanan adaylar analiz taslağına uygulandı.')).toBeInTheDocument())

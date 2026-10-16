@@ -110,7 +110,7 @@ function enumerateDbFilesUnderFolder(database, folderId) {
   })).filter((entry) => !entry.relativePath.split(/[\\/]+/).some(isTemporarySourceEntry))
 }
 
-async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath }) {
+async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath, requireAbsent = false }) {
   const parts = caseRelativePath.split(/[\\/]/)
   assert(parts.every(part => part && part !== '.' && part !== '..' && !/[<>:"|?*\x00-\x1f]/.test(part) && !/[. ]$/.test(part)), 'CASE_RELATIVE_PATH_INVALID')
   const nameKey = name => name.normalize('NFC').toUpperCase()
@@ -154,6 +154,7 @@ async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolde
       if (!folders.length) return false
       folderId = folders[0].id
     }
+    assert(!requireAbsent, 'DESTINATION_ALREADY_EXISTS')
     assert(findAllConflictNames(database, folderId).length === 0, 'WORKSPACE_PATH_CONFLICT')
     const subtree = database.prepare(`WITH RECURSIVE tree(id) AS (SELECT ? UNION ALL SELECT folder.id FROM folder JOIN tree ON folder.parentfolderid=tree.id) SELECT CAST(id AS TEXT) AS id FROM tree`).all(BigInt(folderId))
     for (const row of subtree) {
@@ -179,17 +180,24 @@ export async function determineSessionSafeCaseStatus({
   assert(typeof topLevelFolderName === 'string' && topLevelFolderName.length > 0, 'TOP_LEVEL_FOLDER_NAME_REQUIRED')
   assert(typeof caseRelativePath === 'string' && caseRelativePath.length > 0, 'CASE_RELATIVE_PATH_REQUIRED')
   assert(typeof attestationStoreDirectory === 'string' && attestationStoreDirectory.length > 0, 'ATTESTATION_STORE_DIRECTORY_REQUIRED')
-  assert(operation === undefined || operation === 'workspace', 'OPERATION_INVALID')
+  assert(operation === undefined || operation === 'workspace' || operation === 'file_destination', 'OPERATION_INVALID')
 
   // Provisioning only adds directories. An absent/empty tree has no content
   // revision to attest. Check both inventories before allowing this limited
   // operation; any existing content still uses the unchanged freshness gate.
-  if (operation === 'workspace') {
-    const empty = await checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath })
+  const absentDestination = operation === 'file_destination' && await lstat(targetCaseRoot).then(() => false, error => {
+    if (error.code === 'ENOENT') return true
+    throw error
+  })
+  // A move has no destination bytes to attest before it creates that path.
+  // Require absence in both inventories and idle, conflict-free ancestors;
+  // existing destinations still pass through the full content gate below.
+  if (operation === 'workspace' || absentDestination) {
+    const empty = await checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath, requireAbsent: absentDestination })
     if (empty) return {
       SchemaVersion: 'hasarbotu-pcloud-session0-freshness-gate/1.0.0',
       GeneratedAtUtc: new Date().toISOString(), CaseRelativePath: caseRelativePath,
-      CaseStatus: 'ready', Operation: 'workspace', Reason: 'EMPTY_WORKSPACE_CREATE_OR_RESUME',
+      CaseStatus: 'ready', Operation: operation, Reason: absentDestination ? 'ABSENT_FILE_DESTINATION' : 'EMPTY_WORKSPACE_CREATE_OR_RESUME',
       Entries: [], ConflictNamesFound: [],
       Summary: { TotalFiles: 0, ReadyCount: 0, SyncingCount: 0, UnknownCount: 0, ConflictCount: 0 },
     }

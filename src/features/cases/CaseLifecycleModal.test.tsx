@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
@@ -30,6 +30,31 @@ const planned: LifecycleOperationRecord = {
 }
 
 describe('CaseLifecycleModal', () => {
+  it('keeps tracking after one minute and displays the eventual worker failure', async () => {
+    vi.useFakeTimers()
+    const readOperation = vi.fn().mockResolvedValue({ ...planned, status: 'moving', canApprove: false })
+    const port: CaseLifecycleCommandPort = {
+      readLocationVersion: vi.fn().mockResolvedValue(1), planClose: vi.fn().mockResolvedValue(planned), planReopen: vi.fn(),
+      approve: vi.fn().mockResolvedValue({ ...planned, status: 'queued', canApprove: false }), readOperation, readCase: vi.fn(),
+    }
+    const view = render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={vi.fn()} onUnauthorized={vi.fn()} onReload={vi.fn()} />)
+    try {
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Önizleme Oluştur' })) })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Onayla ve Kapat' })) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(66_000) })
+      const calls = readOperation.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(readOperation.mock.calls.length).toBeGreaterThan(calls)
+      readOperation.mockResolvedValue({ ...planned, status: 'failed', canApprove: false, failureReasonCode: 'case_not_fresh' })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      expect(screen.getByText('İşlem başarısız')).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent('Klasörün güncelliği doğrulanamadı')
+      const completedCalls = readOperation.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(readOperation).toHaveBeenCalledTimes(completedCalls)
+    } finally { view.unmount(); vi.useRealTimers() }
+  })
+
   it('refreshes a stale version without losing the missing-requirements mode or reason',async () => {
     const reason = 'Eksik evraklar takip edilerek kapanış istendi.'
     const port: CaseLifecycleCommandPort = {
@@ -83,6 +108,9 @@ describe('CaseLifecycleModal', () => {
     expect(await screen.findByText('2026.07.14.1 · 2026.07.14.2')).toBeInTheDocument()
     expect(screen.getAllByText('Mevcut')).toHaveLength(2)
     expect(screen.getByText('Değer Kaybı Kapanış Özeti')).toBeInTheDocument()
+    expect(screen.getByText('Nihai ekspertiz raporu')).toBeInTheDocument()
+    expect(screen.getByText('Hesaplanabilir')).toBeInTheDocument()
+    expect(screen.queryByText('calculable')).not.toBeInTheDocument()
     expect(screen.getByText(/2\.450,00/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Onayla ve Kapat' }))
     await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(closed), { timeout: 2500 })

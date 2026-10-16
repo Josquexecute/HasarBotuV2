@@ -2,7 +2,6 @@ import { canUsePermission } from '../../app/permissions'
 import { useActiveCase, QUICK_NOTE_EVENT } from '../../app/activeCase'
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
@@ -24,6 +23,7 @@ import {
 } from 'lucide-react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { EmptyState } from '../../components/StateViews'
+import { ModalFrame } from '../../components/ModalFrame'
 import { formatCurrency } from '../../mocks/cases'
 import { type OperationalAlertDataPort } from '../../data/operationalAlertPort'
 import { getConfiguredDataSource, type CaseReferenceDataPort, type CasesDataPort } from '../../data/ports'
@@ -99,12 +99,7 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
           </dl>
         </section>
 
-        {source === 'api' ? (
-          <section className="alert-panel alert-panel--warning">
-            <AlertTriangle size={17} />
-            <button className="button button--secondary" type="button" onClick={() => navigate(`/dosyalar/${item.caseId}?tab=documents`)}>Evrakları aç</button>
-          </section>
-        ) : item.missingDocuments > 0 ? (
+        {source !== 'api' && (item.missingDocuments > 0 ? (
           <section className="alert-panel alert-panel--warning">
             <strong>{item.missingDocuments} eksik evrak bulunuyor</strong>
             <span>{item.type === 'Seçiniz' ? 'Dosya türünü Trafik veya Kasko olarak seçin.' : item.type === 'Trafik' ? 'KTT / Beyan ve ruhsat kontrolü gerekiyor.' : 'Poliçe eki ve ruhsat kontrolü gerekiyor.'}</span>
@@ -114,7 +109,7 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
             <Check size={17} />
             <div><strong>Zorunlu evraklar tam</strong><span>Kural setine göre açık eksik görünmüyor.</span></div>
           </section>
-        )}
+        ))}
 
         <section className="quick-section">
           <h3>Operasyon</h3>
@@ -122,15 +117,14 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
             <div><dt>Aşama</dt><dd>{item.stage}</dd></div>
             <div><dt>Takip</dt><dd className={`text-${item.followUpTone}`}>{item.followUp}</dd></div>
             <div><dt>Servis</dt><dd>{item.service}</dd></div>
-            <div><dt>Tahmini Hasar</dt><dd>{source === 'api' ? '—' : formatCurrency(item.estimatedDamage)}</dd></div>
+            {source !== 'api' && <div><dt>Tahmini Hasar</dt><dd>{formatCurrency(item.estimatedDamage)}</dd></div>}
           </dl>
         </section>
 
         <section className="quick-section">
-          <h3><History size={14} /> Son Gelişmeler</h3>
           {source === 'api' ? (
-            <p>Gerçek not, görev ve takip geçmişi dosya detayındaki Operasyon sekmesinde gösterilir.</p>
-          ) : <div className="timeline">
+            <><h3>Kısayollar</h3><div className="quick-detail__shortcuts"><button className="button button--secondary" type="button" onClick={() => navigate(`/dosyalar/${item.caseId}?tab=documents`)}>Evrakları aç</button><button className="button button--secondary" type="button" onClick={() => navigate(`/dosyalar/${item.caseId}?tab=operations`)}>Notları aç</button></div></>
+          ) : <><h3><History size={14} /> Son Gelişmeler</h3><div className="timeline">
             {item.notes.map((note, index) => (
               <div className="timeline__item" key={note}>
                 <i aria-hidden="true" />
@@ -138,7 +132,7 @@ function QuickDetail({ item, source, onClose, onMockAction }: {
                 <p>{note}</p>
               </div>
             ))}
-          </div>}
+          </div></>}
         </section>
       </div>
 
@@ -162,10 +156,7 @@ function MockNewNoticeModal({ onClose }: { onClose: () => void }) {
   const [analysisReady, setAnalysisReady] = useState(false)
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.currentTarget === event.target) onClose()
-    }}>
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-notice-title">
+    <ModalFrame labelledBy="new-notice-title" onClose={onClose}>
         <header className="modal__header">
           <div><span className="eyebrow">Mock akış</span><h2 id="new-notice-title">Yeni İhbar Oluştur</h2></div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Pencereyi kapat"><X size={18} /></button>
@@ -187,8 +178,7 @@ function MockNewNoticeModal({ onClose }: { onClose: () => void }) {
           <button className="button button--secondary" type="button" onClick={onClose}>İptal</button>
           <button className="button button--primary" type="button" disabled={!documentSelected || analysisReady} onClick={() => setAnalysisReady(true)}>{analysisReady ? 'Mock analiz hazır' : 'Analize Geç'}</button>
         </footer>
-      </section>
-    </div>
+    </ModalFrame>
   )
 }
 
@@ -395,10 +385,9 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
       <section className="page-heading page-heading--compact">
         <div>
           <h1>Tüm Dosyalar <span className="heading-count">{totalCount}</span></h1>
-          {source === 'api' && pageStatus === 'unauthorized' && <p role="alert" className="page-subtitle">Oturum gerekli: gerçek veriye erişmek için API oturumu açın. Sahte veri gösterilmiyor.</p>}
-          {source === 'api' && pageStatus === 'unavailable' && <p role="alert" className="page-subtitle">Servis şu anda kullanılamıyor. Sahte veri gösterilmiyor; bağlantıyı kontrol edin.</p>}
-          {source === 'api' && pageStatus === 'loading' && <p role="status" className="page-subtitle">Gerçek veriler yükleniyor…</p>}
-          <p>Açık ekspertiz dosyaları · Tek tık hızlı bakış, çift tık tam dosya</p>
+          {source === 'api' && pageStatus === 'unauthorized' && <p role="alert" className="page-subtitle">Oturumunuz sona erdi. Yeniden giriş yapın.</p>}
+          {source === 'api' && pageStatus === 'unavailable' && <p role="alert" className="page-subtitle">Dosyalar yüklenemedi. Bağlantınızı kontrol edin.</p>}
+          {source === 'api' && pageStatus === 'loading' && <p role="status" className="page-subtitle">Dosyalar yükleniyor…</p>}
         </div>
         <div className="heading-actions">
           {source === 'api' && <button className="button button--secondary" type="button" onClick={() => { reload(); reloadAlerts() }} disabled={pageStatus === 'loading'}><RefreshCw size={15} />Listeyi Yenile</button>}

@@ -1,5 +1,6 @@
 import { canUsePermission } from '../../app/permissions'
 import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
+import { ModalFrame } from '../../components/ModalFrame'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle,
@@ -110,10 +111,7 @@ const mockPhotoSource = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 
 function CloseCaseModal({ onClose }: { onClose: () => void }) {
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose()
-    }}>
-      <section className="modal modal--small" role="dialog" aria-modal="true" aria-labelledby="close-case-title">
+    <ModalFrame className="modal--small" labelledBy="close-case-title" onClose={onClose}>
         <header className="modal__header">
           <div><span className="eyebrow eyebrow--danger">Kritik işlem önizlemesi</span><h2 id="close-case-title">Dosya Kapatma Kontrolü</h2></div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Pencereyi kapat"><X size={18} /></button>
@@ -133,8 +131,7 @@ function CloseCaseModal({ onClose }: { onClose: () => void }) {
           <button className="button button--secondary" type="button" onClick={onClose}>Vazgeç</button>
           <button className="button button--danger" type="button" disabled>Onayla ve Kapat</button>
         </footer>
-      </section>
-    </div>
+    </ModalFrame>
   )
 }
 

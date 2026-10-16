@@ -1,26 +1,7 @@
 import { AlertTriangle, CheckCircle2, CircleSlash2, FileQuestion, RefreshCw, ShieldAlert } from 'lucide-react'
 import { useCaseDocuments } from '../../data/useCaseDocuments'
 import type { CaseDocumentWorkspaceRecord, DataSourceKind, DocumentPhysicalStatus, DocumentRequirementRecord, DocumentRequirementStatus } from '../../data/ports'
-const DOCUMENT_LABELS: Readonly<Record<string, string>> = {
-  victim_traffic_policy: 'Mağdur trafik poliçesi',
-  insured_traffic_policy: 'Sigortalı trafik poliçesi',
-  sbm_heavy_damage_result: 'SBM Ağır Hasar sonucu',
-  victim_registration: 'Mağdur ruhsat',
-  insured_registration: 'Sigortalı ruhsat',
-  victim_driver_license: 'Mağdur ehliyet',
-  insured_driver_license: 'Sigortalı ehliyet',
-  casco_policy: 'Kasko poliçesi',
-  casco_vehicle_registration: 'Kasko aracı ruhsatı',
-  casco_driver_license: 'Kasko aracı sürücü ehliyeti',
-  accident_report: 'Zabıt',
-  ktt: 'KTT',
-  statement: 'Beyan',
-  tramer_result: 'Tramer sonucu',
-  opposing_vehicle_registration: 'Karşı araç ruhsatı',
-  opposing_driver_license: 'Karşı araç sürücü ehliyeti',
-  opposing_traffic_policy: 'Karşı araç trafik poliçesi',
-  fault_ratio: 'Kusur oranı',
-}
+import { DOCUMENT_LABELS } from './document-labels'
 
 const REQUIREMENT_STATUS: Readonly<Record<DocumentRequirementStatus, { label: string; className: string }>> = {
   present: { label: 'Mevcut', className: 'status-pill--open' },

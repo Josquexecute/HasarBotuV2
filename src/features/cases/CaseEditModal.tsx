@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { ModalFrame } from '../../components/ModalFrame'
 import { AlertTriangle, LoaderCircle, RefreshCw, Save, Pencil, X } from 'lucide-react'
 import type { SessionUser } from '../../data/authPort'
 import { CaseCommandError, createHttpCaseCommandAdapter, type CaseCommandPort, type CaseUpdateInput } from '../../data/commandPort'
@@ -109,34 +110,32 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.currentTarget === event.target && !submitting) onClose()
-    }}>
-      <section className="modal modal--case-form" role="dialog" aria-modal="true" aria-labelledby="case-edit-title" aria-busy={submitting} inert={serviceEditorOpen}>
+    <>
+      <ModalFrame className="modal--case-form" labelledBy="case-edit-title" onClose={onClose} busy={submitting} inert={serviceEditorOpen}>
         <form onSubmit={submit} noValidate>
           <header className="modal__header">
-            <div><span className="eyebrow">Gerçek API · optimistic locking</span><h2 id="case-edit-title">Temel Dosya Bilgilerini Düzenle</h2></div>
+            <h2 id="case-edit-title">Temel Dosya Bilgilerini Düzenle</h2>
             <button className="icon-button" type="button" onClick={onClose} disabled={submitting} aria-label="Pencereyi kapat"><X size={18} /></button>
           </header>
           <div className="modal__body case-form-scroll">
-            <div className="case-form-note"><span>Sürüm {item.version ?? '—'}</span><span>Plaka, ofis numarası ve yaşam döngüsü bu ekrandan değiştirilemez. Dosya türü değiştiğinde evrak kuralları yeni türe göre değerlendirilir.</span></div>
+            <p className="form-hint">Dosya türü değişirse evrak listesi yeniden değerlendirilir.</p>
             {generalError && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{generalError}</span>{conflict && <button className="button button--secondary" type="button" onClick={onReload}><RefreshCw size={15} /> Güncel Veriyi Yükle</button>}</div>}
-            {referenceData.status === 'loading' && <div className="case-form-note" role="status"><LoaderCircle className="spin" size={16} /><span>Aktif referans listeleri yükleniyor…</span></div>}
-            {(referenceData.status === 'unavailable' || referenceData.status === 'unauthorized') && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{referenceData.status === 'unauthorized' ? 'Referanslar için yeniden giriş gerekli.' : 'Referans listeleri yüklenemedi; sahte seçenek kullanılmadı.'}</span><button className="button button--secondary" type="button" onClick={referenceData.reload}>Yeniden Dene</button></div>}
+            {referenceData.status === 'loading' && <div className="case-form-note" role="status"><LoaderCircle className="spin" size={16} /><span>Seçenekler yükleniyor…</span></div>}
+            {(referenceData.status === 'unavailable' || referenceData.status === 'unauthorized') && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{referenceData.status === 'unauthorized' ? 'Referanslar için yeniden giriş gerekli.' : 'Seçenekler yüklenemedi.'}</span><button className="button button--secondary" type="button" onClick={referenceData.reload}>Yeniden Dene</button></div>}
             <div className="case-form-grid">
               <label className="form-field form-field--immutable"><span>Plaka</span><input value={item.plate} readOnly /></label>
               <label className="form-field"><span>Dosya türü</span><select value={caseType} onChange={event => setCaseType(event.target.value as typeof caseType)}>{!caseType && <option value="">Seçiniz</option>}<option value="traffic">Trafik</option><option value="casco">Kasko</option></select><FieldError message={fieldErrors.caseType} /></label>
               <label className="form-field form-field--immutable"><span>Ofis dosya numarası</span><input value={item.officeNumber} readOnly /></label>
-              <label className="form-field form-field--immutable"><span>Yaşam döngüsü</span><input value="Açık · kapatma/yeniden açma ayrı işlem" readOnly /></label>
-              <label className="form-field"><span>Workflow aşaması</span><select autoFocus value={workflowStage} onChange={(event) => setWorkflowStage(event.target.value as CaseStageCode)}>{CASE_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><FieldError message={fieldErrors.workflowStage} /></label>
-              <label className="form-field"><span>Takip tarihi</span><input value={item.followUpDate ?? "—"} readOnly /><small>Kayıt günü otomatik atanır; elle değiştirilemez.</small></label>
+              <label className="form-field form-field--immutable"><span>Dosya durumu</span><input value="Açık" readOnly /></label>
+              <label className="form-field"><span>Aşama</span><select autoFocus value={workflowStage} onChange={(event) => setWorkflowStage(event.target.value as CaseStageCode)}>{CASE_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><FieldError message={fieldErrors.workflowStage} /></label>
+              <label className="form-field"><span>Takip tarihi</span><input value={item.followUpDate ?? "—"} readOnly /></label>
               <label className="form-field"><span>İhbar numarası</span><input readOnly={item.eksist !== undefined} value={notificationFormNumber} onChange={(event) => setNotificationFormNumber(event.target.value)} autoComplete="off" aria-invalid={fieldErrors.notificationFormNumber !== undefined} /><FieldError message={fieldErrors.notificationFormNumber} /></label>
               <label className="form-field"><span>Hasar dosya numarası</span><input value={insurerClaimNumber} onChange={(event) => setInsurerClaimNumber(event.target.value)} autoComplete="off" aria-invalid={fieldErrors.insurerClaimNumber !== undefined} /><FieldError message={fieldErrors.insurerClaimNumber} /></label>
               <label className="form-field"><span>Sorumlu</span><select value={responsibleUserId} onChange={(event) => setResponsibleUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{item.responsibleUserId && !referenceData.references?.users.some((option) => option.id === item.responsibleUserId) && <option value={item.responsibleUserId}>Mevcut sorumlu · pasif/erişilemez</option>}{referenceData.references?.users.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.responsibleUserId} /></label>
               <label className="form-field"><span>Sigorta şirketi</span><select value={insurerId} onChange={(event) => setInsurerId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="" disabled={!!item.eksist}>{item.eksist?.insurerName ?? 'Seçilmedi'}</option>{item.insurerId && !referenceData.references?.insurers.some((option) => option.id === item.insurerId) && <option value={item.insurerId}>{item.eksist?.insurerName ?? 'Mevcut sigorta şirketi'} · pasif</option>}{referenceData.references?.insurers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.insurerId} />{referenceData.status === 'ok' && referenceData.references?.insurers.length === 0 && <small>Aktif şirket bulunamadı. Yönetim → Sigorta Şirketleri bölümünden ekleyebilirsiniz.</small>}</label>
               {item.eksist ? <div className="form-field"><label><span>Servis</span><input aria-label="Servis" value={serviceRevision ?? item.eksist.serviceName} readOnly /></label><button type="button" className="icon-button" aria-label="Servisi revize et" onClick={() => setServiceEditorOpen(true)}><Pencil size={17} /></button><FieldError message={fieldErrors.serviceRevision} /></div> : <label className="form-field"><span>Servis</span><select aria-label="Servis" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{item.serviceId && !referenceData.references?.services.some((option) => option.id === item.serviceId) && <option value={item.serviceId}>Mevcut servis · pasif/erişilemez</option>}{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{serviceOptionLabel(option)}</option>)}</select><small>{serviceEvaluationSummary(referenceData.references?.services.find((option) => option.id === serviceId) ?? item.serviceProfile)}</small><FieldError message={fieldErrors.serviceId} /></label>}
               {item.eksist ? <label className="form-field"><span>Eksper</span><input value={item.eksist.expertName} readOnly /></label> : <label className="form-field"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{item.expertUserId && !referenceData.references?.experts.some((option) => option.id === item.expertUserId) && <option value={item.expertUserId}>Mevcut eksper · pasif/uygun değil</option>}{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} /></label>}
-              <label className="form-field"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><small>LocalDate; boş bırakılırsa temizlenir.</small><FieldError message={fieldErrors.lossDate} /></label>
+              <label className="form-field"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><small>Boş bırakılırsa tarih kaldırılır.</small><FieldError message={fieldErrors.lossDate} /></label>
               <label className="form-field"><span>İhbar tarihi</span><input type="date" value={notificationDate} onChange={(event) => setNotificationDate(event.target.value)} aria-invalid={fieldErrors.notificationDate !== undefined} /><small>Hasar tarihinden önce olamaz.</small><FieldError message={fieldErrors.notificationDate} /></label>
             </div>
           </div>
@@ -145,8 +144,8 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
             <button className="button button--primary" type="submit" disabled={submitting || referenceData.status !== 'ok'}>{submitting ? <><LoaderCircle className="spin" size={16} /> Kaydediliyor…</> : <><Save size={16} /> Değişiklikleri Kaydet</>}</button>
           </footer>
         </form>
-      </section>
+      </ModalFrame>
       {serviceEditorOpen && <ServiceRevisionDialog name={serviceRevision ?? item.eksist?.serviceName ?? ""} options={referenceData.references?.services ?? []} onClose={() => setServiceEditorOpen(false)} onSave={name => { setServiceRevision(name); setServiceEditorOpen(false) }} />}
-    </div>
+    </>
   )
 }

@@ -31,7 +31,7 @@ describe('CasesPage api modu durumlari', () => {
 
     renderPage()
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-    expect(screen.getByRole('alert').textContent).toContain('Oturum gerekli')
+    expect(screen.getByRole('alert').textContent).toContain('Yeniden giriş yapın')
     expect(screen.queryByText('34 MPA 764')).not.toBeInTheDocument()
   })
 
@@ -41,7 +41,7 @@ describe('CasesPage api modu durumlari', () => {
 
     renderPage()
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-    expect(screen.getByRole('alert').textContent).toContain('kullanılamıyor')
+    expect(screen.getByRole('alert').textContent).toContain('Dosyalar yüklenemedi')
     expect(screen.queryByText('34 MPA 764')).not.toBeInTheDocument()
   })
 

@@ -126,6 +126,25 @@ describe('checkCaseFreshness (real spawn of pcloud-session0-freshness-gate.mjs)'
     expect((await checkCaseFreshness(gateConfig(), targetRoot, payload.relativePath, { operation: 'workspace' })).ready).toBe(false)
   })
 
+  it('moves an attested source into a new destination through the real freshness gate', async () => {
+    const bytes = 'verified claim document'
+    await buildCaseFixture('00AAA000', 8101, 111, bytes)
+    await writeAttestation(8101, 111, '00AAA000', bytes)
+    const payload = {
+      kind: 'file_operation' as const, operationId: '01900000-0000-7000-8000-000000000021', operationVersion: 1,
+      operationType: 'move_case_workspace' as const, strategy: 'atomic_rename' as const,
+      source: { storageRootKey: 'main', relativePath: '00AAA000' },
+      destination: { storageRootKey: 'main', relativePath: 'CLOSED/00AAA000' },
+      plannedAt: new Date(Date.now() + 5000).toISOString(), stagingRelativePath: '.hasarbotu-staging/op-21', temporaryRelativePath: '.hasarbotu-rename-op-21',
+    }
+    const config = { apiBaseUrl: '', agentId: 'test', agentSecret: 'test', roots: { main: targetRoot }, leaseSeconds: 30, pollIntervalMs: 1, freshnessGate: gateConfig() }
+    const client = { claim: async () => ({ id: 'move-job', payload, leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() }), heartbeat: async () => ({ leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() }), reportResult: async () => ({ acknowledged: true }) } as unknown as AgentApiClient
+    expect(await runOnce(client, config)).toMatchObject({ kind: 'reported', outcome: 'verified' })
+    const { readFile, stat } = await import('node:fs/promises')
+    expect(await readFile(join(targetRoot, payload.destination.relativePath, 'a.pdf'), 'utf8')).toBe(bytes)
+    await expect(stat(join(targetRoot, payload.source.relativePath))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('attestation olmayan gercek bir vaka icin fail-closed ready=false doner (asla sessizce ready degil)', async () => {
     const bytes = 'attest-edilmemis-icerik'
     await buildCaseFixture('00BBB000', 8002, 222, bytes)

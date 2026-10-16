@@ -205,7 +205,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     await user.click(screen.getByRole('button', { name: 'Temel Bilgileri Düzenle' }))
     await screen.findByRole('dialog', { name: 'Temel Dosya Bilgilerini Düzenle' })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' })).toBeEnabled())
-    await user.selectOptions(screen.getByLabelText('Workflow aşaması'), 'damage_assessment')
+    await user.selectOptions(screen.getByLabelText('Aşama'), 'damage_assessment')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
 
     // Yerel override uygulanır: header AYNI render'da (sunucu yenilenmeden) yeni değeri gösterir.

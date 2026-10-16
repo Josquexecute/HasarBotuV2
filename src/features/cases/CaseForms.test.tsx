@@ -169,7 +169,8 @@ describe('CaseCreateModal gerçek API komut akışı', () => {
     renderCreate(commandPort())
     expect(await screen.findByRole('option', { name: 'Uzman Eksper' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Merkez Servis · Özel servis · seçili sigorta şirketiyle anlaşmalı' })).toBeInTheDocument()
-    expect(screen.getByText(/Servis seçildiğinde tür ve sigorta şirketine özel anlaşma sonucu/)).toBeInTheDocument()
+    await userEvent.setup().selectOptions(screen.getByLabelText('Servis'), 'service-1')
+    expect(screen.getByText('Özel servis · İnsan onaylı aktif anlaşma bulundu.')).toBeInTheDocument()
     expect(screen.getByLabelText(/^Hasar tarihi/)).toHaveAttribute('type', 'date')
     expect(screen.getByLabelText(/^İhbar tarihi/)).toHaveAttribute('type', 'date')
   })
@@ -212,7 +213,7 @@ describe('CaseEditModal optimistic locking akışı', () => {
     const update = vi.fn().mockResolvedValue(record({ version: 2, workflowStage: 'inspection_pending', stage: 'Ekspertiz Bekliyor' }))
     const props = renderEdit(commandPort({ update }))
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Workflow aşaması'), 'inspection_pending')
+    await user.selectOptions(screen.getByLabelText('Aşama'), 'inspection_pending')
     expect(screen.getByLabelText(/^Takip tarihi/)).toHaveAttribute('readonly')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
 
@@ -227,7 +228,7 @@ describe('CaseEditModal optimistic locking akışı', () => {
 
   it('plaka, ofis numarası ve lifecycle alanlarını değiştirilemez gösterir', () => {
     renderEdit(commandPort())
-    for (const label of ['Plaka', 'Ofis dosya numarası', 'Yaşam döngüsü']) {
+    for (const label of ['Plaka', 'Ofis dosya numarası', 'Dosya durumu']) {
       expect(screen.getByLabelText(label)).toHaveAttribute('readonly')
     }
     expect(screen.queryByRole('button', { name: 'Dosyayı Kapat' })).not.toBeInTheDocument()
@@ -246,7 +247,7 @@ describe('CaseEditModal optimistic locking akışı', () => {
   it('stale expectedVersion 409 çatışmasını açıklar ve yeniden yükleme sunar', async () => {
     const props = renderEdit(commandPort({ update: vi.fn().mockRejectedValue(new CaseCommandError('version_conflict', 'raw stack')) }))
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Workflow aşaması'), 'reporting')
+    await user.selectOptions(screen.getByLabelText('Aşama'), 'reporting')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('başka bir işlemle güncellendi')
     expect(screen.queryByText(/raw stack/)).not.toBeInTheDocument()

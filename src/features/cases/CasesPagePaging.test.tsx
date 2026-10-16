@@ -350,7 +350,7 @@ describe('Dosyalar sonsuz kaydırma', () => {
     renderPage(port)
     await findRow('34 PG 1')
     await userEvent.click(screen.getByRole('button', { name: 'Daha fazla dosya yükle' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Oturum gerekli')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Yeniden giriş yapın')
     expect(rowPlates()).toHaveLength(0)
   })
 
@@ -358,7 +358,7 @@ describe('Dosyalar sonsuz kaydırma', () => {
     const { port } = stubCasesPort()
     port.listCasePage = async () => { throw new HttpCasesError('unavailable', 'synthetic') }
     renderPage(port)
-    expect(await screen.findByRole('alert')).toHaveTextContent('kullanılamıyor')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Dosyalar yüklenemedi')
     expect(rowPlates()).toHaveLength(0)
     expect(screen.queryByText('34 MPA 764')).not.toBeInTheDocument()
   })

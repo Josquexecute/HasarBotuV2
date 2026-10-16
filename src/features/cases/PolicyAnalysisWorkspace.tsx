@@ -13,7 +13,7 @@ const STEPS: readonly {
   { phase: 'source', title: 'Kaynağı seç ve planla', description: 'Doğrulanmış PDF/OCR parçaları', icon: FileSearch },
   { phase: 'planned', title: 'Analizi başlat', description: 'Açık gönderim onayı ve bütçe', icon: PlayCircle },
   { phase: 'review', title: 'Adayları incele', description: 'Kanıt, kabul, düzenleme veya red', icon: ListChecks },
-  { phase: 'applied', title: 'Taslağa uygula', description: 'Paket 23 sürümü ve kaynak zinciri', icon: ShieldCheck },
+  { phase: 'applied', title: 'Taslağa uygula', description: 'Onay için analiz taslağı', icon: ShieldCheck },
 ]
 
 const PHASE_INDEX: Record<PolicyAnalysisWorkflowPhase, number> = {
@@ -43,7 +43,7 @@ export function PolicyAnalysisWorkspace({
 
   return <section className="policy-analysis-workspace" aria-labelledby="policy-workflow-heading">
     <header className="policy-analysis-workspace__header">
-      <div><span className="eyebrow">Paket 30 · kullanıcı kontrollü uçtan uca akış</span><h2 id="policy-workflow-heading">Kasko Poliçe Analiz Akışı</h2><p>Analiz başlatma, kanıt inceleme ve onaylanan adayları taslağa uygulama aynı dosya bağlamında yürütülür.</p></div>
+      <div><h2 id="policy-workflow-heading">Kasko Poliçe Analiz Akışı</h2></div>
       <strong>AI sonucu tek başına kesin karar değildir.</strong>
     </header>
     <ol className="policy-analysis-steps" aria-label="Poliçe analiz adımları">

@@ -26,16 +26,33 @@
 .desktop-assistant-panel footer { border-top: 1px solid var(--border); padding-top: 8px; }
 .desktop-assistant-panel footer button:last-child { margin-left: auto; }
 .desktop-assistant-panel [hidden] { display: none; }
-.assistant-appearance-editor { display: grid; gap: 12px; margin-top: 12px; }
-.assistant-appearance-editor button { min-height: 44px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; cursor: pointer; font: inherit; }
+.assistant-appearance-editor { display: grid; min-width: 0; gap: 20px; }
+.assistant-appearance-layout { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) 230px; gap: 24px; align-items: start; }
+.assistant-appearance-controls { display: grid; min-width: 0; gap: 18px; }
+.assistant-appearance-editor button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; cursor: pointer; font: inherit; font-size: 12px; }
 .assistant-appearance-editor button:focus-visible { outline: 2px solid var(--assistant-focus, var(--text-primary)); outline-offset: 2px; }
-.assistant-appearance-editor fieldset { margin: 0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: grid; gap: 10px; }
-.assistant-appearance-editor label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.assistant-appearance-editor input[type=color] { width: 64px; min-height: 44px; padding: 3px; }
-.assistant-appearance-editor input[type=checkbox] { width: 20px; min-height: 20px; }
-.assistant-appearance-editor select { max-width: 180px; min-height: 44px; font: inherit; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; }
+.assistant-appearance-editor fieldset { display: grid; min-width: 0; gap: 14px; margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 8px; }
+.assistant-appearance-editor legend { padding-inline: 5px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.assistant-appearance-editor label { display: grid; grid-template-columns: minmax(0, 1fr) 160px; align-items: center; gap: 12px; font-size: 13px; }
+.assistant-appearance-editor input[type=color] { justify-self: end; width: 48px; height: 36px; padding: 3px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); cursor: pointer; }
+.assistant-appearance-editor input[type=checkbox] { justify-self: end; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.assistant-appearance-editor select { width: 100%; min-width: 0; min-height: 36px; padding: 6px 8px; font: inherit; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: 6px; }
 .assistant-palette-presets { display: flex; gap: 8px; flex-wrap: wrap; }
-.assistant-palette-presets button { border-width: 2px; }
-.assistant-appearance-preview { padding: 16px; border-radius: 12px; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); display: grid; gap: 10px; }
-.assistant-appearance-preview button { border: 1px solid var(--assistant-focus); border-radius: 8px; padding: 10px; }
+.assistant-palette-presets button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+.assistant-palette-presets i { width: 12px; height: 12px; border-radius: 50%; }
+.assistant-appearance-preview { display: grid; justify-items: center; align-content: center; gap: 14px; min-height: 250px; padding: 24px 16px; border-radius: 12px; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); text-align: center; }
+.assistant-appearance-preview > small, .assistant-appearance-preview > span:not(.assistant-character-preview):not(.assistant-appearance-preview__accent) { color: var(--text-secondary); font-size: 12px; }
+.assistant-appearance-preview__accent { display: inline-block; padding: 8px 14px; border-radius: 6px; font-size: 12px; }
+.assistant-appearance-editor .assistant-native-actions { padding-top: 16px; border-top: 1px solid var(--border); }
+.assistant-appearance-editor .assistant-native-actions button { flex: 0 1 auto; }
+.assistant-appearance-editor .assistant-native-actions button:first-child { border-color: var(--accent); background: var(--accent); color: var(--accent-contrast); }
+.assistant-appearance-editor > [role=status] { margin: 0; font-size: 12px; color: var(--text-secondary); }
+@media (max-width: 900px) {
+  .assistant-appearance-layout { grid-template-columns: minmax(0, 1fr); }
+  .assistant-appearance-preview { min-height: 180px; }
+}
+@media (max-width: 600px) {
+  .assistant-appearance-editor label { grid-template-columns: minmax(0, 1fr) minmax(100px, 140px); }
+  .assistant-appearance-editor button, .assistant-appearance-editor select { min-height: 44px; }
+}
 .assistant-character-preview { width: 64px; height: 54px; border-radius: 22px; display: grid; place-items: center; color: #171c26; font-size: 24px; letter-spacing: 8px; padding-left: 8px; }

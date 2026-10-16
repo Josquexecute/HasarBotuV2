@@ -28,7 +28,7 @@ export async function checkCaseFreshness(
   freshnessGate: FreshnessGateConfig | undefined,
   rootAbsolute: string,
   relativePath: string,
-  options: { readonly timeoutMs?: number; readonly operation?: 'workspace' } = {},
+  options: { readonly timeoutMs?: number; readonly operation?: 'workspace' | 'file_destination' } = {},
 ): Promise<FreshnessCheckResult> {
   if (freshnessGate === undefined) {
     return { ready: false, caseStatus: 'unknown', reason: 'freshness_gate_not_configured' }

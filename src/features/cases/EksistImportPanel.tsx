@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Upload } from 'lucide-react'
 import type { EksistPort, EksistSource } from '../../data/eksistPort'
 import { CaseCommandError } from '../../data/commandPort'
 
@@ -21,12 +22,12 @@ export function EksistImportPanel({ port, onImported, disabled, onUnauthorized, 
   }
   return <fieldset disabled={disabled || busy} className="eksist-import">
     <legend>Eksist üzerinden hızlı dosya</legend>
-    <label className="form-field"><span>Eksist metni veya panodan görsel</span><textarea rows={3} value={text} onChange={event => setText(event.target.value)} placeholder="Eksist sayfasında Ctrl+A → Ctrl+C; buraya Ctrl+V" onPaste={event => {
+    <label className="form-field"><span className="sr-only">Eksist metni veya panodan görsel</span><textarea rows={3} value={text} onChange={event => setText(event.target.value)} placeholder="Eksist metnini veya panodaki görseli yapıştırın…" onPaste={event => {
       const file = [...event.clipboardData.items].find(item => item.type.startsWith('image/'))?.getAsFile()
       if (file) { event.preventDefault(); void read(file) }
     }} /></label>
-    <button type="button" className="button button--secondary" disabled={!text.trim() || busy} onClick={() => void read()}>Metni forma aktar</button>
-    <label className="form-field"><span>PDF veya ekran görüntüsü yükle</span><input type="file" accept="application/pdf,image/png,image/jpeg" onChange={event => { const file = event.target.files?.[0]; if (file) void read(file); event.target.value = '' }} /></label>
+    <div className="eksist-import__actions"><button type="button" className="button button--secondary" disabled={!text.trim() || busy} onClick={() => void read()}>Metni forma aktar</button>
+    <label className="button button--secondary eksist-import__upload" title="PDF, PNG veya JPEG · En fazla 10 MB"><Upload size={15} aria-hidden="true" /><span>PDF veya görsel yükle</span><input className="sr-only" aria-label="PDF veya ekran görüntüsü yükle" type="file" accept="application/pdf,image/png,image/jpeg" onChange={event => { const file = event.target.files?.[0]; if (file) void read(file); event.target.value = '' }} /></label></div>
     {busy && <p role="status">Kaynak okunuyor; gerekirse OCR uygulanıyor…</p>}
     {error && <p role="alert">{error}</p>}
   </fieldset>

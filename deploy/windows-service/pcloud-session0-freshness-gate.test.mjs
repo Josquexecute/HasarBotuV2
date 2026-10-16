@@ -146,6 +146,28 @@ test('workspace intent: absent and partially created empty trees can resume; nor
   await assert.rejects(determineSessionSafeCaseStatus(args), /PCLOUD_CASE_FOLDER_NOT_FOUND/)
 })
 
+test('file destination intent permits an absent idle namespace without granting source readiness', async context => {
+  const fixture = await buildFixture(context)
+  const args = { ...fixture, caseRelativePath: 'CLOSED/00AAA000', targetCaseRoot: path.join(fixture.temporaryRoot, 'CLOSED/00AAA000'), operation: 'file_destination' }
+  assert.equal((await determineSessionSafeCaseStatus(args)).CaseStatus, 'ready')
+  await assert.rejects(determineSessionSafeCaseStatus({ ...args, operation: undefined }), /TARGET_CASE_ROOT_NOT_FOUND/)
+  const database = new DatabaseSync(fixture.databasePath)
+  try {
+    database.exec("INSERT INTO folder VALUES(400,100,'CLOSED',0,1,1,0); INSERT INTO folder VALUES(401,400,'00AAA000',0,1,1,0)")
+    await assert.rejects(determineSessionSafeCaseStatus(args), /DESTINATION_ALREADY_EXISTS/)
+    database.exec('DELETE FROM folder WHERE id IN (400,401); INSERT INTO task VALUES(2,100,0,0)')
+    await assert.rejects(determineSessionSafeCaseStatus(args), /WORKSPACE_SYNC_PENDING/)
+  } finally { database.close() }
+})
+
+test('file destination intent retains full freshness checks for existing content and rejects aliases', async context => {
+  const fixture = await buildFixture(context)
+  assert.notEqual((await determineSessionSafeCaseStatus({ ...fixture, operation: 'file_destination' })).CaseStatus, 'ready')
+  const alias = path.join(fixture.temporaryRoot, 'alias')
+  await symlink(fixture.targetCaseRoot, alias, process.platform === 'win32' ? 'junction' : 'dir')
+  await assert.rejects(determineSessionSafeCaseStatus({ ...fixture, targetCaseRoot: path.join(alias, 'absent'), caseRelativePath: 'new', operation: 'file_destination' }), /WORKSPACE_PATH_CONFLICT/)
+})
+
 test('workspace intent refuses cloud-only content, path collisions and pending folder tasks', async context => {
   const fixture = await buildFixture(context)
   const targetCaseRoot = path.join(fixture.temporaryRoot, 'missing')

@@ -109,8 +109,8 @@ export function serviceOptionLabel(service: ServiceReferenceRecord): string {
 }
 
 export function serviceEvaluationSummary(service: ServiceReferenceRecord | null | undefined): string {
-  if (service === null || service === undefined) return 'Servis seçildiğinde tür ve sigorta şirketine özel anlaşma sonucu gösterilir.'
-  return `${SERVICE_TYPE_LABELS[service.serviceType]} · ${service.agreement.reason} Kural ${service.agreement.ruleVersion}.`
+  if (service === null || service === undefined) return ''
+  return `${SERVICE_TYPE_LABELS[service.serviceType]} · ${service.agreement.reason}`
 }
 
 export function makeSubmissionKey(): string {

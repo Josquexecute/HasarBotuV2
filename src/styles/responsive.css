@@ -41,6 +41,7 @@
 select option { color: var(--text-primary); background: var(--surface); }
 
 @media (max-width: 1023px) {
+  .settings-content { grid-template-columns: minmax(0, 1fr); }
   .app-shell:not(.app-shell--menu-open) .sidebar { display: none; }
   .sidebar-backdrop { position: fixed; inset: 0; z-index: 35; border: 0; background: #0006; }
   .sidebar { position: absolute; inset: 0 auto 0 0; z-index: 40; box-shadow: 8px 0 24px #0003; }
@@ -75,17 +76,25 @@ select option { color: var(--text-primary); background: var(--surface); }
   .case-operations__form-grid, .case-lifecycle-paths, .case-lifecycle-value-loss dl,
   .policy-pdf-toolbar, .policy-ocr-toolbar, .policy-pdf-segments, .policy-ocr-comparison,
   .policy-ocr-elements, .email-workspace, .value-loss-form-grid, .pert-editor__grid { grid-template-columns: minmax(0, 1fr); }
-  .case-detail-head__identity { flex: 1; }
-  .case-detail-head__actions { width: 100%; }
-  .case-detail-head__actions .button { flex: 1 1 auto; }
+  .policy-ai-review-fields, .source-reference-details dl { grid-template-columns: minmax(0, 1fr); }
+  .case-detail-head__identity { flex: 1 1 100%; flex-wrap: wrap; gap: 8px; }
+  .case-detail-head__actions { width: 100%; flex: 1 1 100%; }
+  .case-detail-head__actions .button { min-width: 0; flex: 1 1 140px; white-space: normal; }
   .case-tabs { flex-shrink: 0; }
   .case-module { padding: 10px; }
   .module-heading { flex-wrap: wrap; }
   .notification-item { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .notification-item > * { min-width: 0; }
-  .modal { max-height: calc(100dvh - 16px); }
+  .modal-backdrop { padding: 12px; }
+  .modal { max-height: calc(100dvh - 24px); }
   .modal__header, .modal__footer { flex-wrap: wrap; }
-  .modal__body { padding: 12px; }
+  .modal__header, .modal__footer { padding: 16px; }
+  .modal__header { flex-wrap: nowrap; }
+  .modal__header h2, .modal__header h3 { font-size: 17px; }
+  .modal__body { padding: 18px 16px; }
+  .modal__footer .button { flex: 1 1 auto; white-space: normal; }
+  .settings-content { gap: 14px; padding: 14px; }
+  .settings-section { padding: 16px; }
   .touch-assistant-trigger { right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
   .office-scroll, .case-module { padding-bottom: 76px; }
   .touch-assistant-backdrop { padding: 8px; }
