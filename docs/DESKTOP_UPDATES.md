@@ -24,6 +24,10 @@ Open **Ayarlar → Uygulama güncellemeleri**, select **Güncellemeleri kontrol 
 then **Güncelle ve yeniden başlat** when a newer release is available. The app
 downloads and verifies the installer, closes normally, installs into its existing
 per-user directory and restarts. User data and API configuration are retained.
+From desktop 0.1.28, selecting installation immediately shows the checking state
+while the server revalidates the selected release. Both actions remain disabled
+until that check finishes, so a slow response no longer leaves an apparently idle
+installation button. The installer is still downloaded only after revalidation.
 Browser and development builds have no installation action. Every authenticated
 role can check releases.
 

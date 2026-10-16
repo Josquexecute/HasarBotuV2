@@ -34,10 +34,12 @@ export function startDesktopUpdates(shell: DesktopShell, apiOrigin: string): () 
   }
   const install = async () => {
     if (!supported || busy || state.phase !== 'available' || !state.release) return state
+    const selectedRelease = state.release
     busy = true
+    publish({ ...state, phase: 'checking', downloadedBytes: 0 })
     try {
       const release = await latest()
-      if (!release || release.sha256 !== state.release.sha256 || !isNewerVersion(release.version, state.currentVersion)) throw new Error('Yayımlanan sürüm değişti. Güncellemeleri yeniden kontrol edin.')
+      if (!release || release.sha256 !== selectedRelease.sha256 || !isNewerVersion(release.version, state.currentVersion)) throw new Error('Yayımlanan sürüm değişti. Güncellemeleri yeniden kontrol edin.')
       publish({ ...state, phase: 'downloading', downloadedBytes: 0 })
       const directory = join(app.getPath('userData'), 'updates', release.sha256)
       const installer = await downloadVerifiedInstaller({ release, origin: shell.origin, directory, fetch: fetchAuthenticated, progress: bytes => publish({ ...state, downloadedBytes: bytes }) })

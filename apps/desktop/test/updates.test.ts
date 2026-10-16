@@ -39,6 +39,19 @@ it('checks a shared release, verifies the streamed installer and hands off norma
   expect(String(scheduledCommands()[0]![1])).toContain("-RunLevel Limited")
   expect(mocks.app.quit).toHaveBeenCalledOnce()
 })
+it('immediately reports installation revalidation and rejects repeat clicks while it is pending', async () => {
+  await invoke('check')
+  let complete!: (response: Response) => void
+  fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { complete = resolve }))
+  const pending = invoke('install')
+  const send = vi.mocked(shell.window.webContents.send)
+  expect(send.mock.calls.at(-1)?.[1]).toMatchObject({ phase: 'checking', release })
+  expect((await invoke('install')).phase).toBe('checking')
+  expect(fetchMock).toHaveBeenCalledTimes(2)
+  complete(Response.json({ release }))
+  expect((await pending).phase).toBe('installing')
+  expect(scheduledCommands()).toHaveLength(1)
+})
 it('rejects untrusted senders and subframes before any network or installer action', async () => {
   await expect(invoke('check', { sender: {}, senderFrame: {} })).rejects.toThrow('Untrusted')
   await expect(invoke('install', { sender: shell.window.webContents, senderFrame: { url: shell.origin } })).rejects.toThrow('Untrusted')
