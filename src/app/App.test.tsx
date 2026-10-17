@@ -10,6 +10,8 @@ describe('HasarBotu V2 UI prototipi', () => {
     render(<App />)
 
     const globalSearch = screen.getByPlaceholderText('Plaka, dosya no veya isim ara')
+    await user.keyboard('{Control>}k{/Control}')
+    expect(globalSearch).toHaveFocus()
     await user.type(globalSearch, '34mpa764{Enter}')
 
     expect(await screen.findByRole('heading', { name: 'Tüm Dosyalar 1' })).toBeInTheDocument()
@@ -95,7 +97,7 @@ describe('HasarBotu V2 UI prototipi', () => {
     render(<App />)
 
     expect(screen.getByText('UI Prototip · Mock Veri')).toBeInTheDocument()
-    const pendingFeeTable = screen.getByRole('table')
+    const pendingFeeTable = await screen.findByRole('table')
     expect(within(pendingFeeTable).getByText('2026/168')).toBeInTheDocument()
     expect(within(pendingFeeTable).getAllByText('Kontrol Bekliyor').length).toBeGreaterThan(0)
   })
@@ -242,7 +244,7 @@ describe('HasarBotu V2 UI prototipi', () => {
     for (const [linkName, headingName] of destinations) {
       const link = screen.getByRole('link', { name: linkName === 'Bildirimler' ? /Bildirimler/ : linkName })
       await user.click(link)
-      expect(screen.getByRole('heading', { name: new RegExp(headingName) })).toBeInTheDocument()
+      expect(await screen.findByRole('heading', { name: new RegExp(headingName) })).toBeInTheDocument()
     }
   })
 

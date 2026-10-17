@@ -317,6 +317,22 @@ describeDb('Paket 37 case not, görev ve takip geçmişi gerçek API', () => {
     })
   })
 
+  it('classifies created and loaded tasks with the Istanbul day after UTC 21:00', async () => {
+    const nightApp = buildApp({ clock: fixedClock('2026-07-16T21:30:00.000Z'), loggerEnabled: false, auth: { pool, cookieSecure: false } })
+    try {
+      const auth = await nightApp.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload: { email: 'p37-manager@test.local', password: PASSWORD } })
+      expect(auth.statusCode).toBe(200)
+      const cookie = String(auth.headers['set-cookie']).split(';')[0]!
+      const created = await nightApp.inject({ method: 'POST', url: tasksUrl(), headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: { title: 'Gece takvim kontrolü', priority: 'normal', dueDate: '2026-07-17' } })
+      expect(created.statusCode).toBe(201)
+      const task = caseTaskResponseSchema.parse(created.json()).task
+      expect(task.dueStatus).toBe('today')
+      const loaded = await nightApp.inject({ method: 'GET', url: operationsUrl(), headers: { cookie } })
+      expect(loaded.statusCode).toBe(200)
+      expect(caseOperationsResponseSchema.parse(loaded.json()).tasks.find(item => item.id === task.id)?.dueStatus).toBe('today')
+    } finally { await nightApp.close() }
+  })
+
   it('takip tarihinin manuel değişmesini reddeder ve geçmişi korur', async () => {
     const updated = await app.inject({
       method: 'PATCH',

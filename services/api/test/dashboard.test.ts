@@ -244,6 +244,18 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     expect(response.statusCode).toBe(401)
   })
 
+  it('evaluates follow-up dates on the Istanbul day after UTC 21:00', async () => {
+    const nightApp = buildApp({ clock: fixedClock('2026-07-16T21:30:00.000Z'), loggerEnabled: false, auth: { pool, cookieSecure: false } })
+    try {
+      const login = await nightApp.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload: { email: EMAIL, password: PASSWORD } })
+      expect(login.statusCode).toBe(200)
+      const nightCookie = String(login.headers['set-cookie']).split(';')[0]!
+      const response = await nightApp.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie: nightCookie } })
+      expect(response.statusCode).toBe(200)
+      expect(dashboardResponseSchema.parse(response.json()).asOfDate).toBe('2026-07-17')
+    } finally { await nightApp.close() }
+  })
+
   it('tenant-kapsamlı gerçek sinyalleri doğru önceliklendirir ve salt okunur kalır', async () => {
     const auditBefore = await pool.query(
       'SELECT count(*)::int AS count FROM audit_events WHERE organization_id=$1',

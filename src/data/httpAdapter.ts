@@ -1,4 +1,5 @@
 import type { CaseListItem, CaseStageDto, CaseLegacyReferences } from '@hasarbotu/contracts'
+import { toOfficeDate } from '@hasarbotu/domain'
 import type { CaseRecord, CaseStage, CaseStatus, CaseType } from '../types/case'
 import type { CasePageQuery, CasePageResult, CasesDataPort } from './ports'
 
@@ -26,22 +27,16 @@ const STAGE_LABELS: Record<CaseStageDto, CaseStage> = {
 const MONTHS_TR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
 const MAX_CASE_LIST_PAGES = 10_000
 
-function toLocalDateString(value: Date): string {
-  const month = String(value.getMonth() + 1).padStart(2, '0')
-  const day = String(value.getDate()).padStart(2, '0')
-  return `${value.getFullYear()}-${month}-${day}`
-}
-
-export function deriveFollowUp(followUpDate: string | null, today: Date = new Date()): {
+export function deriveFollowUp(followUpDate: string | null, today: Date | string = new Date()): {
   followUp: string
   followUpTone: CaseRecord['followUpTone']
 } {
   if (followUpDate === null) return { followUp: '—', followUpTone: 'normal' }
-  const todayString = toLocalDateString(today)
+  const todayString = toOfficeDate(today)
   if (followUpDate === todayString) return { followUp: 'Bugün', followUpTone: 'today' }
 
   const [year, month, day] = followUpDate.split('-').map(Number) as [number, number, number]
-  const label = `${day} ${MONTHS_TR[month - 1]}${year === today.getFullYear() ? '' : ` ${year}`}`
+  const label = `${day} ${MONTHS_TR[month - 1]}${year === Number(todayString.slice(0, 4)) ? '' : ` ${year}`}`
   return {
     followUp: label,
     followUpTone: followUpDate < todayString ? 'late' : 'normal',
@@ -50,10 +45,10 @@ export function deriveFollowUp(followUpDate: string | null, today: Date = new Da
 
 export function deriveStatus(
   dto: { readonly status: 'open' | 'closed'; readonly followUpDate: string | null },
-  today: Date = new Date(),
+  today: Date | string = new Date(),
 ): CaseStatus {
   if (dto.status === 'closed') return 'Kapalı'
-  if (dto.followUpDate !== null && dto.followUpDate < toLocalDateString(today)) return 'Gecikmiş'
+  if (dto.followUpDate !== null && dto.followUpDate < toOfficeDate(today)) return 'Gecikmiş'
   return 'Açık'
 }
 

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { toOfficeDate } from '@hasarbotu/domain'
 import { AlertTriangle, CalendarRange, CheckCircle2, ChevronDown, FileDown, Printer, RefreshCw, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { getConfiguredDataSource } from '../../data/ports'
@@ -26,7 +27,7 @@ export function ReportsPage({
   const [period, setPeriod] = useState('Temmuz 2026')
   const [assignee, setAssignee] = useState('Tümü')
   const [service, setService] = useState('Tümü')
-  const [apiPeriod, setApiPeriod] = useState(() => new Date().toISOString().slice(0, 7))
+  const [apiPeriod, setApiPeriod] = useState(() => toOfficeDate(new Date()).slice(0, 7))
   const [apiAssignee, setApiAssignee] = useState('')
   const [apiService, setApiService] = useState('')
   const [notice, setNotice] = useState('')
@@ -56,8 +57,8 @@ export function ReportsPage({
         </section>
         <section className="filterbar" aria-label="Rapor filtreleri">
           <label className="select-field"><span className="select-field__label">Dönem</span><input aria-label="Rapor dönemi" type="month" value={apiPeriod} onChange={(event) => { setApiPeriod(event.target.value); setApiAssignee(''); setApiService('') }} /></label>
-          <label className="select-field"><span className="select-field__label">Sorumlu</span><select aria-label="Rapor sorumlusu" value={apiAssignee} onChange={(event) => setApiAssignee(event.target.value)}><option value="">Tümü</option>{report?.responsibleUsers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Servis</span><select aria-label="Rapor servisi" value={apiService} onChange={(event) => setApiService(event.target.value)}><option value="">Tümü</option>{report?.services.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Sorumlu</span><select aria-label="Rapor sorumlusu" value={apiAssignee} onChange={(event) => setApiAssignee(event.target.value)}><option value="">Tümü</option>{apiReport.filterOptions.responsibleUsers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Servis</span><select aria-label="Rapor servisi" value={apiService} onChange={(event) => setApiService(event.target.value)}><option value="">Tümü</option>{apiReport.filterOptions.services.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14} /></label>
           <span className="filterbar__context"><CalendarRange size={14} />{apiPeriod}</span>
         </section>
         <div className="office-scroll">

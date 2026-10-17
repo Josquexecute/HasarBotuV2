@@ -1,5 +1,4 @@
 import type { CaseReferenceWorkspace } from '../../data/ports'
-import { useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseRecord } from '../../types/case'
 
 function normalized(value: string): string {
@@ -52,9 +51,4 @@ export function CaseLegacyReferenceFields({ item, references }: {
       <ReferenceField label="Eksper" current={expert} legacy={legacy.expertNames} />
     </>
   )
-}
-
-export function CaseApiLegacyReferenceFields({ item }: { readonly item: CaseRecord }) {
-  const { references } = useCaseReferences()
-  return <CaseLegacyReferenceFields item={item} references={references} />
 }

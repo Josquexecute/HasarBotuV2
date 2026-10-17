@@ -26,6 +26,7 @@ void app.whenReady().then(async () => {
     check('sandbox main preload can check updates; development install stays disabled', await shell.window.webContents.executeJavaScript('window.hasarbotuUpdates.check().then(state => !state.supported && state.phase === "disabled")'))
     const options = { shell, assetRoot: process.env.HB_ASSISTANT_ASSETS, userDataPath: app.getPath('userData'), quit: () => {} }
     assistant = await startDesktopAssistant(options)
+    check('shortcut React workspace is not loaded before the first menu request', assistant.menuWindow.webContents.getURL() === '')
     const win = assistant.window
     check('isolated character cannot invoke installation', await win.webContents.executeJavaScript('typeof window.hasarbotuUpdates === "undefined"'))
     const appearance = { scheme: 'dark', accentColor: '#15803d', characterColor: '#b9e7c8', textSize: 'large', reduceMotion: true }
@@ -117,7 +118,11 @@ void app.whenReady().then(async () => {
       await win.webContents.executeJavaScript('window.gazeOff = window.hasarbotuAssistant.onGaze((value) => { window.gaze = value }); undefined')
       await until(() => win.webContents.executeJavaScript('window.gaze?.x === 0 && window.gaze?.y === 0'))
       check('native cursor reaches renderer as relative gaze', true)
+      await win.webContents.executeJavaScript('window.gaze = undefined')
+      await new Promise((resolve) => setTimeout(resolve, 180))
+      check('stationary cursor does not keep sending duplicate gaze IPC', await win.webContents.executeJavaScript('window.gaze === undefined'))
       await win.webContents.executeJavaScript('window.gazeOff(); window.gaze = undefined')
+      cursor = { x: cursor.x + 16, y: cursor.y }
       await new Promise((resolve) => setTimeout(resolve, 180))
       check('gaze subscription can be removed', await win.webContents.executeJavaScript('window.gaze === undefined'))
       await win.webContents.executeJavaScript(`window.eyeCenter = (axis = 'x') => {

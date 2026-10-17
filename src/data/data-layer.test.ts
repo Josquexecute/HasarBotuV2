@@ -10,6 +10,13 @@ import { useCases } from './useCases'
 
 const TODAY = new Date(2026, 6, 12) // 12 Temmuz 2026 (yerel)
 
+it('uses the office day for follow-up labels and overdue state at the UTC year boundary', () => {
+  const night = new Date('2026-12-31T21:30:00Z')
+  expect(deriveFollowUp('2027-01-01', night)).toEqual({ followUp: 'Bugün', followUpTone: 'today' })
+  expect(deriveFollowUp('2026-12-31', night)).toEqual({ followUp: '31 Ara 2026', followUpTone: 'late' })
+  expect(deriveStatus({ status: 'open', followUpDate: '2026-12-31' }, night)).toBe('Gecikmiş')
+})
+
 const dto = caseListItemSchema.parse({
   id: 'case-1',
   caseType: 'casco' as const,

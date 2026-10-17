@@ -1593,7 +1593,7 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; b
 .case-detail-head { display: flex; min-height: 64px; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .case-detail-head__identity { display: flex; min-width: 250px; flex-shrink: 0; align-items: center; gap: 12px; }
 .case-detail-head__identity > div { display: flex; flex-direction: column; }
-.case-detail-head__identity span { color: var(--text-secondary); font-size: 11px; }
+.case-detail-head__identity > div > span { color: var(--text-secondary); font-size: 11px; }
 .case-detail-head__stage { display: flex; min-width: 140px; flex-direction: column; padding-left: 14px; border-left: 1px solid var(--border); }
 .case-detail-head__stage span { color: var(--text-tertiary); font-size: 11px; text-transform: uppercase; }
 .case-detail-head__stage strong { font-size: 12px; }

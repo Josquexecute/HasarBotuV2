@@ -32,12 +32,15 @@ async function boot() {
   helper.window.hide()
   await until('!!document.querySelector(".login-card, .app-shell")')
   if (await evaluate('!!document.querySelector(".login-card")')) {
+    // Open through the real native command before inspecting the lazy panel.
+    await helper.window.webContents.executeJavaScript('window.hasarbotuAssistant.menu()')
     const deadline = Date.now() + 10_000
     while (!await helper.menuWindow.webContents.executeJavaScript('document.body.textContent.includes("hesabınızla giriş yapın")')) {
       if (Date.now() > deadline) throw new Error('Assistant anonymous bootstrap timed out')
       await delay(50)
     }
     check('native assistant starts without a session before main-window login', true)
+    await helper.menuWindow.webContents.executeJavaScript('window.hasarbotuAssistantMenu.choose("close")')
     await fill('input[name=email]', process.env.HB_TOUCH_EMAIL)
     await fill('input[name=password]', process.env.HB_TOUCH_PASSWORD)
     await click('.login-card button[type=submit]')

@@ -1,4 +1,5 @@
 import { Bell, LogOut, Menu, Moon, Search, Sun } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { getSearchTokens } from '../utils/search'
 import { useSession } from '../app/sessionContext'
@@ -7,6 +8,7 @@ interface TopbarProps {
   theme: 'light' | 'dark'
   onThemeToggle: () => void
   onMenuToggle: () => void
+  menuExpanded?: boolean
 }
 
 const routeTitles: Record<string, string> = {
@@ -27,7 +29,19 @@ function initialsOf(name: string): string {
   return letters.toLocaleUpperCase('tr')
 }
 
-export function Topbar({ theme, onThemeToggle, onMenuToggle }: TopbarProps) {
+export function Topbar({ theme, onThemeToggle, onMenuToggle, menuExpanded }: TopbarProps) {
+  const search = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && !document.querySelector('[role="dialog"]')) {
+        event.preventDefault()
+        search.current?.focus()
+        search.current?.select()
+      }
+    }
+    window.addEventListener('keydown', focusSearch)
+    return () => window.removeEventListener('keydown', focusSearch)
+  }, [])
   const location = useLocation()
   const navigate = useNavigate()
   const session = useSession()
@@ -43,7 +57,7 @@ export function Topbar({ theme, onThemeToggle, onMenuToggle }: TopbarProps) {
 
   return (
     <header className="topbar">
-      <button className="icon-button topbar__menu" type="button" onClick={onMenuToggle} aria-label="Sol menüyü aç veya kapat">
+      <button className="icon-button topbar__menu" type="button" onClick={onMenuToggle} aria-label="Sol menüyü aç veya kapat" aria-expanded={menuExpanded}>
         <Menu size={19} />
       </button>
       <div className="topbar__title">
@@ -55,13 +69,15 @@ export function Topbar({ theme, onThemeToggle, onMenuToggle }: TopbarProps) {
         <Search size={16} aria-hidden="true" />
         <span className="sr-only">Genel arama</span>
         <input
+          ref={search}
+          aria-keyshortcuts="Control+k Meta+k"
           type="search"
           placeholder="Plaka, dosya no veya isim ara"
           onKeyDown={(event) => {
             if (event.key === 'Enter') handleSearch(event.currentTarget.value)
           }}
         />
-        <kbd>Enter</kbd>
+        <kbd title="Aramaya odaklan: Ctrl+K · Ara: Enter">Ctrl K</kbd>
       </label>
 
       <div className="topbar__actions">
@@ -78,7 +94,6 @@ export function Topbar({ theme, onThemeToggle, onMenuToggle }: TopbarProps) {
         </button>
         <button className="icon-button icon-button--notification" type="button" onClick={() => navigate('/bildirimler')} aria-label="Bildirimleri aç">
           <Bell size={18} />
-          <i aria-hidden="true" />
         </button>
         <button className="avatar avatar--button" type="button" onClick={() => navigate('/ayarlar')} title={authenticated ? session.user!.displayName : 'Kullanıcı ayarları'}>
           {authenticated ? initialsOf(session.user!.displayName) : 'ÖF'}

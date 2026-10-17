@@ -10,7 +10,6 @@ import { LegislationPage } from '../features/legislation/LegislationPage'
 import { ManagementPage } from '../features/management/ManagementPage'
 import { NotificationsPage } from '../features/notifications/NotificationsPage'
 import { PlaceholderPage } from '../features/placeholder/PlaceholderPage'
-import { ReportsPage } from '../features/reports/ReportsPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { SessionProvider } from './session'
@@ -18,6 +17,7 @@ import { AssistantAppearanceProvider } from '../features/assistant/AssistantAppe
 import { useSession } from './sessionContext'
 import { PERSISTENCE_ERROR_EVENT, usePersistentState } from './usePersistentState'
 const TrackingPopup = lazy(async () => ({ default: (await import('../features/tracking/TrackingPopup')).TrackingPopup }))
+const ReportsPage = lazy(async () => ({ default: (await import('../features/reports/ReportsPage')).ReportsPage }))
 const DesktopAssistantPanel = lazy(async () => ({ default: (await import('../features/assistant/DesktopAssistantPanel')).DesktopAssistantPanel }))
 
 const CaseDetailPage = lazy(async () => {

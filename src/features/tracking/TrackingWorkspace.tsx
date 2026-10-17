@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { trackedDocumentTypeSchema, TRACKED_DOCUMENT_LABELS, type TrackingSnapshot } from '@hasarbotu/contracts'
 import { commandTramer, loadTracking, trackingRequest } from './trackingApi'
@@ -13,6 +13,7 @@ const detailLabels: Record<string,string> = { applicationNumber: 'Başvuru numar
 const valueLabels: Record<string,string> = { ...statuses,pending: 'Kontrol bekliyor',approved: 'Onaylandı',rejected: 'Reddedildi' }
 const displayValue = (value: unknown) => valueLabels[String(value)] ?? String(value ?? '—')
 type Run = (work: () => Promise<unknown>) => Promise<void>
+type DocumentDraft = { documentType: string;note: string }
 function CaseLink({ row }: { row: { caseId: string;plate: string;officeNumber: string } }) {
   return <Link to={`/dosyalar/${row.caseId}`}>{row.plate} · {row.officeNumber}</Link>
 }
@@ -33,16 +34,16 @@ function TramerRow({ item,run,busy }: { item: TrackingSnapshot['tramer'][number]
   </article>
 }
 
-function DocumentRow({ item,run,busy,showCaseLink }: { item: TrackingSnapshot['documents'][number];run: Run;busy: boolean;showCaseLink: boolean }) {
-  const [type,setType] = useState(item.documentType ?? 'other_document')
+function DocumentRow({ item,run,busy,showCaseLink,getDraft,onDraftChange }: { item: TrackingSnapshot['documents'][number];run: Run;busy: boolean;showCaseLink: boolean;getDraft: (id: string) => DocumentDraft | undefined;onDraftChange: (id: string,draft: DocumentDraft) => void }) {
+  const [type,setType] = useState(() => getDraft(item.id)?.documentType ?? item.documentType ?? 'other_document')
   const [editing,setEditing] = useState(false)
-  const [note,setNote] = useState('')
+  const [note,setNote] = useState(() => getDraft(item.id)?.note ?? '')
   return <article className="tracking-row tracking-document-row">
     <div className="tracking-document-row__identity">{showCaseLink && <CaseLink row={item} />}<strong title={item.relativePath}>{item.fileName}</strong><span>{TRACKED_DOCUMENT_LABELS[type as keyof typeof TRACKED_DOCUMENT_LABELS] ?? type}</span></div>
     <span className="tracking-document-row__status">{item.status === 'pending' ? 'Kontrol bekliyor' : item.status === 'approved' ? 'Onaylandı' : 'Reddedildi'}</span>
-    {item.canReview && <><div className="tracking-actions">{(['approved','rejected'] as const).map((status) => <button key={status} className="button button--secondary" disabled={busy || !type} onClick={() => { void run(() => trackingRequest(`tracking/documents/${item.id}/review`,{ status,documentType: type,note })) }}>{status === 'approved' ? 'Kontrol ettim, uygun' : 'Uygun değil'}</button>)}<button className="text-button" type="button" onClick={() => setEditing(value => !value)} aria-expanded={editing}>Türü düzelt / not ekle</button></div>
-      {editing && <div className="tracking-document-row__edit"><small>{item.relativePath}</small><label>Evrak türü<select value={type} onChange={(e) => setType(e.target.value)}>{trackedDocumentTypeSchema.options.map((t) => <option key={t} value={t}>{TRACKED_DOCUMENT_LABELS[t]}</option>)}</select></label>
-      <label>Kontrol notu<input value={note} maxLength={2000} onChange={(e) => setNote(e.target.value)} /></label></div>}
+    {item.canReview && <><div className="tracking-actions">{(['approved','rejected'] as const).map((status) => <button key={status} className="button button--secondary" disabled={busy || !type} onClick={() => { void run(() => trackingRequest(`tracking/documents/${item.id}/review`,{ status,documentType: type,note })) }}>{status === 'approved' ? 'Kontrol ettim, uygun' : 'Uygun değil'}</button>)}<button className="text-button" type="button" disabled={busy} onClick={() => setEditing(value => !value)} aria-expanded={editing}>Türü düzelt / not ekle</button></div>
+      {editing && <div className="tracking-document-row__edit"><small>{item.relativePath}</small><label>Evrak türü<select value={type} disabled={busy} onChange={(e) => { setType(e.target.value);onDraftChange(item.id,{ documentType: e.target.value,note }) }}>{trackedDocumentTypeSchema.options.map((t) => <option key={t} value={t}>{TRACKED_DOCUMENT_LABELS[t]}</option>)}</select></label>
+      <label>Kontrol notu<input value={note} maxLength={2000} disabled={busy} onChange={(e) => { setNote(e.target.value);onDraftChange(item.id,{ documentType: type,note: e.target.value }) }} /></label></div>}
     </>}
   </article>
 }
@@ -65,36 +66,70 @@ export function TrackingWorkspace({ caseId, view = 'all' }: { caseId?: string; v
   const [data,setData] = useState<TrackingSnapshot | null>(null)
   const [error,setError] = useState('')
   const [busy,setBusy] = useState(false)
+  const busyRef = useRef(false)
+  const documentDrafts = useRef(new Map<string,DocumentDraft>())
+  const [bulkProgress,setBulkProgress] = useState<{ completed: number;total: number } | null>(null)
+  const [notice,setNotice] = useState('')
   const [assignee,setAssignee] = useState('')
   const [unreadOnly,setUnreadOnly] = useState(true)
   const [documentLimit,setDocumentLimit] = useState(ROW_BATCH_SIZE)
   const [notificationLimit,setNotificationLimit] = useState(ROW_BATCH_SIZE)
   const visibleNotifications = data?.notifications.filter((n) => !unreadOnly || !n.readAt) ?? []
+  const pendingDocuments = data?.documents.filter((item) => item.status === 'pending' && item.canReview) ?? []
   const reload = useCallback(async () => { setData(await loadTracking(caseId)) },[caseId])
+  useEffect(() => {
+    const pendingIds = new Set(data?.documents.filter((item) => item.status === 'pending' && item.canReview).map((item) => item.id))
+    for (const id of documentDrafts.current.keys()) if (!pendingIds.has(id)) documentDrafts.current.delete(id)
+  },[data])
   useEffect(() => {
     let controller: AbortController | undefined
     const refresh = () => {
+      if (busyRef.current) return
       controller?.abort()
       controller = new AbortController()
       const { signal } = controller
-      void loadTracking(caseId,signal).then((next) => { if (!signal.aborted) { setData(next);setError('') } })
-        .catch((e: unknown) => { if (!signal.aborted) setError(e instanceof Error ? e.message : 'Takip yüklenemedi.') })
+      void loadTracking(caseId,signal).then((next) => { if (!signal.aborted && !busyRef.current) { setData(next);setError('') } })
+        .catch((e: unknown) => { if (!signal.aborted && !busyRef.current) setError(e instanceof Error ? e.message : 'Takip yüklenemedi.') })
     }
     window.addEventListener('tracking-received',refresh)
     refresh()
     return () => { controller?.abort();window.removeEventListener('tracking-received',refresh) }
   },[caseId])
   const run: Run = async (work) => {
-    if (busy) return
-    setBusy(true);setError('')
-    try { await work();await reload();window.dispatchEvent(new Event('tracking-updated')) }
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true);setError('');setNotice('')
+    try { await work() }
     catch (e) { setError(e instanceof Error ? e.message : 'İşlem tamamlanamadı.') }
-    finally { setBusy(false) }
+    // A bulk operation can stop after some reviews have already been saved.
+    try { await reload();window.dispatchEvent(new Event('tracking-updated')) }
+    catch (e) { setError((previous) => `${previous ? `${previous} ` : ''}Liste yenilenemedi: ${e instanceof Error ? e.message : 'Takip servisine ulaşılamadı.'}`) }
+    finally { busyRef.current = false;setBusy(false) }
+  }
+  const approveAll = () => {
+    if (!pendingDocuments.length) return
+    const reviews = pendingDocuments.map((item) => ({ id: item.id,...(documentDrafts.current.get(item.id) ?? { documentType: item.documentType ?? 'other_document',note: '' }) }))
+    void run(async () => {
+      let completed = 0
+      setBulkProgress({ completed,total: reviews.length })
+      try {
+        // Each request retains the server's ownership, revision and audit checks.
+        for (const { id,...draft } of reviews) {
+          await trackingRequest(`tracking/documents/${id}/review`,{ status: 'approved',...draft })
+          completed++
+          setBulkProgress({ completed,total: reviews.length })
+        }
+        setNotice(`${completed} evrak uygun işaretlendi.`)
+      } catch (e) {
+        throw new Error(`Toplu işlem durdu. ${completed}/${reviews.length} evrak uygun işaretlendi. ${e instanceof Error ? e.message : 'İşlem tamamlanamadı.'}`,{ cause: e })
+      } finally { setBulkProgress(null) }
+    })
   }
   const onConnected = useCallback(() => { void reload().catch(() => setError('Bağlantı listesi yenilenemedi.')) },[reload])
   return <section className="tracking-workspace" aria-label="Evrak ve Tramer takibi">
     <div className="tracking-actions"><h2>{view === 'documents' ? 'Klasör evrakları ve fotoğraflar' : view === 'operations' ? 'Tramer işlemleri' : 'Evrak ve Tramer takibi'}</h2><button className="button button--secondary" disabled={busy} onClick={() => { void run(reload) }}>Yenile</button></div>
     {error && <p role="alert">{error}</p>}{!data && !error && <p role="status">Takip yükleniyor…</p>}
+    {(bulkProgress || notice) && <p role="status">{bulkProgress ? `Evraklar uygun işaretleniyor… (${bulkProgress.completed}/${bulkProgress.total})` : notice}</p>}
     {data && <>
       {view !== 'documents' && <details open={!caseId || data.tramer.length > 0}><summary>{caseId ? 'Tramer işlemleri' : 'Bana atanan bekleyen Tramer işleri'} ({data.tramer.length})</summary>
         {caseId && data.canManage && <form onSubmit={(e) => { e.preventDefault();void run(() => commandTramer(caseId,{ action: 'assign',assignedUserId: assignee })) }}>
@@ -105,7 +140,8 @@ export function TrackingWorkspace({ caseId, view = 'all' }: { caseId?: string; v
         {!data.tramer.length && <p>Tramer işi bulunmuyor.</p>}
       </details>}
       {view !== 'operations' && <details open><summary>{caseId ? 'Klasörde algılanan evraklar' : 'Kontrolümü bekleyen evraklar'} ({data.documents.length})</summary><p>Tür, dosya ve alt klasör adından belirlenir; gerekirse düzeltebilirsiniz. İçerik kontrolünden sonra onaylayın.</p>
-        {data.documents.slice(0,documentLimit).map((item) => <DocumentRow key={`${item.id}:${item.status}`} item={item} run={run} busy={busy} showCaseLink={!caseId} />)}{!data.documents.length && <p>Kontrol kaydı bulunmuyor.</p>}
+        {!caseId && pendingDocuments.length > 0 && <div className="tracking-actions"><button type="button" className="button button--primary" disabled={busy} onClick={approveAll}>Hepsini uygun işaretle ({pendingDocuments.length})</button></div>}
+        {data.documents.slice(0,documentLimit).map((item) => <DocumentRow key={`${item.id}:${item.status}`} item={item} run={run} busy={busy} showCaseLink={!caseId} getDraft={(id) => documentDrafts.current.get(id)} onDraftChange={(id,draft) => { documentDrafts.current.set(id,draft) }} />)}{!data.documents.length && <p>Kontrol kaydı bulunmuyor.</p>}
         {data.documents.length > documentLimit && <button className="button button--secondary" onClick={() => setDocumentLimit((limit) => limit+ROW_BATCH_SIZE)}>Daha fazla evrak göster ({data.documents.length-documentLimit} kalan)</button>}
       </details>}
       {view === 'all' && <details open={!caseId}><summary>Kalıcı bildirimler ({data.notifications.filter((n) => !n.readAt).length} okunmamış)</summary>

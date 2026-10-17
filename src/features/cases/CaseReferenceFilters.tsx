@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { SearchableSelect } from '../../components/SearchableSelect'
 import type { CaseReferenceDataPort } from '../../data/ports'
 import { useCaseReferences } from '../../data/useCaseReferences'
 /**
@@ -15,50 +15,30 @@ export function CaseReferenceFilters({
   onResponsibleChange,
   onServiceChange,
   port,
+  referenceData,
 }: {
   readonly responsibleUserId: string
   readonly serviceId: string
   onResponsibleChange: (value: string) => void
   onServiceChange: (value: string) => void
   readonly port?: CaseReferenceDataPort
+  readonly referenceData?: ReturnType<typeof useCaseReferences>
 }) {
-  const { references, status } = useCaseReferences(port)
+  const loaded = useCaseReferences(port, {}, referenceData === undefined)
+  const { references, status, reload } = referenceData ?? loaded
   const users = (references?.users ?? []).filter((user) => user.roles?.includes('case_manager'))
   const services = references?.services ?? []
   const disabled = status !== 'ok'
 
   return (
     <>
-      <label className="select-field">
-        <span className="select-field__label">Sorumlu</span>
-        <select
-          aria-label="Dosya sorumlusu"
-          value={responsibleUserId}
-          disabled={disabled}
-          onChange={(event) => onResponsibleChange(event.target.value)}
-        >
-          <option value="Tümü">Tümü</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>{user.displayName}</option>
-          ))}
-        </select>
-        <ChevronDown size={14} />
-      </label>
-      <label className="select-field">
-        <span className="select-field__label">Servis</span>
-        <select
-          aria-label="Dosya servisi"
-          value={serviceId}
-          disabled={disabled}
-          onChange={(event) => onServiceChange(event.target.value)}
-        >
-          <option value="Tümü">Tümü</option>
-          {services.map((service) => (
-            <option key={service.id} value={service.id}>{service.name}</option>
-          ))}
-        </select>
-        <ChevronDown size={14} />
-      </label>
+      <SearchableSelect label="Dosya sorumlusu" value={responsibleUserId} disabled={disabled} onChange={onResponsibleChange}
+        options={[{ value: 'Tümü', label: 'Tüm sorumlular' }, ...users.map(user => ({ value: user.id, label: user.displayName }))]} />
+      <SearchableSelect label="Dosya servisi" value={serviceId} disabled={disabled} onChange={onServiceChange}
+        options={[{ value: 'Tümü', label: 'Tüm servisler' }, ...services.map(service => ({ value: service.id, label: service.name }))]} />
+      {status === 'loading' && <span className="filterbar__status" role="status">Filtreler yükleniyor…</span>}
+      {status === 'unavailable' && <span className="filterbar__status" role="status">Filtreler yüklenemedi. <button type="button" className="filterbar__clear" onClick={reload}>Yeniden dene</button></span>}
+      {status === 'unauthorized' && <span className="filterbar__status" role="status">Filtreleri kullanmak için yeniden giriş yapın.</span>}
     </>
   )
 }

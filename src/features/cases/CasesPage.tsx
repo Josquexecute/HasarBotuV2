@@ -1,4 +1,8 @@
 import { canUsePermission } from '../../app/permissions'
+import { useOfficeDate } from '../../app/useOfficeDate'
+import { useCaseReferences } from '../../data/useCaseReferences'
+import { resolveCaseReferenceNames } from '../../data/caseReferenceNames'
+import { deriveFollowUp, deriveStatus } from '../../data/httpAdapter'
 import { useActiveCase, QUICK_NOTE_EVENT } from '../../app/activeCase'
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -192,6 +196,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
 } = {}) {
   // API modunda bütün liste ÇEKİLMEZ; yalnız mock prototipi bu hook'u kullanır.
   const { cases, source } = useCases({ enabled: getConfiguredDataSource() !== 'api' })
+  const referenceData = useCaseReferences(referencePort, {}, source === 'api')
   const session = useSession()
   const location = useLocation()
   const navigate = useNavigate()
@@ -235,7 +240,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
 
 
   // Filtering and ordering remain on the server; scrolling requests only the next batch.
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const today = useOfficeDate()
   const filterState: CasesFilterState = useMemo(() => ({
     query,
     typeFilter,
@@ -326,8 +331,12 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
 
   /** Loaded batches stay visible while the next one is being fetched. */
   const visibleCases = useMemo(
-    () => (source === 'api' ? list.items : mockFilteredCases),
-    [list.items, mockFilteredCases, source],
+    () => (source === 'api' ? list.items.map(item => resolveCaseReferenceNames(item.lifecycleStatus ? {
+      ...item,
+      ...deriveFollowUp(item.followUpDate ?? null, today),
+      status: deriveStatus({ status: item.lifecycleStatus, followUpDate: item.followUpDate ?? null }, today),
+    } : item, referenceData.references)) : mockFilteredCases),
+    [list.items, mockFilteredCases, source, referenceData.references, today],
   )
   const totalCount = source === 'api' ? list.totalCount : mockFilteredCases.length
 
@@ -423,6 +432,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
               onResponsibleChange={setAssigneeFilter}
               onServiceChange={setServiceFilter}
               port={referencePort}
+              referenceData={referenceData}
             />
           ) : (
             <>
@@ -498,7 +508,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                       )}
                       <td>{item.assignee}</td>
                       <td className="truncate-cell" title={item.service}>{item.service}</td>
-                      <td><OpenCaseFolderButton caseId={item.caseId} /><NoticeSheetButton compact caseId={item.caseId} plate={item.plate} source={source} /></td>
+                      <td><div className="case-table-actions"><OpenCaseFolderButton compact caseId={item.caseId} /><NoticeSheetButton compact caseId={item.caseId} plate={item.plate} source={source} /></div></td>
                       <td><span className={`follow-up follow-up--${item.followUpTone}`}>{item.followUp}</span></td>
                       <td>{item.lastAction}</td>
                     </tr>

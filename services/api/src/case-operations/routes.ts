@@ -1,4 +1,5 @@
 import { hasPermission } from '../auth/permissions.js'
+import { toOfficeDate } from '@hasarbotu/domain'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type pg from 'pg'
 import {
@@ -117,7 +118,7 @@ export function registerCaseOperationsRoutes(
     const result = await store.read(
       session.user.organizationId,
       params.data.caseId,
-      now.slice(0, 10),
+      toOfficeDate(now),
       canWrite(session.user.roles) && hasPermission(session.user,'operations_write'),
     )
     if (result === undefined) {
@@ -204,7 +205,7 @@ export function registerCaseOperationsRoutes(
         organizationId: session.user.organizationId,
         actorUserId: session.user.id,
         requestId,
-      }, params.data.caseId, body.data, { scope: TASK_SCOPE, key, requestHash }, now.slice(0, 10))
+      }, params.data.caseId, body.data, { scope: TASK_SCOPE, key, requestHash }, toOfficeDate(now))
       if (outcome.kind === 'idempotency_race') {
         const raced = await store.findIdempotent(session.user.organizationId, TASK_SCOPE, key)
         if (raced !== undefined && raced.requestHash === requestHash) {
@@ -270,7 +271,7 @@ export function registerCaseOperationsRoutes(
         scope,
         key,
         requestHash,
-      }, now.slice(0, 10))
+      }, toOfficeDate(now))
       if (outcome.kind === 'idempotency_race') {
         const raced = await store.findIdempotent(session.user.organizationId, scope, key)
         if (raced !== undefined && raced.requestHash === requestHash) {

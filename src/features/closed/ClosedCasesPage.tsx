@@ -5,6 +5,8 @@ import { useActiveCase } from '../../app/activeCase'
 import type { CasesDataPort } from '../../data/ports'
 import type { ClosureFeeStatusRecord, ReportsFeesDataPort, TrafficValueLossClosureSummaryRecord } from '../../data/reportsFeesPort'
 import { useClosedCases } from '../../data/useClosedCases'
+import { useCaseReferences } from '../../data/useCaseReferences'
+import { resolveCaseReferenceNames } from '../../data/caseReferenceNames'
 import { useClosureFeeList, useValueLossClosureList } from '../../data/useReportsFees'
 import { formatCurrency } from '../../mocks/cases'
 import { closedCases } from '../../mocks/workspaces'
@@ -53,6 +55,7 @@ export function ClosedCasesPage({
 } = {}) {
   const navigate = useNavigate()
   const { cases: apiCases, source, status } = useClosedCases(casesPort)
+  const { references } = useCaseReferences(undefined, {}, source === 'api')
   const feeList = useClosureFeeList(source === 'api', feePort)
   const valueLossList = useValueLossClosureList(source === 'api', feePort)
   const [query, setQuery] = useState('')
@@ -78,7 +81,8 @@ export function ClosedCasesPage({
     }
     const feeByCase = new Map(feeList.items.map((item) => [item.caseId, item]))
     const valueLossByCase = new Map(valueLossList.items.map((item) => [item.caseId, item]))
-    return apiCases.map((item) => {
+    return apiCases.map((raw) => {
+      const item = resolveCaseReferenceNames(raw, references)
       const feeItem = feeByCase.get(item.caseId)
       const feeVersion = feeItem?.fee.currentVersion
       const valueLossItem = valueLossByCase.get(item.caseId)
@@ -106,7 +110,7 @@ export function ClosedCasesPage({
       hasClosureDetails: valueLossItem !== undefined,
     }}
     )
-  }, [apiCases, feeList.items, source, valueLossList.items])
+  }, [apiCases, feeList.items, references, source, valueLossList.items])
 
   const filtered = useMemo(() => {
     const normalized = query.toLocaleLowerCase('tr-TR')

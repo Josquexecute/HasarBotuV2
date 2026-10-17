@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
 import { CaseListCacheContext, createCaseListCache } from '../../data/caseListCache'
@@ -100,6 +100,34 @@ const referencePort = {
     insurers: [],
   }),
 } as unknown as CaseReferenceDataPort
+
+it('resolves the current responsible ID in the table and shares one reference request with its filters', async () => {
+  const references = vi.spyOn(referencePort, 'getCaseReferences')
+  const { port } = stubCasesPort(1)
+  port.listCasePage = async query => ({ items: [{ ...caseRecord(1), responsibleUserId: 'user-1' }], page: 1, pageSize: query.pageSize, totalCount: 1, totalPages: 1 })
+  renderPage(port, stubAlertPort().port)
+  expect(await within(await screen.findByRole('table')).findByRole('cell', { name: 'Sentetik Sorumlu' })).toBeInTheDocument()
+  expect(references).toHaveBeenCalledTimes(1)
+})
+
+it('updates already loaded follow-up labels and overdue state when the office day changes', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-31T20:59:45Z'))
+  try {
+    const { port, queries } = stubCasesPort(1)
+    port.listCasePage = async query => {
+      queries.push(query)
+      return { items: [{ ...caseRecord(1), followUpDate: '2026-10-31' }], page: 1, pageSize: query.pageSize, totalCount: 1, totalPages: 1 }
+    }
+    renderPage(port, stubAlertPort().port)
+    await act(async () => {})
+    expect(within(screen.getByRole('table')).getByText('Bugün')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(15_000))
+    expect(within(screen.getByRole('table')).getByText('Gecikmiş')).toBeInTheDocument()
+    expect(within(screen.getByRole('table')).queryByText('Bugün')).not.toBeInTheDocument()
+    expect(queries).toHaveLength(1)
+  } finally { vi.useRealTimers() }
+})
 
 /** Plaka hem satirda hem hizli detay panelinde gorunur; sorgular tabloya sinirlanir. */
 function rowPlates(): string[] {

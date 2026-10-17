@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import { DASHBOARD_ROUTE } from '@hasarbotu/contracts'
+import { toOfficeDate } from '@hasarbotu/domain'
 import { createAuthStore } from '../auth/store.js'
 import { requireSession } from '../auth/guard.js'
 import type { Clock } from '../clock.js'
@@ -22,7 +23,7 @@ export function registerDashboardRoutes(
     const session = await requireSession(auth, request, reply)
     if (session === undefined) return
     const evaluatedAt = options.clock.nowUtcIso()
-    const asOfDate = evaluatedAt.slice(0, 10)
+    const asOfDate = toOfficeDate(evaluatedAt)
     return dashboard.read(session.user.organizationId, asOfDate, evaluatedAt)
   })
 }

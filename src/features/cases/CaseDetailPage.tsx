@@ -2,7 +2,7 @@ import { canUsePermission } from '../../app/permissions'
 import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
 import { NoticeSheetButton } from './NoticeSheetButton'
 import { ModalFrame } from '../../components/ModalFrame'
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -33,7 +33,9 @@ import { CaseEditModal } from './CaseEditModal'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
 import { EksistSources } from './EksistSources'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
-import { CaseApiLegacyReferenceFields } from './CaseLegacyReferenceFields'
+import { CaseLegacyReferenceFields } from './CaseLegacyReferenceFields'
+import { useCaseReferences } from '../../data/useCaseReferences'
+import { resolveCaseReferenceNames } from '../../data/caseReferenceNames'
 import { CaseTypeAssignment } from './CaseTypeAssignment'
 
 const DocumentPhotoApiModule = lazy(async () => {
@@ -179,6 +181,7 @@ function CaseDetail() {
     status: dataStatus,
     reload: reloadCase,
   } = useCase(caseId ?? '')
+  const referenceData = useCaseReferences(undefined, {}, source === 'api')
   const navigate = useNavigate()
   const location = useLocation()
   const session = useSession()
@@ -204,7 +207,8 @@ function CaseDetail() {
   const overrideKey = `${caseId}#${baseItem?.version ?? ''}`
   const caseOverride = override.key === overrideKey ? override.value : null
   const setCaseOverride = useCallback((value: CaseRecord | null) => setOverride({ key: overrideKey, value }), [overrideKey])
-  const item = caseOverride?.caseId === caseId ? caseOverride : baseItem
+  const currentItem = caseOverride?.caseId === caseId ? caseOverride : baseItem
+  const item = useMemo(() => currentItem ? resolveCaseReferenceNames(currentItem, referenceData.references) : null, [currentItem, referenceData.references])
   useActiveCase(dataStatus === 'ok' || source === 'mock' ? item : null, source)
   useEffect(() => {
     const showNotes = (event: Event) => {
@@ -337,7 +341,7 @@ function CaseDetail() {
                   <div><dt>İhbar Föyü No</dt><dd>{item.noticeNumber}</dd></div>
                   <div><dt>Tahmini Hasar</dt><dd>{source === 'api' ? 'Henüz bağlı değil' : formatCurrency(item.estimatedDamage)}</dd></div>
                   {source === 'api'
-                    ? <CaseApiLegacyReferenceFields item={item} />
+                    ? <CaseLegacyReferenceFields item={item} references={referenceData.references} />
                     : <><div><dt>Servis</dt><dd>{item.service}</dd></div><div><dt>Sorumlu</dt><dd>{item.assignee}</dd></div><div><dt>Eksper</dt><dd>{item.expert}</dd></div></>}
                 </dl>
               </section>

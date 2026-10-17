@@ -20,6 +20,7 @@ interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
   onNavigate?: () => void
+  toggleLabel?: string
   /** Test enjeksiyonu için; verilmezse gerçek HTTP adaptörü kullanılır. */
   operationalAlertPort?: OperationalAlertDataPort
 }
@@ -62,7 +63,7 @@ const navigation: readonly {
   { to: '/ayarlar', label: 'Ayarlar', icon: Settings },
 ]
 
-export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort, toggleLabel }: SidebarProps) {
   // Kimlik yalnız gerçek oturumdan gelir; mock modda prototip kimliği korunur.
   const { mode, user } = useSession()
   const displayName = user?.displayName ?? (mode === 'mock' ? 'Ömer Faruk Kaya' : 'Oturum bekleniyor')
@@ -101,6 +102,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort 
               end={end}
               className={({ isActive }) => `nav-item${isActive ? ' nav-item--active' : ''}`}
               title={collapsed ? label : undefined}
+              aria-label={collapsed ? label : undefined}
             >
               <Icon size={18} aria-hidden="true" />
               {!collapsed && <span className="nav-item__label">{label}</span>}
@@ -124,8 +126,8 @@ export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort 
           className="sidebar__toggle"
           type="button"
           onClick={onToggle}
-          aria-label={collapsed ? 'Menüyü genişlet' : 'Menüyü daralt'}
-          title={collapsed ? 'Menüyü genişlet' : 'Menüyü daralt'}
+          aria-label={toggleLabel ?? (collapsed ? 'Menüyü genişlet' : 'Menüyü daralt')}
+          title={toggleLabel ?? (collapsed ? 'Menüyü genişlet' : 'Menüyü daralt')}
         >
           {collapsed ? <ChevronsRight size={17} /> : <ChevronsLeft size={17} />}
         </button>

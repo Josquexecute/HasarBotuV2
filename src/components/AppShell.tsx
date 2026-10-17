@@ -5,6 +5,7 @@ import { TouchAssistant } from './TouchAssistant'
 import { StartupPage } from '../app/StartupPage'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { ModalFrame } from './ModalFrame'
 
 interface AppShellProps {
   children: ReactNode
@@ -20,7 +21,7 @@ export function AppShell(props: AppShellProps) {
   const [narrow, setNarrow] = useState(() => window.innerWidth < 1024)
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => {
-    const update = () => setNarrow(window.innerWidth < 1024)
+    const update = () => { setNarrow(window.innerWidth < 1024); if (window.innerWidth >= 1024) setMenuOpen(false) }
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
   }, [])
@@ -30,13 +31,16 @@ export function AppShell(props: AppShellProps) {
     <CaseListCacheContext.Provider value={caseListCache}>
     <StartupPage />
     <div className={`app-shell${menuOpen ? ' app-shell--menu-open' : ''}`}>
-      {narrow && menuOpen && <button className="sidebar-backdrop" type="button" aria-label="Menüyü kapat" onClick={() => setMenuOpen(false)} />}
-      <Sidebar collapsed={narrow ? false : props.collapsed} onToggle={toggleMenu} onNavigate={() => setMenuOpen(false)} />
-      <div className="app-shell__main">
+      {narrow ? menuOpen && <ModalFrame className="mobile-navigation" labelledBy="mobile-navigation-title" onClose={() => setMenuOpen(false)}>
+        <h2 id="mobile-navigation-title" className="sr-only">Ana menü</h2>
+        <Sidebar collapsed={false} onToggle={toggleMenu} onNavigate={() => setMenuOpen(false)} toggleLabel="Menüyü kapat" />
+      </ModalFrame> : <Sidebar collapsed={props.collapsed} onToggle={toggleMenu} />}
+      <div className="app-shell__main" inert={narrow && menuOpen}>
         <Topbar
           theme={props.theme}
           onMenuToggle={toggleMenu}
           onThemeToggle={props.onThemeToggle}
+          menuExpanded={narrow ? menuOpen : !props.collapsed}
         />
         <div className="workspace">{props.children}</div>
       </div>

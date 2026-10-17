@@ -1,0 +1,30 @@
+/* Animate only short interactions; resting screens do not keep compositor layers alive. */
+:root {
+  --motion-fast: 120ms;
+  --motion-panel: 180ms;
+  --motion-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .button, .icon-button, .nav-item, .case-tabs button, .topbar-action,
+  .assistant-native-actions button, .assistant-palette-presets button {
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease,
+      color var(--motion-fast) ease, opacity var(--motion-fast) ease, transform var(--motion-fast) var(--motion-ease);
+  }
+  .button:active:not(:disabled), .icon-button:active:not(:disabled) { transform: translateY(1px); }
+  .modal-backdrop, .touch-assistant-backdrop { animation: surface-fade var(--motion-fast) ease-out; }
+  .modal, .touch-assistant { animation: panel-enter var(--motion-panel) var(--motion-ease); }
+  .modal.mobile-navigation { animation-name: navigation-enter; }
+  .searchable-select__popup { animation: panel-enter var(--motion-fast) var(--motion-ease); }
+  .quick-detail, .office-detail, .source-detail { animation: detail-enter var(--motion-panel) var(--motion-ease); }
+  .workspace > * { animation: surface-fade var(--motion-panel) ease-out; }
+}
+
+@keyframes surface-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes panel-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes navigation-enter { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes detail-enter { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .state-view__spinner, .spin { animation: none; }
+}

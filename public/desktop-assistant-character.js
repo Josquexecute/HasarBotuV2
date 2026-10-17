@@ -13,16 +13,17 @@ if (assistant && context) {
   const neutral = new BotEngine()
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
   let frame
+  let idleTimer
   let hoverTimer
   let previousTime = performance.now()
   let lastDraw = 0
   let disposed = false
   let personalReducedMotion = false
+  let size = canvas.clientWidth
+  let ratio = window.devicePixelRatio || 1
   const reduced = () => motion.matches || personalReducedMotion
 
   const draw = () => {
-    const size = canvas.clientWidth
-    const ratio = window.devicePixelRatio || 1
     const pixels = Math.round(size * ratio)
     if (canvas.width !== pixels || canvas.height !== pixels) {
       canvas.width = pixels
@@ -34,51 +35,71 @@ if (assistant && context) {
     pose.draw(context, size, size)
   }
   const sizeObserver = new ResizeObserver(() => {
+    size = canvas.clientWidth
+    ratio = window.devicePixelRatio || 1
     if (!document.hidden) draw()
   })
+  const wake = () => {
+    window.clearTimeout(idleTimer)
+    idleTimer = undefined
+    if (!disposed && !document.hidden && !reduced() && frame === undefined) {
+      lastDraw = -Infinity
+      frame = window.requestAnimationFrame(animate)
+    }
+  }
   const animate = (time) => {
     frame = undefined
     if (disposed || document.hidden || reduced()) return
-    // Idle still needs occasional updates for blinks; movement gets 30 fps.
-    const interval = bot.busy ? 1000 / 30 : 1000 / 8
-    if (time - lastDraw >= interval) {
+    // The engine also starts delayed emotes internally; check those at 8 Hz while idle.
+    // Only active motion uses display frames, drawing at up to 60 fps.
+    const interval = 1000 / 60
+    const elapsed = time - lastDraw
+    // RAF timestamps are fractional. Keep the cadence instead of losing alternate
+    // 60 Hz frames to rounding, or drifting below 60 fps on 144 Hz displays.
+    if (elapsed >= interval - 0.5) {
+      const wasBusy = bot.busy
       bot.update(Math.min((time - previousTime) / 1000, 0.1))
       previousTime = time
-      lastDraw = time
-      draw()
+      lastDraw = Number.isFinite(lastDraw) ? lastDraw + Math.max(1, Math.floor((elapsed + 0.5) / interval)) * interval : time
+      if (wasBusy || bot.busy) draw()
     }
-    frame = window.requestAnimationFrame(animate)
+    if (bot.busy) frame = window.requestAnimationFrame(animate)
+    else idleTimer = window.setTimeout(wake, 125)
   }
   const pause = () => {
     if (frame !== undefined) window.cancelAnimationFrame(frame)
     frame = undefined
+    window.clearTimeout(idleTimer)
+    idleTimer = undefined
     window.clearTimeout(hoverTimer)
   }
   const resume = () => {
     pause()
     if (disposed || document.hidden) return
     previousTime = performance.now()
+    lastDraw = 0
     if (reduced()) {
       // Use the neutral pose so a mid-blink or squash cannot get frozen.
       draw()
       return
     }
-    frame = window.requestAnimationFrame(animate)
+    wake()
   }
   const unsubscribe = assistant.onGaze(({ x, y }) => {
-    if (reduced() || disposed) return
+    if (reduced() || disposed || bot.lookX === x && bot.lookY === -y) return
     bot.lookX = x
     // Screen Y grows downwards; the engine's pitch draws positive Y upwards.
     bot.lookY = -y
+    wake()
   })
   const greetOnHover = () => {
     if (reduced()) return
     window.clearTimeout(hoverTimer)
-    hoverTimer = window.setTimeout(() => bot.triggerEmote('happy'), 1200)
+    hoverTimer = window.setTimeout(() => { bot.triggerEmote('happy'); wake() }, 1200)
   }
   const leave = () => window.clearTimeout(hoverTimer)
   const press = (event) => {
-    if (event.button === 0 && !reduced()) bot.squash()
+    if (event.button === 0 && !reduced()) { bot.squash(); wake() }
   }
   const onVisibility = () => {
     if (document.hidden) pause()
@@ -108,7 +129,12 @@ if (assistant && context) {
     document.removeEventListener('visibilitychange', onVisibility)
     motion.removeEventListener('change', resume)
     sizeObserver.disconnect()
-    window.removeEventListener('resize', draw)
+    window.removeEventListener('resize', resize)
+  }
+  const resize = () => {
+    size = canvas.clientWidth
+    ratio = window.devicePixelRatio || 1
+    if (!document.hidden) draw()
   }
 
   draw()
@@ -120,7 +146,7 @@ if (assistant && context) {
   motion.addEventListener('change', resume)
   // Track physical pixels even when monitor changes leave the CSS size intact.
   sizeObserver.observe(canvas, { box: 'device-pixel-content-box' })
-  window.addEventListener('resize', draw)
+  window.addEventListener('resize', resize)
   window.addEventListener('pagehide', dispose, { once: true })
   resume()
 }

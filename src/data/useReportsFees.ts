@@ -82,6 +82,7 @@ export function useCaseSummaryReport(
   const { reportUnauthorized } = useSession()
   const [revision, setRevision] = useState(0)
   const { period, responsibleUserId, serviceId } = input
+  const [filterOptions, setFilterOptions] = useState<{ period: string; responsibleUsers: CaseSummaryReportRecord['responsibleUsers']; services: CaseSummaryReportRecord['services'] }>(() => ({ period, responsibleUsers: [], services: [] }))
   const reload = useCallback(() => setRevision((value) => value + 1), [])
   // Yükleme durumu efektte senkron sıfırlanmaz; sorgu veya sürüm değişince
   // RENDER sırasında türetilir. Önceki dönemin özeti hiçbir frame'de görünmez.
@@ -101,6 +102,7 @@ export function useCaseSummaryReport(
     }).then((value) => {
       if (cancelled) return
       setLoaded({ key: requestKey, report: value, status: 'ok' })
+      setFilterOptions({ period, responsibleUsers: value.responsibleUsers, services: value.services })
     }).catch((error: unknown) => {
       if (cancelled) return
       const kind = error instanceof ReportsFeesError ? error.kind : 'unavailable'
@@ -110,8 +112,9 @@ export function useCaseSummaryReport(
     return () => { cancelled = true }
   }, [enabled, period, port, reportUnauthorized, requestKey, responsibleUserId, serviceId])
 
-  if (!enabled) return { report: null, status: 'idle' as ReportsFeesLoadStatus, reload }
-  return { report: current.report, status: current.status, reload }
+  const options = enabled && filterOptions.period === period ? filterOptions : { responsibleUsers: [], services: [] }
+  if (!enabled) return { report: null, status: 'idle' as ReportsFeesLoadStatus, reload, filterOptions: options }
+  return { report: current.report, status: current.status, reload, filterOptions: options }
 }
 
 export function useClosureFeeList(

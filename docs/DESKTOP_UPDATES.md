@@ -1,13 +1,15 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.33**, published on 2026-10-16.
+The current authenticated office release is **0.1.36**, published on 2026-10-17.
 Existing users receive it through the update button below. Its verified Windows
-x64 installer is 107,136,047 bytes, SHA-256
-`09dd75ad564a2f90fe5ff6ef5c7d91a620b191ef902612b67e4d120e37e6d7a8`.
-It preserves selected Touch character colors in the preview and Canvas renderer,
-adapts eye contrast, and corrects and expands the ready-made palettes. The prior
-automatic Kasko/Traffic notice sheets and their deployed API/database support
-remain included. See [notice sheets](NOTICE_SHEETS.md).
+x64 installer is 107,141,714 bytes, SHA-256
+`576ba24804651789fe76b2fd5d7a6479e50253fd4c1ad6cf43d033795f9d4ada`.
+Notifications now provides **Hepsini uygun işaretle** for all owned pending
+documents, including rows beyond the first 100. Edited document categories and
+notes are retained. Progress, duplicate-action prevention and partial-failure
+reporting use the existing per-document authorization, revision and audit checks.
+Previous smoothness, resource, reference, calendar, Touch color and notice-sheet
+improvements remain included; see [the performance measurements](PERFORMANCE_2026-10-17.md).
 
 The existing public 0.1.15 installer remains available from [HasarBotu download](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
 New GitHub releases are prepared only in the private `HasarBotuV2` repository and
@@ -148,3 +150,89 @@ Temporary diagnostic tasks and inspectors were removed. Local evidence:
 `.local/touch-colors-release-20261016/` (`preparation.json`,
 `hasarbotu-release-checks/summary.json`, `package-smoke.log`,
 `publication-proof.json`).
+
+## Full review publication · 2026-10-17
+
+Version 0.1.34 was published at 2026-10-17T05:50:00.669Z. The existing
+authenticated office feed retained the previous 0.1.33 manifest and immutable
+installer; the latter's SHA-256 was verified again after publication.
+
+The running installed 0.1.33 client's production update IPC returned `available`
+for 0.1.34. Its existing authenticated session streamed all 107,140,726 bytes
+with HTTP 200 and the exact published SHA-256. Installation was left to users.
+The two compiled API routes now use the shared Istanbul calendar helper; their
+previous files and deployment plan were preserved and the running API process
+was verified to have started after both file updates. No database migration was
+required. All four office services are running; folder discovery completed a
+fresh cycle with `PASS`. Temporary verification tasks and inspectors were removed.
+
+The review recorded 2,904 distinct passing tests, including the optional live
+HTTP tests executed separately. TypeScript, ESLint, production builds, bundle
+limits, the actual packaged Electron startup and Windows publisher all passed.
+The installer smoke test verified all 59 packaged UI files and the office profile.
+See [scope, evidence and limitations](FULL_REVIEW_2026-10-17.md).
+
+Office memory exhaustion also interrupted services during delivery. With the
+user's explicit approval, pCloud was restarted in its original user session;
+its files, cache and configuration were retained. The resulting memory reduction
+and successful subsequent discovery cycle were verified. This recovery does not
+establish a permanent fix for pCloud's excessive memory consumption.
+
+Local evidence: `.local/full-review-20261016/` (`publication-proof.json`,
+`office-update-check-proof.json`, `backend-proof.json`,
+`pcloud-restart-proof.json`, `final-health-proof.json`).
+
+## Smoothness and resource publication · 2026-10-17
+
+Version 0.1.35 was published at 2026-10-17T06:26:19.761Z. The previous 0.1.34
+manifest and immutable installer were preserved and its installer hash was
+verified again. The installed 0.1.33 client's production update IPC returned
+available for 0.1.35; its existing authenticated session streamed all 107,141,484
+bytes with HTTP 200 and the exact published SHA-256. Installation remains under
+user control. All four services and folder discovery are healthy; temporary
+verification tasks and inspectors were removed. No backend or database update
+was required.
+
+Validation recorded 2,912 distinct passing tests, a successful Windows x64
+installer build and actual packaged startup, all 59 UI files matching the build,
+and the preserved office connection profile. See [measured CPU/memory results,
+frame cadence, test scope and limits](PERFORMANCE_2026-10-17.md).
+
+Local evidence: `.local/smooth-20261017/` (`final-performance-summary.json`,
+`final-validation.json`, `package-results.json`, `publication-proof.json`,
+`office-update-check-proof.json`, `final-health-proof.json`).
+
+## Bulk document approval publication · 2026-10-17
+
+Version 0.1.36 was published at 2026-10-17T06:55:24.713Z. The previous
+0.1.35 manifest and immutable installer were preserved and the latter's SHA-256
+was verified again. The installed 0.1.35 client's production update
+IPC returned `available` for 0.1.36. Its existing authenticated session downloaded
+all 107,141,714 bytes with HTTP 200 and the exact published SHA-256.
+Installation remains under user control. All four office services are healthy;
+temporary verification tasks and inspectors were removed. No backend deployment
+or database migration was required.
+
+The first publication attempt stopped at the health guard because folder
+discovery was stopped. Windows recovered it automatically. Two fresh successful
+cycles were confirmed before publication and another at the final health check;
+service code and configuration were retained.
+
+Validation passed TypeScript, ESLint, the production build, 531 broad frontend
+tests, the final 14-test tracking regression suite, 21 tracking API integration
+tests, real Electron UI acceptance (35 checks) and the Windows installer smoke
+and publisher checks. All six optional live HTTP tests skipped by the default
+frontend runner were executed separately with an isolated fixture and passed.
+The isolated UI fixture approved 103 owned
+documents in one action through the real authenticated API, persisted the edited
+type and note, recorded 103 owner audit events and left another owner's document
+pending. Layout was checked in light/dark themes, a 390-pixel window and 150% zoom.
+Regression tests cover 201 documents beyond the visible batch, restored drafts
+after a refreshed row leaves the visible batch, keyboard activation, missing permissions,
+duplicate clicks, arrivals during processing, partial failure/retry and refresh
+failure. Production claim documents were not approved during validation.
+
+Local evidence: `.local/bulk-documents-20261017/` (`validation.json`,
+`final-validation.json`, `ui-evidence/refinements-ui-acceptance.json`, `package-results.json`,
+`publication-proof.json`, `office-update-check-proof.json`,
+`final-health-proof.json`).

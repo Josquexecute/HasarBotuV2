@@ -4,22 +4,24 @@ import type { CaseReferenceDataPort, CaseReferenceWorkspace, ServiceReferenceQue
 
 export type CaseReferencesStatus = 'loading' | 'ok' | 'unauthorized' | 'unavailable'
 
-export function useCaseReferences(port?: CaseReferenceDataPort, query: ServiceReferenceQuery = {}): {
+export function useCaseReferences(port?: CaseReferenceDataPort, query: ServiceReferenceQuery = {}, enabled = true): {
   readonly references: CaseReferenceWorkspace | null
   readonly status: CaseReferencesStatus
   reload(): void
 } {
   const adapter = useMemo(() => port ?? createHttpReferenceDataAdapter(), [port])
-  const [references, setReferences] = useState<CaseReferenceWorkspace | null>(null)
-  const [status, setStatus] = useState<CaseReferencesStatus>('loading')
   const [token, setToken] = useState(0)
   const insurerId = query.insurerId
   const evaluationDate = query.evaluationDate
   const dateSource = query.dateSource ?? 'loss_date'
   const operation = query.operation ?? 'closure_documents'
-  const reload = useCallback(() => { setStatus('loading'); setToken((value) => value + 1) }, [])
+  const requestKey = JSON.stringify([insurerId, evaluationDate, dateSource, operation, token])
+  const [loaded, setLoaded] = useState<{ adapter: CaseReferenceDataPort; key: string; references: CaseReferenceWorkspace | null; status: CaseReferencesStatus }>(() => ({ adapter, key: requestKey, references: null, status: 'loading' }))
+  const current = loaded.adapter === adapter && loaded.key === requestKey ? loaded : { references: null, status: 'loading' as const }
+  const reload = useCallback(() => setToken((value) => value + 1), [])
 
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     adapter.getCaseReferences({
       ...(insurerId === undefined ? {} : { insurerId }),
@@ -28,15 +30,13 @@ export function useCaseReferences(port?: CaseReferenceDataPort, query: ServiceRe
       operation,
     }).then((result) => {
       if (cancelled) return
-      setReferences(result)
-      setStatus('ok')
+      setLoaded({ adapter, key: requestKey, references: result, status: 'ok' })
     }).catch((error: unknown) => {
       if (cancelled) return
-      setReferences(null)
-      setStatus(error instanceof ReferenceDataError ? error.kind : 'unavailable')
+      setLoaded({ adapter, key: requestKey, references: null, status: error instanceof ReferenceDataError ? error.kind : 'unavailable' })
     })
     return () => { cancelled = true }
-  }, [adapter, token, insurerId, evaluationDate, dateSource, operation])
+  }, [adapter, requestKey, insurerId, evaluationDate, dateSource, operation, enabled])
 
-  return { references, status, reload }
+  return { references: enabled ? current.references : null, status: enabled ? current.status : 'loading', reload }
 }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, type IpcMainEvent } from 'electron'
+import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen, type IpcMainEvent } from 'electron'
 import { assistantAppearanceSchema, DEFAULT_ASSISTANT_APPEARANCE } from '@hasarbotu/contracts'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -78,6 +78,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   let tray: Tray | undefined
   let disposed = false
   let gazeTimer: ReturnType<typeof setInterval> | undefined
+  let previousGaze: Point | undefined
   let appearance = DEFAULT_ASSISTANT_APPEARANCE
   const stopGaze = () => {
     clearInterval(gazeTimer)
@@ -86,15 +87,20 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   const startGaze = () => {
     stopGaze()
     if (appearance.reduceMotion) return
+    previousGaze = undefined
     gazeTimer = setInterval(() => {
       if (disposed || window.isDestroyed() || !window.isVisible()) return
-      window.webContents.send('hasarbotu:assistant-gaze', assistantGaze(screen.getCursorScreenPoint(), position))
+      const gaze = assistantGaze(screen.getCursorScreenPoint(), position)
+      if (gaze.x === previousGaze?.x && gaze.y === previousGaze.y) return
+      previousGaze = gaze
+      window.webContents.send('hasarbotu:assistant-gaze', gaze)
     }, 80)
   }
   window.on('show', startGaze)
   window.on('hide', stopGaze)
   let drag: { cursor: Point; origin: Point; moved: boolean } | undefined
   let menuOpen = false
+  let menuReady: Promise<void> | undefined
   const persist = () => {
     try {
       writeFileSync(`${statePath}.tmp`, JSON.stringify(position), 'utf8')
@@ -154,9 +160,21 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     if (menuOpen) return
     menuOpen = true
     menuWindow.setBounds(assistantMenuBounds(position,screen.getDisplayNearestPoint(position).workArea))
-    menuWindow.show()
-    menuWindow.setAlwaysOnTop(true,'pop-up-menu')
-    menuWindow.focus()
+    // Keep the React workspace out of memory until the first actual menu request.
+    menuReady ??= menuWindow.loadURL(menuUrl).then(() => {
+      menuWindow.webContents.send('hasarbotu:appearance-ready')
+    }).catch(error => { menuReady = undefined; throw error })
+    void menuReady.then(() => {
+      if (disposed || !menuOpen) return
+      menuWindow.show()
+      menuWindow.setAlwaysOnTop(true,'pop-up-menu')
+      menuWindow.focus()
+    }).catch(() => {
+      if (disposed) return
+      menuOpen = false
+      console.error('desktop assistant could not load the shortcut panel')
+      dialog.showErrorBox('HasarBotu Hızlı İşlemler', 'Panel açılamadı. Yardımcıya tekrar tıklayarak yeniden deneyin.')
+    })
   }
   const hideMenu = () => { menuOpen = false;if (!menuWindow.isDestroyed()) menuWindow.hide() }
   const handleMenuAction = (event: IpcMainEvent,action: unknown) => {
@@ -251,11 +269,10 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     tray.setToolTip('HasarBotu · Yardımcı')
     tray.setContextMenu(menu)
     tray.on('double-click', () => showMain())
-    await Promise.all([window.loadURL(url),menuWindow.loadURL(menuUrl)])
+    await window.loadURL(url)
     await readyToShow
     window.webContents.send('hasarbotu:assistant-appearance', appearance)
     options.shell.window.webContents.send('hasarbotu:appearance-ready')
-    menuWindow.webContents.send('hasarbotu:appearance-ready')
     show()
   } catch (error) { dispose(); throw error }
   return { window, menu, menuWindow, show, dispose }
