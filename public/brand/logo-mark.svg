@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <!-- Copyright (c) 2026 Ömer Faruk İŞLEYEN. All rights reserved. -->
+  <title id="title">HasarBotu</title>
+  <defs>
+    <linearGradient id="blue" x2="1" y2="1">
+      <stop stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="18" fill="url(#blue)"/>
+  <path d="M15 21v22m14-22v22M15 32h14m12-11v22m0-22h5a5.5 5.5 0 0 1 0 11h-5m5 0a5.5 5.5 0 0 1 0 11h-5" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

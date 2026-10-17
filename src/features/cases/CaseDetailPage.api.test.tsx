@@ -182,7 +182,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     const sessionValue: SessionContextValue = {
       mode: 'api',
       status: 'authenticated',
-      user: { id: 'user-1', organizationId: 'org-1', email: 'eksper@baran.example', displayName: 'Eksper', roles: ['expert'] },
+      user: { id: 'user-1', organizationId: 'org-1', email: 'eksper@office.example', displayName: 'Eksper', roles: ['expert'] },
       notice: null,
       login: vi.fn(),
       logout: vi.fn(),

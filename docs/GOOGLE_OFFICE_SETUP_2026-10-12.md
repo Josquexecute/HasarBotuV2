@@ -1,9 +1,11 @@
 # Google ve Gmail bağlantısı — 12.10.2026
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 ## Canlı kurulum
 
-- Kurumsal hesap: `omerfaruk.isleyen@baranekspertiz.com`.
-- Proje: **HasarBotu V2**, `baran-hasarbotu-v2-20261012`; kuruluş `baranekspertiz.com`.
+- Kurumsal hesap: `omerfaruk.isleyen@office.example`.
+- Proje: **HasarBotu V2**, `<GOOGLE_PROJECT_ID>`; kuruluş `office.example`.
 - Gmail API **Enabled**, Google Auth Platform **Internal**. Politika kabulü ve OAuth istemcisi oluşturma kullanıcı tarafından tamamlandı.
 - OAuth istemcisi: **Web application**, **HasarBotu V2 - Ofis API**. Tek callback: `https://desktop-efn2g33.tail276cda.ts.net/api/v1/google/callback`.
 - Giriş kapsamları `openid email profile`; eklenen tek posta kapsamı `https://www.googleapis.com/auth/gmail.readonly`.

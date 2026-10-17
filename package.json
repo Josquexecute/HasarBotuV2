@@ -62,5 +62,7 @@
     "esbuild@0.28.1": true,
     "electron-winstaller": false,
     "tesseract.js": false
-  }
+  },
+  "author": "Ömer Faruk İŞLEYEN",
+  "license": "UNLICENSED"
 }

@@ -26,5 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "24.13.3"
-  }
+  },
+  "author": "Ömer Faruk İŞLEYEN",
+  "license": "UNLICENSED"
 }

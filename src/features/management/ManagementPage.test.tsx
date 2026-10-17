@@ -125,7 +125,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     return {
       mode: 'api',
       status: 'authenticated',
-      user: { id: 'admin-1', organizationId: 'org-1', email: 'admin@baran.example', displayName: 'Admin', roles: ['admin'] },
+      user: { id: 'admin-1', organizationId: 'org-1', email: 'admin@office.example', displayName: 'Admin', roles: ['admin'] },
       notice: null,
       login: vi.fn(),
       logout: vi.fn(),
@@ -137,7 +137,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     return {
       mode: 'api',
       status: 'authenticated',
-      user: { id: 'expert-1', organizationId: 'org-1', email: 'expert@baran.example', displayName: 'Eksper', roles: ['expert'] },
+      user: { id: 'expert-1', organizationId: 'org-1', email: 'expert@office.example', displayName: 'Eksper', roles: ['expert'] },
       notice: null,
       login: vi.fn(),
       logout: vi.fn(),
@@ -146,7 +146,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
   }
 
   const users: readonly UserSummaryRecord[] = [
-    { id: 'usr-1', email: 'sekreter@baran.example', displayName: 'Sekreter Kullanıcı', status: 'active', roles: ['secretary'], version: 1 },
+    { id: 'usr-1', email: 'sekreter@office.example', displayName: 'Sekreter Kullanıcı', status: 'active', roles: ['secretary'], version: 1 },
   ]
 
   function makeUsersPort(overrides: Partial<UsersDataPort> = {}): UsersDataPort {

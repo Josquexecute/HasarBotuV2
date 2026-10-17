@@ -149,7 +149,9 @@ button {
 
 .brand__mark {
   display: inline-flex;
-  min-width: 0;
+  width: 32px;
+  min-width: 32px;
+  flex: 0 0 32px;
   height: 32px;
   align-items: center;
   justify-content: flex-start;
@@ -159,22 +161,11 @@ button {
   display: block;
   max-width: 100%;
   max-height: 100%;
-  width: auto;
-  height: auto;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
 }
 
-.brand__logo--dark {
-  display: none;
-}
-
-[data-theme='dark'] .brand__logo--light {
-  display: none;
-}
-
-[data-theme='dark'] .brand__logo--dark {
-  display: block;
-}
 
 .brand__copy,
 .user-card__copy {
@@ -2125,9 +2116,6 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; b
   justify-content: center;
 }
 
-[data-theme='dark'] .login-card__logo {
-  height: 72px;
-}
 
 .login-card__brand h1 {
   font-size: 17px;

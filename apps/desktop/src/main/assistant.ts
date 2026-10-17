@@ -263,7 +263,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   screen.on('display-removed', onDisplayChange)
   screen.on('display-metrics-changed', onDisplayChange)
   try {
-    const icon = nativeImage.createFromPath(join(options.assetRoot, 'brand', 'logo-mark-dark.png')).resize({ width: 20, height: 20 })
+    const icon = nativeImage.createFromPath(join(options.assetRoot, 'brand', 'logo-mark.png')).resize({ width: 20, height: 20 })
     if (icon.isEmpty()) throw new Error('desktop assistant tray icon missing')
     tray = new Tray(icon)
     tray.setToolTip('HasarBotu · Yardımcı')

@@ -1,11 +1,13 @@
 # Merkezi servis pilotu — 6 Ekim 2026
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 Kullanıcı tarafından seçilen hedef:
 
 | Alan | Karar |
 |---|---|
 | Bilgisayar | `DESKTOP-EFN2G33` |
-| Gerçek dosya kökü | `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ` |
+| Gerçek dosya kökü | `C:\HasarBotuStorage\OFIS` |
 | Çalışma süresi | Mesai dışında açık kalacak |
 | Google / Gmail / otomatik SBM | Ayrı kabul süreci; beklemede, tamamlandı sayılmaz |
 
@@ -25,7 +27,7 @@ Ofis bilgisayarında, depo kökünden PowerShell:
 ```powershell
 .\deploy\windows-service\inspect-central-pilot-host.ps1 `
   -ExpectedComputerName 'DESKTOP-EFN2G33' `
-  -StorageRoot 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ'
+  -StorageRoot 'C:\HasarBotuStorage\OFIS'
 ```
 
 Paket içindeki Node kullanılıyorsa `-NodeExe` ile onun tam yolu verilir.

@@ -1,7 +1,9 @@
 # Ofis ana sunucusu için kullanım hazırlığı — 11.10.2026
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 Ana sunucu **DESKTOP-EFN2G33** olacaktır. Geliştirme **51793-22893** üzerinde
-devam eder. Ofis evrak kökü `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ`.
+devam eder. Ofis evrak kökü `C:\HasarBotuStorage\OFIS`.
 İki bilgisayarda bağımsız üretim veritabanı kullanılmaz.
 
 ## Gerçek ofis kurulumu — güncel durum

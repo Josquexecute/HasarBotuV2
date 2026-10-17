@@ -8,13 +8,15 @@ export interface GoogleConfig {
   encryptionKey: string
   sbmSenders: string[]
   automaticSbmEnabled: boolean
+  loginDomain: string
   signupOrganizationId?: string
 }
 
 export function parseGoogleConfig(env: Readonly<Record<string,string | undefined>>): GoogleConfig | undefined {
-  const keys = ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REDIRECT_URI','GOOGLE_TOKEN_ENCRYPTION_KEY'] as const
+  const keys = ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REDIRECT_URI','GOOGLE_TOKEN_ENCRYPTION_KEY','GOOGLE_LOGIN_DOMAIN'] as const
   if (keys.every((key) => !env[key])) return undefined
   for (const key of keys) if (!env[key]?.trim()) throw new Error(`Missing ${key}`)
+  const loginDomain = loginDomainSchema.parse(env.GOOGLE_LOGIN_DOMAIN!.trim().toLowerCase())
   if (!/^[a-f0-9]{64}$/i.test(env.GOOGLE_TOKEN_ENCRYPTION_KEY!)) throw new Error('Invalid GOOGLE_TOKEN_ENCRYPTION_KEY: 32-byte hexadecimal key required')
   let redirect: URL
   try { redirect = new URL(env.GOOGLE_REDIRECT_URI!) } catch { throw new Error('Invalid GOOGLE_REDIRECT_URI') }
@@ -25,7 +27,7 @@ export function parseGoogleConfig(env: Readonly<Record<string,string | undefined
   if (env.SBM_AUTOMATIC_ENABLED && !['true','false'].includes(env.SBM_AUTOMATIC_ENABLED)) throw new Error('Invalid SBM_AUTOMATIC_ENABLED')
   if (env.SBM_AUTOMATIC_ENABLED === 'true' && !sbmSenders.length) throw new Error('SBM_SENDER_ADDRESSES required for automatic processing')
   const signupOrganizationId = env.GOOGLE_SIGNUP_ORGANIZATION_ID ? z.string().uuid().parse(env.GOOGLE_SIGNUP_ORGANIZATION_ID) : undefined
-  return { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET!, redirectUri: redirect.href, encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY!, sbmSenders, automaticSbmEnabled: env.SBM_AUTOMATIC_ENABLED === 'true',...(signupOrganizationId ? { signupOrganizationId } : {}) }
+  return { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET!, redirectUri: redirect.href, encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY!, loginDomain, sbmSenders, automaticSbmEnabled: env.SBM_AUTOMATIC_ENABLED === 'true',...(signupOrganizationId ? { signupOrganizationId } : {}) }
 }
 
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -51,15 +53,16 @@ export function decryptToken(value: string, key: string, context: string): strin
 }
 
 const claimsSchema = z.object({ iss: z.string(), sub: z.string().min(1), aud: z.union([z.string(),z.array(z.string())]), azp: z.string().optional(), exp: z.number(), iat: z.number(), nonce: z.string(), email: z.string().email(), email_verified: z.boolean(), hd: z.string().optional() })
+const loginDomainSchema = z.string().max(253).regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/)
 export type GoogleIdentity = z.infer<typeof claimsSchema>
 
-export function validateGoogleClaims(claims: unknown, clientId: string, nonce: string, corporate: boolean, now = Date.now()): GoogleIdentity {
+export function validateGoogleClaims(claims: unknown, clientId: string, nonce: string, loginDomain: string | undefined, now = Date.now()): GoogleIdentity {
   const c = claimsSchema.parse(claims)
   const aud = Array.isArray(c.aud) ? c.aud : [c.aud]
   if (!['accounts.google.com','https://accounts.google.com'].includes(c.iss) || !aud.includes(clientId)
     || (aud.length > 1 && c.azp !== clientId) || (c.azp !== undefined && c.azp !== clientId)
     || c.exp <= now / 1000 || c.iat > now / 1000 + 60 || c.nonce !== nonce || !c.email_verified
-    || (corporate && (c.hd !== 'baranekspertiz.com' || !c.email.toLowerCase().endsWith('@baranekspertiz.com')))) throw new Error('Google identity rejected')
+    || (loginDomain !== undefined && (c.hd !== loginDomainSchema.parse(loginDomain) || !c.email.toLowerCase().endsWith(`@${loginDomain}`)))) throw new Error('Google identity rejected')
   return c
 }
 
@@ -68,6 +71,7 @@ export class GoogleProviderError extends Error {
 }
 
 export function createGoogleProvider(config: GoogleConfig, fetchImpl: typeof fetch = fetch) {
+  const loginDomain = loginDomainSchema.parse(config.loginDomain)
   let keys: JsonWebKey[] = []
   let keysExpireAt = 0
   async function json(url: string, init: RequestInit = {}) {
@@ -86,7 +90,7 @@ export function createGoogleProvider(config: GoogleConfig, fetchImpl: typeof fet
   }
   return {
     authorizeUrl(purpose: 'login' | 'mail', state: string, nonce: string, verifier: string) {
-      const params = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri, response_type: 'code', scope: `openid email profile${purpose === 'mail' ? ` ${GMAIL_SCOPE}` : ''}`, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', include_granted_scopes: 'false', prompt: purpose === 'mail' ? 'consent select_account' : 'select_account', ...(purpose === 'mail' ? { access_type: 'offline' } : { hd: 'baranekspertiz.com' }) })
+      const params = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri, response_type: 'code', scope: `openid email profile${purpose === 'mail' ? ` ${GMAIL_SCOPE}` : ''}`, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', include_granted_scopes: 'false', prompt: purpose === 'mail' ? 'consent select_account' : 'select_account', ...(purpose === 'mail' ? { access_type: 'offline' } : { hd: loginDomain }) })
       return `https://accounts.google.com/o/oauth2/v2/auth?${params}`
     },
     exchange: (code: string, verifier: string) => token({ code,code_verifier: verifier,redirect_uri: config.redirectUri,grant_type: 'authorization_code' }),
@@ -102,7 +106,7 @@ export function createGoogleProvider(config: GoogleConfig, fetchImpl: typeof fet
       }
       const jwk = keys.find((k) => k.kid === header.kid)
       if (!jwk || !verify('RSA-SHA256',Buffer.from(`${parts[0]}.${parts[1]}`),createPublicKey({ key: jwk,format: 'jwk' }),Buffer.from(parts[2]!,'base64url'))) throw new Error('Invalid identity signature')
-      return validateGoogleClaims(JSON.parse(Buffer.from(parts[1]!,'base64url').toString('utf8')),config.clientId,nonce,corporate)
+      return validateGoogleClaims(JSON.parse(Buffer.from(parts[1]!,'base64url').toString('utf8')),config.clientId,nonce,corporate ? loginDomain : undefined)
     },
     gmail: (accessToken: string, path: string) => json(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`,{ headers: { authorization: `Bearer ${accessToken}` } }),
   }

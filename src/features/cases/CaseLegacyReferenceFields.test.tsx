@@ -19,10 +19,10 @@ const references: CaseReferenceWorkspace = {
 describe('Case legacy reference alanlari', () => {
   it('first-class NULL iken legacy responsible/expert/service adlarini tarihsel diye gosterir', () => {
     render(<dl><CaseLegacyReferenceFields item={{ ...base, responsibleUserId: null, expertUserId: null, serviceId: null, legacyReferences: {
-      responsibleNames: ['Enes Özmen'], expertNames: ['Baran Gürbüz'], serviceNames: ['BABİL - VEDAT'],
+      responsibleNames: ['Enes Özmen'], expertNames: ['Deniz Örnek'], serviceNames: ['BABİL - VEDAT'],
     } }} references={references} /></dl>)
     expect(screen.getByText('V1 geçmiş: Enes Özmen')).toBeInTheDocument()
-    expect(screen.getByText('V1 geçmiş: Baran Gürbüz')).toBeInTheDocument()
+    expect(screen.getByText('V1 geçmiş: Deniz Örnek')).toBeInTheDocument()
     expect(screen.getByText('V1 geçmiş: BABİL - VEDAT')).toBeInTheDocument()
   })
 

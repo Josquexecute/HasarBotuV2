@@ -17,15 +17,15 @@ import { sbmFixture,sbmNumber } from '../test-support/sbm-fixtures.js'
 const url = process.env.TEST_DATABASE_URL
 const describeDb = url ? describe : describe.skip
 const password = 'tracking-isolated-password-2026'
-const google: GoogleConfig = { clientId: 'test-client',clientSecret: 'test-secret',redirectUri: 'https://test.example/api/v1/google/callback',encryptionKey: 'ab'.repeat(32),sbmSenders: ['results@sbm.example'],automaticSbmEnabled: false }
+const google: GoogleConfig = { clientId: 'test-client',clientSecret: 'test-secret',redirectUri: 'https://test.example/api/v1/google/callback',encryptionKey: 'ab'.repeat(32),sbmSenders: ['results@sbm.example'],automaticSbmEnabled: false,loginDomain: 'office.example' }
 
 describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
   let pool: pg.Pool,app: FastifyInstance,org: string,otherOrg: string,owner: string,operator: string,manager: string,ownerCookie: string,operatorCookie: string,managerCookie: string,otherCookie: string
-  let loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
+  let loginIdentity = { email: 'manager@office.example',sub: 'manager-google' }
   const provider: GoogleProvider = {
     authorizeUrl: (purpose,state) => `https://accounts.google.com/o/oauth2/v2/auth?state=${state}&purpose=${purpose}`,
     exchange: async () => ({ access_token: 'access',id_token: 'signed',refresh_token: 'refresh',scope: `openid email ${GMAIL_SCOPE}` }),
-    identity: async (_jwt,nonce,corporate) => validateGoogleClaims({ iss: 'https://accounts.google.com',...loginIdentity,aud: google.clientId,exp: Date.now()/1000+600,iat: Date.now()/1000,nonce,email_verified: true,hd: 'baranekspertiz.com' },google.clientId,nonce,corporate),
+    identity: async (_jwt,nonce,corporate) => validateGoogleClaims({ iss: 'https://accounts.google.com',...loginIdentity,aud: google.clientId,exp: Date.now()/1000+600,iat: Date.now()/1000,nonce,email_verified: true,hd: 'office.example' },google.clientId,nonce,corporate ? google.loginDomain : undefined),
     refresh: async () => ({ access_token: 'access' }),
     gmail: async () => ({ emailAddress: loginIdentity.email }),
   }
@@ -68,13 +68,13 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     await runMigrations({ databaseUrl: config.url,quiet: true })
     org = uuidv7();otherOrg = uuidv7()
     await pool.query("INSERT INTO organizations(id,code,name) VALUES($1,'tracking-a','Tracking A'),($2,'tracking-b','Tracking B')", [org,otherOrg])
-    owner = await user(org,'owner@baranekspertiz.com','case_manager')
-    operator = await user(org,'operator@baranekspertiz.com','secretary')
-    manager = await user(org,'manager@baranekspertiz.com','admin')
-    await user(otherOrg,'other@baranekspertiz.com','admin')
+    owner = await user(org,'owner@office.example','case_manager')
+    operator = await user(org,'operator@office.example','secretary')
+    manager = await user(org,'manager@office.example','admin')
+    await user(otherOrg,'other@office.example','admin')
     app = buildApp({ loggerEnabled: false,auth: { pool,cookieSecure: false,loginRateLimit: { limit: 100,windowMs: 60_000 } },google: { ...google,signupOrganizationId: org },googleProvider: provider })
     await app.ready()
-    ownerCookie = await login('owner@baranekspertiz.com');operatorCookie = await login('operator@baranekspertiz.com');managerCookie = await login('manager@baranekspertiz.com');otherCookie = await login('other@baranekspertiz.com')
+    ownerCookie = await login('owner@office.example');operatorCookie = await login('operator@office.example');managerCookie = await login('manager@office.example');otherCookie = await login('other@office.example')
   },60_000)
   afterAll(async () => { await app?.close();await pool?.end() })
 
@@ -112,7 +112,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
 
   it('processes the supplied KTT templates through mailbox sync, matching by text number and notifying only the owner once',async () => {
     const id = await createCase();await submit(id,sbmNumber)
-    const connections = [await connection('template-one@baranekspertiz.com'),await connection('template-two@baranekspertiz.com')]
+    const connections = [await connection('template-one@office.example'),await connection('template-two@office.example')]
     let messages = [sbmFixture('entry')]
     const gmail = vi.fn<GoogleProvider['gmail']>().mockImplementation(async (_token,path) => {
       if (path.startsWith('messages?')) return { messages: messages.map(({ id }) => ({ id })) }
@@ -159,7 +159,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
 
   it('notifies the case owner, deduplicates accounts and retains cancelled state on late results',async () => {
     const id = await createCase();await submit(id,'000200')
-    const c1 = await connection('mail-one@baranekspertiz.com'),c2 = await connection('mail-two@baranekspertiz.com')
+    const c1 = await connection('mail-one@office.example'),c2 = await connection('mail-two@office.example')
     const result = { applicationNumber: '000200',status: 'completed' as const,text: 'Sonuç: Tamamlandı',evidenceHash: 'a'.repeat(64),reason: null }
     await Promise.all([c1,c2].map((connectionId) => ingestSbmResult(pool,{ connectionId,messageId: 'same-result',receivedAt: new Date(),result,automatic: true })))
     await ingestSbmResult(pool,{ connectionId: c1,messageId: 'same-result',receivedAt: new Date(),result,automatic: true })
@@ -177,7 +177,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
 
   it('queues unknown, ambiguous and unvalidated messages; permits explicit review only for managers',async () => {
     const id = await createCase();await submit(id,'000300')
-    const c = await connection('review-mail@baranekspertiz.com')
+    const c = await connection('review-mail@office.example')
     const result = { applicationNumber: '000300',status: 'completed' as const,text: 'candidate',evidenceHash: 'b'.repeat(64),reason: null }
     await ingestSbmResult(pool,{ connectionId: c,messageId: 'unvalidated',receivedAt: new Date(),result,automatic: false })
     await ingestSbmResult(pool,{ connectionId: c,messageId: 'unmatched',receivedAt: new Date(),result: { ...result,applicationNumber: '999999' },automatic: true })
@@ -192,10 +192,10 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
 
   it('alerts the owner when automatic processing is disabled without claiming completion or duplicating accounts',async () => {
     const id = await createCase();await submit(id,'000310')
-    const recipient = await user(org,'review-popup-owner@baranekspertiz.com','case_manager')
-    const recipientCookie = await login('review-popup-owner@baranekspertiz.com')
+    const recipient = await user(org,'review-popup-owner@office.example','case_manager')
+    const recipientCookie = await login('review-popup-owner@office.example')
     await pool.query('UPDATE cases SET responsible_user_id=$2 WHERE id=$1',[id,recipient])
-    const accounts = [await connection('review-alert-one@baranekspertiz.com'),await connection('review-alert-two@baranekspertiz.com')]
+    const accounts = [await connection('review-alert-one@office.example'),await connection('review-alert-two@office.example')]
     const result = { applicationNumber: '000310',status: 'completed' as const,text: 'Sonuç: Tamamlandı',evidenceHash: 'c'.repeat(64),reason: null }
     for (const connectionId of accounts) await ingestSbmResult(pool,{ connectionId,messageId: 'review-alert',receivedAt: new Date(),result,automatic: false })
     const data = await snapshot(recipientCookie,id)
@@ -212,7 +212,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
   })
 
   it('links an already received result when its number is saved and requires explicit review',async () => {
-    const id = await createCase(),c = await connection('early-result@baranekspertiz.com')
+    const id = await createCase(),c = await connection('early-result@office.example')
     const result = { applicationNumber: '000311',status: 'completed' as const,text: 'Sonuç: Tamamlandı',evidenceHash: 'd'.repeat(64),reason: null }
     await ingestSbmResult(pool,{ connectionId: c,messageId: 'before-number',receivedAt: new Date(),result,automatic: true })
     await submit(id,'000311')
@@ -229,7 +229,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
 
   it('never turns an entry notice or an untrusted message into an owner result alert',async () => {
     const id = await createCase();await submit(id,'000312')
-    const c = await connection('non-result-alert@baranekspertiz.com')
+    const c = await connection('non-result-alert@office.example')
     for (const reason of ['non_result_notification','untrusted_sender']) await ingestSbmResult(pool,{ connectionId: c,messageId: reason,receivedAt: new Date(),automatic: true,result: { applicationNumber: '000312',status: null,text: reason,evidenceHash: 'e'.repeat(64),reason } })
     const data = await snapshot(ownerCookie,id)
     expect(data.tramer[0]?.status).toBe('result_pending')
@@ -237,7 +237,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
   })
 
   it('does not lose an alert when number registration and result ingestion happen concurrently',async () => {
-    const id = await createCase(),c = await connection('simultaneous-result@baranekspertiz.com')
+    const id = await createCase(),c = await connection('simultaneous-result@office.example')
     expect((await command(id,{ action: 'assign',assignedUserId: operator })).statusCode).toBe(204)
     const result = { applicationNumber: '000313',status: 'completed' as const,text: 'Sonuç: Tamamlandı',evidenceHash: 'f'.repeat(64),reason: null }
     const [saved] = await Promise.all([
@@ -420,7 +420,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
   })
 
   it('rejects external/disabled employees and revoked consent without creating identities',async () => {
-    for (const email of ['unknown@outside.example','disabled@baranekspertiz.com']) {
+    for (const email of ['unknown@outside.example','disabled@office.example']) {
       if (email.startsWith('disabled')) { const id = await user(org,email,'secretary');await pool.query("UPDATE users SET status='disabled' WHERE id=$1", [id]) }
       loginIdentity = { email,sub: email }
       const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
@@ -430,11 +430,11 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
     expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&error=access_denied` })).statusCode).toBe(400)
     expect((await pool.query('SELECT count(*)::int AS n FROM google_identities')).rows[0].n).toBe(1)
-    loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
+    loginIdentity = { email: 'manager@office.example',sub: 'manager-google' }
   })
 
   it('registers verified corporate accounts pending approval and issues a session only after admin role assignment',async () => {
-    loginIdentity = { email: 'new.employee@baranekspertiz.com',sub: 'new-employee-google' }
+    loginIdentity = { email: 'new.employee@office.example',sub: 'new-employee-google' }
     async function googleLogin() {
       const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
       expect(start.statusCode,start.payload).toBe(200)
@@ -456,13 +456,13 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect(approved.json().status).toBe('complete')
     expect((await app.inject({ method: 'GET',url: '/api/v1/auth/session',headers: { cookie: cookie(approved) } })).json().user.roles).toEqual(['case_manager'])
     expect((await app.inject({ method: 'POST',url: '/api/v1/auth/login',payload: { email: loginIdentity.email,password } })).statusCode).toBe(401)
-    loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
+    loginIdentity = { email: 'manager@office.example',sub: 'manager-google' }
   })
 
   it('connects mail separately, encrypts refresh permission and records source account without changing file ownership',async () => {
     const denied = await app.inject({ method: 'POST',url: '/api/v1/google/start',headers: { cookie: operatorCookie },payload: { purpose: 'mail' } })
     expect(denied.statusCode).toBe(403)
-    loginIdentity = { email: 'sbm-inbox@baranekspertiz.com',sub: 'sbm-inbox-google' }
+    loginIdentity = { email: 'sbm-inbox@office.example',sub: 'sbm-inbox-google' }
     const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',headers: { cookie: managerCookie },payload: { purpose: 'mail' } })
     expect(start.statusCode,start.payload).toBe(200)
     expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&code=fake` })).statusCode).toBe(200)
@@ -470,11 +470,11 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect(row.status).toBe('connected');expect(row.encrypted_refresh_token).not.toContain('refresh')
     const done = await app.inject({ method: 'POST',url: '/api/v1/google/complete',headers: { cookie: `${managerCookie}; ${cookie(start)}` },payload: { flowId: start.json().flowId } })
     expect(done.json().status).toBe('complete');expect(done.headers['set-cookie']).toBeUndefined()
-    loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
+    loginIdentity = { email: 'manager@office.example',sub: 'manager-google' }
   })
 
   it('refuses a mailbox callback when its initiating user lost permission during consent',async () => {
-    loginIdentity = { email: 'revoked-flow@baranekspertiz.com',sub: 'revoked-flow' }
+    loginIdentity = { email: 'revoked-flow@office.example',sub: 'revoked-flow' }
     const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',headers: { cookie: ownerCookie },payload: { purpose: 'mail' } })
     expect(start.statusCode,start.payload).toBe(200)
     const policy = defaultRolePolicy()
@@ -485,13 +485,13 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
       expect((await pool.query("SELECT count(*)::int AS n FROM mail_connections WHERE subject='revoked-flow'")).rows[0].n).toBe(0)
     } finally {
       await pool.query('DELETE FROM organization_role_policies WHERE organization_id=$1',[org])
-      loginIdentity = { email: 'manager@baranekspertiz.com',sub: 'manager-google' }
+      loginIdentity = { email: 'manager@office.example',sub: 'manager-google' }
     }
   })
 
   it('records permission loss; catches up after recovery; processes messages only once',async () => {
     await pool.query("UPDATE mail_connections SET status='disconnected'")
-    const c = await connection('recovery@baranekspertiz.com')
+    const c = await connection('recovery@office.example')
     const refresh = vi.fn<GoogleProvider['refresh']>().mockRejectedValue(new GoogleProviderError('permission_required',400))
     await syncMailboxes(pool,google,{ ...provider,refresh })
     expect((await pool.query('SELECT status FROM mail_connections WHERE id=$1', [c])).rows[0].status).toBe('permission_required')

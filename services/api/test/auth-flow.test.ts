@@ -26,7 +26,7 @@ const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
 
 const PASSWORD = 'cok-guclu-parola-42'
-const EMAIL = 'eksper@baran.example'
+const EMAIL = 'eksper@office.example'
 
 describeDb('auth uclari (gercek veritabani)', () => {
   let config: DatabaseConfig
@@ -50,8 +50,8 @@ describeDb('auth uclari (gercek veritabani)', () => {
     userId = uuidv7()
     await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [
       orgId,
-      'baran-global',
-      'Baran Global',
+      'hasarbotu-office',
+      'HasarBotu Ofis',
     ])
     await pool.query(
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',
@@ -101,7 +101,7 @@ describeDb('auth uclari (gercek veritabani)', () => {
     const unknownUser = await app.inject({
       method: 'POST',
       url: AUTH_LOGIN_ROUTE,
-      payload: { email: 'yok@baran.example', password: 'yanlis-parola-42' },
+      payload: { email: 'yok@office.example', password: 'yanlis-parola-42' },
     })
     expect(wrongPassword.statusCode).toBe(401)
     expect(unknownUser.statusCode).toBe(401)
@@ -211,7 +211,7 @@ describeDb('auth uclari (gercek veritabani)', () => {
       auth: { pool, cookieSecure: false, loginRateLimit: { limit: 2, windowMs: 60_000 } },
     })
     try {
-      const payload = { email: 'hiz@baran.example', password: 'herhangi-parola-1' }
+      const payload = { email: 'hiz@office.example', password: 'herhangi-parola-1' }
       await limitedApp.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload })
       await limitedApp.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload })
       const third = await limitedApp.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload })

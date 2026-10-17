@@ -1,15 +1,14 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.36**, published on 2026-10-17.
-Existing users receive it through the update button below. Its verified Windows
-x64 installer is 107,141,714 bytes, SHA-256
-`576ba24804651789fe76b2fd5d7a6479e50253fd4c1ad6cf43d033795f9d4ada`.
-Notifications now provides **Hepsini uygun işaretle** for all owned pending
-documents, including rows beyond the first 100. Edited document categories and
-notes are retained. Progress, duplicate-action prevention and partial-failure
-reporting use the existing per-document authorization, revision and audit checks.
-Previous smoothness, resource, reference, calendar, Touch color and notice-sheet
-improvements remain included; see [the performance measurements](PERFORMANCE_2026-10-17.md).
+The current authenticated office release is **0.1.37**, published on 2026-10-17.
+Its verified Windows x64 installer is 105,162,642 bytes, SHA-256
+`541077afcabbb0d3ceedfbbceced38e0cd9d799b1b7c6026076eb92751534ea4`.
+Project ownership, UI branding, notice templates and Windows metadata identify
+**Ömer Faruk İŞLEYEN**. The existing Touch character is retained under the user's
+stated written permission; third-party notices remain separate. Google login domain
+and folder mappings use private configuration while preserving existing office access.
+See [ownership, validation and delivery evidence](OWNERSHIP_2026-10-17.md).
+Previous bulk document approval, smoothness and resource improvements remain included.
 
 The existing public 0.1.15 installer remains available from [HasarBotu download](https://github.com/Josquexecute/HasarBotu-Downloads/releases/latest/download/HasarBotu-Kurulum.exe).
 New GitHub releases are prepared only in the private `HasarBotuV2` repository and

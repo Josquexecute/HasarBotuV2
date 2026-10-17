@@ -1,5 +1,7 @@
 # Eksist V2 — bu bilgisayardaki izole pilot
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 20 Eylül 2026. Kaynak commit: `497f3f275929098bf06149d66a595874fc1387b5`.
 Önceki rapor: [EKSIST_PILOT_2026-09-20.md](EKSIST_PILOT_2026-09-20.md).
 
@@ -17,8 +19,8 @@
 | Migration | 0049 dahil 49 migration; migration dosyaları kurulu database paketinde |
 | Masaüstü | V2 0.1.2; ayrı `com.hasarbotu.eksistpilot` kimliği ve `HasarBotu V2 Eksist Pilot` ürün adı |
 | NSIS adayı | `C:\HasarBotuPilot\desktop-build\HasarBotu-Setup-0.1.2.exe`; x64, imzasız; kurulumu/arayüzü doğrulanmadı |
-| pCloud | Mevcut sync: `D:\BaranGlobalStorage` → `BARAN GLOBAL EKSPERTİZ`, folder ID `22216867113`, synctype `3` |
-| Pilot depolama | `D:\BaranGlobalStorage\_V2_EKSIST_PILOT_20260920`; gerçek ofis klasörleri kullanılmadı |
+| pCloud | Mevcut sync: `D:\OfficeStorage` → `OFIS`, folder ID `22216867113`, synctype `3` |
+| Pilot depolama | `D:\OfficeStorage\_V2_EKSIST_PILOT_20260920`; gerçek ofis klasörleri kullanılmadı |
 
 Servisler Manual başlangıç türündedir ve çalışma sonunda çalışır durumdadır.
 Kalıcı makine ortam değişkenleri yazılmadı. Sırlar `private` altında dar ACL ile

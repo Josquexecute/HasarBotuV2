@@ -4,7 +4,7 @@ import { join } from 'node:path'
 /**
  * Depolama kökü sağlık probu (D4, FILE_STORAGE_AND_AGENT_PLAN §11).
  *
- * `P:\BARAN GLOBAL EKSPERTİZ` gibi bulut-senkron köklerde bağlantı koparsa
+ * `P:\OFIS` gibi bulut-senkron köklerde bağlantı koparsa
  * dizin LİSTELEME çoğu zaman son önbelleklenmiş hâliyle BAŞARILI görünebilir.
  * Bu yüzden yalnız `lstat` YETERLİ SAYILMAZ: köke GERÇEKTEN yazılabildiği,
  * sabit adlı küçük bir işaretçi dosyası yazıp SİLİNEREK doğrulanır.

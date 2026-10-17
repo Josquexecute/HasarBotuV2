@@ -1,5 +1,7 @@
 # Yerel salt okunur takip pilotu — 11 Ekim 2026
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 **Sonraki doğrulama düzeltmesi:** Seçilen iki dosya `_HASARBOTU` uygulama
 kayıt klasöründeydi; bunlar hasar evrakı değildi. Hash/kalıcılık testi geçerli
 olsa da evrak kapsamı bu ilk pilotla doğrulanmış sayılmaz. Gerçek evrak
@@ -16,7 +18,7 @@ güncel kaynakla ayrı test kurulumu çalışıyor. Ön kontrol:
 | PostgreSQL | Ayrı küme, `127.0.0.1:55442`; `hasarbotu_local_tracking_20261011_test`; 50 migration |
 | API | `127.0.0.1:3146`; normal yetkili DB rolü, superuser değil |
 | Web arayüzü | `http://127.0.0.1:3147`; güncel production UI, aynı origin üzerinden API |
-| Takip | `D:\BaranGlobalStorage`; yalnız seçilen bir gerçek klasör test kaydına bağlı |
+| Takip | `D:\OfficeStorage`; yalnız seçilen bir gerçek klasör test kaydına bağlı |
 | Windows servisleri | `hb-local-tracking-db-20261011`, `hb-local-tracking-api-20261011`, `hb-local-tracking-tracker-20261011`; üçü de Running / Manual / LocalService |
 | Masaüstü kısayolu | `HasarBotu - Yerel Takip Testi`; normal giriş formuyla ayrı test hesabını açar |
 

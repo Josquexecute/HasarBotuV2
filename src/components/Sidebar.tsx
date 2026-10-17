@@ -80,8 +80,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort,
     <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`}>
       <div className="brand">
         <span className="brand__mark" aria-hidden="true">
-          <img className="brand__logo brand__logo--light" src="/brand/logo-horizontal.png" alt="" />
-          <img className="brand__logo brand__logo--dark" src="/brand/logo-mark-dark.png" alt="" />
+          <img className="brand__logo" src="/brand/logo-mark.svg" alt="" />
         </span>
         {!collapsed && (
           <span className="brand__copy">

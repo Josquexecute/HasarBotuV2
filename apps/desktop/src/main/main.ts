@@ -116,7 +116,7 @@ async function bootstrap(): Promise<void> {
     hideToTrayOnClose(app, shell.window)
     startDesktopUpdates(shell, config.apiOrigin)
     const assistant = await startDesktopAssistant({ shell, assetRoot: config.assetRoot, userDataPath: app.getPath('userData'), quit: () => app.quit() })
-    startCaseFolders(shell, app.getPath('userData'), app.isPackaged ? join(process.resourcesPath, 'folder-roots.json') : join(app.getAppPath(), 'build-resources', 'folder-roots.json'), config.apiOrigin, assistant.menuWindow)
+    startCaseFolders(shell, app.getPath('userData'), app.isPackaged ? join(process.resourcesPath, 'folder-roots.json') : join(app.getAppPath(), 'build-resources', 'office-folder-roots.json'), config.apiOrigin, assistant.menuWindow)
     shell.window.once('closed', () => app.quit())
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {

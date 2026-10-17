@@ -62,7 +62,7 @@ describeDb('File Agent iş kuyruğu ve doğrulama (gerçek veritabanı)', () => 
       method: 'POST',
       url: `/api/v1/cases/${caseId}/documents`,
       headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
-      payload: { documentType: 'ruhsat', sourceType: 'upload', originalFileName: 'r.pdf', mimeType: 'application/pdf', byteSize: size, contentHash: hash, storageRootKey: 'baran-primary', relativePath: rel, ...over },
+      payload: { documentType: 'ruhsat', sourceType: 'upload', originalFileName: 'r.pdf', mimeType: 'application/pdf', byteSize: size, contentHash: hash, storageRootKey: 'office-primary', relativePath: rel, ...over },
     })
     return { versionId: (res.json() as { version: { id: string } }).version.id, hash, size }
   }
@@ -93,7 +93,7 @@ describeDb('File Agent iş kuyruğu ve doğrulama (gerçek veritabanı)', () => 
     await seedUser(orgA, 'admin@a.example', 'admin')
     await seedUser(orgA, 'mgr@a.example', 'case_manager')
     await seedUser(orgB, 'b@b.example', 'case_manager')
-    await pool.query('INSERT INTO storage_roots (id, organization_id, root_key, label, is_active) VALUES ($1,$2,$3,$4,true)', [uuidv7(), orgA, 'baran-primary', 'A'])
+    await pool.query('INSERT INTO storage_roots (id, organization_id, root_key, label, is_active) VALUES ($1,$2,$3,$4,true)', [uuidv7(), orgA, 'office-primary', 'A'])
     await pool.query('INSERT INTO storage_roots (id, organization_id, root_key, label, is_active) VALUES ($1,$2,$3,$4,true)', [uuidv7(), orgB, 'b-primary', 'B'])
     app = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false, loginRateLimit: { limit: 1000, windowMs: 60_000 } } })
     adminCookie = await login('admin@a.example')
@@ -134,7 +134,7 @@ describeDb('File Agent iş kuyruğu ve doğrulama (gerçek veritabanı)', () => 
     expect(claimed.status).toBe(200)
     expect(claimed.body.job?.targetId).toBe(versionId)
     expect(claimed.body.job?.attemptCount).toBe(1)
-    expect(claimed.body.job?.payload).toMatchObject({ storageRootKey: 'baran-primary', kind: 'file', declaredHash: hash, declaredSize: size })
+    expect(claimed.body.job?.payload).toMatchObject({ storageRootKey: 'office-primary', kind: 'file', declaredHash: hash, declaredSize: size })
     const payloadText = JSON.stringify(claimed.body.job?.payload)
     expect(/[A-Za-z]:/.test(payloadText)).toBe(false)
     expect(payloadText.includes(String.fromCharCode(92))).toBe(false)
@@ -233,7 +233,7 @@ describeDb('File Agent iş kuyruğu ve doğrulama (gerçek veritabanı)', () => 
       const registered = await app.inject({ method: 'POST', url: `/api/v1/cases/${caseAId}/photos`,
         headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
         payload: { sourceType: 'upload', originalFileName: 'audit.jpg', mimeType: 'image/jpeg', byteSize: 5,
-          contentHash: hex('audit'), storageRootKey: 'baran-primary', relativePath: `HASAR/${uuidv7()}.jpg` } })
+          contentHash: hex('audit'), storageRootKey: 'office-primary', relativePath: `HASAR/${uuidv7()}.jpg` } })
       expect(registered.statusCode).toBe(201)
       targetId = registered.json().photo.id as string
     }
@@ -285,10 +285,10 @@ describeDb('File Agent iş kuyruğu ve doğrulama (gerçek veritabanı)', () => 
 
   it('yarış: eski konum sürümü üzerine yazılmaz (case_location)', async () => {
     // v1 ata -> job (targetVersion 1). Sonra v2 ata (yeni job). Eski job stale kalır.
-    await app.inject({ method: 'PUT', url: `/api/v1/cases/${caseAId}/location`, headers: { cookie: managerCookie }, payload: { storageRootKey: 'baran-primary', relativePath: '2026/A' } })
+    await app.inject({ method: 'PUT', url: `/api/v1/cases/${caseAId}/location`, headers: { cookie: managerCookie }, payload: { storageRootKey: 'office-primary', relativePath: '2026/A' } })
     const oldJob = await pool.query("SELECT id, target_version FROM jobs WHERE type='verify_case_location' ORDER BY created_at LIMIT 1")
     const oldJobId = (oldJob.rows[0] as { id: string }).id
-    await app.inject({ method: 'PUT', url: `/api/v1/cases/${caseAId}/location`, headers: { cookie: managerCookie }, payload: { storageRootKey: 'baran-primary', relativePath: '2026/B', expectedVersion: 1 } })
+    await app.inject({ method: 'PUT', url: `/api/v1/cases/${caseAId}/location`, headers: { cookie: managerCookie }, payload: { storageRootKey: 'office-primary', relativePath: '2026/B', expectedVersion: 1 } })
     // Eski job'u claim edip verified bildir: sürüm artık 2, stale -> konum ezilmez (pending kalır).
     // oldJob pending; claim head olan en eski pending'i verir.
     let claimed = await claim()

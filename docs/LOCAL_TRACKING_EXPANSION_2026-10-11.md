@@ -1,8 +1,10 @@
 # Yerel takip genişletmesi — 11 Ekim 2026
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 **Durum: ayrı test ortamında geniş evrak takibi PASS; tam kullanım PARTIAL.**
 Kurulum: `C:\HasarBotuPilot\local-tracking-20261011`.
-Kaynak: `D:\BaranGlobalStorage`. Gerçek V1 dosyaları salt okunur kullanıldı;
+Kaynak: `D:\OfficeStorage`. Gerçek V1 dosyaları salt okunur kullanıldı;
 üretim veritabanına geçiş yapılmadı.
 
 ## Önceki pilotun kapsam düzeltmesi

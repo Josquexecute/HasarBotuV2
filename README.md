@@ -14,7 +14,7 @@
 
 ## 📋 Genel Bakış
 
-HasarBotu V2, **Baran Global Ekspertiz** için geliştirilen; trafik ve kasko dosyalarının ihbar aşamasından kapanışa kadar tüm sürecini yöneten profesyonel bir operasyon uygulamasıdır. Dosya takibi, evrak/fotoğraf doğrulaması, ağır hasar (PERT) değerlendirmesi, değer kaybı hesabı ve raporlama tek bir çatı altında toplanır.
+HasarBotu V2, **Ömer Faruk İŞLEYEN**'e ait; trafik ve kasko dosyalarının ihbar aşamasından kapanışa kadar tüm sürecini yöneten profesyonel bir operasyon uygulamasıdır. Dosya takibi, evrak/fotoğraf doğrulaması, ağır hasar (PERT) değerlendirmesi, değer kaybı hesabı ve raporlama tek bir çatı altında toplanır.
 
 Uygulama **yalnız iki dosya türünü** yönetir: **Trafik** ve **Kasko**. Değer Kaybı, Trafik dosyasında zorunlu, Kasko dosyasında isteğe bağlı bir modüldür — ayrı bir dosya türü değildir.
 
@@ -150,11 +150,11 @@ npm run package:win
 
 ## 📄 Lisans
 
-Bu yazılım **Baran Global Ekspertiz**'in özel mülkiyetindedir. Tüm hakları saklıdır. Ayrıntılar için [`LICENSE`](./LICENSE) dosyasına bakın.
+Bu yazılım **Ömer Faruk İŞLEYEN**'in özel mülkiyetindedir. Tüm hakları saklıdır. Üçüncü taraf bileşenlerin kendi lisans bildirimleri korunur. Ayrıntılar için [`LICENSE`](./LICENSE) dosyasına bakın.
 
 <div align="center">
 
-**© 2026 Baran Global Ekspertiz** — Tüm hakları saklıdır.
+**© 2026 Ömer Faruk İŞLEYEN** — Tüm hakları saklıdır.
 
 </div>
 

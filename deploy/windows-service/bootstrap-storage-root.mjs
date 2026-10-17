@@ -12,9 +12,9 @@ import { storageRootSchema } from '@hasarbotu/contracts'
 // `services/api/src/storage/store.ts` and `workspace/store.ts` only ever
 // SELECT it (fail-closed `unknown_reference`/`unknown_root` if empty), and
 // grep across services/api/src confirms zero `INSERT INTO storage_roots`.
-// Live production DB confirmed 0 rows for the real `baran-global` org even
+// Live production DB confirmed 0 rows for the real `hasarbotu-office` org even
 // though D9 already wrote the matching `HASARBOTU_AGENT_ROOTS` env var on
-// the File Agent side (rootKey `baran-global-primary`). Since `storage_roots`
+// the File Agent side (rootKey `office-primary`). Since `storage_roots`
 // gates the FK on `case_locations`, `case_workspace_provisionings`, and both
 // sides of `case_file_operations`/`case_lifecycle_operations`, the very
 // first real case's workspace-provisioning/location-assign/file-operation

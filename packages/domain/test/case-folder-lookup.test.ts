@@ -19,7 +19,7 @@ function lister(tree: Record<string, readonly string[]>): CaseFolderLister {
 
 describe('vaka klasörü çözümleme — yalın düzen', () => {
   it('kullanıcının bildirdiği güncel yapıyı bulur', () => {
-    // P:\BARAN GLOBAL EKSPERTİZ\2026\Temmuz 2026\47ACA535
+    // P:\OFIS\2026\Temmuz 2026\47ACA535
     const result = lookupCaseFolder({
       ...BASE,
       listFolders: lister({

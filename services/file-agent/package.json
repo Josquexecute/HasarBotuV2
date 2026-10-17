@@ -39,5 +39,7 @@
   "devDependencies": {
     "@types/node": "24.13.3",
     "tsx": "4.23.0"
-  }
+  },
+  "author": "Ömer Faruk İŞLEYEN",
+  "license": "UNLICENSED"
 }

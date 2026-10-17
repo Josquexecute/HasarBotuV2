@@ -98,7 +98,8 @@ try {
     }
 
     if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
-        $companyFolder = 'BARAN GLOBAL EKSPERT' + [char]0x0130 + 'Z'
+        $companyFolder = $env:HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER
+        if ([string]::IsNullOrWhiteSpace($companyFolder)) { throw 'PCLOUD_TOP_LEVEL_FOLDER_REQUIRED' }
         $SourceRoot = Join-Path 'P:\' $companyFolder
     }
     $source = [System.IO.Path]::GetFullPath($SourceRoot).TrimEnd('\')

@@ -99,7 +99,7 @@ try {
     # Set once, for the whole script's remaining lifetime (not restored):
     # both the node passthrough output AND this script's own final JSON
     # print contain Turkish characters (relative paths under the real
-    # BARAN GLOBAL EKSPERTİZ tree), so both must cross the process/console
+    # OFIS tree), so both must cross the process/console
     # boundary as UTF-8. Restoring immediately after the node call (and
     # printing this script's own output afterwards) reintroduces the exact
     # corruption this is meant to prevent.
@@ -114,7 +114,8 @@ try {
     if ([string]::IsNullOrWhiteSpace($CaseRelativePath)) { Throw-SafeError 'CASE_RELATIVE_PATH_REQUIRED' }
 
     if ([string]::IsNullOrWhiteSpace($SourceRoot) -or [string]::IsNullOrWhiteSpace($TargetRoot)) {
-        $companyFolder = 'BARAN GLOBAL EKSPERT' + [char]0x0130 + 'Z'
+        $companyFolder = $env:HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER
+        if ([string]::IsNullOrWhiteSpace($companyFolder)) { throw 'PCLOUD_TOP_LEVEL_FOLDER_REQUIRED' }
         if ([string]::IsNullOrWhiteSpace($SourceRoot)) { $SourceRoot = Join-Path 'P:\' $companyFolder }
         if ([string]::IsNullOrWhiteSpace($TargetRoot)) { $TargetRoot = Join-Path 'C:\HasarBotuStorage' $companyFolder }
     }

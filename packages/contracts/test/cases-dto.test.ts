@@ -96,7 +96,7 @@ describe('Cases DTO sozlesmeleri', () => {
         ...validItem,
         legacyReferences: {
           responsibleNames: ['Enes Özmen'],
-          expertNames: ['Baran Gürbüz'],
+          expertNames: ['Deniz Örnek'],
           serviceNames: ['BABİL - VEDAT'],
         },
       },

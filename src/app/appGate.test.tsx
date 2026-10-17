@@ -11,7 +11,7 @@ const SESSION = {
   user: {
     id: 'user-1',
     organizationId: 'org-1',
-    email: 'yazici@baran.example',
+    email: 'yazici@office.example',
     displayName: 'Yazıcı Kullanıcı',
     roles: ['case_manager'],
   },
@@ -67,7 +67,7 @@ describe('App oturum kapisi (api mod)', () => {
     render(<App />)
     await screen.findByRole('button', { name: 'Giriş Yap' })
 
-    await user.type(screen.getByLabelText('E-posta'), 'yazici@baran.example')
+    await user.type(screen.getByLabelText('E-posta'), 'yazici@office.example')
     await user.type(screen.getByLabelText('Parola'), 'cok-guclu-parola-42')
     await user.click(screen.getByRole('button', { name: 'Giriş Yap' }))
 

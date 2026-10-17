@@ -1,11 +1,13 @@
 # Gerçek kullanım düzenlemeleri — 13.10.2026
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 **Durum: PASS — bu revizyon geliştirildi, test edildi ve iki bilgisayara dağıtıldı.** Ana sunucu DESKTOP-EFN2G33, geliştirme bilgisayarı 51793-22893. Masaüstü sürümü iki bilgisayarda **0.1.4**. Ana adres `https://desktop-efn2g33.tail276cda.ts.net`; erişim Tailscale üzerinden sürer.
 
 ## Kullanım
 
 - Masaüstündeki **HasarBotu - Ofis.bat** dosyasını açın. Mevcut Google hesabıyla giriş akışı korunur.
-- Yeni doğrulanmış **@baranekspertiz.com** Google hesapları yetkisiz, parola gerektirmeyen **Onay bekliyor** kaydı oluşturur. Yönetici **Yönetim → Kullanıcılar → Onayla ve rol ata** üzerinden etkinleştirir; onaydan önce oturum ve iş verilerine erişim verilmez.
+- Yeni doğrulanmış **@office.example** Google hesapları yetkisiz, parola gerektirmeyen **Onay bekliyor** kaydı oluşturur. Yönetici **Yönetim → Kullanıcılar → Onayla ve rol ata** üzerinden etkinleştirir; onaydan önce oturum ve iş verilerine erişim verilmez.
 - **Yönetim → Servisler**: ad, tür, telefon ve aktiflik düzenlenir. Eşzamanlı eski sürümle yazma reddedilir. Önceki servis kaynak eşleştirmeleri bu revizyonda yapılmadı.
 - **Yönetim → Belge Kuralları**: zorunlu ve koşullu evraklar ofise özel sürümlenir. Değişiklik gerçek evrak değerlendirmesinde ve uyarılarda uygulanır. Evrak hash/boyut doğrulaması ve kritik işlem onayları korunur.
 - **Yönetim → Erişim ve Yetki**: rollerin işlem izinleri mevcut güvenlik sınırları içinde düzenlenir. Sunucu her istekte güncel izni kontrol eder; açık oturum eski yetkiyle yazamaz. Yönetici yetkileri korunur.

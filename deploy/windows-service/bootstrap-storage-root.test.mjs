@@ -24,29 +24,29 @@ const SCRIPT_PATH = fileURLToPath(new URL('./bootstrap-storage-root.mjs', import
 // === Salt-okunur, DB gerektirmeyen dogrulama testleri (her zaman calisir) ===
 
 test('validateOrganizationCode: bosluklu deger trim edilir, bos deger reddedilir', () => {
-  assert.equal(validateOrganizationCode('  baran-global  '), 'baran-global')
+  assert.equal(validateOrganizationCode('  hasarbotu-office  '), 'hasarbotu-office')
   assert.throws(() => validateOrganizationCode(''), (e) => e instanceof SafeError && e.safeCode === 'ORGANIZATION_CODE_INVALID')
   assert.throws(() => validateOrganizationCode('   '), (e) => e.safeCode === 'ORGANIZATION_CODE_INVALID')
 })
 
-test('validateRootKey: gercek uretim degeri (baran-global-primary) kabul edilir; buyuk harf/bosluk/asiri uzunluk reddedilir (storage_roots_key_format ile AYNI kural)', () => {
-  assert.equal(validateRootKey('baran-global-primary'), 'baran-global-primary')
-  assert.throws(() => validateRootKey('Baran-Global'), (e) => e.safeCode === 'ROOT_KEY_INVALID')
-  assert.throws(() => validateRootKey('baran global'), (e) => e.safeCode === 'ROOT_KEY_INVALID')
+test('validateRootKey: gercek uretim degeri (office-primary) kabul edilir; buyuk harf/bosluk/asiri uzunluk reddedilir (storage_roots_key_format ile AYNI kural)', () => {
+  assert.equal(validateRootKey('office-primary'), 'office-primary')
+  assert.throws(() => validateRootKey('Office-Primary'), (e) => e.safeCode === 'ROOT_KEY_INVALID')
+  assert.throws(() => validateRootKey('office global'), (e) => e.safeCode === 'ROOT_KEY_INVALID')
   assert.throws(() => validateRootKey('-leading-dash'), (e) => e.safeCode === 'ROOT_KEY_INVALID')
   assert.throws(() => validateRootKey('a'.repeat(65)), (e) => e.safeCode === 'ROOT_KEY_INVALID')
   assert.throws(() => validateRootKey(''), (e) => e.safeCode === 'ROOT_KEY_INVALID')
 })
 
 test('validateLabel: bos/asiri uzun deger reddedilir', () => {
-  assert.equal(validateLabel('Baran Global Ana Depo'), 'Baran Global Ana Depo')
+  assert.equal(validateLabel('HasarBotu Ofis Ana Depo'), 'HasarBotu Ofis Ana Depo')
   assert.throws(() => validateLabel(''), (e) => e.safeCode === 'LABEL_INVALID')
   assert.throws(() => validateLabel('x'.repeat(201)), (e) => e.safeCode === 'LABEL_INVALID')
 })
 
 test('parseArguments: tam gecerli girdi (apply ile/olmadan) dogru nesneyi doner', () => {
-  const withoutApply = parseArguments(['--organization-code', 'baran-global', '--root-key', 'baran-global-primary', '--label', 'Ana Depo'])
-  assert.deepEqual(withoutApply, { apply: false, organizationCode: 'baran-global', rootKey: 'baran-global-primary', label: 'Ana Depo' })
+  const withoutApply = parseArguments(['--organization-code', 'hasarbotu-office', '--root-key', 'office-primary', '--label', 'Ana Depo'])
+  assert.deepEqual(withoutApply, { apply: false, organizationCode: 'hasarbotu-office', rootKey: 'office-primary', label: 'Ana Depo' })
   const withApply = parseArguments(['--organization-code', 'x', '--root-key', 'y', '--label', 'z', '--apply'])
   assert.equal(withApply.apply, true)
 })
@@ -66,8 +66,8 @@ test('parseArguments: bilinmeyen bayrak, degersiz bayrak ve eksik zorunlu alan r
 test('CLI: DATABASE_URL verilmezse DATABASE_URL_REQUIRED ile exit 1 doner', () => {
   const result = spawnSync(process.execPath, [
     SCRIPT_PATH,
-    '--organization-code', 'baran-global',
-    '--root-key', 'baran-global-primary',
+    '--organization-code', 'hasarbotu-office',
+    '--root-key', 'office-primary',
     '--label', 'Ana Depo',
   ], {
     encoding: 'utf8',
@@ -106,7 +106,7 @@ async function freshTestPool() {
   return pool
 }
 
-async function insertOrganization(pool, code = 'baran-global', name = 'Baran Global Ekspertiz') {
+async function insertOrganization(pool, code = 'hasarbotu-office', name = 'HasarBotu Ofis') {
   const id = uuidv7()
   await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [id, code, name])
   return id
@@ -116,7 +116,7 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
   test('getStorageRootReadiness: organizasyon yoksa ORGANIZATION_NOT_FOUND', async () => {
     const pool = await freshTestPool()
     try {
-      const readiness = await getStorageRootReadiness(pool, 'baran-global', 'baran-global-primary')
+      const readiness = await getStorageRootReadiness(pool, 'hasarbotu-office', 'office-primary')
       assert.equal(readiness.organizationId, null)
       assert.deepEqual(readiness.blockers, ['ORGANIZATION_NOT_FOUND'])
     } finally {
@@ -128,7 +128,7 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
     const pool = await freshTestPool()
     try {
       const orgId = await insertOrganization(pool)
-      const readiness = await getStorageRootReadiness(pool, 'baran-global', 'baran-global-primary')
+      const readiness = await getStorageRootReadiness(pool, 'hasarbotu-office', 'office-primary')
       assert.equal(readiness.organizationId, orgId)
       assert.equal(readiness.ready, true)
       assert.equal(readiness.alreadyExists, false)
@@ -142,9 +142,9 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
     try {
       const orgId = await insertOrganization(pool)
       const result = await bootstrapStorageRoot(pool, {
-        organizationCode: 'baran-global',
-        rootKey: 'baran-global-primary',
-        label: 'Baran Global Ana Depo',
+        organizationCode: 'hasarbotu-office',
+        rootKey: 'office-primary',
+        label: 'HasarBotu Ofis Ana Depo',
       })
       assert.equal(result.outcome, 'applied')
       assert.equal(result.organizationId, orgId)
@@ -154,8 +154,8 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
         [result.id],
       )
       assert.equal(row.rows[0].organization_id, orgId)
-      assert.equal(row.rows[0].root_key, 'baran-global-primary')
-      assert.equal(row.rows[0].label, 'Baran Global Ana Depo')
+      assert.equal(row.rows[0].root_key, 'office-primary')
+      assert.equal(row.rows[0].label, 'HasarBotu Ofis Ana Depo')
       assert.equal(row.rows[0].is_active, true)
 
       const audit = await pool.query(
@@ -167,7 +167,7 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
       assert.equal(audit.rows[0].action, 'storage_root.created')
       assert.equal(audit.rows[0].resource_type, 'storage_root')
       assert.equal(audit.rows[0].resource_id, result.id)
-      assert.equal(audit.rows[0].details.rootKey, 'baran-global-primary')
+      assert.equal(audit.rows[0].details.rootKey, 'office-primary')
     } finally {
       await closeDatabasePool(pool)
     }
@@ -178,15 +178,15 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
     try {
       await insertOrganization(pool)
       const first = await bootstrapStorageRoot(pool, {
-        organizationCode: 'baran-global',
-        rootKey: 'baran-global-primary',
-        label: 'Baran Global Ana Depo',
+        organizationCode: 'hasarbotu-office',
+        rootKey: 'office-primary',
+        label: 'HasarBotu Ofis Ana Depo',
       })
       assert.equal(first.outcome, 'applied')
 
       const second = await bootstrapStorageRoot(pool, {
-        organizationCode: 'baran-global',
-        rootKey: 'baran-global-primary',
+        organizationCode: 'hasarbotu-office',
+        rootKey: 'office-primary',
         label: 'Farkli bir etiket bile fark etmez',
       })
       assert.equal(second.outcome, 'already_exists')
@@ -205,7 +205,7 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
     try {
       const result = await bootstrapStorageRoot(pool, {
         organizationCode: 'no-such-org',
-        rootKey: 'baran-global-primary',
+        rootKey: 'office-primary',
         label: 'Ana Depo',
       })
       assert.equal(result.outcome, 'blocked')
@@ -223,17 +223,17 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
       const orgId = await insertOrganization(pool)
       await pool.query(
         'INSERT INTO storage_roots (id, organization_id, root_key, label) VALUES ($1, $2, $3, $4)',
-        [uuidv7(), orgId, 'baran-global-primary', 'Rakip yazimla eklenen kok'],
+        [uuidv7(), orgId, 'office-primary', 'Rakip yazimla eklenen kok'],
       )
 
       const result = await bootstrapStorageRoot(pool, {
-        organizationCode: 'baran-global',
-        rootKey: 'baran-global-primary',
+        organizationCode: 'hasarbotu-office',
+        rootKey: 'office-primary',
         label: 'Bu asla yazilmamali',
       })
       assert.equal(result.outcome, 'already_exists')
 
-      const rows = await pool.query('SELECT label FROM storage_roots WHERE organization_id = $1 AND root_key = $2', [orgId, 'baran-global-primary'])
+      const rows = await pool.query('SELECT label FROM storage_roots WHERE organization_id = $1 AND root_key = $2', [orgId, 'office-primary'])
       assert.equal(rows.rows.length, 1, 'ikinci bir satir olusmamis olmali')
       assert.equal(rows.rows[0].label, 'Rakip yazimla eklenen kok', 'ilk (rakip) etiket degismemis olmali')
     } finally {
@@ -246,7 +246,7 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
     try {
       await insertOrganization(pool)
       await assert.rejects(
-        () => bootstrapStorageRoot(pool, { organizationCode: 'baran-global', rootKey: 'Invalid Key', label: 'Ana Depo' }),
+        () => bootstrapStorageRoot(pool, { organizationCode: 'hasarbotu-office', rootKey: 'Invalid Key', label: 'Ana Depo' }),
         (error) => error instanceof SafeError && error.safeCode === 'ROOT_KEY_INVALID',
       )
       const rootCount = await pool.query('SELECT COUNT(*)::int AS count FROM storage_roots')
@@ -262,8 +262,8 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
       await insertOrganization(pool)
       const result = spawnSync(process.execPath, [
         SCRIPT_PATH,
-        '--organization-code', 'baran-global',
-        '--root-key', 'baran-global-primary',
+        '--organization-code', 'hasarbotu-office',
+        '--root-key', 'office-primary',
         '--label', 'Ana Depo',
       ], {
         encoding: 'utf8',
@@ -288,7 +288,7 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
       const result = spawnSync(process.execPath, [
         SCRIPT_PATH,
         '--organization-code', 'no-such-org',
-        '--root-key', 'baran-global-primary',
+        '--root-key', 'office-primary',
         '--label', 'Ana Depo',
       ], {
         encoding: 'utf8',
@@ -309,8 +309,8 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-storage-root)', { skip: hasT
       await insertOrganization(pool)
       const args = [
         SCRIPT_PATH,
-        '--organization-code', 'baran-global',
-        '--root-key', 'baran-global-primary',
+        '--organization-code', 'hasarbotu-office',
+        '--root-key', 'office-primary',
         '--label', 'Ana Depo',
         '--apply',
       ]

@@ -2331,16 +2331,16 @@ describeDb('PostgreSQL entegrasyonu (gercek veritabani)', () => {
     const id = uuidv7()
     await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [
       id,
-      'baran-global',
-      'Baran Global Sigorta Ekspertiz',
+      'hasarbotu-office',
+      'HasarBotu Ofis Sigorta Ekspertiz',
     ])
     const row = await pool.query('SELECT id, code, version FROM organizations WHERE id = $1', [id])
-    expect(row.rows[0]).toMatchObject({ id, code: 'baran-global', version: 1 })
+    expect(row.rows[0]).toMatchObject({ id, code: 'hasarbotu-office', version: 1 })
 
     await expect(
       pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [
         uuidv7(),
-        'baran-global',
+        'hasarbotu-office',
         'Mukerrer Kod',
       ]),
     ).rejects.toMatchObject({ code: '23505' })

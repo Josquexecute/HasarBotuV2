@@ -58,7 +58,7 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
 
 /**
  * Ortamdan yükler. `HASARBOTU_AGENT_ROOTS` JSON'dur:
- * `{"baran-global-primary": "P:\\BARAN GLOBAL EKSPERTİZ"}`. Değerler yerel
+ * `{"office-primary": "P:\\OFIS"}`. Değerler yerel
  * mutlak yollardır ve dışarı sızdırılmaz.
  */
 export function loadAgentConfigFromEnv(env: NodeJS.ProcessEnv = process.env): AgentConfig {

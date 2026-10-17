@@ -1,5 +1,7 @@
 # Eksist pilot doğrulaması ve devreye alma hazırlığı
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 > Bu bilgisayarda sonradan hazırlanan izole V2 servisleri, gerçek pCloud eşlemesi,
 > kurulu OCR/HTTP kontrolleri ve açık freshness/UI engelleri için
 > [yerel pilot devam raporuna](EKSIST_PILOT_LOCAL_2026-09-20.md) bakın.
@@ -11,7 +13,7 @@
 
 ## Ortam bulguları
 
-- Kurulu uygulama: `C:\Program Files\HasarBotu - Baran Ekspertiz`, paket kimliği `hasarbotu-baran-ekspertiz`, sürüm `0.6.10`. Kimlik `resources/app.asar` içindeki `package.json` üzerinden okundu. Bu, depodaki `@hasarbotu/desktop 0.1.2` V2 paketi değildir.
+- Kurulu uygulama: `C:\Program Files\HasarBotu - Office Ekspertiz`, paket kimliği `hasarbotu-office-ekspertiz`, sürüm `0.6.10`. Kimlik `resources/app.asar` içindeki `package.json` üzerinden okundu. Bu, depodaki `@hasarbotu/desktop 0.1.2` V2 paketi değildir.
 - Windows servis envanterinde HasarBotu API/File Agent veya PostgreSQL servisi bulunmadı. Process/User/Machine kapsamlarında incelenen V2 veritabanı, agent kimliği ve depolama kökü değişkenleri tanımlı değil.
 - Kullanıcı pCloud'u açtığını, **bu bilgisayarda sync kurulmadığını** bildirdi. Çalışan pCloud uygulaması, File Agent'ın servis hesabından erişilebilir ve güncel yerel kök bulunduğunu kanıtlamaz.
 - Yerelde yalnız `.local/postgres/data` geliştirme/test kümesi bulundu. Veritabanları: `hasarbotu_removal_test` (0048), `hasarbotu_eksist_test` (0049). Üretim veritabanı erişimi bulunmadı.

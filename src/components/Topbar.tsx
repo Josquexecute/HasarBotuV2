@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { getSearchTokens } from '../utils/search'
 import { useSession } from '../app/sessionContext'
+import { APPLICATION_OWNER } from '../app/branding'
 
 interface TopbarProps {
   theme: 'light' | 'dark'
@@ -62,7 +63,7 @@ export function Topbar({ theme, onThemeToggle, onMenuToggle, menuExpanded }: Top
       </button>
       <div className="topbar__title">
         <strong>{title}</strong>
-        <span>Baran Global Ekspertiz</span>
+        <span>{APPLICATION_OWNER}</span>
       </div>
 
       <label className="global-search">

@@ -133,7 +133,7 @@ export const MAX_STORAGE_ROOT_KEY_LENGTH = 64
 export const MAX_RELATIVE_PATH_LENGTH = 400
 
 /**
- * Mantiksal depolama kok anahtari: kucuk-harf slug (`baran-global-primary`).
+ * Mantiksal depolama kok anahtari: kucuk-harf slug (`office-primary`).
  * Mutlak yol, surucu harfi veya UNC DEGILDIR ve olamaz.
  */
 export const storageRootKeySchema = z

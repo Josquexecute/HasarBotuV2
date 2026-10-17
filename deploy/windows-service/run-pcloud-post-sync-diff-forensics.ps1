@@ -93,7 +93,8 @@ try {
     }
 
     if ([string]::IsNullOrWhiteSpace($SourceRoot) -or [string]::IsNullOrWhiteSpace($TargetRoot)) {
-        $companyFolder = 'BARAN GLOBAL EKSPERT' + [char]0x0130 + 'Z'
+        $companyFolder = $env:HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER
+        if ([string]::IsNullOrWhiteSpace($companyFolder)) { throw 'PCLOUD_TOP_LEVEL_FOLDER_REQUIRED' }
         if ([string]::IsNullOrWhiteSpace($SourceRoot)) { $SourceRoot = Join-Path 'P:\' $companyFolder }
         if ([string]::IsNullOrWhiteSpace($TargetRoot)) { $TargetRoot = Join-Path 'C:\HasarBotuStorage' $companyFolder }
     }

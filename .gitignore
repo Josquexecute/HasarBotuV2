@@ -10,6 +10,7 @@ coverage/
 # electron-builder packaged installer output (apps/desktop)
 release/
 /apps/desktop/build-resources/office-connection.json
+/apps/desktop/build-resources/office-folder-roots.json
 
 # Logs and diagnostics
 logs/

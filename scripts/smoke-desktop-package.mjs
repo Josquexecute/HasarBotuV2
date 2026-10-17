@@ -11,10 +11,12 @@ import { parseOfficeConnection } from '../apps/desktop/dist/main/office-connecti
 if (process.platform !== 'win32') throw new Error('Run Windows package smoke validation on Windows.')
 const directory = resolve(process.argv[2] ?? 'apps/desktop/release/win-unpacked')
 const expectedVersion = JSON.parse(await readFile('apps/desktop/package.json', 'utf8')).version
+const expectedOwner = JSON.parse(await readFile('apps/desktop/package.json', 'utf8')).author
+assert.ok((await readFile(join(directory, 'resources/LICENSE-HasarBotu.txt'), 'utf8')).startsWith(`Copyright (c) 2026 ${expectedOwner}.`))
 const expectedProfile = parseOfficeConnection(JSON.parse(await readFile(process.env.HASARBOTU_DISTRIBUTION_PROFILE, 'utf8')))
 const packagedProfile = parseOfficeConnection(JSON.parse(await readFile(join(directory, 'resources/office-connection.json'), 'utf8')))
 assert.deepEqual(packagedProfile, expectedProfile)
-assert.deepEqual(JSON.parse(await readFile(join(directory, 'resources/folder-roots.json'), 'utf8')), JSON.parse(await readFile('apps/desktop/build-resources/folder-roots.json', 'utf8')))
+assert.deepEqual(JSON.parse(await readFile(join(directory, 'resources/folder-roots.json'), 'utf8')), JSON.parse(await readFile('apps/desktop/build-resources/office-folder-roots.json', 'utf8')))
 let verifiedUiFiles = 0
 async function verifyUi(relative = '') {
   for (const entry of await readdir(join('dist', relative), { withFileTypes: true })) {

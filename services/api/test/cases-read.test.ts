@@ -21,7 +21,7 @@ const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
 
 const PASSWORD = 'cok-guclu-parola-42'
-const EMAIL = 'okuyucu@baran.example'
+const EMAIL = 'okuyucu@office.example'
 
 describeDb('salt okunur Cases uclari (gercek veritabani)', () => {
   let config: DatabaseConfig
@@ -84,8 +84,8 @@ describeDb('salt okunur Cases uclari (gercek veritabani)', () => {
     serviceId = uuidv7()
     await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [
       orgId,
-      'baran-global',
-      'Baran Global',
+      'hasarbotu-office',
+      'HasarBotu Ofis',
     ])
     await pool.query(
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',

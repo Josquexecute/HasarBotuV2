@@ -1,6 +1,8 @@
 # Windows distribution and office HTTPS
 
-## Current office distribution: 0.1.16 (2026-10-15)
+Current authenticated office releases are recorded in [DESKTOP_UPDATES.md](DESKTOP_UPDATES.md). The 0.1.16 acceptance below is historical.
+
+## Office distribution acceptance: 0.1.16 (2026-10-15)
 
 Both existing computers and the authenticated office update feed use **0.1.16**.
 The verified installer is available in `HasarBotu-Kurulum-0.1.16` on both desktops.
@@ -82,9 +84,12 @@ fails if it is absent or invalid. Its generated build file is ignored by Git.
 
 ```powershell
 $env:HASARBOTU_DISTRIBUTION_PROFILE = 'C:\protected\office-distribution.json'
+$env:HASARBOTU_DISTRIBUTION_ROOTS = 'C:\protected\office-folder-roots.json'
 npm run build
 npm run package:win --workspace @hasarbotu/desktop -- --publish never
 ```
+
+Folder mappings are private distribution inputs: use `apps/desktop/build-resources/folder-roots.example.json` as the schema example. The roots input must be an absolute path to a JSON object containing valid root keys and absolute Windows paths, up to 64 KiB. Packaging generates the ignored `office-folder-roots.json`; its packaged name remains `folder-roots.json`. An omitted input produces an empty map and normal manual folder selection. Existing office releases must include their verified current mappings so physical paths and stored root identities remain compatible. Do not commit the actual office map.
 
 GitHub Actions verifies the installer and uploaded assets before completing its
 private draft. Source upload and the final publication remain user-controlled.

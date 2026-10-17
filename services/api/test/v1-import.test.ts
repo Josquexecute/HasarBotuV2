@@ -190,7 +190,7 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     await pool.query(
       `INSERT INTO users (id,organization_id,email,display_name,password_hash) VALUES
        ($1,$4,'actor@test.local','Sentetik Aktor',$5),($2,$4,'responsible@test.local','Sentetik Sorumlu',$5),
-       ($3,$4,'omerfaruk.isleyen@baranekspertiz.com','Ömer Faruk',$5)`,
+       ($3,$4,'omerfaruk.isleyen@office.example','Ömer Faruk',$5)`,
       [actorUserId, responsibleUserId, omerUserId, organizationId, await hashPassword(PASSWORD)],
     )
     await pool.query("INSERT INTO user_roles (user_id,role_id) SELECT $1,id FROM roles WHERE code='admin'", [actorUserId])
@@ -471,13 +471,13 @@ describeDb('V1 remediation (gercek dosya sistemi + gercek PostgreSQL)', () => {
     root = await mkdtemp(join(tmpdir(), 'hb-v1-remediation-'))
     await writeSource(root, '2026/Agustos 2026/34REF101', {
       caseKey: 'omer-email-identity', createdAt: '2026-08-06T08:00:00Z', responsible: 'Ömer Faruk İşleyen',
-      expert: 'Baran Gürbüz', service: 'GÜNEY',
+      expert: 'Deniz Örnek', service: 'GÜNEY',
     })
     await writeSource(root, '2026/Agustos 2026/34REF102', {
-      caseKey: 'unassigned-sentinel', createdAt: '2026-08-06T09:00:00Z', responsible: 'Atanmadı', expert: 'Baran Gürbüz',
+      caseKey: 'unassigned-sentinel', createdAt: '2026-08-06T09:00:00Z', responsible: 'Atanmadı', expert: 'Deniz Örnek',
     })
     await writeSource(root, '2026/Agustos 2026/34REF103', {
-      caseKey: 'legacy-user', createdAt: '2026-08-06T10:00:00Z', responsible: 'Enes Özmen', expert: 'Baran Gürbüz',
+      caseKey: 'legacy-user', createdAt: '2026-08-06T10:00:00Z', responsible: 'Enes Özmen', expert: 'Deniz Örnek',
     })
     const plan = await planV1Remediation(pool, organizationId, root)
     const byKey = new Map(plan.entries.map((entry) => [entry.rawSnapshot?.caseIdentity?.caseKey, entry]))

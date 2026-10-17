@@ -55,6 +55,8 @@ void app.whenReady().then(async () => {
     const clickAria = (label) => evaluate(`document.querySelector(${JSON.stringify(`[aria-label="${label}"]`)}).click()`)
     const button = (label) => `Array.from(document.querySelectorAll('button')).find((item)=>item.textContent.trim()===${JSON.stringify(label)})`
     await until(() => evaluate('document.querySelectorAll(".case-table tbody tr").length>0 || document.querySelector("tbody")?.textContent.includes("34 TEST 001")'),'actual case list')
+    await until(() => evaluate('document.querySelector(".brand__logo")?.complete'),'sidebar logo decode')
+    check('original sidebar logo decodes and retains visible dimensions',await evaluate('(()=>{const logo=document.querySelector(".brand__logo");const box=logo.getBoundingClientRect();return logo.naturalWidth>0 && box.width>=32 && box.height>=32;})()'))
     await until(() => evaluate('document.querySelector(\'button[aria-label="Uyarıyı kapat"]\') !== null'),'owned popup')
     await clickAria('Uyarıyı kapat')
     await until(() => evaluate('!document.querySelector(".tracking-popup")'),'backlog dismissal')
@@ -184,6 +186,15 @@ void app.whenReady().then(async () => {
     check('detail plate retains contrast in the dark theme',await evaluate('getComputedStyle(document.querySelector(".case-detail-head .plate")).color === "rgb(17, 17, 17)"'))
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
     await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'case-detail-dark.png'),(await shell.window.webContents.capturePage()).toPNG())
+    await clickAria('Oturumu kapat')
+    await until(() => evaluate('document.querySelector(".login-card") !== null'),'login screen after actual logout')
+    await shell.window.loadURL(shell.origin)
+    await until(() => evaluate('document.querySelector(".login-card") !== null'),'login persists after reload')
+    await until(() => evaluate('document.querySelector(".brand__logo")?.complete'),'login logo decode')
+    check('login displays the project owner and copyright with a visible original logo',await evaluate('(()=>{const card=document.querySelector(".login-card");const logo=card.querySelector(".brand__logo");const box=logo.getBoundingClientRect();return card.textContent.includes("Ömer Faruk İŞLEYEN") && card.textContent.includes("© 2026 Ömer Faruk İŞLEYEN. Tüm hakları saklıdır.") && logo.naturalWidth>0 && box.width>=32 && box.height>=32;})()'))
+    await settleMotion()
+    await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+    await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'ownership-login.png'),(await shell.window.webContents.capturePage(undefined,{stayHidden: true,stayAwake: true})).toPNG())
   } catch (error) { checks.push({ name: error instanceof Error ? error.message : 'Unexpected UI acceptance error',pass: false }) }
   finally {
     await shell?.close();await api?.close();await pool?.end()

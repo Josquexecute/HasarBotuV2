@@ -11,7 +11,8 @@ const latestPath=reportDirectory+(pendingOnly?'/pending-latest.json':'/latest.js
  if(process.env.COMPUTERNAME!=='DESKTOP-EFN2G33')throw new Error('SOURCE_REFRESH_TARGET_MISMATCH')
  const config=JSON.parse(fs.readFileSync(reportDirectory+'/configuration.json','utf8'))
  const roots=JSON.parse(process.env.HASARBOTU_AGENT_ROOTS)
- const targetRoot=roots['baran-global-primary']
+ const rootKey=config.storageRootKey??(Object.keys(roots).length===1?Object.keys(roots)[0]:undefined)
+ const targetRoot=rootKey&&roots[rootKey]
  if(!targetRoot||!/^P:[\\/]/i.test(config.sourceRoot))throw new Error('SOURCE_REFRESH_ROOT_CONFIGURATION_INVALID')
  if(!fs.statSync(config.sourceRoot).isDirectory())throw new Error('PCLOUD_SOURCE_NOT_AVAILABLE')
  function underRoot(base,relative){
@@ -27,13 +28,13 @@ const latestPath=reportDirectory+(pendingOnly?'/pending-latest.json':'/latest.js
  let rows
  try{rows=(await db.query(`SELECT c.id case_id,l.relative_path FROM case_locations l JOIN cases c ON c.id=l.case_id
   WHERE c.organization_id='019fe084-1ec1-7797-835a-777eb0cc59c2' AND NOT c.is_archived
-   AND l.verification_status='verified' AND l.storage_root_key='baran-global-primary'
+   AND l.verification_status='verified' AND l.storage_root_key=$2
    AND ($1::boolean=false OR EXISTS (
     SELECT 1 FROM case_file_operations operation JOIN jobs job ON job.id=operation.active_job_id
     WHERE operation.organization_id=c.organization_id AND operation.case_id=c.id
      AND operation.approved_by_user_id IS NOT NULL
      AND job.status='pending' AND job.last_error_code='case_not_fresh'
-   )) ORDER BY c.id`,[pendingOnly])).rows}finally{await db.end()}
+   )) ORDER BY c.id`,[pendingOnly,rootKey])).rows}finally{await db.end()}
  const cases=rows.map(r=>({caseId:r.case_id,caseRelativePath:r.relative_path,targetCaseRoot:underRoot(targetRoot,r.relative_path),sourceCaseRoot:underRoot(config.sourceRoot,r.relative_path)}))
  const {findCasesNeedingAttestation,buildAttestationRecordsBatch,writeAttestationRecord}=await import(pathToFileURL(root+'/tools/pcloud-source-attestation.mjs'))
  const started=Date.now()

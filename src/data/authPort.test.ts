@@ -5,7 +5,7 @@ const SESSION_BODY = {
   user: {
     id: 'user-1',
     organizationId: 'org-1',
-    email: 'yazici@baran.example',
+    email: 'yazici@office.example',
     displayName: 'Yazıcı Kullanıcı',
     roles: ['case_manager'],
   },
@@ -28,7 +28,7 @@ describe('HttpAuthAdapter bootstrap', () => {
     expect(user).toEqual({
       id: 'user-1',
       organizationId: 'org-1',
-      email: 'yazici@baran.example',
+      email: 'yazici@office.example',
       displayName: 'Yazıcı Kullanıcı',
       roles: ['case_manager'],
     })
@@ -51,7 +51,7 @@ describe('HttpAuthAdapter bootstrap', () => {
 describe('HttpAuthAdapter login', () => {
   it('200 -> SessionUser', async () => {
     const auth = createHttpAuthAdapter({ fetchImpl: respond(200, SESSION_BODY) })
-    const user = await auth.login('yazici@baran.example', 'cok-guclu-parola-42')
+    const user = await auth.login('yazici@office.example', 'cok-guclu-parola-42')
     expect(user.displayName).toBe('Yazıcı Kullanıcı')
   })
 
@@ -85,13 +85,13 @@ describe('HttpAuthAdapter login', () => {
   it('login govdesi email+password gonderir, GET session credentials include kullanir', async () => {
     const fetchImpl = respond(200, SESSION_BODY)
     const auth = createHttpAuthAdapter({ baseUrl: 'http://api.test', fetchImpl })
-    await auth.login('yazici@baran.example', 'cok-guclu-parola-42')
+    await auth.login('yazici@office.example', 'cok-guclu-parola-42')
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://api.test/api/v1/auth/login',
       expect.objectContaining({
         method: 'POST',
         credentials: 'include',
-        body: JSON.stringify({ email: 'yazici@baran.example', password: 'cok-guclu-parola-42' }),
+        body: JSON.stringify({ email: 'yazici@office.example', password: 'cok-guclu-parola-42' }),
       }),
     )
   })

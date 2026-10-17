@@ -1,5 +1,7 @@
 # Eksist klasör oluşturma ve OCR doğrulaması — 20 Eylül 2026
 
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
 **Durum: PARTIAL. Kod ve kurulu pilot servis kontrolleri geçti. Gerçek masaüstü
 kabulü tamamlanmadığından genel dağıtım ZIP'i ve dağıtım onayı yoktur.**
 
@@ -52,7 +54,7 @@ zamanı modülüdür. HTTP ve jsdom sonuçları masaüstü kabulü yerine geçir
 
 - Pilot: `C:\HasarBotuPilot`; API `127.0.0.1:3141`, PostgreSQL `55441`.
 - Agent/API/PostgreSQL servisleri çalışma sonunda çalışır; başlangıçları Manual.
-- Gerçek pilot kökü: `D:\BaranGlobalStorage\_V2_EKSIST_PILOT_20260920`.
+- Gerçek pilot kökü: `D:\OfficeStorage\_V2_EKSIST_PILOT_20260920`.
 - Aday: `C:\HasarBotuPilot\desktop-build-freshness\HasarBotu-Setup-0.1.2.exe`.
 - `C:\HasarBotuPilot\Open-Pilot.cmd` yeni adayı seçer; önceki adaylar korunur.
 - Manuel kabul belgeleri: `C:\HasarBotuPilot\freshness-fixtures\manual`.

@@ -78,7 +78,7 @@ describeLive('Auth + komut gercek API uctan uca', () => {
 
   it('gecersiz kimlik invalid_credentials firlatir', async () => {
     const auth = createHttpAuthAdapter({ baseUrl: BASE_URL as string })
-    await expect(auth.login('yok@baran.example', 'yanlis-parola-123')).rejects.toMatchObject({
+    await expect(auth.login('yok@office.example', 'yanlis-parola-123')).rejects.toMatchObject({
       name: 'HttpAuthError',
       kind: 'invalid_credentials',
     })

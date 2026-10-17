@@ -21,7 +21,7 @@ const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
 
 const PASSWORD = 'cok-guclu-parola-42'
-const EMAIL = 'yazici@baran.example'
+const EMAIL = 'yazici@office.example'
 const YEAR = new Date().getFullYear()
 
 describeDb('Cases yazma uclari (gercek veritabani)', () => {
@@ -62,7 +62,7 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expertId = uuidv7()
     insurerId = uuidv7()
     inactiveServiceId = uuidv7()
-    await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [orgId, 'baran-global', 'Baran Global'])
+    await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [orgId, 'hasarbotu-office', 'HasarBotu Ofis'])
     await pool.query(
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',
       [userId, orgId, EMAIL, 'Yazici', await hashPassword(PASSWORD)],
@@ -74,7 +74,7 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     )
     await pool.query(
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',
-      [expertId, orgId, 'eksper@baran.example', 'Gerçek Eksper', await hashPassword(PASSWORD)],
+      [expertId, orgId, 'eksper@office.example', 'Gerçek Eksper', await hashPassword(PASSWORD)],
     )
     await pool.query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE code='expert'", [expertId])
     await pool.query('INSERT INTO insurers (id, organization_id, name) VALUES ($1, $2, $3)', [insurerId, orgId, 'Güven Sigorta'])

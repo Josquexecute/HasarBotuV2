@@ -7,13 +7,13 @@ import {
 
 describe('parseStorageRootKey', () => {
   it('küçük harf slug kabul eder', () => {
-    expect(parseStorageRootKey('baran-global-primary')).toEqual({ ok: true, value: 'baran-global-primary' })
+    expect(parseStorageRootKey('office-primary')).toEqual({ ok: true, value: 'office-primary' })
     expect(parseStorageRootKey('root1')).toMatchObject({ ok: true })
   })
 
   it('boş, biçimsiz veya çok uzun anahtarı reddeder', () => {
     expect(parseStorageRootKey('').ok).toBe(false)
-    expect(parseStorageRootKey('Baran_Global').ok).toBe(false) // büyük harf + alt çizgi
+    expect(parseStorageRootKey('Office_Global').ok).toBe(false) // büyük harf + alt çizgi
     expect(parseStorageRootKey('a/b').ok).toBe(false)
     expect(parseStorageRootKey('-lead').ok).toBe(false)
     expect(parseStorageRootKey('a'.repeat(65)).ok).toBe(false)
@@ -47,7 +47,7 @@ describe('parseRelativePath — güvenlik reddi (traversal ve mutlak yol)', () =
     ['a/b/..', 'sonda traversal'],
     ['/etc/passwd', 'POSIX absolute'],
     ['C:/Windows', 'sürücü ön eki'],
-    [`P:${String.fromCharCode(92)}BARAN`, 'sürücü + backslash'],
+    [`P:${String.fromCharCode(92)}OFFICE`, 'sürücü + backslash'],
     [`${String.fromCharCode(92)}${String.fromCharCode(92)}server${String.fromCharCode(92)}share`, 'UNC'],
     [`a${String.fromCharCode(92)}b`, 'backslash ayraç'],
     ['a//b', 'çift ayraç'],
@@ -95,14 +95,14 @@ describe('parseRelativePath — güvenlik reddi (traversal ve mutlak yol)', () =
 
 describe('parseStorageLocation', () => {
   it('rootKey + göreli yolu birlikte doğrular', () => {
-    expect(parseStorageLocation('baran-global-primary', '2026/EVRAK/x.pdf')).toMatchObject({
+    expect(parseStorageLocation('office-primary', '2026/EVRAK/x.pdf')).toMatchObject({
       ok: true,
-      value: { rootKey: 'baran-global-primary', relativePath: '2026/EVRAK/x.pdf' },
+      value: { rootKey: 'office-primary', relativePath: '2026/EVRAK/x.pdf' },
     })
   })
 
   it('yol güvensizse veya rootKey biçimsizse reddeder', () => {
-    expect(parseStorageLocation('baran-global-primary', '../escape').ok).toBe(false)
+    expect(parseStorageLocation('office-primary', '../escape').ok).toBe(false)
     expect(parseStorageLocation('BAD KEY', '2026/x.pdf').ok).toBe(false)
   })
 })

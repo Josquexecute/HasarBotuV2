@@ -47,7 +47,7 @@ const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
 
 const PASSWORD = 'cok-guclu-parola-transport-42'
-const EMAIL = 'transport-admin@baran.example'
+const EMAIL = 'transport-admin@office.example'
 
 describeDb('auth çerez taşıma sözleşmesi (gerçek TCP + gerçek HTTP, HB-2026-175)', () => {
   let config: DatabaseConfig
@@ -64,8 +64,8 @@ describeDb('auth çerez taşıma sözleşmesi (gerçek TCP + gerçek HTTP, HB-20
     userId = uuidv7()
     await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1, $2, $3)', [
       orgId,
-      'baran-global-transport',
-      'Baran Global Transport Test',
+      'hasarbotu-office-transport',
+      'HasarBotu Ofis Transport Test',
     ])
     await pool.query(
       'INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1, $2, $3, $4, $5)',

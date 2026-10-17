@@ -19,7 +19,7 @@ describe('auth sozlesmeleri', () => {
   })
 
   it('email bicimi sinirlidir', () => {
-    expect(emailSchema.safeParse('eksper@baran.example').success).toBe(true)
+    expect(emailSchema.safeParse('eksper@office.example').success).toBe(true)
     expect(emailSchema.safeParse('bosluk yok@x.y').success).toBe(false)
     expect(emailSchema.safeParse('atsiz.example').success).toBe(false)
     expect(emailSchema.safeParse(`a@${'b'.repeat(260)}.c`).success).toBe(false)

@@ -125,12 +125,12 @@ describe('Document workspace HttpApiAdapter', () => {
 
   it('mutlak veya üst dizine çıkan metadata yolunu ekrana ulaşmadan reddeder', async () => {
     expect(isSafeMetadataRelativePath('EVRAK/police.pdf')).toBe(true)
-    expect(isSafeMetadataRelativePath('P:\\BARAN\\police.pdf')).toBe(false)
+    expect(isSafeMetadataRelativePath('P:\\OFFICE\\police.pdf')).toBe(false)
     expect(isSafeMetadataRelativePath('../police.pdf')).toBe(false)
     const unsafeDetail = {
       document: {
         ...documentDetail.document,
-        versions: [{ ...documentDetail.document.versions[0], relativePath: 'P:\\BARAN\\magdur-police.pdf' }],
+        versions: [{ ...documentDetail.document.versions[0], relativePath: 'P:\\OFFICE\\magdur-police.pdf' }],
       },
     }
     const adapter = createHttpDocumentWorkspaceAdapter({ fetchImpl: successfulFetch({ documentDetail: unsafeDetail }) })

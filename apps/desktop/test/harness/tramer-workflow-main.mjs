@@ -24,7 +24,7 @@ void app.whenReady().then(async () => {
     await runMigrations({ databaseUrl: config.url,quiet: true })
     const org = uuidv7(),owner = uuidv7(),connectionId = uuidv7()
     const password = 'isolated-tramer-ui-password',email = 'tramer-owner@example.test'
-    const google = { clientId: 'isolated',clientSecret: 'isolated',redirectUri: 'https://example.test/api/v1/google/callback',encryptionKey: 'ab'.repeat(32),sbmSenders: ['results@sbm.example'],automaticSbmEnabled: true }
+    const google = { clientId: 'isolated',clientSecret: 'isolated',redirectUri: 'https://example.test/api/v1/google/callback',encryptionKey: 'ab'.repeat(32),sbmSenders: ['results@sbm.example'],automaticSbmEnabled: true,loginDomain: 'office.example' }
     await pool.query("INSERT INTO organizations(id,code,name) VALUES($1,'tramer-ui','Tramer UI Acceptance')",[org])
     await pool.query("INSERT INTO users(id,organization_id,email,display_name,password_hash) VALUES($1,$2,$3,'Tramer Test Sorumlusu',$4)",[owner,org,email,await hashPassword(password)])
     await pool.query("INSERT INTO user_roles(user_id,role_id) SELECT $1,id FROM roles WHERE code='admin'",[owner])

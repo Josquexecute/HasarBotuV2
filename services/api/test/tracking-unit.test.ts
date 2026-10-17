@@ -5,7 +5,7 @@ import { decryptToken,encryptToken,parseGoogleConfig,validateGoogleClaims,create
 import { parseSbmMessage, type GmailMessage } from '../src/tracking/sbm.js'
 import { sbmFixture,sbmNumber } from '../test-support/sbm-fixtures.js'
 
-const claims = { iss: 'https://accounts.google.com',sub: 'google-sub',aud: 'client',exp: 2_000_000_000,iat: 1_700_000_000,nonce: 'nonce',email: 'employee@baranekspertiz.com',email_verified: true,hd: 'baranekspertiz.com' }
+const claims = { iss: 'https://accounts.google.com',sub: 'google-sub',aud: 'client',exp: 2_000_000_000,iat: 1_700_000_000,nonce: 'nonce',email: 'employee@office.example',email_verified: true,hd: 'office.example' }
 const now = 1_800_000_000_000
 describe('Google and SBM trust boundaries',() => {
   it('keeps leading zeros and numbers beyond JavaScript precision; rejects numeric JSON',() => {
@@ -15,11 +15,11 @@ describe('Google and SBM trust boundaries',() => {
   it.each([
     { hd: 'other.example' },{ email: 'x@gmail.com' },{ email_verified: false },{ nonce: 'wrong' },{ aud: 'other' },{ iss: 'https://evil.example' },{ exp: 1_700_000_000 },{ iat: 1_900_000_000 },{ aud: ['client','other'] },{ azp: 'other' },
   ])('rejects invalid identity claims %j',(change) => {
-    expect(() => validateGoogleClaims({ ...claims,...change },'client','nonce',true,now)).toThrow()
+    expect(() => validateGoogleClaims({ ...claims,...change },'client','nonce','office.example',now)).toThrow()
   })
   it('accepts verified corporate claims; mail identity does not grant corporate login',() => {
-    expect(validateGoogleClaims(claims,'client','nonce',true,now).sub).toBe('google-sub')
-    expect(validateGoogleClaims({ ...claims,email: 'sbm-mail@gmail.com',hd: undefined },'client','nonce',false,now).email).toBe('sbm-mail@gmail.com')
+    expect(validateGoogleClaims(claims,'client','nonce','office.example',now).sub).toBe('google-sub')
+    expect(validateGoogleClaims({ ...claims,email: 'sbm-mail@gmail.com',hd: undefined },'client','nonce',undefined,now).email).toBe('sbm-mail@gmail.com')
   })
   it('encrypts credentials, detects tampering and prevents cross-account credential swaps',() => {
     const key = 'ab'.repeat(32)
@@ -30,10 +30,24 @@ describe('Google and SBM trust boundaries',() => {
     expect(() => decryptToken(encrypted,'cd'.repeat(32),'org:subject')).toThrow()
     expect(() => decryptToken(encrypted.slice(0,-5)+'aaaaa',key,'org:subject')).toThrow()
   })
+  it('requires an explicit login domain and rejects malformed domain configuration',() => {
+    const env = { GOOGLE_CLIENT_ID: 'client',GOOGLE_CLIENT_SECRET: 'secret',GOOGLE_REDIRECT_URI: 'https://example.com/api/v1/google/callback',GOOGLE_TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32) }
+    expect(() => parseGoogleConfig(env)).toThrow('GOOGLE_LOGIN_DOMAIN')
+    for (const value of ['*','https://office.example','@office.example','office.example/','office.example:443','office.example,other.example']) {
+      expect(() => parseGoogleConfig({ ...env,GOOGLE_LOGIN_DOMAIN: value })).toThrow()
+    }
+    expect(parseGoogleConfig({ ...env,GOOGLE_LOGIN_DOMAIN: ' Office.Example ' })?.loginDomain).toBe('office.example')
+  })
+  it('uses the configured hosted domain and exact email domain, rejecting suffix impersonation',() => {
+    expect(validateGoogleClaims({ ...claims,email: 'owner@another.example',hd: 'another.example' },'client','nonce','another.example',now).sub).toBe('google-sub')
+    for (const change of [{ email: 'owner@sub.office.example' },{ email: 'owner@fakeoffice.example' },{ hd: 'another.example' }]) {
+      expect(() => validateGoogleClaims({ ...claims,...change },'client','nonce','office.example',now)).toThrow()
+    }
+  })
   it('config is disabled until complete; automatic SBM never defaults on; scopes are separate',() => {
     expect(parseGoogleConfig({})).toBeUndefined()
     expect(() => parseGoogleConfig({ GOOGLE_CLIENT_ID: 'client' })).toThrow()
-    const config = parseGoogleConfig({ GOOGLE_CLIENT_ID: 'client',GOOGLE_CLIENT_SECRET: 'secret',GOOGLE_REDIRECT_URI: 'https://example.com/api/v1/google/callback',GOOGLE_TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32) })!
+    const config = parseGoogleConfig({ GOOGLE_CLIENT_ID: 'client',GOOGLE_CLIENT_SECRET: 'secret',GOOGLE_REDIRECT_URI: 'https://example.com/api/v1/google/callback',GOOGLE_TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),GOOGLE_LOGIN_DOMAIN: 'office.example' })!
     expect(config.automaticSbmEnabled).toBe(false)
     const provider = createGoogleProvider(config)
     const login = new URL(provider.authorizeUrl('login','state','nonce','verifier'))
@@ -42,10 +56,12 @@ describe('Google and SBM trust boundaries',() => {
     expect(mail.searchParams.get('scope')).toContain('gmail.readonly')
     expect(mail.searchParams.get('access_type')).toBe('offline')
     expect(login.searchParams.get('code_challenge_method')).toBe('S256')
+    expect(login.searchParams.get('hd')).toBe('office.example')
+    expect(mail.searchParams.has('hd')).toBe(false)
   })
   it('verifies the actual RSA signature and rejects a changed signed payload',async () => {
     const { privateKey,publicKey } = generateKeyPairSync('rsa',{ modulusLength: 2048 })
-    const config = { clientId: 'client',clientSecret: 'secret',redirectUri: 'https://example.com/api/v1/google/callback',encryptionKey: 'ab'.repeat(32),sbmSenders: [],automaticSbmEnabled: false }
+    const config = { clientId: 'client',clientSecret: 'secret',redirectUri: 'https://example.com/api/v1/google/callback',encryptionKey: 'ab'.repeat(32),sbmSenders: [],automaticSbmEnabled: false,loginDomain: 'office.example' }
     const provider = createGoogleProvider(config,async () => Response.json({ keys: [{ ...publicKey.export({ format: 'jwk' }),kid: 'test-key',alg: 'RS256',use: 'sig' }] }))
     const encode = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url')
     const header = encode({ alg: 'RS256',kid: 'test-key' })

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 /**
  * V1 `_HASARBOTU/takip.json` semasi -- GERCEK production dosyalarindan
- * (2026-08-11, `C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ`) dogrudan
+ * (2026-08-11, `C:\HasarBotuStorage\OFIS`) dogrudan
  * okunarak cikarildi, TAHMIN EDILMEDI. Bugune kadar gozlenen TUM 142+
  * gercek dosya `schemaVersion:1`; baska surum hic gorulmedi ama kod
  * `parseV1TakipJson` icinde acikca dispatch eder -- yeni bir surum

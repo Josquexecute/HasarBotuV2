@@ -146,7 +146,7 @@ param(
     [ValidateLength(1, 20)]
     [string]$AccountName = 'svc-hb-fileagent',
 
-    [string]$StorageRoot = 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ',
+    [string]$StorageRoot = $env:HASARBOTU_OFFICE_STORAGE_ROOT,
 
     [string]$PCloudSyncAccount = "$env:COMPUTERNAME\$env:USERNAME",
 

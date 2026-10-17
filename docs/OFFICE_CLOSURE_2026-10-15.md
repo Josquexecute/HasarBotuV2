@@ -1,6 +1,8 @@
 # Ofis klasörü ve kapanış
 
-Ofisin çalışma alanı `P:\BARAN GLOBAL EKSPERTİZ\2026 OFİS` olarak yapılandırılmıştır. Desktop varsayılanı bu klasördür; kayıtlı göreli yolda `2026 OFİS` varsa tekrar eklenmez. Ofis varsayılanı eski yerel kök kaydından önce denenir. Merkezi file agent kökü `P:\BARAN GLOBAL EKSPERTİZ` olur; mevcut göreli yollar, belge kimlikleri ve geçmiş konumlar topluca yeniden yazılmaz. Eski `C:` çalışma kopyası silinmez. Servis hesabıyla P: okuma/yazma probu ve 27 TST025 klasöründe 67 gerçek dosyanın güncellik doğrulaması başarılıdır.
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
+Ofisin çalışma alanı `P:\OFIS\2026 OFİS` olarak yapılandırılmıştır. Desktop varsayılanı bu klasördür; kayıtlı göreli yolda `2026 OFİS` varsa tekrar eklenmez. Ofis varsayılanı eski yerel kök kaydından önce denenir. Merkezi file agent kökü `P:\OFIS` olur; mevcut göreli yollar, belge kimlikleri ve geçmiş konumlar topluca yeniden yazılmaz. Eski `C:` çalışma kopyası silinmez. Servis hesabıyla P: okuma/yazma probu ve 27 TST025 klasöründe 67 gerçek dosyanın güncellik doğrulaması başarılıdır.
 
 Otomatik keşif yapılandırmasında `yearFolder: "2026 OFİS"` yalnız bu yıl klasörünü taratır. pCloud klasör kimlikleri ve depolama köküne göre tam göreli yollar korunur. Başka yıllardaki mevcut kayıtlar silinmez.
 

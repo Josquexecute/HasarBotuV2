@@ -94,7 +94,8 @@ try {
 
     if ([string]::IsNullOrWhiteSpace($CaseRelativePath)) { Throw-SafeError 'CASE_RELATIVE_PATH_REQUIRED' }
 
-    if ([string]::IsNullOrWhiteSpace($TopLevelFolderName)) { $TopLevelFolderName = 'BARAN GLOBAL EKSPERT' + [char]0x0130 + 'Z' }
+    if ([string]::IsNullOrWhiteSpace($TopLevelFolderName)) { $TopLevelFolderName = $env:HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER }
+    if ([string]::IsNullOrWhiteSpace($TopLevelFolderName)) { throw 'PCLOUD_TOP_LEVEL_FOLDER_REQUIRED' }
     if ([string]::IsNullOrWhiteSpace($TargetRoot)) { $TargetRoot = Join-Path (Join-Path 'C:\HasarBotuStorage' $TopLevelFolderName) $CaseRelativePath }
     $target = [System.IO.Path]::GetFullPath($TargetRoot).TrimEnd('\')
     if (-not [System.IO.Directory]::Exists($target)) { Throw-SafeError 'TARGET_ROOT_NOT_FOUND' }

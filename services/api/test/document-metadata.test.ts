@@ -68,7 +68,7 @@ describeDb('Belge/fotoğraf metadata (gerçek veritabanı)', () => {
       mimeType: 'application/pdf',
       byteSize: 2048,
       contentHash: hex('doc-default'),
-      storageRootKey: 'baran-primary',
+      storageRootKey: 'office-primary',
       relativePath: '2026/EVRAK/ruhsat.pdf',
       ...over,
     }
@@ -101,7 +101,7 @@ describeDb('Belge/fotoğraf metadata (gerçek veritabanı)', () => {
     await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1,$2,$3)', [orgB, 'org-b', 'B'])
     await seedUser(orgA, 'a@a.example')
     await seedUser(orgB, 'b@b.example')
-    await pool.query('INSERT INTO storage_roots (id, organization_id, root_key, label, is_active) VALUES ($1,$2,$3,$4,true)', [uuidv7(), orgA, 'baran-primary', 'A Primary'])
+    await pool.query('INSERT INTO storage_roots (id, organization_id, root_key, label, is_active) VALUES ($1,$2,$3,$4,true)', [uuidv7(), orgA, 'office-primary', 'A Primary'])
     await pool.query('INSERT INTO storage_roots (id, organization_id, root_key, label, is_active) VALUES ($1,$2,$3,$4,true)', [uuidv7(), orgB, 'other-primary', 'B Primary'])
     app = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false, loginRateLimit: { limit: 1000, windowMs: 60_000 } } })
     cookieA = await loginCookie('a@a.example')
@@ -215,7 +215,7 @@ describeDb('Belge/fotoğraf metadata (gerçek veritabanı)', () => {
       mimeType: 'image/jpeg',
       byteSize: 4096,
       contentHash: hex('photo1'),
-      storageRootKey: 'baran-primary',
+      storageRootKey: 'office-primary',
       relativePath: '2026/HASAR/hasar_001.jpg',
     })
     expect(ok.statusCode).toBe(201)
@@ -228,7 +228,7 @@ describeDb('Belge/fotoğraf metadata (gerçek veritabanı)', () => {
       mimeType: 'application/pdf',
       byteSize: 100,
       contentHash: hex('p2'),
-      storageRootKey: 'baran-primary',
+      storageRootKey: 'office-primary',
       relativePath: '2026/HASAR/belge.pdf',
     })
     expect(notPhoto.statusCode).toBe(400)
@@ -254,7 +254,7 @@ describeDb('Belge/fotoğraf metadata (gerçek veritabanı)', () => {
     const cross = await app.inject({ method: 'GET', url: `/api/v1/documents/${documentId}`, headers: { cookie: cookieB } })
     expect(cross.statusCode).toBe(404)
     // A, B'nin dosyasına kayıt yapamaz.
-    const crossWrite = await registerDoc(cookieA, caseBId, docBody({ storageRootKey: 'baran-primary', relativePath: '2026/EVRAK/x.pdf', contentHash: hex('x') }))
+    const crossWrite = await registerDoc(cookieA, caseBId, docBody({ storageRootKey: 'office-primary', relativePath: '2026/EVRAK/x.pdf', contentHash: hex('x') }))
     expect(crossWrite.statusCode).toBe(404)
   })
 
@@ -302,7 +302,7 @@ describeDb('Belge/fotoğraf metadata (gerçek veritabanı)', () => {
         `INSERT INTO document_versions (id, organization_id, document_id, case_id, version_number,
            original_file_name, display_name, mime_type, byte_size, content_hash, storage_root_key,
            relative_path, source_type)
-         VALUES ($1,$2,$3,$4,99,'x.pdf','x.pdf','application/pdf',1,$5,'baran-primary','../escape.pdf','upload')`,
+         VALUES ($1,$2,$3,$4,99,'x.pdf','x.pdf','application/pdf',1,$5,'office-primary','../escape.pdf','upload')`,
         [uuidv7(), orgA, documentId, caseAId, hex('bad')],
       ),
     ).rejects.toThrow()

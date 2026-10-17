@@ -111,7 +111,7 @@ describe('HttpApiAdapter esleme', () => {
     const second = { ...dto, id: 'case-2', officeCaseNumber: '2026/185', plate: '34 MPA 765' }
     const secondDetail = {
       ...second,
-      legacyReferences: { responsibleNames: ['Enes Özmen'], expertNames: ['Baran Gürbüz'], serviceNames: ['BABİL - VEDAT'] },
+      legacyReferences: { responsibleNames: ['Enes Özmen'], expertNames: ['Deniz Örnek'], serviceNames: ['BABİL - VEDAT'] },
     }
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)

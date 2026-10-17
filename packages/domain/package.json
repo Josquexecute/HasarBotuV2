@@ -20,5 +20,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
     "test": "vitest run --config vitest.config.ts"
-  }
+  },
+  "author": "Ömer Faruk İŞLEYEN",
+  "license": "UNLICENSED"
 }

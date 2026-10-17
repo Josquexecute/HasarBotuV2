@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$ExpectedComputerName = 'DESKTOP-EFN2G33',
-    [string]$StorageRoot = 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ',
+    [string]$StorageRoot = $env:HASARBOTU_OFFICE_STORAGE_ROOT,
     [string]$NodeExe = '',
     [string]$OutputPath = '',
     [switch]$NetworkOnly
@@ -24,12 +24,19 @@ if ($NetworkOnly) {
     }
 } else {
     if ([string]::IsNullOrWhiteSpace($NodeExe)) { $NodeExe = Join-Path $PSScriptRoot 'runtime\node.exe' }
+    $storageRootConfigured = -not [string]::IsNullOrWhiteSpace($StorageRoot)
+    # Keep producing a diagnostic report when the private root was not supplied.
+    if (-not $storageRootConfigured) { $StorageRoot = Join-Path ($env:SystemDrive + '\') 'HasarBotuStorage' }
     $inspectionScript = Join-Path $PSScriptRoot 'inspect-central-pilot-host.ps1'
     if (-not (Test-Path -LiteralPath $inspectionScript -PathType Leaf)) { throw 'HOST_INSPECTION_SCRIPT_REQUIRED' }
     # The child can fail its readiness checks while still returning a useful report.
     $raw = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $inspectionScript -ExpectedComputerName $ExpectedComputerName -StorageRoot $StorageRoot -NodeExe $NodeExe
     if (-not $raw) { throw 'HOST_INSPECTION_REPORT_REQUIRED' }
     $hostReport = ($raw | Out-String) | ConvertFrom-Json
+    if (-not $storageRootConfigured) {
+        $hostReport.Blockers = @($hostReport.Blockers) + 'STORAGE_ROOT_CONFIGURATION_REQUIRED'
+        $hostReport.Status = 'BLOCKED'
+    }
 }
 $networkAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
     Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.AddressState -eq 'Preferred' })

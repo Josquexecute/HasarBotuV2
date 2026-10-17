@@ -9,5 +9,7 @@
   ],
   "exports": {
     "./tsconfig/base.json": "./tsconfig/base.json"
-  }
+  },
+  "author": "Ömer Faruk İŞLEYEN",
+  "license": "UNLICENSED"
 }

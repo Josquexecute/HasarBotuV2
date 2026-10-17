@@ -393,8 +393,8 @@ async function main() {
     let adminEmail
     let adminDisplayName
     try {
-      organizationCode = await promptField(rl, 'Organizasyon kodu (ör. baran-global): ', validateOrganizationCode)
-      organizationName = await promptField(rl, 'Organizasyon adı (ör. Baran Global Ekspertiz): ', validateOrganizationName)
+      organizationCode = await promptField(rl, 'Organizasyon kodu (ör. hasarbotu-office): ', validateOrganizationCode)
+      organizationName = await promptField(rl, 'Organizasyon adı (ör. HasarBotu Ofis): ', validateOrganizationName)
       adminEmail = await promptField(rl, 'Admin e-posta: ', validateEmail)
       adminDisplayName = await promptField(rl, 'Admin görünen ad: ', validateDisplayName)
     } finally {

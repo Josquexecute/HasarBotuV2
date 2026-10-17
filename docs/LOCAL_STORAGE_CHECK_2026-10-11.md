@@ -1,6 +1,8 @@
 # Yerel depolama ve test ortamı kontrolü — 11 Ekim 2026
 
-`51793-22893` bilgisayarında `D:\BaranGlobalStorage` kullanılarak yerel
+> Bu tarihsel belgedeki kurum, hesap ve yol adları anonimleştirilmiştir. Gerçek bağlantı değerleri özel ofis yapılandırmasından alınır.
+
+`51793-22893` bilgisayarında `D:\OfficeStorage` kullanılarak yerel
 test yapılabildiği doğrulandı. Ofis bilgisayarı genel test ön koşulu değildir.
 6 Ekim kaydındaki `DESKTOP-EFN2G33`, o kayıtta seçilmiş merkezi servis
 kurulum hedefidir; hedefe özgü kurulum kabulü ayrı kalır.
@@ -11,7 +13,7 @@ kurulum hedefidir; hedefe özgü kurulum kabulü ayrı kalır.
 | Son envanter | 10:14 Türkiye saati: 4.242 klasör, 41.502 dosya; eski `_V2_` pilot ağacı hariç |
 | Etkileşimli hesap | Listeleme ve 11 farklı dizin grubundan örnek dosya okuma PASS |
 | Windows servis hesabı | Gerçek Session 0 / `LocalService`: listeleme ve 11 örnek dosya okuma PASS; pCloud DB tutarlı salt okunur snapshot PASS |
-| pCloud eşlemesi | `D:\BaranGlobalStorage`; folder ID `22216867113`, synctype `3` |
+| pCloud eşlemesi | `D:\OfficeStorage`; folder ID `22216867113`, synctype `3` |
 | pCloud kuyruğu | 10:10 → 10:13 → 10:14: 1.948 → 488 → 8 task; son kontrolde fstask ve syncfolderdelayed sıfır |
 | Node | PATH: 22.23.2; doğrulamada kullanılan `C:\HasarBotuPilot\runtime\node.exe`: 24.21.0 |
 | File Agent | 110/110 test PASS |
@@ -27,7 +29,7 @@ API/scanner yeniden başlatma davranışını kapsar; canlı Google/SBM kabulü 
 
 API, File Agent ve PostgreSQL pilot servisleri kontrol başında ve sonunda
 durmuş durumdaydı. Kayıtlı tek agent kökü
-`D:\BaranGlobalStorage\_V2_EKSIST_PILOT_20260920`; mevcut altı kayıtlı konum
+`D:\OfficeStorage\_V2_EKSIST_PILOT_20260920`; mevcut altı kayıtlı konum
 bu pilot kökünde bulunuyor. `eksist_pilot` veritabanında `tracked_files`
 tablosu yok; yeni takip şeması kurulu değil.
 

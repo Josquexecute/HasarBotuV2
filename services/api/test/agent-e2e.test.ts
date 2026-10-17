@@ -59,7 +59,7 @@ describeDb('File Agent uçtan uca doğrulama (gerçek DB + geçici dosya)', () =
       method: 'POST',
       url: `/api/v1/cases/${caseId}/documents`,
       headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
-      payload: { documentType: 'ruhsat', sourceType: 'upload', originalFileName: 'r.pdf', mimeType: 'application/pdf', byteSize: declaredSize, contentHash: declaredHash, storageRootKey: 'baran-primary', relativePath },
+      payload: { documentType: 'ruhsat', sourceType: 'upload', originalFileName: 'r.pdf', mimeType: 'application/pdf', byteSize: declaredSize, contentHash: declaredHash, storageRootKey: 'office-primary', relativePath },
     })
     return (res.json() as { version: { id: string } }).version.id
   }
@@ -78,7 +78,7 @@ describeDb('File Agent uçtan uca doğrulama (gerçek DB + geçici dosya)', () =
     await pool.query('INSERT INTO organizations (id, code, name) VALUES ($1,$2,$3)', [orgId, 'org', 'Org'])
     await pool.query('INSERT INTO users (id, organization_id, email, display_name, password_hash) VALUES ($1,$2,$3,$4,$5)', [userId, orgId, 'u@a.example', 'U', await hashPassword(PASSWORD)])
     await pool.query("INSERT INTO user_roles (user_id, role_id) VALUES ($1, (SELECT id FROM roles WHERE code='admin'))", [userId])
-    await pool.query('INSERT INTO storage_roots (id, organization_id, root_key, label, is_active) VALUES ($1,$2,$3,$4,true)', [uuidv7(), orgId, 'baran-primary', 'Primary'])
+    await pool.query('INSERT INTO storage_roots (id, organization_id, root_key, label, is_active) VALUES ($1,$2,$3,$4,true)', [uuidv7(), orgId, 'office-primary', 'Primary'])
 
     app = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false, loginRateLimit: { limit: 1000, windowMs: 60_000 } } })
     const loginRes = await app.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload: { email: 'u@a.example', password: PASSWORD } })
@@ -89,7 +89,7 @@ describeDb('File Agent uçtan uca doğrulama (gerçek DB + geçici dosya)', () =
     const regBody = reg.json() as { agent: { id: string }; secret: string }
 
     root = await mkdtemp(join(tmpdir(), 'hb-e2e-root-'))
-    agentConfig = { apiBaseUrl: '', agentId: regBody.agent.id, agentSecret: regBody.secret, roots: { 'baran-primary': root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }
+    agentConfig = { apiBaseUrl: '', agentId: regBody.agent.id, agentSecret: regBody.secret, roots: { 'office-primary': root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }
     client = createAgentApiClient({ baseUrl: '', agentId: regBody.agent.id, secret: regBody.secret, fetchImpl: injectFetch })
   }, 60_000)
 

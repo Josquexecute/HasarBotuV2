@@ -176,7 +176,7 @@ describeDb('V1 aktarim gorunurlugu (gercek PostgreSQL)', () => {
     mappedUserId = uuidv7()
     await pool.query(
       `INSERT INTO users (id,organization_id,email,display_name,password_hash)
-       VALUES ($1,$2,'omerfaruk.isleyen@baranekspertiz.com','Ömer Faruk',$3)`,
+       VALUES ($1,$2,'omerfaruk.isleyen@office.example','Ömer Faruk',$3)`,
       [mappedUserId, organizationId, await hashPassword(PASSWORD)],
     )
 
@@ -195,7 +195,7 @@ describeDb('V1 aktarim gorunurlugu (gercek PostgreSQL)', () => {
       caseId: legacyCaseId,
       ordinal: 2,
       responsible: 'Enes Özmen',
-      expert: 'Baran Gürbüz',
+      expert: 'Deniz Örnek',
       service: 'BABİL - VEDAT',
       rawMarker: 'RAW_CASE_MARKER_LEGACY',
     })
@@ -266,7 +266,7 @@ describeDb('V1 aktarim gorunurlugu (gercek PostgreSQL)', () => {
     const legacyBody = caseDetailWithLegacyReferencesResponseSchema.parse(legacy.json())
     expect(legacyBody.case.responsibleUserId).toBeNull()
     expect(legacyBody.case.legacyReferences).toEqual({
-      responsibleNames: ['Enes Özmen'], expertNames: ['Baran Gürbüz'], serviceNames: ['BABİL - VEDAT'],
+      responsibleNames: ['Enes Özmen'], expertNames: ['Deniz Örnek'], serviceNames: ['BABİL - VEDAT'],
     })
     expect(JSON.stringify(legacyBody)).not.toMatch(/RAW_CASE_MARKER|raw_snapshot|privateRawPayload/i)
 

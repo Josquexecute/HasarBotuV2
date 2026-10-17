@@ -9,7 +9,7 @@ import { HttpAuthError, type AuthPort, type SessionUser } from '../data/authPort
 const USER: SessionUser = {
   id: 'user-1',
   organizationId: 'org-1',
-  email: 'yazici@baran.example',
+  email: 'yazici@office.example',
   displayName: 'Yazıcı Kullanıcı',
   roles: ['case_manager'],
 }
@@ -29,7 +29,7 @@ function Probe() {
       <span data-testid="status">{session.status}</span>
       <span data-testid="user">{session.user?.displayName ?? '-'}</span>
       <span data-testid="notice">{session.notice ?? '-'}</span>
-      <button type="button" onClick={() => { void session.login('yazici@baran.example', 'cok-guclu-parola-42') }}>login</button>
+      <button type="button" onClick={() => { void session.login('yazici@office.example', 'cok-guclu-parola-42') }}>login</button>
       <button type="button" onClick={() => { void session.logout() }}>logout</button>
       <button type="button" onClick={() => session.reportUnauthorized()}>expire</button>
     </div>

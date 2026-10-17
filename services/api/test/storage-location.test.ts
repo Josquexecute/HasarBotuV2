@@ -81,8 +81,8 @@ describeDb('Depolama referansı ve vaka konumu (gerçek veritabanı)', () => {
     await seedUser(orgB, 'b@b.example')
     // Kökler: A'da iki aktif + bir pasif; B'de bir aktif.
     for (const [org, key, active] of [
-      [orgA, 'baran-primary', true],
-      [orgA, 'baran-archive', true],
+      [orgA, 'office-primary', true],
+      [orgA, 'office-archive', true],
       [orgA, 'old-root', false],
       [orgB, 'other-primary', true],
     ] as [string, string, boolean][]) {
@@ -116,7 +116,7 @@ describeDb('Depolama referansı ve vaka konumu (gerçek veritabanı)', () => {
     const body = res.json()
     expect(storageRootsResponseSchema.safeParse(body).success).toBe(true)
     const keys = (body as { items: { rootKey: string }[] }).items.map((r) => r.rootKey)
-    expect(keys).toEqual(['baran-archive', 'baran-primary', 'old-root'])
+    expect(keys).toEqual(['office-archive', 'office-primary', 'old-root'])
     expect(keys).not.toContain('other-primary')
   })
 
@@ -130,14 +130,14 @@ describeDb('Depolama referansı ve vaka konumu (gerçek veritabanı)', () => {
       method: 'PUT',
       url: locationRoute(caseAId),
       headers: { cookie: cookieA },
-      payload: { storageRootKey: 'baran-primary', relativePath: VALID_PATH },
+      payload: { storageRootKey: 'office-primary', relativePath: VALID_PATH },
     })
     expect(res.statusCode).toBe(200)
     const body = res.json()
     expect(caseLocationResponseSchema.safeParse(body).success).toBe(true)
     expect((body as { location: Record<string, unknown> }).location).toMatchObject({
       caseId: caseAId,
-      storageRootKey: 'baran-primary',
+      storageRootKey: 'office-primary',
       relativePath: VALID_PATH,
       verificationStatus: 'pending',
       source: 'manual',
@@ -169,7 +169,7 @@ describeDb('Depolama referansı ve vaka konumu (gerçek veritabanı)', () => {
       method: 'PUT',
       url: locationRoute(caseAId),
       headers: { cookie: cookieA },
-      payload: { storageRootKey: 'baran-archive', relativePath: newPath, expectedVersion: 1 },
+      payload: { storageRootKey: 'office-archive', relativePath: newPath, expectedVersion: 1 },
     })
     expect(res.statusCode).toBe(200)
     expect((res.json() as { location: { version: number; relativePath: string } }).location).toMatchObject({
@@ -196,7 +196,7 @@ describeDb('Depolama referansı ve vaka konumu (gerçek veritabanı)', () => {
       method: 'PUT',
       url: locationRoute(caseAId),
       headers: { cookie: cookieA },
-      payload: { storageRootKey: 'baran-primary', relativePath: 'EVRAK/x.pdf', expectedVersion: 1 },
+      payload: { storageRootKey: 'office-primary', relativePath: 'EVRAK/x.pdf', expectedVersion: 1 },
     })
     expect(res.statusCode).toBe(409)
     expect((res.json() as { error: { code: string } }).error.code).toBe('version_conflict')
@@ -245,7 +245,7 @@ describeDb('Depolama referansı ve vaka konumu (gerçek veritabanı)', () => {
       method: 'PUT',
       url: locationRoute(caseBId),
       headers: { cookie: cookieA },
-      payload: { storageRootKey: 'baran-primary', relativePath: 'EVRAK/x.pdf' },
+      payload: { storageRootKey: 'office-primary', relativePath: 'EVRAK/x.pdf' },
     })
     expect(write.statusCode).toBe(404)
   })
@@ -274,7 +274,7 @@ describeDb('Depolama referansı ve vaka konumu (gerçek veritabanı)', () => {
       await expect(
         pool.query(
           `INSERT INTO case_locations (id, organization_id, case_id, storage_root_key, relative_path)
-           VALUES ($1,$2,$3,'baran-primary',$4)`,
+           VALUES ($1,$2,$3,'office-primary',$4)`,
           [uuidv7(), orgA, caseAId, badPath],
         ),
       ).rejects.toThrow()

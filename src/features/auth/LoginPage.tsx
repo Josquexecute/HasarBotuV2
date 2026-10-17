@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, type FormEvent } from 'react'
 import { LogIn } from 'lucide-react'
 import { HttpAuthError } from '../../data/authPort'
 import { useSession } from '../../app/sessionContext'
+import { APPLICATION_COPYRIGHT, APPLICATION_OWNER } from '../../app/branding'
 const GoogleConnectButton = lazy(async () => ({ default: (await import('../tracking/GoogleConnectButton')).GoogleConnectButton }))
 
 /**
@@ -46,12 +47,11 @@ export function LoginPage() {
       <form className="login-card" onSubmit={handleSubmit} aria-labelledby="login-title">
         <div className="login-card__brand">
           <span className="login-card__logo" aria-hidden="true">
-            <img className="brand__logo brand__logo--light" src="/brand/logo-horizontal.png" alt="" />
-            <img className="brand__logo brand__logo--dark" src="/brand/logo-mark-dark.png" alt="" />
+            <img className="brand__logo" src="/brand/logo-mark.svg" alt="" />
           </span>
           <div>
             <h1 id="login-title">HasarBotu V2</h1>
-            <p>Baran Global Ekspertiz · Operasyon</p>
+            <p>{APPLICATION_OWNER} · HasarBotu</p>
           </div>
         </div>
 
@@ -99,6 +99,7 @@ export function LoginPage() {
 
         <Suspense fallback={null}><GoogleConnectButton purpose="login" /></Suspense>
         <p className="login-card__foot">Oturum güvenli çerezle sunucuda tutulur; parola tarayıcıda saklanmaz.</p>
+        <p className="login-card__foot">{APPLICATION_COPYRIGHT}</p>
       </form>
     </div>
   )

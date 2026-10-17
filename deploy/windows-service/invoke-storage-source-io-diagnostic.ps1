@@ -94,7 +94,8 @@ function Get-SafeSourceRoot {
     param([string]$Path)
 
     if ([string]::IsNullOrWhiteSpace($Path)) {
-        $companyFolder = 'BARAN GLOBAL EKSPERT' + [char]0x0130 + 'Z'
+        $companyFolder = $env:HASARBOTU_AGENT_PCLOUD_TOP_LEVEL_FOLDER
+        if ([string]::IsNullOrWhiteSpace($companyFolder)) { throw 'PCLOUD_TOP_LEVEL_FOLDER_REQUIRED' }
         $Path = Join-Path 'P:\' $companyFolder
     }
 

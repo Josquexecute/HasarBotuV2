@@ -42,5 +42,7 @@
   "dependencies": {
     "@hasarbotu/domain": "*",
     "zod": "4.4.3"
-  }
+  },
+  "author": "Ömer Faruk İŞLEYEN",
+  "license": "UNLICENSED"
 }

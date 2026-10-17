@@ -29,7 +29,7 @@ it('does not forward OAuth client credentials and authorization codes through re
     response.end()
   }))
   const provider = createGoogleProvider({ clientId: 'synthetic-client', clientSecret: 'synthetic-secret',
-    redirectUri: 'https://example.test/callback', encryptionKey: 'ab'.repeat(32), sbmSenders: [], automaticSbmEnabled: false },
+    redirectUri: 'https://example.test/callback', encryptionKey: 'ab'.repeat(32), sbmSenders: [], automaticSbmEnabled: false, loginDomain: 'office.example' },
   (_input, init) => fetch(origin, init))
   await expect(provider.exchange('synthetic-code', 'synthetic-verifier')).rejects.toThrow()
   await expect(provider.refresh('synthetic-refresh-token')).rejects.toThrow()

@@ -17,7 +17,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('legislation live database route
     await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public')
     await runMigrations({ databaseUrl: config.url, quiet: true })
     app = buildApp({ auth: { pool, cookieSecure: false, loginRateLimit: { limit: 50, windowMs: 60_000 } }, loggerEnabled: false, legislationProvider: provider,
-      google: { clientId: 'synthetic', clientSecret: 'synthetic', redirectUri: 'http://localhost/api/v1/google/callback', encryptionKey, sbmSenders: [], automaticSbmEnabled: false } })
+      google: { clientId: 'synthetic', clientSecret: 'synthetic', redirectUri: 'http://localhost/api/v1/google/callback', encryptionKey, sbmSenders: [], automaticSbmEnabled: false, loginDomain: 'office.example' } })
     const password = 'Legal-Synthetic-Only-42!', passwordHash = await hashPassword(password), org = uuidv7()
     for (let index = 0; index < 3; index++) {
       const organizationId = index < 2 ? org : uuidv7(), id = uuidv7(), email = `legal-${index}@example.test`

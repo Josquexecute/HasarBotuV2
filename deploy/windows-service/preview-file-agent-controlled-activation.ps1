@@ -6,7 +6,7 @@ param(
 
     [string]$PCloudLocalDatabasePath,
 
-    [string]$StorageRoot = 'C:\HasarBotuStorage\BARAN GLOBAL EKSPERTİZ',
+    [string]$StorageRoot = $env:HASARBOTU_OFFICE_STORAGE_ROOT,
 
     [string]$FileAgentServiceName = 'hasarbotu-file-agent',
 

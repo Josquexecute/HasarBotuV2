@@ -24,9 +24,9 @@ const SCRIPT_PATH = fileURLToPath(new URL('./bootstrap-first-admin.mjs', import.
 
 function sampleInput(overrides = {}) {
   return {
-    organizationCode: 'baran-global',
-    organizationName: 'Baran Global Ekspertiz',
-    adminEmail: 'admin@baranglobal.com',
+    organizationCode: 'hasarbotu-office',
+    organizationName: 'HasarBotu Ofis',
+    adminEmail: 'admin@office.example',
     adminDisplayName: 'Sistem Yöneticisi',
     adminPassword: 'correct-horse-battery-staple',
     adminPasswordConfirm: 'correct-horse-battery-staple',
@@ -37,19 +37,19 @@ function sampleInput(overrides = {}) {
 // === Salt-okunur, DB gerektirmeyen dogrulama testleri (her zaman calisir) ===
 
 test('validateOrganizationCode: gecerli kod kabul edilir, bosluk/buyuk harf/gecersiz karakter reddedilir', () => {
-  assert.equal(validateOrganizationCode('baran-global'), 'baran-global')
-  assert.throws(() => validateOrganizationCode('Baran Global'), (e) => e instanceof SafeError && e.safeCode === 'ORGANIZATION_CODE_INVALID')
+  assert.equal(validateOrganizationCode('hasarbotu-office'), 'hasarbotu-office')
+  assert.throws(() => validateOrganizationCode('HasarBotu Ofis'), (e) => e instanceof SafeError && e.safeCode === 'ORGANIZATION_CODE_INVALID')
   assert.throws(() => validateOrganizationCode('-leading-dash'), (e) => e.safeCode === 'ORGANIZATION_CODE_INVALID')
   assert.throws(() => validateOrganizationCode(''), (e) => e.safeCode === 'ORGANIZATION_CODE_INVALID')
 })
 
 test('validateOrganizationName: bos/yalniz-bosluk isim reddedilir', () => {
-  assert.equal(validateOrganizationName('Baran Global Ekspertiz'), 'Baran Global Ekspertiz')
+  assert.equal(validateOrganizationName('HasarBotu Ofis'), 'HasarBotu Ofis')
   assert.throws(() => validateOrganizationName('   '), (e) => e.safeCode === 'ORGANIZATION_NAME_INVALID')
 })
 
 test('validateEmail: gecersiz bicim reddedilir (loginRequestSchema ile AYNI emailSchema)', () => {
-  assert.equal(validateEmail('admin@baranglobal.com'), 'admin@baranglobal.com')
+  assert.equal(validateEmail('admin@office.example'), 'admin@office.example')
   assert.throws(() => validateEmail('not-an-email'), (e) => e.safeCode === 'ADMIN_EMAIL_INVALID')
 })
 
@@ -129,14 +129,14 @@ describe('GERCEK PostgreSQL entegrasyonu (bootstrap-first-admin)', { skip: hasTe
       assert.equal(result.auditEventIds.length, 2)
 
       const org = await pool.query('SELECT code, name FROM organizations WHERE id = $1', [result.organizationId])
-      assert.equal(org.rows[0].code, 'baran-global')
-      assert.equal(org.rows[0].name, 'Baran Global Ekspertiz')
+      assert.equal(org.rows[0].code, 'hasarbotu-office')
+      assert.equal(org.rows[0].name, 'HasarBotu Ofis')
 
       const user = await pool.query(
         'SELECT email, display_name, status, password_hash, organization_id FROM users WHERE id = $1',
         [result.userId],
       )
-      assert.equal(user.rows[0].email, 'admin@baranglobal.com')
+      assert.equal(user.rows[0].email, 'admin@office.example')
       assert.equal(user.rows[0].status, 'active')
       assert.equal(user.rows[0].organization_id, result.organizationId)
       const passwordVerified = await verifyPassword(user.rows[0].password_hash, 'correct-horse-battery-staple')
