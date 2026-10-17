@@ -25,25 +25,11 @@ interface SidebarProps {
   operationalAlertPort?: OperationalAlertDataPort
 }
 
-const ROLE_LABELS: Readonly<Record<string, string>> = {
-  admin: 'Yönetici',
-  expert: 'Eksper',
-  case_manager: 'Dosya Sorumlusu',
-  secretary: 'Sekreter',
-  accounting: 'Muhasebe',
-  read_only: 'Salt Okunur',
-}
-
 /** Ad-soyaddan en çok iki harfli baş harf; boş adda güvenli sabit döner. */
 function initialsOf(displayName: string): string {
   const parts = displayName.trim().split(/\s+/u).filter((part) => part.length > 0)
   if (parts.length === 0) return 'HB'
   return parts.slice(0, 2).map((part) => part[0]?.toLocaleUpperCase('tr-TR') ?? '').join('')
-}
-
-function roleLabelOf(roles: readonly string[]): string {
-  const known = roles.map((role) => ROLE_LABELS[role]).filter((label): label is string => label !== undefined)
-  return known.length > 0 ? known.join(' · ') : 'Kullanıcı'
 }
 
 const navigation: readonly {
@@ -67,9 +53,6 @@ export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort,
   // Kimlik yalnız gerçek oturumdan gelir; mock modda prototip kimliği korunur.
   const { mode, user } = useSession()
   const displayName = user?.displayName ?? (mode === 'mock' ? 'Ömer Faruk Kaya' : 'Oturum bekleniyor')
-  const roleLabel = user === null
-    ? (mode === 'mock' ? 'Eksper' : 'Kimlik doğrulanmadı')
-    : roleLabelOf(user.roles)
 
   // Bildirimler rozeti: gerçek API sayısı dışında hiçbir şey göstermez --
   // yükleniyor/mock/hata durumunda rozet YOK (sahte veya bayat sayı yok).
@@ -91,7 +74,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort,
       </div>
 
       <nav className="sidebar__nav" aria-label="Ana navigasyon">
-        {navigation.map(({ to, label, icon: Icon, badge, end }) => {
+        {navigation.filter(item => item.to !== '/yonetim' || mode === 'mock' || user?.roles.includes('admin')).map(({ to, label, icon: Icon, badge, end }) => {
           const resolvedBadge = to === '/bildirimler' ? bildirimBadge : badge
           return (
             <NavLink
@@ -112,12 +95,11 @@ export function Sidebar({ collapsed, onToggle, onNavigate, operationalAlertPort,
       </nav>
 
       <div className="sidebar__footer">
-        <div className="user-card" title={collapsed ? `${displayName} · ${roleLabel}` : undefined}>
+        <div className="user-card" title={displayName}>
           <span className="avatar" aria-hidden="true">{initialsOf(displayName)}</span>
           {!collapsed && (
             <span className="user-card__copy">
               <strong>{displayName}</strong>
-              <small>{roleLabel}</small>
             </span>
           )}
         </div>

@@ -12,11 +12,13 @@ import {
   userRolesUpdateRequestSchema,
   zodErrorToApiError,
   type RoleCode,
+  adminProfileUpdateSchema,
 } from '@hasarbotu/contracts'
 import { requireAnyRole } from '../auth/guard.js'
 import { createAuthStore } from '../auth/store.js'
 import { failureBody } from '../errors/failure.js'
 import { createUsersStore } from './store.js'
+import { updateAccountProfile } from './profile.js'
 
 export interface UserRoutesOptions {
   readonly pool: pg.Pool
@@ -99,5 +101,17 @@ export function registerUserRoutes(app: FastifyInstance, options: UserRoutesOpti
       ))
     }
     return userResponseSchema.parse({ user: outcome.user })
+  })
+
+  app.patch('/api/v1/users/:userId/profile', async (request, reply) => {
+    const session = await requireAnyRole(auth, request, reply, ADMIN_ROLES)
+    if (!session) return
+    const requestId = String(request.id), params = userParamsSchema.safeParse(request.params), body = adminProfileUpdateSchema.safeParse(request.body)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
+    if (!body.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(body.error, requestId) }))
+    const outcome = await updateAccountProfile(options.pool, { organizationId: session.user.organizationId, actorUserId: session.user.id, requestId }, params.data.userId, body.data)
+    if (outcome.kind === 'not_found') return reply.code(404).send(failureBody('not_found', 'Kullanıcı bulunamadı.', requestId))
+    if (outcome.kind === 'conflict') return reply.code(409).send(failureBody('version_conflict', 'Kullanıcı bilgileri değişti. Listeyi yenileyin.', requestId))
+    return outcome.profile
   })
 }

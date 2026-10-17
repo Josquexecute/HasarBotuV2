@@ -348,7 +348,7 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
            ON service.organization_id=c.organization_id AND service.id=c.service_center_id
          LEFT JOIN users responsible
            ON responsible.organization_id=c.organization_id AND responsible.id=c.responsible_user_id
-         WHERE fee.organization_id=$1 AND c.lifecycle_status='closed' AND c.closed_at IS NOT NULL
+         WHERE fee.organization_id=$1 AND c.lifecycle_status='closed' AND c.closed_at IS NOT NULL AND NOT c.is_archived
            ${statusClause}
          ORDER BY c.closed_at DESC,c.id`,
         params,
@@ -392,7 +392,7 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
         filters.push(`c.service_center_id=$${params.length}`)
       }
       const filterSql = filters.length === 0 ? '' : `AND ${filters.join(' AND ')}`
-      const scopedSql = `c.organization_id=$1
+      const scopedSql = `c.organization_id=$1 AND NOT c.is_archived
         AND (
           (c.lifecycle_status='open' AND c.created_at >= $2::date AND c.created_at < $3::date)
           OR (c.lifecycle_status='closed' AND c.closed_at >= $2::date AND c.closed_at < $3::date)
@@ -506,7 +506,7 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
            ON responsible.organization_id=c.organization_id AND responsible.id=c.responsible_user_id
          LEFT JOIN service_centers service
            ON service.organization_id=c.organization_id AND service.id=c.service_center_id
-         WHERE c.organization_id=$1
+         WHERE c.organization_id=$1 AND NOT c.is_archived
            AND (
              (c.lifecycle_status='open' AND c.created_at >= $2::date AND c.created_at < $3::date)
              OR (c.lifecycle_status='closed' AND c.closed_at >= $2::date AND c.closed_at < $3::date)

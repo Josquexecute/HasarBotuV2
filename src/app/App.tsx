@@ -16,6 +16,7 @@ import { SessionProvider } from './session'
 import { AssistantAppearanceProvider } from '../features/assistant/AssistantAppearanceProvider'
 import { useSession } from './sessionContext'
 import { PERSISTENCE_ERROR_EVENT, usePersistentState } from './usePersistentState'
+import { UserDirectorySync } from './UserDirectorySync'
 const TrackingPopup = lazy(async () => ({ default: (await import('../features/tracking/TrackingPopup')).TrackingPopup }))
 const ReportsPage = lazy(async () => ({ default: (await import('../features/reports/ReportsPage')).ReportsPage }))
 const DesktopAssistantPanel = lazy(async () => ({ default: (await import('../features/assistant/DesktopAssistantPanel')).DesktopAssistantPanel }))
@@ -83,6 +84,7 @@ function AppGate(props: AppGateProps) {
       onThemeToggle={props.onThemeToggle}
     >
       <Suspense fallback={<LoadingState label="Görünüm hazırlanıyor" />}>
+        <UserDirectorySync />
         {session.mode === 'api' && <TrackingPopup />}
         <AppRoutes theme={props.theme} collapsed={props.collapsed} onThemeChange={props.onThemeChange} onSidebarChange={props.onSidebarChange} />
       </Suspense>

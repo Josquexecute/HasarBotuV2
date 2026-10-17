@@ -8,8 +8,8 @@ export function resolveCaseReferenceNames(item: CaseRecord, references: CaseRefe
     ...item,
     company: item.eksist?.insurerName ?? references.insurers.find(entry => entry.id === item.insurerId)?.name ?? item.company,
     assignee: references.users.find(entry => entry.id === item.responsibleUserId)?.displayName ?? item.assignee,
-    expert: item.eksist?.expertName ?? references.experts.find(entry => entry.id === item.expertUserId)?.displayName
-      ?? references.users.find(entry => entry.id === item.expertUserId)?.displayName ?? item.expert,
+    expert: references.experts.find(entry => entry.id === item.expertUserId)?.displayName
+      ?? references.users.find(entry => entry.id === item.expertUserId)?.displayName ?? item.eksist?.expertName ?? item.expert,
     service: item.eksist?.serviceName ?? item.serviceProfile?.name ?? references.services.find(entry => entry.id === item.serviceId)?.name ?? item.service,
   }
 }

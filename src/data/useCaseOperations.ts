@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import { NOTE_SAVED_EVENT } from '../app/activeCase'
+import { useUserDirectoryRefresh } from '../app/userDirectory'
 import {
   CaseOperationsError,
   createHttpCaseOperationsAdapter,
@@ -41,6 +42,7 @@ export function useCaseOperations(
   const [token, setToken] = useState(0)
   const reload = useCallback(() => setToken((value) => value + 1), [])
   const active = source === 'api' && enabled
+  useUserDirectoryRefresh(reload, active)
   useEffect(() => {
     if (!active) return
     const refresh = (event: Event) => {

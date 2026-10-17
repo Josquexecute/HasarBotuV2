@@ -330,4 +330,13 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     )
     expect(auditAfter.rows[0]).toEqual(auditBefore.rows[0])
   })
+  it('excludes archived cases from both dashboard plates and totals', async () => {
+    const read = async () => (await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie } })).json() as DashboardResponse
+    const before = await read()
+    const id = await seedCase(90, 'new_notification', '34 ARC 123', null)
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [id])
+    const after = await read()
+    expect(after.items).toEqual(before.items)
+    expect(after.summary).toEqual(before.summary)
+  })
 })

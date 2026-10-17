@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 const AuditLog = lazy(async () => ({ default: (await import('./AuditLog')).AuditLog }))
 const ServicesAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).ServicesAdministration }))
 const InsurersAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).InsurersAdministration }))
@@ -6,8 +6,7 @@ const DocumentRulesAdministration = lazy(async () => ({ default: (await import('
 const PermissionsAdministration = lazy(async () => ({ default: (await import('./OfficeAdministration')).PermissionsAdministration }))
 import { CheckCircle2, FileCog, Plus, RefreshCw, ShieldAlert, ShieldCheck, Store, UserRoundCog, UsersRound, X } from 'lucide-react'
 import { managementServices, managementUsers } from '../../mocks/workspaces'
-import { getConfiguredDataSource, type CaseReferenceDataPort, type CaseReferenceWorkspace, type DataSourceKind } from '../../data/ports'
-import { useCaseReferences } from '../../data/useCaseReferences'
+import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
 import { useSession } from '../../app/sessionContext'
 import { useUsers } from '../../data/useUsers'
 import type { RoleCodeRecord, UserCreateInput, UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
@@ -101,53 +100,6 @@ function PermissionMatrixPanel() {
 type ManagementTab =
   | 'Kullanıcılar' | 'Servisler' | 'Sigorta Şirketleri' | 'V1 Aktarım Karantinası' | 'Belge Kuralları' | 'Erişim ve Yetki' | 'İşlem Kayıtları'
 
-const SERVICE_TYPE_LABELS: Readonly<Record<string, string>> = {
-  authorized: 'Yetkili',
-  private: 'Özel',
-}
-
-const AGREEMENT_LABELS: Readonly<Record<string, string>> = {
-  agreed: 'Anlaşmalı',
-  not_agreed: 'Anlaşmasız',
-  control_required: 'Kontrol Gerekli',
-}
-
-function loadMessage(status: string): string | null {
-  if (status === 'loading') return 'Gerçek kullanıcı ve servis verisi yükleniyor…'
-  if (status === 'unauthorized') return 'Oturum gerekli; mock kayıt gösterilmez.'
-  if (status === 'unavailable') return 'Referans servisine ulaşılamıyor; mock fallback yapılmadı.'
-  return null
-}
-
-/**
- * API modunda Yönetim listeleri yalnız gerçek referans verisinden gelir.
- * Mock prototipteki telefon, atanmış dosya ve açık dosya sayıları gerçek
- * referans sözleşmesinde bulunmadığı için gösterilmez; uydurulmuş sütun
- * eklenmez.
- */
-function ManagementReferenceContent({ activeTab, port }: { activeTab: ManagementTab; port?: CaseReferenceDataPort }) {
-  const { references, status, reload } = useCaseReferences(port)
-  const message = loadMessage(status)
-
-  if (status !== 'ok' || references === null) {
-    return (
-      <section className="office-table-panel">
-        <header className="panel-heading">
-          <div><h2>{activeTab}</h2><span>Gerçek veri kaynağı</span></div>
-          <UsersRound size={18} />
-        </header>
-        <div className="management-state">
-          <p role={status === 'loading' ? 'status' : 'alert'}>{message ?? 'Veri hazırlanıyor…'}</p>
-          <button className="button" type="button" onClick={reload}><RefreshCw size={15} /> Yeniden dene</button>
-        </div>
-      </section>
-    )
-  }
-
-  if (activeTab === 'Kullanıcılar') return <ReferenceUsers references={references} />
-  return <ReferenceServices references={references} />
-}
-
 function usersLoadMessage(status: string): string | null {
   if (status === 'loading') return 'Gerçek kullanıcı ve rol verisi yükleniyor…'
   if (status === 'unauthorized') return 'Oturum gerekli; kullanıcı listesi gösterilmez.'
@@ -163,7 +115,7 @@ function usersLoadMessage(status: string): string | null {
  * ayrı mesajlarla yüzeye çıkar.
  */
 function ManagementUsersAdminContent({ port }: { port?: UsersDataPort }) {
-  const { items, status, reload, updateRoles, savingUserId, createUser, creating } = useUsers(true, port)
+  const { items, status, reload, updateRoles, updateName, savingUserId, createUser, creating } = useUsers(true, port)
   const [showCreate, setShowCreate] = useState(false)
   const [notice, setNotice] = useState('')
   const message = usersLoadMessage(status)
@@ -206,6 +158,7 @@ function ManagementUsersAdminContent({ port }: { port?: UsersDataPort }) {
                 user={user}
                 saving={savingUserId === user.id}
                 onSave={(roles) => updateRoles(user.id, { roles, expectedVersion: user.version })}
+                onNameSave={(displayName, expectedVersion) => updateName(user.id, { displayName, expectedVersion })}
               />
             ))}
           </tbody>
@@ -263,10 +216,42 @@ function UserCreateForm({ saving, onCreate, onCancel, onCreated }: {
   )
 }
 
-function UserRoleRow({ user, saving, onSave }: {
+function UserNameEditor({ user, saving, onSave }: {
+  user: UserSummaryRecord
+  saving: boolean
+  onSave: (name: string, version: number) => Promise<{ ok: true } | { ok: false; kind: string }>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [version, setVersion] = useState(user.version)
+  const [error, setError] = useState('')
+  const busy = useRef(false)
+  if (!editing) return <><strong>{user.displayName}</strong><br /><small>{user.email}</small><br /><button className="button button--secondary" type="button" disabled={saving} aria-label={`${user.displayName} ad soyadını düzenle`} onClick={() => { setDraft(user.displayName); setVersion(user.version); setError(''); setEditing(true) }}>Ad Soyadı Düzenle</button></>
+  async function submit() {
+    if (busy.current) return
+    busy.current = true
+    try {
+      const { accountDisplayNameSchema } = await import('@hasarbotu/contracts')
+      const parsed = accountDisplayNameSchema.safeParse(draft)
+      if (!parsed.success) { setError('Ad soyad 1–160 karakter olmalıdır.'); return }
+      const outcome = await onSave(parsed.data, version)
+      if (outcome.ok) { setEditing(false); return }
+      setError(outcome.kind === 'conflict' ? 'Kayıt değişti. Düzenlemeyi kapatıp güncel bilgilerle yeniden açın.' : 'Ad soyad kaydedilemedi. Tekrar deneyin.')
+    } catch { setError('Ad soyad kaydedilemedi. Tekrar deneyin.') }
+    finally { busy.current = false }
+  }
+  return <form onSubmit={event => { event.preventDefault(); void submit() }}>
+    <label className="settings-field"><span>Ad Soyad</span><input aria-label={`Ad Soyad: ${user.email}`} autoFocus required maxLength={160} value={draft} disabled={saving} onChange={event => setDraft(event.target.value)} /></label>
+    <div className="tracking-actions"><button className="button button--primary" disabled={saving || !draft.trim()}>Ad Soyadı Kaydet</button><button className="button button--secondary" type="button" disabled={saving} onClick={() => setEditing(false)}>Vazgeç</button></div>
+    {error && <p role="alert">{error}</p>}
+  </form>
+}
+
+function UserRoleRow({ user, saving, onSave, onNameSave }: {
   user: UserSummaryRecord
   saving: boolean
   onSave: (roles: readonly RoleCodeRecord[]) => Promise<{ ok: true } | { ok: false; kind: string }>
+  onNameSave: (name: string, version: number) => Promise<{ ok: true } | { ok: false; kind: string }>
 }) {
   const [draft, setDraft] = useState<readonly RoleCodeRecord[]>(user.roles)
   const [feedback, setFeedback] = useState<string | null>(null)
@@ -292,7 +277,7 @@ function UserRoleRow({ user, saving, onSave }: {
 
   return (
     <tr>
-      <td><strong>{user.displayName}</strong><br /><small>{user.email}</small></td>
+      <td><UserNameEditor user={user} saving={saving} onSave={onNameSave} /></td>
       <td>
         <div className="role-checkbox-group">
           {ALL_ROLES.map((role) => (
@@ -315,72 +300,6 @@ function UserRoleRow({ user, saving, onSave }: {
         {feedback !== null && <p className="role-row-feedback" role="status">{feedback}</p>}
       </td>
     </tr>
-  )
-}
-
-function ReferenceUsers({ references }: { references: CaseReferenceWorkspace }) {
-  const expertIds = new Set(references.experts.map((expert) => expert.id))
-  return (
-    <section className="office-table-panel">
-      <header className="panel-heading">
-        <div>
-          <h2>Kullanıcı ve Sorumlu Listesi</h2>
-          <span>{references.users.length} gerçek kullanıcı · eksper rolü referans verisinden türetilir</span>
-        </div>
-        <UsersRound size={18} />
-      </header>
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead><tr><th>Kullanıcı</th><th>Eksper Rolü</th><th>Operasyon Yetkisi</th></tr></thead>
-          <tbody>
-            {references.users.map((user) => (
-              <tr key={user.id}>
-                <td><strong>{user.displayName}</strong></td>
-                <td>{expertIds.has(user.id)
-                  ? <span className="status-pill status-pill--open">Eksper</span>
-                  : <span className="status-pill status-pill--waiting">Eksper değil</span>}</td>
-                <td>Görüntüle · Not · Görev</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {references.users.length === 0 && <p className="management-empty">Bu organizasyonda kayıtlı kullanıcı bulunamadı.</p>}
-    </section>
-  )
-}
-
-function ReferenceServices({ references }: { references: CaseReferenceWorkspace }) {
-  return (
-    <section className="office-table-panel">
-      <header className="panel-heading">
-        <div>
-          <h2>Servis Listesi</h2>
-          <span>{references.services.length} gerçek servis · anlaşma durumu sürümlü değerlendirmeden gelir</span>
-        </div>
-        <Store size={18} />
-      </header>
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead><tr><th>Servis Adı</th><th>Tür</th><th>Anlaşma</th><th>Durum</th></tr></thead>
-          <tbody>
-            {references.services.map((service) => (
-              <tr key={service.id}>
-                <td><strong>{service.name}</strong></td>
-                <td>{SERVICE_TYPE_LABELS[service.serviceType] ?? service.serviceType}</td>
-                <td>{AGREEMENT_LABELS[service.agreement.agreementStatus] ?? service.agreement.agreementStatus}</td>
-                <td>
-                  <span className={`status-pill ${service.isActive ? 'status-pill--open' : 'status-pill--waiting'}`}>
-                    {service.isActive ? 'Aktif' : 'Pasif'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {references.services.length === 0 && <p className="management-empty">Bu organizasyonda kayıtlı servis bulunamadı.</p>}
-    </section>
   )
 }
 
@@ -441,8 +360,7 @@ function ManagementQuarantineContent({ port }: { readonly port?: V1ImportQuarant
   )
 }
 
-export function ManagementPage({ port, usersPort, quarantinePort }: {
-  readonly port?: CaseReferenceDataPort
+export function ManagementPage({ usersPort, quarantinePort }: {
   readonly usersPort?: UsersDataPort
   readonly quarantinePort?: V1ImportQuarantineDataPort
 } = {}) {
@@ -453,7 +371,8 @@ export function ManagementPage({ port, usersPort, quarantinePort }: {
   const [activeTab, setActiveTab] = useState<ManagementTab>(isAdmin && new URLSearchParams(window.location.search).get('bolum') === 'kayitlar' ? 'İşlem Kayıtları' : 'Kullanıcılar')
   const [notice, setNotice] = useState('')
   const showAdminUsers = activeTab === 'Kullanıcılar' && isAdmin
-  const referenceTab = (activeTab === 'Kullanıcılar' && !isAdmin) || (activeTab === 'Servisler' && !isAdmin)
+
+  if (source === 'api' && !isAdmin) return <main className="page office-page management-page"><section className="page-heading"><h1>Erişim yetkiniz yok</h1><p role="alert">Yönetim ekranı yalnızca yöneticilere açıktır.</p></section></main>
 
   return (
     <main className="page office-page management-page">
@@ -478,7 +397,6 @@ export function ManagementPage({ port, usersPort, quarantinePort }: {
         {activeTab === 'Belge Kuralları' && source === 'api' && <DocumentRulesAdministration canEdit={isAdmin} />}
         {activeTab === 'Erişim ve Yetki' && source === 'api' && <PermissionsAdministration canEdit={isAdmin} />}
         {activeTab === 'İşlem Kayıtları' && isAdmin && source === 'api' && <AuditLog />}
-        {referenceTab && source === 'api' && <ManagementReferenceContent activeTab={activeTab} port={port} />}
         {showAdminUsers && source === 'api' && <ManagementUsersAdminContent port={usersPort} />}
         {activeTab === 'V1 Aktarım Karantinası' && isAdmin && source === 'api' && <ManagementQuarantineContent port={quarantinePort} />}
         {activeTab === 'Kullanıcılar' && source === 'mock' && <section className="office-table-panel"><header className="panel-heading"><div><h2>Kullanıcı ve Sorumlu Listesi</h2><span>Başlangıçta herkes tüm dosyaları görebilir</span></div><UsersRound size={18} /></header><div className="table-scroll"><table className="data-table"><thead><tr><th>Kullanıcı</th><th>Rol</th><th>Atanmış Dosya</th><th>Durum</th><th>Operasyon Yetkisi</th></tr></thead><tbody>{managementUsers.map((user) => <tr key={user.id}><td><strong>{user.name}</strong></td><td>{user.role}</td><td>{user.assigned}</td><td><span className="status-pill status-pill--open">{user.status}</span></td><td>Görüntüle · Not · Görev</td></tr>)}</tbody></table></div></section>}

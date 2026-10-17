@@ -1,4 +1,5 @@
 export { trackedDocumentTypeSchema, inferTrackedDocumentType, TRACKED_DOCUMENT_LABELS } from './v1/tracking.js'
+export { ACCOUNT_PROFILE_ROUTE, accountDisplayNameSchema, accountProfileSchema, accountProfileUpdateSchema, adminProfileUpdateSchema, type AccountProfile } from './v1/account-profile.js'
 export {
   // primitives
   MAX_ID_LENGTH,

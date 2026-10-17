@@ -8,8 +8,10 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
   if (!isAbsolute(configFile)) throw new Error('automatic_folder_absolute_config_required')
   const config = JSON.parse(await readFile(configFile, 'utf8'))
   const fields = ['intervalMs', 'pcloudDatabasePath', 'policy', 'runtimeDirectory', 'sourceRoot', 'statusFile', 'topLevelFolderName']
-  if (Object.keys(config).filter(key => !['trackRegisteredMoves','yearFolder'].includes(key)).sort().join(',') !== fields.sort().join(',')
+  if (Object.keys(config).filter(key => !['trackRegisteredMoves','yearFolder','officeInventoryOnly'].includes(key)).sort().join(',') !== fields.sort().join(',')
     || (config.trackRegisteredMoves !== undefined && typeof config.trackRegisteredMoves !== 'boolean')
+    || (config.officeInventoryOnly !== undefined && typeof config.officeInventoryOnly !== 'boolean')
+    || (config.officeInventoryOnly && (config.yearFolder !== undefined || !config.trackRegisteredMoves))
     || (config.yearFolder !== undefined && (typeof config.yearFolder !== 'string' || !/^\d{4}(?: (?:OFİS|UZAKTAN))?$/u.test(config.yearFolder.toLocaleUpperCase('tr'))))
     || ![config.runtimeDirectory, config.sourceRoot, config.pcloudDatabasePath, config.statusFile].every(value => typeof value === 'string' && isAbsolute(value))
     || typeof config.topLevelFolderName !== 'string' || !config.topLevelFolderName
@@ -19,6 +21,8 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
   const load = file => import(pathToFileURL(join(runtime, file)))
   const { automaticFolderPolicySchema, registerAutomaticFolders } = await load('services/api/dist/cases/automatic-folder-registration.js')
   const { discoverPlateFolders } = await load('services/api/dist/cases/folder-discovery.js')
+  const reconcileOfficeFolderInventory = config.officeInventoryOnly
+    ? (await load('services/api/dist/cases/office-folder-inventory.js')).reconcileOfficeFolderInventory : undefined
   const { planSourceFolderRelocation, applySourceFolderRelocation } = await load('services/api/dist/cases/source-folder-relocation.js')
   const { readV1Sidecar } = await load('services/api/dist/v1-import/store.js')
   const { buildV1SourceIdentityMaterial } = await load('services/api/node_modules/@hasarbotu/domain/dist/index.js')
@@ -32,12 +36,17 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
   const previous = new Map()
   const previousMoves = new Map()
   let lastLogStatus
+  let previousInventoryHash
+  const discoveryOptions = { ...(config.officeInventoryOnly ? { officeOnly: true } : {}), yearFolder: config.yearFolder }
+  const inventoryHash = (folders, ids) => createHash('sha256').update(JSON.stringify(folders.map(folder =>
+    [folder.relativePath, String(ids.get(folder.relativePath))]).sort((a, b) => a[0].localeCompare(b[0])))).digest('hex')
   async function saveStatus(status) {
     const temporary = config.statusFile + '.' + process.pid + '.tmp'
     await writeFile(temporary, JSON.stringify({ ...status, checkedAt: new Date().toISOString() }, null, 2), { flag: 'wx' })
     await rename(temporary, config.statusFile)
     // Paths, names and credentials stay in the administrator-owned configuration.
-    const log = JSON.stringify({ status: status.status, created: status.created ?? 0, deferred: status.deferred ?? 0, relocated: status.relocated ?? 0, relocationDeferred: status.relocationDeferred ?? 0 })
+    const log = JSON.stringify({ status: status.status, created: status.created ?? 0, deferred: status.deferred ?? 0, relocated: status.relocated ?? 0, relocationDeferred: status.relocationDeferred ?? 0,
+      ...(status.archived === undefined ? {} : { archived: status.archived, restored: status.restored, statusUpdated: status.statusUpdated, inventoryDeferred: status.inventoryDeferred }) })
     if (log !== lastLogStatus || status.created) { onStatus?.(log); lastLogStatus = log }
   }
   async function safeDirectory(relativePath) {
@@ -127,10 +136,11 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
     do {
       if (signal?.aborted) break
       try {
+        const scanStartedAt = new Date().toISOString()
         await safeDirectory('')
         // The scope limits new cases; a registered folder can move into another year/work group.
         if (config.trackRegisteredMoves && config.yearFolder !== undefined) await safeDirectory(config.yearFolder)
-        const moveInventory = await discoverPlateFolders(config.sourceRoot, { yearFolder: config.trackRegisteredMoves ? undefined : config.yearFolder })
+        const moveInventory = await discoverPlateFolders(config.sourceRoot, { ...discoveryOptions, yearFolder: config.trackRegisteredMoves ? undefined : config.yearFolder })
         const discovered = config.yearFolder === undefined ? moveInventory : moveInventory.filter(folder =>
           folder.relativePath.split('/')[0].toLocaleUpperCase('tr') === config.yearFolder.toLocaleUpperCase('tr'))
         const ids = await resolveIds(moveInventory)
@@ -142,8 +152,10 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           EXISTS(SELECT 1 FROM case_file_operations o WHERE o.organization_id=c.organization_id AND o.case_id=c.id AND o.status NOT IN ('ready','failed','stale','cancelled')) AS operation_active
           FROM case_folder_registrations r JOIN cases c ON c.organization_id=r.organization_id AND c.id=r.case_id
           JOIN case_locations l ON l.organization_id=c.organization_id AND l.case_id=c.id AND l.storage_root_key=r.storage_root_key
-          WHERE r.organization_id=$1 AND r.storage_root_key=$2 AND NOT c.is_archived`,
-          [policy.organizationId, policy.storageRootKey])).rows.map(row => [row.source_folder_id, row]))
+          WHERE r.organization_id=$1 AND r.storage_root_key=$2 AND (NOT c.is_archived OR ($3 AND EXISTS(
+            SELECT 1 FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
+              AND a.action='case.office_inventory_reconciled' AND a.details->>'managedArchive'='true')))`,
+          [policy.organizationId, policy.storageRootKey, !!config.officeInventoryOnly])).rows.map(row => [row.source_folder_id, row]))
         const moves = await reconcileMoves(moveInventory, ids, registered)
         const observations = [], seen = new Set()
         let waitingForCloudIdentity = 0, settling = 0
@@ -161,22 +173,40 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
         }
         for (const id of previous.keys()) if (!seen.has(id)) previous.delete(id)
         const summary = await registerAutomaticFolders(pool, policy, observations, async folder => {
-          const current = (await discoverPlateFolders(config.sourceRoot, { yearFolder: config.yearFolder })).find(item => item.relativePath === folder.relativePath)
+          const current = (await discoverPlateFolders(config.sourceRoot, discoveryOptions)).find(item => item.relativePath === folder.relativePath)
           if (!current) throw new Error('source_changed')
           const currentIds = await resolveIds([current])
           if (String(currentIds.get(current.relativePath)) !== folder.sourceFolderId
             || (await observe(current, folder.sourceFolderId)).observationHash !== folder.observationHash) throw new Error('source_changed')
         }, signal)
-        await saveStatus({ status: summary.deferred || moves.relocationDeferred || waitingForCloudIdentity ? 'ATTENTION' : 'PASS', ...summary, ...moves,
+        let inventory = {}
+        if (reconcileOfficeFolderInventory) {
+          const complete = moveInventory.length > 0 && cloudIds.length === moveInventory.length
+          const currentHash = complete ? inventoryHash(moveInventory, ids) : undefined
+          if (complete && currentHash === previousInventoryHash && !signal?.aborted) {
+            inventory = await reconcileOfficeFolderInventory(pool, policy, moveInventory.map(folder => ({
+              relativePath: folder.relativePath, sourceFolderId: String(ids.get(folder.relativePath)),
+            })), scanStartedAt, async () => {
+              if (signal?.aborted) throw new Error('source_unavailable')
+              await safeDirectory('')
+              const current = await discoverPlateFolders(config.sourceRoot, discoveryOptions)
+              const currentIds = await resolveIds(current)
+              if (inventoryHash(current, currentIds) !== currentHash) throw new Error('source_changed')
+            })
+          } else inventory = { inventorySettling: true }
+          previousInventoryHash = currentHash
+        }
+        await saveStatus({ status: summary.deferred || moves.relocationDeferred || waitingForCloudIdentity || inventory.inventoryDeferred ? 'ATTENTION' : 'PASS', ...summary, ...moves, ...inventory,
           discovered: discovered.length, registeredMoveScanFolders: config.trackRegisteredMoves ? moveInventory.length : 0,
           waitingForCloudIdentity, settling, sourceReadOnly: true, defaultCaseType: null })
       } catch (error) {
+        previousInventoryHash = undefined
         const diagnosticCode = error?.safeCode ?? error?.code ?? 'automatic_folder_cycle_failed'
         await saveStatus({ status: 'BLOCKED', code: /^[a-z0-9_]+$/i.test(diagnosticCode) ? diagnosticCode : 'automatic_folder_cycle_failed',
           errorType: error?.name ?? 'Error', sourceReadOnly: true })
         // Preserve local diagnostics without logging arbitrary exception messages that may contain secrets.
         const recoverable = ['ENOENT', 'EACCES', 'EPERM', 'EBUSY', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', '57P01', '53300',
-          'PCLOUD_LOCAL_DATABASE_NOT_FOUND', 'PCLOUD_TOP_LEVEL_FOLDER_NOT_FOUND', 'source_unavailable'].includes(diagnosticCode)
+          'PCLOUD_LOCAL_DATABASE_NOT_FOUND', 'PCLOUD_TOP_LEVEL_FOLDER_NOT_FOUND', 'source_unavailable', 'source_changed'].includes(diagnosticCode)
         if (once || !recoverable) throw new Error('automatic_folder_cycle_failed', { cause: error })
       }
       if (once || signal?.aborted) break

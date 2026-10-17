@@ -1,8 +1,14 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.37**, published on 2026-10-17.
-Its verified Windows x64 installer is 105,162,642 bytes, SHA-256
-`541077afcabbb0d3ceedfbbceced38e0cd9d799b1b7c6026076eb92751534ea4`.
+The current authenticated office release is **0.1.39**, published on 2026-10-17.
+Its verified Windows x64 installer is 105,164,440 bytes, SHA-256
+`6f38d673e0daf1744e8e71d67df56bf4e64c5656dda9a706438d335ac9e57a9d`.
+Management is now administrator-only. Users can edit their own names, and
+administrators can edit everyone's names; changes synchronize across active clients.
+See [account profiles and delivery evidence](ACCOUNT_PROFILES_2026-10-17.md).
+The previous case-stage filter and company-root folder mapping remain included.
+The deployed office-only inventory reconciles moved, deleted and physically
+closed folders; see [folder repair and verification](FOLDER_FIXES_2026-10-17.md).
 Project ownership, UI branding, notice templates and Windows metadata identify
 **Ömer Faruk İŞLEYEN**. The existing Touch character is retained under the user's
 stated written permission; third-party notices remain separate. Google login domain

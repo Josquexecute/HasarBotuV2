@@ -5,6 +5,7 @@ import { SessionProvider } from './session'
 import { useSession } from './sessionContext'
 import { DATA_SOURCE_STORAGE_KEY } from '../data/ports'
 import { HttpAuthError, type AuthPort, type SessionUser } from '../data/authPort'
+import { PROFILE_UPDATED_EVENT, USER_DIRECTORY_UPDATED_EVENT } from './userDirectory'
 
 const USER: SessionUser = {
   id: 'user-1',
@@ -43,6 +44,15 @@ function renderProvider(auth?: AuthPort) {
     </SessionProvider>,
   )
 }
+
+it.each([PROFILE_UPDATED_EVENT, USER_DIRECTORY_UPDATED_EVENT])('refreshes the central session identity on %s', async event => {
+  window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+  const bootstrap = vi.fn().mockResolvedValueOnce(USER).mockResolvedValue({ ...USER, displayName: 'Güncel Ad Soyad' })
+  renderProvider(fakeAuth({ bootstrap }))
+  await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent(USER.displayName))
+  fireEvent(window, new Event(event))
+  await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('Güncel Ad Soyad'))
+})
 
 afterEach(() => {
   window.localStorage.removeItem(DATA_SOURCE_STORAGE_KEY)

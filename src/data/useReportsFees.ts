@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from '../app/sessionContext'
+import { useUserDirectoryRefresh } from '../app/userDirectory'
 import {
   ReportsFeesError,
   createHttpReportsFeesAdapter,
@@ -84,6 +85,7 @@ export function useCaseSummaryReport(
   const { period, responsibleUserId, serviceId } = input
   const [filterOptions, setFilterOptions] = useState<{ period: string; responsibleUsers: CaseSummaryReportRecord['responsibleUsers']; services: CaseSummaryReportRecord['services'] }>(() => ({ period, responsibleUsers: [], services: [] }))
   const reload = useCallback(() => setRevision((value) => value + 1), [])
+  useUserDirectoryRefresh(reload, enabled)
   // Yükleme durumu efektte senkron sıfırlanmaz; sorgu veya sürüm değişince
   // RENDER sırasında türetilir. Önceki dönemin özeti hiçbir frame'de görünmez.
   const requestKey = `${period}|${responsibleUserId ?? ''}|${serviceId ?? ''}#${revision}`
@@ -123,6 +125,9 @@ export function useClosureFeeList(
 ) {
   const port = usePort(suppliedPort)
   const { reportUnauthorized } = useSession()
+  const [revision, setRevision] = useState(0)
+  const refresh = useCallback(() => setRevision(value => value + 1), [])
+  useUserDirectoryRefresh(refresh, enabled)
   // Bu hook'un değişen bir istek anahtarı yoktur; yalnız `enabled` kapısı vardır.
   // Devre dışı sonuç efektte yazılmaz, RENDER sırasında türetilir. Başlangıç
   // durumu 'loading'dir; böylece ilk okuma öncesinde 'idle' görünmez.
@@ -144,7 +149,7 @@ export function useClosureFeeList(
       if (kind === 'unauthorized') reportUnauthorized()
     })
     return () => { cancelled = true }
-  }, [enabled, port, reportUnauthorized])
+  }, [enabled, port, reportUnauthorized, revision])
 
   if (!enabled) return { items: NO_CLOSURE_FEES, status: 'idle' as ReportsFeesLoadStatus }
   return { items, status }

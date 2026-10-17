@@ -4,13 +4,16 @@ import {
   AUTH_LOGIN_ROUTE,
   AUTH_LOGOUT_ROUTE,
   AUTH_SESSION_ROUTE,
+  ACCOUNT_PROFILE_ROUTE,
+  accountProfileSchema,
+  accountProfileUpdateSchema,
   failureEnvelopeSchema,
   loginRequestSchema,
   sessionResponseSchema,
   zodErrorToApiError,
 } from '@hasarbotu/contracts'
 import { failureBody } from '../errors/failure.js'
-import { resolveSession, sendUnauthorized } from './guard.js'
+import { requireSession, resolveSession, sendUnauthorized } from './guard.js'
 import { createAuthStore } from './store.js'
 import { createFixedWindowLimiter, type FixedWindowOptions } from './rate-limit.js'
 import { login, toSessionUser } from './service.js'
@@ -23,6 +26,7 @@ import {
 import { hashSessionToken } from './token.js'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
+import { updateAccountProfile } from '../users/profile.js'
 
 export interface AuthRoutesOptions {
   readonly pool: pg.Pool
@@ -128,5 +132,25 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
     }
     void reply.header('set-cookie', buildClearSessionCookie({ secure: options.cookieSecure }))
     return reply.code(204).send()
+  })
+
+  app.get(ACCOUNT_PROFILE_ROUTE, async (request, reply) => {
+    const session = await requireSession(store, request, reply)
+    if (!session) return
+    const row = (await options.pool.query('SELECT display_name,version FROM users WHERE organization_id=$1 AND id=$2 AND status=\'active\'',
+      [session.user.organizationId, session.user.id])).rows[0]
+    if (!row) { sendUnauthorized(reply, String(request.id)); return }
+    return accountProfileSchema.parse({ userId: session.user.id, displayName: row.display_name, version: row.version })
+  })
+
+  app.patch(ACCOUNT_PROFILE_ROUTE, async (request, reply) => {
+    const session = await requireSession(store, request, reply)
+    if (!session) return
+    const requestId = String(request.id)
+    const parsed = accountProfileUpdateSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(parsed.error, requestId) }))
+    if (parsed.data.expectedUserId !== session.user.id) return reply.code(409).send(failureBody('conflict', 'Hesap değişti. Profilinizi yeniden yükleyin.', requestId))
+    const outcome = await updateAccountProfile(options.pool, { organizationId: session.user.organizationId, actorUserId: session.user.id, requestId }, session.user.id, parsed.data)
+    return outcome.kind === 'ok' ? outcome.profile : reply.code(409).send(failureBody('version_conflict', 'Profil başka bir oturumda değişti. Güncel bilgileri yükleyin.', requestId))
   })
 }

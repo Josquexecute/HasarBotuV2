@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { getConfiguredDataSource, type DataSourceKind } from '../data/ports'
 import { createHttpAuthAdapter, HttpAuthError, type AuthPort, type SessionUser } from '../data/authPort'
 import { SessionContext, type SessionContextValue, type SessionStatus } from './sessionContext'
+import { PROFILE_UPDATED_EVENT, USER_DIRECTORY_UPDATED_EVENT } from './userDirectory'
 
 /**
  * Oturum sinir saglayicisi (Paket 10).
@@ -76,7 +77,7 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
   )
 
   useEffect(() => {
-    if (mode !== 'api' || status === 'bootstrapping') return
+    if (mode !== 'api') return
     let cancelled = false
     const refresh = () => {
       if (pendingMutation.current !== null) return
@@ -90,7 +91,9 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
     }
     window.addEventListener('focus',refresh)
     window.addEventListener('permissions-updated',refresh)
-    return () => { cancelled = true;window.removeEventListener('focus',refresh);window.removeEventListener('permissions-updated',refresh) }
+    window.addEventListener(PROFILE_UPDATED_EVENT,refresh)
+    window.addEventListener(USER_DIRECTORY_UPDATED_EVENT,refresh)
+    return () => { cancelled = true;window.removeEventListener('focus',refresh);window.removeEventListener('permissions-updated',refresh);window.removeEventListener(PROFILE_UPDATED_EVENT,refresh);window.removeEventListener(USER_DIRECTORY_UPDATED_EVENT,refresh) }
   },[auth,mode,status])
 
   const logout = useCallback(async () => {

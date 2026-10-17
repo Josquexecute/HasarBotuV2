@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from './App'
 import { DATA_SOURCE_STORAGE_KEY } from '../data/ports'
@@ -121,10 +121,9 @@ describe('App oturum kapisi (api mod)', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument()
-    // Sidebar her rotada aynı, gerçek Bildirimler rozetini sorar (Paket 56 düzeltmesi:
-    // önceden sabit kodlu "7" idi) -- /ayarlar sayfasının KENDİ içeriği hâlâ ek istek yapmaz.
-    // Kalıcı gelen kutusu artık uygulama kabuğunda yeni bildirimleri de yoklar.
-    expect(calls).toHaveLength(4)
+    await waitFor(() => expect(calls.some(call => call.includes('/api/v1/me/profile'))).toBe(true))
+    expect(calls).toHaveLength(6)
+    expect(calls.some(call => call.includes('/api/v1/references/users'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/me/assistant-appearance'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/tracking/notifications/pending'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)
@@ -159,7 +158,7 @@ describe('App oturum kapisi (api mod)', () => {
     render(<App />)
 
     expect(await screen.findByText('Mevzuat yanıtının biçimi program sürümüyle uyumlu değil. Programı güncelleyip yeniden yükleyin.')).toBeInTheDocument()
-    expect(calls).toHaveLength(7)
+    expect(calls).toHaveLength(8)
     expect(calls.some(call => call.includes('/api/v1/legislation/library'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/me/assistant-appearance'))).toBe(true)
     expect(calls.some((call) => call.includes('/api/v1/tracking/notifications/pending'))).toBe(true)

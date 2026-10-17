@@ -7,6 +7,14 @@ import { discoverPlateFolders } from '../src/cases/folder-discovery.js'
 let root: string
 afterEach(async () => { if (root) await rm(root,{ recursive: true,force: true }) })
 describe('office year discovery scope',() => {
+  it('restricts the recurring office inventory to all office years without entering remote or unrelated groups',async () => {
+    root = await mkdtemp(join(tmpdir(),'hb-office-only-'))
+    for (const path of ['2026 OFİS/Ekim 2026/34ABC123','2027 OFİS/Ocak 2027/KAPALI DOSYALAR/06DEF456',
+      '2026 UZAKTAN/35ABC123','2026/36ABC123','UZAKTAN ALINAN GİRİŞLERİ YAPILMAYAN DOSYALAR/72ABC123']) await mkdir(join(root,path),{ recursive: true })
+    const folders = await discoverPlateFolders(root,{ officeOnly: true })
+    expect(folders.map(folder => folder.relativePath)).toEqual(['2026 OFİS/Ekim 2026/34ABC123','2027 OFİS/Ocak 2027/KAPALI DOSYALAR/06DEF456'])
+    expect(folders[1]?.physicallyUnderKapali).toBe(true)
+  })
   it('scans only the office year and preserves paths relative to the registered storage root',async () => {
     root = await mkdtemp(join(tmpdir(),'hb-office-scope-'))
     await mkdir(join(root,'2026 OFİS/Ekim 2026/27AUE21'),{ recursive: true })

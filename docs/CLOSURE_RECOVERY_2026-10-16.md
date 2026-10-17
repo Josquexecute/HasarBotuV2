@@ -43,6 +43,8 @@ Bu vakada üç ayrı koşul birleşti:
 
 Kaynak görevinin sürümlenen uygulaması `deploy/windows-service/office-source-refresh.cjs`; başlatıcısı `run-office-source-refresh.ps1`. Ofise özeldir, mevcut korumalı yapılandırmayı ve servis ortamını kullanır. Saatlik genel tarama korunur. Onaylı dosya işlemlerinden `case_not_fresh` nedeniyle bekleyenler ayrıca **dakikada bir** seçilir. İki görev ortak mutex kullanır. Boş kuyrukta pCloud veritabanı taranmaz; başarısız kaynak kontrolü artık son durum raporunu da `FAIL` yapar. Belgeler ve vaka iş alanları bu görev tarafından değiştirilmez.
 
+2026-10-17: Görevler PowerShell'i `run-office-source-refresh.vbs` üzerinden pencere stili 0 ile başlatır; doğrudan PowerShell başlatılırken görülen kısa konsol parlaması böyle önlenir. `set-office-source-refresh-launcher.ps1 -SourceRefreshDirectory <korumalı-dizin> -BackupDirectory <yedek-dizini>` mevcut görev XML'lerini korur ve yalnız eylemi değiştirir. İki başlatıcı dosyası aynı korumalı dizinde bulunmalıdır. Görev kullanıcıları, zamanlamalar, mutex ve çıkış kodları korunur.
+
 Doğrulama:
 
 - File Agent **315/315 PASS**, gerçek gate ile kaybolmuş sonuç ve ilgisiz işlem kanıtı dahil.

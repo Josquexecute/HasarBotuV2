@@ -9,7 +9,7 @@ import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/databas
 import { startAutomaticFolderDiscovery } from './automatic-folder-discovery.mjs'
 import { writeFile } from 'node:fs/promises'
 
-test('real background scans discover folders, follow stable identity moves and preserve existing cases', { skip: !process.env.TEST_DATABASE_URL, timeout: 90_000 }, async () => {
+test('real background scans discover folders, follow stable identity moves and reconcile the office-only inventory', { skip: !process.env.TEST_DATABASE_URL, timeout: 150_000 }, async () => {
   const database = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL)
   const pool = new pg.Pool({ connectionString: database.url })
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
@@ -107,6 +107,38 @@ test('real background scans discover folders, follow stable identity moves and p
     const offline = JSON.parse(await readFile(statusFile, 'utf8'))
     assert.equal(offline.status, 'BLOCKED'); assert.equal(offline.code, 'ENOENT')
     assert.deepEqual((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c')).rows, preserved)
+    await mkdir(join(source, '2026 OFİS/EKİM 2026/KAPALI DOSYALAR'), { recursive: true })
+    await rename(moved, join(source, '2026 OFİS/EKİM 2026/KAPALI DOSYALAR/34AUT123'))
+    await mkdir(join(source, '2027 OFİS/OCAK 2027/06NEW123'), { recursive: true })
+    sqlite.exec("INSERT INTO folder VALUES(110,100,'2026 OFİS'),(111,110,'EKİM 2026'),(112,111,'KAPALI DOSYALAR'),(113,100,'2027 OFİS'),(114,113,'OCAK 2027'),(115,114,'06NEW123'); UPDATE folder SET parentfolderid=112 WHERE id=103")
+    const officeConfig = { ...enabled, officeInventoryOnly: true }
+    delete officeConfig.yearFolder
+    await writeFile(configFile, JSON.stringify(officeConfig))
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,plate,plate_normalized,workflow_stage)
+      VALUES($1,$2,2026,900,'2026/900','34 AUT 123','34AUT123','reporting')`, [uuidv7(), org])
+    async function officeCycle() {
+      const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 25_000)
+      try {
+        await startAutomaticFolderDiscovery(configFile, { signal: stop.signal, onStatus: text => {
+          if (JSON.parse(text).archived !== undefined) stop.abort()
+        } })
+      } finally { clearTimeout(timer); stop.abort() }
+      const status = JSON.parse(await readFile(statusFile, 'utf8'))
+      assert.equal(status.status, 'PASS')
+      assert.notEqual(status.archived, undefined, 'Two consistent live inventories must be reconciled')
+      return status
+    }
+    const officeStatus = await officeCycle()
+    assert.equal(officeStatus.archived, 1)
+    assert.equal(officeStatus.statusUpdated, 1)
+    assert.deepEqual((await pool.query('SELECT plate_normalized,lifecycle_status FROM cases WHERE NOT is_archived ORDER BY plate_normalized')).rows,
+      [{ plate_normalized: '06NEW123', lifecycle_status: 'open' }, { plate_normalized: '34AUT123', lifecycle_status: 'closed' }])
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [rows[0].id])).rows[0].relative_path,
+      '2026 OFİS/EKİM 2026/KAPALI DOSYALAR/34AUT123')
+    await rmdir(join(source, '2026 OFİS/EKİM 2026/KAPALI DOSYALAR/34AUT123'))
+    sqlite.exec('DELETE FROM folder WHERE id=103')
+    assert.equal((await officeCycle()).archived, 1)
+    assert.deepEqual((await pool.query('SELECT plate_normalized FROM cases WHERE NOT is_archived')).rows, [{ plate_normalized: '06NEW123' }])
   } finally {
     clearTimeout(deadline); abort.abort(); sqlite.close(); await pool.end()
     if (originalUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalUrl

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import { getConfiguredDataSource, type DataSourceKind } from './ports'
+import { useUserDirectoryRefresh } from '../app/userDirectory'
 import {
   buildMockDashboard,
   createHttpDashboardAdapter,
@@ -31,6 +32,7 @@ export function useDashboard(): UseDashboardResult {
     setStatus('loading')
     setReloadToken((value) => value + 1)
   }, [source])
+  useUserDirectoryRefresh(reload, source === 'api')
 
   useEffect(() => {
     if (source !== 'api') return

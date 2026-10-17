@@ -1,122 +1,34 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DATA_SOURCE_STORAGE_KEY, type CaseReferenceDataPort } from '../../data/ports'
-import { ReferenceDataError } from '../../data/referenceHttpAdapter'
+import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
 import type { UserSummaryRecord, UsersDataPort } from '../../data/usersPort'
 import { UsersError } from '../../data/usersPort'
 import type { V1ImportQuarantineDataPort } from '../../data/v1ImportQuarantinePort'
 import { ManagementPage } from './ManagementPage'
-import { PERMISSION_DEFINITIONS } from '@hasarbotu/contracts'
-
-const references = {
-  insurers: [{ id: 'ins-1', name: 'Sentetik Sigorta' }],
-  services: [
-    {
-      id: 'srv-1',
-      name: 'Gerçek Yetkili Servis',
-      serviceType: 'authorized' as const,
-      isActive: true,
-      agreement: {
-        status: 'eligible' as const,
-        agreementStatus: 'agreed' as const,
-        serviceType: 'authorized' as const,
-        operation: 'closure_documents' as const,
-        evaluationDate: '2026-07-18',
-        dateSource: 'loss_date' as const,
-        isAuthorized: true,
-        isInsurerAgreed: true,
-        reason: 'Anlaşma kaydı doğrulandı.',
-        ruleVersion: '2026.07.14.1',
-        matchedAgreementIds: [],
-        requiresHumanReview: false,
-      },
-    },
-  ],
-  users: [
-    { id: 'usr-1', displayName: 'Gerçek Eksper' },
-    { id: 'usr-2', displayName: 'Gerçek Sorumlu' },
-  ],
-  experts: [{ id: 'usr-1', displayName: 'Gerçek Eksper' }],
-}
-
-function makePort(overrides: Partial<CaseReferenceDataPort> = {}): CaseReferenceDataPort {
-  return {
-    getCaseReferences: vi.fn().mockResolvedValue(references),
-    ...overrides,
-  } as CaseReferenceDataPort
-}
 
 afterEach(() => {
   window.localStorage.clear()
 })
 
-describe('ManagementPage', () => {
-  it('API modunda gerçek kullanıcı ve servis verisini gösterir; mock kayıt sızdırmaz', async () => {
+describe('ManagementPage access', () => {
+  it.each(['expert','case_manager','secretary','accounting','read_only'])('blocks %s on direct navigation without making administrative requests', role => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
-    render(<ManagementPage port={makePort()} />)
-    const user = userEvent.setup()
-
-    expect(await screen.findByText('Gerçek Eksper')).toBeInTheDocument()
-    expect(screen.getByText('Gerçek Sorumlu')).toBeInTheDocument()
-    // Mock kullanıcılar API modunda görünmez.
-    expect(screen.queryByText('Ömer Faruk Kaya')).not.toBeInTheDocument()
-    // Eksper rolü referans verisinden türetilir.
-    expect(screen.getByText('Eksper')).toBeInTheDocument()
-    expect(screen.getByText('Eksper değil')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Servisler' }))
-    expect(await screen.findByText('Gerçek Yetkili Servis')).toBeInTheDocument()
-    expect(screen.getByText('Yetkili')).toBeInTheDocument()
-    expect(screen.getByText('Anlaşmalı')).toBeInTheDocument()
-    expect(screen.queryByText('Akşam Otomotiv')).not.toBeInTheDocument()
-    // Gerçek sözleşmede karşılığı olmayan mock sütunları gösterilmez.
-    expect(screen.queryByText('Telefon')).not.toBeInTheDocument()
-    expect(screen.queryByText('Açık Dosya')).not.toBeInTheDocument()
+    const list = vi.fn()
+    render(<SessionContext.Provider value={{ mode: 'api', status: 'authenticated', user: { roles: [role] } } as unknown as SessionContextValue}><ManagementPage usersPort={{ list } as unknown as UsersDataPort} /></SessionContext.Provider>)
+    expect(screen.getByRole('alert')).toHaveTextContent('yalnızca yöneticilere')
+    expect(screen.queryByRole('navigation', { name: 'Yönetim bölümleri' })).not.toBeInTheDocument()
+    expect(list).not.toHaveBeenCalled()
   })
-
-  it('API modunda servis hatasında mock fallback yapmaz', async () => {
+  it('blocks an unidentified API session', () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
-    const port = makePort({
-      getCaseReferences: vi.fn().mockRejectedValue(new ReferenceDataError('unavailable', 'down')),
-    })
-    render(<ManagementPage port={port} />)
-    expect(await screen.findByText(/mock fallback yapılmadı/)).toBeInTheDocument()
-    expect(screen.queryByText('Ömer Faruk Kaya')).not.toBeInTheDocument()
+    render(<ManagementPage />)
+    expect(screen.getByRole('alert')).toHaveTextContent('yalnızca yöneticilere')
   })
-
-  it('oturum yoksa mock kayıt göstermez', async () => {
-    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
-    const port = makePort({
-      getCaseReferences: vi.fn().mockRejectedValue(new ReferenceDataError('unauthorized', 'no session')),
-    })
-    render(<ManagementPage port={port} />)
-    expect(await screen.findByText(/Oturum gerekli/)).toBeInTheDocument()
-    expect(screen.queryByText('Ömer Faruk Kaya')).not.toBeInTheDocument()
-  })
-
-  it('mock modda prototip listesi korunur ve referans servisi çağrılmaz', async () => {
-    const port = makePort()
-    render(<ManagementPage port={port} />)
-    expect(await screen.findByText('Ömer Faruk Kaya')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Excel Şablonları' })).not.toBeInTheDocument()
-    await waitFor(() => expect(port.getCaseReferences).not.toHaveBeenCalled())
-  })
-
-  it('loads real rule and permission policies and makes them read-only for non-admin users', async () => {
-    vi.spyOn(globalThis,'fetch').mockImplementation(async (input) => new Response(JSON.stringify(String(input).includes('document-rules') ? { items: [{ caseType: 'traffic',versionId: '019f5f00-0000-7000-8000-000000000011',configuration: { baseRequired: ['victim_traffic_policy'],incidentEvidenceRequired: true,tramerWithoutReportRequired: true,recourseDocumentsRequired: true } }] } : { version: 0,permissions: Object.fromEntries(PERMISSION_DEFINITIONS.map((item) => [item.code,item.roles])) }),{ status: 200 }))
-    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
-    render(<ManagementPage port={makePort()} />)
-    expect(screen.queryByRole('button', { name: 'Excel Şablonları' })).not.toBeInTheDocument()
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Belge Kuralları' }))
-    expect(await screen.findByLabelText('Mağdur trafik poliçesi')).toBeChecked()
-    expect(screen.getByLabelText('Mağdur trafik poliçesi')).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Erişim ve Yetki' }))
-    expect(await screen.findByLabelText('Not ve görev · Sorumlu')).toBeChecked()
-    expect(screen.getByLabelText('Not ve görev · Sorumlu')).toBeDisabled()
-    expect(screen.queryByRole('button',{ name: 'Yetkileri kaydet' })).not.toBeInTheDocument()
+  it('preserves the explicitly selected mock preview', () => {
+    render(<ManagementPage />)
+    expect(screen.getByText('Ömer Faruk Kaya')).toBeInTheDocument()
   })
 })
 
@@ -154,6 +66,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
       list: vi.fn().mockResolvedValue(users),
       create: vi.fn().mockResolvedValue({ id: 'usr-new', email: 'expert@example.test', displayName: 'Yeni Eksper', status: 'active', roles: ['expert'], version: 1 }),
       updateRoles: vi.fn().mockResolvedValue({ ...users[0], roles: ['secretary', 'expert'], version: 2 }),
+      updateName: vi.fn().mockResolvedValue({ userId: users[0]!.id, displayName: 'Güncel Ad Soyad', version: 2 }),
       ...overrides,
     } as UsersDataPort
   }
@@ -183,7 +96,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     const user = userEvent.setup()
     render(
       <SessionContext.Provider value={adminSession()}>
-        <ManagementPage port={makePort()} usersPort={usersPort} />
+        <ManagementPage usersPort={usersPort} />
       </SessionContext.Provider>,
     )
 
@@ -202,6 +115,20 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
       { roles: expect.arrayContaining(['secretary', 'expert']), expectedVersion: 1 },
     ))
     expect(await screen.findByText('Roller güncellendi.')).toBeInTheDocument()
+  })
+  it('lets the administrator rename another user through the real profile port', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const updated = { ...users[0]!, displayName: 'Güncel Ad Soyad', version: 2 }
+    const port = makeUsersPort({ list: vi.fn().mockResolvedValueOnce(users).mockResolvedValue([updated]) })
+    render(<SessionContext.Provider value={adminSession()}><ManagementPage usersPort={port} /></SessionContext.Provider>)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Sekreter Kullanıcı ad soyadını düzenle' }))
+    const input = screen.getByLabelText('Ad Soyad: sekreter@office.example')
+    await user.clear(input); await user.type(input, 'Güncel Ad Soyad')
+    await user.click(screen.getByRole('button', { name: 'Ad Soyadı Kaydet' }))
+    await waitFor(() => expect(port.updateName).toHaveBeenCalledWith('usr-1', { displayName: 'Güncel Ad Soyad', expectedVersion: 1 }))
+    expect(await screen.findByText('Güncel Ad Soyad')).toBeInTheDocument()
+    expect(port.updateRoles).not.toHaveBeenCalled()
   })
 
   it('admin manually creates a user with chosen roles and sees the persisted response', async () => {
@@ -241,16 +168,16 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     expect(screen.queryByText(/Kullanıcı kaydedildi/)).not.toBeInTheDocument()
   })
 
-  it('admin olmayan oturumda mevcut salt-okunur referans görünümü değişmeden kalır', async () => {
+  it('blocks a non-admin from the whole management page', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     const usersPort = makeUsersPort()
     render(
       <SessionContext.Provider value={expertSession()}>
-        <ManagementPage port={makePort()} usersPort={usersPort} />
+        <ManagementPage usersPort={usersPort} />
       </SessionContext.Provider>,
     )
 
-    expect(await screen.findByText('Gerçek Eksper')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('yalnızca yöneticilere')
     expect(screen.queryByText('Kullanıcı ve Rol Yönetimi')).not.toBeInTheDocument()
     expect(usersPort.list).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Kullanıcı Ekle' })).not.toBeInTheDocument()
@@ -263,7 +190,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     const user = userEvent.setup()
     render(
       <SessionContext.Provider value={adminSession()}>
-        <ManagementPage port={makePort()} usersPort={makeUsersPort()} quarantinePort={quarantinePort} />
+        <ManagementPage usersPort={makeUsersPort()} quarantinePort={quarantinePort} />
       </SessionContext.Provider>,
     )
     await user.click(screen.getByRole('button', { name: 'V1 Aktarım Karantinası' }))
@@ -278,7 +205,7 @@ describe('ManagementPage — HB-011 gerçek rol ataması (yalnız admin)', () =>
     const user = userEvent.setup()
     render(
       <SessionContext.Provider value={adminSession()}>
-        <ManagementPage port={makePort()} usersPort={makeUsersPort()} quarantinePort={makeQuarantinePort([])} />
+        <ManagementPage usersPort={makeUsersPort()} quarantinePort={makeQuarantinePort([])} />
       </SessionContext.Provider>,
     )
     await user.click(screen.getByRole('button', { name: 'V1 Aktarım Karantinası' }))

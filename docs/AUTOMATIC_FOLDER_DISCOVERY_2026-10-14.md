@@ -23,6 +23,22 @@ An already displayed list uses its existing refresh/navigation behavior; this
 change does not add live updates to an open list. Touch plate searches query the
 server and can find the new record. Existing role permissions still apply.
 
+As of 2026-10-17, the office uses the explicitly authorized
+`officeInventoryOnly: true` policy with `trackRegisteredMoves: true` and no
+`yearFolder`. Both registration and move tracking scan only top-level `YYYY OFİS`
+directories, including future years. Remote groups and bare year folders are
+excluded. After two identical complete inventories, revalidated against the
+filesystem and pCloud, missing/out-of-scope and unbound case rows are archived
+reversibly. Business records and children remain intact. Returning registered
+folders may restore only archives made by this policy. An unavailable source or
+missing cloud identity cannot trigger an archive. Active file, lifecycle and
+workspace operations defer reconciliation.
+
+The same policy reconciles open/closed status with physical `KAPALI` placement,
+with an audit event and no fabricated closure timestamp, fee or document approval.
+The last open stage is retained for an observed reopening. Generic deployments
+retain the previous behavior below unless this policy is explicitly enabled.
+
 Registration uses stable **pCloud folder IDs**, not plates alone. Repeated scans
 and service restarts do not create duplicates. Separate source folders can
 legitimately share a plate; their records are not merged. A folder associated with
@@ -31,7 +47,8 @@ configuration `trackRegisteredMoves: true`, registered source IDs (including the
 baseline) are also checked for moved directories. Two consistent observations,
 an unchanged folder ID, an absent old directory and no active file operation
 allow the existing audited relocation transaction to update only the location.
-Notes, assignments, types and lifecycle states remain intact. Completed-move
+Notes, assignments and types remain intact. Without the office-only policy,
+lifecycle states also remain intact. Completed-move
 history keeps document paths and tracked-file approvals connected to the case.
 An existing old directory, conflicting identity or active operation is deferred.
 The status includes `relocated`, `relocationSettling` and `relocationDeferred`.

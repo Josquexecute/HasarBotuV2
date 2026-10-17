@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from '../app/sessionContext'
+import { useUserDirectoryRefresh } from '../app/userDirectory'
 import {
   createHttpEmailDraftAdapter,
   EmailDraftError,
@@ -33,6 +34,7 @@ export function useEmailDrafts(
   const [token, setToken] = useState(0)
   const reload = useCallback(() => setToken((value) => value + 1), [])
   const active = source === 'api' && enabled
+  useUserDirectoryRefresh(reload, active)
   // Yükleme durumu efektte senkron sıfırlanmaz; istek anahtarı değişince RENDER
   // sırasında türetilir. Anahtarı tutmayan geç yanıt yok sayılır.
   const requestKey = `${caseId}#${token}`

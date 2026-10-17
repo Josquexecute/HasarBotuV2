@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from '../app/sessionContext'
+import { useUserDirectoryRefresh } from '../app/userDirectory'
+import { PROFILE_UPDATED_EVENT, USER_DIRECTORY_UPDATED_EVENT } from '../app/userDirectory'
 import {
   UsersError,
   createHttpUsersAdapter,
@@ -23,6 +25,7 @@ export function useUsers(enabled: boolean, suppliedPort?: UsersDataPort) {
   const { reportUnauthorized } = useSession()
   const [revision, setRevision] = useState(0)
   const reload = useCallback(() => setRevision((value) => value + 1), [])
+  useUserDirectoryRefresh(reload, enabled)
   const [items, setItems] = useState<readonly UserSummaryRecord[]>(NO_USERS)
   const [status, setStatus] = useState<UsersLoadStatus>('loading')
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
@@ -80,6 +83,23 @@ export function useUsers(enabled: boolean, suppliedPort?: UsersDataPort) {
     }
   }, [port, reload, reportUnauthorized])
 
-  if (!enabled) return { items: NO_USERS, status: 'idle' as UsersLoadStatus, reload, updateRoles, createUser, creating: false, savingUserId: null }
-  return { items, status, reload, updateRoles, createUser, creating, savingUserId }
+  const updateName = useCallback(async (userId: string, input: { displayName: string; expectedVersion: number }): Promise<{ ok: true } | { ok: false; kind: UsersErrorKind }> => {
+    setSavingUserId(userId)
+    try {
+      const profile = await port.updateName(userId, input)
+      if (profile.userId !== userId) throw new UsersError('unavailable', 'Updated profile identity mismatch')
+      setItems(current => current.map(user => user.id === userId ? { ...user, displayName: profile.displayName, version: profile.version } : user))
+      window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT))
+      window.dispatchEvent(new Event(USER_DIRECTORY_UPDATED_EVENT))
+      return { ok: true }
+    } catch (error) {
+      const kind = error instanceof UsersError ? error.kind : 'unavailable'
+      if (kind === 'unauthorized') reportUnauthorized()
+      if (kind === 'conflict') reload()
+      return { ok: false, kind }
+    } finally { setSavingUserId(null) }
+  }, [port, reload, reportUnauthorized])
+
+  if (!enabled) return { items: NO_USERS, status: 'idle' as UsersLoadStatus, reload, updateRoles, updateName, createUser, creating: false, savingUserId: null }
+  return { items, status, reload, updateRoles, updateName, createUser, creating, savingUserId }
 }

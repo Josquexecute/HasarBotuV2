@@ -464,4 +464,13 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
     expect(audit).toContain('closure_fee.approved')
     expect(audit).toContain('closure_fee.corrected')
   })
+  it('excludes archived plates and their amounts from fee lists, period reports and closure summaries', async () => {
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=ANY($1::uuid[])', [[closedCaseId, openCaseId]])
+    const fees = closureFeeListResponseSchema.parse((await app.inject({ method: 'GET', url: FEES_ROUTE, headers: { cookie: managerCookie } })).json())
+    expect(fees.items.some(item => item.caseId === closedCaseId)).toBe(false)
+    const report = caseSummaryReportResponseSchema.parse((await app.inject({ method: 'GET', url: `${CASE_SUMMARY_REPORT_ROUTE}?period=2026-07`, headers: { cookie: managerCookie } })).json())
+    expect(report.summary).toMatchObject({ totalCaseCount: 1, openCaseCount: 0, approvedFeeCount: 0, approvedFeeTotalMinor: 0 })
+    const closures = trafficValueLossClosureListResponseSchema.parse((await app.inject({ method: 'GET', url: TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE, headers: { cookie: managerCookie } })).json())
+    expect(closures.items.map(item => item.caseId)).toEqual([closedWithoutFeeCaseId])
+  })
 })

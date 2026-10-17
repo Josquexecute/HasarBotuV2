@@ -7,6 +7,13 @@ import { resolveCaseFolder, resolveSelectedCaseFolder } from '../src/main/case-f
 let root: string
 afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }) })
 describe('case folder opening boundary', () => {
+  it('opens remote and later office-year paths from the company root without inventing a year prefix',async () => {
+    root = await mkdtemp(join(tmpdir(),'hb-company-folder-'))
+    for (const path of ['UZAKTAN ALINAN GİRİŞLERİ YAPILMAYAN DOSYALAR/06ABC123','2027 OFİS/Ocak 2027/34ABC123']) {
+      await mkdir(join(root,path),{ recursive: true })
+      expect(await resolveCaseFolder(root,path)).toBe(await realpath(join(root,path)))
+    }
+  })
   it('opens from the configured office year root without duplicating the year in stored paths',async () => {
     root = await mkdtemp(join(tmpdir(),'hb-case-folder-'))
     const office = join(root,'2026 OFİS'),target = join(office,'Ekim 2026/27AUE21')

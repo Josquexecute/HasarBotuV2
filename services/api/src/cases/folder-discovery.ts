@@ -4,7 +4,7 @@ import { parseSourcePlateFolderName } from '@hasarbotu/domain'
 import type { V1DiscoveredFolder } from '../v1-import/store.js'
 
 /** Read-only inventory across month, insurer and work-group containers; never follow links. */
-export async function discoverPlateFolders(root: string, options: { readonly yearFolder?: string } = {}): Promise<V1DiscoveredFolder[]> {
+export async function discoverPlateFolders(root: string, options: { readonly yearFolder?: string; readonly officeOnly?: boolean } = {}): Promise<V1DiscoveredFolder[]> {
   if (options.yearFolder !== undefined) {
     if (!/^\d{4}(?: (?:OFİS|UZAKTAN))?$/u.test(options.yearFolder.toLocaleUpperCase('tr'))) throw new Error('folder_discovery_invalid_year_scope')
     const scoped = await lstat(join(root, options.yearFolder))
@@ -18,6 +18,7 @@ export async function discoverPlateFolders(root: string, options: { readonly yea
     for (const child of children) {
       if (!child.isDirectory() || child.name.startsWith('_HASARBOTU')) continue
       if (depth === 0 && !/^\d{4}(?: (?:OFİS|UZAKTAN))?$/u.test(child.name.toLocaleUpperCase('tr'))) continue
+      if (depth === 0 && options.officeOnly && !/^\d{4} OFİS$/u.test(child.name.toLocaleUpperCase('tr'))) continue
       if (depth === 0 && options.yearFolder !== undefined && child.name.toLocaleUpperCase('tr') !== options.yearFolder.toLocaleUpperCase('tr')) continue
       const absolutePath = join(directory, child.name)
       const parsedName = parseSourcePlateFolderName(child.name)

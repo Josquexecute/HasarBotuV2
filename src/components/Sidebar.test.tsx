@@ -35,7 +35,7 @@ function portReturning(record: OperationalAlertsRecord): OperationalAlertDataPor
 }
 
 describe('Sidebar kullanıcı kartı', () => {
-  it('gerçek oturumda kimliği ve rolü oturum verisinden gösterir', () => {
+  it('shows the current name once and omits roles and management for a non-admin', () => {
     renderSidebar({
       user: {
         id: 'usr-1',
@@ -46,7 +46,9 @@ describe('Sidebar kullanıcı kartı', () => {
       },
     })
     expect(screen.getByText('Gerçek Kullanıcı')).toBeInTheDocument()
-    expect(screen.getByText('Eksper · Dosya Sorumlusu')).toBeInTheDocument()
+    expect(screen.queryByText('Eksper · Dosya Sorumlusu')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Gerçek Kullanıcı')).toHaveLength(1)
+    expect(screen.queryByRole('link', { name: 'Yönetim' })).not.toBeInTheDocument()
     expect(screen.getByText('GK')).toBeInTheDocument()
     // API modunda sabit kodlu prototip kimliği gösterilmez.
     expect(screen.queryByText('Ömer Faruk Kaya')).not.toBeInTheDocument()
@@ -61,7 +63,7 @@ describe('Sidebar kullanıcı kartı', () => {
   it('mock modda prototip kimliği korunur', () => {
     renderSidebar({ mode: 'mock', status: 'mock', user: null })
     expect(screen.getByText('Ömer Faruk Kaya')).toBeInTheDocument()
-    expect(screen.getByText('Eksper')).toBeInTheDocument()
+    expect(screen.queryByText('Eksper')).not.toBeInTheDocument()
   })
 
   it('bilinmeyen rol kodunda güvenli etiket kullanır', () => {
@@ -74,8 +76,13 @@ describe('Sidebar kullanıcı kartı', () => {
         roles: ['unknown_role'],
       },
     })
-    expect(screen.getByText('Kullanıcı')).toBeInTheDocument()
+    expect(screen.queryByText('Kullanıcı')).not.toBeInTheDocument()
     expect(screen.getByText('TA')).toBeInTheDocument()
+  })
+  it('keeps the management link for an authenticated administrator', () => {
+    renderSidebar({ user: { id: 'admin', organizationId: 'org', email: 'admin@example.test', displayName: 'Ofis Yöneticisi', roles: ['admin'] } })
+    expect(screen.getByRole('link', { name: 'Yönetim' })).toHaveAttribute('href', '/yonetim')
+    expect(screen.getAllByText('Ofis Yöneticisi')).toHaveLength(1)
   })
 })
 

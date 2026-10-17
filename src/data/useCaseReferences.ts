@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createHttpReferenceDataAdapter, ReferenceDataError } from './referenceHttpAdapter'
 import type { CaseReferenceDataPort, CaseReferenceWorkspace, ServiceReferenceQuery } from './ports'
+import { useUserDirectoryRefresh } from '../app/userDirectory'
 
 export type CaseReferencesStatus = 'loading' | 'ok' | 'unauthorized' | 'unavailable'
 
@@ -19,6 +20,7 @@ export function useCaseReferences(port?: CaseReferenceDataPort, query: ServiceRe
   const [loaded, setLoaded] = useState<{ adapter: CaseReferenceDataPort; key: string; references: CaseReferenceWorkspace | null; status: CaseReferencesStatus }>(() => ({ adapter, key: requestKey, references: null, status: 'loading' }))
   const current = loaded.adapter === adapter && loaded.key === requestKey ? loaded : { references: null, status: 'loading' as const }
   const reload = useCallback(() => setToken((value) => value + 1), [])
+  useUserDirectoryRefresh(reload, enabled)
 
   useEffect(() => {
     if (!enabled) return

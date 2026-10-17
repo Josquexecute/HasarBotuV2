@@ -113,7 +113,7 @@ export function createDashboardStore(pool: pg.Pool) {
            ON insurer.organization_id=c.organization_id AND insurer.id=c.insurer_id
          LEFT JOIN service_centers service
            ON service.organization_id=c.organization_id AND service.id=c.service_center_id
-         WHERE c.organization_id=$1 AND c.lifecycle_status='open'
+         WHERE c.organization_id=$1 AND c.lifecycle_status='open' AND NOT c.is_archived
          ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`,
         [organizationId],
       )

@@ -5,6 +5,7 @@ import { usePersistentState } from '../../app/usePersistentState'
 import { useSession } from '../../app/sessionContext'
 import { AssistantAppearanceSettings } from '../assistant/AssistantAppearanceEditor'
 import { DesktopUpdates } from './DesktopUpdates'
+import { AccountProfileEditor } from './AccountProfileEditor'
 
 interface SettingsPageProps {
   theme: 'light' | 'dark'
@@ -32,8 +33,8 @@ export function SettingsPage({ theme, collapsed, onThemeChange, onSidebarChange 
       <section className="page-heading page-heading--compact"><div><h1>Ayarlar</h1>{mode === 'mock' && <p>Demo cihaz tercihleri</p>}</div><button className="button button--secondary" type="button" onClick={reset}><RotateCcw size={15} /> Varsayılanlara Dön</button></section>
       <div className="office-scroll settings-content">
         {mode === 'api' && user && <DesktopUpdates />}
+        {mode === 'api' && user && <section className="settings-section"><header><MonitorCog size={19} /><div><h2>Hesabım</h2></div></header><AccountProfileEditor key={user.id} /><dl className="settings-status"><div><dt>E-posta</dt><dd>{user.email}</dd></div><div><dt>Roller</dt><dd>{user.roles.map((role) => ({ admin: 'Yönetici',expert: 'Eksper',case_manager: 'Dosya Sorumlusu',secretary: 'Sekreter',accounting: 'Muhasebe',read_only: 'Salt Okunur' })[role]).join(', ')}</dd></div></dl><div className="tracking-actions">{user.roles.includes('admin') && <Link className="button button--secondary" to="/yonetim?bolum=kayitlar">İşlem kayıtlarını aç</Link>}<button className="button button--secondary" onClick={() => { void logout() }}>Oturumu kapat</button></div></section>}
         {mode === 'api' && user && <AssistantAppearanceSettings key={user.id} />}
-        {mode === 'api' && user && <section className="settings-section"><header><MonitorCog size={19} /><div><h2>Hesabım</h2></div></header><dl className="settings-status"><div><dt>Ad</dt><dd>{user.displayName}</dd></div><div><dt>E-posta</dt><dd>{user.email}</dd></div><div><dt>Roller</dt><dd>{user.roles.map((role) => ({ admin: 'Yönetici',expert: 'Eksper',case_manager: 'Dosya Sorumlusu',secretary: 'Sekreter',accounting: 'Muhasebe',read_only: 'Salt Okunur' })[role]).join(', ')}</dd></div></dl><div className="tracking-actions">{user.roles.includes('admin') && <Link className="button button--secondary" to="/yonetim?bolum=kayitlar">İşlem kayıtlarını aç</Link>}<button className="button button--secondary" onClick={() => { void logout() }}>Oturumu kapat</button></div></section>}
         <section className="settings-section"><header><MonitorCog size={19} /><div><h2>Görünüm</h2><span>{mode === 'mock' ? 'Ayarlar bu tarayıcıdaki mock profil için saklanır' : 'Bu cihazda saklanır'}</span></div></header>
           <div className="settings-grid">
             <fieldset><legend>Tema</legend><label><input type="radio" name="theme" checked={theme === 'light'} onChange={() => onThemeChange('light')} /> Açık tema</label><label><input type="radio" name="theme" checked={theme === 'dark'} onChange={() => onThemeChange('dark')} /> Koyu tema</label></fieldset>

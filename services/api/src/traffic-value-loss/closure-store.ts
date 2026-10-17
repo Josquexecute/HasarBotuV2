@@ -114,7 +114,7 @@ export function createTrafficValueLossClosureStore(pool: pg.Pool) {
            ORDER BY occurred_at DESC,id DESC
            LIMIT 1
          ) history ON true
-         WHERE c.organization_id=$1 AND c.lifecycle_status='closed' AND c.closed_at IS NOT NULL
+         WHERE c.organization_id=$1 AND c.lifecycle_status='closed' AND c.closed_at IS NOT NULL AND NOT c.is_archived
          ORDER BY c.closed_at DESC,c.id`,
         [organizationId],
       )

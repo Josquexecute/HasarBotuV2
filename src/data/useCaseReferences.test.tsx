@@ -3,10 +3,18 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CaseReferenceDataPort, CaseReferenceWorkspace } from './ports'
 import { ReferenceDataError } from './referenceHttpAdapter'
 import { useCaseReferences } from './useCaseReferences'
+import { USER_DIRECTORY_UPDATED_EVENT } from '../app/userDirectory'
 
 const empty: CaseReferenceWorkspace = { users: [], services: [], experts: [], insurers: [] }
 
 describe('reference request ownership', () => {
+  it('refreshes a loaded owner name after a shared directory update', async () => {
+    const port = { getCaseReferences: vi.fn().mockResolvedValueOnce({ ...empty, users: [{ id: 'owner', displayName: 'Eski Ad Soyad' }] }).mockResolvedValue({ ...empty, users: [{ id: 'owner', displayName: 'Güncel Ad Soyad' }] }) }
+    const { result } = renderHook(() => useCaseReferences(port))
+    await waitFor(() => expect(result.current.references?.users[0]?.displayName).toBe('Eski Ad Soyad'))
+    act(() => window.dispatchEvent(new Event(USER_DIRECTORY_UPDATED_EVENT)))
+    await waitFor(() => expect(result.current.references?.users[0]?.displayName).toBe('Güncel Ad Soyad'))
+  })
   it('hides the previous evaluation immediately when the insurer or date changes and ignores late responses', async () => {
     const pending: ((value: CaseReferenceWorkspace) => void)[] = []
     const port: CaseReferenceDataPort = { getCaseReferences: vi.fn(() => new Promise<CaseReferenceWorkspace>(resolve => pending.push(resolve))) }

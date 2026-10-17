@@ -10,6 +10,7 @@ export interface UserSummaryRecord {
 }
 
 export interface UsersDataPort {
+  updateName(userId: string, input: { displayName: string; expectedVersion: number }): Promise<{ userId: string; displayName: string; version: number }>
   list(): Promise<readonly UserSummaryRecord[]>
   create(input: UserCreateInput): Promise<UserSummaryRecord>
   updateRoles(
@@ -92,6 +93,17 @@ export function createHttpUsersAdapter(options: UsersAdapterOptions = {}): Users
   }
 
   return {
+    async updateName(userId, input) {
+      try {
+        const { accountProfileSchema } = await import('@hasarbotu/contracts')
+        return accountProfileSchema.parse(await request(`/api/v1/users/${encodeURIComponent(userId)}/profile`, {
+          method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+        }))
+      } catch (error) {
+        if (error instanceof UsersError) throw error
+        throw new UsersError('unavailable', 'user profile response invalid')
+      }
+    },
     async create(input) {
       try {
         const { userResponseSchema } = await import('@hasarbotu/contracts')
