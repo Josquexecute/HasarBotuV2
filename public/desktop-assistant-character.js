@@ -1,4 +1,5 @@
 import { BotEngine } from './vendor/coucou/mochi/engine.js'
+import { AssistantMotion } from './desktop-assistant-motion.js'
 
 const button = document.querySelector('#assistant')
 const canvas = document.querySelector('#mochi')
@@ -11,6 +12,7 @@ if (context && !assistant) new BotEngine().draw(context, canvas.width, canvas.he
 if (assistant && context) {
   const bot = new BotEngine()
   const neutral = new BotEngine()
+  const gestures = new AssistantMotion(bot)
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
   let frame
   let idleTimer
@@ -58,10 +60,12 @@ if (assistant && context) {
     // 60 Hz frames to rounding, or drifting below 60 fps on 144 Hz displays.
     if (elapsed >= interval - 0.5) {
       const wasBusy = bot.busy
+      const previousEyes = bot.eyeOverride
+      gestures.tick()
       bot.update(Math.min((time - previousTime) / 1000, 0.1))
       previousTime = time
       lastDraw = Number.isFinite(lastDraw) ? lastDraw + Math.max(1, Math.floor((elapsed + 0.5) / interval)) * interval : time
-      if (wasBusy || bot.busy) draw()
+      if (wasBusy || bot.busy || bot.eyeOverride !== previousEyes) draw()
     }
     if (bot.busy) frame = window.requestAnimationFrame(animate)
     else idleTimer = window.setTimeout(wake, 125)
@@ -79,6 +83,7 @@ if (assistant && context) {
     previousTime = performance.now()
     lastDraw = 0
     if (reduced()) {
+      gestures.reset()
       // Use the neutral pose so a mid-blink or squash cannot get frozen.
       draw()
       return
@@ -93,16 +98,29 @@ if (assistant && context) {
     wake()
   })
   const greetOnHover = () => {
-    if (reduced()) return
+    if (reduced() || disposed || document.hidden) return
+    gestures.hovered = true
+    gestures.activity()
     window.clearTimeout(hoverTimer)
-    hoverTimer = window.setTimeout(() => { bot.triggerEmote('happy'); wake() }, 1200)
+    hoverTimer = window.setTimeout(() => { gestures.curious(); wake() }, 650)
   }
-  const leave = () => window.clearTimeout(hoverTimer)
+  const leave = () => { window.clearTimeout(hoverTimer); gestures.hovered = false }
   const press = (event) => {
-    if (event.button === 0 && !reduced()) { bot.squash(); wake() }
+    if (event.button === 0 && !reduced() && !disposed && !document.hidden) {
+      window.clearTimeout(hoverTimer)
+      gestures.press()
+      wake()
+    }
   }
+  const unsubscribeMotion = assistant.onMotion(value => {
+    if (reduced() || disposed || document.hidden) return
+    if (value.type === 'drag') gestures.drag(value.x)
+    else if (value.type === 'release') gestures.release()
+    else if (value.type === 'success') gestures.success()
+    wake()
+  })
   const onVisibility = () => {
-    if (document.hidden) pause()
+    if (document.hidden) { pause(); gestures.reset() }
     else resume()
   }
   const unsubscribeAppearance = assistant.onAppearance(({ accentColor, characterColor, reduceMotion }) => {
@@ -123,6 +141,7 @@ if (assistant && context) {
     pause()
     unsubscribe()
     unsubscribeAppearance()
+    unsubscribeMotion()
     button.removeEventListener('pointerenter', greetOnHover)
     button.removeEventListener('pointerleave', leave)
     button.removeEventListener('pointerdown', press)

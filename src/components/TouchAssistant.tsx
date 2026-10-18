@@ -52,6 +52,8 @@ export function QuickNote({ target, port, onClose, standalone = false }: { targe
       // Retaining an old key if storage is unavailable remains safe: the API deduplicates it.
       try { localStorage.removeItem(storageKey) } catch { /* Saved on the server; do not report a failed write. */ }
       window.dispatchEvent(new CustomEvent(NOTE_SAVED_EVENT, { detail: { caseId: target.caseId } }))
+      const feedback = (window as Window & { hasarbotuAssistantFeedback?: { noteSaved(): void } }).hasarbotuAssistantFeedback
+      feedback?.noteSaved()
     } catch (caught) {
       if (caught instanceof CaseOperationsError && caught.kind === 'unauthorized') session.reportUnauthorized()
       const definitive = caught instanceof CaseOperationsError && ['validation', 'forbidden', 'not_found'].includes(caught.kind)

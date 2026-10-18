@@ -38,4 +38,15 @@ contextBridge.exposeInMainWorld('hasarbotuAssistant', Object.freeze({
     ipcRenderer.on('hasarbotu:assistant-appearance', listener)
     return () => ipcRenderer.removeListener('hasarbotu:assistant-appearance', listener)
   },
+  onMotion: (callback: unknown) => {
+    if (typeof callback !== 'function') throw new TypeError('Motion callback must be a function')
+    const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      if (typeof value !== 'object' || value === null) return
+      const { type, x } = value as Record<string, unknown>
+      if (type === 'release' || type === 'success') callback({ type })
+      else if (type === 'drag' && typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1) callback({ type, x })
+    }
+    ipcRenderer.on('hasarbotu:assistant-motion', listener)
+    return () => ipcRenderer.removeListener('hasarbotu:assistant-motion', listener)
+  },
 }))

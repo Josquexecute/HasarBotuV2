@@ -1,6 +1,21 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.50**, published on 2026-10-18
+The current authenticated office release is **0.1.51**, published on 2026-10-18
+(Europe/Istanbul; 2026-10-18T20:08:05.938Z).
+Its verified Windows x64 installer is 105,189,841 bytes, SHA-256
+`902cf9f869051f36b0e10d61d5f0be43759aa70533204d20bf8e07a9f7f76d6a`.
+Touch now adds a curious hover, occasional stretch, directional drag response
+and soft landing, plus a small happy hop after a confirmed quick-note save.
+The existing frame cadence, idle sleeping and reduced-motion preferences remain
+covered by regression tests. The installed 0.1.49 client reported 0.1.51 as
+available and downloaded all authenticated bytes with HTTP 200 and the exact
+SHA-256. The previous 0.1.50 manifest and immutable installer were preserved;
+installation remains user-controlled. No backend code or service configuration
+was changed. The file-agent was already stopped after a server memory failure;
+that separate condition remains recorded. See
+[gesture behavior, validation and publication](TOUCH_ANIMATIONS_2026-10-18.md).
+
+The previous authenticated office release was **0.1.50**, published on 2026-10-18
 (Europe/Istanbul; 2026-10-18T13:01:51.093Z).
 Its verified Windows x64 installer is 105,188,267 bytes, SHA-256
 `b38596c625f475d36c6762185899abf9f9a11177f3182420e04dace4f702e1fe`.

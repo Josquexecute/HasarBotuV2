@@ -14,6 +14,57 @@ const until = async (predicate, description = 'assistant condition') => {
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
 }
+// Draw the actual shipped poses at physical 2x resolution, including the sparse
+// idle stretch, without waiting a minute or changing the production scheduler.
+async function sampleGestures() {
+  const { BotEngine } = await import('/vendor/coucou/mochi/engine.js')
+  const { AssistantMotion } = await import('/desktop-assistant-motion.js')
+  const original = Object.getOwnPropertyDescriptor(performance, 'now')
+  let time = 0
+  Object.defineProperty(performance, 'now', { configurable: true, value: () => time })
+  try {
+    const sheet = document.createElement('canvas')
+    sheet.width = 1200; sheet.height = 840
+    const output = sheet.getContext('2d')
+    let unclipped = true
+    for (const [column, kind] of ['curious', 'stretch', 'drag', 'release', 'success'].entries()) {
+      time = 0
+      const bot = new BotEngine()
+      bot.bodyColor = [.937, .949, .98]
+      bot.nextBlink = Infinity
+      const motion = new AssistantMotion(bot, () => time, () => .5)
+      if (kind === 'curious') motion.curious()
+      if (kind === 'stretch') { time = 60000; motion.tick() }
+      if (kind === 'drag' || kind === 'release') { motion.press(); motion.drag(-1) }
+      if (kind === 'release') {
+        for (let i = 0; i < 10; i++) { time += 1000 / 60; bot.update(1 / 60) }
+        motion.release()
+      }
+      if (kind === 'success') motion.success()
+      const start = time
+      for (const [row, elapsed] of [180, 480, 1500].entries()) {
+        while (time - start < elapsed) { time += 1000 / 60; bot.update(1 / 60) }
+        const cell = document.createElement('canvas')
+        cell.width = cell.height = 240
+        const context = cell.getContext('2d')
+        context.scale(2, 2)
+        bot.draw(context, 120, 120)
+        const pixels = context.getImageData(0, 0, 240, 240).data
+        for (let i = 0; i < 240; i++) {
+          if (pixels[(i * 240) * 4 + 3] || pixels[(i * 240 + 239) * 4 + 3]
+            || pixels[i * 4 + 3] || pixels[(239 * 240 + i) * 4 + 3]) unclipped = false
+        }
+        output.drawImage(cell, column * 240, row * 280)
+        output.fillStyle = '#64748b'; output.font = '18px sans-serif'
+        output.fillText(kind + ' · ' + elapsed + ' ms', column * 240 + 12, row * 280 + 264)
+      }
+    }
+    return { unclipped, png: sheet.toDataURL().split(',')[1] }
+  } finally {
+    if (original) Object.defineProperty(performance, 'now', original)
+    else delete performance.now
+  }
+}
 app.enableSandbox()
 // Keep the harness alive until the result file has finished writing.
 app.on('window-all-closed', () => {})
@@ -76,9 +127,30 @@ void app.whenReady().then(async () => {
     check('independent window', !win.getParentWindow())
     check('fixed 120 DIP character', win.getBounds().width === 120 && win.getBounds().height === 120 && !win.isResizable())
     const surface = await win.webContents.executeJavaScript('({ node: typeof require, process: typeof process, ready: !document.querySelector("button").disabled, keys: Object.keys(window.hasarbotuAssistant) })')
-    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'cancel,drag,menu,move,onAppearance,onGaze,press,release')
+    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'cancel,drag,menu,move,onAppearance,onGaze,onMotion,press,release')
+    await win.webContents.executeJavaScript('window.motionEvents = []; window.motionOff = window.hasarbotuAssistant.onMotion(value => window.motionEvents.push(value)); undefined')
+    for (const value of [null, {}, { type: 'drag', x: Infinity }, { type: 'drag', x: 2 }, { type: 'drag', x: '1' }, { type: 'unknown' }]) {
+      win.webContents.send('hasarbotu:assistant-motion', value)
+    }
+    await win.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 80))')
+    check('motion preload rejects malformed cosmetic events', await win.webContents.executeJavaScript('window.motionEvents.length === 0'))
+    const feedback = ipcMain.listeners('hasarbotu:assistant-success').at(-1)
+    feedback({ sender: win.webContents, senderFrame: win.webContents.mainFrame })
+    feedback({ sender: shell.window.webContents, senderFrame: { url: shell.window.webContents.getURL() } })
+    await win.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 80))')
+    check('character and untrusted frames cannot announce saved notes', await win.webContents.executeJavaScript('window.motionEvents.length === 0 && typeof window.hasarbotuAssistantFeedback === "undefined"'))
+    const beforeSuccess = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+    await shell.window.webContents.executeJavaScript('window.hasarbotuAssistantFeedback.noteSaved()')
+    await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "success")'))
+    await until(() => win.webContents.executeJavaScript(`document.querySelector("canvas").toDataURL() !== ${JSON.stringify(beforeSuccess)}`))
+    check('confirmed note feedback reaches the isolated renderer and changes actual character pixels', true)
+    await new Promise(resolve => setTimeout(resolve, 330))
+    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-success.png'), (await win.webContents.capturePage()).toPNG())
     await until(() => win.webContents.executeJavaScript('(()=>{ const c=document.querySelector("canvas"); return c && c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((v,i)=>i%4===3 && v>0) })()'))
     check('upstream Mochi actually renders in sandbox canvas', true)
+    const samples = await win.webContents.executeJavaScript('(' + sampleGestures.toString() + ')()')
+    check('all five gesture phases render without clipping at 2x physical resolution', samples.unclipped)
+    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-motion-poses.png'), Buffer.from(samples.png, 'base64'))
     check('main renderer keeps privilege-free preload', await shell.window.webContents.executeJavaScript('typeof window.hasarbotuAssistant === "undefined" && Object.keys(window.hasarbotuDesktop).sort().join(",") === "isDesktopShell,platform"'))
     const prefs = win.webContents.getLastWebPreferences()
     check('sandbox isolation and web security', prefs.sandbox && prefs.contextIsolation && prefs.webSecurity && !prefs.nodeIntegration)
@@ -155,8 +227,20 @@ void app.whenReady().then(async () => {
       cursor = { x: cursor.x - 96, y: cursor.y + 32 }
       await input('drag')
       await until(() => win.getBounds().x === saved.x - 96)
+      await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "drag" && value.x === -1)'))
+      check('native dragging sends bounded direction without desktop coordinates', await win.webContents.executeJavaScript('window.motionEvents.filter(value => value.type === "drag").every(value => Object.keys(value).sort().join(",") === "type,x")'))
+      await new Promise(resolve => setTimeout(resolve, 100))
+      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-drag.png'), (await win.webContents.capturePage()).toPNG())
       await input('release')
+      await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "release")'))
       check('drag IPC moves native window and saves position', win.getBounds().x === saved.x - 96)
+      Object.assign(saved, JSON.parse(await readFile(join(app.getPath('userData'), 'assistant-position.json'), 'utf8')))
+      await win.webContents.executeJavaScript('window.motionEvents = []')
+      await input('press')
+      cursor = { x: cursor.x + 12, y: cursor.y }
+      await input('release')
+      await until(() => win.webContents.executeJavaScript('window.motionEvents.at(-1)?.type === "release"'))
+      check('movement first observed on release sends drag before landing', await win.webContents.executeJavaScript('window.motionEvents[0]?.type === "drag" && window.motionEvents.at(-1).type === "release"'))
       Object.assign(saved, JSON.parse(await readFile(join(app.getPath('userData'), 'assistant-position.json'), 'utf8')))
     } finally { screen.getCursorScreenPoint = originalCursor }
     const ownUrl = win.webContents.getURL()
@@ -174,6 +258,14 @@ void app.whenReady().then(async () => {
     await assistant.menuWindow.webContents.executeJavaScript('document.querySelector("header button").click()')
     await until(() => !assistant.menuWindow.isVisible())
     check('menu close command hides the actual panel',true)
+    await win.webContents.executeJavaScript('window.motionEvents = []')
+    await assistant.menuWindow.webContents.executeJavaScript('window.hasarbotuAssistantFeedback.noteSaved()')
+    await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "success")'))
+    check('standalone quick-note panel also reaches cosmetic feedback', true)
+    await win.webContents.executeJavaScript('document.querySelector("button").dispatchEvent(new Event("pointerenter"))')
+    await new Promise(resolve => setTimeout(resolve, 1050))
+    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-curious.png'), (await win.webContents.capturePage()).toPNG())
+    await win.webContents.executeJavaScript('document.querySelector("button").dispatchEvent(new Event("pointerleave")); window.motionOff(); undefined')
     shell.window.minimize()
     await until(() => shell.window.isMinimized())
     check('helper survives main minimize', win.isVisible() && win.isAlwaysOnTop())
@@ -232,6 +324,7 @@ void app.whenReady().then(async () => {
     win.webContents.debugger.detach()
     assistant.dispose()
     check('dispose removes IPC listeners', ipcMain.listenerCount('hasarbotu:assistant') === 0)
+    check('dispose removes success feedback listener', ipcMain.listenerCount('hasarbotu:assistant-success') === 0)
     check('dispose removes shortcut panel and its IPC',assistant.menuWindow.isDestroyed() && ipcMain.listenerCount('hasarbotu:assistant-menu') === 0)
     assistant = await startDesktopAssistant(options)
     check('recreation restores persisted position', assistant.window.getBounds().x === saved.x && assistant.window.getBounds().y === saved.y)
@@ -245,6 +338,7 @@ void app.whenReady().then(async () => {
     assistant?.dispose()
     await shell?.close()
     await writeFile(process.env.HB_ASSISTANT_RESULT, JSON.stringify(checks, null, 2))
+    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-checks.json'), JSON.stringify(checks, null, 2))
     app.exit(checks.every((item) => item.pass) ? 0 : 1)
   }
 })

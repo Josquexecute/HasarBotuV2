@@ -19,3 +19,6 @@ contextBridge.exposeInMainWorld('hasarbotuAppearance', Object.freeze({
     return () => ipcRenderer.removeListener('hasarbotu:appearance-ready', listener)
   },
 }))
+contextBridge.exposeInMainWorld('hasarbotuAssistantFeedback', Object.freeze({
+  noteSaved: () => ipcRenderer.send('hasarbotu:assistant-success'),
+}))

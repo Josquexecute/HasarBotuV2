@@ -80,6 +80,11 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   let gazeTimer: ReturnType<typeof setInterval> | undefined
   let previousGaze: Point | undefined
   let appearance = DEFAULT_ASSISTANT_APPEARANCE
+  const sendMotion = (value: { type: 'drag'; x: number } | { type: 'release' | 'success' }) => {
+    if (!disposed && !window.isDestroyed() && window.isVisible() && !appearance.reduceMotion) {
+      window.webContents.send('hasarbotu:assistant-motion', value)
+    }
+  }
   const stopGaze = () => {
     clearInterval(gazeTimer)
     gazeTimer = undefined
@@ -157,6 +162,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   ])
   const openMenu = () => {
     drag = undefined
+    sendMotion({ type: 'release' })
     if (menuOpen) return
     menuOpen = true
     menuWindow.setBounds(assistantMenuBounds(position,screen.getDisplayNearestPoint(position).workArea))
@@ -204,6 +210,13 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     window.webContents.send('hasarbotu:assistant-appearance', appearance)
     return true
   }
+  const handleSuccess = (event: IpcMainEvent) => {
+    if (disposed) return
+    const main = options.shell.window.webContents
+    const trustedMain = event.sender === main && event.senderFrame === main.mainFrame && event.senderFrame?.url.startsWith(options.shell.origin + '/')
+    const trustedMenu = event.sender === menuWindow.webContents && event.senderFrame === menuWindow.webContents.mainFrame && event.senderFrame?.url === menuUrl
+    if (trustedMain || trustedMenu) sendMotion({ type: 'success' })
+  }
   menuWindow.on('close',(event) => { event.preventDefault();hideMenu() })
   const updateDrag = () => {
     if (!drag) return
@@ -211,7 +224,13 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     const dx = cursor.x - drag.cursor.x
     const dy = cursor.y - drag.cursor.y
     drag.moved ||= Math.hypot(dx, dy) >= 5
-    if (drag.moved) move({ x: drag.origin.x + dx, y: drag.origin.y + dy })
+    if (drag.moved) {
+      const previous = position
+      move({ x: drag.origin.x + dx, y: drag.origin.y + dy })
+      if (position.x !== previous.x || position.y !== previous.y) {
+        sendMotion({ type: 'drag', x: Math.max(-1, Math.min(1, (position.x - previous.x) / 24)) })
+      }
+    }
   }
   const handleCommand = (event: IpcMainEvent, command: unknown) => {
     if (disposed || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame
@@ -220,15 +239,17 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       if (!menuOpen) drag = { cursor: screen.getCursorScreenPoint(), origin: position, moved: false }
     } else if (command === 'drag') updateDrag()
     else if (command === 'release') {
-      if (!drag) return
+      if (!drag) { sendMotion({ type: 'release' }); return }
       updateDrag()
       const moved = drag.moved
       drag = undefined
+      sendMotion({ type: 'release' })
       if (moved) persist()
       else openMenu()
     } else if (command === 'cancel') {
       if (drag?.moved) persist()
       drag = undefined
+      sendMotion({ type: 'release' })
     } else if (command === 'menu') openMenu()
     else {
       move({ x: position.x + (command === 'left' ? -16 : command === 'right' ? 16 : 0),
@@ -236,7 +257,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       persist()
     }
   }
-  const onDisplayChange = () => { drag = undefined;hideMenu();move(position);persist() }
+  const onDisplayChange = () => { drag = undefined;sendMotion({ type: 'release' });hideMenu();move(position);persist() }
   const dispose = () => {
     if (disposed) return
     disposed = true
@@ -246,6 +267,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     menuWindow.webContents.session.removeListener('will-download', denyMenuDownload)
     ipcMain.removeListener('hasarbotu:assistant', handleCommand)
     ipcMain.removeListener('hasarbotu:assistant-menu',handleMenuAction)
+    ipcMain.removeListener('hasarbotu:assistant-success', handleSuccess)
     ipcMain.removeHandler('hasarbotu:assistant-appearance')
     screen.removeListener('display-added', onDisplayChange)
     screen.removeListener('display-removed', onDisplayChange)
@@ -265,6 +287,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   app.on('before-quit', dispose)
   ipcMain.on('hasarbotu:assistant', handleCommand)
   ipcMain.on('hasarbotu:assistant-menu',handleMenuAction)
+  ipcMain.on('hasarbotu:assistant-success', handleSuccess)
   ipcMain.handle('hasarbotu:assistant-appearance', handleAppearance)
   screen.on('display-added', onDisplayChange)
   screen.on('display-removed', onDisplayChange)

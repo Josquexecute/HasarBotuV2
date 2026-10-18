@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import { URL as NodeURL } from 'node:url'
 import { afterEach, expect, it, vi } from 'vitest'
 
-const source = readFileSync(new NodeURL('../../../public/desktop-assistant-character.js', import.meta.url), 'utf8').replace(/^import .*\r?\n/, '')
+const source = readFileSync(new NodeURL('../../../public/desktop-assistant-character.js', import.meta.url), 'utf8').replace(/^import .*\r?\n/gm, '')
+const motionSource = readFileSync(new NodeURL('../../../public/desktop-assistant-motion.js', import.meta.url), 'utf8').replace('export class', 'class')
 afterEach(() => vi.useRealTimers())
 
 function setup() {
@@ -22,6 +23,10 @@ function setup() {
     busy = false
     lookX = 0
     lookY = 0
+    tweens = new Map()
+    locks = new Set()
+    anim = vi.fn()
+    interruptGreet = vi.fn()
     draw = vi.fn()
     update = vi.fn(() => { if (this.lookX || this.lookY) this.busy = true })
     greet = vi.fn()
@@ -31,6 +36,7 @@ function setup() {
   }
   let gaze: (point: { x: number; y: number }) => void = () => {}
   let appearance: (value: { characterColor: string; accentColor: string; reduceMotion: boolean }) => void = () => {}
+  let motionEvent: (value: { type: string; x?: number }) => void = () => {}
   const unsubscribe = vi.fn()
   const frames = new Map<number, FrameRequestCallback>()
   let nextFrame = 0, now = 0
@@ -39,6 +45,7 @@ function setup() {
     hasarbotuAssistant: {
       onGaze: (callback: typeof gaze) => { gaze = callback; return unsubscribe },
       onAppearance: (callback: typeof appearance) => { appearance = callback; return unsubscribe },
+      onMotion: (callback: typeof motionEvent) => { motionEvent = callback; return unsubscribe },
     },
     matchMedia: () => motion,
     devicePixelRatio: 1,
@@ -52,7 +59,9 @@ function setup() {
     disconnect = vi.fn()
     constructor(callback: ResizeObserverCallback) { resize = callback }
   }
-  new Function('BotEngine', 'window', 'document', 'ResizeObserver', 'performance', source)(Engine, target, doc, Observer, { now: () => now })
+  const timing = { now: () => now }
+  const Motion = new Function('performance', motionSource + '; return AssistantMotion')(timing)
+  new Function('BotEngine', 'AssistantMotion', 'window', 'document', 'ResizeObserver', 'performance', source)(Engine, Motion, target, doc, Observer, timing)
   const step = (ms = 20) => {
     now += ms
     const pending = [...frames.values()]
@@ -60,7 +69,7 @@ function setup() {
     pending.forEach(callback => callback(now))
   }
   const setAppearance = (reduceMotion: boolean) => appearance({ characterColor: '#ffffff', accentColor: '#2563eb', reduceMotion })
-  return { doc, canvas, measure, engines, target, frames, step, gaze: (x: number, y: number) => gaze({ x, y }), setAppearance, unsubscribe,
+  return { doc, canvas, measure, engines, target, frames, step, gaze: (x: number, y: number) => gaze({ x, y }), setAppearance, unsubscribe, motionEvent,
     hide: (value: boolean) => { hidden = value; doc.dispatchEvent(new Event('visibilitychange')) },
     resize: () => resize([], {} as ResizeObserver),
   }
@@ -99,6 +108,18 @@ it('internal delayed emotes are detected without a permanent display-frame loop'
   expect(ui.frames.size).toBe(1)
 })
 
+it('expired facial expressions redraw even after body movement has settled', () => {
+  const ui = setup()
+  ui.step()
+  const engine = ui.engines[0] as typeof ui.engines[0] & { eyeOverride: string | null }
+  engine.eyeOverride = 'happy'
+  engine.update.mockImplementationOnce(() => { engine.eyeOverride = null })
+  vi.advanceTimersByTime(125)
+  ui.step(125)
+  expect(engine.draw).toHaveBeenCalledTimes(2)
+  expect(ui.frames.size).toBe(0)
+})
+
 it.each([60, 144])('keeps active drawing near 60 fps on a %i Hz display without fractional timestamp drift', refreshRate => {
   const ui = setup()
   ui.gaze(1, 1)
@@ -134,15 +155,36 @@ it('press and hover wake a settled character; disposal removes subscriptions and
   expect(ui.engines[0].squash).toHaveBeenCalledOnce()
   expect(ui.frames.size).toBe(1)
   ui.engines[0].busy = false
+  ui.motionEvent({ type: 'release' })
   ui.step()
   button.dispatchEvent(new Event('pointerenter'))
-  vi.advanceTimersByTime(1200)
-  expect(ui.engines[0].triggerEmote).toHaveBeenCalledWith('happy')
+  vi.advanceTimersByTime(650)
+  expect(ui.engines[0].triggerEmote).toHaveBeenCalledWith('happy', .9)
   ui.target.dispatchEvent(new Event('pagehide'))
-  expect(ui.unsubscribe).toHaveBeenCalledTimes(2)
+  expect(ui.unsubscribe).toHaveBeenCalledTimes(3)
   expect(ui.frames.size).toBe(0)
   expect(vi.getTimerCount()).toBe(0)
   ui.gaze(1, 1)
+  expect(ui.frames.size).toBe(0)
+  ui.motionEvent({ type: 'success' })
+  expect(ui.frames.size).toBe(0)
+})
+
+it('success wakes a settled character but hidden and reduced-motion feedback is discarded', () => {
+  const ui = setup()
+  ui.step()
+  ui.motionEvent({ type: 'success' })
+  expect(ui.engines[0].triggerEmote).toHaveBeenCalledWith('happy', 1.2)
+  expect(ui.frames.size).toBe(1)
+  ui.hide(true)
+  ui.motionEvent({ type: 'success' })
+  ui.doc.querySelector('button')!.dispatchEvent(new Event('pointerenter'))
+  expect(ui.frames.size).toBe(0)
+  expect(vi.getTimerCount()).toBe(0)
+  ui.hide(false)
+  ui.setAppearance(true)
+  ui.motionEvent({ type: 'success' })
+  expect(ui.engines[0].triggerEmote).toHaveBeenCalledTimes(1)
   expect(ui.frames.size).toBe(0)
 })
 

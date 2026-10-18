@@ -4,9 +4,28 @@ The Electron helper displays Coucou's original Mochi using its Canvas drawing
 engine in a transparent 120 DIP window. Dragging, keyboard movement, saved
 position, tray recovery and the native quick-action menu remain available.
 The eyes follow the desktop cursor; the helper greets on launch, blinks and
-reacts to pressing and hovering. This version has no audio or business-status
-animations. Reduced motion displays a neutral still pose. Hiding the helper
+reacts to pressing and hovering. It has no audio. Reduced motion displays a neutral still pose. Hiding the helper
 stops cursor polling and rendering; closing the main window disposes it.
+
+## Gentle gestures (desktop 0.1.51)
+
+Hovering for 650 ms produces a small curious tilt toward the cursor, with a
+12-second cooldown. After 45–75 seconds without character interaction, Touch
+occasionally stretches; hovering, pressing and active gestures defer it.
+Dragging gently tilts the body in the actual window movement direction, then
+settles on release. Display boundaries still constrain the window as before.
+
+A confirmed quick-note save in the main app or standalone panel produces a
+short happy hop. Pending and failed saves do not trigger it. Bursts of saves
+are coalesced for six seconds; a save during dragging is acknowledged on release.
+This is cosmetic feedback and does not change any business record.
+
+Gestures use the existing drawing engine's interpolation from the current pose
+and the same capped 60 fps rendering loop. Idle checks remain at 8 Hz without
+redrawing settled pixels. No gesture adds a timer or desktop-coordinate access.
+Hidden or reduced-motion feedback is discarded, and unfinished gestures are
+cleared on hide or reduced motion. The account and system accessibility settings
+both take precedence over animation.
 
 Only normalized gaze and validated cosmetic appearance reach the isolated character renderer. It receives neither
 screen coordinates nor access to the authenticated main window's session.

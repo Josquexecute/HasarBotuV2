@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TouchAssistant } from './TouchAssistant'
 import { QUICK_NOTE_EVENT, type ActiveCase } from '../app/activeCase'
 import { CaseOperationsError, type CaseNoteRecord, type CaseOperationsPort, type CaseOperationsRecord } from '../data/caseOperationsPort'
@@ -9,6 +9,7 @@ import { useCaseOperations } from '../data/useCaseOperations'
 
 const target: ActiveCase = { caseId: 'case-a', plate: '34 TEST 01', officeNumber: '2026/1', source: 'api' }
 const note: CaseNoteRecord = { id: 'note-a', noteType: 'internal', subject: null, body: 'Servis ile görüşüldü.', createdAt: '2026-09-22T09:00:00Z', createdByUserId: 'user-a', createdByDisplayName: 'Test', legacySource: null }
+afterEach(() => vi.unstubAllGlobals())
 function makePort(canWrite = true) {
   let notes: readonly CaseNoteRecord[] = []
   const port: CaseOperationsPort = {
@@ -31,6 +32,25 @@ async function open() {
 }
 
 describe('Touch Assistant quick note', () => {
+  it('acknowledges only a confirmed save and never a failed or pending request', async () => {
+    const noteSaved = vi.fn()
+    vi.stubGlobal('hasarbotuAssistantFeedback', { noteSaved })
+    const port = makePort()
+    let finish!: (value: CaseNoteRecord) => void
+    vi.mocked(port.createNote).mockImplementationOnce(async () => { throw new CaseOperationsError('unavailable', 'lost response') })
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    renderPanel(port)
+    await open()
+    await userEvent.type(screen.getByRole('textbox'), note.body)
+    await userEvent.click(screen.getByRole('button', { name: 'Notu kaydet' }))
+    await screen.findByRole('alert')
+    expect(noteSaved).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydı tekrar dene' }))
+    expect(noteSaved).not.toHaveBeenCalled()
+    await act(async () => { finish(note) })
+    expect(noteSaved).toHaveBeenCalledOnce()
+    expect(screen.getByText('Not dosyaya kaydedildi.')).toBeInTheDocument()
+  })
   it('requires a visible target and never asks for a second case selection', async () => {
     renderPanel(makePort(), null)
     act(() => { window.dispatchEvent(new Event(QUICK_NOTE_EVENT)) })
