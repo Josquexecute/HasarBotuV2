@@ -1,6 +1,67 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.46**, published on 2026-10-18
+The current authenticated office release is **0.1.50**, published on 2026-10-18
+(Europe/Istanbul; 2026-10-18T13:01:51.093Z).
+Its verified Windows x64 installer is 105,188,267 bytes, SHA-256
+`b38596c625f475d36c6762185899abf9f9a11177f3182420e04dace4f702e1fe`.
+The Value Loss calculator now automatically reads the accident date and available
+vehicle type, make, model, model year and explicit body description from the case's
+SBM/Eksist data. The tariff category and the vehicle model are mapped separately.
+Manual corrections survive navigation; source refresh preserves monetary inputs
+and physical part observations and invalidates stale calculation results.
+The installed 0.1.49 client reported 0.1.50 as available and downloaded all
+105,188,267 authenticated bytes with HTTP 200 and the exact SHA-256.
+The previous 0.1.49 manifest and immutable installer were preserved; installation
+remains user-controlled. See [source mapping and verification](VALUE_LOSS_SBM_PREFILL_2026-10-18.md).
+
+The previous authenticated office release was **0.1.49**, published on 2026-10-18
+(Europe/Istanbul; 2026-10-18T12:21:19.142Z).
+Its verified Windows x64 installer is 105,186,969 bytes, SHA-256
+`ab579496150dfd41a6347a74e3424993874ffece3827373983adcd370293243f`.
+Value Loss now carries manufacturer/model identity separately from generic
+reference coefficients and shows the public manufacturer document when available.
+An unverified model fitment or incomplete operation coefficient automatically uses
+the whole-vehicle market difference when market values are available. Missing or
+invalid coefficients cannot produce a partial total. Existing generic reference
+estimates and older client requests remain supported.
+Public manufacturer documents do not establish full VIN fitment or model-specific
+coefficient coverage; that limitation remains explicit.
+The installed 0.1.48 client reported 0.1.49 as available and downloaded all
+105,186,969 authenticated bytes with HTTP 200 and the exact SHA-256. The previous
+0.1.48 manifest and immutable installer were preserved; installation remains
+user-controlled. See [sources, limits and verification](VALUE_LOSS_MANUFACTURER_MATCHING_2026-10-18.md).
+
+
+The previous authenticated office release was **0.1.48**, published on 2026-10-18
+(Europe/Istanbul; 2026-10-18T12:00:26.818Z).
+Its verified Windows x64 installer is 105,183,511 bytes, SHA-256
+`4b71eec837107af6ff27db6461a1b7084895f1949af7c446fcdec120cd1b2aea`.
+Value Loss now separates vehicle/body-specific part suggestions from numeric
+reference rules. Users can enter actual positions, quantities and unlisted parts.
+Source-verified cabrio side-panel coefficients, the passenger-van exception and
+explicit base-only material/operation rules are applied. An incomplete coefficient
+match requires the whole-vehicle market difference instead of a partial total.
+The installed 0.1.47 client reported 0.1.48 as available and downloaded all
+105,183,511 authenticated bytes with HTTP 200 and the exact SHA-256. The previous
+manifest and immutable installer were preserved; installation remains user-controlled.
+See [source audit, limitations and validation](VALUE_LOSS_CATALOG_2026-10-18.md).
+
+The previous authenticated office release was **0.1.47**, published on 2026-10-18
+(Europe/Istanbul; 2026-10-18T08:19:10.822Z).
+Its verified Windows x64 installer is 105,170,984 bytes, SHA-256
+`eb2d1a178d315b5fa0bb61a411e8f5acecd92d29dff23f1090dcb78a6c79f492`.
+Value Loss now has a searchable, scrollable part popup constrained to the screen.
+Repair + Paint and Replacement + Paint are selectable on one physical part;
+paintless repair is a main operation, with part properties kept separately.
+The reference result is identified as an estimate after reviewing SEDDK's report
+template and published Arbitration decisions. Existing arithmetic is preserved.
+The installed 0.1.46 client reported 0.1.47 as available and downloaded the entire
+authenticated installer with HTTP 200 and its exact size and SHA-256. The previous
+manifest and immutable installer were preserved; installation remains user-controlled.
+See [official sources, behavior and delivery evidence](VALUE_LOSS_OPERATIONS_2026-10-18.md).
+
+
+The previous authenticated office release was **0.1.46**, published on 2026-10-18
 (Europe/Istanbul; 2026-10-18T07:58:38.939Z).
 Its verified Windows x64 installer is 105,170,166 bytes, SHA-256
 `664dd0a1e2401b4a39e17b0d05e2ce85482fd76ac6295237787a6a90dab1d3ba`.

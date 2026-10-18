@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { parseEksist, matchEksistReference } from '../src/eksist.js'
 
 describe('Eksist shared mapping', () => {
+  it('preserves explicit source body fields instead of appending them to the model value', () => {
+    const result = parseEksist('Marka: FORD\nAraç Tipi: TRANSIT\nModel Yılı: 2021\nAraç Tarife Grubu: KAMYONET\nKasa Tipi: Panelvan\nGövde Tipi: Panelvan\nMotor No: TEST123')
+    expect(result).toMatchObject({ brand: 'FORD', model: 'TRANSIT', modelYear: '2021', vehicleClass: 'light_commercial', vehicleFields: { 'Kasa Tipi': 'Panelvan', 'Gövde Tipi': 'Panelvan', 'Motor No': 'TEST123' } })
+  })
   it('maps labels with clipboard whitespace and keeps distinct identities apart', () => {
     const result = parseEksist('Talep İşlem Ref No:\n\n162111\nÜrün: Trafik\nPlaka: 034 - TR2491\nHasar Dosya No: 2026 T 47308\nHasar Zamanı: 17/09/2026 00:00\nSigortalı TC Kimlik No: 30***62\nSigortalı Ad/Ünvan: ALİ\nPoliçe Vadesi: 2026 - 2027\nMarka: VW\nAraç Tipi: PASSAT\nModel Yılı: 2014\nAraç Tarife Grubu: OTOMOBİL\nMotor No: CAYZ46629\nŞasi No: WVWZZZ3CZEE144172\nEksper Atama Tarihi: 2026-09-18')
     expect(result).toMatchObject({ reference: '162111', plate: '34 TR 2491', caseType: 'traffic', lossDate: '2026-09-17', claimNumber: '2026 T 47308', brand: 'VW', model: 'PASSAT', modelYear: '2014', vehicleClass: 'passenger_car' })

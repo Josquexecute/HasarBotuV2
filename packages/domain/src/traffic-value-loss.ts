@@ -222,6 +222,12 @@ function applyBasisPointsHalfUp(amountMinor: number, basisPoints: number): numbe
   return Number.isSafeInteger(result) ? result : null
 }
 
+export function calculateTrafficValueLossMarketDifference(preAccidentMinor: number | null, postRepairMinor: number | null, faultRateBasisPoints: number | null) {
+  const grossValueLossMinor = isSafeMoney(preAccidentMinor) && isSafeMoney(postRepairMinor) ? Math.max(0, preAccidentMinor - postRepairMinor) : null
+  const faultAdjustedValueLossMinor = grossValueLossMinor !== null && isSafeBasisPoints(faultRateBasisPoints) ? applyBasisPointsHalfUp(grossValueLossMinor, faultRateBasisPoints) : null
+  return { grossValueLossMinor, faultAdjustedValueLossMinor }
+}
+
 export function evaluateTrafficValueLoss(input: TrafficValueLossInput): TrafficValueLossEvaluation {
   const uncertainties: TrafficValueLossUncertainty[] = []
   const reasoning: string[] = [
@@ -284,14 +290,7 @@ export function evaluateTrafficValueLoss(input: TrafficValueLossInput): TrafficV
   if (qualifyingPreComparableCount < MIN_COMPARABLES_PER_SIDE) uncertainties.push(uncertainty('INSUFFICIENT_PRE_COMPARABLES', 'comparables', 'Kaza öncesi değer için son 30 gün ve ±%10 km aralığında en az üç emsal gereklidir.'))
   if (qualifyingPostComparableCount < MIN_COMPARABLES_PER_SIDE) uncertainties.push(uncertainty('INSUFFICIENT_POST_COMPARABLES', 'comparables', 'Onarım sonrası değer için son 30 gün ve ±%10 km aralığında en az üç emsal gereklidir.'))
 
-  let grossValueLossMinor: number | null = null
-  let faultAdjustedValueLossMinor: number | null = null
-  if (isSafeMoney(input.preAccidentMarketValueMinor) && isSafeMoney(input.postRepairMarketValueMinor)) {
-    grossValueLossMinor = Math.max(0, input.preAccidentMarketValueMinor - input.postRepairMarketValueMinor)
-    if (isSafeBasisPoints(input.faultRateBasisPoints)) {
-      faultAdjustedValueLossMinor = applyBasisPointsHalfUp(grossValueLossMinor, input.faultRateBasisPoints)
-    }
-  }
+  const { grossValueLossMinor, faultAdjustedValueLossMinor } = calculateTrafficValueLossMarketDifference(input.preAccidentMarketValueMinor, input.postRepairMarketValueMinor, input.faultRateBasisPoints)
 
   const eligibilityStatus: TrafficValueLossEligibilityStatus = uncertainties.length > 0
     ? 'control_required'

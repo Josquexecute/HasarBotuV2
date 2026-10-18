@@ -18,7 +18,8 @@ export async function applyEksistSource(client: pg.PoolClient, organizationId: s
   }
   const requiredVehicle = ['Plaka', 'Marka', 'Araç Tipi', 'Model Yılı', 'Araç Tarife Grubu', 'Motor No', 'Şasi No']
   if (requiredVehicle.some(label => !data.vehicleFields[label])) throw new ReferenceCheckError('vehicle', 'eksist_vehicle_incomplete')
-  if (data.conflicts.some(field => ['sigortasirketi', 'eksperadsoyad', 'eksperatamatarihi', 'levhano', 'tuzeleksperlevhano', ...requiredVehicle.map(eksistKey)].includes(field))) {
+  const bodyLabels = ['Araç Cinsi', 'Kasa Tipi', 'Kasa Cinsi', 'Gövde Tipi', 'Araç Gövde Tipi', 'Kasa / Araç Yapısı']
+  if (data.conflicts.some(field => ['sigortasirketi', 'eksperadsoyad', 'eksperatamatarihi', 'levhano', 'tuzeleksperlevhano', ...requiredVehicle.map(eksistKey), ...bodyLabels.map(eksistKey)].includes(field))) {
     throw new ReferenceCheckError('source.id', 'eksist_source_conflict')
   }
   if (!serviceRevision && data.conflicts.some(field => ['tamirhaneadunvan', 'tamirhanesoyad'].includes(field))) throw new ReferenceCheckError('serviceId', 'use_service_revision')

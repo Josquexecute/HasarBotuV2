@@ -372,6 +372,7 @@ export {
   TRAFFIC_VALUE_LOSS_RULE_VERSION,
   TRAFFIC_VALUE_LOSS_STATUSES,
   TRAFFIC_VALUE_LOSS_UNCERTAINTY_CODES,
+  calculateTrafficValueLossMarketDifference,
   evaluateTrafficValueLoss,
   type TrafficValueLossComparable,
   type TrafficValueLossDamagePart,
@@ -708,3 +709,5 @@ export { toOfficeDate } from './office-date.js'
 
 export { parseSourcePlateFolderName, matchSourceFolderInsurer } from './source-plate-folder.js'
 export * from './notice-sheet.js'
+export * from './value-loss-calculator-catalog.js'
+export * from './value-loss-manufacturer-catalog.js'

@@ -9,6 +9,7 @@ const LABELS = [
   'Poliçe No', 'Acente No', 'Yenileme No', 'Poliçe Vadesi', 'Hasar Dosya No', 'Hasar Zamanı', 'Hasar Tarihi',
   'Hasar Nedeni', 'İl', 'İlçe', 'Plaka', 'Model Yılı', 'Marka', 'Araç Tarife Grubu', 'Araç Tipi',
   'Motor No', 'Şasi No', 'Renk', 'Yakıt Tipi', 'Vites Tipi', 'Kullanım Şekli', 'Kullanım Amacı',
+  'Araç Cinsi', 'Kasa Tipi', 'Kasa Cinsi', 'Gövde Tipi', 'Araç Gövde Tipi', 'Kasa / Araç Yapısı',
   'Silindir Hacmi', 'Motor Gücü', 'Koltuk Sayısı', 'İlk Tescil Tarihi', 'Tescil Tarihi', 'Tip / Varyant / Versiyon',
   'Eposta', 'Cep Telefonu', 'Kimlik Tipi', 'Kimlik No', 'Ad/Ünvan', 'Soyad', 'İş Telefonu',
   'Ekspertiz Yeri Ad/Ünvan', 'Ekspertiz Yeri Soyad', 'Ekspertiz Yeri Kimlik Tipi', 'Ekspertiz Yeri Kimlik No',
@@ -45,7 +46,7 @@ export interface EksistExtraction {
   vehicleClass: 'passenger_car' | 'light_commercial' | 'heavy_commercial' | 'motorcycle' | 'trailer' | 'other' | ''
 }
 
-export const EKSIST_VEHICLE_LABELS = ['Plaka', 'Marka', 'Araç Tipi', 'Model Yılı', 'Araç Tarife Grubu', 'Motor No', 'Şasi No', 'Renk', 'Yakıt Tipi', 'Vites Tipi', 'Kullanım Şekli', 'Kullanım Amacı', 'Silindir Hacmi', 'Motor Gücü', 'Koltuk Sayısı', 'İlk Tescil Tarihi', 'Tescil Tarihi', 'Tip / Varyant / Versiyon'] as const
+export const EKSIST_VEHICLE_LABELS = ['Plaka', 'Marka', 'Araç Tipi', 'Model Yılı', 'Araç Tarife Grubu', 'Araç Cinsi', 'Kasa Tipi', 'Kasa Cinsi', 'Gövde Tipi', 'Araç Gövde Tipi', 'Kasa / Araç Yapısı', 'Motor No', 'Şasi No', 'Renk', 'Yakıt Tipi', 'Vites Tipi', 'Kullanım Şekli', 'Kullanım Amacı', 'Silindir Hacmi', 'Motor Gücü', 'Koltuk Sayısı', 'İlk Tescil Tarihi', 'Tescil Tarihi', 'Tip / Varyant / Versiyon'] as const
 
 function sourceDate(value: string): string {
   const local = /^(\d{2})[/.](\d{2})[/.](\d{4})(?:\s|$)/.exec(value)

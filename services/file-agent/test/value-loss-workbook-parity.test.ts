@@ -6,6 +6,7 @@ import {
   buildValueLossRuleSnapshot,
   evaluateRealMarketValueLoss,
   parseLocalDate,
+  valueLossCalculatorAdditionalRules,
   type RealMarketValueLossInput,
   type RealMarketValueLossPartInput,
   type ValueLossProductDecisionOverlay,
@@ -53,6 +54,20 @@ function scenario(mapping: ValueLossRuleSnapshot['vehicleMappings'][number], usa
 }
 
 describe('Kaynak Excel formülleri ile hesap motoru karşılaştırması', () => {
+  it('ek yan panel katsayılarını ve uygulanabilirlik esasını kaynak hücreleriyle doğrular', () => {
+    const tables = workbook.sheets.find(sheet => sheet.name === 'Tablolar')!
+    const principles = workbook.sheets.find(sheet => sheet.name === 'Uygulama Esasları')!
+    expect(principles.cells.find(cell => cell.address === 'B50')?.value).toContain('cabrio')
+    expect(principles.cells.find(cell => cell.address === 'B54')?.value).toContain('kamyonet')
+    expect(principles.cells.find(cell => cell.address === 'B54')?.value).toContain('ticari')
+    for (const rule of valueLossCalculatorAdditionalRules('OTOMOBİL', 'cabriolet')) {
+      const value = (column: string) => tables.cells.find(cell => cell.address === `${column}${rule.sourceRow}`)?.value
+      expect(rule.sourceLabel).toBe(value('B'))
+      expect(rule.coefficients).toEqual({ replacement: value('C'), repair: { light: value('F'), medium: value('G'), heavy: value('H') }, paint: { full: value('K'), local: value('L') } })
+    }
+    expect(principles.cells.find(cell => cell.address === 'B56')?.value).toContain('plastik karoseri')
+    expect(principles.cells.find(cell => cell.address === 'B60')?.value).toContain('Ayrıca kaporta ve boya katsayısı uygulanmaz')
+  })
   it('kaynak dosyayı değiştirmeden tüm tablo ve katsayıları birebir yeniden üretir', () => {
     assertWorkbookSha256(bytes, VALUE_LOSS_SOURCE_WORKBOOK_SHA256)
     expect(buildValueLossRuleSnapshot({

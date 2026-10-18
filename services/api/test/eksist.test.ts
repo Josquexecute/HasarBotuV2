@@ -145,6 +145,16 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
   }
   const manual = { case: { caseType: 'traffic', plate: '34 TR 2491', notificationDate: '2026-09-19', lossDate: '2026-09-17' }, storageRootKey: 'test-primary' }
 
+  it('does not publish contradictory body fields as authoritative calculator defaults', async () => {
+    const src = await source('Talep İşlem Ref No: body-conflict\nPlaka: 034 - AB1234\nKasa Tipi: Sedan\nKasa Tipi: SUV')
+    const response = await quick({ ...manual, source: { id: src.id, reference: 'body-conflict' } })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.fieldErrors).toContainEqual(expect.objectContaining({ code: 'eksist_source_conflict' }))
+    const row = (await pool.query('SELECT case_id,reviewed_fields FROM eksist_sources WHERE id=$1', [src.id])).rows[0]
+    expect(row.case_id).toBeNull()
+    expect(row.reviewed_fields).not.toHaveProperty('automatic')
+  })
+
   it('commits case, source, vehicle and queued folder atomically; agent verifies real folders; retries do not duplicate', async () => {
     const src = await source('Talep İşlem Ref No: 162111\nÜrün: Trafik\nPlaka: 034 - TR2491')
     const input = { ...manual, source: { id: src.id, reference: '162111' }, vehicle: { brand: 'VOLKSWAGEN', model: 'PASSAT', modelYear: 2014, vehicleClass: 'passenger_car', evidenceSource: 'insurer_record', chassisPrefix: null, engineCode: null } }

@@ -534,6 +534,7 @@ export function listRealMarketPartRules(
 export function evaluateRealMarketValueLoss(
   snapshot: ValueLossRuleSnapshot,
   input: RealMarketValueLossInput,
+  options?: { readonly documentedBaseOnlyPartCount: number },
 ): RealMarketValueLossEvaluation {
   if (snapshot.identity !== VALUE_LOSS_SNAPSHOT_IDENTITY
     || snapshot.source.workbookSha256 !== VALUE_LOSS_SOURCE_WORKBOOK_SHA256) {
@@ -577,7 +578,10 @@ export function evaluateRealMarketValueLoss(
   if (!safeMinor(input.damageAmountMinor)) {
     reasons.push(reason('DAMAGE_AMOUNT_INVALID', 'damageAmountMinor', 'Hasar tutarı negatif olmayan minor-unit olmalıdır.'))
   }
-  if (input.parts.length === 0) {
+  // Calculator-only entries can follow source principles 3.9/3.10, contributing through damage amount.
+  const baseOnlyCount = options?.documentedBaseOnlyPartCount ?? 0
+  if (!Number.isSafeInteger(baseOnlyCount) || baseOnlyCount < 0 || baseOnlyCount > 100) throw new Error('REAL_MARKET_BASE_ONLY_PART_COUNT_INVALID')
+  if (input.parts.length === 0 && baseOnlyCount === 0) {
     reasons.push(reason('PARTS_MISSING', 'parts', 'En az bir desteklenen parça işlemi gereklidir.'))
   }
   if (!safeNonNegativeInteger(input.previousDamageCount)) {

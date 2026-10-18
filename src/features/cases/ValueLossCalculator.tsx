@@ -1,31 +1,49 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Calculator, CirclePlus, LoaderCircle, Trash2 } from 'lucide-react'
-import { valueLossCalculatorResponseSchema, type ValueLossCalculatorResponse } from '@hasarbotu/contracts'
+import { VALUE_LOSS_BODY_LABELS, VALUE_LOSS_PART_COVERAGE_LABELS, buildValueLossPartSuggestions, valueLossBaseOnlyPrinciple, valueLossBodyOptions, valueLossCalculatorResponseSchema, valueLossCalculatorSourceParts, valueLossCalculatorVehicleContext, type ValueLossCalculatorResponse, type ValueLossPartCoverage } from '@hasarbotu/contracts'
 import { canUsePermission } from '../../app/permissions'
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { useSession } from '../../app/sessionContext'
 import type { DataSourceKind } from '../../data/ports'
 import { TrafficValueLossError, type TrafficValueLossPartCatalogRecord } from '../../data/trafficValueLossPort'
 import { createHttpValueLossCalculatorAdapter, type ValueLossCalculatorPort } from '../../data/valueLossCalculatorPort'
 import type { CaseRecord } from '../../types/case'
-import { VEHICLE_GROUPS, calculatorDraftSchema, calculatorRequest, initialCalculatorDraft, type CalculatorDraft, type CalculatorPartDraft } from './value-loss-calculator-form'
+import { CALCULATOR_OPERATION_LABELS, VEHICLE_GROUPS, calculatorCaseDefaultsSchema, calculatorDraftSchema, calculatorPartDraftSchema, calculatorPartResolution, calculatorRequest, calculatorRequiresMarket, consolidateCalculatorParts, initialCalculatorDraft, type CalculatorDraft, type CalculatorPartDraft } from './value-loss-calculator-form'
+import { calculatorCaseDefaults, mergeCalculatorCaseDefaults } from './value-loss-calculator-prefill'
 
-const OPERATION_LABELS = { replacement: 'Değişim', repair: 'Onarım', paint: 'Boya' } as const
 const formatMoney = (value: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value / 100)
 
-function readRemembered(key: string): { draft: CalculatorDraft; result: ValueLossCalculatorResponse | null } | null {
+function PartReference({ part, draft, catalog, coverage }: { readonly part: CalculatorPartDraft; readonly draft: CalculatorDraft; readonly catalog: TrafficValueLossPartCatalogRecord | null; readonly coverage: ValueLossPartCoverage | undefined }) {
+  if (coverage && !['reference_match', 'documented_base_only'].includes(coverage.reason)) return <p className="value-loss-calculator__reference">{VALUE_LOSS_PART_COVERAGE_LABELS[coverage.reason]}{coverage.manufacturerSource && <> <a href={coverage.manufacturerSource.sourceUrl} target="_blank" rel="noreferrer">{coverage.manufacturerSource.sourceTitle}</a></>}</p>
+  const principle = valueLossBaseOnlyPrinciple(part)
+  if (principle !== null) return <p className="value-loss-calculator__reference">Kaynak rehber {principle}: ek parça / boya katsayısı uygulanmaz. Hasar tutarı üzerinden değerlendirilir; toplam değer kaybı sıfır kabul edilmez.</p>
+  const rule = valueLossCalculatorSourceParts(draft.vehicleType, draft.bodyType, catalog?.parts ?? []).find(rule => rule.stableRuleId === part.stableRuleId)
+  const coefficients = rule?.coefficients
+  if (!coefficients) return <p className="value-loss-calculator__reference">Bu parça için doğrulanmış özel katsayı bulunamadı. Piyasa değer farkı kullanılır.</p>
+  return <details className="value-loss-calculator__reference"><summary>Kaynakla doğrulanmış referans katsayıları</summary>
+    <p>Değişim: {coefficients.replacement ?? 'tanımlı değil'}. Onarım (hafif / orta / ağır): {coefficients.repair ? `${coefficients.repair.light} / ${coefficients.repair.medium} / ${coefficients.repair.heavy}` : 'tanımlı değil'}. Boya (tam / lokal): {coefficients.paint ? `${coefficients.paint.full} / ${coefficients.paint.local}` : 'tanımlı değil'}.</p>
+    <p>Kaynak: 01.07.2026 hesaplama Excel'i. Bunlar referans modelinin katsayılarıdır; güncel SEDDK şablonu piyasa araştırmasını esas alır.</p>
+  </details>
+}
+
+function readRemembered(key: string, item: CaseRecord): { draft: CalculatorDraft; result: ValueLossCalculatorResponse | null } | null {
   try {
     const value = JSON.parse(window.sessionStorage.getItem(key) ?? 'null')
     const draft = calculatorDraftSchema.safeParse(value?.draft)
     if (!draft.success) return null
     const result = valueLossCalculatorResponseSchema.safeParse(value?.result)
-    return { draft: draft.data, result: result.success ? result.data : null }
+    const previousDefaults = calculatorCaseDefaultsSchema.safeParse(value?.caseDefaults)
+    const restored = mergeCalculatorCaseDefaults({ ...draft.data, parts: consolidateCalculatorParts(draft.data.parts) }, calculatorCaseDefaults(item), previousDefaults.success ? previousDefaults.data : { accidentDate: '', vehicleType: 'OTOMOBİL', bodyType: 'unspecified', manufacturer: '', model: '', modelYear: '' })
+    const changed = JSON.stringify(restored) !== JSON.stringify(draft.data)
+    return { draft: restored, result: !changed && value?.verificationVersion === 1 && value?.draft?.formatVersion === 2 && result.success ? result.data : null }
   } catch { return null } // Invalid or unavailable session storage must not prevent calculation.
 }
 
 function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord; readonly port: ValueLossCalculatorPort; readonly storageKey: string }) {
   const { user, reportUnauthorized } = useSession()
   const [initialItem] = useState(item)
-  const [remembered] = useState(() => readRemembered(storageKey))
+  const [remembered] = useState(() => readRemembered(storageKey, item))
+  const sourceDefaults = useRef(calculatorCaseDefaultsSchema.parse(initialCalculatorDraft(item)))
   const [draft, setDraft] = useState(() => remembered?.draft ?? initialCalculatorDraft(item))
   const [result, setResult] = useState<ValueLossCalculatorResponse | null>(() => remembered?.result ?? null)
   const [catalogState, setCatalogState] = useState<{ key: string; data: TrafficValueLossPartCatalogRecord | null; error: boolean }>({ key: '', data: null, error: false })
@@ -38,17 +56,22 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
   const storageWritable = useRef(true)
   const revision = useRef(0)
   const active = useRef(true)
-  const group = VEHICLE_GROUPS[draft.vehicleType]
+  const vehicleContext = valueLossCalculatorVehicleContext(draft.vehicleType, draft.bodyType)
+  const group = vehicleContext.group
   const catalogKey = `${group}:${catalogRetry}`
   const catalog = catalogState.key === catalogKey ? catalogState.data : null
   const catalogError = catalogState.key === catalogKey && catalogState.error
   const modern = !draft.accidentDate || draft.accidentDate >= '2026-07-01'
-  const catalogLoading = modern && catalogState.key !== catalogKey
+  const catalogLoading = catalogState.key !== catalogKey
+  const suggestions = useMemo(() => buildValueLossPartSuggestions(draft.vehicleType, draft.bodyType, catalog?.parts ?? []), [draft.vehicleType, draft.bodyType, catalog])
+  const marketRequired = calculatorRequiresMarket(draft, catalog?.parts)
+  const coverage = useMemo(() => calculatorPartResolution(draft, catalog?.parts ?? []).coverage, [draft, catalog])
+  const market = !modern || draft.calculationBasis === 'market_difference' || marketRequired
   const workingHours = group === 'D'
   const canCalculate = canUsePermission(user, 'analysis_write', ['admin', 'expert', 'case_manager'])
   const remember = useCallback((nextDraft: CalculatorDraft, nextResult: ValueLossCalculatorResponse | null) => {
     if (!storageWritable.current) return
-    try { window.sessionStorage.setItem(storageKey, JSON.stringify({ draft: nextDraft, result: nextResult })) }
+    try { window.sessionStorage.setItem(storageKey, JSON.stringify({ verificationVersion: 1, caseDefaults: sourceDefaults.current, draft: nextDraft, result: nextResult })) }
     catch { storageWritable.current = false; setStorageAvailable(false) }
   }, [storageKey])
 
@@ -82,7 +105,6 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
   }, [port, initialItem, remembered, reportUnauthorized, remember])
 
   useEffect(() => {
-    if (!modern) return
     let current = true
     void port.catalog(item.caseId, group).then(value => {
       if (value.vehicleGroupCode !== group) throw new Error('Unexpected catalog group')
@@ -93,7 +115,7 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
       if (error instanceof TrafficValueLossError && error.kind === 'unauthorized') reportUnauthorized()
     })
     return () => { current = false }
-  }, [port, item.caseId, group, modern, catalogKey, reportUnauthorized])
+  }, [port, item.caseId, group, catalogKey, reportUnauthorized])
 
   const update = (patch: Partial<CalculatorDraft>) => {
     revision.current++
@@ -102,25 +124,35 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
     setChanged(result !== null || changed); setResult(null); setMessage('')
   }
   const updatePart = (id: string, patch: Partial<CalculatorPartDraft>) => {
-    const selected = draft.parts.find(part => part.id === id)
-    update({ parts: draft.parts.map(part => part.id === id ? { ...part, ...patch } : part.stableRuleId === selected?.stableRuleId ? { ...part, ...(patch.priorPartState === undefined ? {} : { priorPartState: patch.priorPartState }), ...(patch.treatment === undefined ? {} : { treatment: patch.treatment }) } : part) })
+    update({ parts: draft.parts.map(part => part.id === id ? { ...part, ...patch } : part) })
   }
-  const addPart = () => {
-    const part = catalog?.parts.find(part => part.label === query || part.stableRuleId === query)
-    if (!part) { setMessage('Listeden geçerli bir parça seçin.'); return }
-    const selected = draft.parts.filter(row => row.stableRuleId === part.stableRuleId)
-    const operation = part.supportedOperations.find(operation => !selected.some(row => row.operation === operation) && !(operation !== 'paint' && selected.some(row => row.operation !== 'paint')))
-    if (!operation) { setMessage('Bu parçanın işlemi zaten eklendi.'); return }
-    update({ parts: [...draft.parts, { id: crypto.randomUUID(), stableRuleId: part.stableRuleId, label: part.label, operation, paintMode: 'full', price: '', labor: '', priceUnknown: false, priorPartState: selected[0]?.priorPartState ?? 'none', treatment: selected[0]?.treatment ?? 'standard' }] })
+  const refreshCaseDefaults = () => {
+    const defaults = calculatorCaseDefaults(item)
+    sourceDefaults.current = calculatorCaseDefaultsSchema.parse(initialCalculatorDraft(item))
+    update(mergeCalculatorCaseDefaults(draft, defaults, draft))
     setQuery('')
   }
+  const updateBody = (bodyType: CalculatorDraft['bodyType']) => {
+    const sameGroup = valueLossCalculatorVehicleContext(draft.vehicleType, bodyType).group === group
+    const allowed = new Set(buildValueLossPartSuggestions(draft.vehicleType, bodyType, sameGroup ? catalog?.parts ?? [] : []).map(part => part.stableRuleId))
+    update({ bodyType, parts: draft.parts.map(part => allowed.has(part.stableRuleId) ? part : { ...part, stableRuleId: '' }) })
+    setQuery('')
+  }
+  const addPart = () => {
+    const part = suggestions.find(part => part.id === query)
+    if (!part) { setMessage('Listeden geçerli bir parça seçin.'); return }
+    if (draft.parts.some(row => row.label === part.label && !row.position)) { setMessage('Bu parça zaten eklendi. Adet alanını veya farklı konum seçeneğini kullanın.'); return }
+    update({ parts: [...draft.parts, calculatorPartDraftSchema.parse({ id: crypto.randomUUID(), stableRuleId: part.stableRuleId ?? '', label: part.label, operation: part.supportedOperations[0] ?? 'replacement', paintMode: 'full', price: '', labor: '', priceUnknown: false, priorPartState: 'none', treatment: 'standard' })] })
+    setQuery('')
+  }
+  const addCustomPart = () => update({ parts: [...draft.parts, calculatorPartDraftSchema.parse({ id: crypto.randomUUID(), stableRuleId: '', label: '', operation: 'replacement', paintMode: 'full', price: '', labor: '', priceUnknown: false, priorPartState: 'none', treatment: 'standard' })] })
   const calculate = async (event: FormEvent) => {
     event.preventDefault()
     if (busy || !canCalculate) return
     setMessage(''); setResult(null)
     remember(draft, null)
     let input
-    try { input = calculatorRequest(draft) } catch (error) { setMessage(reportError(error)); return }
+    try { input = calculatorRequest(draft, catalog?.parts) } catch (error) { setMessage(reportError(error)); return }
     const started = revision.current
     setBusy(true)
     try {
@@ -131,41 +163,59 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
   }
 
   return <section className="value-loss-calculator" aria-labelledby="value-loss-title">
-    <header><div><h2 id="value-loss-title">Değer Kaybı Hesapla</h2><p>Bilgileri girin, hasarlı parçaları seçin ve tutarı hesaplayın.</p></div><Calculator size={22} /></header>
+    <header><div><h2 id="value-loss-title">Değer Kaybı Hesapla</h2><p>Dosyada bulunan kaza ve araç bilgileri otomatik alınır. Eksik bilgileri tamamlayıp hasarlı parçaları seçin.</p></div><Calculator size={22} /></header>
     <form onSubmit={event => void calculate(event)} noValidate>
+      <button className="button button--secondary" type="button" onClick={refreshCaseDefaults} disabled={!Object.values(calculatorCaseDefaults(item)).some(Boolean)}>Dosya bilgilerini al</button>
       <div className="value-loss-calculator__fields">
         <label className="form-field"><span>Kaza tarihi</span><input type="date" value={draft.accidentDate} onChange={event => update({ accidentDate: event.target.value })} /></label>
-        {modern && <label className="form-field"><span>Araç türü</span><select value={draft.vehicleType} onChange={event => {
+        <label className="form-field"><span>Araç türü</span><select value={draft.vehicleType} onChange={event => {
           const vehicleType = event.target.value as CalculatorDraft['vehicleType']
-          update({ vehicleType, ...(VEHICLE_GROUPS[vehicleType] !== group ? { parts: [] } : {}), ...((VEHICLE_GROUPS[vehicleType] === 'D') !== workingHours ? { usageValue: '' } : {}) }); setQuery('')
-        }}>{Object.keys(VEHICLE_GROUPS).map(type => <option key={type}>{type}</option>)}</select></label>}
+          update({ vehicleType, bodyType: 'unspecified', parts: [], ...((VEHICLE_GROUPS[vehicleType] === 'D') !== workingHours ? { usageValue: '' } : {}) }); setQuery('')
+        }}>{Object.keys(VEHICLE_GROUPS).map(type => <option key={type}>{type}</option>)}</select></label>
+        <label className="form-field"><span>Kasa / araç yapısı</span><select value={draft.bodyType} onChange={event => updateBody(event.target.value as CalculatorDraft['bodyType'])}>{valueLossBodyOptions(draft.vehicleType).map(body => <option key={body} value={body}>{VALUE_LOSS_BODY_LABELS[body]}</option>)}</select></label>
+        <label className="form-field"><span>Marka</span><input value={draft.manufacturer} maxLength={120} onChange={event => update({ manufacturer: event.target.value })} placeholder="Üretici / model eşleştirmesi için" /></label>
+        <label className="form-field"><span>Model</span><input value={draft.model} maxLength={160} onChange={event => update({ model: event.target.value })} placeholder="Örn. Model 3" /></label>
+        <label className="form-field"><span>Hesap yöntemi</span><select value={market ? 'market_difference' : 'reference'} onChange={event => update({ calculationBasis: event.target.value as CalculatorDraft['calculationBasis'] })}><option value="reference" disabled={!modern || marketRequired}>Referans tahmin</option><option value="market_difference">Piyasa değer farkı</option></select></label>
         {modern && <><label className="form-field"><span>Model yılı</span><input inputMode="numeric" value={draft.modelYear} onChange={event => update({ modelYear: event.target.value })} placeholder="2024" /></label>
         <label className="form-field"><span>{workingHours ? 'Çalışma saati' : 'Kilometre'}</span><input inputMode="numeric" value={draft.usageValue} onChange={event => update({ usageValue: event.target.value })} placeholder="50000" /></label></>}
         <label className="form-field"><span>Rayiç bedeli (TL)</span><input inputMode="decimal" value={draft.marketValue} onChange={event => update({ marketValue: event.target.value })} placeholder="1.000.000" /></label>
-        {modern ? <label className="form-field"><span>Hasar tutarı (TL)</span><input inputMode="decimal" value={draft.damageAmount} onChange={event => update({ damageAmount: event.target.value })} placeholder="100.000" /></label>
+        {!market ? <label className="form-field"><span>Hasar tutarı (TL)</span><input inputMode="decimal" value={draft.damageAmount} onChange={event => update({ damageAmount: event.target.value })} placeholder="100.000" /></label>
           : <label className="form-field"><span>Onarım sonrası piyasa değeri (TL)</span><input inputMode="decimal" value={draft.postRepairMarketValue} onChange={event => update({ postRepairMarketValue: event.target.value })} /></label>}
         <label className="form-field"><span>Araç durumu</span><select value={draft.vehicleCondition} onChange={event => update({ vehicleCondition: event.target.value as CalculatorDraft['vehicleCondition'] })}><option value="normal">Normal</option><option value="prior_heavy_damage">Önceki ağır hasar</option><option value="current_heavy_damage">Mevcut ağır / pert hasar</option><option value="antique">Antika / koleksiyon</option><option value="foreign_plate">Yabancı plaka</option></select></label>
-        {modern ? <><label className="form-field"><span>Önceki hasar sayısı</span><input inputMode="numeric" value={draft.previousDamageCount} onChange={event => update({ previousDamageCount: event.target.value })} /></label><label className="value-loss-calculator__check"><input type="checkbox" checked={draft.commercialOrRental} onChange={event => update({ commercialOrRental: event.target.checked })} /> Ticari / kiralık kullanım</label></>
+        {!market ? <><label className="form-field"><span>Önceki hasar sayısı</span><input inputMode="numeric" value={draft.previousDamageCount} onChange={event => update({ previousDamageCount: event.target.value })} /></label><label className="value-loss-calculator__check"><input type="checkbox" checked={draft.commercialOrRental || vehicleContext.commercialRequired} disabled={vehicleContext.commercialRequired} onChange={event => update({ commercialOrRental: event.target.checked })} /> Ticari / kiralık kullanım</label></>
           : <label className="form-field"><span>Karşı taraf kusuru (%)</span><input inputMode="decimal" value={draft.faultPercent} onChange={event => update({ faultPercent: event.target.value })} /></label>}
       </div>
-      {modern && <section className="value-loss-calculator__parts" aria-label="Hasarlı parçalar">
-        <div className="value-loss-calculator__add"><label className="form-field"><span>Hasarlı parça</span><input list="calculator-part-catalog" value={query} onChange={event => setQuery(event.target.value)} placeholder={catalogLoading ? 'Parçalar yükleniyor…' : 'Parça adı yazın veya seçin'} disabled={catalogLoading || catalogError} /><datalist id="calculator-part-catalog">{catalog?.parts.map(part => <option key={part.stableRuleId} value={part.label} />)}</datalist></label><button className="button button--secondary" type="button" onClick={addPart} disabled={!catalog || catalogLoading}><CirclePlus size={15} /> Ekle</button></div>
+      {vehicleContext.commercialRequired && <p className="value-loss-calculator__basis">Kaynak rehber 3.8 uyarınca bu araç yapısında otomobil tablosu ve ticari değerlendirme birlikte uygulanır.</p>}
+      <section className="value-loss-calculator__parts" aria-label="Hasarlı parçalar">
+        <p className="value-loss-calculator__basis">Parça önerilerini aracın gerçek yapısıyla karşılaştırın. Listede olmayan parçayı adını yazarak ekleyebilirsiniz.</p>
+        <div className="value-loss-calculator__add"><div className="form-field"><span>Hasarlı parça</span><SearchableSelect label="Hasarlı parça" value={query} onChange={setQuery} options={suggestions.map(part => ({ value: part.id, label: part.label }))} disabled={catalogLoading || catalogError} /></div><button className="button button--secondary" type="button" onClick={addPart} disabled={catalogLoading || !query || draft.parts.length >= 100}><CirclePlus size={15} /> Ekle</button></div>
+        <button className="button button--secondary value-loss-calculator__custom" type="button" onClick={addCustomPart} disabled={draft.parts.length >= 100}><CirclePlus size={15} /> Listede olmayan parça ekle</button>
         {catalogError && <p role="alert">Parça listesi yüklenemedi. <button type="button" className="button button--secondary" onClick={() => setCatalogRetry(value => value + 1)}>Yeniden dene</button></p>}
-        {draft.parts.map(part => <div className="value-loss-calculator__part" key={part.id}>
-          <strong>{part.label}</strong>
+        {draft.parts.map((part, index) => <div className="value-loss-calculator__part" key={part.id}>
+          <strong>{part.label || 'Yeni parça'}</strong>
           <label className="form-field"><span>İşlem</span><select aria-label={`${part.label} işlemi`} value={part.operation} onChange={event => {
             const operation = event.target.value as CalculatorPartDraft['operation']
-            if (draft.parts.some(other => other.id !== part.id && other.stableRuleId === part.stableRuleId && (other.operation === operation || other.operation !== 'paint' && operation !== 'paint'))) { setMessage('Bu parçada değişim ve onarım birlikte seçilemez.'); return }
-            updatePart(part.id, { operation })
-          }}>{(catalog?.parts.find(row => row.stableRuleId === part.stableRuleId)?.supportedOperations ?? [part.operation]).map(operation => <option key={operation} value={operation}>{OPERATION_LABELS[operation]}</option>)}</select></label>
+            updatePart(part.id, { operation, treatment: operation === 'paintless_repair' ? 'paintless_repair' : part.treatment === 'paintless_repair' ? 'standard' : part.treatment })
+          }}>{Object.entries(CALCULATOR_OPERATION_LABELS).map(([operation, label]) => <option key={operation} value={operation}>{label}</option>)}</select></label>
           <label className="form-field"><span>Önceki durum</span><select aria-label={`${part.label} önceki durumu`} value={part.priorPartState} onChange={event => updatePart(part.id, { priorPartState: event.target.value as CalculatorPartDraft['priorPartState'] })}><option value="none">Hasarsız</option><option value="previously_damaged">Önceden hasarlı</option><option value="previously_repaired_detachable">Sökülebilir parça onarımlı</option><option value="previously_repaired_welded">Sabit parça onarımlı</option></select></label>
           <button className="icon-button" type="button" aria-label={`${part.label} işlemini kaldır`} onClick={() => update({ parts: draft.parts.filter(row => row.id !== part.id) })}><Trash2 size={16} /></button>
-          {part.operation === 'paint' && <label className="form-field"><span>Boya türü</span><select aria-label={`${part.label} boya türü`} value={part.paintMode} onChange={event => updatePart(part.id, { paintMode: event.target.value as 'full' | 'local' })}><option value="full">Tam boya</option><option value="local">Lokal boya</option></select></label>}
-          {part.operation === 'repair' && <div className="value-loss-calculator__repair"><label className="value-loss-calculator__check"><input type="checkbox" checked={part.priceUnknown} onChange={event => updatePart(part.id, { priceUnknown: event.target.checked })} /> Parça bedeli bilinmiyor</label>{!part.priceUnknown && <><label className="form-field"><span>Yeni parça bedeli (TL)</span><input inputMode="decimal" aria-label={`${part.label} yeni parça bedeli`} value={part.price} onChange={event => updatePart(part.id, { price: event.target.value })} /></label><label className="form-field"><span>Onarım işçiliği (TL)</span><input inputMode="decimal" aria-label={`${part.label} onarım işçiliği`} value={part.labor} onChange={event => updatePart(part.id, { labor: event.target.value })} /></label></>}<small>İskontosuz, KDV hariç bedelleri girin.{part.priceUnknown && ' Bedel bilinmiyorsa ağır onarım katsayısı uygulanır.'}</small></div>}
-          <details><summary>Özel işlem</summary><select aria-label={`${part.label} özel işlemi`} value={part.treatment} onChange={event => updatePart(part.id, { treatment: event.target.value as CalculatorPartDraft['treatment'] })}><option value="standard">Standart</option><option value="paintless_repair">Boyasız onarım</option><option value="plastic_or_unpainted">Plastik / boyasız parça</option><option value="accessory">Aksesuar</option><option value="superstructure">Üstyapı</option></select></details>
+          <div className="value-loss-calculator__part-facts">
+            {!part.stableRuleId && <label className="form-field"><span>Parça adı</span><input aria-label={`${index + 1}. parça adı`} value={part.label} maxLength={200} onChange={event => updatePart(part.id, { label: event.target.value })} placeholder="Örn. ön grenaj" /></label>}
+            <label className="form-field"><span>Konum / bölüm</span><input aria-label={`${part.label || 'Yeni parça'} konumu`} value={part.position} maxLength={120} onChange={event => updatePart(part.id, { position: event.target.value })} placeholder="Örn. sağ ön, 1. ve 2. bölüm" /></label>
+            <label className="form-field"><span>Adet</span><input aria-label={`${part.label || 'Yeni parça'} adedi`} inputMode="numeric" value={part.quantity} onChange={event => updatePart(part.id, { quantity: event.target.value })} /></label>
+            <label className="form-field"><span>Malzeme / nitelik</span><select aria-label={`${part.label || 'Yeni parça'} malzemesi`} value={part.material} onChange={event => updatePart(part.id, { material: event.target.value as CalculatorPartDraft['material'] })}><option value="unspecified">Belirtilmedi</option><option value="steel">Çelik / sac</option><option value="aluminium">Alüminyum</option><option value="plastic_bodywork">Plastik karoseri / grenaj</option><option value="plastic">Diğer plastik</option><option value="composite">Kompozit</option><option value="glass">Cam</option><option value="mechanical">Mekanik</option><option value="electrical">Elektrik / elektronik</option><option value="accessory">Aksesuar</option><option value="superstructure">Üstyapı</option><option value="other">Diğer</option></select></label>
+          </div>
+          <button type="button" className="button button--secondary value-loss-calculator__another" onClick={() => update({ parts: [...draft.parts, { ...part, id: crypto.randomUUID(), position: '', quantity: '1' }] })} disabled={draft.parts.length >= 100}>Aynı parçaya farklı konum ekle</button>
+          <PartReference part={part} draft={draft} catalog={catalog} coverage={coverage.find(entry => entry.entryId === part.id)} />
+          {['paint', 'repair_paint', 'replacement_paint'].includes(part.operation) && <label className="form-field"><span>Boya türü</span><select aria-label={`${part.label} boya türü`} value={part.paintMode} onChange={event => updatePart(part.id, { paintMode: event.target.value as 'full' | 'local' })}><option value="full">Tam boya</option><option value="local">Lokal boya</option></select></label>}
+          {!market && valueLossBaseOnlyPrinciple(part) === null && ['repair', 'repair_paint'].includes(part.operation) && <div className="value-loss-calculator__repair"><label className="value-loss-calculator__check"><input type="checkbox" checked={part.priceUnknown} onChange={event => updatePart(part.id, { priceUnknown: event.target.checked })} /> Parça bedeli bilinmiyor</label>{!part.priceUnknown && <><label className="form-field"><span>Yeni parça bedeli (TL)</span><input inputMode="decimal" aria-label={`${part.label} yeni parça bedeli`} value={part.price} onChange={event => updatePart(part.id, { price: event.target.value })} /></label><label className="form-field"><span>Onarım işçiliği (TL)</span><input inputMode="decimal" aria-label={`${part.label} onarım işçiliği`} value={part.labor} onChange={event => updatePart(part.id, { labor: event.target.value })} /></label></>}<small>İskontosuz, KDV hariç bedelleri girin.{part.priceUnknown && ' Bedel bilinmiyorsa ağır onarım katsayısı uygulanır.'}</small></div>}
+          {part.operation !== 'paintless_repair' && <details><summary>Parça niteliği</summary><label className="form-field"><span>Parçanın malzemesi / niteliği</span><select aria-label={`${part.label} parça niteliği`} value={part.treatment} onChange={event => updatePart(part.id, { treatment: event.target.value as CalculatorPartDraft['treatment'] })}><option value="standard">Standart</option><option value="plastic_or_unpainted">Plastik / boyasız parça</option><option value="accessory">Aksesuar</option><option value="superstructure">Üstyapı</option>{part.treatment === 'paintless_repair' && <option value="paintless_repair">Boyasız onarım (önceki kayıt)</option>}</select></label><small>Bu nitelikler referans hesabını etkiler. Tek başına tazminat hakkını belirlemez.</small></details>}
         </div>)}
-      </section>}
-      <footer className="value-loss-calculator__footer"><button className="button button--primary" disabled={!canCalculate || busy} type="submit">{busy ? <LoaderCircle className="spin" size={17} /> : <Calculator size={17} />}{busy ? 'Hesaplanıyor…' : 'Hesapla'}</button><div aria-live="polite">{result?.amountMinor != null ? <><span>Değer kaybı tutarı</span><strong>{formatMoney(result.amountMinor)}</strong></> : <span>{changed ? 'Bilgiler değişti. Yeniden hesaplayın.' : 'Hesaplanan tutar burada görünecek.'}</span>}</div></footer>
+      </section>
+      {!draft.manufacturer.trim() && !draft.model.trim() && <p className="value-loss-calculator__basis" role="status">Marka ve model girilmedi. Liste araç türüne ait referans önerileridir; üretici / model / VIN doğrulaması yapılmış değildir.</p>}
+      {marketRequired && <p className="value-loss-calculator__basis" role="status">Seçilen parçaların üretici uygunluğu, işlem katsayısı, malzemesi veya adedi için tam eşleştirme yok. Araştırmayla belirlenen onarım sonrası piyasa değerini girerek bütün araç için piyasa farkını hesaplayın.</p>}
+      <footer className="value-loss-calculator__footer"><button className="button button--primary" disabled={!canCalculate || busy} type="submit">{busy ? <LoaderCircle className="spin" size={17} /> : <Calculator size={17} />}{busy ? 'Hesaplanıyor…' : 'Hesapla'}</button><div aria-live="polite">{result?.amountMinor != null ? <><span>{result.calculationMethod === 'real_market_analysis' ? 'Tahmini değer kaybı' : 'Piyasa değer farkı'}</span><strong>{formatMoney(result.amountMinor)}</strong></> : <span>{changed ? 'Bilgiler değişti. Yeniden hesaplayın.' : 'Hesaplanan tutar burada görünecek.'}</span>}</div></footer>
+      <p className="value-loss-calculator__basis">Piyasa değerlerini kaza tarihi koşullarında, aracın geçmiş hasarını da dikkate alarak girin. Sonuç girilen değerlere dayanır. <a href="https://seddk.gov.tr/UploadContent/Documents/2026-11_Say%C4%B1l%C4%B1_Genelge.pdf" target="_blank" rel="noreferrer">SEDDK 2026/11 rapor şablonu</a></p>
       {!canCalculate && <p role="status">Hesaplama yapmak için yetkiniz bulunmuyor.</p>}
       {result?.issues.map((issue, index) => <p className="value-loss-calculator__error" role="alert" key={`${issue.field}-${index}`}>{issue.message}</p>)}
       {message && <p className="value-loss-calculator__error" role="alert">{message}</p>}
@@ -179,5 +229,5 @@ export function ValueLossCalculator({ item, source, port }: { readonly item: Cas
   const calculator = useMemo(() => port ?? createHttpValueLossCalculatorAdapter(), [port])
   if (item.type !== 'Trafik' || source !== 'api') return <div className="document-module-state" role="status">Değer kaybı hesabı Trafik dosyaları için kullanılabilir.</div>
   const scope = `hasarbotu-value-loss-calculator-v1:${session.user?.organizationId}:${session.user?.id}:${item.caseId}`
-  return <CalculatorForm key={scope} item={item} port={calculator} storageKey={scope} />
+  return <CalculatorForm key={`${scope}:${JSON.stringify(calculatorCaseDefaults(item))}`} item={item} port={calculator} storageKey={scope} />
 }
