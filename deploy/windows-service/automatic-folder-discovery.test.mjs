@@ -9,7 +9,7 @@ import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/databas
 import { startAutomaticFolderDiscovery } from './automatic-folder-discovery.mjs'
 import { writeFile } from 'node:fs/promises'
 
-test('real background scans discover folders, follow stable identity moves and reconcile the office-only inventory', { skip: !process.env.TEST_DATABASE_URL, timeout: 150_000 }, async () => {
+test('real background scans discover folders, follow stable identity moves and reconcile the office-only inventory', { skip: !process.env.TEST_DATABASE_URL, timeout: 180_000 }, async () => {
   const database = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL)
   const pool = new pg.Pool({ connectionString: database.url })
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
@@ -21,6 +21,23 @@ test('real background scans discover folders, follow stable identity moves and r
   await cp(join(repo, 'services/api/package.json'), join(runtime, 'services/api/package.json'))
   await symlink(join(repo, 'node_modules'), join(runtime, 'services/api/node_modules'), process.platform === 'win32' ? 'junction' : 'dir')
   await cp(join(repo, 'deploy/windows-service'), join(runtime, 'tools'), { recursive: true, filter: path => !path.endsWith('.test.mjs') && !path.endsWith('.tests.ps1') })
+  const unstableMarker = join(runtime, 'tools', 'unstable-snapshot.fixture')
+  await rename(join(runtime, 'tools/pcloud-maintenance-window-gate.mjs'), join(runtime, 'tools/real-pcloud-maintenance-window-gate.mjs'))
+  await writeFile(join(runtime, 'tools/pcloud-maintenance-window-gate.mjs'), `
+    import { existsSync, unlinkSync } from 'node:fs'
+    import { withConsistentPcloudDatabase as realSnapshot } from './real-pcloud-maintenance-window-gate.mjs'
+    export * from './real-pcloud-maintenance-window-gate.mjs'
+    export async function withConsistentPcloudDatabase(...args) {
+      const marker = new URL('./unstable-snapshot.fixture', import.meta.url)
+      if (existsSync(marker)) {
+        unlinkSync(marker)
+        const error = new Error('Synthetic concurrent pCloud write')
+        error.safeCode = 'PCLOUD_DATABASE_SNAPSHOT_UNSTABLE'
+        throw error
+      }
+      return realSnapshot(...args)
+    }
+  `)
   await mkdir(join(source, '2026/EKİM 2026'), { recursive: true })
   const sqlitePath = join(directory, 'pcloud-test.db'), sqlite = new DatabaseSync(sqlitePath)
   sqlite.exec("CREATE TABLE folder(id INTEGER PRIMARY KEY,parentfolderid INTEGER,name TEXT); INSERT INTO folder VALUES(100,0,'SyntheticCompany'),(101,100,'2026'),(102,101,'EKİM 2026')")
@@ -139,6 +156,20 @@ test('real background scans discover folders, follow stable identity moves and r
     sqlite.exec('DELETE FROM folder WHERE id=103')
     assert.equal((await officeCycle()).archived, 1)
     assert.deepEqual((await pool.query('SELECT plate_normalized FROM cases WHERE NOT is_archived')).rows, [{ plate_normalized: '06NEW123' }])
+    const beforeUnstableSnapshot = (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows
+    await writeFile(unstableMarker, 'one transient snapshot failure')
+    const recovery = new AbortController(), recoveryDeadline = setTimeout(() => recovery.abort(), 25_000)
+    let unstableBlocked = false, recovered = false
+    try {
+      await startAutomaticFolderDiscovery(configFile, { signal: recovery.signal, onStatus: text => {
+        const status = JSON.parse(text)
+        if (status.status === 'BLOCKED') unstableBlocked = true
+        if (unstableBlocked && status.status === 'PASS') { recovered = true; recovery.abort() }
+      } })
+    } finally { clearTimeout(recoveryDeadline); recovery.abort() }
+    assert.equal(unstableBlocked, true, 'An unstable snapshot must fail closed')
+    assert.equal(recovered, true, 'A transient pCloud write must not terminate background discovery')
+    assert.deepEqual((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows, beforeUnstableSnapshot)
   } finally {
     clearTimeout(deadline); abort.abort(); sqlite.close(); await pool.end()
     if (originalUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalUrl

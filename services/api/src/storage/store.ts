@@ -13,6 +13,7 @@ import { uuidv7 } from '@hasarbotu/database'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
 import { enqueueVerifyJob } from '../agent/enqueue.js'
+import { hasActiveFieldPhoto } from '../field-photos/active.js'
 
 /**
  * Depolama referansi / vaka konumu veri katmani (Paket 12).
@@ -134,10 +135,11 @@ export function createStorageStore(pool: pg.Pool) {
     ): Promise<AssignOutcome> {
       return withTransaction(pool, async (client) => {
         const caseRes = await client.query(
-          'SELECT 1 FROM cases WHERE id::text = $1 AND organization_id = $2',
+          'SELECT 1 FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE',
           [caseId, actor.organizationId],
         )
         if (caseRes.rowCount === 0) return { kind: 'not_found' }
+        if (await hasActiveFieldPhoto(client, actor.organizationId, caseId)) return { kind: 'version_conflict' }
 
         const rootRes = await client.query(
           'SELECT 1 FROM storage_roots WHERE organization_id = $1 AND root_key = $2 AND is_active = true',

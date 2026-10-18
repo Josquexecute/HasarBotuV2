@@ -14,7 +14,9 @@ function Reset-Fixture {
     $script:responses = [Collections.Generic.Queue[object]]::new()
     $script:responses.Enqueue(@{ status = 'ok' })
     $script:responses.Enqueue(@{ status = 'ok' })
-    foreach ($name in @('postgresql-x64-17', 'Tailscale', 'hasarbotu-api', 'hasarbotu-lan-https', 'hasarbotu-file-agent', 'hasarbotu-folder-discovery')) {
+    $script:responses.Enqueue(@{ status = 'ok' })
+    $script:stopApiOnHttps = $false
+    foreach ($name in @('postgresql-x64-17', 'Tailscale', 'hasarbotu-api', 'hasarbotu-field-portal', 'hasarbotu-lan-https', 'hasarbotu-file-agent', 'hasarbotu-folder-discovery')) {
         $service = [pscustomobject]@{ Name = $name; Status = 'Stopped'; FailStart = $false; Race = $false }
         $service | Add-Member ScriptMethod Start {
             $script:events.Add("start:$($this.Name)")
@@ -32,6 +34,10 @@ function Get-Service { param([string[]]$Name, $ErrorAction) foreach ($item in $N
 function Invoke-RestMethod {
     param($Uri, $TimeoutSec, $ErrorAction)
     $script:events.Add("http:$Uri")
+    if ($Uri -like 'https:*') {
+        if ($script:services['hasarbotu-field-portal'].Status -ne 'Running') { throw 'HTTPS requires the field portal' }
+        if ($script:stopApiOnHttps) { $script:services['hasarbotu-api'].Status = 'Stopped' }
+    }
     $response = $script:responses.Dequeue()
     if ($response -is [Exception]) { throw $response }
     return $response
@@ -40,10 +46,11 @@ function Start-Sleep { param($Milliseconds) $script:events.Add('wait') }
 
 Reset-Fixture
 $result = Start-HasarBotuOfficeServer
-Assert-True ($result.status -eq 'PASS' -and $result.services.Count -eq 6) 'all six services are verified'
-Assert-True (($script:events -join '|') -eq 'start:postgresql-x64-17|start:Tailscale|start:hasarbotu-api|http:http://127.0.0.1:3100/health|start:hasarbotu-lan-https|start:hasarbotu-file-agent|start:hasarbotu-folder-discovery|http:https://desktop-efn2g33.tail276cda.ts.net/health') 'database and API readiness precede workers; HTTPS is checked'
+Assert-True ($result.status -eq 'PASS' -and $result.services.Count -eq 7 -and $result.fieldPortalHealthy) 'all seven services and field portal readiness are verified'
+Assert-True (($script:events -join '|') -eq 'start:postgresql-x64-17|start:Tailscale|start:hasarbotu-api|http:http://127.0.0.1:3100/health|start:hasarbotu-field-portal|start:hasarbotu-lan-https|start:hasarbotu-file-agent|start:hasarbotu-folder-discovery|http:https://desktop-efn2g33.tail276cda.ts.net/health|http:https://desktop-efn2g33.tail276cda.ts.net/field-health') 'API readiness precedes workers and the portal starts before HTTPS checks'
 $script:events.Clear()
 $script:responses.Enqueue(@{ status = 'ok' }); $script:responses.Enqueue(@{ status = 'ok' })
+$script:responses.Enqueue(@{ status = 'ok' })
 [void](Start-HasarBotuOfficeServer)
 Assert-True (@($script:events | Where-Object { $_ -like 'start:*' }).Count -eq 0) 'already-running services are not started again'
 
@@ -57,6 +64,19 @@ $failed = $false
 try { [void](Start-HasarBotuOfficeServer) } catch { $failed = $_.Exception.Message -match 'Service logon failed' }
 Assert-True $failed 'a real service start error is preserved'
 Assert-True (-not $script:events.Contains('start:hasarbotu-file-agent')) 'workers stay untouched after an API startup failure'
+
+Reset-Fixture
+$script:services['hasarbotu-field-portal'].FailStart = $true
+$failed = $false
+try { [void](Start-HasarBotuOfficeServer) } catch { $failed = $_.Exception.Message -match 'Service logon failed' }
+Assert-True $failed 'a failed portal startup prevents a false success'
+Assert-True (@($script:events | Where-Object { $_ -like 'http:https:*' }).Count -eq 0) 'HTTPS readiness is not checked before the portal starts'
+
+Reset-Fixture
+$script:stopApiOnHttps = $true
+$failed = $false
+try { [void](Start-HasarBotuOfficeServer) } catch { $failed = $_.Exception.Message -match 'hasarbotu-api' }
+Assert-True $failed 'an orphan HTTP listener cannot hide a stopped API service'
 
 Reset-Fixture
 $script:responses.Clear()

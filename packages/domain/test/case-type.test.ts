@@ -21,8 +21,8 @@ describe('CaseType', () => {
     expect(isCaseType('Trafik')).toBe(false)
   })
 
-  it('değer kaybını Trafik için zorunlu, Kasko için zorunlu değil olarak belirler', () => {
-    expect(isValueLossRequired('traffic')).toBe(true)
+  it('değer kaybı hesaplamasını her iki dosya türü için isteğe bağlı tutar', () => {
+    expect(isValueLossRequired('traffic')).toBe(false)
     expect(isValueLossRequired('casco')).toBe(false)
   })
 

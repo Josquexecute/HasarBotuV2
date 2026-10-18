@@ -15,8 +15,8 @@ import { useAssistantAppearance } from './assistantAppearanceContext'
 import { appearanceStyle } from './appearance'
 
 type MenuAction = 'open' | 'notifications' | 'settings' | 'hide' | 'reset' | 'close'
-type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: MenuAction): void } }
-const choose = (action: MenuAction) => (window as AssistantWindow).hasarbotuAssistantMenu?.choose(action)
+type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: MenuAction, caseId?: string): void } }
+const choose = (action: MenuAction, caseId?: string) => (window as AssistantWindow).hasarbotuAssistantMenu?.choose(action, caseId)
 const dateTime = (value: string | null) => value ? new Date(value).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }) : '—'
 
 function CaseWorkspace({ item, cases, operations }: { item: CaseRecord; cases: CasesDataPort; operations?: CaseOperationsPort }) {
@@ -176,6 +176,7 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations }: { case
 
 export function DesktopAssistantPanel() {
   const session = useSession()
+  const selectedCaseId = useAssistantCaseSelection(session.user?.id ?? 'anonymous')
   const appearance = useAssistantAppearance()
   const native = (window as AssistantWindow).hasarbotuAssistantMenu
   useEffect(() => {
@@ -190,7 +191,7 @@ export function DesktopAssistantPanel() {
         <AssistantCaseSearch key={session.user!.id} />
       </>}
     </div>
-    <nav className="assistant-native-actions" aria-label="Kısayollar"><button disabled={!native} onClick={() => choose('open')}>{session.status === 'authenticated' ? 'Uygulamayı aç' : 'Giriş yap'}</button><button disabled={!native} onClick={() => choose('notifications')}>Bildirimler</button><button disabled={!native} onClick={() => choose('settings')}>Ayarlar</button></nav>
+    <nav className="assistant-native-actions" aria-label="Kısayollar"><button disabled={!native} onClick={() => choose('open', session.status === 'authenticated' ? selectedCaseId ?? undefined : undefined)}>{session.status === 'authenticated' ? 'Uygulamayı aç' : 'Giriş yap'}</button><button disabled={!native} onClick={() => choose('notifications', session.status === 'authenticated' ? selectedCaseId ?? undefined : undefined)}>Bildirimler</button><button disabled={!native} onClick={() => choose('settings')}>Ayarlar</button></nav>
     <footer><button disabled={!native} onClick={() => choose('hide')}>Gizle</button><button disabled={!native} onClick={() => choose('reset')}>Konumu sıfırla</button></footer>
   </main>
 }

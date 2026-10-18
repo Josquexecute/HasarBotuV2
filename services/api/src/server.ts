@@ -78,6 +78,7 @@ export async function startServer(): Promise<void> {
   }
 
   const app = buildApp({
+    ...(config.fieldPhotoDirectory ? { fieldPhotoDirectory: config.fieldPhotoDirectory } : {}),
     ...(config.desktopReleasesDirectory ? { desktopReleasesDirectory: config.desktopReleasesDirectory } : {}),
     ...(config.google ? { google: config.google } : {}),
     logLevel: config.logLevel,

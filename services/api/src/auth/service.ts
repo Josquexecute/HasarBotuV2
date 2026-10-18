@@ -9,7 +9,6 @@ import { withTransaction } from '../db/executor.js'
 import type { AuditService } from '../audit/service.js'
 
 /** Oturum ve kilitleme politikasi (HB-2026-011). */
-export const SESSION_TTL_SECONDS = 12 * 60 * 60
 export const MAX_FAILED_LOGINS = 5
 export const LOCKOUT_MINUTES = 15
 
@@ -19,7 +18,7 @@ export type LoginOutcome =
   | {
       readonly kind: 'ok'
       readonly token: string
-      readonly expiresAt: Date
+      readonly expiresAt: Date | null
       readonly user: SessionUser
     }
 
@@ -39,6 +38,7 @@ export interface LoginInput {
   readonly password: string
   readonly ip: string
   readonly requestId: string
+  readonly rememberMe?: boolean
 }
 
 export interface AuthServiceDeps {
@@ -141,11 +141,10 @@ export async function login(deps: AuthServiceDeps, input: LoginInput): Promise<L
       return { kind: 'invalid' }
     }
     const token = generateSessionToken()
-    const ttlSeconds = deps.sessionTtlSeconds ?? SESSION_TTL_SECONDS
-    const expiresAt = new Date(Date.now() + ttlSeconds * 1000)
+    const expiresAt = deps.sessionTtlSeconds === undefined ? null : new Date(Date.now() + deps.sessionTtlSeconds * 1000)
     if (current.failedLoginCount > 0) await deps.store.resetFailedLogins(current.id, client)
     await deps.store.createSession(
-      { tokenHash: hashSessionToken(token), userId: user.id, organizationId: user.organizationId, expiresAt },
+      { tokenHash: hashSessionToken(token), userId: user.id, organizationId: user.organizationId, expiresAt, persistent: input.rememberMe !== false },
       client,
     )
     await deps.audit.record(client, { ...base, action: 'auth.login_succeeded' })

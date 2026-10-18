@@ -58,9 +58,9 @@ const KascoMandatoryCheckModule = lazy(async () => {
   const module = await import('./KascoMandatoryCheckModule')
   return { default: module.KascoMandatoryCheckModule }
 })
-const TrafficValueLossApiModule = lazy(async () => {
-  const module = await import('./TrafficValueLossApiModule')
-  return { default: module.TrafficValueLossApiModule }
+const ValueLossCalculator = lazy(async () => {
+  const module = await import('./ValueLossCalculator')
+  return { default: module.ValueLossCalculator }
 })
 const CaseOperationsApiModule = lazy(async () => {
   const module = await import('./CaseOperationsApiModule')
@@ -448,7 +448,7 @@ function CaseDetail() {
               ? <PertApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
               : <HeavyDamageModule item={item} />
               : activeTab === 'Değer Kaybı' ? source === 'api'
-                ? <TrafficValueLossApiModule item={item} source={source} />
+                ? <ValueLossCalculator item={item} source={source} />
                 : <ValueLossModule item={item} onNotice={setPrototypeNotice} />
                 : activeTab === 'Raporlar ve Ücretler' ? source === 'api'
                   ? <CaseFeeApiModule item={item} source={source} />

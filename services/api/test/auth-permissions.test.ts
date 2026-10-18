@@ -8,6 +8,8 @@ describe('route authorization boundaries',() => {
     ['/api/v1/cases/:caseId/email-drafts/preview','POST','case_read'],
     ['/api/v1/cases/:caseId/policy-ai-runs/:runId/promote','POST','analysis_write'],
     ['/api/v1/cases/:caseId/policy-analyses/:analysisId/approve','POST','analysis_approve'],
+    ['/api/v1/cases/:caseId/traffic-value-loss/calculate','POST','analysis_write'],
+    ['/api/v1/cases/:caseId/traffic-value-loss/versions/:versionId/approve','POST','analysis_approve'],
     ['/api/v1/fees/:feeId/approve','POST','fees_approve'],
     ['/api/v1/tracking/notifications/dismiss','POST','case_read'],
   ])('maps %s %s to the intended permission',(route,method,permission) => {

@@ -213,8 +213,8 @@ export function createOperationalAlertStore(pool: pg.Pool) {
     }
   return {
     list: evaluate,
-    markAllRead: (organizationId: string, asOfDate: string, evaluatedAt: string, userId: string): Promise<OperationalAlertsResponse> =>
-      evaluate(organizationId, asOfDate, evaluatedAt, undefined, userId, 'mark_all_read'),
+    markAllRead: (organizationId: string, asOfDate: string, evaluatedAt: string, userId: string, caseIds?: readonly string[]): Promise<OperationalAlertsResponse> =>
+      evaluate(organizationId, asOfDate, evaluatedAt, caseIds, userId, 'mark_all_read'),
   }
 }
 

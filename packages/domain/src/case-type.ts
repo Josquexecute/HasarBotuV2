@@ -21,5 +21,7 @@ export function parseCaseType(value: unknown): ParseResult<CaseType> {
 }
 
 export function isValueLossRequired(caseType: CaseType): boolean {
-  return caseType === 'traffic'
+  // Preserve the public call signature while both case types use optional calculation.
+  void caseType
+  return false
 }

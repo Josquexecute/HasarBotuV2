@@ -24,6 +24,9 @@
     "lint": "eslint .",
     "test": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run build --workspace @hasarbotu/database && npm run build --workspace @hasarbotu/desktop-bridge && vitest run src && npm run test --workspace @hasarbotu/domain && npm run test --workspace @hasarbotu/contracts && npm run test --workspace @hasarbotu/database && npm run test --workspace @hasarbotu/desktop-bridge && npm run test --workspace @hasarbotu/api && npm run test --workspace @hasarbotu/file-agent && npm run test --workspace @hasarbotu/desktop",
     "test:watch": "vitest",
+    "test:field:browsers": "npm run build && node scripts/test-field-browsers.mjs",
+    "build:field:edge": "node scripts/build-field-edge.mjs",
+    "test:field:edge": "node --test deploy/cloudflare/field-portal-worker.test.mjs scripts/field-portal-server.test.mjs",
     "pilot:gemini:policy": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run pilot:gemini:policy --workspace @hasarbotu/api"
   },
   "dependencies": {
@@ -35,6 +38,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.64.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",

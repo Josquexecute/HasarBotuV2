@@ -66,7 +66,7 @@ export type LifecycleCommandErrorKind =
 
 export class LifecycleCommandError extends Error {
   readonly kind: LifecycleCommandErrorKind
-  constructor(kind: LifecycleCommandErrorKind, message: string, readonly code?: string) {
+  constructor(kind: LifecycleCommandErrorKind, message: string, readonly code?: string, readonly fields: readonly string[] = []) {
     super(message)
     this.name = 'LifecycleCommandError'
     this.kind = kind
@@ -118,7 +118,11 @@ function errorFor(status: number, body: unknown): LifecycleCommandError {
   if (status === 401) return new LifecycleCommandError('unauthorized', 'session required')
   if (status === 403) return new LifecycleCommandError('forbidden', 'permission denied')
   if (status === 404) return new LifecycleCommandError('not_found', 'case or operation not found')
-  if (status === 400) return new LifecycleCommandError('validation', 'lifecycle request validation failed')
+  if (status === 400) {
+    const errors = (body as { error?: { fieldErrors?: unknown } } | null)?.error?.fieldErrors
+    const fields = Array.isArray(errors) ? errors.flatMap(field => typeof field?.path === 'string' ? [field.path] : []) : []
+    return new LifecycleCommandError('validation', 'lifecycle request validation failed', code, fields)
+  }
   if (code === 'manual_recovery_required') return new LifecycleCommandError('manual_recovery_required', 'manual recovery required')
   if (status === 409) return new LifecycleCommandError('conflict', 'lifecycle request conflict', code)
   return new LifecycleCommandError('unavailable', `lifecycle endpoint HTTP ${status}`)

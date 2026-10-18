@@ -46,13 +46,15 @@ function Wait-HasarBotuHttpReady {
 }
 
 function Start-HasarBotuOfficeServer {
-    $names = @('postgresql-x64-17', 'Tailscale', 'hasarbotu-api', 'hasarbotu-lan-https', 'hasarbotu-file-agent', 'hasarbotu-folder-discovery')
+    $names = @('postgresql-x64-17', 'Tailscale', 'hasarbotu-api', 'hasarbotu-field-portal', 'hasarbotu-lan-https', 'hasarbotu-file-agent', 'hasarbotu-folder-discovery')
     foreach ($name in $names[0..2]) { Start-HasarBotuWindowsService -Name $name }
     Write-Host 'Merkezi sunucu yanıtı bekleniyor...'
     Wait-HasarBotuHttpReady -Uri 'http://127.0.0.1:3100/health'
-    foreach ($name in $names[3..5]) { Start-HasarBotuWindowsService -Name $name }
+    # Tailscale HTTPS proxies through the field portal before reaching the API.
+    foreach ($name in $names[3..6]) { Start-HasarBotuWindowsService -Name $name }
     Write-Host 'Ofis HTTPS bağlantısı kontrol ediliyor...'
     Wait-HasarBotuHttpReady -Uri 'https://desktop-efn2g33.tail276cda.ts.net/health'
+    Wait-HasarBotuHttpReady -Uri 'https://desktop-efn2g33.tail276cda.ts.net/field-health'
     $services = @(Get-Service -Name $names -ErrorAction Stop)
     $stopped = @($services | Where-Object { $_.Status -ne 'Running' })
     if ($stopped.Count) { throw "Kontrol sırasında hizmet durdu: $(($stopped.Name) -join ', ')" }
@@ -63,6 +65,7 @@ function Start-HasarBotuOfficeServer {
         administrator = $true
         apiHealthy = $true
         httpsHealthy = $true
+        fieldPortalHealthy = $true
         services = @($services | ForEach-Object { @{ name = $_.Name; status = [string]$_.Status } })
     }
 }

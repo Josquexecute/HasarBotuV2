@@ -346,8 +346,7 @@ describeDb('Değer Kaybı uçtan uca UAT: hesaplama -> revizyon -> onay -> rapor
     expect(v2ApprovedBody.currentVersion).toMatchObject({ status: 'approved', humanApprovalStatus: 'approved' })
     expect((await pool.query('SELECT status FROM traffic_value_loss_versions WHERE id=$1', [v1Id])).rows[0]).toEqual({ status: 'superseded' })
 
-    // 7) Revizyondan SONRA, v2 için henüz rapor yok: kapanış hazırlığı control_required'a düşmeli
-    //    (eski v1 raporu artık güncel onaylı sürüme ait değil).
+    // Historical report status remains accurate but no longer blocks ordinary closure.
     const planAfterRevision = await app.inject({
       method: 'POST', url: `/api/v1/cases/${caseId}/lifecycle/close/plan`,
       headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
@@ -355,8 +354,15 @@ describeDb('Değer Kaybı uçtan uca UAT: hesaplama -> revizyon -> onay -> rapor
     })
     expect(planAfterRevision.statusCode, planAfterRevision.payload).toBe(201)
     const planAfterRevisionOp = caseLifecycleOperationResponseSchema.parse(planAfterRevision.json()).operation
-    expect(planAfterRevisionOp.status).toBe('blocked')
+    expect(planAfterRevisionOp.status).toBe('approval_required')
+    expect(planAfterRevisionOp.requirementSummary.requirements.some(item => item.canonicalType === 'traffic_value_loss')).toBe(false)
     expect(planAfterRevisionOp.requirementSummary.valueLossSummary?.status).toBe('control_required')
+    const cancelledOptionalPreview = await app.inject({
+      method: 'POST', url: `/api/v1/cases/${caseId}/lifecycle-operations/${planAfterRevisionOp.id}/cancel`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { expectedVersion: planAfterRevisionOp.version, cancelled: true },
+    })
+    expect(cancelledOptionalPreview.statusCode, cancelledOptionalPreview.payload).toBe(200)
 
     // 8) v2 için nihai rapor üretilir.
     const v2Preview = await app.inject({

@@ -35,6 +35,7 @@ export const MIN_PORT = 1
 export const MAX_PORT = 65_535
 
 export interface ApiConfig {
+  readonly fieldPhotoDirectory?: string
   readonly desktopReleasesDirectory?: string
   readonly google?: GoogleConfig
   readonly host: string
@@ -220,6 +221,8 @@ function parseOpenAiPolicyProvider(env: Readonly<Record<string, string | undefin
  * gercek process ortamina bagimli olmadan acik nesnelerle calisir.
  */
 export function parseConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
+  const fieldPhotoDirectory = env.FIELD_PHOTO_DIRECTORY?.trim()
+  if (fieldPhotoDirectory !== undefined && (!fieldPhotoDirectory || !isAbsolute(fieldPhotoDirectory))) throw new ConfigError('FIELD_PHOTO_DIRECTORY', 'expected an absolute directory path.')
   const desktopReleasesDirectory = env.DESKTOP_RELEASES_DIR?.trim()
   if (desktopReleasesDirectory !== undefined && (!desktopReleasesDirectory || !isAbsolute(desktopReleasesDirectory))) throw new ConfigError('DESKTOP_RELEASES_DIR', 'expected an absolute directory path.')
   let google: GoogleConfig | undefined
@@ -234,6 +237,7 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
   const host = parseHost(env.HOST)
   return {
     ...(desktopReleasesDirectory ? { desktopReleasesDirectory } : {}),
+    ...(fieldPhotoDirectory ? { fieldPhotoDirectory } : {}),
     host,
     ...(google ? { google } : {}),
     port: parsePort(env.PORT),

@@ -52,7 +52,7 @@ export async function checkCaseFreshness(
         '--pcloud-db', freshnessGate.pcloudLocalDatabasePath,
         '--attestation-store', freshnessGate.attestationStoreDirectory,
         ...(options.operation ? ['--operation', options.operation] : []),
-      ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
 
       const timer = setTimeout(() => {
         timedOut = true

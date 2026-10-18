@@ -36,6 +36,7 @@ export { ARGON2_OPTIONS, hashPassword, verifyPassword } from './auth/password.js
 export { generateSessionToken, hashSessionToken } from './auth/token.js'
 export {
   SESSION_COOKIE_NAME,
+  SESSION_COOKIE_MAX_AGE_SECONDS,
   buildClearSessionCookie,
   buildSessionCookie,
   parseCookies,
@@ -44,7 +45,6 @@ export { createFixedWindowLimiter, type FixedWindowLimiter } from './auth/rate-l
 export {
   LOCKOUT_MINUTES,
   MAX_FAILED_LOGINS,
-  SESSION_TTL_SECONDS,
 } from './auth/service.js'
 export { DEFAULT_LOGIN_RATE_LIMIT, registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
 export { createAuthStore, type AuthStore } from './auth/store.js'

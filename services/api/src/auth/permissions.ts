@@ -17,6 +17,7 @@ export function permissionForRequest(route: string,method: string): PermissionCo
   if (route === '/api/v1/me/assistant-appearance' || route === '/api/v1/me/profile') return undefined
   if (method === 'GET' && (route === '/api/v1/desktop-updates/latest' || route === '/api/v1/desktop-updates/artifacts/:sha256')) return undefined
   if (!route.startsWith('/api/v1/') || /\/auth\/|\/google\//.test(route)) return undefined
+  if (route.startsWith('/api/v1/field/')) return ['GET','HEAD'].includes(method) ? 'case_read' : 'documents_write'
   if (/\/audit-events/.test(route)) return 'audit_read'
   if (/^\/api\/v1\/users(?:\/|$)/.test(route)) return 'users_admin'
   if (/\/administration\//.test(route)) return method === 'GET' ? undefined : 'office_admin'
@@ -37,6 +38,6 @@ export function permissionForRequest(route: string,method: string): PermissionCo
   if (/\/fee(?:\/|$)/.test(route)) return 'fees_write'
   if (/\/(notes|tasks|follow-up)(?:\/|$)/.test(route)) return 'operations_write'
   if (/\/(documents|photos)(?:\/|$)/.test(route)) return 'documents_write'
-  if (/\/(policy-|value-loss|pert|email-)/.test(route)) return /\/(approve|reject|resolve)$/.test(route) ? 'analysis_approve' : 'analysis_write'
+  if (/\/(policy-|traffic-value-loss|value-loss|pert|email-)/.test(route)) return /\/(approve|reject|resolve)$/.test(route) ? 'analysis_approve' : 'analysis_write'
   return 'case_write'
 }

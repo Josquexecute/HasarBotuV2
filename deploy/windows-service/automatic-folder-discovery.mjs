@@ -206,7 +206,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           errorType: error?.name ?? 'Error', sourceReadOnly: true })
         // Preserve local diagnostics without logging arbitrary exception messages that may contain secrets.
         const recoverable = ['ENOENT', 'EACCES', 'EPERM', 'EBUSY', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', '57P01', '53300',
-          'PCLOUD_LOCAL_DATABASE_NOT_FOUND', 'PCLOUD_TOP_LEVEL_FOLDER_NOT_FOUND', 'source_unavailable', 'source_changed'].includes(diagnosticCode)
+          'PCLOUD_LOCAL_DATABASE_NOT_FOUND', 'PCLOUD_TOP_LEVEL_FOLDER_NOT_FOUND', 'PCLOUD_DATABASE_SNAPSHOT_UNSTABLE', 'source_unavailable', 'source_changed'].includes(diagnosticCode)
         if (once || !recoverable) throw new Error('automatic_folder_cycle_failed', { cause: error })
       }
       if (once || signal?.aborted) break

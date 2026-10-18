@@ -30,6 +30,29 @@ const planned: LifecycleOperationRecord = {
 }
 
 describe('CaseLifecycleModal', () => {
+  it.each([
+    ['idempotency-key', 'İşlem bilgileri sunucuya eksik ulaştı.'],
+    ['reason', 'En az 3 karakterlik bir gerekçe yazın'],
+    ['expectedCaseVersion', 'Dosya veya klasör sürümü alınamadı.'],
+  ])('explains the rejected %s field and retains the entered reason', async (field, message) => {
+    const reason = 'Eksik belgeler daha sonra tamamlanacak.'
+    const port: CaseLifecycleCommandPort = {
+      readLocationVersion: vi.fn().mockResolvedValue(1),
+      planClose: vi.fn().mockRejectedValue(new LifecycleCommandError('validation', 'Private internal detail', 'validation_error', [field])),
+      planReopen: vi.fn(), approve: vi.fn(), readOperation: vi.fn(), readCase: vi.fn(),
+    }
+    render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={vi.fn()} onUnauthorized={vi.fn()} onReload={vi.fn()} />)
+    const user = userEvent.setup()
+    await user.click(screen.getByLabelText('Eksiklerle kapat'))
+    await user.type(screen.getByLabelText('Gerekçe'), reason)
+    await user.click(screen.getByRole('button', { name: 'Önizleme Oluştur' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(screen.getByLabelText('Gerekçe')).toHaveValue(reason)
+    expect(screen.getByLabelText('Eksiklerle kapat')).toBeChecked()
+    expect(screen.queryByText('Private internal detail')).not.toBeInTheDocument()
+    expect(port.approve).not.toHaveBeenCalled()
+  })
+
   it('keeps tracking after one minute and displays the eventual worker failure', async () => {
     vi.useFakeTimers()
     const readOperation = vi.fn().mockResolvedValue({ ...planned, status: 'moving', canApprove: false })

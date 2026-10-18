@@ -16,6 +16,17 @@ function renderInbox() {
 beforeEach(() => { request.mockReset() })
 
 describe('notification card actions', () => {
+  it('keeps the selected case on every inbox request and scopes bulk read to that case', async () => {
+    request.mockResolvedValue(inbox)
+    render(<MemoryRouter><TrackingInbox caseId="case-a" /></MemoryRouter>)
+    await screen.findByText('Rapor eklendi')
+    expect(request.mock.calls[0]?.[0]).toBe('tracking/notifications/inbox?page=1&read=unread&caseId=case-a')
+    await userEvent.click(screen.getByRole('button', { name: 'Tümü' }))
+    await waitFor(() => expect(request.mock.calls.at(-1)?.[0]).toBe('tracking/notifications/inbox?page=1&read=all&caseId=case-a'))
+    await userEvent.click(screen.getByRole('button', { name: 'Tümünü okundu işaretle' }))
+    expect(request).toHaveBeenCalledWith('tracking/notifications/read-all', { caseId: 'case-a' })
+    await waitFor(() => expect(request.mock.calls.at(-1)?.[0]).toBe('tracking/notifications/inbox?page=1&read=all&caseId=case-a'))
+  })
   it('adds a newly received Tramer result to an already open inbox',async () => {
     request.mockResolvedValueOnce({ notifications: [],total: 0,unread: 0,page: 1 })
       .mockResolvedValue({ ...inbox,notifications: [{ ...item,kind: 'tramer',title: 'Tramer sonuçlandı — 000310' }] })

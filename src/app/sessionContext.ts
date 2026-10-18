@@ -14,7 +14,7 @@ export interface SessionContextValue {
   readonly user: SessionUser | null
   /** Bootstrap sirasinda servise ulasilamadiysa kullaniciya gosterilecek not. */
   readonly notice: string | null
-  login(email: string, password: string): Promise<void>
+  login(email: string, password: string, rememberMe?: boolean): Promise<void>
   logout(): Promise<void>
   /** Veri katmani api modda 401 gordugunde cagirir: oturum sona erdi akisi. */
   reportUnauthorized(): void

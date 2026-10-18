@@ -1,5 +1,5 @@
 import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen, type IpcMainEvent } from 'electron'
-import { assistantAppearanceSchema, DEFAULT_ASSISTANT_APPEARANCE } from '@hasarbotu/contracts'
+import { assistantAppearanceSchema, DEFAULT_ASSISTANT_APPEARANCE, idSchema } from '@hasarbotu/contracts'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -119,7 +119,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     if (main.isMinimized()) main.restore()
     main.show()
     main.focus()
-    // Only native menu closures supply these constant routes; renderers cannot supply a URL.
+    // Native actions construct routes; renderers can supply only a validated case identity.
     if (route && main.webContents.getURL() !== `${options.shell.origin}${route}`) {
       void main.loadURL(`${options.shell.origin}${route}`).catch(() => {
         console.error('desktop assistant could not open the requested page')
@@ -177,9 +177,16 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     })
   }
   const hideMenu = () => { menuOpen = false;if (!menuWindow.isDestroyed()) menuWindow.hide() }
-  const handleMenuAction = (event: IpcMainEvent,action: unknown) => {
+  const handleMenuAction = (event: IpcMainEvent,action: unknown,caseId?: unknown) => {
     if (disposed || event.sender !== menuWindow.webContents || event.senderFrame !== menuWindow.webContents.mainFrame
       || event.senderFrame?.url !== menuUrl || !isAssistantMenuAction(action)) return
+    if ((action === 'open' || action === 'notifications') && caseId !== undefined) {
+      const parsed = idSchema.safeParse(caseId)
+      if (!parsed.success) return
+      hideMenu()
+      showMain(action === 'open' ? `/dosyalar/${encodeURIComponent(parsed.data)}` : `/bildirimler?caseId=${encodeURIComponent(parsed.data)}`)
+      return
+    }
     hideMenu()
     if (action === 'close') return
     actions[action]()

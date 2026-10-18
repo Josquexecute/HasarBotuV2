@@ -28,7 +28,7 @@ interface SessionResponseDto {
     roles: string[]
     permissions?: string[]
   }
-  expiresAt: string
+  expiresAt: string | null
 }
 
 function toSessionUser(dto: SessionResponseDto): SessionUser {
@@ -65,7 +65,7 @@ export interface AuthPort {
   /** Uygulama acilisinda oturum bootstrap: gecerli oturum -> kullanici, 401 -> null. */
   bootstrap(): Promise<SessionUser | null>
   /** Basari: oturum kullanicisi. Hata: `HttpAuthError`. */
-  login(email: string, password: string): Promise<SessionUser>
+  login(email: string, password: string, rememberMe?: boolean): Promise<SessionUser>
   /** En iyi caba: sunucu oturumu iptal eder ve cerezi temizler. */
   logout(): Promise<void>
 }
@@ -99,14 +99,14 @@ export function createHttpAuthAdapter(options: AuthAdapterOptions = {}): AuthPor
       return toSessionUser((await response.json()) as SessionResponseDto)
     },
 
-    async login(email: string, password: string): Promise<SessionUser> {
+    async login(email: string, password: string, rememberMe?: boolean): Promise<SessionUser> {
       let response: Response
       try {
         response = await fetchImpl(`${baseUrl}${AUTH_LOGIN_ROUTE}`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'content-type': 'application/json', accept: 'application/json', ...extraHeaders },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email, password, ...(rememberMe === undefined ? {} : { rememberMe }) }),
         })
       } catch {
         throw new HttpAuthError('unavailable', 'auth login endpoint unreachable')

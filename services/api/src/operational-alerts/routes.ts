@@ -60,8 +60,10 @@ export function registerOperationalAlertRoutes(
   app.post(`${OPERATIONAL_ALERTS_ROUTE}/read-all`, async (request, reply) => {
     const session = await requireSession(auth, request, reply)
     if (!session) return
+    const parsed = operationalAlertsQuerySchema.pick({ caseIds: true }).safeParse(request.body ?? {})
+    if (!parsed.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(parsed.error, String(request.id)) }))
     const evaluatedAt = options.clock.nowUtcIso()
-    await store.markAllRead(session.user.organizationId, toOfficeDate(evaluatedAt), evaluatedAt, session.user.id)
+    await store.markAllRead(session.user.organizationId, toOfficeDate(evaluatedAt), evaluatedAt, session.user.id, parsed.data.caseIds)
     return reply.code(204).send()
   })
 }

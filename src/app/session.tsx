@@ -60,11 +60,11 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
   }, [mode, auth])
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, rememberMe?: boolean) => {
       const version = ++requestVersion.current
       pendingMutation.current = version
       try {
-        const session = await auth.login(email, password)
+        const session = await (rememberMe === undefined ? auth.login(email, password) : auth.login(email, password, rememberMe))
         if (requestVersion.current !== version) return
         setUser(session)
         setNotice(null)

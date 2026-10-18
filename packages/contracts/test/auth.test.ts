@@ -51,6 +51,7 @@ describe('auth sozlesmeleri', () => {
       expiresAt: '2026-07-12T20:00:00.000Z',
     }
     expect(sessionResponseSchema.safeParse(valid).success).toBe(true)
+    expect(sessionResponseSchema.safeParse({ ...valid, expiresAt: null }).success).toBe(true)
     expect(ROLE_CODES).toHaveLength(6)
     expect(
       sessionResponseSchema.safeParse({

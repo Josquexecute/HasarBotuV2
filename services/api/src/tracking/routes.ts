@@ -115,30 +115,30 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
     routes.get('/api/v1/tracking/notifications/inbox',async (request,reply) => {
       const session = await requireSession(auth,request,reply)
       if (!session) return
-      const query = z.object({ page: z.coerce.number().int().min(1).max(100_000).default(1),read: z.enum(['all','unread','read']).default('unread') }).strict().parse(request.query)
-      const scope = 'n.organization_id=$1 AND c.responsible_user_id=$2 AND NOT c.is_archived'
-      const filter = `${scope} AND ($3='all' OR ($3='unread' AND n.read_at IS NULL) OR ($3='read' AND n.read_at IS NOT NULL))`
-      const params = [session.user.organizationId,session.user.id,query.read]
+      const query = z.object({ page: z.coerce.number().int().min(1).max(100_000).default(1),read: z.enum(['all','unread','read']).default('unread'),caseId: z.string().uuid().optional() }).strict().parse(request.query)
+      const scope = 'n.organization_id=$1 AND c.responsible_user_id=$2 AND NOT c.is_archived AND ($3::uuid IS NULL OR c.id=$3)'
+      const filter = `${scope} AND ($4='all' OR ($4='unread' AND n.read_at IS NULL) OR ($4='read' AND n.read_at IS NOT NULL))`
+      const params = [session.user.organizationId,session.user.id,query.caseId ?? null,query.read]
       const [counts,rows] = await Promise.all([
         pool.query(`SELECT count(*)::int AS total,(SELECT count(*)::int FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${scope} AND n.read_at IS NULL) AS unread
           FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${filter}`,params),
         pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",n.title,n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
-          FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${filter} ORDER BY n.created_at DESC,n.id DESC LIMIT 50 OFFSET $4`,[...params,(query.page-1)*50]),
+          FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${filter} ORDER BY n.created_at DESC,n.id DESC LIMIT 50 OFFSET $5`,[...params,(query.page-1)*50]),
       ])
       return trackingInboxSchema.parse(JSON.parse(JSON.stringify({ notifications: rows.rows,...counts.rows[0],page: query.page })))
     })
     routes.post('/api/v1/tracking/notifications/read-all',async (request,reply) => {
       const session = await requireSession(auth,request,reply)
       if (!session) return
-      z.object({}).strict().parse(request.body)
+      const input = z.object({ caseId: z.string().uuid().optional() }).strict().parse(request.body)
       await withTransaction(pool,async (db) => {
         // All pages of the current user's inbox, bounded by this transaction.
         // New arrivals and existing read timestamps are preserved.
         const result = await db.query(`UPDATE tracking_notifications n SET read_at=now()
           FROM cases c WHERE n.case_id=c.id AND c.organization_id=n.organization_id
           AND n.organization_id=$1 AND c.responsible_user_id=$2 AND NOT c.is_archived
-          AND n.read_at IS NULL AND n.created_at<=now()`,
-        [session.user.organizationId,session.user.id])
+          AND n.read_at IS NULL AND n.created_at<=now() AND ($3::uuid IS NULL OR c.id=$3)`,
+        [session.user.organizationId,session.user.id,input.caseId ?? null])
         if (result.rowCount) await audit.record(db,{ organizationId: session.user.organizationId,actorUserId: session.user.id,
           action: 'tracking.notifications_read_all',requestId: String(request.id),details: { count: result.rowCount } })
       })

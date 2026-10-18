@@ -2,8 +2,9 @@ import { contextBridge,ipcRenderer } from 'electron'
 
 const commands = new Set(['open','note','cases','notifications','settings','hide','reset','close'])
 contextBridge.exposeInMainWorld('hasarbotuAssistantMenu',Object.freeze({
-  choose: (command: unknown) => {
-    if (typeof command === 'string' && commands.has(command)) ipcRenderer.send('hasarbotu:assistant-menu',command)
+  choose: (command: unknown, caseId?: unknown) => {
+    if (caseId !== undefined && (typeof caseId !== 'string' || caseId.length === 0 || caseId.length > 128)) return
+    if (typeof command === 'string' && commands.has(command)) ipcRenderer.send('hasarbotu:assistant-menu',command,caseId)
   },
 }))
 contextBridge.exposeInMainWorld('hasarbotuCaseFolders', Object.freeze({

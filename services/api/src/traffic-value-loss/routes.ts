@@ -2,6 +2,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type pg from 'pg'
 import {
   IDEMPOTENCY_KEY_HEADER,
+  VALUE_LOSS_CALCULATOR_ROUTE,
+  valueLossCalculatorRequestSchema,
+  valueLossCalculatorResponseSchema,
   TRAFFIC_VALUE_LOSS_APPROVE_ROUTE,
   TRAFFIC_VALUE_LOSS_CURRENT_APPROVED_ROUTE,
   TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE,
@@ -57,6 +60,7 @@ import {
 } from './report-store.js'
 import { trafficValueLossReportFilename } from './report-pdf.js'
 import { createTrafficValueLossClosureStore } from './closure-store.js'
+import { calculateValueLoss } from './calculator.js'
 
 export interface TrafficValueLossRoutesOptions { readonly pool: pg.Pool }
 const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const
@@ -102,6 +106,20 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
     organizationId: session.user.organizationId,
     actorUserId: session.user.id,
     requestId: String(request.id),
+  })
+
+  app.post(VALUE_LOSS_CALCULATOR_ROUTE, async (request, reply) => {
+    const session = await requireAnyRole(auth, request, reply, WRITE_ROLES)
+    if (session === undefined) return
+    const requestId = String(request.id)
+    const params = trafficValueLossParamsSchema.safeParse(request.params)
+    const body = valueLossCalculatorRequestSchema.safeParse(request.body)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
+    if (!body.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(body.error, requestId) }))
+    const result = await options.pool.query('SELECT case_type FROM cases WHERE organization_id=$1 AND id=$2', [session.user.organizationId, params.data.caseId])
+    if (!result.rowCount) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
+    if (result.rows[0].case_type !== 'traffic') return reply.code(400).send(failureBody('traffic_value_loss_source_invalid', 'Traffic case required.', requestId))
+    return valueLossCalculatorResponseSchema.parse(calculateValueLoss(body.data))
   })
 
   app.get(TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE, async (request, reply) => {

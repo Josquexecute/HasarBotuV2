@@ -1,12 +1,14 @@
-import { lazy, Suspense, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { BellRing, CheckCheck, ChevronDown, CircleAlert, ExternalLink, FileWarning, ShieldAlert } from 'lucide-react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { initialNotifications, type NotificationType } from '../../mocks/workspaces'
 import { BackendUnavailableState, LoadingState } from '../../components/StateViews'
 import { createHttpOperationalAlertAdapter, OperationalAlertError, type OperationalAlertDataPort, type OperationalAlertSeverityRecord, type OperationalAlertTypeRecord } from '../../data/operationalAlertPort'
 import { useSession } from '../../app/sessionContext'
 import { getConfiguredDataSource, type DataSourceKind } from '../../data/ports'
 import { useOperationalAlerts } from '../../data/useOperationalAlerts'
+import { createHttpCasesAdapter } from '../../data/httpAdapter'
+import type { CaseRecord } from '../../types/case'
 import { NotificationCard } from './NotificationCard'
 import './notifications.css'
 const TrackingInbox = lazy(async () => ({ default: (await import('./TrackingInbox')).TrackingInbox }))
@@ -78,11 +80,11 @@ const ALERT_SEVERITY_TONES: Record<OperationalAlertSeverityRecord, 'critical' | 
 /**
  * Kişisel okunmamış uyarılar; okuma onayı görev veya evrak silmez.
  */
-function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) {
+function OperationalAlertContent({ port, caseId }: { port?: OperationalAlertDataPort; caseId?: string }) {
   const navigate = useNavigate()
   const { reportUnauthorized } = useSession()
-  const adapter = useMemo(() => port ?? createHttpOperationalAlertAdapter(), [port])
-  const { alerts, status } = useOperationalAlerts(port)
+  const adapter = useMemo(() => port ?? createHttpOperationalAlertAdapter({ unreadOnly: true }), [port])
+  const { alerts, status } = useOperationalAlerts(adapter, caseId ? [caseId] : undefined)
   const [type, setType] = useState<'Tümü' | OperationalAlertTypeRecord>('Tümü')
   const [busy, setBusy] = useState(false)
   const [readError, setReadError] = useState('')
@@ -99,7 +101,7 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
       {status === 'ok' && alerts !== null && <div className="notification-feed__toolbar"><p className="notification-feed__count">{alerts.totalCount} okunmamış uyarı</p><button type="button" className="button button--secondary" disabled={!adapter.markAllRead || busy || alerts.totalCount === 0} onClick={async () => {
         if (!adapter.markAllRead || readLock.current) return
         readLock.current = true; setBusy(true); setReadError('')
-        try { await adapter.markAllRead(); window.dispatchEvent(new Event('operational-alerts-updated')) }
+        try { await (caseId ? adapter.markAllRead([caseId]) : adapter.markAllRead()); window.dispatchEvent(new Event('operational-alerts-updated')) }
         catch (error) { setReadError('Uyarılar okundu işaretlenemedi. Tekrar deneyin.'); if (error instanceof OperationalAlertError && error.kind === 'unauthorized') reportUnauthorized() }
         finally { readLock.current = false; setBusy(false) }
       }}><CheckCheck size={15} />{busy ? 'İşleniyor…' : 'Tümünü Okundu İşaretle'}</button></div>}
@@ -155,6 +157,21 @@ function OperationalAlertContent({ port }: { port?: OperationalAlertDataPort }) 
 /** `port` yalnız testler için enjekte edilir; uygulama gerçek HTTP adaptörünü kullanır. */
 export function NotificationsPage({ port }: { port?: OperationalAlertDataPort } = {}) {
   const [source] = useState<DataSourceKind>(getConfiguredDataSource)
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const caseId = params.get('caseId') ?? undefined
+  const [scopeReload, setScopeReload] = useState(0)
+  const [selection, setSelection] = useState<{ caseId: string; item: CaseRecord | null; error: boolean } | null>(null)
+  const scope = selection?.caseId === caseId ? selection : null
+  useEffect(() => {
+    if (!caseId || source !== 'api') return
+    let cancelled = false
+    void createHttpCasesAdapter().getCase(caseId).then(item => {
+      if (!cancelled) setSelection({ caseId, item, error: false })
+    }).catch(() => { if (!cancelled) setSelection({ caseId, item: null, error: true }) })
+    return () => { cancelled = true }
+  }, [caseId, source, scopeReload])
+  const scopeReady = caseId === undefined || scope?.item !== null && scope?.item !== undefined
   const [section,setSection] = useState<'inbox' | 'alerts' | 'tracking'>(port ? 'alerts' : 'inbox')
 
   return (
@@ -162,10 +179,17 @@ export function NotificationsPage({ port }: { port?: OperationalAlertDataPort } 
       {source === 'mock' ? <NotificationsMockContent /> : <>
         <div className="office-scroll notification-center">
           <header className="notification-center__heading"><span className="notification-center__symbol"><BellRing size={24} /></span><div><h1>Bildirimler</h1><p>Dosyalarınızdan son gelişmeler</p></div></header>
+          {caseId !== undefined && <div className="notification-feed__toolbar" aria-label="Seçili dosya bildirimleri">
+            {scope?.item && <Link to={`/dosyalar/${encodeURIComponent(caseId)}`}><strong>{scope.item.plate}</strong> · {scope.item.officeNumber}</Link>}
+            <button type="button" className="button button--secondary" onClick={() => navigate('/bildirimler')}>Tüm dosyaların bildirimleri</button>
+          </div>}
+          {caseId !== undefined && !scopeReady && (scope?.error || !caseId ? <p role="alert">Seçili dosya alınamadı. Bağlantınızı ve dosya erişiminizi kontrol edin. {caseId && <button type="button" onClick={() => { setSelection(null); setScopeReload(value => value + 1) }}>Tekrar dene</button>}</p> : <LoadingState label="Seçili dosya yükleniyor" />)}
+          {scopeReady && <div key={caseId ?? 'all'}>
           <nav className="notification-center__tabs" aria-label="Bildirim bölümleri">{([['inbox','Gelen kutusu'],['alerts','Uyarılar'],['tracking','Tramer ve e-posta']] as const).map(([key,title]) => <button type="button" key={key} aria-pressed={section === key} onClick={() => setSection(key)}>{title}</button>)}</nav>
-          {section === 'inbox' && <Suspense fallback={<LoadingState label="Bildirimler yükleniyor" />}><TrackingInbox /></Suspense>}
-          {section === 'alerts' && <section className="notification-feed" aria-label="Dosya uyarıları"><OperationalAlertContent port={port} /></section>}
-          {section === 'tracking' && <Suspense fallback={<LoadingState label="Takip yükleniyor" />}><TrackingWorkspace /></Suspense>}
+          {section === 'inbox' && <Suspense fallback={<LoadingState label="Bildirimler yükleniyor" />}><TrackingInbox caseId={caseId} /></Suspense>}
+          {section === 'alerts' && <section className="notification-feed" aria-label="Dosya uyarıları"><OperationalAlertContent port={port} caseId={caseId} /></section>}
+          {section === 'tracking' && <Suspense fallback={<LoadingState label="Takip yükleniyor" />}><TrackingWorkspace caseId={caseId} /></Suspense>}
+          </div>}
         </div>
       </>}
     </main>

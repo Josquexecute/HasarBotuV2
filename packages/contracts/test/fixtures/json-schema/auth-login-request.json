@@ -12,6 +12,9 @@
       "type": "string",
       "minLength": 10,
       "maxLength": 128
+    },
+    "rememberMe": {
+      "type": "boolean"
     }
   },
   "required": [

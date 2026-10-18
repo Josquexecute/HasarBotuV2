@@ -8,7 +8,7 @@ import { groupNotifications } from './notification-time'
 
 type Inbox = ReturnType<typeof trackingInboxSchema.parse>
 type Notice = Inbox['notifications'][number]
-export function TrackingInbox() {
+export function TrackingInbox({ caseId }: { caseId?: string } = {}) {
   const navigate = useNavigate()
   const [data,setData] = useState<Inbox | null>(null)
   const [page,setPage] = useState(1)
@@ -25,7 +25,7 @@ export function TrackingInbox() {
   },[])
   useEffect(() => {
     const controller = new AbortController()
-    void trackingRequest(`tracking/notifications/inbox?page=${page}&read=${read}`,undefined,controller.signal)
+    void trackingRequest(`tracking/notifications/inbox?page=${page}&read=${read}${caseId ? `&caseId=${encodeURIComponent(caseId)}` : ''}`,undefined,controller.signal)
       .then((response) => {
         if (controller.signal.aborted) return
         const result = trackingInboxSchema.parse(response)
@@ -35,7 +35,7 @@ export function TrackingInbox() {
       }).catch((e: unknown) => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Bildirimler alınamadı.') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  },[page,read,version])
+  },[page,read,version,caseId])
   async function markRead(id: string): Promise<boolean> {
     if (inFlight.current) return false
     inFlight.current = true
@@ -57,7 +57,7 @@ export function TrackingInbox() {
     inFlight.current = true
     setSaving('all')
     try {
-      await trackingRequest('tracking/notifications/read-all',{})
+      await trackingRequest('tracking/notifications/read-all',caseId ? { caseId } : {})
       setError('')
       setLoading(true)
       setPage(1)

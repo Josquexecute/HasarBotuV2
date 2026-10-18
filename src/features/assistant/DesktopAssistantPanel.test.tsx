@@ -44,6 +44,23 @@ async function select() {
   await screen.findByRole('textbox', { name: 'Hızlı not' })
 }
 describe('standalone Touch case workspace', () => {
+  it('passes the current authenticated case to both native shortcuts and omits anonymous selection', async () => {
+    const choose = vi.fn()
+    vi.stubGlobal('hasarbotuAssistantMenu', { choose })
+    const session: SessionContextValue = { mode: 'api', status: 'authenticated', user: { id: 'user-a', organizationId: 'org', email: 'test@example.test', displayName: 'Test', roles: ['admin'] }, notice: null, login: vi.fn(), logout: vi.fn(), reportUnauthorized: vi.fn() }
+    try {
+      const view = render(<SessionContext.Provider value={session}><AssistantAppearanceProvider><DesktopAssistantPanel /></AssistantAppearanceProvider></SessionContext.Provider>)
+      act(() => { rememberAssistantCase('user-a', first.caseId) })
+      await userEvent.click(screen.getByRole('button', { name: 'Uygulamayı aç' }))
+      expect(choose).toHaveBeenLastCalledWith('open', first.caseId)
+      act(() => { rememberAssistantCase('user-a', second.caseId) })
+      await userEvent.click(screen.getByRole('button', { name: 'Bildirimler' }))
+      expect(choose).toHaveBeenLastCalledWith('notifications', second.caseId)
+      view.rerender(<SessionContext.Provider value={{ ...session, status: 'anonymous', user: null }}><AssistantAppearanceProvider><DesktopAssistantPanel /></AssistantAppearanceProvider></SessionContext.Provider>)
+      await userEvent.click(screen.getByRole('button', { name: 'Giriş yap' }))
+      expect(choose).toHaveBeenLastCalledWith('open', undefined)
+    } finally { vi.unstubAllGlobals() }
+  })
   it('receives a main-window storage selection without requiring another search', async () => {
     const api = setup()
     localStorage.setItem(assistantCaseSelectionKey('anonymous'), first.caseId)

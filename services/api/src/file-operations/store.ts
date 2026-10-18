@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type pg from 'pg'
+import { hasActiveFieldPhoto } from '../field-photos/active.js'
 import {
   fileOperationResponseSchema,
   fileOperationSchema,
@@ -270,6 +271,7 @@ export function createFileOperationStore(pool: pg.Pool) {
           [actor.organizationId, caseId],
         )
         if (caseResult.rowCount === 0) return { kind: 'not_found' }
+        if (await hasActiveFieldPhoto(client, actor.organizationId, caseId)) return { kind: 'active_conflict' }
         const locationResult = await client.query(
           `SELECT id,storage_root_key,relative_path,verification_status,version FROM case_locations
            WHERE organization_id=$1 AND case_id::text=$2 FOR UPDATE`,

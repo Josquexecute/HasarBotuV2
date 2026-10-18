@@ -24,7 +24,8 @@ export interface AuthUserRow {
 
 export interface SessionRow {
   readonly user: AuthUserRow
-  readonly expiresAt: Date
+  readonly expiresAt: Date | null
+  readonly persistent: boolean
 }
 
 const USER_SELECT = `
@@ -125,19 +126,19 @@ export function createAuthStore(pool: pg.Pool) {
     },
 
     async createSession(
-      input: { tokenHash: string; userId: string; organizationId: string; expiresAt: Date },
+      input: { tokenHash: string; userId: string; organizationId: string; expiresAt: Date | null; persistent?: boolean },
       exec: Queryable = pool,
     ): Promise<void> {
       await exec.query(
-        'INSERT INTO sessions (id, token_hash, user_id, organization_id, expires_at) VALUES ($1, $2, $3, $4, $5)',
-        [uuidv7(), input.tokenHash, input.userId, input.organizationId, input.expiresAt],
+        'INSERT INTO sessions (id, token_hash, user_id, organization_id, expires_at, persistent) VALUES ($1, $2, $3, $4, $5, $6)',
+        [uuidv7(), input.tokenHash, input.userId, input.organizationId, input.expiresAt, input.persistent ?? true],
       )
     },
 
     /** Aktif (suresi gecmemis, iptal edilmemis) oturumu aktif kullaniciyla dondurur. */
     async findActiveSession(tokenHash: string, exec: Queryable = pool): Promise<SessionRow | undefined> {
       const result = await exec.query(
-        `SELECT s.expires_at AS session_expires_at,
+        `SELECT s.expires_at AS session_expires_at, s.persistent AS session_persistent,
                 u.id, u.organization_id, u.email, u.display_name, u.password_hash,
                 u.status, u.failed_login_count, u.locked_until,
                 coalesce(array_agg(r.code ORDER BY r.code) FILTER (WHERE r.code IS NOT NULL), '{}') AS roles
@@ -145,15 +146,15 @@ export function createAuthStore(pool: pg.Pool) {
          JOIN users u ON u.id = s.user_id
          LEFT JOIN user_roles ur ON ur.user_id = u.id
          LEFT JOIN roles r ON r.id = ur.role_id
-         WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
+         WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > now())
            AND u.status = 'active'
          GROUP BY s.id, u.id`,
         [tokenHash],
       )
-      const row = result.rows[0] as (RawUserRow & { session_expires_at: Date }) | undefined
+      const row = result.rows[0] as (RawUserRow & { session_expires_at: Date | null; session_persistent: boolean }) | undefined
       if (row === undefined) return undefined
       const user = mapUser(row)
-      return { user: { ...user,permissions: allowedPermissions(await loadRolePolicy(exec,user.organizationId),user.roles) }, expiresAt: row.session_expires_at }
+      return { user: { ...user,permissions: allowedPermissions(await loadRolePolicy(exec,user.organizationId),user.roles) }, expiresAt: row.session_expires_at, persistent: row.session_persistent }
     },
 
     /** Arşivlenmiş kayıtlar günlük vaka uçlarından erişilemez; tarihçe korunur. */

@@ -14,7 +14,7 @@ const run = testUrl ? it : it.skip
 run('production Electron UI: category layouts, native quick note, target selection and restart persistence', async () => {
   const config = assertTestDatabaseUrl(testUrl!)
   const pool = createDatabasePool({ config })
-  const output = fileURLToPath(new URL('../../../.local/ui-cleanup-evidence/', import.meta.url))
+  const output = process.env.HB_TOUCH_EVIDENCE ?? fileURLToPath(new URL('../../../.local/ui-cleanup-evidence/', import.meta.url))
   await mkdir(output, { recursive: true })
   const password = 'touch-synthetic-password-2026'
   const email = 'touch-test@example.test'
@@ -29,6 +29,11 @@ run('production Electron UI: category layouts, native quick note, target selecti
     await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,lifecycle_status,workflow_stage,plate,plate_normalized,responsible_user_id)
       VALUES($1,$3,2026,9101,'2026/9101','traffic','open','inspection_pending','34 TEST 01','34TEST01',$4),
       ($2,$3,2026,9102,'2026/9102','casco','open','new_notification','34 TEST 02','34TEST02',$4)`, [caseId, otherCaseId, organizationId, userId])
+    for (const [id, title] of [[caseId, 'Touch seçili plaka bildirimi'], [otherCaseId, 'Touch diğer plaka bildirimi']]) {
+      const notice = uuidv7()
+      await pool.query(`INSERT INTO tracking_notifications(id,organization_id,case_id,recipient_user_id,event_key,kind,title,presented_at)
+        VALUES($1::uuid,$2,$3,$4,$1::text,'document',$5,now())`, [notice, organizationId, id, userId, title])
+    }
     const origin = await api.listen({ host: '127.0.0.1', port: 0 })
     const child = spawn(require('electron') as string, [fileURLToPath(new URL('./harness/touch-workflow-main.mjs', import.meta.url)), `--user-data-dir=${join(output, `profile-${Date.now()}`)}`], {
       windowsHide: true, stdio: 'ignore', env: { ...process.env, HB_TOUCH_API: origin, HB_TOUCH_OUTPUT: output, HB_TOUCH_EMAIL: email, HB_TOUCH_PASSWORD: password, HB_TOUCH_CASE: caseId, HB_TOUCH_OTHER_CASE: otherCaseId, HB_TOUCH_ASSETS: fileURLToPath(new URL('../../../dist/', import.meta.url)) },
@@ -44,6 +49,9 @@ run('production Electron UI: category layouts, native quick note, target selecti
     const notes = await pool.query('SELECT case_id,body FROM case_notes ORDER BY created_at')
     expect(notes.rows).toEqual([{ case_id: caseId, body: 'Dokunmatik kalıcı not.' }, { case_id: otherCaseId, body: 'Seçili dosyaya not.' }])
     expect((await pool.query('SELECT user_id,appearance FROM user_assistant_preferences')).rows).toEqual([{ user_id: userId, appearance: expect.objectContaining({ accentColor: '#15803d' }) }])
+    const notifications = (await pool.query('SELECT case_id,read_at FROM tracking_notifications ORDER BY title')).rows
+    expect(notifications.find(row => row.case_id === caseId)?.read_at).toBeInstanceOf(Date)
+    expect(notifications.find(row => row.case_id === otherCaseId)?.read_at).toBeNull()
   } finally {
     await api.close()
     await pool.end()

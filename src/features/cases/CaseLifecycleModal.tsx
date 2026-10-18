@@ -39,7 +39,12 @@ function safeError(error: unknown, hasOperation: boolean): string {
   switch (error.kind) {
     case 'unauthorized': return 'Oturumunuz sona erdi. Yeniden giriş yapın.'
     case 'forbidden': return 'Bu işlem için yönetici, eksper veya dosya sorumlusu rolü gerekir.'
-    case 'validation': return 'Form bilgileri kabul edilmedi. Gerekçe ve seçimleri kontrol edin.'
+    case 'validation': {
+      if (error.fields.includes('idempotency-key')) return 'İşlem bilgileri sunucuya eksik ulaştı. Yeniden önizleme oluşturun; sorun sürerse yöneticinize bildirin.'
+      if (error.fields.includes('reason')) return 'En az 3 karakterlik bir gerekçe yazın; 500 karakteri aşmayın.'
+      if (error.fields.includes('expectedCaseVersion') || error.fields.includes('expectedLocationVersion')) return 'Dosya veya klasör sürümü alınamadı. Dosyayı yeniden açıp önizlemeyi tekrar oluşturun.'
+      return 'Form bilgileri kabul edilmedi. Kapatma seçimini ve gerekçenin 3 ile 500 karakter arasında olduğunu kontrol edin.'
+    }
     case 'not_found': return 'Dosya veya işlem bulunamadı.'
     case 'conflict': {
       if (error.code === 'version_conflict') return 'Dosya başka bir işlemle değişti. Güncel veriyi yükleyebilirsiniz; seçiminiz ve gerekçeniz korunur.'
@@ -180,7 +185,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
                 {operation.operationType === 'close' && operation.source.storageRootKey === operation.destination.storageRootKey && operation.source.relativePath === operation.destination.relativePath && <div><dt>Klasör zaten kapalı dosyalar içinde</dt><dd>Onaydan sonra içeriği bulunduğu yerde doğrulanır ve programdaki kapanış tamamlanır.</dd></div>}
                 <div><dt>Servis koşulu</dt><dd>{operation.requirementSummary.serviceEligibility?.reason ?? 'Servis atanmamış'}</dd></div>
               </dl>
-              {operation.requirementSummary.valueLossSummary !== null && (
+              {operation.requirementSummary.valueLossSummary?.status === 'present' && (
                 <section className="case-lifecycle-value-loss" aria-label="Değer kaybı kapanış özeti">
                   <header>
                     <div><span>Değer Kaybı Kapanış Özeti</span><strong>{STATUS_LABELS[operation.requirementSummary.valueLossSummary.status]}</strong></div>

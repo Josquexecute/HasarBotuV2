@@ -13,6 +13,7 @@ import { checkCaseFreshness } from './freshness-gate-client.js'
 import { startDocumentTracker } from './document-tracker.js'
 import { lstat } from 'node:fs/promises'
 import { resolveUnderRoot } from './path-resolver.js'
+import { runFieldPhotoOnce } from './field-photo-worker.js'
 
 /**
  * File Agent çalışma döngüsü (Paket 14). Bir işi claim eder, yerel root
@@ -163,6 +164,7 @@ export async function runLoop(
   try {
   while (signal === undefined || !signal.aborted) {
     try {
+      if (config.fieldPhotosEnabled) await runFieldPhotoOnce(config, signal)
       const result = await runOnce(client, config)
       if (result.kind === 'storage_unavailable') options.onCycleError?.('storage_unavailable')
       if (result.kind !== 'no_work' && result.kind !== 'storage_unavailable') continue

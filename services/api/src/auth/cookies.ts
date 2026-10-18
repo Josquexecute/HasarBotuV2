@@ -4,10 +4,13 @@
  * opak token'dir.
  */
 export const SESSION_COOKIE_NAME = 'hb_session'
+// Browser cookie lifetimes are finite; bootstrap renews persistent cookies.
+export const SESSION_COOKIE_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
 
 export interface SessionCookieOptions {
   readonly maxAgeSeconds: number
   readonly secure: boolean
+  readonly persistent?: boolean
 }
 
 export function buildSessionCookie(token: string, options: SessionCookieOptions): string {
@@ -16,7 +19,7 @@ export function buildSessionCookie(token: string, options: SessionCookieOptions)
     'Path=/',
     'HttpOnly',
     'SameSite=Strict',
-    `Max-Age=${options.maxAgeSeconds}`,
+    ...(options.persistent === false ? [] : [`Max-Age=${options.maxAgeSeconds}`]),
   ]
   if (options.secure) parts.push('Secure')
   return parts.join('; ')

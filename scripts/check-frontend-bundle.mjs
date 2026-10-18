@@ -10,7 +10,7 @@ const REQUIRED_LAZY_CHUNKS = [
   'PolicyPdfTextApiModule-',
   'PolicyOcrApiModule-',
   'PolicyAnalysisWorkspace-',
-  'TrafficValueLossApiModule-',
+  'ValueLossCalculator-',
   'CaseOperationsApiModule-',
   'EmailDraftApiModule-',
   'PertApiModule-',

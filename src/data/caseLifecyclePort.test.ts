@@ -12,6 +12,11 @@ const operation = {
 } as const
 
 describe('HttpCaseLifecycleCommandAdapter', () => {
+  it.each(['reason', 'idempotency-key', 'expectedLocationVersion'])('retains the rejected %s field without exposing server details', async field => {
+    const adapter = createHttpCaseLifecycleCommandAdapter({ fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ok: false, error: { code: 'validation_error', fieldErrors: [{ path: field, code: 'invalid', message: 'Private internal detail' }] } }), { status: 400 })), idempotencyKeyFactory: () => 'key' })
+    await expect(adapter.planClose('case-1', { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'with_missing_requirements', reason: 'Belgeler takip edilecek.' })).rejects.toMatchObject({ kind: 'validation', code: 'validation_error', fields: [field], message: 'lifecycle request validation failed' })
+  })
+
   it('reloads the full case response including legacy names after a version conflict',async () => {
     const dto = { id: 'case-1',caseType: 'traffic',officeCaseNumber: '2026/25',notificationFormNumber: null,insurerClaimNumber: null,plate: '27 TST 025',status: 'open',stage: 'new_notification',responsibleUserId: null,expertUserId: null,serviceId: null,serviceProfile: null,insurerId: null,followUpDate: null,lossDate: null,notificationDate: null,lastInterventionAt: '2026-10-15T10:00:00.000Z',createdAt: '2026-10-15T10:00:00.000Z',updatedAt: '2026-10-15T10:00:00.000Z',version: 3,legacyReferences: { responsibleNames: ['Sentetik sorumlu'],expertNames: [],serviceNames: [] } }
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ case: dto }),{ status: 200 }))

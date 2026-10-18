@@ -43,6 +43,7 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
         AND o.status NOT IN ('ready','failed','stale','cancelled')) OR
        EXISTS(SELECT 1 FROM case_lifecycle_operations o WHERE o.organization_id=c.organization_id AND o.case_id=c.id
         AND o.status NOT IN ('blocked','closed','reopened','failed','stale','cancelled')) OR
+       EXISTS(SELECT 1 FROM field_photo_uploads o WHERE o.organization_id=c.organization_id AND o.case_id=c.id AND o.status='processing' AND o.lease_expires_at>now()) OR
        EXISTS(SELECT 1 FROM case_workspace_provisionings o WHERE o.organization_id=c.organization_id AND o.case_id=c.id
         AND o.status NOT IN ('ready','failed','stale','cancelled'))) operation_active
       FROM cases c LEFT JOIN case_locations l ON l.organization_id=c.organization_id AND l.case_id=c.id

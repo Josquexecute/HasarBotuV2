@@ -5,9 +5,8 @@ import { uuidv7 } from '@hasarbotu/database'
 import { createAuthStore } from '../auth/store.js'
 import { requireSession } from '../auth/guard.js'
 import { allowedPermissions,loadRolePolicy } from '../auth/permissions.js'
-import { buildSessionCookie, parseCookies } from '../auth/cookies.js'
+import { buildSessionCookie, parseCookies, SESSION_COOKIE_MAX_AGE_SECONDS } from '../auth/cookies.js'
 import { generateSessionToken, hashSessionToken } from '../auth/token.js'
-import { SESSION_TTL_SECONDS } from '../auth/service.js'
 import { createFixedWindowLimiter } from '../auth/rate-limit.js'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
@@ -101,7 +100,7 @@ export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.P
   })
   app.post('/api/v1/google/complete',async (request,reply) => {
     void reply.header('cache-control','no-store')
-    const body = z.object({ flowId: z.string().min(20).max(200) }).safeParse(request.body)
+    const body = z.object({ flowId: z.string().min(20).max(200), rememberMe: z.boolean().optional() }).safeParse(request.body)
     const browser = parseCookies(request.headers.cookie)[COOKIE]
     if (!body.success || !browser) return reply.code(400).send({ status: 'expired' })
     return withTransaction(pool,async (db) => {
@@ -117,9 +116,9 @@ export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.P
         }
         if (!user || user.status !== 'active') return reply.code(403).send({ status: 'failed' })
         const token = generateSessionToken()
-        await auth.createSession({ tokenHash: hashSessionToken(token),userId: user.id,organizationId: user.organization_id,expiresAt: new Date(Date.now()+SESSION_TTL_SECONDS*1000) },db)
+        await auth.createSession({ tokenHash: hashSessionToken(token),userId: user.id,organizationId: user.organization_id,expiresAt: null,persistent: body.data.rememberMe !== false },db)
         await audit.record(db,{ organizationId: user.organization_id,actorUserId: user.id,action: 'auth.google_login' })
-        void reply.header('set-cookie',buildSessionCookie(token,{ maxAgeSeconds: SESSION_TTL_SECONDS,secure: options.cookieSecure }))
+        void reply.header('set-cookie',buildSessionCookie(token,{ maxAgeSeconds: SESSION_COOKIE_MAX_AGE_SECONDS,secure: options.cookieSecure, ...(body.data.rememberMe === undefined ? {} : { persistent: body.data.rememberMe }) }))
       }
       await db.query('DELETE FROM google_oauth_states WHERE state_hash=$1', [row.state_hash])
       return { status: 'complete' }

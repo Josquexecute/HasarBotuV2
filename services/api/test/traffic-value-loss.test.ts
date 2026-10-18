@@ -8,6 +8,7 @@ import {
   trafficValueLossReportResponseSchema,
   trafficValueLossReportsResponseSchema,
   trafficValueLossResponseSchema,
+  valueLossCalculatorResponseSchema,
 } from '@hasarbotu/contracts'
 import {
   assertTestDatabaseUrl,
@@ -154,6 +155,24 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
   afterAll(async () => {
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
+  })
+
+  it('calculates from entered facts without creating drafts, approvals or reports and preserves tenant/role gates', async () => {
+    const catalog = await app.inject({ method: 'GET', url: `/api/v1/cases/${trafficCaseId}/traffic-value-loss/part-catalog?vehicleGroupCode=A`, headers: { cookie: managerCookie } })
+    const part = catalog.json().parts.find((part: { supportedOperations: string[] }) => part.supportedOperations.includes('replacement'))
+    const payload = { accidentDate: '2026-10-01', vehicleType: 'OTOMOBİL', modelYear: 2024, usageValue: 50000, marketValueMinor: 100_000_000, damageAmountMinor: 10_000_000, previousDamageCount: 0, commercialOrRental: false, vehicleCondition: 'normal', postRepairMarketValueMinor: null, faultRateBasisPoints: 10000, parts: [{ stableRuleId: part.stableRuleId, operation: 'replacement', paintMode: null, newPartPriceMinor: null, repairLaborMinor: null, partPriceAvailability: 'unavailable', priorPartState: 'none', treatment: 'standard' }] }
+    const before = (await pool.query('SELECT version,loss_date FROM cases WHERE id=$1', [trafficCaseId])).rows[0]
+    const request = (cookie: string, caseId = trafficCaseId, body = payload) => app.inject({ method: 'POST', url: `/api/v1/cases/${caseId}/traffic-value-loss/calculate`, headers: { cookie }, payload: body })
+    expect((await request('')).statusCode).toBe(401)
+    expect((await request(secretaryCookie)).statusCode).toBe(403)
+    expect((await request(otherCookie)).statusCode).toBe(404)
+    expect((await request(managerCookie, cascoCaseId)).statusCode).toBe(400)
+    expect((await request(managerCookie, trafficCaseId, { ...payload, modelYear: 2030 })).statusCode).toBe(400)
+    const response = await request(managerCookie)
+    expect(response.statusCode, response.payload).toBe(200)
+    expect(valueLossCalculatorResponseSchema.parse(response.json())).toMatchObject({ amountMinor: expect.any(Number), issues: [] })
+    expect((await pool.query('SELECT version,loss_date FROM cases WHERE id=$1', [trafficCaseId])).rows[0]).toEqual(before)
+    for (const table of ['traffic_value_loss_assessments','traffic_value_loss_versions','traffic_value_loss_reports']) expect((await pool.query(`SELECT count(*)::int AS n FROM ${table} WHERE case_id=$1`, [trafficCaseId])).rows[0].n).toBe(0)
   })
 
   it('401, 403, Trafik ve ready/verified kaynak kapılarını uygular', async () => {

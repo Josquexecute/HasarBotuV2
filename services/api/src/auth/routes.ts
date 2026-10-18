@@ -22,6 +22,7 @@ import {
   buildSessionCookie,
   parseCookies,
   SESSION_COOKIE_NAME,
+  SESSION_COOKIE_MAX_AGE_SECONDS,
 } from './cookies.js'
 import { hashSessionToken } from './token.js'
 import { withTransaction } from '../db/executor.js'
@@ -74,7 +75,7 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
         audit,
         ...(options.sessionTtlSeconds !== undefined ? { sessionTtlSeconds: options.sessionTtlSeconds } : {}),
       },
-      { email: parsed.data.email, password: parsed.data.password, ip: request.ip, requestId },
+      { email: parsed.data.email, password: parsed.data.password, ip: request.ip, requestId, ...(parsed.data.rememberMe === undefined ? {} : { rememberMe: parsed.data.rememberMe }) },
     )
 
     if (outcome.kind === 'rate_limited') {
@@ -85,14 +86,14 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       return reply.code(401).send(failureBody('unauthorized', 'Invalid credentials.', requestId))
     }
 
-    const maxAgeSeconds = Math.floor((outcome.expiresAt.getTime() - Date.now()) / 1000)
+    const maxAgeSeconds = outcome.expiresAt === null ? SESSION_COOKIE_MAX_AGE_SECONDS : Math.floor((outcome.expiresAt.getTime() - Date.now()) / 1000)
     void reply.header(
       'set-cookie',
-      buildSessionCookie(outcome.token, { maxAgeSeconds, secure: options.cookieSecure }),
+      buildSessionCookie(outcome.token, { maxAgeSeconds, secure: options.cookieSecure, ...(parsed.data.rememberMe !== undefined ? { persistent: parsed.data.rememberMe } : {}) }),
     )
     return sessionResponseSchema.parse({
       user: outcome.user,
-      expiresAt: outcome.expiresAt.toISOString(),
+      expiresAt: outcome.expiresAt?.toISOString() ?? null,
     })
   })
 
@@ -103,9 +104,15 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOpti
       sendUnauthorized(reply, requestId)
       return
     }
+    if (session.expiresAt === null) {
+      const token = parseCookies(request.headers.cookie)[SESSION_COOKIE_NAME]!
+      void reply.header('set-cookie', buildSessionCookie(token, {
+        maxAgeSeconds: SESSION_COOKIE_MAX_AGE_SECONDS, secure: options.cookieSecure, persistent: session.persistent,
+      }))
+    }
     return sessionResponseSchema.parse({
       user: toSessionUser(session.user),
-      expiresAt: session.expiresAt.toISOString(),
+      expiresAt: session.expiresAt?.toISOString() ?? null,
     })
   })
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { trackingRequest } from './trackingApi'
 
-export function GoogleConnectButton({ purpose, onComplete }: { purpose: 'login' | 'mail'; onComplete?: () => void }) {
+export function GoogleConnectButton({ purpose, onComplete, rememberMe }: { purpose: 'login' | 'mail'; onComplete?: () => void; rememberMe?: boolean }) {
   const [enabled,setEnabled] = useState(false)
   const [flow,setFlow] = useState<{ flowId: string;url: string } | null>(null)
   const [error,setError] = useState('')
@@ -18,7 +18,7 @@ export function GoogleConnectButton({ purpose, onComplete }: { purpose: 'login' 
     const controller = new AbortController()
     const poll = async () => {
       try {
-        const result = await trackingRequest('google/complete',{ flowId: flow.flowId },controller.signal) as { status: string }
+        const result = await trackingRequest('google/complete',{ flowId: flow.flowId, ...(rememberMe === undefined ? {} : { rememberMe }) },controller.signal) as { status: string }
         if (stopped) return
         if (result.status === 'complete') {
           setFlow(null)
@@ -38,7 +38,7 @@ export function GoogleConnectButton({ purpose, onComplete }: { purpose: 'login' 
     }
     timer = setTimeout(() => { void poll() },2000)
     return () => { stopped = true;controller.abort();clearTimeout(timer) }
-  },[flow,purpose,onComplete])
+  },[flow,purpose,onComplete,rememberMe])
   async function start() {
     setBusy(true);setError('')
     try {

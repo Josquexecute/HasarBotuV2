@@ -2,6 +2,7 @@ import { access, mkdir, mkdtemp, rename, rm, utimes, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Server } from 'node:http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
@@ -87,7 +88,7 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     return String(response.headers['set-cookie']).split(';')[0] as string
   }
 
-  async function seedCase(plate: string, withReadyRequirements: boolean, references: { insurerId?: string; serviceId?: string } = {}): Promise<{
+  async function seedCase(plate: string, withReadyRequirements: boolean, references: { insurerId?: string; serviceId?: string } = {}, includeValueLoss = true): Promise<{
     caseId: string; officeNumber: string; openPath: string; locationId: string
   }> {
     const response = await app.inject({
@@ -114,7 +115,7 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     if (withReadyRequirements) {
       for (const type of BASE_TYPES) await seedDocument(body.case.id, type, 'ready')
       await seedPhoto(body.case.id, 'ready')
-      await seedApprovedValueLoss(body.case.id)
+      if (includeValueLoss) await seedApprovedValueLoss(body.case.id)
     }
     return { caseId: body.case.id, officeNumber: body.case.officeCaseNumber, openPath, locationId }
   }
@@ -273,6 +274,56 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
     if (root !== undefined) await rm(root, { recursive: true, force: true })
+  })
+
+  it('previews, replays and closes with missing requirements through the private field gateway only after explicit approval', async () => {
+    const moduleUrl = new URL('../../../scripts/field-portal-server.mjs', import.meta.url).href
+    const { createFieldPortal } = await import(moduleUrl) as { createFieldPortal(options: { directory: string; upstream: string; publicOrigin: string; allowTailnetApi: boolean }): Server }
+    const upstream = await app.listen({ port: 0, host: '127.0.0.1' })
+    const gateway = createFieldPortal({ directory: root, upstream, publicOrigin: 'http://127.0.0.1:0', allowTailnetApi: true })
+    await new Promise<void>(resolve => gateway.listen(0, '127.0.0.1', resolve))
+    const address = gateway.address()
+    if (address === null || typeof address === 'string') throw new Error('Gateway did not start')
+    const seeded = await seedCase('27 TST 28', false)
+    const reason = 'Eksik belgeler daha sonra tamamlanacak.'
+    const path = `/api/v1/cases/${seeded.caseId}/lifecycle/close/plan`
+    const payload = { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'with_missing_requirements', reason }
+    async function command(url: string, body: unknown, key = uuidv7()) {
+      const response = await fetch(`http://127.0.0.1:${typeof address === 'object' && address !== null ? address.port : 0}${url}`, { method: 'POST', headers: { cookie: adminCookie, 'tailscale-user-login': 'synthetic-tailnet@example.test', [IDEMPOTENCY_KEY_HEADER]: key, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      return { status: response.status, body: await response.json() as unknown }
+    }
+    try {
+      const key = uuidv7()
+      const response = await command(path, payload, key)
+      expect(response.status, JSON.stringify(response.body)).toBe(201)
+      const operation = caseLifecycleOperationResponseSchema.parse(response.body).operation
+      expect(operation).toMatchObject({ status: 'approval_required', closeMode: 'with_missing_requirements', reason, blockers: [], canApprove: true })
+      expect(await command(path, payload, key)).toEqual(response)
+      expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0].lifecycle_status).toBe('open')
+      await expect(access(join(root, ...seeded.openPath.split('/'), 'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
+      const approved = await command(`/api/v1/cases/${seeded.caseId}/lifecycle/close/${operation.id}/approve`, { approved: true, expectedVersion: operation.version })
+      expect(approved.status, JSON.stringify(approved.body)).toBe(202)
+      expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+      expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0]).toMatchObject({ lifecycle_status: 'closed' })
+      expect((await pool.query('SELECT status,user_reason FROM case_lifecycle_operations WHERE id=$1', [operation.id])).rows[0]).toMatchObject({ status: 'closed', user_reason: reason })
+      await expect(access(join(root, ...operation.destination.relativePath.split('/'), 'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
+      await expect(access(join(root, ...seeded.openPath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally { await new Promise<void>((resolve, reject) => gateway.close(error => error ? reject(error) : resolve())) }
+  }, 20_000)
+
+  it('normally closes with no value loss calculation or report, while retaining explicit approval and verified folder movement', async () => {
+    const seeded = await seedCase('27 TST 29', true, {}, false)
+    const response = await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' })
+    expect(response.statusCode, response.payload).toBe(201)
+    const planned = caseLifecycleOperationResponseSchema.parse(response.json()).operation
+    expect(planned).toMatchObject({ status: 'approval_required', blockers: [], canApprove: true })
+    expect(planned.requirementSummary.requirements.some(item => item.canonicalType === 'traffic_value_loss')).toBe(false)
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0].lifecycle_status).toBe('open')
+    await expect(access(join(root, ...seeded.openPath.split('/'), 'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
+    expect((await approve(seeded.caseId, planned)).statusCode).toBe(202)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0].lifecycle_status).toBe('closed')
+    await expect(access(join(root, ...planned.destination.relativePath.split('/'), 'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
   })
 
   it('closes a verified imported office folder without inventing a notification date and moves files only after approval',async () => {

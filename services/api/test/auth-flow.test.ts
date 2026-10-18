@@ -16,7 +16,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
-import { buildApp, hashPassword, SESSION_COOKIE_NAME } from '../src/index.js'
+import { buildApp, hashPassword, hashSessionToken, SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS } from '../src/index.js'
 
 /**
  * Ucdan uca auth akisi (gercek PostgreSQL). TEST_DATABASE_URL yoksa acikca
@@ -90,6 +90,49 @@ describeDb('auth uclari (gercek veritabani)', () => {
     expect(setCookie).toContain('SameSite=Strict')
     expect(response.payload).not.toContain(PASSWORD)
     expect(response.payload).not.toContain('password')
+  })
+
+  it('keeps old sessions open after server restart and renews the persistent cookie', async () => {
+    const response = await app.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload: { email: EMAIL, password: PASSWORD } })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().expiresAt).toBeNull()
+    const cookie = cookieFrom(response.headers['set-cookie'])
+    const tokenHash = hashSessionToken(cookie.slice(`${SESSION_COOKIE_NAME}=`.length))
+    expect(String(response.headers['set-cookie'])).toContain(`Max-Age=${SESSION_COOKIE_MAX_AGE_SECONDS}`)
+    await pool.query("UPDATE sessions SET created_at=now()-interval '10 years' WHERE token_hash=$1", [tokenHash])
+    const restarted = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: true } })
+    try {
+      const session = await restarted.inject({ method: 'GET', url: AUTH_SESSION_ROUTE, headers: { cookie } })
+      expect(session.statusCode).toBe(200)
+      expect(session.json()).toMatchObject({ user: { id: userId }, expiresAt: null })
+      expect(String(session.headers['set-cookie'])).toContain(`Max-Age=${SESSION_COOKIE_MAX_AGE_SECONDS}`)
+      expect(String(session.headers['set-cookie'])).toContain('HttpOnly; SameSite=Strict')
+      expect(String(session.headers['set-cookie'])).toContain('Secure')
+      await pool.query("UPDATE users SET status='disabled' WHERE id=$1", [userId])
+      expect((await restarted.inject({ method: 'GET', url: AUTH_SESSION_ROUTE, headers: { cookie } })).statusCode).toBe(401)
+    } finally {
+      await pool.query("UPDATE users SET status='active' WHERE id=$1", [userId])
+      await restarted.close()
+    }
+  })
+
+  it('preserves browser-only cookie consent during bootstrap', async () => {
+    const response = await app.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload: { email: EMAIL, password: PASSWORD, rememberMe: false } })
+    const cookie = cookieFrom(response.headers['set-cookie'])
+    const session = await app.inject({ method: 'GET', url: AUTH_SESSION_ROUTE, headers: { cookie } })
+    expect(session.statusCode).toBe(200)
+    expect(session.json().expiresAt).toBeNull()
+    expect(String(session.headers['set-cookie'])).toContain(`${SESSION_COOKIE_NAME}=`)
+    expect(String(session.headers['set-cookie'])).not.toContain('Max-Age=')
+  })
+
+  it('rejects explicitly expired sessions without issuing a replacement cookie', async () => {
+    const response = await app.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload: { email: EMAIL, password: PASSWORD } })
+    const cookie = cookieFrom(response.headers['set-cookie'])
+    await pool.query("UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1", [hashSessionToken(cookie.slice(`${SESSION_COOKIE_NAME}=`.length))])
+    const session = await app.inject({ method: 'GET', url: AUTH_SESSION_ROUTE, headers: { cookie } })
+    expect(session.statusCode).toBe(401)
+    expect(session.headers['set-cookie']).toBeUndefined()
   })
 
   it('yanlis parola ve bilinmeyen e-posta AYNI tekduze 401 doner (enumeration yok)', async () => {

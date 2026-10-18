@@ -1,8 +1,47 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.39**, published on 2026-10-17.
-Its verified Windows x64 installer is 105,164,440 bytes, SHA-256
-`6f38d673e0daf1744e8e71d67df56bf4e64c5656dda9a706438d335ac9e57a9d`.
+The current authenticated office release is **0.1.46**, published on 2026-10-18
+(Europe/Istanbul; 2026-10-18T07:58:38.939Z).
+Its verified Windows x64 installer is 105,170,166 bytes, SHA-256
+`664dd0a1e2401b4a39e17b0d05e2ce85482fd76ac6295237787a6a90dab1d3ba`.
+The Value Loss tab is now a compact calculator with one Calculate action and a TL
+result. It no longer requests evidence, reports or calculation approval, and value
+loss no longer blocks normal case closure. Existing records remain preserved.
+The installed 0.1.45 client verified the live calculator, reported 0.1.46 as
+available and downloaded the complete authenticated installer with HTTP 200 and
+its exact size and SHA-256. The previous manifest and immutable installer were
+preserved; users control installation. See
+[calculator behavior, validation and delivery evidence](VALUE_LOSS_CALCULATOR_2026-10-18.md).
+
+The previous authenticated office release was **0.1.45**, published on 2026-10-18
+(Europe/Istanbul; 2026-10-18T07:13:43.210Z).
+Its verified Windows x64 installer is 105,179,531 bytes, SHA-256
+`89a4802ca536dc01872b8b1cbb6df5b1f486fde6d440d4bd870857c1ca85733c`.
+Close previews and approvals now retain their required command key through the
+office field gateway. Validation messages distinguish reason, version and command
+transport failures. The server correction is already effective for existing clients.
+The installed 0.1.44 client reported 0.1.45 as available and downloaded the complete
+authenticated installer with HTTP 200 and its exact SHA-256. Its manifest and
+immutable installer were preserved. See
+[closure correction and delivery evidence](CLOSURE_PREVIEW_FIX_2026-10-18.md).
+The free public entry is [HasarBotu Saha](https://hasarbotu.profaruk1.workers.dev/saha).
+For the previous release, the installed 0.1.43 client reported 0.1.44 as available and downloaded the complete
+authenticated installer with HTTP 200 and its exact SHA-256. The previous 0.1.43
+manifest and immutable installer were preserved. Users control installation.
+Touch now opens the selected search result directly in the main application.
+Its Notifications shortcut filters inbox, operational alerts and tracking to the
+same case, including read acknowledgments. Users can return to general notifications.
+See [Touch behavior, validation and delivery evidence](TOUCH_CASE_NAVIGATION_2026-10-18.md).
+The previous 12-hour account timeout is removed. Valid existing sessions were
+preserved; application restart retains authentication. The running older client
+confirmed a session without server expiry and renewal of its persistent cookie.
+Logout, account disablement and password changes revoke sessions. See
+[session behavior, validation and delivery evidence](PERSISTENT_SESSIONS_2026-10-18.md).
+The authenticated mobile field-photo portal supports plate search, camera/gallery
+uploads, original preservation, 100–600 KiB JPEG office copies and consent-based
+session persistence. See [field photos and delivery evidence](FIELD_PHOTOS.md).
+Folder discovery now keeps running after a transient, unstable pCloud snapshot,
+without changing records until a consistent scan is available.
 Management is now administrator-only. Users can edit their own names, and
 administrators can edit everyone's names; changes synchronize across active clients.
 See [account profiles and delivery evidence](ACCOUNT_PROFILES_2026-10-17.md).

@@ -28,6 +28,7 @@ export interface FreshnessGateConfig {
 }
 
 export interface AgentConfig {
+  readonly fieldPhotosEnabled?: boolean
   readonly trackingEnabled?: boolean
   readonly apiBaseUrl: string
   readonly agentId: string
@@ -82,8 +83,10 @@ export function loadAgentConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Ag
   const leaseSeconds = Number(env.HASARBOTU_AGENT_LEASE_SECONDS ?? '120')
   const pollIntervalMs = Number(env.HASARBOTU_AGENT_POLL_MS ?? '5000')
   if (env.HASARBOTU_TRACKING_ENABLED !== undefined && !['true','false'].includes(env.HASARBOTU_TRACKING_ENABLED)) throw new AgentConfigError('invalid HASARBOTU_TRACKING_ENABLED: expected true or false')
+  if (env.HASARBOTU_FIELD_PHOTOS_ENABLED !== undefined && !['true','false'].includes(env.HASARBOTU_FIELD_PHOTOS_ENABLED)) throw new AgentConfigError('invalid HASARBOTU_FIELD_PHOTOS_ENABLED: expected true or false')
   return {
     trackingEnabled: env.HASARBOTU_TRACKING_ENABLED !== 'false',
+    fieldPhotosEnabled: env.HASARBOTU_FIELD_PHOTOS_ENABLED === 'true',
     apiBaseUrl: required(env, 'HASARBOTU_API_BASE_URL'),
     agentId: required(env, 'HASARBOTU_AGENT_ID'),
     agentSecret: required(env, 'HASARBOTU_AGENT_SECRET'),

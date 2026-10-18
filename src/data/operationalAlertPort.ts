@@ -35,7 +35,7 @@ export interface OperationalAlertsRecord {
 export interface OperationalAlertDataPort {
   /** `caseIds` verilirse yanıt dosya başına özet taşır (200 kırpmasından bağımsız). */
   list(caseIds?: readonly string[]): Promise<OperationalAlertsRecord>
-  markAllRead?(): Promise<void>
+  markAllRead?(caseIds?: readonly string[]): Promise<void>
 }
 
 /** Sözleşme sınırı; Dosyalar ekranı tek çağrıda bu kadar satır sorabilir. */
@@ -76,6 +76,7 @@ export class OperationalAlertError extends Error {
 }
 
 export interface OperationalAlertAdapterOptions {
+  readonly unreadOnly?: boolean
   readonly baseUrl?: string
   readonly fetchImpl?: typeof fetch
   readonly headers?: Readonly<Record<string, string>>
@@ -100,9 +101,10 @@ export function createHttpOperationalAlertAdapter(
 
   return {
     async list(caseIds) {
-      const suffix = caseIds === undefined || caseIds.length === 0
+      let suffix = caseIds === undefined || caseIds.length === 0
         ? '?includeTotal=true&unreadOnly=true'
         : `?includeTotal=true&caseIds=${caseIds.map((value) => encodeURIComponent(value)).join(',')}`
+      if (caseIds?.length && options.unreadOnly) suffix += '&unreadOnly=true'
       let response: Response
       try {
         response = await fetchImpl(`${baseUrl}/api/v1/operational-alerts${suffix}`, {
@@ -127,11 +129,12 @@ export function createHttpOperationalAlertAdapter(
       }
       return parsed.data
     },
-    async markAllRead() {
+    async markAllRead(caseIds) {
       let response: Response
       try {
         response = await fetchImpl(`${baseUrl}/api/v1/operational-alerts/read-all`, {
           method: 'POST', credentials: 'include', headers: { accept: 'application/json', ...headers },
+          ...(caseIds ? { headers: { accept: 'application/json', ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ caseIds }) } : {}),
         })
       } catch { throw new OperationalAlertError('unavailable', 'operational alerts endpoint unreachable') }
       if (!response.ok) throw mapError(response.status)

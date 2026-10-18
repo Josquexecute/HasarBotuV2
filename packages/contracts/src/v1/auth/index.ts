@@ -37,6 +37,7 @@ export const emailSchema = z
 export const loginRequestSchema = z.strictObject({
   email: emailSchema,
   password: passwordSchema,
+  rememberMe: z.boolean().optional(),
 })
 export type LoginRequest = z.infer<typeof loginRequestSchema>
 
@@ -54,6 +55,6 @@ export type SessionUser = z.infer<typeof sessionUserSchema>
 /** Login ve `GET /api/v1/auth/session` basari govdesi. */
 export const sessionResponseSchema = z.strictObject({
   user: sessionUserSchema,
-  expiresAt: utcDateTimeSchema,
+  expiresAt: utcDateTimeSchema.nullable(),
 })
 export type SessionResponse = z.infer<typeof sessionResponseSchema>

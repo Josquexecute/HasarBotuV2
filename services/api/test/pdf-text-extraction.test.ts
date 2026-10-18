@@ -15,9 +15,13 @@ import {
   pdfTextSourceReferenceResponseSchema,
   policyAnalysisResponseSchema,
 } from '@hasarbotu/contracts'
-import { assertTestDatabaseUrl, closeDatabasePool, createDatabasePool, runMigrations, uuidv7, type DatabaseConfig } from '@hasarbotu/database'
+import { assertTestDatabaseUrl, closeDatabasePool, createDatabasePool, runMigrations as runMigrationsPackage, uuidv7, type DatabaseConfig } from '@hasarbotu/database'
 import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
+import { createHistoricalMigrationDirectory } from '../test-support/historical-migrations.js'
+
+let migrationDirectory: string
+const runMigrations = (options: Parameters<typeof runMigrationsPackage>[0]) => runMigrationsPackage({ ...options, dir: migrationDirectory })
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -61,6 +65,7 @@ describeDb('Kasko PDF metin çıkarımı API + gerçek File Agent (gerçek Postg
   }
 
   beforeAll(async () => {
+    migrationDirectory = createHistoricalMigrationDirectory('0060')
     config = assertTestDatabaseUrl(TEST_URL as string); pool = createDatabasePool({ config }); await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
     // Keep rollback tests on the exact schema introducing parser compatibility.
     await runMigrations({ databaseUrl: config.url, count: 60, quiet: true })
@@ -78,7 +83,7 @@ describeDb('Kasko PDF metin çıkarımı API + gerçek File Agent (gerçek Postg
     agentConfig = { apiBaseUrl: baseUrl, agentId: agent.agent.id, agentSecret: agent.secret, roots: { 'test-root': root }, leaseSeconds: 120, pollIntervalMs: 1000, freshnessGate: undefined }; client = createAgentApiClient({ baseUrl, agentId: agent.agent.id, secret: agent.secret })
   }, 60_000)
 
-  afterAll(async () => { if (app !== undefined) await app.close(); if (pool !== undefined) await closeDatabasePool(pool); if (root !== undefined) await rm(root, { recursive: true, force: true }) })
+  afterAll(async () => { if (app !== undefined) await app.close(); if (pool !== undefined) await closeDatabasePool(pool); if (root !== undefined) await rm(root, { recursive: true, force: true }); if (migrationDirectory) await rm(migrationDirectory, { recursive: true, force: true }) })
 
   it('allows an empty parser migration rollback and reapplies its compatibility constraint', async () => {
     expect((await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })).map(item => item.name)).toEqual(['0060_pdf_parser_version'])

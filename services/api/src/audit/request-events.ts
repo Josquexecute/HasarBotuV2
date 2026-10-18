@@ -12,6 +12,8 @@ export function registerRequestAudit(app: FastifyInstance,pool: pg.Pool) {
   app.addHook('onResponse',async (request,reply) => {
     const actor = actors.get(request),route = request.routeOptions.url ?? ''
     if (!actor || /\/auth\//.test(route)) return
+    // Upload start/finish are audited atomically; successful transport fragments add no business event.
+    if (route === '/api/v1/field/uploads/:uploadId/chunk' && reply.statusCode < 400) return
     const view = request.method === 'GET' && (/^\/api\/v1\/cases\/:caseId$/.test(route) || /\/download$|\/export$/.test(route))
     if (!view && ['GET','HEAD','OPTIONS'].includes(request.method) && reply.statusCode < 400) return
     try {

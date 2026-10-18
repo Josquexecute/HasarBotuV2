@@ -37,6 +37,7 @@ import { registerOperationalAlertRoutes } from './operational-alerts/index.js'
 import { registerCaseVehicleProfileRoutes } from './case-vehicle-profile/index.js'
 import { registerCaseVehicleOwnersRoutes } from './case-vehicle-owners/index.js'
 import { registerNoticeSheetRoutes } from './notice-sheets/routes.js'
+import { registerFieldPhotoRoutes } from './field-photos/routes.js'
 import { registerCaseInventoryRoutes } from './case-inventory/index.js'
 import { registerUserRoutes } from './users/index.js'
 import { registerV1ImportQuarantineRoutes } from './v1-import-quarantine/index.js'
@@ -60,6 +61,7 @@ export const REDACTED_LOG_PATHS = [
   'req.headers["set-cookie"]',
   'req.headers["x-api-key"]',
   'req.headers["x-agent-secret"]',
+  'req.headers["x-upload-lease"]',
   'res.headers["set-cookie"]',
 ] as const
 
@@ -68,6 +70,7 @@ export const DEFAULT_BODY_LIMIT_BYTES = 1_048_576
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 
 export interface BuildAppOptions {
+  readonly fieldPhotoDirectory?: string
   readonly legislationProvider?: LegalProvider
   readonly desktopReleasesDirectory?: string
   readonly google?: GoogleConfig
@@ -146,6 +149,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerAuditRoutes(app, { pool: options.auth.pool })
     registerStorageRoutes(app, { pool: options.auth.pool })
     registerDocumentRoutes(app, { pool: options.auth.pool })
+    if (options.fieldPhotoDirectory) registerFieldPhotoRoutes(app, { pool: options.auth.pool, directory: options.fieldPhotoDirectory })
     registerAgentRoutes(app, { pool: options.auth.pool })
     registerDocumentRequirementsRoutes(app, { pool: options.auth.pool })
     registerKascoMandatoryCheckRoutes(app, { pool: options.auth.pool })

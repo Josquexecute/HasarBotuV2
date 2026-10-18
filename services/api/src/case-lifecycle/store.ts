@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { requireCaseType } from '../cases/classification.js'
 import type pg from 'pg'
+import { hasActiveFieldPhoto } from '../field-photos/active.js'
 import {
   caseLifecycleOperationSchema,
   caseLifecycleOperationResponseSchema,
@@ -198,19 +199,6 @@ async function requirementSummary(
     [{ caseId, caseType }],
   )).get(caseId)
   if (valueLossSummary === undefined) throw new Error('value_loss_closure_summary_missing')
-  const valueLossItem: LifecycleRequirementItem = {
-    requirementCode: 'closure.traffic_value_loss',
-    sourceType: 'module',
-    canonicalType: 'traffic_value_loss',
-    status: valueLossSummary.status,
-    reason: valueLossSummary.reason,
-    matchedMetadataIds: [
-      ...(valueLossSummary.assessmentVersionId === null ? [] : [valueLossSummary.assessmentVersionId]),
-      ...(valueLossSummary.reportId === null ? [] : [valueLossSummary.reportId]),
-    ],
-    relatedMetadataStatuses: [],
-    requiresHumanReview: valueLossSummary.requiresHumanReview,
-  }
   // Zorunlu Kasko Kontrolü: yalnız Kasko dosyasında (not_applicable, Trafik'i
   // hiçbir zaman engellemez). Aynı requirements dizisine katılır -- kapanış
   // normal modda missing/control_required'ı zaten engelliyor (aşağıdaki
@@ -235,7 +223,8 @@ async function requirementSummary(
     relatedMetadataStatuses: [],
     requiresHumanReview: kascoStatus === 'control_required',
   }
-  const requirements = [...baseItems, ...closureItems, valueLossItem, kascoMandatoryCheckItem]
+  // Value loss is an optional calculator; historical report metadata is retained below.
+  const requirements = [...baseItems, ...closureItems, kascoMandatoryCheckItem]
   return {
     documentRuleVersion: base.ruleSetVersion,
     documentOverallStatus: base.overallStatus,
@@ -313,6 +302,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         if (location === undefined) return { kind: 'location_required' }
         if (location.verification_status !== 'verified') return { kind: 'location_not_verified' }
         if (location.version !== input.expectedLocationVersion) return { kind: 'version_conflict' }
+        if (await hasActiveFieldPhoto(client, actor.organizationId, caseId)) return { kind: 'active_file_operation' }
         const activeFile = await client.query(
           `SELECT status FROM case_file_operations WHERE organization_id=$1 AND case_id=$2
            AND status NOT IN ('ready','stale','cancelled')`, [actor.organizationId, caseId],
@@ -423,6 +413,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           if (!restored.ok) return { kind: 'invalid_location' }
           openLocation.source_relative_path = restored.value
         }
+        if (await hasActiveFieldPhoto(client, actor.organizationId, caseId)) return { kind: 'active_file_operation' }
         const activeFile = await client.query(
           `SELECT status FROM case_file_operations WHERE organization_id=$1 AND case_id=$2
            AND status NOT IN ('ready','stale','cancelled')`, [actor.organizationId, caseId],
