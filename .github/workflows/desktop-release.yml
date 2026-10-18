@@ -43,8 +43,8 @@ jobs:
         run: node scripts/write-ci-distribution-profile.mjs
       - name: Ayrı PostgreSQL test veritabanını aç
         run: node scripts/ci-postgres.mjs start
-      - name: Operasyonel uyarı ölçeklenmesini erken doğrula
-        run: npm test --workspace @hasarbotu/api -- test/operational-alerts-scaling.test.ts
+      - name: API worker kapanışını ve operasyonel uyarı ölçeklenmesini erken doğrula
+        run: npm test --workspace @hasarbotu/api -- test/native-worker-lifecycle.test.ts test/operational-alerts-scaling.test.ts
       - name: TypeScript kontrolü
         run: npm run typecheck
       - name: Kod kontrolü

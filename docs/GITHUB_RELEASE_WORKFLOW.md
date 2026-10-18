@@ -63,6 +63,13 @@ başarısızsa paketleme beklenmeden durulur. Toplu test verisi eklendikten sonr
 PostgreSQL istatistikleri `ANALYZE` ile hazırlanır. Sorgu planındaki gerçek evrak
 tarama sayısı da sınırlandırılır; bu kontrol süre aşımını artırmaya veya testleri
 atlamaya dayanmaz. Aynı test, tam çalışma alanı testlerinde yeniden çalıştırılır.
+API testleri `forks` havuzunda ayrı Node süreçlerinde çalışır. Yerel PDF/canvas
+modüllerinin `threads` worker kapanışında Windows erişim ihlaliyle
+(`0xC0000005`) runner'ı düşürmesini önlemek için bu izolasyon korunur.
+[Vitest'in native modül rehberi](https://vitest.dev/guide/common-errors.html#segfaults-and-native-code-errors)
+bu süreç izolasyonunu önerir. Erken kontrol ayrıca gerçek PDF renderer testini
+alt süreçte çalıştırıp test sonucu kadar normal süreç çıkışını da doğrular;
+yalnızca yeşil test satırı başarı sayılmaz.
 Touch görsel testleri, pencere boyutu veya içerik değiştiğinde Chromium'un yeni
 kareyi üretmesini bekledikten sonra ekran görüntüsü alır.
 
