@@ -24,7 +24,11 @@ const fill = async (selector, value, textarea = false) => evaluate(`(() => {
   Object.getOwnPropertyDescriptor(${textarea ? 'HTMLTextAreaElement' : 'HTMLInputElement'}.prototype, 'value').set.call(el, ${JSON.stringify(value)})
   el.dispatchEvent(new Event('input', { bubbles: true }))
 })()`)
-const screenshot = async (name) => writeFile(join(output, `${name}.png`), (await shell.window.webContents.capturePage()).toPNG())
+const screenshot = async (name, contents = shell.window.webContents) => {
+  // A resized DOM can be ready before Chromium submits its new capture surface.
+  await contents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))')
+  await writeFile(join(output, `${name}.png`), (await contents.capturePage()).toPNG())
+}
 async function boot() {
   shell = await startDesktopShell({ apiOrigin: process.env.HB_TOUCH_API, assetRoot: process.env.HB_TOUCH_ASSETS, userDataPath: app.getPath('userData'), show: false })
   hideToTrayOnClose(app, shell.window)
@@ -94,7 +98,6 @@ void app.whenReady().then(async () => {
     await evaluate('[...document.querySelectorAll(".case-detail-head__actions button")].find(button => button.textContent === "Dosyayı Kapat").click()')
     await until('!!document.querySelector(".modal--case-lifecycle")')
     check('full case header opens the real close preview dialog', await evaluate('!![...document.querySelectorAll(".modal--case-lifecycle button")].find(button => button.textContent === "Önizleme Oluştur")'))
-    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))')
     await screenshot('case-close-dialog')
     await click('.modal--case-lifecycle [aria-label="Pencereyi kapat"]')
     for (const tab of ['Özet', 'Operasyon', 'Evrak ve Fotoğraf', 'Ağır Hasar', 'Değer Kaybı', 'Raporlar ve Ücretler', 'E-postalar', 'Geçmiş']) {
@@ -180,13 +183,13 @@ void app.whenReady().then(async () => {
     for (const theme of ['light','dark']) {
       await menuEval(`document.querySelector('.theme-root').dataset.theme=${JSON.stringify(theme)}`)
       check(`assistant ${theme}: fits work area`, await menuEval('document.documentElement.scrollWidth <= innerWidth && document.querySelector("main").scrollHeight <= innerHeight'))
-      await writeFile(join(output,`standalone-assistant-${theme}.png`),(await helper.menuWindow.webContents.capturePage()).toPNG())
+      await screenshot(`standalone-assistant-${theme}`, helper.menuWindow.webContents)
     }
     helper.menuWindow.webContents.setZoomFactor(1.5)
     await menuUntil('innerWidth <= 280')
     await menuEval('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))')
     check('assistant at 150 percent: no horizontal overflow', await menuEval('document.documentElement.scrollWidth <= innerWidth'))
-    await writeFile(join(output,'standalone-assistant-zoom.png'),(await helper.menuWindow.webContents.capturePage()).toPNG())
+    await screenshot('standalone-assistant-zoom', helper.menuWindow.webContents)
     helper.menuWindow.webContents.setZoomFactor(1)
     await menuUntil('innerWidth === 420')
     await menuEval('document.querySelector("header button").click()')

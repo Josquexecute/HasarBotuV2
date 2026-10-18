@@ -41,14 +41,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - name: Ofis bağlantısını doğrula
         run: node scripts/write-ci-distribution-profile.mjs
+      - name: Ayrı PostgreSQL test veritabanını aç
+        run: node scripts/ci-postgres.mjs start
+      - name: Operasyonel uyarı ölçeklenmesini erken doğrula
+        run: npm test --workspace @hasarbotu/api -- test/operational-alerts-scaling.test.ts
       - name: TypeScript kontrolü
         run: npm run typecheck
       - name: Kod kontrolü
         run: npm run lint
       - name: Uygulamayı derle
         run: npm run build
-      - name: Ayrı PostgreSQL test veritabanını aç
-        run: node scripts/ci-postgres.mjs start
       - name: Gerçek Electron ve veritabanı dahil testleri çalıştır
         run: node scripts/run-release-tests.mjs
       - name: Windows x64 kurulumunu oluştur

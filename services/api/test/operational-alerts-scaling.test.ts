@@ -38,6 +38,20 @@ const TRAFFIC_DOCUMENTS = [
 
 interface QueryCall {
   readonly parameterElementCount: number
+  readonly sql: string
+  readonly parameters: readonly unknown[]
+}
+
+interface QueryPlan {
+  readonly 'Relation Name'?: string
+  readonly 'Actual Rows': number
+  readonly 'Actual Loops': number
+  readonly Plans?: readonly QueryPlan[]
+}
+
+function countRelationRows(plan: QueryPlan, relation: string): number {
+  const rows = plan['Relation Name'] === relation ? plan['Actual Rows'] * plan['Actual Loops'] : 0
+  return rows + (plan.Plans ?? []).reduce((sum, child) => sum + countRelationRows(child, relation), 0)
 }
 
 /** `pool.query` sarmalayıcısı: sorgu sayısı ve parametre yükü toplanır. */
@@ -50,7 +64,7 @@ function instrument(pool: pg.Pool) {
         (sum, value) => sum + (Array.isArray(value) ? value.length : 1),
         0,
       )
-      calls.push({ parameterElementCount })
+      calls.push({ parameterElementCount, sql: args[0] as string, parameters })
       return (pool.query as (...inner: unknown[]) => Promise<unknown>)(...args)
     },
   } as unknown as pg.Pool
@@ -141,6 +155,11 @@ describeDb('Paket 51 operasyonel uyarı ölçeklenme sınırları', () => {
     smallOrganizationId = await seedOrganization('p51-small', SMALL_CASE_COUNT)
     largeOrganizationId = await seedOrganization('p51-large', LARGE_CASE_COUNT)
     emptyOrganizationId = await seedOrganization('p51-empty', 0)
+    // Bulk fixtures bypass autovacuum's usual analyze cadence. Empty statistics
+    // can rescan the entire document view for every case on a fresh CI database.
+    await pool.query(`ANALYZE cases, case_tasks, documents, document_versions,
+      tracked_files, document_observations, case_locations, tracking_health,
+      document_rule_sets, document_rule_versions`)
   }, 180_000)
 
   afterAll(async () => {
@@ -179,6 +198,24 @@ describeDb('Paket 51 operasyonel uyarı ölçeklenme sınırları', () => {
     // Dosya kimliği dizisi parametre olarak taşınmamalı.
     expect(largePayload).toBe(smallPayload)
     expect(largePayload).toBeLessThan(10)
+  })
+
+  it('evrak sorgusu her dosya için bütün evrakları yeniden taramaz', async () => {
+    const { proxy, calls } = instrument(pool)
+    await createOperationalAlertStore(proxy).list(largeOrganizationId, AS_OF_DATE, EVALUATED_AT)
+    const documentsQuery = calls.find((call) => call.sql.includes('FROM tracking_requirement_documents'))
+    expect(documentsQuery).toBeDefined()
+    const { rows } = await pool.query<{ 'QUERY PLAN': { Plan: QueryPlan }[] }>(
+      `EXPLAIN (ANALYZE, FORMAT JSON) ${documentsQuery!.sql}`,
+      [...documentsQuery!.parameters],
+    )
+    const plan = rows[0]['QUERY PLAN'][0].Plan
+    const maximumDocumentCount = (SMALL_CASE_COUNT + LARGE_CASE_COUNT) * TRAFFIC_DOCUMENTS.length
+    for (const relation of ['documents', 'document_versions']) {
+      const scannedRows = countRelationRows(plan, relation)
+      expect(scannedRows).toBeGreaterThan(0)
+      expect(scannedRows).toBeLessThanOrEqual(maximumDocumentCount)
+    }
   })
 
   it('açık dosyası olmayan organization için tek sorgu yeterlidir', async () => {

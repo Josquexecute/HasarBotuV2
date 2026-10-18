@@ -58,6 +58,14 @@ kapatılır; ofis veritabanına bağlanılmaz. Test sonuçlarında atlanan kontr
 gösterilir. Gerçek Google hesabı ve ofis sunucusunun yeni sürüm kabulü bu çalışma
 tarafından doğrulanmış sayılmaz.
 
+Operasyonel uyarı ölçeklenme testi, uzun doğrulamalardan önce ayrıca çalışır;
+başarısızsa paketleme beklenmeden durulur. Toplu test verisi eklendikten sonra
+PostgreSQL istatistikleri `ANALYZE` ile hazırlanır. Sorgu planındaki gerçek evrak
+tarama sayısı da sınırlandırılır; bu kontrol süre aşımını artırmaya veya testleri
+atlamaya dayanmaz. Aynı test, tam çalışma alanı testlerinde yeniden çalıştırılır.
+Touch görsel testleri, pencere boyutu veya içerik değiştiğinde Chromium'un yeni
+kareyi üretmesini bekledikten sonra ekran görüntüsü alır.
+
 NSIS paketi ayrıca gerçekten açılır; sürümü, ofis profili, paketlenmiş arayüz
 dosyaları, HTTP sunumu ve normal kapanışı kontrol edilir. Taslağa eklenen dosyanın
 Windows sürüm bilgisi, uzunluğu ve SHA-256 değeri kontrol edilir. Kullanıcı yayından
