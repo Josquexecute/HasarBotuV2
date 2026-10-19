@@ -1,6 +1,36 @@
 # Shared Windows releases
 
-The current authenticated office release is **0.1.51**, published on 2026-10-18
+The current authenticated office release is **0.1.53**, published on 2026-10-19
+(Europe/Istanbul; 2026-10-19T04:54:32.219Z). Its verified Windows x64 installer is
+105,191,623 bytes, SHA-256
+`f180e53ad78129021b8acb95e153a7c332d70797e066f3bde66ea3bbd897c901`.
+Long case lists now keep only viewport rows mounted while preserving loaded data,
+selection, scrolling, keyboard access and open notice sheets. In the local
+1,000-case comparison, average total private memory fell from 560.3 to 347.0 MiB;
+theme-update median fell from 178.0 to 12.3 ms. The initial screenshot and Touch
+assets are identical; median scroll cadence was preserved with no blank frames.
+The installed 0.1.49 client reported 0.1.53 as available and downloaded the
+authenticated package with its exact length and SHA-256. The previous 0.1.52
+manifest and immutable installer were preserved; installation remains user-controlled.
+No backend, schema or office service configuration changed. See
+[behavior, performance, validation and publication](CASE_LIST_PERFORMANCE_2026-10-19.md).
+
+The previous authenticated office release was **0.1.52**, published on 2026-10-19
+(Europe/Istanbul; 2026-10-18T21:18:06.421Z). Its verified Windows x64 installer is
+105,191,690 bytes, SHA-256
+`499c51706f3c3b1927b4f9512a1840e472b98316484d57c5058c374023405e11`.
+Long case lists now keep only viewport rows mounted while preserving loaded data,
+selection, scrolling, keyboard access and open notice sheets. In the local
+1,000-case comparison, average total private memory fell from 560.3 to 361.8 MiB;
+theme-update median fell from 178.0 to 12.6 ms. The initial screenshot and Touch
+assets are identical; scroll frame intervals did not regress in the measured runs.
+The installed 0.1.49 client reported 0.1.52 as available and downloaded the
+authenticated package with its exact length and SHA-256. The previous 0.1.51
+manifest and immutable installer were preserved; installation remains user-controlled.
+No backend, schema or office service configuration changed. See
+[behavior, performance, validation and publication](CASE_LIST_PERFORMANCE_2026-10-19.md).
+
+The previous authenticated office release was **0.1.51**, published on 2026-10-18
 (Europe/Istanbul; 2026-10-18T20:08:05.938Z).
 Its verified Windows x64 installer is 105,189,841 bytes, SHA-256
 `902cf9f869051f36b0e10d61d5f0be43759aa70533204d20bf8e07a9f7f76d6a`.

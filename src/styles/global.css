@@ -1355,9 +1355,12 @@ button {
   background: var(--surface);
 }
 
-.case-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-muted) 45%, var(--surface)); }
+.case-table:not(.case-table--windowed) tbody tr:nth-child(even), .case-table--windowed tbody tr.is-even { background: color-mix(in srgb, var(--surface-muted) 45%, var(--surface)); }
 .case-table tbody tr:hover { background: var(--surface-hover); }
 .case-table tbody tr.is-selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+
+.case-table .case-table-spacer { pointer-events: none; overflow-anchor: none; }
+.case-table .case-table-spacer td { padding: 0; border: 0; }
 
 .case-table td > small { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: 10px; }
 .case-table td > strong { display: block; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

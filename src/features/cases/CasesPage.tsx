@@ -49,6 +49,7 @@ import { CaseCreateModal } from './CaseCreateModal'
 import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
 import { NoticeSheetButton } from './NoticeSheetButton'
 import { CASE_STAGE_OPTIONS } from './caseForm'
+import { WindowedCaseRows } from './WindowedCaseRows'
 
 type SortDirection = 'asc' | 'desc'
 
@@ -271,11 +272,13 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
     if (restoration.current.key !== list.queryKey) {
       restoration.current = { key: list.queryKey, top: 0, left: 0, done: false }
       element.scrollTop = 0
+      element.dispatchEvent(new Event('scroll'))
     }
     if (pageStatus === 'ok' && !restoration.current.done) {
       element.scrollTop = restoration.current.top
       element.scrollLeft = restoration.current.left
       restoration.current.done = true
+      element.dispatchEvent(new Event('scroll'))
     }
   }, [list.queryKey, pageStatus])
   useEffect(() => {
@@ -456,7 +459,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
             if (typeof IntersectionObserver === 'undefined' && element.clientHeight > 0 && moreStatus === 'ok' && element.scrollHeight - element.scrollTop - element.clientHeight < 320) void loadMore()
           }}>
             {visibleCases.length === 0 ? (source !== 'api' || pageStatus === 'ok' ? <EmptyState onReset={resetFilters} /> : null) : (
-              <table className="case-table">
+              <table className="case-table case-table--windowed" aria-rowcount={visibleCases.length + 1}>
                 <thead>
                   <tr>
                     <th><button type="button" onClick={() => handleSort('plate')}>Plaka / Dosya No <SortIcon column="plate" sortKey={sortKey} direction={direction} /></button></th>
@@ -475,11 +478,12 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                     <th><button type="button" onClick={() => handleSort('lastAction')}>Son İşlem <SortIcon column="lastAction" sortKey={sortKey} direction={direction} /></button></th>
                   </tr>
                 </thead>
-                <tbody>
-                  {visibleCases.map((item) => (
+                <WindowedCaseRows key={`${scope}:${list.queryKey}`} items={visibleCases} columns={source === 'api' ? 13 : 12} initialScrollTop={saved?.queryKey === list.queryKey ? saved.view?.scrollTop : 0} initialRowHeights={saved?.queryKey === list.queryKey ? saved.rowHeights : undefined} onHeightsChange={heights => cache.saveRowHeights(scope, list.queryKey, heights)}>
+                  {(item, index, { onDialogChange, ...rowProps }) => (
                     <tr
+                      {...rowProps}
                       key={item.caseId}
-                      className={selectedCase?.caseId === item.caseId ? 'is-selected' : ''}
+                      className={`${selectedCase?.caseId === item.caseId ? 'is-selected ' : ''}${index % 2 === 1 ? 'is-even' : ''}`}
                       tabIndex={0}
                       onClick={() => { setSelectedId(item.caseId); setDetailOpen(true); activateCase(item) }}
                       onDoubleClick={() => navigate(`/dosyalar/${item.caseId}`)}
@@ -510,12 +514,12 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                       )}
                       <td>{item.assignee}</td>
                       <td className="truncate-cell" title={item.service}>{item.service}</td>
-                      <td><div className="case-table-actions"><OpenCaseFolderButton compact caseId={item.caseId} /><NoticeSheetButton compact caseId={item.caseId} plate={item.plate} source={source} /></div></td>
+                      <td><div className="case-table-actions"><OpenCaseFolderButton compact caseId={item.caseId} /><NoticeSheetButton compact caseId={item.caseId} plate={item.plate} source={source} onOpenChange={onDialogChange} /></div></td>
                       <td><span className={`follow-up follow-up--${item.followUpTone}`}>{item.followUp}</span></td>
                       <td>{item.lastAction}</td>
                     </tr>
-                  ))}
-                </tbody>
+                  )}
+                </WindowedCaseRows>
               </table>
             )}
             {source === 'api' && <div ref={sentinel} className="case-list-sentinel" aria-hidden="true" />}
