@@ -41,6 +41,7 @@ Türkçe etiket eşlemesi ileride UI/adaptör katmanında yapılacaktır.
 - `PlateNumber` girdiyi kırpar (en çok **32 karakter**), büyük harfe ve tek aralıklı kanonik gösterime dönüştürür. Standart Türk plaka dizilimi tanınırsa `34 MPA 764` biçimi üretilir; farklı ama alfasayısal plakalar gereksiz katı bir regex ile reddedilmez. Arama anahtarı ayraçsızdır: `34MPA764`.
 - `UtcDateTime`, yalnız `YYYY-MM-DDTHH:mm:ssZ` veya üç basamak milisaniyeli `YYYY-MM-DDTHH:mm:ss.sssZ` biçimini kabul eder. Offset ve timezone'suz değerler reddedilir.
 - `LocalDate`, gerçek takvim doğrulamasıyla `YYYY-MM-DD` biçimini kabul eder; timezone taşımaz ve dönüştürülmez.
+- Yeni ihbar çalışma klasörleri `YYYY OFİS/Ay YYYY/PLAKA` altında oluşturulur; böylece ofis envanterinde kalır. Kapanış aynı ayın `KAPALI DOSYALAR` altını kullanır; mevcut `YYYY/Ay YYYY` yolları desteklenmeye devam eder.
 - Takip tarihi ürün kararıyla **saat içermez**: `CaseCore.followUpDate`, `LocalDate` taşır (2026-07-11 proje sertleştirme kararı, `DECISION_LOG.md` HB-2026-005). `followUpAt` alanı kaldırılmıştır. `lastInterventionAt`, `createdAt` ve `updatedAt` `UtcDateTime` olarak kalır.
 - `EntityVersion`, optimistic locking için 1'den başlayan pozitif güvenli tam sayıdır; güvenli sınırda artırım `overflow` hatası verir.
 

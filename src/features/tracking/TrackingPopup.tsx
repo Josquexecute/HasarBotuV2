@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { BellRing, X } from 'lucide-react'
 import { trackingPendingNotificationsSchema } from '@hasarbotu/contracts'
 import { trackingRequest } from './trackingApi'
+import { assistantFeedback } from '../../app/assistantFeedback'
 import './tracking.css'
 
 interface Notice { id: string;caseId: string;plate: string;title: string }
@@ -27,7 +28,10 @@ export function TrackingPopup() {
           const received = data.notifications.some((notice) => !knownIds.current.has(notice.id))
           knownIds.current = new Set(data.notifications.map((notice) => notice.id))
           setItems(data.notifications);setError('')
-          if (received) window.dispatchEvent(new Event('tracking-received'))
+          if (received) {
+            window.dispatchEvent(new Event('tracking-received'))
+            assistantFeedback()?.notificationReceived?.()
+          }
         }
       } catch {
         if (!controller.signal.aborted) setError('Yeni bildirimler alınamıyor.')

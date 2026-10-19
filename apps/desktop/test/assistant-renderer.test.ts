@@ -10,7 +10,7 @@ function setup(available = true) {
   doc.body.innerHTML = '<button id="assistant" disabled>Yardımcı</button>'
   const button = doc.querySelector('button')!
   button.setPointerCapture = vi.fn()
-  const api = { press: vi.fn(), drag: vi.fn(), release: vi.fn(), cancel: vi.fn(), menu: vi.fn(), move: vi.fn() }
+  const api = { press: vi.fn(), drag: vi.fn(), release: vi.fn(), cancel: vi.fn(), menu: vi.fn(), activate: vi.fn(), move: vi.fn() }
   const target = Object.assign(new EventTarget(), { hasarbotuAssistant: available ? api : undefined })
   // Evaluate the shipped, dependency-free renderer in an isolated DOM per test.
   new Function('window', 'document', source)(target, doc)
@@ -64,7 +64,8 @@ describe('assistant renderer input', () => {
     button.dispatchEvent(new MouseEvent('contextmenu'))
     button.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
     button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    expect(api.menu).toHaveBeenCalledTimes(2)
+    expect(api.activate).toHaveBeenCalledOnce()
+    expect(api.menu).toHaveBeenCalledOnce()
     expect(api.move).toHaveBeenCalledWith('left')
     expect(api.cancel).toHaveBeenCalledOnce()
   })

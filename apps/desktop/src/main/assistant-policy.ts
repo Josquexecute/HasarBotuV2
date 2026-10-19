@@ -12,6 +12,12 @@ export const ASSISTANT_MARGIN = 8
 export interface Point { readonly x: number; readonly y: number }
 export interface WorkArea extends Point { readonly width: number; readonly height: number }
 
+export function assistantEdge(position: Point, area: WorkArea): -1 | 0 | 1 {
+  if (position.x <= area.x + ASSISTANT_MARGIN + 16) return -1
+  if (position.x + ASSISTANT_SIZE >= area.x + area.width - ASSISTANT_MARGIN - 16) return 1
+  return 0
+}
+
 /** Publish only relative gaze, never global desktop coordinates. */
 export function assistantGaze(cursor: Point, position: Point): Point {
   const center = { x: position.x + ASSISTANT_SIZE / 2, y: position.y + ASSISTANT_SIZE / 2 }
@@ -38,8 +44,8 @@ export function clampAssistantPosition(point: Point, area: WorkArea): Point {
   }
 }
 
-export type AssistantCommand = 'press' | 'drag' | 'release' | 'cancel' | 'menu' | 'left' | 'right' | 'up' | 'down'
+export type AssistantCommand = 'press' | 'drag' | 'release' | 'cancel' | 'menu' | 'activate' | 'left' | 'right' | 'up' | 'down'
 
 export function isAssistantCommand(value: unknown): value is AssistantCommand {
-  return typeof value === 'string' && ['press', 'drag', 'release', 'cancel', 'menu', 'left', 'right', 'up', 'down'].includes(value)
+  return typeof value === 'string' && ['press', 'drag', 'release', 'cancel', 'menu', 'activate', 'left', 'right', 'up', 'down'].includes(value)
 }

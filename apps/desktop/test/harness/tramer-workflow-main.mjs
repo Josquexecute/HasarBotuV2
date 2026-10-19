@@ -76,7 +76,7 @@ void app.whenReady().then(async () => {
     await until(() => evaluate('Array.from(document.querySelectorAll(".tracking-row strong")).some(element=>element.textContent === "Tamamlandı")'),'updated Tramer status in the open case')
     check('the open case updates to completed without a manual refresh',true)
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))')
-    await writeFile(join(process.env.HB_TRAMER_EVIDENCE,'tramer-result-popup.png'),(await shell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_TRAMER_EVIDENCE,'tramer-result-popup.png'),(await shell.window.webContents.capturePage()).toPNG()) }
     await syncMailboxes(pool,google,provider)
     const state = (await pool.query('SELECT status,result_text FROM tramer_requests WHERE case_id=$1',[caseId])).rows[0]
     check('mailbox ingestion persists the actual completed outcome',state.status === 'completed' && state.result_text === 'Sonuç: Tamamlandı')
@@ -92,7 +92,7 @@ void app.whenReady().then(async () => {
     await until(() => evaluate('document.body.textContent.includes("Tramer sonuçlandı — 000311")'),'persistent result inbox after reopen')
     check('reopening the desktop shows the result received while it was closed',true)
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))')
-    await writeFile(join(process.env.HB_TRAMER_EVIDENCE,'tramer-inbox-after-reopen.png'),(await shell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_TRAMER_EVIDENCE,'tramer-inbox-after-reopen.png'),(await shell.window.webContents.capturePage()).toPNG()) }
   } catch (error) { checks.push({ name: error instanceof Error ? error.message : 'Unexpected Tramer UI error',pass: false }) }
   finally {
     await shell?.close();await api?.close();await pool?.end()

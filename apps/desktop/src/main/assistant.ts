@@ -3,7 +3,8 @@ import { assistantAppearanceSchema, DEFAULT_ASSISTANT_APPEARANCE, idSchema } fro
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ASSISTANT_SIZE, assistantGaze, assistantMenuBounds, clampAssistantPosition, isAssistantCommand, isAssistantMenuAction, parseAssistantPosition, type Point } from './assistant-policy.js'
+import { ASSISTANT_SIZE, assistantEdge, assistantGaze, assistantMenuBounds, clampAssistantPosition, isAssistantCommand, isAssistantMenuAction, parseAssistantPosition, type Point } from './assistant-policy.js'
+import { AssistantFeedbackState, type AssistantMotionEvent } from './assistant-feedback.js'
 import { SECURE_WEB_PREFERENCES } from './security.js'
 import { hardenSession, type DesktopShell } from './shell.js'
 
@@ -16,6 +17,8 @@ interface AssistantOptions {
 
 /** Separate UI windows; business operations use the existing authenticated API. */
 export async function startDesktopAssistant(options: AssistantOptions) {
+  const mainContents = options.shell.window.webContents
+  const mainContentsId = mainContents.id
   const statePath = join(options.userDataPath, 'assistant-position.json')
   const url = `${options.shell.origin}/desktop-assistant.html`
   const menuUrl = `${options.shell.origin}/touch-assistant`
@@ -80,8 +83,9 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   let gazeTimer: ReturnType<typeof setInterval> | undefined
   let previousGaze: Point | undefined
   let appearance = DEFAULT_ASSISTANT_APPEARANCE
-  const sendMotion = (value: { type: 'drag'; x: number } | { type: 'release' | 'success' }) => {
-    if (!disposed && !window.isDestroyed() && window.isVisible() && !appearance.reduceMotion) {
+  const feedback = new AssistantFeedbackState()
+  const sendMotion = (value: AssistantMotionEvent) => {
+    if (!disposed && !window.isDestroyed() && window.isVisible() && (!appearance.reduceMotion || value.type === 'working' || value.type === 'error')) {
       window.webContents.send('hasarbotu:assistant-motion', value)
     }
   }
@@ -137,6 +141,9 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     // Electron's default floating level moves behind the Windows taskbar, which
     // can drop WS_EX_TOPMOST. Keep this small work-area-clamped control above it.
     window.setAlwaysOnTop(true, 'pop-up-menu')
+    sendMotion({ type: 'working', active: feedback.working })
+    sendMotion({ type: 'error', active: Boolean(feedback.error) })
+    sendMotion({ type: 'edge', x: assistantEdge(position, screen.getDisplayNearestPoint(position).workArea) })
   }
   const actions = {
     open: () => showMain(),
@@ -208,6 +215,8 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     if (appearance.reduceMotion) stopGaze()
     else if (window.isVisible()) startGaze()
     window.webContents.send('hasarbotu:assistant-appearance', appearance)
+    sendMotion({ type: 'working', active: feedback.working })
+    sendMotion({ type: 'error', active: Boolean(feedback.error) })
     return true
   }
   const handleSuccess = (event: IpcMainEvent) => {
@@ -217,7 +226,30 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     const trustedMenu = event.sender === menuWindow.webContents && event.senderFrame === menuWindow.webContents.mainFrame && event.senderFrame?.url === menuUrl
     if (trustedMain || trustedMenu) sendMotion({ type: 'success' })
   }
+  const handleFeedback = (event: IpcMainEvent, value: unknown) => {
+    if (disposed) return
+    const main = options.shell.window.webContents
+    const trustedMain = event.sender === main && event.senderFrame === main.mainFrame && event.senderFrame?.url.startsWith(options.shell.origin + '/')
+    const trustedMenu = event.sender === menuWindow.webContents && event.senderFrame === menuWindow.webContents.mainFrame && event.senderFrame?.url === menuUrl
+    if (trustedMain || trustedMenu) for (const motion of feedback.accept(event.sender.id, value)) sendMotion(motion)
+  }
+  const clearMainFeedback = () => { for (const motion of feedback.clear(mainContentsId)) sendMotion(motion) }
+  const clearMenuFeedback = () => { for (const motion of feedback.clear(menuWindow.webContents.id)) sendMotion(motion) }
+  const mainNavigation = (_event: Electron.Event, _url: string, isInPlace: boolean, isMainFrame: boolean) => { if (isMainFrame && !isInPlace) clearMainFeedback() }
+  const menuNavigation = (_event: Electron.Event, _url: string, isInPlace: boolean, isMainFrame: boolean) => { if (isMainFrame && !isInPlace) clearMenuFeedback() }
+  mainContents.on('did-start-navigation', mainNavigation)
+  menuWindow.webContents.on('did-start-navigation', menuNavigation)
+  mainContents.on('render-process-gone', clearMainFeedback)
+  menuWindow.webContents.on('render-process-gone', clearMenuFeedback)
   menuWindow.on('close',(event) => { event.preventDefault();hideMenu() })
+  const activate = () => {
+    if (!feedback.error) { openMenu(); return }
+    const detail = feedback.error
+    feedback.error = undefined
+    sendMotion({ type: 'error', active: false })
+    showMain()
+    void dialog.showMessageBox(options.shell.window, { type: 'warning', title: 'HasarBotu · İşlem tamamlanamadı', message: 'Son işlem tamamlanamadı', detail, buttons: ['Tamam'] })
+  }
   const updateDrag = () => {
     if (!drag) return
     const cursor = screen.getCursorScreenPoint()
@@ -244,17 +276,21 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       const moved = drag.moved
       drag = undefined
       sendMotion({ type: 'release' })
-      if (moved) persist()
-      else openMenu()
+      if (moved) {
+        persist()
+        sendMotion({ type: 'edge', x: assistantEdge(position, screen.getDisplayNearestPoint(position).workArea) })
+      } else activate()
     } else if (command === 'cancel') {
       if (drag?.moved) persist()
       drag = undefined
       sendMotion({ type: 'release' })
     } else if (command === 'menu') openMenu()
+    else if (command === 'activate') activate()
     else {
       move({ x: position.x + (command === 'left' ? -16 : command === 'right' ? 16 : 0),
         y: position.y + (command === 'up' ? -16 : command === 'down' ? 16 : 0) })
       persist()
+      sendMotion({ type: 'edge', x: assistantEdge(position, screen.getDisplayNearestPoint(position).workArea) })
     }
   }
   const onDisplayChange = () => { drag = undefined;sendMotion({ type: 'release' });hideMenu();move(position);persist() }
@@ -268,6 +304,11 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     ipcMain.removeListener('hasarbotu:assistant', handleCommand)
     ipcMain.removeListener('hasarbotu:assistant-menu',handleMenuAction)
     ipcMain.removeListener('hasarbotu:assistant-success', handleSuccess)
+    ipcMain.removeListener('hasarbotu:assistant-feedback', handleFeedback)
+    mainContents.removeListener('did-start-navigation', mainNavigation)
+    menuWindow.webContents.removeListener('did-start-navigation', menuNavigation)
+    mainContents.removeListener('render-process-gone', clearMainFeedback)
+    menuWindow.webContents.removeListener('render-process-gone', clearMenuFeedback)
     ipcMain.removeHandler('hasarbotu:assistant-appearance')
     screen.removeListener('display-added', onDisplayChange)
     screen.removeListener('display-removed', onDisplayChange)
@@ -288,6 +329,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   ipcMain.on('hasarbotu:assistant', handleCommand)
   ipcMain.on('hasarbotu:assistant-menu',handleMenuAction)
   ipcMain.on('hasarbotu:assistant-success', handleSuccess)
+  ipcMain.on('hasarbotu:assistant-feedback', handleFeedback)
   ipcMain.handle('hasarbotu:assistant-appearance', handleAppearance)
   screen.on('display-added', onDisplayChange)
   screen.on('display-removed', onDisplayChange)

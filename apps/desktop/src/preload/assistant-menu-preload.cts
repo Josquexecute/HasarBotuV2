@@ -21,4 +21,7 @@ contextBridge.exposeInMainWorld('hasarbotuAppearance', Object.freeze({
 }))
 contextBridge.exposeInMainWorld('hasarbotuAssistantFeedback', Object.freeze({
   noteSaved: () => ipcRenderer.send('hasarbotu:assistant-success'),
+  activity: (id: unknown, phase: unknown, message?: unknown) => ipcRenderer.send('hasarbotu:assistant-feedback', { type: 'activity', id, phase, message }),
+  taskCompleted: () => ipcRenderer.send('hasarbotu:assistant-feedback', { type: 'completed' }),
+  notificationReceived: () => ipcRenderer.send('hasarbotu:assistant-feedback', { type: 'notification' }),
 }))

@@ -178,7 +178,7 @@ export type ClosedWorkspacePathResult =
   | { readonly ok: true; readonly value: string }
   | { readonly ok: false; readonly code: 'notification_date_required' | 'location_date_mismatch' | 'invalid_open_location' }
 
-/** `YYYY/Ay YYYY/CASE` -> `YYYY/Ay YYYY/KAPALI AY YYYY/CASE`; serbest client yolu kabul etmez. */
+/** Doğrulanmış yıl/ay klasöründe kapanış yolunu üretir; eski YYYY yolları da desteklenir. */
 export function buildClosedCaseWorkspacePath(notificationDate: string | null, openRelativePath: string): ClosedWorkspacePathResult {
   if (notificationDate === null) return { ok: false, code: 'notification_date_required' }
   const parsed = parseRelativePath(openRelativePath)
@@ -190,10 +190,11 @@ export function buildClosedCaseWorkspacePath(notificationDate: string | null, op
   const year = Number(notificationDate.slice(0, 4))
   const month = Number(notificationDate.slice(5, 7))
   const monthName = TURKISH_MONTH_NAMES[month - 1]
-  if (monthName === undefined || yearText !== String(year) || monthFolder !== `${monthName} ${year}`) {
+  if (monthName === undefined || (yearText !== String(year) && yearText !== `${year} OFİS`) || monthFolder !== `${monthName} ${year}`) {
     return { ok: false, code: 'location_date_mismatch' }
   }
-  return { ok: true, value: `${yearText}/${monthFolder}/KAPALI ${monthName.toLocaleUpperCase('tr-TR')} ${year}/${workspaceName}` }
+  const closedFolder = yearText === `${year} OFİS` ? 'KAPALI DOSYALAR' : `KAPALI ${monthName.toLocaleUpperCase('tr-TR')} ${year}`
+  return { ok: true, value: `${yearText}/${monthFolder}/${closedFolder}/${workspaceName}` }
 }
 
 /** Imported folders already have a verified calendar location; do not invent a claim notification date. */

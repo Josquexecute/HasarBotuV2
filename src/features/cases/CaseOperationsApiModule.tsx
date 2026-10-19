@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
+import { assistantFeedback, withAssistantActivity } from '../../app/assistantFeedback'
 import {
   AlertTriangle,
   CalendarClock,
@@ -109,7 +110,7 @@ export function CaseOperationsApiModule({
     setError('')
     setConflict(false)
     try {
-      await operation()
+      await withAssistantActivity(operation, 'Operasyon tamamlanamadı. Dosyanın operasyonlar bölümündeki hata açıklamasını kontrol edin.')
       window.dispatchEvent(new Event('operational-alerts-updated'))
     } catch (caught) {
       setError(safeErrorMessage(caught))
@@ -165,6 +166,7 @@ export function CaseOperationsApiModule({
     void run(`resolve-${task.id}`, async () => {
       if (resolution.action === 'complete') {
         await workspace.port.completeTask(item.caseId, task.id, task.version, resolution.text.trim())
+        assistantFeedback()?.taskCompleted?.()
       } else {
         await workspace.port.cancelTask(item.caseId, task.id, task.version, resolution.text.trim())
       }

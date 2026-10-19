@@ -84,16 +84,16 @@ void app.whenReady().then(async () => {
     check('sidebar displays a single name and no role subtitle', await evaluate(employeeShell, 'document.querySelectorAll(".user-card__copy strong").length===1 && !document.querySelector(".user-card__copy small")'))
     check('roles and account status remain intact', (await pool.query('SELECT status FROM users WHERE id=$1', [employee])).rows[0].status === 'active' && (await pool.query('SELECT r.code FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1', [employee])).rows[0].code === 'read_only')
     check('profile changes retain actor attribution', (await pool.query("SELECT count(DISTINCT actor_user_id)::int n FROM audit_events WHERE action='user.profile_updated'")).rows[0].n === 2)
-    await writeFile(join(process.env.HB_PROFILE_EVIDENCE, 'profile-settings.png'), (await employeeShell.window.webContents.capturePage()).toPNG())
-    await writeFile(join(process.env.HB_PROFILE_EVIDENCE, 'profile-management.png'), (await adminShell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_PROFILE_EVIDENCE, 'profile-settings.png'), (await employeeShell.window.webContents.capturePage()).toPNG()) }
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_PROFILE_EVIDENCE, 'profile-management.png'), (await adminShell.window.webContents.capturePage()).toPNG()) }
     await evaluate(employeeShell, `document.querySelector('[aria-label="Koyu temaya geç"]').click()`)
     await until(() => evaluate(employeeShell, 'document.querySelector(".theme-root").dataset.theme === "dark"'), 'profile dark theme')
     check('personal name editor works in dark theme', await evaluate(employeeShell, '!document.querySelector("input[autocomplete=name]").disabled'))
-    await writeFile(join(process.env.HB_PROFILE_EVIDENCE, 'profile-settings-dark.png'), (await employeeShell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_PROFILE_EVIDENCE, 'profile-settings-dark.png'), (await employeeShell.window.webContents.capturePage()).toPNG()) }
     employeeShell.window.setSize(390, 820)
     await until(() => evaluate(employeeShell, 'innerWidth<500'), 'narrow settings viewport')
     check('profile input fits the narrow settings viewport', await evaluate(employeeShell, 'document.body.scrollWidth<=innerWidth && document.querySelector("input[autocomplete=name]").getBoundingClientRect().right<=innerWidth'))
-    await writeFile(join(process.env.HB_PROFILE_EVIDENCE, 'profile-settings-mobile.png'), (await employeeShell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_PROFILE_EVIDENCE, 'profile-settings-mobile.png'), (await employeeShell.window.webContents.capturePage()).toPNG()) }
   } catch (error) {
     const state = []
     for (const shell of shells) {

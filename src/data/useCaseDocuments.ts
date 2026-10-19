@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from '../app/sessionContext'
+import { withAssistantActivity } from '../app/assistantFeedback'
 import { createHttpDocumentWorkspaceAdapter, HttpDocumentWorkspaceError } from './documentHttpAdapter'
 import type { CaseDocumentsDataPort, CaseDocumentWorkspaceRecord, DataSourceKind } from './ports'
 
@@ -41,7 +42,7 @@ export function useCaseDocuments(
   useEffect(() => {
     if (!active) return undefined
     let cancelled = false
-    port.getCaseDocumentWorkspace(caseId)
+    withAssistantActivity(() => port.getCaseDocumentWorkspace(caseId), 'Belge bilgileri yüklenemedi. Dosyanın evrak bölümünden yeniden deneyin.')
       .then((workspace) => {
         if (cancelled) return
         setLoaded({

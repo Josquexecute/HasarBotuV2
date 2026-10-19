@@ -108,6 +108,20 @@ Masaüstü başlangıcı ilk seçilen köprü portunu `userData/bridge-origins` 
 
 Bu değişiklikten önce rastgele portlarda bırakılmış depolama otomatik taşınmaz. Eski taslak gerekiyorsa önceki sürümün ilgili origin'indeki metin ayrıca kurtarılmalıdır.
 
+## Touch Assistant tepkileri
+
+Yardımcı iki dakika etkileşim olmadığında uyuklar; üzerine gelince veya işlem
+başlayınca uyanır. Not, operasyon, belge bilgisi yükleme, PDF metni çıkarma ve
+e-posta işlemleri sürerken kısa çalışma hareketleri yapar. Başarısız işlemde
+başını sallar; yardımcıya tıklamak ilgili açıklamayı açar. Yeni takip bildirimi
+kısa bir dikkat hareketi, onaylanmış görev tamamlama el sallama üretir. Ekranın
+kenarına bırakıldığında inişten sonra kenardan bakar. Her basışta sıkışma, küçük
+zıplama, sallanma, göz kırpma, utanıp gülümseme veya şaşırmadan biri seçilir;
+altısı da gösterilmeden havuz yenilenmez ve art arda aynı tepki gelmez.
+Hareketler seyrekleştirilir; hesap ve Windows hareket azaltma ayarları geçerlidir.
+Electron UI testleri varsayılan olarak ekran görüntüsü üretmez; yalnız açıkça
+istenen görsel doğrulama için `HB_CAPTURE_SCREENSHOTS=1` kullanılabilir.
+
 ## Ofis güncellemesi yayınlama
 
 Kullanıcıya yansıyan tamamlanmış değişiklikler doğrulandıktan sonra masaüstü sürümünü artır,
@@ -160,8 +174,26 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son kayıtlı ofis yayını: **0.1.53**, 2026-10-19T04:54:32.219Z; Windows x64,
-105.191.623 bayt, SHA-256 `f180e53ad78129021b8acb95e153a7c332d70797e066f3bde66ea3bbd897c901`.
-0.1.49 istemcisinin yeni sürümü gördüğü ve tam paketi doğruladığı, önceki 0.1.52 manifesti
-ve kurulumunun korunduğu önceki yayın kaydından aktarılmıştır; bu belge temizliğinde
-yeni uygulama sürümü yayınlanmamıştır.
+Son doğrulanan ofis yayını: **0.1.56**, 2026-10-19T06:33:48.191Z; Windows x64,
+105.194.704 bayt, SHA-256 `4b623f8da681509e26cb6638e88440ef2b74b3d0cd42678bbb64d7446273cb1d`.
+Yeni ihbar klasörleri `YYYY OFİS/Ay YYYY/PLAKA` altında oluşturulur; kaydın sonraki
+ofis taramasında arşivlenip aramadan kaybolması düzeltildi. Kapanış ve yeniden açılış
+akışı yeni konumu destekler; eski `YYYY/Ay YYYY` konumları da geçerlidir.
+İki kayıt seçeneği gerçek API, PostgreSQL, File Agent, fiziksel klasör taraması ve
+arama zinciriyle doğrulandı. 3.008 test geçti; harici canlı bağlantı isteyen 6 test
+atlandı. TypeScript, lint, üretim derlemesi ve Windows paket smoke testi geçti;
+61 paket UI dosyası doğrulandı. Kurulu 0.1.55 istemcisinde `available`, kimlik
+doğrulamalı manifest ve HTTP 200 indirmesinde tam boyut/SHA-256 eşleşmesi doğrulandı.
+Onarılan kaydın üç farklı plaka yazımıyla aranması ve özgün detayına erişim doğrulandı.
+Önceki 0.1.55 manifesti ve değişmez kurulum korundu; zorunlu kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.55**, 2026-10-19T06:06:50.897Z; Windows x64,
+105.194.578 bayt, SHA-256 `48fac35384dffedd99747ca31951392b87ba250f376d0037ba59183bbe759b1c`.
+Kurulu 0.1.54 istemcisinde `available` ve kimlik doğrulamalı HTTP 200 indirmesinde
+tam boyut/SHA-256 eşleşmesi doğrulandı. Önceki 0.1.54 manifesti ve değişmez kurulum
+korundu. 3.005 test geçti; harici canlı bağlantı ayarı isteyen 6 test atlandı.
+TypeScript, lint, üretim derlemesi, 90 yerel Electron kontrolü ve Windows paket
+smoke testi geçti; 61 paket UI dosyası doğrulandı. Altı tıklama tepkisi 2× çözünürlükte
+farklı ve taşmasız çizildi. Yerel 0.1.55 kurulumunda altı gerçek fare tıklamasının
+altı farklı tepki vermesi, her tıklamada menünün açılması ve klavye tepkisi doğrulandı.
+Çalışan ofis istemcilerinin kurulumu kullanıcı kontrolündedir.

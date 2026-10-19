@@ -6,18 +6,25 @@ import { trackingRequest } from './trackingApi'
 
 vi.mock('./trackingApi',() => ({ trackingRequest: vi.fn() }))
 const notice = { id: 'notice',caseId: 'case',plate: '34 TEST 01',title: 'Yeni evrak' }
-afterEach(() => { vi.useRealTimers();vi.resetAllMocks() })
+afterEach(() => { vi.useRealTimers();vi.resetAllMocks();vi.unstubAllGlobals() })
 describe('owned notification popup',() => {
   it('shows a newly arrived Tramer result on the next poll with the correct case link',async () => {
+    const notificationReceived = vi.fn()
+    vi.stubGlobal('hasarbotuAssistantFeedback', { notificationReceived })
     vi.useFakeTimers()
     vi.mocked(trackingRequest).mockResolvedValueOnce({ notifications: [] })
       .mockResolvedValueOnce({ notifications: [{ id: 'tramer-result',caseId: 'matched-case',plate: '34 TEST 02',title: 'Tramer sonuçlandı — 000310' }] })
     await act(async () => { render(<MemoryRouter><TrackingPopup /></MemoryRouter>) })
     expect(screen.queryByLabelText('Yeni bildirim')).not.toBeInTheDocument()
+    expect(notificationReceived).not.toHaveBeenCalled()
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
     expect(screen.getByText('Tramer sonuçlandı — 000310')).toBeInTheDocument()
     expect(screen.getByText('34 TEST 02')).toBeInTheDocument()
     expect(screen.getByRole('link',{ name: 'Dosyayı aç' })).toHaveAttribute('href','/dosyalar/matched-case')
+    expect(notificationReceived).toHaveBeenCalledOnce()
+    vi.mocked(trackingRequest).mockResolvedValueOnce({ notifications: [{ id: 'tramer-result',caseId: 'matched-case',plate: '34 TEST 02',title: 'Tramer sonuçlandı — 000310' }] })
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+    expect(notificationReceived).toHaveBeenCalledOnce()
   })
   it('dismisses the backlog in one request while retaining future polling',async () => {
     vi.mocked(trackingRequest).mockResolvedValueOnce({ notifications: Array.from({ length: 20 },(_,i) => ({ ...notice,id: String(i) })) })

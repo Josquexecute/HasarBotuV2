@@ -35,7 +35,8 @@ export type CaseWorkspacePathResult =
   | { readonly ok: false; readonly error: CaseWorkspacePathError }
 
 /**
- * notificationDate + kanonik plakadan `YYYY/Ay YYYY/PLAKA` tabanını üretir.
+ * notificationDate + kanonik plakadan `YYYY OFİS/Ay YYYY/PLAKA` tabanını üretir.
+ * Ofis envanteri yalnız YYYY OFİS altını izlediği için yıl klasörü aynı kapsamı kullanır.
  * Saat, timezone, DB veya dosya sistemi kullanmaz; aynı girdi aynı sonucu verir.
  */
 export function buildCaseWorkspaceBasePath(notificationDate: string, plate: string): CaseWorkspacePathResult {
@@ -49,7 +50,7 @@ export function buildCaseWorkspaceBasePath(notificationDate: string, plate: stri
   const month = TURKISH_MONTH_NAMES[monthIndex]
   if (month === undefined) return { ok: false, error: 'invalid_notification_date' }
   const compactPlate = String(parsedPlate.value).replaceAll(' ', '')
-  const parsedPath = parseRelativePath(`${year}/${month} ${year}/${compactPlate}`)
+  const parsedPath = parseRelativePath(`${year} OFİS/${month} ${year}/${compactPlate}`)
   return parsedPath.ok
     ? { ok: true, relativePath: parsedPath.value }
     : { ok: false, error: 'invalid_plate' }

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { buildClosedCaseWorkspacePath, buildClosedImportedCaseWorkspacePath, buildOpenImportedCaseWorkspacePath, evaluateClosureRequirements, isOpenWorkflowStage } from '../src/index.js'
 
+it('yeni ofis çalışma klasörü kapanırken ofis kapsamını ve tarih kontrolünü korur', () => {
+  const open = '2026 OFİS/Ekim 2026/72ABA951'
+  const closed = '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/72ABA951'
+  expect(buildClosedCaseWorkspacePath('2026-10-19', open)).toEqual({ ok: true, value: closed })
+  expect(buildOpenImportedCaseWorkspacePath(closed)).toEqual({ ok: true, value: open })
+  expect(buildClosedCaseWorkspacePath('2027-10-19', open)).toEqual({ ok: false, code: 'location_date_mismatch' })
+})
+
 describe('case lifecycle domain', () => {
   it('uses the verified imported office month without fabricating a notification date or merging insurer labels',() => {
     expect(buildClosedImportedCaseWorkspacePath(null,'2026 OFİS/Ekim 2026/27TST025')).toEqual({ ok: true,value: '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/27TST025' })

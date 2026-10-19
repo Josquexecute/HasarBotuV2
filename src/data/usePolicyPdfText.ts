@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from '../app/sessionContext'
+import { withAssistantActivity } from '../app/assistantFeedback'
 import { createHttpPolicyPdfTextAdapter, HttpPolicyPdfTextError } from './policyPdfTextHttpAdapter'
 import type {
   PdfPolicySourceRecord, PdfTextExtractionRecord, PdfTextPageRecord,
@@ -134,7 +135,8 @@ export function usePolicyPdfText(caseId: string) {
     if (createKey.current?.source !== sourceKey) createKey.current = { source: sourceKey, value: crypto.randomUUID() }
     update(generation, { busy: true, reference: null })
     try {
-      const current = await adapter.createExtraction(caseId, selected, createKey.current.value)
+      const key = createKey.current.value
+      const current = await withAssistantActivity(() => adapter.createExtraction(caseId, selected, key), 'PDF metni çıkarılamadı. Poliçe belgesi bölümündeki hata açıklamasını kontrol edin.')
       if (epoch.current !== generation) return
       createKey.current = null
       const content = await readContent(current)

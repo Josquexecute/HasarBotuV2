@@ -36,7 +36,7 @@ function setup() {
   }
   let gaze: (point: { x: number; y: number }) => void = () => {}
   let appearance: (value: { characterColor: string; accentColor: string; reduceMotion: boolean }) => void = () => {}
-  let motionEvent: (value: { type: string; x?: number }) => void = () => {}
+  let motionEvent: (value: { type: string; x?: number; active?: boolean }) => void = () => {}
   const unsubscribe = vi.fn()
   const frames = new Map<number, FrameRequestCallback>()
   let nextFrame = 0, now = 0
@@ -152,11 +152,11 @@ it('press and hover wake a settled character; disposal removes subscriptions and
   ui.step()
   const button = ui.doc.querySelector('button')!
   button.dispatchEvent(new MouseEvent('pointerdown', { button: 0 }))
-  expect(ui.engines[0].squash).toHaveBeenCalledOnce()
+  expect(ui.engines[0].interruptGreet).toHaveBeenCalled()
   expect(ui.frames.size).toBe(1)
   ui.engines[0].busy = false
   ui.motionEvent({ type: 'release' })
-  ui.step()
+  ui.step(1100)
   button.dispatchEvent(new Event('pointerenter'))
   vi.advanceTimersByTime(650)
   expect(ui.engines[0].triggerEmote).toHaveBeenCalledWith('happy', .9)
@@ -188,6 +188,21 @@ it('success wakes a settled character but hidden and reduced-motion feedback is 
   expect(ui.frames.size).toBe(0)
 })
 
+it('keyboard activation gets one reaction while a pointer click does not add a second reaction', () => {
+  const ui = setup()
+  ui.step()
+  const button = ui.doc.querySelector('button')!
+  const interrupt = ui.engines[0].interruptGreet
+  button.click()
+  expect(interrupt).toHaveBeenCalledOnce()
+  expect(ui.frames.size).toBe(1)
+  button.dispatchEvent(new MouseEvent('click', { detail: 1 }))
+  expect(interrupt).toHaveBeenCalledOnce()
+  ui.setAppearance(true)
+  button.click()
+  expect(ui.frames.size).toBe(0)
+})
+
 it('animation uses cached layout dimensions and updates physical pixels on monitor resize', () => {
   const ui = setup()
   ui.gaze(1, 1)
@@ -197,4 +212,22 @@ it('animation uses cached layout dimensions and updates physical pixels on monit
   ui.resize()
   expect(ui.measure).toHaveBeenCalledTimes(2)
   expect(ui.canvas.width).toBe(240)
+})
+
+it('working state survives reduced motion and visibility; error affordance remains available without animation', () => {
+  const ui = setup()
+  ui.setAppearance(true)
+  ui.motionEvent({ type: 'working', active: true })
+  ui.motionEvent({ type: 'error', active: true })
+  expect(ui.doc.querySelector('button')!.title).toContain('Açıklama')
+  expect(ui.doc.querySelector('button')!.getAttribute('aria-label')).toContain('hatasının açıklamasını')
+  expect(ui.frames.size).toBe(0)
+  ui.setAppearance(false)
+  ui.step(500)
+  expect(ui.engines[0].anim).toHaveBeenCalledWith('tilt', expect.any(Array))
+  ui.hide(true)
+  ui.motionEvent({ type: 'working', active: false })
+  ui.hide(false)
+  ui.motionEvent({ type: 'error', active: false })
+  expect(ui.doc.querySelector('button')!.title).not.toContain('Açıklama')
 })

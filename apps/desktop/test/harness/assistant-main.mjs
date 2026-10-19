@@ -1,4 +1,4 @@
-import { app, ipcMain, nativeTheme, screen } from 'electron'
+import { app, dialog, ipcMain, nativeTheme, screen } from 'electron'
 import { writeFile, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { startDesktopShell } from '../../dist/main/shell.js'
@@ -23,11 +23,10 @@ async function sampleGestures() {
   let time = 0
   Object.defineProperty(performance, 'now', { configurable: true, value: () => time })
   try {
-    const sheet = document.createElement('canvas')
-    sheet.width = 1200; sheet.height = 840
-    const output = sheet.getContext('2d')
     let unclipped = true
-    for (const [column, kind] of ['curious', 'stretch', 'drag', 'release', 'success'].entries()) {
+    const tapKinds = new Set()
+    const tapPixels = new Set()
+    for (const kind of ['curious', 'stretch', 'drag', 'release', 'success', 'sleep', 'wake', 'working', 'error', 'notification', 'celebrate', 'surprised', 'edge', 'tap-0', 'tap-1', 'tap-2', 'tap-3', 'tap-4', 'tap-5']) {
       time = 0
       const bot = new BotEngine()
       bot.bodyColor = [.937, .949, .98]
@@ -41,8 +40,21 @@ async function sampleGestures() {
         motion.release()
       }
       if (kind === 'success') motion.success()
+      if (kind === 'sleep' || kind === 'wake') { time = 120000; motion.tick() }
+      if (kind === 'wake') motion.activity()
+      if (kind === 'working') { motion.work(true); time += 450; motion.tick() }
+      if (['error', 'notification', 'celebrate', 'surprised'].includes(kind)) motion.react(kind)
+      if (kind === 'edge') motion.edge(-1)
+      if (kind.startsWith('tap-')) {
+        for (let click = 0; click <= Number(kind.slice(4)); click++) {
+          if (click > 0) for (let frame = 0; frame < 90; frame++) { time += 1000 / 60; bot.update(1 / 60) }
+          motion.press()
+          motion.release()
+        }
+        tapKinds.add(motion.lastTap)
+      }
       const start = time
-      for (const [row, elapsed] of [180, 480, 1500].entries()) {
+      for (const elapsed of [70, 180, 480, 1100, 1500]) {
         while (time - start < elapsed) { time += 1000 / 60; bot.update(1 / 60) }
         const cell = document.createElement('canvas')
         cell.width = cell.height = 240
@@ -50,16 +62,18 @@ async function sampleGestures() {
         context.scale(2, 2)
         bot.draw(context, 120, 120)
         const pixels = context.getImageData(0, 0, 240, 240).data
+        if (kind.startsWith('tap-') && elapsed === 180) {
+          let signature = 0
+          for (const value of pixels) signature = (Math.imul(signature, 31) + value) >>> 0
+          tapPixels.add(signature)
+        }
         for (let i = 0; i < 240; i++) {
           if (pixels[(i * 240) * 4 + 3] || pixels[(i * 240 + 239) * 4 + 3]
             || pixels[i * 4 + 3] || pixels[(239 * 240 + i) * 4 + 3]) unclipped = false
         }
-        output.drawImage(cell, column * 240, row * 280)
-        output.fillStyle = '#64748b'; output.font = '18px sans-serif'
-        output.fillText(kind + ' · ' + elapsed + ' ms', column * 240 + 12, row * 280 + 264)
       }
     }
-    return { unclipped, png: sheet.toDataURL().split(',')[1] }
+    return { unclipped, distinctTapKinds: tapKinds.size, distinctTapDraws: tapPixels.size }
   } finally {
     if (original) Object.defineProperty(performance, 'now', original)
     else delete performance.now
@@ -79,13 +93,20 @@ void app.whenReady().then(async () => {
     assistant = await startDesktopAssistant(options)
     check('shortcut React workspace is not loaded before the first menu request', assistant.menuWindow.webContents.getURL() === '')
     const win = assistant.window
+    await win.webContents.executeJavaScript(`window.canvasSignature = () => {
+      const canvas = document.querySelector('canvas')
+      const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+      let hash = 0
+      for (const value of pixels) hash = (Math.imul(hash, 31) + value) >>> 0
+      return hash
+    }; undefined`)
     check('isolated character cannot invoke installation', await win.webContents.executeJavaScript('typeof window.hasarbotuUpdates === "undefined"'))
     const appearance = { scheme: 'dark', accentColor: '#15803d', characterColor: '#b9e7c8', textSize: 'large', reduceMotion: true }
     await until(() => win.webContents.executeJavaScript('document.querySelector("canvas").style.filter.includes("drop-shadow")'), 'initial appearance ready')
-    const beforePalette = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+    const beforePalette = await win.webContents.executeJavaScript('window.canvasSignature()')
     check('trusted main frame can publish appearance', await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify(appearance)})`))
     await until(() => win.webContents.executeJavaScript('document.querySelector("canvas").style.filter.includes("21, 128, 61")'), 'personalized character color')
-    const afterPalette = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+    const afterPalette = await win.webContents.executeJavaScript('window.canvasSignature()')
     check('appearance changes actual character pixels', beforePalette !== afterPalette)
     const colors = [
       ['#000000', '#ffffff'], ['#ffffff', '#111111'], ['#ff0000', '#111111'],
@@ -111,12 +132,12 @@ void app.whenReady().then(async () => {
           return count(${JSON.stringify(body)}) > 500 && count(${JSON.stringify(eyes)}) > 10
         })()`), `exact body and contrasting eyes ${characterColor}, reduced motion ${reduceMotion}`)
         check(`exact body and contrasting eyes ${characterColor}, reduced motion ${reduceMotion}`, true)
-        if (reduceMotion) await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, `assistant-color-${characterColor.slice(1)}.png`), (await win.webContents.capturePage()).toPNG())
+        if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { if (reduceMotion) await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, `assistant-color-${characterColor.slice(1)}.png`), (await win.webContents.capturePage()).toPNG()) }
       }
     }
     check('malformed color payload is rejected', !(await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: 'url(file:///private)' })})`)))
     check('character cannot publish appearance', await win.webContents.executeJavaScript('typeof window.hasarbotuAppearance === "undefined"'))
-    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-custom-appearance.png'), (await win.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-custom-appearance.png'), (await win.webContents.capturePage()).toPNG()) }
     await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: '#635bff', characterColor: '#eff2fa', reduceMotion: false })})`)
     await win.webContents.executeJavaScript('window.rendererErrors = []; window.addEventListener("error", event => window.rendererErrors.push(event.message)); undefined')
     // Gaze animation must not depend on the host's accessibility preference.
@@ -127,7 +148,7 @@ void app.whenReady().then(async () => {
     check('independent window', !win.getParentWindow())
     check('fixed 120 DIP character', win.getBounds().width === 120 && win.getBounds().height === 120 && !win.isResizable())
     const surface = await win.webContents.executeJavaScript('({ node: typeof require, process: typeof process, ready: !document.querySelector("button").disabled, keys: Object.keys(window.hasarbotuAssistant) })')
-    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'cancel,drag,menu,move,onAppearance,onGaze,onMotion,press,release')
+    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'activate,cancel,drag,menu,move,onAppearance,onGaze,onMotion,press,release')
     await win.webContents.executeJavaScript('window.motionEvents = []; window.motionOff = window.hasarbotuAssistant.onMotion(value => window.motionEvents.push(value)); undefined')
     for (const value of [null, {}, { type: 'drag', x: Infinity }, { type: 'drag', x: 2 }, { type: 'drag', x: '1' }, { type: 'unknown' }]) {
       win.webContents.send('hasarbotu:assistant-motion', value)
@@ -139,18 +160,46 @@ void app.whenReady().then(async () => {
     feedback({ sender: shell.window.webContents, senderFrame: { url: shell.window.webContents.getURL() } })
     await win.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 80))')
     check('character and untrusted frames cannot announce saved notes', await win.webContents.executeJavaScript('window.motionEvents.length === 0 && typeof window.hasarbotuAssistantFeedback === "undefined"'))
-    const beforeSuccess = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+    const beforeSuccess = await win.webContents.executeJavaScript('window.canvasSignature()')
     await shell.window.webContents.executeJavaScript('window.hasarbotuAssistantFeedback.noteSaved()')
     await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "success")'))
-    await until(() => win.webContents.executeJavaScript(`document.querySelector("canvas").toDataURL() !== ${JSON.stringify(beforeSuccess)}`))
+    await until(() => win.webContents.executeJavaScript(`window.canvasSignature() !== ${JSON.stringify(beforeSuccess)}`))
     check('confirmed note feedback reaches the isolated renderer and changes actual character pixels', true)
+    await win.webContents.executeJavaScript('window.motionEvents = []')
+    const report = ipcMain.listeners('hasarbotu:assistant-feedback').at(-1)
+    report({ sender: win.webContents, senderFrame: win.webContents.mainFrame }, { type: 'notification' })
+    report({ sender: shell.window.webContents, senderFrame: { url: shell.window.webContents.getURL() } }, { type: 'completed' })
+    await win.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 80))')
+    check('isolated character and forged frames cannot publish workflow feedback', await win.webContents.executeJavaScript('window.motionEvents.length === 0'))
+    await shell.window.webContents.executeJavaScript(`window.hasarbotuAssistantFeedback.activity('first', 'start'); window.hasarbotuAssistantFeedback.activity('second', 'start'); window.hasarbotuAssistantFeedback.activity('first', 'finish')`)
+    await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "working" && value.active)'))
+    check('overlapping work stays active until the last real operation finishes', await win.webContents.executeJavaScript('window.motionEvents.filter(value => value.type === "working").every(value => value.active)'))
+    await shell.window.webContents.executeJavaScript(`window.hasarbotuAssistantFeedback.activity('second', 'fail', 'Belge yüklenemedi. Evrak bölümünden yeniden deneyin.')`)
+    await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "error" && value.active) && document.querySelector("button").title.includes("Açıklama")'))
+    const showMessage = dialog.showMessageBox
+    let errorDialog
+    try {
+      dialog.showMessageBox = async (_owner, options) => { errorDialog = options; return { response: 0, checkboxChecked: false } }
+      await win.webContents.executeJavaScript('window.hasarbotuAssistant.press(); window.hasarbotuAssistant.release()')
+      await until(() => Boolean(errorDialog))
+      check('clicking a failed operation opens its safe explanation without opening the shortcut panel', errorDialog.detail === 'Belge yüklenemedi. Evrak bölümünden yeniden deneyin.' && !assistant.menuWindow.isVisible())
+      errorDialog = undefined
+      await shell.window.webContents.executeJavaScript(`window.hasarbotuAssistantFeedback.activity('keyboard', 'start'); window.hasarbotuAssistantFeedback.activity('keyboard', 'fail', 'Görev tamamlanamadı.')`)
+      await until(() => win.webContents.executeJavaScript('document.querySelector("button").title.includes("Açıklama")'))
+      await win.webContents.executeJavaScript('document.querySelector("button").click()')
+      await until(() => Boolean(errorDialog))
+      check('keyboard activation opens the same error explanation', errorDialog.detail === 'Görev tamamlanamadı.')
+    } finally { dialog.showMessageBox = showMessage }
+    await shell.window.webContents.executeJavaScript('window.hasarbotuAssistantFeedback.taskCompleted(); window.hasarbotuAssistantFeedback.notificationReceived()')
+    await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "celebrate") && window.motionEvents.some(value => value.type === "notification")'))
+    check('confirmed completion and new notification cross the bounded preload', true)
     await new Promise(resolve => setTimeout(resolve, 330))
-    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-success.png'), (await win.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-success.png'), (await win.webContents.capturePage()).toPNG()) }
     await until(() => win.webContents.executeJavaScript('(()=>{ const c=document.querySelector("canvas"); return c && c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((v,i)=>i%4===3 && v>0) })()'))
     check('upstream Mochi actually renders in sandbox canvas', true)
     const samples = await win.webContents.executeJavaScript('(' + sampleGestures.toString() + ')()')
-    check('all five gesture phases render without clipping at 2x physical resolution', samples.unclipped)
-    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-motion-poses.png'), Buffer.from(samples.png, 'base64'))
+    check('all nineteen gesture phases render without clipping at 2x physical resolution', samples.unclipped)
+    check('six successive clicks select and draw six distinct reactions in the real canvas', samples.distinctTapKinds === 6 && samples.distinctTapDraws === 6)
     check('main renderer keeps privilege-free preload', await shell.window.webContents.executeJavaScript('typeof window.hasarbotuAssistant === "undefined" && Object.keys(window.hasarbotuDesktop).sort().join(",") === "isDesktopShell,platform"'))
     const prefs = win.webContents.getLastWebPreferences()
     check('sandbox isolation and web security', prefs.sandbox && prefs.contextIsolation && prefs.webSecurity && !prefs.nodeIntegration)
@@ -216,11 +265,11 @@ void app.whenReady().then(async () => {
       check('cursor movement visibly moves Mochi eyes left and right', true)
       cursor = { x: saved.x + 60, y: saved.y - 800 }
       await until(() => win.webContents.executeJavaScript('window.eyeCenter("y") < 56'), 'upward gaze in canvas')
-      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-gaze-up.png'), (await win.webContents.capturePage()).toPNG())
+      if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-gaze-up.png'), (await win.webContents.capturePage()).toPNG()) }
       const upperEyeY = await win.webContents.executeJavaScript('window.eyeCenter("y")')
       cursor = { x: saved.x + 60, y: saved.y + 800 }
       await until(() => win.webContents.executeJavaScript(`window.eyeCenter("y") > ${upperEyeY + 12}`), 'downward gaze in canvas')
-      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-gaze-down.png'), (await win.webContents.capturePage()).toPNG())
+      if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-gaze-down.png'), (await win.webContents.capturePage()).toPNG()) }
       check('cursor movement visibly moves Mochi eyes in the correct vertical direction', true)
       cursor = { x: saved.x + 60, y: saved.y + 60 }
       await input('press')
@@ -230,7 +279,7 @@ void app.whenReady().then(async () => {
       await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "drag" && value.x === -1)'))
       check('native dragging sends bounded direction without desktop coordinates', await win.webContents.executeJavaScript('window.motionEvents.filter(value => value.type === "drag").every(value => Object.keys(value).sort().join(",") === "type,x")'))
       await new Promise(resolve => setTimeout(resolve, 100))
-      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-drag.png'), (await win.webContents.capturePage()).toPNG())
+      if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-drag.png'), (await win.webContents.capturePage()).toPNG()) }
       await input('release')
       await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "release")'))
       check('drag IPC moves native window and saves position', win.getBounds().x === saved.x - 96)
@@ -239,8 +288,8 @@ void app.whenReady().then(async () => {
       await input('press')
       cursor = { x: cursor.x + 12, y: cursor.y }
       await input('release')
-      await until(() => win.webContents.executeJavaScript('window.motionEvents.at(-1)?.type === "release"'))
-      check('movement first observed on release sends drag before landing', await win.webContents.executeJavaScript('window.motionEvents[0]?.type === "drag" && window.motionEvents.at(-1).type === "release"'))
+      await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "edge")'))
+      check('movement first observed on release sends drag before landing and then edge feedback', await win.webContents.executeJavaScript('window.motionEvents.map(value => value.type).join(",") === "drag,release,edge"'))
       Object.assign(saved, JSON.parse(await readFile(join(app.getPath('userData'), 'assistant-position.json'), 'utf8')))
     } finally { screen.getCursorScreenPoint = originalCursor }
     const ownUrl = win.webContents.getURL()
@@ -254,7 +303,7 @@ void app.whenReady().then(async () => {
     await until(() => assistant.menuWindow.webContents.executeJavaScript('!!document.querySelector(".desktop-assistant-panel")'))
     check('menu shares authenticated session with bounded IPC; character stays isolated',await assistant.menuWindow.webContents.executeJavaScript('typeof require === "undefined" && Object.keys(window.hasarbotuAssistantMenu).join(",") === "choose"') && assistant.menuWindow.webContents.session === shell.window.webContents.session && win.webContents.session !== shell.window.webContents.session)
     check('unauthenticated panel hides case data and has no overflow',await assistant.menuWindow.webContents.executeJavaScript('!document.querySelector("input") && document.body.scrollWidth === innerWidth && document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight'))
-    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT,'assistant-menu.png'),(await assistant.menuWindow.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT,'assistant-menu.png'),(await assistant.menuWindow.webContents.capturePage()).toPNG()) }
     await assistant.menuWindow.webContents.executeJavaScript('document.querySelector("header button").click()')
     await until(() => !assistant.menuWindow.isVisible())
     check('menu close command hides the actual panel',true)
@@ -264,7 +313,7 @@ void app.whenReady().then(async () => {
     check('standalone quick-note panel also reaches cosmetic feedback', true)
     await win.webContents.executeJavaScript('document.querySelector("button").dispatchEvent(new Event("pointerenter"))')
     await new Promise(resolve => setTimeout(resolve, 1050))
-    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-curious.png'), (await win.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-curious.png'), (await win.webContents.capturePage()).toPNG()) }
     await win.webContents.executeJavaScript('document.querySelector("button").dispatchEvent(new Event("pointerleave")); window.motionOff(); undefined')
     shell.window.minimize()
     await until(() => shell.window.isMinimized())
@@ -287,15 +336,15 @@ void app.whenReady().then(async () => {
       nativeTheme.themeSource = theme
       await until(() => win.webContents.executeJavaScript(`matchMedia('(prefers-color-scheme: dark)').matches === ${theme === 'dark'}`))
       check(`theme ${theme} has no overflow`, await win.webContents.executeJavaScript('document.body.scrollWidth === innerWidth && document.body.scrollHeight === innerHeight'))
-      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, `assistant-${theme}.png`), (await win.webContents.capturePage()).toPNG())
+      if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, `assistant-${theme}.png`), (await win.webContents.capturePage()).toPNG()) }
     }
     await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
     await until(() => win.webContents.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches'))
     // The media-query change event applies the neutral pose at the next render.
     await win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))')
-    const still = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+    const still = await win.webContents.executeJavaScript('window.canvasSignature()')
     await new Promise((resolve) => setTimeout(resolve, 300))
-    check('reduced motion renders a still visible character', await win.webContents.executeJavaScript(`document.querySelector("canvas").toDataURL() === ${JSON.stringify(still)}`))
+    check('reduced motion renders a still visible character', await win.webContents.executeJavaScript(`window.canvasSignature() === ${JSON.stringify(still)}`))
     // Use a real Chromium scale change: CDP's synthetic DPR does not notify
     // physical-pixel ResizeObservers, unlike zoom or moving between monitors.
     const originalRatio = await win.webContents.executeJavaScript('devicePixelRatio')
@@ -312,10 +361,10 @@ void app.whenReady().then(async () => {
       screen.getCursorScreenPoint = () => { hiddenCursorReads++; return readCursor() }
       win.hide()
       await until(() => win.webContents.executeJavaScript('document.hidden'))
-      const hiddenCanvas = await win.webContents.executeJavaScript('document.querySelector("canvas").toDataURL()')
+      const hiddenCanvas = await win.webContents.executeJavaScript('window.canvasSignature()')
       await new Promise((resolve) => setTimeout(resolve, 300))
       check('hidden helper stops cursor polling', hiddenCursorReads === 0)
-      check('hidden helper stops drawing', await win.webContents.executeJavaScript(`document.querySelector("canvas").toDataURL() === ${JSON.stringify(hiddenCanvas)}`))
+      check('hidden helper stops drawing', await win.webContents.executeJavaScript(`window.canvasSignature() === ${JSON.stringify(hiddenCanvas)}`))
       assistant.show()
       await until(() => hiddenCursorReads > 0)
       check('showing helper restarts gaze', true)
@@ -325,6 +374,7 @@ void app.whenReady().then(async () => {
     assistant.dispose()
     check('dispose removes IPC listeners', ipcMain.listenerCount('hasarbotu:assistant') === 0)
     check('dispose removes success feedback listener', ipcMain.listenerCount('hasarbotu:assistant-success') === 0)
+    check('dispose removes workflow feedback listener', ipcMain.listenerCount('hasarbotu:assistant-feedback') === 0)
     check('dispose removes shortcut panel and its IPC',assistant.menuWindow.isDestroyed() && ipcMain.listenerCount('hasarbotu:assistant-menu') === 0)
     assistant = await startDesktopAssistant(options)
     check('recreation restores persisted position', assistant.window.getBounds().x === saved.x && assistant.window.getBounds().y === saved.y)

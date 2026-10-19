@@ -164,7 +164,7 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     const firstBody = workspaceProvisioningResponseSchema.parse(first.json())
     expect(firstBody.provisioning).toMatchObject({
       caseId,
-      relativePath: '2026/Temmuz 2026/34ABC123',
+      relativePath: '2026 OFİS/Temmuz 2026/34ABC123',
       status: 'planned',
       canApprove: true,
     })
@@ -230,8 +230,8 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     const caseThree = await createCase(cookieA, '34 XYZ 019')
     const second = workspaceProvisioningResponseSchema.parse((await plan(caseTwo)).json()).provisioning
     const third = workspaceProvisioningResponseSchema.parse((await plan(caseThree)).json()).provisioning
-    expect(second.relativePath).toBe('2026/Temmuz 2026/34XYZ019 - 2')
-    expect(third.relativePath).toBe('2026/Temmuz 2026/34XYZ019 - 3')
+    expect(second.relativePath).toBe('2026 OFİS/Temmuz 2026/34XYZ019 - 2')
+    expect(third.relativePath).toBe('2026 OFİS/Temmuz 2026/34XYZ019 - 3')
   })
 
   it('location plan sonrası değişirse Agent sonucu stale olur ve yeni location yazmaz', async () => {

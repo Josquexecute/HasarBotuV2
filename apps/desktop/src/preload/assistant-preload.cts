@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('hasarbotuAssistant', Object.freeze({
   release: () => ipcRenderer.send('hasarbotu:assistant', 'release'),
   cancel: () => ipcRenderer.send('hasarbotu:assistant', 'cancel'),
   menu: () => ipcRenderer.send('hasarbotu:assistant', 'menu'),
+  activate: () => ipcRenderer.send('hasarbotu:assistant', 'activate'),
   move: (direction: unknown) => {
     if (direction === 'left' || direction === 'right' || direction === 'up' || direction === 'down') {
       ipcRenderer.send('hasarbotu:assistant', direction)
@@ -43,8 +44,9 @@ contextBridge.exposeInMainWorld('hasarbotuAssistant', Object.freeze({
     const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
       if (typeof value !== 'object' || value === null) return
       const { type, x } = value as Record<string, unknown>
-      if (type === 'release' || type === 'success') callback({ type })
-      else if (type === 'drag' && typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1) callback({ type, x })
+      if (type === 'release' || type === 'success' || type === 'notification' || type === 'celebrate') callback({ type })
+      else if ((type === 'working' || type === 'error') && typeof (value as Record<string, unknown>).active === 'boolean') callback({ type, active: (value as Record<string, unknown>).active })
+      else if ((type === 'drag' || type === 'edge') && typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1) callback({ type, x })
     }
     ipcRenderer.on('hasarbotu:assistant-motion', listener)
     return () => ipcRenderer.removeListener('hasarbotu:assistant-motion', listener)

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { withAssistantActivity } from '../app/assistantFeedback'
 import { Link } from 'react-router'
 import { Bell, Files, NotebookPen, X } from 'lucide-react'
 import { NOTE_SAVED_EVENT, QUICK_NOTE_EVENT, type ActiveCase } from '../app/activeCase'
@@ -47,7 +48,7 @@ export function QuickNote({ target, port, onClose, standalone = false }: { targe
     }
     setDraft(attempt)
     try {
-      await workspace.port.createNote(target.caseId, { noteType: 'internal', subject: null, body: attempt.body }, attempt.key)
+      await withAssistantActivity(() => workspace.port.createNote(target.caseId, { noteType: 'internal', subject: null, body: attempt.body }, attempt.key), 'Notun kayıt yanıtı alınamadı. Hızlı not panelindeki açıklamayı kontrol edin; yeniden denemek aynı notu ikinci kez eklemez.')
       setSaved(true)
       // Retaining an old key if storage is unavailable remains safe: the API deduplicates it.
       try { localStorage.removeItem(storageKey) } catch { /* Saved on the server; do not report a failed write. */ }

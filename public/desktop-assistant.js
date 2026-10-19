@@ -23,7 +23,7 @@ if (assistant) {
   button.addEventListener('lostpointercapture', cancel)
   window.addEventListener('blur', cancel)
   // Mouse/touch activation is handled above, after distinguishing a drag.
-  button.addEventListener('click', (event) => { if (event.detail === 0) assistant.menu() })
+  button.addEventListener('click', (event) => { if (event.detail === 0) assistant.activate() })
   button.addEventListener('contextmenu', (event) => { event.preventDefault(); assistant.menu() })
   button.addEventListener('keydown', (event) => {
     const direction = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[event.key]

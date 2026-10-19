@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CaseOperationsPort } from '../../data/caseOperationsPort'
 import type { CaseReferenceDataPort } from '../../data/ports'
 import { CaseOperationsError } from '../../data/caseOperationsPort'
@@ -10,6 +10,7 @@ import { CaseOperationsApiModule } from './CaseOperationsApiModule'
 const CASE_ID = '019f7000-0000-7000-8000-000000000001'
 const USER_ID = '019f7000-0000-7000-8000-000000000002'
 const TASK_ID = '019f7000-0000-7000-8000-000000000003'
+afterEach(() => vi.unstubAllGlobals())
 const item = {
   ...mockCases[0],
   caseId: CASE_ID,
@@ -110,11 +111,15 @@ describe('Case Operations gerçek API modülü', () => {
     await waitFor(() => expect(operations.createTask).toHaveBeenCalledWith(CASE_ID, expect.objectContaining({ title: 'Yeni görev', assignedUserId: USER_ID })))
 
     await user.click(screen.getByRole('button', { name: /Tamamla/ }))
+    const taskCompleted = vi.fn()
+    vi.stubGlobal('hasarbotuAssistantFeedback', { taskCompleted })
     await user.click(screen.getByRole('button', { name: 'Onayla' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Görev sonucu notu zorunludur.')
+    expect(taskCompleted).not.toHaveBeenCalled()
     await user.type(screen.getByLabelText('Görev sonucu'), 'Görev tamamlandı.')
     await user.click(screen.getByRole('button', { name: 'Onayla' }))
     await waitFor(() => expect(operations.completeTask).toHaveBeenCalledWith(CASE_ID, TASK_ID, 1, 'Görev tamamlandı.'))
+    await waitFor(() => expect(taskCompleted).toHaveBeenCalledOnce())
 
     expect(screen.queryByLabelText('Yeni takip tarihi')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Takibi Kaydet/ })).not.toBeInTheDocument()

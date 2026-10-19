@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { withAssistantActivity } from '../../app/assistantFeedback'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -131,7 +132,7 @@ export function EmailDraftApiModule({
     setError('')
     setNotice('')
     try {
-      await operation()
+      await withAssistantActivity(operation, 'E-posta işlemi tamamlanamadı. Dosyanın e-posta bölümündeki hata açıklamasını kontrol edin.')
     } catch (caught) {
       setError(safeMessage(caught))
       if (

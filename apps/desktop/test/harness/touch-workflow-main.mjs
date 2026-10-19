@@ -27,7 +27,7 @@ const fill = async (selector, value, textarea = false) => evaluate(`(() => {
 const screenshot = async (name, contents = shell.window.webContents) => {
   // A resized DOM can be ready before Chromium submits its new capture surface.
   await contents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))')
-  await writeFile(join(output, `${name}.png`), (await contents.capturePage()).toPNG())
+  if (process.env.HB_CAPTURE_SCREENSHOTS === '1') await writeFile(join(output, `${name}.png`), (await contents.capturePage()).toPNG())
 }
 async function boot() {
   shell = await startDesktopShell({ apiOrigin: process.env.HB_TOUCH_API, assetRoot: process.env.HB_TOUCH_ASSETS, userDataPath: app.getPath('userData'), show: false })

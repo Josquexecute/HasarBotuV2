@@ -80,7 +80,7 @@ void app.whenReady().then(async () => {
       await settleMotion()
       const result = await evaluate(`(()=>{const input=document.querySelector('textarea').getBoundingClientRect();const save=${button('Notu kaydet')}.getBoundingClientRect();const panel=document.querySelector('.touch-assistant');return {separate:input.bottom+4<=save.top,inside:input.width<=panel.clientWidth,scroll:document.body.scrollWidth<=innerWidth};})()`)
       check(`${label}: note text stays above the save control and inside the panel`,result.separate && result.inside && result.scroll)
-      await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,`quick-note-${label}.png`),(await shell.window.webContents.capturePage()).toPNG())
+      if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,`quick-note-${label}.png`),(await shell.window.webContents.capturePage()).toPNG()) }
     }
     await geometry('light',1280,1)
     await clickAria('Hızlı notu kapat')
@@ -111,13 +111,13 @@ void app.whenReady().then(async () => {
     await evaluate(`${button('Sonraki')}.click()`)
     await until(() => evaluate('document.querySelectorAll(".notification-item").length===10'),'second inbox page')
     check('remaining owned notices are reachable through pagination',true)
-    await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'notifications-inbox.png'),(await shell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'notifications-inbox.png'),(await shell.window.webContents.capturePage()).toPNG()) }
     async function notificationGeometry(label,width,zoom) {
       shell.window.setSize(width,820);shell.window.webContents.setZoomFactor(zoom)
       await until(() => evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))'),'notification paint')
       const layout=await evaluate(`(()=>{const cards=Array.from(document.querySelectorAll('.notification-card')).slice(0,2).map(card=>card.getBoundingClientRect());return cards.length===2 && cards[0].right<=innerWidth && cards[1].top>=cards[0].bottom && document.body.scrollWidth<=innerWidth;})()`)
       check(`${label}: notification cards stay in one column without horizontal overflow`,layout)
-      await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,`notifications-${label}.png`),(await shell.window.webContents.capturePage()).toPNG())
+      if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,`notifications-${label}.png`),(await shell.window.webContents.capturePage()).toPNG()) }
     }
     await notificationGeometry('dark',1280,1)
     await notificationGeometry('narrow',390,1)
@@ -142,14 +142,14 @@ void app.whenReady().then(async () => {
       await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
       await evaluate(`${bulkButton}.scrollIntoView({block:'center'})`)
       check(`${label}: bulk approval button fits the viewport`,await evaluate(`(()=>{const rect=${bulkButton}.getBoundingClientRect();return rect.left>=0 && rect.right<=innerWidth && document.body.scrollWidth<=innerWidth})()`))
-      await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,`bulk-approval-${label}.png`),(await shell.window.webContents.capturePage()).toPNG())
+      if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,`bulk-approval-${label}.png`),(await shell.window.webContents.capturePage()).toPNG()) }
     }
     shell.window.setSize(1280,820);shell.window.webContents.setZoomFactor(1)
     await clickAria('Koyu temaya geç')
     await until(() => evaluate('document.querySelector(".theme-root").dataset.theme === "dark"'),'bulk dark theme')
     await settleMotion()
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
-    await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'bulk-approval-dark.png'),(await shell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'bulk-approval-dark.png'),(await shell.window.webContents.capturePage()).toPNG()) }
     await evaluate(`${bulkButton}.focus();${bulkButton}.click()`)
     await until(() => evaluate('document.querySelector(".tracking-workspace [role=status]")?.textContent === "103 evrak uygun işaretlendi."'),'completed bulk approval')
     await until(() => evaluate('document.querySelectorAll(".tracking-document-row").length === 0'),'refreshed pending documents')
@@ -161,7 +161,7 @@ void app.whenReady().then(async () => {
     const foreign = await pool.query('SELECT o.status FROM document_observations o JOIN tracked_files f ON f.id=o.file_id WHERE f.case_id=$1',[otherCase])
     check('another owner document remains pending',foreign.rows.length === 1 && foreign.rows[0].status === 'pending')
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
-    await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'bulk-approval-complete.png'),(await shell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'bulk-approval-complete.png'),(await shell.window.webContents.capturePage()).toPNG()) }
     await clickAria('Açık temaya geç')
     await until(() => evaluate('document.querySelector(".theme-root").dataset.theme === "light"'),'bulk light theme restored')
     shell.window.setSize(390,844)
@@ -173,7 +173,7 @@ void app.whenReady().then(async () => {
     check('mobile drawer uses the compositor-friendly navigation entrance',await evaluate('getComputedStyle(document.querySelector(".mobile-navigation")).animationName === "navigation-enter"'))
     await settleMotion()
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
-    await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'mobile-navigation.png'),(await shell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'mobile-navigation.png'),(await shell.window.webContents.capturePage()).toPNG()) }
     await evaluate('document.querySelector(".mobile-navigation").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))')
     await until(() => evaluate('document.querySelector(".mobile-navigation") === null'),'drawer dismissal')
     check('Escape restores focus to the mobile menu opener',await evaluate('document.activeElement === document.querySelector(".topbar__menu")'))
@@ -185,7 +185,7 @@ void app.whenReady().then(async () => {
     await until(() => evaluate('document.querySelector(".theme-root").dataset.theme === "dark"'),'detail dark theme')
     check('detail plate retains contrast in the dark theme',await evaluate('getComputedStyle(document.querySelector(".case-detail-head .plate")).color === "rgb(17, 17, 17)"'))
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
-    await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'case-detail-dark.png'),(await shell.window.webContents.capturePage()).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'case-detail-dark.png'),(await shell.window.webContents.capturePage()).toPNG()) }
     await clickAria('Oturumu kapat')
     await until(() => evaluate('document.querySelector(".login-card") !== null'),'login screen after actual logout')
     await shell.window.loadURL(shell.origin)
@@ -194,7 +194,7 @@ void app.whenReady().then(async () => {
     check('login displays the project owner and copyright with a visible original logo',await evaluate('(()=>{const card=document.querySelector(".login-card");const logo=card.querySelector(".brand__logo");const box=logo.getBoundingClientRect();return card.textContent.includes("Ömer Faruk İŞLEYEN") && card.textContent.includes("© 2026 Ömer Faruk İŞLEYEN. Tüm hakları saklıdır.") && logo.naturalWidth>0 && box.width>=32 && box.height>=32;})()'))
     await settleMotion()
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
-    await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'ownership-login.png'),(await shell.window.webContents.capturePage(undefined,{stayHidden: true,stayAwake: true})).toPNG())
+    if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_REFINEMENTS_EVIDENCE,'ownership-login.png'),(await shell.window.webContents.capturePage(undefined,{stayHidden: true,stayAwake: true})).toPNG()) }
   } catch (error) { checks.push({ name: error instanceof Error ? error.message : 'Unexpected UI acceptance error',pass: false }) }
   finally {
     await shell?.close();await api?.close();await pool?.end()

@@ -21,6 +21,9 @@ if (assistant && context) {
   let lastDraw = 0
   let disposed = false
   let personalReducedMotion = false
+  let working = false
+  const defaultTitle = button.title
+  const defaultLabel = button.getAttribute('aria-label') || 'HasarBotu yardımcı menüsünü aç'
   let size = canvas.clientWidth
   let ratio = window.devicePixelRatio || 1
   const reduced = () => motion.matches || personalReducedMotion
@@ -88,6 +91,7 @@ if (assistant && context) {
       draw()
       return
     }
+    gestures.work(working)
     wake()
   }
   const unsubscribe = assistant.onGaze(({ x, y }) => {
@@ -112,11 +116,27 @@ if (assistant && context) {
       wake()
     }
   }
+  const activate = (event) => {
+    if (event.detail !== 0 || reduced() || disposed || document.hidden) return
+    gestures.press()
+    gestures.release()
+    wake()
+  }
   const unsubscribeMotion = assistant.onMotion(value => {
+    if (disposed) return
+    if (value.type === 'working') working = value.active
+    if (value.type === 'error') {
+      button.title = value.active ? 'Son işlem tamamlanamadı · Açıklama için tıkla' : defaultTitle
+      button.setAttribute('aria-label', value.active ? 'Son işlem hatasının açıklamasını aç' : defaultLabel)
+    }
     if (reduced() || disposed || document.hidden) return
     if (value.type === 'drag') gestures.drag(value.x)
     else if (value.type === 'release') gestures.release()
     else if (value.type === 'success') gestures.success()
+    else if (value.type === 'working') gestures.work(value.active)
+    else if (value.type === 'edge') gestures.edge(value.x)
+    else if (value.type === 'error' && value.active) gestures.react('error')
+    else if (value.type === 'notification' || value.type === 'celebrate') gestures.react(value.type)
     wake()
   })
   const onVisibility = () => {
@@ -145,6 +165,7 @@ if (assistant && context) {
     button.removeEventListener('pointerenter', greetOnHover)
     button.removeEventListener('pointerleave', leave)
     button.removeEventListener('pointerdown', press)
+    button.removeEventListener('click', activate)
     document.removeEventListener('visibilitychange', onVisibility)
     motion.removeEventListener('change', resume)
     sizeObserver.disconnect()
@@ -161,6 +182,7 @@ if (assistant && context) {
   button.addEventListener('pointerenter', greetOnHover)
   button.addEventListener('pointerleave', leave)
   button.addEventListener('pointerdown', press)
+  button.addEventListener('click', activate)
   document.addEventListener('visibilitychange', onVisibility)
   motion.addEventListener('change', resume)
   // Track physical pixels even when monitor changes leave the CSS size intact.

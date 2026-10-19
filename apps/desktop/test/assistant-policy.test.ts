@@ -47,7 +47,7 @@ describe('desktop assistant geometry and commands', () => {
   it.each(['exec', 'https://example.invalid', 'C:\\Windows', {}, null])('rejects an unknown command %j', (value) => {
     expect(isAssistantCommand(value)).toBe(false)
   })
-  it.each(['press', 'drag', 'release', 'cancel', 'menu', 'left', 'right', 'up', 'down'])('accepts the UI-only command %s', (value) => {
+  it.each(['press', 'drag', 'release', 'cancel', 'menu', 'activate', 'left', 'right', 'up', 'down'])('accepts the UI-only command %s', (value) => {
     expect(isAssistantCommand(value)).toBe(true)
   })
 })
