@@ -6,14 +6,14 @@ import { DesktopUpdates } from './DesktopUpdates'
 describe('desktop update controls', () => {
   it('checks published version, shows release notes and invokes real installation command', async () => {
     const available: DesktopUpdateState = { currentVersion: '0.1.7', supported: true, phase: 'available', downloadedBytes: 0,
-      release: { version: '0.1.8', platform: 'win32', arch: 'x64', sha256: 'a'.repeat(64), size: 100, publishedAt: '2026-10-14T00:00:00Z', notes: 'Kişisel Touch renkleri' } }
+      release: { version: '0.1.8', platform: 'win32', arch: 'x64', sha256: 'a'.repeat(64), size: 100, publishedAt: '2026-10-14T00:00:00Z', notes: 'Dosya aşamaları, kapanış ve gerçek taşıma: ÇĞİÖŞÜ çğıöşü.' } }
     let listener: ((state: DesktopUpdateState) => void) | undefined
     const unsubscribe = vi.fn()
     const surface: DesktopUpdatesSurface = { check: vi.fn(async () => available), install: vi.fn(async () => ({ ...available, phase: 'installing' as const })), onState: cb => { listener = cb; return unsubscribe } }
     const view = render(<DesktopUpdates suppliedSurface={surface} />)
     fireEvent.click(screen.getByText('Güncellemeleri kontrol et'))
     expect(await screen.findByText('0.1.8 sürümü hazır.')).toBeInTheDocument()
-    expect(screen.getByText('Kişisel Touch renkleri')).toBeInTheDocument()
+    expect(screen.getByText(available.release!.notes)).toBeInTheDocument()
     fireEvent.click(screen.getByText('Güncelle ve yeniden başlat'))
     expect(await screen.findByText('Güncelleme kuruluyor. Uygulama yeniden açılacak.')).toBeInTheDocument()
     expect(surface.install).toHaveBeenCalledOnce()

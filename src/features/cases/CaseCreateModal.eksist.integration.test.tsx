@@ -9,6 +9,7 @@ import { createRequire } from 'node:module'
 import type { AgentConfig } from '@hasarbotu/file-agent'
 import type { CaseReferenceDataPort } from '../../data/ports'
 import { CaseCreateModal } from './CaseCreateModal'
+import { WorkspaceMonthMovePanel } from './WorkspaceMonthMovePanel'
 
 const testUrl = process.env.TEST_DATABASE_URL
 // Native loading keeps server-side import.meta URLs outside Vite's browser asset rewriting.
@@ -58,7 +59,9 @@ describe.skipIf(!testUrl)('UI → real API → isolated PostgreSQL → real File
     await waitFor(() => expect(screen.getByRole('button', { name: button })).toBeEnabled())
     fireEvent.change(screen.getByLabelText('Eksist metni veya panodan görsel'), { target: { value: `Talep İşlem Ref No: ${button === 'Kaydet ve kapat' ? '88001' : '88002'}\nÜrün: Trafik\nPlaka: 034 - TR2491\nSigorta Şirketi: Sentetik Sigorta\nEksper Ad-Soyad: Sentetik Eksper\nEksper Atama Tarihi: 18.09.2026 12:00\nMarka: TEST\nAraç Tipi: MODEL\nModel Yılı: 2020\nAraç Tarife Grubu: OTOMOBİL\nMotor No: ENGINE12345\nŞasi No: WVWZZZ3CZEE144172` } })
     await userEvent.click(screen.getByRole('button', { name: 'Metni forma aktar' }))
-    await screen.findByLabelText('Eksist talep referansı *')
+    // The field exists before parsing finishes; wait for the imported value before submitting.
+    await waitFor(() => expect(screen.getByLabelText('Eksist talep referansı *')).toHaveValue(button === 'Kaydet ve kapat' ? '88001' : '88002'))
+    await waitFor(() => expect(screen.getByRole('button', { name: button })).toBeEnabled())
     fireEvent.change(screen.getByLabelText(/İhbar tarihi/), { target: { value: '2026-09-19' } })
     await userEvent.click(screen.getByRole('button', { name: button }))
     // Real parsing and database transactions can exceed jsdom's default one second.
@@ -69,6 +72,29 @@ describe.skipIf(!testUrl)('UI → real API → isolated PostgreSQL → real File
     expect(run.kind).toBe('reported')
     if (run.kind === 'reported') expect(run.reported.status).toBe('succeeded')
     await screen.findByText(button === 'Kaydet ve kapat' ? 'DOĞRULANDI LİSTE' : 'DOĞRULANDI DETAY', {}, { timeout: 4000 })
+    const created = (await pool.query('SELECT case_id,relative_path FROM case_workspace_provisionings WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 1', [organizationId])).rows[0]
+    expect(created.relative_path).toMatch(/^2026 OFİS\/_EKSİK DOSYALAR\/34TR2491(?: - 2)?$/)
+    cleanup()
+    const moved = vi.fn()
+    const showMove = () => render(<WorkspaceMonthMovePanel caseId={created.case_id} canWrite onUnauthorized={() => { throw Error('unexpected unauthorized') }} onMoved={moved} />)
+    showMove()
+    await userEvent.click(await screen.findByRole('button', { name: 'Tamamlandı · Ay klasörüne taşı' }))
+    await screen.findByRole('button', { name: 'Tamamlandığını onayla ve taşı' })
+    // Navigation must recover the server plan without creating another operation.
+    cleanup(); showMove()
+    await userEvent.click(await screen.findByRole('button', { name: 'Tamamlandığını onayla ve taşı' }))
+    await screen.findByText('Taşıma kuyruğunda')
+    expect(await runOnce(client, config)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    await screen.findByText('Taşındı ve doğrulandı', {}, { timeout: 5000 })
+    expect(moved).toHaveBeenCalledTimes(1)
+    cleanup(); showMove()
+    await screen.findByText('Taşındı ve doğrulandı')
+    // A parent reload remounts the panel; historical success must not start another reload.
+    expect(moved).toHaveBeenCalledTimes(1)
+    const location = (await pool.query('SELECT relative_path,verification_status FROM case_locations WHERE case_id=$1', [created.case_id])).rows[0]
+    expect(location).toEqual({ relative_path: created.relative_path.replace('_EKSİK DOSYALAR', 'Eylül 2026'), verification_status: 'verified' })
+    await access(join(root, location.relative_path, 'EVRAK'))
+    await expect(access(join(root, created.relative_path))).rejects.toMatchObject({ code: 'ENOENT' })
     const folders = await discoverPlateFolders(root, { officeOnly: true })
     const { scan } = (await pool.query(`SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') scan`)).rows[0]
     const inventory = await reconcileOfficeFolderInventory(pool, {
@@ -77,7 +103,7 @@ describe.skipIf(!testUrl)('UI → real API → isolated PostgreSQL → real File
       baselineSourceFolderIds: [], decision: 'Synthetic office inventory regression',
     }, folders.map((folder, index) => ({ relativePath: folder.relativePath, sourceFolderId: String(index + 1) })), scan, async () => {})
     expect(inventory.archived).toBe(0)
-    const rows = await pool.query('SELECT c.id,c.lifecycle_status,c.is_archived,p.relative_path,p.status FROM cases c JOIN case_workspace_provisionings p ON p.case_id=c.id WHERE c.organization_id=$1', [organizationId])
+    const rows = await pool.query('SELECT c.id,c.lifecycle_status,c.is_archived,l.relative_path,p.status FROM cases c JOIN case_workspace_provisionings p ON p.case_id=c.id JOIN case_locations l ON l.case_id=c.id WHERE c.organization_id=$1', [organizationId])
     for (const row of rows.rows) {
       expect(row.lifecycle_status).toBe('open'); expect(row.status).toBe('ready')
       expect(row.is_archived).toBe(false)

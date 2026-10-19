@@ -100,7 +100,7 @@ export function WorkspaceProvisioningPanel({ caseId, notificationDate, onUnautho
         <div className="workspace-provisioning__start">
           <div>
             <strong>Dosya için güvenli klasör planı oluştur</strong>
-            <span>Yol, ihbar tarihi ({notificationDate ?? 'girili değil'}) ve plakadan üretilir. Plan diske yazmaz.</span>
+            <span>Yeni ihbar, ihbar yılının _EKSİK DOSYALAR klasöründe hazırlanır ({notificationDate ?? 'ihbar tarihi girili değil'}). Tamamlandığında ay klasörüne taşınabilir.</span>
           </div>
           <label>
             <span>Depolama kökü</span>
@@ -115,7 +115,7 @@ export function WorkspaceProvisioningPanel({ caseId, notificationDate, onUnautho
       ) : (
         <div className="workspace-provisioning__preview">
           <dl>
-            <div><dt>Göreli konum</dt><dd>{provisioning.relativePath}</dd></div>
+            <div><dt>İlk oluşturma konumu</dt><dd>{provisioning.relativePath}</dd></div>
             <div><dt>Mantıksal kök</dt><dd>{provisioning.storageRootKey}</dd></div>
           </dl>
           <div className="workspace-subfolders" aria-label="Oluşturulacak alt klasörler">

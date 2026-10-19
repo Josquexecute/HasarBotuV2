@@ -164,7 +164,7 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     const firstBody = workspaceProvisioningResponseSchema.parse(first.json())
     expect(firstBody.provisioning).toMatchObject({
       caseId,
-      relativePath: '2026 OFİS/Temmuz 2026/34ABC123',
+      relativePath: '2026 OFİS/_EKSİK DOSYALAR/34ABC123',
       status: 'planned',
       canApprove: true,
     })
@@ -227,11 +227,11 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
 
   it('aynı plaka/ay için -2 ve -3 rezervasyonları deterministik ayrılır', async () => {
     const caseTwo = await createCase(cookieA, '34 XYZ 019')
-    const caseThree = await createCase(cookieA, '34 XYZ 019')
+    const caseThree = await createCase(cookieA, '34 XYZ 019', '2026-10-19')
     const second = workspaceProvisioningResponseSchema.parse((await plan(caseTwo)).json()).provisioning
     const third = workspaceProvisioningResponseSchema.parse((await plan(caseThree)).json()).provisioning
-    expect(second.relativePath).toBe('2026 OFİS/Temmuz 2026/34XYZ019 - 2')
-    expect(third.relativePath).toBe('2026 OFİS/Temmuz 2026/34XYZ019 - 3')
+    expect(second.relativePath).toBe('2026 OFİS/_EKSİK DOSYALAR/34XYZ019 - 2')
+    expect(third.relativePath).toBe('2026 OFİS/_EKSİK DOSYALAR/34XYZ019 - 3')
   })
 
   it('location plan sonrası değişirse Agent sonucu stale olur ve yeni location yazmaz', async () => {
@@ -303,6 +303,57 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     expect(await readFile(join(root, ...reopenedPhoto.relativePath.split('/')))).toEqual(content)
     expect((await pool.query('SELECT relative_path FROM photos WHERE id=$1', [photoId])).rows[0]).toEqual({ relative_path: photoPath })
     expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [caseId])).rows[0]).toEqual({ lifecycle_status: 'open' })
+  }, 60_000)
+
+  it('pending → month preserves bytes and document locations; stale, foreign and repeated moves are rejected', async () => {
+    const caseId = await createCase(cookieA, '34 AUD 211', '2026-10-19')
+    const workspace = workspaceProvisioningResponseSchema.parse((await plan(caseId)).json()).provisioning
+    await approve(caseId, workspace.id)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    const content = Buffer.from('pending-month-preserved-document')
+    const relativePath = `${workspace.relativePath}/EVRAK/complete.pdf`
+    await writeFile(join(root, relativePath), content)
+    const command = (suffix: string, payload: Record<string, unknown>, cookie = cookieA, key = uuidv7()) => app.inject({
+      method: 'POST', url: `/api/v1/cases/${caseId}/${suffix}`, headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: key }, payload,
+    })
+    const document = await command('documents', { documentType: 'ruhsat', sourceType: 'upload', originalFileName: 'complete.pdf', mimeType: 'application/pdf',
+      byteSize: content.length, contentHash: createHash('sha256').update(content).digest('hex'), storageRootKey: 'test-primary', relativePath })
+    expect(document.statusCode).toBe(201)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    expect((await command('workspace-month-plan', { expectedLocationVersion: 2 })).statusCode).toBe(409)
+    expect((await command('workspace-month-plan', { expectedLocationVersion: 1 }, cookieB)).statusCode).toBe(404)
+    const key = uuidv7()
+    const planned = await command('workspace-month-plan', { expectedLocationVersion: 1 }, cookieA, key)
+    expect(planned.statusCode).toBe(201)
+    const operation = planned.json().operation
+    expect(operation.destination.relativePath).toBe('2026 OFİS/Ekim 2026/34AUD211')
+    expect((await command('workspace-month-plan', { expectedLocationVersion: 1 }, cookieA, key)).json()).toEqual(planned.json())
+    await expect(access(join(root, operation.destination.relativePath))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await command(`file-operations/${operation.id}/approve`, { approved: true })).statusCode).toBe(202)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    const latest = await app.inject({ method: 'GET', url: `/api/v1/cases/${caseId}/file-operations`, headers: { cookie: cookieA } })
+    expect(latest.json().operation).toMatchObject({ id: operation.id, status: 'ready' })
+    const current = (await pool.query('SELECT relative_path,version,verification_status FROM case_locations WHERE case_id=$1', [caseId])).rows[0]
+    expect(current).toEqual({ relative_path: operation.destination.relativePath, version: 2, verification_status: 'verified' })
+    const detail = await app.inject({ method: 'GET', url: `/api/v1/documents/${document.json().document.id}`, headers: { cookie: cookieA } })
+    const movedPath = detail.json().document.versions[0].relativePath
+    expect(movedPath).toBe(`${operation.destination.relativePath}/EVRAK/complete.pdf`)
+    expect(await readFile(join(root, movedPath))).toEqual(content)
+    await expect(access(join(root, workspace.relativePath))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await command('workspace-month-plan', { expectedLocationVersion: 2 })).statusCode).toBe(409)
+    const close = await command('lifecycle/close/plan', { expectedCaseVersion: 1, expectedLocationVersion: 2, closeMode: 'with_missing_requirements', reason: 'Synthetic completion validation' })
+    expect(close.statusCode).toBe(201)
+    expect(close.json().operation.destination.relativePath).toBe('2026 OFİS/Ekim 2026/KAPALI DOSYALAR/34AUD211')
+    const closed = close.json().operation
+    expect((await command(`lifecycle/close/${closed.id}/approve`, { expectedVersion: closed.version, approved: true })).statusCode).toBe(202)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    const reopen = await command('lifecycle/reopen/plan', { expectedCaseVersion: 2, expectedLocationVersion: 3, reason: 'Synthetic reopening', targetWorkflowStage: 'reporting' })
+    expect(reopen.statusCode).toBe(201)
+    const reopened = reopen.json().operation
+    expect(reopened.destination.relativePath).toBe(operation.destination.relativePath)
+    expect((await command(`lifecycle/reopen/${reopened.id}/approve`, { expectedVersion: reopened.version, approved: true })).statusCode).toBe(202)
+    expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+    expect(await readFile(join(root, movedPath))).toEqual(content)
   }, 60_000)
 
   it('file paths follow cross-root move history without rewriting later uploads, neighboring paths or another tenant', async () => {

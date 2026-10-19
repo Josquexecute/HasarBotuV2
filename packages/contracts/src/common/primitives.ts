@@ -9,6 +9,7 @@ import {
   parseOfficeCaseNumber,
   parsePlateNumber,
   parseRelativePath,
+  normalizeCaseStage,
 } from '@hasarbotu/domain'
 
 /**
@@ -55,9 +56,9 @@ export const insurerIdSchema = idSchema
 
 export const caseTypeSchema = z.enum(CASE_TYPES)
 export const caseStatusSchema = z.enum(CASE_STATUSES)
-export const caseStageSchema = z.enum(CASE_STAGES)
+export const caseStageSchema = z.preprocess(normalizeCaseStage, z.enum(CASE_STAGES))
 /** `closed` yalniz lifecycle saga'sinin server-side sonucudur. */
-export const openCaseStageSchema = z.enum(OPEN_CASE_STAGES)
+export const openCaseStageSchema = z.preprocess(normalizeCaseStage, z.enum(OPEN_CASE_STAGES))
 
 // Referans numaralari: kontrol karakteri (C0, DEL, C1) ve backslash yasak; slash
 // gecerli (`11/18882475`); en az bir alfasayisal karakter zorunlu; 1..128 karakter.

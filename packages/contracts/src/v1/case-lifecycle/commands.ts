@@ -1,10 +1,10 @@
 import { z } from 'zod'
-import { CLOSURE_MODES, OPEN_CASE_STAGES } from '@hasarbotu/domain'
-import { entityVersionSchema } from '../../common/primitives.js'
+import { CLOSURE_MODES } from '@hasarbotu/domain'
+import { entityVersionSchema, openCaseStageSchema } from '../../common/primitives.js'
 
 export const lifecycleReasonSchema = z.string().min(3).max(500).regex(/\S/, { error: 'must_not_be_blank' })
 export const closeModeSchema = z.enum(CLOSURE_MODES)
-export const openWorkflowStageSchema = z.enum(OPEN_CASE_STAGES)
+export const openWorkflowStageSchema = openCaseStageSchema
 
 export const closePlanRequestSchema = z.strictObject({
   expectedCaseVersion: entityVersionSchema,

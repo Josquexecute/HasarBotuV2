@@ -20,7 +20,7 @@ describeLive('HttpApiAdapter gercek API smoke', () => {
     expect(cases.length).toBeGreaterThan(0)
     const mpa = cases.find((item) => item.plate === '34 MPA 764')
     expect(mpa).toBeDefined()
-    expect(mpa).toMatchObject({ type: 'Kasko', stage: 'Ekspertiz Bekliyor', officeNumber: '2026/184' })
+    expect(mpa).toMatchObject({ type: 'Kasko', stage: 'Onarımda', officeNumber: '2026/184' })
   })
 
   it('oturumsuz cagri unauthorized turunde HttpCasesError firlatir', async () => {

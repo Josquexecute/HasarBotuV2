@@ -79,9 +79,54 @@ function references(): CaseReferenceDataPort {
 }
 
 describe('Case Operations gerçek API modülü', () => {
+  it('yalnız oturum sahibinin kendi notunu onaydan sonra siler ve gerçek listeyi yeniler', async () => {
+    const own = { ...note, id: 'own', body: 'Kendi notum.' }
+    const other = { ...note, id: 'other', createdByUserId: TASK_ID, body: 'Başkasının notu.' }
+    const historical = { ...note, id: 'historical', body: 'Tarihsel not.', legacySource: { historical: true as const, authorName: 'Eski yazar', occurredAt: null } }
+    let notes = [own, other, historical]
+    const operations: CaseOperationsPort = {
+      load: vi.fn(async () => ({ ...workspace, notes })),
+      createNote: vi.fn(), createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn(),
+      deleteNote: vi.fn(async (_caseId, noteId) => { notes = notes.filter(item => item.id !== noteId) }),
+    }
+    const user = userEvent.setup()
+    render(<CaseOperationsApiModule item={item} currentUserId={USER_ID} source="api" onUnauthorized={vi.fn()} onReloadCase={vi.fn()} operationsPort={operations} referencePort={references()} />)
+    expect(await screen.findAllByRole('button', { name: 'Kendi notumu sil' })).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Kendi notumu sil' }))
+    expect(operations.deleteNote).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Vazgeç' }))
+    expect(operations.deleteNote).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Kendi notumu sil' }))
+    await user.click(screen.getByRole('button', { name: 'Sil' }))
+    await waitFor(() => expect(screen.queryByText('Kendi notum.')).not.toBeInTheDocument())
+    expect(operations.deleteNote).toHaveBeenCalledExactlyOnceWith(CASE_ID, 'own')
+    expect(screen.getByText('Başkasının notu.')).toBeInTheDocument()
+    expect(screen.getByText('Tarihsel not.')).toBeInTheDocument()
+  })
+
+  it.each(['other', 'read_only', 'closed'] as const)('%s kullanımı not silme düğmesi göstermez', async mode => {
+    const operations: CaseOperationsPort = { load: vi.fn().mockResolvedValue({ ...workspace, permissions: { canWrite: mode !== 'read_only', canCompleteTasks: false } }),
+      createNote: vi.fn(), deleteNote: vi.fn(), createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn() }
+    render(<CaseOperationsApiModule item={{ ...item, lifecycleStatus: mode === 'closed' ? 'closed' : 'open' }} currentUserId={mode === 'other' ? TASK_ID : USER_ID} source="api" onUnauthorized={vi.fn()} onReloadCase={vi.fn()} operationsPort={operations} referencePort={references()} />)
+    await screen.findByText(note.body)
+    expect(screen.queryByRole('button', { name: 'Kendi notumu sil' })).not.toBeInTheDocument()
+  })
+
+  it('sunucu silmeyi reddederse notu korur ve yetki hatasını gösterir', async () => {
+    const operations: CaseOperationsPort = { load: vi.fn().mockResolvedValue(workspace), deleteNote: vi.fn().mockRejectedValue(new CaseOperationsError('forbidden', 'author required')),
+      createNote: vi.fn(), createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn() }
+    const user = userEvent.setup()
+    render(<CaseOperationsApiModule item={item} currentUserId={USER_ID} source="api" onUnauthorized={vi.fn()} onReloadCase={vi.fn()} operationsPort={operations} referencePort={references()} />)
+    await user.click(await screen.findByRole('button', { name: 'Kendi notumu sil' }))
+    await user.click(screen.getByRole('button', { name: 'Sil' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bu işlem için yetkiniz bulunmuyor.')
+    expect(screen.getByText(note.body)).toBeInTheDocument()
+  })
+
   it('not ve görev işlemlerini çalıştırır; otomatik takip tarihi için düzenleyici sunmaz', async () => {
     const operations: CaseOperationsPort = {
       load: vi.fn().mockResolvedValue(workspace),
+      deleteNote: vi.fn(),
       createNote: vi.fn().mockResolvedValue(note),
       createTask: vi.fn().mockResolvedValue(task),
       completeTask: vi.fn().mockResolvedValue({ ...task, status: 'completed', version: 2, resolutionNote: 'Görev tamamlandı.', resolvedByUserId: USER_ID, resolvedByDisplayName: 'Sentetik Kullanıcı', resolvedAt: '2026-07-16T11:00:00.000Z' }),
@@ -128,6 +173,7 @@ describe('Case Operations gerçek API modülü', () => {
   it('API kesintisinde mock not/görev göstermeden güvenli hata ve retry sunar', async () => {
     const operations: CaseOperationsPort = {
       load: vi.fn().mockRejectedValue(new CaseOperationsError('unavailable', 'network')),
+      deleteNote: vi.fn(),
       createNote: vi.fn(),
       createTask: vi.fn(),
       completeTask: vi.fn(),
@@ -165,6 +211,7 @@ describe('Case Operations gerçek API modülü', () => {
         }],
         followUpHistory: [{ ...workspace.followUpHistory[0], source: 'v1_historical_import' as const }],
       }),
+      deleteNote: vi.fn(),
       createNote: vi.fn(), createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn(),
     }
     render(

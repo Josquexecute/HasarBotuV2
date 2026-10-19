@@ -71,6 +71,8 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
   const [message, setMessage] = useState('')
   const [canReload, setCanReload] = useState(false)
   const polling = useRef(false)
+  const pollGeneration = useRef(0)
+  const [restoring, setRestoring] = useState(true)
   useEffect(() => () => { polling.current = false }, [])
 
   const handleError = (error: unknown) => {
@@ -118,12 +120,14 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
   const poll = async (operationId: string) => {
     if (polling.current) return
     polling.current = true
-    while (polling.current) {
+    const generation = ++pollGeneration.current
+    const active = () => polling.current && pollGeneration.current === generation
+    while (active()) {
       await new Promise((resolve) => window.setTimeout(resolve, 1500))
-      if (!polling.current) return
+      if (!active()) return
       try {
         const current = await commands.readOperation(item.caseId, operationId)
-        if (!polling.current) return
+        if (!active()) return
         setOperation(current)
         if (TERMINAL.has(current.status)) {
           polling.current = false
@@ -133,6 +137,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
           return
         }
       } catch (error) {
+        if (!active()) return
         polling.current = false
         handleError(error)
         return
@@ -150,6 +155,23 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
     } catch (error) { handleError(error) }
     finally { setBusy(false) }
   }
+
+  useEffect(() => {
+    let active = true
+    void commands.readLatestOperation(item.caseId).then((latest) => {
+      if (!active || latest === null || latest.operationType !== (isReopen ? 'reopen' : 'close')) return
+      if (latest.status === 'failed' || latest.status === 'manual_recovery_required' || !TERMINAL.has(latest.status)) {
+        setOperation(latest)
+        if (latest.reason !== null) setReason(latest.reason)
+        if (latest.closeMode !== null) setCloseMode(latest.closeMode)
+        if (!TERMINAL.has(latest.status) && !latest.canApprove) void poll(latest.id)
+      }
+    }).catch((error: unknown) => { if (active) handleError(error) })
+      .finally(() => { if (active) setRestoring(false) })
+    return () => { active = false; polling.current = false; pollGeneration.current++ }
+    // This subscription belongs to the case, not to each polled operation snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commands, item.caseId, isReopen])
 
   const completed = operation?.status === 'closed' || operation?.status === 'reopened'
   const recovery = operation?.status === 'manual_recovery_required'
@@ -178,7 +200,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
                 {completed ? <CheckCircle2 size={17} /> : recovery ? <AlertTriangle size={17} /> : <LoaderCircle className={operation.status === 'queued' || operation.status === 'moving' ? 'spin' : ''} size={17} />}
                 <span><strong>{OPERATION_LABELS[operation.status]}</strong>{operation.status === 'cleanup_pending' ? ' · hedef doğrulandı, kaynak temizliği bekliyor' : ''}</span>
               </div>
-              {operation.failureReasonCode && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{operation.failureReasonCode === 'case_not_fresh' ? 'Klasörün güncelliği doğrulanamadı. İşlem tamamlanmadı.' : 'İşlem tamamlanamadı. Klasör ve işlem kayıtlarını kontrol edin.'}</span></div>}
+              {operation.failureReasonCode && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{operation.status === 'queued' ? 'Taşıma başlamadı; klasör erişimi ve güncelliği yeniden kontrol ediliyor.' : operation.failureReasonCode === 'case_not_fresh' ? 'Klasörün güncelliği doğrulanamadı. İşlem tamamlanmadı.' : operation.failureReasonCode === 'access_denied' ? 'Klasöre erişim reddedildi. İşlem tamamlanmadı; erişimi kontrol edip yeniden deneyin.' : operation.failureReasonCode === 'file_locked' ? 'Klasör veya içindeki dosya kullanımda. Açık dosyaları kapatıp yeniden deneyin.' : 'İşlem tamamlanamadı. Klasör ve işlem kayıtlarını kontrol edin.'}</span></div>}
               <dl className="case-lifecycle-paths">
                 <div><dt>Kaynak</dt><dd>{operation.source.storageRootKey} · {operation.source.relativePath}</dd></div>
                 <div><dt>Hedef</dt><dd>{operation.destination.storageRootKey} · {operation.destination.relativePath}</dd></div>
@@ -215,10 +237,11 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
         </div>
         <footer className="modal__footer">
           <button className="button button--secondary" type="button" onClick={() => { polling.current = false; onClose() }} disabled={busy}>{completed ? 'Kapat' : 'Vazgeç'}</button>
+          {operation && ['stale', 'blocked', 'cancelled'].includes(operation.status) && <button className="button button--primary" type="button" disabled={busy} onClick={() => void reloadLatest()}>Güncel Verilerle Yeniden Önizle</button>}
           {operation === null
-            ? <button className="button button--primary" type="button" onClick={preview} disabled={busy || item.lifecycleStatus !== (isReopen ? 'closed' : 'open')}>{busy ? 'Planlanıyor…' : 'Önizleme Oluştur'}</button>
+            ? <button className="button button--primary" type="button" onClick={preview} disabled={busy || restoring || item.lifecycleStatus !== (isReopen ? 'closed' : 'open')}>{restoring ? 'İşlem kontrol ediliyor…' : busy ? 'Planlanıyor…' : 'Önizleme Oluştur'}</button>
             : operation.canApprove
-              ? <button className="button button--danger" type="button" onClick={approve} disabled={busy || operation.blockers.length > 0}>{busy ? 'Kuyruğa alınıyor…' : isReopen ? 'Onayla ve Yeniden Aç' : 'Onayla ve Kapat'}</button>
+              ? <button className="button button--danger" type="button" onClick={approve} disabled={busy || operation.blockers.length > 0}>{busy ? 'Kuyruğa alınıyor…' : operation.status === 'failed' ? 'Taşımayı Yeniden Dene' : isReopen ? 'Onayla ve Yeniden Aç' : 'Onayla ve Kapat'}</button>
               : null}
         </footer>
       </ModalFrame>

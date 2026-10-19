@@ -46,16 +46,11 @@ const CASE_TYPE_CODES: Record<CaseType, 'traffic' | 'casco' | 'unclassified'> = 
 
 const STAGE_CODES: Record<CaseStage, string> = {
   'Yeni İhbar': 'new_notification',
-  'Araç / Servis Bekleniyor': 'vehicle_or_service_pending',
-  'Ekspertiz Bekliyor': 'inspection_pending',
-  'Hasar Tespiti': 'damage_assessment',
-  'Onarım Takibi': 'parts_and_labor',
-  'Onarım Onayı Bekleniyor': 'repair_approval_pending',
+  'Parça Referans Kodları İstenildi': 'parts_and_labor',
   Onarımda: 'under_repair',
-  Raporlama: 'reporting',
-  'Kapanış Evrakları': 'closing_documents',
-  'Kapanmaya Hazır': 'ready_to_close',
-  Kapalı: 'closed',
+  Araştırmada: 'under_investigation',
+  'Ağır Hasar/Pert': 'total_loss',
+  Kapanış: 'closed',
 }
 
 const SORT_FIELDS: Record<CaseSortKey, CasePageQuery['sortBy']> = {

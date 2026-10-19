@@ -212,7 +212,7 @@ describeDb('Dosyalar/Dosya Detayı uçtan uca UAT: gerçek case oluşturma → l
     const unchangedAfterReadOnly = await pool.query(
       'SELECT workflow_stage,version FROM cases WHERE id=$1', [caseA.id],
     )
-    expect(unchangedAfterReadOnly.rows[0]).toEqual({ workflow_stage: 'reporting', version: caseA.version })
+    expect(unchangedAfterReadOnly.rows[0]).toEqual({ workflow_stage: 'under_repair', version: caseA.version })
 
     const readOnlyRead = await app.inject({
       method: 'GET', url: `${CASES_ROUTE}/${caseA.id}`, headers: { cookie: readOnlyACookie },

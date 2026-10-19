@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import pg from 'pg'
+import { mkdtemp, mkdir, rename, rm, writeFile, readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { discoverPlateFolders } from '../src/cases/folder-discovery.js'
 import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/database'
 import { reconcileOfficeFolderInventory } from '../src/cases/office-folder-inventory.js'
 import { applyFolderRegistration, planFolderRegistration } from '../src/cases/folder-registration.js'
@@ -53,6 +57,34 @@ describeDb('verified office folder inventory', () => {
     const audits = await pool.query("SELECT details FROM audit_events WHERE action='case.office_inventory_reconciled'")
     expect(audits.rows.every(row => row.details.childRecordsPreserved)).toBe(true)
   })
+  it('hides a manually cut pending folder moved to UZAKTAN and restores its original identity on return', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hb-office-inventory-'))
+    try {
+      const keep = await register('2026 OFİS/Ekim 2026/34TST501')
+      const pending = await register('2026 OFİS/_EKSİK DOSYALAR/34TST502')
+      for (const folder of [keep, pending]) await mkdir(join(root, folder.relativePath, 'EVRAK'), { recursive: true })
+      await writeFile(join(root, pending.relativePath, 'EVRAK/retained.txt'), 'retained original bytes')
+      const caseId = (await pool.query('SELECT case_id FROM case_folder_registrations WHERE source_folder_id=$1', [pending.sourceFolderId])).rows[0].case_id
+      const scan = async () => (await discoverPlateFolders(root, { officeOnly: true })).map(folder => {
+        const registered = [keep, pending].find(item => item.relativePath === folder.relativePath)
+        if (!registered) throw new Error('unexpected fixture folder')
+        return registered
+      })
+      await reconcile(await scan())
+      const remote = '2026 UZAKTAN/_EKSİK DOSYALAR/34TST502'
+      await mkdir(join(root, '2026 UZAKTAN/_EKSİK DOSYALAR'), { recursive: true })
+      await rename(join(root, pending.relativePath), join(root, remote))
+      expect((await scan()).map(item => item.sourceFolderId)).not.toContain(pending.sourceFolderId)
+      expect(await reconcile(await scan())).toMatchObject({ archived: 1 })
+      expect((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [caseId])).rows[0]).toEqual({ is_archived: true })
+      expect(await readFile(join(root, remote, 'EVRAK/retained.txt'), 'utf8')).toBe('retained original bytes')
+      await rename(join(root, remote), join(root, pending.relativePath))
+      expect(await reconcile(await scan())).toMatchObject({ restored: 1 })
+      expect((await pool.query('SELECT case_id FROM case_folder_registrations WHERE source_folder_id=$1', [pending.sourceFolderId])).rows[0].case_id).toBe(caseId)
+      expect((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [caseId])).rows[0]).toEqual({ is_archived: false })
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
   it('synchronizes physically closed placement and restores the previous open stage without fabricating closure dates', async () => {
     const folder = await register('2027 OFİS/Ocak 2027/KAPALI DOSYALAR/72JKL123')
     const id = (await pool.query('SELECT case_id FROM case_folder_registrations WHERE source_folder_id=$1', [folder.sourceFolderId])).rows[0].case_id
@@ -64,7 +96,7 @@ describeDb('verified office folder inventory', () => {
     await pool.query('UPDATE case_locations SET relative_path=$1 WHERE case_id=$2', [open.relativePath, id])
     expect(await reconcile([open])).toMatchObject({ statusUpdated: 1 })
     expect((await pool.query('SELECT lifecycle_status,workflow_stage FROM cases WHERE id=$1', [id])).rows[0])
-      .toEqual({ lifecycle_status: 'open', workflow_stage: 'reporting' })
+      .toEqual({ lifecycle_status: 'open', workflow_stage: 'under_repair' })
   })
   it('refuses incomplete, changed or unauthorized inventories without writing', async () => {
     const folder = await register('2026 OFİS/Ekim 2026/16MNO123')

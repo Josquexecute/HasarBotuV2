@@ -37,15 +37,10 @@
       "type": "string",
       "enum": [
         "new_notification",
-        "vehicle_or_service_pending",
-        "inspection_pending",
-        "damage_assessment",
         "parts_and_labor",
-        "repair_approval_pending",
         "under_repair",
-        "reporting",
-        "closing_documents",
-        "ready_to_close",
+        "under_investigation",
+        "total_loss",
         "closed"
       ]
     },

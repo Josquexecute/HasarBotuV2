@@ -12,6 +12,7 @@ import {
   fileOperationParamsSchema,
   fileOperationPlanParamsSchema,
   fileOperationPlanRequestSchema,
+  workspaceMonthPlanRequestSchema,
   fileOperationResponseSchema,
   idempotencyKeySchema,
   zodErrorToApiError,
@@ -73,17 +74,27 @@ export function registerFileOperationRoutes(app: FastifyInstance, options: FileO
   const authStore = createAuthStore(options.pool)
   const store = createFileOperationStore(options.pool)
 
-  app.post(CASE_FILE_OPERATION_PLAN_ROUTE, async (request, reply) => {
+  app.get('/api/v1/cases/:caseId/file-operations', async (request, reply) => {
+    const session = await requireSession(authStore, request, reply)
+    if (!session) return
+    const params = fileOperationPlanParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(failureBody('validation_error', 'Invalid case.', String(request.id)))
+    const exists = await options.pool.query('SELECT 1 FROM cases WHERE organization_id=$1 AND id::text=$2', [session.user.organizationId, params.data.caseId])
+    if (!exists.rowCount) return reply.code(404).send(failureBody('not_found', 'Case not found.', String(request.id)))
+    return { operation: await store.findLatestOperation(session.user.organizationId, params.data.caseId) }
+  })
+
+  async function plan(request: FastifyRequest, reply: FastifyReply, month = false) {
     const requestId = String(request.id)
     const session = await requireAnyRole(authStore, request, reply, WRITE_ROLES)
     if (session === undefined) return
     const params = fileOperationPlanParamsSchema.safeParse(request.params)
-    const body = fileOperationPlanRequestSchema.safeParse(request.body)
+    const body = (month ? workspaceMonthPlanRequestSchema : fileOperationPlanRequestSchema).safeParse(request.body)
     if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
     if (!body.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(body.error, requestId) }))
     const key = parseKey(request as unknown as { headers: Record<string, unknown> })
     if (key === undefined) return sendKeyRequired(reply, requestId)
-    const requestHash = hashRequestBody({ caseId: params.data.caseId, ...body.data })
+    const requestHash = hashRequestBody({ caseId: params.data.caseId, ...(month ? { purpose: 'complete_to_month' } : {}), ...body.data })
     const replay = await store.findIdempotent(session.user.organizationId, FILE_OPERATION_PLAN_SCOPE, key)
     if (replay !== undefined) {
       if (replay.requestHash !== requestHash) return reply.code(409).send(failureBody('idempotency_conflict', 'Idempotency key was used with a different request.', requestId))
@@ -97,6 +108,7 @@ export function registerFileOperationRoutes(app: FastifyInstance, options: FileO
         { key, requestHash },
       )
       if (outcome.kind === 'not_found') return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
+      if (outcome.kind === 'invalid_month_source') return reply.code(409).send(failureBody('file_operation_conflict', 'An open pending workspace and a valid notification date are required.', requestId))
       if (outcome.kind === 'location_required') return reply.code(409).send(failureBody('file_operation_stale', 'Verified case workspace is required.', requestId))
       if (outcome.kind === 'location_not_verified') return reply.code(409).send(failureBody('file_operation_stale', 'Case workspace is not verified.', requestId))
       if (outcome.kind === 'version_conflict') return reply.code(409).send(failureBody('version_conflict', 'Case location was modified by another operation.', requestId))
@@ -114,7 +126,9 @@ export function registerFileOperationRoutes(app: FastifyInstance, options: FileO
       }
       throw error
     }
-  })
+  }
+  app.post(CASE_FILE_OPERATION_PLAN_ROUTE, async (request, reply) => plan(request, reply))
+  app.post('/api/v1/cases/:caseId/workspace-month-plan', async (request, reply) => plan(request, reply, true))
 
   app.get(CASE_FILE_OPERATION_ROUTE, async (request, reply) => {
     const requestId = String(request.id)

@@ -1,6 +1,6 @@
 import type pg from 'pg'
 import { relativePathSchema } from '@hasarbotu/contracts'
-import { parseSourcePlateFolderName, plateSearchKey } from '@hasarbotu/domain'
+import { normalizeCaseStage, parseSourcePlateFolderName, plateSearchKey } from '@hasarbotu/domain'
 import { createAuditService } from '../audit/service.js'
 import { automaticFolderPolicySchema, type AutomaticFolderPolicy } from './automatic-folder-registration.js'
 
@@ -66,7 +66,7 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
       if (row.operation_active) { result.inventoryDeferred++; continue }
       const previousStage = row.previous_inventory?.openStage
       const openStage = row.workflow_stage === 'closed' ? (typeof previousStage === 'string' ? previousStage : 'new_notification') : row.workflow_stage
-      const stage = changedStatus ? (closed ? 'closed' : openStage) : row.workflow_stage
+      const stage = changedStatus ? (closed ? 'closed' : normalizeCaseStage(openStage)) : row.workflow_stage
       await client.query(`UPDATE cases SET is_archived=$1,lifecycle_status=$2,workflow_stage=$3,version=version+1,updated_at=now()
         WHERE organization_id=$4 AND id=$5`, [archived, status, stage, policy.organizationId, row.id])
       await audit.record(client, { organizationId: policy.organizationId, actorUserId: policy.actorUserId,
@@ -79,6 +79,32 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
       if (archived) result.archived++
       else if (row.is_archived) result.restored++
       if (changedStatus) result.statusUpdated++
+    }
+    // An externally completed move can leave an old failed saga reserving its
+    // destination forever. Release only after the same registered cloud identity
+    // and verified location agree with the intended lifecycle placement.
+    const failed = (await client.query(`SELECT fo.id,fo.case_id,fo.failure_reason_code,fo.active_job_id,
+      l.relative_path,r.source_folder_id FROM case_file_operations fo
+      JOIN case_lifecycle_operations lo ON lo.linked_file_operation_id=fo.id
+      JOIN cases c ON c.id=fo.case_id AND c.organization_id=fo.organization_id
+      JOIN case_locations l ON l.case_id=c.id AND l.organization_id=c.organization_id
+      JOIN case_folder_registrations r ON r.case_id=c.id AND r.organization_id=c.organization_id
+      WHERE fo.organization_id=$1 AND fo.status='failed' AND lo.status='failed' AND NOT c.is_archived
+        AND c.lifecycle_status=lo.target_lifecycle_status AND c.workflow_stage=lo.target_workflow_stage
+        AND l.verification_status='verified' AND l.storage_root_key=$2
+        AND fo.destination_storage_root_key=l.storage_root_key AND fo.destination_relative_path=l.relative_path
+        AND r.storage_root_key=l.storage_root_key AND r.source_relative_path=l.relative_path
+        AND NOT EXISTS(SELECT 1 FROM jobs j WHERE j.target_type='file_operation' AND j.target_id=fo.id AND j.status IN ('pending','leased'))
+      FOR UPDATE OF fo`, [policy.organizationId, policy.storageRootKey])).rows
+    for (const operation of failed) {
+      if (byPath.get(key(operation.relative_path))?.sourceFolderId !== operation.source_folder_id) continue
+      await client.query(`UPDATE case_file_operations SET status='stale',failure_reason_code='verified_external_relocation',
+        version=version+1,updated_at=now() WHERE id=$1`, [operation.id])
+      await audit.record(client, { organizationId: policy.organizationId, actorUserId: policy.actorUserId,
+        requestId: 'office-inventory-' + scanStartedAt, action: 'file_operation.externally_reconciled',
+        entityType: 'case_file_operation', entityId: operation.id,
+        details: { caseId: operation.case_id, previousErrorCode: operation.failure_reason_code, previousJobId: operation.active_job_id,
+          relativePath: operation.relative_path, sourceFolderId: operation.source_folder_id, failedHistoryPreserved: true } })
     }
     await client.query('COMMIT')
     return result

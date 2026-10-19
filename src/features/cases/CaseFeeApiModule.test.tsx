@@ -18,7 +18,7 @@ const item: CaseRecord = {
   company: 'Sentetik Sigorta',
   type: 'Trafik',
   status: 'Kapalı',
-  stage: 'Kapalı',
+  stage: 'Kapanış',
   missingDocuments: 0,
   assignee: 'Sorumlu',
   expert: 'Eksper',

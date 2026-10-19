@@ -103,8 +103,8 @@
       "additionalProperties": false
     },
     "stageCounts": {
-      "minItems": 10,
-      "maxItems": 10,
+      "minItems": 6,
+      "maxItems": 6,
       "type": "array",
       "items": {
         "type": "object",
@@ -113,15 +113,11 @@
             "type": "string",
             "enum": [
               "new_notification",
-              "vehicle_or_service_pending",
-              "inspection_pending",
-              "damage_assessment",
               "parts_and_labor",
-              "repair_approval_pending",
               "under_repair",
-              "reporting",
-              "closing_documents",
-              "ready_to_close"
+              "under_investigation",
+              "total_loss",
+              "closed"
             ]
           },
           "count": {
@@ -177,15 +173,10 @@
             "type": "string",
             "enum": [
               "new_notification",
-              "vehicle_or_service_pending",
-              "inspection_pending",
-              "damage_assessment",
               "parts_and_labor",
-              "repair_approval_pending",
               "under_repair",
-              "reporting",
-              "closing_documents",
-              "ready_to_close"
+              "under_investigation",
+              "total_loss"
             ]
           },
           "responsibleUserId": {

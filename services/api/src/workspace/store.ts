@@ -154,7 +154,7 @@ export function createWorkspaceStore(pool: pg.Pool) {
         const base = buildCaseWorkspaceBasePath(caseRow.notification_date, caseRow.plate)
         if (!base.ok) return { kind: base.error === 'path_limit_exhausted' ? 'path_exhausted' : 'notification_date_required' }
 
-        // Aynı org/root/ay/plaka için sıra tahsisini transaction boyunca tekilleştirir.
+        // Aynı org/root/yıl/plaka için sıra tahsisini transaction boyunca tekilleştirir.
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
           `${actor.organizationId}:${input.storageRootKey}:${base.relativePath}`,
         ])

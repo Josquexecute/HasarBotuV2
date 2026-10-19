@@ -19,19 +19,7 @@ Kilit ürün kuralı `isValueLossRequired` ile saf biçimde temsil edilir: Trafi
 
 `CaseStatus` yaşam döngüsünü temsil eder ve yalnız `open` ile `closed` değerlerini kabul eder. Mevcut UI'daki “Beklemede”, “Gecikmiş” ve “Kontrol Bekliyor” değerleri yaşam döngüsü durumu değildir; bunlar takip/operasyon sunumlarıdır ve ortak çekirdeğe alınmamıştır.
 
-`CaseStage` ürün belgelerindeki on operasyon aşamasını kararlı İngilizce kodlarla temsil eder:
-
-1. `new_notification`
-2. `vehicle_or_service_pending`
-3. `inspection_pending`
-4. `damage_assessment`
-6. `repair_approval_pending`
-7. `under_repair`
-8. `reporting`
-9. `closing_documents`
-10. `ready_to_close`
-
-Türkçe etiket eşlemesi ileride UI/adaptör katmanında yapılacaktır.
+`CaseStage` altı aşama taşır: `new_notification` (Yeni İhbar), `parts_and_labor` (Parça Referans Kodları İstenildi), `under_repair` (Onarımda), `under_investigation` (Araştırmada), `total_loss` (Ağır Hasar/Pert) ve `closed` (Kapanış). Eski aşama kodları okuma ve komut sınırlarında Onarımda olarak normalleştirilir; kapanış yalnız fiziksel konum doğrulamasıyla tamamlanır.
 
 ## Kimlik ve tarih politikası
 
@@ -41,7 +29,7 @@ Türkçe etiket eşlemesi ileride UI/adaptör katmanında yapılacaktır.
 - `PlateNumber` girdiyi kırpar (en çok **32 karakter**), büyük harfe ve tek aralıklı kanonik gösterime dönüştürür. Standart Türk plaka dizilimi tanınırsa `34 MPA 764` biçimi üretilir; farklı ama alfasayısal plakalar gereksiz katı bir regex ile reddedilmez. Arama anahtarı ayraçsızdır: `34MPA764`.
 - `UtcDateTime`, yalnız `YYYY-MM-DDTHH:mm:ssZ` veya üç basamak milisaniyeli `YYYY-MM-DDTHH:mm:ss.sssZ` biçimini kabul eder. Offset ve timezone'suz değerler reddedilir.
 - `LocalDate`, gerçek takvim doğrulamasıyla `YYYY-MM-DD` biçimini kabul eder; timezone taşımaz ve dönüştürülmez.
-- Yeni ihbar çalışma klasörleri `YYYY OFİS/Ay YYYY/PLAKA` altında oluşturulur; böylece ofis envanterinde kalır. Kapanış aynı ayın `KAPALI DOSYALAR` altını kullanır; mevcut `YYYY/Ay YYYY` yolları desteklenmeye devam eder.
+- Yeni ihbar çalışma klasörleri `YYYY OFİS/_EKSİK DOSYALAR/PLAKA` altında oluşturulur. Dosya detayındaki ay klasörüne taşıma planı, ihbar tarihinden `YYYY OFİS/Ay YYYY/PLAKA` hedefini üretir; kullanıcı onayından sonra File Agent bütünlüğü doğrulayıp kayıtlı konumu değiştirir. Plaka sonekleri korunur ve hedefin üzerine yazılmaz. Kapanış aynı ayın `KAPALI DOSYALAR` altını kullanır; mevcut `YYYY/Ay YYYY` yolları desteklenmeye devam eder.
 - Takip tarihi ürün kararıyla **saat içermez**: `CaseCore.followUpDate`, `LocalDate` taşır (2026-07-11 proje sertleştirme kararı, `DECISION_LOG.md` HB-2026-005). `followUpAt` alanı kaldırılmıştır. `lastInterventionAt`, `createdAt` ve `updatedAt` `UtcDateTime` olarak kalır.
 - `EntityVersion`, optimistic locking için 1'den başlayan pozitif güvenli tam sayıdır; güvenli sınırda artırım `overflow` hatası verir.
 

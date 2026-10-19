@@ -73,7 +73,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
     if (!config.trackRegisteredMoves) return result
     const seen = new Set()
     const expected = new Set(['source_changed', 'source_unavailable', 'source_previous_path_exists', 'folder_relocation_operation_active',
-      'folder_relocation_case_changed', 'folder_relocation_location_changed', 'folder_relocation_plan_stale',
+      'folder_relocation_case_changed', 'folder_relocation_case_not_found', 'folder_relocation_location_changed', 'folder_relocation_plan_stale',
       'folder_relocation_location_in_use', 'folder_relocation_registered_identity_required', 'folder_relocation_plate_mismatch',
       'folder_admin_required', 'folder_active_root_required'])
     for (const folder of discovered) {

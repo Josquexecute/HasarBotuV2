@@ -22,6 +22,7 @@ function ports(canWrite = true) {
   let notes = [note]
   const cases: CasesDataPort = { listCases: vi.fn(), listCasePage: vi.fn(async () => page()), getCase: vi.fn(async (id) => id === first.caseId ? first : second) }
   const operations: CaseOperationsPort = {
+    deleteNote: vi.fn(),
     load: vi.fn(async (caseId): Promise<CaseOperationsRecord> => ({ caseId, asOfDate: '2026-10-13', notes, tasks: [], followUpHistory: [], permissions: { canWrite, canCompleteTasks: canWrite } })),
     createNote: vi.fn(async (_caseId, input) => { const saved = { ...note, ...input, id: 'new-note' }; notes = [...notes, saved]; return saved }),
     createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn(),

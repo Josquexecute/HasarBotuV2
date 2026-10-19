@@ -21,6 +21,7 @@ function renderDashboard() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/dosyalar/:caseId" element={<div>Gerçek dosya detayı hedefi</div>} />
+        <Route path="/dosyalar" element={<div>Kapalı dosya listesi hedefi</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -36,6 +37,14 @@ beforeEach(() => {
 })
 
 describe('DashboardPage gerçek veri görünüm davranışları', () => {
+  it('shows exactly the six requested stages and opens the closed case list', () => {
+    renderDashboard()
+    expect([...document.querySelectorAll('.workflow-column__head > span')].map(item => item.textContent)).toEqual([
+      'Yeni İhbar', 'Parça Referans Kodları İstenildi', 'Onarımda', 'Araştırmada', 'Ağır Hasar/Pert', 'Kapanış',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Kapalı dosyaları göster' }))
+    expect(screen.getByText('Kapalı dosya listesi hedefi')).toBeInTheDocument()
+  })
   it('insan onayı özetinden filtreler ve dosya detayına klavyeyle geçer', () => {
     renderDashboard()
 

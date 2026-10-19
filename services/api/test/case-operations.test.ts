@@ -98,8 +98,9 @@ describeDb('Paket 37 case not, görev ve takip geçmişi gerçek API', () => {
     await pool.query(
       `INSERT INTO user_roles (user_id,role_id)
        SELECT $1::uuid,id FROM roles WHERE code='case_manager'
-       UNION ALL SELECT $2::uuid,id FROM roles WHERE code='read_only'`,
-      [managerUserId, readOnlyUserId],
+       UNION ALL SELECT $2::uuid,id FROM roles WHERE code='read_only'
+       UNION ALL SELECT $3::uuid,id FROM roles WHERE code='case_manager'`,
+      [managerUserId, readOnlyUserId, activeAssigneeId],
     )
     await pool.query(
       `INSERT INTO cases
@@ -358,6 +359,50 @@ describeDb('Paket 37 case not, görev ve takip geçmişi gerçek API', () => {
       [caseId],
     )
     expect(audit.rows).toEqual([{ n: 0 }])
+  })
+
+  async function newNote(body: string) {
+    const response = await app.inject({ method: 'POST', url: notesUrl(),
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: { noteType: 'internal', body } })
+    expect(response.statusCode).toBe(201)
+    return caseNoteResponseSchema.parse(response.json()).note
+  }
+
+  it('yazar kendi notunu eşzamanlı ve tekrar eden isteklerde bir kez siler; gerçek listeden kaldırır', async () => {
+    const note = await newNote('Yalnız yazarın kaldırabileceği sentetik not.')
+    const request = { method: 'DELETE' as const, url: `${notesUrl()}/${note.id}`, headers: { cookie: managerCookie } }
+    const results = await Promise.all([app.inject(request), app.inject(request)])
+    expect(results.map(result => result.statusCode)).toEqual([200, 200])
+    expect(results[0]!.json()).toEqual({ deletedNoteId: note.id })
+    const loaded = caseOperationsResponseSchema.parse((await app.inject({ url: operationsUrl(), headers: { cookie: managerCookie } })).json())
+    expect(loaded.notes.some(item => item.id === note.id)).toBe(false)
+    expect(loaded.notes.length).toBeGreaterThan(0)
+    expect((await pool.query('SELECT body FROM case_notes WHERE id=$1', [note.id])).rows).toEqual([{ body: note.body }])
+    const audit = (await pool.query("SELECT details FROM audit_events WHERE action='case_note.deleted' AND resource_id=$1", [note.id])).rows
+    expect(audit).toEqual([{ details: { caseId } }])
+    await expect(pool.query('DELETE FROM case_note_deletions WHERE note_id=$1', [note.id])).rejects.toMatchObject({ code: '23001' })
+  })
+
+  it('başka sorumlu, salt okunur, kimliksiz ve başka ofis/dosya taleplerini engeller', async () => {
+    const note = await newNote('Yetki sınırı için sentetik not.')
+    const otherCookie = await login('p37-assignee@test.local')
+    const url = `${notesUrl()}/${note.id}`
+    expect((await app.inject({ method: 'DELETE', url })).statusCode).toBe(401)
+    for (const cookie of [otherCookie, readOnlyCookie]) expect((await app.inject({ method: 'DELETE', url, headers: { cookie } })).statusCode).toBe(403)
+    expect((await app.inject({ method: 'DELETE', url: `${notesUrl(foreignCaseId)}/${note.id}`, headers: { cookie: managerCookie } })).statusCode).toBe(404)
+    expect((await app.inject({ method: 'DELETE', url: `${notesUrl()}/${uuidv7()}`, headers: { cookie: managerCookie } })).statusCode).toBe(404)
+    expect((await app.inject({ method: 'DELETE', url: `${notesUrl(closedCaseId)}/${note.id}`, headers: { cookie: managerCookie } })).statusCode).toBe(409)
+    await expect(pool.query('INSERT INTO case_note_deletions(note_id,organization_id,case_id,deleted_by_user_id) VALUES($1,$2,$3,$4)', [note.id, organizationId, caseId, activeAssigneeId])).rejects.toMatchObject({ code: '23503' })
+    expect((await pool.query('SELECT 1 FROM case_note_deletions WHERE note_id=$1', [note.id])).rowCount).toBe(0)
+  })
+
+  it('audit yazılamazsa not silmeyi de geri alır', async () => {
+    const note = await newNote('Audit bütünlüğü sentetik notu.')
+    await pool.query("CREATE FUNCTION reject_note_delete_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='case_note.deleted' THEN RAISE EXCEPTION 'synthetic';END IF;RETURN NEW;END $$;CREATE TRIGGER reject_note_delete_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION reject_note_delete_audit()")
+    try {
+      expect((await app.inject({ method: 'DELETE', url: `${notesUrl()}/${note.id}`, headers: { cookie: managerCookie } })).statusCode).toBe(500)
+      expect((await pool.query('SELECT 1 FROM case_note_deletions WHERE note_id=$1', [note.id])).rowCount).toBe(0)
+    } finally { await pool.query('DROP TRIGGER reject_note_delete_audit ON audit_events;DROP FUNCTION reject_note_delete_audit()') }
   })
 
   it('kapalı dosyada yazmayı conflict ile durdurur ve response/audit sızıntısı üretmez', async () => {

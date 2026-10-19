@@ -55,6 +55,7 @@ interface LifecycleRow {
   destination_relative_path: string
   linked_file_operation_id: string | null
   linked_file_operation_status: string | null
+  linked_job_status: string | null
   closure_mode: 'normal' | 'with_missing_requirements' | null
   requirement_snapshot: LifecycleRequirementSummary
   blockers: string[]
@@ -75,7 +76,8 @@ interface LifecycleRow {
 
 const LIFECYCLE_FIELDS = `lo.id,lo.case_id,lo.operation_type,lo.expected_case_version,lo.expected_location_version,
   lo.source_storage_root_key,lo.source_relative_path,lo.destination_storage_root_key,lo.destination_relative_path,
-  lo.linked_file_operation_id,fo.status AS linked_file_operation_status,lo.closure_mode,lo.requirement_snapshot,
+  lo.linked_file_operation_id,fo.status AS linked_file_operation_status,
+  (SELECT status FROM jobs WHERE id=fo.active_job_id) AS linked_job_status,lo.closure_mode,lo.requirement_snapshot,
   lo.blockers,lo.warnings,lo.user_reason,lo.previous_lifecycle_status,lo.target_lifecycle_status,
   lo.previous_workflow_stage,lo.target_workflow_stage,lo.status,lo.failure_reason_code,lo.version,
   lo.approved_at,lo.finalized_at,lo.created_at,lo.updated_at`
@@ -105,7 +107,7 @@ function toDto(row: LifecycleRow): CaseLifecycleOperation {
       status: row.linked_file_operation_status,
     },
     failureReasonCode: row.failure_reason_code,
-    canApprove: row.status === 'approval_required',
+    canApprove: row.status === 'approval_required' || row.status === 'failed' && row.linked_file_operation_status === 'failed' && row.linked_job_status === 'dead_letter',
     canCancel: row.status === 'approval_required',
     approvedAt: row.approved_at?.toISOString() ?? null,
     finalizedAt: row.finalized_at?.toISOString() ?? null,
@@ -394,10 +396,10 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         )
         if (activeLifecycle.rowCount !== 0) return { kind: 'lifecycle_conflict' }
         const locationResult = await client.query(
-          `SELECT id,storage_root_key,relative_path,verification_status,version FROM case_locations
+          `SELECT id,storage_root_key,relative_path,verification_status,version,source FROM case_locations
            WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`, [actor.organizationId, caseId],
         )
-        const location = locationResult.rows[0] as { id: string; storage_root_key: string; relative_path: string; verification_status: string; version: number } | undefined
+        const location = locationResult.rows[0] as { id: string; storage_root_key: string; relative_path: string; verification_status: string; version: number; source: string } | undefined
         if (location === undefined) return { kind: 'location_required' }
         if (location.verification_status !== 'verified') return { kind: 'location_not_verified' }
         if (location.version !== input.expectedLocationVersion) return { kind: 'version_conflict' }
@@ -406,8 +408,17 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
            WHERE organization_id=$1 AND case_id=$2 AND operation_type='close'
            ORDER BY occurred_at DESC,id DESC LIMIT 1`, [actor.organizationId, caseId],
         )
-        const openLocation = prior.rows[0] as { source_storage_root_key: string; source_relative_path: string } | undefined
-        if (openLocation === undefined) return { kind: 'invalid_location' }
+        let openLocation = prior.rows[0] as { source_storage_root_key: string; source_relative_path: string } | undefined
+        if (openLocation === undefined) {
+          const registered = location.source === 'imported' && (await client.query(
+            `SELECT 1 FROM case_folder_registrations WHERE organization_id=$1 AND case_id=$2
+             AND storage_root_key=$3 AND source_relative_path=$4`,
+            [actor.organizationId, caseId, location.storage_root_key, location.relative_path],
+          )).rowCount !== 0
+          const restored = buildOpenImportedCaseWorkspacePath(location.relative_path)
+          if (!registered || !restored.ok) return { kind: 'invalid_location' }
+          openLocation = { source_storage_root_key: location.storage_root_key, source_relative_path: restored.value }
+        }
         if (openLocation.source_storage_root_key === location.storage_root_key && openLocation.source_relative_path === location.relative_path) {
           const restored = buildOpenImportedCaseWorkspacePath(location.relative_path)
           if (!restored.ok) return { kind: 'invalid_location' }
@@ -478,7 +489,8 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         if (row === undefined) return { kind: 'not_found' }
         if (row.operation_type !== expectedOperationType) return { kind: 'conflict' }
         if (row.version !== input.expectedVersion) return { kind: 'version_conflict' }
-        if (row.status !== 'approval_required') return { kind: row.status === 'stale' ? 'stale' : 'conflict' }
+        const retrying = row.status === 'failed' && row.linked_file_operation_id !== null
+        if (row.status !== 'approval_required' && !retrying) return { kind: row.status === 'stale' ? 'stale' : 'conflict' }
         const expectedLifecycle = row.operation_type === 'close' ? 'open' : 'closed'
         if (row.case_version !== row.expected_case_version || row.lifecycle_status !== expectedLifecycle
           || row.location_version !== row.expected_location_version || row.location_root !== row.source_storage_root_key
@@ -495,7 +507,37 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           [actor.organizationId, row.destination_storage_root_key, row.destination_relative_path, row.expected_location_id],
         )
         if (conflict.rowCount !== 0) return { kind: 'destination_conflict' }
-        const file = await enqueueLifecycleFileOperation(client, {
+        let file: { operationId: string; jobId: string }
+        if (retrying) {
+          // Reuse the operation identity and original payload so persisted manifest
+          // evidence can safely recover a move whose acknowledgement was lost.
+          const previous = await client.query(
+            `SELECT fo.id,fo.version,j.id AS job_id,j.payload,j.max_attempts,j.attempt_count,j.last_error_code
+             FROM case_file_operations fo JOIN jobs j ON j.id=fo.active_job_id
+             WHERE fo.id=$1 AND fo.organization_id=$2 AND fo.case_id=$3 AND fo.status='failed'
+               AND j.status='dead_letter' AND j.target_version=fo.version AND j.type IN ('rename_case_workspace','move_case_workspace')
+             FOR UPDATE OF fo,j`,
+            [row.linked_file_operation_id, actor.organizationId, caseId],
+          )
+          const old = previous.rows[0] as { id: string; version: number; job_id: string; payload: unknown;
+            max_attempts: number; attempt_count: number; last_error_code: string | null } | undefined
+          if (old === undefined) return { kind: 'conflict' }
+          const jobId = uuidv7()
+          await client.query(
+            `INSERT INTO jobs(id,organization_id,type,status,target_type,target_id,target_version,payload,max_attempts)
+             SELECT $1,organization_id,type,'pending',target_type,target_id,target_version,payload,max_attempts
+             FROM jobs WHERE id=$2`, [jobId, old.job_id],
+          )
+          await client.query(
+            `UPDATE case_file_operations SET status='queued',active_job_id=$2,failure_reason_code=NULL,
+             attempt_count=0,updated_at=now() WHERE id=$1`, [old.id, jobId],
+          )
+          await audit.record(client, { organizationId: actor.organizationId, actorUserId: actor.actorUserId, requestId: actor.requestId,
+            action: 'file_operation.retry_approved', entityType: 'case_file_operation', entityId: old.id,
+            details: { caseId, lifecycleOperationId: operationId, previousJobId: old.job_id, jobId,
+              previousAttempts: old.attempt_count, previousErrorCode: old.last_error_code } })
+          file = { operationId: old.id, jobId }
+        } else file = await enqueueLifecycleFileOperation(client, {
           organizationId: actor.organizationId, actorUserId: actor.actorUserId, requestId: actor.requestId,
           caseId, lifecycleOperationId: operationId,
           source: { locationId: row.expected_location_id, storageRootKey: row.source_storage_root_key,
@@ -504,7 +546,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         })
         await client.query(
           `UPDATE case_lifecycle_operations SET status='queued',linked_file_operation_id=$2,approved_by_user_id=$3,
-           approved_at=now(),version=version+1,updated_at=now() WHERE id=$1`,
+           approved_at=now(),failure_reason_code=NULL,version=version+1,updated_at=now() WHERE id=$1`,
           [operationId, file.operationId, actor.actorUserId],
         )
         await audit.record(client, { organizationId: actor.organizationId, actorUserId: actor.actorUserId, requestId: actor.requestId,

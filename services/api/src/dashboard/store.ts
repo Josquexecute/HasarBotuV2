@@ -2,6 +2,8 @@ import type pg from 'pg'
 import {
   DASHBOARD_HUMAN_APPROVAL_KINDS,
   DASHBOARD_OPEN_STAGES,
+  DASHBOARD_STAGES,
+  openCaseStageSchema,
   dashboardResponseSchema,
   type DashboardHumanApprovalKindDto,
   type DashboardResponse,
@@ -117,7 +119,7 @@ export function createDashboardStore(pool: pg.Pool) {
          ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`,
         [organizationId],
       )
-      const rows = casesResult.rows as DashboardCaseRow[]
+      const rows = (casesResult.rows as DashboardCaseRow[]).map(row => ({ ...row, workflow_stage: openCaseStageSchema.parse(row.workflow_stage) }))
       const caseIds = rows.map((row) => row.id)
 
       const documentsByCase = new Map<string, DocumentRow[]>()
@@ -327,9 +329,10 @@ export function createDashboardStore(pool: pg.Pool) {
         }
       }).sort(compareDashboardItems)
 
-      const stageCounts = DASHBOARD_OPEN_STAGES.map((stage) => ({
+      const closedCount = Number((await pool.query("SELECT count(*)::int n FROM cases WHERE organization_id=$1 AND lifecycle_status='closed' AND NOT is_archived", [organizationId])).rows[0].n)
+      const stageCounts = DASHBOARD_STAGES.map((stage) => ({
         stage,
-        count: items.filter((item) => item.stage === stage).length,
+        count: stage === 'closed' ? closedCount : items.filter((item) => item.stage === stage).length,
       }))
       const summary = {
         openCaseCount: items.length,

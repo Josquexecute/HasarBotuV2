@@ -19,7 +19,7 @@ test('real Windows publisher receives only verified downloads and preserves the 
   try {
     const state = join(root, 'state'); await mkdir(state)
     const release = { id: 1, tag_name: 'v' + version, draft: false, prerelease: false,
-      body: `https://github.com/Josquexecute/HasarBotuV2/actions/runs/123\n<!-- hasarbotu-source:${sourceSha} -->\n<!-- hasarbotu-artifact:${sha256}:${bytes.length} -->`,
+      body: `Dosya aşamaları, kapanış ve gerçek taşıma: ÇĞİÖŞÜ çğıöşü.\nhttps://github.com/Josquexecute/HasarBotuV2/actions/runs/123\n<!-- hasarbotu-source:${sourceSha} -->\n<!-- hasarbotu-artifact:${sha256}:${bytes.length} -->`,
       assets: [{ id: 11, name: 'HasarBotu-Kurulum.exe', size: bytes.length, digest: 'sha256:' + sha256 },
         { id: 12, name: 'SHA256SUMS.txt', size: Buffer.byteLength(checksum), digest: 'sha256:' + createHash('sha256').update(checksum).digest('hex') }] }
     const fixture = { release, installer, sourceSha, checksum }
@@ -45,6 +45,7 @@ else process.exit(1);
     const first = invoke(); assert.equal(first.status, 0, first.stdout + first.stderr)
     const before = await readFile(join(store, 'latest.json'), 'utf8'), manifest = JSON.parse(before)
     assert.equal(manifest.version, version); assert.equal(manifest.sha256, sha256)
+    assert.equal(manifest.notes, release.body)
     assert.equal(createHash('sha256').update(await readFile(join(store, sha256 + '.exe'))).digest('hex'), sha256)
     assert.equal(JSON.parse(await readFile(join(state, 'status.json'), 'utf8')).action, 'UPDATE')
     const lockFile = join(store, '.publish.lock'), notesFile = join(root, 'notes.txt')
@@ -55,6 +56,19 @@ else process.exit(1);
     assert.ok(competing.stderr.includes('EEXIST'))
     assert.equal(await readFile(join(store, 'latest.json'), 'utf8'), before)
     await unlink(lockFile)
+    const publish = () => spawnSync(process.execPath, [join(workspace, 'scripts/publish-desktop-release.mjs'), installer, store, version, notesFile], { windowsHide: true, encoding: 'utf8', timeout: 30_000 })
+    for (const invalid of [Buffer.from(release.body).toString('latin1'), Buffer.from([0xff, 0xfe, 0xe7, 0xfd])]) {
+      await writeFile(notesFile, invalid)
+      const rejected = publish()
+      assert.equal(rejected.status, 1)
+      assert.match(rejected.stderr, /Release notes:/)
+      assert.equal(await readFile(join(store, 'latest.json'), 'utf8'), before)
+    }
+    await writeFile(notesFile, '\uFEFF' + release.body)
+    assert.equal(publish().status, 0)
+    assert.equal(JSON.parse(await readFile(join(store, 'latest.json'), 'utf8')).notes, release.body)
+    // Restore the exact manifest for the remaining immutability assertions.
+    await writeFile(join(store, 'latest.json'), before)
     const second = invoke(); assert.equal(second.status, 0, second.stdout + second.stderr)
     assert.equal(JSON.parse(await readFile(join(state, 'status.json'), 'utf8')).action, 'CURRENT')
     assert.equal((await readFile(join(root, 'requests.log'), 'utf8')).split('\n').filter(line => line.endsWith('/releases/assets/11')).length, 1)

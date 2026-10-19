@@ -9,6 +9,7 @@ import { planV1Remediation, applyV1Remediation } from '../src/v1-import/remediat
 import { applyRegisteredV1Notes, registeredNotesManifestSchema } from '../src/v1-import/registered-notes.js'
 import { hashPassword } from '../src/auth/password.js'
 import { buildV1SourceIdentityMaterial } from '@hasarbotu/domain'
+import { createCaseOperationsStore } from '../src/case-operations/store.js'
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)('registered V1 notes independent of pending classification', () => {
   let pool: pg.Pool, root: string, org: string, actor: string
@@ -63,6 +64,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('registered V1 notes independent
     expect((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows).toEqual(before)
     const metadata = (await pool.query("SELECT source_author_name,to_char(source_occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI') date FROM v1_import_item_metadata WHERE item_type='note'")).rows
     expect(metadata).toEqual([{ source_author_name: 'Historical author', date: '2026-07-02 01:00' }, { source_author_name: 'Historical author', date: '2026-07-02 01:00' }])
+    const notes = (await pool.query('SELECT id,case_id FROM case_notes')).rows
+    for (const note of notes) expect(await createCaseOperationsStore(pool).deleteNote({ organizationId: org, actorUserId: actor, requestId: uuidv7() }, note.case_id, note.id)).toEqual({ kind: 'forbidden' })
+    expect((await pool.query('SELECT 1 FROM case_note_deletions')).rowCount).toBe(0)
     expect((await pool.query('SELECT count(*)::int n FROM v1_import_quarantine_status WHERE NOT resolved')).rows[0].n).toBe(2)
   })
   it('restores notes for a newly registered insurer-suffixed source without requiring a previous historical import', async () => {

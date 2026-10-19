@@ -179,6 +179,9 @@ describeDb('salt okunur Cases uclari (gercek veritabani)', () => {
 
     const byStage = await app.inject({ method: 'GET', url: `${CASES_ROUTE}?stage=reporting`, headers: { cookie } })
     expect((byStage.json() as { items: { id: string }[] }).items[0]?.id).toBe(caseIds.abc)
+    const canonicalStage = await app.inject({ method: 'GET', url: `${CASES_ROUTE}?stage=under_repair`, headers: { cookie } })
+    expect(canonicalStage.json().items.map((item: { id: string }) => item.id)).toEqual([caseIds.abc, caseIds.mpa])
+    expect(byStage.json().items).toEqual(canonicalStage.json().items)
 
     const byResponsible = await app.inject({
       method: 'GET',

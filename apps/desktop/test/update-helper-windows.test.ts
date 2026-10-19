@@ -15,7 +15,7 @@ const powershell = (script: string, env?: NodeJS.ProcessEnv) => exec('powershell
 describe.skipIf(process.platform !== 'win32')('Windows update helper cleanup failures', () => {
   let directory: string, installer: string, executable: string
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), "hb-update O'Neil-"))
+    directory = await mkdtemp(join(tmpdir(), "hb-update Çığ Şöför İĞÜ ıöşçü O'Neil-"))
     installer = join(directory, 'installer.exe'); executable = join(directory, 'application.exe')
     await powershell(String.raw`$ErrorActionPreference='Stop'; Add-Type -OutputAssembly ${literal(installer)} -OutputType WindowsApplication -TypeDefinition @'
 using System;
@@ -36,7 +36,11 @@ public class UpdateFixture {
 '@`)
     await copyFile(installer, executable)
   }, 30_000)
-  afterAll(async () => { if (directory) await rm(directory, { recursive: true, force: true }) })
+  afterAll(async () => {
+    if (!directory) return
+    await powershell(`Get-CimInstance Win32_Process -Filter "Name='application.exe'" | Where-Object { $_.ExecutablePath -eq ${literal(executable)} } | ForEach-Object { $process=Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; if($process){$process.Kill(); $process.WaitForExit()} }`)
+    await rm(directory, { recursive: true, force: true })
+  })
 
   async function run(exitCode: number) {
     const marker = join(directory, `result-${exitCode}`)
@@ -76,8 +80,11 @@ if (-not $succeeded) { throw 'Helper failed on task cleanup' }
     const { marker, result, stderr } = await run(0)
     expect(result).toMatchObject({ installerExitCode: 0, error: null, taskCleanupError: 'Synthetic task deletion denied', restartRequested: true })
     expect(stderr).toBe('')
-    expect(await readFile(marker + '.install', 'utf8')).toContain('/S')
     await assertIndependentRestart(marker, result.helperProcessId)
+    const arguments_ = (await readFile(marker + '.install', 'utf8')).split('\n')
+    expect(arguments_[0]).toBe('/S')
+    // NSIS consumes the unquoted /D= tail, including its spaces, as the directory.
+    expect(arguments_.slice(1).join(' ')).toBe(`/D=${directory}`)
   }, 30_000)
 
   it('preserves an installer failure and never restarts when task deletion also fails', async () => {

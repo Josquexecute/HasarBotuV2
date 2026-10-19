@@ -210,17 +210,17 @@ describe('CaseEditModal optimistic locking akışı', () => {
     await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, serviceRevision: { name: 'Yeni Servis' } }))
   })
   it('yalnız desteklenen alanları expectedVersion ile günceller ve server version sonucunu taşır', async () => {
-    const update = vi.fn().mockResolvedValue(record({ version: 2, workflowStage: 'inspection_pending', stage: 'Ekspertiz Bekliyor' }))
+    const update = vi.fn().mockResolvedValue(record({ version: 2, workflowStage: 'under_repair', stage: 'Onarımda' }))
     const props = renderEdit(commandPort({ update }))
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Aşama'), 'inspection_pending')
+    await user.selectOptions(screen.getByLabelText('Aşama'), 'under_repair')
     expect(screen.getByLabelText(/^Takip tarihi/)).toHaveAttribute('readonly')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
     expect(update).toHaveBeenCalledWith('case-created', expect.objectContaining({
       expectedVersion: 1,
-      workflowStage: 'inspection_pending',
+      workflowStage: 'under_repair',
     }))
     expect(update.mock.calls[0]![1]).not.toHaveProperty('followUpDate')
     expect(props.onUpdated).toHaveBeenCalledWith(expect.objectContaining({ version: 2 }))
@@ -247,7 +247,7 @@ describe('CaseEditModal optimistic locking akışı', () => {
   it('stale expectedVersion 409 çatışmasını açıklar ve yeniden yükleme sunar', async () => {
     const props = renderEdit(commandPort({ update: vi.fn().mockRejectedValue(new CaseCommandError('version_conflict', 'raw stack')) }))
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Aşama'), 'reporting')
+    await user.selectOptions(screen.getByLabelText('Aşama'), 'under_investigation')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('başka bir işlemle güncellendi')
     expect(screen.queryByText(/raw stack/)).not.toBeInTheDocument()

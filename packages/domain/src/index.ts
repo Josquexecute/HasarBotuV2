@@ -43,11 +43,13 @@ export {
 } from './case-type.js'
 export {
   CASE_STAGES,
+  LEGACY_CASE_STAGES,
   OPEN_CASE_STAGES,
   CASE_STATUSES,
   isCaseStage,
   isCaseStatus,
   parseCaseStage,
+  normalizeCaseStage,
   parseCaseStatus,
   type CaseStage,
   type OpenCaseStage,
@@ -138,6 +140,7 @@ export {
   CASE_WORKSPACE_SUBDIRECTORIES,
   TURKISH_MONTH_NAMES,
   buildCaseWorkspaceBasePath,
+  buildCompletedCaseWorkspacePath,
   selectAvailableCaseWorkspacePath,
   type CaseWorkspacePathError,
   type CaseWorkspacePathResult,

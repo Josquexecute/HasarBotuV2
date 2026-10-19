@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('BeforeSync', 'D8BeforeSync', 'PostSyncRebaseline', 'AfterSync')]
     [string]$Stage = 'BeforeSync',

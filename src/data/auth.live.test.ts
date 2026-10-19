@@ -54,22 +54,22 @@ describeLive('Auth + komut gercek API uctan uca', () => {
 
     const updated = await commands.updateCase(traffic.caseId, {
       expectedVersion: 1,
-      workflowStage: 'inspection_pending',
+      workflowStage: 'under_repair',
     })
     expect(updated).toMatchObject({
       caseId: traffic.caseId,
       version: 2,
-      stage: 'Ekspertiz Bekliyor',
+      stage: 'Onarımda',
       followUpDate: traffic.followUpDate,
     })
     await expect(
-      commands.updateCase(traffic.caseId, { expectedVersion: 1, workflowStage: 'reporting' }),
+      commands.updateCase(traffic.caseId, { expectedVersion: 1, workflowStage: 'under_investigation' }),
     ).rejects.toMatchObject({ kind: 'version_conflict' })
 
     const reloaded = await list.listCases()
     expect(reloaded.find((item) => item.caseId === traffic.caseId)?.version).toBe(2)
-    const savedAgain = await commands.updateCase(traffic.caseId, { expectedVersion: 2, workflowStage: 'reporting' })
-    expect(savedAgain).toMatchObject({ version: 3, stage: 'Raporlama' })
+    const savedAgain = await commands.updateCase(traffic.caseId, { expectedVersion: 2, workflowStage: 'under_investigation' })
+    expect(savedAgain).toMatchObject({ version: 3, stage: 'Araştırmada' })
 
     // Node'da cerez otomatik tasinmaz; cikis cagrisi da oturum cerezini gondermeli.
     await authWithCookie.logout()

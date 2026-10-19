@@ -33,18 +33,13 @@ describe('CaseStatus', () => {
 })
 
 describe('CaseStage', () => {
-  it('ürün belgelerindeki on aşamayı aynı sırada taşır', () => {
+  it('yalnızca altı iş akışı aşamasını taşır', () => {
     expect(CASE_STAGES).toEqual([
       'new_notification',
-      'vehicle_or_service_pending',
-      'inspection_pending',
-      'damage_assessment',
       'parts_and_labor',
-      'repair_approval_pending',
       'under_repair',
-      'reporting',
-      'closing_documents',
-      'ready_to_close',
+      'under_investigation',
+      'total_loss',
       'closed',
     ])
   })
@@ -54,8 +49,14 @@ describe('CaseStage', () => {
   })
 
   it('type guard yalnız kanonik aşamayı tanır', () => {
-    expect(isCaseStage('reporting')).toBe(true)
+    expect(isCaseStage('under_investigation')).toBe(true)
+    expect(isCaseStage('reporting')).toBe(false)
     expect(isCaseStage('Raporlama')).toBe(false)
+  })
+
+  it.each(['vehicle_or_service_pending', 'inspection_pending', 'damage_assessment', 'repair_approval_pending',
+    'reporting', 'closing_documents', 'ready_to_close'])('eski %s kodunu Onarımda olarak okur', (stage) => {
+    expect(parseCaseStage(stage)).toEqual({ ok: true, value: 'under_repair' })
   })
 
   it('bilinmeyen aşamayı reddeder', () => {
@@ -68,7 +69,7 @@ describe('CaseStage', () => {
 
 function assertStatusStageSeparation(): void {
   const status = 'open' as CaseStatus
-  const stage = 'reporting' as CaseStage
+  const stage = 'under_investigation' as CaseStage
   // @ts-expect-error Durum ve operasyon aşaması ayrı kavramlardır.
   const invalidStage: CaseStage = status
   // @ts-expect-error Operasyon aşaması yaşam döngüsü durumu değildir.

@@ -89,6 +89,7 @@ export interface CaseLifecycleCommandPort {
   }, idempotencyKey?: string): Promise<LifecycleOperationRecord>
   approve(caseId: string, operation: LifecycleOperationRecord, idempotencyKey?: string): Promise<LifecycleOperationRecord>
   readOperation(caseId: string, operationId: string): Promise<LifecycleOperationRecord>
+  readLatestOperation(caseId: string): Promise<LifecycleOperationRecord | null>
   readCase(caseId: string): Promise<CaseRecord>
 }
 
@@ -180,6 +181,16 @@ export function createHttpCaseLifecycleCommandAdapter(options: AdapterOptions = 
       const body = await jsonOf(response)
       if (!response.ok) throw errorFor(response.status, body)
       return readOperationBody(body)
+    },
+    async readLatestOperation(caseId) {
+      const response = await request(`/api/v1/cases/${encodeURIComponent(caseId)}/lifecycle-operations`,
+        { headers: { accept: 'application/json', ...headers } })
+      const body = await jsonOf(response)
+      if (!response.ok) throw errorFor(response.status, body)
+      const { caseLifecycleOperationsResponseSchema } = await import('@hasarbotu/contracts')
+      const parsed = caseLifecycleOperationsResponseSchema.safeParse(body)
+      if (!parsed.success) throw new LifecycleCommandError('unavailable', 'invalid operation response')
+      return parsed.data.items[0] ?? null
     },
     async readCase(caseId) {
       const response = await request(`/api/v1/cases/${encodeURIComponent(caseId)}?includeLegacyReferences=true&includeEksist=true`, { headers: { accept: 'application/json', ...headers } })

@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 import type pg from 'pg'
+import { buildCompletedCaseWorkspacePath } from '@hasarbotu/domain'
+import type { WorkspaceMonthPlanRequest } from '@hasarbotu/contracts'
 import { hasActiveFieldPhoto } from '../field-photos/active.js'
 import {
   fileOperationResponseSchema,
@@ -88,6 +90,7 @@ interface IdempotencyInput {
 }
 
 export type FileOperationPlanOutcome =
+  | { readonly kind: 'invalid_month_source' }
   | { readonly kind: 'ok'; readonly operation: FileOperation }
   | { readonly kind: 'not_found' }
   | { readonly kind: 'location_required' }
@@ -249,6 +252,12 @@ export function createFileOperationStore(pool: pg.Pool) {
   return {
     findIdempotent,
 
+    async findLatestOperation(organizationId: string, caseId: string): Promise<FileOperation | null> {
+      const result = await pool.query(`SELECT ${OPERATION_FIELDS} FROM case_file_operations
+        WHERE organization_id=$1 AND case_id::text=$2 ORDER BY created_at DESC,id DESC LIMIT 1`, [organizationId, caseId])
+      return result.rows[0] ? toDto(result.rows[0] as FileOperationRow) : null
+    },
+
     async findOperation(organizationId: string, caseId: string, operationId: string): Promise<FileOperation | undefined> {
       const result = await pool.query(
         `SELECT ${OPERATION_FIELDS} FROM case_file_operations
@@ -262,12 +271,12 @@ export function createFileOperationStore(pool: pg.Pool) {
     async createPlan(
       actor: ActorContext,
       caseId: string,
-      input: FileOperationPlanRequest,
+      request: FileOperationPlanRequest | WorkspaceMonthPlanRequest,
       idempotency: IdempotencyInput,
     ): Promise<FileOperationPlanOutcome> {
       return withTransaction(pool, async (client): Promise<FileOperationPlanOutcome> => {
         const caseResult = await client.query(
-          'SELECT 1 FROM cases WHERE organization_id=$1 AND id::text=$2 FOR UPDATE',
+          'SELECT notification_date::text,lifecycle_status,is_archived FROM cases WHERE organization_id=$1 AND id::text=$2 FOR UPDATE',
           [actor.organizationId, caseId],
         )
         if (caseResult.rowCount === 0) return { kind: 'not_found' }
@@ -286,7 +295,16 @@ export function createFileOperationStore(pool: pg.Pool) {
         } | undefined
         if (location === undefined) return { kind: 'location_required' }
         if (location.verification_status !== 'verified') return { kind: 'location_not_verified' }
-        if (location.version !== input.expectedLocationVersion) return { kind: 'version_conflict' }
+        if (location.version !== request.expectedLocationVersion) return { kind: 'version_conflict' }
+        let input: FileOperationPlanRequest
+        if ('operationType' in request) input = request
+        else {
+          const item = caseResult.rows[0] as { notification_date: string | null; lifecycle_status: string; is_archived: boolean }
+          const destination = buildCompletedCaseWorkspacePath(item.notification_date, location.relative_path)
+          if (!destination.ok || item.lifecycle_status !== 'open' || item.is_archived) return { kind: 'invalid_month_source' }
+          input = { operationType: 'move_case_workspace', destinationStorageRootKey: location.storage_root_key,
+            destinationRelativePath: destination.relativePath, expectedLocationVersion: request.expectedLocationVersion }
+        }
 
         const root = await client.query(
           'SELECT 1 FROM storage_roots WHERE organization_id=$1 AND root_key=$2 AND is_active=true',

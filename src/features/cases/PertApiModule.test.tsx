@@ -18,7 +18,7 @@ const item: CaseRecord = {
   company: 'Sentetik Sigorta',
   type: 'Kasko',
   status: 'Açık',
-  stage: 'Hasar Tespiti',
+  stage: 'Onarımda',
   missingDocuments: 0,
   assignee: 'Sorumlu',
   expert: 'Eksper',
@@ -32,7 +32,7 @@ const item: CaseRecord = {
   notes: [],
   version: 3,
   lifecycleStatus: 'open',
-  workflowStage: 'damage_assessment',
+  workflowStage: 'under_repair',
 }
 
 const assessment: PertAssessmentRecord = {

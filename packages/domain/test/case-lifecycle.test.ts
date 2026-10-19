@@ -5,6 +5,7 @@ it('yeni ofis çalışma klasörü kapanırken ofis kapsamını ve tarih kontrol
   const open = '2026 OFİS/Ekim 2026/72ABA951'
   const closed = '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/72ABA951'
   expect(buildClosedCaseWorkspacePath('2026-10-19', open)).toEqual({ ok: true, value: closed })
+  expect(buildClosedCaseWorkspacePath('2026-10-19', '2026 OFİS/_EKSİK DOSYALAR/72ABA951')).toEqual({ ok: true, value: closed })
   expect(buildOpenImportedCaseWorkspacePath(closed)).toEqual({ ok: true, value: open })
   expect(buildClosedCaseWorkspacePath('2027-10-19', open)).toEqual({ ok: false, code: 'location_date_mismatch' })
 })

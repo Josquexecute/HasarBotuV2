@@ -159,7 +159,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
       updatedAt: '2026-07-16T09:00:00.000Z',
     }
     const initialDto = { ...base, stage: 'new_notification' as const, version: 4 }
-    const patchedDto = { ...base, stage: 'damage_assessment' as const, version: 4 }
+    const patchedDto = { ...base, stage: 'under_repair' as const, version: 4 }
     const refreshedDto = { ...base, stage: 'parts_and_labor' as const, version: 6 }
     let getCallCount = 0
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -205,11 +205,11 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     await user.click(screen.getByRole('button', { name: 'Temel Bilgileri Düzenle' }))
     await screen.findByRole('dialog', { name: 'Temel Dosya Bilgilerini Düzenle' })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' })).toBeEnabled())
-    await user.selectOptions(screen.getByLabelText('Aşama'), 'damage_assessment')
+    await user.selectOptions(screen.getByLabelText('Aşama'), 'under_repair')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
 
     // Yerel override uygulanır: header AYNI render'da (sunucu yenilenmeden) yeni değeri gösterir.
-    await waitFor(() => expect(screen.getByText('Hasar Tespiti')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Onarımda')).toBeInTheDocument())
     expect(screen.queryByRole('dialog', { name: 'Temel Dosya Bilgilerini Düzenle' })).not.toBeInTheDocument()
 
     const getCallsBeforeReload = getCallCount
@@ -217,9 +217,9 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     await waitFor(() => expect(getCallCount).toBeGreaterThan(getCallsBeforeReload))
 
     // Sürüm 4 -> 6 sunucudan geldiği anda override anahtarı uyuşmaz ve düşer;
-    // ekran bayat "Hasar Tespiti" override'ını değil taze sunucu aşamasını gösterir.
-    await waitFor(() => expect(screen.getByText('Onarım Takibi')).toBeInTheDocument())
-    expect(screen.queryByText('Hasar Tespiti')).not.toBeInTheDocument()
+    // ekran bayat "Onarımda" override'ını değil taze sunucu aşamasını gösterir.
+    await waitFor(() => expect(screen.getByText('Parça Referans Kodları İstenildi')).toBeInTheDocument())
+    expect(screen.queryByText('Onarımda')).not.toBeInTheDocument()
     expect(fetchSpy).toHaveBeenCalledWith(`/api/v1/cases/${CASE_ID}`, expect.objectContaining({ method: 'PATCH' }))
   })
 })

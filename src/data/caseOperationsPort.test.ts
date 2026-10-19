@@ -83,6 +83,16 @@ describe('case operations HTTP adapter', () => {
     await expect(adapter.load(CASE_ID)).rejects.toMatchObject({ kind })
   })
 
+  it('not silmede kimlik doğrulamalı DELETE kullanır ve yanlış not kimliğini reddeder', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response(200, { deletedNoteId: CASE_ID }))
+    await createHttpCaseOperationsAdapter({ fetchImpl }).deleteNote(CASE_ID, CASE_ID)
+    expect(fetchImpl).toHaveBeenCalledWith(`/api/v1/cases/${CASE_ID}/notes/${CASE_ID}`, expect.objectContaining({ method: 'DELETE', credentials: 'include' }))
+    fetchImpl.mockResolvedValue(response(200, { deletedNoteId: TASK_ID }))
+    await expect(createHttpCaseOperationsAdapter({ fetchImpl }).deleteNote(CASE_ID, CASE_ID)).rejects.toMatchObject({ kind: 'unavailable' })
+    fetchImpl.mockResolvedValue(response(403, {}))
+    await expect(createHttpCaseOperationsAdapter({ fetchImpl }).deleteNote(CASE_ID, CASE_ID)).rejects.toMatchObject({ kind: 'forbidden' })
+  })
+
   it('ağ ve unknown alan cevabını fail-closed reddeder; kullanıcı not metnini bozmaz', async () => {
     await expect(createHttpCaseOperationsAdapter({
       fetchImpl: vi.fn().mockRejectedValue(new Error('network')),

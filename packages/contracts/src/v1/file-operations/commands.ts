@@ -10,6 +10,9 @@ export const fileOperationPlanRequestSchema = z.strictObject({
 })
 export type FileOperationPlanRequest = z.infer<typeof fileOperationPlanRequestSchema>
 
+export const workspaceMonthPlanRequestSchema = z.strictObject({ expectedLocationVersion: entityVersionSchema })
+export type WorkspaceMonthPlanRequest = z.infer<typeof workspaceMonthPlanRequestSchema>
+
 export const fileOperationApproveRequestSchema = z.strictObject({ approved: z.literal(true) })
 export type FileOperationApproveRequest = z.infer<typeof fileOperationApproveRequestSchema>
 

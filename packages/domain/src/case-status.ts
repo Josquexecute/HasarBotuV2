@@ -6,15 +6,10 @@ export type CaseStatus = (typeof CASE_STATUSES)[number]
 
 export const CASE_STAGES = [
   'new_notification',
-  'vehicle_or_service_pending',
-  'inspection_pending',
-  'damage_assessment',
   'parts_and_labor',
-  'repair_approval_pending',
   'under_repair',
-  'reporting',
-  'closing_documents',
-  'ready_to_close',
+  'under_investigation',
+  'total_loss',
   'closed',
 ] as const
 
@@ -23,6 +18,15 @@ export type CaseStage = (typeof CASE_STAGES)[number]
 /** Kullanici tarafindan secilebilen acik vaka asamalari; `closed` yalniz lifecycle saga'si tarafindan atanir. */
 export const OPEN_CASE_STAGES = CASE_STAGES.filter((stage) => stage !== 'closed')
 export type OpenCaseStage = (typeof OPEN_CASE_STAGES)[number]
+
+export const LEGACY_CASE_STAGES = ['vehicle_or_service_pending', 'inspection_pending', 'damage_assessment',
+  'repair_approval_pending', 'reporting', 'closing_documents', 'ready_to_close'] as const
+const LEGACY_STAGES: ReadonlySet<string> = new Set(LEGACY_CASE_STAGES)
+
+/** Older clients and immutable history retain their codes; current workflows use six stages. */
+export function normalizeCaseStage(value: unknown): unknown {
+  return typeof value === 'string' && LEGACY_STAGES.has(value.trim()) ? 'under_repair' : value
+}
 
 export function isCaseStatus(value: unknown): value is CaseStatus {
   return typeof value === 'string' && CASE_STATUSES.some((item) => item === value)
@@ -52,4 +56,4 @@ export const parseCaseStatus = (value: unknown): ParseResult<CaseStatus> =>
   parseCode(value, CASE_STATUSES, 'caseStatus')
 
 export const parseCaseStage = (value: unknown): ParseResult<CaseStage> =>
-  parseCode(value, CASE_STAGES, 'caseStage')
+  parseCode(normalizeCaseStage(value), CASE_STAGES, 'caseStage')

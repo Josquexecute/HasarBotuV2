@@ -31,6 +31,7 @@ import { LoadingState } from '../../components/StateViews'
 import type { CaseRecord } from '../../types/case'
 import { CaseEditModal } from './CaseEditModal'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
+import { WorkspaceMonthMovePanel } from './WorkspaceMonthMovePanel'
 import { EksistSources } from './EksistSources'
 import { CaseLifecycleModal } from './CaseLifecycleModal'
 import { CaseLegacyReferenceFields } from './CaseLegacyReferenceFields'
@@ -387,12 +388,15 @@ function CaseDetail() {
                   caseId={item.caseId}
                   notificationDate={item.notificationDate ?? null}
                   onUnauthorized={session.reportUnauthorized}
-                /></>
+                /><WorkspaceMonthMovePanel key={item.caseId} caseId={item.caseId}
+                  canWrite={canChangeLifecycle && item.lifecycleStatus !== 'closed'}
+                  onUnauthorized={session.reportUnauthorized} onMoved={reloadCase} /></>
               )}
             </div>
           ) : activeTab === 'Operasyon' && source === 'api' ? (
             <><CaseOperationsApiModule
               item={item}
+              currentUserId={session.user?.id}
               source={source}
               onUnauthorized={session.reportUnauthorized}
               onReloadCase={reloadCase}
@@ -457,7 +461,7 @@ function CaseDetail() {
                     ? <EmailDraftApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
                     : <EmailsModule item={item} onNotice={setPrototypeNotice} />
                     : source === 'api'
-                      ? <CaseOperationsApiModule key={item.caseId} item={item} source={source} onReloadCase={reloadCase} onUnauthorized={session.reportUnauthorized} />
+                      ? <CaseOperationsApiModule key={item.caseId} item={item} currentUserId={session.user?.id} source={source} onReloadCase={reloadCase} onUnauthorized={session.reportUnauthorized} />
                       : <HistoryModule item={item} />}
           </Suspense>
         </section>

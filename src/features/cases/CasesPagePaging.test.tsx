@@ -22,7 +22,7 @@ function caseRecord(index: number): CaseRecord {
     company: 'Sentetik Sigorta',
     type: 'Trafik',
     status: 'Açık',
-    stage: 'Raporlama',
+    stage: 'Araştırmada',
     missingDocuments: 0,
     assignee: '-',
     expert: '-',
@@ -35,7 +35,7 @@ function caseRecord(index: number): CaseRecord {
     estimatedDamage: 0,
     notes: [],
     version: 1,
-    workflowStage: 'reporting',
+    workflowStage: 'under_investigation',
     responsibleUserId: null,
     expertUserId: null,
     serviceId: null,
@@ -127,6 +127,32 @@ it('updates already loaded follow-up labels and overdue state when the office da
     expect(within(screen.getByRole('table')).queryByText('Bugün')).not.toBeInTheDocument()
     expect(queries).toHaveLength(1)
   } finally { vi.useRealTimers() }
+})
+
+it.each(['focus', 'interval'])('removes an externally archived case from the open list on %s refresh', async (trigger) => {
+  vi.useFakeTimers()
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+  let present = true
+  const { port } = stubCasesPort(2)
+  port.listCasePage = vi.fn(async query => {
+    const items = present ? [caseRecord(1), caseRecord(2)] : [caseRecord(2)]
+    return { items, page: 1, pageSize: query.pageSize, totalCount: items.length, totalPages: 1 }
+  })
+  const view = renderPage(port, stubAlertPort().port)
+  try {
+    await act(async () => {})
+    expect(rowPlates()).toEqual(['34 PG 1', '34 PG 2'])
+    present = false
+    await act(async () => {
+      if (trigger === 'focus') window.dispatchEvent(new Event('focus'))
+      else await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(rowPlates()).toEqual(['34 PG 2'])
+    expect(port.listCasePage).toHaveBeenCalledTimes(2)
+    view.unmount()
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+    expect(port.listCasePage).toHaveBeenCalledTimes(2)
+  } finally { view.unmount(); visibility.mockRestore(); vi.useRealTimers() }
 })
 
 /** Plaka hem satirda hem hizli detay panelinde gorunur; sorgular tabloya sinirlanir. */
@@ -268,8 +294,8 @@ describe('Dosyalar sonsuz kaydırma', () => {
     await userEvent.selectOptions(screen.getByLabelText('Dosya türü'), 'Kasko')
     await waitFor(() => expect(queries.at(-1)).toMatchObject({ page: 1, caseType: 'casco' }))
     await waitFor(() => expect(rowPlates()).toHaveLength(50))
-    await userEvent.selectOptions(screen.getByLabelText('Dosya aşaması'), 'Hasar Tespiti')
-    await waitFor(() => expect(queries.at(-1)).toMatchObject({ page: 1, stage: 'damage_assessment', caseType: 'casco' }))
+    await userEvent.selectOptions(screen.getByLabelText('Dosya aşaması'), 'Onarımda')
+    await waitFor(() => expect(queries.at(-1)).toMatchObject({ page: 1, stage: 'under_repair', caseType: 'casco' }))
     await userEvent.selectOptions(screen.getByLabelText('Dosya aşaması'), 'Tümü')
     await waitFor(() => expect(queries.at(-1)?.stage).toBeUndefined())
     await userEvent.type(screen.getByPlaceholderText(/Plaka, dosya no/), 'PG')

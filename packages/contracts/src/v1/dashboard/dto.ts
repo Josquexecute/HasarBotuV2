@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DASHBOARD_ATTENTION_CODES, DASHBOARD_PRIORITY_VERSION } from '@hasarbotu/domain'
+import { CASE_STAGES, OPEN_CASE_STAGES, DASHBOARD_ATTENTION_CODES, DASHBOARD_PRIORITY_VERSION } from '@hasarbotu/domain'
 import {
   caseIdSchema,
   caseTypeSchema,
@@ -9,20 +9,12 @@ import {
   plateNumberSchema,
   userIdSchema,
   utcDateTimeSchema,
+  caseStageSchema,
+  openCaseStageSchema,
 } from '../../common/primitives.js'
 
-export const DASHBOARD_OPEN_STAGES = [
-  'new_notification',
-  'vehicle_or_service_pending',
-  'inspection_pending',
-  'damage_assessment',
-  'parts_and_labor',
-  'repair_approval_pending',
-  'under_repair',
-  'reporting',
-  'closing_documents',
-  'ready_to_close',
-] as const
+export const DASHBOARD_OPEN_STAGES = OPEN_CASE_STAGES
+export const DASHBOARD_STAGES = CASE_STAGES
 
 export const DASHBOARD_PRIORITIES = ['critical', 'high', 'medium', 'normal'] as const
 export const DASHBOARD_HUMAN_APPROVAL_KINDS = [
@@ -35,7 +27,7 @@ export const DASHBOARD_HUMAN_APPROVAL_KINDS = [
 export const dashboardPrioritySchema = z.enum(DASHBOARD_PRIORITIES)
 export const dashboardAttentionCodeSchema = z.enum(DASHBOARD_ATTENTION_CODES)
 export const dashboardHumanApprovalKindSchema = z.enum(DASHBOARD_HUMAN_APPROVAL_KINDS)
-export const dashboardOpenStageSchema = z.enum(DASHBOARD_OPEN_STAGES)
+export const dashboardOpenStageSchema = openCaseStageSchema
 
 const boundedCountSchema = z.number().int().min(0).max(100_000)
 const safeDisplayNameSchema = z.string().min(1).max(160)
@@ -105,7 +97,7 @@ export const dashboardSummarySchema = z.strictObject({
 })
 
 export const dashboardStageCountSchema = z.strictObject({
-  stage: dashboardOpenStageSchema,
+  stage: caseStageSchema,
   count: boundedCountSchema,
 })
 
@@ -114,7 +106,7 @@ export const dashboardResponseSchema = z.strictObject({
   evaluatedAt: utcDateTimeSchema,
   priorityVersion: z.literal(DASHBOARD_PRIORITY_VERSION),
   summary: dashboardSummarySchema,
-  stageCounts: z.array(dashboardStageCountSchema).length(DASHBOARD_OPEN_STAGES.length),
+  stageCounts: z.array(dashboardStageCountSchema).length(DASHBOARD_STAGES.length),
   items: z.array(dashboardCaseItemSchema).max(5_000),
 })
 

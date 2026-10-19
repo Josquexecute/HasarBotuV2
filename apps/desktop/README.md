@@ -154,6 +154,10 @@ node scripts/publish-desktop-release.mjs <installer.exe> <DESKTOP_RELEASES_DIR> 
 ```
 
 Notlar mevcut bir metin dosyasıyla sağlanır; yeni Markdown raporu oluşturma.
+Not dosyasını UTF-8 olarak yaz; Türkçe metni BOM içermeyen Windows PowerShell 5.1
+betiğine gömme. Yayıncı bozuk karakterleri ve UTF-8 olmayan notları reddeder.
+`npm run check:text` kaynak metinleri ve Unicode içeren Windows betiklerinin BOM'unu
+denetler; üretim derlemesi de bu kontrolü çalıştırır.
 Yayınlayıcı Windows sürüm kaynağını, gerçek boyutu ve SHA-256'yı doğrular; değişmez
 `<sha256>.exe` kopyasını kontrol edip `latest.json` dosyasını atomik değiştirir.
 Eski sürüme dönmeyi ve aynı sürüm altında farklı paket yayınlamayı reddeder.
@@ -174,7 +178,70 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.56**, 2026-10-19T06:33:48.191Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.60**, 2026-10-19T12:22:59.161Z; Windows x64,
+105.197.360 bayt, SHA-256 `e36c97245235400c6756264f3653a4d9075e5ee0e4b7300ef6dd2c819a148d36`.
+Açık dosyada not yazma yetkisi olan kişi, **Notlar ve Görüşmeler → Kendi notumu sil**
+ile yalnız kendi notunu onaydan sonra kaldırabilir. Sunucu ve veritabanı yazar
+kimliğini denetler; notun özgün içeriği ve silme geçmişi korunur. Başkasının notları,
+V1 tarihsel kayıtları ve kapalı dosyalar korunur. Eski istemcilerin not listeleme
+sözleşmesi değişmedi. Migration 0065 ve yedi çalışma modülü doğrulandı; üç ofis
+servisi çalışıyor. 379 ilgili test, typecheck, lint, derleme ve x64 paket açılışı
+geçti. Kurulu 0.1.58 istemcisinde `available`, kimlik doğrulamalı silme ucu,
+gerçek ayarlar görünümündeki Türkçe notlar ve HTTP 200 paket indirmesinde
+boyut/SHA-256 eşleşmesi doğrulandı. Gerçek kullanıcı notu test için silinmedi.
+Önceki 0.1.59 manifesti ve değişmez paketi korundu; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.59**, 2026-10-19T12:09:56.708Z; Windows x64,
+105.197.230 bayt, SHA-256 `71f556af5e56c343b7afff2c141876e4831173752755a9c8b8f3dc882cd3c07b`.
+Güncelleme notlarının Windows PowerShell 5.1'de yanlış kodlanması giderildi;
+bozuk notlar yayıncıda reddedilir. Türkçe kullanıcı/kurulum yolları için güncelleme
+betiği UTF-8 BOM ile yazılır. 384 ilgili test, typecheck, lint, derleme ve gerçek
+x64 paket açılışı geçti. Kurulu 0.1.58 istemcisinde `available`, gerçek ayarlar
+görünümünde notların birebir Türkçe kalması ve kimlik doğrulamalı HTTP 200 paket
+indirmesinde boyut/SHA-256 eşleşmesi doğrulandı. Önceki 0.1.58 manifesti ve değişmez
+paketi korundu; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.58**, 2026-10-19T11:55:07.087Z; Windows x64,
+105.197.172 bayt, SHA-256 `3d24cf9f5ea451eced6618be0369b2d43708a7a45be241aa54f587c19c5118d1`.
+Aşamalar altı seçenekle ve aynı pano sütunlarıyla sınırlandı. Eski açık ofis dosyaları
+Onarımda'ya alındı; 425 kapalı ve 41 eksik evrak dosyası korundu. Elle Uzaktan'a
+alınan dosyalar tarama sonrası gizlenir; açık liste/pano odakta ve görünürken 30 saniyede
+bir yenilenir. Kapanışta gerçek taşıma öncesi bekleme ayrıldı; işlem yeniden açılan
+pencerede izlenir ve başarısız taşıma aynı doğrulama kimliğiyle yeniden denenebilir.
+Doğrulanmış dış taşımalardaki iki eski işlem kilidi geçmiş silinmeden kaldırıldı;
+resmî evrakla doğrulanan plaka/klasör düzeltmesi aynı vaka kimliği korunarak uygulandı.
+3027 test geçti; 6 harici canlı API testi atlandı. Typecheck, lint, derleme,
+x64 paket açılışı ve iki tutarlı ofis taraması geçti. Kurulu 0.1.57 istemcisinde
+`available`, altı aşamalı canlı API, doğrulanmış klasör konumu ve kimlik doğrulamalı
+HTTP 200 indirmesinde tam boyut/SHA-256 eşleşmesi doğrulandı. Önceki 0.1.57 manifesti
+ve değişmez kurulum korundu; çalışan istemcilere zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.57**, 2026-10-19T10:00:46.740Z; Windows x64,
+105.196.344 bayt, SHA-256 `e6ebf11afe847f6697b1bfd40abe99a5e09be14fa0ff6bc3ac84652f400218c0`.
+Yeni ihbarlar `P:\BARAN GLOBAL EKSPERTİZ\2026 OFİS\_EKSİK DOSYALAR\PLAKA`
+altında hazırlanır; yıl, ihbar tarihinden gelir. Dosya detayındaki **Tamamlandı · Ay
+klasörüne taşı**, kaynak/hedef önizlemesi ve ayrı onayla ihbar ayına taşır. Aynı plaka
+sonekleri korunur; hedefin üzerine yazılmaz. Güncel konum, işlem durumu ve iptal
+seçeneği sunucudan okunur; sayfaya dönünce işlem izlenmeye devam eder.
+Gerçek API/PostgreSQL/File Agent/disk zincirinde kayıt, taşıma, evrak içeriği ve
+konumu, ofis taraması sonrası arama, kapanış/yeniden açılış ve ekranı tekrar açma
+doğrulandı. 3.013 testlik genel paket geçti; harici canlı bağlantı isteyen 6 test
+atlandı. Son tarama düzeltmesi ayrıca 48 API testi ve gerçek arka plan taramasıyla
+doğrulandı: otomatik arşivlenen kayıt yeni konumda aynı klasör kimliğiyle geri
+eşleşir; elle arşivlenen kayıt korunur ve tek kayıttaki değişiklik taramayı durdurmaz.
+TypeScript, lint, üretim derlemesi ve Windows paket smoke testi geçti; 61 paket
+UI dosyası doğrulandı. Sunucudaki 16 çalışma dosyası yedeklenip hash ile doğrulandı;
+API, File Agent ve klasör tarama servisleri çalışıyor. Kurulu 0.1.56 istemcisinde
+`available`, kimlik doğrulamalı yeni klasör işlem ucu ve HTTP 200 paket indirmesinde
+tam boyut/SHA-256 eşleşmesi doğrulandı. Önceki 0.1.56 manifesti ve değişmez kurulum
+korundu; zorunlu kurulum yapılmadı.
+
+Canlı son kontrolde tarayıcı çalışmaya devam ediyor; pCloud yazmaları sırasında
+`PCLOUD_DATABASE_SNAPSHOT_UNSTABLE` ile güvenli biçimde bekleyip taramaya devam ediyor.
+618 klasör içeren iki tam ofis envanteri doğrulandı. Bir eski kayıt `folder_relocation_plate_mismatch`
+nedeniyle ayrı incelemede tutuluyor; kayıt veya klasör plakası otomatik değiştirilmedi.
+
+Önceki doğrulanan ofis yayını: **0.1.56**, 2026-10-19T06:33:48.191Z; Windows x64,
 105.194.704 bayt, SHA-256 `4b623f8da681509e26cb6638e88440ef2b74b3d0cd42678bbb64d7446273cb1d`.
 Yeni ihbar klasörleri `YYYY OFİS/Ay YYYY/PLAKA` altında oluşturulur; kaydın sonraki
 ofis taramasında arşivlenip aramadan kaybolması düzeltildi. Kapanış ve yeniden açılış

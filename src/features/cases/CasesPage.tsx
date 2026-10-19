@@ -225,7 +225,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
   const [queryInput, setQueryInput] = useState<{ key: string; value: string }>({ key: queryKey, value: saved?.view?.query ?? queryParam })
   const [typeFilter, setTypeFilter] = useState<'Tümü' | CaseType>(saved?.view?.typeFilter ?? 'Tümü')
   const [stageFilter, setStageFilter] = useState(saved?.view?.stageFilter ?? 'Tümü')
-  const [statusFilter, setStatusFilter] = useState(saved?.view?.statusFilter ?? 'Açık')
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') === 'closed' ? 'Kapalı' : saved?.view?.statusFilter ?? 'Açık')
   const [assigneeFilter, setAssigneeFilter] = useState(saved?.view?.assigneeFilter ?? 'Tümü')
   const [serviceFilter, setServiceFilter] = useState(saved?.view?.serviceFilter ?? 'Tümü')
   const followUpFilter = 'Tümü'
@@ -428,7 +428,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
             {query && <button type="button" onClick={() => setQuery('')} aria-label="Aramayı temizle"><X size={14} /></button>}
           </label>
           <label className="select-field"><span className="select-field__label">Tür</span><select aria-label="Dosya türü" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'Tümü' | CaseType)}><option>Tümü</option><option>Trafik</option><option>Kasko</option><option>Seçiniz</option></select><ChevronDown size={14} /></label>
-          <label className="select-field"><span className="select-field__label">Aşama</span><select aria-label="Dosya aşaması" value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}><option>Tümü</option>{CASE_STAGE_OPTIONS.map(option => <option key={option.value}>{option.label}</option>)}<option>Kapalı</option></select><ChevronDown size={14} /></label>
+          <label className="select-field"><span className="select-field__label">Aşama</span><select aria-label="Dosya aşaması" value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}><option>Tümü</option>{CASE_STAGE_OPTIONS.map(option => <option key={option.value}>{option.label}</option>)}<option>Kapanış</option></select><ChevronDown size={14} /></label>
           <label className="select-field"><span className="select-field__label">Durum</span><select aria-label="Dosya durumu" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>Açık</option><option>Kapalı</option></select><ChevronDown size={14} /></label>
           {source === 'api' ? (
             <CaseReferenceFilters

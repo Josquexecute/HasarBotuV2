@@ -156,6 +156,17 @@ test('real background scans discover folders, follow stable identity moves and r
     sqlite.exec('DELETE FROM folder WHERE id=103')
     assert.equal((await officeCycle()).archived, 1)
     assert.deepEqual((await pool.query('SELECT plate_normalized FROM cases WHERE NOT is_archived')).rows, [{ plate_normalized: '06NEW123' }])
+    // A stable source may return under a new path after an inventory-managed archive.
+    // Its location must be reconciled before the inventory can restore its case.
+    await mkdir(join(source, '2026 OFİS/_EKSİK DOSYALAR/34AUT123'), { recursive: true })
+    sqlite.exec("INSERT INTO folder VALUES(116,110,'_EKSİK DOSYALAR'),(103,116,'34AUT123')")
+    await pool.query("UPDATE cases SET is_archived=true WHERE plate_normalized='06NEW123'")
+    const restored = await officeCycle()
+    assert.equal(restored.relocated, 1)
+    assert.equal(restored.restored, 1)
+    assert.deepEqual((await pool.query('SELECT plate_normalized FROM cases WHERE NOT is_archived')).rows, [{ plate_normalized: '34AUT123' }])
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [rows[0].id])).rows[0].relative_path,
+      '2026 OFİS/_EKSİK DOSYALAR/34AUT123')
     const beforeUnstableSnapshot = (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows
     await writeFile(unstableMarker, 'one transient snapshot failure')
     const recovery = new AbortController(), recoveryDeadline = setTimeout(() => recovery.abort(), 25_000)

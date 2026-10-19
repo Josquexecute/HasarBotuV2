@@ -85,6 +85,7 @@ interface FollowUpRow {
 export type CaseOperationCommandOutcome<T> =
   | { readonly kind: 'ok'; readonly item: T }
   | { readonly kind: 'not_found' }
+  | { readonly kind: 'forbidden' }
   | { readonly kind: 'case_closed' }
   | { readonly kind: 'version_conflict' }
   | { readonly kind: 'invalid_status' }
@@ -242,6 +243,7 @@ export function createCaseOperationsStore(pool: pg.Pool) {
            JOIN users creator ON creator.organization_id=n.organization_id AND creator.id=n.created_by_user_id
            ${NOTE_METADATA_JOIN}
            WHERE n.organization_id=$1 AND n.case_id::text=$2
+             AND NOT EXISTS (SELECT 1 FROM case_note_deletions d WHERE d.note_id=n.id)
            ORDER BY COALESCE(v1m.source_occurred_at,n.created_at) DESC,n.id DESC LIMIT 1000`,
           [organizationId, caseId],
         ),
@@ -355,6 +357,55 @@ export function createCaseOperationsStore(pool: pg.Pool) {
       } catch (error) {
         await client.query('ROLLBACK').catch(() => undefined)
         if (isIdempotencyRace(error)) return { kind: 'idempotency_race' }
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
+    async deleteNote(
+      actor: ActorContext,
+      caseId: string,
+      noteId: string,
+    ): Promise<Exclude<CaseOperationCommandOutcome<string>, { kind: 'idempotency_race' }>> {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const writable = await lockWritableCase(client, actor.organizationId, caseId)
+        if (writable !== 'ok') {
+          await client.query('ROLLBACK')
+          return { kind: writable }
+        }
+        const result = await client.query(
+          `SELECT n.created_by_user_id,v1m.id IS NOT NULL AS historical
+           FROM case_notes n ${NOTE_METADATA_JOIN}
+           WHERE n.organization_id=$1 AND n.case_id::text=$2 AND n.id::text=$3`,
+          [actor.organizationId, caseId, noteId],
+        )
+        const note = result.rows[0] as { created_by_user_id: string; historical: boolean } | undefined
+        if (!note || note.created_by_user_id !== actor.actorUserId || note.historical) {
+          await client.query('ROLLBACK')
+          return { kind: note ? 'forbidden' : 'not_found' }
+        }
+        // Keep the original append-only note and historical evidence intact.
+        const inserted = await client.query(
+          `INSERT INTO case_note_deletions(note_id,organization_id,case_id,deleted_by_user_id)
+           VALUES($1,$2,$3,$4) ON CONFLICT(note_id) DO NOTHING RETURNING note_id`,
+          [noteId, actor.organizationId, caseId, actor.actorUserId],
+        )
+        if (inserted.rowCount) await audit.record(client, {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          requestId: actor.requestId,
+          action: 'case_note.deleted',
+          entityType: 'case_note',
+          entityId: noteId,
+          details: { caseId },
+        })
+        await client.query('COMMIT')
+        return { kind: 'ok', item: noteId }
+      } catch (error) {
+        await client.query('ROLLBACK')
         throw error
       } finally {
         client.release()

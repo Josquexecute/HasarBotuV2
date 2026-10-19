@@ -1,18 +1,14 @@
 import { CaseCommandError, type CaseCommandFieldError } from '../../data/commandPort'
 import type { ServiceReferenceRecord } from '../../data/ports'
 import type { CaseStage, CaseStageCode } from '../../types/case'
+import { CASE_STAGE_LABELS } from '../../data/caseStages'
 
 export const CASE_STAGE_OPTIONS: readonly { value: CaseStageCode; label: CaseStage }[] = [
   { value: 'new_notification', label: 'Yeni İhbar' },
-  { value: 'vehicle_or_service_pending', label: 'Araç / Servis Bekleniyor' },
-  { value: 'inspection_pending', label: 'Ekspertiz Bekliyor' },
-  { value: 'damage_assessment', label: 'Hasar Tespiti' },
-  { value: 'parts_and_labor', label: 'Onarım Takibi' },
-  { value: 'repair_approval_pending', label: 'Onarım Onayı Bekleniyor' },
+  { value: 'parts_and_labor', label: CASE_STAGE_LABELS.parts_and_labor },
   { value: 'under_repair', label: 'Onarımda' },
-  { value: 'reporting', label: 'Raporlama' },
-  { value: 'closing_documents', label: 'Kapanış Evrakları' },
-  { value: 'ready_to_close', label: 'Kapanmaya Hazır' },
+  { value: 'under_investigation', label: 'Araştırmada' },
+  { value: 'total_loss', label: 'Ağır Hasar/Pert' },
 ]
 
 const NON_ALPHANUMERIC = /[^\p{L}\p{N}]+/gu

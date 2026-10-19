@@ -270,6 +270,8 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     const body = response.json() as DashboardResponse
     expect(dashboardResponseSchema.safeParse(body).success).toBe(true)
     expect(body.asOfDate).toBe('2026-07-16')
+    expect(body.stageCounts.map(item => item.stage)).toEqual(['new_notification', 'parts_and_labor', 'under_repair', 'under_investigation', 'total_loss', 'closed'])
+    expect(body.stageCounts.find(item => item.stage === 'under_repair')?.count).toBe(5)
     expect(body.priorityVersion).toBe('dashboard-priority/1.1.0')
     expect(body.summary).toMatchObject({
       openCaseCount: 5,
@@ -338,5 +340,23 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     const after = await read()
     expect(after.items).toEqual(before.items)
     expect(after.summary).toEqual(before.summary)
+  })
+  it('counts investigation, total loss and visible closed cases without putting closed cases in open cards', async () => {
+    const ids: string[] = []
+    try {
+      ids.push(await seedCase(91, 'under_investigation', '34 STG 091', null))
+      ids.push(await seedCase(92, 'total_loss', '34 STG 092', null))
+      ids.push(await seedCase(93, 'new_notification', '34 STG 093', null))
+      ids.push(await seedCase(94, 'new_notification', '34 STG 094', null))
+      await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed' WHERE id=ANY($1::uuid[])", [ids.slice(2)])
+      await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [ids[3]])
+      const response = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie } })
+      const body = dashboardResponseSchema.parse(response.json())
+      expect(body.stageCounts.find(item => item.stage === 'under_investigation')?.count).toBe(1)
+      expect(body.stageCounts.find(item => item.stage === 'total_loss')?.count).toBe(1)
+      expect(body.stageCounts.find(item => item.stage === 'closed')?.count).toBe(1)
+      expect(body.items.map(item => item.caseId)).not.toContain(ids[2])
+      expect(body.items.map(item => item.caseId)).not.toContain(ids[3])
+    } finally { await pool.query('DELETE FROM cases WHERE id=ANY($1::uuid[])', [ids]) }
   })
 })

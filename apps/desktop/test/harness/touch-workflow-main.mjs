@@ -25,9 +25,10 @@ const fill = async (selector, value, textarea = false) => evaluate(`(() => {
   el.dispatchEvent(new Event('input', { bubbles: true }))
 })()`)
 const screenshot = async (name, contents = shell.window.webContents) => {
+  if (process.env.HB_CAPTURE_SCREENSHOTS !== '1') return
   // A resized DOM can be ready before Chromium submits its new capture surface.
   await contents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))')
-  if (process.env.HB_CAPTURE_SCREENSHOTS === '1') await writeFile(join(output, `${name}.png`), (await contents.capturePage()).toPNG())
+  await writeFile(join(output, `${name}.png`), (await contents.capturePage()).toPNG())
 }
 async function boot() {
   shell = await startDesktopShell({ apiOrigin: process.env.HB_TOUCH_API, assetRoot: process.env.HB_TOUCH_ASSETS, userDataPath: app.getPath('userData'), show: false })
@@ -102,6 +103,7 @@ void app.whenReady().then(async () => {
     check('technical vehicle fields initially collapsed', await evaluate('!document.querySelector(".vehicle-profile__technical").open'))
     await evaluate('[...document.querySelectorAll(".case-detail-head__actions button")].find(button => button.textContent === "Dosyayı Kapat").click()')
     await until('!!document.querySelector(".modal--case-lifecycle")')
+      await until('!![...document.querySelectorAll(".modal--case-lifecycle button")].find(button => button.textContent === "Önizleme Oluştur" && !button.disabled)')
     check('full case header opens the real close preview dialog', await evaluate('!![...document.querySelectorAll(".modal--case-lifecycle button")].find(button => button.textContent === "Önizleme Oluştur")'))
     await screenshot('case-close-dialog')
     await click('.modal--case-lifecycle [aria-label="Pencereyi kapat"]')
@@ -188,7 +190,7 @@ void app.whenReady().then(async () => {
     await menuUntil('!![...document.querySelectorAll(".assistant-entry")].find(entry=>entry.textContent.includes("Dokunmatik kalıcı not."))')
     check('native assistant reads committed note history', true)
     await menuEval('[...document.querySelectorAll(".assistant-tabs button")].find(button=>button.textContent==="Süreçler").click()')
-    await menuUntil('document.querySelector(".assistant-process")?.textContent.includes("Ekspertiz Bekliyor") && document.body.textContent.includes("Tramer talebi yok.")')
+    await menuUntil('document.querySelector(".assistant-process")?.textContent.includes("Onarımda") && document.body.textContent.includes("Tramer talebi yok.")')
     check('native assistant reads effective workflow and tracking state', true)
     for (const theme of ['light','dark']) {
       await menuEval(`document.querySelector('.theme-root').dataset.theme=${JSON.stringify(theme)}`)

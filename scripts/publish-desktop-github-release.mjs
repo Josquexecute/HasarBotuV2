@@ -4,6 +4,7 @@ import { copyFile, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { desktopReleaseSchema } from '@hasarbotu/contracts'
+import { decodeUtf8Text } from './text-encoding.mjs'
 
 const [repository, installer, version, notesFile] = process.argv.slice(2)
 if (!repository || !/^[\w.-]+\/[\w.-]+$/.test(repository) || !installer || !version || !notesFile) {
@@ -26,7 +27,7 @@ const actualVersion = execFileSync('powershell.exe', ['-NoProfile', '-NonInterac
 if (actualVersion !== version && actualVersion !== version + '.0') throw new Error('Installer version mismatch.')
 const bytes = await readFile(source)
 if (bytes.subarray(0, 2).toString('ascii') !== 'MZ') throw new Error('Expected a Windows installer.')
-const release = desktopReleaseSchema.parse({ version, platform: 'win32', arch: 'x64', sha256: createHash('sha256').update(bytes).digest('hex'), size: bytes.length, publishedAt: new Date().toISOString(), notes: await readFile(resolve(notesFile), 'utf8') })
+const release = desktopReleaseSchema.parse({ version, platform: 'win32', arch: 'x64', sha256: createHash('sha256').update(bytes).digest('hex'), size: bytes.length, publishedAt: new Date().toISOString(), notes: decodeUtf8Text(await readFile(resolve(notesFile)), 'Release notes') })
 const tag = 'v' + release.version
 const latest = optionalApi(`repos/${repository}/releases/latest`)
 if (latest) {

@@ -9,6 +9,7 @@ import {
   NotebookPen,
   RefreshCw,
   Save,
+  Trash2,
   XCircle,
 } from 'lucide-react'
 import { CaseOperationsError, type CaseOperationsPort, type CaseTaskRecord } from '../../data/caseOperationsPort'
@@ -24,6 +25,7 @@ interface Props {
   readonly onReloadCase: () => void
   readonly operationsPort?: CaseOperationsPort
   readonly referencePort?: CaseReferenceDataPort
+  readonly currentUserId?: string
 }
 
 const noteTypeLabels = {
@@ -83,6 +85,7 @@ export function CaseOperationsApiModule({
   onReloadCase,
   operationsPort,
   referencePort,
+  currentUserId,
 }: Props) {
   const workspace = useCaseOperations(item.caseId, source, true, operationsPort)
   const references = useCaseReferences(referencePort)
@@ -93,6 +96,7 @@ export function CaseOperationsApiModule({
   const [noteType, setNoteType] = useState<'internal' | 'contact'>('internal')
   const [noteSubject, setNoteSubject] = useState('')
   const [noteBody, setNoteBody] = useState('')
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null)
   const [taskTitle, setTaskTitle] = useState('')
   const [taskPriority, setTaskPriority] = useState<'low' | 'normal' | 'high'>('normal')
   const [taskAssignee, setTaskAssignee] = useState(item.responsibleUserId ?? '')
@@ -236,6 +240,17 @@ export function CaseOperationsApiModule({
               <article className="long-note" key={note.id}>
                 <div><strong>{note.subject ?? noteTypeLabels[note.noteType]}</strong><span>{formatDateTime(note.legacySource?.occurredAt ?? note.createdAt)} · {note.legacySource?.authorName ?? note.createdByDisplayName}{note.legacySource !== null ? ' · V1 tarihsel kayıt' : ''}</span></div>
                 <p>{note.body}</p>
+                {canWrite && note.createdByUserId === currentUserId && note.legacySource === null && (
+                  deletingNoteId === note.id ? <div className="tracking-actions">
+                    <span>Kendi notunuz silinsin mi?</span>
+                    <button type="button" className="button button--secondary" disabled={busy !== ''} onClick={() => setDeletingNoteId(null)}>Vazgeç</button>
+                    <button type="button" className="button button--secondary" disabled={busy !== ''} onClick={() => { void run(`delete-note:${note.id}`, async () => {
+                      await workspace.port.deleteNote(item.caseId, note.id)
+                      setDeletingNoteId(null)
+                      workspace.reload()
+                    }) }}>Sil</button>
+                  </div> : <button type="button" className="button button--secondary" disabled={busy !== ''} onClick={() => setDeletingNoteId(note.id)}><Trash2 size={14} /> Kendi notumu sil</button>
+                )}
               </article>
             ))}
           </div>

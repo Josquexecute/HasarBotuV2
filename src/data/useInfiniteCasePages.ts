@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import { createHttpCasesAdapter, HttpCasesError } from './httpAdapter'
 import { getConfiguredDataSource, type CasePageQuery, type CasePageResult, type CasesDataPort } from './ports'
+import { useVisibleRefresh } from './useVisibleRefresh'
 
 type CasePageStatus = 'ok' | 'loading' | 'unauthorized' | 'unavailable'
 
@@ -33,6 +34,8 @@ export function useInfiniteCasePages(query: CasePageQuery, port?: CasesDataPort,
     retainedPages.current = { queryKey, scope, count: current.pages.length }
     setRevision(value => value + 1)
   }, [current.pages.length, queryKey, scope])
+  const refreshVisible = useCallback(() => { if (!inFlight.current) reload() }, [reload])
+  useVisibleRefresh(refreshVisible, source === 'api' && current.status === 'ok')
 
   useEffect(() => {
     if (source !== 'api') return

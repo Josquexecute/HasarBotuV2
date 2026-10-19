@@ -95,7 +95,7 @@ const item: CaseRecord = {
   company: 'Sentetik Sigorta',
   type: 'Trafik',
   status: 'Açık',
-  stage: 'Raporlama',
+  stage: 'Araştırmada',
   missingDocuments: 1,
   assignee: 'Sorumlu',
   expert: 'Eksper',
@@ -109,7 +109,7 @@ const item: CaseRecord = {
   notes: [],
   version: 3,
   lifecycleStatus: 'open',
-  workflowStage: 'reporting',
+  workflowStage: 'under_investigation',
 }
 
 const preview: EmailDraftPreviewRecord = {

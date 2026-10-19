@@ -255,7 +255,7 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect(update.statusCode).toBe(200)
     const updated = update.json() as { case: { version: number; stage: string; followUpDate: string } }
     expect(caseDetailResponseSchema.safeParse(updated).success).toBe(true)
-    expect(updated.case).toMatchObject({ version: 2, stage: 'reporting', insurerClaimNumber: 'CLAIM' })
+    expect(updated.case).toMatchObject({ version: 2, stage: 'under_repair', insurerClaimNumber: 'CLAIM' })
 
     const clear = await app.inject({
       method: 'PATCH',
@@ -297,7 +297,7 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect((stale.json() as { error: { code: string } }).error.code).toBe('version_conflict')
 
     const row = await pool.query('SELECT workflow_stage, version FROM cases WHERE id = $1', [caseId])
-    expect(row.rows[0]).toMatchObject({ workflow_stage: 'reporting', version: 2 })
+    expect(row.rows[0]).toMatchObject({ workflow_stage: 'under_repair', version: 2 })
   })
 
   it('kapali dosyada PATCH 409 case_closed doner, alanlar EZILMEZ, audit yazilmaz', async () => {

@@ -38,6 +38,13 @@ export const caseTaskParamsSchema = z.strictObject({
   taskId: idSchema,
 })
 
+export const caseNoteParamsSchema = z.strictObject({
+  caseId: caseIdSchema,
+  noteId: idSchema,
+})
+
+export const caseNoteDeleteResponseSchema = z.strictObject({ deletedNoteId: idSchema })
+
 export const caseNoteSchema = z.strictObject({
   id: idSchema,
   noteType: z.enum(CASE_NOTE_TYPES),

@@ -346,7 +346,7 @@ export function DashboardPage({ alertPort }: { alertPort?: OperationalAlertDataP
         </div>
       )}
 
-      {dashboard !== null && visibleCases.length > 0 && (
+      {dashboard !== null && (
         <section className="workflow-board" aria-label="Dosya iş akışı panosu">
           {caseStages.map((stage) => {
             const stageCases = visibleCases.filter((item) => item.stage === stage)
@@ -354,11 +354,12 @@ export function DashboardPage({ alertPort }: { alertPort?: OperationalAlertDataP
               <section className="workflow-column" key={stage}>
                 <header className="workflow-column__head">
                   <span>{stage}</span>
-                  <strong>{stageCases.length}</strong>
+                  <strong>{stage === 'Kapanış' ? dashboard.stageCounts.closed : stageCases.length}</strong>
                 </header>
                 <div className="workflow-column__body">
                   {stageCases.map((item) => <WorkflowCard key={item.caseId} item={item} />)}
-                  {stageCases.length === 0 && (
+                  {stage === 'Kapanış' && <button className="text-button" type="button" onClick={() => navigate('/dosyalar?status=closed')}>Kapalı dosyaları göster <ArrowRight size={14} /></button>}
+                  {stageCases.length === 0 && stage !== 'Kapanış' && (
                     <div className="workflow-empty">
                       <span>Bu aşamada eşleşen dosya yok</span>
                     </div>

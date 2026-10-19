@@ -23,6 +23,7 @@ import {
 } from '@hasarbotu/database'
 import { createAgentApiClient, executeFileOperation, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
+import { reconcileOfficeFolderInventory } from '../src/cases/office-folder-inventory.js'
 
 // HB-2026-175: HB-2026-171'in fail-closed freshness-gate dispatch kapısı
 // (workspace/file_operation/labor_workbook_apply) gerçek bir freshnessGate
@@ -447,7 +448,7 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     expect((await approve(seeded.caseId, reopenPlan)).statusCode).toBe(202)
     expect((await runOnce(agentClient, agentConfig)).kind).toBe('reported')
     const reopened = await pool.query('SELECT lifecycle_status,workflow_stage,version,office_number FROM cases WHERE id=$1', [seeded.caseId])
-    expect(reopened.rows[0]).toMatchObject({ lifecycle_status: 'open', workflow_stage: 'reporting', version: 3, office_number: seeded.officeNumber })
+    expect(reopened.rows[0]).toMatchObject({ lifecycle_status: 'open', workflow_stage: 'under_repair', version: 3, office_number: seeded.officeNumber })
     expect((await pool.query('SELECT count(*)::int AS n FROM case_lifecycle_history WHERE case_id=$1', [seeded.caseId])).rows[0]).toEqual({ n: 2 })
     const closeSnapshot = await pool.query(
       `SELECT requirement_snapshot->'valueLossSummary' AS value_loss
@@ -602,14 +603,80 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     })).json()).operation
     expect((await approve(seeded.caseId, planned)).statusCode).toBe(202)
     const job = await agentClient.claim()
-    if (job === null) throw new Error('expected lifecycle job')
+    if (job === null || job.payload.kind !== 'file_operation') throw new Error('expected lifecycle job')
+    expect((await pool.query('SELECT status FROM case_lifecycle_operations WHERE id=$1', [planned.id])).rows[0]).toEqual({ status: 'queued' })
+    expect((await pool.query('SELECT status FROM case_file_operations WHERE id=$1', [job.payload.operationId])).rows[0]).toEqual({ status: 'queued' })
+    await agentClient.heartbeat(job.id, 'applying')
+    expect((await pool.query('SELECT status FROM case_lifecycle_operations WHERE id=$1', [planned.id])).rows[0]).toEqual({ status: 'moving' })
     expect(await agentClient.reportResult(job.id, { outcome: 'failed', errorCode: 'file_locked' })).toMatchObject({ status: 'pending' })
+    expect((await pool.query('SELECT status,failure_reason_code FROM case_lifecycle_operations WHERE id=$1', [planned.id])).rows[0])
+      .toEqual({ status: 'queued', failure_reason_code: 'file_locked' })
     expect((await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' })).statusCode).toBe(409)
     await pool.query('UPDATE jobs SET next_attempt_at=now() WHERE id=$1', [job.id])
     expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
     expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0]).toEqual({ lifecycle_status: 'closed' })
     await expect(access(join(root, ...seeded.openPath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(access(join(root, ...planned.destination.relativePath.split('/')))).resolves.toBeUndefined()
+  }, 60_000)
+
+  it('retries an exhausted close with the same file operation and immutable recovery evidence', async () => {
+    const seeded = await seedCase('34 RTY 105', false)
+    const planned = caseLifecycleOperationResponseSchema.parse((await planClose(seeded.caseId, {
+      expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'with_missing_requirements', reason: 'Eksikler takip edilecek',
+    })).json()).operation
+    expect((await approve(seeded.caseId, planned)).statusCode).toBe(202)
+    const job = await agentClient.claim()
+    if (job === null || job.payload.kind !== 'file_operation') throw new Error('expected lifecycle job')
+    await pool.query('UPDATE jobs SET attempt_count=max_attempts WHERE id=$1', [job.id])
+    expect(await agentClient.reportResult(job.id, { outcome: 'failed', errorCode: 'case_not_fresh' })).toMatchObject({ status: 'dead_letter' })
+    const failed = caseLifecycleOperationResponseSchema.parse((await app.inject({ method: 'GET',
+      url: `/api/v1/cases/${seeded.caseId}/lifecycle-operations/${planned.id}`, headers: { cookie: adminCookie } })).json()).operation
+    expect(failed).toMatchObject({ status: 'failed', canApprove: true })
+    expect((await approve(seeded.caseId, failed)).statusCode).toBe(202)
+    const next = await agentClient.claim()
+    if (next === null || next.payload.kind !== 'file_operation') throw new Error('expected retry job')
+    expect(next.id).not.toBe(job.id)
+    expect(next.payload).toEqual(job.payload)
+    expect(await agentClient.reportResult(next.id, await executeFileOperation(agentConfig.roots, next.payload))).toMatchObject({ status: 'succeeded' })
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0]).toEqual({ lifecycle_status: 'closed' })
+    expect((await pool.query('SELECT status FROM jobs WHERE id=$1', [job.id])).rows[0]).toEqual({ status: 'dead_letter' })
+    await expect(access(join(root, ...seeded.openPath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(access(join(root, ...planned.destination.relativePath.split('/'), 'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
+  }, 60_000)
+
+  it('releases a failed reservation after a verified manual move, retaining the failed lifecycle history', async () => {
+    const seeded = await seedCase('34 EXT 106', false)
+    const planned = caseLifecycleOperationResponseSchema.parse((await planClose(seeded.caseId, {
+      expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'with_missing_requirements', reason: 'Eksikler sonradan tamamlanacak',
+    })).json()).operation
+    // Use the physical office layout recognized by the office-only inventory.
+    const officeSource = '2026 OFİS/_EKSİK DOSYALAR/34EXT106'
+    await mkdir(join(root, '2026 OFİS/_EKSİK DOSYALAR'), { recursive: true })
+    await rename(join(root, seeded.openPath), join(root, officeSource))
+    await pool.query('UPDATE case_locations SET relative_path=$2 WHERE case_id=$1', [seeded.caseId, officeSource])
+    await pool.query("UPDATE case_lifecycle_operations SET status='cancelled' WHERE id=$1", [planned.id])
+    const fresh = caseLifecycleOperationResponseSchema.parse((await planClose(seeded.caseId, {
+      expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'with_missing_requirements', reason: 'Eksikler sonradan tamamlanacak',
+    })).json()).operation
+    expect((await approve(seeded.caseId, fresh)).statusCode).toBe(202)
+    const job = await agentClient.claim()
+    if (job === null || job.payload.kind !== 'file_operation') throw new Error('expected lifecycle job')
+    await pool.query('UPDATE jobs SET attempt_count=max_attempts WHERE id=$1', [job.id])
+    await agentClient.reportResult(job.id, { outcome: 'failed', errorCode: 'case_not_fresh' })
+    await mkdir(join(root, ...fresh.destination.relativePath.split('/').slice(0, -1)), { recursive: true })
+    await rename(join(root, officeSource), join(root, fresh.destination.relativePath))
+    await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',version=version+1 WHERE id=$1", [seeded.caseId])
+    await pool.query("UPDATE case_locations SET relative_path=$2,version=version+1,verification_status='verified',source='imported' WHERE case_id=$1", [seeded.caseId, fresh.destination.relativePath])
+    await pool.query(`INSERT INTO case_folder_registrations(id,organization_id,case_id,storage_root_key,source_folder_id,source_relative_path,evidence,plan_hash,created_by_user_id)
+      VALUES($1,$2,$3,$4,'9106',$5,'{}',$6,$7)`, [uuidv7(), organizationId, seeded.caseId, ROOT_KEY, fresh.destination.relativePath, 'a'.repeat(64), adminUserId])
+    const policy = { schemaVersion: 'hasarbotu-automatic-folders/1' as const, organizationId, actorUserId: adminUserId,
+      responsibleUserId: adminUserId, expertUserId: adminUserId, storageRootKey: ROOT_KEY, baselineSourceFolderIds: [], decision: 'User-authorized verified manual relocation' }
+    await reconcileOfficeFolderInventory(pool, policy, [{ sourceFolderId: '9106', relativePath: fresh.destination.relativePath }], new Date().toISOString(), async () => {})
+    expect((await pool.query('SELECT status,failure_reason_code FROM case_file_operations WHERE id=$1', [job.payload.operationId])).rows[0])
+      .toEqual({ status: 'stale', failure_reason_code: 'verified_external_relocation' })
+    expect((await pool.query('SELECT status,failure_reason_code FROM case_lifecycle_operations WHERE id=$1', [fresh.id])).rows[0])
+      .toEqual({ status: 'failed', failure_reason_code: 'case_not_fresh' })
+    expect((await planReopen(seeded.caseId, { expectedCaseVersion: 2, expectedLocationVersion: 2, reason: 'Ek inceleme', targetWorkflowStage: 'under_repair' })).statusCode).toBe(201)
   }, 60_000)
 
   it.each(['verified_destination', 'unverified_destination', 'later_version', 'different_path'] as const)(
@@ -660,7 +727,7 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
       status: 'manual_recovery_required', failureReasonCode: 'case_changed_after_move',
     })
     expect((await pool.query('SELECT lifecycle_status,workflow_stage FROM cases WHERE id=$1', [seeded.caseId])).rows[0])
-      .toEqual({ lifecycle_status: 'open', workflow_stage: 'ready_to_close' })
+      .toEqual({ lifecycle_status: 'open', workflow_stage: 'under_repair' })
     expect((await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action='case_lifecycle.manual_recovery_required' AND resource_id=$1", [planned.id])).rows[0]).toEqual({ n: 1 })
   }, 60_000)
 })

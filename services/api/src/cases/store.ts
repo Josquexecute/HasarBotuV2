@@ -9,7 +9,7 @@ import {
   type CasesQuery,
   type ServiceReference,
 } from '@hasarbotu/contracts'
-import { getSearchTokens, normalizeV1ResolutionName } from '@hasarbotu/domain'
+import { getSearchTokens, LEGACY_CASE_STAGES, normalizeV1ResolutionName } from '@hasarbotu/domain'
 import { loadServiceProfiles } from '../service-agreements/service.js'
 
 /**
@@ -197,7 +197,8 @@ export function createCasesStore(pool: pg.Pool) {
       if (query.caseType === 'unclassified') where.push('case_type IS NULL')
       else if (query.caseType !== undefined) add('case_type = ?', query.caseType)
       if (query.status !== undefined) add('lifecycle_status = ?', query.status)
-      if (query.stage !== undefined) add('workflow_stage = ?', query.stage)
+      if (query.stage !== undefined) add('workflow_stage = ANY(?::text[])',
+        query.stage === 'under_repair' ? ['under_repair', ...LEGACY_CASE_STAGES] : [query.stage])
       if (query.responsibleUserId !== undefined) add('responsible_user_id = ?', query.responsibleUserId)
       if (query.serviceId !== undefined) add('service_center_id = ?', query.serviceId)
       if (query.followUpFrom !== undefined) add('follow_up_date >= ?', query.followUpFrom)

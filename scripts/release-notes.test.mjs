@@ -30,3 +30,9 @@ test('damaged markers and invalid validation provenance fail before publication'
   assert.throws(() => renderReleaseNotes([{ sha: 'HEAD', subject: 'bad' }], options))
   assert.throws(() => renderReleaseNotes([], { ...options, testSummary: undefined }))
 })
+test('broken Turkish summaries, commit titles and existing notes cannot enter a draft', () => {
+  const broken = 'Kapan\u00c4\u00b1\u00c5\u0178'
+  assert.throws(() => renderReleaseNotes([], { ...options, summary: broken }), /garbled text/)
+  assert.throws(() => renderReleaseNotes([{ sha, subject: 'fix: ' + broken }], options), /garbled text/)
+  assert.throws(() => mergeReleaseNotes(broken, 'Kapanış'), /garbled text/)
+})

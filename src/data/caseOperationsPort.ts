@@ -69,6 +69,7 @@ export interface CaseOperationsRecord {
 
 export interface CaseOperationsPort {
   load(caseId: string): Promise<CaseOperationsRecord>
+  deleteNote(caseId: string, noteId: string): Promise<void>
   createNote(caseId: string, input: {
     noteType: CaseNoteTypeRecord
     subject: string | null
@@ -281,7 +282,7 @@ export function createHttpCaseOperationsAdapter(options: AdapterOptions = {}): C
 
   const request = async (
     url: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'DELETE',
     body?: unknown,
     key?: string,
   ): Promise<unknown> => {
@@ -322,6 +323,11 @@ export function createHttpCaseOperationsAdapter(options: AdapterOptions = {}): C
       ))
       exact(result, ['note'])
       return parseNote(result.note)
+    },
+    async deleteNote(caseId, noteId) {
+      const result = record(await request(`/api/v1/cases/${encodeURIComponent(caseId)}/notes/${encodeURIComponent(noteId)}`, 'DELETE'))
+      exact(result, ['deletedNoteId'])
+      if (result.deletedNoteId !== noteId) throw new CaseOperationsError('unavailable', 'deleted note identity mismatch')
     },
     async createTask(caseId, input, key) {
       const result = record(await request(

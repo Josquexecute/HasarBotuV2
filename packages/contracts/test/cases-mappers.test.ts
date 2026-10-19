@@ -32,7 +32,7 @@ const minimalCase: CaseCore = {
   plate: unwrap(parsePlateNumber('34 MPA 764')),
   caseType: 'casco',
   status: 'open',
-  stage: 'inspection_pending',
+  stage: 'under_repair',
   createdAt: unwrap(parseUtcDateTime('2026-07-11T08:00:00Z')),
   updatedAt: unwrap(parseUtcDateTime('2026-07-11T09:00:00Z')),
   version: unwrap(parseEntityVersion(1)),

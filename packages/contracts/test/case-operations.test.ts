@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   CASE_NOTES_ROUTE,
+  CASE_NOTE_ROUTE,
+  caseNoteParamsSchema,
+  caseNoteDeleteResponseSchema,
   CASE_OPERATIONS_ROUTE,
   CASE_TASK_CANCEL_ROUTE,
   CASE_TASK_COMPLETE_ROUTE,
@@ -18,6 +21,10 @@ describe('case operations contracts', () => {
   it('route ve strict komut şemalarını sürümlü biçimde taşır', () => {
     expect(CASE_OPERATIONS_ROUTE).toBe('/api/v1/cases/:caseId/operations')
     expect(CASE_NOTES_ROUTE).toBe('/api/v1/cases/:caseId/notes')
+    expect(CASE_NOTE_ROUTE).toBe('/api/v1/cases/:caseId/notes/:noteId')
+    expect(caseNoteParamsSchema.parse({ caseId: id, noteId: id })).toEqual({ caseId: id, noteId: id })
+    expect(caseNoteDeleteResponseSchema.parse({ deletedNoteId: id })).toEqual({ deletedNoteId: id })
+    expect(caseNoteParamsSchema.safeParse({ caseId: id, noteId: id, createdByUserId: userId }).success).toBe(false)
     expect(CASE_TASKS_ROUTE).toBe('/api/v1/cases/:caseId/tasks')
     expect(CASE_TASK_COMPLETE_ROUTE).toContain('/:taskId/complete')
     expect(CASE_TASK_CANCEL_ROUTE).toContain('/:taskId/cancel')

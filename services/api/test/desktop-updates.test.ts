@@ -12,7 +12,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('authenticated desktop release d
   let pool: pg.Pool, app: FastifyInstance, directory: string, cookie: string
   let inFlight = 0, drained: (() => void) | undefined
   const bytes = Buffer.from('MZsynthetic-install-artifact'), hash = createHash('sha256').update(bytes).digest('hex')
-  const release = { version: '0.1.8', platform: 'win32', arch: 'x64', sha256: hash, size: bytes.length, publishedAt: '2026-10-14T00:00:00Z', notes: 'Synthetic release' }
+  const release = { version: '0.1.8', platform: 'win32', arch: 'x64', sha256: hash, size: bytes.length, publishedAt: '2026-10-14T00:00:00Z', notes: 'Dosya aşamaları, kapanış ve gerçek taşıma: ÇĞİÖŞÜ çğıöşü.' }
   beforeAll(async () => {
     const config = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL!)
     pool = createDatabasePool({ config })

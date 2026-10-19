@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from '../app/sessionContext'
 import { getConfiguredDataSource, type DataSourceKind } from './ports'
 import { useUserDirectoryRefresh } from '../app/userDirectory'
+import { useVisibleRefresh } from './useVisibleRefresh'
 import {
   buildMockDashboard,
   createHttpDashboardAdapter,
@@ -26,6 +27,9 @@ export function useDashboard(): UseDashboardResult {
   )
   const [status, setStatus] = useState<DashboardLoadStatus>(source === 'mock' ? 'ok' : 'loading')
   const [reloadToken, setReloadToken] = useState(0)
+  const requestActive = useRef(false)
+  const refreshVisible = useCallback(() => { if (!requestActive.current) setReloadToken(value => value + 1) }, [])
+  useVisibleRefresh(refreshVisible, source === 'api' && status === 'ok')
 
   const reload = useCallback(() => {
     if (source !== 'api') return
@@ -37,6 +41,7 @@ export function useDashboard(): UseDashboardResult {
   useEffect(() => {
     if (source !== 'api') return
     let cancelled = false
+    requestActive.current = true
     createHttpDashboardAdapter().loadDashboard()
       .then((result) => {
         if (cancelled) return
@@ -49,7 +54,7 @@ export function useDashboard(): UseDashboardResult {
         const kind = error instanceof DashboardError ? error.kind : 'unavailable'
         setStatus(kind)
         if (kind === 'unauthorized') reportUnauthorized()
-      })
+      }).finally(() => { if (!cancelled) requestActive.current = false })
     return () => {
       cancelled = true
     }

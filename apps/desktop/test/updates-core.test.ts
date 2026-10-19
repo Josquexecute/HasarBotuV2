@@ -45,6 +45,7 @@ describe('verified desktop update', () => {
     const path = await directory()
     const helper = await writeUpdateHelper({ directory: path, installer: "C:\\Users\\O'Neil\\setup.exe", executable: 'C:\\Program Files\\HasarBotu\\HasarBotu.exe', installDirectory: 'C:\\Program Files\\HasarBotu', pid: 1234, taskName: 'HasarBotu-Update-fixture', apiOrigin: 'https://api.example.test', userDataPath: "C:\\Users\\O'Neil\\Profile" })
     const script = await readFile(helper, 'utf8')
+    expect(script.charCodeAt(0)).toBe(0xfeff)
     expect(script).toContain('Wait-Process -Id 1234 -Timeout 60')
     expect(script).toContain("'C:\\Users\\O''Neil\\setup.exe'")
     expect(script).toContain('@("/S", ("/D=" + $installTarget))')

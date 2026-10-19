@@ -21,3 +21,6 @@ test('missing approval, changed tags, source mismatches and changed installer or
   }
   assert.throws(() => validatePublishedRelease(release, 'd'.repeat(40)))
 })
+test('published notes with broken Turkish fail before office synchronization', () => {
+  assert.throws(() => validatePublishedRelease({ ...release, body: 'a\u00c5\u0178amalar\u00c4\u00b1\n' + release.body }, sha), /garbled text/)
+})

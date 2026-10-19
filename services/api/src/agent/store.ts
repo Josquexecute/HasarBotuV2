@@ -272,7 +272,7 @@ export function createAgentStore(pool: pg.Pool) {
         if (claimed.target_type === 'file_operation') {
           const isCleanup = claimed.type === 'cleanup_moved_workspace'
           const changed = await client.query(
-            `UPDATE case_file_operations SET status=CASE WHEN $3 THEN 'cleanup_pending' ELSE 'applying' END,
+            `UPDATE case_file_operations SET status=CASE WHEN $3 THEN 'cleanup_pending' ELSE 'queued' END,
              attempt_count=$4,failure_reason_code=NULL,updated_at=now()
              WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled','manual_recovery_required')
              RETURNING case_id,approved_by_user_id,operation_type,strategy`,
@@ -286,7 +286,7 @@ export function createAgentStore(pool: pg.Pool) {
           } | undefined
           if (operation !== undefined) {
             await client.query(
-              `UPDATE case_lifecycle_operations SET status=CASE WHEN $2 THEN 'cleanup_pending' ELSE 'moving' END,updated_at=now()
+              `UPDATE case_lifecycle_operations SET status=CASE WHEN $2 THEN 'cleanup_pending' ELSE 'queued' END,failure_reason_code=NULL,updated_at=now()
                WHERE linked_file_operation_id=$1 AND status NOT IN ('closed','reopened','failed','stale','cancelled','manual_recovery_required')`,
               [claimed.target_id, isCleanup],
             )
@@ -303,7 +303,7 @@ export function createAgentStore(pool: pg.Pool) {
                 operationType: operation.operation_type,
                 strategy: operation.strategy,
                 attempt: nextAttempt,
-                phase: isCleanup ? 'cleanup' : 'apply',
+                phase: isCleanup ? 'cleanup' : 'preflight',
               },
             })
           }
@@ -365,6 +365,11 @@ export function createAgentStore(pool: pg.Pool) {
             `UPDATE case_file_operations SET status=$3,updated_at=now()
              WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled','manual_recovery_required')`,
             [row.target_id, agent.organizationId, phase === 'verifying' ? 'verifying' : 'applying'],
+          )
+          await client.query(
+            `UPDATE case_lifecycle_operations SET status=$2,failure_reason_code=NULL,updated_at=now()
+             WHERE linked_file_operation_id=$1 AND status IN ('queued','moving','verifying')`,
+            [row.target_id, phase === 'verifying' ? 'verifying' : 'moving'],
           )
         }
         if (phase !== undefined && row.type === 'ocr_policy_pages') {
@@ -479,7 +484,7 @@ export function createAgentStore(pool: pg.Pool) {
                 ? 'stale'
                 : isCleanup
                   ? 'cleanup_pending'
-                  : 'failed'
+                  : job.attempt_count < job.max_attempts ? 'queued' : 'failed'
             const changed = await client.query(
               `UPDATE case_file_operations SET status=$3,
                cleanup_state=CASE WHEN $4 THEN 'blocked' WHEN $5 THEN 'pending' ELSE cleanup_state END,
@@ -525,6 +530,13 @@ export function createAgentStore(pool: pg.Pool) {
                 [job.id, errorCode],
               )
               return { kind: 'ok', status: 'dead_letter', lastErrorCode: errorCode }
+            }
+            if (!isCleanup && job.attempt_count < job.max_attempts) {
+              await client.query(
+                `UPDATE case_lifecycle_operations SET status='queued',failure_reason_code=$2,updated_at=now()
+                 WHERE linked_file_operation_id=$1 AND status IN ('queued','moving','verifying')`,
+                [job.target_id, errorCode],
+              )
             }
           }
           if (job.attempt_count >= job.max_attempts) {

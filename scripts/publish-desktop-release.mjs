@@ -4,6 +4,7 @@ import { constants } from 'node:fs'
 import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { desktopReleaseSchema } from '@hasarbotu/contracts'
+import { decodeUtf8Text } from './text-encoding.mjs'
 
 const [installer, directory, version, notesFile] = process.argv.slice(2)
 if (!installer || !directory || !version || !notesFile) throw new Error('Usage: node scripts/publish-desktop-release.mjs <installer.exe> <release-directory> <version> <notes.txt>')
@@ -21,7 +22,7 @@ try {
   const signature = Buffer.alloc(2); await handle.read(signature, 0, 2, 0)
   if (signature.toString('ascii') !== 'MZ') throw new Error('Installer must be a Windows executable')
 } finally { await handle.close() }
-const release = desktopReleaseSchema.parse({ version, platform: 'win32', arch: 'x64', sha256: await hashFile(source), size: (await stat(source)).size, publishedAt: new Date().toISOString(), notes: await readFile(resolve(notesFile), 'utf8') })
+const release = desktopReleaseSchema.parse({ version, platform: 'win32', arch: 'x64', sha256: await hashFile(source), size: (await stat(source)).size, publishedAt: new Date().toISOString(), notes: decodeUtf8Text(await readFile(resolve(notesFile)), 'Release notes') })
 await mkdir(target, { recursive: true })
 const manifest = join(target, 'latest.json'), artifact = join(target, release.sha256 + '.exe')
 // Serialize manual and scheduled publishers before reading the current version.

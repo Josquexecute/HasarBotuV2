@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto'
 import { parseReleaseVersion } from './release-notes.mjs'
+import { assertReadableText } from './text-encoding.mjs'
 
 export function validatePublishedRelease(release, sourceSha) {
   if (release.draft || release.prerelease) throw new Error('Only a published stable release can be distributed.')
   if (typeof release.body !== 'string' || release.body.length > 4000) throw new Error('Published notes must fit the desktop update limit.')
+  assertReadableText(release.body, 'Published release notes')
   const version = parseReleaseVersion(release.tag_name)
   const source = /<!-- hasarbotu-source:([a-f0-9]{40}) -->/.exec(release.body ?? '')
   const artifact = /<!-- hasarbotu-artifact:([a-f0-9]{64}):(\d+) -->/.exec(release.body ?? '')

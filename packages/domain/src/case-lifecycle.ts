@@ -183,7 +183,10 @@ export function buildClosedCaseWorkspacePath(notificationDate: string | null, op
   if (notificationDate === null) return { ok: false, code: 'notification_date_required' }
   const parsed = parseRelativePath(openRelativePath)
   if (!parsed.ok) return { ok: false, code: 'invalid_open_location' }
-  const [yearText, monthFolder, workspaceName, ...rest] = openRelativePath.split('/')
+  const [yearText, originalFolder, workspaceName, ...rest] = openRelativePath.split('/')
+  const monthFolder = originalFolder === '_EKSİK DOSYALAR'
+    ? `${TURKISH_MONTH_NAMES[Number(notificationDate.slice(5, 7)) - 1]} ${notificationDate.slice(0, 4)}`
+    : originalFolder
   if (yearText === undefined || monthFolder === undefined || workspaceName === undefined || rest.length > 0) {
     return { ok: false, code: 'invalid_open_location' }
   }

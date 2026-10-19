@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot '../../distribution/office-hosts.psm1') -Force
 $encoding=[Text.Encoding]::UTF8
 $hostName='office.example.test';$address='192.168.1.100';$checks=0

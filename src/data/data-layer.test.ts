@@ -69,7 +69,7 @@ describe('HttpApiAdapter esleme', () => {
     expect(record).toMatchObject({
       caseId: 'case-1',
       type: 'Kasko',
-      stage: 'Ekspertiz Bekliyor',
+      stage: 'Onarımda',
       officeNumber: '2026/184',
       noticeNumber: 'F-2026-0988',
       claimNumber: '—',
@@ -77,7 +77,7 @@ describe('HttpApiAdapter esleme', () => {
       followUp: '14 Tem',
       followUpTone: 'normal',
       version: 4,
-      workflowStage: 'inspection_pending',
+      workflowStage: 'under_repair',
       responsibleUserId: 'user-1',
       insurerId: 'insurer-1',
       expertUserId: 'expert-1',

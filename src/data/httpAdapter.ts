@@ -1,6 +1,7 @@
-import type { CaseListItem, CaseStageDto, CaseLegacyReferences } from '@hasarbotu/contracts'
+import type { CaseListItem, CaseLegacyReferences } from '@hasarbotu/contracts'
+import { CASE_STAGE_LABELS as STAGE_LABELS } from './caseStages'
 import { toOfficeDate } from '@hasarbotu/domain'
-import type { CaseRecord, CaseStage, CaseStatus, CaseType } from '../types/case'
+import type { CaseRecord, CaseStatus, CaseType } from '../types/case'
 import type { CasePageQuery, CasePageResult, CasesDataPort } from './ports'
 
 /**
@@ -9,20 +10,6 @@ import type { CasePageQuery, CasePageResult, CasesDataPort } from './ports'
  * - Listeyi server pagination'i uzerinden eksiksiz ve deterministik toplar.
  * - Tek case detayini gercek detail endpoint'inden okur.
  */
-
-const STAGE_LABELS: Record<CaseStageDto, CaseStage> = {
-  new_notification: 'Yeni İhbar',
-  vehicle_or_service_pending: 'Araç / Servis Bekleniyor',
-  inspection_pending: 'Ekspertiz Bekliyor',
-  damage_assessment: 'Hasar Tespiti',
-  parts_and_labor: 'Onarım Takibi',
-  repair_approval_pending: 'Onarım Onayı Bekleniyor',
-  under_repair: 'Onarımda',
-  reporting: 'Raporlama',
-  closing_documents: 'Kapanış Evrakları',
-  ready_to_close: 'Kapanmaya Hazır',
-  closed: 'Kapalı',
-}
 
 const MONTHS_TR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
 const MAX_CASE_LIST_PAGES = 10_000

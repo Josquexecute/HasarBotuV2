@@ -1,5 +1,6 @@
-import { caseStages, mockCases } from '../mocks/cases'
+import { mockCases } from '../mocks/cases'
 import type { CaseStage, CaseStageCode, CaseType } from '../types/case'
+import { CASE_STAGE_LABELS as STAGE_LABELS } from './caseStages'
 
 export type DashboardPriorityRecord = 'critical' | 'high' | 'medium' | 'normal'
 export type DashboardAttentionCodeRecord =
@@ -79,7 +80,7 @@ export interface DashboardSnapshotRecord {
   readonly evaluatedAt: string
   readonly priorityVersion: string
   readonly summary: DashboardSummaryRecord
-  readonly stageCounts: Readonly<Record<DashboardOpenStageCode, number>>
+  readonly stageCounts: Readonly<Record<CaseStageCode, number>>
   readonly items: readonly DashboardCaseRecord[]
 }
 
@@ -87,23 +88,8 @@ export interface DashboardDataPort {
   loadDashboard(): Promise<DashboardSnapshotRecord>
 }
 
-const STAGE_LABELS: Readonly<Record<CaseStageCode, CaseStage>> = {
-  new_notification: 'Yeni İhbar',
-  vehicle_or_service_pending: 'Araç / Servis Bekleniyor',
-  inspection_pending: 'Ekspertiz Bekliyor',
-  damage_assessment: 'Hasar Tespiti',
-  parts_and_labor: 'Onarım Takibi',
-  repair_approval_pending: 'Onarım Onayı Bekleniyor',
-  under_repair: 'Onarımda',
-  reporting: 'Raporlama',
-  closing_documents: 'Kapanış Evrakları',
-  ready_to_close: 'Kapanmaya Hazır',
-  closed: 'Kapalı',
-}
-
-const OPEN_STAGE_CODES = Object.entries(STAGE_LABELS)
-  .filter(([, label]) => caseStages.includes(label))
-  .map(([code]) => code as DashboardOpenStageCode)
+const STAGE_CODES = Object.keys(STAGE_LABELS) as CaseStageCode[]
+const OPEN_STAGE_CODES = STAGE_CODES.filter((code): code is DashboardOpenStageCode => code !== 'closed')
 
 const ROOT_KEYS = new Set(['asOfDate', 'evaluatedAt', 'priorityVersion', 'summary', 'stageCounts', 'items'])
 const SUMMARY_KEYS = new Set([
@@ -244,14 +230,14 @@ function parseDashboardResponse(value: unknown): DashboardSnapshotRecord {
     actionRequiredCaseCount: count(value.summary.actionRequiredCaseCount),
     criticalCaseCount: count(value.summary.criticalCaseCount),
   }
-  if (value.stageCounts.length !== OPEN_STAGE_CODES.length) throw new Error('dashboard_response_invalid')
-  const stageCounts = Object.fromEntries(OPEN_STAGE_CODES.map((stage) => [stage, 0])) as Record<DashboardOpenStageCode, number>
-  const seenStages = new Set<DashboardOpenStageCode>()
+  if (value.stageCounts.length !== STAGE_CODES.length) throw new Error('dashboard_response_invalid')
+  const stageCounts = Object.fromEntries(STAGE_CODES.map((stage) => [stage, 0])) as Record<CaseStageCode, number>
+  const seenStages = new Set<CaseStageCode>()
   for (const raw of value.stageCounts) {
     if (!isRecord(raw)) throw new Error('dashboard_response_invalid')
     assertExactKeys(raw, STAGE_COUNT_KEYS)
-    const stage = requiredString(raw.stage) as DashboardOpenStageCode
-    if (!OPEN_STAGE_CODES.includes(stage) || seenStages.has(stage)) throw new Error('dashboard_response_invalid')
+    const stage = requiredString(raw.stage) as CaseStageCode
+    if (!STAGE_CODES.includes(stage) || seenStages.has(stage)) throw new Error('dashboard_response_invalid')
     seenStages.add(stage)
     stageCounts[stage] = count(raw.count)
   }
@@ -262,7 +248,7 @@ function parseDashboardResponse(value: unknown): DashboardSnapshotRecord {
     if (caseType !== null && caseType !== 'traffic' && caseType !== 'casco') throw new Error('dashboard_response_invalid')
     const stageCode = requiredString(raw.stage) as DashboardOpenStageCode
     const stage = STAGE_LABELS[stageCode]
-    if (stage === undefined || stage === 'Kapalı') throw new Error('dashboard_response_invalid')
+    if (stage === undefined || !OPEN_STAGE_CODES.includes(stageCode)) throw new Error('dashboard_response_invalid')
     const priority = requiredString(raw.priority) as DashboardPriorityRecord
     if (!PRIORITIES.has(priority)) throw new Error('dashboard_response_invalid')
     const primaryAttention = raw.primaryAttention === null
@@ -447,10 +433,10 @@ export function buildMockDashboard(): DashboardSnapshotRecord {
       actionRequiredCaseCount: items.filter((item) => item.requiresAction).length,
       criticalCaseCount: items.filter((item) => item.priority === 'critical').length,
     },
-    stageCounts: Object.fromEntries(OPEN_STAGE_CODES.map((stage) => [
+    stageCounts: Object.fromEntries(STAGE_CODES.map((stage) => [
       stage,
-      items.filter((item) => item.stageCode === stage).length,
-    ])) as Readonly<Record<DashboardOpenStageCode, number>>,
+      stage === 'closed' ? mockCases.filter(item => item.status === 'Kapalı').length : items.filter((item) => item.stageCode === stage).length,
+    ])) as Readonly<Record<CaseStageCode, number>>,
     items,
   }
 }

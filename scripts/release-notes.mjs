@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { assertReadableText } from './text-encoding.mjs'
 
 export function parseReleaseVersion(tag) {
   if (typeof tag !== 'string' || tag.replace(/^v/, '').length > 32 || !/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag)) throw new Error('Release version must be major.minor.patch.')
@@ -46,11 +47,13 @@ export function renderReleaseNotes(commits, { version, sourceSha, runUrl, testSu
     `<!-- hasarbotu-source:${sourceSha} -->`)
   const body = lines.join('\n')
   if (body.length > 3500) throw new Error('Release notes exceed the desktop update limit; shorten the version summary or commit subjects.')
-  return body
+  return assertReadableText(body, 'Generated release notes')
 }
 
 const start = '<!-- hasarbotu-generated:start -->', end = '<!-- hasarbotu-generated:end -->'
 export function mergeReleaseNotes(existing, generated) {
+  assertReadableText(existing ?? '', 'Existing release notes')
+  assertReadableText(generated, 'Generated release notes')
   const block = `${start}\n${generated}\n${end}`
   if (!existing?.trim()) return block
   const first = existing.indexOf(start), last = existing.indexOf(end)

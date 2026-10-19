@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import type pg from 'pg'
 import {
   CASE_NOTES_ROUTE,
+  CASE_NOTE_ROUTE,
   CASE_OPERATIONS_ROUTE,
   CASE_TASK_CANCEL_ROUTE,
   CASE_TASK_COMPLETE_ROUTE,
@@ -11,6 +12,8 @@ import {
   IDEMPOTENCY_KEY_HEADER,
   caseNoteCreateRequestSchema,
   caseNoteResponseSchema,
+  caseNoteParamsSchema,
+  caseNoteDeleteResponseSchema,
   caseOperationsParamsSchema,
   caseTaskCancelRequestSchema,
   caseTaskCompleteRequestSchema,
@@ -86,6 +89,9 @@ function sendOutcomeError(
 ): FastifyReply {
   if (outcome.kind === 'not_found') {
     return reply.code(404).send(failureBody('not_found', 'Case operation resource not found.', requestId))
+  }
+  if (outcome.kind === 'forbidden') {
+    return reply.code(403).send(failureBody('forbidden', 'Only the author can delete their own note.', requestId))
   }
   if (outcome.kind === 'version_conflict') {
     return reply.code(409).send(failureBody('version_conflict', 'Task was modified by another operation.', requestId))
@@ -169,6 +175,23 @@ export function registerCaseOperationsRoutes(
     }
     if (outcome.kind !== 'ok') return sendOutcomeError(reply, requestId, outcome)
     return reply.code(201).send(caseNoteResponseSchema.parse({ note: outcome.item }))
+  })
+
+  app.delete(CASE_NOTE_ROUTE, async (request, reply) => {
+    const session = await requireAnyRole(auth, request, reply, WRITE_ROLES)
+    if (session === undefined) return
+    const params = caseNoteParamsSchema.safeParse(request.params)
+    const requestId = String(request.id)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({
+      ok: false, error: zodErrorToApiError(params.error, requestId),
+    }))
+    const outcome = await store.deleteNote({
+      organizationId: session.user.organizationId,
+      actorUserId: session.user.id,
+      requestId,
+    }, params.data.caseId, params.data.noteId)
+    if (outcome.kind !== 'ok') return sendOutcomeError(reply, requestId, outcome)
+    return caseNoteDeleteResponseSchema.parse({ deletedNoteId: outcome.item })
   })
 
   app.post(CASE_TASKS_ROUTE, async (request, reply) => {

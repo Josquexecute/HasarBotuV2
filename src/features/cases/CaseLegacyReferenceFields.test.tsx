@@ -6,7 +6,7 @@ import { CaseLegacyReferenceFields } from './CaseLegacyReferenceFields'
 
 const base = {
   caseId: 'case-1', plate: '34 TEST 1', officeNumber: '2026/1', noticeNumber: '—', claimNumber: '—', company: '—',
-  type: 'Trafik', status: 'Açık', stage: 'Raporlama', missingDocuments: 0, assignee: '—', expert: '—', service: '—',
+  type: 'Trafik', status: 'Açık', stage: 'Araştırmada', missingDocuments: 0, assignee: '—', expert: '—', service: '—',
   followUp: '—', followUpTone: 'normal', lastAction: '—', vehicle: '—', insured: '—', estimatedDamage: 0, notes: [],
 } satisfies CaseRecord
 

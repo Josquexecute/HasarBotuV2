@@ -13,6 +13,7 @@ afterEach(() => vi.unstubAllGlobals())
 function makePort(canWrite = true) {
   let notes: readonly CaseNoteRecord[] = []
   const port: CaseOperationsPort = {
+    deleteNote: vi.fn(),
     load: vi.fn(async (caseId) => ({ caseId, asOfDate: '2026-09-22', notes, tasks: [], followUpHistory: [], permissions: { canWrite, canCompleteTasks: canWrite } } satisfies CaseOperationsRecord)),
     createNote: vi.fn(async (_caseId, input) => { const saved = { ...note, ...input }; notes = [saved]; return saved }),
     createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn(),

@@ -100,7 +100,8 @@ export async function writeUpdateHelper(options: { directory: string; installer:
     `$completion.finishedAt = [DateTime]::UtcNow.ToString('o'); $completion | ConvertTo-Json | Set-Content -LiteralPath ${psLiteral(join(options.directory, 'install-result.json'))} -Encoding UTF8`,
     '}',
   ].join('\r\n')
-  await writeFile(path, script, 'utf8')
+  // Windows PowerShell 5.1 reads a BOM-less script as ANSI, corrupting Unicode paths.
+  await writeFile(path, '\uFEFF' + script, 'utf8')
   return path
 }
 

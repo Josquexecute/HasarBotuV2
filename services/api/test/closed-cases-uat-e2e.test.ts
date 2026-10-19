@@ -341,7 +341,7 @@ describeDb('Kapanan Dosyalar uçtan uca UAT: gerçek kapanış/yeniden açma sag
     expect((await approve(seeded.caseId, reopenPlan)).statusCode).toBe(202)
     expect((await runOnce(agentClient, agentConfig)).kind).toBe('reported')
     const reopenedRow = await pool.query('SELECT lifecycle_status,workflow_stage,version FROM cases WHERE id=$1', [seeded.caseId])
-    expect(reopenedRow.rows[0]).toMatchObject({ lifecycle_status: 'open', workflow_stage: 'reporting', version: 3 })
+    expect(reopenedRow.rows[0]).toMatchObject({ lifecycle_status: 'open', workflow_stage: 'under_repair', version: 3 })
 
     // 6) LİSTE ÜYELİĞİ TERSİ — yeniden açma sonrası gerçek liste ucu ile doğrulanır.
     const openListAfterReopen = await listCases('open', adminACookie)

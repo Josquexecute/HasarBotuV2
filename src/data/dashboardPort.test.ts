@@ -1,21 +1,11 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildMockDashboard, createHttpDashboardAdapter, DashboardError } from './dashboardPort'
 import { DATA_SOURCE_STORAGE_KEY } from './ports'
 import { useDashboard } from './useDashboard'
 
-const stageCounts = [
-  'new_notification',
-  'vehicle_or_service_pending',
-  'inspection_pending',
-  'damage_assessment',
-  'parts_and_labor',
-  'repair_approval_pending',
-  'under_repair',
-  'reporting',
-  'closing_documents',
-  'ready_to_close',
-].map((stage) => ({ stage, count: stage === 'inspection_pending' ? 1 : 0 }))
+const stageCounts = ['new_notification', 'parts_and_labor', 'under_repair', 'under_investigation', 'total_loss', 'closed']
+  .map((stage) => ({ stage, count: stage === 'under_repair' ? 1 : 0 }))
 
 const response = {
   asOfDate: '2026-07-16',
@@ -42,7 +32,7 @@ const response = {
     caseType: 'casco',
     officeCaseNumber: '2026/1',
     plate: '34 PNO 001',
-    stage: 'inspection_pending',
+    stage: 'under_repair',
     responsibleUserId: '019f7000-0000-7000-8000-000000000002',
     responsibleUserName: 'Pano Sorumlusu',
     insurerName: 'Sentetik Sigorta',
@@ -84,6 +74,31 @@ afterEach(() => {
 })
 
 describe('dashboard data port', () => {
+  it.each(['focus', 'interval'])('drops externally archived cards on %s refresh and pauses while hidden', async (trigger) => {
+    vi.useFakeTimers()
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(fetchResponse(200, response) as never)
+    const view = renderHook(() => useDashboard())
+    try {
+      await act(async () => {})
+      expect(view.result.current.dashboard?.items).toHaveLength(1)
+      visibility.mockReturnValue('hidden')
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      fetchSpy.mockImplementation(fetchResponse(200, { ...response, items: [],
+        summary: Object.fromEntries(Object.keys(response.summary).map(key => [key, 0])),
+        stageCounts: stageCounts.map(item => ({ ...item, count: 0 })),
+      }) as never)
+      visibility.mockReturnValue('visible')
+      await act(async () => {
+        if (trigger === 'focus') window.dispatchEvent(new Event('focus'))
+        else await vi.advanceTimersByTimeAsync(30_000)
+      })
+      expect(view.result.current.dashboard?.items).toEqual([])
+      expect(view.result.current.status).toBe('ok')
+    } finally { view.unmount(); vi.useRealTimers() }
+  })
   it('shows pending classification without assigning a document rule version', async () => {
     const pending = { ...response, items: [{ ...response.items[0], caseType: null, documentRuleVersion: null, missingDocumentCount: 0, controlRequiredDocumentCount: 0 }] }
     const dashboard = await createHttpDashboardAdapter({ fetchImpl: fetchResponse(200, pending) }).loadDashboard()
@@ -96,7 +111,7 @@ describe('dashboard data port', () => {
 
     expect(dashboard.items[0]).toMatchObject({
       type: 'Kasko',
-      stage: 'Ekspertiz Bekliyor',
+      stage: 'Onarımda',
       followUpLabel: 'Gecikmiş · 15 Tem',
       followUpTone: 'late',
       priority: 'critical',

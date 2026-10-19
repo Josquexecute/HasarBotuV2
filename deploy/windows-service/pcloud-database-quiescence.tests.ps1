@@ -1,4 +1,4 @@
-# HB-2026-128: pcloud-database-quiescence.ps1 icin bagimliliksiz test
+﻿# HB-2026-128: pcloud-database-quiescence.ps1 icin bagimliliksiz test
 # script'i (Pester veya baska bir cerceve gerektirmez, repo'nun genel
 # "ek dependency ekleme" prensibiyle tutarli). Ayrica D8BeforeSync'in
 # Turkce yol/mojibake regresyonuna karsi kilitli kalmasi icin manifest

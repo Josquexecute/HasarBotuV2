@@ -10,6 +10,7 @@ import { planFolderLocationReconciliation, applyFolderLocationReconciliation, ty
 import { planSourceFolderRelocation, applySourceFolderRelocation, type SourceFolderRelocation } from '../src/cases/source-folder-relocation.js'
 import { registerAutomaticFolders, type AutomaticFolderPolicy, type ObservedPlateFolder } from '../src/cases/automatic-folder-registration.js'
 import { resolveFileLocations } from '../src/storage/file-location.js'
+import { createAuditService } from '../src/audit/service.js'
 
 const testUrl = process.env.TEST_DATABASE_URL
 const describeDb = testUrl ? describe : describe.skip
@@ -302,6 +303,22 @@ describeDb('sidecarless physical folder registration', () => {
       previousLocation: { id: location.id, storageRootKey: 'test-root', relativePath: location.relative_path, version: location.version },
     }] }
   }
+  it('relocates only inventory-managed archives while preserving explicit archive decisions', async () => {
+    const input = await relocation(), caseId = input.bindings[0]!.caseId
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [caseId])
+    await expect(planSourceFolderRelocation(pool, org, input)).rejects.toThrow('folder_relocation_case_not_found')
+    const audit = createAuditService()
+    const record = (managedArchive: boolean) => audit.record(pool, { organizationId: org, actorUserId: admin,
+      action: 'case.office_inventory_reconciled', entityType: 'case', entityId: caseId, requestId: 'archive-relocation-test', details: { managedArchive } })
+    await record(true)
+    await expect(planSourceFolderRelocation(pool, org, input)).resolves.toHaveProperty('planHash')
+    await record(false)
+    await expect(planSourceFolderRelocation(pool, org, input)).rejects.toThrow('folder_relocation_case_not_found')
+    await record(true)
+    const plan = await planSourceFolderRelocation(pool, org, input)
+    expect(await applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})).toMatchObject({ relocated: 1 })
+    expect((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [caseId])).rows[0].is_archived).toBe(true)
+  })
   it('rebinds registered and immutable V1 sources atomically without closing open cases or inventing history', async () => {
     const input = await relocation(), legacy = await relocation(false)
     input.bindings.push(...legacy.bindings)

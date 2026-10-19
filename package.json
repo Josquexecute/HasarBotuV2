@@ -16,7 +16,7 @@
     "dev:api": "npm run dev --workspace @hasarbotu/api",
     "build:packages": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run build --workspace @hasarbotu/database && npm run build --workspace @hasarbotu/desktop-bridge && npm run build --workspace @hasarbotu/api && npm run build --workspace @hasarbotu/file-agent && npm run build --workspace @hasarbotu/desktop",
     "prepare": "npm run build:packages",
-    "build:ui": "tsc -b && vite build && npm run check:bundle",
+    "build:ui": "npm run check:text && tsc -b && vite build && npm run check:bundle",
     "check:bundle": "node scripts/check-frontend-bundle.mjs",
     "check:deploy": "node scripts/check-windows-service-configs.mjs",
     "build": "npm run build:ui && npm run build:packages",
@@ -27,7 +27,8 @@
     "test:field:browsers": "npm run build && node scripts/test-field-browsers.mjs",
     "build:field:edge": "node scripts/build-field-edge.mjs",
     "test:field:edge": "node --test deploy/cloudflare/field-portal-worker.test.mjs scripts/field-portal-server.test.mjs",
-    "pilot:gemini:policy": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run pilot:gemini:policy --workspace @hasarbotu/api"
+    "pilot:gemini:policy": "npm run build --workspace @hasarbotu/domain && npm run build --workspace @hasarbotu/contracts && npm run pilot:gemini:policy --workspace @hasarbotu/api",
+    "check:text": "node scripts/check-text-encoding.mjs"
   },
   "dependencies": {
     "@hasarbotu/contracts": "*",

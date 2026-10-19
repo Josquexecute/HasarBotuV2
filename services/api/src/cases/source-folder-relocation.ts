@@ -41,8 +41,14 @@ export async function planSourceFolderRelocation(db: Queryable, organizationId: 
   }
   if (!(await db.query('SELECT 1 FROM storage_roots WHERE organization_id=$1 AND root_key=$2 AND is_active', [organizationId, manifest.storageRootKey])).rowCount) fail('folder_active_root_required')
   for (const binding of manifest.bindings) {
-    const row = (await db.query('SELECT plate_normalized,lifecycle_status,version FROM cases WHERE organization_id=$1 AND id=$2 AND NOT is_archived FOR SHARE', [organizationId, binding.caseId])).rows[0]
+    const row = (await db.query('SELECT plate_normalized,lifecycle_status,version,is_archived FROM cases WHERE organization_id=$1 AND id=$2 FOR SHARE', [organizationId, binding.caseId])).rows[0]
     if (!row) fail('folder_relocation_case_not_found')
+    if (row.is_archived) {
+      // The office inventory can restore its own archives after the same source ID reappears at a new path.
+      const previous = (await db.query(`SELECT details FROM audit_events WHERE organization_id=$1 AND resource_id=$2
+        AND action='case.office_inventory_reconciled' ORDER BY occurred_at DESC,id DESC LIMIT 1`, [organizationId, binding.caseId])).rows[0]
+      if (binding.identity.kind !== 'registered' || previous?.details?.managedArchive !== true) fail('folder_relocation_case_not_found')
+    }
     const plate = parseSourcePlateFolderName(binding.relativePath.split('/').at(-1)!)?.plate
     if (!plate || plateSearchKey(plate) !== row.plate_normalized) fail('folder_relocation_plate_mismatch')
     if (row.version !== binding.expectedCaseVersion || row.lifecycle_status !== binding.expectedLifecycleStatus) fail('folder_relocation_case_changed')

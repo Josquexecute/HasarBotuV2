@@ -2,30 +2,20 @@ export type CaseType = 'Trafik' | 'Kasko' | 'Seçiniz'
 
 export type CaseStage =
   | 'Yeni İhbar'
-  | 'Araç / Servis Bekleniyor'
-  | 'Ekspertiz Bekliyor'
-  | 'Hasar Tespiti'
-  | 'Onarım Takibi'
-  | 'Onarım Onayı Bekleniyor'
+  | 'Parça Referans Kodları İstenildi'
   | 'Onarımda'
-  | 'Raporlama'
-  | 'Kapanış Evrakları'
-  | 'Kapanmaya Hazır'
-  | 'Kapalı'
+  | 'Araştırmada'
+  | 'Ağır Hasar/Pert'
+  | 'Kapanış'
 
 export type CaseStatus = 'Açık' | 'Kapalı' | 'Beklemede' | 'Gecikmiş' | 'Kontrol Bekliyor'
 
 export type CaseStageCode =
   | 'new_notification'
-  | 'vehicle_or_service_pending'
-  | 'inspection_pending'
-  | 'damage_assessment'
   | 'parts_and_labor'
-  | 'repair_approval_pending'
   | 'under_repair'
-  | 'reporting'
-  | 'closing_documents'
-  | 'ready_to_close'
+  | 'under_investigation'
+  | 'total_loss'
   | 'closed'
 
 export interface CaseRecord {
