@@ -1,5 +1,5 @@
 import type { ReadinessResult } from './readiness.js'
-import { MINIMUM_API_MINOR, SUPPORTED_API_MAJOR } from './compatibility.js'
+import { SUPPORTED_API_MINOR, SUPPORTED_API_MAJOR } from './compatibility.js'
 
 /**
  * Başlangıç kapısı (D3): hazırlık sonucunu kullanıcıya anlatılabilir bir
@@ -27,7 +27,7 @@ export interface GateMessage {
  * (bir sır değildir) uyum hatalarında tanı için gösterilir.
  */
 export function describeReadiness(result: ReadinessResult): GateMessage {
-  const expected = `${SUPPORTED_API_MAJOR}.${MINIMUM_API_MINOR}.x`
+  const expected = `${SUPPORTED_API_MAJOR}.${SUPPORTED_API_MINOR}.x`
   switch (result.outcome) {
     case 'ready':
       return { title: 'Sunucu hazır', detail: 'Sunucu bağlantısı doğrulandı.' }

@@ -124,6 +124,8 @@ istenen görsel doğrulama için `HB_CAPTURE_SCREENSHOTS=1` kullanılabilir.
 
 ## Ofis güncellemesi yayınlama
 
+Başlangıçta bağlantı kontrolü ve Windows izin hazırlığı ayrı, scriptsiz bir durum penceresinde gösterilir; bağlantı hazırlığı hataları ve zaman aşımı kullanıcıya açıklanır. Yardımcı konumu 200 ms içinde birleştirilerek asenkron ve atomik kaydedilir; çıkış son kaydı bekler. İmleç karakterden dört karakter genişliğinden uzaktaysa göz takibi 320 ms, yakındaysa 80 ms aralıkla çalışır; gizleme ve azaltılmış hareket sorgulamayı durdurur. API uyumu masaüstü paket sürümünden bağımsız olarak desteklenen `0.0.x` sözleşmesini korur.
+
 Kullanıcıya yansıyan tamamlanmış değişiklikler doğrulandıktan sonra masaüstü sürümünü artır,
 Windows x64 NSIS kurulumunu üret ve gerçek paketin açılışını doğrula. Yerel derleme veya
 kurulum, ofis güncelleme akışını ilerletmez. Depo kökünde Node.js 24 ile:
@@ -178,7 +180,26 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.64**, 2026-10-19T17:37:28.946Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.65**, 2026-10-19T19:06:55.197Z; Windows x64,
+105.199.448 bayt, SHA-256 `2461f534946619132758b7d2c9f1badde7cdf27eeb4b12ada518a803b84031b0`.
+Görünür başlangıç durumu/hataları, asenkron ve çıkışta tamamlanan konum kaydı,
+uzak imleçte seyrek göz takibi ve API uyum politikası temizliği teslim edildi.
+3.075 genel test geçti; genel koşuda atlanan altı canlı bağlantı testi ayrı
+ortamda 6/6 geçti. Ek dört kaynak yenileme testi ve gerçek Electron çıkışında
+son hareketin korunması testi geçti. Typecheck, lint, servis kontrolü, derleme,
+gerçek NSIS Unicode hedef testi ve paket açılışı geçti; 61 UI dosyası ve dokuz
+paketli ana süreç modülünün kaynak derlemeyle hash eşleşmesi doğrulandı.
+İki ofis görevi yapılandırılmış yerel Windows başlatıcısına geçirildi; gerçek
+görev çıkış kodu 0, 621 klasörün salt okunur önizlemesinde bekletilen kayıt 0.
+Kullanıcının onayıyla, etkin dosya/fotoğraf işi yokken ve korumalı SQLite yedeği
+alındıktan sonra pCloud aynı etkileşimli oturumda yeniden başlatıldı; yaklaşık
+50,6 GiB özel bellek tüketiminin yarattığı baskı kalktı, kullanılabilir Windows
+bellek taahhüdü yaklaşık 80 MiB'den 44,6 GiB'ye çıktı. Beş ofis servisi çalışıyor.
+Kurulu **0.1.64**, yeni sürümü `available` gördü; kimlik doğrulamalı HTTP 200
+indirmesinde tam boyut ve SHA-256 eşleşti. Önceki 0.1.64 manifesti ve değişmez
+paketi korundu; zorla kurulum ve ekran görüntüsü üretimi yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.64**, 2026-10-19T17:37:28.946Z; Windows x64,
 105.197.735 bayt, SHA-256 `155f3a6f54a11b99ba8ca8d4d9cbbb7427939c733f282f82d56ef8237b3eaee1`.
 AI/mevzuat çağrılarında köprünün erken zaman aşımı ve kapanış sonrası dosya
 yenilemesindeki geç yanıt/oturum hatası düzeltildi; yeni regresyonlar önce hatayı

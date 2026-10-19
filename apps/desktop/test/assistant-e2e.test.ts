@@ -8,6 +8,24 @@ import { expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 
+it('actual app quit flushes the last movement before Electron exits', async () => {
+  const workspace = await mkdtemp(join(tmpdir(), 'hb-assistant-quit-'))
+  const profile = join(workspace, 'profile'), resultPath = join(workspace, 'expected.json')
+  try {
+    const code = await new Promise<number | null>((resolve, reject) => {
+      const child = spawn(require('electron') as string, [
+        fileURLToPath(new URL('./harness/assistant-quit-main.mjs', import.meta.url)), `--user-data-dir=${profile}`,
+      ], { windowsHide: true, env: { ...process.env, HB_ASSISTANT_ASSETS: fileURLToPath(new URL('../../../dist/', import.meta.url)), HB_ASSISTANT_RESULT: resultPath }, stdio: 'ignore' })
+      const timer = setTimeout(() => { child.kill(); reject(new Error('assistant quit did not finish')) }, 20_000)
+      child.once('error', error => { clearTimeout(timer); reject(error) })
+      child.once('exit', value => { clearTimeout(timer); resolve(value) })
+    })
+    expect(code).toBe(0)
+    expect(JSON.parse(await readFile(join(profile, 'assistant-position.json'), 'utf8')))
+      .toEqual(JSON.parse(await readFile(resultPath, 'utf8')))
+  } finally { await rm(workspace, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }) }
+})
+
 it('Windows assistant: real Electron window, security, menu, navigation, persistence and cleanup', async () => {
   const workspace = await mkdtemp(join(tmpdir(), 'hb-assistant-test-'))
   const resultPath = join(workspace, 'result.json')

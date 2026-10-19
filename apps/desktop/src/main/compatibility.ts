@@ -17,8 +17,8 @@ export const EXPECTED_API_SERVICE = 'hasarbotu-api'
 /** Kabuğun desteklediği API ana sürümü. */
 export const SUPPORTED_API_MAJOR = 0
 
-/** Kabuğun gerektirdiği en düşük ikincil sürüm. */
-export const MINIMUM_API_MINOR = 0
+/** Kabuğun desteklediği 0.x API ikincil sürümü; masaüstü paket sürümünden ayrıdır. */
+export const SUPPORTED_API_MINOR = 0
 
 export interface SemanticVersion {
   readonly major: number
@@ -69,8 +69,6 @@ export type CompatibilityResult =
  * - Ana sürüm `0` iken ikincil sürüm de BİREBİR eşleşmelidir: semver'de `0.x`
  *   serisinde kırıcı değişiklik ikincil sürümle taşınır, yani `0.1` ile `0.2`
  *   uyumlu SAYILMAZ.
- * - Ana sürüm `0`dan büyükken ikincil sürüm en düşük gereksinimden küçük
- *   olmamalıdır (ileri uyumluluk: daha yeni bir API kabul edilir).
  *
  * Ön sürüm (`-rc.1`) etiketi uyumu ETKİLEMEZ; sürüm numarası belirleyicidir.
  */
@@ -79,12 +77,7 @@ export function checkApiCompatibility(service: string, version: string): Compati
   const parsed = parseSemanticVersion(version)
   if (parsed === null) return { outcome: 'unparseable_version', compatible: false }
   if (parsed.major !== SUPPORTED_API_MAJOR) return { outcome: 'incompatible_major', compatible: false }
-  if (SUPPORTED_API_MAJOR === 0) {
-    return parsed.minor === MINIMUM_API_MINOR
-      ? { outcome: 'compatible', compatible: true }
-      : { outcome: 'incompatible_minor', compatible: false }
-  }
-  return parsed.minor >= MINIMUM_API_MINOR
+  return parsed.minor === SUPPORTED_API_MINOR
     ? { outcome: 'compatible', compatible: true }
     : { outcome: 'incompatible_minor', compatible: false }
 }

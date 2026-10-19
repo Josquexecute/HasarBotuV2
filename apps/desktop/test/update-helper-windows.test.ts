@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm, copyFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, copyFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -25,6 +25,7 @@ public class UpdateFixture {
     string marker = Environment.GetEnvironmentVariable("HB_UPDATE_TEST_MARKER") ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"result-0");
     if (Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]) == "installer") {
       File.WriteAllText(marker + ".install", string.Join("\n", args));
+      File.WriteAllText(marker + ".commandline", Environment.CommandLine);
       return int.Parse(Environment.GetEnvironmentVariable("HB_UPDATE_TEST_EXIT_CODE") ?? "0");
     }
     File.WriteAllText(marker + ".restart", string.Join("\n", args));
@@ -85,6 +86,9 @@ if (-not $succeeded) { throw 'Helper failed on task cleanup' }
     expect(arguments_[0]).toBe('/S')
     // NSIS consumes the unquoted /D= tail, including its spaces, as the directory.
     expect(arguments_.slice(1).join(' ')).toBe(`/D=${directory}`)
+    const commandLine = await readFile(marker + '.commandline', 'utf8')
+    // Windows PowerShell 5.1 appends a separator after the final argument.
+    expect(commandLine.slice(commandLine.indexOf('/S')).trimEnd()).toBe(`/S /D=${directory}`)
   }, 30_000)
 
   it('preserves an installer failure and never restarts when task deletion also fails', async () => {
@@ -93,6 +97,29 @@ if (-not $succeeded) { throw 'Helper failed on task cleanup' }
     expect(result.restartedProcessId).toBeUndefined()
     expect(stderr).toBe('')
     await expect(readFile(marker + '.restart')).rejects.toMatchObject({ code: 'ENOENT' })
+  }, 30_000)
+
+  it.skipIf(!process.env.HASARBOTU_TEST_MAKENSIS)('runs a real NSIS package into the exact Unicode directory with spaces', async () => {
+    const target = join(directory, "NSIS Çığ O'Neil")
+    const nsis = join(directory, 'nsis-fixture.exe')
+    const input = join(directory, 'fixture.nsi')
+    await writeFile(input, '\uFEFF' + [
+      'Unicode true', 'RequestExecutionLevel user', 'SilentInstall silent', 'Name "HasarBotu synthetic test"',
+      `OutFile "${nsis}"`, 'Section', 'SetOutPath "$INSTDIR"',
+      'FileOpen $0 "$INSTDIR\\nsis-marker.txt" w', 'FileWriteUTF16LE $0 "$INSTDIR"', 'FileClose $0', 'SectionEnd',
+    ].join('\r\n'), 'utf8')
+    await exec(process.env.HASARBOTU_TEST_MAKENSIS!, ['/V2', input], { windowsHide: true, timeout: 15_000 })
+    // Explorer intentionally does not inherit the helper's environment.
+    const marker = join(directory, 'result-0')
+    await rm(marker + '.pid', { force: true })
+    await rm(marker + '.restart', { force: true })
+    const helper = await writeUpdateHelper({ directory, installer: nsis, executable, installDirectory: target,
+      pid: 2147483646, taskName: 'HasarBotu-Update-synthetic', apiOrigin: 'https://api.example.test', userDataPath: join(directory, 'saved profile') })
+    await powershell(`function Unregister-ScheduledTask { param([string]$TaskName,[switch]$Confirm) }; & ${literal(helper)}`, { HB_UPDATE_TEST_MARKER: marker })
+    const result = JSON.parse((await readFile(join(directory, 'install-result.json'), 'utf8')).replace(/^\uFEFF/u, ''))
+    expect(result).toMatchObject({ installerExitCode: 0, error: null, restartRequested: true })
+    expect((await readFile(join(target, 'nsis-marker.txt'))).toString('utf16le').replace(/^\uFEFF/u, '')).toBe(target)
+    await assertIndependentRestart(marker, result.helperProcessId)
   }, 30_000)
 
   it('finishes the actual Windows scheduled task while the restarted GUI remains alive', async () => {

@@ -69,7 +69,7 @@ AI bu uygulamada yalnız **karar desteği** sağlar. Dosya kapatma, klasör taş
 ```
 
 - **Veritabanı**: PostgreSQL tek doğruluk kaynağı; fiziksel dosyalara yalnız göreli yol tutulur.
-- **Depolama**: aktif dosyalar yerel storage üzerindedir; pCloud yedek/arşiv içindir, canlı çalışma kökü değildir.
+- **Depolama**: mevcut ofis dağıtımı pCloud kaynak ağacını kullanır. File Agent yapılandırılmış dosya kökünde çalışır; kritik işlemler pCloud yerel metadata'sı ve ayrı üretilen kaynak SHA-256 kayıtlarıyla doğrulanır. pCloud bu dağıtımda canlı bir bağımlılıktır.
 - **Dosya Agent**: kritik klasör taşıma/yeniden adlandırma işlemlerini plan → önizle → onay → uygula → doğrula → kesinleştir → audit modeliyle yürütür.
 - **API**: kimlik doğrulama, RBAC (6 rol), audit trail, tüm iş kuralları.
 - **Masaüstü**: iş mantığı taşımayan ince Electron kabuğu; tek origin, sıkı CSP, sandbox açık.

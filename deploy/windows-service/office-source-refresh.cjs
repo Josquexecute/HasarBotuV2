@@ -2,18 +2,18 @@ const fs=require('node:fs')
 const path=require('node:path')
 const {pathToFileURL}=require('node:url')
 const {createRequire}=require('node:module')
-const root='C:/ProgramData/HasarBotu/runtime-20261011'
-const reportDirectory='C:/ProgramData/HasarBotu/office-management/source-refresh'
+const {loadSourceRefreshConfig}=require('./office-source-refresh-config.cjs')
+const reportDirectory=process.env.HASARBOTU_SOURCE_REFRESH_DIRECTORY||__dirname
 const stamp=new Date().toISOString().replaceAll(':','').replaceAll('.','')
 const pendingOnly=process.env.HB_SOURCE_REFRESH_PENDING_ONLY==='1'
 const latestPath=reportDirectory+(pendingOnly?'/pending-latest.json':'/latest.json')
 ;(async()=>{
- if(process.env.COMPUTERNAME!=='DESKTOP-EFN2G33')throw new Error('SOURCE_REFRESH_TARGET_MISMATCH')
- const config=JSON.parse(fs.readFileSync(reportDirectory+'/configuration.json','utf8'))
+ const config=loadSourceRefreshConfig(reportDirectory)
+ const root=config.runtimeRoot
  const roots=JSON.parse(process.env.HASARBOTU_AGENT_ROOTS)
  const rootKey=config.storageRootKey??(Object.keys(roots).length===1?Object.keys(roots)[0]:undefined)
  const targetRoot=rootKey&&roots[rootKey]
- if(!targetRoot||!/^P:[\\/]/i.test(config.sourceRoot))throw new Error('SOURCE_REFRESH_ROOT_CONFIGURATION_INVALID')
+ if(!targetRoot)throw new Error('SOURCE_REFRESH_ROOT_CONFIGURATION_INVALID')
  if(!fs.statSync(config.sourceRoot).isDirectory())throw new Error('PCLOUD_SOURCE_NOT_AVAILABLE')
  function underRoot(base,relative){
   if(path.win32.isAbsolute(relative))throw new Error('ABSOLUTE_CASE_PATH_REJECTED')
@@ -23,18 +23,18 @@ const latestPath=reportDirectory+(pendingOnly?'/pending-latest.json':'/latest.js
  }
  const pg=createRequire(root+'/services/api/package.json')('pg')
  const url=new URL(process.env.DATABASE_URL)
- if(!['127.0.0.1','localhost'].includes(url.hostname)||url.pathname!=='/hasarbotu')throw new Error('SOURCE_REFRESH_DATABASE_MISMATCH')
+ if(!['127.0.0.1','localhost'].includes(url.hostname)||url.pathname!=='/'+config.databaseName)throw new Error('SOURCE_REFRESH_DATABASE_MISMATCH')
  const db=new pg.Client({connectionString:url.href});await db.connect()
  let rows
  try{rows=(await db.query(`SELECT c.id case_id,l.relative_path FROM case_locations l JOIN cases c ON c.id=l.case_id
-  WHERE c.organization_id='019fe084-1ec1-7797-835a-777eb0cc59c2' AND NOT c.is_archived
+  WHERE c.organization_id=$3 AND NOT c.is_archived
    AND l.verification_status='verified' AND l.storage_root_key=$2
    AND ($1::boolean=false OR EXISTS (
     SELECT 1 FROM case_file_operations operation JOIN jobs job ON job.id=operation.active_job_id
     WHERE operation.organization_id=c.organization_id AND operation.case_id=c.id
      AND operation.approved_by_user_id IS NOT NULL
      AND job.status='pending' AND job.last_error_code='case_not_fresh'
-   )) ORDER BY c.id`,[pendingOnly,rootKey])).rows}finally{await db.end()}
+   )) ORDER BY c.id`,[pendingOnly,rootKey,config.organizationId])).rows}finally{await db.end()}
  const cases=rows.map(r=>({caseId:r.case_id,caseRelativePath:r.relative_path,targetCaseRoot:underRoot(targetRoot,r.relative_path),sourceCaseRoot:underRoot(config.sourceRoot,r.relative_path)}))
  const {findCasesNeedingAttestation,buildAttestationRecordsBatch,writeAttestationRecord}=await import(pathToFileURL(root+'/tools/pcloud-source-attestation.mjs'))
  const started=Date.now()
@@ -62,7 +62,7 @@ const latestPath=reportDirectory+(pendingOnly?'/pending-latest.json':'/latest.js
  const proof={checkedAt:new Date().toISOString(),status:preview?'PREVIEW':held.length?'PARTIAL':'PASS',pendingOnly,directSource:directSourceRoot!==undefined,casesChecked:cases.length,filesChecked:selected.checkedFiles,casesRequiringNewSourceProof:selected.casesToRefresh.length,refreshedCases,sourceFilesAttested,heldCases:held.length,held,durationMs:Date.now()-started,sourceReadOnly:true,targetReadOnly:true,gateBypassed:false}
  if(!pendingOnly||cases.length>0)fs.writeFileSync(reportDirectory+'/'+stamp+'.json',JSON.stringify(proof,null,2),{flag:'wx'})
  fs.writeFileSync(latestPath,JSON.stringify(proof,null,2))
- if(!pendingOnly)fs.writeFileSync('C:/Users/user/Desktop/HasarBotu - Kaynak Kontrol Durumu.txt','\uFEFF'+`Kaynak doğrulaması: ${proof.status}\r\nTarih: ${proof.checkedAt}\r\nKontrol edilen klasör: ${proof.casesChecked}\r\nYeni kaynak kanıtı gereken: ${proof.casesRequiringNewSourceProof}\r\nYenilenen: ${refreshedCases}\r\nBekleyen: ${held.length}\r\nEvraklara yazılmadı; dosya işlemlerinin güvenlik kontrolü devam ediyor.\r\n`)
+ if(!pendingOnly&&config.statusFile)fs.writeFileSync(config.statusFile,'\uFEFF'+`Kaynak doğrulaması: ${proof.status}\r\nTarih: ${proof.checkedAt}\r\nKontrol edilen klasör: ${proof.casesChecked}\r\nYeni kaynak kanıtı gereken: ${proof.casesRequiringNewSourceProof}\r\nYenilenen: ${refreshedCases}\r\nBekleyen: ${held.length}\r\nEvraklara yazılmadı; dosya işlemlerinin güvenlik kontrolü devam ediyor.\r\n`)
 })().catch(e=>{
  const failure={checkedAt:new Date().toISOString(),status:'FAIL',stage:'SOURCE_REFRESH',pendingOnly,code:e.safeCode||e.code||e.message}
  fs.writeFileSync(reportDirectory+'/failure-'+stamp+'.json',JSON.stringify(failure))

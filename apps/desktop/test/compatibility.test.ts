@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { API_SERVICE_NAME, API_VERSION } from '@hasarbotu/api'
 import {
   EXPECTED_API_SERVICE,
-  MINIMUM_API_MINOR,
+  SUPPORTED_API_MINOR,
   SUPPORTED_API_MAJOR,
   checkApiCompatibility,
   parseSemanticVersion,
@@ -50,12 +50,12 @@ describe('checkApiCompatibility', () => {
   it('0.x serisinde ikincil sürüm farkını KIRICI sayar', () => {
     // semver: `0.x` serisinde kırıcı değişiklik ikincil sürümle taşınır.
     expect(SUPPORTED_API_MAJOR).toBe(0)
-    expect(checkApiCompatibility(EXPECTED_API_SERVICE, `0.${MINIMUM_API_MINOR + 1}.0`))
+    expect(checkApiCompatibility(EXPECTED_API_SERVICE, `0.${SUPPORTED_API_MINOR + 1}.0`))
       .toEqual({ outcome: 'incompatible_minor', compatible: false })
   })
 
   it('yama sürümü ve ön sürüm etiketi uyumu etkilemez', () => {
-    expect(checkApiCompatibility(EXPECTED_API_SERVICE, `${SUPPORTED_API_MAJOR}.${MINIMUM_API_MINOR}.99`).compatible).toBe(true)
-    expect(checkApiCompatibility(EXPECTED_API_SERVICE, `${SUPPORTED_API_MAJOR}.${MINIMUM_API_MINOR}.0-rc.3`).compatible).toBe(true)
+    expect(checkApiCompatibility(EXPECTED_API_SERVICE, `${SUPPORTED_API_MAJOR}.${SUPPORTED_API_MINOR}.99`).compatible).toBe(true)
+    expect(checkApiCompatibility(EXPECTED_API_SERVICE, `${SUPPORTED_API_MAJOR}.${SUPPORTED_API_MINOR}.0-rc.3`).compatible).toBe(true)
   })
 })

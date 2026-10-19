@@ -11,6 +11,8 @@ import { startDesktopUpdates } from './updates.js'
 import { startCaseFolders } from './case-folder.js'
 import { hideToTrayOnClose } from './window-lifecycle.js'
 import { initializeOfficeConnection, readOfficeConnection } from './office-connection.js'
+import { createStartupProgress } from './startup-progress.js'
+import { describeStartupFailure } from './startup-feedback.js'
 
 /**
  * Masaüstü kabuğunun giriş noktası (D2, D3).
@@ -74,17 +76,21 @@ async function promptGate(message: GateMessage): Promise<GateChoice> {
 }
 
 async function bootstrap(): Promise<void> {
+  let progress: Awaited<ReturnType<typeof createStartupProgress>> | undefined
   try {
+    progress = await createStartupProgress()
     const office = app.isPackaged ? readOfficeConnection(join(process.resourcesPath, 'office-connection.json')) : undefined
     const restartOrigin = app.commandLine.getSwitchValue('hasarbotu-api-origin')
     const config = parseDesktopConfig({ ...process.env, ...(restartOrigin ? { HASARBOTU_API_ORIGIN: restartOrigin } : {}) }, { assetRoot: defaultAssetRoot(), ...(office ? { apiOrigin: office.apiOrigin } : {}) })
     let connectionSetup: string | undefined
     if (office && config.apiOrigin === office.apiOrigin && !(await probeApiReadiness({ apiOrigin: config.apiOrigin })).ready) {
+      await progress.update('configuring')
       const result = await initializeOfficeConnection(join(process.resourcesPath, 'initialize-office-connection.ps1'))
       connectionSetup = result.status
       await mkdir(app.getPath('userData'), { recursive: true })
       await writeFile(join(app.getPath('userData'), 'connection-setup-status.json'), JSON.stringify({ version: app.getVersion(), status: result.status, checkedAt: new Date().toISOString() }))
     }
+    await progress.update('loading')
     const shell = await startDesktopShell({
       ...config,
       userDataPath: app.getPath('userData'),
@@ -100,28 +106,30 @@ async function bootstrap(): Promise<void> {
           })).catch(() => { console.error('desktop startup status could not be recorded') })
           return result
         },
-        prompt: (message, result) => promptGate(connectionSetup && result.outcome === 'unreachable' ? {
+        prompt: (message, result) => {
+          progress?.hide()
+          return promptGate(connectionSetup && result.outcome === 'unreachable' ? {
           ...message,
           detail: connectionSetup === 'approval_declined'
             ? 'Ofis bağlantısını tanımlamak için Windows izin ekranı onaylanmalı. Uygulamayı yeniden açıp izni onaylayın.'
             : connectionSetup === 'existing_dns_conflict'
               ? 'Bilgisayarda ofis bağlantısıyla çakışan bir adres kaydı var. Ağ yöneticinizin kontrol etmesi gerekiyor.'
               : 'Ofis ağına bağlanın. Ofis dışındaysanız Tailscale bağlantısını açıp yeniden deneyin.',
-        } : message),
+          } : message)
+        },
       }),
       openExternal: (url) => electronShell.openExternal(url),
     })
     shellOrigin = shell.origin
     mainWindow = shell.window
+    progress.dispose()
     hideToTrayOnClose(app, shell.window)
     startDesktopUpdates(shell, config.apiOrigin)
     const assistant = await startDesktopAssistant({ shell, assetRoot: config.assetRoot, userDataPath: app.getPath('userData'), quit: () => app.quit() })
     startCaseFolders(shell, app.getPath('userData'), app.isPackaged ? join(process.resourcesPath, 'folder-roots.json') : join(app.getAppPath(), 'build-resources', 'office-folder-roots.json'), config.apiOrigin, assistant.menuWindow)
     shell.window.once('closed', () => app.quit())
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
-      dialog.showErrorBox('HasarBotu V2', 'Uygulamanın kayıtlı yerel portu başka bir işlem tarafından kullanılıyor. İlgili işlemi kapatıp yeniden deneyin. Taslakları korumak için port değiştirilmedi.')
-    }
+    progress?.hide()
     if (error instanceof DesktopStartupAbortedError) {
       // Kullanıcının kendi kararı; hata değil.
       app.exit(0)
@@ -131,7 +139,10 @@ async function bootstrap(): Promise<void> {
     // yalnız alan adı ve kuralı taşır (bkz. `config.ts`).
     if (error instanceof DesktopConfigError) console.error(error.message)
     else console.error('desktop shell failed to start')
+    dialog.showErrorBox('HasarBotu V2', describeStartupFailure(error))
     app.exit(1)
+  } finally {
+    progress?.dispose()
   }
 }
 

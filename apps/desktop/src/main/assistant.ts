@@ -1,9 +1,11 @@
 import { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen, type IpcMainEvent } from 'electron'
 import { assistantAppearanceSchema, DEFAULT_ASSISTANT_APPEARANCE, idSchema } from '@hasarbotu/contracts'
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ASSISTANT_SIZE, assistantEdge, assistantGaze, assistantMenuBounds, clampAssistantPosition, isAssistantCommand, isAssistantMenuAction, parseAssistantPosition, type Point } from './assistant-policy.js'
+import { ASSISTANT_SIZE, assistantEdge, assistantMenuBounds, clampAssistantPosition, isAssistantCommand, isAssistantMenuAction, parseAssistantPosition, type Point } from './assistant-policy.js'
+import { createAssistantPositionStore } from './assistant-position.js'
+import { createAssistantGazeTracker } from './assistant-gaze.js'
 import { AssistantFeedbackState, type AssistantMotionEvent } from './assistant-feedback.js'
 import { SECURE_WEB_PREFERENCES } from './security.js'
 import { hardenSession, type DesktopShell } from './shell.js'
@@ -25,7 +27,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   const primary = screen.getPrimaryDisplay().workArea
   let position: Point = { x: primary.x + primary.width - ASSISTANT_SIZE - 16, y: primary.y + Math.round(primary.height / 2) }
   try {
-    const saved: unknown = JSON.parse(readFileSync(statePath, 'utf8'))
+    const saved: unknown = JSON.parse(await readFile(statePath, 'utf8'))
     const parsed = parseAssistantPosition(saved)
     if (parsed) position = parsed
     else console.warn('desktop assistant ignored invalid saved position')
@@ -80,8 +82,8 @@ export async function startDesktopAssistant(options: AssistantOptions) {
 
   let tray: Tray | undefined
   let disposed = false
-  let gazeTimer: ReturnType<typeof setInterval> | undefined
-  let previousGaze: Point | undefined
+  let cleanup: Promise<void> | undefined
+  let quitRequested = false
   let appearance = DEFAULT_ASSISTANT_APPEARANCE
   const feedback = new AssistantFeedbackState()
   const sendMotion = (value: AssistantMotionEvent) => {
@@ -89,33 +91,19 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       window.webContents.send('hasarbotu:assistant-motion', value)
     }
   }
-  const stopGaze = () => {
-    clearInterval(gazeTimer)
-    gazeTimer = undefined
-  }
-  const startGaze = () => {
-    stopGaze()
-    if (appearance.reduceMotion) return
-    previousGaze = undefined
-    gazeTimer = setInterval(() => {
-      if (disposed || window.isDestroyed() || !window.isVisible()) return
-      const gaze = assistantGaze(screen.getCursorScreenPoint(), position)
-      if (gaze.x === previousGaze?.x && gaze.y === previousGaze.y) return
-      previousGaze = gaze
-      window.webContents.send('hasarbotu:assistant-gaze', gaze)
-    }, 80)
-  }
+  const { start: startGaze, stop: stopGaze } = createAssistantGazeTracker({
+    enabled: () => !disposed && !window.isDestroyed() && window.isVisible() && !appearance.reduceMotion,
+    cursor: () => screen.getCursorScreenPoint(),
+    position: () => position,
+    send: gaze => window.webContents.send('hasarbotu:assistant-gaze', gaze),
+  })
   window.on('show', startGaze)
   window.on('hide', stopGaze)
   let drag: { cursor: Point; origin: Point; moved: boolean } | undefined
   let menuOpen = false
   let menuReady: Promise<void> | undefined
-  const persist = () => {
-    try {
-      writeFileSync(`${statePath}.tmp`, JSON.stringify(position), 'utf8')
-      renameSync(`${statePath}.tmp`, statePath)
-    } catch { console.warn('desktop assistant could not save position') }
-  }
+  const positionStore = createAssistantPositionStore(statePath, () => console.warn('desktop assistant could not save position'))
+  const persist = () => positionStore.save(position)
   const move = (point: Point) => {
     const next = clamp(point)
     if (next.x === position.x && next.y === position.y) return
@@ -295,9 +283,12 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   }
   const onDisplayChange = () => { drag = undefined;sendMotion({ type: 'release' });hideMenu();move(position);persist() }
   const dispose = () => {
-    if (disposed) return
+    if (disposed) return cleanup ?? Promise.resolve()
     disposed = true
-    app.removeListener('before-quit', dispose)
+    persist()
+    cleanup = positionStore.flush().catch(() => {
+      console.warn('desktop assistant could not save final position')
+    }).finally(() => { app.removeListener('before-quit', beforeQuit) })
     stopGaze()
     assistantSession.removeListener('will-download', denyDownload)
     menuWindow.webContents.session.removeListener('will-download', denyMenuDownload)
@@ -318,6 +309,13 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     tray?.destroy()
     if (!menuWindow.isDestroyed()) menuWindow.destroy()
     if (!window.isDestroyed()) window.destroy()
+    return cleanup
+  }
+  const beforeQuit = (event: Electron.Event) => {
+    event.preventDefault()
+    if (quitRequested) return
+    quitRequested = true
+    void dispose().then(() => app.quit())
   }
   window.on('closed', dispose)
   menuWindow.on('closed',dispose)
@@ -325,7 +323,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   window.on('close', (event) => { event.preventDefault(); drag = undefined; window.hide() })
   options.shell.window.once('closed', dispose)
   // Hide-on-close helper windows must not cancel an explicit app quit/update.
-  app.on('before-quit', dispose)
+  app.on('before-quit', beforeQuit)
   ipcMain.on('hasarbotu:assistant', handleCommand)
   ipcMain.on('hasarbotu:assistant-menu',handleMenuAction)
   ipcMain.on('hasarbotu:assistant-success', handleSuccess)
@@ -346,6 +344,6 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     window.webContents.send('hasarbotu:assistant-appearance', appearance)
     options.shell.window.webContents.send('hasarbotu:appearance-ready')
     show()
-  } catch (error) { dispose(); throw error }
+  } catch (error) { await dispose(); throw error }
   return { window, menu, menuWindow, show, dispose }
 }

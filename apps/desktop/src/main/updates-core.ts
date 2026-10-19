@@ -79,6 +79,7 @@ export async function writeUpdateHelper(options: { directory: string; installer:
     `$installTarget = ${psLiteral(options.installDirectory)}`,
     `$installedExecutable = ${psLiteral(options.executable)}`,
     // Wait only for NSIS, not its descendant processes or a restarted application.
+    // PowerShell joins these with spaces; NSIS requires the final /D= tail unquoted.
     '$result = Start-Process -FilePath $installerPath -ArgumentList @("/S", ("/D=" + $installTarget)) -WindowStyle Hidden -PassThru',
     '$result.WaitForExit()',
     '$completion.installerExitCode = $result.ExitCode',

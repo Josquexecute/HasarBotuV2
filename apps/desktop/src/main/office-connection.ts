@@ -34,14 +34,27 @@ export function readOfficeConnection(file: string): OfficeConnection {
   return parseOfficeConnection(input)
 }
 
-export async function initializeOfficeConnection(script: string): Promise<{ status: string }> {
-  const { stdout } = await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script], {
-    windowsHide: true, timeout: 120_000, maxBuffer: 4096,
-  })
-  const result: unknown = JSON.parse(stdout.trim())
-  if (!result || typeof result !== 'object' || !('status' in result) || typeof result.status !== 'string'
-    || !['configured', 'remote_required', 'approval_declined', 'existing_dns_conflict'].includes(result.status)) {
-    throw new DesktopConfigError('office-connection', 'unexpected connection setup result.')
+export class OfficeConnectionSetupError extends Error {
+  constructor(readonly reason: 'timeout' | 'failed', cause?: unknown) {
+    super(`Office connection setup ${reason}`, { cause })
+    this.name = 'OfficeConnectionSetupError'
   }
-  return { status: result.status }
+}
+
+export async function initializeOfficeConnection(script: string, timeoutMs = 120_000): Promise<{ status: string }> {
+  try {
+    const { stdout } = await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script], {
+      windowsHide: true, timeout: timeoutMs, maxBuffer: 4096,
+    })
+    const result: unknown = JSON.parse(stdout.trim())
+    if (!result || typeof result !== 'object' || !('status' in result) || typeof result.status !== 'string'
+      || !['configured', 'remote_required', 'approval_declined', 'existing_dns_conflict'].includes(result.status)) {
+      throw new OfficeConnectionSetupError('failed')
+    }
+    return { status: result.status }
+  } catch (error) {
+    if (error instanceof OfficeConnectionSetupError) throw error
+    const failure = error as { killed?: boolean; code?: string }
+    throw new OfficeConnectionSetupError(failure.killed || failure.code === 'ETIMEDOUT' ? 'timeout' : 'failed', error)
+  }
 }

@@ -1,8 +1,10 @@
-param([ValidateSet('all','pending','preview')][string]$Mode='all')
+param([ValidateSet('all','pending','preview')][string]$Mode='all',[string]$SourceRefreshDirectory=$PSScriptRoot)
 $ErrorActionPreference='Stop'
-if($env:COMPUTERNAME -ne 'DESKTOP-EFN2G33'){throw 'SOURCE_REFRESH_TARGET_MISMATCH'}
-$runtime='C:/ProgramData/HasarBotu/runtime-20261011'
-$directory='C:/ProgramData/HasarBotu/office-management/source-refresh'
+$directory=[IO.Path]::GetFullPath($SourceRefreshDirectory)
+$config=Get-Content -LiteralPath (Join-Path $directory 'configuration.json') -Encoding UTF8 -Raw|ConvertFrom-Json
+if(-not $config.expectedComputerName -or $env:COMPUTERNAME -ine $config.expectedComputerName){throw 'SOURCE_REFRESH_TARGET_MISMATCH'}
+if(-not $config.runtimeRoot -or -not [IO.Path]::IsPathRooted($config.runtimeRoot) -or $config.runtimeRoot.Contains('"')){throw 'SOURCE_REFRESH_RUNTIME_ROOT_REQUIRED'}
+$runtime=[IO.Path]::GetFullPath($config.runtimeRoot)
 $mutex=[Threading.Mutex]::new($false,'Global\HasarBotu-Office-Source-Attestations')
 $acquired=$false
 try {
@@ -14,7 +16,8 @@ try {
   foreach($entry in $wrapper.service.env){if($entry.name -in $keys){[Environment]::SetEnvironmentVariable([string]$entry.name,[string]$entry.value,'Process')}}
   $env:HB_SOURCE_REFRESH_PENDING_ONLY=if($Mode -eq 'pending'){'1'}else{'0'}
   $env:HB_SOURCE_REFRESH_PLAN_ONLY=if($Mode -eq 'preview'){'1'}else{'0'}
-  & "$runtime/runtime/node.exe" "$directory/refresh-source.cjs"
+  $env:HASARBOTU_SOURCE_REFRESH_DIRECTORY=$directory
+  & "$runtime/runtime/node.exe" "$directory/office-source-refresh.cjs"
   if($LASTEXITCODE -ne 0){throw 'SOURCE_REFRESH_FAILED; see the protected source-refresh status report'}
 } finally {
   if($acquired){$mutex.ReleaseMutex()}

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { startDesktopShell } from '../../dist/main/shell.js'
 import { startDesktopAssistant } from '../../dist/main/assistant.js'
 import { startDesktopUpdates } from '../../dist/main/updates.js'
+import { createStartupProgress } from '../../dist/main/startup-progress.js'
 
 const checks = []
 const check = (name, pass) => { checks.push({ name, pass: Boolean(pass) }); if (!pass) throw new Error(name) }
@@ -86,7 +87,18 @@ void app.whenReady().then(async () => {
   let shell
   let assistant
   try {
+    const progress = await createStartupProgress()
+    check('startup feedback is visible before any API connection or shell exists', progress.window.isVisible())
+    check('startup feedback explains the initial connection', await progress.window.webContents.executeJavaScript('document.body.textContent.includes("Sunucuya bağlanılıyor")'))
+    await progress.update('configuring')
+    check('startup feedback explains possible Windows approval', await progress.window.webContents.executeJavaScript('document.body.textContent.includes("Windows izin ekranı")'))
+    const startupPreferences = progress.window.webContents.getLastWebPreferences()
+    check('startup page is isolated and has no preload', startupPreferences.sandbox && !startupPreferences.nodeIntegration && !startupPreferences.preload)
+    progress.hide()
+    check('gate prompts can hide the progress window without losing the startup lifecycle', !progress.window.isVisible() && !progress.window.isDestroyed())
     shell = await startDesktopShell({ apiOrigin: 'http://127.0.0.1:1', assetRoot: process.env.HB_ASSISTANT_ASSETS, show: false })
+    progress.dispose()
+    check('startup progress is destroyed after the real shell exists', progress.window.isDestroyed())
     startDesktopUpdates(shell, 'http://127.0.0.1:1')
     check('sandbox main preload can check updates; development install stays disabled', await shell.window.webContents.executeJavaScript('window.hasarbotuUpdates.check().then(state => !state.supported && state.phase === "disabled")'))
     const options = { shell, assetRoot: process.env.HB_ASSISTANT_ASSETS, userDataPath: app.getPath('userData'), quit: () => {} }
@@ -218,7 +230,17 @@ void app.whenReady().then(async () => {
     await win.webContents.executeJavaScript('window.hasarbotuAssistant.move("left")')
     await until(() => win.getBounds().x === initial.x - 16)
     check('renderer keyboard movement reaches native window', true)
-    const saved = JSON.parse(await readFile(join(app.getPath('userData'), 'assistant-position.json'), 'utf8'))
+    const positionPath = join(app.getPath('userData'), 'assistant-position.json')
+    const readPersistedPosition = async () => {
+      await until(async () => {
+        try {
+          const value = JSON.parse(await readFile(positionPath, 'utf8'))
+          return value.x === win.getBounds().x && value.y === win.getBounds().y
+        } catch (error) { if (error.code === 'ENOENT') return false; throw error }
+      }, 'debounced position persisted')
+      return JSON.parse(await readFile(positionPath, 'utf8'))
+    }
+    const saved = await readPersistedPosition()
     check('actual saved coordinates match window', saved.x === win.getBounds().x && saved.y === win.getBounds().y)
     // Exercise real preload -> IPC -> native movement with a deterministic cursor.
     // Physical mouse acceptance is separate from this integration test.
@@ -283,14 +305,14 @@ void app.whenReady().then(async () => {
       await input('release')
       await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "release")'))
       check('drag IPC moves native window and saves position', win.getBounds().x === saved.x - 96)
-      Object.assign(saved, JSON.parse(await readFile(join(app.getPath('userData'), 'assistant-position.json'), 'utf8')))
+      Object.assign(saved, await readPersistedPosition())
       await win.webContents.executeJavaScript('window.motionEvents = []')
       await input('press')
       cursor = { x: cursor.x + 12, y: cursor.y }
       await input('release')
       await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "edge")'))
       check('movement first observed on release sends drag before landing and then edge feedback', await win.webContents.executeJavaScript('window.motionEvents.map(value => value.type).join(",") === "drag,release,edge"'))
-      Object.assign(saved, JSON.parse(await readFile(join(app.getPath('userData'), 'assistant-position.json'), 'utf8')))
+      Object.assign(saved, await readPersistedPosition())
     } finally { screen.getCursorScreenPoint = originalCursor }
     const ownUrl = win.webContents.getURL()
     await win.webContents.executeJavaScript('location.href = "/dosyalar"')
@@ -371,7 +393,10 @@ void app.whenReady().then(async () => {
     } finally { screen.getCursorScreenPoint = readCursor }
     check('renderer interaction has no uncaught errors', await win.webContents.executeJavaScript('window.rendererErrors.length === 0'))
     win.webContents.debugger.detach()
-    assistant.dispose()
+    // A final movement followed immediately by disposal must survive recreation.
+    command({ sender: win.webContents, senderFrame: win.webContents.mainFrame }, 'left')
+    Object.assign(saved, { x: win.getBounds().x, y: win.getBounds().y })
+    await assistant.dispose()
     check('dispose removes IPC listeners', ipcMain.listenerCount('hasarbotu:assistant') === 0)
     check('dispose removes success feedback listener', ipcMain.listenerCount('hasarbotu:assistant-success') === 0)
     check('dispose removes workflow feedback listener', ipcMain.listenerCount('hasarbotu:assistant-feedback') === 0)
@@ -385,7 +410,7 @@ void app.whenReady().then(async () => {
   } catch (error) {
     checks.push({ name: error instanceof Error ? error.message : 'unexpected failure', pass: false })
   } finally {
-    assistant?.dispose()
+    await assistant?.dispose()
     await shell?.close()
     await writeFile(process.env.HB_ASSISTANT_RESULT, JSON.stringify(checks, null, 2))
     await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-checks.json'), JSON.stringify(checks, null, 2))
