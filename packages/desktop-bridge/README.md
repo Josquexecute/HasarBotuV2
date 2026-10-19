@@ -33,6 +33,9 @@ Karar ve gerekçe: `docs/DECISION_LOG.md` → HB-2026-103.
   doğrulanır ve birleştirmeden sonra kök altında olduğu yeniden denetlenir.
 - API erişilemezken sahte başarı üretilmez; `502` döner ve ham hata metni
   istemciye taşınmaz.
+- Yanıt bekleme sınırı normal isteklerde 30 saniyedir. Eşzamanlı AI/mevzuat
+  çağrılarında 75, Eksist okumasında 120, güncelleme indirmesinde 300 saniye
+  ayrılır; daha uzun yapılandırılmış sınırlar korunur.
 
 ## Kullanım
 

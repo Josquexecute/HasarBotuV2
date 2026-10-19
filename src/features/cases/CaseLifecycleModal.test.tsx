@@ -30,6 +30,51 @@ const planned: LifecycleOperationRecord = {
 }
 
 describe('CaseLifecycleModal', () => {
+  it('reports an expired session when the final case refresh fails', async () => {
+    vi.useFakeTimers()
+    const onUnauthorized = vi.fn()
+    const port: CaseLifecycleCommandPort = {
+      readLatestOperation: vi.fn().mockResolvedValue({ ...planned, status: 'queued', canApprove: false }),
+      readLocationVersion: vi.fn(), planClose: vi.fn(), planReopen: vi.fn(), approve: vi.fn(),
+      readOperation: vi.fn().mockResolvedValue({ ...planned, status: 'closed', canApprove: false }),
+      readCase: vi.fn().mockRejectedValue(new LifecycleCommandError('unauthorized', 'expired request')),
+    }
+    const view = render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={vi.fn()} onUnauthorized={onUnauthorized} onReload={vi.fn()} />)
+    try {
+      await act(async () => {})
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      expect(onUnauthorized).toHaveBeenCalledOnce()
+      expect(screen.getByRole('alert')).toHaveTextContent('Oturumunuz sona erdi')
+    } finally { view.unmount(); vi.useRealTimers() }
+  })
+
+  it.each(['resolved', 'unauthorized'] as const)('ignores a %s case refresh after the modal closes', async (outcome) => {
+    vi.useFakeTimers()
+    let resolveCase!: (value: CaseRecord) => void
+    let rejectCase!: (error: unknown) => void
+    const pendingCase = new Promise<CaseRecord>((resolve, reject) => { resolveCase = resolve; rejectCase = reject })
+    const onUpdated = vi.fn(), onUnauthorized = vi.fn()
+    const port: CaseLifecycleCommandPort = {
+      readLatestOperation: vi.fn().mockResolvedValue({ ...planned, status: 'queued', canApprove: false }),
+      readLocationVersion: vi.fn(), planClose: vi.fn(), planReopen: vi.fn(), approve: vi.fn(),
+      readOperation: vi.fn().mockResolvedValue({ ...planned, status: 'closed', canApprove: false }),
+      readCase: vi.fn().mockReturnValue(pendingCase),
+    }
+    const view = render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={onUpdated} onUnauthorized={onUnauthorized} onReload={vi.fn()} />)
+    try {
+      await act(async () => {})
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      expect(port.readCase).toHaveBeenCalledOnce()
+      view.unmount()
+      await act(async () => {
+        if (outcome === 'resolved') resolveCase({ ...item, lifecycleStatus: 'closed' })
+        else rejectCase(new LifecycleCommandError('unauthorized', 'expired request'))
+      })
+      expect(onUpdated).not.toHaveBeenCalled()
+      expect(onUnauthorized).not.toHaveBeenCalled()
+    } finally { view.unmount(); vi.useRealTimers() }
+  })
+
   it('restores an existing operation after navigation and keeps tracking it', async () => {
     vi.useFakeTimers()
     const readOperation = vi.fn().mockResolvedValue({ ...planned, status: 'closed', canApprove: false })

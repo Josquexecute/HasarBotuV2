@@ -5,6 +5,7 @@ import { chromium, firefox, webkit } from '@playwright/test'
 import { startFieldBrowserFixture } from '../services/api/tools/field-browser-fixture.mjs'
 
 const evidence=resolve(process.env.FIELD_BROWSER_EVIDENCE ?? '.local/field-browser-evidence')
+const captureScreenshots=process.env.HB_CAPTURE_SCREENSHOTS==='1'
 await mkdir(evidence,{recursive:true})
 const fixture=await startFieldBrowserFixture(process.env.TEST_DATABASE_URL)
 const checks=[]
@@ -23,7 +24,7 @@ try {
         check(`${name}: login fits ${width}x${height}`,await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))
       }
       await page.setViewportSize({width:390,height:844})
-      await page.screenshot({path:join(evidence,`${name}-login-mobile.png`),fullPage:true})
+      if(captureScreenshots)await page.screenshot({path:join(evidence,`${name}-login-mobile.png`),fullPage:true})
       check(`${name}: persistent-cookie consent starts unchecked`,!await page.getByRole('checkbox',{name:'Bu cihazda oturumumu hatırla'}).isChecked())
       await page.getByLabel('E-posta',{exact:true}).fill(fixture.email);await page.getByLabel('Parola',{exact:true}).fill(fixture.password)
       await page.getByRole('button',{name:'Giriş yap',exact:true}).click();await page.getByRole('textbox',{name:'Plaka ara'}).waitFor()
@@ -62,8 +63,8 @@ try {
         await page.setViewportSize({width,height})
         check(`${name}: photo workflow fits ${width}x${height}`,await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))
       }
-      await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(evidence,`${name}-uploads-mobile.png`),fullPage:true})
-      await page.setViewportSize({width:1440,height:900});await page.screenshot({path:join(evidence,`${name}-uploads-desktop.png`),fullPage:true})
+      await page.setViewportSize({width:390,height:844});if(captureScreenshots)await page.screenshot({path:join(evidence,`${name}-uploads-mobile.png`),fullPage:true})
+      await page.setViewportSize({width:1440,height:900});if(captureScreenshots)await page.screenshot({path:join(evidence,`${name}-uploads-desktop.png`),fullPage:true})
       check(`${name}: private management endpoints stay unavailable`,(await context.request.get(fixture.origin+'/api/v1/users')).status()===404)
       await page.getByRole('button',{name:'Oturumu kapat',exact:true}).click();await page.getByRole('heading',{name:'Hoş geldiniz'}).waitFor()
       check(`${name}: logout removes session cookie`,!(await context.cookies()).some(cookie=>cookie.name==='hb_session'))

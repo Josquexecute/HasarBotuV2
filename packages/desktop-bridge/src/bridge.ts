@@ -50,9 +50,14 @@ export interface DesktopBridge {
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 30_000
 export const EKSIST_UPSTREAM_TIMEOUT_MS = 120_000
+// Legal generation allows 60 seconds; include time for authorization and result persistence.
+const AI_UPSTREAM_TIMEOUT_MS = 75_000
 
 export function upstreamTimeoutFor(pathname: string, defaultTimeout: number): number {
   if (/^\/api\/v1\/desktop-updates\/artifacts\/[a-f0-9]{64}$/.test(pathname)) return Math.max(defaultTimeout, 300_000)
+  if (pathname === '/api/v1/legislation/questions'
+    || /^\/api\/v1\/cases\/[^/]+\/policy-ai-extractions\/[^/]+\/start$/.test(pathname)
+    || /^\/api\/v1\/cases\/[^/]+\/email-ai-suggestions$/.test(pathname)) return Math.max(defaultTimeout, AI_UPSTREAM_TIMEOUT_MS)
   return pathname === '/api/v1/eksist/sources' ? Math.max(defaultTimeout, EKSIST_UPSTREAM_TIMEOUT_MS) : defaultTimeout
 }
 

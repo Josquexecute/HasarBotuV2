@@ -112,3 +112,30 @@ it('allows bounded OCR time while retaining the ordinary request timeout', async
     expect(await (await fetch(`${bridge.origin}/api/v1/eksist/sources`)).text()).toBe('done')
   } finally { await bridge.close(); await close(upstream) }
 })
+
+it.each([
+  '/api/v1/legislation/questions',
+  '/api/v1/cases/case-1/policy-ai-extractions/run-1/start',
+  '/api/v1/cases/case-1/email-ai-suggestions',
+])('waits for the bounded synchronous AI response at %s', async (path) => {
+  // Legal generation has a 60-second provider budget; other AI calls can use 30 seconds.
+  expect(upstreamTimeoutFor(path, 30_000)).toBe(75_000)
+  expect(upstreamTimeoutFor(path, 100_000)).toBe(100_000)
+  const upstream = createServer((_req, res) => { setTimeout(() => res.end('AI result'), 80) })
+  const port = await listen(upstream)
+  const bridge = await startDesktopBridge({ apiOrigin: `http://127.0.0.1:${port}`, upstreamTimeoutMs: 20 })
+  try {
+    const response = await fetch(`${bridge.origin}${path}`, { method: 'POST' })
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe('AI result')
+  } finally { await bridge.close(); await close(upstream) }
+})
+
+it.each([
+  '/api/v1/legislation/history',
+  '/api/v1/legislation/questions/extra',
+  '/api/v1/cases/case-1/policy-ai-extractions/run-1',
+  '/api/v1/cases/case-1/email-ai-suggestions/plan',
+])('retains the configured timeout for the ordinary route %s', (path) => {
+  expect(upstreamTimeoutFor(path, 30_000)).toBe(30_000)
+})

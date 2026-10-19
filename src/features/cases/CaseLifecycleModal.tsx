@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ModalFrame } from '../../components/ModalFrame'
 import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw, X } from 'lucide-react'
 import { LifecycleCommandError, createHttpCaseLifecycleCommandAdapter, type CaseLifecycleCommandPort, type LifecycleOperationRecord, type LifecycleOperationStatus } from '../../data/caseLifecyclePort'
@@ -73,7 +73,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
   const polling = useRef(false)
   const pollGeneration = useRef(0)
   const [restoring, setRestoring] = useState(true)
-  useEffect(() => () => { polling.current = false }, [])
+  const stopPolling = useCallback(() => { polling.current = false; pollGeneration.current++ }, [])
 
   const handleError = (error: unknown) => {
     const typed = error instanceof LifecycleCommandError ? error : null
@@ -130,10 +130,12 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
         if (!active()) return
         setOperation(current)
         if (TERMINAL.has(current.status)) {
-          polling.current = false
           if (current.status === 'closed' || current.status === 'reopened' || current.status === 'cleanup_pending') {
-            onUpdated(await commands.readCase(item.caseId))
+            const updated = await commands.readCase(item.caseId)
+            if (!active()) return
+            onUpdated(updated)
           }
+          polling.current = false
           return
         }
       } catch (error) {
@@ -168,18 +170,18 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
       }
     }).catch((error: unknown) => { if (active) handleError(error) })
       .finally(() => { if (active) setRestoring(false) })
-    return () => { active = false; polling.current = false; pollGeneration.current++ }
+    return () => { active = false; stopPolling() }
     // This subscription belongs to the case, not to each polled operation snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commands, item.caseId, isReopen])
+  }, [commands, item.caseId, isReopen, stopPolling])
 
   const completed = operation?.status === 'closed' || operation?.status === 'reopened'
   const recovery = operation?.status === 'manual_recovery_required'
   return (
-      <ModalFrame className={`modal--case-lifecycle${operation === null ? ' modal--case-lifecycle-form' : ''}`} labelledBy="case-lifecycle-title" onClose={() => { polling.current = false; onClose() }} busy={busy}>
+      <ModalFrame className={`modal--case-lifecycle${operation === null ? ' modal--case-lifecycle-form' : ''}`} labelledBy="case-lifecycle-title" onClose={() => { stopPolling(); onClose() }} busy={busy}>
         <header className="modal__header">
           <h2 id="case-lifecycle-title">{isReopen ? 'Dosyayı Yeniden Aç' : 'Dosyayı Kapat'}</h2>
-          <button className="icon-button" type="button" onClick={() => { polling.current = false; onClose() }} disabled={busy} aria-label="Pencereyi kapat"><X size={18} /></button>
+          <button className="icon-button" type="button" onClick={() => { stopPolling(); onClose() }} disabled={busy} aria-label="Pencereyi kapat"><X size={18} /></button>
         </header>
         <div className="modal__body case-lifecycle-scroll">
           {operation === null ? (
@@ -236,7 +238,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
           {message && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{message}</span>{canReload && <button className="button button--secondary" type="button" disabled={busy} onClick={() => void reloadLatest()}><RefreshCw size={15} /> Güncel Veriyi Yükle</button>}{operation && !TERMINAL.has(operation.status) && <button className="button button--secondary" type="button" disabled={busy} onClick={() => { setMessage(''); void poll(operation.id) }}><RefreshCw size={15} /> Durumu yenile</button>}</div>}
         </div>
         <footer className="modal__footer">
-          <button className="button button--secondary" type="button" onClick={() => { polling.current = false; onClose() }} disabled={busy}>{completed ? 'Kapat' : 'Vazgeç'}</button>
+          <button className="button button--secondary" type="button" onClick={() => { stopPolling(); onClose() }} disabled={busy}>{completed ? 'Kapat' : 'Vazgeç'}</button>
           {operation && ['stale', 'blocked', 'cancelled'].includes(operation.status) && <button className="button button--primary" type="button" disabled={busy} onClick={() => void reloadLatest()}>Güncel Verilerle Yeniden Önizle</button>}
           {operation === null
             ? <button className="button button--primary" type="button" onClick={preview} disabled={busy || restoring || item.lifecycleStatus !== (isReopen ? 'closed' : 'open')}>{restoring ? 'İşlem kontrol ediliyor…' : busy ? 'Planlanıyor…' : 'Önizleme Oluştur'}</button>

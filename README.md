@@ -135,6 +135,10 @@ npm run build
 
 PostgreSQL, gerçek entegrasyon testleri için `TEST_DATABASE_URL` ortam değişkeni bekler (yalnız `_test` ile biten veritabanı adları kabul edilir — güvenlik kapısı).
 
+`npm run test:field:browsers`, ayrı bir test veritabanıyla Chromium, Firefox ve
+WebKit saha akışlarını doğrular. Ekran görüntüsü yalnız açıkça istendiğinde
+`HB_CAPTURE_SCREENSHOTS=1` ile alınır.
+
 ### 🖥️ Masaüstü Paketi
 
 ```bash

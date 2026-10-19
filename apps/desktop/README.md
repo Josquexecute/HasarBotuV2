@@ -178,7 +178,24 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.63**, 2026-10-19T16:57:03.623Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.64**, 2026-10-19T17:37:28.946Z; Windows x64,
+105.197.735 bayt, SHA-256 `155f3a6f54a11b99ba8ca8d4d9cbbb7427939c733f282f82d56ef8237b3eaee1`.
+AI/mevzuat çağrılarında köprünün erken zaman aşımı ve kapanış sonrası dosya
+yenilemesindeki geç yanıt/oturum hatası düzeltildi; yeni regresyonlar önce hatayı
+üretip düzeltmeden sonra geçti. Saha tarayıcı testlerinde ekran görüntüsü açık
+seçim gerektirir. 3.063 genel test geçti; bu koşuda atlanan 6 canlı bağlantı testi
+ayrı API/PostgreSQL ortamında 6/6 geçti. Chromium, Firefox ve WebKit'te 90 saha
+kontrolü, 199 korumalı API rotasında oturumsuz erişim reddi, dağıtım/yayınlayıcı
+entegrasyonları, 182 JavaScript ve 62 PowerShell dosyası sözdizimi doğrulandı.
+Typecheck, uyarısız lint, servis kontrolü ve derleme geçti; bağımlılık taraması
+bilinen açık bildirmedi. Gerçek x64 paket açılışı, 61 UI dosyası ve paket içindeki
+ana giriş/köprü kodunun kaynak derlemeyle hash eşleşmesi doğrulandı. Kurulu
+0.1.63 istemcisi 0.1.64'ü `available` gördü; kimlik doğrulamalı HTTP 200 indirmesinde
+tam boyut ve SHA-256 eşleşti. Önceki 0.1.63 manifesti ve değişmez paketi korundu;
+beş ofis servisi çalışıyor. Zorla kurulum ve ekran görüntüsü üretimi yapılmadı.
+Yalnız bu inceleme için başlatılan test PostgreSQL süreci kapatıldı.
+
+Önceki doğrulanan ofis yayını: **0.1.63**, 2026-10-19T16:57:03.623Z; Windows x64,
 105.197.784 bayt, SHA-256 `8b764420cc327f8d4713ac810917a4e0505b2aed59f197b2465310a78057d530`.
 Genel kod taramasında iki hata giderildi: yarıda kalan aktarımların ayırdığı fotoğraf
 adları hasar, şase ve kilometre yüklemelerini engellemez; seçimden kaldırılan saha
