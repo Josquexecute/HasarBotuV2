@@ -183,7 +183,11 @@ describeDb('01.07.2026 Trafik değer kaybı API (gerçek PostgreSQL)', () => {
     expect((await calculatePhysical({ ...physical, partSelections: [{ ...physical.partSelections[0], quantity: 2, position: '' }] })).statusCode).toBe(400)
     const unmapped = await calculatePhysical({ ...physical, calculationBasis: 'reference', modelYear: 2024, usageValue: 50000 })
     expect(unmapped.statusCode, unmapped.payload).toBe(200)
-    expect(unmapped.json()).toMatchObject({ amountMinor: 7_500_000, calculationMethod: 'market_value_difference', issues: [] })
+    expect(unmapped.json()).toMatchObject({ amountMinor: null, calculationMethod: 'real_market_analysis', issues: [expect.objectContaining({ field: 'partSelections' })] })
+    const reference = await calculatePhysical({ ...payload, bodyType: 'sedan', calculationBasis: 'reference', vehicleIdentity: { manufacturer: 'Toyota', model: 'Corolla' }, parts: [],
+      partSelections: [{ ...payload.parts[0], entryId: 'reference-hood', partName: part.label, position: '', quantity: 1, material: 'unspecified' }] })
+    expect(reference.statusCode, reference.payload).toBe(200)
+    expect(reference.json()).toMatchObject({ amountMinor: response.json().amountMinor, calculationMethod: 'real_market_analysis', issues: [] })
     const manufacturer = await calculatePhysical({ ...physical, vehicleIdentity: { manufacturer: 'Toyota', model: 'Corolla' } })
     expect(manufacturer.statusCode, manufacturer.payload).toBe(200)
     expect(manufacturer.json()).toMatchObject({ amountMinor: 7_500_000, calculationMethod: 'market_value_difference', issues: [] })

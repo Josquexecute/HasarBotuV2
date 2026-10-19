@@ -4,7 +4,7 @@ import { buildMockDashboard, createHttpDashboardAdapter, DashboardError } from '
 import { DATA_SOURCE_STORAGE_KEY } from './ports'
 import { useDashboard } from './useDashboard'
 
-const stageCounts = ['new_notification', 'parts_and_labor', 'under_repair', 'under_investigation', 'total_loss', 'closed']
+const stageCounts = ['new_notification', 'parts_and_labor', 'under_repair', 'under_investigation', 'total_loss', 'ready_to_close', 'closed']
   .map((stage) => ({ stage, count: stage === 'under_repair' ? 1 : 0 }))
 
 const response = {
@@ -74,6 +74,18 @@ afterEach(() => {
 })
 
 describe('dashboard data port', () => {
+  it('requests and displays the restored ready-to-close stage', async () => {
+    const fetchImpl = vi.fn(fetchResponse(200, { ...response, items: [{ ...response.items[0], stage: 'ready_to_close' }],
+      stageCounts: stageCounts.map(item => ({ ...item, count: item.stage === 'ready_to_close' ? 1 : 0 })),
+    }))
+    const dashboard = await createHttpDashboardAdapter({ fetchImpl }).loadDashboard()
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/dashboard', expect.objectContaining({
+      headers: expect.objectContaining({ 'x-hasarbotu-dashboard-stages': '7' }),
+    }))
+    expect(dashboard.items[0]).toMatchObject({ stage: 'Kapanışa Hazır' })
+    expect(dashboard.stageCounts.ready_to_close).toBe(1)
+    expect(dashboard.stageCounts.under_repair).toBe(0)
+  })
   it.each(['focus', 'interval'])('drops externally archived cards on %s refresh and pauses while hidden', async (trigger) => {
     vi.useFakeTimers()
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')

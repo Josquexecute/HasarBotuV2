@@ -6,5 +6,6 @@ export const CASE_STAGE_LABELS: Readonly<Record<CaseStageCode, CaseStage>> = {
   under_repair: 'Onarımda',
   under_investigation: 'Araştırmada',
   total_loss: 'Ağır Hasar/Pert',
+  ready_to_close: 'Kapanışa Hazır',
   closed: 'Kapanış',
 }

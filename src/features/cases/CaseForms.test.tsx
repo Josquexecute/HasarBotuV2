@@ -94,6 +94,17 @@ function renderCreate(port: CaseCommandPort, unauthorized = vi.fn()) {
 }
 
 describe('CaseCreateModal gerçek API komut akışı', () => {
+  it('Kapanışa Hazır aşamasıyla açık dosya oluşturur', async () => {
+    const create = vi.fn().mockResolvedValue(record({ workflowStage: 'ready_to_close', stage: 'Kapanışa Hazır' }))
+    renderCreate(commandPort({ create }))
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Plaka *'), '34mpa764')
+    await user.selectOptions(screen.getByLabelText('İlk aşama *'), 'ready_to_close')
+    expect(screen.queryByRole('option', { name: 'Kapanış' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Dosyayı Oluştur' }))
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ workflowStage: 'ready_to_close' }), expect.any(String)))
+    expect(await screen.findByText('SONUÇ 2026/41 case-created')).toBeInTheDocument()
+  })
   it.each([
     ['Trafik', 'traffic'],
     ['Kasko', 'casco'],
@@ -209,18 +220,21 @@ describe('CaseEditModal optimistic locking akışı', () => {
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
     await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, serviceRevision: { name: 'Yeni Servis' } }))
   })
-  it('yalnız desteklenen alanları expectedVersion ile günceller ve server version sonucunu taşır', async () => {
-    const update = vi.fn().mockResolvedValue(record({ version: 2, workflowStage: 'under_repair', stage: 'Onarımda' }))
+  it.each([
+    ['under_repair', 'Onarımda'],
+    ['ready_to_close', 'Kapanışa Hazır'],
+  ] as const)('%s aşamasını expectedVersion ile günceller ve server version sonucunu taşır', async (workflowStage, stage) => {
+    const update = vi.fn().mockResolvedValue(record({ version: 2, workflowStage, stage }))
     const props = renderEdit(commandPort({ update }))
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Aşama'), 'under_repair')
+    await user.selectOptions(screen.getByLabelText('Aşama'), workflowStage)
     expect(screen.getByLabelText(/^Takip tarihi/)).toHaveAttribute('readonly')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
     expect(update).toHaveBeenCalledWith('case-created', expect.objectContaining({
       expectedVersion: 1,
-      workflowStage: 'under_repair',
+      workflowStage,
     }))
     expect(update.mock.calls[0]![1]).not.toHaveProperty('followUpDate')
     expect(props.onUpdated).toHaveBeenCalledWith(expect.objectContaining({ version: 2 }))

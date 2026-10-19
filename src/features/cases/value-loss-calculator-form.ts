@@ -90,7 +90,6 @@ export function calculatorSelections(draft: CalculatorDraft): ValueLossCalculato
 export function calculatorRequiresMarket(draft: CalculatorDraft, sourceParts?: Parameters<typeof resolveValueLossCalculatorParts>[2]): boolean {
   const selections = calculatorSelections(draft)
   if (sourceParts !== undefined) return calculatorPartResolution(draft, sourceParts).requiresMarketDifference
-  if (draft.manufacturer.trim() || draft.model.trim()) return selections.length > 0
   return selections.some(part => valueLossBaseOnlyPrinciple(part) === null && (part.stableRuleId === null || part.quantity !== 1 || !['unspecified', 'steel'].includes(part.material) || part.treatment !== 'standard' || part.operation === 'paintless_repair'))
 }
 
@@ -100,13 +99,14 @@ export function calculatorPartResolution(draft: CalculatorDraft, sourceParts: Pa
 }
 
 export function calculatorRequest(draft: CalculatorDraft, sourceParts?: Parameters<typeof resolveValueLossCalculatorParts>[2]): ValueLossCalculatorRequest {
-  const market = draft.accidentDate < '2026-07-01' || draft.calculationBasis === 'market_difference' || calculatorRequiresMarket(draft, sourceParts)
+  const market = draft.accidentDate < '2026-07-01' || draft.calculationBasis === 'market_difference'
   const selections = calculatorSelections(draft)
   for (const part of selections) {
     if (!part.partName.trim()) throw new Error('Eklediğiniz parçanın adını girin.')
     if (part.quantity < 1 || part.quantity > 20) throw new Error('Parça adedini 1 ile 20 arasında girin.')
     if (part.quantity > 1 && !part.position.trim()) throw new Error('Birden çok parçanın konumlarını belirtin.')
   }
+  if (!market && sourceParts !== undefined && calculatorRequiresMarket(draft, sourceParts)) throw new Error('Seçilen parça veya işlem için referans katsayısı bulunamadı. Parça, işlem, adet ve malzeme bilgilerini kontrol edin; bu seçimle tahmini tutar hesaplanamaz.')
   if (market && moneyMinor(draft.postRepairMarketValue) !== null && moneyMinor(draft.marketValue) !== null && moneyMinor(draft.postRepairMarketValue)! > moneyMinor(draft.marketValue)!) throw new Error('Onarım sonrası değer kaza öncesi piyasa değerini aşamaz.')
   const input = valueLossCalculatorRequestSchema.safeParse({
     ...(draft.manufacturer.trim() || draft.model.trim() ? { vehicleIdentity: { manufacturer: draft.manufacturer, model: draft.model } } : {}),

@@ -139,10 +139,10 @@ export type ValueLossPartCoverageReason = 'reference_match' | 'documented_base_o
 export const VALUE_LOSS_PART_COVERAGE_LABELS: Record<ValueLossPartCoverageReason, string> = {
   reference_match: 'İşlem katsayısı kaynak tabloda doğrulandı. Üretici / VIN uygunluğu doğrulanmış değildir.',
   documented_base_only: 'Kaynak rehberde ek katsayı uygulanmayan işlem. Üretici / VIN uygunluğu doğrulanmış değildir.',
-  manufacturer_unverified: 'Bu üretici, model ve yıl için parça uygunluğu doğrulanamadı. Piyasa değer farkı kullanılır.',
-  manufacturer_documented: 'Parça kategorisi üretici belgesinde eşleşti; VIN uygunluğu, malzeme ve bu modele uygulanacak katsayı doğrulanamadı. Piyasa değer farkı kullanılır.',
-  coefficient_unverified: 'Seçilen işlem için tam sayısal katsayı doğrulanamadı. Piyasa değer farkı kullanılır.',
-  part_mismatch: 'Parça, konum, adet, malzeme veya işlem tam eşleşmedi. Piyasa değer farkı kullanılır.',
+  manufacturer_unverified: 'Bu üretici, model ve yıl için parça uygunluğu doğrulanamadı. Referans tahmini araç grubunun genel katsayılarına dayanır; modele özel değerleme değildir.',
+  manufacturer_documented: 'Parça kategorisi üretici belgesinde eşleşti; VIN uygunluğu doğrulanmadı. Referans tahmini araç grubunun genel katsayılarına dayanır; modele özel değerleme değildir.',
+  coefficient_unverified: 'Seçilen işlem için sayısal katsayı bulunamadı. Bu parçayla referans tahmini hesaplanamaz.',
+  part_mismatch: 'Parça, konum, adet, malzeme veya işlem referans tabloyla eşleşmedi. Bu seçimle referans tahmini hesaplanamaz.',
 }
 
 export interface ValueLossPartCoverage {
@@ -176,15 +176,11 @@ export function resolveValueLossCalculatorParts(vehicleType: string, body: Value
     seenPhysical.add(physical)
     const source = sources.find(part => part.stableRuleId === entry.stableRuleId)
     if (entry.stableRuleId !== null && !source) issues.push({ field: 'partSelections', message: 'Parça referansı seçilen araç grubuna ait değildir.' })
-    if (vehicle !== undefined) {
-      const manufacturerSource = findValueLossManufacturerPart(vehicle.identity, vehicle.modelYear, vehicleType, body, entry.partName)
-      // A repair manual is not evidence of VIN fitment or of a model-specific value-loss coefficient.
-      coverage.push({ entryId: entry.entryId, reason: manufacturerSource ? 'manufacturer_documented' : 'manufacturer_unverified', manufacturerSource })
-      requiresMarketDifference = true
-      continue
-    }
+    // Manufacturer documentation describes fitment, independently of the generic reference arithmetic.
+    const manufacturerSource = vehicle === undefined ? null : findValueLossManufacturerPart(vehicle.identity, vehicle.modelYear, vehicleType, body, entry.partName)
+    const referenceReason = vehicle === undefined ? 'reference_match' : manufacturerSource ? 'manufacturer_documented' : 'manufacturer_unverified'
     const principle = valueLossBaseOnlyPrinciple(entry)
-    if (principle !== null) { baseOnlyParts.push({ entryId: entry.entryId, principle }); coverage.push({ entryId: entry.entryId, reason: 'documented_base_only', manufacturerSource: null }); continue }
+    if (principle !== null) { baseOnlyParts.push({ entryId: entry.entryId, principle }); coverage.push({ entryId: entry.entryId, reason: 'documented_base_only', manufacturerSource }); continue }
     const operation = entry.operation === 'replacement_paint' ? 'replacement' : entry.operation === 'repair_paint' || entry.operation === 'paintless_repair' ? 'repair' : entry.operation
     const hasPaint = entry.operation === 'replacement_paint' || entry.operation === 'repair_paint'
     const repeated = entry.stableRuleId !== null && seenRules.has(entry.stableRuleId)
@@ -201,7 +197,7 @@ export function resolveValueLossCalculatorParts(vehicleType: string, body: Value
       coverage.push({ entryId: entry.entryId, reason: 'coefficient_unverified', manufacturerSource: null })
       continue
     }
-    coverage.push({ entryId: entry.entryId, reason: 'reference_match', manufacturerSource: null })
+    coverage.push({ entryId: entry.entryId, reason: referenceReason, manufacturerSource })
     const row: RealMarketValueLossPartInput = { stableRuleId: source.stableRuleId, operation, paintMode: operation === 'paint' ? entry.paintMode : null, newPartPriceMinor: entry.newPartPriceMinor, repairLaborMinor: entry.repairLaborMinor, partPriceAvailability: entry.partPriceAvailability, priorPartState: entry.priorPartState, treatment: entry.treatment }
     referenceParts.push(row)
     if (hasPaint) referenceParts.push({ ...row, operation: 'paint', paintMode: entry.paintMode })

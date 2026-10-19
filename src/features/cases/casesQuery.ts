@@ -50,6 +50,7 @@ const STAGE_CODES: Record<CaseStage, string> = {
   Onarımda: 'under_repair',
   Araştırmada: 'under_investigation',
   'Ağır Hasar/Pert': 'total_loss',
+  'Kapanışa Hazır': 'ready_to_close',
   Kapanış: 'closed',
 }
 

@@ -4,6 +4,8 @@ import type pg from 'pg'
 import {
   AUTH_LOGIN_ROUTE,
   DASHBOARD_ROUTE,
+  DASHBOARD_STAGE_SET_HEADER,
+  DASHBOARD_STAGE_SET_VERSION,
   dashboardResponseSchema,
   type DashboardResponse,
 } from '@hasarbotu/contracts'
@@ -232,7 +234,7 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     const id = await seedCase(99, 'new_notification', '34 XYZ 999', null)
     try {
       await pool.query('UPDATE cases SET case_type=NULL WHERE id=$1', [id])
-      const response = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie } })
+      const response = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie, [DASHBOARD_STAGE_SET_HEADER]: DASHBOARD_STAGE_SET_VERSION } })
       expect(response.statusCode).toBe(200)
       const body = dashboardResponseSchema.parse(response.json())
       expect(body.items.find(item => item.caseId === id)).toMatchObject({ caseType: null, documentRuleVersion: null, missingDocumentCount: 0, controlRequiredDocumentCount: 0 })
@@ -250,7 +252,7 @@ describeDb('Durum Panosu gerçek API verileri', () => {
       const login = await nightApp.inject({ method: 'POST', url: AUTH_LOGIN_ROUTE, payload: { email: EMAIL, password: PASSWORD } })
       expect(login.statusCode).toBe(200)
       const nightCookie = String(login.headers['set-cookie']).split(';')[0]!
-      const response = await nightApp.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie: nightCookie } })
+      const response = await nightApp.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie: nightCookie, [DASHBOARD_STAGE_SET_HEADER]: DASHBOARD_STAGE_SET_VERSION } })
       expect(response.statusCode).toBe(200)
       expect(dashboardResponseSchema.parse(response.json()).asOfDate).toBe('2026-07-17')
     } finally { await nightApp.close() }
@@ -264,13 +266,13 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     const response = await app.inject({
       method: 'GET',
       url: DASHBOARD_ROUTE,
-      headers: { cookie },
+      headers: { cookie, [DASHBOARD_STAGE_SET_HEADER]: DASHBOARD_STAGE_SET_VERSION },
     })
     expect(response.statusCode).toBe(200)
     const body = response.json() as DashboardResponse
     expect(dashboardResponseSchema.safeParse(body).success).toBe(true)
     expect(body.asOfDate).toBe('2026-07-16')
-    expect(body.stageCounts.map(item => item.stage)).toEqual(['new_notification', 'parts_and_labor', 'under_repair', 'under_investigation', 'total_loss', 'closed'])
+    expect(body.stageCounts.map(item => item.stage)).toEqual(['new_notification', 'parts_and_labor', 'under_repair', 'under_investigation', 'total_loss', 'ready_to_close', 'closed'])
     expect(body.stageCounts.find(item => item.stage === 'under_repair')?.count).toBe(5)
     expect(body.priorityVersion).toBe('dashboard-priority/1.1.0')
     expect(body.summary).toMatchObject({
@@ -333,7 +335,7 @@ describeDb('Durum Panosu gerçek API verileri', () => {
     expect(auditAfter.rows[0]).toEqual(auditBefore.rows[0])
   })
   it('excludes archived cases from both dashboard plates and totals', async () => {
-    const read = async () => (await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie } })).json() as DashboardResponse
+    const read = async () => (await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie, [DASHBOARD_STAGE_SET_HEADER]: DASHBOARD_STAGE_SET_VERSION } })).json() as DashboardResponse
     const before = await read()
     const id = await seedCase(90, 'new_notification', '34 ARC 123', null)
     await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [id])
@@ -350,7 +352,7 @@ describeDb('Durum Panosu gerçek API verileri', () => {
       ids.push(await seedCase(94, 'new_notification', '34 STG 094', null))
       await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed' WHERE id=ANY($1::uuid[])", [ids.slice(2)])
       await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [ids[3]])
-      const response = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie } })
+      const response = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie, [DASHBOARD_STAGE_SET_HEADER]: DASHBOARD_STAGE_SET_VERSION } })
       const body = dashboardResponseSchema.parse(response.json())
       expect(body.stageCounts.find(item => item.stage === 'under_investigation')?.count).toBe(1)
       expect(body.stageCounts.find(item => item.stage === 'total_loss')?.count).toBe(1)

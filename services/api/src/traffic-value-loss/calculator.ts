@@ -8,7 +8,7 @@ export function calculateValueLoss(input: ValueLossCalculatorRequest): ValueLoss
   if (!date.ok) throw new Error('Calculator received an invalid date')
   const selected = selectTrafficValueLossRule(date.value)
   if (selected.status !== 'selected') throw new Error('Calculator rule selection failed')
-  let market = selected.kind === 'legacy' || input.calculationBasis === 'market_difference'
+  const market = selected.kind === 'legacy' || input.calculationBasis === 'market_difference'
   const conditionIssue = input.vehicleCondition === 'normal' ? null
     : input.vehicleCondition === 'prior_heavy_damage' ? 'Önceki ağır hasar nedeniyle bu araç için değer kaybı hesaplanamaz.'
     : input.vehicleCondition === 'current_heavy_damage' ? 'Mevcut ağır / pert hasar nedeniyle değer kaybı hesaplanamaz.'
@@ -22,8 +22,8 @@ export function calculateValueLoss(input: ValueLossCalculatorRequest): ValueLoss
   const resolved = input.partSelections === undefined ? null : resolveValueLossCalculatorParts(input.vehicleType, input.bodyType ?? 'unspecified', sourceParts, input.partSelections, input.vehicleIdentity === undefined ? undefined : { identity: input.vehicleIdentity, modelYear: input.modelYear })
   if (resolved?.issues.length) return { amountMinor: null, ruleVersion: selected.ruleVersion, calculationMethod: market ? 'market_value_difference' : 'real_market_analysis', issues: resolved.issues }
   if (resolved?.requiresMarketDifference) {
-    market = true
-    if (input.postRepairMarketValueMinor === null) return { amountMinor: null, ruleVersion: TRAFFIC_VALUE_LOSS_RULE_VERSION, calculationMethod: 'market_value_difference', issues: [{ field: 'postRepairMarketValueMinor', message: 'Parça uygunluğu veya işlem katsayısı tam doğrulanamadı. Piyasa değer farkı için onarım sonrası piyasa değerini girin.' }] }
+    if (!market) return { amountMinor: null, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: 'real_market_analysis', issues: [{ field: 'partSelections', message: 'Seçilen parça veya işlem için referans katsayısı bulunamadı. Parça, işlem, adet ve malzeme bilgilerini kontrol edin; bu seçimle tahmini tutar hesaplanamaz.' }] }
+    if (input.postRepairMarketValueMinor === null) return { amountMinor: null, ruleVersion: TRAFFIC_VALUE_LOSS_RULE_VERSION, calculationMethod: 'market_value_difference', issues: [{ field: 'postRepairMarketValueMinor', message: 'Piyasa değer farkı için onarım sonrası piyasa değerini girin.' }] }
     if (input.postRepairMarketValueMinor > input.marketValueMinor) return { amountMinor: null, ruleVersion: TRAFFIC_VALUE_LOSS_RULE_VERSION, calculationMethod: 'market_value_difference', issues: [{ field: 'postRepairMarketValueMinor', message: 'Onarım sonrası piyasa değeri kaza öncesi değeri aşamaz.' }] }
   }
 

@@ -28,6 +28,29 @@ async function fill() {
 }
 
 describe('simple value loss calculator', () => {
+  it('calculates from automatically imported manufacturer and model with no post-repair value', async () => {
+    const port = fixture()
+    render(view(port, sourceCase({ Marka: 'Toyota', 'Araç Tipi': 'Corolla', 'Model Yılı': '2024', 'Araç Tarife Grubu': 'OTOMOBİL', 'Kasa Tipi': 'Sedan' })))
+    await fill()
+    expect(screen.getByLabelText('Hesap yöntemi')).toHaveValue('reference')
+    expect(screen.queryByLabelText('Onarım sonrası piyasa değeri (TL)')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Hesapla' }))
+    await screen.findByText(/55\.000,00/)
+    expect(port.calculate).toHaveBeenCalledWith(item.caseId, expect.objectContaining({ calculationBasis: 'reference', vehicleIdentity: { manufacturer: 'Toyota', model: 'Corolla' }, postRepairMarketValueMinor: null, damageAmountMinor: 10_000_000 }))
+  })
+  it('discards results verified under the previous automatic market-selection behavior', async () => {
+    const port = fixture()
+    const mounted = render(view(port)); await fill()
+    await userEvent.click(screen.getByRole('button', { name: 'Hesapla' }))
+    await screen.findByText(/55\.000,00/)
+    mounted.unmount()
+    const key = `hasarbotu-value-loss-calculator-v1:${session.user!.organizationId}:${session.user!.id}:${item.caseId}`
+    const stored = JSON.parse(sessionStorage.getItem(key)!)
+    sessionStorage.setItem(key, JSON.stringify({ ...stored, verificationVersion: 1 }))
+    render(view(port))
+    expect(screen.getByLabelText('Kilometre')).toHaveValue('50000')
+    expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
+  })
   it('automatically fills available case and SBM fields when the calculator opens', async () => {
     const port = fixture()
     const current = sourceCase({ Marka: 'FORD', 'Araç Tipi': 'TRANSIT', 'Model Yılı': '2021', 'Araç Tarife Grubu': 'KAMYONET', 'Kasa Tipi': 'Panelvan' })
@@ -67,7 +90,7 @@ describe('simple value loss calculator', () => {
     expect(screen.getByLabelText('Rayiç bedeli (TL)')).toHaveValue('1.000.000')
     expect(screen.getByLabelText('1. parça adı')).toHaveValue('SOL ÇAMURLUK')
   })
-  it('routes an unverified manufacturer/model to market values and invalidates an earlier reference amount', async () => {
+  it('keeps a reference estimate after adding manufacturer/model and calculates without post-repair market value', async () => {
     const port = fixture()
     render(view(port)); await fill()
     await userEvent.click(screen.getByRole('button', { name: 'Hesapla' }))
@@ -76,10 +99,11 @@ describe('simple value loss calculator', () => {
     fireEvent.change(screen.getByLabelText('Model', { exact: true }), { target: { value: 'Corolla' } })
     expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
     expect(screen.getByText(/Bu üretici, model ve yıl/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Hesap yöntemi')).toHaveValue('market_difference')
-    fireEvent.change(screen.getByLabelText('Onarım sonrası piyasa değeri (TL)'), { target: { value: '900.000' } })
+    expect(screen.getByLabelText('Hesap yöntemi')).toHaveValue('reference')
+    expect(screen.queryByLabelText('Onarım sonrası piyasa değeri (TL)')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Hasar tutarı (TL)')).toHaveValue('100000')
     await userEvent.click(screen.getByRole('button', { name: 'Hesapla' }))
-    await waitFor(() => expect(port.calculate).toHaveBeenLastCalledWith('case-1', expect.objectContaining({ calculationBasis: 'market_difference', vehicleIdentity: { manufacturer: 'Toyota', model: 'Corolla' } })))
+    await waitFor(() => expect(port.calculate).toHaveBeenLastCalledWith('case-1', expect.objectContaining({ calculationBasis: 'reference', postRepairMarketValueMinor: null, vehicleIdentity: { manufacturer: 'Toyota', model: 'Corolla' } })))
   })
   it('shows one calculation action and returns an amount without evidence, draft, approval or report steps', async () => {
     const port = fixture()
@@ -183,7 +207,7 @@ describe('simple value loss calculator', () => {
     expect(screen.getByLabelText('Çalışma saati')).toHaveValue('')
     await waitFor(() => expect(port.catalog).toHaveBeenLastCalledWith('case-1','D'))
   })
-  it('records an unlisted part completely, requires market inputs and retains it across navigation', async () => {
+  it('keeps unsupported parts in reference mode with a clear warning and offers explicit market comparison', async () => {
     const port = fixture(), user = userEvent.setup()
     vi.mocked(port.calculate).mockResolvedValue({ ...result, amountMinor: 7_500_000, calculationMethod: 'market_value_difference' })
     const current = render(view(port))
@@ -193,8 +217,11 @@ describe('simple value loss calculator', () => {
     await user.type(screen.getByLabelText('1. parça adı'), 'Ön amortisör')
     fireEvent.change(screen.getByLabelText('Rayiç bedeli (TL)'), { target: { value: '1.000.000' } })
     await user.click(screen.getByRole('button', { name: 'Hesapla' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Onarım sonrası piyasa değerini')
+    expect(screen.getByRole('alert')).toHaveTextContent('referans katsayısı bulunamadı')
+    expect(screen.getByLabelText('Hesap yöntemi')).toHaveValue('reference')
+    expect(screen.queryByLabelText('Onarım sonrası piyasa değeri (TL)')).not.toBeInTheDocument()
     expect(port.calculate).not.toHaveBeenCalled()
+    await user.selectOptions(screen.getByLabelText('Hesap yöntemi'), 'market_difference')
     fireEvent.change(screen.getByLabelText('Onarım sonrası piyasa değeri (TL)'), { target: { value: '900.000' } })
     fireEvent.change(screen.getByLabelText('Karşı taraf kusuru (%)'), { target: { value: '75' } })
     fireEvent.change(screen.getByLabelText('Ön amortisör konumu'), { target: { value: 'sol ön' } })
@@ -211,10 +238,13 @@ describe('simple value loss calculator', () => {
     const port = fixture(), user = userEvent.setup()
     render(view(port)); await fill()
     fireEvent.change(screen.getByLabelText('SOL ÇAMURLUK adedi'), { target: { value: '2' } })
-    expect(screen.getByLabelText('Hesap yöntemi')).toHaveValue('market_difference')
+    expect(screen.getByLabelText('Hesap yöntemi')).toHaveValue('reference')
     await user.click(screen.getByRole('button', { name: 'Hesapla' }))
     expect(screen.getByRole('alert')).toHaveTextContent('konumlarını')
     fireEvent.change(screen.getByLabelText('SOL ÇAMURLUK konumu'), { target: { value: '1. ve 2. bölüm' } })
+    await user.click(screen.getByRole('button', { name: 'Hesapla' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('referans katsayısı bulunamadı')
+    await user.selectOptions(screen.getByLabelText('Hesap yöntemi'), 'market_difference')
     fireEvent.change(screen.getByLabelText('Onarım sonrası piyasa değeri (TL)'), { target: { value: '900.000' } })
     await user.click(screen.getByRole('button', { name: 'Hesapla' }))
     await screen.findByText(/55\.000,00/)
@@ -252,6 +282,6 @@ describe('simple value loss calculator', () => {
     await user.selectOptions(screen.getByLabelText('Kasa / araç yapısı'), 'sedan')
     expect(screen.getByLabelText('2. parça adı')).toHaveValue('SOL YAN PANEL (TİCARİ VE CABRİO)')
     expect(screen.getByLabelText('SOL YAN PANEL (TİCARİ VE CABRİO) konumu')).toHaveValue('sol arka bölüm')
-    expect(screen.getByLabelText('Hesap yöntemi')).toHaveValue('market_difference')
+    expect(screen.getByLabelText('Hesap yöntemi')).toHaveValue('reference')
   })
 })

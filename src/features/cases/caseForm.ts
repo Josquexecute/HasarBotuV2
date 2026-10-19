@@ -9,6 +9,7 @@ export const CASE_STAGE_OPTIONS: readonly { value: CaseStageCode; label: CaseSta
   { value: 'under_repair', label: 'Onarımda' },
   { value: 'under_investigation', label: 'Araştırmada' },
   { value: 'total_loss', label: 'Ağır Hasar/Pert' },
+  { value: 'ready_to_close', label: CASE_STAGE_LABELS.ready_to_close },
 ]
 
 const NON_ALPHANUMERIC = /[^\p{L}\p{N}]+/gu

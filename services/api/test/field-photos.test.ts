@@ -9,7 +9,7 @@ import { createCanvas } from '@napi-rs/canvas'
 import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/database'
 import { buildApp, hashPassword } from '../src/index.js'
 import { hashAgentSecret } from '../src/agent/auth.js'
-import { runFieldPhotoOnce } from '../../file-agent/dist/field-photo-worker.js'
+import { nextFieldPhotoName, runFieldPhotoOnce } from '../../file-agent/dist/field-photo-worker.js'
 import { createFieldPhotoStore } from '../src/field-photos/store.js'
 import { hasActiveFieldPhoto } from '../src/field-photos/active.js'
 import { createGoogleProvider, validateGoogleClaims, type GoogleConfig } from '../src/tracking/google.js'
@@ -186,4 +186,31 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
     expect((await pool.query('SELECT status,received_bytes,attempt_count FROM field_photo_uploads WHERE id=$1', [upload.id])).rows[0]).toEqual({ status: 'queued', received_bytes: jpeg.length, attempt_count: 0 })
     expect(await readFile(join(originalDirectory, `${upload.id}.bin`))).toEqual(jpeg)
   })
+  it.each(['damage', 'chassis', 'odometer'] as const)('skips reserved %s names from interrupted uploads without changing the case location', async kind => {
+    await pool.query("UPDATE field_photo_uploads SET status='failed',lease_expires_at=NULL WHERE status IN ('queued','processing')")
+    const folder = join(physicalRoot, relativePath)
+    const store = createFieldPhotoStore(pool, originalDirectory)
+    const reserved: string[] = []
+    for (let index = 0; index < 2; index++) {
+      const upload = await receive(jpeg, kind)
+      const job = (await store.claim(agent()))!
+      expect(job.id).toBe(upload.id)
+      const fileName = nextFieldPhotoName(kind, [...await readdir(folder), ...reserved])
+      reserved.push(fileName)
+      await store.prepare(agent(), upload.id, { leaseToken: job.leaseToken, fileName, byteSize: 102400, contentHash: 'a'.repeat(64), width: 1000, height: 1000 })
+      await store.reportFailure(agent(), upload.id, job.leaseToken, 'photo_write_failed', false)
+      await expect(readFile(join(folder, fileName))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
+    const upload = await receive(jpeg, kind)
+    const gate = join(work, 'reserved-name-freshness.mjs')
+    await writeFile(gate, "import {existsSync} from 'node:fs';const args=process.argv.slice(2);const ready=args[args.indexOf('--operation')+1]==='file_destination'&&!existsSync(args[args.indexOf('--target-root')+1]);console.log(JSON.stringify({CaseStatus:ready?'ready':'unknown'}));process.exitCode=ready?0:1\n")
+    const config = { apiBaseUrl: origin, agentId, agentSecret, roots: { office: physicalRoot }, leaseSeconds: 120, pollIntervalMs: 100,
+      freshnessGate: { toolPath: gate, pcloudLocalDatabasePath: join(work, 'fixture.db'), topLevelFolderName: 'Synthetic', attestationStoreDirectory: work } }
+    expect(await runFieldPhotoOnce(config)).toBe(true)
+    const row = (await pool.query('SELECT status,output_file_name,last_error_code FROM field_photo_uploads WHERE id=$1', [upload.id])).rows[0]
+    expect(row).toMatchObject({ status: 'ready', last_error_code: null })
+    expect(reserved).not.toContain(row.output_file_name)
+    expect((await readFile(join(folder, row.output_file_name))).subarray(0, 2)).toEqual(Buffer.from([255,216]))
+    expect(await readFile(join(originalDirectory, `${upload.id}.bin`))).toEqual(jpeg)
+  }, 60000)
 })

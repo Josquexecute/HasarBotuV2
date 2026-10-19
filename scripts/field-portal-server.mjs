@@ -33,11 +33,11 @@ export function createFieldPortal({ directory, upstream, publicOrigin, allowTail
         const limit = trustedTailnet ? 16 * 1024 * 1024 : url.pathname.endsWith('/chunk') ? 262144 : 65536
         if (Number(request.headers['content-length'] ?? 0) > limit) { reject(413,'payload_too_large'); return }
         const headers = {}
-        for (const name of ['accept','content-type','content-length','cookie','idempotency-key']) if (request.headers[name]) headers[name] = request.headers[name]
+        for (const name of ['accept','content-type','content-length','cookie','idempotency-key','x-hasarbotu-dashboard-stages']) if (request.headers[name]) headers[name] = request.headers[name]
         const proxy = http.request({ hostname: target.hostname, port: target.port, method, path: url.pathname + url.search, headers, timeout: 90_000 }, incoming => {
           if ((incoming.statusCode ?? 500) >= 300 && (incoming.statusCode ?? 500) < 400) { incoming.resume(); reject(502,'unexpected_redirect'); return }
           response.statusCode = incoming.statusCode ?? 502
-          for (const name of ['content-type','content-length','content-disposition','retry-after','referrer-policy','content-security-policy']) if (incoming.headers[name]) response.setHeader(name, incoming.headers[name])
+          for (const name of ['content-type','content-length','content-disposition','retry-after','referrer-policy','content-security-policy','vary']) if (incoming.headers[name]) response.setHeader(name, incoming.headers[name])
           const cookies = incoming.headers['set-cookie']
           if (cookies) response.setHeader('set-cookie', cookies.map(cookie => !trustedTailnet && origin.protocol === 'https:' && !/;\s*Secure(?:;|$)/iu.test(cookie) ? `${cookie}; Secure` : cookie))
           incoming.on('error', () => response.destroy())

@@ -10,6 +10,7 @@ export const CASE_STAGES = [
   'under_repair',
   'under_investigation',
   'total_loss',
+  'ready_to_close',
   'closed',
 ] as const
 
@@ -20,10 +21,10 @@ export const OPEN_CASE_STAGES = CASE_STAGES.filter((stage) => stage !== 'closed'
 export type OpenCaseStage = (typeof OPEN_CASE_STAGES)[number]
 
 export const LEGACY_CASE_STAGES = ['vehicle_or_service_pending', 'inspection_pending', 'damage_assessment',
-  'repair_approval_pending', 'reporting', 'closing_documents', 'ready_to_close'] as const
+  'repair_approval_pending', 'reporting', 'closing_documents'] as const
 const LEGACY_STAGES: ReadonlySet<string> = new Set(LEGACY_CASE_STAGES)
 
-/** Older clients and immutable history retain their codes; current workflows use six stages. */
+/** Older clients and immutable history retain their codes; obsolete stages map to repair. */
 export function normalizeCaseStage(value: unknown): unknown {
   return typeof value === 'string' && LEGACY_STAGES.has(value.trim()) ? 'under_repair' : value
 }

@@ -10,6 +10,7 @@ HasarBotu V2'nin UI ile gelecekteki merkezi API arasindaki **surumlu, runtime do
 - Domain tipleri ile JSON DTO **ayni sey degildir**. Donusum yalnizca `v1/cases/mappers.ts` icindeki saf mapper'larla, acik sekilde yapilir.
 - Domainde opsiyonel iliski `undefined`/alan yoklugu; wire DTO'da tutarli `null` ile temsil edilir.
 - Sunum alani, Turkce sabit etiket, renk veya badge sozlesmeye sizmaz.
+- Pano istemcileri yedi asamali yanit icin `x-hasarbotu-dashboard-stages: 7` gonderir. Bu baslik yoksa alti asamali eski istemciler icin `ready_to_close` yalniz yanitta `under_repair` olarak gosterilir; kayitli asama degismez.
 - Hata nesnesi ham girdi degeri, stack, SQL mesaji, mutlak yol, parola veya token tasimaz; yalnizca alan yolu ve kararli kod tasir. `unrecognized_keys` icin reddedilen alan ADLARI (degerler degil) en cok 10 adet, temizlenmis olarak raporlanir.
 
 ## Deger sinirlari

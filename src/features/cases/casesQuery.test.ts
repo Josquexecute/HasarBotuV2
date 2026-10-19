@@ -27,6 +27,10 @@ function state(overrides: Partial<CasesFilterState> = {}): CasesFilterState {
 }
 
 describe('buildCasesPageQuery', () => {
+  it('Kapanışa Hazır filtresini açık dosya aşaması olarak sunucuya taşır', () => {
+    expect(buildCasesPageQuery(state({ stageFilter: 'Kapanışa Hazır' }), TODAY))
+      .toMatchObject({ status: 'open', stage: 'ready_to_close' })
+  })
   it('queries only folders awaiting classification when Seçiniz is selected', () => {
     expect(buildCasesPageQuery(state({ typeFilter: 'Seçiniz' }), TODAY).caseType).toBe('unclassified')
   })

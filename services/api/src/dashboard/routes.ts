@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
-import { DASHBOARD_ROUTE } from '@hasarbotu/contracts'
+import { DASHBOARD_ROUTE, DASHBOARD_STAGE_SET_HEADER, DASHBOARD_STAGE_SET_VERSION } from '@hasarbotu/contracts'
 import { toOfficeDate } from '@hasarbotu/domain'
 import { createAuthStore } from '../auth/store.js'
 import { requireSession } from '../auth/guard.js'
@@ -24,6 +24,16 @@ export function registerDashboardRoutes(
     if (session === undefined) return
     const evaluatedAt = options.clock.nowUtcIso()
     const asOfDate = toOfficeDate(evaluatedAt)
-    return dashboard.read(session.user.organizationId, asOfDate, evaluatedAt)
+    const result = await dashboard.read(session.user.organizationId, asOfDate, evaluatedAt)
+    reply.header('Vary', DASHBOARD_STAGE_SET_HEADER)
+    if (request.headers[DASHBOARD_STAGE_SET_HEADER] === DASHBOARD_STAGE_SET_VERSION) return result
+    // Installed six-stage clients reject additional counters and unknown item stages.
+    const readyCount = result.stageCounts.find(item => item.stage === 'ready_to_close')?.count ?? 0
+    return {
+      ...result,
+      stageCounts: result.stageCounts.filter(item => item.stage !== 'ready_to_close').map(item =>
+        item.stage === 'under_repair' ? { ...item, count: item.count + readyCount } : item),
+      items: result.items.map(item => item.stage === 'ready_to_close' ? { ...item, stage: 'under_repair' } : item),
+    }
   })
 }

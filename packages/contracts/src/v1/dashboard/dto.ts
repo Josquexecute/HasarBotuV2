@@ -15,6 +15,8 @@ import {
 
 export const DASHBOARD_OPEN_STAGES = OPEN_CASE_STAGES
 export const DASHBOARD_STAGES = CASE_STAGES
+export const DASHBOARD_STAGE_SET_HEADER = 'x-hasarbotu-dashboard-stages'
+export const DASHBOARD_STAGE_SET_VERSION = '7'
 
 export const DASHBOARD_PRIORITIES = ['critical', 'high', 'medium', 'normal'] as const
 export const DASHBOARD_HUMAN_APPROVAL_KINDS = [

@@ -727,7 +727,7 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
       status: 'manual_recovery_required', failureReasonCode: 'case_changed_after_move',
     })
     expect((await pool.query('SELECT lifecycle_status,workflow_stage FROM cases WHERE id=$1', [seeded.caseId])).rows[0])
-      .toEqual({ lifecycle_status: 'open', workflow_stage: 'under_repair' })
+      .toEqual({ lifecycle_status: 'open', workflow_stage: 'ready_to_close' })
     expect((await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action='case_lifecycle.manual_recovery_required' AND resource_id=$1", [planned.id])).rows[0]).toEqual({ n: 1 })
   }, 60_000)
 })

@@ -103,10 +103,11 @@ describe('coefficient verification and manufacturer boundaries', () => {
   })
   it('does not equate a documented manufacturer category with verified VIN fitment or a model coefficient', () => {
     const result = resolveValueLossCalculatorParts('OTOMOBİL', 'sedan', parts, [selection(rule)], { identity: { manufacturer: 'Tesla', model: 'Model 3' }, modelYear: 2023 })
-    expect(result).toMatchObject({ requiresMarketDifference: true, referenceParts: [], coverage: [{ reason: 'manufacturer_documented', manufacturerSource: { manufacturer: 'Tesla' } }] })
+    expect(result).toMatchObject({ requiresMarketDifference: false, coverage: [{ reason: 'manufacturer_documented', manufacturerSource: { manufacturer: 'Tesla' } }] })
+    expect(result.referenceParts).toEqual(resolveValueLossCalculatorParts('OTOMOBİL', 'sedan', parts, [selection(rule)]).referenceParts)
   })
-  it('does not bypass model verification through a zero-additional-coefficient principle', () => {
+  it('keeps documented base-only arithmetic independent of manufacturer fitment', () => {
     const result = resolveValueLossCalculatorParts('OTOMOBİL', 'sedan', parts, [selection(rule, { material: 'plastic_bodywork' })], { identity: { manufacturer: 'Unknown', model: 'Unknown' }, modelYear: 2023 })
-    expect(result).toMatchObject({ requiresMarketDifference: true, referenceParts: [], baseOnlyParts: [], coverage: [{ reason: 'manufacturer_unverified' }] })
+    expect(result).toMatchObject({ requiresMarketDifference: false, referenceParts: [], baseOnlyParts: [{ entryId: 'one', principle: '3.9' }], coverage: [{ reason: 'documented_base_only' }] })
   })
 })

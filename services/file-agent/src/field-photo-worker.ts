@@ -62,7 +62,13 @@ export async function runFieldPhotoOnce(config: AgentConfig, signal?: AbortSigna
   const headers = { 'x-agent-id': config.agentId, 'x-agent-secret': config.agentSecret }
   async function request(path: string, init: RequestInit = {}) {
     const response = await fetch(base + '/api/v1/field-agent/uploads' + path, { ...init, redirect: 'error', headers: { ...headers, ...init.headers }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) })
-    if (!response.ok) throw new Error(response.status === 409 ? 'case_location_changed' : 'photo_write_failed')
+    if (!response.ok) {
+      if (response.status === 409) {
+        const body = await response.json().catch(() => null) as { code?: unknown } | null
+        if (body?.code === 'photo_name_conflict') throw new Error('photo_name_conflict')
+      }
+      throw new Error(response.status === 409 ? 'case_location_changed' : 'photo_write_failed')
+    }
     return response
   }
   const response = await request('/claim', { method: 'POST' })
@@ -90,18 +96,27 @@ export async function runFieldPhotoOnce(config: AgentConfig, signal?: AbortSigna
     const size = await processImage(input, output, signal), jpeg = await readFile(output)
     await assertRealPathUnderRoot(root, folder)
     let fileName = job.outputFileName ?? nextFieldPhotoName(job.kind, await readdir(folder))
+    const reservedNames: string[] = []
     let published = false
     const stage = resolveUnderRoot(root, `${job.relativePath}/.hb-${randomUUID().slice(0,8)}`)
     try {
     for (let attempt = 0; attempt < 20; attempt++) {
       const prepared = { leaseToken: job.leaseToken, fileName, byteSize: jpeg.length, contentHash: sha(jpeg), ...size }
-      await request(`/${job.id}/prepare`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(prepared) })
+      try {
+        await request(`/${job.id}/prepare`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(prepared) })
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== 'photo_name_conflict') throw error
+        // Interrupted uploads may reserve names before any physical file exists.
+        reservedNames.push(fileName)
+        fileName = nextFieldPhotoName(job.kind, [...await readdir(folder), ...reservedNames])
+        continue
+      }
       const target = resolveUnderRoot(root, `${job.relativePath}/${fileName}`)
       await assertRealPathUnderRoot(root, folder)
       const previous = await lstat(target).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error })
       if (previous) {
         if (job.outputFileName === fileName && !previous.isSymbolicLink() && previous.isFile() && previous.size === jpeg.length && sha(await readFile(target)) === prepared.contentHash) { published = true; break }
-        fileName = nextFieldPhotoName(job.kind, [...await readdir(folder), fileName]); continue
+        fileName = nextFieldPhotoName(job.kind, [...await readdir(folder), ...reservedNames, fileName]); continue
       }
       // A new, non-replacing photo needs a stable destination namespace. Requiring
       // attestations for unrelated photos would block the next upload in a batch.
@@ -114,7 +129,7 @@ export async function runFieldPhotoOnce(config: AgentConfig, signal?: AbortSigna
         await unlink(stage)
         const previous = await lstat(target)
         if (!previous.isSymbolicLink() && previous.isFile() && previous.size === jpeg.length && sha(await readFile(target)) === prepared.contentHash && job.outputFileName === fileName) { published = true; break }
-        fileName = nextFieldPhotoName(job.kind, [...await readdir(folder), fileName]); continue
+        fileName = nextFieldPhotoName(job.kind, [...await readdir(folder), ...reservedNames, fileName]); continue
       }
       const actual = await readFile(target)
       if (actual.length !== jpeg.length || sha(actual) !== prepared.contentHash) throw new Error('photo_write_failed')

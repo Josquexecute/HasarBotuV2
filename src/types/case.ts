@@ -6,6 +6,7 @@ export type CaseStage =
   | 'Onarımda'
   | 'Araştırmada'
   | 'Ağır Hasar/Pert'
+  | 'Kapanışa Hazır'
   | 'Kapanış'
 
 export type CaseStatus = 'Açık' | 'Kapalı' | 'Beklemede' | 'Gecikmiş' | 'Kontrol Bekliyor'
@@ -16,6 +17,7 @@ export type CaseStageCode =
   | 'under_repair'
   | 'under_investigation'
   | 'total_loss'
+  | 'ready_to_close'
   | 'closed'
 
 export interface CaseRecord {

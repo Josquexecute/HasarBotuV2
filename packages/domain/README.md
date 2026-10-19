@@ -19,7 +19,7 @@ Kilit ürün kuralı `isValueLossRequired` ile saf biçimde temsil edilir: Trafi
 
 `CaseStatus` yaşam döngüsünü temsil eder ve yalnız `open` ile `closed` değerlerini kabul eder. Mevcut UI'daki “Beklemede”, “Gecikmiş” ve “Kontrol Bekliyor” değerleri yaşam döngüsü durumu değildir; bunlar takip/operasyon sunumlarıdır ve ortak çekirdeğe alınmamıştır.
 
-`CaseStage` altı aşama taşır: `new_notification` (Yeni İhbar), `parts_and_labor` (Parça Referans Kodları İstenildi), `under_repair` (Onarımda), `under_investigation` (Araştırmada), `total_loss` (Ağır Hasar/Pert) ve `closed` (Kapanış). Eski aşama kodları okuma ve komut sınırlarında Onarımda olarak normalleştirilir; kapanış yalnız fiziksel konum doğrulamasıyla tamamlanır.
+`CaseStage` yedi aşama taşır: `new_notification` (Yeni İhbar), `parts_and_labor` (Parça Referans Kodları İstenildi), `under_repair` (Onarımda), `under_investigation` (Araştırmada), `total_loss` (Ağır Hasar/Pert), `ready_to_close` (Kapanışa Hazır) ve `closed` (Kapanış). Kaldırılan eski aşama kodları okuma ve komut sınırlarında Onarımda olarak normalleştirilir; Kapanışa Hazır dosyayı açık tutar, kapanış yalnız fiziksel konum doğrulamasıyla tamamlanır.
 
 ## Kimlik ve tarih politikası
 

@@ -178,7 +178,52 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.60**, 2026-10-19T12:22:59.161Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.63**, 2026-10-19T16:57:03.623Z; Windows x64,
+105.197.784 bayt, SHA-256 `8b764420cc327f8d4713ac810917a4e0505b2aed59f197b2465310a78057d530`.
+Genel kod taramasında iki hata giderildi: yarıda kalan aktarımların ayırdığı fotoğraf
+adları hasar, şase ve kilometre yüklemelerini engellemez; seçimden kaldırılan saha
+fotoğraflarının önizlemeleri hemen bellekten bırakılır. Gerçek API/PostgreSQL/worker/disk
+zincirinde üç ad çakışması ve UI bellek bırakma regresyonu doğrulandı. 3.053 genel test
+ve ayrı script koşusunda 209 test geçti; 6 harici canlı bağlantı testi atlandı. Ek script
+koşusunda atlanan veritabanı senaryosu genel pakette veritabanıyla geçti. 178 JavaScript
+ve 60 PowerShell dosyası sözdizimi, typecheck, lint, Windows servis doğrulaması,
+derleme, gerçek x64 paket açılışı ve yayınlayıcı entegrasyonu geçti. Fotoğraf worker'ı
+ve 61 saha UI dosyası yedeklenip hash ile doğrulandı; iki worker yeniden başlatıldı,
+beş ofis servisi çalışıyor. Eski varlıklar korundu; gerçek dosyalar veya fotoğraf kayıtları
+test için değiştirilmedi. Kurulu 0.1.61 istemcisinde `available`, sunulan saha HTML/JS
+hash eşleşmesi ve kimlik doğrulamalı HTTP 200 paket indirmesinde tam boyut/SHA-256
+eşleşmesi doğrulandı. Önceki 0.1.62 manifesti ve değişmez paketi korundu; zorla kurulum
+yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.62**, 2026-10-19T14:47:34.524Z; Windows x64,
+105.197.911 bayt, SHA-256 `832c0085cf2c9552d6cf9fb5d0c56f1760e8cf9307c537ff68d9e3138ffe250f`.
+**Kapanışa Hazır** (`ready_to_close`) oluşturma, düzenleme, aşama filtresi ve panoya
+geri eklendi; bu aşama dosyayı açık tutar. Yeni pano istemcileri yedi aşamalı yanıtı
+ister; eski istemcilere uyumlu altı aşamalı yanıt verilir. Ofis ağ geçidi bu seçim
+başlığını ve `Vary` yanıtını iletir. 3.049 genel ve 17 ağ geçidi testi geçti;
+6 harici canlı bağlantı testi atlandı. Typecheck, lint, derleme ve gerçek x64 paket
+açılışı geçti. Beş çalışma modülü ve ağ geçidi yedeklenip hash ile doğrulandı;
+API, File Agent, klasör tarama ve ağ geçidi servisleri çalışıyor. Kurulu 0.1.61
+istemcisinde `available`, kimlik doğrulamalı yedi/altı aşamalı pano ve aşama filtresi,
+HTTP 200 paket indirmesinde tam boyut/SHA-256 eşleşmesi doğrulandı. Önceki 0.1.61
+manifesti ve değişmez paketi korundu; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.61**, 2026-10-19T13:59:57.354Z; Windows x64,
+105.197.835 bayt, SHA-256 `49e051fdab5157fc9d7e297ed3f7a5d59f72ae48691fb6eb6d4f81443fb9d080`.
+Yeni dönem değer kaybı referans tahmini marka/model bilgileriyle birlikte çalışır;
+onarım sonrası piyasa değeri istemeden rayiç, hasar, araç ve parça bilgilerinden
+hesaplanır. Desteklenmeyen seçimler açıkça belirtilir; otomatik piyasa değer farkına
+geçiş kaldırıldı. Genel katsayılar modele özel değerleme olarak sunulmaz; önceki
+dönem ve isteğe bağlı piyasa karşılaştırması korunur. Eski sonuçlar yeniden hesaplama gerektirir;
+girilmiş bilgiler korunur. 3.044 test geçti, 6 test atlandı; typecheck,
+lint, derleme ve gerçek x64 paket açılışı geçti. Üç çalışma modülü yedeklenip hash
+ile doğrulandı; üç ofis servisi çalışıyor. Kurulu 0.1.60 istemcisinde `available`,
+kimlik doğrulamalı gerçek referans hesabı (onarım sonrası değer olmadan), desteklenmeyen
+parça uyarısı, isteğe bağlı piyasa karşılaştırması ve HTTP 200 indirmesinde tam
+boyut/SHA-256 eşleşmesi doğrulandı. Önceki 0.1.60 manifesti ve değişmez paketi
+korundu; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.60**, 2026-10-19T12:22:59.161Z; Windows x64,
 105.197.360 bayt, SHA-256 `e36c97245235400c6756264f3653a4d9075e5ee0e4b7300ef6dd2c819a148d36`.
 Açık dosyada not yazma yetkisi olan kişi, **Notlar ve Görüşmeler → Kendi notumu sil**
 ile yalnız kendi notunu onaydan sonra kaldırabilir. Sunucu ve veritabanı yazar

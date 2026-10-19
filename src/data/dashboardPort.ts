@@ -334,7 +334,7 @@ export function createHttpDashboardAdapter(
       try {
         response = await fetchImpl(`${baseUrl}/api/v1/dashboard`, {
           credentials: 'include',
-          headers: { accept: 'application/json', ...(options.headers ?? {}) },
+          headers: { accept: 'application/json', ...(options.headers ?? {}), 'x-hasarbotu-dashboard-stages': '7' },
         })
       } catch {
         throw new DashboardError('unavailable', 'dashboard API unreachable')

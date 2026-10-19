@@ -13,9 +13,9 @@ function request(parts: CalculatorPartDraft[]) {
 }
 
 describe('calculator combined operations', () => {
-  it('keeps model matching separate from a generic reference coefficient and uses market difference', () => {
-    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), manufacturer: 'Tesla', model: 'Model 3', modelYear: '2023', marketValue: '1.000.000', postRepairMarketValue: '900.000', faultPercent: '75', parts: [part] }
-    expect(calculatorRequest(draft)).toMatchObject({ vehicleIdentity: { manufacturer: 'Tesla', model: 'Model 3' }, calculationBasis: 'market_difference', faultRateBasisPoints: 7500 })
+  it('keeps manufacturer information without requiring the unknown post-repair value for a reference estimate', () => {
+    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), manufacturer: 'Tesla', model: 'Model 3', modelYear: '2023', usageValue: '50000', damageAmount: '100.000', marketValue: '1.000.000', faultPercent: '75', parts: [part] }
+    expect(calculatorRequest(draft)).toMatchObject({ vehicleIdentity: { manufacturer: 'Tesla', model: 'Model 3' }, calculationBasis: 'reference', postRepairMarketValueMinor: null, faultRateBasisPoints: 7500 })
     expect(() => calculatorRequest({ ...draft, model: '' })).toThrow('marka ve modeli')
   })
   it.each(['repair_paint', 'replacement_paint'] as const)('sends %s as one physical part without duplicating its descriptive metadata', operation => {
@@ -50,7 +50,7 @@ describe('calculator combined operations', () => {
     expect(consolidateCalculatorParts([{ ...part, treatment: 'paintless_repair' }])[0]?.operation).toBe('paintless_repair')
   })
   it('requires market values for custom metal parts and does not drop them from the request', () => {
-    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), marketValue: '1.000.000', postRepairMarketValue: '900.000', faultPercent: '75', parts: [{ ...part, stableRuleId: '', label: 'Ön amortisör', material: 'mechanical' as const, position: 'sol ön', quantity: '2' }] }
+    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), calculationBasis: 'market_difference' as const, marketValue: '1.000.000', postRepairMarketValue: '900.000', faultPercent: '75', parts: [{ ...part, stableRuleId: '', label: 'Ön amortisör', material: 'mechanical' as const, position: 'sol ön', quantity: '2' }] }
     const input = calculatorRequest(draft)
     expect(input).toMatchObject({ calculationBasis: 'market_difference', postRepairMarketValueMinor: 90_000_000, faultRateBasisPoints: 7500, partSelections: [expect.objectContaining({ partName: 'Ön amortisör', stableRuleId: null, quantity: 2, position: 'sol ön' })] })
     expect(() => calculatorRequest({ ...draft, postRepairMarketValue: '' })).toThrow('Onarım sonrası piyasa değerini')

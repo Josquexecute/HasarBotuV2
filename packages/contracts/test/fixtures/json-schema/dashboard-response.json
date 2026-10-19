@@ -103,8 +103,8 @@
       "additionalProperties": false
     },
     "stageCounts": {
-      "minItems": 6,
-      "maxItems": 6,
+      "minItems": 7,
+      "maxItems": 7,
       "type": "array",
       "items": {
         "type": "object",
@@ -117,6 +117,7 @@
               "under_repair",
               "under_investigation",
               "total_loss",
+              "ready_to_close",
               "closed"
             ]
           },
@@ -176,7 +177,8 @@
               "parts_and_labor",
               "under_repair",
               "under_investigation",
-              "total_loss"
+              "total_loss",
+              "ready_to_close"
             ]
           },
           "responsibleUserId": {

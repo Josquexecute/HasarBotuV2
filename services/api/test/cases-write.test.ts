@@ -4,6 +4,9 @@ import type pg from 'pg'
 import {
   AUTH_LOGIN_ROUTE,
   CASES_ROUTE,
+  DASHBOARD_ROUTE,
+  DASHBOARD_STAGE_SET_HEADER,
+  DASHBOARD_STAGE_SET_VERSION,
   IDEMPOTENCY_KEY_HEADER,
   caseDetailResponseSchema,
 } from '@hasarbotu/contracts'
@@ -345,6 +348,48 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     const rules = await app.inject({ url: `${CASES_ROUTE}/${id}/document-requirements`,headers: { cookie } })
     expect(rules.statusCode,rules.payload).toBe(200)
     expect(JSON.stringify(rules.json())).toContain('traffic')
+  })
+
+  it('Kapanışa Hazır kayıt, güncelleme, filtre ve panoda korunur; dosyayı kapatmaz', async () => {
+    const created = await app.inject({
+      method: 'POST', url: CASES_ROUTE, headers: { cookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { ...createPayload('34 HZR 901'), workflowStage: 'ready_to_close' },
+    })
+    expect(created.statusCode).toBe(201)
+    const caseId = created.json().case.id as string
+    expect(created.json().case).toMatchObject({ stage: 'ready_to_close', status: 'open' })
+    for (const [expectedVersion, workflowStage] of [[1, 'under_repair'], [2, 'ready_to_close']] as const) {
+      const updated = await app.inject({
+        method: 'PATCH', url: `${CASES_ROUTE}/${caseId}`, headers: { cookie },
+        payload: { expectedVersion, workflowStage },
+      })
+      expect(updated.statusCode).toBe(200)
+      expect(updated.json().case).toMatchObject({ stage: workflowStage, status: 'open', version: expectedVersion + 1 })
+    }
+    expect((await pool.query('SELECT workflow_stage,lifecycle_status FROM cases WHERE id=$1', [caseId])).rows[0])
+      .toEqual({ workflow_stage: 'ready_to_close', lifecycle_status: 'open' })
+    const detail = await app.inject({ method: 'GET', url: `${CASES_ROUTE}/${caseId}`, headers: { cookie } })
+    expect(detail.json().case).toMatchObject({ stage: 'ready_to_close', status: 'open' })
+    for (const stage of ['ready_to_close', 'under_repair']) {
+      const list = await app.inject({ method: 'GET', url: `${CASES_ROUTE}?stage=${stage}`, headers: { cookie } })
+      expect(list.statusCode).toBe(200)
+      const ids = list.json().items.map((item: { id: string }) => item.id)
+      if (stage === 'ready_to_close') expect(ids).toContain(caseId)
+      else expect(ids).not.toContain(caseId)
+    }
+    const dashboard = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie, [DASHBOARD_STAGE_SET_HEADER]: DASHBOARD_STAGE_SET_VERSION } })
+    expect(dashboard.statusCode).toBe(200)
+    expect(dashboard.json().items).toEqual(expect.arrayContaining([expect.objectContaining({ caseId, stage: 'ready_to_close' })]))
+    expect(dashboard.json().stageCounts).toContainEqual({ stage: 'ready_to_close', count: 1 })
+    const legacy = await app.inject({ method: 'GET', url: DASHBOARD_ROUTE, headers: { cookie } })
+    expect(legacy.statusCode).toBe(200)
+    expect(legacy.headers.vary).toBe(DASHBOARD_STAGE_SET_HEADER)
+    expect(legacy.json().stageCounts).toHaveLength(6)
+    expect(legacy.json().stageCounts.some((item: { stage: string }) => item.stage === 'ready_to_close')).toBe(false)
+    expect(legacy.json().items).toEqual(expect.arrayContaining([expect.objectContaining({ caseId, stage: 'under_repair' })]))
+    const repairCount = dashboard.json().stageCounts.find((item: { stage: string }) => item.stage === 'under_repair').count as number
+    expect(legacy.json().stageCounts).toContainEqual({ stage: 'under_repair', count: repairCount + 1 })
+    expect((await pool.query('SELECT workflow_stage FROM cases WHERE id=$1', [caseId])).rows[0].workflow_stage).toBe('ready_to_close')
   })
 
   it('sinirlar: bos guncelleme 400; baska org dosyasi 404; oturumsuz 401; plaka degistirilemez (strict)', async () => {

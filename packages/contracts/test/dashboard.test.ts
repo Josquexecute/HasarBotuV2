@@ -23,7 +23,7 @@ const response = {
     actionRequiredCaseCount: 1,
     criticalCaseCount: 1,
   },
-  stageCounts: ['new_notification', 'parts_and_labor', 'under_repair', 'under_investigation', 'total_loss', 'closed']
+  stageCounts: ['new_notification', 'parts_and_labor', 'under_repair', 'under_investigation', 'total_loss', 'ready_to_close', 'closed']
     .map(stage => ({ stage, count: stage === 'under_repair' ? 1 : 0 })),
   items: [{
     caseId: '019f7000-0000-7000-8000-000000000001',

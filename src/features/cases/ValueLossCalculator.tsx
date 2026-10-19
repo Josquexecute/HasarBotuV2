@@ -19,7 +19,7 @@ function PartReference({ part, draft, catalog, coverage }: { readonly part: Calc
   if (principle !== null) return <p className="value-loss-calculator__reference">Kaynak rehber {principle}: ek parça / boya katsayısı uygulanmaz. Hasar tutarı üzerinden değerlendirilir; toplam değer kaybı sıfır kabul edilmez.</p>
   const rule = valueLossCalculatorSourceParts(draft.vehicleType, draft.bodyType, catalog?.parts ?? []).find(rule => rule.stableRuleId === part.stableRuleId)
   const coefficients = rule?.coefficients
-  if (!coefficients) return <p className="value-loss-calculator__reference">Bu parça için doğrulanmış özel katsayı bulunamadı. Piyasa değer farkı kullanılır.</p>
+  if (!coefficients) return <p className="value-loss-calculator__reference">Bu parça için referans katsayısı bulunamadı; tahmini tutar hesaplanamaz.</p>
   return <details className="value-loss-calculator__reference"><summary>Kaynakla doğrulanmış referans katsayıları</summary>
     <p>Değişim: {coefficients.replacement ?? 'tanımlı değil'}. Onarım (hafif / orta / ağır): {coefficients.repair ? `${coefficients.repair.light} / ${coefficients.repair.medium} / ${coefficients.repair.heavy}` : 'tanımlı değil'}. Boya (tam / lokal): {coefficients.paint ? `${coefficients.paint.full} / ${coefficients.paint.local}` : 'tanımlı değil'}.</p>
     <p>Kaynak: 01.07.2026 hesaplama Excel'i. Bunlar referans modelinin katsayılarıdır; güncel SEDDK şablonu piyasa araştırmasını esas alır.</p>
@@ -35,7 +35,7 @@ function readRemembered(key: string, item: CaseRecord): { draft: CalculatorDraft
     const previousDefaults = calculatorCaseDefaultsSchema.safeParse(value?.caseDefaults)
     const restored = mergeCalculatorCaseDefaults({ ...draft.data, parts: consolidateCalculatorParts(draft.data.parts) }, calculatorCaseDefaults(item), previousDefaults.success ? previousDefaults.data : { accidentDate: '', vehicleType: 'OTOMOBİL', bodyType: 'unspecified', manufacturer: '', model: '', modelYear: '' })
     const changed = JSON.stringify(restored) !== JSON.stringify(draft.data)
-    return { draft: restored, result: !changed && value?.verificationVersion === 1 && value?.draft?.formatVersion === 2 && result.success ? result.data : null }
+    return { draft: restored, result: !changed && value?.verificationVersion === 2 && value?.draft?.formatVersion === 2 && result.success ? result.data : null }
   } catch { return null } // Invalid or unavailable session storage must not prevent calculation.
 }
 
@@ -66,12 +66,12 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
   const suggestions = useMemo(() => buildValueLossPartSuggestions(draft.vehicleType, draft.bodyType, catalog?.parts ?? []), [draft.vehicleType, draft.bodyType, catalog])
   const marketRequired = calculatorRequiresMarket(draft, catalog?.parts)
   const coverage = useMemo(() => calculatorPartResolution(draft, catalog?.parts ?? []).coverage, [draft, catalog])
-  const market = !modern || draft.calculationBasis === 'market_difference' || marketRequired
+  const market = !modern || draft.calculationBasis === 'market_difference'
   const workingHours = group === 'D'
   const canCalculate = canUsePermission(user, 'analysis_write', ['admin', 'expert', 'case_manager'])
   const remember = useCallback((nextDraft: CalculatorDraft, nextResult: ValueLossCalculatorResponse | null) => {
     if (!storageWritable.current) return
-    try { window.sessionStorage.setItem(storageKey, JSON.stringify({ verificationVersion: 1, caseDefaults: sourceDefaults.current, draft: nextDraft, result: nextResult })) }
+    try { window.sessionStorage.setItem(storageKey, JSON.stringify({ verificationVersion: 2, caseDefaults: sourceDefaults.current, draft: nextDraft, result: nextResult })) }
     catch { storageWritable.current = false; setStorageAvailable(false) }
   }, [storageKey])
 
@@ -175,7 +175,7 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
         <label className="form-field"><span>Kasa / araç yapısı</span><select value={draft.bodyType} onChange={event => updateBody(event.target.value as CalculatorDraft['bodyType'])}>{valueLossBodyOptions(draft.vehicleType).map(body => <option key={body} value={body}>{VALUE_LOSS_BODY_LABELS[body]}</option>)}</select></label>
         <label className="form-field"><span>Marka</span><input value={draft.manufacturer} maxLength={120} onChange={event => update({ manufacturer: event.target.value })} placeholder="Üretici / model eşleştirmesi için" /></label>
         <label className="form-field"><span>Model</span><input value={draft.model} maxLength={160} onChange={event => update({ model: event.target.value })} placeholder="Örn. Model 3" /></label>
-        <label className="form-field"><span>Hesap yöntemi</span><select value={market ? 'market_difference' : 'reference'} onChange={event => update({ calculationBasis: event.target.value as CalculatorDraft['calculationBasis'] })}><option value="reference" disabled={!modern || marketRequired}>Referans tahmin</option><option value="market_difference">Piyasa değer farkı</option></select></label>
+        <label className="form-field"><span>Hesap yöntemi</span><select value={market ? 'market_difference' : 'reference'} onChange={event => update({ calculationBasis: event.target.value as CalculatorDraft['calculationBasis'] })}><option value="reference" disabled={!modern}>Referans tahmin</option><option value="market_difference">Piyasa değer farkı (değerler biliniyorsa)</option></select></label>
         {modern && <><label className="form-field"><span>Model yılı</span><input inputMode="numeric" value={draft.modelYear} onChange={event => update({ modelYear: event.target.value })} placeholder="2024" /></label>
         <label className="form-field"><span>{workingHours ? 'Çalışma saati' : 'Kilometre'}</span><input inputMode="numeric" value={draft.usageValue} onChange={event => update({ usageValue: event.target.value })} placeholder="50000" /></label></>}
         <label className="form-field"><span>Rayiç bedeli (TL)</span><input inputMode="decimal" value={draft.marketValue} onChange={event => update({ marketValue: event.target.value })} placeholder="1.000.000" /></label>
@@ -213,7 +213,8 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
         </div>)}
       </section>
       {!draft.manufacturer.trim() && !draft.model.trim() && <p className="value-loss-calculator__basis" role="status">Marka ve model girilmedi. Liste araç türüne ait referans önerileridir; üretici / model / VIN doğrulaması yapılmış değildir.</p>}
-      {marketRequired && <p className="value-loss-calculator__basis" role="status">Seçilen parçaların üretici uygunluğu, işlem katsayısı, malzemesi veya adedi için tam eşleştirme yok. Araştırmayla belirlenen onarım sonrası piyasa değerini girerek bütün araç için piyasa farkını hesaplayın.</p>}
+      {marketRequired && !market && <p className="value-loss-calculator__basis" role="status">Seçilen parça veya işlem referans tabloda karşılanmıyor. Parça, işlem, adet ve malzeme bilgilerini kontrol edin; bu seçimle tahmini tutar hesaplanamaz.</p>}
+      {!market && <p className="value-loss-calculator__basis">Tahmin; rayiç bedeli, hasar tutarı, araç yaşı, kullanım ve parça işlemlerinden hesaplanır. Onarım sonrası piyasa değerini bilmeniz gerekmez. Sonuç araç grubunun referans tahminidir; modele özel piyasa araştırması değildir.</p>}
       <footer className="value-loss-calculator__footer"><button className="button button--primary" disabled={!canCalculate || busy} type="submit">{busy ? <LoaderCircle className="spin" size={17} /> : <Calculator size={17} />}{busy ? 'Hesaplanıyor…' : 'Hesapla'}</button><div aria-live="polite">{result?.amountMinor != null ? <><span>{result.calculationMethod === 'real_market_analysis' ? 'Tahmini değer kaybı' : 'Piyasa değer farkı'}</span><strong>{formatMoney(result.amountMinor)}</strong></> : <span>{changed ? 'Bilgiler değişti. Yeniden hesaplayın.' : 'Hesaplanan tutar burada görünecek.'}</span>}</div></footer>
       <p className="value-loss-calculator__basis">Piyasa değerlerini kaza tarihi koşullarında, aracın geçmiş hasarını da dikkate alarak girin. Sonuç girilen değerlere dayanır. <a href="https://seddk.gov.tr/UploadContent/Documents/2026-11_Say%C4%B1l%C4%B1_Genelge.pdf" target="_blank" rel="noreferrer">SEDDK 2026/11 rapor şablonu</a></p>
       {!canCalculate && <p role="status">Hesaplama yapmak için yetkiniz bulunmuyor.</p>}

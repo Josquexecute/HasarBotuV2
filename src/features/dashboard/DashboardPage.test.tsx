@@ -37,10 +37,10 @@ beforeEach(() => {
 })
 
 describe('DashboardPage gerçek veri görünüm davranışları', () => {
-  it('shows exactly the six requested stages and opens the closed case list', () => {
+  it('shows all seven stages including ready to close and opens the closed case list', () => {
     renderDashboard()
     expect([...document.querySelectorAll('.workflow-column__head > span')].map(item => item.textContent)).toEqual([
-      'Yeni İhbar', 'Parça Referans Kodları İstenildi', 'Onarımda', 'Araştırmada', 'Ağır Hasar/Pert', 'Kapanış',
+      'Yeni İhbar', 'Parça Referans Kodları İstenildi', 'Onarımda', 'Araştırmada', 'Ağır Hasar/Pert', 'Kapanışa Hazır', 'Kapanış',
     ])
     fireEvent.click(screen.getByRole('button', { name: 'Kapalı dosyaları göster' }))
     expect(screen.getByText('Kapalı dosya listesi hedefi')).toBeInTheDocument()

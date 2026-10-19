@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CASE_STAGES,
   CASE_STATUSES,
+  OPEN_CASE_STAGES,
   isCaseStage,
   isCaseStatus,
   parseCaseStage,
@@ -33,13 +34,14 @@ describe('CaseStatus', () => {
 })
 
 describe('CaseStage', () => {
-  it('yalnızca altı iş akışı aşamasını taşır', () => {
+  it('Kapanışa Hazır dahil yedi iş akışı aşamasını taşır', () => {
     expect(CASE_STAGES).toEqual([
       'new_notification',
       'parts_and_labor',
       'under_repair',
       'under_investigation',
       'total_loss',
+      'ready_to_close',
       'closed',
     ])
   })
@@ -49,13 +51,16 @@ describe('CaseStage', () => {
   })
 
   it('type guard yalnız kanonik aşamayı tanır', () => {
+    expect(isCaseStage('ready_to_close')).toBe(true)
+    expect(OPEN_CASE_STAGES).toContain('ready_to_close')
+    expect(OPEN_CASE_STAGES).not.toContain('closed')
     expect(isCaseStage('under_investigation')).toBe(true)
     expect(isCaseStage('reporting')).toBe(false)
     expect(isCaseStage('Raporlama')).toBe(false)
   })
 
   it.each(['vehicle_or_service_pending', 'inspection_pending', 'damage_assessment', 'repair_approval_pending',
-    'reporting', 'closing_documents', 'ready_to_close'])('eski %s kodunu Onarımda olarak okur', (stage) => {
+    'reporting', 'closing_documents'])('eski %s kodunu Onarımda olarak okur', (stage) => {
     expect(parseCaseStage(stage)).toEqual({ ok: true, value: 'under_repair' })
   })
 

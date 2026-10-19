@@ -25,15 +25,17 @@ const physicalPart = { entryId: 'physical-1', stableRuleId: part.stableId, partN
 function physical(patch: Record<string, unknown> = {}) { return valueLossCalculatorRequestSchema.parse({ ...input, bodyType: 'unspecified', calculationBasis: 'reference', parts: [], partSelections: [physicalPart], ...patch }) }
 
 describe('calculator physical parts and market difference', () => {
-  it('automatically applies whole-vehicle market difference when a reference selection is not fully verified', () => {
-    const value = physical({ partSelections: [physicalPart, { ...physicalPart, entryId: 'unlisted', stableRuleId: null, partName: 'Ön amortisör' }], postRepairMarketValueMinor: 90_000_000, faultRateBasisPoints: 7500 })
+  it('applies whole-vehicle market difference only when explicitly selected', () => {
+    const value = physical({ calculationBasis: 'market_difference', partSelections: [physicalPart, { ...physicalPart, entryId: 'unlisted', stableRuleId: null, partName: 'Ön amortisör' }], postRepairMarketValueMinor: 90_000_000, faultRateBasisPoints: 7500 })
     expect(calculateValueLoss(value)).toMatchObject({ amountMinor: 7_500_000, calculationMethod: 'market_value_difference', issues: [] })
     expect(calculateValueLoss({ ...value, postRepairMarketValueMinor: 110_000_000 })).toMatchObject({ amountMinor: null, issues: [expect.objectContaining({ field: 'postRepairMarketValueMinor' })] })
   })
-  it('does not apply a generic coefficient as if it were verified for the specified manufacturer and model', () => {
-    const value = physical({ vehicleIdentity: { manufacturer: 'Unknown', model: 'Unknown' }, postRepairMarketValueMinor: 90_000_000, faultRateBasisPoints: 7500 })
-    expect(calculateValueLoss(value)).toMatchObject({ amountMinor: 7_500_000, calculationMethod: 'market_value_difference', issues: [] })
-    expect(calculateValueLoss({ ...value, postRepairMarketValueMinor: null })).toMatchObject({ amountMinor: null, calculationMethod: 'market_value_difference' })
+  it.each([{ manufacturer: 'Unknown', model: 'Unknown' }, { manufacturer: 'Tesla', model: 'Model 3' }])('calculates a generic reference estimate for %j without asking for the answer as input', vehicleIdentity => {
+    const value = physical({ vehicleIdentity, postRepairMarketValueMinor: null })
+    const estimate = calculateValueLoss(value)
+    expect(estimate).toMatchObject({ amountMinor: calculateValueLoss(physical()).amountMinor, calculationMethod: 'real_market_analysis', ruleVersion: 'calculator-reference/2026-07-01/1.1.0', issues: [] })
+    expect(estimate.amountMinor).toBeGreaterThan(0)
+    expect(calculateValueLoss({ ...value, postRepairMarketValueMinor: 90_000_000 })).toEqual(estimate)
   })
   it('uses the automobile table and commercial factor for a registered passenger van', () => {
     const van = calculateValueLoss(physical({ vehicleType: 'KAMYONET', bodyType: 'passenger_van', commercialOrRental: false }))
@@ -44,7 +46,7 @@ describe('calculator physical parts and market difference', () => {
   it('preserves the old amount for an exactly matched physical part', () => expect(calculateValueLoss(physical()).amountMinor).toBe(calculateValueLoss(input).amountMinor))
   it('does not emit a partial amount for mixed mapped and unlisted physical parts', () => {
     const value = physical({ partSelections: [physicalPart, { ...physicalPart, entryId: 'custom-1', stableRuleId: null, partName: 'Ön amortisör', material: 'mechanical' }] })
-    expect(calculateValueLoss(value)).toMatchObject({ amountMinor: null, calculationMethod: 'market_value_difference', issues: [expect.objectContaining({ field: 'postRepairMarketValueMinor' })] })
+    expect(calculateValueLoss(value)).toMatchObject({ amountMinor: null, calculationMethod: 'real_market_analysis', issues: [expect.objectContaining({ field: 'partSelections' })] })
     expect(calculateValueLoss({ ...value, calculationBasis: 'market_difference', postRepairMarketValueMinor: 90_000_000, faultRateBasisPoints: 7500 })).toMatchObject({ amountMinor: 7_500_000, calculationMethod: 'market_value_difference', issues: [] })
   })
   it('calculates a modern-period market difference without a fabricated part coefficient or repair price', () => {
