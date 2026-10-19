@@ -107,3 +107,61 @@ gerçek Electron 43 ile gözlendi (bkz. `docs/DECISION_LOG.md` → HB-2026-105).
 Masaüstü başlangıcı ilk seçilen köprü portunu `userData/bridge-origins` altında API origin'i bazında saklar. Sonraki açılışlar aynı portu kullanır; port doluysa uygulama hata bildirir ve farklı bir porta geçmez. Kaydedilmiş portla çelişen `HASARBOTU_BRIDGE_PORT` değeri kabul edilmez. Chromium oturum bölümü de API bazında ayrıdır; hızlı not anahtarları kullanıcı bazında ayrılmaya devam eder.
 
 Bu değişiklikten önce rastgele portlarda bırakılmış depolama otomatik taşınmaz. Eski taslak gerekiyorsa önceki sürümün ilgili origin'indeki metin ayrıca kurtarılmalıdır.
+
+## Ofis güncellemesi yayınlama
+
+Kullanıcıya yansıyan tamamlanmış değişiklikler doğrulandıktan sonra masaüstü sürümünü artır,
+Windows x64 NSIS kurulumunu üret ve gerçek paketin açılışını doğrula. Yerel derleme veya
+kurulum, ofis güncelleme akışını ilerletmez. Depo kökünde Node.js 24 ile:
+
+```powershell
+npm run typecheck
+npm run lint
+npm run build
+node scripts/run-release-tests.mjs
+npm run package:win --workspace @hasarbotu/desktop -- --publish never
+node scripts/smoke-desktop-package.mjs
+```
+
+Sürüm testleri ayrı bir `_test` veritabanına ait `TEST_DATABASE_URL` ister.
+Paketleme ve smoke testi için mevcut özel ofis bağlantı profilini kullan;
+`HASARBOTU_DISTRIBUTION_PROFILE` bu profili göstermelidir. Özel yapılandırmayı Git'e ekleme.
+
+API'nin `DESKTOP_RELEASES_DIR` ayarı mutlak, yalnız dağıtım yöneticileri ve servis hesabınca
+yazılabilir bir dizin olmalıdır. Ayar eksikse yayın devre dışıdır; bozuk manifest veya
+paket 503 döndürür. Servis ayarını değiştirmek gerekirse API'den önce bağımlı file-agent'ı
+durdur; API sağlıklı olduktan sonra agent'ı yeniden başlat.
+
+Yayınlamadan önce önceki `latest.json` manifestini ve değişmez kurulum paketini koru.
+Mevcut ofis sunucusunda, doğrulanan sürüm/paket ve yapılandırılmış yayın diziniyle çalıştır:
+
+```powershell
+node scripts/publish-desktop-release.mjs <installer.exe> <DESKTOP_RELEASES_DIR> <version> <notes.txt>
+```
+
+Notlar mevcut bir metin dosyasıyla sağlanır; yeni Markdown raporu oluşturma.
+Yayınlayıcı Windows sürüm kaynağını, gerçek boyutu ve SHA-256'yı doğrular; değişmez
+`<sha256>.exe` kopyasını kontrol edip `latest.json` dosyasını atomik değiştirir.
+Eski sürüme dönmeyi ve aynı sürüm altında farklı paket yayınlamayı reddeder.
+
+Teslimatı tamamlamadan önce mevcut kimlik doğrulamalı bağlantı üzerinden
+`GET /api/v1/desktop-updates/latest` yanıtını, eski kurulu istemcinin yeni sürümü
+`available` görmesini ve `GET /api/v1/desktop-updates/artifacts/:sha256` indirmesinin
+tam boyutunu ve SHA-256'sını doğrula. Önceki manifest ve paketin korunduğunu da kontrol et.
+Sonucu burada kısa kaydet; ekran görüntüsü üretme. GitHub yayını ofis akışını, backend'i
+veya veritabanını kendiliğinden güncellemez. Depo görünürlüğünü veya herkese açık indirme
+kanalını değiştirme; çalışan istemcilere zorla kurulum yapma.
+
+Kullanıcı **Ayarlar → Uygulama güncellemeleri → Güncellemeleri kontrol et** üzerinden
+sürümü görür ve **Güncelle ve yeniden başlat** ile kurar. Mevcut kullanıcı profili ve
+API ayarı korunur. Electron, indirmeden önce sürümü yeniden doğrular; yönlendirmeleri
+reddeder, boyut/hash/Windows başlığı ve paket sürümünü denetler. Doğrulama hatası uygulamayı
+açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
+`userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
+imzası eklemez.
+
+Son kayıtlı ofis yayını: **0.1.53**, 2026-10-19T04:54:32.219Z; Windows x64,
+105.191.623 bayt, SHA-256 `f180e53ad78129021b8acb95e153a7c332d70797e066f3bde66ea3bbd897c901`.
+0.1.49 istemcisinin yeni sürümü gördüğü ve tam paketi doğruladığı, önceki 0.1.52 manifesti
+ve kurulumunun korunduğu önceki yayın kaydından aktarılmıştır; bu belge temizliğinde
+yeni uygulama sürümü yayınlanmamıştır.

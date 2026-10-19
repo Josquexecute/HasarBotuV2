@@ -1,5 +1,12 @@
 # Repository Guidelines
 
+## Documentation and Screenshot Policy
+
+- Kullanıcı açıkça istemedikçe yeni dokümantasyon dosyası veya `docs/` klasörü oluşturma; `.md`/`.mdx` belgeleri, planlar, inceleme raporları ve sürüm notları da buna dahildir. Bu kural `.local/`, `tmp/` ve diğer geçici/izlenmeyen konumlarda da geçerlidir.
+- Gerekli bilgi güncellemelerini ilgili mevcut `README.md` içinde kısa tut; kendiliğinden yeni README veya ayrı rapor oluşturma.
+- Kullanıcı açıkça istemedikçe ekran görüntüsü alma, oluşturma, kaydetme veya projeye/PR'a ekleme. UI doğrulamalarını ekran görüntüsü üretmeden yap.
+- Mevcut README dosyalarını, bu kural dosyasını, gerekli üçüncü taraf lisans bildirimlerini ve kullanılan test girdilerini koru. Proje kurallarını gerektiğinde bu mevcut `AGENTS.md` içinde güncelle.
+
 ## Project Structure & Module Organization
 
 HasarBotu V2 uses TypeScript npm workspaces for insurance claim operations.
@@ -9,7 +16,7 @@ HasarBotu V2 uses TypeScript npm workspaces for insurance claim operations.
 - `services/api/`: Fastify API; `services/file-agent/`: file-operation worker.
 - `apps/desktop/`: Electron shell and Windows installer configuration.
 - `packages/`: domain rules, Zod contracts, PostgreSQL helpers/migrations, desktop bridge, and shared configuration.
-- `docs/`, `scripts/`, `deploy/windows-service/`: documentation, validation tools, and deployment tooling.
+- `scripts/`, `deploy/windows-service/`: validation tools and deployment tooling; documentation stays in the relevant existing README.
 
 Frontend tests sit beside source; workspace tests live in `test/` directories.
 
@@ -27,7 +34,7 @@ Use Node.js 24.x; run commands from the repository root.
 
 ## Standing Release Requirement
 
-The user has authorized publishing completed user-facing changes to all office users as part of the task. After validation, increment the desktop version, build and smoke-test the Windows x64 installer, and publish the verified package to the existing authenticated office update feed. Verify that an older installed client sees the new version and that the authenticated artifact download matches its size and SHA-256. Preserve the previous manifest and immutable installer. Record the published version and verification results; a local build alone does not complete delivery. Follow `docs/DESKTOP_UPDATES.md`. Do not force installation on users' running clients or change repository visibility or public download channels without a separate instruction.
+The user has authorized publishing completed user-facing changes to all office users as part of the task. After validation, increment the desktop version, build and smoke-test the Windows x64 installer, and publish the verified package to the existing authenticated office update feed. Verify that an older installed client sees the new version and that the authenticated artifact download matches its size and SHA-256. Preserve the previous manifest and immutable installer. Record the published version and verification results in the existing desktop README; a local build alone does not complete delivery. Follow the office update publication section in `apps/desktop/README.md`. Do not force installation on users' running clients or change repository visibility or public download channels without a separate instruction.
 
 ## Coding Style & Naming Conventions
 
@@ -43,7 +50,7 @@ Add regression coverage for meaningful fixes. Database integration tests require
 
 ## Commit & Pull Request Guidelines
 
-History favors `feat: ...` and `feat(tracking): ...`, alongside plain maintenance messages. Prefer concise, imperative messages with relevant scopes. Keep changes focused. PRs should describe behavior changes, link issues, report validation and skipped checks, and include screenshots for UI changes.
+History favors `feat: ...` and `feat(tracking): ...`, alongside plain maintenance messages. Prefer concise, imperative messages with relevant scopes. Keep changes focused. PRs should describe behavior changes, link issues, and report validation and skipped checks. Include screenshots only when explicitly requested by the user.
 
 ## Security & Configuration
 

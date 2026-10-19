@@ -1,6 +1,6 @@
 Follow `AGENTS.md` as the canonical project instruction.
 
-Before coding, read the relevant files under `docs/`.
+Before coding, read `AGENTS.md` and the relevant existing `README.md` files. Follow the documentation and screenshot policy in `AGENTS.md`; do not create documentation or screenshots unless the user explicitly requests them.
 
 Key constraints:
 - UI-first
