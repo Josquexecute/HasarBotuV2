@@ -70,9 +70,9 @@ void app.whenReady().then(async () => {
       id: messageId,internalDate: String(Date.now()),payload: { mimeType: 'text/plain',headers: [{ name: 'From',value: 'results@sbm.example' },{ name: 'Authentication-Results',value: 'mx.google.com; dmarc=pass header.from=sbm.example' }],body: { data: Buffer.from(`Başvuru no: ${messageNumber}\nSonuç: Tamamlandı`).toString('base64url') } },
     } }
     await syncMailboxes(pool,google,provider)
-    await until(() => evaluate(`document.querySelector('.tracking-popup')?.textContent.includes(${JSON.stringify(`Tramer sonuçlandı — ${number}`)})`),'scheduled result popup')
-    check('the normal polling timer displays the matching result popup without a manual refresh',await evaluate('document.querySelector(".tracking-popup").textContent.includes("34 TEST 310")'))
-    check('the popup links to the exact matched case',await evaluate(`document.querySelector('.tracking-popup a').getAttribute('href') === ${JSON.stringify(`/dosyalar/${caseId}`)}`))
+    await until(() => evaluate(`document.querySelector('.tramer-result-popup')?.textContent.includes(${JSON.stringify(`Tramer sonuçlandı — ${number}`)})`),'scheduled result popup')
+    check('the normal polling timer displays the matching result popup without a manual refresh',await evaluate('document.querySelector(".tramer-result-popup").textContent.includes("34 TEST 310")'))
+    check('the popup links to the exact matched case',await evaluate(`document.querySelector('.tramer-result-popup a').getAttribute('href') === ${JSON.stringify(`/dosyalar/${caseId}`)}`))
     await until(() => evaluate('Array.from(document.querySelectorAll(".tracking-row strong")).some(element=>element.textContent === "Tamamlandı")'),'updated Tramer status in the open case')
     check('the open case updates to completed without a manual refresh',true)
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))')

@@ -42,7 +42,7 @@ async function sampleGestures() {
       }
       if (kind === 'success') motion.success()
       if (kind === 'sleep' || kind === 'wake') { time = 120000; motion.tick() }
-      if (kind === 'wake') motion.activity()
+      if (kind === 'wake') { motion.press(); motion.release() }
       if (kind === 'working') { motion.work(true); time += 450; motion.tick() }
       if (['error', 'notification', 'celebrate', 'surprised'].includes(kind)) motion.react(kind)
       if (kind === 'edge') motion.edge(-1)
@@ -314,6 +314,18 @@ void app.whenReady().then(async () => {
       check('movement first observed on release sends drag before landing and then edge feedback', await win.webContents.executeJavaScript('window.motionEvents.map(value => value.type).join(",") === "drag,release,edge"'))
       Object.assign(saved, await readPersistedPosition())
     } finally { screen.getCursorScreenPoint = originalCursor }
+    await win.webContents.executeJavaScript(`window.sleepClockDescriptor=Object.getOwnPropertyDescriptor(performance,'now');window.sleepClockBase=performance.now.bind(performance);Object.defineProperty(performance,'now',{configurable:true,value:()=>window.sleepClockBase()+130000});document.querySelector('#assistant').dispatchEvent(new Event('pointerleave'));undefined`)
+    await until(() => win.webContents.executeJavaScript(`document.querySelector('#assistant').dataset.sleeping==='true'`),'actual assistant sleep')
+    check('sleep indicator is visible, animated and inside the assistant window',await win.webContents.executeJavaScript(`(()=>{const e=document.querySelector('.assistant-sleep'),r=e.getBoundingClientRect();return getComputedStyle(e).display==='flex'&&getComputedStyle(e.firstElementChild).animationName==='assistant-sleep-float'&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight})()`))
+    win.webContents.send('hasarbotu:assistant-gaze',{x:1,y:1})
+    win.webContents.send('hasarbotu:assistant-motion',{type:'notification'})
+    await win.webContents.executeJavaScript(`document.querySelector('#assistant').dispatchEvent(new Event('pointerenter'));undefined`)
+    await new Promise(resolve=>setTimeout(resolve,800))
+    check('sleep survives native gaze, hover and notifications',await win.webContents.executeJavaScript(`document.querySelector('#assistant').dataset.sleeping==='true'`))
+    await win.webContents.executeJavaScript(`document.querySelector('#assistant').click();undefined`)
+    await until(()=>win.webContents.executeJavaScript(`document.querySelector('#assistant').dataset.sleeping==='false'`),'click wakes sleeping assistant')
+    check('click removes the actual sleep indicator',await win.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.assistant-sleep')).display==='none'`))
+    await win.webContents.executeJavaScript(`if(window.sleepClockDescriptor)Object.defineProperty(performance,'now',window.sleepClockDescriptor);else delete performance.now;undefined`)
     const ownUrl = win.webContents.getURL()
     await win.webContents.executeJavaScript('location.href = "/dosyalar"')
     await new Promise((resolve) => setTimeout(resolve, 200))

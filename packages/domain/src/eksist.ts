@@ -63,8 +63,9 @@ export function parseEksist(text: string): EksistExtraction {
   matches.forEach((match, index) => {
     const label = eksistKey(match[1]!)
     const value = clean.slice(match.index! + match[0].length, matches[index + 1]?.index ?? clean.length).trim().split('\u0000')[0]!.split(/©|Kayıt bulunamadı/)[0]!.trim().replace(/\s+/g, ' ')
-    if (fields[label] && value && fields[label] !== value) conflicts.push(label)
-    fields[label] ??= value
+    const same = ['urun', 'sigortasirketi'].includes(label) ? eksistKey(fields[label] ?? '') === eksistKey(value) : fields[label] === value
+    if (fields[label] && value && !same && !conflicts.includes(label)) conflicts.push(label)
+    if (!fields[label]) fields[label] = value
   })
   const get = (label: string) => fields[eksistKey(label)] ?? ''
   const rawPlate = get('Plaka').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^0(?=\d{2}[A-Z])/, '')
@@ -84,6 +85,19 @@ export function parseEksist(text: string): EksistExtraction {
     vehicleFields: Object.fromEntries(EKSIST_VEHICLE_LABELS.filter(label => get(label)).map(label => [label, get(label)])),
     vehicleClass: classes[eksistKey(get('Araç Tarife Grubu'))] ?? '',
   }
+}
+
+/** Distinct original values let an operator resolve repeated SBM fields. */
+export function getEksistFieldValues(text: string, label: string): string[] {
+  const clean = text.replace(HEADINGS, '\u0000').replace(/https?:\/\/\S+/g, '')
+  const matches = [...clean.matchAll(pattern)]
+  const values = new Map<string, string>()
+  for (const [index, match] of matches.entries()) {
+    if (eksistKey(match[1]!) !== eksistKey(label)) continue
+    const value = clean.slice(match.index! + match[0].length, matches[index + 1]?.index ?? clean.length).trim().split('\u0000')[0]!.split(/©|Kayıt bulunamadı/)[0]!.trim().replace(/\s+/g, ' ')
+    if (value && !values.has(eksistKey(value))) values.set(eksistKey(value), value)
+  }
+  return [...values.values()]
 }
 
 /** Only unique canonical names are accepted; approximate matches require an explicit choice. */

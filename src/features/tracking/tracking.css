@@ -31,3 +31,10 @@
 .tracking-popup footer { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 4px; }
 .tracking-popup footer a { padding-block: 5px; font-size: 11px; color: var(--accent); text-decoration: none; }
 .tracking-popup button:focus-visible, .tracking-popup a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.tramer-result-popup { width: min(780px, calc(100vw - 32px)); border: 3px solid var(--accent); box-shadow: 0 0 0 8px var(--accent-soft), 0 24px 90px #0006; }
+.tramer-result-popup .modal__header h2 { display: flex; align-items: center; gap: 14px; font-size: 28px; color: var(--accent); }
+.tramer-result-popup .modal__body { overflow: auto; }
+.tramer-result-popup__count { color: var(--text-secondary); }
+.tramer-result-popup article { padding: 20px; margin-block: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--accent-soft); }
+.tramer-result-popup article strong { font-size: 32px; }
+.tramer-result-popup article p { font-size: 18px; line-height: 1.5; }

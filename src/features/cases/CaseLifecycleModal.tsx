@@ -28,6 +28,18 @@ const OPERATION_LABELS: Readonly<Record<LifecycleOperationStatus, string>> = {
 }
 const TERMINAL = new Set(['closed', 'reopened', 'failed', 'stale', 'cancelled', 'manual_recovery_required', 'cleanup_pending'])
 
+function failureMessage(operation: LifecycleOperationRecord): string {
+  const messages: Record<string, string> = {
+    case_not_fresh: 'Klasörün güncelliği doğrulanamadı. Senkronizasyon ve klasör erişimini kontrol edin.',
+    access_denied: 'Klasöre erişilemedi veya klasör başka bir uygulamada açık. Açık evrakları kapatın ve klasör izinlerini kontrol edin.',
+    file_locked: 'Klasör veya içindeki dosya kullanımda. Açık dosyaları kapatın.',
+    source_changed_since_plan: 'Klasör içeriği önizlemeden sonra değişti. Güncel verilerle yeniden önizleme oluşturun.',
+    source_evidence_mismatch: 'Klasör içeriği önceki taşıma kaydıyla uyuşmuyor. Kaynak ve hedef klasörlerin kontrol edilmesi gerekiyor.',
+  }
+  const message = messages[operation.failureReasonCode ?? ''] ?? 'İşlem tamamlanamadı. Klasör ve işlem kayıtlarını kontrol edin.'
+  return `${message} ${operation.status === 'queued' ? 'Taşıma tamamlanmadı; sistem yeniden deneyecek.' : operation.status === 'failed' ? 'Güncel verilerle yeni önizleme oluşturabilirsiniz.' : ''}`.trim()
+}
+
 function minorCurrency(value: number | null): string {
   return value === null
     ? 'Tutar uygulanmıyor'
@@ -67,6 +79,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
   const [reason, setReason] = useState('')
   const [targetStage, setTargetStage] = useState<Exclude<CaseStageCode, 'closed'>>('new_notification')
   const [operation, setOperation] = useState<LifecycleOperationRecord | null>(null)
+  const [replacingOperationId, setReplacingOperationId] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [canReload, setCanReload] = useState(false)
@@ -89,6 +102,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
       const latest = await commands.readCase(item.caseId)
       if (latest.caseId !== item.caseId || latest.version === undefined) throw new LifecycleCommandError('unavailable','invalid case response')
       onReload(latest)
+      setReplacingOperationId(operation?.status === 'failed' && operation.linkedFileOperation?.status === 'failed' ? operation.id : undefined)
       setOperation(null);setCanReload(false)
       setMessage(latest.lifecycleStatus === (isReopen ? 'closed' : 'open') ? '' : 'Dosyanın açık/kapalı durumu değişmiş. Bu pencereyi kapatıp dosyanın güncel durumunu kontrol edin.')
     } catch (error) { handleError(error) }
@@ -107,9 +121,11 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
         ? await commands.planReopen(item.caseId, {
             expectedCaseVersion: item.version, expectedLocationVersion: locationVersion,
             reason: reason.trim(), targetWorkflowStage: targetStage,
+            ...(replacingOperationId ? { replaceFailedOperationId: replacingOperationId } : {}),
           })
         : await commands.planClose(item.caseId, {
             expectedCaseVersion: item.version, expectedLocationVersion: locationVersion, closeMode,
+            ...(replacingOperationId ? { replaceFailedOperationId: replacingOperationId } : {}),
             ...(closeMode === 'with_missing_requirements' ? { reason: reason.trim() } : {}),
           })
       setOperation(planned)
@@ -202,7 +218,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
                 {completed ? <CheckCircle2 size={17} /> : recovery ? <AlertTriangle size={17} /> : <LoaderCircle className={operation.status === 'queued' || operation.status === 'moving' ? 'spin' : ''} size={17} />}
                 <span><strong>{OPERATION_LABELS[operation.status]}</strong>{operation.status === 'cleanup_pending' ? ' · hedef doğrulandı, kaynak temizliği bekliyor' : ''}</span>
               </div>
-              {operation.failureReasonCode && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{operation.status === 'queued' ? 'Taşıma başlamadı; klasör erişimi ve güncelliği yeniden kontrol ediliyor.' : operation.failureReasonCode === 'case_not_fresh' ? 'Klasörün güncelliği doğrulanamadı. İşlem tamamlanmadı.' : operation.failureReasonCode === 'access_denied' ? 'Klasöre erişim reddedildi. İşlem tamamlanmadı; erişimi kontrol edip yeniden deneyin.' : operation.failureReasonCode === 'file_locked' ? 'Klasör veya içindeki dosya kullanımda. Açık dosyaları kapatıp yeniden deneyin.' : 'İşlem tamamlanamadı. Klasör ve işlem kayıtlarını kontrol edin.'}</span></div>}
+              {operation.failureReasonCode && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{failureMessage(operation)}</span></div>}
               <dl className="case-lifecycle-paths">
                 <div><dt>Kaynak</dt><dd>{operation.source.storageRootKey} · {operation.source.relativePath}</dd></div>
                 <div><dt>Hedef</dt><dd>{operation.destination.storageRootKey} · {operation.destination.relativePath}</dd></div>
@@ -239,7 +255,7 @@ export function CaseLifecycleModal({ item, onClose, onUpdated, onUnauthorized, o
         </div>
         <footer className="modal__footer">
           <button className="button button--secondary" type="button" onClick={() => { stopPolling(); onClose() }} disabled={busy}>{completed ? 'Kapat' : 'Vazgeç'}</button>
-          {operation && ['stale', 'blocked', 'cancelled'].includes(operation.status) && <button className="button button--primary" type="button" disabled={busy} onClick={() => void reloadLatest()}>Güncel Verilerle Yeniden Önizle</button>}
+          {operation && ['stale', 'blocked', 'cancelled', 'failed'].includes(operation.status) && <button className="button button--primary" type="button" disabled={busy} onClick={() => void reloadLatest()}>Güncel Verilerle Yeniden Önizle</button>}
           {operation === null
             ? <button className="button button--primary" type="button" onClick={preview} disabled={busy || restoring || item.lifecycleStatus !== (isReopen ? 'closed' : 'open')}>{restoring ? 'İşlem kontrol ediliyor…' : busy ? 'Planlanıyor…' : 'Önizleme Oluştur'}</button>
             : operation.canApprove

@@ -34,6 +34,19 @@ async function fill() {
 }
 afterEach(cleanup)
 describe('Eksist creation UI', () => {
+  it('resolves multiple source insurers explicitly and accepts repeated traffic labels', async () => {
+    const { create } = setup(); await fill()
+    const text = completeText.replace('Ürün: Kasko','Ürün: Trafik\nÜrün: TRAFİK').replace('Sigorta Şirketi: KAYNAK SİGORTA A.Ş.','Sigorta Şirketi: KAYNAK SİGORTA A.Ş.\nSigorta Şirketi: DİĞER SİGORTA')
+    fireEvent.change(screen.getByLabelText('Eksist metni veya panodan görsel'), { target: { value: text } })
+    await userEvent.click(screen.getByRole('button', { name: 'Metni forma aktar' }))
+    expect(await screen.findByLabelText('Dosya türü *')).toHaveValue('traffic')
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydet ve detayını aç' }))
+    expect(create).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByRole('combobox', { name: /Sigorta şirketi/ }), { target: { value: 'DİĞER SİGORTA' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydet ve detayını aç' }))
+    expect(create).toHaveBeenCalledOnce()
+    expect(create.mock.calls[0]![0].source.insurerReview).toEqual({ name: 'DİĞER SİGORTA', confirmed: true })
+  })
   it.each([['Kaydet ve kapat', 'DOSYA LİSTESİ'], ['Kaydet ve detayını aç', 'DOSYA DETAYI']])('waits for verified folders before %s', async (button, destination) => {
     const read = vi.fn().mockResolvedValue({ ...plan, status: 'ready' })
     const { create } = setup(undefined, read)

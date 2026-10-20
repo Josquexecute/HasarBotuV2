@@ -1,5 +1,5 @@
 import type pg from 'pg'
-import { buildNoticeSheetDefaults } from '@hasarbotu/domain'
+import { buildNoticeSheetDefaults, NOTICE_SHEET_HEADER_LIMITS } from '@hasarbotu/domain'
 import { noticeSheetResponseSchema, noticeSheetOverridesSchema, type NoticeSheetResponse, type NoticeSheetSaveRequest } from '@hasarbotu/contracts'
 import { withTransaction, type Queryable } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
@@ -70,8 +70,16 @@ export function createNoticeSheetStore(pool: pg.Pool) {
       expertName: row.expert_name ?? sourceRow?.reviewed_fields?.automatic?.expertName ?? null,
       version: sheet?.version ?? null, updatedAt: sheet?.updated_at.toISOString() ?? null,
       defaults: buildNoticeSheetDefaults({
+        caseFields: {
+          organizationName: row.organization_name, officeNumber: row.office_number,
+          claimNumber: row.insurer_claim_number ?? '', noticeNumber: row.notification_form_number ?? '',
+          insurerName: row.insurer_name ?? sourceRow?.reviewed_fields?.automatic?.insurerName ?? '',
+          plate: row.plate, notificationDate: row.notification_date ?? '', lossDate: row.loss_date ?? '',
+          closureDate: row.lifecycle_status === 'closed' ? row.closure_date ?? '' : '',
+          expertName: row.expert_name ?? sourceRow?.reviewed_fields?.automatic?.expertName ?? '',
+        },
         caseType: row.case_type, plate: row.plate,
-        serviceName: row.service_name, servicePhone: row.service_phone,
+        serviceName: row.service_name ?? sourceRow?.reviewed_fields?.automatic?.serviceName ?? null, servicePhone: row.service_phone,
         eksistText: sourceRow?.raw_text ?? null,
         eksistServiceRevised: sourceRow?.reviewed_fields?.automatic?.serviceRevised === true,
         vehicleDescription: profile ? [profile.brand, profile.model, profile.model_year].join(' · ') : null,
@@ -91,16 +99,18 @@ export function createNoticeSheetStore(pool: pg.Pool) {
         return read(client, actor, caseId, canEdit)
       })
     },
-    save(actor: Actor, caseId: string, input: NoticeSheetSaveRequest): Promise<NoticeSheetResponse> {
+    save(actor: Actor, caseId: string, input: NoticeSheetSaveRequest, includeHeaderFields = true): Promise<NoticeSheetResponse> {
       return withTransaction(pool, async client => {
         const row = await loadCase(client, actor.organizationId, caseId, true)
         if (row.lifecycle_status === 'closed' || row.case_type === null) throw new NoticeSheetError('conflict', 409)
-        const existing = await client.query('SELECT version FROM case_notice_sheets WHERE organization_id=$1 AND case_id=$2', [actor.organizationId, caseId])
+        const existing = await client.query('SELECT version,overrides FROM case_notice_sheets WHERE organization_id=$1 AND case_id=$2', [actor.organizationId, caseId])
         const version = existing.rows[0]?.version ?? null
         if (version !== input.expectedVersion) throw new NoticeSheetError('version_conflict', 409)
         const overrides = noticeSheetOverridesSchema.parse(input.overrides)
-        const primaryPlate = row.case_type === 'casco' ? 'insuredPlate' : 'victimPlate'
-        delete overrides.fields[primaryPlate]
+        if (!includeHeaderFields) {
+          const previous = noticeSheetOverridesSchema.parse(existing.rows[0]?.overrides ?? { fields: {},documents: {} })
+          overrides.fields = { ...Object.fromEntries(Object.entries(previous.fields).filter(([key]) => Object.hasOwn(NOTICE_SHEET_HEADER_LIMITS,key))), ...overrides.fields }
+        }
         const nextVersion = (version ?? 0) + 1
         await client.query(`INSERT INTO case_notice_sheets(organization_id,case_id,overrides,version,updated_by_user_id)
           VALUES($1,$2,$3::jsonb,$4,$5) ON CONFLICT(organization_id,case_id) DO UPDATE

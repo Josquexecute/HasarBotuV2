@@ -9,7 +9,7 @@ import type { CaseReferenceDataPort } from '../../data/ports'
 import { useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseStageCode } from '../../types/case'
 import type { QuickCaseCreate } from '@hasarbotu/contracts'
-import { matchEksistReference } from '@hasarbotu/domain'
+import { getEksistFieldValues, matchEksistReference } from '@hasarbotu/domain'
 import { createEksistPort, type EksistPort, type EksistSource, type QuickCreation } from '../../data/eksistPort'
 import { createHttpWorkspaceCommandAdapter, type WorkspaceCommandPort, type WorkspaceRootRecord } from '../../data/workspacePort'
 import { EksistImportPanel } from './EksistImportPanel'
@@ -59,6 +59,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
   const [expertUserId, setExpertUserId] = useState('')
   const [serviceId, setServiceId] = useState('')
   const [insurerId, setInsurerId] = useState('')
+  const [insurerReviewName, setInsurerReviewName] = useState('')
   const [lossDate, setLossDate] = useState('')
   const [notificationDate, setNotificationDate] = useState('')
   const referenceData = useCaseReferences(referencePort, {
@@ -119,6 +120,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
     const data = value.extraction, refs = referenceData.references
     setSource(value); setReference(data.reference); setPlate(data.plate); setInsurerClaimNumber(data.claimNumber); setLossDate(data.lossDate)
     setExpertReviewName(data.expert); setExpertReviewed(false)
+    setInsurerReviewName('')
     setNotificationFormNumber(data.assignmentDateText); setServiceRevision(null)
     setCaseType(data.caseType ?? ''); setBrand(data.brand); setModel(data.model); setModelYear(data.modelYear); setVehicleClass(data.vehicleClass)
     const issues: Record<string, string> = {}
@@ -179,6 +181,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
     if (quickMode) {
       if (!quickAttempt.current) {
         const errors: Record<string, string> = { ...unresolved }
+        if (source?.extraction.conflicts.includes('sigortasirketi') && !insurerReviewName) errors.insurerId = 'Bu ihbarın sigorta şirketini kaynak belgeden seçin.'
         if (source?.method === 'ocr' && (!expertReviewed || !expertReviewName.trim())) errors.expertUserId = 'Eksper adını orijinal belgeyle karşılaştırıp doğrulayın. Doğrulayamıyorsanız kaynak metni aktarın.'
         if (!notificationDate) errors.notificationDate = 'Çalışma klasörü için ihbar tarihi zorunludur. Atama tarihi ihbar tarihi değildir.'
         if (!rootKey) errors.storageRootKey = 'Çalışma klasörü konumunu seçin.'
@@ -187,7 +190,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
         if (modelYear && (!/^\d{4}$/.test(modelYear) || Number(modelYear) < 1950 || Number(modelYear) > 2100)) errors.modelYear = 'Geçerli model yılı girin veya isteğe bağlı alanı boş bırakın.'
         if (Object.keys(errors).length) { setFieldErrors(errors); return }
         quickAttempt.current = { key: makeSubmissionKey(), input: { case: { ...input, workflowStage: workflowStage as Exclude<CaseStageCode, 'closed'>, notificationDate }, storageRootKey: rootKey,
-          ...(source ? { source: { id: source.id, reference: reference.trim(), ...(source.method === 'ocr' ? { expertReview: { name: expertReviewName.trim(), confirmed: true as const } } : {}), ...(serviceRevision === null ? {} : { serviceRevision: { name: serviceRevision } }), ...(!hasVehicle ? { vehicleDraft: { brand, model, modelYear, vehicleClass } } : {}) } } : {}),
+          ...(source ? { source: { id: source.id, reference: reference.trim(), ...(insurerReviewName ? { insurerReview: { name: insurerReviewName, confirmed: true as const } } : {}), ...(source.method === 'ocr' ? { expertReview: { name: expertReviewName.trim(), confirmed: true as const } } : {}), ...(serviceRevision === null ? {} : { serviceRevision: { name: serviceRevision } }), ...(!hasVehicle ? { vehicleDraft: { brand, model, modelYear, vehicleClass } } : {}) } } : {}),
           ...(hasVehicle ? { vehicle: { brand: brand.trim(), model: model.trim(), modelYear: Number(modelYear), vehicleClass: vehicleClass as NonNullable<QuickCaseCreate['vehicle']>['vehicleClass'], variant: null, chassisPrefix: null, engineCode: null, evidenceSource: 'insurer_record', evidenceReference: source ? `Eksist ${reference.trim()}` : null } } : {}),
         } }
       }
@@ -265,7 +268,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
               <label className="form-field"><span>İlk aşama *</span><select value={workflowStage} onChange={(event) => setWorkflowStage(event.target.value as CaseStageCode)}>{CASE_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><FieldError message={fieldErrors.workflowStage} /></label>
               <label className="form-field"><span>Takip tarihi</span><input aria-label="Takip tarihi" value="Kayıt günü · otomatik" readOnly /></label>
               <label className="form-field"><span>Sorumlu</span><select value={responsibleUserId} onChange={(event) => setResponsibleUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.users.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.responsibleUserId} /></label>
-              {source ? <label className="form-field"><span>Sigorta şirketi</span><input aria-label="Sigorta şirketi" value={source.extraction.insurer} readOnly /><FieldError message={fieldErrors.insurerId} /></label> : <label className="form-field" data-field="insurerId"><span>Sigorta şirketi</span><select value={insurerId} onChange={(event) => setInsurerId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.insurers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.insurerId} />{unresolved.insurerId && <button type="button" onClick={() => { setInsurerId(''); resolved('insurerId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
+              {source ? <label className="form-field" data-field="insurerId"><span>Sigorta şirketi</span>{source.extraction.conflicts.includes('sigortasirketi') ? <><select aria-label="Sigorta şirketi" value={insurerReviewName} onChange={event => { setInsurerReviewName(event.target.value); if (event.target.value) resolved('insurerId') }}><option value="">Kaynak belgeden şirketi seçin</option>{getEksistFieldValues(source.text, 'Sigorta Şirketi').map(name => <option key={name} value={name}>{name}</option>)}</select><small>Kaynakta birden fazla şirket var. Bu ihbarın şirketini seçerek doğrulayın.</small></> : <input aria-label="Sigorta şirketi" value={source.extraction.insurer} readOnly />}<FieldError message={fieldErrors.insurerId} /></label> : <label className="form-field" data-field="insurerId"><span>Sigorta şirketi</span><select value={insurerId} onChange={(event) => setInsurerId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.insurers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.insurerId} />{unresolved.insurerId && <button type="button" onClick={() => { setInsurerId(''); resolved('insurerId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
               {source ? <div className="form-field"><label><span>Servis</span><input aria-label="Servis" value={serviceRevision ?? source.extraction.service} readOnly /></label><button type="button" className="icon-button" aria-label="Servisi revize et" onClick={() => setServiceEditorOpen(true)}><Pencil size={17} /></button><FieldError message={fieldErrors.serviceId} /></div> : <label className="form-field" data-field="serviceId"><span>Servis</span><select aria-label="Servis" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{serviceOptionLabel(option)}</option>)}</select><small>{serviceEvaluationSummary(referenceData.references?.services.find((option) => option.id === serviceId))}</small><FieldError message={fieldErrors.serviceId} />{unresolved.serviceId && <button type="button" onClick={() => { setServiceId(''); resolved('serviceId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
               {source ? <label className="form-field"><span>Eksper</span><input aria-label="Eksper" value={source.extraction.expert} readOnly /><small>Levha no: {source.extraction.expertLicenseNumber || "Kaynakta belirtilmedi"}</small><FieldError message={fieldErrors.expertUserId} /></label> : <label className="form-field" data-field="expertUserId"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} />{unresolved.expertUserId && <button type="button" onClick={() => { setExpertUserId(''); resolved('expertUserId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
               <label className="form-field" data-field="lossDate"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><FieldError message={fieldErrors.lossDate} /></label>

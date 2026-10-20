@@ -3,6 +3,16 @@ import type { NoticeSheetDocument, NoticeSheetField } from '@hasarbotu/contracts
 interface FieldDefinition { key: NoticeSheetField; label: string; multiline?: boolean; date?: boolean }
 export const noticeSheetFieldGroups: readonly { title: string; fields: readonly FieldDefinition[] }[] = [
   { title: 'Dosya ve poliçe', fields: [
+    { key: 'organizationName', label: 'Ofis adı' },
+    { key: 'officeNumber', label: 'Ofis dosya no' },
+    { key: 'claimNumber', label: 'Hasar dosya no' },
+    { key: 'noticeNumber', label: 'İhbar föy no' },
+    { key: 'insurerName', label: 'Sigorta şirketi' },
+    { key: 'plate', label: 'Dosya plakası' },
+    { key: 'notificationDate', label: 'İhbar tarihi', date: true },
+    { key: 'lossDate', label: 'Hasar tarihi', date: true },
+    { key: 'closureDate', label: 'Kapatma tarihi', date: true },
+    { key: 'expertName', label: 'Eksper adı' },
     { key: 'inspectionDate', label: 'Ekspertiz tarihi', date: true },
     { key: 'reportNumber', label: 'Eksper rapor no' },
     { key: 'insuredPolicyPeriod', label: 'Sigortalı poliçe vadesi' },

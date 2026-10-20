@@ -79,6 +79,7 @@ export interface CaseLifecycleCommandPort {
     readonly expectedCaseVersion: number
     readonly expectedLocationVersion: number
     readonly closeMode: 'normal' | 'with_missing_requirements'
+    readonly replaceFailedOperationId?: string
     readonly reason?: string
   }, idempotencyKey?: string): Promise<LifecycleOperationRecord>
   planReopen(caseId: string, input: {
@@ -86,6 +87,7 @@ export interface CaseLifecycleCommandPort {
     readonly expectedLocationVersion: number
     readonly reason: string
     readonly targetWorkflowStage: Exclude<CaseStageCode, 'closed'>
+    readonly replaceFailedOperationId?: string
   }, idempotencyKey?: string): Promise<LifecycleOperationRecord>
   approve(caseId: string, operation: LifecycleOperationRecord, idempotencyKey?: string): Promise<LifecycleOperationRecord>
   readOperation(caseId: string, operationId: string): Promise<LifecycleOperationRecord>

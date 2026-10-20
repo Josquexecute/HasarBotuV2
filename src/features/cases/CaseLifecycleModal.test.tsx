@@ -30,6 +30,25 @@ const planned: LifecycleOperationRecord = {
 }
 
 describe('CaseLifecycleModal', () => {
+  it('lets an exhausted move create a fresh preview with current versions and a separate approval', async () => {
+    const failure = { ...planned,status: 'failed',failureReasonCode: 'access_denied',linkedFileOperation: { id: 'file-1',status: 'failed' },canApprove: true } as const
+    const port: CaseLifecycleCommandPort = {
+      readLatestOperation: vi.fn().mockResolvedValue(failure),readLocationVersion: vi.fn().mockResolvedValue(2),
+      readCase: vi.fn().mockResolvedValue({ ...item,version: 2 }),planClose: vi.fn().mockResolvedValue({ ...planned,id: 'fresh' }),
+      planReopen: vi.fn(),approve: vi.fn(),readOperation: vi.fn(),
+    }
+    function View() {
+      const [current,setCurrent] = useState(item)
+      return <CaseLifecycleModal item={current} port={port} onClose={vi.fn()} onUpdated={vi.fn()} onUnauthorized={vi.fn()} onReload={setCurrent} />
+    }
+    render(<View />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Klasöre erişilemedi')
+    await userEvent.click(screen.getByRole('button',{ name: 'Güncel Verilerle Yeniden Önizle' }))
+    await userEvent.click(await screen.findByRole('button',{ name: 'Önizleme Oluştur' }))
+    expect(port.planClose).toHaveBeenCalledWith(item.caseId,{ expectedCaseVersion: 2,expectedLocationVersion: 2,closeMode: 'normal',replaceFailedOperationId: failure.id })
+    expect(await screen.findByRole('button',{ name: 'Onayla ve Kapat' })).toBeEnabled()
+    expect(port.approve).not.toHaveBeenCalled()
+  })
   it('reports an expired session when the final case refresh fails', async () => {
     vi.useFakeTimers()
     const onUnauthorized = vi.fn()

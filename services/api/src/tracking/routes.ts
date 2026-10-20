@@ -11,6 +11,7 @@ import { canManageTracking, canWriteTracking, observeFile, reconcileFiles, revie
 import { createAuditService } from '../audit/service.js'
 import { withTransaction } from '../db/executor.js'
 import { registerTrackingResponseCompression } from './response-compression.js'
+import { DEFAULT_NOTIFICATION_PREFERENCES, notificationPreferencesSchema } from '@hasarbotu/contracts'
 
 export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg.Pool; googleEnabled: boolean; automaticSbmEnabled: boolean }) {
   const { pool } = options
@@ -106,11 +107,16 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
     routes.get('/api/v1/tracking/notifications/pending',async (request,reply) => {
       const session = await requireSession(auth,request,reply)
       if (!session) return
-      const rows = (await pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,n.title
+      const preference = (await pool.query('SELECT preferences FROM user_notification_preferences WHERE organization_id=$1 AND user_id=$2', [session.user.organizationId,session.user.id])).rows[0]
+      const preferences = notificationPreferencesSchema.parse(preference?.preferences ?? DEFAULT_NOTIFICATION_PREFERENCES)
+      const rows = (await pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,n.title,
+        (n.kind='tramer' AND n.event_key ~ '^tramer:[^:]+:(completed|cancelled)$') AS "isResult"
         FROM tracking_notifications n JOIN cases c ON c.id=n.case_id
         WHERE n.organization_id=$1 AND NOT c.is_archived AND c.responsible_user_id=$2
-        AND n.read_at IS NULL AND n.presented_at IS NULL ORDER BY n.created_at LIMIT 20`, [session.user.organizationId,session.user.id])).rows
-      return { notifications: rows }
+        AND n.read_at IS NULL AND n.presented_at IS NULL
+        AND ($3 OR (n.kind='tramer' AND n.event_key ~ '^tramer:[^:]+:(completed|cancelled)$'))
+        ORDER BY "isResult" DESC,n.created_at,n.id LIMIT 20`, [session.user.organizationId,session.user.id,preferences.showPopups])).rows
+      return { notifications: rows, preferences }
     })
     routes.get('/api/v1/tracking/notifications/inbox',async (request,reply) => {
       const session = await requireSession(auth,request,reply)
@@ -147,15 +153,18 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
     routes.post('/api/v1/tracking/notifications/dismiss',async (request,reply) => {
       const session = await requireSession(auth,request,reply)
       if (!session) return
-      z.object({}).strict().parse(request.body)
+      const input = z.object({ ids: z.array(z.string().uuid()).min(1).max(20).optional(),ordinary: z.literal(true).optional() }).strict()
+        .refine(value => !value.ids || !value.ordinary).parse(request.body)
       await withTransaction(pool,async (db) => {
-        // Closing the popup dismisses the current backlog; unread inbox entries remain.
-        // A notification created after this transaction still opens a future popup.
+        // Result popups acknowledge displayed IDs; ordinary backlog dismissal
+        // never consumes a Tramer result. Inbox read timestamps stay unchanged.
         const result = await db.query(`UPDATE tracking_notifications n SET presented_at=now()
           FROM cases c WHERE n.case_id=c.id AND n.organization_id=$1
           AND c.responsible_user_id=$2 AND NOT c.is_archived
-          AND n.presented_at IS NULL AND n.read_at IS NULL AND n.created_at<=now()`,
-        [session.user.organizationId,session.user.id])
+          AND n.presented_at IS NULL AND n.read_at IS NULL AND n.created_at<=now()
+          AND ($3::uuid[] IS NULL OR n.id=ANY($3::uuid[]))
+          AND (NOT $4 OR NOT (n.kind='tramer' AND n.event_key ~ '^tramer:[^:]+:(completed|cancelled)$'))`,
+        [session.user.organizationId,session.user.id,input.ids ?? null,input.ordinary === true])
         if (result.rowCount) await audit.record(db,{ organizationId: session.user.organizationId,actorUserId: session.user.id,
           action: 'tracking.notifications_dismissed',requestId: String(request.id),details: { count: result.rowCount } })
       })

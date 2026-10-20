@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rename, rm, utimes, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,7 +21,7 @@ import {
   uuidv7,
   type DatabaseConfig,
 } from '@hasarbotu/database'
-import { createAgentApiClient, executeFileOperation, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
+import { createAgentApiClient, executeFileOperation, nodeFileSystemAdapter, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
 import { reconcileOfficeFolderInventory } from '../src/cases/office-folder-inventory.js'
 
@@ -643,6 +643,36 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     await expect(access(join(root, ...seeded.openPath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(access(join(root, ...planned.destination.relativePath.split('/'), 'EVRAK/sentetik.txt'))).resolves.toBeUndefined()
   }, 60_000)
+
+  it('replans an exhausted atomic close explicitly, preserves old evidence and requires a fresh approval before moving', async () => {
+    const seeded = await seedCase('34 NEW 107', false)
+    const input = { expectedCaseVersion: 1,expectedLocationVersion: 1,closeMode: 'with_missing_requirements',reason: 'Eksikler takip edilecek' }
+    const old = caseLifecycleOperationResponseSchema.parse((await planClose(seeded.caseId,input)).json()).operation
+    await approve(seeded.caseId,old)
+    const job = await agentClient.claim()
+    if (!job || job.payload.kind !== 'file_operation') throw Error('Expected close job')
+    const result = await executeFileOperation(agentConfig.roots,job.payload,{ ...nodeFileSystemAdapter,rename: async () => { throw Object.assign(Error('locked'),{ code: 'EACCES' }) } })
+    expect(result).toMatchObject({ outcome: 'failed',errorCode: 'access_denied' })
+    const evidencePath = join(root,'.hasarbotu-operations',`${job.payload.operationId}-${job.payload.operationVersion}.json`)
+    const evidence = await readFile(evidencePath,'utf8')
+    await pool.query('UPDATE jobs SET attempt_count=max_attempts WHERE id=$1',[job.id])
+    expect(await agentClient.reportResult(job.id,result)).toMatchObject({ status: 'dead_letter' })
+    expect((await planClose(seeded.caseId,input)).statusCode).toBe(409)
+    expect((await planClose(seeded.caseId,{ ...input,replaceFailedOperationId: uuidv7() })).statusCode).toBe(409)
+    await writeFile(join(root,seeded.openPath,'EVRAK','sentetik.txt'),'güncel içerik')
+    const response = await planClose(seeded.caseId,{ ...input,replaceFailedOperationId: old.id })
+    expect(response.statusCode).toBe(201)
+    const fresh = caseLifecycleOperationResponseSchema.parse(response.json()).operation
+    expect(fresh).toMatchObject({ status: 'approval_required',canApprove: true,linkedFileOperation: null })
+    expect(await readFile(evidencePath,'utf8')).toBe(evidence)
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1',[seeded.caseId])).rows[0].lifecycle_status).toBe('open')
+    expect((await pool.query('SELECT status,failure_reason_code FROM case_lifecycle_operations WHERE id=$1',[old.id])).rows[0]).toEqual({ status: 'stale',failure_reason_code: 'access_denied' })
+    await approve(seeded.caseId,fresh)
+    expect((await runOnce(agentClient,agentConfig)).kind).toBe('reported')
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1',[seeded.caseId])).rows[0].lifecycle_status).toBe('closed')
+    expect(await readFile(join(root,fresh.destination.relativePath,'EVRAK','sentetik.txt'),'utf8')).toBe('güncel içerik')
+    expect(await readFile(evidencePath,'utf8')).toBe(evidence)
+  },60_000)
 
   it('releases a failed reservation after a verified manual move, retaining the failed lifecycle history', async () => {
     const seeded = await seedCase('34 EXT 106', false)

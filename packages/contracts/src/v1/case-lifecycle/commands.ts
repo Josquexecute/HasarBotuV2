@@ -10,6 +10,7 @@ export const closePlanRequestSchema = z.strictObject({
   expectedCaseVersion: entityVersionSchema,
   expectedLocationVersion: entityVersionSchema,
   closeMode: closeModeSchema,
+  replaceFailedOperationId: z.string().uuid().optional(),
   reason: lifecycleReasonSchema.optional(),
 }).superRefine((value, context) => {
   if (value.closeMode === 'with_missing_requirements' && value.reason === undefined) {
@@ -22,6 +23,7 @@ export const reopenPlanRequestSchema = z.strictObject({
   expectedLocationVersion: entityVersionSchema,
   reason: lifecycleReasonSchema,
   targetWorkflowStage: openWorkflowStageSchema.default('new_notification'),
+  replaceFailedOperationId: z.string().uuid().optional(),
 })
 
 export const lifecycleApproveRequestSchema = z.strictObject({

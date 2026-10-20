@@ -15,6 +15,8 @@
 .notice-sheet-editor__checks label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .notice-sheet-reset { justify-self: start; border: 0; background: transparent; padding: 2px 0; color: var(--accent); cursor: pointer; font-size: 11px; }
 .notice-sheet-preview { overflow: auto; min-height: 0; padding: 20px; background: var(--surface-muted); }
+.notice-sheet-workspace--print-preview { grid-template-columns: minmax(0, 1fr); }
+.notice-sheet-workspace--print-preview .notice-sheet-editor { display: none; }
 .notice-sheet-message { padding: 10px 20px; font-size: 13px; line-height: 1.5; border-bottom: 1px solid var(--border); }
 .notice-sheet-message[role='alert'] { color: var(--danger, #ba3434); }
 .notice-sheet-save-state { margin-right: auto; font-size: 11px; color: var(--text-secondary); }

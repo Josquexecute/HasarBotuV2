@@ -7,7 +7,7 @@ export const noticeSheetParamsSchema = z.strictObject({ caseId: caseIdSchema })
 
 const fieldShapes = Object.fromEntries(Object.entries(NOTICE_SHEET_FIELD_LIMITS).map(([key, limit]) => [
   key, z.string().trim().max(limit).refine(value =>
-    (key !== 'inspectionDate' && key !== 'preliminaryReportDate') || value === '' || localDateSchema.safeParse(value).success,
+    !['inspectionDate', 'preliminaryReportDate', 'notificationDate', 'lossDate', 'closureDate'].includes(key) || value === '' || localDateSchema.safeParse(value).success,
   { message: 'invalid_local_date' }),
 ])) as Record<NoticeSheetField, z.ZodString>
 const documentShapes = Object.fromEntries(NOTICE_SHEET_DOCUMENT_CODES.map(code => [code, z.boolean()])) as Record<NoticeSheetDocument, z.ZodBoolean>

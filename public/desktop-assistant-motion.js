@@ -25,7 +25,8 @@ export class AssistantMotion {
     this.activity()
   }
 
-  activity() {
+  activity(wake = false) {
+    if (this.sleeping && !wake) return
     const now = this.clock()
     this.nextStretch = now + 45000 + this.random() * 30000
     this.sleepAt = now + 120000
@@ -50,6 +51,7 @@ export class AssistantMotion {
   }
 
   curious() {
+    if (this.sleeping) return
     const now = this.clock()
     this.activity()
     if (this.pressed || now < this.activeUntil || now - this.lastCuriosity < 12000) return
@@ -78,6 +80,7 @@ export class AssistantMotion {
     }
     if (now >= this.sleepAt) {
       this.sleeping = true
+      this.bot.lookX = this.bot.lookY = 0
       this.bot.eyeOverride = 'closed'
       this.bot.eyeOverrideUntil = Infinity
       this.pose({ tilt: [[.07, 650], [0, 650]], sy: [[.96, 650], [1, 650]] })
@@ -98,7 +101,7 @@ export class AssistantMotion {
 
   press() {
     if (this.pressed) return
-    this.activity()
+    this.activity(true)
     this.pressed = true
     this.settle()
     this.bot.eyeOverride = null
@@ -172,6 +175,7 @@ export class AssistantMotion {
   work(active) {
     if (this.working === active) return
     this.working = active
+    if (this.sleeping) return
     this.activity()
     this.nextWork = this.clock() + 400
     // Do not cut off a confirmed task celebration when its promise finishes.
@@ -179,6 +183,7 @@ export class AssistantMotion {
   }
 
   edge(direction) {
+    if (this.sleeping) return
     this.pendingEdge = 0
     if (!direction) return
     if (this.pressed || this.working || this.clock() < this.activeUntil || this.bot.tweens.size) { this.pendingEdge = direction; return }
@@ -189,6 +194,7 @@ export class AssistantMotion {
   }
 
   react(kind) {
+    if (this.sleeping) return
     if (this.pressed && kind !== 'surprised') { this.pendingReaction = kind; return }
     const now = this.clock()
     const cooldown = kind === 'notification' ? 15000 : 5000
@@ -216,6 +222,7 @@ export class AssistantMotion {
   }
 
   success() {
+    if (this.sleeping) return
     const now = this.clock()
     this.activity()
     if (this.pressed) { this.pendingSuccess = true; return }
@@ -228,17 +235,19 @@ export class AssistantMotion {
     this.pose({ oy: [[.025, 100], [-.12, 240], [0, 380]], sy: [[.95, 100], [1.045, 240], [1, 380]], sx: [[1.04, 100], [.98, 240], [1, 380]] })
   }
 
-  reset() {
+  reset(preserveSleep = false) {
+    const asleep = preserveSleep && this.sleeping
     this.bot.interruptGreet()
     for (const [property, value] of Object.entries(resting)) {
       this.bot.tweens.delete(property)
       this.bot.locks.delete(property)
       this.bot[property] = value
     }
-    this.bot.eyeOverride = null
-    this.bot.eyeOverrideUntil = 0
+    this.bot.eyeOverride = asleep ? 'closed' : null
+    this.bot.eyeOverrideUntil = asleep ? Infinity : 0
     this.hovered = this.pressed = this.dragging = this.pendingSuccess = false
-    this.sleeping = this.working = false
+    this.sleeping = asleep
+    this.working = false
     this.pendingReaction = undefined
     this.pendingEdge = 0
     this.activeUntil = 0

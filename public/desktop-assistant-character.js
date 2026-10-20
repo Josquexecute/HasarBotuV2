@@ -37,6 +37,12 @@ if (assistant && context) {
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, size, size)
     const pose = reduced() ? neutral : bot
+    if (reduced()) {
+      neutral.eyeOverride = gestures.sleeping ? 'closed' : null
+      neutral.eyeOverrideUntil = gestures.sleeping ? Infinity : 0
+    }
+    button.dataset.sleeping = String(gestures.sleeping)
+    button.dataset.reducedMotion = String(reduced())
     pose.draw(context, size, size)
   }
   const sizeObserver = new ResizeObserver(() => {
@@ -65,6 +71,7 @@ if (assistant && context) {
       const wasBusy = bot.busy
       const previousEyes = bot.eyeOverride
       gestures.tick()
+      button.dataset.sleeping = String(gestures.sleeping)
       bot.update(Math.min((time - previousTime) / 1000, 0.1))
       previousTime = time
       lastDraw = Number.isFinite(lastDraw) ? lastDraw + Math.max(1, Math.floor((elapsed + 0.5) / interval)) * interval : time
@@ -86,7 +93,7 @@ if (assistant && context) {
     previousTime = performance.now()
     lastDraw = 0
     if (reduced()) {
-      gestures.reset()
+      gestures.reset(true)
       // Use the neutral pose so a mid-blink or squash cannot get frozen.
       draw()
       return
@@ -95,14 +102,14 @@ if (assistant && context) {
     wake()
   }
   const unsubscribe = assistant.onGaze(({ x, y }) => {
-    if (reduced() || disposed || bot.lookX === x && bot.lookY === -y) return
+    if (reduced() || disposed || gestures.sleeping || bot.lookX === x && bot.lookY === -y) return
     bot.lookX = x
     // Screen Y grows downwards; the engine's pitch draws positive Y upwards.
     bot.lookY = -y
     wake()
   })
   const greetOnHover = () => {
-    if (reduced() || disposed || document.hidden) return
+    if (reduced() || disposed || document.hidden || gestures.sleeping) return
     gestures.hovered = true
     gestures.activity()
     window.clearTimeout(hoverTimer)
@@ -110,15 +117,24 @@ if (assistant && context) {
   }
   const leave = () => { window.clearTimeout(hoverTimer); gestures.hovered = false }
   const press = (event) => {
+    if (event.button === 0 && reduced() && !disposed && !document.hidden) {
+      gestures.activity(true)
+      gestures.reset()
+      draw()
+      return
+    }
     if (event.button === 0 && !reduced() && !disposed && !document.hidden) {
       window.clearTimeout(hoverTimer)
       gestures.press()
+      button.dataset.sleeping = 'false'
       wake()
     }
   }
   const activate = (event) => {
-    if (event.detail !== 0 || reduced() || disposed || document.hidden) return
+    if (event.detail !== 0 || disposed || document.hidden) return
+    if (reduced()) { gestures.activity(true); gestures.reset(); draw(); return }
     gestures.press()
+    button.dataset.sleeping = 'false'
     gestures.release()
     wake()
   }
@@ -140,7 +156,7 @@ if (assistant && context) {
     wake()
   })
   const onVisibility = () => {
-    if (document.hidden) { pause(); gestures.reset() }
+    if (document.hidden) { pause(); gestures.reset(true) }
     else resume()
   }
   const unsubscribeAppearance = assistant.onAppearance(({ accentColor, characterColor, reduceMotion }) => {

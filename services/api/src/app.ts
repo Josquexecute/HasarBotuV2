@@ -37,6 +37,7 @@ import { registerOperationalAlertRoutes } from './operational-alerts/index.js'
 import { registerCaseVehicleProfileRoutes } from './case-vehicle-profile/index.js'
 import { registerCaseVehicleOwnersRoutes } from './case-vehicle-owners/index.js'
 import { registerNoticeSheetRoutes } from './notice-sheets/routes.js'
+import { registerNotificationPreferencesRoutes } from './notification-preferences/routes.js'
 import { registerFieldPhotoRoutes } from './field-photos/routes.js'
 import { registerCaseInventoryRoutes } from './case-inventory/index.js'
 import { registerUserRoutes } from './users/index.js'
@@ -196,6 +197,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerCaseVehicleProfileRoutes(app, { pool: options.auth.pool })
     registerCaseVehicleOwnersRoutes(app, { pool: options.auth.pool })
     registerNoticeSheetRoutes(app, { pool: options.auth.pool })
+    registerNotificationPreferencesRoutes(app, { pool: options.auth.pool })
     registerCaseInventoryRoutes(app, { pool: options.auth.pool, clock: options.clock ?? systemClock })
     registerUserRoutes(app, { pool: options.auth.pool })
     registerV1ImportQuarantineRoutes(app, { pool: options.auth.pool })

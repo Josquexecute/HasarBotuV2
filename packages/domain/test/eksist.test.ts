@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { parseEksist, matchEksistReference } from '../src/eksist.js'
 
 describe('Eksist shared mapping', () => {
+  it('accepts repeated equivalent SBM values and skips empty copies without losing real conflicts', () => {
+    const result = parseEksist('Ürün:\nÜrün: Trafik\nÜrün: TRAFİK\nSigorta Şirketi:\nSigorta Şirketi: Örnek Sigorta\nSigorta Şirketi: ÖRNEK SİGORTA')
+    expect(result).toMatchObject({ caseType: 'traffic',insurer: 'Örnek Sigorta',conflicts: [] })
+    expect(parseEksist('Sigorta Şirketi: İlk Sigorta\nSigorta Şirketi: İkinci Sigorta').conflicts).toEqual(['sigortasirketi'])
+  })
   it('preserves explicit source body fields instead of appending them to the model value', () => {
     const result = parseEksist('Marka: FORD\nAraç Tipi: TRANSIT\nModel Yılı: 2021\nAraç Tarife Grubu: KAMYONET\nKasa Tipi: Panelvan\nGövde Tipi: Panelvan\nMotor No: TEST123')
     expect(result).toMatchObject({ brand: 'FORD', model: 'TRANSIT', modelYear: '2021', vehicleClass: 'light_commercial', vehicleFields: { 'Kasa Tipi': 'Panelvan', 'Gövde Tipi': 'Panelvan', 'Motor No': 'TEST123' } })

@@ -110,8 +110,9 @@ Bu değişiklikten önce rastgele portlarda bırakılmış depolama otomatik ta�
 
 ## Touch Assistant tepkileri
 
-Yardımcı iki dakika etkileşim olmadığında uyuklar; üzerine gelince veya işlem
-başlayınca uyanır. Not, operasyon, belge bilgisi yükleme, PDF metni çıkarma ve
+Yardımcı iki dakika etkileşim olmadığında uyur; üzerinde animasyonlu Zzz görünür.
+Uyurken fareyi takip etmez ve arka plan işlemleriyle uyanmaz; tıklanınca uyanır.
+Hareket azaltma tercihinde Zzz sabit gösterilir. Not, operasyon, belge bilgisi yükleme, PDF metni çıkarma ve
 e-posta işlemleri sürerken kısa çalışma hareketleri yapar. Başarısız işlemde
 başını sallar; yardımcıya tıklamak ilgili açıklamayı açar. Yeni takip bildirimi
 kısa bir dikkat hareketi, onaylanmış görev tamamlama el sallama üretir. Ekranın
@@ -180,7 +181,22 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.65**, 2026-10-19T19:06:55.197Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.66**, 2026-10-20T15:39:16.725Z; Windows x64,
+105.204.575 bayt, SHA-256 `8587d53982cf657a0e2057a91375f614bd180ded074c40feee0f802e4bce21ab`.
+Föyde revize servis ve doğru bölüme ait telefon/adres aktarımı, tüm basılı alanların
+düzenlenmesi, ayrı A4 önizleme, çoklu SBM şirket seçimi, başarısız atomik kapanışta
+güncel önizleme ve yeni onay akışı teslim edildi. Touch uyku göstergesi ve hesaba özel
+bildirim penceresi/ses/tepki tercihleri eklendi; Tramer sonuçları büyük pencereyle gösterilir.
+3.111 genel test geçti; dış servis ayarı isteyen 6 canlı test atlandı. Gerçek Electron,
+A4 PDF, NSIS Unicode hedef, typecheck, lint, derleme ve paket açılışı doğrulandı;
+62 paketli UI dosyası kaynak çıktısıyla eşleşti. Yeni tercih tablosu ve API ofise
+uygulandı. Özel bağlantı katmanının föy başlığını iletmesi 18 testle doğrulandı.
+Kurulu **0.1.65**, yeni sürümü `available` gördü; kimlik doğrulamalı HTTP 200 indirmesinde
+tam boyut ve SHA-256 eşleşti. Canlı istemcide revize servis, eski/yeni föy sözleşmeleri
+ve kişisel bildirim ayarları doğrulandı. Önceki 0.1.65 manifesti ve değişmez paketi korundu;
+çalışan istemcilere zorla kurulum veya kullanıcı kayıtlarında toplu değişiklik yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.65**, 2026-10-19T19:06:55.197Z; Windows x64,
 105.199.448 bayt, SHA-256 `2461f534946619132758b7d2c9f1badde7cdf27eeb4b12ada518a803b84031b0`.
 Görünür başlangıç durumu/hataları, asenkron ve çıkışta tamamlanan konum kaydı,
 uzak imleçte seyrek göz takibi ve API uyum politikası temizliği teslim edildi.

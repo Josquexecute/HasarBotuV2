@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { TRACKED_DOCUMENT_TYPES } from '@hasarbotu/domain'
+import { DEFAULT_NOTIFICATION_PREFERENCES, notificationPreferencesSchema } from './notification-preferences.js'
 export { inferTrackedDocumentType, TRACKED_DOCUMENT_LABELS } from '@hasarbotu/domain'
 export const trackedDocumentTypeSchema = z.enum(TRACKED_DOCUMENT_TYPES)
 
@@ -33,7 +34,10 @@ export const trackingSnapshotSchema = z.object({
   services: z.array(z.object({ kind: z.enum(['folder','mail']), status: z.enum(['running','error','stale']), lastAttemptAt: z.string(), lastSuccessAt: z.string().nullable() })),
 })
 export type TrackingSnapshot = z.infer<typeof trackingSnapshotSchema>
-export const trackingPendingNotificationsSchema = z.object({ notifications: z.array(z.object({ id: z.string(),caseId: z.string(),plate: z.string(),title: z.string() })) })
+export const trackingPendingNotificationsSchema = z.object({
+  notifications: z.array(z.object({ id: z.string(),caseId: z.string(),plate: z.string(),title: z.string(),isResult: z.boolean().default(false) })),
+  preferences: notificationPreferencesSchema.default(DEFAULT_NOTIFICATION_PREFERENCES),
+})
 export const trackingInboxSchema = z.strictObject({
   notifications: trackingSnapshotSchema.shape.notifications,
   total: z.number().int().nonnegative(),unread: z.number().int().nonnegative(),page: z.number().int().positive(),

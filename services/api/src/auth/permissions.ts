@@ -13,8 +13,8 @@ export const hasPermission = (user: { roles: readonly string[];permissions?: rea
 
 /** Uses registered route templates, never raw URLs containing tokens or user input. */
 export function permissionForRequest(route: string,method: string): PermissionCode | undefined {
-  // Personal profile and appearance are self-service, including read-only accounts.
-  if (route === '/api/v1/me/assistant-appearance' || route === '/api/v1/me/profile') return undefined
+  // Personal profile, appearance and notifications are self-service for every account.
+  if (route === '/api/v1/me/assistant-appearance' || route === '/api/v1/me/profile' || route === '/api/v1/me/notification-preferences') return undefined
   if (method === 'GET' && (route === '/api/v1/desktop-updates/latest' || route === '/api/v1/desktop-updates/artifacts/:sha256')) return undefined
   if (!route.startsWith('/api/v1/') || /\/auth\/|\/google\//.test(route)) return undefined
   if (route.startsWith('/api/v1/field/')) return ['GET','HEAD'].includes(method) ? 'case_read' : 'documents_write'

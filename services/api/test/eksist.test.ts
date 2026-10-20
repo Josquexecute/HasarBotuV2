@@ -144,7 +144,6 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     return app.inject({ method: 'POST', url: '/api/v1/cases/quick-create', headers: { cookie, 'idempotency-key': key }, payload })
   }
   const manual = { case: { caseType: 'traffic', plate: '34 TR 2491', notificationDate: '2026-09-19', lossDate: '2026-09-17' }, storageRootKey: 'test-primary' }
-
   it('does not publish contradictory body fields as authoritative calculator defaults', async () => {
     const src = await source('Talep İşlem Ref No: body-conflict\nPlaka: 034 - AB1234\nKasa Tipi: Sedan\nKasa Tipi: SUV')
     const response = await quick({ ...manual, source: { id: src.id, reference: 'body-conflict' } })
@@ -315,6 +314,21 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
     expect(row.raw_text).toContain('SENTETİK EKSPER')
     expect(row.reviewed_fields.expertReview).toMatchObject({ name: 'SENTETIK EKSPER', confirmed: true, reviewedByUserId: expect.any(String) })
     expect((await quick(reviewed, key)).json().case.id).toBe(accepted.json().case.id)
+  })
+
+
+  it('accepts a source-checked insurer selection without silently choosing between conflicting companies', async () => {
+    const src = await source('Talep İşlem Ref No: insurer-choice\nÜrün: Trafik\nÜrün: TRAFİK\nPlaka: 034 - AB1234\nSigorta Şirketi: İlk Sigorta\nSigorta Şirketi: İkinci Sigorta')
+    const base = { ...manual, source: { id: src.id, reference: 'insurer-choice' } }
+    expect((await quick(base)).statusCode).toBe(400)
+    expect((await quick({ ...base, source: { ...base.source, insurerReview: { name: 'Kaynakta olmayan şirket', confirmed: true } } })).statusCode).toBe(400)
+    const response = await quick({ ...base, source: { ...base.source, insurerReview: { name: 'İkinci Sigorta', confirmed: true } } })
+    expect(response.statusCode).toBe(202)
+    expect(response.json().case.eksist.insurerName).toBe('İkinci Sigorta')
+    const stored = (await pool.query('SELECT raw_text,reviewed_fields FROM eksist_sources WHERE id=$1',[src.id])).rows[0]
+    expect(stored.raw_text).toContain('İlk Sigorta')
+    expect(stored.reviewed_fields.insurerReview).toMatchObject({ name: 'İkinci Sigorta', confirmed: true })
+    await runOnce(agentClient, agentConfig)
   })
 
 

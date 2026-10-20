@@ -3,8 +3,10 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TrackingPopup } from './TrackingPopup'
 import { trackingRequest } from './trackingApi'
+import { playNotificationSound } from '../notifications/notification-sound'
 
 vi.mock('./trackingApi',() => ({ trackingRequest: vi.fn() }))
+vi.mock('../notifications/notification-sound',() => ({ enableNotificationSound: vi.fn(),playNotificationSound: vi.fn() }))
 const notice = { id: 'notice',caseId: 'case',plate: '34 TEST 01',title: 'Yeni evrak' }
 afterEach(() => { vi.useRealTimers();vi.resetAllMocks();vi.unstubAllGlobals() })
 describe('owned notification popup',() => {
@@ -33,11 +35,38 @@ describe('owned notification popup',() => {
     render(<MemoryRouter><TrackingPopup /></MemoryRouter>)
     fireEvent.click(await screen.findByRole('button',{ name: 'Uyarıyı kapat' }))
     await waitFor(() => expect(screen.queryByRole('button',{ name: 'Uyarıyı kapat' })).not.toBeInTheDocument())
-    expect(trackingRequest).toHaveBeenNthCalledWith(2,'tracking/notifications/dismiss',{})
+    expect(trackingRequest).toHaveBeenNthCalledWith(2,'tracking/notifications/dismiss',{ ordinary: true })
     act(() => { window.dispatchEvent(new Event('tracking-updated')) })
     await waitFor(() => expect(trackingRequest).toHaveBeenCalledTimes(3))
     act(() => { window.dispatchEvent(new Event('tracking-updated')) })
     expect(await screen.findByRole('button',{ name: 'Uyarıyı kapat' })).toBeInTheDocument()
+  })
+  it('always shows Tramer results prominently even when all ordinary notifications are muted',async () => {
+    const notificationReceived = vi.fn()
+    vi.stubGlobal('hasarbotuAssistantFeedback', { notificationReceived })
+    vi.mocked(trackingRequest).mockResolvedValue({ notifications: [{ ...notice,id: 'result',isResult: true,title: 'Tramer sonuçlandı' },{ ...notice,id: 'document' }],preferences: { showPopups: false,playSound: false,assistantReaction: false } })
+    render(<MemoryRouter><TrackingPopup /></MemoryRouter>)
+    expect(await screen.findByRole('alertdialog',{ name: 'Tramer sonucu geldi' })).toBeInTheDocument()
+    expect(screen.getByText('Tramer sonuçlandı')).toBeInTheDocument()
+    expect(screen.queryByText('Yeni evrak')).not.toBeInTheDocument()
+    expect(notificationReceived).toHaveBeenCalledOnce()
+    expect(playNotificationSound).toHaveBeenCalledWith(true)
+  })
+  it('shows ordinary notifications silently when sound and assistant reactions are disabled',async () => {
+    const notificationReceived = vi.fn()
+    vi.stubGlobal('hasarbotuAssistantFeedback',{ notificationReceived })
+    vi.mocked(trackingRequest).mockResolvedValue({ notifications: [notice],preferences: { showPopups: true,playSound: false,assistantReaction: false } })
+    render(<MemoryRouter><TrackingPopup /></MemoryRouter>)
+    expect(await screen.findByLabelText('Yeni bildirim')).toBeInTheDocument()
+    expect(notificationReceived).not.toHaveBeenCalled()
+    expect(playNotificationSound).not.toHaveBeenCalled()
+  })
+  it('hides ordinary popup notifications without acknowledging them',async () => {
+    vi.mocked(trackingRequest).mockResolvedValue({ notifications: [notice],preferences: { showPopups: false,playSound: false,assistantReaction: false } })
+    render(<MemoryRouter><TrackingPopup /></MemoryRouter>)
+    await waitFor(() => expect(trackingRequest).toHaveBeenCalledOnce())
+    expect(screen.queryByLabelText('Yeni bildirim')).not.toBeInTheDocument()
+    expect(trackingRequest).not.toHaveBeenCalledWith('tracking/notifications/dismiss',expect.anything())
   })
   it('does not restore a stale poll result after dismissal',async () => {
     let finish!: (value: unknown) => void

@@ -7,6 +7,8 @@ export const noticeSheetFixture = noticeSheetResponseSchema.parse({
   version: null, updatedAt: null, permissions: { canEdit: true }, overrides: { fields: {}, documents: {} },
   defaults: {
     fields: {
+      organizationName: 'Örnek Ekspertiz', officeNumber: '2026/123', claimNumber: 'TR-2026-123', noticeNumber: 'IH-123',
+      insurerName: 'Örnek Sigorta', plate: '34 TEST 123', notificationDate: '2026-10-16', lossDate: '2026-10-15', closureDate: '', expertName: 'Örnek Eksper',
       inspectionDate: '', reportNumber: 'R-123', insuredPolicyPeriod: '01.01.2026 – 01.01.2027', victimPolicyPeriod: '',
       recourse: '', deductible: '', insuredFault: '', victimFault: '', insuredName: 'Sigortalı Örnek', insuredPlate: '',
       insuredMileage: '', insuredHeavyDamage: '', insuredPreviousClaims: '', victimName: 'Mağdur Örnek', victimPlate: '34 TEST 123',

@@ -40,6 +40,9 @@ describe('İhbar föyü düzenleme ve yazdırma', () => {
       window.dispatchEvent(new Event('afterprint'))
     })
     await user.click(dialog.getByRole('button', { name: 'Kaydet ve Yazdır' }))
+    expect(await dialog.findByText('Yazdırma Önizlemesi')).toBeInTheDocument()
+    expect(print).not.toHaveBeenCalled()
+    await user.click(dialog.getByRole('button', { name: 'Yazıcıya gönder' }))
     await waitFor(() => expect(print).toHaveBeenCalledOnce())
     expect(port.save).toHaveBeenCalledWith(noticeSheetFixture.caseId, { expectedVersion: null, overrides: { fields: { recourse: 'İnceleniyor' }, documents: {} } })
     expect(document.body).not.toHaveClass('printing-notice-sheet')
@@ -62,6 +65,7 @@ describe('İhbar föyü düzenleme ve yazdırma', () => {
     expect(dialog.getByLabelText('Rücu durumu')).toBeDisabled()
     const print = vi.spyOn(window, 'print').mockImplementation(() => window.dispatchEvent(new Event('afterprint')))
     await user.click(dialog.getByRole('button', { name: 'Yazdır' }))
+    await user.click(await dialog.findByRole('button', { name: 'Yazıcıya gönder' }))
     expect(print).toHaveBeenCalledOnce()
     expect(port.save).not.toHaveBeenCalled()
   })
@@ -76,7 +80,7 @@ describe('İhbar föyü düzenleme ve yazdırma', () => {
     expect(await dialog.findByRole('alert')).toHaveTextContent('tek A4 sayfasını aşıyor')
     expect(print).not.toHaveBeenCalled()
   })
-  it('protects unsaved work on Escape and keeps the primary plate read-only', async () => {
+  it('protects unsaved work on Escape and lets the printed plate be revised', async () => {
     const { dialog, user, onClose } = setup()
     await dialog.findByRole('article')
     await user.type(dialog.getByLabelText('Rücu durumu'), 'Not')
@@ -84,8 +88,21 @@ describe('İhbar föyü düzenleme ve yazdırma', () => {
     expect(onClose).not.toHaveBeenCalled()
     await user.click(dialog.getByRole('button', { name: 'Düzenlemeye dön' }))
     await user.click(dialog.getByText('Mağdur / karşı araç', { selector: 'summary' }))
-    expect(dialog.getByLabelText('Mağdur plaka')).toHaveAttribute('readonly')
+    expect(dialog.getByLabelText('Mağdur plaka')).not.toHaveAttribute('readonly')
+    await user.clear(dialog.getByLabelText('Mağdur plaka'))
+    await user.type(dialog.getByLabelText('Mağdur plaka'), '06 TEST 99')
+    expect(dialog.getByRole('article')).toHaveTextContent('06 TEST 99')
     expect(dialog.getByLabelText(/Rücu durumu/)).toHaveValue('Not')
+  })
+  it('revises all header fields in the preview and saves sheet overrides only', async () => {
+    const { dialog, user, port } = setup()
+    await dialog.findByRole('article')
+    for (const [label, value] of [['Sigorta şirketi', 'Yeni Sigorta'], ['Dosya plakası', '06 TEST 99'], ['Ofis dosya no', 'F-999'], ['Eksper adı', 'Yeni Eksper']] as const) {
+      await user.clear(dialog.getByLabelText(label)); await user.type(dialog.getByLabelText(label), value)
+      expect(dialog.getByRole('article')).toHaveTextContent(value)
+    }
+    await user.click(dialog.getByRole('button', { name: 'Kaydet' }))
+    expect(port.save).toHaveBeenCalledWith(noticeSheetFixture.caseId, expect.objectContaining({ overrides: expect.objectContaining({ fields: expect.objectContaining({ insurerName: 'Yeni Sigorta', plate: '06 TEST 99', officeNumber: 'F-999', expertName: 'Yeni Eksper' }) }) }))
   })
   it('requires a classified case type before previewing or printing', async () => {
     const { dialog } = setup({}, { ...noticeSheetFixture, caseType: null, permissions: { canEdit: false } })

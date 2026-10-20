@@ -1,12 +1,18 @@
 import type pg from 'pg'
 import { eksistCaseDataSchema, type CaseListItem, type EksistCaseData } from '@hasarbotu/contracts'
-import { eksistKey, matchEksistReference, parseEksist } from '@hasarbotu/domain'
+import { eksistKey, getEksistFieldValues, matchEksistReference, parseEksist } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { ReferenceCheckError } from '../cases/write-store.js'
 
 /** Reparse the stored original, never trust browser-supplied names or vehicle fields. */
-export async function applyEksistSource(client: pg.PoolClient, organizationId: string, caseId: string, sourceId: string, text: string, serviceRevision?: { name: string }, review?: { method: string; expertReview?: { name: string; confirmed: true } }): Promise<EksistCaseData> {
+export async function applyEksistSource(client: pg.PoolClient, organizationId: string, caseId: string, sourceId: string, text: string, serviceRevision?: { name: string }, review?: { method: string; expertReview?: { name: string; confirmed: true }; insurerReview?: { name: string; confirmed: true } }): Promise<EksistCaseData> {
   const data = parseEksist(text)
+  if (review?.insurerReview) {
+    const selected = getEksistFieldValues(text, 'Sigorta Şirketi').find(name => name === review.insurerReview!.name)
+    if (!selected || !review.insurerReview.confirmed) throw new ReferenceCheckError('insurerId', 'eksist_source_conflict')
+    data.insurer = selected
+    data.conflicts = data.conflicts.filter(field => field !== 'sigortasirketi')
+  }
   // Turkish I/İ cannot be inferred from OCR text. Keep the original as evidence
   // and require a source-checked name; never silently replace identity letters.
   if (review?.method === 'ocr') {

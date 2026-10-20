@@ -33,7 +33,7 @@ export function createFieldPortal({ directory, upstream, publicOrigin, allowTail
         const limit = trustedTailnet ? 16 * 1024 * 1024 : url.pathname.endsWith('/chunk') ? 262144 : 65536
         if (Number(request.headers['content-length'] ?? 0) > limit) { reject(413,'payload_too_large'); return }
         const headers = {}
-        for (const name of ['accept','content-type','content-length','cookie','idempotency-key','x-hasarbotu-dashboard-stages']) if (request.headers[name]) headers[name] = request.headers[name]
+        for (const name of ['accept','content-type','content-length','cookie','idempotency-key','x-hasarbotu-dashboard-stages','x-hasarbotu-notice-sheet-fields']) if (request.headers[name]) headers[name] = request.headers[name]
         const proxy = http.request({ hostname: target.hostname, port: target.port, method, path: url.pathname + url.search, headers, timeout: 90_000 }, incoming => {
           if ((incoming.statusCode ?? 500) >= 300 && (incoming.statusCode ?? 500) < 400) { incoming.resume(); reject(502,'unexpected_redirect'); return }
           response.statusCode = incoming.statusCode ?? 502

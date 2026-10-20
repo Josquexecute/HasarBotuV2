@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 
 const FOCUSABLE = 'button:not(:disabled), a[href], summary, input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
 
-export function ModalFrame({ children, labelledBy, onClose, className = '', busy = false, inert = false, nested = false }: {
+export function ModalFrame({ children, labelledBy, onClose, className = '', busy = false, inert = false, nested = false, role = 'dialog' }: {
   children: ReactNode
   labelledBy: string
   onClose(): void
@@ -11,6 +11,7 @@ export function ModalFrame({ children, labelledBy, onClose, className = '', busy
   busy?: boolean
   inert?: boolean
   nested?: boolean
+  role?: 'dialog' | 'alertdialog'
 }) {
   const dialog = useRef<HTMLElement>(null)
   const previousFocus = useRef(document.activeElement as HTMLElement | null)
@@ -24,7 +25,7 @@ export function ModalFrame({ children, labelledBy, onClose, className = '', busy
   return createPortal(<div className={`modal-backdrop${nested ? ' modal-backdrop--nested' : ''}`} role="presentation" onMouseDown={event => {
     if (event.currentTarget === event.target && !busy && !inert) onClose()
   }}>
-    <section ref={dialog} className={`modal ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={labelledBy} aria-busy={busy} inert={inert} tabIndex={-1} onKeyDown={event => {
+    <section ref={dialog} className={`modal ${className}`.trim()} role={role} aria-modal="true" aria-labelledby={labelledBy} aria-busy={busy} inert={inert} tabIndex={-1} onKeyDown={event => {
       if (event.defaultPrevented || inert) return
       if (event.key === 'Escape') {
         event.preventDefault()

@@ -39,9 +39,15 @@ describe('İhbar föyü kaynak eşlemesi', () => {
     expect(result.documents).toMatchObject({ accidentReport: true, victimRegistration: true, insuredLicense: false, tramerEntry: true, damagePhotos: false, scenePhotos: false })
     expect(buildNoticeSheetDefaults({ ...source, caseType: 'casco', readyDocumentTypes: ['casco_driver_license'] }).documents.insuredLicense).toBe(true)
   })
-  it('applies explicit blanks and unchecked boxes while protecting the claim identity', () => {
+  it('allows every printed value to be revised without mutating source facts', () => {
     const defaults = buildNoticeSheetDefaults({ ...source, readyDocumentTypes: ['ktt'] })
-    expect(applyNoticeSheetOverrides(defaults, { fields: { insuredName: '', victimPlate: '06 WRONG 99' }, documents: { accidentReport: false } }, 'traffic'))
-      .toMatchObject({ fields: { insuredName: '', victimPlate: source.plate }, documents: { accidentReport: false } })
+    expect(applyNoticeSheetOverrides(defaults, { fields: { insuredName: '', victimPlate: '06 WRONG 99' }, documents: { accidentReport: false } }))
+      .toMatchObject({ fields: { insuredName: '', victimPlate: '06 WRONG 99' }, documents: { accidentReport: false } })
+    expect(defaults.fields.victimPlate).toBe(source.plate)
+  })
+  it('reads the repair shop phone and address separately from repeated contact labels', () => {
+    const eksistText = 'Atama Yapan İletişim Bilgileri\nTelefon: 0111 111 11 11\nAçık Adres: Atayan adresi\nEkspertiz Yeri Bilgileri\nTelefon: 0222 222 22 22\nAçık Adres: İnceleme adresi\nTamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: Eski Servis\nTelefon: 0333 333 33 33\nAçık Adres: Tamirhane açık adresi\nEksper Bilgileri\nTelefon: 0444 444 44 44'
+    expect(buildNoticeSheetDefaults({ ...source, serviceName: 'Eski Servis', eksistServiceRevised: false, eksistText }).fields)
+      .toMatchObject({ servicePhone: '0333 333 33 33', serviceAddress: 'Tamirhane açık adresi' })
   })
 })

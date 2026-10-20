@@ -4,9 +4,11 @@ import { BellRing, X } from 'lucide-react'
 import { trackingPendingNotificationsSchema } from '@hasarbotu/contracts'
 import { trackingRequest } from './trackingApi'
 import { assistantFeedback } from '../../app/assistantFeedback'
+import { ModalFrame } from '../../components/ModalFrame'
+import { enableNotificationSound, playNotificationSound } from '../notifications/notification-sound'
 import './tracking.css'
 
-interface Notice { id: string;caseId: string;plate: string;title: string }
+interface Notice { id: string;caseId: string;plate: string;title: string;isResult: boolean }
 export function TrackingPopup() {
   const [items,setItems] = useState<Notice[]>([])
   const [error,setError] = useState('')
@@ -25,12 +27,15 @@ export function TrackingPopup() {
       try {
         const data = trackingPendingNotificationsSchema.parse(await trackingRequest('tracking/notifications/pending',undefined,controller.signal))
         if (!controller.signal.aborted && requestGeneration === generation.current) {
-          const received = data.notifications.some((notice) => !knownIds.current.has(notice.id))
+          const visible = data.notifications.filter(notice => notice.isResult || data.preferences.showPopups)
+          const arrivals = visible.filter(notice => !knownIds.current.has(notice.id))
+          const urgent = arrivals.some(notice => notice.isResult)
           knownIds.current = new Set(data.notifications.map((notice) => notice.id))
-          setItems(data.notifications);setError('')
-          if (received) {
+          setItems(visible);setError('')
+          if (arrivals.length) {
             window.dispatchEvent(new Event('tracking-received'))
-            assistantFeedback()?.notificationReceived?.()
+            if (urgent || data.preferences.assistantReaction) assistantFeedback()?.notificationReceived?.()
+            if (urgent || data.preferences.playSound) void playNotificationSound(urgent)
           }
         }
       } catch {
@@ -42,8 +47,10 @@ export function TrackingPopup() {
     }
     const refresh = () => { void poll() }
     window.addEventListener('tracking-updated',refresh)
+    window.addEventListener('pointerdown',enableNotificationSound)
+    window.addEventListener('keydown',enableNotificationSound)
     void poll()
-    return () => { controller.abort();clearTimeout(timer);window.removeEventListener('tracking-updated',refresh) }
+    return () => { controller.abort();clearTimeout(timer);window.removeEventListener('tracking-updated',refresh);window.removeEventListener('pointerdown',enableNotificationSound);window.removeEventListener('keydown',enableNotificationSound) }
   },[])
   const first = items[0]
   if (!first) return error ? <aside className="tracking-popup" role="status">{error}</aside> : null
@@ -53,11 +60,19 @@ export function TrackingPopup() {
     generation.current += 1
     setDismissing(true)
     try {
-      await trackingRequest('tracking/notifications/dismiss',{})
-      setItems([])
+      const results = items.filter(item => item.isResult)
+      const ids = (results.length ? results : items).map(item => item.id)
+      await trackingRequest('tracking/notifications/dismiss',results.length ? { ids } : { ordinary: true })
+      setItems(current => results.length ? current.filter(item => !ids.includes(item.id)) : [])
     } catch { setError('Uyarı kapatılamadı; tekrar deneyin.') }
     finally { dismissInProgress.current = false;setDismissing(false) }
   }
+  const results = items.filter(item => item.isResult)
+  if (results.length) return <ModalFrame role="alertdialog" labelledBy="tramer-result-popup-title" className="tramer-result-popup" busy={dismissing} onClose={() => { void dismiss() }}>
+    <header className="modal__header"><h2 id="tramer-result-popup-title"><BellRing size={30} /> Tramer sonucu geldi</h2><button className="icon-button" type="button" aria-label="Uyarıyı kapat" disabled={dismissing} onClick={() => { void dismiss() }}><X size={22} /></button></header>
+    <div className="modal__body"><p className="tramer-result-popup__count">{results.length} dosyada yeni sonuç</p>{results.map(item => <article key={item.id}><strong>{item.plate}</strong><p>{item.title}</p><Link className="button button--primary" to={`/dosyalar/${item.caseId}`} onClick={() => { void dismiss() }}>Dosyayı aç</Link></article>)}{error && <p role="alert">{error}</p>}</div>
+    <footer className="modal__footer"><Link to="/bildirimler">Tüm bildirimler</Link><button className="button button--primary" type="button" disabled={dismissing} onClick={() => { void dismiss() }}>{dismissing ? 'Kapatılıyor…' : 'Sonuçları gördüm'}</button></footer>
+  </ModalFrame>
   return <aside className="tracking-popup" aria-label="Yeni bildirim" role="status">
     <header className="tracking-popup__header"><span><BellRing size={16} />{items.length === 20 ? '20 veya daha fazla' : items.length} yeni bildirim</span><button type="button" aria-label={dismissing ? 'Kapatılıyor…' : 'Uyarıyı kapat'} disabled={dismissing} onClick={() => { void dismiss() }}><X size={17} /></button></header>
     <strong>{first.plate}</strong><p>{first.title}</p>

@@ -1,6 +1,20 @@
 import { eksistKey, parseEksist } from './eksist.js'
 
+export const NOTICE_SHEET_HEADER_LIMITS = {
+  organizationName: 300,
+  officeNumber: 120,
+  claimNumber: 120,
+  noticeNumber: 120,
+  insurerName: 500,
+  plate: 30,
+  notificationDate: 10,
+  lossDate: 10,
+  closureDate: 10,
+  expertName: 500,
+} as const
+
 export const NOTICE_SHEET_FIELD_LIMITS = {
+  ...NOTICE_SHEET_HEADER_LIMITS,
   inspectionDate: 10,
   reportNumber: 120,
   insuredPolicyPeriod: 160,
@@ -52,12 +66,14 @@ export interface NoticeSheetSource {
   readonly plate: string
   readonly serviceName: string | null
   readonly servicePhone: string | null
+  readonly serviceAddress?: string | null
   readonly eksistText: string | null
   readonly eksistServiceRevised: boolean
   readonly vehicleDescription: string | null
   readonly ownerNames: readonly string[]
   readonly approvedPolicyPeriods: readonly string[]
   readonly readyDocumentTypes: readonly string[]
+  readonly caseFields?: Partial<NoticeSheetFields>
 }
 
 /** Only established source facts are copied. Unknown decisions stay blank. */
@@ -66,6 +82,7 @@ export function buildNoticeSheetDefaults(source: NoticeSheetSource): {
   documents: NoticeSheetDocuments
 } {
   const fields = Object.fromEntries(Object.keys(NOTICE_SHEET_FIELD_LIMITS).map(key => [key, ''])) as NoticeSheetFields
+  Object.assign(fields, source.caseFields)
   const documents = Object.fromEntries(NOTICE_SHEET_DOCUMENT_CODES.map(code => [code, false])) as NoticeSheetDocuments
   const extracted = source.eksistText ? parseEksist(source.eksistText) : null
   const get = (label: string) => {
@@ -81,8 +98,14 @@ export function buildNoticeSheetDefaults(source: NoticeSheetSource): {
   // Contact details from a replaced service must not follow the old name.
   const sameService = !source.eksistServiceRevised && extracted?.service
     && eksistKey(fields.serviceName) === eksistKey(extracted.service)
-  fields.servicePhone = source.servicePhone ?? (sameService ? get('Telefon') : '')
-  if (sameService) fields.serviceAddress = get('Açık Adres')
+  // Repeated contact labels belong to different people. Prefer the repair
+  // section, then the inspection location, never an unrelated sender's phone.
+  const serviceSection = source.eksistText?.match(/Tamirhane Yeri Bilgileri([\s\S]*?)(?=Eksper Bilgileri|Ağır Hasar bilgileri|İşlemler|$)/iu)?.[1]
+    ?? source.eksistText?.match(/Ekspertiz Yeri Bilgileri([\s\S]*?)(?=Tamirhane Yeri Bilgileri|Eksper Bilgileri|İşlemler|$)/iu)?.[1]
+  const contact = serviceSection ? parseEksist(serviceSection) : extracted
+  const contactValue = (label: string) => contact?.conflicts.includes(eksistKey(label)) ? '' : contact?.fields[eksistKey(label)] ?? ''
+  fields.servicePhone = source.servicePhone || (sameService ? contactValue('Telefon') || contactValue('Cep Telefonu') || contactValue('İş Telefonu') : '')
+  fields.serviceAddress = source.serviceAddress || (sameService ? contactValue('Açık Adres') : '')
   if (source.caseType === 'casco') {
     fields.insuredPlate = source.plate
     fields.insuredName = source.ownerNames.join(' / ') || fields.insuredName
@@ -115,11 +138,7 @@ export function buildNoticeSheetDefaults(source: NoticeSheetSource): {
 export function applyNoticeSheetOverrides(
   defaults: ReturnType<typeof buildNoticeSheetDefaults>,
   overrides: NoticeSheetOverrides,
-  caseType: NoticeSheetSource['caseType'],
 ) {
   const fields = { ...defaults.fields, ...overrides.fields }
-  // A sheet can supplement a claim, but cannot relabel its primary vehicle.
-  if (caseType === 'casco') fields.insuredPlate = defaults.fields.insuredPlate
-  if (caseType === 'traffic') fields.victimPlate = defaults.fields.victimPlate
   return { fields, documents: { ...defaults.documents, ...overrides.documents } }
 }

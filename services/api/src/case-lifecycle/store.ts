@@ -24,7 +24,7 @@ import {
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
 import { insertIdempotent, type IdempotentRecord } from '../db/idempotency.js'
-import { withTransaction } from '../db/executor.js'
+import { withTransaction, type Queryable } from '../db/executor.js'
 import { evaluateCaseDocumentRequirements } from '../document-requirements/evaluation.js'
 import { enqueueLifecycleFileOperation } from '../file-operations/store.js'
 import { loadKascoMandatoryCheckGate } from '../kasco-mandatory-check/index.js'
@@ -249,6 +249,27 @@ type CommandOutcome =
 
 export function createCaseLifecycleStore(pool: pg.Pool) {
   const audit = createAuditService()
+  async function replaceFailedPlan(client: Queryable, actor: ActorContext, caseId: string, operationId: string): Promise<boolean> {
+    // Only a fully exhausted atomic move with no confirmed destination can be
+    // replaced. Keep its immutable filesystem evidence for recovery/auditing.
+    const previous = await client.query(`SELECT lo.id,fo.id AS file_id,fo.failure_reason_code
+      FROM case_lifecycle_operations lo JOIN case_file_operations fo ON fo.id=lo.linked_file_operation_id
+      JOIN jobs j ON j.id=fo.active_job_id
+      WHERE lo.organization_id=$1 AND lo.case_id=$2 AND lo.id=$3 AND lo.status='failed'
+      AND fo.organization_id=$1 AND fo.case_id=$2 AND fo.status='failed' AND fo.strategy='atomic_rename'
+      AND fo.manifest_hash IS NULL AND fo.finalized_at IS NULL AND j.status='dead_letter'
+      AND j.organization_id=$1 AND j.target_type='file_operation' AND j.target_id=fo.id AND j.target_version=fo.version
+      AND NOT EXISTS(SELECT 1 FROM jobs active WHERE active.organization_id=$1 AND active.target_id=fo.id AND active.status IN ('pending','leased'))
+      FOR UPDATE OF lo,fo,j`, [actor.organizationId,caseId,operationId])
+    const row = previous.rows[0] as { id: string;file_id: string;failure_reason_code: string | null } | undefined
+    if (!row) return false
+    await client.query("UPDATE case_file_operations SET status='stale',version=version+1,updated_at=now() WHERE id=$1",[row.file_id])
+    await client.query("UPDATE case_lifecycle_operations SET status='stale',version=version+1,updated_at=now() WHERE id=$1",[row.id])
+    await audit.record(client,{ organizationId: actor.organizationId,actorUserId: actor.actorUserId,requestId: actor.requestId,
+      action: 'case_lifecycle.failed_plan_replaced',entityType: 'case_lifecycle_operation',entityId: row.id,
+      details: { caseId,fileOperationId: row.file_id,previousErrorCode: row.failure_reason_code } })
+    return true
+  }
   return {
     async findIdempotent(organizationId: string, scope: string, key: string): Promise<IdempotentRecord | undefined> {
       const result = await pool.query(
@@ -305,6 +326,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
         if (location.verification_status !== 'verified') return { kind: 'location_not_verified' }
         if (location.version !== input.expectedLocationVersion) return { kind: 'version_conflict' }
         if (await hasActiveFieldPhoto(client, actor.organizationId, caseId)) return { kind: 'active_file_operation' }
+        if (input.replaceFailedOperationId && !await replaceFailedPlan(client,actor,caseId,input.replaceFailedOperationId)) return { kind: 'active_file_operation' }
         const activeFile = await client.query(
           `SELECT status FROM case_file_operations WHERE organization_id=$1 AND case_id=$2
            AND status NOT IN ('ready','stale','cancelled')`, [actor.organizationId, caseId],
@@ -425,6 +447,7 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
           openLocation.source_relative_path = restored.value
         }
         if (await hasActiveFieldPhoto(client, actor.organizationId, caseId)) return { kind: 'active_file_operation' }
+        if (input.replaceFailedOperationId && !await replaceFailedPlan(client,actor,caseId,input.replaceFailedOperationId)) return { kind: 'active_file_operation' }
         const activeFile = await client.query(
           `SELECT status FROM case_file_operations WHERE organization_id=$1 AND case_id=$2
            AND status NOT IN ('ready','stale','cancelled')`, [actor.organizationId, caseId],

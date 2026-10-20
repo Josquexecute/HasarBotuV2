@@ -11,7 +11,7 @@ const publicOrigin = 'https://photos.example.test:8443'
 before(async () => {
   root = await mkdtemp(join(tmpdir(),'hb-field-gateway-'))
   await mkdir(join(root,'assets')); await writeFile(join(root,'field.html'), '<h1>Synthetic field portal</h1>'); await writeFile(join(root,'assets','test.js'),'export const value=1')
-  upstream = http.createServer((request,response) => { calls++; response.setHeader('content-type','application/json'); response.setHeader('vary','x-hasarbotu-dashboard-stages'); response.setHeader('set-cookie','hb_session=synthetic; Path=/; HttpOnly; SameSite=Strict'); response.end(JSON.stringify({ ok:true, url:request.url, agentHeader:request.headers['x-agent-secret'] ?? null, idempotencyKey:request.headers['idempotency-key'] ?? null, identityHeader:request.headers['tailscale-user-login'] ?? null, dashboardStages:request.headers['x-hasarbotu-dashboard-stages'] ?? null })) })
+  upstream = http.createServer((request,response) => { calls++; response.setHeader('content-type','application/json'); response.setHeader('vary',request.url.endsWith('/notice-sheet') ? 'x-hasarbotu-notice-sheet-fields' : 'x-hasarbotu-dashboard-stages'); response.setHeader('set-cookie','hb_session=synthetic; Path=/; HttpOnly; SameSite=Strict'); response.end(JSON.stringify({ ok:true, url:request.url, agentHeader:request.headers['x-agent-secret'] ?? null, idempotencyKey:request.headers['idempotency-key'] ?? null, identityHeader:request.headers['tailscale-user-login'] ?? null, dashboardStages:request.headers['x-hasarbotu-dashboard-stages'] ?? null,noticeSheetFields:request.headers['x-hasarbotu-notice-sheet-fields'] ?? null })) })
   await new Promise(done=>upstream.listen(0,'127.0.0.1',done))
   gateway=createFieldPortal({directory:root,upstream:`http://127.0.0.1:${upstream.address().port}`,publicOrigin})
   await new Promise(done=>gateway.listen(0,'127.0.0.1',done)); address=`http://127.0.0.1:${gateway.address().port}`
@@ -94,5 +94,23 @@ test('private dashboards preserve stage negotiation and Vary for current and old
       assert.equal(body.agentHeader,null)
       assert.equal(body.identityHeader,null)
     }
+  }finally{await new Promise(done=>privateGateway.close(done))}
+})
+test('private notice sheets preserve read/write capability headers without exposing privileged transport headers',async()=>{
+  const privateGateway=createFieldPortal({directory:root,upstream:`http://127.0.0.1:${upstream.address().port}`,publicOrigin,allowTailnetApi:true})
+  await new Promise(done=>privateGateway.listen(0,'127.0.0.1',done))
+  const at=`http://127.0.0.1:${privateGateway.address().port}`
+  const path='/api/v1/cases/00000000-0000-4000-8000-000000000000/notice-sheet'
+  try{
+    for(const method of ['GET','PUT'])for(const fields of ['2',undefined]){
+      const response=await request(path,{method,headers:{'tailscale-user-login':'synthetic-tailnet@example.test','x-agent-secret':'must-not-forward',...(fields?{'x-hasarbotu-notice-sheet-fields':fields}:{})}},at)
+      assert.equal(response.status,200)
+      assert.equal(response.headers.get('vary'),'x-hasarbotu-notice-sheet-fields')
+      const body=await response.json()
+      assert.equal(body.noticeSheetFields,fields ?? null)
+      assert.equal(body.agentHeader,null)
+      assert.equal(body.identityHeader,null)
+    }
+    assert.equal((await request(path,{headers:{'x-hasarbotu-notice-sheet-fields':'2'}},at)).status,404)
   }finally{await new Promise(done=>privateGateway.close(done))}
 })

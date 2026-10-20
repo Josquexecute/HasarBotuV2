@@ -31,6 +31,7 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
   const [discarding, setDiscarding] = useState(false)
   const [loadVersion, setLoadVersion] = useState(0)
   const mounted = useRef(false)
@@ -68,7 +69,7 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
   }, [])
 
   const { fields, documents } = sheet
-    ? applyNoticeSheetOverrides(sheet.defaults, draft, sheet.caseType)
+    ? applyNoticeSheetOverrides(sheet.defaults, draft)
     : { fields: null, documents: null }
   const close = () => {
     if (busy) return
@@ -117,8 +118,12 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
         setNotice('Föy kaydedildi.')
       }
       if (printAfter && mounted.current && fitsPage()) {
+        if (!previewing) {
+          setPreviewing(true)
+          return
+        }
         originalTitle.current = document.title
-        document.title = `${sheet.plate} · ${sheet.officeNumber} · İhbar Föyü`
+        document.title = `${fields?.plate ?? sheet.plate} · ${fields?.officeNumber ?? sheet.officeNumber} · İhbar Föyü`
         document.body.classList.add('printing-notice-sheet')
         try { window.print() } catch {
           document.body.classList.remove('printing-notice-sheet')
@@ -138,7 +143,7 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
   return <>
     <ModalFrame className="notice-sheet-modal" labelledBy="notice-sheet-title" onClose={close} busy={busy}>
       <header className="modal__header">
-        <div><span className="eyebrow">{sheet ? `${sheet.plate} · ${sheet.officeNumber}` : 'Dosya hazırlanıyor'}</span><h2 id="notice-sheet-title">İhbar Föyü</h2></div>
+        <div><span className="eyebrow">{sheet ? `${sheet.plate} · ${sheet.officeNumber}` : 'Dosya hazırlanıyor'}</span><h2 id="notice-sheet-title">{previewing ? 'Yazdırma Önizlemesi' : 'İhbar Föyü'}</h2></div>
         <button className="icon-button" type="button" onClick={close} disabled={busy} aria-label="İhbar föyünü kapat"><X size={18} /></button>
       </header>
       {discarding ? <div className="modal__body notice-sheet-discard" role="alert">
@@ -151,18 +156,17 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
         {status === 'loading' && <div className="modal__body" role="status">İhbar föyü hazırlanıyor…</div>}
         {status === 'error' && <div className="modal__body"><button type="button" className="button button--secondary" onClick={() => { setStatus('loading'); setError(''); setLoadVersion(value => value + 1) }}>Yeniden dene</button></div>}
         {status === 'ok' && sheet?.caseType === null && <div className="modal__body" role="status">Föy oluşturmak için dosya içinden Kasko veya Trafik türünü seçin.</div>}
-        {status === 'ok' && sheet && sheet.caseType !== null && fields && documents && <div className="notice-sheet-workspace">
+        {status === 'ok' && sheet && sheet.caseType !== null && fields && documents && <div className={`notice-sheet-workspace${previewing ? ' notice-sheet-workspace--print-preview' : ''}`}>
           <aside className="notice-sheet-editor">
-            <p>Dosyadaki bilgiler otomatik doldurulur. Boş alanları tamamlayabilirsiniz. Değişiklikler bu föye kaydedilir.</p>
+            <p>Tüm föy alanlarını düzenleyebilirsiniz. Değişiklikler yalnız bu föye kaydedilir; dosya kaydı değişmez.</p>
             {!canEdit && <p role="status">Bu föy salt okunur; güncel hali yazdırılabilir.</p>}
             <fieldset disabled={!canEdit || busy}>
               {noticeSheetFieldGroups.map((group, index) => <details key={group.title} open={index === 0}>
                 <summary>{group.title}</summary>
                 <div className="notice-sheet-editor__fields">{group.fields.map(field => {
-                  const primaryPlate = sheet.caseType === 'casco' ? 'insuredPlate' : 'victimPlate'
                   return <label key={field.key}><span>{field.label}{Object.hasOwn(draft.fields, field.key) && <small> · Düzenlendi</small>}</span>
-                    {field.multiline ? <textarea value={fields[field.key]} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} rows={field.key === 'inspectionNotes' ? 6 : 3} onChange={event => changeField(field.key, event.target.value)} />
-                      : <input value={fields[field.key]} type={field.date ? 'date' : 'text'} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} readOnly={field.key === primaryPlate} onChange={event => changeField(field.key, event.target.value)} />}
+                    {field.multiline ? <textarea aria-label={field.label} value={fields[field.key]} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} rows={field.key === 'inspectionNotes' ? 6 : 3} onChange={event => changeField(field.key, event.target.value)} />
+                      : <input aria-label={field.label} value={fields[field.key]} type={field.date ? 'date' : 'text'} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} onChange={event => changeField(field.key, event.target.value)} />}
                     {Object.hasOwn(draft.fields, field.key) && <button type="button" className="notice-sheet-reset" onClick={() => setDraft(current => { const next = { ...current.fields }; delete next[field.key]; return { ...current, fields: next } })}>Otomatik bilgiyi kullan</button>}
                   </label>
                 })}</div>
@@ -176,8 +180,9 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
         <footer className="modal__footer">
           <span className="notice-sheet-save-state">{dirty ? 'Kaydedilmemiş değişiklikler' : sheet?.version ? `Kayıtlı föy · Sürüm ${sheet.version}` : 'Otomatik föy'} · A4 / 1 sayfa</span>
           <button className="button button--secondary" type="button" onClick={close} disabled={busy}>Kapat</button>
+          {previewing && <button className="button button--secondary" type="button" disabled={busy} onClick={() => setPreviewing(false)}>Düzenlemeye dön</button>}
           {canEdit && <button className="button button--secondary" type="button" disabled={busy || !dirty} onClick={() => void save(false)}><Save size={15} /> Kaydet</button>}
-          <button className="button button--primary" type="button" disabled={busy || status !== 'ok' || !sheet?.caseType} onClick={() => void save(true)}><Printer size={15} />{busy ? 'Hazırlanıyor…' : dirty ? 'Kaydet ve Yazdır' : 'Yazdır'}</button>
+          <button className="button button--primary" type="button" disabled={busy || status !== 'ok' || !sheet?.caseType} onClick={() => void save(true)}><Printer size={15} />{busy ? 'Hazırlanıyor…' : previewing ? 'Yazıcıya gönder' : dirty ? 'Kaydet ve Yazdır' : 'Yazdır'}</button>
         </footer>
       </>}
     </ModalFrame>

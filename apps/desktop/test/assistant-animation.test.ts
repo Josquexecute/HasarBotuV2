@@ -75,6 +75,32 @@ function setup() {
   }
 }
 
+it('ignores gaze, hover and background feedback while asleep and wakes only on a press', () => {
+  const ui = setup()
+  ui.step(124000)
+  const button = ui.doc.querySelector('button')!
+  expect(button.dataset.sleeping).toBe('true')
+  ui.gaze(1,1)
+  button.dispatchEvent(new Event('pointerenter'))
+  vi.advanceTimersByTime(650)
+  ui.motionEvent({ type: 'notification' })
+  ui.step()
+  expect(button.dataset.sleeping).toBe('true')
+  expect(ui.engines[0].lookX).toBe(0)
+  expect(ui.engines[0].lookY).toBe(0)
+  expect(ui.engines[0].triggerEmote).not.toHaveBeenCalled()
+  ui.hide(true)
+  ui.hide(false)
+  ui.setAppearance(true)
+  expect(button.dataset.sleeping).toBe('true')
+  ui.setAppearance(false)
+  button.dispatchEvent(new MouseEvent('pointerdown',{ button: 0 }))
+  expect(button.dataset.sleeping).toBe('false')
+  ui.gaze(.5,.5)
+  expect(ui.engines[0].lookX).toBe(.5)
+  ui.target.dispatchEvent(new Event('pagehide'))
+})
+
 it('settled poses sleep between engine checks and do not redraw unchanged pixels', () => {
   const ui = setup()
   ui.step()

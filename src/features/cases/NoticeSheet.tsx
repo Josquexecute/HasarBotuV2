@@ -21,13 +21,13 @@ export function NoticeSheet({ sheet, fields, documents }: {
   return <article className="notice-sheet-paper" aria-label={`${traffic ? 'Trafik' : 'Kasko'} ihbar föyü A4`}>
     <div className="notice-sheet">
       <header className="notice-sheet__header">
-        <div><span className="notice-sheet__brand">{sheet.organizationName}</span><h1>İhbar Föyü <span>{traffic ? 'TRAFİK' : 'KASKO'}</span></h1><p>{sheet.insurerName || 'Sigorta şirketi belirtilmedi'}</p></div>
-        <div className="notice-sheet__identity"><strong>{sheet.plate}</strong><span>Ofis dosya no</span><b>{sheet.officeNumber}</b></div>
+        <div><span className="notice-sheet__brand">{fields.organizationName}</span><h1>İhbar Föyü <span>{traffic ? 'TRAFİK' : 'KASKO'}</span></h1><p>{fields.insurerName || 'Sigorta şirketi belirtilmedi'}</p></div>
+        <div className="notice-sheet__identity"><strong>{fields.plate}</strong><span>Ofis dosya no</span><b>{fields.officeNumber}</b></div>
       </header>
 
       <section className="notice-sheet__section">
-        <div className="notice-sheet__row"><Field label="Hasar dosya no" value={sheet.claimNumber} /><Field label="İhbar föy no" value={sheet.noticeNumber} /><Field label="İhbar tarihi" value={formatNoticeSheetDate(sheet.notificationDate)} /></div>
-        <div className="notice-sheet__row"><Field label="Eksper rapor no" value={fields.reportNumber} /><Field label="Hasar tarihi" value={formatNoticeSheetDate(sheet.lossDate)} /><Field label="Ekspertiz tarihi" value={formatNoticeSheetDate(fields.inspectionDate)} /></div>
+        <div className="notice-sheet__row"><Field label="Hasar dosya no" value={fields.claimNumber} /><Field label="İhbar föy no" value={fields.noticeNumber} /><Field label="İhbar tarihi" value={formatNoticeSheetDate(fields.notificationDate)} /></div>
+        <div className="notice-sheet__row"><Field label="Eksper rapor no" value={fields.reportNumber} /><Field label="Hasar tarihi" value={formatNoticeSheetDate(fields.lossDate)} /><Field label="Ekspertiz tarihi" value={formatNoticeSheetDate(fields.inspectionDate)} /></div>
         <div className="notice-sheet__row"><Field label="S. poliçe vadesi" value={fields.insuredPolicyPeriod} /><Field label="M. poliçe vadesi" value={fields.victimPolicyPeriod} /></div>
         <div className="notice-sheet__row"><Field label="Rücu durumu" value={fields.recourse} /><Field label="Muafiyet" value={fields.deductible} /></div>
         <div className="notice-sheet__row"><Field label="Sigortalı kusur durumu" value={fields.insuredFault} /><Field label="Mağdur kusur durumu" value={fields.victimFault} /></div>
@@ -44,7 +44,7 @@ export function NoticeSheet({ sheet, fields, documents }: {
 
       <section className="notice-sheet__section">
         <div className="notice-sheet__row"><Field label="Tedarik" value={fields.procurement} /><Field label="Ön rapor tarihi" value={formatNoticeSheetDate(fields.preliminaryReportDate)} /></div>
-        <div className="notice-sheet__row"><Field label="Tramer" value={fields.tramer} /><Field label="Kapatma tarihi" value={formatNoticeSheetDate(sheet.closureDate)} /></div>
+        <div className="notice-sheet__row"><Field label="Tramer" value={fields.tramer} /><Field label="Kapatma tarihi" value={formatNoticeSheetDate(fields.closureDate)} /></div>
         <Field label="IBAN" value={fields.iban} />
       </section>
 
@@ -57,7 +57,7 @@ export function NoticeSheet({ sheet, fields, documents }: {
       </section>
 
       <section className="notice-sheet__notes"><h2>Ekspertiz çalışması</h2><p>{fields.inspectionNotes || '\u00a0'}</p></section>
-      <footer className="notice-sheet__footer"><span>Eksper: {sheet.expertName || '____________________'}</span><span>{sheet.officeNumber} · {sheet.plate}</span><span>1 / 1</span></footer>
+      <footer className="notice-sheet__footer"><span>Eksper: {fields.expertName || '____________________'}</span><span>{fields.officeNumber} · {fields.plate}</span><span>1 / 1</span></footer>
     </div>
   </article>
 }
