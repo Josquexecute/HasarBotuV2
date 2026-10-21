@@ -99,7 +99,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   })
   window.on('show', startGaze)
   window.on('hide', stopGaze)
-  let drag: { cursor: Point; origin: Point; moved: boolean } | undefined
+  let drag: { cursor: Point; origin: Point; moved: boolean; startedAt: number } | undefined
   let menuOpen = false
   let menuReady: Promise<void> | undefined
   const positionStore = createAssistantPositionStore(statePath, () => console.warn('desktop assistant could not save position'))
@@ -248,7 +248,8 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       const previous = position
       move({ x: drag.origin.x + dx, y: drag.origin.y + dy })
       if (position.x !== previous.x || position.y !== previous.y) {
-        sendMotion({ type: 'drag', x: Math.max(-1, Math.min(1, (position.x - previous.x) / 24)) })
+        sendMotion({ type: 'drag', x: Math.max(-1, Math.min(1, (position.x - previous.x) / 24)),
+          dx: position.x - previous.x, dy: position.y - previous.y, elapsed: performance.now() - drag.startedAt })
       }
     }
   }
@@ -256,7 +257,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     if (disposed || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame
       || event.senderFrame?.url !== url || !isAssistantCommand(command)) return
     if (command === 'press') {
-      if (!menuOpen) drag = { cursor: screen.getCursorScreenPoint(), origin: position, moved: false }
+      if (!menuOpen) drag = { cursor: screen.getCursorScreenPoint(), origin: position, moved: false, startedAt: performance.now() }
     } else if (command === 'drag') updateDrag()
     else if (command === 'release') {
       if (!drag) { sendMotion({ type: 'release' }); return }

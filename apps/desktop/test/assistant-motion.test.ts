@@ -265,3 +265,220 @@ it('retains a requested edge peek until the active operation finishes', () => {
   advance(2000)
   expect(bot.busy).toBe(false)
 })
+
+function shakePath(motion: InstanceType<typeof Motion>, advance: (ms: number) => void, options: { hz?: number; amplitude?: number; frequency?: number; vertical?: number; duration?: number } = {}) {
+  const { hz = 60, amplitude = 75, frequency = 5, vertical = 0, duration = 900 } = options
+  let previous = 0
+  for (let elapsed = 1000 / hz; elapsed <= duration; elapsed += 1000 / hz) {
+    const x = amplitude * Math.sin(elapsed / 1000 * frequency * Math.PI * 2)
+    const dx = x - previous
+    motion.drag(Math.max(-1, Math.min(1, dx / 24)), { dx, dy: dx * vertical, elapsed })
+    previous = x
+    advance(1000 / hz)
+  }
+}
+
+it('distinguishes single, double and burst clicks, then resets the rhythm after a hold or drag', () => {
+  const { bot, motion, advance } = setup()
+  for (const kind of ['single', 'double', 'burst', 'burst']) {
+    motion.press()
+    expect(motion.lastInteraction).toBe(kind)
+    advance(210)
+    if (kind === 'single') expect(bot.hands).toBe(0)
+    else expect(bot.hands).toBeGreaterThan(.6)
+    motion.release()
+    advance(120)
+  }
+  advance(400)
+  motion.press()
+  expect(motion.lastInteraction).toBe('single')
+  advance(2000)
+  motion.release()
+  motion.press()
+  expect(motion.lastInteraction).toBe('single')
+  motion.drag(1)
+  motion.release()
+  motion.press()
+  expect(motion.lastInteraction).toBe('single')
+})
+
+it('a stationary hold becomes curious, bored and grumpy and settles on release without timers', () => {
+  const { bot, motion, advance } = setup()
+  motion.press()
+  advance(700)
+  expect(motion.holdPhase).toBe(1)
+  expect(bot.eyeOverride).toBe('dot')
+  advance(1200)
+  expect(bot.eyeOverride).toBe('tired')
+  advance(1700)
+  expect(bot.eyeOverride).toBe('line')
+  motion.release()
+  advance(2500)
+  expect(bot.eyeOverride).toBe(null)
+  expect(bot.busy).toBe(false)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('landings cycle through distinct bounce, stumble and balance poses and always settle', () => {
+  const { bot, motion, advance } = setup()
+  const kinds = new Set(), poses = new Set()
+  for (let drop = 0; drop < 3; drop++) {
+    motion.press(); motion.drag(1); advance(180); motion.release()
+    kinds.add(motion.lastLanding)
+    advance(200)
+    poses.add(JSON.stringify([bot.oy, bot.tilt]))
+    advance(2200)
+    expect(bot.busy).toBe(false)
+    expect(bot.oy).toBe(0)
+    expect(bot.tilt).toBe(0)
+  }
+  expect(kinds.size).toBe(3)
+  expect(poses.size).toBe(3)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it.each([30, 60, 144])('rapid horizontal shaking at %i Hz triggers one bounded nausea reaction and a gradual recovery', hz => {
+  const { bot, motion, advance } = setup()
+  motion.press()
+  shakePath(motion, advance, { hz })
+  expect(motion.dizzy).toBe(true)
+  expect(bot.eyeOverride).toBe('dot')
+  expect(bot.nausea).toBeGreaterThan(.5)
+  expect(bot.roll).toBe(0)
+  const triggeredAt = motion.lastDizzy
+  motion.release()
+  const until = motion.recoverUntil
+  motion.release()
+  expect(motion.recoverUntil).toBe(until)
+  advance(1200)
+  expect(motion.dizzy).toBe(true)
+  expect(bot.nausea).toBeGreaterThan(.2)
+  expect(Math.abs(bot.tilt)).toBeLessThanOrEqual(.14)
+  advance(3000)
+  expect(motion.dizzy).toBe(false)
+  expect(bot.nausea).toBe(0)
+  expect(bot.busy).toBe(false)
+  expect(motion.lastDizzy).toBe(triggeredAt)
+  expect(motion.shakeTurns).toHaveLength(0)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it.each([
+  ['small pointer jitter', { amplitude: 3 }],
+  ['slow back-and-forth dragging', { frequency: 1, duration: 4500 }],
+  ['predominantly vertical dragging', { vertical: 4 }],
+  ['diagonal dragging', { vertical: 1 }],
+  ['one fast change of direction', { duration: 200 }],
+])('does not mistake %s for vigorous shaking', (_name, options) => {
+  const { bot, motion, advance } = setup()
+  motion.press()
+  shakePath(motion, advance, options)
+  expect(motion.dizzy).toBe(false)
+  expect(bot.nausea).toBe(0)
+})
+
+it('fast one-way movement, stale samples and pauses cannot accumulate shake turns', () => {
+  const { motion, advance } = setup()
+  motion.press()
+  for (let i = 1; i <= 20; i++) { motion.drag(1, { dx: 70, dy: 0, elapsed: i * 20 }); advance(20) }
+  expect(motion.dizzy).toBe(false)
+  motion.release(); motion.press()
+  for (let i = 1; i <= 20; i++) {
+    motion.drag(i % 2 ? 1 : -1, { dx: i % 2 ? 70 : -70, dy: 0, elapsed: i * 400 })
+    advance(400)
+  }
+  expect(motion.dizzy).toBe(false)
+  motion.drag(-1, { dx: -100, dy: 0, elapsed: 10 })
+  motion.drag(1, { dx: NaN, dy: 0, elapsed: 9000 })
+  expect(motion.shakeElapsed).toBe(8000)
+  expect(motion.shakeTurns).toHaveLength(0)
+})
+
+it('cooldown survives release, a new drag and reset; a later deliberate shake can trigger again', () => {
+  const { motion, advance } = setup()
+  motion.press(); shakePath(motion, advance)
+  const first = motion.lastDizzy
+  motion.release(); advance(4200)
+  motion.press(); shakePath(motion, advance)
+  expect(motion.dizzy).toBe(false)
+  motion.reset()
+  motion.press(); shakePath(motion, advance)
+  expect(motion.dizzy).toBe(false)
+  motion.release(); advance(15000)
+  motion.press(); shakePath(motion, advance)
+  expect(motion.dizzy).toBe(true)
+  expect(motion.lastDizzy).toBeGreaterThan(first)
+})
+
+it('dragging and recovery defer background feedback and edge peeking until the user reaction finishes', () => {
+  const { bot, motion, advance } = setup()
+  motion.press(); shakePath(motion, advance)
+  motion.success(); motion.react('surprised'); motion.edge(-1)
+  expect(motion.pendingSuccess).toBe(true)
+  motion.release()
+  motion.react('error'); motion.work(true); motion.work(false)
+  advance(1000)
+  expect(bot.nausea).toBeGreaterThan(0)
+  expect(bot.eyeOverride).toBe('dot')
+  advance(9000)
+  expect(motion.pendingSuccess).toBe(false)
+  expect(motion.pendingReaction).toBeUndefined()
+  expect(motion.pendingEdge).toBe(0)
+  expect(bot.nausea).toBe(0)
+  expect(bot.busy).toBe(false)
+})
+
+it('reset cancels a held shake, recovery, queued feedback and every cosmetic tween', () => {
+  const { bot, motion, advance } = setup()
+  motion.press(); shakePath(motion, advance); motion.success(); motion.release()
+  motion.reset()
+  advance(5000)
+  expect(motion.dizzy).toBe(false)
+  expect(bot.nausea).toBe(0)
+  expect(bot.eyeOverride).toBe(null)
+  expect(bot.busy).toBe(false)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('quiet gestures use a non-repeating bag, do not postpone sleep and yield to real work', () => {
+  const { bot, motion, advance } = setup()
+  motion.nextStretch = Infinity
+  const seen = new Set<string>()
+  const poses = new Set<string>()
+  let previous
+  for (let i = 0; i < 22; i++) {
+    motion.nextIdle = performance.now()
+    motion.tick()
+    expect(motion.lastIdle).not.toBe(previous)
+    seen.add(motion.lastIdle)
+    previous = motion.lastIdle
+    advance(400)
+    poses.add(JSON.stringify([bot.tilt, bot.sy, bot.oy, bot.ox, bot.es, bot.hands, bot.blush, bot.open, bot.eyeOverride]))
+    advance(2600)
+    expect(bot.busy).toBe(false)
+    if (i === 10) { expect(seen.size).toBe(11); expect(poses.size).toBe(11); seen.clear() }
+  }
+  expect(seen.size).toBe(11)
+  motion.work(true)
+  const lastIdle = motion.lastIdle
+  advance(40000)
+  expect(motion.lastIdle).toBe(lastIdle)
+  motion.work(false)
+  advance(124000)
+  expect(motion.sleeping).toBe(true)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('nausea drawing temporarily tints the chosen body color and restores it even on drawing failure', () => {
+  const { bot, motion } = setup()
+  const color = [.9, .5, .3]
+  bot.bodyColor = color
+  bot.nausea = .8
+  const draw = vi.spyOn(bot, 'draw').mockImplementation(() => {
+    expect(bot.bodyColor[1]).toBeGreaterThan(color[1])
+    throw new Error('canvas unavailable')
+  })
+  expect(() => motion.draw({}, 120, 120)).toThrow('canvas unavailable')
+  expect(draw).toHaveBeenCalledOnce()
+  expect(bot.bodyColor).toBe(color)
+})

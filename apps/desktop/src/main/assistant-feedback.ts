@@ -1,5 +1,6 @@
 export type AssistantMotionEvent =
-  | { type: 'drag' | 'edge'; x: number }
+  | { type: 'drag'; x: number; dx: number; dy: number; elapsed: number }
+  | { type: 'edge'; x: number }
   | { type: 'working' | 'error'; active: boolean }
   | { type: 'release' | 'success' | 'notification' | 'celebrate' }
 

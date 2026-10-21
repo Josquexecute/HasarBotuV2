@@ -27,7 +27,9 @@ async function sampleGestures() {
     let unclipped = true
     const tapKinds = new Set()
     const tapPixels = new Set()
-    for (const kind of ['curious', 'stretch', 'drag', 'release', 'success', 'sleep', 'wake', 'working', 'error', 'notification', 'celebrate', 'surprised', 'edge', 'tap-0', 'tap-1', 'tap-2', 'tap-3', 'tap-4', 'tap-5']) {
+    const idleKinds = ['dance', 'laugh', 'wink', 'blush', 'surprised', 'doze', 'yawn', 'stretch', 'wave', 'excited', 'play']
+    let nauseaRendered = false, nauseaRecovered = false
+    for (const kind of ['curious', 'stretch', 'drag', 'release', 'success', 'sleep', 'wake', 'working', 'error', 'notification', 'celebrate', 'surprised', 'edge', 'tap-0', 'tap-1', 'tap-2', 'tap-3', 'tap-4', 'tap-5', 'hold', 'dizzy', ...idleKinds.map(kind => 'idle-' + kind)]) {
       time = 0
       const bot = new BotEngine()
       bot.bodyColor = [.937, .949, .98]
@@ -46,6 +48,18 @@ async function sampleGestures() {
       if (kind === 'working') { motion.work(true); time += 450; motion.tick() }
       if (['error', 'notification', 'celebrate', 'surprised'].includes(kind)) motion.react(kind)
       if (kind === 'edge') motion.edge(-1)
+      if (kind.startsWith('idle-')) motion.idle(kind.slice(5))
+      if (kind === 'hold') { motion.press(); time = 1900; motion.tick() }
+      if (kind === 'dizzy') {
+        motion.press()
+        for (let step = 1; step <= 12; step++) {
+          time = step * 40
+          motion.drag(step % 2 ? 1 : -1, { dx: step % 2 ? 70 : -70, dy: 0, elapsed: time })
+          motion.tick(); bot.update(.04)
+        }
+        if (!motion.dizzy) throw new Error('rapid shake failed to reach the drawing engine')
+        motion.release()
+      }
       if (kind.startsWith('tap-')) {
         for (let click = 0; click <= Number(kind.slice(4)); click++) {
           if (click > 0) for (let frame = 0; frame < 90; frame++) { time += 1000 / 60; bot.update(1 / 60) }
@@ -55,14 +69,23 @@ async function sampleGestures() {
         tapKinds.add(motion.lastTap)
       }
       const start = time
-      for (const elapsed of [70, 180, 480, 1100, 1500]) {
-        while (time - start < elapsed) { time += 1000 / 60; bot.update(1 / 60) }
+      for (const elapsed of [70, 180, 480, 1100, 1500, 2600, 4200]) {
+        while (time - start < elapsed) { time += 1000 / 60; motion.tick(); bot.update(1 / 60) }
         const cell = document.createElement('canvas')
         cell.width = cell.height = 240
         const context = cell.getContext('2d')
         context.scale(2, 2)
-        bot.draw(context, 120, 120)
+        motion.draw(context, 120, 120)
         const pixels = context.getImageData(0, 0, 240, 240).data
+        if (kind === 'dizzy' && elapsed === 480) {
+          let green = 0, stars = 0
+          for (let pixel = 0; pixel < pixels.length; pixel += 4) {
+            if (pixels[pixel + 3] > 200 && pixels[pixel + 1] > pixels[pixel] + 8 && pixels[pixel + 1] > pixels[pixel + 2] + 8) green++
+            if (pixels[pixel + 3] > 40 && pixels[pixel] > pixels[pixel + 1] + 20 && pixels[pixel + 1] > pixels[pixel + 2] + 60) stars++
+          }
+          nauseaRendered = green > 100 && stars > 10
+        }
+        if (kind === 'dizzy' && elapsed === 4200) nauseaRecovered = !motion.dizzy && bot.nausea === 0 && !bot.busy
         if (kind.startsWith('tap-') && elapsed === 180) {
           let signature = 0
           for (const value of pixels) signature = (Math.imul(signature, 31) + value) >>> 0
@@ -74,7 +97,7 @@ async function sampleGestures() {
         }
       }
     }
-    return { unclipped, distinctTapKinds: tapKinds.size, distinctTapDraws: tapPixels.size }
+    return { unclipped, nauseaRendered, nauseaRecovered, distinctTapKinds: tapKinds.size, distinctTapDraws: tapPixels.size }
   } finally {
     if (original) Object.defineProperty(performance, 'now', original)
     else delete performance.now
@@ -162,7 +185,7 @@ void app.whenReady().then(async () => {
     const surface = await win.webContents.executeJavaScript('({ node: typeof require, process: typeof process, ready: !document.querySelector("button").disabled, keys: Object.keys(window.hasarbotuAssistant) })')
     check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'activate,cancel,drag,menu,move,onAppearance,onGaze,onMotion,press,release')
     await win.webContents.executeJavaScript('window.motionEvents = []; window.motionOff = window.hasarbotuAssistant.onMotion(value => window.motionEvents.push(value)); undefined')
-    for (const value of [null, {}, { type: 'drag', x: Infinity }, { type: 'drag', x: 2 }, { type: 'drag', x: '1' }, { type: 'unknown' }]) {
+    for (const value of [null, {}, { type: 'drag', x: Infinity }, { type: 'drag', x: 2 }, { type: 'drag', x: '1' }, { type: 'drag', x: 1, dx: Infinity, dy: 0, elapsed: 10 }, { type: 'drag', x: 1, dx: 10, dy: 0, elapsed: -1 }, { type: 'unknown' }]) {
       win.webContents.send('hasarbotu:assistant-motion', value)
     }
     await win.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 80))')
@@ -210,7 +233,9 @@ void app.whenReady().then(async () => {
     await until(() => win.webContents.executeJavaScript('(()=>{ const c=document.querySelector("canvas"); return c && c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((v,i)=>i%4===3 && v>0) })()'))
     check('upstream Mochi actually renders in sandbox canvas', true)
     const samples = await win.webContents.executeJavaScript('(' + sampleGestures.toString() + ')()')
-    check('all nineteen gesture phases render without clipping at 2x physical resolution', samples.unclipped)
+    check('all interaction, idle and shake phases render without clipping at 2x physical resolution', samples.unclipped)
+    check('rapid shaking draws a green face and stars in the actual canvas', samples.nauseaRendered)
+    check('shake recovery restores the actual canvas and stops frame work', samples.nauseaRecovered)
     check('six successive clicks select and draw six distinct reactions in the real canvas', samples.distinctTapKinds === 6 && samples.distinctTapDraws === 6)
     check('main renderer keeps privilege-free preload', await shell.window.webContents.executeJavaScript('typeof window.hasarbotuAssistant === "undefined" && Object.keys(window.hasarbotuDesktop).sort().join(",") === "isDesktopShell,platform"'))
     const prefs = win.webContents.getLastWebPreferences()
@@ -299,7 +324,7 @@ void app.whenReady().then(async () => {
       await input('drag')
       await until(() => win.getBounds().x === saved.x - 96)
       await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "drag" && value.x === -1)'))
-      check('native dragging sends bounded direction without desktop coordinates', await win.webContents.executeJavaScript('window.motionEvents.filter(value => value.type === "drag").every(value => Object.keys(value).sort().join(",") === "type,x")'))
+      check('native dragging sends bounded direction and relative motion without desktop coordinates', await win.webContents.executeJavaScript('window.motionEvents.filter(value => value.type === "drag").every(value => Object.keys(value).sort().join(",") === "dx,dy,elapsed,type,x")'))
       await new Promise(resolve => setTimeout(resolve, 100))
       if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-drag.png'), (await win.webContents.capturePage()).toPNG()) }
       await input('release')
@@ -312,6 +337,27 @@ void app.whenReady().then(async () => {
       await input('release')
       await until(() => win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "edge")'))
       check('movement first observed on release sends drag before landing and then edge feedback', await win.webContents.executeJavaScript('window.motionEvents.map(value => value.type).join(",") === "drag,release,edge"'))
+      check('native movement publishes unsaturated DIP distances and a monotonic drag age through preload', await win.webContents.executeJavaScript('window.motionEvents.some(value => value.type === "drag" && value.dx === 12 && value.dy === 0 && Number.isFinite(value.elapsed) && value.elapsed >= 0)'))
+      Object.assign(saved, await readPersistedPosition())
+      await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, characterColor: '#eff2fa', reduceMotion: false })})`)
+      await input('press')
+      for (let step = 0; step < 8; step++) {
+        cursor = { x: cursor.x + (step % 2 ? 70 : -70), y: cursor.y }
+        await input('drag')
+      }
+      const hasGreenFace = `(() => {
+        const c = document.querySelector('canvas'), p = c.getContext('2d').getImageData(0,0,c.width,c.height).data
+        let green = 0
+        for (let i = 0; i < p.length; i += 4) if (p[i+3] > 200 && p[i+1] > p[i]+8 && p[i+1] > p[i+2]+8) green++
+        return green > 100
+      })()`
+      await until(() => win.webContents.executeJavaScript(hasGreenFace), 'native shake reaches the actual green face')
+      check('native cursor reversals reach IPC, shake detection and visible nausea end to end', true)
+      await input('release')
+      await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, characterColor: '#eff2fa', reduceMotion: true })})`)
+      await until(async () => !(await win.webContents.executeJavaScript(hasGreenFace)), 'reduced motion cancels visible nausea')
+      check('reduced motion removes actual shake effects during recovery', true)
+      await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, reduceMotion: false })})`)
       Object.assign(saved, await readPersistedPosition())
     } finally { screen.getCursorScreenPoint = originalCursor }
     await win.webContents.executeJavaScript(`window.sleepClockDescriptor=Object.getOwnPropertyDescriptor(performance,'now');window.sleepClockBase=performance.now.bind(performance);Object.defineProperty(performance,'now',{configurable:true,value:()=>window.sleepClockBase()+130000});document.querySelector('#assistant').dispatchEvent(new Event('pointerleave'));undefined`)

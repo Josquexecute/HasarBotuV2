@@ -36,7 +36,7 @@ function setup() {
   }
   let gaze: (point: { x: number; y: number }) => void = () => {}
   let appearance: (value: { characterColor: string; accentColor: string; reduceMotion: boolean }) => void = () => {}
-  let motionEvent: (value: { type: string; x?: number; active?: boolean }) => void = () => {}
+  let motionEvent: (value: { type: string; x?: number; active?: boolean; dx?: number; dy?: number; elapsed?: number }) => void = () => {}
   const unsubscribe = vi.fn()
   const frames = new Map<number, FrameRequestCallback>()
   let nextFrame = 0, now = 0
@@ -256,4 +256,30 @@ it('working state survives reduced motion and visibility; error affordance remai
   ui.hide(false)
   ui.motionEvent({ type: 'error', active: false })
   expect(ui.doc.querySelector('button')!.title).not.toContain('Açıklama')
+})
+
+it('shake samples reach the motion engine, while reduced motion, hiding and disposal cancel their effects', () => {
+  const ui = setup()
+  const bot = ui.engines[0] as typeof ui.engines[0] & { nausea: number }
+  ui.doc.querySelector('button')!.dispatchEvent(new MouseEvent('pointerdown', { button: 0 }))
+  for (let i = 1; i <= 8; i++) {
+    ui.motionEvent({ type: 'drag', x: i % 2 ? 1 : -1, dx: i % 2 ? 70 : -70, dy: 0, elapsed: i * 40 })
+    ui.step(40)
+  }
+  expect(bot.anim).toHaveBeenCalledWith('nausea', expect.arrayContaining([expect.arrayContaining([.8, 280])]))
+  ui.motionEvent({ type: 'release' })
+  ui.setAppearance(true)
+  expect(bot.nausea).toBe(0)
+  expect(ui.frames.size).toBe(0)
+  expect(vi.getTimerCount()).toBe(0)
+  bot.anim.mockClear()
+  ui.motionEvent({ type: 'drag', x: 1, dx: 100, dy: 0, elapsed: 400 })
+  expect(bot.anim).not.toHaveBeenCalled()
+  ui.setAppearance(false)
+  ui.hide(true)
+  expect(ui.frames.size).toBe(0)
+  expect(vi.getTimerCount()).toBe(0)
+  ui.target.dispatchEvent(new Event('pagehide'))
+  ui.motionEvent({ type: 'drag', x: -1, dx: -100, dy: 0, elapsed: 500 })
+  expect(ui.frames.size).toBe(0)
 })

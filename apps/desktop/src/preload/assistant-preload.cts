@@ -46,7 +46,13 @@ contextBridge.exposeInMainWorld('hasarbotuAssistant', Object.freeze({
       const { type, x } = value as Record<string, unknown>
       if (type === 'release' || type === 'success' || type === 'notification' || type === 'celebrate') callback({ type })
       else if ((type === 'working' || type === 'error') && typeof (value as Record<string, unknown>).active === 'boolean') callback({ type, active: (value as Record<string, unknown>).active })
-      else if ((type === 'drag' || type === 'edge') && typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1) callback({ type, x })
+      else if ((type === 'drag' || type === 'edge') && typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1) {
+        if (type === 'edge') { callback({ type, x }); return }
+        const { dx, dy, elapsed } = value as Record<string, unknown>
+        if (typeof dx !== 'number' || !Number.isFinite(dx) || typeof dy !== 'number' || !Number.isFinite(dy)
+          || typeof elapsed !== 'number' || !Number.isFinite(elapsed) || elapsed < 0) return
+        callback({ type, x, dx, dy, elapsed })
+      }
     }
     ipcRenderer.on('hasarbotu:assistant-motion', listener)
     return () => ipcRenderer.removeListener('hasarbotu:assistant-motion', listener)

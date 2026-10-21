@@ -43,7 +43,8 @@ if (assistant && context) {
     }
     button.dataset.sleeping = String(gestures.sleeping)
     button.dataset.reducedMotion = String(reduced())
-    pose.draw(context, size, size)
+    if (reduced()) pose.draw(context, size, size)
+    else gestures.draw(context, size, size)
   }
   const sizeObserver = new ResizeObserver(() => {
     size = canvas.clientWidth
@@ -146,7 +147,7 @@ if (assistant && context) {
       button.setAttribute('aria-label', value.active ? 'Son işlem hatasının açıklamasını aç' : defaultLabel)
     }
     if (reduced() || disposed || document.hidden) return
-    if (value.type === 'drag') gestures.drag(value.x)
+    if (value.type === 'drag') gestures.drag(value.x, value)
     else if (value.type === 'release') gestures.release()
     else if (value.type === 'success') gestures.success()
     else if (value.type === 'working') gestures.work(value.active)

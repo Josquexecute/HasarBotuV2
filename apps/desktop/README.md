@@ -120,6 +120,13 @@ kısa bir dikkat hareketi, onaylanmış görev tamamlama el sallama üretir. Ekr
 kenarına bırakıldığında inişten sonra kenardan bakar. Her basışta sıkışma, küçük
 zıplama, sallanma, göz kırpma, utanıp gülümseme veya şaşırmadan biri seçilir;
 altısı da gösterilmeden havuz yenilenmez ve art arda aynı tepki gelmez.
+Tekli, çiftli ve seri tıklamalar farklı vurgular; uzun basış merak, sıkılma ve
+huysuzlanma üretir. Sürükleme esner, bırakma üç farklı inişten birini seçer.
+Boşta 16–28 saniyede bir 11 hareketlik tekrarsız havuzdan hareket oynar; iki dakika
+sonra uyur. Gerçek DIP hareketinde 1,1 saniyede en az dört güçlü yön değişimi
+(en az 40 DIP, 650 DIP/sn) yeşil yüz, şaşkın gözler, yavaş yıldızlar ve bulantı
+tepkisini başlatır. Bırakınca 3,6 saniyede toparlanır; yeniden tetikleme aralığı
+14 saniyedir. Normal sürükleme ve küçük titreşimler bu tepkiyi başlatmaz.
 Hareketler seyrekleştirilir; hesap ve Windows hareket azaltma ayarları geçerlidir.
 Electron UI testleri varsayılan olarak ekran görüntüsü üretmez; yalnız açıkça
 istenen görsel doğrulama için `HB_CAPTURE_SCREENSHOTS=1` kullanılabilir.
@@ -182,7 +189,20 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.71**, 2026-10-21T20:17:29.604Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.72**, 2026-10-21T20:43:22.690Z; Windows x64,
+112.961.755 bayt, SHA-256 `0afadaaa1fcd9ef7698058b8ccd8d6ab036c34b0d9fd9aa661df9c936017dfb0`.
+Touch tıklama ritimleri, uzun basış evreleri, üç iniş, 11 tekrarsız boşta hareket ve
+hızlı sallamada bulantı/toparlanma eklendi. Normal sürükleme, ekran sınırları ve
+hareket azaltma korundu; yeni hareketler zamanlayıcı eklemez. 52 Touch testi dahil
+3.287 genel test, altı ayrı canlı adaptör fikstürü ve gerçek NSIS kontrolü geçti.
+Genel koşudaki sekiz atlamanın yedisi ayrı geçti; Windows WebKit SameSite testi
+platform kısıtıyla atlandı. Typecheck, lint, build, Electron A4 ve gerçek paket
+açılışı geçti; 66 UI ve üç ana süreç/preload dosyası kaynakla eşleşti. Kurulu
+**0.1.71**, **0.1.72** sürümünü `available` gördü; kimlikli HTTP 200 indirmesinde
+tam boyut ve SHA-256 eşleşti. Önceki manifest/değişmez kurulum korundu; beş ofis
+servisi sağlıklı. Tanılama görevi ve inspector kapatıldı; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.71**, 2026-10-21T20:17:29.604Z; Windows x64,
 112.959.526 bayt, SHA-256 `877c5c7dc13ae6cf891bba816d2619f6f2a00972daab047d740644cfb2ba6e80`.
 Kurumsal Google girişi ve Gmail/SBM bağlantısı tek tıkla güvenli tarayıcıda açılır;
 parametresiz Türkçe sonuç ekranları, otomatik oturum yenileme ve uygulamaya dönüş eklendi.
