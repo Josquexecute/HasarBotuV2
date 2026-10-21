@@ -109,6 +109,24 @@ test('returns a deliberate unavailable error when the office cannot be reached',
   assert.deepEqual(await response.json(), { code: 'office_unavailable' })
 })
 
+test('relays only clean local Google result redirects and preserves their no-referrer policy', async () => {
+  const path = '/api/v1/google/result/field/login/success'
+  const edge = createFieldEdge(async () => new Response(null, { status: 303, headers: { location: path, 'referrer-policy': 'no-referrer' } }))
+  const response = await edge(request('/api/v1/google/callback?code=synthetic&state=synthetic'))
+  assert.equal(response.status, 303)
+  assert.equal(response.headers.get('location'), path)
+  assert.equal(response.headers.get('referrer-policy'), 'no-referrer')
+  for (const location of ['https://evil.test' + path, '//evil.test' + path, path + '?code=private', path + '#state', '/api/v1/users']) {
+    const rejected = await createFieldEdge(async () => new Response(null, { status: 303, headers: { location } }))(request('/api/v1/google/callback'))
+    assert.equal(rejected.status, 502)
+    assert.equal(rejected.headers.get('location'), null)
+  }
+  assert.equal((await edge(request('/saha'))).status, 502)
+  const page = await createFieldEdge(async () => new Response('result', { headers: { 'referrer-policy': 'no-referrer' } }))(request(path))
+  assert.equal(page.status, 200)
+  assert.equal(page.headers.get('referrer-policy'), 'no-referrer')
+})
+
 test('the alternate Workers address requires its own exact Origin and uses the same restricted proxy', async () => {
   const workerOrigin = 'https://hasarbotu.profaruk1.workers.dev'
   let calls = 0

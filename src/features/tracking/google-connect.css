@@ -1,0 +1,10 @@
+.google-connect { display: grid; gap: 10px; margin-block: 12px; min-width: 0; }
+.google-connect__button { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; white-space: normal; }
+.google-connect__button svg { flex-shrink: 0; }
+.google-connect__notice { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); color: var(--text-secondary); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.google-connect__notice--success { border-color: var(--success); }
+.google-connect__spinner { width: 16px; height: 16px; margin-top: 3px; flex-shrink: 0; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: google-connect-spin 1s linear infinite; }
+.google-connect__retry { justify-self: start; padding-block: 5px; color: var(--accent); font-size: 13px; }
+.google-connect__retry:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@keyframes google-connect-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .google-connect__spinner { animation: none; } }

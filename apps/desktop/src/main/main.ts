@@ -9,6 +9,7 @@ import { DesktopStartupAbortedError, guardWebContents, startDesktopShell } from 
 import { startDesktopAssistant } from './assistant.js'
 import { startDesktopUpdates } from './updates.js'
 import { startCaseFolders } from './case-folder.js'
+import { startOAuthReturn } from './oauth.js'
 import { hideToTrayOnClose } from './window-lifecycle.js'
 import { initializeOfficeConnection, readOfficeConnection } from './office-connection.js'
 import { createStartupProgress } from './startup-progress.js'
@@ -125,6 +126,7 @@ async function bootstrap(): Promise<void> {
     progress.dispose()
     hideToTrayOnClose(app, shell.window)
     startDesktopUpdates(shell, config.apiOrigin)
+    startOAuthReturn(shell)
     const assistant = await startDesktopAssistant({ shell, assetRoot: config.assetRoot, userDataPath: app.getPath('userData'), quit: () => app.quit() })
     startCaseFolders(shell, app.getPath('userData'), app.isPackaged ? join(process.resourcesPath, 'folder-roots.json') : join(app.getAppPath(), 'build-resources', 'office-folder-roots.json'), config.apiOrigin, assistant.menuWindow)
     shell.window.once('closed', () => app.quit())

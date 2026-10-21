@@ -23,6 +23,9 @@ const surface = Object.freeze({
 })
 
 contextBridge.exposeInMainWorld('hasarbotuDesktop', surface)
+contextBridge.exposeInMainWorld('hasarbotuOAuth', Object.freeze({
+  focus: () => ipcRenderer.invoke('hasarbotu:oauth-focus'),
+}))
 contextBridge.exposeInMainWorld('hasarbotuCaseFolders', Object.freeze({
   open: (caseId: unknown) => ipcRenderer.invoke('hasarbotu:open-case-folder', caseId),
 }))

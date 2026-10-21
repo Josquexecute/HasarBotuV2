@@ -34,6 +34,7 @@ Her giriş repository'de gerçekten kullanılan bir hedefe karşılık gelir:
 
 | Host | Neden |
 |---|---|
+| `accounts.google.com` | Kurumsal giriş ve Gmail/SBM için sistem tarayıcısında Google onayı |
 | `mail.google.com` | E-posta hazırlama, Gmail web compose bağlantısı |
 | `resmigazete.gov.tr`, `www.resmigazete.gov.tr` | Değer Kaybı kural kaynakları |
 | `seddk.gov.tr`, `www.seddk.gov.tr` | Değer Kaybı kural kaynakları |
@@ -101,6 +102,8 @@ modülünün değerlendirmesi bitmeden `ready` olayını yaymaz; üst düzey
 gerçek Electron 43 ile gözlendi (bkz. `docs/DECISION_LOG.md` → HB-2026-105).
 
 ## Kalıcı yerel depolama
+
+Google girişi ve Gmail/SBM bağlantısı tek tıkla sistem tarayıcısında açılır. Temiz sonuç ekranı yalnız işlem türü ve durumu taşır; kod, token ve state içermez. Oturum yalnız isteği başlatan uygulamanın HttpOnly çereziyle tamamlanır. Tamamlanınca ana pencere öne gelir; `hasarbotu://oauth/return` bağlantısı da yalnız uygulamayı açıp odaklar, kimlik veya oturum verisi kabul etmez. Bekleyen işlem sayfa yenilenince aynı sekmede devam eder; sonuç ekranları hareket azaltma tercihini destekler.
 
 Masaüstü başlangıcı ilk seçilen köprü portunu `userData/bridge-origins` altında API origin'i bazında saklar. Sonraki açılışlar aynı portu kullanır; port doluysa uygulama hata bildirir ve farklı bir porta geçmez. Kaydedilmiş portla çelişen `HASARBOTU_BRIDGE_PORT` değeri kabul edilmez. Chromium oturum bölümü de API bazında ayrıdır; hızlı not anahtarları kullanıcı bazında ayrılmaya devam eder.
 
@@ -179,7 +182,25 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.70**, 2026-10-21T17:42:43.322Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.71**, 2026-10-21T20:17:29.604Z; Windows x64,
+112.959.526 bayt, SHA-256 `877c5c7dc13ae6cf891bba816d2619f6f2a00972daab047d740644cfb2ba6e80`.
+Kurumsal Google girişi ve Gmail/SBM bağlantısı tek tıkla güvenli tarayıcıda açılır;
+parametresiz Türkçe sonuç ekranları, otomatik oturum yenileme ve uygulamaya dönüş eklendi.
+State, nonce, PKCE, çerezle bağlı tamamlama ve yetki denetimleri korunur. Mobil görünüm,
+klavye erişimi ve reduced-motion Chromium, Firefox, WebKit ve Electron akışlarında sınandı.
+3.269 genel test ve 27 ek geçit/canlı adaptör/NSIS kontrolü geçti; typecheck, lint, build,
+gerçek Electron A4 ve x64 paket açılışı geçti. Genel koşudaki sekiz atlamanın yedisi ayrı
+çalıştırıldı. Windows Playwright WebKit SameSite uygulama testi platform kısıtıyla atlandı;
+Strict çerez başlığı ve Chromium/Firefox uygulaması doğrulandı. Google sağlayıcısı testlerde
+PKCE/nonce doğrulayan yerel fikstürdür; gerçek Google hesabıyla canlı onay sınanmadı.
+Migration 0070 mevcut 687 dosyayı korudu; 75 çalışma dosyası ve 66 paketli UI dosyası
+doğrulandı. Web geçidi `c46109bf` sürümünde; canlı 36 sonuç ekranı, temiz 303, CSP,
+no-referrer ve korumalı API sınırları geçti. Beş ofis servisi sağlıklı, yeni işlem hatası yok.
+Kurulu **0.1.70** istemcisi **0.1.71** sürümünü `available` gördü; kimlikli HTTP 200
+indirmesinde tam boyut ve SHA-256 eşleşti. Önceki manifest, değişmez kurulum ve çalışma
+dosyaları korundu; tanılama görevi/inspector kapatıldı, zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.70**, 2026-10-21T17:42:43.322Z; Windows x64,
 112.957.104 bayt, SHA-256 `7ca60e23b46800bdd6456cd5bc33cca225d87a58017d505b20d396ae0bdf16d2`.
 SBM servis adı, telefon ve adresi dosyaya birlikte kaydedilir; güncel servisle eşleşmeyen
 iletişim aktarılmaz, kullanıcı düzeltmeleri ve föy override davranışı korunur. Manuel kaskoda

@@ -1,6 +1,6 @@
 {
   "name": "@hasarbotu/desktop",
-  "version": "0.1.70",
+  "version": "0.1.71",
   "private": true,
   "type": "module",
   "description": "HasarBotu V2 ince Electron kabuğu (ADR-Q06): güvenli BrowserWindow + loopback aynı-origin köprüsü",
@@ -34,6 +34,14 @@
     "productName": "HasarBotu",
     "copyright": "Copyright (c) 2026 Ömer Faruk İŞLEYEN. All rights reserved.",
     "asar": true,
+    "protocols": [
+      {
+        "name": "HasarBotu uygulamasına dön",
+        "schemes": [
+          "hasarbotu"
+        ]
+      }
+    ],
     "directories": {
       "output": "release",
       "buildResources": "build-resources"

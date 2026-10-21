@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { lstat, realpath } from 'node:fs/promises'
 import { resolve, relative, isAbsolute, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { allowedFieldApi } from './field-portal-routes.mjs'
+import { allowedFieldApi, isGoogleResultRedirect } from './field-portal-routes.mjs'
 
 export { allowedFieldApi }
 export function createFieldPortal({ directory, upstream, publicOrigin, allowTailnetApi = false }) {
@@ -35,7 +35,10 @@ export function createFieldPortal({ directory, upstream, publicOrigin, allowTail
         const headers = {}
         for (const name of ['accept','content-type','content-length','cookie','idempotency-key','x-hasarbotu-dashboard-stages','x-hasarbotu-notice-sheet-fields']) if (request.headers[name]) headers[name] = request.headers[name]
         const proxy = http.request({ hostname: target.hostname, port: target.port, method, path: url.pathname + url.search, headers, timeout: 90_000 }, incoming => {
-          if ((incoming.statusCode ?? 500) >= 300 && (incoming.statusCode ?? 500) < 400) { incoming.resume(); reject(502,'unexpected_redirect'); return }
+          if ((incoming.statusCode ?? 500) >= 300 && (incoming.statusCode ?? 500) < 400) {
+            if (!isGoogleResultRedirect(method, url.pathname, incoming.statusCode, incoming.headers.location)) { incoming.resume(); reject(502,'unexpected_redirect'); return }
+            response.setHeader('location', incoming.headers.location)
+          }
           response.statusCode = incoming.statusCode ?? 502
           for (const name of ['content-type','content-length','content-disposition','retry-after','referrer-policy','content-security-policy','vary']) if (incoming.headers[name]) response.setHeader(name, incoming.headers[name])
           const cookies = incoming.headers['set-cookie']

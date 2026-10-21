@@ -29,6 +29,35 @@ test('public route allowlist excludes management, private APIs, agents and insta
   for(const path of ['/api/v1/users','/api/v1/agents','/api/v1/cases','/api/v1/desktop-updates/latest','/api/v1/field-agent/uploads/claim'])assert.equal(allowedFieldApi('GET',path),false)
   assert.equal(allowedFieldApi('POST','/api/v1/field-agent/uploads/claim'),false)
 })
+
+test('Google callback redirects pass only to fixed clean result paths without following them', async () => {
+  const resultPath = '/api/v1/google/result/field/login/success'
+  let location = resultPath
+  const oauthUpstream = http.createServer((_request, response) => {
+    response.writeHead(303, { location, 'referrer-policy': 'no-referrer' }); response.end()
+  })
+  await new Promise(done => oauthUpstream.listen(0, '127.0.0.1', done))
+  const portal = createFieldPortal({ directory: root, upstream: `http://127.0.0.1:${oauthUpstream.address().port}`, publicOrigin })
+  await new Promise(done => portal.listen(0, '127.0.0.1', done))
+  const at = `http://127.0.0.1:${portal.address().port}`
+  try {
+    const response = await request('/api/v1/google/callback?code=synthetic&state=synthetic', {}, at)
+    assert.equal(response.status, 303)
+    assert.equal(response.headers.get('location'), resultPath)
+    assert.equal(response.headers.get('referrer-policy'), 'no-referrer')
+    assert.equal(allowedFieldApi('GET', resultPath), true)
+    assert.equal(allowedFieldApi('POST', resultPath), false)
+    for (const unsafe of ['https://evil.test' + resultPath, '//evil.test' + resultPath, resultPath + '?code=private', resultPath + '#state', '/api/v1/users']) {
+      location = unsafe
+      const rejected = await request('/api/v1/google/callback', {}, at)
+      assert.equal(rejected.status, 502)
+      assert.equal(rejected.headers.get('location'), null)
+    }
+  } finally {
+    await new Promise(done => portal.close(done))
+    await new Promise(done => oauthUpstream.close(done))
+  }
+})
 test('serves only the mobile entry and safe assets with restrictive browser headers',async()=>{
   const response=await request('/saha');assert.equal(response.status,200);assert.match(await response.text(),/Synthetic field portal/);assert.match(response.headers.get('content-security-policy'),/frame-ancestors 'none'/)
   assert.equal((await request('/assets/test.js')).status,200)

@@ -1,4 +1,4 @@
-import { allowedFieldApi } from '../../scripts/field-portal-routes.mjs'
+import { allowedFieldApi, isGoogleResultRedirect } from '../../scripts/field-portal-routes.mjs'
 
 const publicOrigins = new Set(['https://hasarbotu.pages.dev', 'https://hasarbotu.profaruk1.workers.dev'])
 const upstreamOrigin = 'https://desktop-efn2g33.tail276cda.ts.net'
@@ -62,14 +62,17 @@ export function createFieldEdge(fetchUpstream = fetch) {
       const target = new URL(url.pathname + url.search, upstreamOrigin)
       const incoming = await fetchUpstream(target, { method, headers, body, redirect: 'manual', cache: 'no-store' })
       if (incoming.status >= 300 && incoming.status < 400) {
-        await incoming.body?.cancel()
-        return reject(502, 'unexpected_redirect')
+        if (!isGoogleResultRedirect(method, url.pathname, incoming.status, incoming.headers.get('location'))) {
+          await incoming.body?.cancel()
+          return reject(502, 'unexpected_redirect')
+        }
       }
       const outgoing = new Headers(securityHeaders)
-      for (const name of ['content-type', 'content-disposition', 'retry-after', 'content-security-policy', 'content-encoding']) {
+      for (const name of ['content-type', 'content-disposition', 'retry-after', 'content-security-policy', 'content-encoding', 'referrer-policy']) {
         const value = incoming.headers.get(name)
         if (value !== null) outgoing.set(name, value)
       }
+      if (incoming.status === 303) outgoing.set('location', incoming.headers.get('location'))
       const cookies = typeof incoming.headers.getAll === 'function'
         ? incoming.headers.getAll('set-cookie') : incoming.headers.getSetCookie()
       for (const cookie of cookies) {

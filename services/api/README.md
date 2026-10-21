@@ -8,6 +8,8 @@ HasarBotu V2 merkezi API'si: Fastify, PostgreSQL ve `@hasarbotu/contracts` taban
 - Guvenli 404 ve merkezi hata zarflari (contracts failure envelope).
 - Graceful shutdown (SIGINT/SIGTERM, tek kapanis garantisi).
 - PostgreSQL, kalıcı oturum, altı rol ve ofis yetki politikası; dosya/evrak, görev/not, kapanış, ücret, PERT, değer kaybı, poliçe/OCR/AI, mevzuat, Gmail/SBM, saha fotoğrafları ve kimlikli masaüstü güncellemeleri.
+
+Google OAuth callback'i doğrulama sonrasında parametresiz `/api/v1/google/result/:client/:purpose/:outcome` ekranına 303 ile yönlendirir. Sonuç ekranı oturum açmaz; mevcut state, nonce, PKCE ve isteği başlatan tarayıcının HttpOnly çereziyle `/google/complete` doğrulaması korunur. Gmail tamamlama adımı güncel oturumu ve yönetim yetkisini yeniden denetler. Migration `0070_google_oauth_client` sunum hedefini ekler; eski istemciler `web` varsayılanıyla çalışır.
 - Kritik komutlar transaction, sürüm kontrolü, idempotency ve atomik audit kullanır. Evrak/fotoğraf kaydı kapanışla aynı dosya kilidini alır; kapanmış dosyaya yeni kayıt reddedilir. Aynı kayıt isteği tekrarlandığında tek sonuç döner; ayrılmış depolama yolu 409 üretir.
 - Kilit bekleyen aynı anahtarlı komutlar ilk yanıtı tekrar döndürür; ücret revizyonu güncel sürüm kilidi altında okunur. `reliability-recovery.test.ts`, gerçek HTTP kesintisi, API/havuz yeniden kurulumu ve PostgreSQL bağlantı kaybında rollback, tek kayıt/audit ve kalıcı oturum kurtarmasını doğrular. Aktif havuz istemcisinin bağlantı hatası da güvenli biçimde ele alınır.
 - Üretim ofis erişimi mevcut HTTPS dağıtımından sağlanır; geliştirme varsayılanı `127.0.0.1` kalır. Yapılandırılmış veritabanı sağlık kontrolü başarısızsa `/health` sağlıklı sonuç bildirmez.

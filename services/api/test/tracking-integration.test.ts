@@ -409,8 +409,10 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
     expect(start.statusCode,start.payload).toBe(200)
     const flowId = start.json().flowId as string
-    expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${flowId}&code=fake` })).statusCode).toBe(200)
-    expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${flowId}&code=fake` })).statusCode).toBe(400)
+    const callback = await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${flowId}&code=fake` })
+    expect(callback.statusCode).toBe(303)
+    expect(callback.headers.location).toBe('/api/v1/google/result/web/login/success')
+    expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${flowId}&code=fake` })).headers.location).toBe('/api/v1/google/result/web/login/expired')
     expect((await app.inject({ method: 'POST',url: '/api/v1/google/complete',payload: { flowId } })).statusCode).toBe(400)
     const done = await app.inject({ method: 'POST',url: '/api/v1/google/complete',headers: { cookie: cookie(start) },payload: { flowId } })
     expect(done.json().status).toBe('complete')
@@ -425,20 +427,24 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
       loginIdentity = { email,sub: email }
       const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
       const flowId = start.json().flowId as string
-      expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${flowId}&code=fake` })).statusCode).toBe(400)
+      const callback = await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${flowId}&code=fake` })
+      expect(callback.statusCode).toBe(303)
+      expect(callback.headers.location).toBe(`/api/v1/google/result/web/login/${email.startsWith('disabled') ? 'denied' : 'failed'}`)
     }
     const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
-    expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&error=access_denied` })).statusCode).toBe(400)
+    expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&error=access_denied` })).headers.location).toBe('/api/v1/google/result/web/login/denied')
     expect((await pool.query('SELECT count(*)::int AS n FROM google_identities')).rows[0].n).toBe(1)
     loginIdentity = { email: 'manager@office.example',sub: 'manager-google' }
   })
 
   it('registers verified corporate accounts pending approval and issues a session only after admin role assignment',async () => {
     loginIdentity = { email: 'new.employee@office.example',sub: 'new-employee-google' }
-    async function googleLogin() {
+    async function googleLogin(outcome = 'approval') {
       const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',payload: { purpose: 'login' } })
       expect(start.statusCode,start.payload).toBe(200)
-      expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&code=fake` })).statusCode).toBe(200)
+      const callback = await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&code=fake` })
+      expect(callback.statusCode).toBe(303)
+      expect(callback.headers.location).toBe(`/api/v1/google/result/web/login/${outcome}`)
       return app.inject({ method: 'POST',url: '/api/v1/google/complete',headers: { cookie: cookie(start) },payload: { flowId: start.json().flowId } })
     }
     const pending = await googleLogin()
@@ -452,7 +458,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     const approval = await app.inject({ method: 'PATCH',url: `/api/v1/users/${newUser.id}/roles`,headers: { cookie: managerCookie },payload: { roles: ['case_manager'],expectedVersion: 1 } })
     expect(approval.statusCode,approval.payload).toBe(200)
     expect(approval.json().user).toMatchObject({ status: 'active',roles: ['case_manager'] })
-    const approved = await googleLogin()
+    const approved = await googleLogin('success')
     expect(approved.json().status).toBe('complete')
     expect((await app.inject({ method: 'GET',url: '/api/v1/auth/session',headers: { cookie: cookie(approved) } })).json().user.roles).toEqual(['case_manager'])
     expect((await app.inject({ method: 'POST',url: '/api/v1/auth/login',payload: { email: loginIdentity.email,password } })).statusCode).toBe(401)
@@ -465,7 +471,9 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     loginIdentity = { email: 'sbm-inbox@office.example',sub: 'sbm-inbox-google' }
     const start = await app.inject({ method: 'POST',url: '/api/v1/google/start',headers: { cookie: managerCookie },payload: { purpose: 'mail' } })
     expect(start.statusCode,start.payload).toBe(200)
-    expect((await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&code=fake` })).statusCode).toBe(200)
+    const callback = await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&code=fake` })
+    expect(callback.statusCode).toBe(303)
+    expect(callback.headers.location).toBe('/api/v1/google/result/web/mail/success')
     const row = (await pool.query("SELECT * FROM mail_connections WHERE subject='sbm-inbox-google'")).rows[0]
     expect(row.status).toBe('connected');expect(row.encrypted_refresh_token).not.toContain('refresh')
     const done = await app.inject({ method: 'POST',url: '/api/v1/google/complete',headers: { cookie: `${managerCookie}; ${cookie(start)}` },payload: { flowId: start.json().flowId } })
@@ -481,7 +489,8 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     await pool.query('INSERT INTO organization_role_policies(organization_id,version,permissions) VALUES($1,1,$2)',[org,JSON.stringify({ ...policy.permissions,tracking_write: ['admin'] })])
     try {
       const callback = await app.inject({ method: 'GET',url: `/api/v1/google/callback?state=${start.json().flowId}&code=fake` })
-      expect(callback.statusCode,callback.payload).toBe(400)
+      expect(callback.statusCode,callback.payload).toBe(303)
+      expect(callback.headers.location).toBe('/api/v1/google/result/web/mail/denied')
       expect((await pool.query("SELECT count(*)::int AS n FROM mail_connections WHERE subject='revoked-flow'")).rows[0].n).toBe(0)
     } finally {
       await pool.query('DELETE FROM organization_role_policies WHERE organization_id=$1',[org])
