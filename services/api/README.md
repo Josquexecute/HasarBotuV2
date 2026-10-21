@@ -1,14 +1,19 @@
 # `@hasarbotu/api`
 
-HasarBotu V2 merkezi API'sinin **Paket 04 iskeleti**: Fastify tabanli, `@hasarbotu/contracts` sozlesmelerini tuketen minimum calisma ve saglik siniri.
+HasarBotu V2 merkezi API'si: Fastify, PostgreSQL ve `@hasarbotu/contracts` tabanlı kimlikli ofis servisidir. İş kuralları `@hasarbotu/domain` içindedir; fiziksel dosya işleri File Agent üzerinden yürür.
 
-## Kapsam (Paket 04)
+## Kapsam
 
 - Gercek `GET /health` endpoint'i (contracts health sozlesmesiyle birebir).
 - Guvenli 404 ve merkezi hata zarflari (contracts failure envelope).
 - Graceful shutdown (SIGINT/SIGTERM, tek kapanis garantisi).
-- **Icermez:** PostgreSQL, migration, authentication, session, kullanici/rol, Cases endpoint'leri, Electron, File Agent, Gmail, AI. Health yaniti database hazirmis izlenimi VERMEZ; `status` bu pakette her zaman `ok` doner.
-- LAN erisimi henuz acilmamistir (varsayilan host `127.0.0.1`); uretim deployment'i yapilmamistir.
+- PostgreSQL, kalıcı oturum, altı rol ve ofis yetki politikası; dosya/evrak, görev/not, kapanış, ücret, PERT, değer kaybı, poliçe/OCR/AI, mevzuat, Gmail/SBM, saha fotoğrafları ve kimlikli masaüstü güncellemeleri.
+- Kritik komutlar transaction, sürüm kontrolü, idempotency ve atomik audit kullanır. Evrak/fotoğraf kaydı kapanışla aynı dosya kilidini alır; kapanmış dosyaya yeni kayıt reddedilir. Aynı kayıt isteği tekrarlandığında tek sonuç döner; ayrılmış depolama yolu 409 üretir.
+- Üretim ofis erişimi mevcut HTTPS dağıtımından sağlanır; geliştirme varsayılanı `127.0.0.1` kalır. Yapılandırılmış veritabanı sağlık kontrolü başarısızsa `/health` sağlıklı sonuç bildirmez.
+
+Node.js 24.15+ gerekir; doğrulanan araç zinciri 24.22.0'dır. Test yazmaları yalnız `_test` ile biten ayrı veritabanında yapılır. `npm test --workspace @hasarbotu/api -- test/multi-user-system.test.ts`, gerçek HTTP oturumlarıyla 5/10/20/50 istemciyi sınar; `HB_CAPACITY_DURATION_MS=10000` kontrollü yük süresini, `HB_CAPACITY_RESULTS` JSONL ölçüm dosyasını belirler. Dış servisler yük testinin hedefi değildir.
+
+`node scripts/test-field-multi-user.mjs`, aynı `_test` korumasıyla 5/10 ayrı tarayıcı oturumu, çakışan klasörler, gerçek File Agent ve disk hash kontrollerini çalıştırır. Bu testin pCloud tazelik kapısı sentetiktir; gerçek dış servis yükü oluşturmaz. `scripts/package66-browser-smoke.mjs` güncel hesaplayıcı tarayıcı akışına yönlenir; ekran görüntüleri yalnız `HB_CAPTURE_SCREENSHOTS=1` ile üretilir.
 
 ## Calistirma (Windows PowerShell)
 

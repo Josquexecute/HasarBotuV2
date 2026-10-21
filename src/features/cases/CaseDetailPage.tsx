@@ -189,7 +189,9 @@ function CaseDetail() {
   const requestedTab = new URLSearchParams(location.search).get('tab')
   const routeTab: Tab | undefined = requestedTab === 'operations' ? 'Operasyon' : requestedTab === 'documents' ? 'Evrak ve Fotoğraf' : undefined
   const [tabSelection, setTabSelection] = useState<{ key: string;tab: Tab }>(() => {
-    const saved = window.sessionStorage.getItem('hasarbotu-active-case-tab')
+    let saved: string | null = null
+    try { saved = window.sessionStorage.getItem('hasarbotu-active-case-tab') }
+    catch { /* A browser storage restriction must not prevent opening a case. */ }
     return { key: location.key,tab: routeTab ?? (tabs.includes(saved as Tab) ? saved as Tab : 'Özet') }
   })
   const activeTab = tabSelection.key === location.key ? tabSelection.tab : routeTab ?? tabSelection.tab
@@ -226,7 +228,8 @@ function CaseDetail() {
   } | null)?.creationResult
 
   useEffect(() => {
-    window.sessionStorage.setItem('hasarbotu-active-case-tab', activeTab)
+    try { window.sessionStorage.setItem('hasarbotu-active-case-tab', activeTab) }
+    catch { /* Tab persistence is optional; the current selection stays in React state. */ }
   }, [activeTab])
 
   useEffect(() => {

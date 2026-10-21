@@ -279,13 +279,9 @@
                         "type": "boolean"
                       },
                       "isInsurerAgreed": {
-                        "anyOf": [
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "boolean",
+                          "null"
                         ]
                       },
                       "reason": {

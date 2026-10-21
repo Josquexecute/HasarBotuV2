@@ -6,7 +6,7 @@
   "sideEffects": false,
   "description": "HasarBotu V2 merkezi API iskeleti: Fastify tabanli health ve guvenli hata sinirlari",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.15 <25"
   },
   "files": [
     "dist"
@@ -32,20 +32,20 @@
     "@hasarbotu/contracts": "*",
     "@hasarbotu/database": "*",
     "@hasarbotu/domain": "*",
-    "@napi-rs/canvas": "1.0.2",
+    "@napi-rs/canvas": "1.0.12",
     "@tesseract.js-data/tur": "1.0.0",
-    "argon2": "0.44.0",
+    "argon2": "0.45.1",
     "fastify": "5.12.7",
     "fflate": "0.8.3",
-    "pdfjs-dist": "6.2.108",
+    "pdfjs-dist": "6.4.299",
     "tesseract.js": "7.0.0",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@hasarbotu/desktop-bridge": "*",
     "@hasarbotu/file-agent": "*",
-    "@types/node": "24.13.3",
-    "tsx": "4.23.0"
+    "@types/node": "24.19.2",
+    "tsx": "4.23.15"
   },
   "author": "Ömer Faruk İŞLEYEN",
   "license": "UNLICENSED"

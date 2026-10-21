@@ -19,6 +19,7 @@ interface ClosedCaseView {
   readonly id: string
   readonly caseId: string
   readonly closedAt: string
+  readonly closedAtTimestamp: number | null
   readonly officeNumber: string
   readonly plate: string
   readonly type: CaseType
@@ -77,7 +78,7 @@ export function ClosedCasesPage({
 
   const records = useMemo<readonly ClosedCaseView[]>(() => {
     if (source === 'mock') {
-      return closedCases.map((item) => ({ ...item, feeStatus: 'mock_approved' as const, valueLossSummary: null, hasClosureDetails: true }))
+      return closedCases.map((item) => ({ ...item, closedAtTimestamp: Date.parse(item.closedAt.split('.').reverse().join('-')), feeStatus: 'mock_approved' as const, valueLossSummary: null, hasClosureDetails: true }))
     }
     const feeByCase = new Map(feeList.items.map((item) => [item.caseId, item]))
     const valueLossByCase = new Map(valueLossList.items.map((item) => [item.caseId, item]))
@@ -86,12 +87,12 @@ export function ClosedCasesPage({
       const feeItem = feeByCase.get(item.caseId)
       const feeVersion = feeItem?.fee.currentVersion
       const valueLossItem = valueLossByCase.get(item.caseId)
+      const closedAt = valueLossItem?.closedAt ?? feeItem?.closedAt
       return {
       id: item.caseId,
       caseId: item.caseId,
-      closedAt: valueLossItem === undefined
-        ? feeItem === undefined ? '—' : new Date(feeItem.closedAt).toLocaleDateString('tr-TR')
-        : new Date(valueLossItem.closedAt).toLocaleDateString('tr-TR'),
+      closedAt: closedAt === undefined ? '—' : new Date(closedAt).toLocaleDateString('tr-TR'),
+      closedAtTimestamp: closedAt === undefined ? null : Date.parse(closedAt),
       officeNumber: item.officeNumber,
       plate: item.plate,
       type: item.type,
@@ -120,7 +121,12 @@ export function ClosedCasesPage({
       .filter((item) => reason === 'Tümü' || item.reason === reason)
       .sort((a, b) => {
         if (sort === 'expertFee') return (b.expertFee ?? -1) - (a.expertFee ?? -1)
-        return a[sort].localeCompare(b[sort], 'tr') * (sort === 'closedAt' ? -1 : 1)
+        if (sort === 'closedAt') {
+          if (a.closedAtTimestamp === null) return b.closedAtTimestamp === null ? 0 : 1
+          if (b.closedAtTimestamp === null) return -1
+          return b.closedAtTimestamp - a.closedAtTimestamp
+        }
+        return a[sort].localeCompare(b[sort], 'tr')
       })
   }, [query, reason, records, sort, type])
 

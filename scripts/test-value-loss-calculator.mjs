@@ -8,6 +8,7 @@ import { startDesktopBridge } from '@hasarbotu/desktop-bridge'
 import { buildApp, hashPassword } from '../services/api/dist/index.js'
 
 const output = resolve(process.env.VALUE_LOSS_EVIDENCE ?? '.local/value-loss-calculator-browser')
+const captureScreenshots = process.env.HB_CAPTURE_SCREENSHOTS === '1'
 await mkdir(output, { recursive: true })
 const config = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL)
 const pool = new pg.Pool({ connectionString: config.url })
@@ -71,7 +72,7 @@ try {
   check('adding paint changes the real calculated amount', combinedAmount !== repairAmount && Number.isSafeInteger(combined.amountMinor) && combined.issues.length === 0)
   check('the amount is identified as an estimate', await page.getByText('Tahmini değer kaybı',{exact:true}).isVisible())
   check('paintless repair is no longer hidden under special treatment', await page.getByText('Özel işlem',{exact:true}).count() === 0 && await page.getByLabel(part+' işlemi',{exact:true}).locator('option[value="paintless_repair"]').count() === 1)
-  await page.screenshot({ path:output+'/desktop.png', fullPage:true })
+  if (captureScreenshots) await page.screenshot({ path:output+'/desktop.png', fullPage:true })
   await page.getByRole('button',{ name:'Özet',exact:true }).click()
   await page.getByRole('button',{ name:'Değer Kaybı',exact:true }).click()
   await page.getByRole('heading',{ name:'Değer Kaybı Hesapla' }).waitFor()
@@ -88,11 +89,11 @@ try {
     await page.mouse.wheel(0,400)
     await page.waitForFunction(() => document.querySelector('.searchable-select__popup')?.scrollTop>0)
     check(`mouse wheel scrolls the part list at ${width}px`, await popup.evaluate(element=>element.scrollTop>0))
-    await popup.screenshot({path:output+`/parts-${width}.png`})
+    if (captureScreenshots) await popup.screenshot({path:output+`/parts-${width}.png`})
     await page.keyboard.press('End')
     await page.keyboard.press('ArrowDown')
     await page.keyboard.press('Escape')
-    await page.locator('.value-loss-calculator').screenshot({ path:output+`/calculator-${width}.png` })
+    if (captureScreenshots) await page.locator('.value-loss-calculator').screenshot({ path:output+`/calculator-${width}.png` })
   }
   await page.getByLabel('Kilometre',{ exact:true }).fill('60000')
   check('changing inputs removes the old amount immediately', await page.locator('.value-loss-calculator__footer strong').count() === 0)
@@ -102,6 +103,7 @@ try {
   async function selectVehicle(type, shape = 'unspecified') {
     await vehicle.selectOption(type)
     await body.selectOption(shape)
+    await page.getByLabel('Hesap yöntemi').selectOption('reference')
     await partInput.waitFor({ state:'visible' })
     await page.waitForFunction(() => !document.querySelector('[aria-label="Hasarlı parça"]')?.disabled)
   }
@@ -141,6 +143,9 @@ try {
   await page.getByRole('button', { name:'Hesapla', exact:true }).click()
   check('multiple panels require actual positions and cannot yield a partial amount', await page.getByRole('alert').textContent().then(text => text.includes('konumlarını')) && await page.locator('.value-loss-calculator__footer strong').count() === 0)
   await page.getByLabel('YAN KAPAK konumu', { exact:true }).fill('sağ, 1. ve 2. bölüm')
+  await page.getByRole('button', { name:'Hesapla', exact:true }).click()
+  check('repeated panels keep reference mode and reject an incomplete reference amount', await page.getByLabel('Hesap yöntemi').inputValue() === 'reference' && (await page.getByRole('alert').textContent()).includes('referans katsayısı bulunamadı') && await page.locator('.value-loss-calculator__footer strong').count() === 0)
+  await page.getByLabel('Hesap yöntemi').selectOption('market_difference')
   await page.getByLabel('Onarım sonrası piyasa değeri (TL)', { exact:true }).fill('900.000')
   await page.getByLabel('Karşı taraf kusuru (%)', { exact:true }).fill('75')
   const repeated = await calculate()
@@ -160,6 +165,9 @@ try {
   await page.getByLabel('2. parça adı', { exact:true }).fill('Ön amortisör')
   await page.getByLabel('Ön amortisör malzemesi', { exact:true }).selectOption('mechanical')
   await page.getByLabel('Ön amortisör konumu', { exact:true }).fill('sol ön')
+  await page.getByRole('button', { name:'Hesapla', exact:true }).click()
+  check('unsupported parts keep reference mode and require an explicit market comparison', await page.getByLabel('Hesap yöntemi').inputValue() === 'reference' && (await page.getByRole('alert').textContent()).includes('referans katsayısı bulunamadı') && await page.locator('.value-loss-calculator__footer strong').count() === 0)
+  await page.getByLabel('Hesap yöntemi').selectOption('market_difference')
   await page.getByLabel('Onarım sonrası piyasa değeri (TL)', { exact:true }).fill('')
   await page.getByRole('button', { name:'Hesapla', exact:true }).click()
   check('one unsupported custom part prevents any incomplete reference total', await page.getByRole('alert').textContent().then(text => text.includes('Onarım sonrası piyasa değerini')) && await page.locator('.value-loss-calculator__footer strong').count() === 0)
@@ -169,7 +177,7 @@ try {
   await page.getByRole('button', { name:'Özet', exact:true }).click()
   await page.getByRole('button', { name:'Değer Kaybı', exact:true }).click()
   check('navigation retains body, material, quantity, positions and custom part name', await body.inputValue() === 'scooter' && await page.getByLabel('2. parça adı', { exact:true }).inputValue() === 'Ön amortisör' && await page.getByLabel('Ön amortisör konumu', { exact:true }).inputValue() === 'sol ön' && await page.getByLabel('ÖN GRENAJ malzemesi', { exact:true }).inputValue() === 'plastic_bodywork')
-  await page.screenshot({ path:output+'/custom-parts.png', fullPage:true })
+  if (captureScreenshots) await page.screenshot({ path:output+'/custom-parts.png', fullPage:true })
   await selectVehicle('OTOMOBİL', 'cabriolet')
   const cabrioParts = await partLabels()
   check('cabrio replaces rear-fender suggestions with documented side panels', cabrioParts.includes('SOL YAN PANEL (TİCARİ VE CABRİO)') && !cabrioParts.some(label => /ARKA ÇAMURLUK|TAVAN SACI/.test(label)))
@@ -183,7 +191,7 @@ try {
   await addSuggestion(carPanel)
   const passengerVan = await calculate()
   check('passenger van uses automobile coefficients with mandatory commercial assessment end to end', passengerVan.input.commercialOrRental && passengerVan.result.issues.length === 0 && passengerVan.result.amountMinor > 0 && await page.getByLabel('Ticari / kiralık kullanım').isChecked() && await page.getByLabel('Ticari / kiralık kullanım').isDisabled())
-  await page.screenshot({ path:output+'/passenger-van.png', fullPage:true })
+  if (captureScreenshots) await page.screenshot({ path:output+'/passenger-van.png', fullPage:true })
   check('no JavaScript errors', errors.length === 0)
   await selectVehicle('OTOMOBİL', 'sedan')
   await addSuggestion('MOTOR KAPUTU')
@@ -191,7 +199,15 @@ try {
   await page.getByLabel('Marka', { exact:true }).fill('Tesla')
   await page.getByLabel('Model', { exact:true }).fill('Model 3')
   check('manufacturer category match shows the exact public manufacturer source', await page.getByRole('link', { name:'Tesla 2017–2023 Model 3 Service Manual — Hood', exact:true }).getAttribute('href') === 'https://service.tesla.com/docs/Model3/ServiceManual/en-us/GUID-485FE399-AB5A-4E92-A465-6E9A6A670B5B.html')
-  check('a manufacturer manual does not masquerade as VIN or coefficient verification', await page.getByText(/Parça kategorisi üretici belgesinde eşleşti/).isVisible() && await page.getByLabel('Hesap yöntemi').inputValue() === 'market_difference')
+  check('a manufacturer manual does not change the selected reference method', await page.getByText(/Parça kategorisi üretici belgesinde eşleşti/).isVisible() && await page.getByLabel('Hesap yöntemi').inputValue() === 'reference')
+  // Remove the earlier scenario's remembered market input before proving that
+  // this reference calculation works without a post-repair valuation.
+  await page.getByLabel('Hesap yöntemi').selectOption('market_difference')
+  await page.getByLabel('Onarım sonrası piyasa değeri (TL)', { exact:true }).fill('')
+  await page.getByLabel('Hesap yöntemi').selectOption('reference')
+  const manufacturerReference = await calculate()
+  check('manufacturer identity reaches a nonzero reference calculation without post-repair market value', manufacturerReference.input.calculationBasis === 'reference' && manufacturerReference.input.postRepairMarketValueMinor === null && manufacturerReference.result.amountMinor > 0 && manufacturerReference.result.issues.length === 0)
+  await page.getByLabel('Hesap yöntemi').selectOption('market_difference')
   await page.getByLabel('Onarım sonrası piyasa değeri (TL)', { exact:true }).fill('900.000')
   const manufacturer = await calculate()
   check('manufacturer-aware input uses the actual authenticated market-difference engine', manufacturer.input.vehicleIdentity.manufacturer === 'Tesla' && manufacturer.input.vehicleIdentity.model === 'Model 3' && manufacturer.result.amountMinor === 7_500_000 && manufacturer.result.calculationMethod === 'market_value_difference')
@@ -204,7 +220,7 @@ try {
   await page.getByRole('button', { name:'Özet', exact:true }).click()
   await page.getByRole('button', { name:'Değer Kaybı', exact:true }).click()
   check('manufacturer and model persist across navigation', await page.getByLabel('Marka', { exact:true }).inputValue() === 'Toyota' && await page.getByLabel('Model', { exact:true }).inputValue() === 'Corolla')
-  await page.screenshot({ path:output+'/manufacturer-market-difference.png', fullPage:true })
+  if (captureScreenshots) await page.screenshot({ path:output+'/manufacturer-market-difference.png', fullPage:true })
   await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'calculator-source','Synthetic source root')", [uuidv7(), org])
   const sourceText = 'Talep İşlem Ref No: prefill-50\nÜrün: Trafik\nPlaka: 034 - TST5050\nHasar Tarihi: 01.10.2026\nSigorta Şirketi: Sentetik Sigorta\nEksper Ad-Soyad: Test Eksper\nEksper Atama Tarihi: 02.10.2026 12:00\nMarka: FORD\nAraç Tipi: TRANSIT 350 L VAN\nModel Yılı: 2021\nAraç Tarife Grubu: KAMYONET\nKasa Tipi: Panelvan\nMotor No: SYNTHETIC-ENGINE\nŞasi No: SYNTHETIC-CHASSIS'
   const sourceResponse = await page.request.post(bridge.origin+'/api/v1/eksist/sources', { data:{ kind:'text', text:sourceText } })
@@ -221,6 +237,8 @@ try {
   await page.getByRole('button', { name:'Listede olmayan parça ekle' }).click()
   await page.getByLabel('1. parça adı', { exact:true }).fill('Ön far')
   await page.getByLabel('Rayiç bedeli (TL)', { exact:true }).fill('1.000.000')
+  check('automatic manufacturer fields and a custom part preserve the reference selection', await page.getByLabel('Hesap yöntemi').inputValue() === 'reference' && await page.getByLabel('Onarım sonrası piyasa değeri (TL)', { exact:true }).count() === 0)
+  await page.getByLabel('Hesap yöntemi').selectOption('market_difference')
   await page.getByLabel('Onarım sonrası piyasa değeri (TL)', { exact:true }).fill('900.000')
   await page.getByLabel('Karşı taraf kusuru (%)', { exact:true }).fill('75')
   const prefilled = await calculate()
@@ -231,14 +249,14 @@ try {
   check('automatic loading preserves a manual correction across navigation', await page.getByLabel('Model', { exact:true }).inputValue() === 'Kullanıcı düzeltmesi')
   await page.getByRole('button', { name:'Dosya bilgilerini al', exact:true }).click()
   check('explicit source refresh restores only known source fields and retains monetary input and physical parts', await page.getByLabel('Model', { exact:true }).inputValue() === 'TRANSIT 350 L VAN' && await page.getByLabel('Rayiç bedeli (TL)', { exact:true }).inputValue() === '1.000.000' && await page.getByLabel('1. parça adı', { exact:true }).inputValue() === 'Ön far')
-  await page.screenshot({ path:output+'/sbm-automatic-prefill.png', fullPage:true })
+  if (captureScreenshots) await page.screenshot({ path:output+'/sbm-automatic-prefill.png', fullPage:true })
   check('source import and automatic calculator loading produce no JavaScript errors', errors.length === 0)
   check('calculation does not create an assessment or report', (await pool.query('SELECT count(*)::int AS n FROM traffic_value_loss_assessments')).rows[0].n === 0)
   await writeFile(output+'/results.json', JSON.stringify({ status:'PASS', checks, amount },null,2))
   console.log(JSON.stringify({ status:'PASS', checks:checks.length, amount }))
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0]
-  if (page) await page.screenshot({ path:output+'/failure.png', fullPage:true })
+  if (page && captureScreenshots) await page.screenshot({ path:output+'/failure.png', fullPage:true })
   await writeFile(output+'/results.json', JSON.stringify({ status:'FAIL', checks, message:String(error) },null,2))
   throw error
 } finally {

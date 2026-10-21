@@ -2028,23 +2028,15 @@
                     "pattern": "^[A-Za-z0-9._-]+$"
                   },
                   "authorizedServiceRequirement": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "boolean",
+                      "null"
                     ]
                   },
                   "insurerContractedServiceRequirement": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "boolean",
+                      "null"
                     ]
                   },
                   "serviceFreedom": {

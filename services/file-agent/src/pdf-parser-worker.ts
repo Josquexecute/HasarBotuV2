@@ -10,7 +10,7 @@ import {
   segmentNormalizedPdfText,
   sha256Text,
 } from '@hasarbotu/domain'
-import { OPS, getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { OPS, getDocument, version } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { PdfExtractedPageChunk } from '@hasarbotu/contracts'
 import type { PdfParserWorkerInput, PdfParserWorkerMessage } from './pdf-parser-protocol.js'
 
@@ -61,6 +61,10 @@ function canonicalError(error: unknown): string {
 
 async function run(): Promise<void> {
   try {
+    if (version !== PDF_TEXT_PARSER_VERSION) {
+      send({ kind: 'error', errorCode: 'parser_version_mismatch' })
+      return
+    }
     const data = new Uint8Array(await readFile(input.filePath))
     const task = getDocument({ data, useSystemFonts: false, verbosity: 0 })
     const pdf = await task.promise

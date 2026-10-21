@@ -2,14 +2,14 @@
 
 HasarBotu V2'nin **ince Electron kabuğu** (ADR-Q06, Paket 21 / D2).
 
-Kabuk şunları yapar ve başka hiçbir şey yapmaz:
+Kabuk aşağıdaki görevleri ve dar masaüstü yardımcılarını yürütür:
 
 1. Loopback aynı-origin köprüsünü başlatır (`@hasarbotu/desktop-bridge`, D1).
 2. API'nin ayakta ve **sürüm olarak uyumlu** olduğunu doğrular (D3).
 3. Güvenli bir `BrowserWindow` açar ve o **tek** origin'i yükler.
 4. `src/main/*` içindeki saf politika kararlarını Electron API'lerine bağlar.
 
-**Kabukta iş mantığı yoktur** ve `ipcMain` handler'ı kaydedilmez. UI verisini
+**Kabukta iş mantığı yoktur**; güncelleme, klasör açma ve Touch yardımcılarının IPC çağrıları gönderici, ana frame ve izinli origin ile sınırlandırılır. UI verisini
 bugün olduğu gibi göreli `/api/...` üzerinden alır; hiçbir adapter sözleşmesi
 değişmez. Bu kural, Paket 21'in geri alma stratejisinin ("desktop paketini
 kaldır, web dağıtımını kullan") geçerli kalmasının tek şartıdır.
@@ -19,7 +19,7 @@ kaldır, web dağıtımını kullan") geçerli kalmasının tek şartıdır.
 | Alan | Uygulanan |
 |---|---|
 | Renderer | `nodeIntegration=false`, `contextIsolation=true`, `sandbox=true`, `webSecurity=true`, `webviewTag=false` |
-| Preload | Yalnız iki **veri** alanı (`isDesktopShell`, `platform`). Fonksiyon yok, IPC kanalı yok, `ipcRenderer` yok |
+| Preload | Kabuk bilgisi ve dar masaüstü yardımcıları; ham Node/fs veya `ipcRenderer` erişimi yok |
 | CSP | `default-src 'none'` ile başlar; `script-src`/`style-src`/`connect-src` yalnız `'self'`. `unsafe-inline`/`unsafe-eval` yok |
 | Navigasyon | Yalnız köprü origin'i. `file:`, `data:`, `about:blank`, uzak origin ve şema kaçışları reddedilir |
 | Yeni pencere | Electron içinde **hiçbir** yeni pencere açılmaz — allowlist'teki hedef bile |
@@ -89,11 +89,9 @@ test kancası yoktur. Gerçek üretim UI build'ini kullanan kontrol yalnız
 
 ## Bu pakette olmayanlar
 
-- Code signing, installer ve otomatik güncelleme (kullanıcı talimatı; Paket
-  21/22 dağıtım kararları).
+- Authenticode kod imzası. NSIS kurulumu ve kullanıcı kontrollü, kimlikli ofis güncellemesi aşağıdaki yayın prosedüründedir.
 - Renderer'dan Node/fs erişimi, doğrudan PostgreSQL, File Agent görevi.
-- Harici bağlantıyı varsayılan tarayıcıya devretme (kabuk hiçbir URL'i dışarıya
-  açmaz).
+- Allowlist dışındaki harici bağlantılar.
 
 ## Bilinen Electron tuzağı
 
@@ -181,7 +179,26 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.66**, 2026-10-20T15:39:16.725Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.67**, 2026-10-21T04:50:51.208Z; Windows x64,
+112.952.619 bayt, SHA-256 `7b2e96847fc9aca66afeb5a9c44b85dba4c438d3d454204e12bad9e27a550e57`.
+Kapanışla çakışan belge/fotoğraf kayıtları, tekrar gönderimler, kaynak kurtarma,
+tarih sıralaması ve oturum depolama hataları düzeltildi. 28 doğrudan bağımlılık,
+Node 24.22.0 ve PDF 6.4.299 doğrulandı; TypeScript 6.0.3 uyumluluk için korundu.
+3.141 sürüm testi geçti; genel koşuda atlanan altı bağlantı testi ayrı gerçek
+API/PostgreSQL ortamında 6/6 geçti. Ek Node denetimleri, 90 saha tarayıcı kontrolü,
+76 hesaplayıcı kontrolü, gerçek Electron/NSIS ve paket açılışı geçti; 65 UI dosyası eşleşti.
+İzole ortamda 5/10 ayrı saha oturumunda 15 fotoğraf gerçek File Agent ile kayıpsız yayımlandı.
+5/10/20/50 oturumun yerel, sentetik ve her biri 10 saniyelik yükünde 54.590 istekte
+hata görülmedi; 5/10 oturum p95 değerleri 10,64/18,10 ms. Bu ölçüm ofiste 50
+kullanıcı veya uzun süreli bellek kararlılığı garantisi değildir. Ücretli AI ve gerçek
+test e-postası kullanılmadı; sağlayıcı hata senaryoları sözleşme testleriyle sınandı.
+133 tablo/503.525 satırlık yedek ayrı ortamda hash ile geri yüklenerek doğrulandı.
+Migration 0067, 8.219 runtime dosyası ve beş ofis servisi doğrulandı; önceki runtime,
+0.1.66 manifesti ve değişmez kurulumu korundu. Kurulu **0.1.65**, yeni sürümü
+`available` gördü; kimlik doğrulamalı HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti.
+Çalışan istemcilere zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.66**, 2026-10-20T15:39:16.725Z; Windows x64,
 105.204.575 bayt, SHA-256 `8587d53982cf657a0e2057a91375f614bd180ded074c40feee0f802e4bce21ab`.
 Föyde revize servis ve doğru bölüme ait telefon/adres aktarımı, tüm basılı alanların
 düzenlenmesi, ayrı A4 önizleme, çoklu SBM şirket seçimi, başarısız atomik kapanışta

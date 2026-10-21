@@ -6,7 +6,7 @@
   "sideEffects": false,
   "description": "HasarBotu V2 masaüstü kabuğu için loopback aynı-origin köprüsü (Electron bağımsız)",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.15 <25"
   },
   "files": [
     "dist"
@@ -25,7 +25,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "devDependencies": {
-    "@types/node": "24.13.3"
+    "@types/node": "24.19.2"
   },
   "author": "Ömer Faruk İŞLEYEN",
   "license": "UNLICENSED"

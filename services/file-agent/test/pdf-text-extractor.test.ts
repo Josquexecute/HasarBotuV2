@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { JobPayload, PdfExtractionChunkRequest } from '@hasarbotu/contracts'
+import { PDF_TEXT_PARSER_VERSION } from '@hasarbotu/domain'
 import { extractPdfText } from '../src/pdf-text-extractor.js'
 
 type PdfPage = { readonly kind: 'text'; readonly text: string } | { readonly kind: 'image' } | { readonly kind: 'empty' }
@@ -50,7 +51,7 @@ const extractionId = '00000000-0000-4000-8000-000000000024'
 function payload(pdf: Buffer, overrides: Partial<Extract<JobPayload, { kind: 'pdf_text_extraction' }>> = {}): Extract<JobPayload, { kind: 'pdf_text_extraction' }> {
   return {
     kind: 'pdf_text_extraction', extractionId, extractionVersion: 1, storageRootKey: 'test-root', relativePath: 'EVRAK/policy.pdf',
-    declaredHash: createHash('sha256').update(pdf).digest('hex'), declaredSize: pdf.length, parserVersion: '6.2.108', normalizationVersion: 'pdf-text-normalization/1.0.0',
+    declaredHash: createHash('sha256').update(pdf).digest('hex'), declaredSize: pdf.length, parserVersion: PDF_TEXT_PARSER_VERSION, normalizationVersion: 'pdf-text-normalization/1.0.0',
     maxSourceBytes: 2_000_000, maxPages: 20, maxPageCharacters: 20_000, maxTotalCharacters: 100_000, timeoutMs: 20_000, workerMemoryMb: 192,
     ...overrides,
   }
@@ -69,8 +70,8 @@ describe('güvenli PDF metin çıkarıcı', () => {
     return { result, chunks }
   }
 
-  it('rejects a job for another parser version before publishing evidence', async () => {
-    const { result, chunks } = await run(syntheticPdf([{ kind: 'text', text: 'POLICE' }]), { parserVersion: '6.1.200' })
+  it.each(['6.1.200', '6.2.108'] as const)('rejects a job for historical parser %s before publishing evidence', async (parserVersion) => {
+    const { result, chunks } = await run(syntheticPdf([{ kind: 'text', text: 'POLICE' }]), { parserVersion })
     expect(result).toEqual({ outcome: 'failed', errorCode: 'parser_version_mismatch' })
     expect(chunks).toEqual([])
   })

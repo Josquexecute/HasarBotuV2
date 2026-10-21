@@ -112,6 +112,10 @@ export function registerDocumentRoutes(app: FastifyInstance, options: DocumentRo
         return
       case 'not_found':
         return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
+      case 'case_closed':
+        return reply.code(409).send(failureBody('conflict', 'Closed cases cannot be modified.', requestId))
+      case 'path_conflict':
+        return reply.code(409).send(failureBody('conflict', 'Storage path is already registered.', requestId))
       case 'unknown_reference':
         sendFieldError(reply, requestId, outcome.field, 'unknown_reference')
         return
@@ -188,6 +192,10 @@ export function registerDocumentRoutes(app: FastifyInstance, options: DocumentRo
         return
       case 'not_found':
         return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
+      case 'case_closed':
+        return reply.code(409).send(failureBody('conflict', 'Closed cases cannot be modified.', requestId))
+      case 'path_conflict':
+        return reply.code(409).send(failureBody('conflict', 'Storage path is already registered.', requestId))
       case 'unknown_reference':
         sendFieldError(reply, requestId, outcome.field, 'unknown_reference')
         return

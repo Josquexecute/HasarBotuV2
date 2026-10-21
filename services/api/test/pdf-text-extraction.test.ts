@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -65,10 +66,10 @@ describeDb('Kasko PDF metin çıkarımı API + gerçek File Agent (gerçek Postg
   }
 
   beforeAll(async () => {
-    migrationDirectory = createHistoricalMigrationDirectory('0060')
+    migrationDirectory = createHistoricalMigrationDirectory('0067')
     config = assertTestDatabaseUrl(TEST_URL as string); pool = createDatabasePool({ config }); await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
-    // Keep rollback tests on the exact schema introducing parser compatibility.
-    await runMigrations({ databaseUrl: config.url, count: 60, quiet: true })
+    // Keep rollback tests on the exact schema introducing current parser compatibility.
+    await runMigrations({ databaseUrl: config.url, quiet: true })
     organizationId = uuidv7(); otherOrganizationId = uuidv7(); await pool.query('INSERT INTO organizations (id,code,name) VALUES ($1,$2,$3),($4,$5,$6)', [organizationId, 'p24-main', 'P24 Main', otherOrganizationId, 'p24-other', 'P24 Other'])
     await seedUser(organizationId, 'p24-admin@test.local', 'admin'); await seedUser(organizationId, 'p24-manager@test.local', 'case_manager'); await seedUser(organizationId, 'p24-secretary@test.local', 'secretary'); await seedUser(otherOrganizationId, 'p24-other@test.local', 'admin')
     await pool.query("INSERT INTO storage_roots (id,organization_id,root_key,label) VALUES ($1,$2,'test-root','Sentetik Root')", [uuidv7(), organizationId])
@@ -86,8 +87,8 @@ describeDb('Kasko PDF metin çıkarımı API + gerçek File Agent (gerçek Postg
   afterAll(async () => { if (app !== undefined) await app.close(); if (pool !== undefined) await closeDatabasePool(pool); if (root !== undefined) await rm(root, { recursive: true, force: true }); if (migrationDirectory) await rm(migrationDirectory, { recursive: true, force: true }) })
 
   it('allows an empty parser migration rollback and reapplies its compatibility constraint', async () => {
-    expect((await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })).map(item => item.name)).toEqual(['0060_pdf_parser_version'])
-    expect((await runMigrations({ databaseUrl: config.url, count: 1, quiet: true })).map(item => item.name)).toEqual(['0060_pdf_parser_version'])
+    expect((await runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })).map(item => item.name)).toEqual(['0067_pdf_parser_version'])
+    expect((await runMigrations({ databaseUrl: config.url, count: 1, quiet: true })).map(item => item.name)).toEqual(['0067_pdf_parser_version'])
   })
 
   it('401/403, Kasko kaynağı, idempotency ve Traffic reddini uygular', async () => {
@@ -103,7 +104,7 @@ describeDb('Kasko PDF metin çıkarımı API + gerçek File Agent (gerçek Postg
   it('canlı API üzerinden claim→izole parse→chunk→verify→finalize çalışır', async () => {
     const result = await runOnce(client, agentConfig); expect(result.kind).toBe('reported'); if (result.kind === 'reported') expect(result.reported.status).toBe('succeeded')
     const row = await pool.query('SELECT id FROM document_text_extractions WHERE document_version_id=$1', [documentVersionId]); const extractionId = (row.rows[0] as { id: string }).id
-    const detailResponse = await fetch(`${baseUrl}/api/v1/cases/${caseId}/text-extractions/${extractionId}`, { headers: { cookie: adminCookie } }); expect(detailResponse.status).toBe(200); const detail = pdfTextExtractionResponseSchema.parse(await detailResponse.json()); expect(detail.extraction).toMatchObject({ status: 'ready', parserVersion: '6.2.108', normalizationVersion: 'pdf-text-normalization/1.0.0', pageCount: 1, textPageCount: 1, segmentCount: 1 })
+    const detailResponse = await fetch(`${baseUrl}/api/v1/cases/${caseId}/text-extractions/${extractionId}`, { headers: { cookie: adminCookie } }); expect(detailResponse.status).toBe(200); const detail = pdfTextExtractionResponseSchema.parse(await detailResponse.json()); expect(detail.extraction).toMatchObject({ status: 'ready', parserVersion: createRequire(import.meta.url)('pdfjs-dist/package.json').version, normalizationVersion: 'pdf-text-normalization/1.0.0', pageCount: 1, textPageCount: 1, segmentCount: 1 })
     const pages = pdfTextPagesResponseSchema.parse((await app.inject({ method: 'GET', url: `/api/v1/cases/${caseId}/text-extractions/${extractionId}/pages?page=1&pageSize=20`, headers: { cookie: adminCookie } })).json()); expect(pages.items[0]).toMatchObject({ pageNumber: 1, status: 'text', normalizedText: 'KASKO POLICE OZEL SART' })
     const segments = pdfTextSegmentsResponseSchema.parse((await app.inject({ method: 'GET', url: `/api/v1/cases/${caseId}/text-extractions/${extractionId}/segments?page=1&pageSize=20`, headers: { cookie: adminCookie } })).json()); expect(segments.items).toHaveLength(1)
     const segment = segments.items[0]!; const referenceResponse = await app.inject({ method: 'POST', url: `/api/v1/cases/${caseId}/text-extractions/${extractionId}/source-reference`, headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: { sourceKey: 'PDF_S1', pageId: segment.pageId, segmentId: segment.id, startOffset: segment.startOffset, endOffset: segment.endOffset, sectionHeading: 'Özel Şartlar', clauseIdentifier: 'PDF-1', sourceType: 'policy', confidence: 1 } }); expect(referenceResponse.statusCode, referenceResponse.payload).toBe(200)
@@ -117,18 +118,51 @@ describeDb('Kasko PDF metin çıkarımı API + gerçek File Agent (gerçek Postg
   }, 60_000)
 
   it('preserves legacy parser records and refuses a downgrade that would lose current evidence', async () => {
-    const historicalId = uuidv7()
-    await pool.query(`INSERT INTO document_text_extractions
-      (id,organization_id,case_id,document_id,document_version_id,extraction_version,status,
-       parser_name,parser_version,normalization_version,offset_unit,source_hash,source_size,output_hash,completed_at)
-      SELECT $1,organization_id,case_id,document_id,document_version_id,extraction_version+1,'ready',
-             parser_name,'6.1.200',normalization_version,offset_unit,source_hash,source_size,output_hash,completed_at
-      FROM document_text_extractions WHERE document_version_id=$2 AND parser_version='6.2.108'`, [historicalId, documentVersionId])
-    const response = await app.inject({ method: 'GET', url: `/api/v1/cases/${caseId}/text-extractions/${historicalId}`, headers: { cookie: adminCookie } })
-    expect(response.statusCode).toBe(200)
-    expect(pdfTextExtractionResponseSchema.parse(response.json()).extraction.parserVersion).toBe('6.1.200')
+    for (const [index, parserVersion] of ['6.1.200', '6.2.108'].entries()) {
+      const historicalId = uuidv7()
+      await pool.query(`INSERT INTO document_text_extractions
+        (id,organization_id,case_id,document_id,document_version_id,extraction_version,status,
+         parser_name,parser_version,normalization_version,offset_unit,source_hash,source_size,output_hash,completed_at)
+        SELECT $1,organization_id,case_id,document_id,document_version_id,extraction_version+$4,'ready',
+               parser_name,$3,normalization_version,offset_unit,source_hash,source_size,output_hash,completed_at
+        FROM document_text_extractions WHERE document_version_id=$2 AND parser_version='6.4.299'`, [historicalId, documentVersionId, parserVersion, index + 1])
+      const response = await app.inject({ method: 'GET', url: `/api/v1/cases/${caseId}/text-extractions/${historicalId}`, headers: { cookie: adminCookie } })
+      expect(response.statusCode).toBe(200)
+      expect(pdfTextExtractionResponseSchema.parse(response.json()).extraction.parserVersion).toBe(parserVersion)
+    }
     await expect(runMigrations({ databaseUrl: config.url, direction: 'down', count: 1, quiet: true })).rejects.toThrow('pdf_parser_version_downgrade_would_lose_data')
     expect((await pool.query('SELECT parser_version FROM document_text_extractions WHERE document_version_id=$1 ORDER BY extraction_version', [documentVersionId])).rows)
-      .toEqual([{ parser_version: '6.2.108' }, { parser_version: '6.1.200' }])
+      .toEqual([{ parser_version: '6.4.299' }, { parser_version: '6.1.200' }, { parser_version: '6.2.108' }])
   })
+
+  it('queues the current parser separately from legacy snapshots and reuses only the current identity', async () => {
+    const pdf = syntheticTextPdf('LEGACY POLICE')
+    await writeFile(join(root, 'EVRAK', 'legacy.pdf'), pdf)
+    const policy = await seedPolicy(caseId, organizationId, 'EVRAK/legacy.pdf', pdf)
+    for (const [index, parserVersion] of ['6.1.200', '6.2.108'].entries()) {
+      await pool.query(`INSERT INTO document_text_extractions
+        (id,organization_id,case_id,document_id,document_version_id,extraction_version,status,
+         parser_name,parser_version,normalization_version,offset_unit,source_hash,source_size,output_hash,completed_at)
+        SELECT $1,organization_id,case_id,document_id,id,$2,'ready',
+               'pdfjs-dist',$3,'pdf-text-normalization/1.0.0','unicode_code_point',content_hash,byte_size,$4,now()
+        FROM document_versions WHERE id=$5`, [uuidv7(), index + 1, parserVersion, 'b'.repeat(64), policy.versionId])
+    }
+    const route = `/api/v1/cases/${caseId}/documents/${policy.docId}/versions/${policy.versionId}/text-extractions`
+    const create = () => app.inject({ method: 'POST', url: route, headers: { cookie: adminCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: {} })
+    const first = await create()
+    expect(first.statusCode, first.payload).toBe(201)
+    const current = pdfTextExtractionResponseSchema.parse(first.json()).extraction
+    expect(current).toMatchObject({ parserVersion: '6.4.299', extractionVersion: 3, status: 'queued' })
+    const duplicate = await create()
+    expect(duplicate.statusCode, duplicate.payload).toBe(201)
+    expect(pdfTextExtractionResponseSchema.parse(duplicate.json()).extraction.id).toBe(current.id)
+    const result = await runOnce(client, agentConfig)
+    expect(result.kind).toBe('reported')
+    if (result.kind === 'reported') expect(result.reported.status).toBe('succeeded')
+    const detail = await app.inject({ method: 'GET', url: `/api/v1/cases/${caseId}/text-extractions/${current.id}`, headers: { cookie: adminCookie } })
+    expect(detail.statusCode, detail.payload).toBe(200)
+    expect(pdfTextExtractionResponseSchema.parse(detail.json()).extraction).toMatchObject({ status: 'ready', parserVersion: '6.4.299', extractionVersion: 3, version: 2 })
+    expect((await pool.query('SELECT parser_version FROM document_text_extractions WHERE document_version_id=$1 ORDER BY extraction_version', [policy.versionId])).rows)
+      .toEqual([{ parser_version: '6.1.200' }, { parser_version: '6.2.108' }, { parser_version: '6.4.299' }])
+  }, 60_000)
 })

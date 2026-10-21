@@ -270,7 +270,7 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
     expect(replay).toMatchObject({ outcome: 'verified', fileOperation: { safeOutcomeCode: 'recovered_existing_destination' } })
   })
 
-  it('DB switch sonrası cleanup yalnız hedef ve kaynak manifestleri eşleşince kaynağı siler', async () => {
+  it('retains the verified cleanup source in metadata storage and recovers an acknowledged retry', async () => {
     const payload = applyPayload({
       destination: { storageRootKey: 'destination-root', relativePath: '2026/KAPALI TEMMUZ 2026/34ABC123' },
       strategy: 'staged_copy',
@@ -289,11 +289,17 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
       totalBytes: applied.fileOperation.totalBytes ?? 0,
     }
     const cleaned = await executeFileOperation(roots(), cleanupPayload)
-    expect(cleaned).toMatchObject({ outcome: 'verified', fileOperation: { phase: 'cleanup_completed' } })
+    expect(cleaned).toMatchObject({ outcome: 'verified', fileOperation: { phase: 'cleanup_completed', safeOutcomeCode: 'source_retained_for_recovery' } })
     await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+    const recovery = join(sourceRoot, '2026/Temmuz 2026/_HASARBOTU_OFFICE/cleanup', `${payload.operationId}-3`)
+    expect(await readFile(join(recovery, 'not.txt'), 'utf8')).toBe('sentetik-not')
+    expect(await executeFileOperation(roots(), cleanupPayload)).toEqual(cleaned)
+    await writeFile(join(recovery, 'not.txt'), 'changed-after-cleanup')
+    expect(await executeFileOperation(roots(), cleanupPayload)).toMatchObject({ outcome: 'failed', errorCode: 'source_changed_during_cleanup' })
+    expect(await readFile(join(recovery, 'not.txt'), 'utf8')).toBe('changed-after-cleanup')
   })
 
-  it('cleanup kilidi kaynakta silme başlamadan oluşursa cleanup_pending retry güvenle tamamlanabilir', async () => {
+  it('retries a locked cleanup rename while preserving both trees', async () => {
     const payload = applyPayload({
       destination: { storageRootKey: 'destination-root', relativePath: '2026/KAPALI TEMMUZ 2026/34ABC123' },
       strategy: 'staged_copy',
@@ -315,12 +321,12 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
     let blocked = true
     const adapter: FileSystemAdapter = {
       ...nodeFileSystemAdapter,
-      async unlink(path) {
+      async rename(source, destination) {
         if (blocked) {
           blocked = false
           throw errno('EBUSY')
         }
-        await nodeFileSystemAdapter.unlink(path)
+        await nodeFileSystemAdapter.rename(source, destination)
       },
     }
     expect(await executeFileOperation(roots(), cleanupPayload, adapter)).toEqual({ outcome: 'failed', errorCode: 'file_locked' })
@@ -328,7 +334,7 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
     expect((await executeFileOperation(roots(), cleanupPayload)).outcome).toBe('verified')
   })
 
-  it('cleanup kısmen başladıktan sonra hata olursa kör retry yerine manual recovery ister', async () => {
+  it('preserves every source file when a cleanup rename succeeds before its acknowledgement fails', async () => {
     const payload = applyPayload({
       destination: { storageRootKey: 'destination-root', relativePath: '2026/KAPALI TEMMUZ 2026/34ABC123' },
       strategy: 'staged_copy',
@@ -347,23 +353,25 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
       directoryCount: summary.directoryCount ?? 0,
       totalBytes: summary.totalBytes ?? 0,
     }
-    let removedFiles = 0
     const adapter: FileSystemAdapter = {
       ...nodeFileSystemAdapter,
-      async unlink(path) {
-        removedFiles += 1
-        if (removedFiles === 2) throw errno('EACCES')
-        await nodeFileSystemAdapter.unlink(path)
+      async rename(source, destination) {
+        await nodeFileSystemAdapter.rename(source, destination)
+        throw errno('EACCES')
       },
     }
     const result = await executeFileOperation(roots(), cleanupPayload, adapter)
     expect(result).toMatchObject({
       outcome: 'failed',
-      errorCode: 'partial_cleanup_detected',
+      errorCode: 'cleanup_recovery_interrupted',
       fileOperation: { phase: 'manual_recovery_required' },
     })
     await expect(access(join(destinationRoot, ...payload.destination.relativePath.split('/')))).resolves.toBeUndefined()
-    await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).resolves.toBeUndefined()
+    await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
+    const recovery = join(sourceRoot, '2026/Temmuz 2026/_HASARBOTU_OFFICE/cleanup', `${payload.operationId}-3`)
+    expect(await readFile(join(recovery, 'not.txt'), 'utf8')).toBe('sentetik-not')
+    expect(await readFile(join(recovery, 'EVRAK/ruhsat.txt'), 'utf8')).toBe('sentetik-ruhsat')
+    expect((await executeFileOperation(roots(), cleanupPayload)).outcome).toBe('verified')
   })
 
   it('kaynak apply sonrası değişmişse cleanup yapmaz ve insan incelemesi ister', async () => {
@@ -392,5 +400,39 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
       fileOperation: { phase: 'manual_recovery_required' },
     })
     await expect(access(join(sourceRoot, ...sourceRelative.split('/'), 'sonradan.txt'))).resolves.toBeUndefined()
+  })
+
+  it('retains a concurrent source edit made after its cleanup manifest was hashed', async () => {
+    const payload = applyPayload({
+      destination: { storageRootKey: 'destination-root', relativePath: '2026/KAPALI TEMMUZ 2026/34ABC123' },
+      strategy: 'staged_copy',
+    })
+    const applied = await executeFileOperation(roots(), payload)
+    const summary = applied.fileOperation
+    if (summary?.manifestHash === undefined) throw new Error('manifest missing')
+    const sourceFile = join(sourceRoot, sourceRelative, 'not.txt')
+    const recoveryRelative = `2026/Temmuz 2026/_HASARBOTU_OFFICE/cleanup/${payload.operationId}-3`
+    let edited = false
+    const adapter: FileSystemAdapter = {
+      ...nodeFileSystemAdapter,
+      async hashFile(path) {
+        const result = await nodeFileSystemAdapter.hashFile(path)
+        if (path === sourceFile && !edited) {
+          edited = true
+          await writeFile(path, 'concurrent-user-update')
+        }
+        return result
+      },
+    }
+    const result = await executeFileOperation(roots(), {
+      kind: 'file_operation_cleanup', operationId: payload.operationId, operationVersion: 3,
+      source: payload.source, destination: payload.destination,
+      manifestHash: summary.manifestHash, fileCount: summary.fileCount ?? 0,
+      directoryCount: summary.directoryCount ?? 0, totalBytes: summary.totalBytes ?? 0,
+    }, adapter)
+    expect(edited).toBe(true)
+    expect(result).toMatchObject({ outcome: 'failed', errorCode: 'source_changed_during_cleanup', fileOperation: { phase: 'manual_recovery_required' } })
+    expect(await readFile(join(sourceRoot, recoveryRelative, 'not.txt'), 'utf8')).toBe('concurrent-user-update')
+    expect(await readFile(join(destinationRoot, payload.destination.relativePath, 'not.txt'), 'utf8')).toBe('sentetik-not')
   })
 })

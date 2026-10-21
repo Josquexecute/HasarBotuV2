@@ -463,9 +463,29 @@ async function cleanupOperation(
     }
 
     const sourceAbsolute = resolveUnderRoot(sourceRoot, payload.source.relativePath)
+    // Keep the old tree in the scanner-excluded metadata namespace. Hashing
+    // followed by unlink cannot protect an edit made between those operations.
+    const recoveryRelativePath = [
+      ...payload.source.relativePath.split('/').slice(0, -1),
+      '_HASARBOTU_OFFICE', 'cleanup', `${payload.operationId}-${payload.operationVersion}`,
+    ].join('/')
+    const recoveryAbsolute = resolveUnderRoot(sourceRoot, recoveryRelativePath)
+    const destinationAbsolute = resolveUnderRoot(destinationRoot, payload.destination.relativePath)
+    if (isUnderRoot(sourceAbsolute, recoveryAbsolute) || isUnderRoot(destinationAbsolute, recoveryAbsolute)) {
+      return manualRecovery('staged_copy', 'unsafe_cleanup_recovery_path')
+    }
     const sourceKind = await pathKind(fs, sourceAbsolute)
-    if (sourceKind === 'missing') return manifestResult('cleanup_completed', 'staged_copy', destinationManifest, 'cleanup_already_complete')
+    const recoveryKind = await pathKind(fs, recoveryAbsolute)
+    if (recoveryKind === 'unsafe') return manualRecovery('staged_copy', 'unexpected_recovery_entry')
+    if (sourceKind === 'missing') {
+      if (recoveryKind === 'missing') return manifestResult('cleanup_completed', 'staged_copy', destinationManifest, 'cleanup_already_complete')
+      const recovered = await buildWorkspaceManifest(fs, sourceRoot, recoveryRelativePath)
+      return sameManifest(recovered, destinationManifest)
+        ? manifestResult('cleanup_completed', 'staged_copy', destinationManifest, 'source_retained_for_recovery')
+        : manualRecovery('staged_copy', 'source_changed_during_cleanup')
+    }
     if (sourceKind === 'unsafe') return manualRecovery('staged_copy', 'unexpected_source_entry')
+    if (recoveryKind !== 'missing') return manualRecovery('staged_copy', 'cleanup_recovery_destination_exists')
     const sourceManifest = await buildWorkspaceManifest(fs, sourceRoot, payload.source.relativePath)
     if (sourceManifest.manifestHash !== payload.manifestHash
       || sourceManifest.fileCount !== payload.fileCount
@@ -474,24 +494,22 @@ async function cleanupOperation(
       return manualRecovery('staged_copy', 'source_changed_before_cleanup')
     }
 
-    let removed = 0
+    await ensureParentChain(fs, sourceRoot, (await rootContext(fs, sourceRoot)).rootReal, recoveryRelativePath)
     try {
-      for (const entry of [...sourceManifest.entries].reverse()) {
-        const absolute = entry.relativePath.length === 0
-          ? sourceAbsolute
-          : join(sourceAbsolute, ...entry.relativePath.split('/'))
-        const metadata = await fs.lstat(absolute)
-        if (metadata.isSymbolicLink()) return manualRecovery('staged_copy', 'reparse_point_rejected')
-        if (entry.type === 'file') await fs.unlink(absolute)
-        else await fs.rmdir(absolute)
-        removed += 1
-      }
+      await fs.rename(sourceAbsolute, recoveryAbsolute)
     } catch (error) {
-      return removed === 0
+      return await pathKind(fs, recoveryAbsolute) === 'missing'
         ? { outcome: 'failed', errorCode: safeFailureCode(error, 'cleanup_failed') }
-        : manualRecovery('staged_copy', 'partial_cleanup_detected')
+        : manualRecovery('staged_copy', 'cleanup_recovery_interrupted')
     }
-    return manifestResult('cleanup_completed', 'staged_copy', destinationManifest)
+    // Revalidate both trees after the atomic move. Never delete the retained
+    // source: even an already-open writer may still be updating its contents.
+    const retained = await buildWorkspaceManifest(fs, sourceRoot, recoveryRelativePath)
+    if (!sameManifest(retained, destinationManifest)) return manualRecovery('staged_copy', 'source_changed_during_cleanup')
+    const currentDestination = await buildWorkspaceManifest(fs, destinationRoot, payload.destination.relativePath)
+    if (!sameManifest(currentDestination, destinationManifest)) return manualRecovery('staged_copy', 'destination_manifest_mismatch')
+    if (await pathKind(fs, sourceAbsolute) !== 'missing') return manualRecovery('staged_copy', 'source_recreated_during_cleanup')
+    return manifestResult('cleanup_completed', 'staged_copy', destinationManifest, 'source_retained_for_recovery')
   } catch (error) {
     return { outcome: 'failed', errorCode: safeFailureCode(error, 'cleanup_failed') }
   }

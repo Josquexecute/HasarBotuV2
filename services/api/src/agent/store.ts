@@ -1110,6 +1110,7 @@ async function applyFileOperationResult(
         agentId: ctx.agentId,
         strategy: 'staged_copy',
         cleanupState: 'completed',
+        safeOutcomeCode: fileResult.safeOutcomeCode,
         manifestHash: fileResult.manifestHash,
         fileCount: fileResult.fileCount,
         directoryCount: fileResult.directoryCount,

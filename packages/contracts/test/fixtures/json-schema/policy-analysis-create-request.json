@@ -970,24 +970,16 @@
           },
           "authorizedServiceRequirement": {
             "default": null,
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "boolean",
+              "null"
             ]
           },
           "insurerContractedServiceRequirement": {
             "default": null,
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "boolean",
+              "null"
             ]
           },
           "serviceFreedom": {

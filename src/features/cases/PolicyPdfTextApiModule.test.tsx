@@ -11,7 +11,7 @@ function response(status: number, body: unknown) { return new Response(JSON.stri
 afterEach(() => vi.restoreAllMocks())
 
 describe('Kasko PDF metin çıkarım görünümü', () => {
-  it.each(['6.1.200', '6.2.108'])('exact parser %s, sayfa, segment ve server kaynak referansını gerçek API’den gösterir', async (parserVersion) => {
+  it.each(['6.1.200', '6.2.108', '6.4.299'])('exact parser %s, sayfa, segment ve server kaynak referansını gerçek API’den gösterir', async (parserVersion) => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
       if (init?.method === 'POST' && url.endsWith('/source-reference')) return response(200, { sourceReference: { sourceKey: 'pdf-1-0', documentId: DOC, documentVersionId: VERSION, pageNumber: 1, sectionHeading: 'KASKO', clauseIdentifier: 'PDF-1', rawExcerpt: segment.text, locator: `pdf-text:${EXTRACTION}:${PAGE}:0-23`, sourceType: 'policy', confidence: 1, extractionLocator: { extractionId: EXTRACTION, pageId: PAGE, segmentId: SEGMENT, startOffset: 0, endOffset: 23 } } })

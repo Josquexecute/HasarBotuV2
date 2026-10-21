@@ -7,10 +7,8 @@ import { CasesPage } from '../features/cases/CasesPage'
 import { ClosedCasesPage } from '../features/closed/ClosedCasesPage'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { LegislationPage } from '../features/legislation/LegislationPage'
-import { ManagementPage } from '../features/management/ManagementPage'
 import { NotificationsPage } from '../features/notifications/NotificationsPage'
 import { PlaceholderPage } from '../features/placeholder/PlaceholderPage'
-import { SettingsPage } from '../features/settings/SettingsPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { SessionProvider } from './session'
 import { AssistantAppearanceProvider } from '../features/assistant/AssistantAppearanceProvider'
@@ -19,6 +17,8 @@ import { PERSISTENCE_ERROR_EVENT, usePersistentState } from './usePersistentStat
 import { UserDirectorySync } from './UserDirectorySync'
 const TrackingPopup = lazy(async () => ({ default: (await import('../features/tracking/TrackingPopup')).TrackingPopup }))
 const ReportsPage = lazy(async () => ({ default: (await import('../features/reports/ReportsPage')).ReportsPage }))
+const ManagementPage = lazy(async () => ({ default: (await import('../features/management/ManagementPage')).ManagementPage }))
+const SettingsPage = lazy(async () => ({ default: (await import('../features/settings/SettingsPage')).SettingsPage }))
 const DesktopAssistantPanel = lazy(async () => ({ default: (await import('../features/assistant/DesktopAssistantPanel')).DesktopAssistantPanel }))
 
 const CaseDetailPage = lazy(async () => {

@@ -148,6 +148,8 @@ export type RegisterDocumentOutcome =
   | { readonly kind: 'replay'; readonly status: number; readonly body: unknown }
   | { readonly kind: 'idempotency_conflict' }
   | { readonly kind: 'not_found' }
+  | { readonly kind: 'case_closed' }
+  | { readonly kind: 'path_conflict' }
   | { readonly kind: 'unknown_reference'; readonly field: string }
   | { readonly kind: 'version_conflict' }
   | { readonly kind: 'validation'; readonly field: string; readonly code: string }
@@ -157,6 +159,8 @@ export type RegisterPhotoOutcome =
   | { readonly kind: 'replay'; readonly status: number; readonly body: unknown }
   | { readonly kind: 'idempotency_conflict' }
   | { readonly kind: 'not_found' }
+  | { readonly kind: 'case_closed' }
+  | { readonly kind: 'path_conflict' }
   | { readonly kind: 'unknown_reference'; readonly field: string }
   | { readonly kind: 'validation'; readonly field: string; readonly code: string }
 
@@ -165,9 +169,15 @@ export interface ListResult<T> {
   readonly totalItems: number
 }
 
-async function caseInOrg(client: pg.PoolClient, organizationId: string, caseId: string): Promise<boolean> {
-  const res = await client.query('SELECT 1 FROM cases WHERE id::text = $1 AND organization_id = $2', [caseId, organizationId])
-  return (res.rowCount ?? 0) > 0
+async function lockWritableCase(client: pg.PoolClient, organizationId: string, caseId: string): Promise<'ok' | 'not_found' | 'case_closed'> {
+  // Share the lifecycle lock so a registration cannot commit across closure.
+  const res = await client.query('SELECT lifecycle_status FROM cases WHERE id::text = $1 AND organization_id = $2 AND NOT is_archived FOR UPDATE', [caseId, organizationId])
+  const row = res.rows[0]
+  return row === undefined ? 'not_found' : row.lifecycle_status === 'open' ? 'ok' : 'case_closed'
+}
+function isStoragePathConflict(error: unknown): boolean {
+  const pgError = error as { code?: string; constraint?: string }
+  return pgError.code === '23505' && ['document_versions_path_unique', 'photos_path_unique'].includes(pgError.constraint ?? '')
 }
 async function activeRootInOrg(client: pg.PoolClient, organizationId: string, rootKey: string): Promise<boolean> {
   const res = await client.query(
@@ -204,7 +214,12 @@ export function createDocumentsStore(pool: pg.Pool) {
 
       try {
         return await withTransaction(pool, async (client): Promise<RegisterDocumentOutcome> => {
-          if (!(await caseInOrg(client, actor.organizationId, caseId))) return { kind: 'not_found' }
+          const writable = await lockWritableCase(client, actor.organizationId, caseId)
+          const replay = await findIdempotent(client, actor.organizationId, idem.scope, idem.key)
+          if (replay !== undefined) return replay.requestHash === idem.requestHash
+            ? { kind: 'replay', status: replay.responseStatus, body: replay.responseBody }
+            : { kind: 'idempotency_conflict' }
+          if (writable !== 'ok') return { kind: writable }
           if (!(await activeRootInOrg(client, actor.organizationId, input.storageRootKey))) {
             return { kind: 'unknown_reference', field: 'storageRootKey' }
           }
@@ -351,6 +366,7 @@ export function createDocumentsStore(pool: pg.Pool) {
           return { kind: 'ok', response }
         })
       } catch (error) {
+        if (isStoragePathConflict(error)) return { kind: 'path_conflict' }
         if (isIdempotencyRace(error)) {
           const raced = await findIdempotent(pool, actor.organizationId, idem.scope, idem.key)
           if (raced !== undefined && raced.requestHash === idem.requestHash) {
@@ -385,7 +401,12 @@ export function createDocumentsStore(pool: pg.Pool) {
 
       try {
         return await withTransaction(pool, async (client): Promise<RegisterPhotoOutcome> => {
-          if (!(await caseInOrg(client, actor.organizationId, caseId))) return { kind: 'not_found' }
+          const writable = await lockWritableCase(client, actor.organizationId, caseId)
+          const replay = await findIdempotent(client, actor.organizationId, idem.scope, idem.key)
+          if (replay !== undefined) return replay.requestHash === idem.requestHash
+            ? { kind: 'replay', status: replay.responseStatus, body: replay.responseBody }
+            : { kind: 'idempotency_conflict' }
+          if (writable !== 'ok') return { kind: writable }
           if (!(await activeRootInOrg(client, actor.organizationId, input.storageRootKey))) {
             return { kind: 'unknown_reference', field: 'storageRootKey' }
           }
@@ -479,6 +500,7 @@ export function createDocumentsStore(pool: pg.Pool) {
           return { kind: 'ok', response }
         })
       } catch (error) {
+        if (isStoragePathConflict(error)) return { kind: 'path_conflict' }
         if (isIdempotencyRace(error)) {
           const raced = await findIdempotent(pool, actor.organizationId, idem.scope, idem.key)
           if (raced !== undefined && raced.requestHash === idem.requestHash) {

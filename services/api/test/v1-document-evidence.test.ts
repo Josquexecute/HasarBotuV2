@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({ getDocument: ({ data }: { data: Uint8Array }) => {
   // Reproduce the real PDF worker ownership transfer, which empties the caller's view.
+  if (!(data.buffer instanceof ArrayBuffer)) throw new Error('A transferable PDF buffer is required')
   structuredClone(data, { transfer: [data.buffer] })
   return { promise: Promise.resolve({ numPages: 1, getPage: async () => ({ getTextContent: async () => ({ items: [{ str: 'KASKO SIGORTA POLICESI POLICE NO 123 SIGORTALI TEST' }] }) }) }), destroy: async () => {} }
 } }))

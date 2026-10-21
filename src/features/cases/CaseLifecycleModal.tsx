@@ -35,6 +35,9 @@ function failureMessage(operation: LifecycleOperationRecord): string {
     file_locked: 'Klasör veya içindeki dosya kullanımda. Açık dosyaları kapatın.',
     source_changed_since_plan: 'Klasör içeriği önizlemeden sonra değişti. Güncel verilerle yeniden önizleme oluşturun.',
     source_evidence_mismatch: 'Klasör içeriği önceki taşıma kaydıyla uyuşmuyor. Kaynak ve hedef klasörlerin kontrol edilmesi gerekiyor.',
+    source_changed_during_cleanup: 'Taşıma sırasında kaynak içerik değişti. Kaynak kurtarma alanında korundu; kaynak ve hedefi yöneticiyle kontrol edin.',
+    source_recreated_during_cleanup: 'Taşıma sırasında kaynak klasör yeniden oluşturuldu. Her iki klasör korundu; yönetici kontrolü gerekiyor.',
+    cleanup_recovery_interrupted: 'Kaynak kurtarma alanına alındı ancak doğrulama tamamlanamadı. İşlem kayıtlarını yöneticiyle kontrol edin.',
   }
   const message = messages[operation.failureReasonCode ?? ''] ?? 'İşlem tamamlanamadı. Klasör ve işlem kayıtlarını kontrol edin.'
   return `${message} ${operation.status === 'queued' ? 'Taşıma tamamlanmadı; sistem yeniden deneyecek.' : operation.status === 'failed' ? 'Güncel verilerle yeni önizleme oluşturabilirsiniz.' : ''}`.trim()

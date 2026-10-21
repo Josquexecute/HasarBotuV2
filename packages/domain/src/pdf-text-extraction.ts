@@ -1,8 +1,8 @@
 /** Paket 24: deterministic, parser-independent PDF text normalization. */
 export const PDF_TEXT_NORMALIZATION_VERSION = 'pdf-text-normalization/1.0.0' as const
 export const PDF_TEXT_PARSER_NAME = 'pdfjs-dist' as const
-export const PDF_TEXT_PARSER_VERSION = '6.2.108' as const
-export const PDF_TEXT_PARSER_VERSIONS = ['6.1.200', PDF_TEXT_PARSER_VERSION] as const
+export const PDF_TEXT_PARSER_VERSION = '6.4.299' as const
+export const PDF_TEXT_PARSER_VERSIONS = ['6.1.200', '6.2.108', PDF_TEXT_PARSER_VERSION] as const
 
 export const PDF_TEXT_EXTRACTION_STATUSES = [
   'queued', 'processing', 'ready', 'partial', 'ocr_required', 'failed', 'cancelled', 'stale',

@@ -121,13 +121,16 @@ describe('App oturum kapisi (api mod)', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument()
-    await waitFor(() => expect(calls.some(call => call.includes('/api/v1/me/profile'))).toBe(true))
-    expect(calls).toHaveLength(6)
-    expect(calls.some(call => call.includes('/api/v1/references/users'))).toBe(true)
-    expect(calls.some((call) => call.includes('/api/v1/me/assistant-appearance'))).toBe(true)
-    expect(calls.some((call) => call.includes('/api/v1/tracking/notifications/pending'))).toBe(true)
-    expect(calls.some((call) => call.includes('/api/v1/auth/session'))).toBe(true)
-    expect(calls.some((call) => call.includes('/api/v1/operational-alerts'))).toBe(true)
+    // The nested preferences import can settle after the page heading appears.
+    await waitFor(() => expect([...calls].sort()).toEqual([
+      '/api/v1/auth/session',
+      '/api/v1/me/assistant-appearance',
+      '/api/v1/me/notification-preferences',
+      '/api/v1/me/profile',
+      '/api/v1/operational-alerts?includeTotal=true&unreadOnly=true',
+      '/api/v1/references/users?includeRoles=true',
+      '/api/v1/tracking/notifications/pending',
+    ].sort()))
   })
 
   it('kimliksiz erisim /mevzuat-ve-ai rotasini da login ekraninin arkasinda tutar', async () => {

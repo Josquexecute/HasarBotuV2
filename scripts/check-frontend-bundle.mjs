@@ -5,6 +5,8 @@ const VITE_WARNING_LIMIT_BYTES = 500_000
 const DIST_DIR = fileURLToPath(new URL('../dist/', import.meta.url))
 const ASSETS_DIR = fileURLToPath(new URL('../dist/assets/', import.meta.url))
 const REQUIRED_LAZY_CHUNKS = [
+  'ManagementPage-',
+  'SettingsPage-',
   'CaseDetailPage-',
   'DocumentPhotoApiModule-',
   'PolicyPdfTextApiModule-',

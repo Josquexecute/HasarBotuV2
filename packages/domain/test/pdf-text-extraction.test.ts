@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  PDF_TEXT_PARSER_VERSION,
+  PDF_TEXT_PARSER_VERSIONS,
   buildPdfExtractionOutputHash,
   derivePdfExtractionStatus,
   normalizeExtractedPageText,
@@ -8,6 +10,11 @@ import {
   sha256Text,
   sliceByCodePoint,
 } from '../src/index.js'
+
+it('keeps historical parser identities separate from the current engine', () => {
+  expect(PDF_TEXT_PARSER_VERSION).toBe('6.4.299')
+  expect(PDF_TEXT_PARSER_VERSIONS).toEqual(['6.1.200', '6.2.108', '6.4.299'])
+})
 
 describe('PDF metin çıkarım domain çekirdeği', () => {
   it('SHA-256 çıktısını bilinen vektör ve Türkçe Unicode için deterministik üretir', () => {

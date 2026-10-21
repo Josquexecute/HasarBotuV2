@@ -5,6 +5,10 @@ ve salt-okunur/planlı PowerShell araçları içerir. Tam prosedür için:
 
 **→ [`docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`](../../docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md)**
 
+## Kapanış sonrası kaynak kurtarma
+
+File Agent, doğrulanmış klasör taşımasından sonra kaynak içeriği silmek yerine kaynak ebeveynindeki `_HASARBOTU_OFFICE/cleanup/<operationId>-<operationVersion>` dizinine atomik taşır. Bu alan tarama dışında tutulur ve otomatik silinmez. Taşıma sırasında içerik değişirse veya kaynak yeniden oluşursa işlem manuel kurtarma ister; audit kaydındaki `safeOutcomeCode` ve saklanan içerik birlikte incelenmelidir. Saklanan kaynaklar, hedef bütünlüğü ve ofis saklama politikası doğrulandıktan sonra yetkili operatör tarafından yönetilir.
+
 ## İçerik
 
 | Dosya | Amaç |

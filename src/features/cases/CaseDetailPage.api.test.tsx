@@ -31,6 +31,35 @@ const CLOSED_CASE = {
 }
 
 describe('CaseDetailPage gercek API dogruluk siniri', () => {
+  it.each(['blocked', 'full'] as const)('keeps case navigation working when session storage is %s', async (failure) => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const sessionStorage = window.sessionStorage
+    const setItem = Storage.prototype.setItem
+    const storageSpy = failure === 'blocked'
+      ? vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() => { throw new DOMException('Storage blocked', 'SecurityError') })
+      : vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+        if (this === sessionStorage) throw new DOMException('Storage full', 'QuotaExceededError')
+        setItem.call(this, key, value)
+      })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => new Response(JSON.stringify(
+      String(input).includes('case-closed-38?')
+        ? { case: CLOSED_CASE }
+        : { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } },
+    ), { status: 200, headers: { 'content-type': 'application/json' } }))
+    try {
+      render(<MemoryRouter initialEntries={['/dosyalar/case-closed-38']}>
+        <Routes><Route path="/dosyalar/:caseId" element={<CaseDetailPage />} /></Routes>
+      </MemoryRouter>)
+      expect(await screen.findByText('34 API 380')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Özet' })).toHaveClass('is-active')
+      await userEvent.click(screen.getByRole('button', { name: 'Geçmiş' }))
+      expect(screen.getByRole('button', { name: 'Geçmiş' })).toHaveClass('is-active')
+    } finally {
+      storageSpy.mockRestore()
+      fetchSpy.mockRestore()
+    }
+  })
+
   it.each([
     { roles: ['read_only'] as const, permissions: ['case_read'] as const },
     { roles: ['expert'] as const, permissions: ['case_read'] as const },

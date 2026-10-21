@@ -1,12 +1,12 @@
 {
   "name": "@hasarbotu/desktop",
-  "version": "0.1.66",
+  "version": "0.1.67",
   "private": true,
   "type": "module",
   "description": "HasarBotu V2 ince Electron kabuğu (ADR-Q06): güvenli BrowserWindow + loopback aynı-origin köprüsü",
   "author": "Ömer Faruk İŞLEYEN",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.15 <25"
   },
   "main": "./dist/main/main.js",
   "scripts": {
@@ -25,8 +25,8 @@
     "@hasarbotu/api": "*",
     "@hasarbotu/database": "*",
     "@hasarbotu/domain": "*",
-    "@types/node": "24.13.3",
-    "electron": "43.7.11",
+    "@types/node": "24.19.2",
+    "electron": "44.9.1",
     "electron-builder": "26.15.3"
   },
   "build": {

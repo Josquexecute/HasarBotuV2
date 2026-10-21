@@ -14,6 +14,16 @@ const segment: PdfTextSegmentRecord = { id: SEGMENT, extractionId: EXTRACTION, p
 function response(status: number, body: unknown) { return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }) }
 
 describe('Policy PDF Text HttpApiAdapter', () => {
+  it.each(['6.1.200', '6.2.108', '6.4.299'])('preserves parser %s when reading historical and current evidence', async (parserVersion) => {
+    const adapter = createHttpPolicyPdfTextAdapter({ fetchImpl: vi.fn().mockResolvedValue(response(200, { items: [{ ...extraction, parserVersion }] })) as typeof fetch })
+    expect((await adapter.listExtractions(CASE, source))[0]?.parserVersion).toBe(parserVersion)
+  })
+
+  it('rejects an unsupported parser identity instead of displaying mislabelled evidence', async () => {
+    const adapter = createHttpPolicyPdfTextAdapter({ fetchImpl: vi.fn().mockResolvedValue(response(200, { items: [{ ...extraction, parserVersion: 'latest' }] })) as typeof fetch })
+    await expect(adapter.listExtractions(CASE, source)).rejects.toMatchObject({ kind: 'unavailable' })
+  })
+
   it('keeps readable page text beyond page 100', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const pageNumber = Number(new URL(String(input), 'http://localhost').searchParams.get('page'))

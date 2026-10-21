@@ -53,13 +53,9 @@
           "x-hasarbotu-runtime-validation": "calendar-date-validity"
         },
         "heavyOrTotalDamage": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "vehicle": {
@@ -447,33 +443,21 @@
                   "type": "object",
                   "properties": {
                     "antiqueOrCollector": {
-                      "anyOf": [
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "boolean",
+                        "null"
                       ]
                     },
                     "priorHeavyDamage": {
-                      "anyOf": [
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "boolean",
+                        "null"
                       ]
                     },
                     "currentHeavyOrTotalDamage": {
-                      "anyOf": [
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "boolean",
+                        "null"
                       ]
                     },
                     "foreignPlate": {
@@ -539,43 +523,19 @@
                         ]
                       },
                       "originalValue": {
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              }
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
                         ]
                       },
                       "newValue": {
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              }
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
                         ]
                       },
                       "overrideReason": {
@@ -636,43 +596,19 @@
                 "maxLength": 100
               },
               "originalValue": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "boolean"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
                 ]
               },
               "newValue": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "boolean"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
                 ]
               },
               "reason": {

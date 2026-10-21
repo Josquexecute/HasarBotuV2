@@ -39,24 +39,25 @@ export function createNoticeSheetStore(pool: pg.Pool) {
   async function read(exec: Queryable, actor: Actor, caseId: string, canEdit: boolean): Promise<NoticeSheetResponse> {
     const row = await loadCase(exec, actor.organizationId, caseId)
     const parameters = [actor.organizationId, caseId]
-    const [saved, source, vehicle, owners, policies, documents] = await Promise.all([
-      exec.query('SELECT overrides,version,updated_at FROM case_notice_sheets WHERE organization_id=$1 AND case_id=$2', parameters),
-      exec.query(`SELECT raw_text,reviewed_fields FROM eksist_sources WHERE organization_id=$1 AND case_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1`, parameters),
-      exec.query(`SELECT v.brand,v.model,v.model_year FROM case_vehicle_profiles p
+    // Both callers use one transaction connection; queries cannot overlap.
+    const [saved, source, vehicle, owners, policies, documents] = [
+      await exec.query('SELECT overrides,version,updated_at FROM case_notice_sheets WHERE organization_id=$1 AND case_id=$2', parameters),
+      await exec.query(`SELECT raw_text,reviewed_fields FROM eksist_sources WHERE organization_id=$1 AND case_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1`, parameters),
+      await exec.query(`SELECT v.brand,v.model,v.model_year FROM case_vehicle_profiles p
         JOIN case_vehicle_profile_versions v ON v.id=p.current_version_id AND v.organization_id=p.organization_id
         WHERE p.organization_id=$1 AND p.case_id=$2`, parameters),
-      exec.query(`SELECT v.name FROM case_vehicle_owner_sets s JOIN case_vehicle_owners v
+      await exec.query(`SELECT v.name FROM case_vehicle_owner_sets s JOIN case_vehicle_owners v
         ON v.organization_id=s.organization_id AND v.case_id=s.case_id AND v.set_version=s.current_set_version
         WHERE s.organization_id=$1 AND s.case_id=$2 ORDER BY v.ordinal`, parameters),
-      exec.query(`SELECT v.policy_start_date::text,v.policy_end_date::text FROM policy_analyses a
+      await exec.query(`SELECT v.policy_start_date::text,v.policy_end_date::text FROM policy_analyses a
         JOIN policy_analysis_versions v ON v.id=a.current_version_id AND v.organization_id=a.organization_id
         WHERE a.organization_id=$1 AND a.case_id=$2 AND v.analysis_status='approved'
         AND v.human_approval_status='approved' AND v.is_active=true`, parameters),
-      exec.query(`SELECT d.document_type FROM documents d JOIN document_versions v
+      await exec.query(`SELECT d.document_type FROM documents d JOIN document_versions v
         ON v.id=d.current_version_id AND v.organization_id=d.organization_id AND v.case_id=d.case_id
         WHERE d.organization_id=$1 AND d.case_id=$2 AND d.status='ready' AND v.status='ready'
         AND v.hash_verified AND v.size_verified AND v.verified_at IS NOT NULL`, parameters),
-    ])
+    ]
     const sourceRow = source.rows[0]
     const profile = vehicle.rows[0]
     const sheet = saved.rows[0]

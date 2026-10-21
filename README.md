@@ -115,7 +115,7 @@ HasarBotuV2/
 
 ## 🚀 Geliştirme
 
-Node.js **24.x** gerekir (`>=24 <25`). Kilit dosyasını korumak için temiz
+Node.js **24.15+ / 24.x** gerekir (`>=24.15 <25`); doğrulanan sürüm **24.22.0**'dır. Kilit dosyasını korumak için temiz
 kurulumda `npm ci` kullanılır. Bu bilgisayarın hazırlığı ve test aşamasına
 geçiş için [API geliştirme kılavuzuna](./services/api/README.md) bakın.
 

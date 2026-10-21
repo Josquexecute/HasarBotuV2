@@ -52,13 +52,14 @@ export async function loadServiceProfiles(
 ): Promise<ReadonlyMap<string, ServiceReference>> {
   if (contexts.length === 0) return new Map()
   const serviceIds = [...new Set(contexts.map((item) => item.serviceId))].sort()
-  const [services, agreements] = await Promise.all([
-    exec.query(
+  // The executor can be a transaction client, which runs one query at a time.
+  const [services, agreements] = [
+    await exec.query(
       `SELECT id,name,service_type,is_active FROM service_centers
        WHERE organization_id=$1 AND id = ANY($2::uuid[])`,
       [organizationId, serviceIds],
     ),
-    exec.query(
+    await exec.query(
       `SELECT id,service_center_id,insurer_id,agreement_status,effective_from,effective_to,
               supported_operations,human_approved
        FROM insurer_service_agreements
@@ -66,7 +67,7 @@ export async function loadServiceProfiles(
        ORDER BY id`,
       [organizationId, serviceIds],
     ),
-  ])
+  ]
   const serviceById = new Map((services.rows as ServiceRow[]).map((row) => [row.id, row]))
   const agreementsByService = new Map<string, InsurerServiceAgreementFact[]>()
   for (const row of agreements.rows as AgreementRow[]) {

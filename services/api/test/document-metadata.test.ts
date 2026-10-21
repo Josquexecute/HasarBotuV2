@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
@@ -114,6 +114,71 @@ describeDb('Belge/fotoğraf metadata (gerçek veritabanı)', () => {
   afterAll(async () => {
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
+  })
+
+  it('rejects new document and photo metadata after case closure without an audit or idempotency write', async () => {
+    const caseId = await createCase(cookieA, '34 END 123')
+    await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',closed_at=now() WHERE id=$1", [caseId])
+    const documentKey = uuidv7(), photoKey = uuidv7()
+    const [document, photo] = await Promise.all([
+      registerDoc(cookieA, caseId, docBody(), documentKey),
+      registerPhoto(cookieA, caseId, { sourceType: 'upload', originalFileName: 'closed.jpg', mimeType: 'image/jpeg', byteSize: 4096, contentHash: hex('closed-photo'), storageRootKey: 'office-primary', relativePath: '2026/HASAR/closed.jpg' }, photoKey),
+    ])
+    expect(document.statusCode).toBe(409)
+    expect(photo.statusCode).toBe(409)
+    expect((await pool.query('SELECT 1 FROM documents WHERE case_id=$1', [caseId])).rowCount).toBe(0)
+    expect((await pool.query('SELECT 1 FROM photos WHERE case_id=$1', [caseId])).rowCount).toBe(0)
+    expect((await pool.query("SELECT 1 FROM audit_events WHERE resource_id=$1 AND action IN ('document.registered','document.version_registered','photo.registered')", [caseId])).rowCount).toBe(0)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=ANY($1::text[])', [[documentKey, photoKey]])).rowCount).toBe(0)
+  })
+
+  it.each(['document', 'photo'])('waits for an in-flight closure before registering %s metadata', async kind => {
+    const caseId = await createCase(cookieA, kind === 'document' ? '34 LCK 123' : '34 LCK 124')
+    const closer = await pool.connect()
+    let pending: ReturnType<typeof registerDoc> | undefined
+    try {
+      await closer.query('BEGIN')
+      const pid = (await closer.query('SELECT pg_backend_pid() AS pid')).rows[0].pid
+      await closer.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',closed_at=now() WHERE id=$1", [caseId])
+      pending = kind === 'document'
+        ? registerDoc(cookieA, caseId, docBody())
+        : registerPhoto(cookieA, caseId, { sourceType: 'upload', originalFileName: 'locked.jpg', mimeType: 'image/jpeg', byteSize: 4096, contentHash: hex('locked-photo'), storageRootKey: 'office-primary', relativePath: '2026/HASAR/locked.jpg' })
+      await vi.waitFor(async () => {
+        const blocked = await pool.query("SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND query LIKE 'SELECT lifecycle_status FROM cases%FOR UPDATE'", [pid])
+        expect(blocked.rowCount).toBe(1)
+      }, { timeout: 3000, interval: 10 })
+      await closer.query('COMMIT')
+      expect((await pending).statusCode).toBe(409)
+      expect((await pool.query('SELECT 1 FROM documents WHERE case_id=$1 UNION ALL SELECT 1 FROM photos WHERE case_id=$1', [caseId])).rowCount).toBe(0)
+    } finally {
+      await closer.query('ROLLBACK')
+      closer.release()
+      if (pending) await pending
+    }
+  })
+
+  it('allows one of ten simultaneous document revisions and preserves the winning version', async () => {
+    const caseId = await createCase(cookieA, '34 VER 123')
+    const first = (await registerDoc(cookieA, caseId, docBody())).json()
+    const revisions = await Promise.all(Array.from({ length: 10 }, (_, index) => registerDoc(cookieA, caseId, docBody({ documentId: first.document.id, expectedVersion: first.document.version, relativePath: `2026/EVRAK/revision-${index}.pdf`, contentHash: hex(`revision-${index}`) }))))
+    expect(revisions.filter(response => response.statusCode === 201)).toHaveLength(1)
+    expect(revisions.filter(response => response.statusCode === 409)).toHaveLength(9)
+    const winner = revisions.find(response => response.statusCode === 201)!.json()
+    expect((await pool.query('SELECT current_version_id,current_version_number FROM documents WHERE id=$1', [first.document.id])).rows[0]).toEqual({ current_version_id: winner.version.id, current_version_number: 2 })
+    expect((await pool.query('SELECT 1 FROM document_versions WHERE document_id=$1', [first.document.id])).rowCount).toBe(2)
+  })
+
+  it.each(['document', 'photo'])('replays ten duplicate %s requests and reports a reused path as a conflict', async kind => {
+    const caseId = await createCase(cookieA, kind === 'document' ? '34 DUP 123' : '34 DUP 124')
+    const key = uuidv7()
+    const body = kind === 'document' ? docBody({ relativePath: '2026/EVRAK/concurrent.pdf' })
+      : { sourceType: 'upload', originalFileName: 'concurrent.jpg', mimeType: 'image/jpeg', byteSize: 4096, contentHash: hex('duplicate-photo'), storageRootKey: 'office-primary', relativePath: '2026/HASAR/concurrent.jpg' }
+    const register = kind === 'document' ? registerDoc : registerPhoto
+    const repeated = await Promise.all(Array.from({ length: 10 }, () => register(cookieA, caseId, body, key)))
+    expect(repeated.every(response => response.statusCode === 201)).toBe(true)
+    for (const response of repeated) expect(response.json()).toEqual(repeated[0]!.json())
+    expect((await register(cookieA, caseId, body)).statusCode).toBe(409)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
   })
 
   it('belge kaydı: 201, version 1, status pending, hashVerified false; audit üretir', async () => {

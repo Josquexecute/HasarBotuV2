@@ -61,13 +61,9 @@
             "type": "object",
             "properties": {
               "replacement": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "repair": {

@@ -6,7 +6,7 @@
   "sideEffects": false,
   "description": "HasarBotu V2 File Agent: dosya doğrulama protokolü istemcisi (yalnız API üzerinden çalışır)",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.15 <25"
   },
   "files": [
     "dist"
@@ -29,17 +29,17 @@
   "dependencies": {
     "@hasarbotu/contracts": "*",
     "@hasarbotu/domain": "*",
-    "@napi-rs/canvas": "1.0.2",
+    "@napi-rs/canvas": "1.0.12",
     "@tesseract.js-data/eng": "1.0.0",
     "@tesseract.js-data/tur": "1.0.0",
     "fflate": "0.8.3",
     "libheif-js": "1.23.5",
-    "pdfjs-dist": "6.2.108",
+    "pdfjs-dist": "6.4.299",
     "tesseract.js": "7.0.0"
   },
   "devDependencies": {
-    "@types/node": "24.13.3",
-    "tsx": "4.23.0"
+    "@types/node": "24.19.2",
+    "tsx": "4.23.15"
   },
   "author": "Ömer Faruk İŞLEYEN",
   "license": "UNLICENSED"
