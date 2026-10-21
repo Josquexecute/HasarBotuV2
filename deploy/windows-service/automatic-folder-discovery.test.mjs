@@ -22,12 +22,18 @@ test('real background scans discover folders, follow stable identity moves and r
   await symlink(join(repo, 'node_modules'), join(runtime, 'services/api/node_modules'), process.platform === 'win32' ? 'junction' : 'dir')
   await cp(join(repo, 'deploy/windows-service'), join(runtime, 'tools'), { recursive: true, filter: path => !path.endsWith('.test.mjs') && !path.endsWith('.tests.ps1') })
   const unstableMarker = join(runtime, 'tools', 'unstable-snapshot.fixture')
+  const changedSourceMarker = join(runtime, 'tools', 'changed-source.fixture')
   await rename(join(runtime, 'tools/pcloud-maintenance-window-gate.mjs'), join(runtime, 'tools/real-pcloud-maintenance-window-gate.mjs'))
   await writeFile(join(runtime, 'tools/pcloud-maintenance-window-gate.mjs'), `
     import { existsSync, unlinkSync } from 'node:fs'
     import { withConsistentPcloudDatabase as realSnapshot } from './real-pcloud-maintenance-window-gate.mjs'
     export * from './real-pcloud-maintenance-window-gate.mjs'
     export async function withConsistentPcloudDatabase(...args) {
+      const changed = new URL('./changed-source.fixture', import.meta.url)
+      if (existsSync(changed)) {
+        unlinkSync(changed)
+        throw new Error('source_changed')
+      }
       const marker = new URL('./unstable-snapshot.fixture', import.meta.url)
       if (existsSync(marker)) {
         unlinkSync(marker)
@@ -180,6 +186,20 @@ test('real background scans discover folders, follow stable identity moves and r
     } finally { clearTimeout(recoveryDeadline); recovery.abort() }
     assert.equal(unstableBlocked, true, 'An unstable snapshot must fail closed')
     assert.equal(recovered, true, 'A transient pCloud write must not terminate background discovery')
+    assert.deepEqual((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows, beforeUnstableSnapshot)
+    await writeFile(changedSourceMarker, 'one concurrent source change')
+    const changedRecovery = new AbortController(), changedDeadline = setTimeout(() => changedRecovery.abort(), 25_000)
+    let changedBlockedAt, changedRecoveredAt
+    try {
+      await startAutomaticFolderDiscovery(configFile, { signal: changedRecovery.signal, onStatus: text => {
+        const status = JSON.parse(text)
+        if (status.status === 'BLOCKED') { assert.equal(status.code, 'source_changed'); changedBlockedAt = Date.now() }
+        if (changedBlockedAt !== undefined && status.status === 'PASS') { changedRecoveredAt = Date.now(); changedRecovery.abort() }
+      } })
+    } finally { clearTimeout(changedDeadline); changedRecovery.abort() }
+    assert.notEqual(changedBlockedAt, undefined, 'A concurrent source change must fail closed')
+    assert.notEqual(changedRecoveredAt, undefined, 'The same background discovery loop must resume after a source change')
+    assert.ok(changedRecoveredAt - changedBlockedAt >= 14_000, 'Recovery must retain the configured polling interval')
     assert.deepEqual((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows, beforeUnstableSnapshot)
   } finally {
     clearTimeout(deadline); abort.abort(); sqlite.close(); await pool.end()

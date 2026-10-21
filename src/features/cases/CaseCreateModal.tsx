@@ -9,11 +9,14 @@ import type { CaseReferenceDataPort } from '../../data/ports'
 import { useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseStageCode } from '../../types/case'
 import type { QuickCaseCreate } from '@hasarbotu/contracts'
-import { getEksistFieldValues, matchEksistReference } from '@hasarbotu/domain'
+import { eksistKey, getEksistFieldValues, matchEksistReference } from '@hasarbotu/domain'
 import { createEksistPort, type EksistPort, type EksistSource, type QuickCreation } from '../../data/eksistPort'
 import { createHttpWorkspaceCommandAdapter, type WorkspaceCommandPort, type WorkspaceRootRecord } from '../../data/workspacePort'
 import { EksistImportPanel } from './EksistImportPanel'
 import { ServiceRevisionDialog } from './ServiceRevisionDialog'
+import { ServiceContactFields } from './ServiceContactFields'
+import { serviceContactDraft, type ServiceContactDraft } from './service-contact'
+import { suggestEmailService } from './service-email'
 import { EksistVehicleFields } from './EksistVehicleFields'
 import {
   CASE_STAGE_OPTIONS,
@@ -58,6 +61,9 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
   const [responsibleUserId, setResponsibleUserId] = useState(currentUser.id)
   const [expertUserId, setExpertUserId] = useState('')
   const [serviceId, setServiceId] = useState('')
+  const [serviceDetails, setServiceDetails] = useState<ServiceContactDraft>({ name: '', phone: '', address: '' })
+  const [emailText, setEmailText] = useState('')
+  const [emailHint, setEmailHint] = useState('')
   const [insurerId, setInsurerId] = useState('')
   const [insurerReviewName, setInsurerReviewName] = useState('')
   const [lossDate, setLossDate] = useState('')
@@ -122,6 +128,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
     setExpertReviewName(data.expert); setExpertReviewed(false)
     setInsurerReviewName('')
     setNotificationFormNumber(data.assignmentDateText); setServiceRevision(null)
+    setServiceDetails(serviceContactDraft(data.service, refs?.services ?? [], value.text))
     setCaseType(data.caseType ?? ''); setBrand(data.brand); setModel(data.model); setModelYear(data.modelYear); setVehicleClass(data.vehicleClass)
     const issues: Record<string, string> = {}
     if (!data.caseType) issues.caseType = 'Ürün eşleşmedi. Dosya türünü seçin.'
@@ -157,6 +164,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
     if (submittingRef.current || extracting) return
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
     destination.current = submitter?.value === 'list' ? 'list' : 'detail'
+    if (!serviceDetails.name.trim() && (serviceDetails.phone.trim() || serviceDetails.address.trim())) { setGeneralError('Telefon ve adresi kaydetmek için servis adını girin.'); return }
 
     const canonicalPlate = normalizePlateInput(plate)
     if (caseType === '') { setFieldErrors({ ...unresolved, caseType: 'Dosya türünü seçin.' }); return }
@@ -174,6 +182,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
       ...(optionalText(responsibleUserId) === undefined ? {} : { responsibleUserId: optionalText(responsibleUserId) }),
       ...(optionalText(expertUserId) === undefined ? {} : { expertUserId: optionalText(expertUserId) }),
       ...(optionalText(serviceId) === undefined ? {} : { serviceId: optionalText(serviceId) }),
+      ...(serviceDetails.name.trim() ? { serviceDetails: { name: serviceDetails.name.trim(), phone: serviceDetails.phone.trim() || null, address: serviceDetails.address.trim() || null } } : {}),
       ...(optionalText(insurerId) === undefined ? {} : { insurerId: optionalText(insurerId) }),
       ...(lossDate === '' ? {} : { lossDate }),
       ...(notificationDate === '' ? {} : { notificationDate }),
@@ -269,7 +278,15 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
               <label className="form-field"><span>Takip tarihi</span><input aria-label="Takip tarihi" value="Kayıt günü · otomatik" readOnly /></label>
               <label className="form-field"><span>Sorumlu</span><select value={responsibleUserId} onChange={(event) => setResponsibleUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.users.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.responsibleUserId} /></label>
               {source ? <label className="form-field" data-field="insurerId"><span>Sigorta şirketi</span>{source.extraction.conflicts.includes('sigortasirketi') ? <><select aria-label="Sigorta şirketi" value={insurerReviewName} onChange={event => { setInsurerReviewName(event.target.value); if (event.target.value) resolved('insurerId') }}><option value="">Kaynak belgeden şirketi seçin</option>{getEksistFieldValues(source.text, 'Sigorta Şirketi').map(name => <option key={name} value={name}>{name}</option>)}</select><small>Kaynakta birden fazla şirket var. Bu ihbarın şirketini seçerek doğrulayın.</small></> : <input aria-label="Sigorta şirketi" value={source.extraction.insurer} readOnly />}<FieldError message={fieldErrors.insurerId} /></label> : <label className="form-field" data-field="insurerId"><span>Sigorta şirketi</span><select value={insurerId} onChange={(event) => setInsurerId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.insurers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><FieldError message={fieldErrors.insurerId} />{unresolved.insurerId && <button type="button" onClick={() => { setInsurerId(''); resolved('insurerId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
-              {source ? <div className="form-field"><label><span>Servis</span><input aria-label="Servis" value={serviceRevision ?? source.extraction.service} readOnly /></label><button type="button" className="icon-button" aria-label="Servisi revize et" onClick={() => setServiceEditorOpen(true)}><Pencil size={17} /></button><FieldError message={fieldErrors.serviceId} /></div> : <label className="form-field" data-field="serviceId"><span>Servis</span><select aria-label="Servis" value={serviceId} onChange={(event) => setServiceId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{serviceOptionLabel(option)}</option>)}</select><small>{serviceEvaluationSummary(referenceData.references?.services.find((option) => option.id === serviceId))}</small><FieldError message={fieldErrors.serviceId} />{unresolved.serviceId && <button type="button" onClick={() => { setServiceId(''); resolved('serviceId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
+              {source ? <div className="form-field"><label><span>Servis</span><input aria-label="Servis" value={serviceRevision ?? source.extraction.service} readOnly /></label><button type="button" className="icon-button" aria-label="Servisi revize et" onClick={() => setServiceEditorOpen(true)}><Pencil size={17} /></button><FieldError message={fieldErrors.serviceId} /></div> : <label className="form-field" data-field="serviceId"><span>Servis</span><select aria-label="Servis" value={serviceId} onChange={(event) => { setServiceId(event.target.value); const option = referenceData.references?.services.find(option => option.id === event.target.value); setServiceDetails(serviceContactDraft(option?.name ?? "", referenceData.references?.services ?? [])) }} disabled={referenceData.status !== 'ok'}><option value="">Seçilmedi</option>{referenceData.references?.services.map((option) => <option key={option.id} value={option.id}>{serviceOptionLabel(option)}</option>)}</select><small>{serviceEvaluationSummary(referenceData.references?.services.find((option) => option.id === serviceId))}</small><FieldError message={fieldErrors.serviceId} />{unresolved.serviceId && <button type="button" onClick={() => { setServiceId(''); resolved('serviceId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
+              {!source && caseType === 'casco' && <div className="form-field"><label><span>İhbar e-postası (isteğe bağlı)</span><textarea value={emailText} maxLength={30000} rows={3} onChange={event => setEmailText(event.target.value)} /></label><button className="button button--secondary" type="button" onClick={() => {
+                const suggestion = suggestEmailService(emailText)
+                if (suggestion) {
+                  setServiceDetails(eksistKey(suggestion.name) === eksistKey(serviceDetails.name) ? { ...suggestion, phone: serviceDetails.phone || suggestion.phone, address: serviceDetails.address || suggestion.address } : suggestion); setServiceId(matchEksistReference(suggestion.name, referenceData.references?.services ?? []) ?? '')
+                  setEmailHint('Önerilen servis bilgilerini kontrol edip düzeltebilirsiniz.')
+                } else setEmailHint('Tek ve açık bir servis bilgisi bulunamadı. Alanları elle doldurun.')
+              }}>Servis bilgilerini öner</button>{emailHint && <small role="status">{emailHint}</small>}</div>}
+              <ServiceContactFields value={serviceDetails} options={referenceData.references?.services ?? []} sourceText={source?.text} nameReadOnly={!!source} onChange={value => { setServiceDetails(value); if (!source) setServiceId(matchEksistReference(value.name, referenceData.references?.services ?? []) ?? "") }} />
               {source ? <label className="form-field"><span>Eksper</span><input aria-label="Eksper" value={source.extraction.expert} readOnly /><small>Levha no: {source.extraction.expertLicenseNumber || "Kaynakta belirtilmedi"}</small><FieldError message={fieldErrors.expertUserId} /></label> : <label className="form-field" data-field="expertUserId"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} />{unresolved.expertUserId && <button type="button" onClick={() => { setExpertUserId(''); resolved('expertUserId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
               <label className="form-field" data-field="lossDate"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><FieldError message={fieldErrors.lossDate} /></label>
               <label className="form-field"><span>İhbar tarihi</span><input type="date" value={notificationDate} onChange={(event) => setNotificationDate(event.target.value)} aria-invalid={fieldErrors.notificationDate !== undefined} /><small>Hasar tarihinden önce olamaz.</small><FieldError message={fieldErrors.notificationDate} /></label>
@@ -298,7 +315,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
           </footer>
         </form>
       </ModalFrame>
-      {serviceEditorOpen && <ServiceRevisionDialog name={serviceRevision ?? source?.extraction.service ?? ''} options={referenceData.references?.services ?? []} onClose={() => setServiceEditorOpen(false)} onSave={name => { setServiceRevision(name); resolved('serviceId'); setServiceEditorOpen(false) }} />}
+      {serviceEditorOpen && <ServiceRevisionDialog name={serviceRevision ?? source?.extraction.service ?? ''} details={serviceDetails} sourceText={source?.text} options={referenceData.references?.services ?? []} onClose={() => setServiceEditorOpen(false)} onSave={(name, details) => { setServiceDetails(details); setServiceRevision(name); resolved('serviceId'); setServiceEditorOpen(false) }} />}
     </>
   )
 }

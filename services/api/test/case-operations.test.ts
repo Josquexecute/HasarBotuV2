@@ -18,6 +18,7 @@ import {
   type DatabaseConfig,
 } from '@hasarbotu/database'
 import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { runBehindRowLock } from '../test-support/row-lock-race.js'
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -316,6 +317,20 @@ describeDb('Paket 37 case not, görev ve takip geçmişi gerçek API', () => {
       status: 'cancelled',
       version: 2,
     })
+  })
+
+  it.each(['complete', 'cancel'] as const)('replays simultaneous task %s commands without duplicating resolution history', async transition => {
+    const created = await app.inject({ method: 'POST', url: tasksUrl(), headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: { title: 'Concurrent resolution', dueDate: '2026-10-21' } })
+    expect(created.statusCode).toBe(201)
+    const task = caseTaskResponseSchema.parse(created.json()).task
+    const key = uuidv7()
+    const payload = transition === 'complete' ? { expectedVersion: 1, resultNote: 'Reviewed completion' } : { expectedVersion: 1, reason: 'Reviewed cancellation' }
+    const responses = await runBehindRowLock(pool, 'SELECT id FROM cases WHERE id=$1 FOR UPDATE', [caseId], () => app.inject({ method: 'POST', url: `${tasksUrl()}/${task.id}/${transition}`, headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: key }, payload }))
+    expect(responses.map(response => response.statusCode)).toEqual(Array(5).fill(200))
+    for (const response of responses) expect(response.json()).toEqual(responses[0]!.json())
+    expect((await pool.query('SELECT 1 FROM case_task_events WHERE task_id=$1', [task.id])).rowCount).toBe(2)
+    expect((await pool.query('SELECT 1 FROM audit_events WHERE resource_id=$1 AND action=$2', [task.id, transition === 'complete' ? 'case_task.completed' : 'case_task.cancelled'])).rowCount).toBe(1)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
   })
 
   it('classifies created and loaded tasks with the Istanbul day after UTC 21:00', async () => {

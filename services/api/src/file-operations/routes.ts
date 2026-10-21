@@ -107,6 +107,13 @@ export function registerFileOperationRoutes(app: FastifyInstance, options: FileO
         body.data,
         { key, requestHash },
       )
+      if (outcome.kind !== 'ok') {
+        const raced = await store.findIdempotent(session.user.organizationId, FILE_OPERATION_PLAN_SCOPE, key)
+        if (raced !== undefined) {
+          if (raced.requestHash !== requestHash) return reply.code(409).send(failureBody('idempotency_conflict', 'Idempotency key was used with a different request.', requestId))
+          return reply.code(raced.responseStatus).send(raced.responseBody)
+        }
+      }
       if (outcome.kind === 'not_found') return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
       if (outcome.kind === 'invalid_month_source') return reply.code(409).send(failureBody('file_operation_conflict', 'An open pending workspace and a valid notification date are required.', requestId))
       if (outcome.kind === 'location_required') return reply.code(409).send(failureBody('file_operation_stale', 'Verified case workspace is required.', requestId))

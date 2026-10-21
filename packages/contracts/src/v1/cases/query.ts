@@ -29,6 +29,7 @@ export const searchSchema = z
   .refine((value) => value.trim().length > 0, { error: 'search_must_not_be_blank' })
 
 const casesQueryObject = z.strictObject({
+  includeServiceDetails: z.literal('true').optional(),
   includeEksist: z.literal('true').optional(),
   search: searchSchema.optional(),
   caseType: caseTypeSchema.or(z.literal('unclassified')).optional(),

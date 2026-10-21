@@ -34,6 +34,17 @@ async function fill() {
 }
 afterEach(cleanup)
 describe('Eksist creation UI', () => {
+  it('transfers matching SBM service name, phone and address together and permits correction', async () => {
+    const { create } = setup(); await fill()
+    const text = completeText + '\nTamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: KAYNAK SERVİS\nTelefon: 0212 555 10 10\nAçık Adres: Kaynak servis adresi\nAtama Yapan İletişim Bilgileri\nTelefon: 0532 555 99 99'
+    fireEvent.change(screen.getByLabelText('Eksist metni veya panodan görsel'), { target: { value: text } })
+    await userEvent.click(screen.getByRole('button', { name: 'Metni forma aktar' }))
+    expect(screen.getByLabelText('Servis telefonu')).toHaveValue('0212 555 10 10')
+    expect(screen.getByLabelText('Servis adresi')).toHaveValue('Kaynak servis adresi')
+    fireEvent.change(screen.getByLabelText('Servis telefonu'), { target: { value: '0212 555 11 11' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydet ve detayını aç' }))
+    expect(create.mock.calls[0]![0].case.serviceDetails).toEqual({ name: 'KAYNAK SERVİS', phone: '0212 555 11 11', address: 'Kaynak servis adresi' })
+  })
   it('resolves multiple source insurers explicitly and accepts repeated traffic labels', async () => {
     const { create } = setup(); await fill()
     const text = completeText.replace('Ürün: Kasko','Ürün: Trafik\nÜrün: TRAFİK').replace('Sigorta Şirketi: KAYNAK SİGORTA A.Ş.','Sigorta Şirketi: KAYNAK SİGORTA A.Ş.\nSigorta Şirketi: DİĞER SİGORTA')

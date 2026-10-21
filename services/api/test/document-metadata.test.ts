@@ -116,6 +116,48 @@ describeDb('Belge/fotoğraf metadata (gerçek veritabanı)', () => {
     if (pool !== undefined) await closeDatabasePool(pool)
   })
 
+  it.each(['document', 'revision', 'photo'] as const)('rolls back every %s side effect when the final idempotency write fails, then resumes after restart', async kind => {
+    const caseId = await createCase(cookieA, '34 RBK 123')
+    const first = kind === 'revision'
+      ? (await registerDoc(cookieA, caseId, docBody({ relativePath: `2026/EVRAK/${caseId}-original.pdf` }))).json()
+      : undefined
+    const key = uuidv7()
+    const body = kind === 'photo'
+      ? { sourceType: 'upload', originalFileName: 'rollback.jpg', mimeType: 'image/jpeg', byteSize: 4096, contentHash: hex(key), storageRootKey: 'office-primary', relativePath: `2026/HASAR/${caseId}.jpg` }
+      : docBody({ relativePath: `2026/EVRAK/${caseId}.pdf`, contentHash: hex(key), ...(first ? { documentId: first.document.id, expectedVersion: first.document.version } : {}) })
+    const register = kind === 'photo' ? registerPhoto : registerDoc
+    const snapshot = async () => ({
+      documents: (await pool.query('SELECT id,current_version_id,current_version_number,version FROM documents WHERE case_id=$1 ORDER BY id', [caseId])).rows,
+      versions: (await pool.query('SELECT id FROM document_versions WHERE case_id=$1 ORDER BY id', [caseId])).rows,
+      photos: (await pool.query('SELECT id FROM photos WHERE case_id=$1 ORDER BY id', [caseId])).rows,
+      jobs: (await pool.query('SELECT id FROM jobs WHERE organization_id=$1 ORDER BY id', [orgA])).rows,
+      audit: (await pool.query("SELECT id FROM audit_events WHERE resource_id=$1 AND action IN ('document.registered','document.version_registered','photo.registered') ORDER BY id", [caseId])).rows,
+    })
+    const before = await snapshot()
+    // Fail after metadata, audit and verification job writes to exercise the entire transaction.
+    await pool.query(`CREATE FUNCTION reject_metadata_idempotency() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic_final_write_failure'; END $$;
+      CREATE TRIGGER reject_metadata_idempotency BEFORE INSERT ON idempotency_keys FOR EACH ROW EXECUTE FUNCTION reject_metadata_idempotency()`)
+    try {
+      const failed = await register(cookieA, caseId, body, key)
+      expect(failed.statusCode).toBe(500)
+      expect(JSON.stringify(failed.json())).not.toMatch(/synthetic_final_write_failure|INSERT|stack/i)
+      expect(await snapshot()).toEqual(before)
+      expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(0)
+    } finally {
+      await pool.query('DROP TRIGGER reject_metadata_idempotency ON idempotency_keys; DROP FUNCTION reject_metadata_idempotency()')
+    }
+    await app.close()
+    app = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false, loginRateLimit: { limit: 1000, windowMs: 60_000 } } })
+    const recovered = await register(cookieA, caseId, body, key)
+    expect(recovered.statusCode).toBe(201)
+    expect((await register(cookieA, caseId, body, key)).json()).toEqual(recovered.json())
+    const after = await snapshot()
+    expect(after.audit).toHaveLength(before.audit.length + 1)
+    expect(after.jobs).toHaveLength(before.jobs.length + 1)
+    expect(after.versions).toHaveLength(before.versions.length + (kind === 'photo' ? 0 : 1))
+    expect(after.photos).toHaveLength(kind === 'photo' ? 1 : 0)
+  })
+
   it('rejects new document and photo metadata after case closure without an audit or idempotency write', async () => {
     const caseId = await createCase(cookieA, '34 END 123')
     await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',closed_at=now() WHERE id=$1", [caseId])

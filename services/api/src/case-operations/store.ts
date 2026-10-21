@@ -510,6 +510,10 @@ export function createCaseOperationsStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const writable = await lockWritableCase(client, actor.organizationId, caseId)
+        if (await findIdempotent(client, actor.organizationId, idempotency.scope, idempotency.key)) {
+          await client.query('ROLLBACK')
+          return { kind: 'idempotency_race' }
+        }
         if (writable !== 'ok') {
           await client.query('ROLLBACK')
           return { kind: writable }

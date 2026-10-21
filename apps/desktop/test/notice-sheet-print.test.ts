@@ -41,6 +41,8 @@ test('production notice sheets: save, reopen, print one A4 and block overflow', 
         const text = (await page.getTextContent()).items.filter(item => 'str' in item).map(item => item.str).join(' ')
         expect(text).toContain('İhbar Föyü')
         expect(text).toContain('Sentetik ekspertiz çalışması')
+        expect(text).toContain('0212 333 44 55')
+        expect(text).toContain('Doğrulanmış servis adresi')
         expect(text).not.toContain('Kaydet ve Yazdır')
       } finally { await task.destroy() }
     }

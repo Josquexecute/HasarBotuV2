@@ -22,6 +22,7 @@ import {
   type DatabaseConfig,
 } from '@hasarbotu/database'
 import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { runBehindRowLock } from '../test-support/row-lock-race.js'
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -472,5 +473,47 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
     expect(report.summary).toMatchObject({ totalCaseCount: 1, openCaseCount: 0, approvedFeeCount: 0, approvedFeeTotalMinor: 0 })
     const closures = trafficValueLossClosureListResponseSchema.parse((await app.inject({ method: 'GET', url: TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE, headers: { cookie: managerCookie } })).json())
     expect(closures.items.map(item => item.caseId)).toEqual([closedWithoutFeeCaseId])
+  })
+  it('replays simultaneous fee candidate commands after waiting for the case lock', async () => {
+    const caseId = uuidv7()
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,lifecycle_status,workflow_stage,plate,plate_normalized,notification_date,closed_at)
+      VALUES($1,$2,2026,9921,'2026/9921','traffic','closed','closed','34 FEE 992','34FEE992','2026-07-18',now())`, [caseId, organizationId])
+    const sourceDocumentVersionId = await seedExpertReport(caseId, 'ready')
+    const key = uuidv7()
+    const payload = { expectedCaseVersion: 1, candidateAmountMinor: 100_000, sourceDocumentVersionId, sourcePage: 1 }
+    const responses = await runBehindRowLock(pool, 'SELECT id FROM cases WHERE id=$1 FOR UPDATE', [caseId], () => app.inject({ method: 'POST', url: candidateUrl(caseId), headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: key }, payload }))
+    expect(responses.map(response => response.statusCode)).toEqual(Array(5).fill(201))
+    for (const response of responses) expect(response.json()).toEqual(responses[0]!.json())
+    expect((await pool.query('SELECT 1 FROM fee_records WHERE case_id=$1', [caseId])).rowCount).toBe(1)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
+  })
+
+  it.each([
+    { kind: 'approve', repeated: true }, { kind: 'correct', repeated: true },
+    { kind: 'approve', repeated: false }, { kind: 'correct', repeated: false },
+  ] as const)('serializes fee $kind commands (repeated key: $repeated) without duplicate accounting revisions or false 404', async ({ kind, repeated }) => {
+    const caseId = uuidv7(), ordinal = (kind === 'approve' ? 9901 : 9902) + (repeated ? 0 : 10)
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,lifecycle_status,workflow_stage,plate,plate_normalized,notification_date,closed_at)
+      VALUES($1,$2,2026,$3,$4,'traffic','closed','closed','34 FEE 991','34FEE991','2026-07-18',now())`, [caseId, organizationId, ordinal, `2026/${ordinal}`])
+    const sourceDocumentVersionId = await seedExpertReport(caseId, 'ready')
+    const created = await app.inject({ method: 'POST', url: candidateUrl(caseId), headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: { expectedCaseVersion: 1, candidateAmountMinor: 100_000, sourceDocumentVersionId, sourcePage: 1 } })
+    expect(created.statusCode).toBe(201)
+    const fee = closureFeeResponseSchema.parse(created.json()).fee
+    if (kind === 'correct') expect((await app.inject({ method: 'POST', url: `/api/v1/fees/${fee.id}/approve`, headers: { cookie: accountingCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: { expectedVersion: 1, confirmed: true } })).statusCode).toBe(200)
+    const payload = kind === 'approve' ? { expectedVersion: 1, confirmed: true } : { expectedVersion: 2, approvedAmountMinor: 110_000, sourceDocumentVersionId, sourcePage: 2, reason: 'Reviewed correction', confirmed: true }
+    const key = uuidv7()
+    const keys: string[] = []
+    const responses = await runBehindRowLock(pool, 'SELECT id FROM fee_records WHERE id=$1 FOR UPDATE', [fee.id], () => {
+      const commandKey = repeated ? key : uuidv7()
+      keys.push(commandKey)
+      return app.inject({ method: 'POST', url: `/api/v1/fees/${fee.id}/${kind}`, headers: { cookie: accountingCookie, [IDEMPOTENCY_KEY_HEADER]: commandKey }, payload })
+    })
+    expect(responses.map(response => response.statusCode).sort()).toEqual(repeated ? Array(5).fill(200) : [200, 409, 409, 409, 409])
+    if (repeated) for (const response of responses) expect(response.json()).toEqual(responses[0]!.json())
+    else for (const response of responses.filter(item => item.statusCode === 409)) expect(response.json().error.code).toBe('closure_fee_stale')
+    const updated = closureFeeResponseSchema.parse(responses.find(response => response.statusCode === 200)!.json()).fee
+    expect(updated.version).toBe(payload.expectedVersion + 1)
+    expect(updated.history).toHaveLength(updated.version)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=ANY($1::text[])', [keys])).rowCount).toBe(1)
   })
 })

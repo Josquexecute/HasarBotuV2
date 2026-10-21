@@ -45,7 +45,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
     await writeFile(temporary, JSON.stringify({ ...status, checkedAt: new Date().toISOString() }, null, 2), { flag: 'wx' })
     await rename(temporary, config.statusFile)
     // Paths, names and credentials stay in the administrator-owned configuration.
-    const log = JSON.stringify({ status: status.status, created: status.created ?? 0, deferred: status.deferred ?? 0, relocated: status.relocated ?? 0, relocationDeferred: status.relocationDeferred ?? 0,
+    const log = JSON.stringify({ status: status.status, ...(status.code === undefined ? {} : { code: status.code }), created: status.created ?? 0, deferred: status.deferred ?? 0, relocated: status.relocated ?? 0, relocationDeferred: status.relocationDeferred ?? 0,
       ...(status.archived === undefined ? {} : { archived: status.archived, restored: status.restored, statusUpdated: status.statusUpdated, inventoryDeferred: status.inventoryDeferred }) })
     if (log !== lastLogStatus || status.created) { onStatus?.(log); lastLogStatus = log }
   }
@@ -201,7 +201,9 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           waitingForCloudIdentity, settling, sourceReadOnly: true, defaultCaseType: null })
       } catch (error) {
         previousInventoryHash = undefined
-        const diagnosticCode = error?.safeCode ?? error?.code ?? 'automatic_folder_cycle_failed'
+        // Inventory verifiers raise these expected source races as Error(message).
+        const sourceCode = ['source_unavailable', 'source_changed'].includes(error?.message) ? error.message : undefined
+        const diagnosticCode = error?.safeCode ?? error?.code ?? sourceCode ?? 'automatic_folder_cycle_failed'
         await saveStatus({ status: 'BLOCKED', code: /^[a-z0-9_]+$/i.test(diagnosticCode) ? diagnosticCode : 'automatic_folder_cycle_failed',
           errorType: error?.name ?? 'Error', sourceReadOnly: true })
         // Preserve local diagnostics without logging arbitrary exception messages that may contain secrets.

@@ -3,6 +3,7 @@ import { SERVICE_SUPPORTED_OPERATIONS } from '@hasarbotu/domain'
 import { insurerIdSchema, localDateSchema } from '../../common/primitives.js'
 
 export const servicesReferenceQuerySchema = z.strictObject({
+  includeContacts: z.literal('true').optional(),
   insurerId: insurerIdSchema.optional(),
   evaluationDate: localDateSchema.optional(),
   dateSource: z.enum(['loss_date', 'policy_date']).default('loss_date'),

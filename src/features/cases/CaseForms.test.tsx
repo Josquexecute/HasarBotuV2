@@ -94,6 +94,22 @@ function renderCreate(port: CaseCommandPort, unauthorized = vi.fn()) {
 }
 
 describe('CaseCreateModal gerçek API komut akışı', () => {
+  it('creates a manual casco with searchable free-text service and editable contacts', async () => {
+    const create = vi.fn().mockResolvedValue(record())
+    renderCreate(commandPort({ create }))
+    const user = userEvent.setup()
+    await screen.findByRole('option', { name: 'Uzman Eksper' })
+    await user.selectOptions(screen.getByLabelText('Dosya türü *'), 'casco')
+    await user.type(screen.getByLabelText('Plaka *'), '34 TST 567')
+    await user.type(screen.getByLabelText('İhbar e-postası (isteğe bağlı)'), 'Servis Adı: Manual Repair\nServis Telefonu: 0212 555 10 10\nServis Adresi: Email Street')
+    await user.click(screen.getByRole('button', { name: 'Servis bilgilerini öner' }))
+    expect(screen.getByLabelText('Servis adı')).toHaveValue('Manual Repair')
+    await user.clear(screen.getByLabelText('Servis telefonu'))
+    await user.type(screen.getByLabelText('Servis telefonu'), '0216 555 20 20')
+    await user.click(screen.getByRole('button', { name: 'Dosyayı Oluştur' }))
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ caseType: 'casco', serviceDetails: { name: 'Manual Repair', phone: '0216 555 20 20', address: 'Email Street' } }), expect.any(String)))
+    expect(create.mock.calls[0]![0]).not.toHaveProperty('serviceId')
+  })
   it('Kapanışa Hazır aşamasıyla açık dosya oluşturur', async () => {
     const create = vi.fn().mockResolvedValue(record({ workflowStage: 'ready_to_close', stage: 'Kapanışa Hazır' }))
     renderCreate(commandPort({ create }))
@@ -204,6 +220,20 @@ function renderEdit(port: CaseCommandPort, options: Partial<Parameters<typeof Ca
 }
 
 describe('CaseEditModal optimistic locking akışı', () => {
+  it('reopens manual contacts, saves edits and drops old contacts on a new free-text service', async () => {
+    const update = vi.fn().mockResolvedValue(record({ version: 2 }))
+    renderEdit(commandPort({ update }), { item: record({ type: 'Kasko', service: 'Saved Repair', serviceDetails: { name: 'Saved Repair', phone: '0212 555 10 10', address: 'Saved Street' } }) })
+    await screen.findByRole('option', { name: 'Uzman Eksper' })
+    expect(screen.getByLabelText('Servis telefonu')).toHaveValue('0212 555 10 10')
+    const user = userEvent.setup()
+    await user.clear(screen.getByLabelText('Servis adı'))
+    await user.type(screen.getByLabelText('Servis adı'), 'Another Repair')
+    expect(screen.getByLabelText('Servis telefonu')).toHaveValue('')
+    expect(screen.getByLabelText('Servis adresi')).toHaveValue('')
+    await user.type(screen.getByLabelText('Servis adresi'), 'New Street')
+    await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, serviceDetails: { name: 'Another Repair', phone: null, address: 'New Street' } }))
+  })
   it('keeps imported fields readonly and submits service changes only through the pencil dialog', async () => {
     const eksist = { sourceId: 'source-1', assignmentDate: localDateSchema.parse('2026-09-18'), assignmentDateText: '18.09.2026 09:30:00', insurerName: 'Kaynak Sigorta', expertName: 'Kaynak Eksper', expertLicenseNumber: 'E12345', corporateExpertLicenseNumber: '', serviceName: 'Kaynak Servis', serviceRevised: false, vehicleFields: {} }
     const update = vi.fn().mockResolvedValue(record({ version: 2, eksist: { ...eksist, serviceName: 'Yeni Servis', serviceRevised: true } }))
@@ -218,7 +248,7 @@ describe('CaseEditModal optimistic locking akışı', () => {
     await user.click(screen.getByRole('button', { name: 'Revizyonu uygula' }))
     expect(update).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
-    await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, serviceRevision: { name: 'Yeni Servis' } }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, serviceRevision: { name: 'Yeni Servis' }, serviceDetails: { name: 'Yeni Servis', phone: null, address: null } }))
   })
   it.each([
     ['under_repair', 'Onarımda'],

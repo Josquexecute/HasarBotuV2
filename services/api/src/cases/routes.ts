@@ -17,6 +17,7 @@ import { requireSession } from '../auth/guard.js'
 import { createAuthStore } from '../auth/store.js'
 import { createCasesStore } from './store.js'
 import { withEksistData } from '../eksist/automatic.js'
+import { withServiceContacts } from './service-contact.js'
 
 export interface CasesRoutesOptions {
   readonly pool: pg.Pool
@@ -53,8 +54,10 @@ export function registerCasesRoutes(app: FastifyInstance, options: CasesRoutesOp
     }
 
     const result = await casesStore.list(session.user.organizationId, parsed.data)
+    let items = parsed.data.includeEksist === 'true' ? await withEksistData(options.pool, session.user.organizationId, result.items) : result.items
+    if (parsed.data.includeServiceDetails === 'true') items = await withServiceContacts(options.pool, session.user.organizationId, items)
     return caseListResponseSchema.parse({
-      items: parsed.data.includeEksist === 'true' ? await withEksistData(options.pool, session.user.organizationId, result.items) : result.items,
+      items,
       pageInfo: {
         page: parsed.data.page,
         pageSize: parsed.data.pageSize,
@@ -88,6 +91,7 @@ export function registerCasesRoutes(app: FastifyInstance, options: CasesRoutesOp
       return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
     }
     if (parsedQuery.data.includeEksist === 'true') detail = (await withEksistData(options.pool, session.user.organizationId, [detail]))[0]!
+    if (parsedQuery.data.includeServiceDetails === 'true') detail = (await withServiceContacts(options.pool, session.user.organizationId, [detail]))[0]!
     if (parsedQuery.data.includeLegacyReferences === 'true') {
       const legacyReferences = await casesStore.findLegacyReferences(session.user.organizationId, parsed.data.caseId)
       return caseDetailWithLegacyReferencesResponseSchema.parse({ case: { ...detail, legacyReferences } })

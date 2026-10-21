@@ -44,9 +44,9 @@ describe('PostgreSQL client query serialization', () => {
         case_type: 'traffic', lifecycle_status: 'open', plate: '34 TEST 123', office_number: '2026/1',
         insurer_claim_number: null, notification_form_number: null, notification_date: '2026-10-20',
         loss_date: null, closure_date: null, organization_name: 'Synthetic office', insurer_name: null,
-        expert_name: null, service_name: null, service_phone: null,
+        expert_name: null, service_center_id: null, service_name: null, service_phone: null,
       }]
-      if (sql.startsWith('SELECT overrides,version') && saved) return [{
+      if (sql.startsWith('SELECT overrides,service_context,version') && saved) return [{
         overrides: { fields: {}, documents: {} }, version: 1, updated_at: new Date('2026-10-20T10:00:00Z'),
       }]
       return []

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { caseServiceContactInputSchema } from './service.js'
 import {
   openCaseStageSchema,
   caseTypeSchema,
@@ -37,6 +38,7 @@ export const caseCreateRequestSchema = z.strictObject({
   responsibleUserId: userIdSchema.optional(),
   expertUserId: userIdSchema.optional(),
   serviceId: serviceIdSchema.optional(),
+  serviceDetails: caseServiceContactInputSchema.optional(),
   insurerId: insurerIdSchema.optional(),
   followUpDate: localDateSchema.optional(),
   lossDate: localDateSchema.optional(),
@@ -56,6 +58,7 @@ const caseUpdateFields = z.strictObject({
   responsibleUserId: userIdSchema.nullable().optional(),
   expertUserId: userIdSchema.nullable().optional(),
   serviceId: serviceIdSchema.nullable().optional(),
+  serviceDetails: caseServiceContactInputSchema.nullable().optional(),
   serviceRevision: z.strictObject({ name: z.string().trim().min(1).max(500) }).optional(),
   insurerId: insurerIdSchema.nullable().optional(),
   lossDate: localDateSchema.nullable().optional(),
@@ -71,6 +74,7 @@ export const CASE_UPDATABLE_FIELDS = [
   'responsibleUserId',
   'expertUserId',
   'serviceId',
+  'serviceDetails',
   'serviceRevision',
   'insurerId',
   'lossDate',

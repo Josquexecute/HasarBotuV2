@@ -185,7 +185,10 @@ export function createGeminiEmailAiProvider(
       try {
         body = JSON.parse(await readBoundedBody(response, config.maximumOutputSize * 4))
       } catch (error) {
-        const code = error instanceof Error ? error.message : 'provider_response_invalid'
+        const code = signal.aborted ? 'provider_timeout'
+          : error instanceof SyntaxError ? 'provider_response_invalid'
+            : error instanceof Error && error.message === 'provider_response_too_large'
+              ? 'provider_response_too_large' : 'provider_network_failure'
         throw new EmailAiProviderExecutionError(code, 'response_received', providerRequestId)
       }
       if (!record(body)) {

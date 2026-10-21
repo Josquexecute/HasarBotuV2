@@ -27,6 +27,7 @@ import {
   type AgentConfig,
 } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
+import { runBehindRowLock } from '../test-support/row-lock-race.js'
 
 // HB-2026-175: bkz. case-lifecycle.test.ts'deki aynı sabitin açıklaması.
 const ALWAYS_READY_FRESHNESS_GATE_PATH = fileURLToPath(new URL('./fixtures/always-ready-freshness-gate.mjs', import.meta.url))
@@ -221,6 +222,19 @@ describeDb('case file operations (gerçek PostgreSQL + sentetik geçici filesyst
     if (pool !== undefined) await closeDatabasePool(pool)
     if (sourceRoot !== undefined) await rm(sourceRoot, { recursive: true, force: true })
     if (archiveRoot !== undefined) await rm(archiveRoot, { recursive: true, force: true })
+  })
+
+  it('replays simultaneous file-operation plans after case-lock contention', async () => {
+    const source = 'workspaces/REPLAY-20'
+    await createWorkspace(sourceRoot, source)
+    const { caseId } = await seedLocatedCase('34 RPT 201', source)
+    const key = uuidv7()
+    const input = { operationType: 'rename_case_workspace' as const, destinationStorageRootKey: 'source-root', destinationRelativePath: 'workspaces/REPLAY-20-RENAMED' }
+    const responses = await runBehindRowLock(pool, 'SELECT id FROM cases WHERE id=$1 FOR UPDATE', [caseId], () => plan(caseId, input, key))
+    expect(responses.map(response => response.statusCode)).toEqual(Array(5).fill(201))
+    for (const response of responses) expect(response.json()).toEqual(responses[0]!.json())
+    expect((await pool.query('SELECT 1 FROM case_file_operations WHERE case_id=$1', [caseId])).rowCount).toBe(1)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
   })
 
   it('plan yalnız preview üretir; filesystem/job değişmez, idempotent replay ve tenant sınırı korunur', async () => {

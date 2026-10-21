@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createHash } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import { noticeSheetResponseSchema } from '@hasarbotu/contracts'
@@ -34,6 +35,20 @@ describeDb('İhbar föyü gerçek API / PostgreSQL', () => {
   }
   const endpoint = (id: string) => `/api/v1/cases/${id}/notice-sheet`
   const input = (fields = {}) => ({ expectedVersion: null, overrides: { fields, documents: {} }, confirmed: true })
+  const sheetHeaders = () => ({ cookie, 'x-hasarbotu-notice-sheet-fields': '2' })
+  async function addSource(id: string, rawText: string, serviceName: string, revised = false) {
+    const sourceId = uuidv7()
+    await pool.query(`INSERT INTO eksist_sources(id,organization_id,case_id,request_reference,input_kind,display_name,mime_type,source_hash,raw_text,extraction_method,extracted_fields,reviewed_fields,created_by_user_id)
+      VALUES($1::uuid,$2,$3,$1::uuid::text,'text','Synthetic','text/plain',$4,$5,'text','{}',$6::jsonb,$7)`,
+    [sourceId, organizationId, id, createHash('sha256').update(rawText).digest('hex'), rawText, JSON.stringify({ automatic: { serviceName, serviceRevised: revised } }), userId])
+    return sourceId
+  }
+  async function assignService(id: string, name: string, phone: string | null) {
+    const serviceId = uuidv7()
+    await pool.query("INSERT INTO service_centers(id,organization_id,name,center_type,service_type,phone) VALUES($1,$2,$3,'ozel','private', $4)", [serviceId, organizationId, name, phone])
+    await pool.query('UPDATE cases SET service_center_id=$2 WHERE id=$1', [id, serviceId])
+    return serviceId
+  }
   async function login(email: string) {
     const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password } })
     expect(response.statusCode).toBe(200)
@@ -108,6 +123,27 @@ describeDb('İhbar föyü gerçek API / PostgreSQL', () => {
     expect(responses.map(response => response.statusCode).sort()).toEqual([200, 409])
     expect((await pool.query('SELECT version FROM case_notice_sheets WHERE case_id=$1', [id])).rows).toEqual([{ version: 1 }])
   })
+  it.each(['first save', 'revision'])('rolls back a notice sheet %s if audit persistence fails and allows the unchanged command to recover', async kind => {
+    const id = await newCase()
+    const save = (payload: object) => app.inject({ method: 'PUT', url: endpoint(id), headers: { cookie, 'x-hasarbotu-notice-sheet-fields': '2' }, payload })
+    if (kind === 'revision') expect((await save(input({ inspectionNotes: 'Original reviewed note' }))).statusCode).toBe(200)
+    const before = (await app.inject({ url: endpoint(id), headers: { cookie, 'x-hasarbotu-notice-sheet-fields': '2' } })).json()
+    const payload = { ...input({ inspectionNotes: 'Recovered reviewed note' }), expectedVersion: before.version }
+    await pool.query(`CREATE FUNCTION reject_notice_sheet_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='notice_sheet.saved' THEN RAISE EXCEPTION 'synthetic_audit_failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER reject_notice_sheet_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION reject_notice_sheet_audit()`)
+    try {
+      expect((await save(payload)).statusCode).toBe(500)
+      expect((await app.inject({ url: endpoint(id), headers: { cookie, 'x-hasarbotu-notice-sheet-fields': '2' } })).json()).toEqual(before)
+      expect((await pool.query("SELECT 1 FROM audit_events WHERE resource_id=$1 AND action='notice_sheet.saved'", [id])).rowCount).toBe(kind === 'revision' ? 1 : 0)
+    } finally {
+      await pool.query('DROP TRIGGER reject_notice_sheet_audit ON audit_events; DROP FUNCTION reject_notice_sheet_audit()')
+    }
+    const recovered = await save(payload)
+    expect(recovered.statusCode).toBe(200)
+    expect(recovered.json().version).toBe((before.version ?? 0) + 1)
+    expect(recovered.json().overrides.fields.inspectionNotes).toBe('Recovered reviewed note')
+    expect((await save(payload)).statusCode).toBe(409)
+  })
   it('uses the reviewed service when it has no directory reference and preserves sheet-only revisions', async () => {
     const id = await newCase()
     await pool.query(`INSERT INTO eksist_sources(id,organization_id,case_id,request_reference,input_kind,display_name,mime_type,source_hash,raw_text,extraction_method,extracted_fields,reviewed_fields,created_by_user_id)
@@ -120,6 +156,48 @@ describeDb('İhbar föyü gerçek API / PostgreSQL', () => {
     const saved = noticeSheetResponseSchema.parse((await app.inject({ url: endpoint(id), headers: { cookie, 'x-hasarbotu-notice-sheet-fields': '2' } })).json())
     expect(saved.overrides.fields).toMatchObject({ servicePhone: '0222 222 22 22', serviceAddress: 'Yeni açık adres', insurerName: 'Föye özel şirket', plate: '06 TEST 99' })
     expect((await pool.query('SELECT plate FROM cases WHERE id=$1',[id])).rows[0].plate).toBe('34 TEST 123')
+  })
+  it.each(['traffic', 'casco'] as const)('loads assigned %s contacts, saves handwritten changes and reloads them', async type => {
+    const id = await newCase(type)
+    const name = `Assigned ${id}`
+    await assignService(id, name, '0333 333 33 33')
+    await addSource(id, `Atama Yapan İletişim Bilgileri\nTelefon: 0111 111 11 11\nAçık Adres: Atayan adresi\nTamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: ${name}\nTelefon: 0222 222 22 22\nAçık Adres: Doğrulanmış servis adresi\nEksper Bilgileri`, name)
+    const read = () => app.inject({ url: endpoint(id), headers: sheetHeaders() })
+    expect((await read()).json().defaults.fields).toMatchObject({ serviceName: name, servicePhone: '0333 333 33 33', serviceAddress: 'Doğrulanmış servis adresi' })
+    const fields = { servicePhone: '0444 444 44 44', serviceAddress: 'Elle düzeltilen adres', inspectionNotes: 'Korunacak not' }
+    expect((await app.inject({ method: 'PUT', url: endpoint(id), headers: sheetHeaders(), payload: input(fields) })).statusCode).toBe(200)
+    expect((await read()).json().overrides.fields).toEqual(fields)
+  })
+  it('uses only a matching named inspection location for a revised casco service', async () => {
+    const id = await newCase('casco')
+    await addSource(id, 'Atama Yapan İletişim Bilgileri\nTelefon: 0111 111 11 11\nEkspertiz Yeri Bilgileri\nEkspertiz Yeri Ad/Ünvan: Revize Servis\nTelefon: 0222 222 22 22\nAçık Adres: Güncel adres\nTamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: Eski Servis\nTelefon: 0333 333 33 33\nAçık Adres: Eski adres\nEksper Bilgileri', 'Revize Servis', true)
+    const sheet = (await app.inject({ url: endpoint(id), headers: sheetHeaders() })).json()
+    expect(sheet.defaults.fields).toMatchObject({ serviceName: 'Revize Servis', servicePhone: '0222 222 22 22', serviceAddress: 'Güncel adres' })
+  })
+  it('keeps old handwritten contacts stored but does not attach them to a replacement directory service', async () => {
+    const id = await newCase('casco')
+    await assignService(id, `Original ${id}`, '0111 111 11 11')
+    const fields = { servicePhone: '0222 222 22 22', serviceAddress: 'Elle girilmiş önceki servis adresi', inspectionNotes: 'Kalıcı not' }
+    expect((await app.inject({ method: 'PUT', url: endpoint(id), headers: sheetHeaders(), payload: input(fields) })).statusCode).toBe(200)
+    const before = (await app.inject({ url: endpoint(id), headers: sheetHeaders() })).json()
+    await assignService(id, `Replacement ${id}`, '0333 333 33 33')
+    const after = (await app.inject({ url: endpoint(id), headers: sheetHeaders() })).json()
+    expect(after.defaults.fields).toMatchObject({ servicePhone: '0333 333 33 33', serviceAddress: '' })
+    expect(after.overrides.fields).toEqual({ inspectionNotes: 'Kalıcı not' })
+    expect(after.version).toBe(before.version + 1)
+    expect((await pool.query('SELECT overrides FROM case_notice_sheets WHERE case_id=$1', [id])).rows[0].overrides.fields).toEqual(fields)
+    expect((await app.inject({ method: 'PUT', url: endpoint(id), headers: sheetHeaders(), payload: { ...input(fields), expectedVersion: before.version } })).statusCode).toBe(409)
+  })
+  it('invalidates an open editor and masks old contacts after a reviewed source service change', async () => {
+    const id = await newCase('casco')
+    const sourceId = await addSource(id, 'Tamirhane Ad / Ünvan: İlk Servis\nTelefon: 0111 111 11 11', 'İlk Servis')
+    const fields = { serviceName: 'Föye özel ad', servicePhone: '0222 222 22 22', serviceAddress: 'Önceki adres', inspectionNotes: 'Kalıcı not' }
+    await app.inject({ method: 'PUT', url: endpoint(id), headers: sheetHeaders(), payload: input(fields) })
+    await pool.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic,serviceName}',to_jsonb('İkinci Servis'::text)) WHERE id=$1", [sourceId])
+    const sheet = (await app.inject({ url: endpoint(id), headers: sheetHeaders() })).json()
+    expect(sheet.defaults.fields).toMatchObject({ serviceName: 'İkinci Servis', servicePhone: '', serviceAddress: '' })
+    expect(sheet.overrides.fields).toEqual({ inspectionNotes: 'Kalıcı not' })
+    expect(sheet.version).toBe(2)
   })
   it('keeps same-plate claims separate and refreshes automatic facts after saving', async () => {
     const first = await newCase(), second = await newCase()
@@ -172,6 +250,24 @@ describeDb('İhbar föyü gerçek API / PostgreSQL', () => {
     const response = await app.inject({ url: endpoint(id), headers: { cookie, 'x-hasarbotu-notice-sheet-fields': '2' } })
     expect(response.statusCode).toBe(200)
     expect(response.json().defaults.documents).toMatchObject({ accidentReport: true, statement: false, damagePhotos: false })
+  })
+  it('reads one latest SBM source consistently for case details and notice defaults', async () => {
+    const id = await newCase('casco')
+    const olderSource = await addSource(id, 'Tamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: Older Repair\nTelefon: 0212 555 10 10\nAçık Adres: Older Street', 'Older Repair')
+    const latestSource = await addSource(id, 'Tamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: Latest Repair\nTelefon: 0216 555 20 20\nAçık Adres: Latest Street', 'Latest Repair')
+    const automatic = { sourceId: latestSource, assignmentDate: '2026-10-16', assignmentDateText: '16.10.2026', insurerName: 'Synthetic Insurer', expertName: 'Synthetic Expert', expertLicenseNumber: '', corporateExpertLicenseNumber: '', serviceName: 'Latest Repair', serviceRevised: false, vehicleFields: {} }
+    await pool.query('UPDATE eksist_sources SET reviewed_fields=$2::jsonb WHERE id=$1', [latestSource, JSON.stringify({ automatic })])
+    const detail = await app.inject({ url: `/api/v1/cases/${id}?includeServiceDetails=true&includeEksist=true`, headers: { cookie } })
+    expect(detail.statusCode).toBe(200)
+    expect(detail.json().case.serviceDetails).toEqual({ name: 'Latest Repair', phone: '0216 555 20 20', address: 'Latest Street' })
+    expect(detail.json().case.eksist.sourceId).toBe(latestSource)
+    const sheet = await app.inject({ url: endpoint(id), headers: sheetHeaders() })
+    expect(sheet.json().defaults.fields).toMatchObject({ serviceName: 'Latest Repair', servicePhone: '0216 555 20 20', serviceAddress: 'Latest Street' })
+    const revised = await app.inject({ method: 'PATCH', url: `/api/v1/cases/${id}`, headers: { cookie }, payload: { expectedVersion: 1, serviceRevision: { name: 'Manual Replacement' }, serviceDetails: { name: 'Manual Replacement', phone: '0212 555 30 30', address: 'Manual Street' } } })
+    expect(revised.statusCode, revised.payload).toBe(200)
+    expect(revised.json().case.serviceDetails).toEqual({ name: 'Manual Replacement', phone: '0212 555 30 30', address: 'Manual Street' })
+    const older = (await pool.query("SELECT reviewed_fields->'automatic' AS automatic FROM eksist_sources WHERE id=$1", [olderSource])).rows[0].automatic
+    expect(older.serviceName).toBe('Older Repair')
   })
   it('keeps older clients compatible and preserves newer header revisions during legacy saves', async () => {
     const id = await newCase()

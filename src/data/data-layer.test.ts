@@ -40,6 +40,11 @@ const dto = caseListItemSchema.parse({
   notificationDate: '2026-07-11',
 })
 
+it('maps saved manual service contacts into the case record', () => {
+  const serviceDetails = { name: 'Manual Repair', phone: '0212 555 10 10', address: 'Saved Street' }
+  expect(mapCaseDtoToRecord({ ...dto, serviceDetails })).toMatchObject({ service: serviceDetails.name, serviceDetails })
+})
+
 function listBody(items: readonly unknown[], page = 1, totalPages = items.length === 0 ? 0 : 1, totalItems = items.length) {
   return { items, pageInfo: { page, pageSize: 100, totalItems, totalPages } }
 }
@@ -125,7 +130,7 @@ describe('HttpApiAdapter esleme', () => {
       caseId: 'case-2', plate: '34 MPA 765', legacyReferences: secondDetail.legacyReferences,
     })
     expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('page=2&pageSize=100'), expect.anything())
-    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case-2?includeLegacyReferences=true&includeEksist=true', expect.anything())
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case-2?includeLegacyReferences=true&includeEksist=true&includeServiceDetails=true', expect.anything())
   })
 
   it('bozuk successful response contracts sinirinda fail-closed reddedilir', async () => {
@@ -233,7 +238,7 @@ describe('tek case detail kancasi', () => {
       const { result } = renderHook(() => useCase('case-1'))
       await waitFor(() => expect(result.current.status).toBe('ok'))
       expect(result.current.item).toMatchObject({ caseId: 'case-1', lifecycleStatus: 'closed', status: 'Kapalı' })
-      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-1?includeLegacyReferences=true&includeEksist=true', expect.anything())
+      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-1?includeLegacyReferences=true&includeEksist=true&includeServiceDetails=true', expect.anything())
     } finally {
       fetchSpy.mockRestore()
     }

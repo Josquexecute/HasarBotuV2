@@ -94,6 +94,13 @@ export function registerWorkspaceRoutes(app: FastifyInstance, options: Workspace
         body.data,
         { key, requestHash },
       )
+      if (result.kind !== 'ok') {
+        const raced = await store.findIdempotent(session.user.organizationId, WORKSPACE_PLAN_SCOPE, key)
+        if (raced !== undefined) {
+          if (raced.requestHash !== requestHash) return reply.code(409).send(failureBody('idempotency_conflict', 'Idempotency key was used with a different request.', requestId))
+          return reply.code(raced.responseStatus).send(raced.responseBody)
+        }
+      }
       if (result.kind === 'not_found') return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
       if (result.kind === 'unknown_root') return sendFieldError(reply, requestId, 'storageRootKey', 'unknown_reference')
       if (result.kind === 'notification_date_required') return sendFieldError(reply, requestId, 'notificationDate', 'required_for_workspace')

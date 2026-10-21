@@ -350,6 +350,21 @@ describeDb('sidecarless physical folder registration', () => {
     legacy.bindings[0]!.identity = { kind: 'v1', stableSourceIdentity: 'f'.repeat(64), sourceFileHash: 'c'.repeat(64) }
     await expect(planSourceFolderRelocation(pool, org, legacy)).rejects.toThrow('folder_relocation_v1_identity_required')
   })
+  it.each([true, false])('rejects a plate change after relocation approval without rebinding or publishing jobs (registered=%s)', async registered => {
+    const input = await relocation(registered), binding = input.bindings[0]!
+    const plan = await planSourceFolderRelocation(pool, org, input)
+    await pool.query("UPDATE cases SET plate='34 ZZZ 999',plate_normalized='34ZZZ999',version=version+1 WHERE id=$1", [binding.caseId])
+    const snapshot = async () => ({
+      counts: await counts(),
+      cases: (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=$1', [binding.caseId])).rows,
+      locations: (await pool.query('SELECT to_jsonb(l) snapshot FROM case_locations l WHERE case_id=$1', [binding.caseId])).rows,
+      registrations: (await pool.query('SELECT to_jsonb(r) snapshot FROM case_folder_registrations r WHERE case_id=$1', [binding.caseId])).rows,
+    })
+    const before = await snapshot(), verify = vi.fn(async () => {})
+    await expect(applySourceFolderRelocation(pool, actor(), plan, plan.planHash, verify)).rejects.toThrow('folder_relocation_plate_mismatch')
+    expect(verify).toHaveBeenCalledTimes(1)
+    expect(await snapshot()).toEqual(before)
+  })
   it('rejects tampering, non-admin and changed live source without writes', async () => {
     const input = await relocation(), plan = await planSourceFolderRelocation(pool, org, input), before = await counts()
     await expect(applySourceFolderRelocation(pool, actor(), plan, '0'.repeat(64), async () => {})).rejects.toThrow('folder_relocation_approval_mismatch')

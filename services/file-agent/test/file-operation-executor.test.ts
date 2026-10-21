@@ -60,6 +60,20 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
     const result = await executeFileOperation(roots(), payload)
     expect(result).toMatchObject({ outcome: 'failed', errorCode: 'source_evidence_missing', fileOperation: { phase: 'manual_recovery_required' } })
   })
+  it('preserves both restored source and conflicting destination after an unowned external move', async () => {
+    const payload = applyPayload()
+    const source = join(sourceRoot, sourceRelative)
+    const destination = join(sourceRoot, payload.destination.relativePath)
+    const original = await buildWorkspaceManifest(nodeFileSystemAdapter, sourceRoot, sourceRelative)
+    await nodeFileSystemAdapter.rename(source, destination)
+    expect(await executeFileOperation(roots(), payload)).toMatchObject({ outcome: 'failed', errorCode: 'source_evidence_missing' })
+    await nodeFileSystemAdapter.rename(destination, source)
+    await mkdir(destination)
+    await writeFile(join(destination, 'other.txt'), 'another-workspace')
+    expect(await executeFileOperation(roots(), payload)).toMatchObject({ outcome: 'failed', errorCode: 'manual_drift_detected' })
+    expect((await buildWorkspaceManifest(nodeFileSystemAdapter, sourceRoot, sourceRelative)).manifestHash).toBe(original.manifestHash)
+    expect(await readFile(join(destination, 'other.txt'), 'utf8')).toBe('another-workspace')
+  })
 
   it('recovers only the recorded operation and rejects a changed destination', async () => {
     const payload = applyPayload()

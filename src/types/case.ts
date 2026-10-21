@@ -47,6 +47,7 @@ export interface CaseRecord {
   workflowStage?: CaseStageCode
   responsibleUserId?: string | null
   expertUserId?: string | null
+  serviceDetails?: { name: string; phone: string | null; address: string | null } | null
   serviceId?: string | null
   serviceProfile?: {
     readonly id: string

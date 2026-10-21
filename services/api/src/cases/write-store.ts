@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto'
 import type pg from 'pg'
 import type { CaseCreateRequest, CaseUpdateRequest, CaseListItem } from '@hasarbotu/contracts'
-import { parsePlateNumber, plateSearchKey, matchEksistReference } from '@hasarbotu/domain'
+import { parsePlateNumber, plateSearchKey, matchEksistReference, eksistKey } from '@hasarbotu/domain'
 import { eksistCaseDataSchema, localDateSchema } from '@hasarbotu/contracts'
 import { uuidv7 } from '@hasarbotu/database'
 import { rowToDto, SELECT_FIELDS, toLocalDateString, type CaseRow } from './store.js'
 import { createAuditService } from '../audit/service.js'
 import { loadServiceProfile } from '../service-agreements/service.js'
 import { requireCaseType } from './classification.js'
+import { saveServiceContact, selectServiceContact, withServiceContacts } from './service-contact.js'
 
 /**
  * Cases yazma katmani (Paket 09) — kritik islem modeli:
@@ -133,6 +134,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         await client.query('BEGIN')
         const today = await client.query<{ today: string }>("SELECT to_char(transaction_timestamp() AT TIME ZONE 'Europe/Istanbul','YYYY-MM-DD') AS today")
         input = { ...input, followUpDate: localDateSchema.parse(today.rows[0]!.today) }
+        if (input.serviceDetails) input = { ...input, serviceId: (await selectServiceContact(client, actor.organizationId, input.serviceDetails, input.serviceId)) ?? undefined }
         await assertReferences(client, actor.organizationId, input)
 
         const counter = await client.query(
@@ -191,7 +193,9 @@ export function createCasesWriteStore(pool: pg.Pool) {
           dateSource: 'loss_date',
           operation: 'closure_documents',
         })
-        const item = rowToDto(createdRow, serviceProfile)
+        if (input.serviceDetails) await saveServiceContact(client, actor.organizationId, caseId, actor.actorUserId, input.serviceDetails)
+        const baseItem = rowToDto(createdRow, serviceProfile)
+        const item = input.serviceDetails ? (await withServiceContacts(client, actor.organizationId, [baseItem]))[0]! : baseItem
 
         await audit.record(client, {
           organizationId: actor.organizationId,
@@ -203,6 +207,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
           details: {
             officeCaseNumber: officeNumber,
             caseType: input.caseType,
+            serviceDetailsPresent: input.serviceDetails !== undefined,
             assignedReferenceFields: ['responsibleUserId', 'expertUserId', 'serviceId', 'insurerId'].filter(
               (field) => (input as Record<string, unknown>)[field] !== undefined,
             ),
@@ -257,7 +262,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const current = await client.query(
-          `SELECT version, follow_up_date, loss_date, notification_date, lifecycle_status, case_type
+          `SELECT version, follow_up_date, loss_date, notification_date, lifecycle_status, case_type, service_center_id
            FROM cases WHERE id::text = $1 AND organization_id = $2 AND is_archived = false FOR UPDATE`,
           [caseId, actor.organizationId],
         )
@@ -268,6 +273,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
           notification_date: Date | null
           lifecycle_status: 'open' | 'closed'
           case_type: 'traffic' | 'casco' | null
+          service_center_id: string | null
         } | undefined
         if (existing === undefined) {
           await client.query('ROLLBACK')
@@ -287,7 +293,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         if (input.workflowStage !== undefined) requireCaseType(input.caseType ?? existing.case_type)
 
         if (input.followUpDate !== undefined) throw new ReferenceCheckError('followUpDate', 'automatic_field_readonly')
-        const imported = await client.query("SELECT reviewed_fields->'automatic' AS automatic FROM eksist_sources WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic' FOR UPDATE", [actor.organizationId, caseId])
+        const imported = await client.query("SELECT id,reviewed_fields->'automatic' AS automatic FROM eksist_sources WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic' ORDER BY created_at DESC,id DESC LIMIT 1 FOR UPDATE", [actor.organizationId, caseId])
         let eksist = imported.rowCount ? eksistCaseDataSchema.parse(imported.rows[0].automatic) : undefined
         if (imported.rowCount) {
           for (const field of ['notificationFormNumber', 'expertUserId'] as const) {
@@ -300,14 +306,18 @@ export function createCasesWriteStore(pool: pg.Pool) {
           const services = await client.query<{ id: string; name: string }>('SELECT id,name FROM service_centers WHERE organization_id=$1 AND is_active', [actor.organizationId])
           input = { ...input, serviceId: matchEksistReference(input.serviceRevision.name, services.rows) }
           eksist = { ...eksist, serviceName: input.serviceRevision!.name, serviceRevised: true }
-          await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic'", [actor.organizationId, caseId, JSON.stringify(eksist)])
+          await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND id=$4", [actor.organizationId, caseId, JSON.stringify(eksist), imported.rows[0].id])
         }
-        await assertReferences(client, actor.organizationId, input)
+        if (input.serviceDetails !== undefined) {
+          if (eksist && (!input.serviceDetails || eksistKey(input.serviceDetails.name) !== eksistKey(eksist.serviceName))) throw new ReferenceCheckError('serviceDetails.name', 'use_service_revision')
+          input = { ...input, serviceId: input.serviceDetails ? await selectServiceContact(client, actor.organizationId, input.serviceDetails, input.serviceId, existing.service_center_id) : null }
+        }
+        await assertReferences(client, actor.organizationId, { ...input, serviceId: input.serviceId === existing.service_center_id ? undefined : input.serviceId })
         if (eksist && input.insurerId !== undefined) {
           if (input.insurerId === null) throw new ReferenceCheckError('insurerId', 'insurer_required')
           const insurer = (await client.query<{ name: string }>('SELECT name FROM insurers WHERE organization_id=$1 AND id=$2',[actor.organizationId,input.insurerId])).rows[0]!
           eksist = { ...eksist,insurerName: insurer.name }
-          await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic'",[actor.organizationId,caseId,JSON.stringify(eksist)])
+          await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND id=$4",[actor.organizationId,caseId,JSON.stringify(eksist),imported.rows[0].id])
         }
         const currentLossDate = existing.loss_date === null ? null : toLocalDateString(existing.loss_date)
         const currentNotificationDate = existing.notification_date === null ? null : toLocalDateString(existing.notification_date)
@@ -331,7 +341,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         }
         const sets: string[] = []
         const params: unknown[] = []
-        const changedFields: string[] = input.serviceRevision ? ['serviceRevision'] : []
+        const changedFields: string[] = [...(input.serviceRevision ? ['serviceRevision'] : []), ...(input.serviceDetails !== undefined ? ['serviceDetails'] : [])]
         for (const [field, column] of Object.entries(columnByField)) {
           const value = (input as Record<string, unknown>)[field]
           if (value === undefined) continue
@@ -354,7 +364,9 @@ export function createCasesWriteStore(pool: pg.Pool) {
           dateSource: 'loss_date',
           operation: 'closure_documents',
         })
-        const item = { ...rowToDto(updatedRow, serviceProfile), ...(eksist ? { eksist } : {}) }
+        if (input.serviceDetails !== undefined || input.serviceId !== undefined || input.serviceRevision) await saveServiceContact(client, actor.organizationId, caseId, actor.actorUserId, input.serviceDetails)
+        const baseItem = { ...rowToDto(updatedRow, serviceProfile), ...(eksist ? { eksist } : {}) }
+        const item = input.serviceDetails !== undefined ? (await withServiceContacts(client, actor.organizationId, [baseItem]))[0]! : baseItem
         await audit.record(client, {
           organizationId: actor.organizationId,
           actorUserId: actor.actorUserId,

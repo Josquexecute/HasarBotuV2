@@ -16,6 +16,7 @@ import {
   type DatabaseConfig,
 } from '@hasarbotu/database'
 import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { runBehindRowLock } from '../test-support/row-lock-race.js'
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -99,6 +100,25 @@ describeDb('Paket 45 PERT değerlendirme çekirdeği gerçek API', () => {
   afterAll(async () => {
     if (app !== undefined) await app.close()
     if (pool !== undefined) await closeDatabasePool(pool)
+  })
+
+  it.each(['create', 'revise'] as const)('replays simultaneous PERT %s commands after waiting for the case lock', async kind => {
+    const id = uuidv7(), ordinal = kind === 'create' ? 4601 : 4602
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,responsible_user_id)
+      VALUES($1,$2,2026,$3,$4,'casco','damage_assessment','34 P 4601','34P4601',$5)`, [id, organizationId, ordinal, `2026/${ordinal}`, expertUserId])
+    if (kind === 'revise') expect((await app.inject({ method: 'POST', url: assessmentUrl(id), headers: { cookie: expertCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: { workflowStatus: 'under_review', expectedCaseVersion: 1, confirmed: true } })).statusCode).toBe(201)
+    const key = uuidv7()
+    const payload = kind === 'create'
+      ? { workflowStatus: 'under_review', expectedCaseVersion: 1, confirmed: true }
+      : { workflowStatus: 'under_review', expectedVersion: 1, reason: 'Concurrent reviewed revision', confirmed: true }
+    const responses = await runBehindRowLock(pool, 'SELECT id FROM cases WHERE id=$1 FOR UPDATE', [id], () => app.inject({ method: 'POST', url: kind === 'create' ? assessmentUrl(id) : versionsUrl(id), headers: { cookie: expertCookie, [IDEMPOTENCY_KEY_HEADER]: key }, payload }))
+    expect(responses.map(response => response.statusCode)).toEqual(Array(5).fill(kind === 'create' ? 201 : 200))
+    for (const response of responses) expect(response.json()).toEqual(responses[0]!.json())
+    const result = pertAssessmentResponseSchema.parse(responses[0]!.json()).assessment
+    expect(result.version).toBe(kind === 'create' ? 1 : 2)
+    expect((await pool.query('SELECT 1 FROM pert_assessment_versions WHERE case_id=$1', [id])).rowCount).toBe(result.version)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
+    expect((await pool.query('SELECT 1 FROM audit_events WHERE resource_id=$1 AND action=$2', [result.id, kind === 'create' ? 'pert_assessment.created' : 'pert_assessment.revised'])).rowCount).toBe(1)
   })
 
   it('401, tenant 404, sekreterlik yazma reddi ve boş değerlendirme sınırlarını uygular', async () => {
@@ -256,8 +276,8 @@ describeDb('Paket 45 PERT değerlendirme çekirdeği gerçek API', () => {
 
   it('audit yalnız güvenli kod/oran metadata taşır; serbest metin sızdırmaz', async () => {
     const audits = (await pool.query(
-      "SELECT action,details FROM audit_events WHERE organization_id=$1 AND action LIKE 'pert_assessment.%' ORDER BY occurred_at",
-      [organizationId],
+      "SELECT action,details FROM audit_events WHERE organization_id=$1 AND action LIKE 'pert_assessment.%' AND details->>'caseId'=$2 ORDER BY occurred_at",
+      [organizationId, caseId],
     )).rows as { action: string; details: Record<string, unknown> }[]
     expect(audits.map((row) => row.action)).toEqual([
       'pert_assessment.created',
@@ -268,5 +288,45 @@ describeDb('Paket 45 PERT değerlendirme çekirdeği gerçek API', () => {
     expect(text).not.toMatch(/Ön panel|ölçümü bekleniyor|yapısal hasar mevcut|Merkez PERT kararını/)
     expect(audits[0].details).toMatchObject({ workflowStatus: 'under_review', damageRatioPercent: 77, hasStructuralNote: true })
     expect(audits[2].details).toMatchObject({ workflowStatus: 'pert_decided', expertOpinion: 'pert', centerDecision: 'pert' })
+  })
+
+  it.each(['create', 'revise'] as const)('rolls back the PERT %s transaction when its final idempotency write fails and safely recovers the same command', async kind => {
+    const id = uuidv7(), ordinal = kind === 'create' ? 4701 : 4702
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,workflow_stage,plate,plate_normalized,responsible_user_id)
+      VALUES($1,$2,2026,$3,$4,'casco','damage_assessment','34 P 4701','34P4701',$5)`, [id, organizationId, ordinal, `2026/${ordinal}`, expertUserId])
+    if (kind === 'revise') expect((await app.inject({ method: 'POST', url: assessmentUrl(id), headers: { cookie: expertCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() }, payload: { workflowStatus: 'under_review', expectedCaseVersion: 1, confirmed: true } })).statusCode).toBe(201)
+    const key = uuidv7()
+    const payload = kind === 'create'
+      ? { workflowStatus: 'under_review', expectedCaseVersion: 1, confirmed: true }
+      : { workflowStatus: 'under_review', expectedVersion: 1, structuralNote: 'Reviewed recovery note', reason: 'Reviewed revision', confirmed: true }
+    const command = () => app.inject({ method: 'POST', url: kind === 'create' ? assessmentUrl(id) : versionsUrl(id), headers: { cookie: expertCookie, [IDEMPOTENCY_KEY_HEADER]: key }, payload })
+    const snapshot = async () => ({
+      assessments: (await pool.query('SELECT * FROM pert_assessments WHERE case_id=$1 ORDER BY id', [id])).rows,
+      versions: (await pool.query('SELECT * FROM pert_assessment_versions WHERE case_id=$1 ORDER BY id', [id])).rows,
+      audit: (await pool.query("SELECT id,action,details FROM audit_events WHERE details->>'caseId'=$1 AND action LIKE 'pert_assessment.%' ORDER BY id", [id])).rows,
+    })
+    const before = await snapshot()
+    // This is the final write, after both the assessment revision and its success audit.
+    await pool.query(`CREATE FUNCTION reject_pert_idempotency() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic_final_write_failure'; END $$;
+      CREATE TRIGGER reject_pert_idempotency BEFORE INSERT ON idempotency_keys FOR EACH ROW EXECUTE FUNCTION reject_pert_idempotency()`)
+    try {
+      const failed = await command()
+      expect(failed.statusCode).toBe(500)
+      expect(JSON.stringify(failed.json())).not.toMatch(/synthetic_final_write_failure|INSERT|stack/i)
+      expect(await snapshot()).toEqual(before)
+      expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(0)
+    } finally {
+      await pool.query('DROP TRIGGER reject_pert_idempotency ON idempotency_keys; DROP FUNCTION reject_pert_idempotency()')
+    }
+    const recovered = await command()
+    expect(recovered.statusCode).toBe(kind === 'create' ? 201 : 200)
+    const assessment = pertAssessmentResponseSchema.parse(recovered.json()).assessment
+    expect(assessment.version).toBe(kind === 'create' ? 1 : 2)
+    expect((await command()).json()).toEqual(recovered.json())
+    const after = await snapshot()
+    expect(after.assessments).toHaveLength(1)
+    expect(after.versions).toHaveLength(before.versions.length + 1)
+    expect(after.audit).toHaveLength(before.audit.length + 1)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
   })
 })

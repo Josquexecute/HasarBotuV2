@@ -32,7 +32,7 @@ export function createReferenceStore(pool: pg.Pool) {
         if (insurer.rowCount === 0) return undefined
       }
       const result = await pool.query(
-        `SELECT id FROM service_centers WHERE organization_id = $1 AND is_active = true ORDER BY name, id`,
+        `SELECT id,phone FROM service_centers WHERE organization_id = $1 AND is_active = true ORDER BY name, id`,
         [organizationId],
       )
       const contexts = (result.rows as Array<{ id: string }>).map((row) => ({
@@ -47,7 +47,7 @@ export function createReferenceStore(pool: pg.Pool) {
       return servicesReferenceResponseSchema.parse({
         items: contexts.flatMap((item) => {
           const profile = profiles.get(item.key)
-          return profile === undefined ? [] : [profile]
+          return profile === undefined ? [] : [{ ...profile, ...(query.includeContacts === 'true' ? { phone: result.rows.find(row => row.id === item.key)?.phone ?? null } : {}) }]
         }),
       })
     },

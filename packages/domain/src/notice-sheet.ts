@@ -94,18 +94,7 @@ export function buildNoticeSheetDefaults(source: NoticeSheetSource): {
   fields.insuredPolicyPeriod = get('Poliçe Vadesi')
   fields.vehicleDescription = source.vehicleDescription
     ?? [get('Marka'), get('Araç Tipi'), get('Model Yılı')].filter(Boolean).join(' · ')
-  fields.serviceName = source.serviceName ?? extracted?.service ?? ''
-  // Contact details from a replaced service must not follow the old name.
-  const sameService = !source.eksistServiceRevised && extracted?.service
-    && eksistKey(fields.serviceName) === eksistKey(extracted.service)
-  // Repeated contact labels belong to different people. Prefer the repair
-  // section, then the inspection location, never an unrelated sender's phone.
-  const serviceSection = source.eksistText?.match(/Tamirhane Yeri Bilgileri([\s\S]*?)(?=Eksper Bilgileri|Ağır Hasar bilgileri|İşlemler|$)/iu)?.[1]
-    ?? source.eksistText?.match(/Ekspertiz Yeri Bilgileri([\s\S]*?)(?=Tamirhane Yeri Bilgileri|Eksper Bilgileri|İşlemler|$)/iu)?.[1]
-  const contact = serviceSection ? parseEksist(serviceSection) : extracted
-  const contactValue = (label: string) => contact?.conflicts.includes(eksistKey(label)) ? '' : contact?.fields[eksistKey(label)] ?? ''
-  fields.servicePhone = source.servicePhone || (sameService ? contactValue('Telefon') || contactValue('Cep Telefonu') || contactValue('İş Telefonu') : '')
-  fields.serviceAddress = source.serviceAddress || (sameService ? contactValue('Açık Adres') : '')
+  Object.assign(fields, resolveServiceContact(source))
   if (source.caseType === 'casco') {
     fields.insuredPlate = source.plate
     fields.insuredName = source.ownerNames.join(' / ') || fields.insuredName
@@ -140,5 +129,48 @@ export function applyNoticeSheetOverrides(
   overrides: NoticeSheetOverrides,
 ) {
   const fields = { ...defaults.fields, ...overrides.fields }
+  if (eksistKey(fields.serviceName) !== eksistKey(defaults.fields.serviceName)) {
+    for (const key of ['serviceContact', 'servicePhone', 'serviceAddress'] as const) {
+      if (!Object.hasOwn(overrides.fields, key)) fields[key] = ''
+    }
+  }
   return { fields, documents: { ...defaults.documents, ...overrides.documents } }
+}
+
+export function resolveServiceContact(source: Pick<NoticeSheetSource, 'serviceName' | 'servicePhone' | 'serviceAddress' | 'eksistText' | 'eksistServiceRevised'>) {
+  const extracted = source.eksistText ? parseEksist(source.eksistText) : null
+  const fields = { serviceName: '', servicePhone: '', serviceAddress: '' }
+  // A section owns its contacts only when its own service identity matches.
+  // Inspection and repair locations may name different businesses.
+  const sections = [...(source.eksistText ?? '').matchAll(/(Tamirhane\s+Yeri\s+Bilgileri|Ekspertiz\s+Yeri\s+Bilgileri)([\s\S]*?)(?=Tamirhane\s+Yeri\s+Bilgileri|Ekspertiz\s+Yeri\s+Bilgileri|Atama\s+Yapan\s+İletişim\s+Bilgileri|Eksper\s+Bilgileri|Ağır\s+Hasar\s+bilgileri|İşlemler|$)/giu)]
+    .map(match => {
+      const contact = parseEksist(match[2]!)
+      const repair = /^Tamirhane/iu.test(match[1]!)
+      const labels = repair ? ['Tamirhane Ad / Ünvan', 'Tamirhane Soyad'] : ['Ekspertiz Yeri Ad/Ünvan', 'Ekspertiz Yeri Soyad']
+      const name = labels.some(label => contact.conflicts.includes(eksistKey(label))) ? ''
+        : labels.map(label => contact.fields[eksistKey(label)] ?? '').filter(Boolean).join(' ')
+      return { contact, name, repair }
+    })
+  const inspectionNames = [...new Set(sections.filter(section => !section.repair && section.name).map(section => section.name))]
+  fields.serviceName = source.serviceName ?? (extracted?.service || (inspectionNames.length === 1 ? inspectionNames[0]! : ''))
+  const matching = sections.filter(section => section.name && eksistKey(section.name) === eksistKey(fields.serviceName))
+  const preferred = matching.some(section => section.repair) ? matching.filter(section => section.repair) : matching
+  const legacyMatch = sections.length === 0 && !source.eksistServiceRevised && extracted?.service
+    && !extracted.conflicts.some(key => ['tamirhaneadunvan', 'tamirhanesoyad'].includes(key))
+    && eksistKey(fields.serviceName) === eksistKey(extracted.service)
+  const contacts = preferred.length ? preferred.map(section => section.contact) : legacyMatch ? [extracted!] : []
+  const contactValue = (labels: string[]) => {
+    const values = contacts.map(contact => {
+      for (const label of labels) {
+        const key = eksistKey(label)
+        if (contact.conflicts.includes(key)) return ''
+        if (contact.fields[key]) return contact.fields[key]!
+      }
+      return ''
+    })
+    return values.length && values.every(value => value === values[0]) ? values[0]! : ''
+  }
+  fields.servicePhone = source.servicePhone || contactValue(['Telefon', 'Cep Telefonu', 'İş Telefonu'])
+  fields.serviceAddress = source.serviceAddress || contactValue(['Açık Adres'])
+  return fields
 }

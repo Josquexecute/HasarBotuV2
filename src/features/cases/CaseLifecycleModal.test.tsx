@@ -30,6 +30,24 @@ const planned: LifecycleOperationRecord = {
 }
 
 describe('CaseLifecycleModal', () => {
+  it.each([
+    ['source_evidence_missing', 'taşıma kanıtı yok veya uyuşmuyor'],
+    ['source_missing', 'Kaynak klasör bulunamadı'],
+    ['destination_exists', 'Hedef klasör zaten var'],
+    ['storage_unavailable', 'Depolama bağlantısı mevcut değil'],
+    ['destination_manifest_mismatch', 'içerik özeti kaynakla uyuşmuyor'],
+    ['unknown_code', 'İşlem tamamlanamadı. Klasör ve işlem kayıtlarını kontrol edin.'],
+  ])('explains %s without guessing or retrying a manual recovery', async (failureReasonCode, message) => {
+    const operation = { ...planned, status: 'manual_recovery_required' as const, failureReasonCode, canApprove: false, canCancel: false }
+    const port: CaseLifecycleCommandPort = {
+      readLatestOperation: vi.fn().mockResolvedValue(operation), readLocationVersion: vi.fn().mockResolvedValue(1),
+      planClose: vi.fn(), planReopen: vi.fn(), approve: vi.fn(), readOperation: vi.fn(), readCase: vi.fn(),
+    }
+    render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={vi.fn()} onUnauthorized={vi.fn()} onReload={vi.fn()} />)
+    expect(await screen.findByText(new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Onayla ve Kapat' })).not.toBeInTheDocument()
+    expect(port.approve).not.toHaveBeenCalled()
+  })
   it('lets an exhausted move create a fresh preview with current versions and a separate approval', async () => {
     const failure = { ...planned,status: 'failed',failureReasonCode: 'access_denied',linkedFileOperation: { id: 'file-1',status: 'failed' },canApprove: true } as const
     const port: CaseLifecycleCommandPort = {

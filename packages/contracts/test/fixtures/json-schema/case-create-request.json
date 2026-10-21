@@ -57,6 +57,42 @@
       "maxLength": 128,
       "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
     },
+    "serviceDetails": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "phone": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 80
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "address": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
     "insurerId": {
       "type": "string",
       "minLength": 1,

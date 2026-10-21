@@ -1,5 +1,5 @@
 import type pg from 'pg'
-import { buildNoticeSheetDefaults, NOTICE_SHEET_HEADER_LIMITS } from '@hasarbotu/domain'
+import { buildNoticeSheetDefaults, eksistKey, NOTICE_SHEET_HEADER_LIMITS } from '@hasarbotu/domain'
 import { noticeSheetResponseSchema, noticeSheetOverridesSchema, type NoticeSheetResponse, type NoticeSheetSaveRequest } from '@hasarbotu/contracts'
 import { withTransaction, type Queryable } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
@@ -18,15 +18,19 @@ async function loadCase(exec: Queryable, organizationId: string, caseId: string,
     office_number: string; insurer_claim_number: string | null; notification_form_number: string | null
     notification_date: string | null; loss_date: string | null; closure_date: string | null
     organization_name: string; insurer_name: string | null; expert_name: string | null
-    service_name: string | null; service_phone: string | null
+    service_center_id: string | null; service_name: string | null; service_phone: string | null
+    contact_name: string | null; contact_phone: string | null; contact_address: string | null
   }>(`SELECT c.case_type,c.lifecycle_status,c.plate,c.office_number,c.insurer_claim_number,c.notification_form_number,
       c.notification_date::text,c.loss_date::text,(c.closed_at AT TIME ZONE 'Europe/Istanbul')::date::text AS closure_date,
       o.name AS organization_name,i.name AS insurer_name,u.display_name AS expert_name,
-      s.name AS service_name,s.phone AS service_phone
+      c.service_center_id,s.name AS service_name,s.phone AS service_phone,
+      sc.name AS contact_name,sc.phone AS contact_phone,sc.address AS contact_address
     FROM cases c JOIN organizations o ON o.id=c.organization_id
     LEFT JOIN insurers i ON i.id=c.insurer_id AND i.organization_id=c.organization_id
     LEFT JOIN users u ON u.id=c.expert_user_id AND u.organization_id=c.organization_id
     LEFT JOIN service_centers s ON s.id=c.service_center_id AND s.organization_id=c.organization_id
+    LEFT JOIN case_service_contacts sc ON sc.organization_id=c.organization_id AND sc.case_id=c.id
+      AND sc.service_center_id IS NOT DISTINCT FROM c.service_center_id
     WHERE c.organization_id=$1 AND c.id=$2 AND NOT c.is_archived${lock ? ' FOR UPDATE OF c' : ''}`,
   [organizationId, caseId])
   const row = result.rows[0]
@@ -41,7 +45,7 @@ export function createNoticeSheetStore(pool: pg.Pool) {
     const parameters = [actor.organizationId, caseId]
     // Both callers use one transaction connection; queries cannot overlap.
     const [saved, source, vehicle, owners, policies, documents] = [
-      await exec.query('SELECT overrides,version,updated_at FROM case_notice_sheets WHERE organization_id=$1 AND case_id=$2', parameters),
+      await exec.query('SELECT overrides,service_context,version,updated_at FROM case_notice_sheets WHERE organization_id=$1 AND case_id=$2', parameters),
       await exec.query(`SELECT raw_text,reviewed_fields FROM eksist_sources WHERE organization_id=$1 AND case_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1`, parameters),
       await exec.query(`SELECT v.brand,v.model,v.model_year FROM case_vehicle_profiles p
         JOIN case_vehicle_profile_versions v ON v.id=p.current_version_id AND v.organization_id=p.organization_id
@@ -62,6 +66,31 @@ export function createNoticeSheetStore(pool: pg.Pool) {
     const profile = vehicle.rows[0]
     const sheet = saved.rows[0]
     const date = (value: string) => value.split('-').reverse().join('.')
+    const defaults = buildNoticeSheetDefaults({
+      caseFields: {
+        organizationName: row.organization_name, officeNumber: row.office_number,
+        claimNumber: row.insurer_claim_number ?? '', noticeNumber: row.notification_form_number ?? '',
+        insurerName: row.insurer_name ?? sourceRow?.reviewed_fields?.automatic?.insurerName ?? '',
+        plate: row.plate, notificationDate: row.notification_date ?? '', lossDate: row.loss_date ?? '',
+        closureDate: row.lifecycle_status === 'closed' ? row.closure_date ?? '' : '',
+        expertName: row.expert_name ?? sourceRow?.reviewed_fields?.automatic?.expertName ?? '',
+      },
+      caseType: row.case_type, plate: row.plate,
+      serviceName: row.service_name ?? sourceRow?.reviewed_fields?.automatic?.serviceName ?? null, servicePhone: row.service_phone,
+      eksistText: sourceRow?.raw_text ?? null,
+      eksistServiceRevised: sourceRow?.reviewed_fields?.automatic?.serviceRevised === true,
+      vehicleDescription: profile ? [profile.brand, profile.model, profile.model_year].join(' · ') : null,
+      ownerNames: owners.rows.map(owner => String(owner.name)),
+      approvedPolicyPeriods: policies.rows.flatMap(policy => policy.policy_start_date && policy.policy_end_date
+        ? [`${date(policy.policy_start_date)} – ${date(policy.policy_end_date)}`] : []),
+      readyDocumentTypes: documents.rows.map(document => String(document.document_type)),
+    })
+    if (row.contact_name) Object.assign(defaults.fields, { serviceName: row.contact_name, servicePhone: row.contact_phone ?? '', serviceAddress: row.contact_address ?? '' })
+    const overrides = noticeSheetOverridesSchema.parse(sheet?.overrides ?? { fields: {}, documents: {} })
+    const context = sheet?.service_context as { id: string | null; name: string } | null | undefined
+    if (context && (context.id !== row.service_center_id || context.id === null && eksistKey(context.name) !== eksistKey(defaults.fields.serviceName))) {
+      for (const key of ['serviceName', 'serviceContact', 'servicePhone', 'serviceAddress'] as const) delete overrides.fields[key]
+    }
     return noticeSheetResponseSchema.parse({
       caseId, caseType: row.case_type, organizationName: row.organization_name,
       officeNumber: row.office_number, claimNumber: row.insurer_claim_number, noticeNumber: row.notification_form_number,
@@ -70,26 +99,8 @@ export function createNoticeSheetStore(pool: pg.Pool) {
       closureDate: row.lifecycle_status === 'closed' ? row.closure_date : null,
       expertName: row.expert_name ?? sourceRow?.reviewed_fields?.automatic?.expertName ?? null,
       version: sheet?.version ?? null, updatedAt: sheet?.updated_at.toISOString() ?? null,
-      defaults: buildNoticeSheetDefaults({
-        caseFields: {
-          organizationName: row.organization_name, officeNumber: row.office_number,
-          claimNumber: row.insurer_claim_number ?? '', noticeNumber: row.notification_form_number ?? '',
-          insurerName: row.insurer_name ?? sourceRow?.reviewed_fields?.automatic?.insurerName ?? '',
-          plate: row.plate, notificationDate: row.notification_date ?? '', lossDate: row.loss_date ?? '',
-          closureDate: row.lifecycle_status === 'closed' ? row.closure_date ?? '' : '',
-          expertName: row.expert_name ?? sourceRow?.reviewed_fields?.automatic?.expertName ?? '',
-        },
-        caseType: row.case_type, plate: row.plate,
-        serviceName: row.service_name ?? sourceRow?.reviewed_fields?.automatic?.serviceName ?? null, servicePhone: row.service_phone,
-        eksistText: sourceRow?.raw_text ?? null,
-        eksistServiceRevised: sourceRow?.reviewed_fields?.automatic?.serviceRevised === true,
-        vehicleDescription: profile ? [profile.brand, profile.model, profile.model_year].join(' · ') : null,
-        ownerNames: owners.rows.map(owner => String(owner.name)),
-        approvedPolicyPeriods: policies.rows.flatMap(policy => policy.policy_start_date && policy.policy_end_date
-          ? [`${date(policy.policy_start_date)} – ${date(policy.policy_end_date)}`] : []),
-        readyDocumentTypes: documents.rows.map(document => String(document.document_type)),
-      }),
-      overrides: noticeSheetOverridesSchema.parse(sheet?.overrides ?? { fields: {}, documents: {} }),
+      defaults,
+      overrides,
       permissions: { canEdit: canEdit && row.lifecycle_status === 'open' && row.case_type !== null },
     })
   }
@@ -112,11 +123,14 @@ export function createNoticeSheetStore(pool: pg.Pool) {
           const previous = noticeSheetOverridesSchema.parse(existing.rows[0]?.overrides ?? { fields: {},documents: {} })
           overrides.fields = { ...Object.fromEntries(Object.entries(previous.fields).filter(([key]) => Object.hasOwn(NOTICE_SHEET_HEADER_LIMITS,key))), ...overrides.fields }
         }
+        const current = await read(client, actor, caseId, true)
+        const serviceContext = { id: row.service_center_id, name: current.defaults.fields.serviceName }
         const nextVersion = (version ?? 0) + 1
-        await client.query(`INSERT INTO case_notice_sheets(organization_id,case_id,overrides,version,updated_by_user_id)
-          VALUES($1,$2,$3::jsonb,$4,$5) ON CONFLICT(organization_id,case_id) DO UPDATE
-          SET overrides=EXCLUDED.overrides,version=EXCLUDED.version,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`,
-        [actor.organizationId, caseId, JSON.stringify(overrides), nextVersion, actor.userId])
+        await client.query(`INSERT INTO case_notice_sheets(organization_id,case_id,overrides,version,updated_by_user_id,service_context)
+          VALUES($1,$2,$3::jsonb,$4,$5,$6::jsonb) ON CONFLICT(organization_id,case_id) DO UPDATE
+          SET overrides=EXCLUDED.overrides,version=EXCLUDED.version,updated_by_user_id=EXCLUDED.updated_by_user_id,
+          service_context=EXCLUDED.service_context,updated_at=now()`,
+        [actor.organizationId, caseId, JSON.stringify(overrides), nextVersion, actor.userId, JSON.stringify(serviceContext)])
         await audit.record(client, { organizationId: actor.organizationId, actorUserId: actor.userId,
           requestId: actor.requestId, action: 'notice_sheet.saved', entityType: 'case', entityId: caseId,
           details: { version: nextVersion, fieldNames: Object.keys(overrides.fields), documentCodes: Object.keys(overrides.documents) },

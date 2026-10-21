@@ -277,6 +277,11 @@ export function createPertStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const context = await readCaseContext(client, actor.organizationId, caseId, true)
+        // A duplicate request may have completed while this transaction waited for the case lock.
+        if (await findIdempotent(client, actor.organizationId, idempotency.scope, idempotency.key)) {
+          await client.query('ROLLBACK')
+          return { kind: 'idempotency_race' }
+        }
         if (context === undefined) {
           await client.query('ROLLBACK')
           return { kind: 'not_found' }
@@ -354,6 +359,10 @@ export function createPertStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const context = await readCaseContext(client, actor.organizationId, caseId, true)
+        if (await findIdempotent(client, actor.organizationId, idempotency.scope, idempotency.key)) {
+          await client.query('ROLLBACK')
+          return { kind: 'idempotency_race' }
+        }
         if (context === undefined) {
           await client.query('ROLLBACK')
           return { kind: 'not_found' }

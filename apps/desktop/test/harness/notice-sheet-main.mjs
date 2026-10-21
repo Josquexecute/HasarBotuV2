@@ -23,7 +23,10 @@ void app.whenReady().then(async () => {
     await pool.query("INSERT INTO users(id,organization_id,email,display_name,password_hash) VALUES($1,$2,$3,'Örnek Kullanıcı',$4)", [userId, organizationId, email, await hashPassword(password)])
     await pool.query("INSERT INTO user_roles(user_id,role_id) SELECT $1,id FROM roles WHERE code='secretary'", [userId])
     await pool.query("INSERT INTO insurers(id,organization_id,name) VALUES($1,$2,'Örnek Sigorta A.Ş.')", [insurerId, organizationId])
-    await pool.query("INSERT INTO service_centers(id,organization_id,name,center_type,service_type,phone) VALUES($1,$2,'Örnek Servis','ozel','private','0212 000 00 00')", [serviceId, organizationId])
+    await pool.query("INSERT INTO service_centers(id,organization_id,name,center_type,service_type,phone) VALUES($1,$2,'Örnek Servis','ozel','private','0212 333 44 55')", [serviceId, organizationId])
+    api = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false } })
+    const login = await api.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password } })
+    const cookie = String(login.headers['set-cookie']).split(';')[0]
     const cases = []
     for (const [index, type] of ['traffic', 'casco'].entries()) {
       const id = uuidv7(), plate = index ? '34 KSK 456' : '34 TRF 123'
@@ -31,6 +34,15 @@ void app.whenReady().then(async () => {
         notification_date,loss_date,insurer_claim_number,notification_form_number,insurer_id,service_center_id)
         VALUES($1,$2,2026,$3,$4,$5,'new_notification',$6,$7,'2026-10-16','2026-10-15','2026-H-12345','IH-12345',$8,$9)`,
       [id, organizationId, index + 1, `2026/${index + 1}`, type, plate, plate.replaceAll(' ', ''), insurerId, serviceId])
+      if (type === 'traffic') {
+      const sourceId = uuidv7()
+      await pool.query(`INSERT INTO eksist_sources(id,organization_id,case_id,request_reference,input_kind,display_name,mime_type,source_hash,raw_text,extraction_method,extracted_fields,reviewed_fields,created_by_user_id)
+        VALUES($1::uuid,$2,$3,$1::uuid::text,'text','Synthetic','text/plain',$4,$5,'text','{}',$6::jsonb,$7)`,
+      [sourceId, organizationId, id, String(index + 1).repeat(64), 'Ekspertiz Yeri Bilgileri\nEkspertiz Yeri Ad/Ünvan: Örnek Servis\nTelefon: 0222 222 22 22\nAçık Adres: Doğrulanmış servis adresi\nTamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: Eski Servis\nTelefon: 0111 111 11 11\nAçık Adres: Eski adres\nEksper Bilgileri', JSON.stringify({ automatic: { sourceId, assignmentDate: '2026-10-16', assignmentDateText: '16.10.2026', insurerName: 'Örnek Sigorta A.Ş.', expertName: 'Örnek Eksper', expertLicenseNumber: '', corporateExpertLicenseNumber: '', serviceName: 'Örnek Servis', serviceRevised: true, vehicleFields: {} } }), userId])
+      } else {
+        const updated = await api.inject({ method: 'PATCH', url: `/api/v1/cases/${id}`, headers: { cookie }, payload: { expectedVersion: 1, serviceDetails: { name: 'Örnek Servis', phone: '0212 333 44 55', address: 'Doğrulanmış servis adresi' } } })
+        check('manual casco contacts saved through authenticated API', updated.statusCode === 200 && updated.json().case.serviceDetails.address === 'Doğrulanmış servis adresi')
+      }
       await createNoticeSheetStore(pool).save({ organizationId, userId, requestId: 'native-print-test' }, id, {
         expectedVersion: null, confirmed: true,
         overrides: { documents: { accidentReport: true, insuredRegistration: true }, fields: {
@@ -38,18 +50,17 @@ void app.whenReady().then(async () => {
           recourse: 'İnceleniyor', deductible: 'Poliçe koşullarına göre kontrol edilecek', insuredFault: '%100', victimFault: '%0',
           insuredName: 'Sigortalı Örnek', insuredMileage: '82.150', insuredHeavyDamage: 'Kontrol edilecek', insuredPreviousClaims: '2',
           ...(type === 'traffic' ? { insuredPlate: '06 ORN 789', victimName: 'Mağdur Örnek', victimMileage: '42.750', victimHeavyDamage: 'Yok', victimPreviousClaims: '0' } : {}),
-          vehicleDescription: 'Örnek Marka · Sedan 1.6 Otomatik · 2022', serviceContact: 'Örnek Yetkili', serviceAddress: 'Örnek Mahallesi Sanayi Caddesi No 12 İstanbul',
+          vehicleDescription: 'Örnek Marka · Sedan 1.6 Otomatik · 2022', serviceContact: 'Örnek Yetkili',
           procurement: 'Orijinal parça / tedarik teyidi bekleniyor', preliminaryReportDate: '2026-10-17', tramer: 'Sorgu kontrol edildi', iban: 'TR00 0000 0000 0000 0000 0000 00',
           missingDocuments: '1. Ehliyet fotokopisi\n2. Onarım faturası', inspectionNotes: 'Sentetik ekspertiz çalışması.\nÖn tampon ve sol ön çamurluk incelendi.\nFotoğraflar, kilometre ve şase bilgileri kontrol edildi.\nParça listesi servis ile karşılaştırılacak.',
         } },
       })
       cases.push({ id, plate, type })
     }
-    api = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false } })
     const apiOrigin = await api.listen({ host: '127.0.0.1', port: 0 })
     shell = await startDesktopShell({ apiOrigin, assetRoot: process.env.HB_NOTICE_ASSETS, userDataPath: app.getPath('userData'), show: false })
     const evaluate = code => shell.window.webContents.executeJavaScript(code, true)
-    const until = predicate => evaluate(`new Promise((resolve,reject)=>{const observer=new MutationObserver(check);const timer=setTimeout(()=>{observer.disconnect();reject(Error('Notice print condition timed out'))},15000);function check(){if(${predicate}){observer.disconnect();clearTimeout(timer);resolve(true)}}observer.observe(document,{childList:true,subtree:true,attributes:true});check()})`)
+    const until = predicate => evaluate(`new Promise((resolve,reject)=>{const observer=new MutationObserver(check);const timer=setTimeout(()=>{observer.disconnect();reject(Error('Notice print condition timed out: '+${JSON.stringify(predicate)}))},15000);function check(){if(${predicate}){observer.disconnect();clearTimeout(timer);resolve(true)}}observer.observe(document,{childList:true,subtree:true,attributes:true});check()})`)
     await evaluate(`fetch('/api/v1/auth/login',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify(${JSON.stringify({ email, password })})}).then(r=>{if(!r.ok)throw Error('Login failed');return true})`)
     for (const item of cases) {
       await shell.window.loadURL(`${shell.origin}/dosyalar/${item.id}`)
@@ -58,6 +69,7 @@ void app.whenReady().then(async () => {
       await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`)
       await until(`document.querySelector('.notice-sheet-preview .notice-sheet-paper')`)
       check(`${item.type}: populated preview fits A4`, await evaluate(`(()=>{const e=document.querySelector('.notice-sheet-preview .notice-sheet');return e.scrollHeight<=e.clientHeight+1 && e.scrollWidth<=e.clientWidth+1})()`))
+      check(`${item.type}: saved automatic service contacts survive reopening`, await evaluate(`document.querySelector('.notice-sheet-preview').textContent.includes('0212 333 44 55') && document.querySelector('.notice-sheet-preview').textContent.includes('Doğrulanmış servis adresi') && !document.querySelector('.notice-sheet-preview').textContent.includes('Eski adres')`))
       await evaluate(`window.__noticePrintCalls=0;window.print=()=>{window.__noticePrintCalls++};[...document.querySelectorAll('.notice-sheet-modal button')].find(b=>b.textContent.trim()==='Yazdır').click()`)
       await until(`document.querySelector('#notice-sheet-title')?.textContent==='Yazdırma Önizlemesi'`)
       check(`${item.type}: explicit preview precedes the printer dialog`, await evaluate(`window.__noticePrintCalls===0 && getComputedStyle(document.querySelector('.notice-sheet-editor')).display==='none'`))

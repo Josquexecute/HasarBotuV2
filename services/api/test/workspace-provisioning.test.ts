@@ -25,6 +25,7 @@ import {
 import { createAgentApiClient, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
 import { resolveFileLocations } from '../src/storage/file-location.js'
+import { runBehindRowLock } from '../test-support/row-lock-race.js'
 
 // HB-2026-175: bkz. case-lifecycle.test.ts'deki aynı sabitin açıklaması.
 const ALWAYS_READY_FRESHNESS_GATE_PATH = fileURLToPath(new URL('./fixtures/always-ready-freshness-gate.mjs', import.meta.url))
@@ -106,6 +107,16 @@ describeDb('case workspace provisioning (gerçek PostgreSQL + sentetik geçici f
   async function readPlan(caseId: string, planId: string, cookie = cookieA) {
     return app.inject({ method: 'GET', url: `/api/v1/cases/${caseId}/workspace-plans/${planId}`, headers: { cookie } })
   }
+
+  it('replays simultaneous workspace plans after case-lock contention', async () => {
+    const caseId = await createCase(cookieA, '34 RPT 191')
+    const key = uuidv7()
+    const responses = await runBehindRowLock(pool, 'SELECT id FROM cases WHERE id=$1 FOR UPDATE', [caseId], () => plan(caseId, key))
+    expect(responses.map(response => response.statusCode)).toEqual(Array(5).fill(201))
+    for (const response of responses) expect(response.json()).toEqual(responses[0]!.json())
+    expect((await pool.query('SELECT 1 FROM case_workspace_provisionings WHERE case_id=$1', [caseId])).rowCount).toBe(1)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
+  })
 
   beforeAll(async () => {
     config = assertTestDatabaseUrl(TEST_URL as string)

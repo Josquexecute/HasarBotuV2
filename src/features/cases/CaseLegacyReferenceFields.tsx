@@ -40,13 +40,14 @@ export function CaseLegacyReferenceFields({ item, references }: {
     : references?.experts.find((entry) => entry.id === item.expertUserId)?.displayName
       ?? references?.users.find((entry) => entry.id === item.expertUserId)?.displayName
       ?? 'V2 ataması mevcut')
-  const service = item.eksist?.serviceName ?? item.serviceProfile?.name
+  const service = item.serviceDetails?.name ?? item.eksist?.serviceName ?? item.serviceProfile?.name
     ?? (item.serviceId === null || item.serviceId === undefined
       ? null
       : references?.services.find((entry) => entry.id === item.serviceId)?.name ?? 'V2 servisi mevcut')
   return (
     <>
       <ReferenceField label="Servis" current={service} legacy={legacy.serviceNames} />
+      {item.serviceDetails && <><div><dt>Servis telefonu</dt><dd>{item.serviceDetails.phone || '—'}</dd></div><div><dt>Servis adresi</dt><dd>{item.serviceDetails.address || '—'}</dd></div></>}
       <ReferenceField label="Sorumlu" current={responsible} legacy={legacy.responsibleNames} />
       <ReferenceField label="Eksper" current={expert} legacy={legacy.expertNames} />
     </>

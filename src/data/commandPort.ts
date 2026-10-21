@@ -13,6 +13,7 @@ import { mapCaseDtoToRecord } from './httpAdapter'
 const CASES_ROUTE = '/api/v1/cases'
 
 export interface CaseCreateInput {
+  readonly serviceDetails?: { name: string; phone?: string | null; address?: string | null }
   readonly caseType: 'traffic' | 'casco'
   readonly plate: string
   readonly workflowStage?: string
@@ -28,6 +29,7 @@ export interface CaseCreateInput {
 }
 
 export interface CaseUpdateInput {
+  readonly serviceDetails?: { name: string; phone?: string | null; address?: string | null } | null
   readonly caseType?: 'traffic' | 'casco'
   readonly serviceRevision?: { readonly name: string }
   readonly expectedVersion: number

@@ -7,6 +7,12 @@
       "items": {
         "type": "object",
         "properties": {
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "id": {
             "type": "string",
             "minLength": 1,

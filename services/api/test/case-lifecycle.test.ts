@@ -24,6 +24,7 @@ import {
 import { createAgentApiClient, executeFileOperation, nodeFileSystemAdapter, runOnce, type AgentConfig } from '@hasarbotu/file-agent'
 import { buildApp, hashPassword } from '../src/index.js'
 import { reconcileOfficeFolderInventory } from '../src/cases/office-folder-inventory.js'
+import { runBehindRowLock } from '../test-support/row-lock-race.js'
 
 // HB-2026-175: HB-2026-171'in fail-closed freshness-gate dispatch kapısı
 // (workspace/file_operation/labor_workbook_apply) gerçek bir freshnessGate
@@ -760,4 +761,29 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
       .toEqual({ lifecycle_status: 'open', workflow_stage: 'ready_to_close' })
     expect((await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE action='case_lifecycle.manual_recovery_required' AND resource_id=$1", [planned.id])).rows[0]).toEqual({ n: 1 })
   }, 60_000)
+  it.each(['close-plan', 'reopen-plan', 'approve', 'cancel'] as const)('replays simultaneous lifecycle %s commands after row-lock contention', async kind => {
+    const plates = { 'close-plan': '34 RPT 211', 'reopen-plan': '34 RPT 212', approve: '34 RPT 213', cancel: '34 RPT 214' }
+    const seeded = await seedCase(plates[kind], true)
+    const input = { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' }
+    const key = uuidv7()
+    let operation: ReturnType<typeof caseLifecycleOperationResponseSchema.parse>['operation'] | undefined
+    if (kind !== 'close-plan') {
+      const response = await planClose(seeded.caseId, input)
+      expect(response.statusCode).toBe(201)
+      operation = caseLifecycleOperationResponseSchema.parse(response.json()).operation
+      if (kind === 'reopen-plan') {
+        expect((await approve(seeded.caseId, operation)).statusCode).toBe(202)
+        expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
+      }
+    }
+    const command = () => kind === 'close-plan' ? planClose(seeded.caseId, input, adminCookie, key)
+      : kind === 'reopen-plan' ? planReopen(seeded.caseId, { expectedCaseVersion: 2, expectedLocationVersion: 2, reason: 'Reviewed reopen', targetWorkflowStage: 'under_repair' }, key)
+        : kind === 'approve' ? approve(seeded.caseId, operation!, key)
+          : app.inject({ method: 'POST', url: `/api/v1/cases/${seeded.caseId}/lifecycle-operations/${operation!.id}/cancel`, headers: { cookie: adminCookie, [IDEMPOTENCY_KEY_HEADER]: key }, payload: { expectedVersion: operation!.version, cancelled: true } })
+    const lockQuery = kind === 'cancel' ? 'SELECT id FROM case_lifecycle_operations WHERE id=$1 FOR UPDATE' : 'SELECT id FROM cases WHERE id=$1 FOR UPDATE'
+    const responses = await runBehindRowLock(pool, lockQuery, [kind === 'cancel' ? operation!.id : seeded.caseId], command)
+    expect(responses.map(response => response.statusCode)).toEqual(Array(5).fill(kind === 'approve' ? 202 : kind === 'cancel' ? 200 : 201))
+    for (const response of responses) expect(response.json()).toEqual(responses[0]!.json())
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
+  })
 })

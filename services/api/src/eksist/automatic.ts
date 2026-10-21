@@ -3,9 +3,10 @@ import { eksistCaseDataSchema, type CaseListItem, type EksistCaseData } from '@h
 import { eksistKey, getEksistFieldValues, matchEksistReference, parseEksist } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { ReferenceCheckError } from '../cases/write-store.js'
+import { saveServiceContact } from '../cases/service-contact.js'
 
 /** Reparse the stored original, never trust browser-supplied names or vehicle fields. */
-export async function applyEksistSource(client: pg.PoolClient, organizationId: string, caseId: string, sourceId: string, text: string, serviceRevision?: { name: string }, review?: { method: string; expertReview?: { name: string; confirmed: true }; insurerReview?: { name: string; confirmed: true } }): Promise<EksistCaseData> {
+export async function applyEksistSource(client: pg.PoolClient, organizationId: string, caseId: string, sourceId: string, text: string, actorUserId: string, serviceRevision?: { name: string }, review?: { method: string; expertReview?: { name: string; confirmed: true }; insurerReview?: { name: string; confirmed: true } }): Promise<EksistCaseData> {
   const data = parseEksist(text)
   if (review?.insurerReview) {
     const selected = getEksistFieldValues(text, 'Sigorta Şirketi').find(name => name === review.insurerReview!.name)
@@ -46,13 +47,14 @@ export async function applyEksistSource(client: pg.PoolClient, organizationId: s
   const nameKey = (name: string) => name.normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR')
   const matchedExperts = experts.rows.filter(expert => nameKey(expert.name) === nameKey(data.expert))
   await client.query('UPDATE cases SET notification_form_number=$3,insurer_id=$4,expert_user_id=$5,service_center_id=$6 WHERE organization_id=$1 AND id=$2', [organizationId, caseId, snapshot.assignmentDateText, insurerId, matchedExperts.length === 1 ? matchedExperts[0]!.id : null, matchEksistReference(snapshot.serviceName, services.rows)])
+  await saveServiceContact(client, organizationId, caseId, actorUserId, undefined, { text, name: snapshot.serviceName, revised: snapshot.serviceRevised })
   return snapshot
 }
 
 /** Batched opt-in enrichment keeps existing strict read clients compatible. */
 export async function withEksistData(pool: pg.Pool, organizationId: string, items: readonly CaseListItem[]): Promise<CaseListItem[]> {
   if (!items.length) return []
-  const rows = await pool.query<{ case_id: string; automatic: unknown }>(`SELECT case_id,reviewed_fields->'automatic' AS automatic FROM eksist_sources WHERE organization_id=$1 AND case_id=ANY($2::uuid[]) AND reviewed_fields ? 'automatic'`, [organizationId, items.map(item => item.id)])
+  const rows = await pool.query<{ case_id: string; automatic: unknown }>(`SELECT DISTINCT ON(case_id) case_id,reviewed_fields->'automatic' AS automatic FROM eksist_sources WHERE organization_id=$1 AND case_id=ANY($2::uuid[]) AND reviewed_fields ? 'automatic' ORDER BY case_id,created_at DESC,id DESC`, [organizationId, items.map(item => item.id)])
   const byCase = new Map(rows.rows.map(row => [row.case_id, eksistCaseDataSchema.parse(row.automatic)]))
   return items.map(item => { const eksist = byCase.get(item.id); return eksist ? { ...item, eksist } : item })
 }

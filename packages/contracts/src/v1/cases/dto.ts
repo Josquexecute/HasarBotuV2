@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { caseServiceContactSchema } from './service.js'
 import {
   caseIdSchema,
   caseStageSchema,
@@ -28,6 +29,7 @@ import { eksistCaseDataSchema } from '../eksist-case.js'
  * - Sunum alani veya Turkce sabit etiket yoktur.
  */
 const caseDtoShape = {
+  serviceDetails: caseServiceContactSchema.nullable().optional(),
   eksist: eksistCaseDataSchema.optional(),
   id: caseIdSchema,
   caseType: caseTypeSchema.nullable(),
@@ -88,6 +90,7 @@ export const caseDetailWithLegacyReferencesSchema = caseDetailSchema.extend({
 export type CaseDetailWithLegacyReferences = z.infer<typeof caseDetailWithLegacyReferencesSchema>
 
 export const caseDetailQuerySchema = z.strictObject({
+  includeServiceDetails: z.literal('true').optional(),
   includeLegacyReferences: z.literal('true').optional(),
   includeEksist: z.literal('true').optional(),
 })

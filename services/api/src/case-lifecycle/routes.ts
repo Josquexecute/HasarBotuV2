@@ -97,6 +97,13 @@ export function registerCaseLifecycleRoutes(app: FastifyInstance, options: CaseL
       const outcome = kind === 'close'
         ? await store.planClose(actor, params.data.caseId, body.data as never, idem)
         : await store.planReopen(actor, params.data.caseId, body.data as never, idem)
+      if (outcome.kind !== 'ok') {
+        const raced = await store.findIdempotent(session.user.organizationId, scope, key)
+        if (raced !== undefined) {
+          if (raced.requestHash !== requestHash) return reply.code(409).send(failureBody('idempotency_conflict', 'Idempotency key was used with a different request.', requestId))
+          return reply.code(raced.responseStatus).send(raced.responseBody)
+        }
+      }
       if (outcome.kind === 'not_found') return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
       if (outcome.kind === 'version_conflict') return reply.code(409).send(failureBody('version_conflict', 'Case or location version changed.', requestId))
       if (outcome.kind === 'lifecycle_conflict') return reply.code(409).send(failureBody('lifecycle_conflict', 'Case lifecycle does not permit this operation.', requestId))
@@ -167,6 +174,13 @@ export function registerCaseLifecycleRoutes(app: FastifyInstance, options: CaseL
       const outcome = kind === 'approve'
         ? await store.approve(actor, params.data.caseId, params.data.operationId, expectedOperationType ?? 'close', body.data as never, idem)
         : await store.cancel(actor, params.data.caseId, params.data.operationId, body.data as never, idem)
+      if (outcome.kind !== 'ok') {
+        const raced = await store.findIdempotent(session.user.organizationId, scope, key)
+        if (raced !== undefined) {
+          if (raced.requestHash !== requestHash) return reply.code(409).send(failureBody('idempotency_conflict', 'Idempotency key was used with a different request.', requestId))
+          return reply.code(raced.responseStatus).send(raced.responseBody)
+        }
+      }
       if (outcome.kind === 'not_found') return reply.code(404).send(failureBody('not_found', 'Lifecycle operation not found.', requestId))
       if (outcome.kind === 'version_conflict') return reply.code(409).send(failureBody('version_conflict', 'Lifecycle operation version changed.', requestId))
       if (outcome.kind === 'stale') return reply.code(409).send(failureBody('lifecycle_stale', 'Lifecycle operation snapshot is stale.', requestId))

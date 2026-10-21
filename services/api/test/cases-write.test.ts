@@ -392,6 +392,61 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect((await pool.query('SELECT workflow_stage FROM cases WHERE id=$1', [caseId])).rows[0].workflow_stage).toBe('ready_to_close')
   })
 
+  it.each(['casco', 'traffic'])('persists editable %s service contacts through create, reload, sheet and replacement', async caseType => {
+    const contact = { name: 'Manual Repair', phone: '0212 555 01 01', address: 'Synthetic Street 10' }
+    const created = await app.inject({ method: 'POST', url: CASES_ROUTE, headers: { cookie, 'idempotency-key': uuidv7() }, payload: { caseType, plate: '34 TST 432', serviceDetails: contact } })
+    expect(created.statusCode, created.payload).toBe(201)
+    const item = created.json().case
+    expect(item.serviceId).toBeNull()
+    expect(item.serviceDetails).toEqual(contact)
+    const read = () => app.inject({ url: `${CASES_ROUTE}/${item.id}?includeServiceDetails=true`, headers: { cookie } })
+    expect((await read()).json().case.serviceDetails).toEqual(contact)
+    const legacy = await app.inject({ url: `${CASES_ROUTE}/${item.id}`, headers: { cookie } })
+    expect(legacy.json().case).not.toHaveProperty('serviceDetails')
+    const sheetUrl = `${CASES_ROUTE}/${item.id}/notice-sheet`
+    const sheetHeaders = { cookie, 'x-hasarbotu-notice-sheet-fields': '2' }
+    expect((await app.inject({ url: sheetUrl, headers: sheetHeaders })).json().defaults.fields).toMatchObject({ serviceName: contact.name, servicePhone: contact.phone, serviceAddress: contact.address })
+    const saved = await app.inject({ method: 'PUT', url: sheetUrl, headers: sheetHeaders, payload: { expectedVersion: null, confirmed: true, overrides: { fields: { servicePhone: '0212 555 99 99' }, documents: {} } } })
+    expect(saved.statusCode, saved.payload).toBe(200)
+    const edit = await app.inject({ method: 'PATCH', url: `${CASES_ROUTE}/${item.id}`, headers: { cookie }, payload: { expectedVersion: 1, serviceDetails: { name: contact.name, address: 'Corrected Address' } } })
+    expect(edit.statusCode, edit.payload).toBe(200)
+    expect((await read()).json().case.serviceDetails).toEqual({ ...contact, address: 'Corrected Address' })
+    expect((await app.inject({ url: sheetUrl, headers: sheetHeaders })).json().overrides.fields.servicePhone).toBe('0212 555 99 99')
+    const replace = await app.inject({ method: 'PATCH', url: `${CASES_ROUTE}/${item.id}`, headers: { cookie }, payload: { expectedVersion: 2, serviceDetails: { name: 'Different Repair' } } })
+    expect(replace.statusCode, replace.payload).toBe(200)
+    expect((await read()).json().case.serviceDetails).toEqual({ name: 'Different Repair', phone: null, address: null })
+    const changedSheet = (await app.inject({ url: sheetUrl, headers: sheetHeaders })).json()
+    expect(changedSheet.defaults.fields).toMatchObject({ serviceName: 'Different Repair', servicePhone: '', serviceAddress: '' })
+    expect(changedSheet.overrides.fields).not.toHaveProperty('servicePhone')
+    expect(changedSheet.version).toBeGreaterThan(saved.json().version)
+  })
+
+  it('copies registered phone, permits corrections, and rejects a mismatched service identity', async () => {
+    await pool.query('UPDATE service_centers SET phone=$2 WHERE id=$1', [serviceId, '0216 555 22 22'])
+    const references = await app.inject({ url: '/api/v1/references/services?includeContacts=true', headers: { cookie } })
+    expect(references.json().items).toContainEqual(expect.objectContaining({ id: serviceId, phone: '0216 555 22 22' }))
+    const legacyReferences = await app.inject({ url: '/api/v1/references/services', headers: { cookie } })
+    expect(legacyReferences.json().items.find((row: { id: string }) => row.id === serviceId)).not.toHaveProperty('phone')
+    const created = await app.inject({ method: 'POST', url: CASES_ROUTE, headers: { cookie, 'idempotency-key': uuidv7() }, payload: { caseType: 'casco', plate: '34 TST 433', serviceId, serviceDetails: { name: 'Merkez Servis' } } })
+    expect(created.statusCode, created.payload).toBe(201)
+    expect(created.json().case.serviceDetails).toEqual({ name: 'Merkez Servis', phone: '0216 555 22 22', address: null })
+    const bad = await app.inject({ method: 'POST', url: CASES_ROUTE, headers: { cookie, 'idempotency-key': uuidv7() }, payload: { caseType: 'casco', plate: '34 TST 434', serviceId, serviceDetails: { name: 'Another Repair' } } })
+    expect(bad.statusCode).toBe(400)
+    expect(bad.json().error.fieldErrors).toContainEqual(expect.objectContaining({ code: 'service_identity_mismatch' }))
+    const id = created.json().case.id
+    const edit = await app.inject({ method: 'PATCH', url: `${CASES_ROUTE}/${id}`, headers: { cookie }, payload: { expectedVersion: 1, serviceDetails: { name: 'Merkez Servis', phone: null, address: 'New Address' } } })
+    expect(edit.statusCode, edit.payload).toBe(200)
+    expect(edit.json().case.serviceDetails).toEqual({ name: 'Merkez Servis', phone: null, address: 'New Address' })
+    const sheet = await app.inject({ url: `${CASES_ROUTE}/${id}/notice-sheet`, headers: { cookie, 'x-hasarbotu-notice-sheet-fields': '2' } })
+    expect(sheet.json().defaults.fields).toMatchObject({ servicePhone: '', serviceAddress: 'New Address' })
+    await pool.query('UPDATE service_centers SET is_active=false WHERE id=$1', [serviceId])
+    try {
+      const correction = await app.inject({ method: 'PATCH', url: `${CASES_ROUTE}/${id}`, headers: { cookie }, payload: { expectedVersion: 2, serviceDetails: { name: 'Merkez Servis', phone: '0212 555 44 44' } } })
+      expect(correction.statusCode, correction.payload).toBe(200)
+      expect(correction.json().case).toMatchObject({ serviceId, serviceDetails: { name: 'Merkez Servis', phone: '0212 555 44 44', address: 'New Address' } })
+    } finally { await pool.query('UPDATE service_centers SET is_active=true WHERE id=$1', [serviceId]) }
+  })
+
   it('sinirlar: bos guncelleme 400; baska org dosyasi 404; oturumsuz 401; plaka degistirilemez (strict)', async () => {
     const created = await createCase('34 JJJ 222')
     const caseId = created.body.case?.id as string

@@ -51,6 +51,7 @@ export interface UserReferenceRecord {
 }
 
 export interface ServiceReferenceRecord extends NamedReferenceRecord {
+  readonly phone?: string | null
   readonly serviceType: 'authorized' | 'private' | 'glass' | 'mobile' | 'other'
   readonly isActive: boolean
   readonly agreement: ServiceAgreementEvaluationRecord

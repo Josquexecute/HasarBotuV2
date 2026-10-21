@@ -50,4 +50,27 @@ describe('İhbar föyü kaynak eşlemesi', () => {
     expect(buildNoticeSheetDefaults({ ...source, serviceName: 'Eski Servis', eksistServiceRevised: false, eksistText }).fields)
       .toMatchObject({ servicePhone: '0333 333 33 33', serviceAddress: 'Tamirhane açık adresi' })
   })
+  it('uses a named inspection location matching the reviewed casco service', () => {
+    const eksistText = 'Atama Yapan İletişim Bilgileri\nTelefon: 0111 111 11 11\nAçık Adres: Atayan adresi\nEkspertiz Yeri Bilgileri\nEkspertiz Yeri Ad/Ünvan: Yeni Servis\nTelefon: 0222 222 22 22\nAçık Adres: Güncel servis adresi\nEksper Bilgileri\nTelefon: 0444 444 44 44'
+    expect(buildNoticeSheetDefaults({ ...source, caseType: 'casco', eksistText }).fields)
+      .toMatchObject({ serviceName: 'Yeni Servis', servicePhone: '0222 222 22 22', serviceAddress: 'Güncel servis adresi' })
+  })
+  it('never borrows an inspection phone for a different named repair shop', () => {
+    const eksistText = 'Ekspertiz Yeri Bilgileri\nEkspertiz Yeri Ad/Ünvan: Başka Servis\nTelefon: 0111 111 11 11\nAçık Adres: Başka adres\nTamirhane Ad / Ünvan: Yeni Servis\nEksper Bilgileri'
+    expect(buildNoticeSheetDefaults({ ...source, eksistServiceRevised: false, eksistText }).fields)
+      .toMatchObject({ servicePhone: '', serviceAddress: '' })
+  })
+  it('does not combine a sheet-only replacement name with automatic contacts', () => {
+    const defaults = buildNoticeSheetDefaults({ ...source, servicePhone: '0111 111 11 11', serviceAddress: 'Önceki servis adresi' })
+    expect(applyNoticeSheetOverrides(defaults, { fields: { serviceName: 'Föye özel servis' }, documents: {} }).fields)
+      .toMatchObject({ serviceName: 'Föye özel servis', servicePhone: '', serviceAddress: '' })
+    expect(applyNoticeSheetOverrides(defaults, { fields: { serviceName: 'Föye özel servis', servicePhone: '0222 222 22 22', serviceAddress: 'Elle girilen adres' }, documents: {} }).fields)
+      .toMatchObject({ servicePhone: '0222 222 22 22', serviceAddress: 'Elle girilen adres' })
+  })
+  it.each(['traffic', 'casco'] as const)('prefers assigned %s directory contacts and leaves missing information blank', caseType => {
+    expect(buildNoticeSheetDefaults({ ...source, caseType, servicePhone: '0333 333 33 33', serviceAddress: 'Güncel kayıt adresi' }).fields)
+      .toMatchObject({ servicePhone: '0333 333 33 33', serviceAddress: 'Güncel kayıt adresi' })
+    expect(buildNoticeSheetDefaults({ ...source, caseType, eksistText: null }).fields)
+      .toMatchObject({ servicePhone: '', serviceAddress: '' })
+  })
 })

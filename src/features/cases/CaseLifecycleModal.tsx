@@ -30,6 +30,16 @@ const TERMINAL = new Set(['closed', 'reopened', 'failed', 'stale', 'cancelled', 
 
 function failureMessage(operation: LifecycleOperationRecord): string {
   const messages: Record<string, string> = {
+    source_missing: 'Kaynak klasör bulunamadı. Klasör konumunu ve depolama bağlantısını yöneticiyle kontrol edin.',
+    destination_exists: 'Hedef klasör zaten var. Kaynak ve hedefi yöneticiyle kontrol edin; klasörleri birleştirmeyin.',
+    storage_unavailable: 'Depolama bağlantısı mevcut değil. Bağlantı yeniden sağlandıktan sonra klasör erişimini kontrol edin.',
+    unknown_root_mapping: 'Depolama konumu bu File Agent üzerinde tanımlı değil. Yönetici yapılandırmayı kontrol etmeli.',
+    source_evidence_missing: 'Kaynak klasör işlem sırasında bulunamadı; hedefin bu işleme ait olduğunu doğrulayan taşıma kanıtı yok veya uyuşmuyor. Kaynak, hedef ve işlem kayıtları yönetici tarafından doğrulanmalı. Otomatik yeniden deneme durduruldu.',
+    manual_drift_detected: 'Kaynak ve hedef klasörlerin içerikleri farklı. Her iki klasörü koruyun ve yönetici incelemesi isteyin.',
+    destination_manifest_mismatch: 'Hedef klasörün dosya sayısı, boyutu veya içerik özeti kaynakla uyuşmuyor. Yönetici bütünlük kontrolü yapmalı.',
+    staging_manifest_mismatch: 'Hazırlama alanının içeriği kaynakla uyuşmuyor. Kurtarma kanıtlarını koruyun ve yönetici incelemesi isteyin.',
+    ambiguous_filesystem_state: 'Birden fazla klasör veya hazırlama alanı bulundu; güvenli hedef belirlenemedi. Manuel kurtarma gerekiyor.',
+    case_changed_after_move: 'Fiziksel taşıma sonrasında dosya kaydı değişti. Kapanış kesinleştirilmedi; klasör ve kayıtlar yönetici tarafından eşleştirilmeli.',
     case_not_fresh: 'Klasörün güncelliği doğrulanamadı. Senkronizasyon ve klasör erişimini kontrol edin.',
     access_denied: 'Klasöre erişilemedi veya klasör başka bir uygulamada açık. Açık evrakları kapatın ve klasör izinlerini kontrol edin.',
     file_locked: 'Klasör veya içindeki dosya kullanımda. Açık dosyaları kapatın.',

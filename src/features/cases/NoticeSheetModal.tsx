@@ -80,6 +80,9 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
     if (!sheet || !canEdit) return
     setDraft(current => {
       const next = { ...current.fields }
+      if (key === 'serviceName' && value !== fields?.serviceName) {
+        for (const contact of ['serviceContact', 'servicePhone', 'serviceAddress'] as const) delete next[contact]
+      }
       if (value === sheet.defaults.fields[key]) delete next[key]
       else next[key] = value
       return { ...current, fields: next }
@@ -167,7 +170,14 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
                   return <label key={field.key}><span>{field.label}{Object.hasOwn(draft.fields, field.key) && <small> · Düzenlendi</small>}</span>
                     {field.multiline ? <textarea aria-label={field.label} value={fields[field.key]} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} rows={field.key === 'inspectionNotes' ? 6 : 3} onChange={event => changeField(field.key, event.target.value)} />
                       : <input aria-label={field.label} value={fields[field.key]} type={field.date ? 'date' : 'text'} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} onChange={event => changeField(field.key, event.target.value)} />}
-                    {Object.hasOwn(draft.fields, field.key) && <button type="button" className="notice-sheet-reset" onClick={() => setDraft(current => { const next = { ...current.fields }; delete next[field.key]; return { ...current, fields: next } })}>Otomatik bilgiyi kullan</button>}
+                    {Object.hasOwn(draft.fields, field.key) && <button type="button" className="notice-sheet-reset" onClick={() => setDraft(current => {
+                      const next = { ...current.fields }
+                      delete next[field.key]
+                      if (field.key === 'serviceName') {
+                        for (const contact of ['serviceContact', 'servicePhone', 'serviceAddress'] as const) delete next[contact]
+                      }
+                      return { ...current, fields: next }
+                    })}>Otomatik bilgiyi kullan</button>}
                   </label>
                 })}</div>
               </details>)}

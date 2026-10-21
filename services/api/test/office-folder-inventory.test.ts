@@ -139,4 +139,25 @@ describeDb('verified office folder inventory', () => {
     const rows = (await pool.query('SELECT id,is_archived FROM cases WHERE id=ANY($1::uuid[])', [ids])).rows
     expect(ids.map(id => rows.find(row => row.id === id)?.is_archived)).toEqual([true, false, false])
   })
+  it('defers a missing source under manual recovery when its destination appears, preserving identity, reservation and audit', async () => {
+    const folder = await register('2026 OFİS/Ekim 2026/63HST123')
+    const location = (await pool.query('SELECT l.* FROM case_locations l JOIN case_folder_registrations r ON r.case_id=l.case_id WHERE r.source_folder_id=$1', [folder.sourceFolderId])).rows[0]
+    const operationId = uuidv7(), destination = '2026 OFİS/Ekim 2026/KAPALI DOSYALAR/63HST123'
+    await pool.query(`INSERT INTO case_file_operations(id,organization_id,case_id,operation_type,source_storage_root_key,source_relative_path,
+      destination_storage_root_key,destination_relative_path,expected_location_id,expected_location_version,status,strategy,idempotency_key_hash,request_hash,failure_reason_code)
+      VALUES($1,$2,$3,'move_case_workspace','office',$4,'office',$5,$6,$7,'manual_recovery_required','atomic_rename',$8,$9,'source_evidence_missing')`,
+    [operationId, policy.organizationId, location.case_id, folder.relativePath, destination, location.id, location.version, 'e'.repeat(64), 'f'.repeat(64)])
+    const snapshot = async () => ({
+      cases: (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=$1', [location.case_id])).rows,
+      locations: (await pool.query('SELECT to_jsonb(l) snapshot FROM case_locations l WHERE case_id=$1', [location.case_id])).rows,
+      registrations: (await pool.query('SELECT to_jsonb(r) snapshot FROM case_folder_registrations r WHERE case_id=$1', [location.case_id])).rows,
+      operations: (await pool.query('SELECT to_jsonb(o) snapshot FROM case_file_operations o WHERE id=$1', [operationId])).rows,
+      audits: (await pool.query('SELECT to_jsonb(a) snapshot FROM audit_events a WHERE resource_id=ANY($1::text[]) ORDER BY id', [[location.case_id, operationId]])).rows,
+    })
+    const before = await snapshot()
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(await reconcile([{ ...folder, relativePath: destination }])).toMatchObject({ inventoryDeferred: 1 })
+      expect(await snapshot()).toEqual(before)
+    }
+  })
 })

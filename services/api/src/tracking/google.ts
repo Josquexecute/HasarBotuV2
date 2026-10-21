@@ -76,12 +76,15 @@ export function createGoogleProvider(config: GoogleConfig, fetchImpl: typeof fet
   let keysExpireAt = 0
   async function json(url: string, init: RequestInit = {}) {
     const response = await fetchImpl(url,{ ...init, redirect: 'error', signal: AbortSignal.timeout(20_000) })
-    const body: unknown = await response.json()
     if (!response.ok) {
-      const error = body as { error?: string | { status?: string } }
-      throw new GoogleProviderError(response.status === 401 || error.error === 'invalid_grant' || (response.status === 403 && typeof error.error === 'object' && error.error.status === 'PERMISSION_DENIED') ? 'permission_required' : 'temporary',response.status)
+      // Proxies and revoked credentials may return an empty or non-JSON error body.
+      const body: unknown = await response.json().catch(() => undefined)
+      const error = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined
+      const permissionDenied = response.status === 403 && error !== null && typeof error === 'object'
+        && 'status' in error && error.status === 'PERMISSION_DENIED'
+      throw new GoogleProviderError(response.status === 401 || error === 'invalid_grant' || permissionDenied ? 'permission_required' : 'temporary',response.status)
     }
-    return body
+    return response.json() as Promise<unknown>
   }
   async function token(params: Record<string,string>) {
     return z.object({ access_token: z.string().min(1), refresh_token: z.string().optional(), id_token: z.string().optional(), scope: z.string().optional() }).parse(await json('https://oauth2.googleapis.com/token',{

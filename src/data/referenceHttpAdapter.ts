@@ -61,11 +61,11 @@ function parseUsers(items: readonly unknown[]): CaseReferenceWorkspace['users'] 
 
 function parseServices(items: readonly unknown[]): CaseReferenceWorkspace['services'] {
   return items.map((item) => {
-    if (!objectWithKeys(item, ['id', 'name', 'serviceType', 'isActive', 'agreement']) || !nonEmpty(item.id) || !nonEmpty(item.name) ||
-      !isServiceType(item.serviceType) || typeof item.isActive !== 'boolean') {
+    if (!objectWithKeys(item, ['id', 'name', 'serviceType', 'isActive', 'agreement', ...(typeof (item as Record<string, unknown>)?.phone === 'undefined' ? [] : ['phone'])]) || !nonEmpty(item.id) || !nonEmpty(item.name) ||
+      (item.phone !== undefined && item.phone !== null && typeof item.phone !== 'string') || !isServiceType(item.serviceType) || typeof item.isActive !== 'boolean') {
       throw new ReferenceDataError('unavailable', 'invalid service reference response')
     }
-    return { id: item.id, name: item.name, serviceType: item.serviceType, isActive: item.isActive, agreement: parseAgreement(item.agreement) }
+    return { id: item.id, name: item.name, ...(item.phone === undefined ? {} : { phone: item.phone as string | null }), serviceType: item.serviceType, isActive: item.isActive, agreement: parseAgreement(item.agreement) }
   })
 }
 
@@ -98,7 +98,7 @@ export function createHttpReferenceDataAdapter(options: ReferenceAdapterOptions 
   const headers = options.headers ?? {}
   return {
     async getCaseReferences(query: ServiceReferenceQuery = {}): Promise<CaseReferenceWorkspace> {
-      const serviceQuery = new URLSearchParams()
+      const serviceQuery = new URLSearchParams({ includeContacts: 'true' })
       if (query.insurerId !== undefined) serviceQuery.set('insurerId', query.insurerId)
       if (query.evaluationDate !== undefined) serviceQuery.set('evaluationDate', query.evaluationDate)
       serviceQuery.set('dateSource', query.dateSource ?? 'loss_date')

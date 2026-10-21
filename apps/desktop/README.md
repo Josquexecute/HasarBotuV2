@@ -179,7 +179,56 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.67**, 2026-10-21T04:50:51.208Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.70**, 2026-10-21T17:42:43.322Z; Windows x64,
+112.957.104 bayt, SHA-256 `7ca60e23b46800bdd6456cd5bc33cca225d87a58017d505b20d396ae0bdf16d2`.
+SBM servis adı, telefon ve adresi dosyaya birlikte kaydedilir; güncel servisle eşleşmeyen
+iletişim aktarılmaz, kullanıcı düzeltmeleri ve föy override davranışı korunur. Manuel kaskoda
+servis arama/seçme, serbest ad ve düzenlenebilir telefon/adres eklendi; açık etiketli e-posta
+bilgileri kullanıcı tarafından kontrol edilebilen öneriler üretir, belirsiz alanlar boş kalır.
+16 yeni regresyonla 3.237 benzersiz test geçti; genel koşudaki yedi atlama ayrı çalıştırıldı.
+Typecheck, lint, build, gerçek Electron A4, NSIS ve paket smoke geçti; 65 paketli UI dosyası
+hash ile eşleşti. Migration 0069 mevcut 687 dosya, 32 kaynak ve 27 föy kaydını birebir korudu;
+49 çalışma dosyası doğrulandı ve önceki dosyalar yedeklendi. Beş ofis servisi çalışıyor.
+Kurulu **0.1.68**, **0.1.70** sürümünü `available` gördü; kimlikli HTTP 200 indirmesinde tam
+boyut ve SHA-256 eşleşti. Üç gerçek kasko kaydının detay/föy servis alanları kimlikli API ile
+eşleştirildi. Önceki 0.1.69 manifesti ve değişmez kurulum korundu; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.69**, 2026-10-21T15:02:46.833Z; Windows x64,
+112.953.542 bayt, SHA-256 `3e0090cbc20ae774db44c98dd63423874111bff46bed7c4ccabfba85423018fa`.
+İhbar föyü iletişim bilgileri kendi bölümündeki güncel servis adıyla eşleştirilir;
+elle kaydedilen alanlar korunur, servis değişiminde eski iletişim yeni servise bağlanmaz.
+Kapanış hatalarının gerçek kodları anlaşılır açıklamalarla gösterilir. 18 yeni regresyonla
+3.221 benzersiz test geçti; genel koşudaki yedi atlama ayrı çalıştırılarak doğrulandı.
+Typecheck, lint, üretim derlemesi, gerçek Electron A4 çıktısı, NSIS ve paket açılışı geçti;
+65 paketli UI dosyası hash ile eşleşti. Migration 0068 mevcut 27 föyü içerik ve sürümleriyle
+birebir korudu; 10 çalışma dosyası doğrulandı ve önceki dosyalar yedeklendi. Beş ofis servisi çalışıyor.
+Kurulu **0.1.68**, yeni sürümü `available` gördü; kimlikli HTTP 200 indirmesinde tam boyut
+ve SHA-256 eşleşti. Önceki manifest ve değişmez kurulum korundu; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.68**, 2026-10-21T10:21:45.983Z; Windows x64,
+112.952.528 bayt, SHA-256 `6d1ea7e526ea292e468a69051e38cf073ad94fa082b9b42fef80b606fcb6e623`.
+Altı hata sınıfı düzeltildi: 14 komut dalında eşzamanlı idempotency replay, ücret
+sürümü kilidi, aktif PostgreSQL bağlantı kesintisi, AI yanıt gövdesi hataları,
+Google hata yanıtları ve discovery'nin geçici kaynak değişiminde kapanması.
+56 yeni regresyon ve discovery kurtarma dalı eklendi; 3.203 benzersiz sürüm testi
+geçti. Genel koşudaki yedi atlama ayrı çalıştırılarak doğrulandı. Typecheck, lint,
+üretim derlemesi, gerçek Electron ve NSIS/paket açılışı geçti; 65 paketli UI dosyası
+hash ile eşleşti. İzole 90 dakika 1,9 saniyede 5/10 kullanıcıyla 60.227 istek ve
+267 fotoğraf hatasız tamamlandı; bağlantı düzeltmesinden sonraki ek 10 dakika
+8 saniyede 6.764 istek ve 36 fotoğraf hatasız geçti. Havuz en çok 10 bağlantı,
+bekleyen bağlantı 0; fiziksel fotoğraf hash'leri ve transaction/audit tutarlılığı
+doğrulandı. Ayrı Electron kontrolünde oturumun yeniden açılışta korunması,
+400 SPA geçişi ve ağ kesintisinden toparlanma geçti.
+25 çalışma dosyası yedeklenip hash ile doğrulandı. Beş ofis servisi çalışıyor;
+son discovery taraması 628 klasörde PASS, yeni operasyon hatası 0. Kurulu
+**0.1.67**, **0.1.68** sürümünü `available` gördü; kimlikli HTTP 200 indirmesinde
+tam boyut ve SHA-256 eşleşti. Önceki manifest ve değişmez kurulum korundu;
+zorla kurulum yapılmadı, tanılama görevi ve inspector kapatıldı.
+Denetim sonucu **PARTIAL**: 52 grup kaynak/testlerden yeniden eşlendi; tüm hata
+dallarının eksiksiz E2E doğrulandığı iddia edilmez. Gerçek ücretli AI, SBM ve
+pCloud yazma sandbox'ları ile tarihsel manuel kurtarma için operatör kanıtı eksik.
+
+Önceki doğrulanan ofis yayını: **0.1.67**, 2026-10-21T04:50:51.208Z; Windows x64,
 112.952.619 bayt, SHA-256 `7b2e96847fc9aca66afeb5a9c44b85dba4c438d3d454204e12bad9e27a550e57`.
 Kapanışla çakışan belge/fotoğraf kayıtları, tekrar gönderimler, kaynak kurtarma,
 tarih sıralaması ve oturum depolama hataları düzeltildi. 28 doğrudan bağımlılık,

@@ -29,9 +29,17 @@ export function createDatabasePool(options: CreatePoolOptions): pg.Pool {
     connectionTimeoutMillis: options.connectionTimeoutMillis ?? DEFAULT_CONNECTION_TIMEOUT_MS,
     idleTimeoutMillis: options.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
   })
-  // pg-pool removes the broken idle client. Never log the raw error: it may
-  // contain connection details. Health checks still query the actual database.
-  pool.on('error', () => console.error('database_pool_idle_connection_error'))
+  const reportedErrors = new WeakSet<Error>()
+  const reportConnectionError = (error: Error, diagnostic: string) => {
+    if (reportedErrors.has(error)) return
+    reportedErrors.add(error)
+    console.error(diagnostic)
+  }
+  // pg-pool handles idle client errors, but detaches that listener on checkout.
+  // Keep a listener through active queries and rollback after a lost connection.
+  pool.on('connect', client => client.on('error', error => reportConnectionError(error, 'database_pool_client_connection_error')))
+  // The same idle error also reaches the pool. Log it once without connection details.
+  pool.on('error', error => reportConnectionError(error, 'database_pool_idle_connection_error'))
   return pool
 }
 

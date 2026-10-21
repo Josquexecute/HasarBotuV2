@@ -20,6 +20,21 @@ function setup(overrides: Partial<NoticeSheetDataPort> = {}, fixture = noticeShe
 }
 
 describe('İhbar föyü düzenleme ve yazdırma', () => {
+  it('clears previous service contacts on a sheet-only service change and saves the new explicit contacts', async () => {
+    const fixture = { ...noticeSheetFixture, overrides: { fields: { servicePhone: '0111 111 11 11', serviceAddress: 'Önceki elle girilmiş adres' }, documents: {} } }
+    const { dialog, user, port } = setup({}, fixture)
+    await dialog.findByRole('article')
+    expect(dialog.getByLabelText('Servis telefonu')).toHaveValue('0111 111 11 11')
+    await user.clear(dialog.getByLabelText('Servis adı'))
+    await user.type(dialog.getByLabelText('Servis adı'), 'Föye özel yeni servis')
+    expect(dialog.getByLabelText('Servis telefonu')).toHaveValue('')
+    expect(dialog.getByLabelText('Servis adresi')).toHaveValue('')
+    await user.type(dialog.getByLabelText('Servis telefonu'), '0222 222 22 22')
+    await user.type(dialog.getByLabelText('Servis adresi'), 'Yeni elle girilmiş adres')
+    await user.click(dialog.getByRole('button', { name: 'Kaydet' }))
+    expect(port.save).toHaveBeenCalledWith(fixture.caseId, expect.objectContaining({ overrides: { fields: { serviceName: 'Föye özel yeni servis', servicePhone: '0222 222 22 22', serviceAddress: 'Yeni elle girilmiş adres' }, documents: {} } }))
+    expect(dialog.getByRole('article')).toHaveTextContent('Yeni elle girilmiş adres')
+  })
   it('previews the correct traffic parties, dates and verified document checks', async () => {
     const { dialog } = setup()
     expect(await dialog.findByRole('article')).toHaveAccessibleName('Trafik ihbar föyü A4')

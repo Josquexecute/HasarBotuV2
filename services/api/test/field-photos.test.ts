@@ -2,7 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import pg from 'pg'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { fork } from 'node:child_process'
+import { createServer, request as httpRequest } from 'node:http'
+import { fileURLToPath } from 'node:url'
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCanvas } from '@napi-rs/canvas'
@@ -212,5 +215,85 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
     expect(reserved).not.toContain(row.output_file_name)
     expect((await readFile(join(folder, row.output_file_name))).subarray(0, 2)).toEqual(Buffer.from([255,216]))
     expect(await readFile(join(originalDirectory, `${upload.id}.bin`))).toEqual(jpeg)
+  }, 60000)
+  it('recovers a real worker process terminated after physical publication without duplicating the photo', async () => {
+    await pool.query("UPDATE field_photo_uploads SET status='failed',lease_expires_at=NULL WHERE status IN ('queued','processing')")
+    const upload = await receive()
+    const folder = join(physicalRoot, relativePath)
+    const gate = join(work, 'process-recovery-freshness.mjs')
+    await writeFile(gate, 'console.log(JSON.stringify({CaseStatus:"ready"}))\n')
+    const temporary = join(work, 'worker-temporary')
+    await mkdir(temporary)
+    const config = { apiBaseUrl: origin, agentId, agentSecret, roots: { office: physicalRoot }, leaseSeconds: 120, pollIntervalMs: 100,
+      freshnessGate: { toolPath: gate, pcloudLocalDatabasePath: join(work, 'fixture.db'), topLevelFolderName: 'Synthetic', attestationStoreDirectory: work } }
+    let publicationReached!: () => void
+    const published = new Promise<void>(done => { publicationReached = done })
+    const proxy = createServer((incoming, outgoing) => {
+      if (incoming.url === `/api/v1/field-agent/uploads/${upload.id}/complete`) {
+        publicationReached()
+        incoming.socket.destroy()
+        return
+      }
+      const upstream = httpRequest(origin + incoming.url, { method: incoming.method, headers: incoming.headers }, response => {
+        outgoing.writeHead(response.statusCode!, response.headers)
+        response.pipe(outgoing)
+      })
+      upstream.on('error', () => { outgoing.destroy() })
+      incoming.pipe(upstream)
+    })
+    await new Promise<void>(done => proxy.listen(0, '127.0.0.1', done))
+    const address = proxy.address() as { port: number }
+    const worker = fork(fileURLToPath(new URL('../test-support/field-photo-process.mjs', import.meta.url)), [], {
+      env: { ...process.env, TEMP: temporary, TMP: temporary }, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    })
+    const exited = new Promise<void>(done => worker.once('exit', () => done()))
+    try {
+      worker.send({ ...config, apiBaseUrl: `http://127.0.0.1:${address.port}` })
+      await Promise.race([published, exited.then(() => { throw new Error('worker exited before publication') })])
+      worker.kill()
+      await exited
+      const interrupted = (await pool.query('SELECT status,output_file_name,output_hash,photo_id FROM field_photo_uploads WHERE id=$1', [upload.id])).rows[0]
+      expect(interrupted).toMatchObject({ status: 'processing', photo_id: null })
+      const before = await readFile(join(folder, interrupted.output_file_name))
+      expect(digest(before)).toBe(interrupted.output_hash)
+      // Advance the persisted lease deadline instead of waiting three minutes.
+      await pool.query("UPDATE field_photo_uploads SET lease_expires_at=now()-interval '1 second' WHERE id=$1", [upload.id])
+      expect(await runFieldPhotoOnce(config)).toBe(true)
+      const recovered = (await pool.query('SELECT status,output_file_name,output_hash,photo_id,attempt_count FROM field_photo_uploads WHERE id=$1', [upload.id])).rows[0]
+      expect(recovered).toMatchObject({ status: 'ready', output_file_name: interrupted.output_file_name, output_hash: interrupted.output_hash, attempt_count: 2 })
+      expect(recovered.photo_id).not.toBeNull()
+      expect(await readFile(join(folder, recovered.output_file_name))).toEqual(before)
+      expect(await readFile(join(originalDirectory, `${upload.id}.bin`))).toEqual(jpeg)
+      expect((await pool.query('SELECT 1 FROM photos WHERE id=$1', [recovered.photo_id])).rowCount).toBe(1)
+      expect((await pool.query("SELECT 1 FROM audit_events WHERE action='photo.upload_published' AND details->>'uploadId'=$1", [upload.id])).rowCount).toBe(1)
+      expect((await readdir(folder)).some(name => name.startsWith('.hb-'))).toBe(false)
+    } finally {
+      if (worker.exitCode === null && worker.signalCode === null) { worker.kill(); await exited }
+      proxy.closeAllConnections()
+      await new Promise<void>(done => proxy.close(() => done()))
+    }
+  }, 60000)
+
+  it('preserves queued original bytes across loss and restoration of the physical storage root', async () => {
+    await pool.query("UPDATE field_photo_uploads SET status='failed',lease_expires_at=NULL WHERE status IN ('queued','processing')")
+    const upload = await receive()
+    const gate = join(work, 'storage-recovery-freshness.mjs')
+    await writeFile(gate, 'console.log(JSON.stringify({CaseStatus:"ready"}))\n')
+    const config = { apiBaseUrl: origin, agentId, agentSecret, roots: { office: physicalRoot }, leaseSeconds: 120, pollIntervalMs: 100,
+      freshnessGate: { toolPath: gate, pcloudLocalDatabasePath: join(work, 'fixture.db'), topLevelFolderName: 'Synthetic', attestationStoreDirectory: work } }
+    const offline = join(work, 'offline-root')
+    await rename(physicalRoot, offline)
+    try {
+      expect(await runFieldPhotoOnce(config)).toBe(true)
+      expect((await pool.query('SELECT status,last_error_code,photo_id FROM field_photo_uploads WHERE id=$1', [upload.id])).rows[0])
+        .toEqual({ status: 'queued', last_error_code: 'photo_write_failed', photo_id: null })
+      expect(await readFile(join(originalDirectory, `${upload.id}.bin`))).toEqual(jpeg)
+    } finally { await rename(offline, physicalRoot) }
+    await pool.query('UPDATE field_photo_uploads SET next_attempt_at=now() WHERE id=$1', [upload.id])
+    expect(await runFieldPhotoOnce(config)).toBe(true)
+    const row = (await pool.query('SELECT status,output_file_name,output_hash FROM field_photo_uploads WHERE id=$1', [upload.id])).rows[0]
+    expect(row.status).toBe('ready')
+    expect(digest(await readFile(join(physicalRoot, relativePath, row.output_file_name)))).toBe(row.output_hash)
+    expect((await pool.query("SELECT 1 FROM audit_events WHERE action='photo.upload_published' AND details->>'uploadId'=$1", [upload.id])).rowCount).toBe(1)
   }, 60000)
 })

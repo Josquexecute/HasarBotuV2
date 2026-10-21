@@ -18,6 +18,7 @@ import {
   type DatabaseConfig,
 } from '@hasarbotu/database'
 import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { runBehindRowLock } from '../test-support/row-lock-race.js'
 
 const TEST_URL = process.env.TEST_DATABASE_URL
 const describeDb = TEST_URL === undefined || TEST_URL.length === 0 ? describe.skip : describe
@@ -392,6 +393,7 @@ describeDb('Paket 41 e-posta taslak ve Gmail handoff gerçek API', () => {
     expect((await pool.query('SELECT count(*)::int AS n FROM email_handoffs WHERE draft_id=$1', [draft.id])).rows).toEqual([{ n: 1 }])
   })
 
+
   it('audit yalnız güvenli özet taşır; gövde, alıcı, yol ve secret sızmaz', async () => {
     const audits = await pool.query(
       `SELECT action,details::text AS details
@@ -409,5 +411,17 @@ describeDb('Paket 41 e-posta taslak ve Gmail handoff gerçek API', () => {
     expect(serialized).not.toContain('Kullanıcı tarafından kontrollü')
     expect(serialized).not.toContain('Sentetik Ön Rapor.pdf')
     expect(serialized).not.toMatch(/[A-Za-z]:[\\/]|\\\\|password|secret/i)
+  })
+  it('replays simultaneous draft revisions without adding extra immutable versions', async () => {
+    const draft = emailDraftWorkspaceResponseSchema.parse((await app.inject({ url: draftsUrl(), headers: { cookie: managerCookie } })).json()).drafts[0]!
+    const payload = { expectedVersion: draft.version, to: ['synthetic@example.test'], cc: [], subject: 'Concurrent reviewed revision', body: 'Reviewed body', attachments: [], reason: 'Concurrent review', confirmed: true }
+    const key = uuidv7()
+    const responses = await runBehindRowLock(pool, 'SELECT id FROM cases WHERE id=$1 FOR UPDATE', [caseId], () => app.inject({ method: 'POST', url: `${draftsUrl()}/${draft.id}/versions`, headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: key }, payload }))
+    expect(responses.map(response => response.statusCode)).toEqual(Array(5).fill(200))
+    for (const response of responses) expect(response.json()).toEqual(responses[0]!.json())
+    const updated = emailDraftResponseSchema.parse(responses[0]!.json()).draft
+    expect(updated.version).toBe(draft.version + 1)
+    expect(updated.versions).toHaveLength(draft.versions.length + 1)
+    expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=$1', [key])).rowCount).toBe(1)
   })
 })

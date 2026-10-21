@@ -1,6 +1,12 @@
 export { trackedDocumentTypeSchema, inferTrackedDocumentType, TRACKED_DOCUMENT_LABELS } from './v1/tracking.js'
 export { ACCOUNT_PROFILE_ROUTE, accountDisplayNameSchema, accountProfileSchema, accountProfileUpdateSchema, adminProfileUpdateSchema, type AccountProfile } from './v1/account-profile.js'
 export {
+  caseServiceContactInputSchema,
+  caseServiceContactSchema,
+  type CaseServiceContactInput,
+  type CaseServiceContact,
+} from './v1/cases/service.js'
+export {
   // primitives
   MAX_ID_LENGTH,
   MAX_PLATE_LENGTH,

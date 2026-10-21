@@ -27,7 +27,7 @@ import {
 } from '@hasarbotu/contracts'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
-import { withTransaction } from '../db/executor.js'
+import { withTransaction, type Queryable } from '../db/executor.js'
 import { findIdempotent, insertIdempotent, isIdempotencyRace } from '../db/idempotency.js'
 
 export const FEE_CANDIDATE_SCOPE = 'closure_fee.candidate'
@@ -273,8 +273,9 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
   async function guard(
     actor: ActorContext,
     idem: IdempotencyContext,
+    exec: Queryable = pool,
   ): Promise<FeeCommandOutcome | undefined> {
-    const existing = await findIdempotent(pool, actor.organizationId, idem.scope, idem.key)
+    const existing = await findIdempotent(exec, actor.organizationId, idem.scope, idem.key)
     if (existing === undefined) return undefined
     if (existing.requestHash !== idem.requestHash) return { kind: 'idempotency_conflict' }
     return { kind: 'replay', status: existing.responseStatus, body: existing.responseBody }
@@ -583,6 +584,8 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
           const source = await sourceForCase(
             client, actor.organizationId, caseId, input.sourceDocumentVersionId, true,
           )
+          const replay = await guard(actor, idem, client)
+          if (replay !== undefined) return replay
           if (source === undefined) {
             const caseExists = await client.query(
               'SELECT 1 FROM cases WHERE organization_id=$1 AND id=$2',
@@ -659,6 +662,10 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
       if (existing !== undefined) return existing
       try {
         return await withTransaction(pool, async (client): Promise<FeeCommandOutcome> => {
+          // Read the current-version join only after the fee lock has been acquired.
+          await client.query('SELECT id FROM fee_records WHERE organization_id=$1 AND id=$2 FOR UPDATE', [actor.organizationId, feeId])
+          const replay = await guard(actor, idem, client)
+          if (replay !== undefined) return replay
           const result = await client.query(
             `SELECT fee.id,fee.case_id,fee.version,fee.current_version_id,current.status,
                     current.candidate_amount_minor,current.source_document_version_id,
@@ -740,6 +747,9 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
       if (existing !== undefined) return existing
       try {
         return await withTransaction(pool, async (client): Promise<FeeCommandOutcome> => {
+          await client.query('SELECT id FROM fee_records WHERE organization_id=$1 AND id=$2 FOR UPDATE', [actor.organizationId, feeId])
+          const replay = await guard(actor, idem, client)
+          if (replay !== undefined) return replay
           const result = await client.query(
             `SELECT fee.id,fee.case_id,fee.version,fee.current_version_id,current.status,
                     current.fee_version

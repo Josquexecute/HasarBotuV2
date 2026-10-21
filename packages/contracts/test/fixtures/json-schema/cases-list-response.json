@@ -7,6 +7,41 @@
       "items": {
         "type": "object",
         "properties": {
+          "serviceDetails": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "phone": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "address": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "phone",
+                  "address"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "eksist": {
             "type": "object",
             "properties": {
@@ -194,6 +229,12 @@
               {
                 "type": "object",
                 "properties": {
+                  "phone": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "id": {
                     "type": "string",
                     "minLength": 1,
