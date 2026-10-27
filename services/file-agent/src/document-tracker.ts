@@ -12,7 +12,7 @@ import { createWindowsFileHasher } from './windows-file-hasher.js'
 const execFileAsync = promisify(execFile)
 const TRACKING_METADATA_DIRECTORIES = new Set(['_HASARBOTU','_HASARBOTU_OFFICE'])
 // Windows sharing rules prevent reading a copy whose writer still holds the file open.
-const WINDOWS_HASH = `$ErrorActionPreference='Stop'; $s=$null; $h=$null; try { $s=[IO.File]::Open($env:HB_TRACKED_FILE,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read); $h=[Security.Cryptography.SHA256]::Create(); $bytes=$h.ComputeHash($s); @{hash=([BitConverter]::ToString($bytes).Replace('-','').ToLowerInvariant());size=$s.Length}|ConvertTo-Json -Compress } catch [IO.IOException] { exit 3 } finally { if($h){$h.Dispose()}; if($s){$s.Dispose()} }`
+const WINDOWS_HASH = `$ErrorActionPreference='Stop'; $s=$null; $h=$null; try { $s=[IO.File]::Open($env:HB_TRACKED_FILE,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::Read -bor [IO.FileShare]::Delete)); $h=[Security.Cryptography.SHA256]::Create(); $bytes=$h.ComputeHash($s); @{hash=([BitConverter]::ToString($bytes).Replace('-','').ToLowerInvariant());size=$s.Length}|ConvertTo-Json -Compress } catch [IO.IOException] { exit 3 } finally { if($h){$h.Dispose()}; if($s){$s.Dispose()} }`
 
 export async function hashClosedFile(path: string): Promise<{ hash: string; size: number } | undefined> {
   if (process.platform === 'win32') {

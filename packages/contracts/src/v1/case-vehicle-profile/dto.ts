@@ -8,6 +8,7 @@ import {
   MAX_VEHICLE_TEXT_LENGTH,
   MIN_VEHICLE_MODEL_YEAR,
   VEHICLE_CLASSES,
+  VEHICLE_TRANSMISSIONS,
   VEHICLE_EVIDENCE_SOURCES,
 } from '@hasarbotu/domain'
 import {
@@ -29,6 +30,7 @@ const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum)
 export const caseVehicleProfileParamsSchema = z.strictObject({ caseId: caseIdSchema })
 
 export const caseVehicleProfileFieldsSchema = z.strictObject({
+  transmission: z.enum(VEHICLE_TRANSMISSIONS).optional(),
   brand: boundedText(MAX_VEHICLE_TEXT_LENGTH),
   model: boundedText(MAX_VEHICLE_TEXT_LENGTH),
   modelYear: z.number().int().min(MIN_VEHICLE_MODEL_YEAR).max(MAX_VEHICLE_MODEL_YEAR),
@@ -50,6 +52,7 @@ export const caseVehicleProfileSaveRequestSchema = z.strictObject({
 })
 
 export const caseVehicleProfileVersionSchema = z.strictObject({
+  transmission: z.enum(VEHICLE_TRANSMISSIONS).default('unknown'),
   id: idSchema,
   profileVersion: entityVersionSchema,
   previousVersionId: idSchema.nullable(),
@@ -69,6 +72,7 @@ export const caseVehicleProfileVersionSchema = z.strictObject({
 })
 
 export const caseVehicleProfileResponseSchema = z.strictObject({
+  transmission: z.enum(VEHICLE_TRANSMISSIONS).optional(),
   caseId: caseIdSchema,
   profileId: idSchema.nullable(),
   version: entityVersionSchema.nullable(),

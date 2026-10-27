@@ -1,3 +1,4 @@
+import './test-display.mjs'
 import { app } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { startDesktopShell } from '../../dist/main/shell.js'

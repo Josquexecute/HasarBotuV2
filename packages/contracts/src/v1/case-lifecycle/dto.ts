@@ -13,7 +13,7 @@ import {
   utcDateTimeSchema,
 } from '../../common/primitives.js'
 import { requirementStatusSchema } from '../document-requirements/index.js'
-import { logicalStorageReferenceSchema, fileOperationStatusSchema } from '../file-operations/index.js'
+import { logicalStorageReferenceSchema, fileOperationStatusSchema, fileLockInfoSchema } from '../file-operations/index.js'
 import { closeModeSchema } from './commands.js'
 import { serviceAgreementEvaluationSchema } from '../references/dto.js'
 import { trafficValueLossClosureSummarySchema } from '../traffic-value-loss/closure.js'
@@ -50,6 +50,7 @@ export const lifecycleRequirementSummarySchema = z.strictObject({
 export const linkedFileOperationSchema = z.strictObject({
   id: idSchema,
   status: fileOperationStatusSchema,
+  fileLock: fileLockInfoSchema.nullable().optional(),
 }).nullable()
 
 export const caseLifecycleOperationSchema = z.strictObject({

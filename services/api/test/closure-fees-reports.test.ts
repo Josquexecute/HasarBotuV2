@@ -516,4 +516,26 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
     expect(updated.history).toHaveLength(updated.version)
     expect((await pool.query('SELECT 1 FROM idempotency_keys WHERE idem_key=ANY($1::text[])', [keys])).rowCount).toBe(1)
   })
+
+  it('keeps the saved manual service name in fees and monthly pending-fee reports', async () => {
+    const caseId = uuidv7()
+    const serviceId = (await pool.query('SELECT id FROM service_centers WHERE organization_id=$1', [organizationId])).rows[0].id as string
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,lifecycle_status,workflow_stage,plate,plate_normalized,service_center_id,created_at)
+      VALUES($1,$2,2026,9931,'2026/9931','traffic','open','reporting','34 SVC 931','34SVC931',$3,'2026-07-18T10:00:00Z')`, [caseId, organizationId, serviceId])
+    const edited = await app.inject({ method: 'PATCH', url: `/api/v1/cases/${caseId}`, headers: { cookie: managerCookie },
+      payload: { expectedVersion: 1, serviceDetails: { name: 'Manual Fee Repair', phone: '0212 555 66 77' } } })
+    expect(edited.statusCode, edited.payload).toBe(200)
+    expect(edited.json().case.serviceId).toBeNull()
+    await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',closed_at='2026-07-20T10:00:00Z' WHERE id=$1", [caseId])
+    const sourceDocumentVersionId = await seedExpertReport(caseId, 'ready')
+    const created = await app.inject({ method: 'POST', url: candidateUrl(caseId), headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { expectedCaseVersion: edited.json().case.version, candidateAmountMinor: 100_000, sourceDocumentVersionId, sourcePage: 1 } })
+    expect(created.statusCode, created.payload).toBe(201)
+    const fees = await app.inject({ url: FEES_ROUTE, headers: { cookie: managerCookie } })
+    expect(fees.statusCode).toBe(200)
+    expect(closureFeeListResponseSchema.parse(fees.json()).items.find(item => item.caseId === caseId)?.serviceName).toBe('Manual Fee Repair')
+    const report = await app.inject({ url: `${CASE_SUMMARY_REPORT_ROUTE}?period=2026-07`, headers: { cookie: managerCookie } })
+    expect(report.statusCode).toBe(200)
+    expect(caseSummaryReportResponseSchema.parse(report.json()).pendingFees.find(item => item.caseId === caseId)?.serviceName).toBe('Manual Fee Repair')
+  })
 })

@@ -2,6 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "transmission": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "manual",
+        "automatic",
+        "semi_automatic"
+      ]
+    },
     "caseId": {
       "type": "string",
       "minLength": 1,
@@ -38,6 +47,16 @@
         {
           "type": "object",
           "properties": {
+            "transmission": {
+              "default": "unknown",
+              "type": "string",
+              "enum": [
+                "unknown",
+                "manual",
+                "automatic",
+                "semi_automatic"
+              ]
+            },
             "id": {
               "type": "string",
               "minLength": 1,
@@ -175,6 +194,7 @@
             }
           },
           "required": [
+            "transmission",
             "id",
             "profileVersion",
             "previousVersionId",
@@ -205,6 +225,16 @@
       "items": {
         "type": "object",
         "properties": {
+          "transmission": {
+            "default": "unknown",
+            "type": "string",
+            "enum": [
+              "unknown",
+              "manual",
+              "automatic",
+              "semi_automatic"
+            ]
+          },
           "id": {
             "type": "string",
             "minLength": 1,
@@ -342,6 +372,7 @@
           }
         },
         "required": [
+          "transmission",
           "id",
           "profileVersion",
           "previousVersionId",

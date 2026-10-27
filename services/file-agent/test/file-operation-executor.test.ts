@@ -1,8 +1,11 @@
 import { access, appendFile, lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { JobPayload } from '@hasarbotu/contracts'
+import { diagnoseWindowsLocks } from '../src/windows-lock-diagnostics.js'
 import {
   buildWorkspaceManifest,
   executeFileOperation,
@@ -52,6 +55,44 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
   }
 
   const roots = () => ({ 'source-root': sourceRoot, 'destination-root': destinationRoot })
+
+  it.skipIf(process.platform !== 'win32').each(['file', 'directory'] as const)('identifies a real Windows %s handle without delete sharing and preserves all data', async kind => {
+    const path = kind === 'file' ? join(sourceRoot, sourceRelative, 'not.txt') : join(sourceRoot, sourceRelative)
+    const script = `$ErrorActionPreference='Stop';Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;using Microsoft.Win32.SafeHandles;public static class TestLock{[DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]public static extern SafeFileHandle CreateFile(string p,uint a,uint s,IntPtr x,uint c,uint f,IntPtr t);}'; $s=[TestLock]::CreateFile($env:HB_LOCK_TEST,1,3,[IntPtr]::Zero,3,0x02000000,[IntPtr]::Zero);if($s.IsInvalid){exit 2};try{[Console]::WriteLine('ready');[Console]::ReadLine()|Out-Null}finally{$s.Dispose()}`
+    const holder = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, env: { ...process.env, HB_LOCK_TEST: path } })
+    try {
+      await once(holder.stdout, 'data')
+      expect(await diagnoseWindowsLocks(join(sourceRoot, sourceRelative))).toMatchObject({ applications: expect.arrayContaining([{ pid: holder.pid, name: 'powershell' }]) })
+      const result = await executeFileOperation(roots(), applyPayload())
+      expect(result).toMatchObject({ outcome: 'failed', errorCode: 'file_locked', fileLock: { applications: expect.arrayContaining([{ pid: holder.pid, name: 'powershell' }]) } })
+      expect(await readFile(join(sourceRoot, sourceRelative, 'not.txt'), 'utf8')).toBe('sentetik-not')
+      const exit = once(holder, 'exit'); holder.stdin.end('\n'); await exit
+      expect(await executeFileOperation(roots(), applyPayload())).toMatchObject({ outcome: 'verified' })
+    } finally {
+      if (holder.exitCode === null) { const exit = once(holder, 'exit'); holder.stdin.end('\n'); await exit }
+    }
+  }, 35_000)
+
+  it('rechecks the source manifest after a transient sharing violation before retrying', async () => {
+    let attempts = 0
+    const adapter = { ...nodeFileSystemAdapter, async rename(source: string, destination: string) {
+      if (++attempts === 1) { await writeFile(join(source, 'not.txt'), 'changed during lock'); throw errno('EBUSY') }
+      await nodeFileSystemAdapter.rename(source, destination)
+    } }
+    expect(await executeFileOperation(roots(), applyPayload(), adapter)).toMatchObject({ outcome: 'failed', errorCode: 'source_evidence_mismatch' })
+    expect(attempts).toBe(1)
+    expect(await readFile(join(sourceRoot, sourceRelative, 'not.txt'), 'utf8')).toBe('changed during lock')
+  })
+
+  it('completes a transient sharing violation without another user approval', async () => {
+    let attempts = 0
+    const adapter = { ...nodeFileSystemAdapter, async rename(source: string, destination: string) {
+      if (++attempts === 1) throw errno('EBUSY')
+      await nodeFileSystemAdapter.rename(source, destination)
+    } }
+    expect(await executeFileOperation(roots(), applyPayload(), adapter)).toMatchObject({ outcome: 'verified' })
+    expect(attempts).toBe(2)
+  })
 
   it('requires manual recovery when the source is missing, even if a destination exists', async () => {
     const payload = applyPayload()
@@ -343,8 +384,8 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
         await nodeFileSystemAdapter.rename(source, destination)
       },
     }
-    expect(await executeFileOperation(roots(), cleanupPayload, adapter)).toEqual({ outcome: 'failed', errorCode: 'file_locked' })
-    await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).resolves.toBeUndefined()
+    expect(await executeFileOperation(roots(), cleanupPayload, adapter)).toMatchObject({ outcome: 'verified', fileOperation: { phase: 'cleanup_completed' } })
+    await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
     expect((await executeFileOperation(roots(), cleanupPayload)).outcome).toBe('verified')
   })
 

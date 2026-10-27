@@ -567,5 +567,43 @@ Assert-ForeignContentIntact -TargetDir $f29.TargetDir -Message 'Rollback SONRASI
 Remove-Item $f29.Root -Recurse -Force -ErrorAction SilentlyContinue
 if ($r29rollback.Json.PreRollbackBackupPath) { Remove-Item $r29rollback.Json.PreRollbackBackupPath -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item "$($r29rollback.Json.PreRollbackBackupPath).manifest.json" -Force -ErrorAction SilentlyContinue }
 
+Write-Output "`n=== TEST 30: service/workspace notices and external LICENSE/NOTICE survive verified deployment ==="
+$f30 = New-SourceFixture
+$cf30 = New-ClosureFixture
+[System.IO.File]::WriteAllText((Join-Path $f30.SourceDir 'THIRD-PARTY-NOTICES.txt'), 'service dependency licenses')
+[System.IO.File]::WriteAllText((Join-Path $cf30.WorkspaceInternalRoot 'THIRD-PARTY-NOTICES.txt'), 'workspace dependency licenses')
+[System.IO.File]::WriteAllText((Join-Path $cf30.ExternalRoot 'LICENSE'), 'external license text')
+[System.IO.File]::WriteAllText((Join-Path $cf30.ExternalRoot 'NOTICE'), 'external copyright notice')
+$r30 = Invoke-DeployJson -Params @{ SourceDir = $f30.SourceDir; TargetDir = $f30.TargetDir; ServiceLabel = 'test30'; DependencyClosureManifestPath = $cf30.ClosureManifestPath; RepoRoot = $cf30.RepoRoot; Apply = $true }
+Assert-True ($r30.ExitCode -eq 0) 'Notice deployment applied'
+Assert-True ($r30.Json.AllowlistFileCount -eq 11) 'All code and license files included exactly once'
+foreach ($pair in @(
+    @((Join-Path $f30.SourceDir 'THIRD-PARTY-NOTICES.txt'), (Join-Path $f30.TargetDir 'THIRD-PARTY-NOTICES.txt')),
+    @((Join-Path $cf30.WorkspaceInternalRoot 'THIRD-PARTY-NOTICES.txt'), (Join-Path $f30.TargetDir 'node_modules\@hasarbotu\demo-internal\THIRD-PARTY-NOTICES.txt')),
+    @((Join-Path $cf30.ExternalRoot 'LICENSE'), (Join-Path $f30.TargetDir 'node_modules\demo-external\LICENSE')),
+    @((Join-Path $cf30.ExternalRoot 'NOTICE'), (Join-Path $f30.TargetDir 'node_modules\demo-external\NOTICE'))
+)) {
+    $present = Test-Path -LiteralPath $pair[1] -PathType Leaf
+    Assert-True $present "License file delivered: $([IO.Path]::GetFileName($pair[1]))"
+    if ($present) { Assert-True ((Get-FileHash -LiteralPath $pair[0]).Hash -eq (Get-FileHash -LiteralPath $pair[1]).Hash) 'License file SHA-256 preserved' }
+}
+[System.IO.File]::WriteAllText((Join-Path $f30.SourceDir 'THIRD-PARTY-NOTICES.txt'), 'updated dependency licenses')
+$r30Update = Invoke-DeployJson -Params @{ SourceDir = $f30.SourceDir; TargetDir = $f30.TargetDir; ServiceLabel = 'test30'; DependencyClosureManifestPath = $cf30.ClosureManifestPath; RepoRoot = $cf30.RepoRoot; Apply = $true }
+Assert-True ($r30Update.Json.Status -eq 'applied') 'Changed notice triggers verified deployment'
+$r30Restore = Invoke-DeployJson -Params @{ Rollback = $true; RollbackBackupPath = $r30Update.Json.BackupPath; TargetDir = $f30.TargetDir; ServiceLabel = 'test30'; Apply = $true }
+Assert-True ($r30Restore.Json.Status -eq 'rolled_back') 'Notice changes roll back with their code'
+Assert-True ((Get-Content -LiteralPath (Join-Path $f30.TargetDir 'THIRD-PARTY-NOTICES.txt') -Raw) -eq 'service dependency licenses') 'Original license notice restored exactly'
+foreach ($backupPath in @($r30Update.Json.BackupPath, $r30Restore.Json.PreRollbackBackupPath)) {
+    $resolvedBackup = [IO.Path]::GetFullPath($backupPath)
+    if (-not $resolvedBackup.StartsWith('C:\ProgramData\HasarBotu\migration-preflight\pre-deploy-backups\test30-', [StringComparison]::OrdinalIgnoreCase)) { throw 'TEST_CLEANUP_OUTSIDE_BACKUP_SCOPE' }
+    if (Test-Path -LiteralPath $resolvedBackup) { Remove-Item -LiteralPath $resolvedBackup -Recurse -Force }
+    if (Test-Path -LiteralPath "$resolvedBackup.manifest.json") { Remove-Item -LiteralPath "$resolvedBackup.manifest.json" -Force }
+}
+foreach ($fixtureRoot in @($f30.Root, $cf30.RepoRoot)) {
+    $resolvedFixtureRoot = [IO.Path]::GetFullPath($fixtureRoot)
+    if (-not $resolvedFixtureRoot.StartsWith([IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'TEST_CLEANUP_OUTSIDE_TEMP' }
+    Remove-Item -LiteralPath $resolvedFixtureRoot -Recurse -Force
+}
+
 Write-Output "`n=== SUMMARY: $($script:failures) failure(s) ==="
 if ($script:failures -gt 0) { exit 1 } else { exit 0 }

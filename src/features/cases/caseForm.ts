@@ -36,6 +36,7 @@ export function nullableText(value: string): string | null {
 }
 
 const FIELD_LABELS: Readonly<Record<string, string>> = {
+  transmission: 'Vites',
   caseType: 'Dosya türü',
   plate: 'Plaka',
   workflowStage: 'İlk aşama',
@@ -121,3 +122,9 @@ export function makeSubmissionKey(): string {
   }
   throw new CaseCommandError('unavailable', 'secure idempotency key generation unavailable')
 }
+export const VEHICLE_TRANSMISSION_OPTIONS = [
+  { value: 'unknown', label: 'Bilinmiyor' },
+  { value: 'manual', label: 'Manuel' },
+  { value: 'automatic', label: 'Otomatik' },
+  { value: 'semi_automatic', label: 'Yarı Otomatik' },
+] as const

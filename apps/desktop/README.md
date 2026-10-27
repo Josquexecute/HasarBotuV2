@@ -111,6 +111,12 @@ Bu değişiklikten önce rastgele portlarda bırakılmış depolama otomatik ta�
 
 ## Touch Assistant tepkileri
 
+Ayarlar → Touch görünümüm → **Göz Rengi** paleti önizlemeyi ve gerçek Touch'ı
+anında günceller. **Görünümü Kaydet** rengi hesaba kaydeder; yeniden açılışta
+korunur. Kaydedilmemiş önizleme ayarlardan çıkınca geri alınır. **Otomatik göz
+rengi** gövdeye göre kontrast seçimine döner; kişisel skinler, ifadeler ve halo
+korunur. Benzer göz/gövde renklerinde karşıt renkli yumuşak kenar görünürlüğü korur.
+
 Yardımcı iki dakika etkileşim olmadığında uyur; üzerinde animasyonlu Zzz görünür.
 Uyurken fareyi takip etmez ve arka plan işlemleriyle uyanmaz; tıklanınca uyanır.
 Hareket azaltma tercihinde Zzz sabit gösterilir. Not, operasyon, belge bilgisi yükleme, PDF metni çıkarma ve
@@ -130,6 +136,16 @@ tepkisini başlatır. Bırakınca 3,6 saniyede toparlanır; yeniden tetikleme ar
 Hareketler seyrekleştirilir; hesap ve Windows hareket azaltma ayarları geçerlidir.
 Electron UI testleri varsayılan olarak ekran görüntüsü üretmez; yalnız açıkça
 istenen görsel doğrulama için `HB_CAPTURE_SCREENSHOTS=1` kullanılabilir.
+
+Bu taban hareketlere ek olarak 61 yeni tepki bulunur: dokuz art arda tıklama,
+altı hızlı tıklama, dokuz baş dönmesi/toparlanma, yedi sürükleme, üç iniş, beş
+uzun basış, on boşta hareket ve on iki nadir sürpriz. Sabır yoğun etkileşimle
+azalır; Touch yalnız bırakıldığında sakinleşir. Boşta ve sürpriz seçimleri son dört
+tepkiyi tekrarlamaz; iniş havuzu art arda aynı hareketi seçmez. Touch menüsündeki
+**Touch tepkileri** bölümünden tepki seçilir,
+sakinleştirilir, bitirilir, duraklatılır veya uyutulur/uyandırılır. Hareket azaltma
+elle oynatmayı da durdurur. Yeni sahneler tek çizim zaman çizelgesini kullanır;
+ayrı animasyon zamanlayıcıları oluşturmaz ve dosya/not işlemlerini değiştirmez.
 
 ## Ofis güncellemesi yayınlama
 
@@ -189,7 +205,166 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.72**, 2026-10-21T20:43:22.690Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.80**, 2026-10-27T11:35:26.446Z; Windows x64,
+113.000.938 bayt, SHA-256 `2652b3d54dde10ca2c69b9f851938cf4809612cb7325c2b0853e4887b15f41e1`.
+0.1.79 temelindeki bağımsız denetimde 19 ürün kusuru düzeltildi: kapalı dosya
+yetkileri, ofis tarihiyle numaralandırma, arşiv filtreleri, servis iletişimlerinin
+arama/pano/raporlara aktarımı, elle girilen servisin kapanış şartları, güncel belge
+kanıtlarının kapanış sırasında tekrar denetlenmesi ve Kasko onayının kapanışla yarışı;
+form kimliği değişiminde eski iletişimler, araç türü değişiminde gözlem kaybı,
+eksik sahip adının sessiz atılması, kayıt sürerken düzenleme ve hızlı kayıt hatası;
+geçerli klasör adı sınırı, fotoğraf kuyruğunun diğer işleri engellemesi, sonuçsuz
+OCR/PDF worker çıkışı, eksik file-agent/frontend lisans bildirimleri ve başarısız
+güncelleme indirmesinde akış kaynaklarının bırakılması. İlgili regresyonlar eklendi.
+Tam kapıda 3.391 test ve ayrıca altı gerçek HTTP/PostgreSQL adaptör testi geçti;
+yalnız Windows WebKit çapraz site SameSite kontrolü atlandı. Typecheck, lint,
+build, dağıtım kontrolleri ve bağımlılık güvenlik taraması geçti (bildirilen açık: 0).
+Gerçek NSIS kurulum, 0.1.79 → 0.1.80 yükseltme, kaldırma ve 0.1.79'a geri dönüşte
+oturum/tema/bağlantı korundu; yerel önceki kurulum ve kullanıcı profilleri geri
+doğrulandı. Görünür son testler ikinci ekranda yapıldı; iki ekran arasında taşıma
+senaryoları bu son koşuda çalıştırılmadı. Chromium/Firefox/WebKit fotoğraf akışında
+108 kontrol, 5/10 tarayıcı oturumu ve dosya hash kontrolleri geçti. Yerel API/DB
+son API/ortak kaynaklarla 20/50 oturum yükünde 26.606 istek, sıfır 500/zaman aşımı,
+p95 56 ms; kapanışta açık bağlantı sıfır. Altı dakikalık
+ölçüm uzun süreli kararlılık kanıtı değildir. Yedek/geri yüklemede 134 tablo ve
+13.657 satır ile şema nesneleri eşleşti. Kurulu **0.1.79**, **0.1.80** sürümünü
+`available` gördü; kimlikli HTTP 200 indirmesinde tam boyut ve SHA-256 eşleşti.
+Önceki 0.1.79 manifesti/paketi korundu; backend'de 46 dosya doğrulandı, değişen
+29 dosya yedeklendi. Migration/veri müdahalesi yok; beş servis sağlıklı, yeni işlem
+hatası yok. Tanılama görevi/inspector kapatıldı; zorla kurulum yapılmadı.
+**Satış öncesi durum: PARTIAL.** İki mevcut üretim klasörü kimlik çakışması
+(2026/650–640 ve 2026/725–723) güvenli biçimde engelleniyor; iş kimliği doğrulanmadan
+birleştirilmedi. Müşteriye özel dağıtım kabulü, canlı dış servis kesinti senaryoları,
+çok günlük ağır OCR/yük ve codec kaynaklarının eksiksiz dağıtım uyumu doğrulanmadı;
+Authenticode imzası yok. Mochi, kullanıcının yazılı ticari izin beyanıyla korundu.
+Kanıtlar yerel `.local/presale-audit-20261026/` altında saklandı.
+
+Önceki doğrulanan ofis yayını: **0.1.79**, 2026-10-26T15:19:07.321Z; Windows x64,
+112.999.103 bayt, SHA-256 `cf98ad6587a5ab4d6f9bfa4443ba7623666981a768d2f217cc325d7ba506ded5`.
+SBM servis adı silinip yeniden yazılırken telefon ve adres korunur; farklı kayıtlı
+servis seçildiğinde yalnız onun doğrulanmış iletişim bilgileri kullanılır.
+Her iki kayıt seçeneği, yeniden açma, elle düzeltme, revizyon iptali ve iletişimsiz
+yeni servise geçiş gerçek Electron → API → PostgreSQL zincirinde doğrulandı.
+Touch animasyonları, geçişleri ve toparlanma dizileri bitene kadar imleci izlemez;
+61 sahnede 366 gerçek Canvas karesi imleçten bağımsız çizildi. Son imleç konumu
+animasyon tamamen bitince yeniden izlenir; canlı IPC ve yumuşak geçiş kontrolü geçti.
+3.359 sürüm testi ve 111 hedefli kontrol geçti; altı HTTP/veritabanı ve dört NSIS
+kontrolü de geçti. Yalnız Windows WebKit çapraz site SameSite kontrolü atlandı.
+Typecheck, lint, build, gerçek x64 kurulum açılışı, 74 UI ve yedi main/preload
+dosyasının eşleşmesi doğrulandı. Kurulu **0.1.78**, **0.1.79** sürümünü
+`available` gördü; kimlikli HTTP 200 indirmesinde tam boyut ve SHA-256 eşleşti.
+Önceki 0.1.78 manifesti ve değişmez kurulum korundu; beş ofis servisi sağlıklı.
+Tanılama görevi ve inspector kapatıldı; çalışan istemcilere zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.78**, 2026-10-26T03:59:36.053Z; Windows x64,
+112.998.504 bayt, SHA-256 `68a530a2701851b77615c538d0b7947d28af6895f6daa1a657955bd9bbf07958`.
+61 yeni tepki, yoğunluğa göre sabır/ruh hâli, ağırlıklı ve tekrarı önleyen seçim
+ile elle oynatma, sakinleştirme, duraklatma ve uyku kontrolleri eklendi. Uzayan
+tıklama serileri tek bir küsme hareketine takılmaz. Eski baş dönmesi yıldızları,
+yeni gövde dönüşlerinden bağımsız çizilerek pencere kenarında kırpılma giderildi.
+3.352 sürüm testi ve son değişiklikleri kapsayan 70 hedef test geçti; altı canlı
+HTTP kontrolü ve dört NSIS kontrolü tamamlandı. Yalnız Windows WebKit çapraz site
+SameSite kontrolü atlandı. Gerçek Windows/Electron'da 28 kontrol, 61 animasyonda
+1.536 kare ve paketli 499 kaplama/göz kontrolü geçti. Canvas çizim çıktıları görsel
+olarak incelendi. Typecheck, lint, build ve x64 NSIS açılış smoke geçti; 74 UI ile
+yedi main/preload dosyası doğrulandı. Kurulu **0.1.75**, **0.1.78** sürümünü
+`available` gördü; kimlikli HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti.
+Önceki 0.1.77 manifesti ve değişmez kurulum korundu; beş ofis servisi sağlıklı,
+tanılama görevi/inspector kapalı. Zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.77**, 2026-10-25T20:11:55.964Z; Windows x64,
+112.985.677 bayt, SHA-256 `c50509bf7e707b6481b60d1c9daf5c561a8c1b4bb696d6a52a93c4be0b816131`.
+Kişisel Göz Rengi paleti önizlemeye ve gerçek Touch'a kaydetmeden önce yansır;
+kayıt hesap bazındadır ve tam Electron yeniden başlatmasında korunur. Skinler,
+ifadeler, hareket azaltma ve açık/koyu gövdelerde görünürlük doğrulandı.
+3.335 sürüm testi, altı canlı HTTP kontrolü, 108 UI ve 571 paketli Canvas kontrolü
+geçti; yalnız Windows WebKit çapraz site SameSite kontrolü atlandı. Windows odak
+testinin pencere hazırlığı düzeltildi; 251 masaüstü testi geçti. Typecheck, lint,
+build ve x64 NSIS açılış smoke geçti; 72 UI ve beş main/preload dosyası doğrulandı.
+Üç API çalışma dosyası yedeklenerek güncellendi; migration yapılmadı. Kurulu
+**0.1.75**, **0.1.77** sürümünü `available` gördü; kimlikli HTTP 200 indirmesinde
+tam boyut/SHA-256 eşleşti. Önceki manifest ve değişmez kurulum korundu; beş ofis
+servisi sağlıklı, tanılama görevi/inspector kapalı. Zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.76**, 2026-10-25T19:17:48.923Z; Windows x64,
+112.985.624 bayt, SHA-256 `15741e9789d680db590f0b6185d7988ecb94768e4ccaaf63a96d77c47831b281`.
+Yuvarlak logolar gövdenin içine küçük bir daire olarak sığdırılmak yerine özgün
+yuvarlatılmış gövde yüzeyine otomatik oturur; beyaz yan boşluklar giderildi.
+Fenerbahçe JPG ve iç içe arka planlı PNG gerçek ayarlar ekranından yüklenip
+kaydedildi; kullanıcının açık talebiyle gerçek pencere/masaüstü görüntüleri ve
+NSIS paketinden çıkarılan uygulama görsel olarak incelendi. Önizleme/Touch ekran
+görüntülerinde piksel farkı sıfır; gözler, siluet, animasyonlar ve halo korundu.
+102 UI kontrolü, 166 paketli Electron piksel kontrolü ve 3.328 sürüm testi geçti.
+Yeniden başlatmada kesilen masaüstü grubu 249/249 geçti; önceki grupların tamamlanan
+sonuçları korundu. Atlanan altı canlı API testi ve NSIS kontrolü ayrıca geçti;
+yalnız Windows WebKit SameSite kontrolü atlandı. Typecheck, lint, build ve x64
+kurulum smoke geçti; 72 UI ve dört main/preload dosyası doğrulandı.
+Kurulu **0.1.75**, **0.1.76** sürümünü `available` gördü; kimlikli HTTP 200
+indirmesinde tam boyut/SHA-256 eşleşti. Önceki manifest/değişmez kurulum korundu;
+beş ofis servisi sağlıklı, tanılama görevleri/inspector kapalı. Zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.75**, 2026-10-25T16:19:26.398Z; Windows x64,
+112.984.374 bayt, SHA-256 `5bb112d73a2fb74b04a3c0e23d1e7e1fcf59a75a0a5fec119761298bacf1b5b0`.
+Touch kaplaması yüklemede ana figüre göre otomatik ortalanır; boş kenarlar,
+uygun siyah/beyaz arka planlar, iç içe logo kutuları ve küçük dış lekeler ayrılır.
+Figür oranı korunarak özgün yuvarlak gövdeye sığdırılır; opak fotoğraflar gövdeyi
+doldurur. Yerleşim yalnız yüklemede hesaplanır; önizleme ve Touch kaydedilmiş
+aynı kaplamayı kullanır. Manuel ölçek/konum, gözler, animasyonlar ve halo korunur.
+Sağlanan iki görsel dahil 9 girdide gerçek yükleme, önizleme/Touch piksel eşitliği,
+ince ayar ve yeniden yükleme geçti; paket varlıklarında 162 Electron piksel
+kontrolü ve 12 görsel regresyonu geçti. Genel koşuda 3.305 test geçti; tam ekran
+CS2'nin etkilediği iki pencere sıralaması testi başarısız kaldı. Kullanıcının
+gerçek test tekrarını gereksiz bulan talebi doğrultusunda bu iki kontrol kod
+incelemesiyle değerlendirildi; dört ilgili main/preload modülü ve animasyon
+motoru doğrulanmış 0.1.74 paketiyle birebir aynı. Genel koşuda atlanan 6 canlı
+adaptör ve NSIS kontrolü ayrı ayrı geçti; Windows WebKit SameSite atlandı.
+18 yayın/keşif testi, 4 Windows kurulum testi, typecheck, lint, build ve kurulumdan
+çıkarılan x64 uygulamanın açılışı geçti; 72 UI ve dört main/preload dosyası eşleşti.
+Kurulu **0.1.74**, **0.1.75** sürümünü `available` gördü; kimlikli HTTP 200
+indirmesinde boyut ve SHA-256 eşleşti. Önceki manifest/değişmez kurulum korundu;
+beş ofis servisi sağlıklı, tanılama görevleri/inspector kapalı. Zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.74**, 2026-10-25T15:20:56.608Z; Windows x64,
+112.982.492 bayt, SHA-256 `43f220f109d155ebf04b1be4c784cba4c096c9c3d072e8aee2d308c0a0a0ec83`.
+Touch kaplaması özgün animasyon motorunun gövde yoluna uygulanır; siluet, gözler,
+yüz ifadeleri ve hareketler korunur. Siyah dış arka plan ayrılırken logonun iç
+siyah detayları korunur; vurgu yalnız arkadaki yumuşak halodur. Aynı motorla
+120×120 önizleme, ölçek/yatay/dikey konum ayarı ve kalıcı kaydetme sağlanır.
+Sağlanan iki görsel dahil beş girdide 160 gerçek Electron piksel kontrolü;
+açık/koyu zemin, saydam kenarlar, kaplamalı hareketler, PNG/JPG/WebP yükleme,
+konumlandırma, yeniden yükleme ve varsayılana dönüş geçti. 3.319 genel test ve
+ayrı altı canlı adaptör kontrolü geçti; tam ekran uygulamanın etkilediği üç
+yerel Electron kontrolü, normal ön plan koşulunda birlikte yeniden geçti.
+Windows WebKit SameSite kontrolü platform kısıtıyla atlandı. Typecheck, lint,
+build, x64 NSIS ve kurulumdan çıkarılan gerçek uygulamanın açılışı geçti;
+72 UI ve dört main/preload dosyası doğrulandı. Kurulu **0.1.73**, **0.1.74**
+sürümünü `available` gördü; kimlikli HTTP 200 indirmesinde boyut ve SHA-256
+eşleşti. Önceki manifest/değişmez kurulum korundu; beş ofis servisi sağlıklı.
+Tanılama görevleri/inspector ve doğrulama için açılan istemci kapatıldı;
+zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.73**, 2026-10-25T14:15:41.314Z; Windows x64,
+112.967.079 bayt, SHA-256 `079f1dd8f82adca7c32e9170bbbcd9179f147dc4215c93864c5a538f8fd3689b`.
+Touch üstte kalma davranışı gerçek görev çubuğu, odak değişimleri ve iki fiziksel
+monitörde doğrulandı; tam ekran ve güvenli masaüstü sınırları korunur. Vurgu rengi
+gövde detayında görünür; kişisel PNG/JPG/WebP görselleri 2 MB kaynak sınırıyla
+256 piksele dönüştürülür, önizlenir ve hesaba özel saklanır. Windows paylaşım
+kilitlerinde kontrollü yeniden deneme ve uygulama bilgisi eklenir; kalıcı kilitte
+belgeyi kaydedip kapatmak gerekir, uygulamalar zorla sonlandırılmaz. Yeni HASAR,
+ŞASE, KM ve VİTES fotoğrafları HASAR alt klasörüne gider; eski dosyalar korunur.
+Vites bilgisi oluşturma/düzenleme ve araç profilinde kalıcı ve tutarlıdır.
+3.315 genel test, altı canlı adaptör ve gerçek NSIS kontrolü geçti.
+Genel koşudaki atlamaların yedisi ayrı geçti; Windows WebKit SameSite testi
+platform kısıtıyla atlandı. Typecheck, lint, build, Windows servis/depolama
+kontrolü ve gerçek kurulum içeriğinin açılışı geçti; 69 UI ve dört ana süreç/preload
+dosyası kaynakla eşleşti. API, File Agent, web ve 0071–0073 migration birlikte
+dağıtıldı; mevcut kayıtların önce/sonra özetleri eşleşti. Kurulu **0.1.72**,
+**0.1.73** sürümünü `available` gördü ve eski dosya sözleşmesi çalıştı; kimlikli
+HTTP 200 indirmesinde tam boyut ve SHA-256 eşleşti. Önceki manifest/değişmez
+kurulum korundu; beş ofis servisi sağlıklı. Tanılama görevleri ve inspector
+kapatıldı; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.72**, 2026-10-21T20:43:22.690Z; Windows x64,
 112.961.755 bayt, SHA-256 `0afadaaa1fcd9ef7698058b8ccd8d6ab036c34b0d9fd9aa661df9c936017dfb0`.
 Touch tıklama ritimleri, uzun basış evreleri, üç iniş, 11 tekrarsız boşta hareket ve
 hızlı sallamada bulantı/toparlanma eklendi. Normal sürükleme, ekran sınırları ve

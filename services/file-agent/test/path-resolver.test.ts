@@ -17,6 +17,13 @@ describe('isUnderRoot', () => {
     expect(isUnderRoot('/srv/root', '/srv/other')).toBe(false)
     expect(isUnderRoot('/srv/root', '/srv/rootother')).toBe(false)
   })
+
+  it('iki noktayla başlayan sıradan adları traversal sanmaz', () => {
+    const root = resolve(tmpdir(), 'hb-dot-prefix-root')
+    expect(isUnderRoot(root, join(root, '..archive', 'policy.pdf'))).toBe(true)
+    expect(resolveUnderRoot(root, '..archive/policy.pdf')).toBe(join(root, '..archive', 'policy.pdf'))
+    expect(isUnderRoot(root, resolve(root, '..'))).toBe(false)
+  })
 })
 
 describe('resolveUnderRoot (leksik güvenlik)', () => {

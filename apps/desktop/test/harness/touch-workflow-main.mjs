@@ -1,5 +1,6 @@
-import { app } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { getTestDisplay, seedTestAssistantPosition } from './test-display.mjs'
+import { app, desktopCapturer } from 'electron'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { startDesktopShell } from '../../dist/main/shell.js'
 import { startDesktopAssistant } from '../../dist/main/assistant.js'
@@ -14,7 +15,14 @@ const evaluate = (code) => shell.window.webContents.executeJavaScript(code)
 const until = async (code) => {
   const deadline = Date.now() + 15_000
   while (!await evaluate(code)) {
-    if (Date.now() > deadline) throw new Error(`UI condition timed out: ${code}`)
+    if (Date.now() > deadline) {
+      const appearance = await evaluate(`(() => {
+        const c = document.querySelector('.assistant-skin-preview'), colors = {}
+        if (c) { const p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; for (let i=0;i<p.length;i+=4) { const key=[...p.slice(i,i+4)].join(','); colors[key]=(colors[key]||0)+1 } }
+        return { notice: document.querySelector('.assistant-appearance-editor > [role=status]')?.textContent, sliders: document.querySelectorAll('.assistant-appearance-editor input[type=range]').length, colors: Object.entries(colors).sort((a,b)=>b[1]-a[1]).slice(0,8) }
+      })()`)
+      throw new Error(`UI condition timed out: ${code}; ${JSON.stringify(appearance)}`)
+    }
     await delay(80)
   }
 }
@@ -33,6 +41,7 @@ const screenshot = async (name, contents = shell.window.webContents) => {
 async function boot() {
   shell = await startDesktopShell({ apiOrigin: process.env.HB_TOUCH_API, assetRoot: process.env.HB_TOUCH_ASSETS, userDataPath: app.getPath('userData'), show: false })
   hideToTrayOnClose(app, shell.window)
+  seedTestAssistantPosition()
   helper = await startDesktopAssistant({ shell, assetRoot: process.env.HB_TOUCH_ASSETS, userDataPath: app.getPath('userData'), quit: () => app.quit() })
   helper.window.hide()
   await until('!!document.querySelector(".login-card, .app-shell")')
@@ -101,6 +110,16 @@ void app.whenReady().then(async () => {
     await navigate(`/dosyalar/${process.env.HB_TOUCH_CASE}`)
     await until('!!document.querySelector(".vehicle-profile")')
     check('technical vehicle fields initially collapsed', await evaluate('!document.querySelector(".vehicle-profile__technical").open'))
+    for (const [label, value] of [['Marka', 'Sentetik Marka'], ['Model', 'Örnek Model']]) {
+      await evaluate(`(()=>{const label=[...document.querySelectorAll('.vehicle-profile label')].find(e=>e.firstElementChild?.textContent.trim()===${JSON.stringify(label)});const input=label.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}))})()`)
+    }
+    await evaluate(`(()=>{const select=document.querySelector('.vehicle-profile [aria-label="Vites"]');select.value='automatic';select.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+    await evaluate(`[...document.querySelectorAll('.vehicle-profile button')].find(e=>e.textContent.trim()==='Araç profilini kaydet').click()`)
+    await until(`document.querySelector('.vehicle-profile')?.textContent.includes('Sürüm 1')`)
+    await evaluate(`[...document.querySelectorAll('.case-detail-head__actions button')].find(e=>e.textContent.includes('Temel Bilgileri Düzenle')).click()`)
+    await until(`!!document.querySelector('.modal--case-form')`)
+    check('saving profile transmission refreshes the existing case edit form without navigation', await evaluate(`[...document.querySelectorAll('.modal--case-form label')].find(e=>e.firstElementChild?.textContent==='Vites').querySelector('select').value==='automatic'`))
+    await click('.modal--case-form [aria-label="Pencereyi kapat"]')
     await evaluate('[...document.querySelectorAll(".case-detail-head__actions button")].find(button => button.textContent === "Dosyayı Kapat").click()')
     await until('!!document.querySelector(".modal--case-lifecycle")')
       await until('!![...document.querySelectorAll(".modal--case-lifecycle button")].find(button => button.textContent === "Önizleme Oluştur" && !button.disabled)')
@@ -183,6 +202,140 @@ void app.whenReady().then(async () => {
     check('personal palette changes actual panel styles after API save', await menuEval('document.querySelector(".desktop-assistant-panel").style.getPropertyValue("--accent") === "#15803d"'))
     const mainSessionResponse = await shell.window.webContents.session.fetch(`${shell.origin}/api/v1/me/assistant-appearance`, { credentials: 'include', redirect: 'error' })
     check('main-process update transport retains the authenticated HttpOnly session', mainSessionResponse.ok && (await mainSessionResponse.json()).appearance.accentColor === '#15803d')
+    await click('.assistant-appearance-motion input')
+    const skinCases = [
+      { name: 'transparent padded PNG', type: 'image/png', width: 320, height: 160, manual: true },
+      { name: 'black-backed round emblem', type: 'image/jpeg', width: 500, height: 350, backdrop: '#000', round: true },
+      { name: 'white-backed WebP emblem', type: 'image/webp', width: 500, height: 350, backdrop: '#fff', round: true },
+      { name: 'transparent portrait', type: 'image/png', width: 220, height: 500 },
+      { name: 'transparent landscape', type: 'image/png', width: 500, height: 220 },
+      { name: 'opaque portrait', type: 'image/jpeg', width: 120, height: 400, photo: true },
+      { name: 'opaque landscape', type: 'image/jpeg', width: 400, height: 120, photo: true },
+    ]
+    for (const [file, type] of [['7883c610ed6f5806fb3559725ccc8245.jpg', 'image/jpeg'], ['ChatGPT Görseli 25 Eki 2026 17_34_09.png', 'image/png']]) {
+      try { skinCases.push({ name: file, type, source: `data:${type};base64,${(await readFile(new URL('../../../../' + file, import.meta.url))).toString('base64')}` }) }
+      catch (error) { if (error.code !== 'ENOENT') throw error }
+    }
+    const pixelSignature = `(() => { const c = document.querySelector('canvas'), p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let hash = 0; for (const v of p) hash = (Math.imul(hash, 31) + v) >>> 0; return [c.width, c.height, hash].join(':') })()`
+    helper.show()
+    for (const eyeColor of ['#000000', '#ffffff', '#cc2277']) {
+      const previous = await evaluate(pixelSignature.replace("document.querySelector('canvas')", "document.querySelector('.assistant-skin-preview')"))
+      await evaluate(`(() => {
+        const el = [...document.querySelectorAll('label')].find(label => label.textContent.includes('Göz Rengi')).querySelector('input')
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(eyeColor)})
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      })()`)
+      await until(`${pixelSignature.replace("document.querySelector('canvas')", "document.querySelector('.assistant-skin-preview')")} !== ${JSON.stringify(previous)}`)
+      const expected = await evaluate(pixelSignature.replace("document.querySelector('canvas')", "document.querySelector('.assistant-skin-preview')"))
+      const deadline = Date.now() + 5000
+      while (await helper.window.webContents.executeJavaScript(pixelSignature) !== expected) {
+        if (Date.now() > deadline) {
+          const actual = await helper.window.webContents.executeJavaScript(`(() => {
+            const c = document.querySelector('canvas'), p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, colors = {}
+            for (let i = 0; i < p.length; i += 4) if (p[i + 3] === 255) { const k = [...p.slice(i, i + 3)].join(','); colors[k] = (colors[k] || 0) + 1 }
+            return { dataset: {...document.querySelector('button').dataset}, colors: Object.entries(colors).sort((a,b)=>b[1]-a[1]).slice(0,5), signature: ${pixelSignature} }
+          })()`)
+          throw new Error(`Eye color ${eyeColor}: expected ${expected}, actual ${JSON.stringify(actual)}`)
+        }
+        await delay(50)
+      }
+      check(`eye color ${eyeColor} previews immediately with identical real Touch pixels before saving`, true)
+    }
+    await evaluate('document.querySelector(".assistant-appearance-editor").requestSubmit()')
+    await until('document.body.textContent.includes("Touch görünümünüz hesabınıza kaydedildi.")')
+    const eyesSaved = await shell.window.webContents.session.fetch(`${shell.origin}/api/v1/me/assistant-appearance`, { credentials: 'include' })
+    check('eye color is persisted to the authenticated account', (await eyesSaved.json()).appearance.eyeColor === '#cc2277')
+    await navigate('/ayarlar')
+    await until(`[...document.querySelectorAll('label')].find(label => label.textContent.includes('Göz Rengi'))?.querySelector('input')?.value === '#cc2277'`)
+    check('saved eye color survives reloading the real application', true)
+    for (const scenario of skinCases) {
+      const { type, name } = scenario
+      const previousPreview = await evaluate('document.querySelector(".assistant-skin-preview").toDataURL()')
+      await evaluate(`(async () => {
+        const s = ${JSON.stringify(scenario)}
+        const c = document.createElement('canvas'); c.width = s.width || 1; c.height = s.height || 1
+        const x = c.getContext('2d')
+        if (s.backdrop) { x.fillStyle = s.backdrop; x.fillRect(0, 0, c.width, c.height) }
+        x.fillStyle = '#001c58'
+        if (s.round) { x.beginPath(); x.arc(320, 120, 72, 0, Math.PI * 2); x.fill() }
+        else x.fillRect(c.width * .25, c.height * .1, c.width * .5, c.height * .8)
+        x.fillStyle = '#ffec00'; x.fillRect(s.round ? 300 : c.width * .44, s.round ? 70 : c.height * .1, s.round ? 40 : c.width * .12, s.round ? 100 : c.height * .8)
+        if (s.photo) { const g = x.createLinearGradient(0, 0, c.width, c.height); g.addColorStop(0, '#c45f32'); g.addColorStop(1, '#12667d'); x.fillStyle = g; x.fillRect(0, 0, c.width, c.height) }
+        const blob = s.source ? new Blob([Uint8Array.from(atob(s.source.split(',')[1]), byte => byte.charCodeAt(0))], { type: s.type }) : await new Promise(resolve => c.toBlob(resolve, s.type))
+        const transfer = new DataTransfer(); transfer.items.add(new File([blob], 'personal-character', { type: ${JSON.stringify(type)} }))
+        const input = document.querySelector('.assistant-appearance-editor input[type=file]')
+        input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }))
+      })()`)
+      await until(`(() => {
+        if (!document.querySelector('input[type=range]') || document.querySelector('.assistant-appearance-editor button[type=submit]').disabled) return false
+        return document.querySelector('.assistant-skin-preview').toDataURL() !== ${JSON.stringify(previousPreview)}
+      })()`)
+      check(`${type}: actual upload is previewed on the 120px original Touch canvas`, await evaluate('document.querySelector(".assistant-skin-preview").clientWidth === 120 && !document.querySelector(".assistant-image-preview")'))
+      if (scenario.manual) {
+        const before = await evaluate('document.querySelector(".assistant-skin-preview").toDataURL()')
+        await fill('input[type=range]', '1.5')
+        await until('!document.querySelector(".assistant-appearance-editor button[type=submit]").disabled')
+        await until(`document.querySelector('.assistant-skin-preview').toDataURL() !== ${JSON.stringify(before)}`)
+        check('scale control changes actual preview pixels before save', true)
+        for (const [selector, value] of [['label:nth-of-type(2) input[type=range]', '10'], ['label:nth-of-type(3) input[type=range]', '-10']]) {
+          const previous = await evaluate('document.querySelector(".assistant-skin-preview").toDataURL()')
+          await fill(selector, value)
+          await until('!document.querySelector(".assistant-appearance-editor button[type=submit]").disabled')
+          await until(`document.querySelector('.assistant-skin-preview').toDataURL() !== ${JSON.stringify(previous)}`)
+        }
+        check('horizontal and vertical controls change actual skin pixels', true)
+      }
+      await evaluate('document.querySelector(".assistant-appearance-editor").requestSubmit()')
+      await until('document.body.textContent.includes("Touch görünümünüz hesabınıza kaydedildi.")')
+      const response = await shell.window.webContents.session.fetch(`${shell.origin}/api/v1/me/assistant-appearance`, { credentials: 'include', redirect: 'error' })
+      const saved = await response.json()
+      check(`${name}: authenticated API persists a sanitized PNG owned by the current account`, response.ok && saved.appearance.customImage.startsWith('data:image/png;base64,'))
+      check(`${name}: saved skin uses the original body aspect within 256px`, await evaluate(`(async () => { const i = new Image(); i.src = ${JSON.stringify(saved.appearance.customImage)}; await i.decode(); return i.width === 256 && i.height === 198 })()`))
+      helper.show()
+      const previewSignature = await evaluate(pixelSignature.replace("document.querySelector('canvas')", "document.querySelector('.assistant-skin-preview')"))
+      const deadline = Date.now() + 5000
+      while (await helper.window.webContents.executeJavaScript(pixelSignature) !== previewSignature) {
+        if (Date.now() > deadline) throw new Error(`${name}: preview and actual Touch pixels differ`)
+        await delay(50)
+      }
+      check(`${name}: preview and actual isolated Electron Touch have identical pixels`, true)
+      if (process.env.HB_CAPTURE_SKINS === '1' && scenario.source) {
+        await evaluate(`document.querySelector('.assistant-skin-preview').scrollIntoView({block:'center'})`)
+        shell.window.show()
+        shell.window.focus()
+        const display = getTestDisplay()
+        const bounds = shell.window.getBounds()
+        helper.window.setPosition(bounds.x + bounds.width - 150, bounds.y + 100)
+        helper.window.showInactive()
+        await delay(250)
+        const rect = await evaluate(`(() => { const r = document.querySelector('.assistant-skin-preview').getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: 120, height: 120 } })()`)
+        const label = scenario.type === 'image/jpeg' ? 'fener-jpg' : 'fener-nested-png'
+        await writeFile(join(output, `${label}-preview.png`), (await shell.window.webContents.capturePage(rect)).toPNG())
+        await writeFile(join(output, `${label}-touch.png`), (await helper.window.webContents.capturePage()).toPNG())
+        await writeFile(join(output, `${label}-settings.png`), (await shell.window.webContents.capturePage()).toPNG())
+        const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: display.size })
+        await writeFile(join(output, `${label}-desktop.png`), sources.find(source => source.display_id === String(display.id)).thumbnail.toPNG())
+      }
+      if (scenario.manual) {
+        const preview = await evaluate('document.querySelector(".assistant-skin-preview").toDataURL()')
+        await navigate('/ayarlar')
+        await until(`document.querySelector('.assistant-skin-preview')?.toDataURL() === ${JSON.stringify(preview)}`)
+        check('saved scale and position survive a real settings reload with identical preview pixels', true)
+      }
+    }
+    helper.show()
+    const imageDeadline = Date.now() + 5000
+    while (!await helper.window.webContents.executeJavaScript('document.querySelector("button").dataset.customImage === "true"')) {
+      if (Date.now() > imageDeadline) throw new Error('Saved custom image did not reach the real Touch renderer')
+      await delay(50)
+    }
+    check('saved image reaches the actual isolated Touch window through the authenticated preference flow', true)
+    await evaluate('[...document.querySelectorAll(".assistant-appearance-editor button")].find(button=>button.textContent === "Varsayılan Touch\'a dön").click()')
+    await click('.assistant-appearance-motion input')
+    await evaluate('document.querySelector(".assistant-appearance-editor").requestSubmit()')
+    await until('document.body.textContent.includes("Touch görünümünüz hesabınıza kaydedildi.")')
+    check('default Touch can be restored and persisted after personal image upload', !await evaluate('!!document.querySelector(".assistant-appearance-editor input[type=range]")'))
+    helper.window.hide()
     await navigate(`/dosyalar/${process.env.HB_TOUCH_CASE}?tab=operations`)
     shell.window.hide()
     helper.menu.items.find((item) => item.label === 'Hızlı not').click()
@@ -235,6 +388,9 @@ void app.whenReady().then(async () => {
     await menuUntil('document.querySelector(".touch-assistant__target")?.textContent.includes("34 TEST 02")')
     await menuUntil('document.querySelector(".desktop-assistant-panel").style.getPropertyValue("--accent") === "#15803d"')
     check('account palette reloads after complete Electron restart', true)
+    await navigate('/ayarlar')
+    await until(`[...document.querySelectorAll('label')].find(label => label.textContent.includes('Göz Rengi'))?.querySelector('input')?.value === '#cc2277'`)
+    check('account eye color reloads after complete Electron restart', true)
     await menuEval('[...document.querySelectorAll(".assistant-tabs button")].find(button=>button.textContent==="Geçmiş notlar").click()')
     await menuUntil('!![...document.querySelectorAll(".assistant-entry")].find(entry=>entry.textContent.includes("Seçili dosyaya not."))')
     check('native assistant restores selection and server history after shell restart', true)

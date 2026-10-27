@@ -32,7 +32,7 @@ interface InventoryDbRow {
 }
 
 const WHERE_AND_PARAMS = (query: CaseInventoryQuery): { where: string; params: unknown[] } => {
-  const where: string[] = ['c.organization_id = $1']
+  const where: string[] = ['c.organization_id = $1', 'NOT c.is_archived']
   const params: unknown[] = []
   if (query.caseType !== undefined) {
     params.push(query.caseType)
@@ -50,6 +50,8 @@ const FROM_JOINS = `
   LEFT JOIN insurers i ON i.organization_id = c.organization_id AND i.id = c.insurer_id
   LEFT JOIN users r ON r.organization_id = c.organization_id AND r.id = c.responsible_user_id
   LEFT JOIN service_centers sc ON sc.organization_id = c.organization_id AND sc.id = c.service_center_id
+  LEFT JOIN case_service_contacts contact ON contact.organization_id = c.organization_id AND contact.case_id = c.id
+    AND contact.service_center_id IS NOT DISTINCT FROM c.service_center_id
   LEFT JOIN case_vehicle_owner_sets s ON s.organization_id = c.organization_id AND s.case_id = c.id
   LEFT JOIN LATERAL (
     SELECT dv.status AS report_status, COALESCE(dv.verified_at, dv.created_at) AS report_date
@@ -95,7 +97,8 @@ export function createCaseInventoryStore(pool: pg.Pool, clock: Clock = systemClo
            c.loss_date::text, c.notification_date::text,
            er.report_status AS expert_report_status,
            (er.report_date AT TIME ZONE 'Europe/Istanbul')::date::text AS expert_report_date,
-           sc.name AS service_name, sc.phone AS service_phone,
+           coalesce(contact.name, sc.name) AS service_name,
+           CASE WHEN contact.case_id IS NOT NULL THEN contact.phone ELSE sc.phone END AS service_phone,
            oa.owners
          ${FROM_JOINS}
          WHERE ${where}

@@ -5,6 +5,15 @@
     "fields": {
       "type": "object",
       "properties": {
+        "transmission": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "manual",
+            "automatic",
+            "semi_automatic"
+          ]
+        },
         "brand": {
           "type": "string",
           "minLength": 1,

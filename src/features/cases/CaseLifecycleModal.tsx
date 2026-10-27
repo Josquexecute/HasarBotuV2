@@ -41,8 +41,8 @@ function failureMessage(operation: LifecycleOperationRecord): string {
     ambiguous_filesystem_state: 'Birden fazla klasör veya hazırlama alanı bulundu; güvenli hedef belirlenemedi. Manuel kurtarma gerekiyor.',
     case_changed_after_move: 'Fiziksel taşıma sonrasında dosya kaydı değişti. Kapanış kesinleştirilmedi; klasör ve kayıtlar yönetici tarafından eşleştirilmeli.',
     case_not_fresh: 'Klasörün güncelliği doğrulanamadı. Senkronizasyon ve klasör erişimini kontrol edin.',
-    access_denied: 'Klasöre erişilemedi veya klasör başka bir uygulamada açık. Açık evrakları kapatın ve klasör izinlerini kontrol edin.',
-    file_locked: 'Klasör veya içindeki dosya kullanımda. Açık dosyaları kapatın.',
+    access_denied: 'Klasöre erişim izni yok veya Windows erişimi engelliyor. Klasör izinlerini ve depolama bağlantısını kontrol edin.',
+    file_locked: 'Windows klasörün veya içindeki bir dosyanın taşınmasını engelliyor. Açık belgelerinizi kaydedip kapatın; Explorer önizlemesini veya ilgili klasör penceresini kapatın. Kaydedilmemiş belgeler için hiçbir uygulama zorla kapatılmaz.',
     source_changed_since_plan: 'Klasör içeriği önizlemeden sonra değişti. Güncel verilerle yeniden önizleme oluşturun.',
     source_evidence_mismatch: 'Klasör içeriği önceki taşıma kaydıyla uyuşmuyor. Kaynak ve hedef klasörlerin kontrol edilmesi gerekiyor.',
     source_changed_during_cleanup: 'Taşıma sırasında kaynak içerik değişti. Kaynak kurtarma alanında korundu; kaynak ve hedefi yöneticiyle kontrol edin.',
@@ -50,7 +50,13 @@ function failureMessage(operation: LifecycleOperationRecord): string {
     cleanup_recovery_interrupted: 'Kaynak kurtarma alanına alındı ancak doğrulama tamamlanamadı. İşlem kayıtlarını yöneticiyle kontrol edin.',
   }
   const message = messages[operation.failureReasonCode ?? ''] ?? 'İşlem tamamlanamadı. Klasör ve işlem kayıtlarını kontrol edin.'
-  return `${message} ${operation.status === 'queued' ? 'Taşıma tamamlanmadı; sistem yeniden deneyecek.' : operation.status === 'failed' ? 'Güncel verilerle yeni önizleme oluşturabilirsiniz.' : ''}`.trim()
+  const lock = operation.linkedFileOperation?.fileLock
+  const applications = lock?.applications.map(app => `${app.name} (PID ${app.pid})`).join(', ')
+  const detail = operation.failureReasonCode === 'file_locked'
+    ? applications ? `Kilitli öğeyi kullanan uygulamalar: ${applications}.${lock?.truncated ? ' İnceleme sınırlı; başka uygulamalar da olabilir.' : ''}`
+      : 'Windows uygulama adını bildirmedi; başka kullanıcı oturumu veya depolama sürücüsü de kilit tutuyor olabilir.'
+    : ''
+  return `${message} ${detail} ${operation.status === 'queued' ? 'Taşıma tamamlanmadı; sistem yeniden deneyecek.' : operation.status === 'failed' ? 'Güncel verilerle yeni önizleme oluşturabilirsiniz.' : ''}`.trim()
 }
 
 function minorCurrency(value: number | null): string {

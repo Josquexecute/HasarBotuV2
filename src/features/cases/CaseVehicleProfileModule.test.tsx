@@ -63,6 +63,32 @@ function makePort(initial: CaseVehicleProfileRecord): CaseVehicleProfileDataPort
 }
 
 describe('CaseVehicleProfileModule', () => {
+  it('keeps pending profile fields fixed and makes read-only profile controls unavailable', async () => {
+    const port = makePort(savedRecord)
+    vi.mocked(port.save).mockImplementation(() => new Promise(() => {}))
+    const mounted = render(<CaseVehicleProfileModule caseId={CASE_ID} port={port} />)
+    await screen.findByText('Araç Profili')
+    await userEvent.type(screen.getByLabelText('Değişiklik gerekçesi'), 'Ruhsat doğrulandı')
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni sürüm kaydet' }))
+    for (const label of ['Marka', 'Model', 'Vites', 'Şasi ön eki', 'Değişiklik gerekçesi']) expect(screen.getByLabelText(label)).toBeDisabled()
+    mounted.unmount()
+    render(<CaseVehicleProfileModule caseId={CASE_ID} port={makePort({ ...savedRecord, permissions: { canEdit: false } })} />)
+    await screen.findByText('Araç Profili')
+    for (const label of ['Marka', 'Model', 'Vites', 'Şasi ön eki']) expect(screen.getByLabelText(label)).toBeDisabled()
+  })
+  it('starts an unsaved profile with the case transmission and saves a new selection', async () => {
+    const port = makePort({ ...emptyRecord, transmission: 'manual' })
+    const onSaved = vi.fn()
+    render(<CaseVehicleProfileModule caseId={CASE_ID} port={port} onSaved={onSaved} />)
+    await screen.findByText('Araç Profili')
+    expect(screen.getByLabelText('Vites')).toHaveValue('manual')
+    await userEvent.type(screen.getByLabelText('Marka'), 'Renault')
+    await userEvent.type(screen.getByLabelText('Model'), 'Clio')
+    await userEvent.selectOptions(screen.getByLabelText('Vites'), 'automatic')
+    await userEvent.click(screen.getByRole('button', { name: 'Araç profilini kaydet' }))
+    expect(port.save).toHaveBeenCalledWith(CASE_ID, expect.objectContaining({ fields: expect.objectContaining({ transmission: 'automatic' }) }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce())
+  })
   it('ana görünümde teknik alanları gizler ve normal düzenlemede mevcut değerleri korur', async () => {
     const record = { ...savedRecord, current: { ...savedRecord.current!, variant: 'Korunacak varyant' } }
     const port = makePort(record)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_ASSISTANT_APPEARANCE, type AssistantAppearance } from '@hasarbotu/contracts/assistant-appearance'
 import { useSession } from '../../app/sessionContext'
 import { AssistantAppearanceError, createAssistantAppearancePort, type AssistantAppearancePort } from '../../data/assistantAppearancePort'
@@ -7,9 +7,15 @@ export type AppearanceWindow = Window & { hasarbotuAppearance?: { set(appearance
 export function useAssistantAppearanceModel(suppliedPort?: AssistantAppearancePort) {
   const { user, reportUnauthorized } = useSession()
   const userId = user?.id ?? null
+  const activeUser = useRef(userId)
+  useEffect(() => { activeUser.current = userId }, [userId])
   const port = useMemo(() => suppliedPort ?? createAssistantAppearancePort(), [suppliedPort])
   const [state, setState] = useState<{ userId: string | null; status: 'loading' | 'ready' | 'error'; version: number; appearance: AssistantAppearance } | null>(null)
   const [generation, setGeneration] = useState(0)
+  const [previewState, setPreviewState] = useState<{ userId: string; appearance: AssistantAppearance } | null>(null)
+  const preview = useCallback((next: AssistantAppearance | null) => {
+    setPreviewState(next && userId ? { userId, appearance: next } : null)
+  }, [userId])
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false)
   useEffect(() => {
     const media = window.matchMedia?.('(prefers-color-scheme: dark)')
@@ -42,20 +48,22 @@ export function useAssistantAppearanceModel(suppliedPort?: AssistantAppearancePo
     return () => controller.abort()
   }, [port, userId, generation, reportUnauthorized])
   const appearance = state?.userId === userId && state.status === 'ready' ? state.appearance : DEFAULT_ASSISTANT_APPEARANCE
+  const nativeAppearance = state?.userId === userId && state.status === 'ready' && previewState?.userId === userId ? previewState.appearance : appearance
   useEffect(() => {
     const native = (window as AppearanceWindow).hasarbotuAppearance
-    const publish = () => { void native?.set(appearance).catch(() => { /* IPC can disappear during startup/shutdown; the ready event republishes authoritative server preferences. */ }) }
+    const publish = () => { void native?.set(nativeAppearance).catch(() => { /* IPC can disappear during startup/shutdown; the ready event republishes authoritative server preferences. */ }) }
     publish()
     return native?.onReady(publish)
-  }, [appearance])
+  }, [nativeAppearance])
   const save = useCallback(async (next: AssistantAppearance) => {
     if (!userId || state?.userId !== userId || state.status !== 'ready') throw new AssistantAppearanceError('unavailable')
     const data = await port.save(userId, state.version, next)
+    if (activeUser.current !== userId) throw new AssistantAppearanceError('account_changed')
     if (data.userId !== userId) { window.dispatchEvent(new Event('permissions-updated')); throw new AssistantAppearanceError('account_changed') }
     setState({ userId, status: 'ready', version: data.version, appearance: data.appearance })
     try { localStorage.setItem('hasarbotu-assistant-appearance-changed', JSON.stringify({ userId, version: data.version, at: Date.now() })) }
     catch { /* Server persistence succeeded; another window can refresh on focus if local signaling is unavailable. */ }
     return data.appearance
   }, [port, userId, state])
-  return { appearance, systemDark, save, reload: () => setGeneration(n => n + 1), status: !userId ? 'anonymous' : state?.userId === userId ? state.status : 'loading' }
+  return { userId, appearance, systemDark, preview, save, reload: () => setGeneration(n => n + 1), status: !userId ? 'anonymous' : state?.userId === userId ? state.status : 'loading' }
 }

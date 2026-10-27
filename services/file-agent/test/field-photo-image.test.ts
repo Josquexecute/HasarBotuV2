@@ -58,5 +58,8 @@ describe('field photo conversion and naming', () => {
     expect(nextFieldPhotoName('chassis', [])).toBe('ŞASE.jpg')
     expect(nextFieldPhotoName('chassis', ['şase.jpg','ŞASE 2.jpeg'])).toBe('ŞASE 3.jpg')
     expect(nextFieldPhotoName('odometer', ['KM.jpg'])).toBe('KM 2.jpg')
+    expect(nextFieldPhotoName('gear', [])).toBe('VİTES.jpg')
+    expect(nextFieldPhotoName('gear', ['vites.jpg'])).toBe('VİTES 1.jpg')
+    expect(nextFieldPhotoName('gear', ['VİTES.jpg', 'vites 1.JPEG', 'VİTES 3.jpg'])).toBe('VİTES 2.jpg')
   })
 })

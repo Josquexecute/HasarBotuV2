@@ -94,6 +94,16 @@ function renderCreate(port: CaseCommandPort, unauthorized = vi.fn()) {
 }
 
 describe('CaseCreateModal gerçek API komut akışı', () => {
+  it('creates a case with the selected transmission and defaults old records to unknown', async () => {
+    const create = vi.fn().mockResolvedValue(record({ transmission: 'semi_automatic' }))
+    renderCreate(commandPort({ create }))
+    const user = userEvent.setup()
+    expect(screen.getByLabelText('Vites')).toHaveValue('unknown')
+    await user.type(screen.getByLabelText('Plaka *'), '34 TST 567')
+    await user.selectOptions(screen.getByLabelText('Vites'), 'semi_automatic')
+    await user.click(screen.getByRole('button', { name: 'Dosyayı Oluştur' }))
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ transmission: 'semi_automatic' }), expect.any(String)))
+  })
   it('creates a manual casco with searchable free-text service and editable contacts', async () => {
     const create = vi.fn().mockResolvedValue(record())
     renderCreate(commandPort({ create }))
@@ -220,7 +230,28 @@ function renderEdit(port: CaseCommandPort, options: Partial<Parameters<typeof Ca
 }
 
 describe('CaseEditModal optimistic locking akışı', () => {
-  it('reopens manual contacts, saves edits and drops old contacts on a new free-text service', async () => {
+  it('prevents edits being silently lost while the current changes are being saved', async () => {
+    const update = vi.fn(() => new Promise<CaseRecord>(() => {}))
+    renderEdit(commandPort({ update }))
+    const user = userEvent.setup()
+    await screen.findByRole('option', { name: 'Uzman Eksper' })
+    await user.selectOptions(screen.getByLabelText('Aşama'), 'under_repair')
+    await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
+    expect(update).toHaveBeenCalledOnce()
+    for (const label of ['Aşama', 'Hasar dosya numarası', 'Servis adı', 'Servis telefonu', 'Servis adresi', 'Vites']) {
+      expect(screen.getByLabelText(label)).toBeDisabled()
+    }
+  })
+  it('loads the saved transmission and submits its change with the case version', async () => {
+    const update = vi.fn().mockResolvedValue(record({ version: 2, transmission: 'automatic' }))
+    renderEdit(commandPort({ update }), { item: record({ transmission: 'manual' }) })
+    const user = userEvent.setup()
+    expect(screen.getByLabelText('Vites')).toHaveValue('manual')
+    await user.selectOptions(screen.getByLabelText('Vites'), 'automatic')
+    await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, transmission: 'automatic' }))
+  })
+  it('reopens manual contacts and preserves them through free-text name corrections', async () => {
     const update = vi.fn().mockResolvedValue(record({ version: 2 }))
     renderEdit(commandPort({ update }), { item: record({ type: 'Kasko', service: 'Saved Repair', serviceDetails: { name: 'Saved Repair', phone: '0212 555 10 10', address: 'Saved Street' } }) })
     await screen.findByRole('option', { name: 'Uzman Eksper' })
@@ -228,11 +259,12 @@ describe('CaseEditModal optimistic locking akışı', () => {
     const user = userEvent.setup()
     await user.clear(screen.getByLabelText('Servis adı'))
     await user.type(screen.getByLabelText('Servis adı'), 'Another Repair')
-    expect(screen.getByLabelText('Servis telefonu')).toHaveValue('')
-    expect(screen.getByLabelText('Servis adresi')).toHaveValue('')
+    expect(screen.getByLabelText('Servis telefonu')).toHaveValue('0212 555 10 10')
+    expect(screen.getByLabelText('Servis adresi')).toHaveValue('Saved Street')
+    await user.clear(screen.getByLabelText('Servis adresi'))
     await user.type(screen.getByLabelText('Servis adresi'), 'New Street')
     await user.click(screen.getByRole('button', { name: 'Değişiklikleri Kaydet' }))
-    await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, serviceDetails: { name: 'Another Repair', phone: null, address: 'New Street' } }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('case-created', { expectedVersion: 1, serviceDetails: { name: 'Another Repair', phone: '0212 555 10 10', address: 'New Street' } }))
   })
   it('keeps imported fields readonly and submits service changes only through the pencil dialog', async () => {
     const eksist = { sourceId: 'source-1', assignmentDate: localDateSchema.parse('2026-09-18'), assignmentDateText: '18.09.2026 09:30:00', insurerName: 'Kaynak Sigorta', expertName: 'Kaynak Eksper', expertLicenseNumber: 'E12345', corporateExpertLicenseNumber: '', serviceName: 'Kaynak Servis', serviceRevised: false, vehicleFields: {} }

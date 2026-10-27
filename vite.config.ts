@@ -1,8 +1,9 @@
 import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { frontendLicenseNotices } from './scripts/frontend-license-notices.ts'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), frontendLicenseNotices()],
   build: { rollupOptions: { input: { main: 'index.html', field: 'field.html' } } },
   server: {
     // Generated installers and local PostgreSQL/tooling files are not UI source.

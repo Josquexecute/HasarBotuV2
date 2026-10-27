@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { ServiceContactFields } from './ServiceContactFields'
 import { serviceContactDraft } from './service-contact'
 import { suggestEmailService } from './service-email'
@@ -11,7 +12,30 @@ describe('service identity and conservative email suggestions', () => {
     fireEvent.change(screen.getByLabelText('Servis adı'), { target: { value: 'New Repair' } })
     expect(onChange).toHaveBeenLastCalledWith({ name: 'New Repair', phone: '0212 555 10 10', address: '' })
     fireEvent.change(screen.getByLabelText('Servis adı'), { target: { value: 'Unlisted Repair' } })
-    expect(onChange).toHaveBeenLastCalledWith({ name: 'Unlisted Repair', phone: '', address: '' })
+    expect(onChange).toHaveBeenLastCalledWith({ name: 'Unlisted Repair', phone: 'old phone', address: 'old address' })
+  })
+  it('keeps contacts through deletion, retyping and manual correction, replacing them only on a new verified selection', () => {
+    function Form() {
+      const [value, setValue] = useState({ name: 'Old Repair', phone: 'manual phone', address: 'manual address' })
+      return <ServiceContactFields value={value} options={[{ name: 'Old Repair', phone: 'directory phone' }, { name: 'New Repair', phone: 'new phone' }, { name: 'Empty Repair' }]} onChange={setValue} />
+    }
+    render(<Form />)
+    const name = screen.getByLabelText('Servis adı'), phone = screen.getByLabelText('Servis telefonu'), address = screen.getByLabelText('Servis adresi')
+    for (const text of ['', 'Old', 'Old Repair', '', 'Corrected Repair']) {
+      fireEvent.change(name, { target: { value: text } })
+      expect(phone).toHaveValue('manual phone'); expect(address).toHaveValue('manual address')
+    }
+    fireEvent.change(phone, { target: { value: '' } })
+    fireEvent.change(name, { target: { value: 'Correction' } })
+    expect(phone).toHaveValue(''); expect(address).toHaveValue('manual address')
+    fireEvent.change(name, { target: { value: 'New Repair' } })
+    expect(phone).toHaveValue('new phone'); expect(address).toHaveValue('')
+    fireEvent.change(address, { target: { value: 'new manual address' } })
+    fireEvent.change(name, { target: { value: '' } })
+    fireEvent.change(name, { target: { value: 'New Repair' } })
+    expect(address).toHaveValue('new manual address')
+    fireEvent.change(name, { target: { value: 'Empty Repair' } })
+    expect(phone).toHaveValue(''); expect(address).toHaveValue('')
   })
   it('preserves entered contacts on equivalent names and allows telephone/address edits', () => {
     const value = { name: 'Repair', phone: 'manual phone', address: 'manual address' }, onChange = vi.fn()
@@ -22,6 +46,14 @@ describe('service identity and conservative email suggestions', () => {
     expect(onChange).toHaveBeenLastCalledWith({ ...value, phone: 'corrected phone' })
     fireEvent.change(screen.getByLabelText('Servis adresi'), { target: { value: 'corrected address' } })
     expect(onChange).toHaveBeenLastCalledWith({ ...value, address: 'corrected address' })
+  })
+  it('tracks service changes from the surrounding selector before selecting a previous service', () => {
+    const onChange = vi.fn()
+    const options = [{ name: 'First Repair', phone: 'first phone' }, { name: 'Second Repair', phone: 'second phone' }]
+    const mounted = render(<ServiceContactFields value={{ name: 'First Repair', phone: 'first phone', address: 'first address' }} options={options} onChange={onChange} />)
+    mounted.rerender(<ServiceContactFields value={{ name: 'Second Repair', phone: 'second phone', address: 'second address' }} options={options} onChange={onChange} />)
+    fireEvent.change(screen.getByLabelText('Servis adı'), { target: { value: 'First Repair' } })
+    expect(onChange).toHaveBeenLastCalledWith({ name: 'First Repair', phone: 'first phone', address: '' })
   })
   it('uses only matching SBM sections when choosing a revised service', () => {
     const text = 'Tamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: Old Repair\nTelefon: 0212 555 10 10\nAçık Adres: Old Street\nEkspertiz Yeri Bilgileri\nEkspertiz Yeri Ad/Ünvan: New Repair\nTelefon: 0216 555 20 20\nAçık Adres: New Street'

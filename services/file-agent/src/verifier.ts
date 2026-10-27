@@ -32,13 +32,18 @@ export async function streamSha256(absolutePath: string): Promise<{ hash: string
   return new Promise((resolvePromise, rejectPromise) => {
     const hash = createHash('sha256')
     let size = 0
+    let ended = false
     const stream = createReadStream(absolutePath)
     stream.on('data', (chunk: string | Buffer) => {
       size += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length
       hash.update(chunk)
     })
     stream.on('error', rejectPromise)
-    stream.on('end', () => resolvePromise({ hash: hash.digest('hex'), size }))
+    stream.on('end', () => { ended = true })
+    stream.on('close', () => {
+      if (ended) resolvePromise({ hash: hash.digest('hex'), size })
+      else rejectPromise(new Error('File hash stream closed before completion'))
+    })
   })
 }
 

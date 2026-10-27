@@ -124,6 +124,13 @@ describe('güvenli PDF metin çıkarıcı', () => {
     expect(after).toEqual(before)
   })
 
+  it('sonuç bildirmeden başarılı çıkış yapan worker için timeout beklemez', async () => {
+    const pdf = syntheticPdf([{ kind: 'text', text: 'POLICE' }])
+    const exited = await run(pdf, { timeoutMs: 1_000 }, new URL('./fixtures/empty-worker.mjs', import.meta.url))
+    expect(exited.result).toEqual({ outcome: 'failed', errorCode: 'worker_crashed' })
+    expect(exited.chunks).toEqual([])
+  })
+
   it('symlink/reparse kaynak bileşenini root içinde olsa bile reddeder', async () => {
     const pdf = syntheticPdf([{ kind: 'text', text: 'POLICE' }])
     const targetDirectory = join(base, 'junction-target')

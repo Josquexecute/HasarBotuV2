@@ -361,4 +361,30 @@ describeDb('Durum Panosu gerçek API verileri', () => {
       expect(body.items.map(item => item.caseId)).not.toContain(ids[3])
     } finally { await pool.query('DELETE FROM cases WHERE id=ANY($1::uuid[])', [ids]) }
   })
+
+  it('shows the saved manual service after creation and replacement, with the directory as a fallback', async () => {
+    const id = await seedCase(95, 'new_notification', '34 SVC 095', null)
+    const serviceId = uuidv7()
+    await pool.query("INSERT INTO service_centers(id,organization_id,name,center_type,service_type) VALUES($1,$2,'Directory Repair','ozel','private')", [serviceId, organizationId])
+    const readService = async () => {
+      const response = await app.inject({ url: DASHBOARD_ROUTE, headers: { cookie, [DASHBOARD_STAGE_SET_HEADER]: DASHBOARD_STAGE_SET_VERSION } })
+      expect(response.statusCode).toBe(200)
+      return dashboardResponseSchema.parse(response.json()).items.find(item => item.caseId === id)?.serviceName
+    }
+    try {
+      await pool.query('UPDATE cases SET service_center_id=$2 WHERE id=$1', [id, serviceId])
+      expect(await readService()).toBe('Directory Repair')
+      let version = 1
+      for (const name of ['Manual Dashboard Repair', 'Revised Dashboard Repair']) {
+        const edited = await app.inject({ method: 'PATCH', url: `/api/v1/cases/${id}`, headers: { cookie }, payload: { expectedVersion: version, serviceDetails: { name } } })
+        expect(edited.statusCode, edited.payload).toBe(200)
+        expect(edited.json().case.serviceId).toBeNull()
+        version = edited.json().case.version as number
+        expect(await readService()).toBe(name)
+      }
+    } finally {
+      await pool.query('DELETE FROM cases WHERE id=$1', [id])
+      await pool.query('DELETE FROM service_centers WHERE id=$1', [serviceId])
+    }
+  })
 })

@@ -8,6 +8,8 @@ import { createAssistantPositionStore } from './assistant-position.js'
 import { createAssistantGazeTracker } from './assistant-gaze.js'
 import { AssistantFeedbackState, type AssistantMotionEvent } from './assistant-feedback.js'
 import { SECURE_WEB_PREFERENCES } from './security.js'
+import { guardAssistantTopmost } from './assistant-topmost.js'
+import { parseTouchPlayCommand, parseTouchPlayState, type TouchPlayState } from './assistant-play.js'
 import { hardenSession, type DesktopShell } from './shell.js'
 
 interface AssistantOptions {
@@ -50,6 +52,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     },
   })
   const readyToShow = new Promise<void>((resolve) => window.once('ready-to-show', () => resolve()))
+  const stopTopmostGuard = guardAssistantTopmost(window)
   const assistantSession = window.webContents.session
   hardenSession(assistantSession)
   const denyDownload = (event: Electron.Event) => event.preventDefault()
@@ -85,6 +88,8 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   let cleanup: Promise<void> | undefined
   let quitRequested = false
   let appearance = DEFAULT_ASSISTANT_APPEARANCE
+  let playState: (TouchPlayState & { version: number }) | null = null
+  let playVersion = 0
   const feedback = new AssistantFeedbackState()
   const sendMotion = (value: AssistantMotionEvent) => {
     if (!disposed && !window.isDestroyed() && window.isVisible() && (!appearance.reduceMotion || value.type === 'working' || value.type === 'error')) {
@@ -92,7 +97,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     }
   }
   const { start: startGaze, stop: stopGaze } = createAssistantGazeTracker({
-    enabled: () => !disposed && !window.isDestroyed() && window.isVisible() && !appearance.reduceMotion,
+    enabled: () => !disposed && !window.isDestroyed() && window.isVisible() && !appearance.reduceMotion && !playState?.paused && !playState?.reducedMotion,
     cursor: () => screen.getCursorScreenPoint(),
     position: () => position,
     send: gaze => window.webContents.send('hasarbotu:assistant-gaze', gaze),
@@ -126,8 +131,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   const show = () => {
     move(position)
     window.showInactive()
-    // Electron's default floating level moves behind the Windows taskbar, which
-    // can drop WS_EX_TOPMOST. Keep this small work-area-clamped control above it.
+    // Restore initial order; the native foreground hook maintains it thereafter.
     window.setAlwaysOnTop(true, 'pop-up-menu')
     sendMotion({ type: 'working', active: feedback.working })
     sendMotion({ type: 'error', active: Boolean(feedback.error) })
@@ -163,7 +167,6 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     menuWindow.setBounds(assistantMenuBounds(position,screen.getDisplayNearestPoint(position).workArea))
     // Keep the React workspace out of memory until the first actual menu request.
     menuReady ??= menuWindow.loadURL(menuUrl).then(() => {
-      menuWindow.webContents.send('hasarbotu:appearance-ready')
     }).catch(error => { menuReady = undefined; throw error })
     void menuReady.then(() => {
       if (disposed || !menuOpen) return
@@ -193,12 +196,37 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     actions[action]()
   }
   menuWindow.on('blur',hideMenu)
+  const trustedPlayUi = (event: Electron.IpcMainInvokeEvent) => {
+    const main = options.shell.window.webContents
+    return !disposed && (event.sender === main && event.senderFrame === main.mainFrame && event.senderFrame?.url.startsWith(options.shell.origin + '/')
+      || event.sender === menuWindow.webContents && event.senderFrame === menuWindow.webContents.mainFrame && event.senderFrame?.url === menuUrl)
+  }
+  const handlePlayControl = (event: Electron.IpcMainInvokeEvent, value: unknown) => {
+    const command = parseTouchPlayCommand(value)
+    if (!trustedPlayUi(event) || !command || window.isDestroyed() || command.type === 'play' && (appearance.reduceMotion || playState?.reducedMotion)) return false
+    if ((command.type === 'play' || command.type === 'wake') && !window.isVisible()) show()
+    window.webContents.send('hasarbotu:touch-control', command)
+    return true
+  }
+  const handlePlayState = (event: IpcMainEvent, value: unknown) => {
+    if (disposed || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame?.url !== url) return
+    const parsed = parseTouchPlayState(value)
+    if (!parsed) return
+    if (playState && Object.entries(parsed).every(([key, entry]) => playState?.[key as keyof TouchPlayState] === entry)) return
+    playState = { ...parsed, version: ++playVersion }
+    if (parsed.paused || parsed.reducedMotion) stopGaze()
+    else if (window.isVisible()) startGaze()
+    for (const contents of [mainContents, menuWindow.webContents]) {
+      if (!contents.isDestroyed() && contents.getURL()) contents.send('hasarbotu:touch-state', playState)
+    }
+  }
   const handleAppearance = (event: Electron.IpcMainInvokeEvent, value: unknown) => {
     const main = options.shell.window.webContents
     const trustedMain = event.sender === main && event.senderFrame === main.mainFrame && event.senderFrame?.url.startsWith(options.shell.origin + '/')
-    const trustedMenu = event.sender === menuWindow.webContents && event.senderFrame === menuWindow.webContents.mainFrame && event.senderFrame?.url === menuUrl
     const parsed = assistantAppearanceSchema.safeParse(value)
-    if (disposed || (!trustedMain && !trustedMenu) || !parsed.success) return false
+    // The main settings model owns live previews; a stale menu refresh must not
+    // republish saved preferences over an unsaved palette selection.
+    if (disposed || !trustedMain || !parsed.success) return false
     appearance = parsed.data
     if (appearance.reduceMotion) stopGaze()
     else if (window.isVisible()) startGaze()
@@ -291,6 +319,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       console.warn('desktop assistant could not save final position')
     }).finally(() => { app.removeListener('before-quit', beforeQuit) })
     stopGaze()
+    stopTopmostGuard()
     assistantSession.removeListener('will-download', denyDownload)
     menuWindow.webContents.session.removeListener('will-download', denyMenuDownload)
     ipcMain.removeListener('hasarbotu:assistant', handleCommand)
@@ -302,6 +331,9 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     mainContents.removeListener('render-process-gone', clearMainFeedback)
     menuWindow.webContents.removeListener('render-process-gone', clearMenuFeedback)
     ipcMain.removeHandler('hasarbotu:assistant-appearance')
+    ipcMain.removeHandler('hasarbotu:touch-control')
+    ipcMain.removeHandler('hasarbotu:touch-state')
+    ipcMain.removeListener('hasarbotu:touch-state', handlePlayState)
     screen.removeListener('display-added', onDisplayChange)
     screen.removeListener('display-removed', onDisplayChange)
     screen.removeListener('display-metrics-changed', onDisplayChange)
@@ -330,6 +362,9 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   ipcMain.on('hasarbotu:assistant-success', handleSuccess)
   ipcMain.on('hasarbotu:assistant-feedback', handleFeedback)
   ipcMain.handle('hasarbotu:assistant-appearance', handleAppearance)
+  ipcMain.handle('hasarbotu:touch-control', handlePlayControl)
+  ipcMain.handle('hasarbotu:touch-state', event => trustedPlayUi(event) ? playState : null)
+  ipcMain.on('hasarbotu:touch-state', handlePlayState)
   screen.on('display-added', onDisplayChange)
   screen.on('display-removed', onDisplayChange)
   screen.on('display-metrics-changed', onDisplayChange)

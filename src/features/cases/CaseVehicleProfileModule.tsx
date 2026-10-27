@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, Car, History } from 'lucide-react'
 import { LoadingState } from '../../components/StateViews'
+import { VEHICLE_TRANSMISSION_OPTIONS } from './caseForm'
 import { CaseVehicleProfileClientError, createHttpCaseVehicleProfileAdapter, type CaseVehicleProfileDataPort, type CaseVehicleProfileFieldsRecord, type CaseVehicleProfileRecord, type VehicleClassRecord, type VehicleEvidenceSourceRecord } from '../../data/caseVehicleProfilePort'
 /**
  * Paket 56 — dosya araç profili bölümü.
@@ -26,6 +27,7 @@ const SOURCE_LABELS: Record<VehicleEvidenceSourceRecord, string> = {
 }
 
 const EMPTY: CaseVehicleProfileFieldsRecord = {
+  transmission: 'unknown',
   brand: '',
   model: '',
   modelYear: new Date().getFullYear(),
@@ -37,13 +39,14 @@ const EMPTY: CaseVehicleProfileFieldsRecord = {
   evidenceReference: null,
 }
 
-export function CaseVehicleProfileModule(props: { readonly caseId: string; readonly port?: CaseVehicleProfileDataPort }) {
+export function CaseVehicleProfileModule(props: { readonly caseId: string; readonly port?: CaseVehicleProfileDataPort; readonly onSaved?: () => void }) {
   return <VehicleProfileForm key={props.caseId} {...props} />
 }
 
-function VehicleProfileForm({ caseId, port }: {
+function VehicleProfileForm({ caseId, port, onSaved }: {
   readonly caseId: string
   readonly port?: CaseVehicleProfileDataPort
+  readonly onSaved?: () => void
 }) {
   const [adapter] = useState<CaseVehicleProfileDataPort>(
     () => port ?? createHttpCaseVehicleProfileAdapter(),
@@ -72,6 +75,7 @@ function VehicleProfileForm({ caseId, port }: {
       setRecord(result)
       if (result.current !== null) {
         setFields({
+          transmission: result.current.transmission ?? 'unknown',
           brand: result.current.brand,
           model: result.current.model,
           modelYear: result.current.modelYear,
@@ -82,7 +86,7 @@ function VehicleProfileForm({ caseId, port }: {
           evidenceSource: result.current.evidenceSource,
           evidenceReference: result.current.evidenceReference,
         })
-      }
+      } else setFields({ ...EMPTY, transmission: result.transmission ?? 'unknown' })
       setStatus('ok')
     }).catch((error: unknown) => {
       if (cancelled) return
@@ -105,6 +109,7 @@ function VehicleProfileForm({ caseId, port }: {
       setRecord(result)
       setReason('')
       setErrorKind(null)
+      onSaved?.()
     } catch (error) {
       setErrorKind(error instanceof CaseVehicleProfileClientError ? error.kind : 'unavailable')
     } finally {
@@ -124,6 +129,7 @@ function VehicleProfileForm({ caseId, port }: {
   }
 
   const isRevision = record.version !== null
+  const fieldsDisabled = busy || !record.permissions.canEdit
   const canSubmit = fields.brand.trim() !== '' && fields.model.trim() !== ''
     && (!isRevision || reason.trim() !== '')
 
@@ -139,16 +145,17 @@ function VehicleProfileForm({ caseId, port }: {
       <div className="vehicle-profile__grid">
         <label className="field">
           <span>Marka</span>
-          <input value={fields.brand} onChange={(event) => setFields({ ...fields, brand: event.target.value })} />
+          <input disabled={fieldsDisabled} value={fields.brand} onChange={(event) => setFields({ ...fields, brand: event.target.value })} />
         </label>
         <label className="field">
           <span>Model</span>
-          <input value={fields.model} onChange={(event) => setFields({ ...fields, model: event.target.value })} />
+          <input disabled={fieldsDisabled} value={fields.model} onChange={(event) => setFields({ ...fields, model: event.target.value })} />
         </label>
         <label className="field">
           <span>Model yılı</span>
           <input
             type="number"
+            disabled={fieldsDisabled}
             value={fields.modelYear}
             onChange={(event) => setFields({ ...fields, modelYear: Number(event.target.value) })}
           />
@@ -157,6 +164,7 @@ function VehicleProfileForm({ caseId, port }: {
           <span className="select-field__label">Araç sınıfı</span>
           <select
             aria-label="Araç sınıfı"
+            disabled={fieldsDisabled}
             value={fields.vehicleClass}
             onChange={(event) => setFields({ ...fields, vehicleClass: event.target.value as VehicleClassRecord })}
           >
@@ -168,9 +176,10 @@ function VehicleProfileForm({ caseId, port }: {
         {isRevision && (
           <label className="field">
             <span>Değişiklik gerekçesi</span>
-            <input value={reason} onChange={(event) => setReason(event.target.value)} />
+            <input disabled={fieldsDisabled} value={reason} onChange={(event) => setReason(event.target.value)} />
           </label>
         )}
+        <label className="select-field"><span className="select-field__label">Vites</span><select disabled={fieldsDisabled} aria-label="Vites" value={fields.transmission ?? 'unknown'} onChange={event => setFields({ ...fields, transmission: event.target.value as CaseVehicleProfileFieldsRecord['transmission'] })}>{VEHICLE_TRANSMISSION_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
       </div>
 
       <details className="vehicle-profile__technical">
@@ -180,6 +189,7 @@ function VehicleProfileForm({ caseId, port }: {
           <span>Varyant</span>
           <input
             value={fields.variant ?? ''}
+            disabled={fieldsDisabled}
             onChange={(event) => setFields({ ...fields, variant: event.target.value || null })}
           />
         </label>
@@ -187,6 +197,7 @@ function VehicleProfileForm({ caseId, port }: {
           <span>Şasi ön eki</span>
           <input
             aria-label="Şasi ön eki"
+            disabled={fieldsDisabled}
             value={fields.chassisPrefix ?? ''}
             maxLength={11}
             placeholder="En çok 11 karakter"
@@ -198,6 +209,7 @@ function VehicleProfileForm({ caseId, port }: {
           <span>Motor kodu</span>
           <input
             value={fields.engineCode ?? ''}
+            disabled={fieldsDisabled}
             onChange={(event) => setFields({ ...fields, engineCode: event.target.value || null })}
           />
         </label>
@@ -205,6 +217,7 @@ function VehicleProfileForm({ caseId, port }: {
           <span className="select-field__label">Kanıt kaynağı</span>
           <select
             aria-label="Kanıt kaynağı"
+            disabled={fieldsDisabled}
             value={fields.evidenceSource}
             onChange={(event) => setFields({
               ...fields, evidenceSource: event.target.value as VehicleEvidenceSourceRecord,
@@ -219,6 +232,7 @@ function VehicleProfileForm({ caseId, port }: {
           <span>Kanıt referansı</span>
           <input
             aria-label="Kanıt referansı"
+            disabled={fieldsDisabled}
             value={fields.evidenceReference ?? ''}
             onChange={(event) => setFields({ ...fields, evidenceReference: event.target.value || null })}
           />

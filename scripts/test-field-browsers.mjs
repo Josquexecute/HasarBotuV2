@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { chromium, firefox, webkit } from '@playwright/test'
@@ -50,15 +51,16 @@ try {
       const saved=await fixture.pool.query('SELECT * FROM field_photo_uploads WHERE case_id=$1',[fixture.cases[index].id])
       check(`${name}: retry has one upload record`,saved.rowCount===1)
       check(`${name}: original bytes remain exact`,(await readFile(join(fixture.originals,saved.rows[0].id+'.bin'))).equals(photo))
-      check(`${name}: JPEG reaches the physical folder`,(await readFile(join(fixture.root,fixture.cases[index].path,'HASAR 102.jpg'))).length>=102400)
-      check(`${name}: earlier office photo is preserved`,(await readFile(join(fixture.root,fixture.cases[index].path,'HASAR 101.jpg'),'utf8'))==='Existing office photo must be preserved')
-      for(const [kind,fileName,label] of [['Şase','synthetic.heic','ŞASE.jpg'],['Kilometre','synthetic.avif','KM.jpg']]){
+      check(`${name}: JPEG reaches the physical HASAR folder`,(await readFile(join(fixture.root,fixture.cases[index].path,'HASAR','HASAR 102.jpg'))).length>=102400)
+      check(`${name}: earlier office photo is preserved`,(await readFile(join(fixture.root,fixture.cases[index].path,'HASAR','HASAR 101.jpg'),'utf8'))==='Existing office photo must be preserved')
+      for(const [kind,fileName,label] of [['Şase','synthetic.heic','ŞASE.jpg'],['Kilometre','synthetic.avif','KM.jpg'],['VİTES','orientation-6.jpg','VİTES.jpg']]){
         await page.getByRole('button',{name:kind,exact:true}).click()
         await page.getByLabel('Galeriden fotoğraf seç',{exact:true}).setInputFiles(resolve('services/file-agent/test/fixtures/field-photo',fileName))
         await page.getByRole('button',{name:'1 fotoğrafı yükle',exact:true}).click()
         await page.getByText(label,{exact:true}).waitFor({timeout:30000})
-        check(`${name}: ${kind} photo is converted and named correctly`,(await readFile(join(fixture.root,fixture.cases[index].path,label))).length>=102400)
+        check(`${name}: ${kind} photo is converted and named correctly`,(await readFile(join(fixture.root,fixture.cases[index].path,'HASAR',label))).length>=102400)
       }
+      check(`${name}: legacy root photo remains untouched`,(await readFile(join(fixture.root,fixture.cases[index].path,'VİTES.jpg'),'utf8'))==='Legacy root photo must be preserved')
       for(const [width,height] of [[320,700],[375,812],[390,844],[412,915],[768,1024],[844,390],[1440,900]]){
         await page.setViewportSize({width,height})
         check(`${name}: photo workflow fits ${width}x${height}`,await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))
@@ -77,9 +79,14 @@ try {
     } finally {await context.close();await browser.close()}
   }
   check('worker reports no unexpected failures',fixture.errors.length===0)
-  const records=(await fixture.pool.query("SELECT status,output_bytes,output_hash FROM field_photo_uploads")).rows
-  check('all nine genuine browser uploads reach ready status',records.length===9&&records.every(row=>row.status==='ready'&&row.output_bytes>=102400&&row.output_bytes<=614400))
+  const records=(await fixture.pool.query("SELECT case_id,status,output_file_name,output_bytes,output_hash FROM field_photo_uploads")).rows
+  check('all twelve genuine browser uploads reach ready status',records.length===12&&records.every(row=>row.status==='ready'&&row.output_bytes>=102400&&row.output_bytes<=614400))
   check('JPEG hashes are recorded',records.every(row=>/^[a-f0-9]{64}$/u.test(row.output_hash)))
+  for(const row of records){
+    const target=fixture.cases.find(item=>item.id===row.case_id)
+    const bytes=await readFile(join(fixture.root,target.path,'HASAR',row.output_file_name))
+    check(`${row.output_file_name}: physical bytes match the recorded hash`,bytes.length===Number(row.output_bytes)&&createHash('sha256').update(bytes).digest('hex')===row.output_hash)
+  }
   await writeFile(join(evidence,'acceptance.json'),JSON.stringify({status:'PASS',checkedAt:new Date().toISOString(),checks},null,2))
   console.log(`Field browsers: ${checks.length} checks PASS`)
 }catch(error){await writeFile(join(evidence,'failure.json'),JSON.stringify({status:'FAIL',message:error.message,checks},null,2));throw error}

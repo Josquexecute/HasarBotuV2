@@ -9,6 +9,7 @@ import { registerHealthRoute } from './routes/index.js'
 import { registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
 import { registerCasesRoutes } from './cases/routes.js'
 import { registerAssistantAppearanceRoutes } from './assistant-appearance/routes.js'
+import { registerLegacyDesktopResponses } from './legacy-desktop-responses.js'
 import { registerDesktopUpdateRoutes } from './desktop-updates/routes.js'
 import { registerCasesWriteRoutes } from './cases/write-routes.js'
 import { registerEksistRoutes } from './eksist/routes.js'
@@ -127,6 +128,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   app.setNotFoundHandler(notFoundHandler)
   app.setErrorHandler(errorHandler)
+  registerLegacyDesktopResponses(app)
   registerHealthRoute(app, {
     clock: options.clock ?? systemClock,
     service: API_SERVICE_NAME,

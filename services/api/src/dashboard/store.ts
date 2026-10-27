@@ -107,7 +107,7 @@ export function createDashboardStore(pool: pg.Pool) {
       const casesResult = await pool.query(
         `SELECT c.id,c.case_type,c.office_number,c.plate,c.workflow_stage,c.responsible_user_id,
                 responsible.display_name AS responsible_user_name,insurer.name AS insurer_name,
-                service.name AS service_name,c.follow_up_date,c.recourse_status,c.updated_at,c.version
+                coalesce(contact.name,service.name) AS service_name,c.follow_up_date,c.recourse_status,c.updated_at,c.version
          FROM cases c
          LEFT JOIN users responsible
            ON responsible.organization_id=c.organization_id AND responsible.id=c.responsible_user_id
@@ -115,6 +115,9 @@ export function createDashboardStore(pool: pg.Pool) {
            ON insurer.organization_id=c.organization_id AND insurer.id=c.insurer_id
          LEFT JOIN service_centers service
            ON service.organization_id=c.organization_id AND service.id=c.service_center_id
+         LEFT JOIN case_service_contacts contact
+           ON contact.organization_id=c.organization_id AND contact.case_id=c.id
+           AND contact.service_center_id IS NOT DISTINCT FROM c.service_center_id
          WHERE c.organization_id=$1 AND c.lifecycle_status='open' AND NOT c.is_archived
          ORDER BY c.office_year DESC,c.office_sequence DESC,c.id`,
         [organizationId],

@@ -1,3 +1,4 @@
+import './test-display.mjs'
 import { app } from 'electron'
 import { startDesktopShell } from '../../dist/main/shell.js'
 import { startOAuthReturn } from '../../dist/main/oauth.js'

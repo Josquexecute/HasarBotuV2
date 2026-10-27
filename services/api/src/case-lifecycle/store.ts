@@ -25,7 +25,7 @@ import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
 import { insertIdempotent, type IdempotentRecord } from '../db/idempotency.js'
 import { withTransaction, type Queryable } from '../db/executor.js'
-import { evaluateCaseDocumentRequirements } from '../document-requirements/evaluation.js'
+import { evaluateCaseDocumentRequirements, type VerifiedWorkspaceMove } from '../document-requirements/evaluation.js'
 import { enqueueLifecycleFileOperation } from '../file-operations/store.js'
 import { loadKascoMandatoryCheckGate } from '../kasco-mandatory-check/index.js'
 import { loadServiceProfile } from '../service-agreements/service.js'
@@ -35,6 +35,21 @@ export const LIFECYCLE_CLOSE_PLAN_SCOPE = 'case.lifecycle.close.plan'
 export const LIFECYCLE_REOPEN_PLAN_SCOPE = 'case.lifecycle.reopen.plan'
 export const LIFECYCLE_APPROVE_SCOPE = 'case.lifecycle.approve'
 export const LIFECYCLE_CANCEL_SCOPE = 'case.lifecycle.cancel'
+
+/** Call while holding the case lock, also used when the physical move completes. */
+export async function loadCurrentLifecycleRequirements(client: pg.PoolClient, organizationId: string, caseId: string, verifiedMove?: VerifiedWorkspaceMove): Promise<LifecycleRequirementSummary> {
+  const selected = await client.query(
+    `SELECT case_type,service_center_id,insurer_id,loss_date::text FROM cases WHERE organization_id=$1 AND id=$2`,
+    [organizationId, caseId],
+  )
+  const current = selected.rows[0] as { case_type: 'traffic' | 'casco' | null; service_center_id: string | null; insurer_id: string | null; loss_date: string | null } | undefined
+  if (!current) throw new Error('case_missing_during_requirement_evaluation')
+  const service = current.service_center_id === null ? null : await loadServiceProfile(client, organizationId, {
+    serviceId: current.service_center_id, insurerId: current.insurer_id, evaluationDate: current.loss_date,
+    dateSource: 'loss_date', operation: 'closure_documents',
+  })
+  return requirementSummary(client, organizationId, caseId, new Date().toISOString(), current.service_center_id !== null, service?.agreement ?? null, requireCaseType(current.case_type), verifiedMove)
+}
 
 interface ActorContext {
   readonly organizationId: string
@@ -55,6 +70,7 @@ interface LifecycleRow {
   destination_relative_path: string
   linked_file_operation_id: string | null
   linked_file_operation_status: string | null
+  file_lock: NonNullable<CaseLifecycleOperation['linkedFileOperation']>['fileLock']
   linked_job_status: string | null
   closure_mode: 'normal' | 'with_missing_requirements' | null
   requirement_snapshot: LifecycleRequirementSummary
@@ -76,7 +92,7 @@ interface LifecycleRow {
 
 const LIFECYCLE_FIELDS = `lo.id,lo.case_id,lo.operation_type,lo.expected_case_version,lo.expected_location_version,
   lo.source_storage_root_key,lo.source_relative_path,lo.destination_storage_root_key,lo.destination_relative_path,
-  lo.linked_file_operation_id,fo.status AS linked_file_operation_status,
+  lo.linked_file_operation_id,fo.status AS linked_file_operation_status,fo.file_lock,
   (SELECT status FROM jobs WHERE id=fo.active_job_id) AS linked_job_status,lo.closure_mode,lo.requirement_snapshot,
   lo.blockers,lo.warnings,lo.user_reason,lo.previous_lifecycle_status,lo.target_lifecycle_status,
   lo.previous_workflow_stage,lo.target_workflow_stage,lo.status,lo.failure_reason_code,lo.version,
@@ -105,6 +121,7 @@ function toDto(row: LifecycleRow): CaseLifecycleOperation {
     linkedFileOperation: row.linked_file_operation_id === null ? null : {
       id: row.linked_file_operation_id,
       status: row.linked_file_operation_status,
+      fileLock: row.file_lock,
     },
     failureReasonCode: row.failure_reason_code,
     canApprove: row.status === 'approval_required' || row.status === 'failed' && row.linked_file_operation_status === 'failed' && row.linked_job_status === 'dead_letter',
@@ -147,8 +164,20 @@ async function requirementSummary(
   hasService: boolean,
   serviceEligibility: ServiceAgreementEvaluation | null,
   caseType: 'traffic' | 'casco',
+  verifiedMove?: VerifiedWorkspaceMove,
 ): Promise<LifecycleRequirementSummary> {
-  const base = await evaluateCaseDocumentRequirements(client, organizationId, caseId, evaluatedAt)
+  if (!hasService) {
+    // A free-text or imported service still requires an invoice and agreement review.
+    const contact = await client.query(`SELECT
+      EXISTS(SELECT 1 FROM case_service_contacts WHERE organization_id=$1 AND case_id=$2 AND service_center_id IS NULL)
+      OR EXISTS(SELECT 1 FROM (
+        SELECT reviewed_fields->'automatic'->>'serviceName' AS name FROM eksist_sources
+        WHERE organization_id=$1 AND case_id=$2 AND reviewed_fields ? 'automatic'
+        ORDER BY created_at DESC,id DESC LIMIT 1
+      ) source WHERE nullif(btrim(source.name),'') IS NOT NULL) AS has_service`, [organizationId, caseId])
+    hasService = contact.rows[0].has_service === true
+  }
+  const base = await evaluateCaseDocumentRequirements(client, organizationId, caseId, evaluatedAt, verifiedMove)
   if (base === undefined) throw new Error('case_missing_during_requirement_evaluation')
   const documents = await client.query(
     `SELECT dv.id,d.document_type,dv.status,dv.hash_verified,dv.size_verified,dv.verified_at
@@ -523,6 +552,16 @@ export function createCaseLifecycleStore(pool: pg.Pool) {
             action: 'case_lifecycle.stale', entityType: 'case_lifecycle_operation', entityId: operationId,
             details: { caseId, errorCode: 'snapshot_changed' } })
           return { kind: 'stale' }
+        }
+        if (row.operation_type === 'close' && row.closure_mode === 'normal') {
+          const requirements = await loadCurrentLifecycleRequirements(client, actor.organizationId, caseId)
+          if (requirements.missingCount + requirements.controlRequiredCount > 0) {
+            await client.query("UPDATE case_lifecycle_operations SET status='stale',failure_reason_code='requirements_changed',version=version+1,updated_at=now() WHERE id=$1", [operationId])
+            await audit.record(client, { organizationId: actor.organizationId, actorUserId: actor.actorUserId, requestId: actor.requestId,
+              action: 'case_lifecycle.stale', entityType: 'case_lifecycle_operation', entityId: operationId,
+              details: { caseId, errorCode: 'requirements_changed' } })
+            return { kind: 'stale' }
+          }
         }
         const conflict = await client.query(
           `SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2

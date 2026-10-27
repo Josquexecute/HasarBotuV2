@@ -6,6 +6,8 @@ import { requireSession } from '../auth/guard.js'
 import { failureBody } from '../errors/failure.js'
 import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
+import { sanitizeAssistantImage } from './image.js'
+import { isLegacyDesktop } from '../legacy-desktop-responses.js'
 
 export function registerAssistantAppearanceRoutes(app: FastifyInstance, { pool }: { pool: pg.Pool }) {
   const auth = createAuthStore(pool), audit = createAuditService()
@@ -22,9 +24,20 @@ export function registerAssistantAppearanceRoutes(app: FastifyInstance, { pool }
     if (!parsed.success) return reply.code(400).send({ ok: false, error: zodErrorToApiError(parsed.error, String(request.id)) })
     const input = parsed.data
     if (input.expectedUserId !== session.user.id) return reply.code(409).send(failureBody('conflict', 'Hesap değişti. Ayarları yeniden yükleyin.', String(request.id)))
+    if (input.appearance.customImage) {
+      try { input.appearance.customImage = await sanitizeAssistantImage(input.appearance.customImage) }
+      catch { return reply.code(400).send(failureBody('validation_error', 'Görsel geçersiz. PNG, JPG veya WebP görselini yeniden seçin.', String(request.id))) }
+    }
     const saved = await withTransaction(pool, async (db) => {
-      const current = (await db.query('SELECT version FROM user_assistant_preferences WHERE organization_id=$1 AND user_id=$2 FOR UPDATE', [session.user.organizationId, session.user.id])).rows[0]
+      const current = (await db.query('SELECT appearance,version FROM user_assistant_preferences WHERE organization_id=$1 AND user_id=$2 FOR UPDATE', [session.user.organizationId, session.user.id])).rows[0]
       if ((current?.version ?? 0) !== input.expectedVersion) return undefined
+      // Older clients omit this field; only explicit null resets automatic eyes.
+      if (!Object.hasOwn(input.appearance, 'eyeColor') && current?.appearance?.eyeColor !== undefined) {
+        input.appearance.eyeColor = current.appearance.eyeColor
+      }
+      if (isLegacyDesktop(request.headers['user-agent']) && !Object.hasOwn(input.appearance, 'customImage') && current?.appearance?.customImage !== undefined) {
+        input.appearance.customImage = current.appearance.customImage
+      }
       const result = await db.query(`INSERT INTO user_assistant_preferences(user_id,organization_id,appearance) VALUES($1,$2,$3::jsonb)
         ON CONFLICT(user_id) DO UPDATE SET appearance=excluded.appearance,version=user_assistant_preferences.version+1,updated_at=now()
         WHERE user_assistant_preferences.organization_id=$2 AND user_assistant_preferences.version=$4 RETURNING appearance,version`, [session.user.id, session.user.organizationId, JSON.stringify(input.appearance), input.expectedVersion])

@@ -3,8 +3,10 @@ import { createReadStream, createWriteStream, type Dirent, type Stats } from 'no
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rmdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
+import { setTimeout as wait } from 'node:timers/promises'
 import type {
   FileOperationResult,
+  FileLockInfo,
   FileOperationStrategy,
   JobPayload,
 } from '@hasarbotu/contracts'
@@ -12,6 +14,7 @@ import { parseRelativePath } from '@hasarbotu/domain'
 import { isUnderRoot, PathSafetyError, resolveUnderRoot } from './path-resolver.js'
 import { streamSha256 } from './verifier.js'
 import { probeRootHealth, STORAGE_UNAVAILABLE_ERROR_CODE } from './root-health.js'
+import { diagnoseWindowsLocks } from './windows-lock-diagnostics.js'
 
 type ApplyPayload = Extract<JobPayload, { readonly kind: 'file_operation' }>
 type CleanupPayload = Extract<JobPayload, { readonly kind: 'file_operation_cleanup' }>
@@ -69,6 +72,7 @@ export const nodeFileSystemAdapter: FileSystemAdapter = {
 export interface FileOperationExecutionResult {
   readonly outcome: 'verified' | 'missing' | 'failed'
   readonly errorCode?: string
+  readonly fileLock?: FileLockInfo
   readonly fileOperation?: FileOperationResult
   readonly observedHash?: undefined
   readonly observedSize?: undefined
@@ -535,7 +539,20 @@ export async function executeFileOperation(
     }
     ownership.check()
   }
-  return payload.kind === 'file_operation'
-    ? applyOperation(roots, payload, fs)
-    : cleanupOperation(roots, payload, fs)
+  // Re-enter the complete operation on retry: ownership, path safety, manifests
+  // and persisted evidence are checked again before another physical mutation.
+  const delays = [250, 750, 1500]
+  for (let attempt = 0; ; attempt++) {
+    ownership?.check()
+    const result = await (payload.kind === 'file_operation'
+      ? applyOperation(roots, payload, fs)
+      : cleanupOperation(roots, payload, fs))
+    if (result.outcome !== 'failed' || result.fileOperation?.phase === 'manual_recovery_required'
+      || !['file_locked', 'access_denied'].includes(result.errorCode ?? '')) return result
+    const root = roots[payload.source.storageRootKey]
+    const fileLock = root ? await diagnoseWindowsLocks(resolveUnderRoot(root, payload.source.relativePath)) : undefined
+    if (result.errorCode === 'access_denied' && !fileLock) return result
+    if (attempt === delays.length) return { ...result, errorCode: 'file_locked', ...(fileLock ? { fileLock } : {}) }
+    await wait(delays[attempt], undefined, { signal: ownership?.signal })
+  }
 }

@@ -1,3 +1,5 @@
+import { AssistantPlay } from './desktop-assistant-play.js'
+
 // Cosmetic gestures share the engine's tweens, so interruptions start at the
 // current pose and use the existing frame loop. No gesture owns a timer.
 const smooth = t => t * t * (3 - 2 * t)
@@ -10,8 +12,11 @@ const shake = { window: 1100, leg: 40, speed: 650, reversals: 4, cooldown: 14000
 export class AssistantMotion {
   constructor(bot, clock = () => performance.now(), random = Math.random) {
     this.bot = bot
+    this.cursorGaze = { x: 0, y: 0 }
     this.clock = clock
     this.random = random
+    this.play = new AssistantPlay(bot, clock, random)
+    this.drawOriginal = this.drawBase.bind(this)
     this.hovered = false
     this.pressed = false
     this.dragging = false
@@ -96,6 +101,7 @@ export class AssistantMotion {
 
   tick() {
     const now = this.clock()
+    this.play.tick(this.sleeping)
     if (this.dizzy) {
       if (now < this.recoverUntil) {
         if (this.dragging && !this.bot.tweens.size) this.wobble()
@@ -106,6 +112,7 @@ export class AssistantMotion {
     }
     if (this.pressed && !this.dragging) {
       const held = now - this.pressedAt
+      this.play.hold(held)
       const phase = held >= 3500 ? 3 : held >= 1800 ? 2 : held >= 650 ? 1 : 0
       if (phase > this.holdPhase) {
         this.holdPhase = phase
@@ -131,6 +138,7 @@ export class AssistantMotion {
       return
     }
     if (now >= this.sleepAt) {
+      this.play.clear()
       this.sleeping = true
       this.bot.lookX = this.bot.lookY = 0
       this.bot.eyeOverride = 'closed'
@@ -143,6 +151,7 @@ export class AssistantMotion {
         this.nextIdle = now + 16000 + this.random() * 12000
         this.lastIdle = this.take(this.idleQueue, idleReactions, this.lastIdle)
         this.idle(this.lastIdle)
+        this.play.idle()
       }
       return
     }
@@ -166,6 +175,7 @@ export class AssistantMotion {
     this.holdPhase = 0
     this.clearShake()
     if (this.dizzy) return
+    this.play.tap()
     this.settle()
     this.bot.eyeOverride = null
     this.bot.eyeOverrideUntil = 0
@@ -206,6 +216,7 @@ export class AssistantMotion {
     this.lastClickAt = undefined
     if (sample) this.sampleShake(sample)
     if (this.dizzy) return
+    this.play.drag()
     this.settle()
     this.eyes(Math.abs(x) > .75 ? 'wide' : 'dot', 550)
     this.pose({ tilt: [[x * .14, 140], [0, 420]], sx: [[.98, 140], [1, 420]], sy: [[1.03, 140], [1, 420]] })
@@ -224,10 +235,12 @@ export class AssistantMotion {
       this.activeUntil = this.recoverUntil
       this.eyes('dot', 1800)
       this.wobble(true)
+      this.play.recover()
       return
     }
     if (this.holdPhase) this.settle()
     if (this.dragging) {
+      this.play.drop()
       this.dragging = false
       this.settle()
       this.activeUntil = this.clock() + 650
@@ -273,6 +286,7 @@ export class AssistantMotion {
     const cooldown = kind === 'notification' ? 15000 : 5000
     if (now - (this.lastReaction.get(kind) ?? -Infinity) < cooldown) return
     this.lastReaction.set(kind, now)
+    this.play.clear()
     this.activity()
     this.activeUntil = now + 1800
     this.settle()
@@ -302,6 +316,7 @@ export class AssistantMotion {
     // Several saves in a burst get one small acknowledgement.
     if (now - this.lastSuccess < 6000) return
     this.lastSuccess = now
+    this.play.clear()
     this.activeUntil = now + 1400
     this.settle()
     this.bot.triggerEmote('happy', 1.2)
@@ -330,7 +345,62 @@ export class AssistantMotion {
     this.tapCount = 0
     this.lastClickAt = undefined
     this.clearShake()
+    this.play.reset()
+    this.play.sleeping = asleep
+    this.play.publish()
     this.activity()
+  }
+
+  get animating() { return this.play.animating }
+
+  get gazeBlocked() {
+    const now = this.clock() / 1000
+    return this.sleeping || this.pressed || this.dragging || this.dizzy || this.play.animating
+      || this.clock() < this.activeUntil || now < this.bot.waveUntil
+      || this.bot.eyeOverride && now <= this.bot.eyeOverrideUntil
+      || this.bot.particles?.length > 0
+      || [...this.bot.tweens.keys()].some(property => property !== 'open')
+  }
+
+  gaze(x, y) { this.cursorGaze = { x, y } }
+
+  updateGaze() {
+    // Keep the latest cursor while choreography owns the eyes. The engine's
+    // normal interpolation eases both handoffs without adding a competing tween.
+    const target = this.gazeBlocked ? { x: 0, y: 0 } : this.cursorGaze
+    this.bot.lookX = target.x
+    this.bot.lookY = target.y
+  }
+
+  control(command) {
+    if (command.type === 'sleep') {
+      this.reset()
+      this.sleeping = true
+      this.bot.lookX = this.bot.lookY = 0
+      this.bot.eyeOverride = 'closed'
+      this.bot.eyeOverrideUntil = Infinity
+      this.play.sleeping = true
+      this.play.publish()
+      return true
+    }
+    if (command.type === 'wake') {
+      this.activity(true)
+      this.play.sleeping = false
+      this.play.publish()
+      return true
+    }
+    if (command.type === 'play') {
+      if (this.play.reducedMotion) return false
+      this.activity(true)
+    }
+    const accepted = this.play.control(command)
+    if (accepted && ['play', 'calm', 'stop', 'pause'].includes(command.type)) {
+      this.dizzy = false
+      this.recoverUntil = 0
+      this.activeUntil = this.clock() + 220
+      this.settle()
+    }
+    return accepted
   }
 
   clearShake() {
@@ -364,6 +434,7 @@ export class AssistantMotion {
         this.settle()
         this.eyes('dot', 2400)
         this.wobble()
+        this.play.shake()
       }
     } else {
       this.opposite = 0
@@ -404,6 +475,11 @@ export class AssistantMotion {
   }
 
   draw(context, width, height) {
+    this.play.draw(context, width, height, this.drawOriginal)
+    this.drawNauseaDecorations(context, width, height)
+  }
+
+  drawBase(context, width, height) {
     const level = this.bot.nausea
     const color = this.bot.bodyColor
     if (level > 0) {
@@ -412,12 +488,16 @@ export class AssistantMotion {
     }
     try { this.bot.draw(context, width, height) }
     finally { this.bot.bodyColor = color }
-    if (!(level > .001)) return
+  }
+
+  drawNauseaDecorations(context, width, height) {
+    const level = this.bot.nausea
+    if (!(level > .001) || this.play.scene?.definition.id === 'orbit-stars') return
     const radius = width * .3
     context.save()
     context.globalAlpha = level
     context.translate(width / 2 + this.bot.ox * radius, height / 2 + this.bot.oy * radius + radius * .06)
-    // Stars orbit slowly; the character never spins or flashes.
+    // Keep the original orbit in window space when a new scene turns the body.
     context.fillStyle = '#e6bd55'
     for (let i = 0; i < 3; i++) {
       const angle = this.clock() / 1000 * .8 + i * Math.PI * 2 / 3
@@ -430,6 +510,7 @@ export class AssistantMotion {
       context.closePath()
       context.fill()
     }
+    if (this.play.scene) { context.restore(); return }
     context.rotate(this.bot.tilt)
     context.scale(this.bot.sx, this.bot.sy)
     context.strokeStyle = this.bot.eyeColor ?? '#1a1412'

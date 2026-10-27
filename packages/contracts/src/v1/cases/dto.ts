@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VEHICLE_TRANSMISSIONS } from '@hasarbotu/domain'
 import { caseServiceContactSchema } from './service.js'
 import {
   caseIdSchema,
@@ -29,6 +30,7 @@ import { eksistCaseDataSchema } from '../eksist-case.js'
  * - Sunum alani veya Turkce sabit etiket yoktur.
  */
 const caseDtoShape = {
+  transmission: z.enum(VEHICLE_TRANSMISSIONS).optional(),
   serviceDetails: caseServiceContactSchema.nullable().optional(),
   eksist: eksistCaseDataSchema.optional(),
   id: caseIdSchema,

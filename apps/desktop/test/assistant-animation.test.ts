@@ -4,8 +4,10 @@ import { URL as NodeURL } from 'node:url'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const source = readFileSync(new NodeURL('../../../public/desktop-assistant-character.js', import.meta.url), 'utf8').replace(/^import .*\r?\n/gm, '')
-const motionSource = readFileSync(new NodeURL('../../../public/desktop-assistant-motion.js', import.meta.url), 'utf8').replace('export class', 'class')
-afterEach(() => vi.useRealTimers())
+const motionSource = readFileSync(new NodeURL('../../../public/desktop-assistant-motion.js', import.meta.url), 'utf8').replace(/^import .*\r?\n/gm, '').replace('export class', 'class')
+const Play = new Function(readFileSync(new NodeURL('../../../public/desktop-assistant-play.js', import.meta.url), 'utf8').replace(/export /g, '') + '; return AssistantPlay')()
+const appearanceSource = readFileSync(new NodeURL('../../../public/desktop-assistant-appearance.js', import.meta.url), 'utf8').replace(/^import .*\r?\n/gm, '').replace(/export /g, '')
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
 function setup() {
   vi.useFakeTimers()
@@ -16,13 +18,26 @@ function setup() {
   const canvas = doc.querySelector('canvas')!
   const measure = vi.fn(() => 120)
   Object.defineProperty(canvas, 'clientWidth', { get: measure })
-  const context = { setTransform: vi.fn(), clearRect: vi.fn() }
+  const stops = vi.fn()
+  const gradient = { addColorStop: stops }
+  const context = { createRadialGradient: vi.fn(() => gradient), fillRect: vi.fn(), setTransform: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), rotate: vi.fn(), scale: vi.fn(), beginPath: vi.fn(), roundRect: vi.fn(), fill: vi.fn(), stroke: vi.fn(), drawImage: vi.fn(), fillStyle: '', strokeStyle: '', globalAlpha: 1,
+    moveTo: vi.fn(), lineTo: vi.fn(), quadraticCurveTo: vi.fn(), bezierCurveTo: vi.fn(), arc: vi.fn(), ellipse: vi.fn(), closePath: vi.fn(), setLineDash: vi.fn(), fillText: vi.fn() }
   canvas.getContext = vi.fn(() => context) as unknown as typeof canvas.getContext
   const engines: Engine[] = []
   class Engine {
     busy = false
     lookX = 0
     lookY = 0
+    ox = 0
+    oy = 0
+    tilt = 0
+    sx = 1
+    sy = 1
+    eyeColor = '#111111'
+    yaw = 0
+    pitch = 0
+    blush = 0
+    open = 1
     tweens = new Map()
     locks = new Set()
     anim = vi.fn()
@@ -35,8 +50,10 @@ function setup() {
     constructor() { engines.push(this) }
   }
   let gaze: (point: { x: number; y: number }) => void = () => {}
-  let appearance: (value: { characterColor: string; accentColor: string; reduceMotion: boolean }) => void = () => {}
+  let appearance: (value: { characterColor: string; accentColor: string; reduceMotion: boolean; customImage?: string; eyeColor?: string | null }) => void = () => {}
   let motionEvent: (value: { type: string; x?: number; active?: boolean; dx?: number; dy?: number; elapsed?: number }) => void = () => {}
+  let playControl: (value: { type: string; id?: string }) => void = () => {}
+  const playState = vi.fn()
   const unsubscribe = vi.fn()
   const frames = new Map<number, FrameRequestCallback>()
   let nextFrame = 0, now = 0
@@ -46,6 +63,8 @@ function setup() {
       onGaze: (callback: typeof gaze) => { gaze = callback; return unsubscribe },
       onAppearance: (callback: typeof appearance) => { appearance = callback; return unsubscribe },
       onMotion: (callback: typeof motionEvent) => { motionEvent = callback; return unsubscribe },
+      onPlay: (callback: typeof playControl) => { playControl = callback; return unsubscribe },
+      playState,
     },
     matchMedia: () => motion,
     devicePixelRatio: 1,
@@ -60,20 +79,111 @@ function setup() {
     constructor(callback: ResizeObserverCallback) { resize = callback }
   }
   const timing = { now: () => now }
-  const Motion = new Function('performance', motionSource + '; return AssistantMotion')(timing)
-  new Function('BotEngine', 'AssistantMotion', 'window', 'document', 'ResizeObserver', 'performance', source)(Engine, Motion, target, doc, Observer, timing)
+  const Motion = new Function('performance', 'AssistantPlay', motionSource + '; return AssistantMotion')(timing, Play)
+  const drawAppearance = new Function('BotEngine', appearanceSource + '; return drawAssistantAppearance')(Engine)
+  const eyeColor = new Function('BotEngine', appearanceSource + '; return assistantEyeColor')(Engine)
+  new Function('BotEngine', 'AssistantMotion', 'drawAssistantAppearance', 'assistantEyeColor', 'window', 'document', 'ResizeObserver', 'performance', source)(Engine, Motion, drawAppearance, eyeColor, target, doc, Observer, timing)
   const step = (ms = 20) => {
     now += ms
     const pending = [...frames.values()]
     frames.clear()
     pending.forEach(callback => callback(now))
   }
-  const setAppearance = (reduceMotion: boolean) => appearance({ characterColor: '#ffffff', accentColor: '#2563eb', reduceMotion })
-  return { doc, canvas, measure, engines, target, frames, step, gaze: (x: number, y: number) => gaze({ x, y }), setAppearance, unsubscribe, motionEvent,
+  const setAppearance = (reduceMotion: boolean, customImage?: string, eyeColor?: string | null) => appearance({ characterColor: '#ffffff', accentColor: '#2563eb', reduceMotion, ...(customImage ? { customImage } : {}), ...(eyeColor !== undefined ? { eyeColor } : {}) })
+  return { doc, canvas, context, measure, engines, target, frames, step, gaze: (x: number, y: number) => gaze({ x, y }), setAppearance, unsubscribe, motionEvent, playState, playControl: (type: string, id?: string) => playControl({ type, ...(id ? { id } : {}) }),
     hide: (value: boolean) => { hidden = value; doc.dispatchEvent(new Event('visibilitychange')) },
     resize: () => resize([], {} as ResizeObserver),
   }
 }
+
+it('holds cursor gaze through an entire scene and resumes from the latest point without another IPC event', () => {
+  const ui = setup(), bot = ui.engines[0]
+  ui.gaze(.8, -.6); ui.step()
+  expect(bot.lookX).toBe(.8)
+  ui.playControl('play', 'reading')
+  ui.gaze(-.9, .7); ui.step(300)
+  expect(bot.lookX).toBe(0); expect(bot.lookY).toBe(0)
+  ui.step(600)
+  expect(bot.lookX).toBe(0)
+  ui.playControl('play', 'magic'); ui.step(300)
+  expect(bot.lookX).toBe(0)
+  ui.step(4000); ui.step()
+  expect(bot.lookX).toBe(-.9); expect(bot.lookY).toBe(-.7)
+  ui.target.dispatchEvent(new Event('pagehide'))
+})
+
+it('applies selected eyes to animated and reduced-motion engines immediately and restores automatic contrast', () => {
+  const ui = setup()
+  for (const color of ['#ffffff', '#000000', '#22cc88', '#ffff00']) {
+    ui.setAppearance(false, undefined, color)
+    expect(ui.engines.map(bot => bot.eyeColor)).toEqual([color, color])
+    ui.setAppearance(true, undefined, color)
+    expect(ui.engines.map(bot => bot.eyeColor)).toEqual([color, color])
+  }
+  ui.setAppearance(true, undefined, null)
+  expect(ui.engines.map(bot => bot.eyeColor)).toEqual(['#111111', '#111111'])
+  ui.target.dispatchEvent(new Event('pagehide'))
+})
+
+it('manual scenes keep drawing on settled engines and stop cleanly on pause or reduced motion', () => {
+  const ui = setup()
+  ui.step()
+  ui.playControl('play', 'magic')
+  expect(ui.playState).toHaveBeenLastCalledWith(expect.objectContaining({ reaction: 'magic', paused: false }))
+  const before = ui.engines[0].draw.mock.calls.length
+  ui.step(100); ui.step(100)
+  expect(ui.engines[0].draw.mock.calls.length).toBeGreaterThan(before)
+  expect(ui.frames.size).toBe(1)
+  ui.playControl('pause')
+  expect(ui.playState).toHaveBeenLastCalledWith(expect.objectContaining({ reaction: null, paused: true }))
+  expect(ui.frames.size).toBe(0); expect(vi.getTimerCount()).toBe(0)
+  ui.playControl('play', 'reading')
+  expect(ui.playState).toHaveBeenLastCalledWith(expect.objectContaining({ reaction: 'reading', paused: false }))
+  ui.setAppearance(true)
+  ui.playControl('play', 'steam')
+  expect(ui.playState).toHaveBeenLastCalledWith(expect.objectContaining({ reaction: null, reducedMotion: true }))
+  expect(ui.frames.size).toBe(0)
+  ui.target.dispatchEvent(new Event('pagehide'))
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('draws accent only as a soft halo behind the original character', () => {
+  const ui = setup()
+  ui.setAppearance(true)
+  expect(ui.context.createRadialGradient).toHaveBeenCalled()
+  expect(ui.context.fillRect).toHaveBeenCalledWith(0, 0, 120, 120)
+  expect(ui.context.roundRect).not.toHaveBeenCalled()
+  expect(ui.context.stroke).not.toHaveBeenCalled()
+  expect(ui.engines[1].draw).toHaveBeenCalled()
+})
+
+it('custom skins keep both original engines drawing and default restoration cancels late image decodes', () => {
+  const images: { onload: () => void }[] = []
+  vi.stubGlobal('Image', class {
+    naturalWidth = 256
+    naturalHeight = 128
+    onload = () => {}
+    constructor() { images.push(this) }
+  })
+  const ui = setup(), button = ui.doc.querySelector('button')!
+  ui.setAppearance(false, 'data:image/png;base64,one')
+  ui.engines[0].draw.mockClear()
+  images[0].onload()
+  expect(button.dataset.customImage).toBe('true')
+  expect(ui.engines[0].draw).toHaveBeenCalled()
+  ui.setAppearance(false, 'data:image/png;base64,one', '#22cc88')
+  expect(images).toHaveLength(1)
+  expect(button.dataset.customImage).toBe('true')
+  ui.setAppearance(true, 'data:image/png;base64,two')
+  ui.engines[1].draw.mockClear()
+  images[1].onload()
+  expect(ui.engines[1].draw).toHaveBeenCalled()
+  ui.setAppearance(false, 'data:image/png;base64,late')
+  ui.setAppearance(false)
+  images[2].onload()
+  expect(button.dataset.customImage).toBe('false')
+  ui.target.dispatchEvent(new Event('pagehide'))
+})
 
 it('ignores gaze, hover and background feedback while asleep and wakes only on a press', () => {
   const ui = setup()
@@ -97,6 +207,10 @@ it('ignores gaze, hover and background feedback while asleep and wakes only on a
   button.dispatchEvent(new MouseEvent('pointerdown',{ button: 0 }))
   expect(button.dataset.sleeping).toBe('false')
   ui.gaze(.5,.5)
+  ui.step()
+  expect(ui.engines[0].lookX).toBe(0)
+  ui.motionEvent({ type: 'release' })
+  ui.step(1500)
   expect(ui.engines[0].lookX).toBe(.5)
   ui.target.dispatchEvent(new Event('pagehide'))
 })
@@ -187,7 +301,7 @@ it('press and hover wake a settled character; disposal removes subscriptions and
   vi.advanceTimersByTime(650)
   expect(ui.engines[0].triggerEmote).toHaveBeenCalledWith('happy', .9)
   ui.target.dispatchEvent(new Event('pagehide'))
-  expect(ui.unsubscribe).toHaveBeenCalledTimes(3)
+  expect(ui.unsubscribe).toHaveBeenCalledTimes(4)
   expect(ui.frames.size).toBe(0)
   expect(vi.getTimerCount()).toBe(0)
   ui.gaze(1, 1)

@@ -338,7 +338,7 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
       }
       const result = await pool.query(
         `SELECT fee.id AS fee_id,c.id AS case_id,c.office_number,c.plate,c.case_type,
-                insurer.name AS insurer_name,service.name AS service_name,
+                insurer.name AS insurer_name,coalesce(contact.name,service.name) AS service_name,
                 responsible.display_name AS responsible_user_name,c.closed_at
          FROM fee_records fee
          JOIN fee_record_versions current ON current.id=fee.current_version_id
@@ -347,6 +347,9 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
            ON insurer.organization_id=c.organization_id AND insurer.id=c.insurer_id
          LEFT JOIN service_centers service
            ON service.organization_id=c.organization_id AND service.id=c.service_center_id
+         LEFT JOIN case_service_contacts contact
+           ON contact.organization_id=c.organization_id AND contact.case_id=c.id
+           AND contact.service_center_id IS NOT DISTINCT FROM c.service_center_id
          LEFT JOIN users responsible
            ON responsible.organization_id=c.organization_id AND responsible.id=c.responsible_user_id
          WHERE fee.organization_id=$1 AND c.lifecycle_status='closed' AND c.closed_at IS NOT NULL AND NOT c.is_archived
@@ -476,7 +479,7 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
       }
       const pendingResult = await pool.query(
         `SELECT fee.id AS fee_id,c.id AS case_id,c.office_number,c.plate,c.case_type,
-                insurer.name AS insurer_name,service.name AS service_name,
+                insurer.name AS insurer_name,coalesce(contact.name,service.name) AS service_name,
                 responsible.display_name AS responsible_user_name,c.closed_at
          FROM cases c
          JOIN fee_records fee ON fee.organization_id=c.organization_id AND fee.case_id=c.id
@@ -486,6 +489,9 @@ export function createFeeStore(pool: pg.Pool): FeeStore {
            ON insurer.organization_id=c.organization_id AND insurer.id=c.insurer_id
          LEFT JOIN service_centers service
            ON service.organization_id=c.organization_id AND service.id=c.service_center_id
+         LEFT JOIN case_service_contacts contact
+           ON contact.organization_id=c.organization_id AND contact.case_id=c.id
+           AND contact.service_center_id IS NOT DISTINCT FROM c.service_center_id
          LEFT JOIN users responsible
            ON responsible.organization_id=c.organization_id AND responsible.id=c.responsible_user_id
          WHERE ${scopedSql} AND c.lifecycle_status='closed' AND c.closed_at IS NOT NULL

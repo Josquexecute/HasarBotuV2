@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
@@ -399,6 +399,10 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     const item = created.json().case
     expect(item.serviceId).toBeNull()
     expect(item.serviceDetails).toEqual(contact)
+    const searchContacts = (name: string) => app.inject({ url: `${CASES_ROUTE}?search=${encodeURIComponent(name)}&includeServiceDetails=true`, headers: { cookie } })
+    const found = await searchContacts('Manual Repair')
+    expect(found.statusCode).toBe(200)
+    expect(found.json().items.some((result: { id: string }) => result.id === item.id)).toBe(true)
     const read = () => app.inject({ url: `${CASES_ROUTE}/${item.id}?includeServiceDetails=true`, headers: { cookie } })
     expect((await read()).json().case.serviceDetails).toEqual(contact)
     const legacy = await app.inject({ url: `${CASES_ROUTE}/${item.id}`, headers: { cookie } })
@@ -415,6 +419,8 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     const replace = await app.inject({ method: 'PATCH', url: `${CASES_ROUTE}/${item.id}`, headers: { cookie }, payload: { expectedVersion: 2, serviceDetails: { name: 'Different Repair' } } })
     expect(replace.statusCode, replace.payload).toBe(200)
     expect((await read()).json().case.serviceDetails).toEqual({ name: 'Different Repair', phone: null, address: null })
+    expect((await searchContacts('Manual Repair')).json().items.some((result: { id: string }) => result.id === item.id)).toBe(false)
+    expect((await searchContacts('Different Repair')).json().items.some((result: { id: string }) => result.id === item.id)).toBe(true)
     const changedSheet = (await app.inject({ url: sheetUrl, headers: sheetHeaders })).json()
     expect(changedSheet.defaults.fields).toMatchObject({ serviceName: 'Different Repair', servicePhone: '', serviceAddress: '' })
     expect(changedSheet.overrides.fields).not.toHaveProperty('servicePhone')
@@ -490,5 +496,21 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
       payload: createPayload('34 KKK 333'),
     })
     expect(anonymous.statusCode).toBe(401)
+  })
+
+  it('uses the transaction office date for numbering when the application clock reports a different year', async () => {
+    const officeDate = String((await pool.query("SELECT to_char(transaction_timestamp() AT TIME ZONE 'Europe/Istanbul','YYYY-MM-DD') AS today")).rows[0].today)
+    const officeYear = Number(officeDate.slice(0, 4))
+    // Simulate the year-boundary disagreement between the Node host and the office clock.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(`${officeYear - 1}-12-31T12:00:00.000Z`))
+    try {
+      const created = await createCase('34 CLK 123')
+      expect(created.status).toBe(201)
+      expect(created.body.case?.officeCaseNumber).toMatch(new RegExp(`^${officeYear}/[1-9][0-9]*$`))
+      const saved = (await pool.query('SELECT office_year,office_number,follow_up_date::text FROM cases WHERE id=$1', [created.body.case!.id])).rows[0]
+      expect(saved).toMatchObject({ office_year: officeYear, office_number: created.body.case!.officeCaseNumber, follow_up_date: officeDate })
+      expect((await pool.query('SELECT 1 FROM office_counters WHERE organization_id=$1 AND office_year=$2', [orgId, officeYear - 1])).rowCount).toBe(0)
+    } finally { vi.useRealTimers() }
   })
 })

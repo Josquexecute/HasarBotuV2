@@ -10,13 +10,14 @@ contextBridge.exposeInMainWorld('hasarbotuAssistantMenu',Object.freeze({
 contextBridge.exposeInMainWorld('hasarbotuCaseFolders', Object.freeze({
   open: (caseId: unknown) => ipcRenderer.invoke('hasarbotu:open-case-folder', caseId),
 }))
-contextBridge.exposeInMainWorld('hasarbotuAppearance', Object.freeze({
-  set: (value: unknown) => ipcRenderer.invoke('hasarbotu:assistant-appearance', value),
-  onReady: (callback: unknown) => {
-    if (typeof callback !== 'function') throw new TypeError('Appearance callback must be a function')
-    const listener = () => callback()
-    ipcRenderer.on('hasarbotu:appearance-ready', listener)
-    return () => ipcRenderer.removeListener('hasarbotu:appearance-ready', listener)
+contextBridge.exposeInMainWorld('hasarbotuTouch', Object.freeze({
+  control: (value: unknown) => ipcRenderer.invoke('hasarbotu:touch-control', value),
+  getState: () => ipcRenderer.invoke('hasarbotu:touch-state'),
+  onState: (callback: unknown) => {
+    if (typeof callback !== 'function') throw new TypeError('Touch callback must be a function')
+    const listener = (_event: unknown, value: unknown) => callback(value)
+    ipcRenderer.on('hasarbotu:touch-state', listener)
+    return () => ipcRenderer.removeListener('hasarbotu:touch-state', listener)
   },
 }))
 contextBridge.exposeInMainWorld('hasarbotuAssistantFeedback', Object.freeze({

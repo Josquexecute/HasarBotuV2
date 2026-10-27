@@ -541,6 +541,7 @@ export {
   MAX_VEHICLE_TEXT_LENGTH,
   MIN_VEHICLE_MODEL_YEAR,
   VEHICLE_CLASSES,
+  VEHICLE_TRANSMISSIONS,
   VEHICLE_EVIDENCE_SOURCES,
   normalizeChassisPrefix,
   normalizeEngineCode,
@@ -551,6 +552,7 @@ export {
   type NormalizedCaseVehicleProfile,
   type OutboundVehicleProfile,
   type VehicleClass,
+  type VehicleTransmission,
   type VehicleEvidenceSource,
 } from './case-vehicle-profile.js'
 export {

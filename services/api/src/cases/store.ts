@@ -25,6 +25,7 @@ export interface CaseRow {
   notification_form_number: string | null
   insurer_claim_number: string | null
   plate: string
+  transmission?: 'unknown' | 'manual' | 'automatic' | 'semi_automatic'
   lifecycle_status: 'open' | 'closed'
   workflow_stage: string
   responsible_user_id: string | null
@@ -56,6 +57,7 @@ export function rowToDto(row: CaseRow, serviceProfile: ServiceReference | null =
     notificationFormNumber: row.notification_form_number,
     insurerClaimNumber: row.insurer_claim_number,
     plate: row.plate,
+    transmission: row.transmission ?? 'unknown',
     status: row.lifecycle_status,
     stage: row.workflow_stage,
     responsibleUserId: row.responsible_user_id,
@@ -83,7 +85,7 @@ const SORT_COLUMNS: Record<CasesQuery['sortBy'], string> = {
 
 export const SELECT_FIELDS = `
   id, case_type, office_number, notification_form_number, insurer_claim_number,
-  plate, lifecycle_status, workflow_stage, responsible_user_id, expert_user_id, service_center_id,
+  plate, transmission, lifecycle_status, workflow_stage, responsible_user_id, expert_user_id, service_center_id,
   insurer_id, follow_up_date, loss_date, notification_date, last_intervention_at, created_at, updated_at, version
 `
 
@@ -216,6 +218,9 @@ export function createCasesStore(pool: pg.Pool) {
                 AND (${normalized('search_user.display_name')} LIKE ${textParam} OR ${normalized('search_user.email')} LIKE ${textParam}))
               OR EXISTS (SELECT 1 FROM service_centers search_service WHERE search_service.organization_id=cases.organization_id
                 AND search_service.id=cases.service_center_id AND ${normalized('search_service.name')} LIKE ${textParam})
+              OR EXISTS (SELECT 1 FROM case_service_contacts search_contact WHERE search_contact.organization_id=cases.organization_id
+                AND search_contact.case_id=cases.id AND search_contact.service_center_id IS NOT DISTINCT FROM cases.service_center_id
+                AND ${normalized('search_contact.name')} LIKE ${textParam})
               OR EXISTS (SELECT 1 FROM insurers search_insurer WHERE search_insurer.organization_id=cases.organization_id
                 AND search_insurer.id=cases.insurer_id AND ${normalized('search_insurer.name')} LIKE ${textParam}))`,
           )

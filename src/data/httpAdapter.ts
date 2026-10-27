@@ -48,6 +48,7 @@ export function mapCaseDtoToRecord(
   return {
     caseId: dto.id,
     plate: dto.plate,
+    transmission: dto.transmission ?? 'unknown',
     officeNumber: dto.officeCaseNumber,
     noticeNumber: dto.notificationFormNumber ?? '—',
     claimNumber: dto.insurerClaimNumber ?? '—',

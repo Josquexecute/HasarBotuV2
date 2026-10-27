@@ -34,6 +34,37 @@ async function fill() {
 }
 afterEach(cleanup)
 describe('Eksist creation UI', () => {
+  it('clears corrected validation errors before starting a quick creation attempt', async () => {
+    const { create } = setup()
+    await fill()
+    const message = 'Çalışma klasörü için ihbar tarihi zorunludur. Atama tarihi ihbar tarihi değildir.'
+    fireEvent.change(screen.getByLabelText(/İhbar tarihi/), { target: { value: '' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydet ve detayını aç' }))
+    expect(screen.getByText(message)).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText(/İhbar tarihi/), { target: { value: '2026-09-19' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Kaydet ve detayını aç' }))
+    await waitFor(() => expect(create).toHaveBeenCalledOnce())
+    expect(screen.queryByText(message)).not.toBeInTheDocument()
+  })
+  it.each(['Kaydet ve kapat', 'Kaydet ve detayını aç'])('preserves SBM contacts through name deletion and revision before %s', async button => {
+    const { create } = setup(); await fill()
+    const text = completeText + '\nTamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: KAYNAK SERVİS\nTelefon: 0212 555 10 10\nAçık Adres: Kaynak servis adresi'
+    fireEvent.change(screen.getByLabelText('Eksist metni veya panodan görsel'), { target: { value: text } })
+    await userEvent.click(screen.getByRole('button', { name: 'Metni forma aktar' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Servisi revize et' }))
+    const name = screen.getByLabelText('Servis adı')
+    fireEvent.change(name, { target: { value: '' } })
+    expect(screen.getAllByLabelText('Servis telefonu').every(field => (field as HTMLInputElement).value === '0212 555 10 10')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Revizyonu uygula' })).toBeDisabled()
+    fireEvent.change(name, { target: { value: 'KAYNAK SERVİS DÜZELTİLDİ' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Revizyonu uygula' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Servisi revize et' }))
+    expect(screen.getByLabelText('Servis adı')).toHaveValue('KAYNAK SERVİS DÜZELTİLDİ')
+    await userEvent.click(screen.getByRole('button', { name: 'Vazgeç' }))
+    await userEvent.click(screen.getByRole('button', { name: button }))
+    expect(create.mock.calls[0]![0]).toMatchObject({ case: { serviceDetails: { name: 'KAYNAK SERVİS DÜZELTİLDİ', phone: '0212 555 10 10', address: 'Kaynak servis adresi' } }, source: { serviceRevision: { name: 'KAYNAK SERVİS DÜZELTİLDİ' } } })
+  })
   it('transfers matching SBM service name, phone and address together and permits correction', async () => {
     const { create } = setup(); await fill()
     const text = completeText + '\nTamirhane Yeri Bilgileri\nTamirhane Ad / Ünvan: KAYNAK SERVİS\nTelefon: 0212 555 10 10\nAçık Adres: Kaynak servis adresi\nAtama Yapan İletişim Bilgileri\nTelefon: 0532 555 99 99'

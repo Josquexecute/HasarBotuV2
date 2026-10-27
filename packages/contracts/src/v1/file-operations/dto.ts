@@ -47,6 +47,15 @@ export type LogicalStorageReference = z.infer<typeof logicalStorageReferenceSche
 const safeReasonCodeSchema = z.string().min(1).max(64).regex(/^[a-z0-9_]+$/)
 const safeCountSchema = z.number().int().min(0)
 
+export const fileLockInfoSchema = z.strictObject({
+  applications: z.array(z.strictObject({
+    pid: z.number().int().positive(),
+    name: z.string().min(1).max(80).regex(/^[\p{L}\p{N} ._-]+$/u),
+  })).max(8),
+  truncated: z.boolean(),
+})
+export type FileLockInfo = z.infer<typeof fileLockInfoSchema>
+
 export const fileOperationSchema = z.strictObject({
   id: idSchema,
   caseId: caseIdSchema,
@@ -62,6 +71,7 @@ export const fileOperationSchema = z.strictObject({
   totalBytes: byteSizeSchema.nullable(),
   cleanupState: fileOperationCleanupStateSchema,
   failureReasonCode: safeReasonCodeSchema.nullable(),
+  fileLock: fileLockInfoSchema.nullable().optional(),
   version: entityVersionSchema,
   canApprove: z.boolean(),
   canCancel: z.boolean(),

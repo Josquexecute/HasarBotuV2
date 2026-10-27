@@ -5,7 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest'
 const read = (path: string) => readFileSync(new URL('../../../public/' + path, import.meta.url), 'utf8')
 const helpers = new Function(read('vendor/coucou/core/anim.js').replace(/export /g, '') + '; return { Ease, lerp }')()
 const Engine = new Function('Ease', 'lerp', read('vendor/coucou/mochi/engine.js').replace(/^import .*\r?\n/gm, '').replace(/export /g, '') + '; return BotEngine')(helpers.Ease, helpers.lerp)
-const Motion = new Function(read('desktop-assistant-motion.js').replace('export class', 'class') + '; return AssistantMotion')()
+const Play = new Function(read('desktop-assistant-play.js').replace(/export /g, '') + '; return AssistantPlay')()
+const Motion = new Function('AssistantPlay', read('desktop-assistant-motion.js').replace(/^import .*\r?\n/gm, '').replace('export class', 'class') + '; return AssistantMotion')(Play)
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 function setup() {
@@ -22,6 +23,52 @@ function setup() {
   }
   return { bot, motion, advance }
 }
+
+it('keeps legacy, delayed greeting, work and recovery choreography in charge until its final frame', () => {
+  const { bot, motion } = setup()
+  const advance = (ms: number) => {
+    for (let elapsed = 0; elapsed < ms; elapsed += 16) {
+      vi.advanceTimersByTime(16); motion.tick(); motion.updateGaze(); bot.update(.016)
+    }
+  }
+  motion.gaze(.9, -.8); advance(1000)
+  expect(bot.yaw).toBeGreaterThan(.5)
+  for (const start of [() => bot.greet(), () => motion.success(), () => motion.idle('yawn'), () => motion.react('error'), () => motion.curious()]) {
+    start(); motion.updateGaze()
+    expect(bot.lookX).toBe(0)
+    motion.gaze(-.9, .8)
+    advance(200)
+    expect(bot.lookX).toBe(0)
+    advance(5000)
+    expect(bot.lookX).toBe(-.9); expect(bot.lookY).toBe(.8)
+    expect(bot.yaw).toBeCloseTo(-.558, 2)
+    advance(7000)
+  }
+  motion.work(true); advance(500)
+  expect(bot.lookX).toBe(0)
+  motion.work(false); advance(3000)
+  expect(bot.lookX).toBe(-.9)
+})
+
+it('does not release gaze between queued reactions or before recovery finishes', () => {
+  const { bot, motion } = setup()
+  motion.gaze(.8, -.6)
+  motion.play.shake()
+  const reactions = new Set()
+  const finishSequence = () => {
+    for (let frame = 0; frame < 1500 && motion.play.animating; frame++) {
+      reactions.add(motion.play.scene.definition.id)
+      vi.advanceTimersByTime(16); motion.tick(); motion.updateGaze(); bot.update(.016)
+      if (motion.play.animating) { expect(bot.lookX).toBe(0); expect(bot.lookY).toBe(0) }
+    }
+    expect(motion.play.animating).toBe(false)
+    expect(bot.lookX).toBe(.8); expect(bot.lookY).toBe(-.6)
+  }
+  finishSequence()
+  expect(reactions.size).toBeGreaterThan(1)
+  motion.play.recover()
+  finishSequence()
+})
 
 it('stretches only after quiet time, returns to rest and leaves no gesture timers or permanent frame work', () => {
   const { bot, motion, advance } = setup()

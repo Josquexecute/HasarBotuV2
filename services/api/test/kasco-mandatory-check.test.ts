@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import {
@@ -291,5 +291,35 @@ describeDb('Zorunlu Kasko Kontrolü gate (gerçek PostgreSQL)', () => {
       payload: { result: 'unclear', evidence: null, expectedVersion: 1 },
     })
     expect(response.statusCode).toBe(409)
+  })
+
+  it('waits for concurrent closure and does not confirm a check using an earlier open-state read', async () => {
+    const caseId = await createCase(adminCookie, 'casco', '34 KRC 103')
+    const closer = await pool.connect()
+    let writing: Promise<Awaited<ReturnType<typeof app.inject>>> | undefined
+    try {
+      await closer.query('BEGIN')
+      await closer.query('SELECT id FROM cases WHERE id=$1 FOR UPDATE', [caseId])
+      writing = Promise.resolve(app.inject({ method: 'PUT', url: checkRoute(caseId, 'service_deductible_clause'), headers: { cookie: adminCookie },
+        payload: { result: 'unclear', evidence: null, expectedVersion: 1 } }))
+      // Observe the real row wait; the old implementation waited only at the later foreign-key insert.
+      await vi.waitFor(async () => {
+        const waiting = await pool.query(`SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'
+          AND (query LIKE 'SELECT case_type, lifecycle_status FROM cases%' OR query LIKE '%INSERT INTO kasco_mandatory_checks%')`)
+        expect(waiting.rowCount).toBeGreaterThan(0)
+      })
+      await closer.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',version=version+1 WHERE id=$1", [caseId])
+      await closer.query('COMMIT')
+      const response = await writing
+      expect(response.statusCode, response.payload).toBe(409)
+      expect(response.json().error.code).toBe('conflict')
+      expect((await pool.query('SELECT 1 FROM kasco_mandatory_checks WHERE case_id=$1', [caseId])).rowCount).toBe(0)
+      expect((await pool.query('SELECT 1 FROM kasco_mandatory_check_confirmations WHERE case_id=$1', [caseId])).rowCount).toBe(0)
+      expect((await pool.query("SELECT 1 FROM audit_events WHERE action='kasco_mandatory_check.confirmed' AND details->>'caseId'=$1", [caseId])).rowCount).toBe(0)
+    } finally {
+      await closer.query('ROLLBACK')
+      closer.release()
+      await writing
+    }
   })
 })

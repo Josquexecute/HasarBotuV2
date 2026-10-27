@@ -1,4 +1,5 @@
 import { access, mkdir, mkdtemp, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -496,6 +497,114 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     expect(audit.rowCount).toBe(1)
   }, 60_000)
 
+  it('requires invoice and agreement review for a manually named service before normal closure', async () => {
+    const seeded = await seedCase('34 MAN 026', true)
+    const edited = await app.inject({ method: 'PATCH', url: `${CASES_ROUTE}/${seeded.caseId}`, headers: { cookie: adminCookie },
+      payload: { expectedVersion: 1, serviceDetails: { name: 'Manual Repair', phone: '0212 555 01 01' } } })
+    expect(edited.statusCode, edited.payload).toBe(200)
+    expect(edited.json().case.serviceId).toBeNull()
+    const result = await planClose(seeded.caseId, { expectedCaseVersion: 2, expectedLocationVersion: 1, closeMode: 'normal' })
+    expect(result.statusCode, result.payload).toBe(201)
+    const plan = caseLifecycleOperationResponseSchema.parse(result.json()).operation
+    expect(plan).toMatchObject({ status: 'blocked', canApprove: false, blockers: ['requirements_incomplete'] })
+    expect(plan.requirementSummary.requirements.find(item => item.requirementCode === 'closure.invoice')?.status).toBe('missing')
+    expect(plan.requirementSummary.requirements.find(item => item.requirementCode === 'closure.delivery_release_assignment')?.status).toBe('control_required')
+    expect(plan.requirementSummary.requirements.find(item => item.requirementCode === 'closure.commitment')?.status).toBe('control_required')
+    expect((await approve(seeded.caseId, plan)).statusCode).toBe(409)
+    expect((await pool.query('SELECT 1 FROM jobs WHERE payload->>\'caseId\'=$1', [seeded.caseId])).rowCount).toBe(0)
+  })
+
+  it.each(['approval', 'finalization'] as const)('rechecks normal-close evidence at %s after a document revision becomes pending', async phase => {
+    const seeded = await seedCase(phase === 'approval' ? '34 EVD 101' : '34 EVD 102', true)
+    const plannedResponse = await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' })
+    expect(plannedResponse.statusCode, plannedResponse.payload).toBe(201)
+    const planned = caseLifecycleOperationResponseSchema.parse(plannedResponse.json()).operation
+    expect(planned.status).toBe('approval_required')
+    if (phase === 'finalization') expect((await approve(seeded.caseId, planned)).statusCode).toBe(202)
+    const moveJob = phase === 'finalization' ? await agentClient.claim() : undefined
+    const document = (await pool.query("SELECT id,version FROM documents WHERE case_id=$1 AND document_type='expert_report'", [seeded.caseId])).rows[0]
+    const revision = await app.inject({ method: 'POST', url: `${CASES_ROUTE}/${seeded.caseId}/documents`, headers: { cookie: adminCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { documentId: document.id, expectedVersion: document.version, documentType: 'expert_report', sourceType: 'manual', originalFileName: 'revision.pdf', mimeType: 'application/pdf',
+        byteSize: 128, contentHash: 'c'.repeat(64), storageRootKey: ROOT_KEY, relativePath: `${seeded.openPath}/EVRAK/revision.pdf` } })
+    expect(revision.statusCode, revision.payload).toBe(201)
+    expect(revision.json().version.status).toBe('pending')
+    // Registration changes the document aggregate; the case optimistic version stays unchanged.
+    expect((await pool.query('SELECT version FROM cases WHERE id=$1', [seeded.caseId])).rows[0].version).toBe(1)
+    if (phase === 'approval') {
+      const approved = await approve(seeded.caseId, planned)
+      expect(approved.statusCode, approved.payload).toBe(409)
+      expect(approved.json().error.code).toBe('lifecycle_stale')
+      expect((await pool.query('SELECT 1 FROM case_file_operations WHERE case_id=$1', [seeded.caseId])).rowCount).toBe(0)
+    } else {
+      // Run the move job directly, leaving the new document verification job pending.
+      const job = moveJob
+      expect(['rename_case_workspace', 'move_case_workspace']).toContain(job?.type)
+      if (!job || job.payload.kind !== 'file_operation') throw new Error('Expected lifecycle move job')
+      const result = await executeFileOperation(agentConfig.roots, job.payload)
+      expect(result.outcome).toBe('verified')
+      await agentClient.reportResult(job.id, result)
+    }
+    const operation = (await app.inject({ url: `/api/v1/cases/${seeded.caseId}/lifecycle-operations/${planned.id}`, headers: { cookie: adminCookie } })).json().operation
+    expect(operation).toMatchObject(phase === 'approval' ? { status: 'stale', failureReasonCode: 'requirements_changed' }
+      : { status: 'manual_recovery_required', failureReasonCode: 'requirements_changed_after_move' })
+    expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0].lifecycle_status).toBe('open')
+    expect((await runOnce(agentClient, agentConfig)).kind).toBe('reported')
+  }, 60_000)
+
+  it.each(['normal', 'recovered', 'pending_destination', 'unavailable_source'] as const)(
+    'keeps tracked evidence scoped to the verified move during %s finalization', async mode => {
+      const seeded = await seedCase(`34 TRK ${301 + ['normal', 'recovered', 'pending_destination', 'unavailable_source'].indexOf(mode)}`, true)
+      const baseTypes = BASE_TYPES.filter(type => type !== 'expert_report' && type !== 'preliminary_report')
+      // The office tracking workflow, rather than registered metadata, supplies the base requirements.
+      await pool.query(`UPDATE document_versions SET status='missing',hash_verified=false,size_verified=false,verified_at=now()
+        WHERE case_id=$1 AND document_id IN (SELECT id FROM documents WHERE case_id=$1 AND document_type=ANY($2::text[]))`, [seeded.caseId, baseTypes])
+      const observed: { id: string; type: string; hash: string; fileName: string }[] = []
+      for (const type of baseTypes) {
+        const id = uuidv7(), bytes = Buffer.from(`Synthetic tracked evidence: ${type}`), hash = createHash('sha256').update(bytes).digest('hex'), fileName = `${type}.pdf`
+        await writeFile(join(root, seeded.openPath, 'EVRAK', fileName), bytes)
+        await pool.query(`INSERT INTO tracked_files(id,organization_id,case_id,storage_root_key,relative_path,current_hash,revision)
+          VALUES($1,$2,$3,$4,$5,$6,1)`, [id, organizationId, seeded.caseId, ROOT_KEY, `${seeded.openPath}/EVRAK/${fileName}`, hash])
+        await pool.query(`INSERT INTO document_observations(id,file_id,revision,content_hash,byte_size,file_name,document_type,status,reviewed_by,reviewed_at)
+          VALUES($1,$2,1,$3,$4,$5,$6,'approved',$7,now())`, [uuidv7(), id, hash, bytes.length, fileName, type, adminUserId])
+        observed.push({ id, type, hash, fileName })
+      }
+      const plannedResponse = await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' })
+      expect(plannedResponse.statusCode, plannedResponse.payload).toBe(201)
+      const planned = caseLifecycleOperationResponseSchema.parse(plannedResponse.json()).operation
+      expect(planned).toMatchObject({ status: 'approval_required', requirementSummary: { missingCount: 0, controlRequiredCount: 0 } })
+      expect((await approve(seeded.caseId, planned)).statusCode).toBe(202)
+      let job = await agentClient.claim()
+      if (!job || job.payload.kind !== 'file_operation') throw new Error('Expected lifecycle move job')
+      let result = await executeFileOperation(agentConfig.roots, job.payload)
+      expect(result).toMatchObject({ outcome: 'verified' })
+      if (mode !== 'normal') {
+        // Discovery published the exact verified destination before the lost result was replayed.
+        await pool.query("UPDATE case_locations SET relative_path=$2,version=2,verification_status='verified' WHERE case_id=$1", [seeded.caseId, planned.destination.relativePath])
+        if (mode === 'pending_destination') {
+          const original = observed[0]!, id = uuidv7()
+          await pool.query(`INSERT INTO tracked_files(id,organization_id,case_id,storage_root_key,relative_path,current_hash,revision)
+            VALUES($1,$2,$3,$4,$5,$6,1)`, [id, organizationId, seeded.caseId, ROOT_KEY, `${planned.destination.relativePath}/EVRAK/${original.fileName}`, original.hash])
+          await pool.query(`INSERT INTO document_observations(id,file_id,revision,content_hash,byte_size,file_name,document_type,status)
+            VALUES($1,$2,1,$3,1,$4,$5,'pending')`, [uuidv7(), id, original.hash, original.fileName, original.type])
+        } else if (mode === 'unavailable_source') {
+          await pool.query('UPDATE tracked_files SET available=false WHERE id=$1', [observed[0]!.id])
+        }
+        await pool.query("UPDATE jobs SET lease_expires_at=now()-interval '1 second' WHERE id=$1", [job.id])
+        job = await agentClient.claim()
+        if (!job || job.payload.kind !== 'file_operation') throw new Error('Expected recovered lifecycle move job')
+        result = await executeFileOperation(agentConfig.roots, job.payload)
+        expect(result).toMatchObject({ outcome: 'verified', fileOperation: { safeOutcomeCode: 'recovered_after_rename' } })
+      }
+      expect(await agentClient.reportResult(job.id, result)).toMatchObject({ status: 'succeeded' })
+      const state = (await app.inject({ url: `/api/v1/cases/${seeded.caseId}/lifecycle-operations/${planned.id}`, headers: { cookie: adminCookie } })).json().operation
+      const blocked = mode === 'pending_destination' || mode === 'unavailable_source'
+      expect(state).toMatchObject(blocked ? { status: 'manual_recovery_required', failureReasonCode: 'requirements_changed_after_move' } : { status: 'closed', failureReasonCode: null })
+      expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0].lifecycle_status).toBe(blocked ? 'open' : 'closed')
+      expect((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [seeded.caseId])).rows[0].relative_path).toBe(planned.destination.relativePath)
+      expect((await pool.query('SELECT relative_path FROM tracked_files WHERE id=$1', [observed[0]!.id])).rows[0].relative_path).toBe(`${seeded.openPath}/EVRAK/${observed[0]!.fileName}`)
+    }, 60_000,
+  )
+
   it('kapanis evrakini yetkili profil ile sigortaciya ozel anlasmadan ayri degerlendirir', async () => {
     const authorized = await seedCase('34 YET 022', true, { insurerId: insurerWithoutAgreementId, serviceId: authorizedServiceId })
     const authorizedPlan = caseLifecycleOperationResponseSchema.parse((await planClose(authorized.caseId, {
@@ -609,13 +718,19 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     expect((await pool.query('SELECT status FROM case_file_operations WHERE id=$1', [job.payload.operationId])).rows[0]).toEqual({ status: 'queued' })
     await agentClient.heartbeat(job.id, 'applying')
     expect((await pool.query('SELECT status FROM case_lifecycle_operations WHERE id=$1', [planned.id])).rows[0]).toEqual({ status: 'moving' })
-    expect(await agentClient.reportResult(job.id, { outcome: 'failed', errorCode: 'file_locked' })).toMatchObject({ status: 'pending' })
+    const fileLock = { applications: [{ pid: 1234, name: 'WINWORD' }], truncated: false }
+    expect(await agentClient.reportResult(job.id, { outcome: 'failed', errorCode: 'file_locked', fileLock })).toMatchObject({ status: 'pending' })
     expect((await pool.query('SELECT status,failure_reason_code FROM case_lifecycle_operations WHERE id=$1', [planned.id])).rows[0])
       .toEqual({ status: 'queued', failure_reason_code: 'file_locked' })
+    const readUrl = `/api/v1/cases/${seeded.caseId}/lifecycle-operations/${planned.id}`
+    expect((await app.inject({ method: 'GET', url: readUrl, headers: { cookie: adminCookie } })).json().operation.linkedFileOperation.fileLock).toEqual(fileLock)
+    expect((await app.inject({ method: 'GET', url: readUrl, headers: { cookie: otherCookie } })).statusCode).toBe(404)
+    expect((await pool.query("SELECT details->'fileLock' AS lock FROM audit_events WHERE resource_id=$1 AND action='file_operation.failed'", [job.payload.operationId])).rows[0]?.lock).toEqual(fileLock)
     expect((await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' })).statusCode).toBe(409)
     await pool.query('UPDATE jobs SET next_attempt_at=now() WHERE id=$1', [job.id])
     expect(await runOnce(agentClient, agentConfig)).toMatchObject({ kind: 'reported', reported: { status: 'succeeded' } })
     expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0]).toEqual({ lifecycle_status: 'closed' })
+    expect((await pool.query('SELECT file_lock FROM case_file_operations WHERE id=$1', [job.payload.operationId])).rows[0]?.file_lock).toBeNull()
     await expect(access(join(root, ...seeded.openPath.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(access(join(root, ...planned.destination.relativePath.split('/')))).resolves.toBeUndefined()
   }, 60_000)

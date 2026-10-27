@@ -1,3 +1,4 @@
+import { seedTestAssistantPosition } from './test-display.mjs'
 import { app, ipcMain } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { startDesktopShell } from '../../dist/main/shell.js'
@@ -7,6 +8,7 @@ app.enableSandbox()
 void app.whenReady().then(async () => {
   try {
     const shell = await startDesktopShell({ apiOrigin: 'http://127.0.0.1:1', assetRoot: process.env.HB_ASSISTANT_ASSETS, show: false })
+    seedTestAssistantPosition()
     const assistant = await startDesktopAssistant({ shell, assetRoot: process.env.HB_ASSISTANT_ASSETS, userDataPath: app.getPath('userData'), quit: () => app.quit() })
     const before = assistant.window.getBounds()
     await writeFile(process.env.HB_ASSISTANT_RESULT, JSON.stringify({ x: before.x - 16, y: before.y }))

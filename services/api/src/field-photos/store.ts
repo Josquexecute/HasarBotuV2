@@ -23,6 +23,7 @@ export class FieldPhotoError extends Error {
   constructor(readonly code: string, readonly status = 409) { super(code) }
 }
 const fail = (code: string, status = 409): never => { throw new FieldPhotoError(code, status) }
+const outputDirectory = (row: { relative_path: string; output_subdirectory: string }) => row.output_subdirectory ? `${row.relative_path}/${row.output_subdirectory}` : row.relative_path
 const dto = (row: Row): FieldUpload => fieldUploadSchema.parse({ id: row.id, caseId: row.case_id, kind: row.kind,
   fileName: row.original_file_name, byteSize: row.byte_size, receivedBytes: row.received_bytes, status: row.status,
   outputFileName: row.status === 'ready' ? row.output_file_name : null, outputBytes: row.status === 'ready' ? row.output_bytes : null,
@@ -190,7 +191,7 @@ export function createFieldPhotoStore(pool: pg.Pool, directory: string) {
         await db.query(`UPDATE field_photo_uploads SET status='processing',leased_by_agent_id=$2,lease_token=$3,lease_expires_at=now()+interval '180 seconds',attempt_count=attempt_count+1,
           storage_root_key=$4,relative_path=$5,location_version=$6,updated_at=now() WHERE id=$1`, [row.id, agent.id, token, row.storage_root_key, row.relative_path, row.location_version])
         return fieldPhotoJobSchema.parse({ id: row.id, caseId: row.case_id, kind: row.kind, contentHash: row.content_hash, byteSize: row.byte_size,
-          storageRootKey: row.storage_root_key, relativePath: row.relative_path, leaseToken: token, outputFileName: row.output_file_name })
+          storageRootKey: row.storage_root_key, relativePath: outputDirectory(row), leaseToken: token, outputFileName: row.output_file_name })
       })
     },
     async originalForAgent(agent: AuthedAgent, id: string, token: string) {
@@ -200,9 +201,9 @@ export function createFieldPhotoStore(pool: pg.Pool, directory: string) {
     async prepare(agent: AuthedAgent, id: string, result: PhotoResult) {
       return withTransaction(pool, async db => {
         const row = await leased(db, agent, id, result.leaseToken)
-        const prefix = row.kind === 'damage' ? 'HASAR ' : row.kind === 'chassis' ? 'ŞASE' : 'KM'
+        const prefix = row.kind === 'damage' ? 'HASAR ' : row.kind === 'chassis' ? 'ŞASE' : row.kind === 'gear' ? 'VİTES' : 'KM'
         if (!result.fileName.startsWith(prefix)) fail('photo_kind_mismatch', 400)
-        const collision = await db.query(`SELECT 1 FROM field_photo_uploads WHERE organization_id=$1 AND storage_root_key=$2 AND relative_path=$3 AND output_file_name=$4 AND id<>$5`, [agent.organizationId, row.storage_root_key, row.relative_path, result.fileName, id])
+        const collision = await db.query(`SELECT 1 FROM field_photo_uploads WHERE organization_id=$1 AND storage_root_key=$2 AND relative_path=$3 AND output_file_name=$4 AND id<>$5 AND output_subdirectory=$6`, [agent.organizationId, row.storage_root_key, row.relative_path, result.fileName, id, row.output_subdirectory])
         if (collision.rowCount) fail('photo_name_conflict')
         await db.query(`UPDATE field_photo_uploads SET output_file_name=$2,output_bytes=$3,output_hash=$4,output_width=$5,output_height=$6,lease_expires_at=now()+interval '180 seconds',updated_at=now() WHERE id=$1`,
         [id, result.fileName, result.byteSize, result.contentHash, result.width, result.height])
@@ -228,7 +229,7 @@ export function createFieldPhotoStore(pool: pg.Pool, directory: string) {
         const photoId = uuidv7()
         await db.query(`INSERT INTO photos(id,organization_id,case_id,original_file_name,display_name,extension,mime_type,byte_size,content_hash,storage_root_key,relative_path,source_type,status,hash_verified,size_verified,verified_at,registered_by_user_id,request_id)
           VALUES($1,$2,$3,$4,$4,'jpg','image/jpeg',$5,$6,$7,$8,'upload','ready',true,true,now(),$9,$10)`,
-        [photoId, agent.organizationId, row.case_id, row.output_file_name, row.output_bytes, row.output_hash, row.storage_root_key, `${row.relative_path}/${row.output_file_name}`, row.uploaded_by_user_id, requestId])
+        [photoId, agent.organizationId, row.case_id, row.output_file_name, row.output_bytes, row.output_hash, row.storage_root_key, `${outputDirectory(row)}/${row.output_file_name}`, row.uploaded_by_user_id, requestId])
         await db.query("UPDATE field_photo_uploads SET status='ready',photo_id=$2,last_error_code=NULL,updated_at=now() WHERE id=$1", [id, photoId])
         await audit.record(db, { organizationId: agent.organizationId, actorUserId: row.uploaded_by_user_id, requestId, action: 'photo.upload_published', entityType: 'case', entityId: row.case_id,
           details: { uploadId: id, photoId, agentId: agent.id, fileName: row.output_file_name, originalPreserved: true, byteSize: row.output_bytes } })

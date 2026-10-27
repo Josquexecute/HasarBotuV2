@@ -39,6 +39,7 @@ interface FileOperationRow {
   total_bytes: string | null
   cleanup_state: string
   failure_reason_code: string | null
+  file_lock: FileOperation['fileLock']
   version: number
   active_job_id: string | null
   approved_at: Date | null
@@ -49,7 +50,7 @@ interface FileOperationRow {
 
 const OPERATION_FIELDS = `id,case_id,operation_type,source_storage_root_key,source_relative_path,
   destination_storage_root_key,destination_relative_path,expected_location_id,expected_location_version,
-  status,strategy,manifest_hash,file_count,directory_count,total_bytes,cleanup_state,failure_reason_code,
+  status,strategy,manifest_hash,file_count,directory_count,total_bytes,cleanup_state,failure_reason_code,file_lock,
   version,active_job_id,approved_at,finalized_at,created_at,updated_at`
 
 function toDto(row: FileOperationRow): FileOperation {
@@ -68,6 +69,7 @@ function toDto(row: FileOperationRow): FileOperation {
     totalBytes: row.total_bytes === null ? null : Number(row.total_bytes),
     cleanupState: row.cleanup_state,
     failureReasonCode: row.failure_reason_code,
+    fileLock: row.file_lock,
     version: row.version,
     canApprove: row.status === 'planned',
     canCancel: row.status === 'planned' || row.status === 'queued',

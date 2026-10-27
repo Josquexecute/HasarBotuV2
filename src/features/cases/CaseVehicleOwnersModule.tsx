@@ -51,6 +51,11 @@ export function CaseVehicleOwnersModule({ caseId, port }: {
   }
 
   const save = async () => {
+    if (busy) return
+    if (rows.some(row => row.name.trim() === '' && row.phone?.trim())) {
+      setSaveError('Telefonu girilen sahibin adını da girin. Bilgileriniz korunuyor.')
+      return
+    }
     setBusy(true)
     setSaveError(null)
     try {
@@ -64,7 +69,16 @@ export function CaseVehicleOwnersModule({ caseId, port }: {
       setRecord(result)
       setEditing(false)
     } catch (error) {
-      setSaveError(error instanceof CaseVehicleOwnersClientError ? error.kind : 'unavailable')
+      const kind = error instanceof CaseVehicleOwnersClientError ? error.kind : 'unavailable'
+      const messages = {
+        unauthorized: 'Oturumunuz sona erdi. Yeniden giriş yapın.',
+        forbidden: 'Araç sahibi bilgilerini düzenleme yetkiniz yok.',
+        not_found: 'Dosya bulunamadı veya erişim alanınızda değil.',
+        validation: 'Sahip adlarını ve telefonlarını kontrol edin. Bilgileriniz korunuyor.',
+        conflict: 'Sahip listesi başka bir işlemle değişti. Dosyayı yeniden açıp güncel listeyi kontrol edin.',
+        unavailable: 'Sunucuya ulaşılamadı. Bilgileriniz korunuyor; yeniden deneyin.',
+      }
+      setSaveError(messages[kind])
     } finally {
       setBusy(false)
     }
@@ -102,7 +116,7 @@ export function CaseVehicleOwnersModule({ caseId, port }: {
   return (
     <section className="info-panel" aria-label="Araç sahibi düzenleme">
       <header><h3><Users size={16} aria-hidden="true" /> Araç Sahibi veya Sahipleri</h3></header>
-      {saveError !== null && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={16} /><span>Kaydedilemedi ({saveError}). Tekrar deneyin.</span></div>}
+      {saveError !== null && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={16} /><span>{saveError}</span></div>}
       {rows.map((row, index) => (
         <div className="case-form-grid" key={index}>
           <label className="form-field">
@@ -110,6 +124,7 @@ export function CaseVehicleOwnersModule({ caseId, port }: {
             <input
               aria-label={`Sahip ${index + 1} adı`}
               value={row.name}
+              disabled={busy}
               maxLength={200}
               onChange={(event) => setRows(rows.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))}
             />
@@ -119,18 +134,20 @@ export function CaseVehicleOwnersModule({ caseId, port }: {
             <input
               aria-label={`Sahip ${index + 1} telefonu`}
               value={row.phone ?? ''}
+              disabled={busy}
               maxLength={32}
               onChange={(event) => setRows(rows.map((item, itemIndex) => itemIndex === index ? { ...item, phone: event.target.value } : item))}
             />
           </label>
           <button
             className="icon-button" type="button" aria-label={`Sahip ${index + 1} satırını kaldır`}
+            disabled={busy}
             onClick={() => setRows(rows.filter((_, itemIndex) => itemIndex !== index))}
           ><Trash2 size={15} /></button>
         </div>
       ))}
       {rows.length < MAX_CASE_VEHICLE_OWNERS && (
-        <button className="button button--secondary" type="button" onClick={() => setRows([...rows, { ...EMPTY_ROW }])}>
+        <button className="button button--secondary" type="button" disabled={busy} onClick={() => setRows([...rows, { ...EMPTY_ROW }])}>
           <Plus size={14} aria-hidden="true" /> Sahip Ekle
         </button>
       )}

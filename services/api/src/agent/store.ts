@@ -1,4 +1,5 @@
 import type pg from 'pg'
+import { loadCurrentLifecycleRequirements } from '../case-lifecycle/store.js'
 import {
   agentSchema,
   claimedJobSchema,
@@ -273,7 +274,7 @@ export function createAgentStore(pool: pg.Pool) {
           const isCleanup = claimed.type === 'cleanup_moved_workspace'
           const changed = await client.query(
             `UPDATE case_file_operations SET status=CASE WHEN $3 THEN 'cleanup_pending' ELSE 'queued' END,
-             attempt_count=$4,failure_reason_code=NULL,updated_at=now()
+             attempt_count=$4,failure_reason_code=NULL,file_lock=NULL,updated_at=now()
              WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled','manual_recovery_required')
              RETURNING case_id,approved_by_user_id,operation_type,strategy`,
             [claimed.target_id, agent.organizationId, isCleanup, nextAttempt],
@@ -488,10 +489,10 @@ export function createAgentStore(pool: pg.Pool) {
             const changed = await client.query(
               `UPDATE case_file_operations SET status=$3,
                cleanup_state=CASE WHEN $4 THEN 'blocked' WHEN $5 THEN 'pending' ELSE cleanup_state END,
-               failure_reason_code=$6,updated_at=now()
+               failure_reason_code=$6,file_lock=$7,updated_at=now()
                WHERE id=$1 AND organization_id=$2 AND status NOT IN ('ready','stale','cancelled')
                RETURNING case_id,approved_by_user_id,operation_type,strategy`,
-              [job.target_id, agent.organizationId, operationStatus, manual, isCleanup && !manual, errorCode],
+              [job.target_id, agent.organizationId, operationStatus, manual, isCleanup && !manual, errorCode, result.fileLock ?? null],
             )
             const operation = changed.rows[0] as {
               case_id: string
@@ -519,6 +520,7 @@ export function createAgentStore(pool: pg.Pool) {
                   strategy: operation.strategy,
                   errorCode,
                   attempt: job.attempt_count,
+                  ...(result.fileLock ? { fileLock: result.fileLock } : {}),
                 },
               })
             }
@@ -872,6 +874,7 @@ async function finalizeLinkedLifecycle(
   job: JobRow,
   operation: FileOperationApplyRow,
   strategy: 'atomic_rename' | 'staged_copy',
+  recoveredLocation = false,
 ): Promise<void> {
   const selected = await ctx.client.query(
     `SELECT id,case_id,operation_type,expected_case_version,expected_location_version,closure_mode,
@@ -908,6 +911,17 @@ async function finalizeLinkedLifecycle(
     return
   }
   const finalStatus = lifecycle.operation_type === 'close' ? 'closed' : 'reopened'
+  if (lifecycle.operation_type === 'close' && lifecycle.closure_mode === 'normal') {
+    const requirements = await loadCurrentLifecycleRequirements(ctx.client, ctx.organizationId, operation.case_id,
+      recoveredLocation ? {
+        source: { storageRootKey: operation.source_storage_root_key, relativePath: operation.source_relative_path },
+        destination: { storageRootKey: operation.destination_storage_root_key, relativePath: operation.destination_relative_path },
+      } : undefined)
+    if (requirements.missingCount + requirements.controlRequiredCount > 0) {
+      await markLinkedLifecycleFailure(ctx, operation, 'manual_recovery_required', 'requirements_changed_after_move', job.id)
+      return
+    }
+  }
   if (lifecycle.operation_type === 'close') {
     await ctx.client.query(
       `UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',closed_at=now(),closed_by_user_id=$2,
@@ -1087,7 +1101,7 @@ async function applyFileOperationResult(
       return markFileOperationManualRecovery(ctx, job, operation, 'location_changed_before_cleanup_finalize')
     }
     await ctx.client.query(
-      `UPDATE case_file_operations SET status='ready',cleanup_state='completed',failure_reason_code=NULL,
+      `UPDATE case_file_operations SET status='ready',cleanup_state='completed',failure_reason_code=NULL,file_lock=NULL,
        finalized_at=now(),version=version+1,updated_at=now() WHERE id=$1`,
       [operation.id],
     )
@@ -1170,7 +1184,7 @@ async function applyFileOperationResult(
 
   await ctx.client.query(
     `UPDATE case_file_operations SET status='switching_location',strategy=$2,manifest_hash=$3,file_count=$4,
-     directory_count=$5,total_bytes=$6,failure_reason_code=NULL,updated_at=now() WHERE id=$1`,
+     directory_count=$5,total_bytes=$6,failure_reason_code=NULL,file_lock=NULL,updated_at=now() WHERE id=$1`,
     [operation.id, fileResult.strategy, fileResult.manifestHash, fileResult.fileCount, fileResult.directoryCount, fileResult.totalBytes],
   )
   await audit.record(ctx.client, {
@@ -1193,6 +1207,10 @@ async function applyFileOperationResult(
       totalBytes: fileResult.totalBytes,
     },
   })
+
+  // Tracking requirements are scoped to the published location. Evaluate while
+  // the source is still current; recovered moves supply their verified source scope.
+  await finalizeLinkedLifecycle(ctx, job, operation, fileResult.strategy, recoveredLocation)
 
   let switchedVersion = location.version
   if (!recoveredLocation) {
@@ -1239,8 +1257,6 @@ async function applyFileOperationResult(
       ...(recoveredLocation ? { existingVerifiedDestination: true } : {}),
     },
   })
-
-  await finalizeLinkedLifecycle(ctx, job, operation, fileResult.strategy)
 
   if (fileResult.strategy === 'staged_copy') {
     const cleanupJobId = uuidv7()
@@ -1291,7 +1307,7 @@ async function applyFileOperationResult(
   await ctx.client.query(
     `UPDATE case_file_operations SET status='ready',cleanup_state='not_required',active_job_id=$2,
      strategy='atomic_rename',manifest_hash=$3,file_count=$4,directory_count=$5,total_bytes=$6,
-     finalized_at=now(),failure_reason_code=NULL,version=version+1,updated_at=now() WHERE id=$1`,
+     finalized_at=now(),failure_reason_code=NULL,file_lock=NULL,version=version+1,updated_at=now() WHERE id=$1`,
     [operation.id, job.id, fileResult.manifestHash, fileResult.fileCount, fileResult.directoryCount, fileResult.totalBytes],
   )
   await audit.record(ctx.client, {

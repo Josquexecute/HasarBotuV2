@@ -13,6 +13,7 @@ import { loadTracking } from '../tracking/trackingApi'
 import './desktop-assistant-panel.css'
 import { useAssistantAppearance } from './assistantAppearanceContext'
 import { appearanceStyle } from './appearance'
+import { TouchPlayControls } from './TouchPlayControls'
 
 type MenuAction = 'open' | 'notifications' | 'settings' | 'hide' | 'reset' | 'close'
 type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: MenuAction, caseId?: string): void } }
@@ -191,6 +192,7 @@ export function DesktopAssistantPanel() {
         <AssistantCaseSearch key={session.user!.id} />
       </>}
     </div>
+    <TouchPlayControls />
     <nav className="assistant-native-actions" aria-label="Kısayollar"><button disabled={!native} onClick={() => choose('open', session.status === 'authenticated' ? selectedCaseId ?? undefined : undefined)}>{session.status === 'authenticated' ? 'Uygulamayı aç' : 'Giriş yap'}</button><button disabled={!native} onClick={() => choose('notifications', session.status === 'authenticated' ? selectedCaseId ?? undefined : undefined)}>Bildirimler</button><button disabled={!native} onClick={() => choose('settings')}>Ayarlar</button></nav>
     <footer><button disabled={!native} onClick={() => choose('hide')}>Gizle</button><button disabled={!native} onClick={() => choose('reset')}>Konumu sıfırla</button></footer>
   </main>

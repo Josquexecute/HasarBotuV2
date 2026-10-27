@@ -117,6 +117,25 @@ describeDb('Dosya Envanteri — araç sahibi mini-yakalama gerçek API', () => {
       ? createCaseVehicleOwnersStore(pool).save(actor, id, ownersInput)
       : createCaseVehicleProfileStore(pool).save(actor, id, profileInput)
   }
+  it.each(['owners', 'profile'])('reports closed %s as read-only before and after data is saved', async kind => {
+    const endpoint = kind === 'owners' ? 'vehicle-owners' : 'vehicle-profile'
+    const empty = await app.inject({ method: 'GET', url: `/api/v1/cases/${closedCaseId}/${endpoint}`, headers: { cookie: expertCookie } })
+    expect(empty.statusCode).toBe(200)
+    expect(empty.json().permissions.canEdit).toBe(false)
+
+    const id = await newRaceCase()
+    await saveRace(kind, id)
+    const open = await app.inject({ method: 'GET', url: `/api/v1/cases/${id}/${endpoint}`, headers: { cookie: expertCookie } })
+    expect(open.statusCode).toBe(200)
+    expect(open.json().permissions.canEdit).toBe(true)
+    await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed' WHERE id=$1", [id])
+    const closed = await app.inject({ method: 'GET', url: `/api/v1/cases/${id}/${endpoint}`, headers: { cookie: expertCookie } })
+    expect(closed.statusCode).toBe(200)
+    expect(closed.json()).toEqual({ ...open.json(), permissions: { canEdit: false } })
+    const attempted = await app.inject({ method: 'PUT', url: `/api/v1/cases/${id}/${endpoint}`, headers: { cookie: expertCookie },
+      payload: kind === 'owners' ? { ...ownersInput, expectedSetVersion: 1, confirmed: true } : { ...profileInput, expectedVersion: 1, reason: 'Closed edit', confirmed: true } })
+    expect(attempted.statusCode).toBe(409)
+  })
   it.each(['owners', 'profile'])('%s waits for closure and refuses to write once closed', async kind => {
     const id = await newRaceCase()
     const closer = await pool.connect()
@@ -127,7 +146,7 @@ describeDb('Dosya Envanteri — araç sahibi mini-yakalama gerçek API', () => {
       writing = saveRace(kind, id).catch(error => error as unknown)
       // Observe a real database lock wait, rather than relying on a sleep.
       await vi.waitFor(async () => {
-        const blocked = await pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT lifecycle_status FROM cases%'")
+        const blocked = await pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT lifecycle_status%FROM cases%'")
         expect(blocked.rowCount).toBeGreaterThan(0)
       })
       await closer.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed' WHERE id=$1", [id])

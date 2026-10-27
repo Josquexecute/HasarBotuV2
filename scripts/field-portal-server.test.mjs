@@ -92,6 +92,23 @@ test('tailnet compatibility requires explicit loopback proxy configuration and p
   }finally{await new Promise(done=>privateGateway.close(done))}
 })
 
+test('private office proxy preserves packaged Electron version negotiation without forwarding privileged headers',async()=>{
+  const privateGateway=createFieldPortal({directory:root,upstream:`http://127.0.0.1:${upstream.address().port}`,publicOrigin,allowTailnetApi:true})
+  await new Promise(done=>privateGateway.listen(0,'127.0.0.1',done))
+  const at=`http://127.0.0.1:${privateGateway.address().port}`
+  const userAgent='Mozilla/5.0 HasarBotu/0.1.72 Chrome/152.0.7977.167 Electron/44.9.1 Safari/537.36'
+  let forwarded
+  const capture=request=>{forwarded=request.headers}
+  upstream.once('request',capture)
+  try{
+    const response=await request('/api/v1/cases',{headers:{'tailscale-user-login':'synthetic-tailnet@example.test','user-agent':userAgent,'x-agent-secret':'must-not-forward'}},at)
+    assert.equal(response.status,200)
+    assert.equal(forwarded['user-agent'],userAgent)
+    assert.equal(forwarded['x-agent-secret'],undefined)
+    assert.equal(forwarded['tailscale-user-login'],undefined)
+  }finally{upstream.removeListener('request',capture);await new Promise(done=>privateGateway.close(done))}
+})
+
 test('private close previews retain the command key while privileged transport headers stay stripped',async()=>{
   const privateGateway=createFieldPortal({directory:root,upstream:`http://127.0.0.1:${upstream.address().port}`,publicOrigin,allowTailnetApi:true})
   await new Promise(done=>privateGateway.listen(0,'127.0.0.1',done))

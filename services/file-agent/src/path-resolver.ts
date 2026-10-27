@@ -40,7 +40,7 @@ export class PathSafetyError extends Error {
 /** Bir yol, root'un ALTINDA mı (veya root'un kendisi mi)? */
 export function isUnderRoot(rootAbsolute: string, candidateAbsolute: string): boolean {
   const rel = relative(rootAbsolute, candidateAbsolute)
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel) && !rel.startsWith(`..${sep}`))
+  return rel === '' || (rel !== '..' && !isAbsolute(rel) && !rel.startsWith(`..${sep}`))
 }
 
 /**

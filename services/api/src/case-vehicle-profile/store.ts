@@ -45,7 +45,7 @@ function safeNumber(value: unknown): number {
 }
 
 const VERSION_COLUMNS = `id::text,profile_version,previous_version_id::text,schema_version,
-  brand,model,model_year,variant,vehicle_class,chassis_prefix,engine_code,
+  brand,model,model_year,variant,vehicle_class,chassis_prefix,engine_code,transmission,
   evidence_source,evidence_reference,revision_reason,created_by_user_id::text,created_at`
 
 function mapVersion(row: Record<string, unknown>) {
@@ -57,6 +57,7 @@ function mapVersion(row: Record<string, unknown>) {
     brand: String(row.brand),
     model: String(row.model),
     modelYear: safeNumber(row.model_year),
+    transmission: String(row.transmission),
     variant: row.variant === null ? null : String(row.variant),
     vehicleClass: String(row.vehicle_class),
     chassisPrefix: row.chassis_prefix === null ? null : String(row.chassis_prefix),
@@ -74,14 +75,14 @@ async function loadCase(
   organizationId: string,
   caseId: string,
   lock = false,
-): Promise<{ closed: boolean }> {
+): Promise<{ closed: boolean; transmission: CaseVehicleProfileFields['transmission'] }> {
   const result = await pool.query(
-    `SELECT lifecycle_status FROM cases WHERE organization_id=$1 AND id=$2${lock ? ' FOR UPDATE' : ''}`,
+    `SELECT lifecycle_status,transmission FROM cases WHERE organization_id=$1 AND id=$2${lock ? ' FOR UPDATE' : ''}`,
     [organizationId, caseId],
   )
   const row = result.rows[0] as Record<string, unknown> | undefined
   if (row === undefined) throw new CaseVehicleProfileError('CASE_NOT_FOUND', 404)
-  return { closed: row.lifecycle_status === 'closed' }
+  return { closed: row.lifecycle_status === 'closed', transmission: row.transmission as CaseVehicleProfileFields['transmission'] }
 }
 
 export function createCaseVehicleProfileStore(pool: pg.Pool) {
@@ -91,6 +92,7 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
     canEdit: boolean,
     executor: pg.Pool | pg.PoolClient = pool,
   ): Promise<CaseVehicleProfileResponse> {
+    const { transmission, closed } = await loadCase(executor, organizationId, caseId)
     const profile = await executor.query(
       'SELECT id::text,current_version_id::text,version FROM case_vehicle_profiles WHERE organization_id=$1 AND case_id=$2',
       [organizationId, caseId],
@@ -98,8 +100,8 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
     const profileRow = profile.rows[0] as Record<string, unknown> | undefined
     if (profileRow === undefined) {
       return caseVehicleProfileResponseSchema.parse({
-        caseId, profileId: null, version: null, current: null, history: [],
-        permissions: { canEdit },
+        caseId, transmission, profileId: null, version: null, current: null, history: [],
+        permissions: { canEdit: canEdit && !closed },
       })
     }
     const versions = await executor.query(
@@ -112,18 +114,19 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
     const current = history.find((version) => version.id === String(profileRow.current_version_id)) ?? null
     return caseVehicleProfileResponseSchema.parse({
       caseId,
+      transmission,
       profileId: String(profileRow.id),
       version: safeNumber(profileRow.version),
       current,
       history,
-      permissions: { canEdit },
+      permissions: { canEdit: canEdit && !closed },
     })
   }
 
   return {
-    async read(actor: Actor, caseId: string, canEdit: boolean): Promise<CaseVehicleProfileResponse> {
-      await loadCase(pool, actor.organizationId, caseId)
-      return read(actor.organizationId, caseId, canEdit)
+    async read(actor: Actor, caseId: string, canEdit: boolean, transaction?: pg.PoolClient): Promise<CaseVehicleProfileResponse> {
+      await loadCase(transaction ?? pool, actor.organizationId, caseId)
+      return read(actor.organizationId, caseId, canEdit, transaction ?? pool)
     },
 
     /** Yeni sürüm yazar. İlk sürümde `expectedVersion` null, sonrasında zorunludur. */
@@ -138,6 +141,7 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
       transaction?: pg.PoolClient,
     ): Promise<CaseVehicleProfileResponse> {
       const validation = validateCaseVehicleProfile({
+        transmission: input.fields.transmission ?? 'unknown',
         brand: input.fields.brand,
         model: input.fields.model,
         modelYear: input.fields.modelYear,
@@ -151,13 +155,15 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
       if (!validation.valid) {
         throw new CaseVehicleProfileError('PROFILE_FIELDS_INVALID', 400, validation.reasonCode)
       }
-      const profile = validation.profile
+      let profile = validation.profile
 
       const client = transaction ?? await pool.connect()
       try {
         if (transaction === undefined) await client.query('BEGIN')
         const caseRow = await loadCase(client, actor.organizationId, caseId, true)
         if (caseRow.closed) throw new CaseVehicleProfileError('CASE_CLOSED', 409)
+        // Legacy clients omit this field; editing other vehicle details must preserve it.
+        profile = { ...profile, transmission: input.fields.transmission ?? caseRow.transmission ?? 'unknown' }
         const existing = await client.query(
           `SELECT id::text,current_version_id::text,version FROM case_vehicle_profiles
             WHERE organization_id=$1 AND case_id=$2 FOR UPDATE`,
@@ -196,20 +202,22 @@ export function createCaseVehicleProfileStore(pool: pg.Pool) {
           `INSERT INTO case_vehicle_profile_versions
              (id,organization_id,case_id,profile_id,profile_version,previous_version_id,schema_version,
               brand,model,model_year,variant,vehicle_class,chassis_prefix,engine_code,
-              evidence_source,evidence_reference,revision_reason,created_by_user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+              evidence_source,evidence_reference,revision_reason,created_by_user_id,transmission)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [
             versionId, actor.organizationId, caseId, profileId, nextVersion, previousVersionId,
             CASE_VEHICLE_PROFILE_SCHEMA_VERSION, profile.brand, profile.model, profile.modelYear,
             profile.variant, profile.vehicleClass, profile.chassisPrefix, profile.engineCode,
             profile.evidenceSource, profile.evidenceReference,
-            nextVersion === 1 ? null : input.reason, actor.userId,
+            nextVersion === 1 ? null : input.reason, actor.userId, profile.transmission,
           ],
         )
         await client.query(
           'UPDATE case_vehicle_profiles SET current_version_id=$2,version=$3,updated_at=now() WHERE id=$1',
           [profileId, versionId, nextVersion],
         )
+        await client.query(`UPDATE cases SET transmission=$3,version=version+1,updated_at=now()
+          WHERE organization_id=$1 AND id=$2 AND transmission IS DISTINCT FROM $3`, [actor.organizationId, caseId, profile.transmission])
         if (transaction === undefined) await client.query('COMMIT')
       } catch (error) {
         if (transaction === undefined) await client.query('ROLLBACK').catch(() => undefined)

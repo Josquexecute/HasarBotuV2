@@ -93,8 +93,8 @@ export function createCaseVehicleOwnersStore(pool: pg.Pool) {
 
   return {
     async read(actor: Actor, caseId: string, canEdit: boolean): Promise<CaseVehicleOwnersResponse> {
-      await loadCase(pool, actor.organizationId, caseId)
-      return read(actor.organizationId, caseId, canEdit)
+      const { closed } = await loadCase(pool, actor.organizationId, caseId)
+      return read(actor.organizationId, caseId, canEdit && !closed)
     },
 
     /** Listeyi tek seferde değiştirir. İlk kayıtta `expectedSetVersion` null'dır. */

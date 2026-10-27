@@ -12,6 +12,7 @@ import { ServiceContactFields } from './ServiceContactFields'
 import { serviceContactDraft, type ServiceContactDraft } from './service-contact'
 import {
   CASE_STAGE_OPTIONS,
+  VEHICLE_TRANSMISSION_OPTIONS,
   commandErrorMessage,
   commandFieldMessages,
   nullableText,
@@ -52,6 +53,7 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
   const [insurerId, setInsurerId] = useState(item.insurerId ?? '')
   const [lossDate, setLossDate] = useState(item.lossDate ?? '')
   const [notificationDate, setNotificationDate] = useState(item.notificationDate ?? '')
+  const [transmission, setTransmission] = useState(item.transmission ?? 'unknown')
   const referenceData = useCaseReferences(referencePort, {
     ...(insurerId === '' ? {} : { insurerId }),
     ...(lossDate === '' ? {} : { evaluationDate: lossDate }),
@@ -91,6 +93,7 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
     }
 
     const input: CaseUpdateInput = { expectedVersion: item.version }
+    if (transmission !== (item.transmission ?? 'unknown')) Object.assign(input, { transmission })
     if (caseType && caseType !== (item.type === 'Trafik' ? 'traffic' : item.type === 'Kasko' ? 'casco' : '')) Object.assign(input, { caseType })
     if (workflowStage !== item.workflowStage) Object.assign(input, { workflowStage })
     if (serviceRevision !== null && serviceRevision !== item.eksist?.serviceName) Object.assign(input, { serviceRevision: { name: serviceRevision } })
@@ -144,9 +147,10 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
             {generalError && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{generalError}</span>{conflict && <button className="button button--secondary" type="button" onClick={onReload}><RefreshCw size={15} /> Güncel Veriyi Yükle</button>}</div>}
             {referenceData.status === 'loading' && <div className="case-form-note" role="status"><LoaderCircle className="spin" size={16} /><span>Seçenekler yükleniyor…</span></div>}
             {(referenceData.status === 'unavailable' || referenceData.status === 'unauthorized') && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={17} /><span>{referenceData.status === 'unauthorized' ? 'Referanslar için yeniden giriş gerekli.' : 'Seçenekler yüklenemedi.'}</span><button className="button button--secondary" type="button" onClick={referenceData.reload}>Yeniden Dene</button></div>}
-            <div className="case-form-grid">
+            <fieldset className="case-form-grid" disabled={submitting}>
               <label className="form-field form-field--immutable"><span>Plaka</span><input value={item.plate} readOnly /></label>
               <label className="form-field"><span>Dosya türü</span><select value={caseType} onChange={event => setCaseType(event.target.value as typeof caseType)}>{!caseType && <option value="">Seçiniz</option>}<option value="traffic">Trafik</option><option value="casco">Kasko</option></select><FieldError message={fieldErrors.caseType} /></label>
+              <label className="form-field"><span>Vites</span><select value={transmission} onChange={event => setTransmission(event.target.value as typeof transmission)}>{VEHICLE_TRANSMISSION_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select><FieldError message={fieldErrors.transmission} /></label>
               <label className="form-field form-field--immutable"><span>Ofis dosya numarası</span><input value={item.officeNumber} readOnly /></label>
               <label className="form-field form-field--immutable"><span>Dosya durumu</span><input value="Açık" readOnly /></label>
               <label className="form-field"><span>Aşama</span><select autoFocus value={workflowStage} onChange={(event) => setWorkflowStage(event.target.value as CaseStageCode)}>{CASE_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><FieldError message={fieldErrors.workflowStage} /></label>
@@ -160,7 +164,7 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
               {item.eksist ? <label className="form-field"><span>Eksper</span><input value={item.eksist.expertName} readOnly /></label> : <label className="form-field"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{item.expertUserId && !referenceData.references?.experts.some((option) => option.id === item.expertUserId) && <option value={item.expertUserId}>Mevcut eksper · pasif/uygun değil</option>}{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} /></label>}
               <label className="form-field"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><small>Boş bırakılırsa tarih kaldırılır.</small><FieldError message={fieldErrors.lossDate} /></label>
               <label className="form-field"><span>İhbar tarihi</span><input type="date" value={notificationDate} onChange={(event) => setNotificationDate(event.target.value)} aria-invalid={fieldErrors.notificationDate !== undefined} /><small>Hasar tarihinden önce olamaz.</small><FieldError message={fieldErrors.notificationDate} /></label>
-            </div>
+            </fieldset>
           </div>
           <footer className="modal__footer">
             <button className="button button--secondary" type="button" onClick={onClose} disabled={submitting}>İptal</button>

@@ -11,7 +11,26 @@ describe('File Agent runLoop recovery', () => {
     root = await mkdtemp(join(tmpdir(), 'hb-agent-loop-'))
   })
   afterEach(async () => {
+    vi.unstubAllGlobals()
     await rm(root, { recursive: true, force: true })
+  })
+
+  it('fotoğraf kuyruğu hatası bağımsız dosya işlerini durdurmaz', async () => {
+    const abort = new AbortController()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 503 })))
+    const claim = vi.fn().mockImplementation(async () => { abort.abort(); return null })
+    const client = { claim, heartbeat: vi.fn(), reportResult: vi.fn() } as unknown as AgentApiClient
+    const config: AgentConfig = {
+      apiBaseUrl: 'http://127.0.0.1:3100', agentId: 'agent-1', agentSecret: 'not-logged',
+      roots: { 'test-root': root }, leaseSeconds: 30, pollIntervalMs: 1,
+      freshnessGate: undefined, fieldPhotosEnabled: true,
+    }
+    const errors: string[] = []
+    const fallback = setTimeout(() => abort.abort(), 250)
+    try { await runLoop(client, config, { signal: abort.signal, onCycleError: code => errors.push(code) }) }
+    finally { clearTimeout(fallback) }
+    expect(claim).toHaveBeenCalledTimes(1)
+    expect(errors).toEqual(['agent_cycle_failed'])
   })
 
   it('API başlangıçta kapalıysa ham hatayı sızdırmadan polling ile yeniden dener', async () => {

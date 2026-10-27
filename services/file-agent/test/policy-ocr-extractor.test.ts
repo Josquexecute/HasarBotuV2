@@ -98,6 +98,15 @@ describe('yerel policy OCR File Agent hattı', () => {
     expect(after).toEqual([])
   }, 30_000)
 
+  it('sonuç bildirmeden başarılı çıkış yapan worker için timeout beklemez', async () => {
+    const directory = await root(); await scannedPdf(directory); const input = await payload(directory)
+    const result = await extractPolicyOcr(directory, { ...input, timeoutMs: 1_000 }, {
+      onChunk: async () => undefined,
+      workerUrl: new URL('./fixtures/empty-worker.mjs', import.meta.url),
+    })
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'worker_crashed' })
+  })
+
   it.each([
     ['tur', 'KASKO POLİÇESİ TEMİNATI', /KASKO/u],
     ['eng', 'CASCO POLICY GLASS COVERAGE', /GLASS COVERAGE/u],

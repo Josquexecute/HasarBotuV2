@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { byteSizeSchema, sha256HexSchema } from '../documents/dto.js'
-import { fileOperationStrategySchema } from '../file-operations/dto.js'
+import { fileLockInfoSchema, fileOperationStrategySchema } from '../file-operations/dto.js'
 import { pdfExtractionResultSummarySchema } from '../pdf-text-extractions/dto.js'
 import { policyOcrResultSummarySchema } from '../policy-ocr/dto.js'
 
@@ -47,6 +47,7 @@ export const jobResultRequestSchema = z.strictObject({
     .regex(/^[a-z0-9_]+$/, { error: 'invalid_error_code' })
     .optional(),
   fileOperation: fileOperationResultSchema.optional(),
+  fileLock: fileLockInfoSchema.optional(),
   pdfExtraction: pdfExtractionResultSummarySchema.optional(),
   policyOcr: policyOcrResultSummarySchema.optional(),
 })

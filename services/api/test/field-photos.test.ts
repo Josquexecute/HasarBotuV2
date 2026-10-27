@@ -41,7 +41,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
     await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
     await runMigrations({ databaseUrl: config.url, quiet: true })
     work = await mkdtemp(join(tmpdir(), 'hb-field-api-')); originalDirectory = join(work, 'private-originals'); physicalRoot = join(work, 'physical-root')
-    await mkdir(join(physicalRoot, relativePath), { recursive: true })
+    await mkdir(join(physicalRoot, relativePath, 'HASAR'), { recursive: true })
     app = buildApp({ loggerEnabled: false, fieldPhotoDirectory: originalDirectory, auth: { pool, cookieSecure: false, loginRateLimit: { limit: 100, windowMs: 60000 } }, google,
       googleProvider: { ...createGoogleProvider(google), exchange: async () => ({ access_token: 'synthetic-only', id_token: 'synthetic-only' }),
         identity: async (_jwt, nonce, corporate) => validateGoogleClaims({ iss: 'https://accounts.google.com', aud: google.clientId, exp: Date.now()/1000+600, iat: Date.now()/1000, nonce, email_verified: true, email: 'field-1@example.test', sub: 'synthetic-field-google', hd: 'example.test' }, google.clientId, nonce, corporate ? google.loginDomain : undefined) } })
@@ -151,7 +151,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
     await pool.query("UPDATE field_photo_uploads SET status='failed',lease_expires_at=NULL WHERE status IN ('queued','processing')")
   })
   it('runs the real worker, preserves originals and existing files, and publishes verified JPEG metadata', async () => {
-    const folder = join(physicalRoot, relativePath), existing = Buffer.from('pre-existing user file')
+    const folder = join(physicalRoot, relativePath, 'HASAR'), existing = Buffer.from('pre-existing user file')
     await writeFile(join(folder, 'HASAR 101.jpg'), existing)
     await writeFile(join(folder, 'HASAR 103.JPG'), existing)
     const upload = await receive()
@@ -166,8 +166,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
     expect(saved.subarray(0, 2)).toEqual(Buffer.from([255,216]))
     expect(await readFile(join(folder, 'HASAR 101.jpg'))).toEqual(existing)
     expect(await readFile(join(originalDirectory, `${upload.id}.bin`))).toEqual(jpeg)
-    const photo = (await pool.query('SELECT status,hash_verified,size_verified,byte_size,content_hash FROM photos WHERE case_id=$1', [caseId])).rows[0]
-    expect(photo).toMatchObject({ status: 'ready', hash_verified: true, size_verified: true, content_hash: digest(saved) })
+    const photo = (await pool.query('SELECT status,hash_verified,size_verified,byte_size,content_hash,relative_path FROM photos WHERE case_id=$1', [caseId])).rows[0]
+    expect(photo).toMatchObject({ status: 'ready', hash_verified: true, size_verified: true, content_hash: digest(saved), relative_path: `${relativePath}/HASAR/HASAR 104.jpg` })
     expect((await request('GET', `/api/v1/field/uploads/${upload.id}/original`)).rawPayload).toEqual(jpeg)
     expect((await request('GET', `/api/v1/field/uploads/${upload.id}/jpeg`)).rawPayload).toEqual(saved)
     expect((await readdir(folder)).some(name => name.endsWith('.tmp'))).toBe(false)
@@ -182,6 +182,33 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
     expect(row).toMatchObject({ status: 'failed', last_error_code: 'unsupported_image', photo_id: null })
     expect(await readFile(join(originalDirectory, `${upload.id}.bin`))).toEqual(Buffer.from('This is not an image'))
   }, 60000)
+  it('publishes all four categories in the physical HASAR folder for two users without touching old root files', async () => {
+    const folder = join(physicalRoot, relativePath, 'HASAR')
+    const oldRootPhoto = join(physicalRoot, relativePath, 'VİTES.jpg')
+    const originalRootBytes = Buffer.from('legacy root photo must stay here')
+    await writeFile(oldRootPhoto, originalRootBytes)
+    const gate = join(work, 'four-kinds-freshness.mjs')
+    await writeFile(gate, "import {dirname,basename} from 'node:path';const a=process.argv.slice(2);const ready=a[a.indexOf('--operation')+1]==='file_destination'&&basename(dirname(a[a.indexOf('--target-root')+1]))==='HASAR';console.log(JSON.stringify({CaseStatus:ready?'ready':'unknown'}));process.exitCode=ready?0:1\n")
+    const config = { apiBaseUrl: origin, agentId, agentSecret, roots: { office: physicalRoot }, leaseSeconds: 120, pollIntervalMs: 100,
+      freshnessGate: { toolPath: gate, pcloudLocalDatabasePath: join(work, 'fixture.db'), topLevelFolderName: 'Synthetic', attestationStoreDirectory: work } }
+    for (const [index, kind] of ['damage', 'chassis', 'odometer', 'gear', 'gear'].entries()) {
+      const uploader = users[index % 2]!, other = users[(index + 1) % 2]!
+      const upload = (await request('POST', `/api/v1/field/cases/${caseId}/uploads`, { fileName: 'camera.jpg', kind, clientKey: randomUUID(), byteSize: jpeg.length, contentHash: digest(jpeg) }, uploader.cookie)).json()
+      expect(upload.kind).toBe(kind)
+      expect((await request('PUT', `/api/v1/field/uploads/${upload.id}/chunk?offset=0`, jpeg, other.cookie, { 'content-type': 'application/octet-stream' })).statusCode).toBe(404)
+      expect((await request('PUT', `/api/v1/field/uploads/${upload.id}/chunk?offset=0`, jpeg, uploader.cookie, { 'content-type': 'application/octet-stream' })).statusCode).toBe(200)
+      expect((await request('POST', `/api/v1/field/uploads/${upload.id}/finish`, undefined, uploader.cookie)).statusCode).toBe(200)
+      expect(await runFieldPhotoOnce(config)).toBe(true)
+      const output = (await pool.query(`SELECT f.status,f.output_file_name,f.uploaded_by_user_id,p.relative_path,p.content_hash FROM field_photo_uploads f JOIN photos p ON p.id=f.photo_id WHERE f.id=$1`, [upload.id])).rows[0]
+      expect(output).toMatchObject({ status: 'ready', uploaded_by_user_id: uploader.id, relative_path: `${relativePath}/HASAR/${output.output_file_name}` })
+      expect(digest(await readFile(join(folder, output.output_file_name)))).toBe(output.content_hash)
+      if (output.output_file_name === 'VİTES.jpg') expect(await readFile(oldRootPhoto)).toEqual(originalRootBytes)
+      else await expect(readFile(join(physicalRoot, relativePath, output.output_file_name))).rejects.toMatchObject({ code: 'ENOENT' })
+      if (kind === 'gear') expect(output.output_file_name).toBe(index === 3 ? 'VİTES.jpg' : 'VİTES 1.jpg')
+      expect((await request('GET', `/api/v1/field/uploads/${upload.id}/jpeg`, undefined, foreignCookie)).statusCode).toBe(404)
+    }
+    expect(await readFile(oldRootPhoto)).toEqual(originalRootBytes)
+  }, 120000)
   it('lets the user explicitly resume a recoverable office transfer without reuploading the original', async () => {
     const upload = await receive()
     await pool.query("UPDATE field_photo_uploads SET status='failed',last_error_code='storage_unavailable',attempt_count=10 WHERE id=$1", [upload.id])
@@ -190,9 +217,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
     expect((await pool.query('SELECT status,received_bytes,attempt_count FROM field_photo_uploads WHERE id=$1', [upload.id])).rows[0]).toEqual({ status: 'queued', received_bytes: jpeg.length, attempt_count: 0 })
     expect(await readFile(join(originalDirectory, `${upload.id}.bin`))).toEqual(jpeg)
   })
-  it.each(['damage', 'chassis', 'odometer'] as const)('skips reserved %s names from interrupted uploads without changing the case location', async kind => {
+  it.each(['damage', 'chassis', 'odometer', 'gear'] as const)('skips reserved %s names from interrupted uploads without changing the case location', async kind => {
     await pool.query("UPDATE field_photo_uploads SET status='failed',lease_expires_at=NULL WHERE status IN ('queued','processing')")
-    const folder = join(physicalRoot, relativePath)
+    const folder = join(physicalRoot, relativePath, 'HASAR')
     const store = createFieldPhotoStore(pool, originalDirectory)
     const reserved: string[] = []
     for (let index = 0; index < 2; index++) {
@@ -220,7 +247,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
   it('recovers a real worker process terminated after physical publication without duplicating the photo', async () => {
     await pool.query("UPDATE field_photo_uploads SET status='failed',lease_expires_at=NULL WHERE status IN ('queued','processing')")
     const upload = await receive()
-    const folder = join(physicalRoot, relativePath)
+    const folder = join(physicalRoot, relativePath, 'HASAR')
     const gate = join(work, 'process-recovery-freshness.mjs')
     await writeFile(gate, 'console.log(JSON.stringify({CaseStatus:"ready"}))\n')
     const temporary = join(work, 'worker-temporary')
@@ -294,7 +321,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('real resumable field photos', (
     expect(await runFieldPhotoOnce(config)).toBe(true)
     const row = (await pool.query('SELECT status,output_file_name,output_hash FROM field_photo_uploads WHERE id=$1', [upload.id])).rows[0]
     expect(row.status).toBe('ready')
-    expect(digest(await readFile(join(physicalRoot, relativePath, row.output_file_name)))).toBe(row.output_hash)
+    expect(digest(await readFile(join(physicalRoot, relativePath, 'HASAR', row.output_file_name)))).toBe(row.output_hash)
     expect((await pool.query("SELECT 1 FROM audit_events WHERE action='photo.upload_published' AND details->>'uploadId'=$1", [upload.id])).rowCount).toBe(1)
   }, 60000)
 })

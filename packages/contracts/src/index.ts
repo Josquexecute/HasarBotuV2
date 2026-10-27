@@ -266,6 +266,8 @@ export {
   fileOperationApproveRequestSchema,
   fileOperationCancelRequestSchema,
   fileOperationSchema,
+  fileLockInfoSchema,
+  type FileLockInfo,
   fileOperationResponseSchema,
   fileOperationPlanParamsSchema,
   fileOperationParamsSchema,

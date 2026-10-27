@@ -389,7 +389,8 @@ function Move-TopLevelSegments {
 }
 
 # Allowlist enumerasyonu YAPISAL olarak sınırlıdır: yalnız $SourceRoot içindeki
-# $AllowlistTopLevelDir (özyinelemeli) ve $AllowlistTopLevelFile taranır --
+# $AllowlistTopLevelDir (özyinelemeli), $AllowlistTopLevelFile ve varsa
+# THIRD-PARTY-NOTICES.txt taranır -- lisans bildirimleri kodla birlikte taşınır.
 # kaynak kökte başka ne olursa olsun (node_modules, src, test-support, .env
 # vb.) bu fonksiyon ONLARI HİÇ GÖRMEZ, HİÇ OKUMAZ. Sonuçlar $TargetPrefix
 # altına yerleştirilir (boşsa dağıtımın köküne).
@@ -424,15 +425,18 @@ function Add-DistAndPackageJsonEntries {
             }
         }
     }
-    $packageJsonPath = Join-Path $SourceRoot $AllowlistTopLevelFile
-    if ([System.IO.File]::Exists($packageJsonPath)) {
-        $relativePath = if ([string]::IsNullOrEmpty($TargetPrefix)) { $AllowlistTopLevelFile } else { Join-Path $TargetPrefix $AllowlistTopLevelFile }
+    foreach ($topLevelFile in @($AllowlistTopLevelFile, 'THIRD-PARTY-NOTICES.txt')) {
+      $topLevelPath = Join-Path $SourceRoot $topLevelFile
+      if ([System.IO.File]::Exists($topLevelPath)) {
+        Test-NoReparsePoint $topLevelPath $false 'SOURCE_FILE_REPARSE_POINT'
+        $relativePath = if ([string]::IsNullOrEmpty($TargetPrefix)) { $topLevelFile } else { Join-Path $TargetPrefix $topLevelFile }
         $Entries.Add([pscustomobject]@{
             RelativePath = $relativePath
-            FullPath = $packageJsonPath
-            Sha256 = Get-Sha256 $packageJsonPath
-            Size = ([System.IO.FileInfo]::new($packageJsonPath)).Length
+            FullPath = $topLevelPath
+            Sha256 = Get-Sha256 $topLevelPath
+            Size = ([System.IO.FileInfo]::new($topLevelPath)).Length
         })
+      }
     }
 }
 

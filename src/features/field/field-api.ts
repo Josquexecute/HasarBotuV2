@@ -38,7 +38,7 @@ export async function uploadFieldPhoto(input: { file: File; caseId: string; user
   input.onProgress(100)
   return upload
 }
-export const FIELD_KIND_LABELS: Record<FieldPhotoKind, string> = { damage: 'Hasar', chassis: 'Şase', odometer: 'Kilometre' }
+export const FIELD_KIND_LABELS: Record<FieldPhotoKind, string> = { damage: 'Hasar', chassis: 'Şase', odometer: 'Kilometre', gear: 'VİTES' }
 export function fieldErrorMessage(error: unknown): string {
   const code = error instanceof FieldApiError ? error.code : ''
   if (error instanceof FieldApiError && error.status === 401) return 'Oturumunuz sona erdi. Yeniden giriş yapın.'

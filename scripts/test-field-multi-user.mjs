@@ -64,7 +64,7 @@ try {
       for (const record of records) {
         const target = fixture.cases.find(item => item.id === record.case_id)
         assert(target)
-        const bytes = await readFile(join(fixture.root, target.path, record.output_file_name))
+        const bytes = await readFile(join(fixture.root, target.path, 'HASAR', record.output_file_name))
         assert.equal(bytes.length, Number(record.output_bytes))
         assert.equal(createHash('sha256').update(bytes).digest('hex'), record.output_hash)
         assert(bytes.length >= 102400 && bytes.length <= 614400)
@@ -77,8 +77,9 @@ try {
         assert(original.equals(Buffer.concat([fixture.jpeg, Buffer.alloc(600000, Number(wave[1]))])), 'Original bytes must remain exact')
       }
       for (const target of fixture.cases) {
-        assert.equal(await readFile(join(fixture.root, target.path, 'HASAR 101.jpg'), 'utf8'), 'Existing office photo must be preserved')
-        const files = await readdir(join(fixture.root, target.path))
+        assert.equal(await readFile(join(fixture.root, target.path, 'HASAR', 'HASAR 101.jpg'), 'utf8'), 'Existing office photo must be preserved')
+        assert.equal(await readFile(join(fixture.root, target.path, 'VİTES.jpg'), 'utf8'), 'Legacy root photo must be preserved')
+        const files = await readdir(join(fixture.root, target.path, 'HASAR'))
         assert.equal(files.length, 1 + records.filter(row => row.case_id === target.id).length)
       }
       assert.equal(fixture.errors.length, 0)

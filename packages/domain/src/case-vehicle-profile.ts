@@ -31,6 +31,9 @@ export const VEHICLE_CLASSES = [
 ] as const
 export type VehicleClass = (typeof VEHICLE_CLASSES)[number]
 
+export const VEHICLE_TRANSMISSIONS = ['unknown', 'manual', 'automatic', 'semi_automatic'] as const
+export type VehicleTransmission = (typeof VEHICLE_TRANSMISSIONS)[number]
+
 export const MAX_VEHICLE_REVISION_REASON_LENGTH = 500
 export const MAX_VEHICLE_TEXT_LENGTH = 60
 export const MAX_VEHICLE_EVIDENCE_REFERENCE_LENGTH = 120
@@ -40,6 +43,7 @@ export const MIN_VEHICLE_MODEL_YEAR = 1950
 export const MAX_VEHICLE_MODEL_YEAR = 2100
 
 export interface CaseVehicleProfileInput {
+  readonly transmission?: VehicleTransmission
   readonly brand: string
   readonly model: string
   readonly modelYear: number
@@ -52,6 +56,7 @@ export interface CaseVehicleProfileInput {
 }
 
 export interface NormalizedCaseVehicleProfile {
+  readonly transmission?: VehicleTransmission
   readonly brand: string
   readonly model: string
   readonly modelYear: number
@@ -71,6 +76,7 @@ export type CaseVehicleProfileValidation =
         | 'VEHICLE_BRAND_INVALID'
         | 'VEHICLE_MODEL_INVALID'
         | 'VEHICLE_MODEL_YEAR_INVALID'
+        | 'VEHICLE_TRANSMISSION_INVALID'
         | 'VEHICLE_VARIANT_INVALID'
         | 'VEHICLE_CLASS_INVALID'
         | 'VEHICLE_CHASSIS_PREFIX_INVALID'
@@ -121,6 +127,10 @@ export function validateCaseVehicleProfile(
   if (brand === null) return { valid: false, reasonCode: 'VEHICLE_BRAND_INVALID' }
   const model = normalizeText(input.model, MAX_VEHICLE_TEXT_LENGTH)
   if (model === null) return { valid: false, reasonCode: 'VEHICLE_MODEL_INVALID' }
+  const transmission = input.transmission ?? 'unknown'
+  if (!(VEHICLE_TRANSMISSIONS as readonly string[]).includes(transmission)) {
+    return { valid: false, reasonCode: 'VEHICLE_TRANSMISSION_INVALID' }
+  }
   if (!Number.isSafeInteger(input.modelYear)
     || input.modelYear < MIN_VEHICLE_MODEL_YEAR
     || input.modelYear > MAX_VEHICLE_MODEL_YEAR) {
@@ -157,7 +167,7 @@ export function validateCaseVehicleProfile(
   return {
     valid: true,
     profile: {
-      brand, model, modelYear: input.modelYear, variant,
+      brand, model, modelYear: input.modelYear, variant, transmission,
       vehicleClass: input.vehicleClass, chassisPrefix, engineCode,
       evidenceSource: input.evidenceSource, evidenceReference,
     },

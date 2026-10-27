@@ -170,7 +170,8 @@ function CalculatorForm({ item, port, storageKey }: { readonly item: CaseRecord;
         <label className="form-field"><span>Kaza tarihi</span><input type="date" value={draft.accidentDate} onChange={event => update({ accidentDate: event.target.value })} /></label>
         <label className="form-field"><span>Araç türü</span><select value={draft.vehicleType} onChange={event => {
           const vehicleType = event.target.value as CalculatorDraft['vehicleType']
-          update({ vehicleType, bodyType: 'unspecified', parts: [], ...((VEHICLE_GROUPS[vehicleType] === 'D') !== workingHours ? { usageValue: '' } : {}) }); setQuery('')
+          const bodyType = valueLossBodyOptions(vehicleType).includes(draft.bodyType) ? draft.bodyType : 'unspecified'
+          update({ vehicleType, bodyType, parts: draft.parts.map(part => ({ ...part, stableRuleId: '' })), ...((VEHICLE_GROUPS[vehicleType] === 'D') !== workingHours ? { usageValue: '' } : {}) }); setQuery('')
         }}>{Object.keys(VEHICLE_GROUPS).map(type => <option key={type}>{type}</option>)}</select></label>
         <label className="form-field"><span>Kasa / araç yapısı</span><select value={draft.bodyType} onChange={event => updateBody(event.target.value as CalculatorDraft['bodyType'])}>{valueLossBodyOptions(draft.vehicleType).map(body => <option key={body} value={body}>{VALUE_LOSS_BODY_LABELS[body]}</option>)}</select></label>
         <label className="form-field"><span>Marka</span><input value={draft.manufacturer} maxLength={120} onChange={event => update({ manufacturer: event.target.value })} placeholder="Üretici / model eşleştirmesi için" /></label>

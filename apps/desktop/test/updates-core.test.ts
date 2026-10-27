@@ -41,6 +41,21 @@ describe('verified desktop update', () => {
       fetch: fetchResponse(body, kind === 'auth' ? 401 : 200, kind === 'header' ? '12345' : String(release.size)), progress: () => {} })).rejects.toThrow()
     expect(await readdir(path)).toEqual([])
   })
+  it.each(['auth', 'header'] as const)('cancels the response stream when %s rejects a download before reading', async kind => {
+    const path = await directory()
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(bytes) },
+      cancel() { cancelled = true },
+    })
+    await expect(downloadVerifiedInstaller({ release, origin: 'http://127.0.0.1:1234', directory: path,
+      fetch: async () => new Response(body, { status: kind === 'auth' ? 401 : 200, headers: { 'content-length': '1' } }),
+      progress: () => {},
+    })).rejects.toThrow()
+    expect(cancelled).toBe(true)
+    expect(body.locked).toBe(false)
+    expect(await readdir(path)).toEqual([])
+  })
   it('produces a shutdown/install/restart helper with literal paths and exit-code gating', async () => {
     const path = await directory()
     const helper = await writeUpdateHelper({ directory: path, installer: "C:\\Users\\O'Neil\\setup.exe", executable: 'C:\\Program Files\\HasarBotu\\HasarBotu.exe', installDirectory: 'C:\\Program Files\\HasarBotu', pid: 1234, taskName: 'HasarBotu-Update-fixture', apiOrigin: 'https://api.example.test', userDataPath: "C:\\Users\\O'Neil\\Profile" })

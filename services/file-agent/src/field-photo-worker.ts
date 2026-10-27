@@ -16,9 +16,9 @@ export function nextFieldPhotoName(kind: FieldPhotoJob['kind'], existing: readon
     const numbers = names.map(name => /^HASAR\s*(\d+)\.(?:JPG|JPEG)$/u.exec(name)).filter(match => match !== null).map(match => Number(match![1])).filter(Number.isSafeInteger)
     return `HASAR ${Math.max(100, ...numbers) + 1}.jpg`
   }
-  const stem = kind === 'chassis' ? 'ŞASE' : 'KM'
+  const stem = kind === 'chassis' ? 'ŞASE' : kind === 'gear' ? 'VİTES' : 'KM'
   if (!names.includes(`${stem}.JPG`) && !names.includes(`${stem}.JPEG`)) return `${stem}.jpg`
-  let number = 2
+  let number = kind === 'gear' ? 1 : 2
   while (names.includes(`${stem} ${number}.JPG`) || names.includes(`${stem} ${number}.JPEG`)) number++
   return `${stem} ${number}.jpg`
 }

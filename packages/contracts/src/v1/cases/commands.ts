@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VEHICLE_TRANSMISSIONS } from '@hasarbotu/domain'
 import { caseServiceContactInputSchema } from './service.js'
 import {
   openCaseStageSchema,
@@ -30,6 +31,7 @@ export const IDEMPOTENCY_KEY_HEADER = 'idempotency-key'
 export const idempotencyKeySchema = idSchema
 
 export const caseCreateRequestSchema = z.strictObject({
+  transmission: z.enum(VEHICLE_TRANSMISSIONS).optional(),
   caseType: caseTypeSchema,
   plate: plateNumberSchema,
   workflowStage: openCaseStageSchema.default('new_notification'),
@@ -48,6 +50,7 @@ export type CaseCreateRequest = z.infer<typeof caseCreateRequestSchema>
 export type CaseCreateRequestInput = z.input<typeof caseCreateRequestSchema>
 
 const caseUpdateFields = z.strictObject({
+  transmission: z.enum(VEHICLE_TRANSMISSIONS).optional(),
   expectedVersion: entityVersionSchema,
   /** Only fills a pending classification; changing an established type is rejected. */
   caseType: caseTypeSchema.optional(),
@@ -66,6 +69,7 @@ const caseUpdateFields = z.strictObject({
 })
 
 export const CASE_UPDATABLE_FIELDS = [
+  'transmission',
   'caseType',
   'workflowStage',
   'followUpDate',

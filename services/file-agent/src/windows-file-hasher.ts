@@ -1,8 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
 
-// Reuse a process while retaining FileShare.Read: an open writer must still block hashing.
-const WORKER = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); while(($line=[Console]::In.ReadLine()) -ne $null) { $request=ConvertFrom-Json -InputObject $line; $s=$null; $h=$null; try { $s=[IO.File]::Open($request.path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read); $h=[Security.Cryptography.SHA256]::Create(); $bytes=$h.ComputeHash($s); $result=@{id=$request.id;hash=([BitConverter]::ToString($bytes).Replace('-','').ToLowerInvariant());size=$s.Length} } catch [IO.IOException] { $result=@{id=$request.id;busy=$true} } catch { $result=@{id=$request.id;failed=$true} } finally { if($h){$h.Dispose()}; if($s){$s.Dispose()} }; [Console]::Out.WriteLine(($result|ConvertTo-Json -Compress)) }`
+// Deny writers while hashing, but allow workspace renames during concurrent tracking scans.
+const WORKER = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); while(($line=[Console]::In.ReadLine()) -ne $null) { $request=ConvertFrom-Json -InputObject $line; $s=$null; $h=$null; try { $s=[IO.File]::Open($request.path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::Read -bor [IO.FileShare]::Delete)); $h=[Security.Cryptography.SHA256]::Create(); $bytes=$h.ComputeHash($s); $result=@{id=$request.id;hash=([BitConverter]::ToString($bytes).Replace('-','').ToLowerInvariant());size=$s.Length} } catch [IO.IOException] { $result=@{id=$request.id;busy=$true} } catch { $result=@{id=$request.id;failed=$true} } finally { if($h){$h.Dispose()}; if($s){$s.Dispose()} }; [Console]::Out.WriteLine(($result|ConvertTo-Json -Compress)) }`
 
 type Hash = { hash: string; size: number }
 interface Pending {

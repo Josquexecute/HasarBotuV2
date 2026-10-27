@@ -1,3 +1,4 @@
+import { getTestDisplay, seedTestAssistantPosition } from './test-display.mjs'
 import { app, dialog, ipcMain, nativeTheme, screen } from 'electron'
 import { writeFile, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -5,9 +6,11 @@ import { startDesktopShell } from '../../dist/main/shell.js'
 import { startDesktopAssistant } from '../../dist/main/assistant.js'
 import { startDesktopUpdates } from '../../dist/main/updates.js'
 import { createStartupProgress } from '../../dist/main/startup-progress.js'
+import { checkSkinRendering } from './assistant-skin-checks.mjs'
+import { positionNativeTestCursor } from './native-pointer.mjs'
 
 const checks = []
-const check = (name, pass) => { checks.push({ name, pass: Boolean(pass) }); if (!pass) throw new Error(name) }
+const check = (name, pass, facts) => { checks.push({ name, pass: Boolean(pass) }); if (!pass) throw new Error(facts ? `${name}: ${JSON.stringify(facts)}` : name) }
 const until = async (predicate, description = 'assistant condition') => {
   const deadline = Date.now() + 5000
   while (!(await predicate())) {
@@ -17,14 +20,17 @@ const until = async (predicate, description = 'assistant condition') => {
 }
 // Draw the actual shipped poses at physical 2x resolution, including the sparse
 // idle stretch, without waiting a minute or changing the production scheduler.
-async function sampleGestures() {
-  const { BotEngine } = await import('/vendor/coucou/mochi/engine.js')
+async function sampleGestures(withSkin = false) {
+  const { BotEngine: OriginalEngine } = await import('/vendor/coucou/mochi/engine.js')
+  const { AssistantSkinEngine } = await import('/desktop-assistant-appearance.js')
+  const BotEngine = withSkin ? AssistantSkinEngine : OriginalEngine
   const { AssistantMotion } = await import('/desktop-assistant-motion.js')
   const original = Object.getOwnPropertyDescriptor(performance, 'now')
   let time = 0
   Object.defineProperty(performance, 'now', { configurable: true, value: () => time })
   try {
     let unclipped = true
+    const leaks = []
     const tapKinds = new Set()
     const tapPixels = new Set()
     const idleKinds = ['dance', 'laugh', 'wink', 'blush', 'surprised', 'doze', 'yawn', 'stretch', 'wave', 'excited', 'play']
@@ -32,6 +38,13 @@ async function sampleGestures() {
     for (const kind of ['curious', 'stretch', 'drag', 'release', 'success', 'sleep', 'wake', 'working', 'error', 'notification', 'celebrate', 'surprised', 'edge', 'tap-0', 'tap-1', 'tap-2', 'tap-3', 'tap-4', 'tap-5', 'hold', 'dizzy', ...idleKinds.map(kind => 'idle-' + kind)]) {
       time = 0
       const bot = new BotEngine()
+      if (withSkin) {
+        const skin = document.createElement('canvas'); skin.width = skin.height = 120
+        const texture = skin.getContext('2d')
+        texture.fillStyle = '#001c58'; texture.fillRect(0, 0, 120, 120)
+        texture.fillStyle = '#ffec00'; texture.fillRect(25, 0, 30, 120)
+        bot.skin = skin
+      }
       bot.bodyColor = [.937, .949, .98]
       bot.nextBlink = Infinity
       const motion = new AssistantMotion(bot, () => time, () => .5)
@@ -91,13 +104,18 @@ async function sampleGestures() {
           for (const value of pixels) signature = (Math.imul(signature, 31) + value) >>> 0
           tapPixels.add(signature)
         }
+        let edgeFailure = false
         for (let i = 0; i < 240; i++) {
           if (pixels[(i * 240) * 4 + 3] || pixels[(i * 240 + 239) * 4 + 3]
-            || pixels[i * 4 + 3] || pixels[(239 * 240 + i) * 4 + 3]) unclipped = false
+            || pixels[i * 4 + 3] || pixels[(239 * 240 + i) * 4 + 3]) {
+            unclipped = false
+            if (!edgeFailure && leaks.length < 8) leaks.push({ kind, elapsed, scene: motion.play.scene?.definition.id, tilt: bot.tilt, sx: bot.sx, sy: bot.sy, nausea: bot.nausea })
+            edgeFailure = true
+          }
         }
       }
     }
-    return { unclipped, nauseaRendered, nauseaRecovered, distinctTapKinds: tapKinds.size, distinctTapDraws: tapPixels.size }
+    return { unclipped, nauseaRendered, nauseaRecovered, distinctTapKinds: tapKinds.size, distinctTapDraws: tapPixels.size, leaks }
   } finally {
     if (original) Object.defineProperty(performance, 'now', original)
     else delete performance.now
@@ -125,6 +143,7 @@ void app.whenReady().then(async () => {
     startDesktopUpdates(shell, 'http://127.0.0.1:1')
     check('sandbox main preload can check updates; development install stays disabled', await shell.window.webContents.executeJavaScript('window.hasarbotuUpdates.check().then(state => !state.supported && state.phase === "disabled")'))
     const options = { shell, assetRoot: process.env.HB_ASSISTANT_ASSETS, userDataPath: app.getPath('userData'), quit: () => {} }
+    seedTestAssistantPosition()
     assistant = await startDesktopAssistant(options)
     check('shortcut React workspace is not loaded before the first menu request', assistant.menuWindow.webContents.getURL() === '')
     const win = assistant.window
@@ -137,12 +156,18 @@ void app.whenReady().then(async () => {
     }; undefined`)
     check('isolated character cannot invoke installation', await win.webContents.executeJavaScript('typeof window.hasarbotuUpdates === "undefined"'))
     const appearance = { scheme: 'dark', accentColor: '#15803d', characterColor: '#b9e7c8', textSize: 'large', reduceMotion: true }
-    await until(() => win.webContents.executeJavaScript('document.querySelector("canvas").style.filter.includes("drop-shadow")'), 'initial appearance ready')
+    await until(() => win.webContents.executeJavaScript('document.querySelector("button").style.getPropertyValue("--assistant-focus") !== ""'), 'initial appearance ready')
     const beforePalette = await win.webContents.executeJavaScript('window.canvasSignature()')
     check('trusted main frame can publish appearance', await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify(appearance)})`))
-    await until(() => win.webContents.executeJavaScript('document.querySelector("canvas").style.filter.includes("21, 128, 61")'), 'personalized character color')
+    await until(() => win.webContents.executeJavaScript('document.querySelector("button").style.getPropertyValue("--assistant-focus") === "#15803d"'), 'personalized character color')
     const afterPalette = await win.webContents.executeJavaScript('window.canvasSignature()')
     check('appearance changes actual character pixels', beforePalette !== afterPalette)
+    const colorCursor = screen.getCursorScreenPoint()
+    const colorBounds = win.getBounds()
+    const colorPointer = await positionNativeTestCursor({ x: colorBounds.x + 60, y: colorBounds.y - 1 })
+    try {
+    // Color acceptance uses a real upward pointer position. A user's downward
+    // gaze correctly moves the eyes outside the neutral-pose sample region.
     const colors = [
       ['#000000', '#ffffff'], ['#ffffff', '#111111'], ['#ff0000', '#111111'],
       ['#00ff00', '#111111'], ['#0000ff', '#ffffff'], ['#ffff00', '#111111'],
@@ -171,7 +196,81 @@ void app.whenReady().then(async () => {
       }
     }
     check('malformed color payload is rejected', !(await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: 'url(file:///private)' })})`)))
+    for (const reduceMotion of [true, false]) {
+      for (const eyeColor of ['#ff0000', '#00ff00', '#0000ff', '#ffffff', '#000000']) {
+        const characterColor = eyeColor === '#ffffff' ? '#ffffff' : '#000000'
+        check(`native eye color ${eyeColor} accepted`, await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, characterColor, eyeColor, reduceMotion })})`))
+        const rgb = [1, 3, 5].map(i => parseInt(eyeColor.slice(i, i + 2), 16))
+        await until(() => win.webContents.executeJavaScript(`(() => {
+          const c = document.querySelector('canvas'), p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+          let eyes = 0
+          for (let y = Math.floor(c.height * .35); y < c.height * .6; y++) for (let x = Math.floor(c.width * .3); x < c.width * .7; x++) {
+            const i = (y * c.width + x) * 4
+            if (p[i] === ${rgb[0]} && p[i + 1] === ${rgb[1]} && p[i + 2] === ${rgb[2]} && p[i + 3] === 255) eyes++
+          }
+          return eyes > 10
+        })()`), `native selected eyes ${eyeColor}, reduced ${reduceMotion}`)
+        check(`native selected eyes ${eyeColor}, reduced ${reduceMotion}`, true)
+        if (!reduceMotion && eyeColor === '#ff0000' && process.platform === 'win32') {
+          await positionNativeTestCursor({ x: colorBounds.x + 60, y: colorBounds.y + 360 })
+          await until(() => win.webContents.executeJavaScript(`(() => {
+            const c=document.querySelector('canvas'), p=c.getContext('2d').getImageData(0,0,c.width,c.height).data
+            let eyes=0, top=c.height
+            for(let y=0;y<c.height;y++) for(let x=0;x<c.width;x++) { const i=(y*c.width+x)*4; if(p[i]===255&&p[i+1]===0&&p[i+2]===0&&p[i+3]===255){eyes++;top=Math.min(top,y)} }
+            return eyes>10 && top>=c.height*.6
+          })()`), 'selected red eyes follow real downward pointer outside the neutral sample region')
+          check('selected eyes preserve their exact color while the physical pointer moves them outside the neutral sample region', true)
+          await positionNativeTestCursor({ x: colorBounds.x + 60, y: colorBounds.y - 1 })
+        }
+      }
+    }
+    } finally {
+      const restored = await positionNativeTestCursor(colorCursor)
+      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'color-pointer-proof.json'), JSON.stringify({ positioned: colorPointer, restored }, null, 2))
+    }
     check('character cannot publish appearance', await win.webContents.executeJavaScript('typeof window.hasarbotuAppearance === "undefined"'))
+    for (const accentColor of ['#000000', '#ffffff', '#eab308']) {
+      await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, characterColor: '#b9e7c8', accentColor })})`)
+      check(`accent ${accentColor} is a translucent rear halo`, await win.webContents.executeJavaScript(`(() => {
+        const c = document.querySelector('canvas'), p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+        let halo = 0
+        for (let i = 0; i < p.length; i += 4) if (p[i + 3] > 15 && p[i + 3] < 200) halo++
+        return halo > 100 && p[3] === 0
+      })()`))
+    }
+    const inputs = []
+    for (const [name, type] of [['7883c610ed6f5806fb3559725ccc8245.jpg', 'image/jpeg'], ['ChatGPT Görseli 25 Eki 2026 17_34_09.png', 'image/png']]) {
+      try { inputs.push(`data:${type};base64,${(await readFile(new URL('../../../../' + name, import.meta.url))).toString('base64')}`) }
+      catch (error) { if (error.code !== 'ENOENT') throw error }
+    }
+    const skinChecks = await win.webContents.executeJavaScript(`(${checkSkinRendering.toString()})(${JSON.stringify(inputs)})`)
+    check(`native skin pixel checks: ${skinChecks.checks}, formats: ${skinChecks.formats}`, skinChecks.passed)
+    await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'skin-pixel-proof.json'), JSON.stringify(skinChecks))
+    const dressedGestures = await win.webContents.executeJavaScript(`(${sampleGestures.toString()})(true)`)
+    check('skin preserves all six taps, drag, wobble, dizzy recovery and idle poses without clipping', dressedGestures.unclipped && dressedGestures.nauseaRecovered && dressedGestures.distinctTapKinds === 6 && dressedGestures.distinctTapDraws === 6, dressedGestures)
+    const customImage = await shell.window.webContents.executeJavaScript(`(() => {
+      const c = document.createElement('canvas'); c.width = 80; c.height = 40
+      const x = c.getContext('2d'); x.fillStyle = '#001c58'; x.fillRect(0, 0, 80, 40)
+      x.fillStyle = '#ffec00'; x.fillRect(20, 0, 20, 40)
+      return c.toDataURL('image/png')
+    })()`)
+    await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, customImage })})`)
+    await until(() => win.webContents.executeJavaScript('document.querySelector("button").dataset.customImage === "true"'))
+    check('custom artwork dresses the original body with visible animated eyes', await win.webContents.executeJavaScript(`(() => {
+      const c = document.querySelector('canvas'), p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+      let navy = 0, yellow = 0, eyes = 0, body = 0
+      for (let i = 0; i < p.length; i += 4) {
+        if (p[i] === 0 && p[i + 1] === 28 && p[i + 2] === 88 && p[i + 3] === 255) navy++
+        if (p[i] === 255 && p[i + 1] === 236 && p[i + 2] === 0 && p[i + 3] === 255) yellow++
+        if (p[i] === 17 && p[i + 1] === 17 && p[i + 2] === 17 && p[i + 3] === 255) eyes++
+        if (p[i] === 185 && p[i + 1] === 231 && p[i + 2] === 200 && p[i + 3] === 255) body++
+      }
+      return navy > 300 && yellow > 100 && eyes > 10 && body > 100 && p[3] === 0
+    })()`))
+    await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, customImage })}); window.hasarbotuAppearance.set(${JSON.stringify(appearance)})`)
+    await until(() => win.webContents.executeJavaScript('document.querySelector("button").dataset.customImage === "false"'))
+    await win.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 80))')
+    check('account/default change cannot be overwritten by a late image decode', await win.webContents.executeJavaScript('document.querySelector("button").dataset.customImage === "false"'))
     if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-custom-appearance.png'), (await win.webContents.capturePage()).toPNG()) }
     await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: '#635bff', characterColor: '#eff2fa', reduceMotion: false })})`)
     await win.webContents.executeJavaScript('window.rendererErrors = []; window.addEventListener("error", event => window.rendererErrors.push(event.message)); undefined')
@@ -179,11 +278,15 @@ void app.whenReady().then(async () => {
     win.webContents.debugger.attach('1.3')
     await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
     await until(() => win.webContents.executeJavaScript('!matchMedia("(prefers-reduced-motion: reduce)").matches'))
+    // The policy deliberately yields to an unrelated foreground fullscreen app.
+    // Establish this harness's normal host before checking the topmost band.
+    shell.window.show(); shell.window.focus()
+    await until(() => shell.window.isFocused() && win.isAlwaysOnTop(), 'normal host foreground and assistant topmost band')
     check(`native always-on-top window (actual: ${win.isAlwaysOnTop()})`, win.isAlwaysOnTop())
     check('independent window', !win.getParentWindow())
     check('fixed 120 DIP character', win.getBounds().width === 120 && win.getBounds().height === 120 && !win.isResizable())
     const surface = await win.webContents.executeJavaScript('({ node: typeof require, process: typeof process, ready: !document.querySelector("button").disabled, keys: Object.keys(window.hasarbotuAssistant) })')
-    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'activate,cancel,drag,menu,move,onAppearance,onGaze,onMotion,press,release')
+    check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'activate,cancel,drag,menu,move,onAppearance,onGaze,onMotion,onPlay,playState,press,release')
     await win.webContents.executeJavaScript('window.motionEvents = []; window.motionOff = window.hasarbotuAssistant.onMotion(value => window.motionEvents.push(value)); undefined')
     for (const value of [null, {}, { type: 'drag', x: Infinity }, { type: 'drag', x: 2 }, { type: 'drag', x: '1' }, { type: 'drag', x: 1, dx: Infinity, dy: 0, elapsed: 10 }, { type: 'drag', x: 1, dx: 10, dy: 0, elapsed: -1 }, { type: 'unknown' }]) {
       win.webContents.send('hasarbotu:assistant-motion', value)
@@ -348,7 +451,11 @@ void app.whenReady().then(async () => {
       const hasGreenFace = `(() => {
         const c = document.querySelector('canvas'), p = c.getContext('2d').getImageData(0,0,c.width,c.height).data
         let green = 0
-        for (let i = 0; i < p.length; i += 4) if (p[i+3] > 200 && p[i+1] > p[i]+8 && p[i+1] > p[i+2]+8) green++
+        // The green accent detail is intentionally permanent; sample the face.
+        for (let y = Math.floor(c.height * .25); y < c.height * .6; y++) for (let x = Math.floor(c.width * .25); x < c.width * .75; x++) {
+          const i = (y * c.width + x) * 4
+          if (p[i+3] > 200 && p[i+1] > p[i]+8 && p[i+1] > p[i+2]+8) green++
+        }
         return green > 100
       })()`
       await until(() => win.webContents.executeJavaScript(hasGreenFace), 'native shake reaches the actual green face')
@@ -382,6 +489,7 @@ void app.whenReady().then(async () => {
     check('accessible button opens the designed shortcut panel',true)
     await until(() => assistant.menuWindow.webContents.executeJavaScript('!!document.querySelector(".desktop-assistant-panel")'))
     check('menu shares authenticated session with bounded IPC; character stays isolated',await assistant.menuWindow.webContents.executeJavaScript('typeof require === "undefined" && Object.keys(window.hasarbotuAssistantMenu).join(",") === "choose"') && assistant.menuWindow.webContents.session === shell.window.webContents.session && win.webContents.session !== shell.window.webContents.session)
+    check('menu cannot overwrite the main settings live preview', await assistant.menuWindow.webContents.executeJavaScript('typeof window.hasarbotuAppearance === "undefined"'))
     check('unauthenticated panel hides case data and has no overflow',await assistant.menuWindow.webContents.executeJavaScript('!document.querySelector("input") && document.body.scrollWidth === innerWidth && document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight'))
     if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT,'assistant-menu.png'),(await assistant.menuWindow.webContents.capturePage()).toPNG()) }
     await assistant.menuWindow.webContents.executeJavaScript('document.querySelector("header button").click()')
@@ -461,12 +569,21 @@ void app.whenReady().then(async () => {
     check('dispose removes shortcut panel and its IPC',assistant.menuWindow.isDestroyed() && ipcMain.listenerCount('hasarbotu:assistant-menu') === 0)
     assistant = await startDesktopAssistant(options)
     check('recreation restores persisted position', assistant.window.getBounds().x === saved.x && assistant.window.getBounds().y === saved.y)
-    screen.emit('display-metrics-changed', {}, screen.getPrimaryDisplay(), ['workArea'])
+    screen.emit('display-metrics-changed', {}, getTestDisplay(), ['workArea'])
     check('display update keeps visible position', assistant.window.getBounds().x === saved.x)
     shell.window.destroy()
     check('main close destroys helper and IPC', assistant.window.isDestroyed() && ipcMain.listenerCount('hasarbotu:assistant') === 0)
   } catch (error) {
     checks.push({ name: error instanceof Error ? error.message : 'unexpected failure', pass: false })
+    if (assistant && !assistant.window.isDestroyed()) {
+      const pixels = await assistant.window.webContents.executeJavaScript(`(() => {
+        const c = document.querySelector('canvas'), p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+        const red = []
+        for (let y=0;y<c.height;y++) for(let x=0;x<c.width;x++) { const i=(y*c.width+x)*4; if(p[i]===255&&p[i+1]===0&&p[i+2]===0&&p[i+3]===255) red.push([x,y]) }
+        return { width:c.width,height:c.height,hidden:document.hidden,state:{...document.querySelector('button').dataset},redPixels:red.length,redBounds:red.length?{left:Math.min(...red.map(p=>p[0])),top:Math.min(...red.map(p=>p[1])),right:Math.max(...red.map(p=>p[0])),bottom:Math.max(...red.map(p=>p[1]))}:null }
+      })()`)
+      await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-failure.json'), JSON.stringify({ error: error.message, bounds: assistant.window.getBounds(), cursor: screen.getCursorScreenPoint(), pixels }, null, 2))
+    }
   } finally {
     await assistant?.dispose()
     await shell?.close()

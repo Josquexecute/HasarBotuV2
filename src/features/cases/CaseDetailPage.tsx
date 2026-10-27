@@ -366,7 +366,7 @@ function CaseDetail() {
               {/* Paket 56: araç profili yalnız API modunda gerçek uçtan gelir. */}
               {source === 'api' && (
                 <section className="info-panel overview-grid__wide">
-                  <CaseVehicleProfileModule caseId={item.caseId} />
+                  <CaseVehicleProfileModule caseId={item.caseId} onSaved={reloadCase} />
                 </section>
               )}
               {/* Dosya Envanteri: araç sahibi mini-yakalama, yalnız API modunda. */}

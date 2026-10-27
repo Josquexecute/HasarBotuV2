@@ -95,6 +95,31 @@ describe('CaseVehicleOwnersModule', () => {
     expect(screen.getByText(/Sahte veri gösterilmiyor/)).toBeInTheDocument()
   })
 
+  it('does not silently discard a telephone when its owner name is empty', async () => {
+    const port = makePort(savedRecord)
+    render(<CaseVehicleOwnersModule caseId={CASE_ID} port={port} />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Listeyi Düzenle' }))
+    await user.clear(screen.getByLabelText('Sahip 1 adı'))
+    await user.click(screen.getByRole('button', { name: 'Listeyi Kaydet' }))
+    expect(port.save).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Telefonu girilen sahibin adını da girin')
+    expect(screen.getByLabelText('Sahip 1 telefonu')).toHaveValue('05321234567')
+  })
+
+  it('keeps in-flight owner data fixed until persistence succeeds or fails', async () => {
+    const port = makePort(savedRecord)
+    vi.mocked(port.save).mockImplementation(() => new Promise(() => {}))
+    render(<CaseVehicleOwnersModule caseId={CASE_ID} port={port} />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Listeyi Düzenle' }))
+    await user.click(screen.getByRole('button', { name: 'Listeyi Kaydet' }))
+    expect(screen.getByLabelText('Sahip 1 adı')).toBeDisabled()
+    expect(screen.getByLabelText('Sahip 1 telefonu')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Sahip 1 satırını kaldır' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Sahip Ekle' })).toBeDisabled()
+  })
+
   it('yetkisiz kullanıcıda düzenleme butonu gösterilmez', async () => {
     const port = makePort({ ...savedRecord, permissions: { canEdit: false } })
     render(<CaseVehicleOwnersModule caseId={CASE_ID} port={port} />)

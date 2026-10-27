@@ -26,6 +26,13 @@ function input(overrides: Partial<CaseVehicleProfileInput> = {}): CaseVehiclePro
 }
 
 describe('araç profili doğrulaması', () => {
+  it('defaults legacy profiles to unknown transmission and rejects unsupported values', () => {
+    expect(validateCaseVehicleProfile(input())).toMatchObject({ valid: true, profile: { transmission: 'unknown' } })
+    for (const transmission of ['unknown', 'manual', 'automatic', 'semi_automatic'] as const) {
+      expect(validateCaseVehicleProfile(input({ transmission }))).toMatchObject({ valid: true, profile: { transmission } })
+    }
+    expect(validateCaseVehicleProfile(input({ transmission: 'CVT' as never }))).toMatchObject({ valid: false, reasonCode: 'VEHICLE_TRANSMISSION_INVALID' })
+  })
   it('geçerli profili normalize eder', () => {
     const result = validateCaseVehicleProfile(input({ brand: '  renault  ', model: 'Clio   V' }))
     expect(result.valid).toBe(true)

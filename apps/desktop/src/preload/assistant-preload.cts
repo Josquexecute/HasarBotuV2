@@ -3,6 +3,18 @@ import { contextBridge, ipcRenderer } from 'electron'
 // Only the dedicated assistant window receives this surface. No channel name,
 // URL, path, cursor coordinates or general Electron API comes from the renderer.
 contextBridge.exposeInMainWorld('hasarbotuAssistant', Object.freeze({
+  playState: (value: unknown) => ipcRenderer.send('hasarbotu:touch-state', value),
+  onPlay: (callback: unknown) => {
+    if (typeof callback !== 'function') throw new TypeError('Touch callback must be a function')
+    const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      if (!value || typeof value !== 'object') return
+      const data = value as Record<string, unknown>
+      if (data.type === 'play' && typeof data.id === 'string' && /^[a-z][a-z0-9-]{0,47}$/.test(data.id)) callback({ type: 'play', id: data.id })
+      else if (typeof data.type === 'string' && ['calm', 'stop', 'pause', 'resume', 'sleep', 'wake'].includes(data.type)) callback({ type: data.type })
+    }
+    ipcRenderer.on('hasarbotu:touch-control', listener)
+    return () => ipcRenderer.removeListener('hasarbotu:touch-control', listener)
+  },
   press: () => ipcRenderer.send('hasarbotu:assistant', 'press'),
   drag: () => ipcRenderer.send('hasarbotu:assistant', 'drag'),
   release: () => ipcRenderer.send('hasarbotu:assistant', 'release'),
@@ -34,7 +46,10 @@ contextBridge.exposeInMainWorld('hasarbotuAssistant', Object.freeze({
       if (typeof data.accentColor !== 'string' || !/^#[a-f0-9]{6}$/i.test(data.accentColor)
         || typeof data.characterColor !== 'string' || !/^#[a-f0-9]{6}$/i.test(data.characterColor)
         || typeof data.reduceMotion !== 'boolean') return
-      callback({ accentColor: data.accentColor, characterColor: data.characterColor, reduceMotion: data.reduceMotion })
+      if (data.customImage != null && (typeof data.customImage !== 'string' || data.customImage.length > 360_000
+        || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(data.customImage))) return
+      if (data.eyeColor != null && (typeof data.eyeColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(data.eyeColor))) return
+      callback({ accentColor: data.accentColor, characterColor: data.characterColor, eyeColor: data.eyeColor, reduceMotion: data.reduceMotion, customImage: data.customImage })
     }
     ipcRenderer.on('hasarbotu:assistant-appearance', listener)
     return () => ipcRenderer.removeListener('hasarbotu:assistant-appearance', listener)

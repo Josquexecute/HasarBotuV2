@@ -199,11 +199,11 @@ describe('simple value loss calculator', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Bu parça zaten eklendi')
     expect(screen.getAllByText('SOL ÇAMURLUK', { selector: 'strong' })).toHaveLength(1)
   })
-  it('clears incompatible parts and switches mileage to working hours for group D', async () => {
+  it('keeps physical parts for review and switches mileage to working hours for group D', async () => {
     const port = fixture()
     render(view(port)); await fill()
     await userEvent.selectOptions(screen.getByLabelText('Araç türü'), 'İŞ MAKİNESİ')
-    expect(screen.queryByText('SOL ÇAMURLUK', { selector: 'strong' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('1. parça adı')).toHaveValue('SOL ÇAMURLUK')
     expect(screen.getByLabelText('Çalışma saati')).toHaveValue('')
     await waitFor(() => expect(port.catalog).toHaveBeenLastCalledWith('case-1','D'))
   })
@@ -261,15 +261,31 @@ describe('simple value loss calculator', () => {
     expect(screen.getAllByLabelText('SOL ÇAMURLUK malzemesi')[0]).toHaveValue('unspecified')
     expect(screen.getAllByLabelText('SOL ÇAMURLUK malzemesi')[1]).toHaveValue('plastic_bodywork')
   })
-  it('clears parts between vehicle types sharing a source group and updates body options', async () => {
+  it('preserves parts between vehicle types sharing a source group and updates body options', async () => {
     const port = fixture(), user = userEvent.setup()
     render(view(port)); await fill()
     await user.selectOptions(screen.getByLabelText('Araç türü'), 'TAKSİ')
-    expect(screen.queryByText('SOL ÇAMURLUK', { selector: 'strong' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('1. parça adı')).toHaveValue('SOL ÇAMURLUK')
     expect(screen.getByLabelText('Kasa / araç yapısı')).toHaveValue('unspecified')
     await user.selectOptions(screen.getByLabelText('Araç türü'), 'MOTORSİKLET')
     expect(within(screen.getByLabelText('Kasa / araç yapısı')).getByRole('option', { name: 'Scooter' })).toBeInTheDocument()
     expect(within(screen.getByLabelText('Kasa / araç yapısı')).queryByRole('option', { name: 'Sedan' })).not.toBeInTheDocument()
+  })
+  it('retains physical damage observations when correcting vehicle type but invalidates its coefficients and result', async () => {
+    const port = fixture(), user = userEvent.setup()
+    render(view(port)); await fill()
+    await user.selectOptions(screen.getByLabelText('Kasa / araç yapısı'), 'sedan')
+    fireEvent.change(screen.getByLabelText('SOL ÇAMURLUK konumu'), { target: { value: 'sol ön' } })
+    await user.click(screen.getByRole('button', { name: 'Hesapla' }))
+    await screen.findByText(/55\.000,00/)
+    await user.selectOptions(screen.getByLabelText('Araç türü'), 'TAKSİ')
+    expect(screen.getByLabelText('1. parça adı')).toHaveValue('SOL ÇAMURLUK')
+    expect(screen.getByLabelText('SOL ÇAMURLUK konumu')).toHaveValue('sol ön')
+    expect(screen.getByLabelText('Kasa / araç yapısı')).toHaveValue('sedan')
+    expect(screen.getByLabelText('Kilometre')).toHaveValue('50000')
+    expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
+    const key = `hasarbotu-value-loss-calculator-v1:${session.user!.organizationId}:${session.user!.id}:${item.caseId}`
+    expect(JSON.parse(sessionStorage.getItem(key)!).draft.parts[0]).toMatchObject({ stableRuleId: '', label: 'SOL ÇAMURLUK', position: 'sol ön' })
   })
   it('preserves physical facts but removes incompatible coefficients when the body changes', async () => {
     const port = fixture(), user = userEvent.setup()

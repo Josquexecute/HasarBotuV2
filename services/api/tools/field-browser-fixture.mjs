@@ -24,7 +24,8 @@ export async function startFieldBrowserFixture(databaseUrl) {
   const cases = []
   for (const [index,plate] of ['34ABC123','06DEF456','35GHI789'].entries()) {
     const id=uuidv7(),path=`2026 OFİS/Ekim 2026/${plate}`
-    await mkdir(join(root,path),{recursive:true});await writeFile(join(root,path,'HASAR 101.jpg'),'Existing office photo must be preserved')
+    await mkdir(join(root,path,'HASAR'),{recursive:true});await writeFile(join(root,path,'HASAR','HASAR 101.jpg'),'Existing office photo must be preserved')
+    await writeFile(join(root,path,'VİTES.jpg'),'Legacy root photo must be preserved')
     await pool.query("INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,plate,plate_normalized,workflow_stage) VALUES($1,$2,2026,$3,$4,$5,$5,'reporting')",[id,org,index+1,`2026/${index+1}`,plate])
     await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path,verification_status) VALUES($1,$2,$3,'office',$4,'verified')",[uuidv7(),org,id,path])
     cases.push({id,plate,path,officeNumber:`2026/${index+1}`})

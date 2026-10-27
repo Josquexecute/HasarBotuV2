@@ -184,4 +184,48 @@ describeDb('Dosya Envanteri — liste önizleme ve export gerçek API', () => {
     expect(readSheetXml(filtered.rawPayload)).toContain('2026/4702')
     expect(readSheetXml(filtered.rawPayload)).not.toContain('2026/4701')
   })
+
+  it('excludes archived cases consistently from preview, filters and the actual workbook', async () => {
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [trafficCaseId])
+    try {
+      const preview = await app.inject({ method: 'GET', url: CASE_INVENTORY_PREVIEW_ROUTE, headers: { cookie: expertCookie } })
+      expect(preview.statusCode).toBe(200)
+      expect(preview.json().totalCount).toBe(1)
+      const filtered = await app.inject({ method: 'GET', url: `${CASE_INVENTORY_PREVIEW_ROUTE}?caseType=traffic&status=open`, headers: { cookie: expertCookie } })
+      expect(filtered.json().totalCount).toBe(0)
+      const exported = await app.inject({ method: 'GET', url: CASE_INVENTORY_EXPORT_ROUTE, headers: { cookie: expertCookie } })
+      expect(exported.statusCode).toBe(200)
+      const sheet = readSheetXml(exported.rawPayload)
+      expect(sheet).toContain('2026/4702')
+      expect(sheet).not.toContain('2026/4701')
+      expect(sheet).not.toContain('Envanter Sahip')
+      expect(sheet).not.toContain('05321112233')
+      expect((await app.inject({ url: `/api/v1/cases/${trafficCaseId}`, headers: { cookie: expertCookie } })).statusCode).toBe(404)
+    } finally { await pool.query('UPDATE cases SET is_archived=false WHERE id=$1', [trafficCaseId]) }
+  })
+
+  it('exports corrected, cleared and manually named service contacts without restoring the directory phone', async () => {
+    const endpoint = `/api/v1/cases/${trafficCaseId}`
+    const current = await app.inject({ url: endpoint, headers: { cookie: expertCookie } })
+    let version = current.json().case.version as number
+    for (const details of [
+      { name: 'Envanter Servis', phone: '0216 555 66 77' },
+      { name: 'Envanter Servis', phone: null },
+      { name: 'Manual Repair', phone: '0216 555 88 99' },
+    ]) {
+      const edited = await app.inject({ method: 'PATCH', url: endpoint, headers: { cookie: expertCookie }, payload: { expectedVersion: version, serviceDetails: details } })
+      expect(edited.statusCode, edited.payload).toBe(200)
+      version = edited.json().case.version as number
+      const exported = await app.inject({ method: 'GET', url: CASE_INVENTORY_EXPORT_ROUTE, headers: { cookie: expertCookie } })
+      expect(exported.statusCode).toBe(200)
+      const sheet = readSheetXml(exported.rawPayload)
+      expect(sheet).toContain(details.name)
+      expect(sheet).not.toContain('02121234567')
+      if (details.phone) expect(sheet).toContain(details.phone)
+      else expect(sheet).not.toContain('0216 555 66 77')
+      const restricted = await app.inject({ method: 'GET', url: CASE_INVENTORY_EXPORT_ROUTE, headers: { cookie: secretaryCookie } })
+      expect(restricted.statusCode).toBe(200)
+      if (details.phone) expect(readSheetXml(restricted.rawPayload)).not.toContain(details.phone)
+    }
+  })
 })

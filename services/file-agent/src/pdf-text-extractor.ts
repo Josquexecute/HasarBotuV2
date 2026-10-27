@@ -63,6 +63,7 @@ async function runIsolatedParser(
     })
     let sequence = 0
     let settled = false
+    let completeReceived = false
     let uploads = Promise.resolve()
     const stopAndReject = async (error: Error): Promise<void> => {
       if (settled) return
@@ -101,6 +102,7 @@ async function runIsolatedParser(
         void stopAndReject(new Error(message.errorCode))
         return
       }
+      completeReceived = true
       void uploads.then(() => {
         return stopAndResolve(message.summary)
       }).catch(() => stopAndReject(new Error('chunk_upload_failed')))
@@ -109,7 +111,7 @@ async function runIsolatedParser(
       void stopAndReject(new Error('worker_crashed'))
     })
     worker.on('exit', (code) => {
-      if (settled || code === 0) return
+      if (settled || code === 0 && completeReceived) return
       settled = true
       clearTimeout(timeout)
       rejectPromise(new Error('worker_crashed'))

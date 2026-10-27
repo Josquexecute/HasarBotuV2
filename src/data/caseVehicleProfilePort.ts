@@ -6,6 +6,7 @@ export type VehicleEvidenceSourceRecord =
   | 'registration_document' | 'policy_document' | 'insurer_record' | 'user_statement' | 'other'
 
 export interface CaseVehicleProfileFieldsRecord {
+  readonly transmission?: import('@hasarbotu/domain').VehicleTransmission
   readonly brand: string
   readonly model: string
   readonly modelYear: number
@@ -25,6 +26,7 @@ export interface CaseVehicleProfileVersionRecord extends CaseVehicleProfileField
 }
 
 export interface CaseVehicleProfileRecord {
+  readonly transmission?: import('@hasarbotu/domain').VehicleTransmission
   readonly caseId: string
   readonly profileId: string | null
   readonly version: number | null

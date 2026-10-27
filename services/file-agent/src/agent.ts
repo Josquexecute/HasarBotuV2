@@ -139,6 +139,7 @@ export async function runOnce(client: AgentApiClient, config: AgentConfig): Prom
         ? { errorCode: result.errorCode }
         : {}),
       ...('fileOperation' in result && result.fileOperation !== undefined ? { fileOperation: result.fileOperation } : {}),
+      ...('fileLock' in result && result.fileLock !== undefined ? { fileLock: result.fileLock } : {}),
       ...((result as PdfTextExtractionResult).pdfExtraction !== undefined ? { pdfExtraction: (result as PdfTextExtractionResult).pdfExtraction } : {}),
       ...((result as PolicyOcrExtractionResult).policyOcr !== undefined ? { policyOcr: (result as PolicyOcrExtractionResult).policyOcr } : {}),
     }
@@ -164,7 +165,11 @@ export async function runLoop(
   try {
   while (signal === undefined || !signal.aborted) {
     try {
-      if (config.fieldPhotosEnabled) await runFieldPhotoOnce(config, signal)
+      if (config.fieldPhotosEnabled) {
+        try { await runFieldPhotoOnce(config, signal) }
+        catch { if (!signal?.aborted) options.onCycleError?.('agent_cycle_failed') }
+      }
+      if (signal?.aborted) break
       const result = await runOnce(client, config)
       if (result.kind === 'storage_unavailable') options.onCycleError?.('storage_unavailable')
       if (result.kind !== 'no_work' && result.kind !== 'storage_unavailable') continue

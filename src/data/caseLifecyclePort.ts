@@ -1,4 +1,5 @@
 import type { CaseRecord, CaseStageCode } from '../types/case'
+import type { FileLockInfo } from '@hasarbotu/contracts'
 import { mapCaseDtoToRecord } from './httpAdapter'
 
 export type LifecycleOperationStatus =
@@ -54,7 +55,7 @@ export interface LifecycleOperationRecord {
   }
   readonly blockers: readonly string[]
   readonly warnings: readonly string[]
-  readonly linkedFileOperation: { readonly id: string; readonly status: string } | null
+  readonly linkedFileOperation: { readonly id: string; readonly status: string; readonly fileLock?: FileLockInfo | null } | null
   readonly failureReasonCode: string | null
   readonly canApprove: boolean
   readonly canCancel: boolean

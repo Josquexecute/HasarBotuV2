@@ -20,6 +20,7 @@ import { suggestEmailService } from './service-email'
 import { EksistVehicleFields } from './EksistVehicleFields'
 import {
   CASE_STAGE_OPTIONS,
+  VEHICLE_TRANSMISSION_OPTIONS,
   commandErrorMessage,
   commandFieldMessages,
   makeSubmissionKey,
@@ -92,6 +93,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
   const [unresolved, setUnresolved] = useState<Record<string, string>>({})
   const [brand, setBrand] = useState(''), [model, setModel] = useState(''), [modelYear, setModelYear] = useState('')
   const [vehicleClass, setVehicleClass] = useState('')
+  const [transmission, setTransmission] = useState<import('@hasarbotu/domain').VehicleTransmission>('unknown')
   const [creation, setCreation] = useState<QuickCreation | null>(null)
   const [locked, setLocked] = useState(false)
   const [extracting, setExtracting] = useState(false)
@@ -174,6 +176,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
     }
 
     const input: CaseCreateInput = {
+      transmission,
       caseType,
       plate: canonicalPlate,
       workflowStage,
@@ -203,7 +206,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
           ...(hasVehicle ? { vehicle: { brand: brand.trim(), model: model.trim(), modelYear: Number(modelYear), vehicleClass: vehicleClass as NonNullable<QuickCaseCreate['vehicle']>['vehicleClass'], variant: null, chassisPrefix: null, engineCode: null, evidenceSource: 'insurer_record', evidenceReference: source ? `Eksist ${reference.trim()}` : null } } : {}),
         } }
       }
-      submittingRef.current = true; setSubmitting(true); setLocked(true); setGeneralError('')
+      submittingRef.current = true; setSubmitting(true); setLocked(true); setGeneralError(''); setFieldErrors({})
       const attempt = quickAttempt.current!
       try { setCreation(await eksist.create(attempt.input, attempt.key)) }
       catch (error) {
@@ -290,6 +293,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
               {source ? <label className="form-field"><span>Eksper</span><input aria-label="Eksper" value={source.extraction.expert} readOnly /><small>Levha no: {source.extraction.expertLicenseNumber || "Kaynakta belirtilmedi"}</small><FieldError message={fieldErrors.expertUserId} /></label> : <label className="form-field" data-field="expertUserId"><span>Eksper</span><select value={expertUserId} onChange={(event) => setExpertUserId(event.target.value)} disabled={referenceData.status !== 'ok'}><option value="">Atanmadı</option>{referenceData.references?.experts.map((option) => <option key={option.id} value={option.id}>{option.displayName}</option>)}</select><FieldError message={fieldErrors.expertUserId} />{unresolved.expertUserId && <button type="button" onClick={() => { setExpertUserId(''); resolved('expertUserId') }}>Eşleştirmeden kaynakta sakla</button>}</label>}
               <label className="form-field" data-field="lossDate"><span>Hasar tarihi</span><input type="date" value={lossDate} onChange={(event) => setLossDate(event.target.value)} aria-invalid={fieldErrors.lossDate !== undefined} /><FieldError message={fieldErrors.lossDate} /></label>
               <label className="form-field"><span>İhbar tarihi</span><input type="date" value={notificationDate} onChange={(event) => setNotificationDate(event.target.value)} aria-invalid={fieldErrors.notificationDate !== undefined} /><small>Hasar tarihinden önce olamaz.</small><FieldError message={fieldErrors.notificationDate} /></label>
+              <label className="form-field"><span>Vites</span><select value={transmission} onChange={event => setTransmission(event.target.value as typeof transmission)}>{VEHICLE_TRANSMISSION_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select><FieldError message={fieldErrors.transmission} /></label>
               {quickMode && <label className="form-field"><span>Çalışma klasörü konumu *</span><select value={rootKey} onChange={event => setRootKey(event.target.value)}><option value="">Seçin</option>{roots.map(root => <option key={root.rootKey} value={root.rootKey}>{root.label}</option>)}</select><FieldError message={fieldErrors.storageRootKey} /></label>}
               {source && <>
                 <label className="form-field" data-field="reference"><span>Eksist talep referansı *</span><input value={reference} onChange={event => setReference(event.target.value)} /><FieldError message={fieldErrors.reference} /></label>

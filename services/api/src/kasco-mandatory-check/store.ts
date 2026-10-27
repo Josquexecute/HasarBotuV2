@@ -241,8 +241,9 @@ export function createKascoMandatoryCheckStore(pool: pg.Pool) {
       input: KascoMandatoryCheckConfirmRequest,
     ): Promise<ConfirmOutcome> {
       return withTransaction(pool, async (client): Promise<ConfirmOutcome> => {
+        // Serialize the lifecycle and evidence checks with closure and document revisions.
         const caseResult = await client.query(
-          'SELECT case_type, lifecycle_status FROM cases WHERE organization_id=$1 AND id::text=$2',
+          'SELECT case_type, lifecycle_status FROM cases WHERE organization_id=$1 AND id::text=$2 FOR UPDATE',
           [actor.organizationId, caseId],
         )
         const caseRow = caseResult.rows[0] as { case_type: 'traffic' | 'casco'; lifecycle_status: 'open' | 'closed' } | undefined

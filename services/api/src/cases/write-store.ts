@@ -9,6 +9,7 @@ import { createAuditService } from '../audit/service.js'
 import { loadServiceProfile } from '../service-agreements/service.js'
 import { requireCaseType } from './classification.js'
 import { saveServiceContact, selectServiceContact, withServiceContacts } from './service-contact.js'
+import { createCaseVehicleProfileStore } from '../case-vehicle-profile/store.js'
 
 /**
  * Cases yazma katmani (Paket 09) — kritik islem modeli:
@@ -125,7 +126,6 @@ export function createCasesWriteStore(pool: pg.Pool) {
       if (!plateResult.ok) throw new ReferenceCheckError('plate')
       const plate = plateResult.value
       const normalized = plateSearchKey(plate)
-      const year = new Date().getFullYear()
       const caseId = uuidv7()
       assertDateOrder(input.lossDate, input.notificationDate)
 
@@ -133,7 +133,9 @@ export function createCasesWriteStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const today = await client.query<{ today: string }>("SELECT to_char(transaction_timestamp() AT TIME ZONE 'Europe/Istanbul','YYYY-MM-DD') AS today")
-        input = { ...input, followUpDate: localDateSchema.parse(today.rows[0]!.today) }
+        const officeDate = localDateSchema.parse(today.rows[0]!.today)
+        const year = Number(officeDate.slice(0, 4))
+        input = { ...input, followUpDate: officeDate }
         if (input.serviceDetails) input = { ...input, serviceId: (await selectServiceContact(client, actor.organizationId, input.serviceDetails, input.serviceId)) ?? undefined }
         await assertReferences(client, actor.organizationId, input)
 
@@ -152,8 +154,8 @@ export function createCasesWriteStore(pool: pg.Pool) {
           `INSERT INTO cases (id, organization_id, office_year, office_sequence, office_number,
              case_type, workflow_stage, notification_form_number, insurer_claim_number,
              plate, plate_normalized, responsible_user_id, expert_user_id, service_center_id, insurer_id,
-             follow_up_date, loss_date, notification_date)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+             follow_up_date, loss_date, notification_date, transmission)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
           [
             caseId,
             actor.organizationId,
@@ -173,6 +175,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
             input.followUpDate ?? null,
             input.lossDate ?? null,
             input.notificationDate ?? null,
+            input.transmission ?? 'unknown',
           ],
         )
         if (input.followUpDate !== undefined) {
@@ -206,6 +209,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
           entityId: caseId,
           details: {
             officeCaseNumber: officeNumber,
+            transmission: input.transmission ?? 'unknown',
             caseType: input.caseType,
             serviceDetailsPresent: input.serviceDetails !== undefined,
             assignedReferenceFields: ['responsibleUserId', 'expertUserId', 'serviceId', 'insurerId'].filter(
@@ -327,6 +331,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         )
 
         const columnByField: Record<string, string> = {
+          transmission: 'transmission',
           caseType: 'case_type',
           workflowStage: 'workflow_stage',
           followUpDate: 'follow_up_date',
@@ -357,6 +362,20 @@ export function createCasesWriteStore(pool: pg.Pool) {
           params,
         )
         const updatedRow = updated.rows[0] as CaseRow
+        if (input.transmission !== undefined) {
+          // Keep the immutable vehicle history and the editable case field consistent in one transaction.
+          const profiles = createCaseVehicleProfileStore(pool)
+          const currentProfile = await profiles.read({ organizationId: actor.organizationId, userId: actor.actorUserId }, caseId, true, client)
+          if (currentProfile.current && currentProfile.current.transmission !== input.transmission) {
+            const saved = currentProfile.current
+            await profiles.save({ organizationId: actor.organizationId, userId: actor.actorUserId }, caseId, {
+              fields: { brand: saved.brand, model: saved.model, modelYear: saved.modelYear, variant: saved.variant,
+                vehicleClass: saved.vehicleClass, chassisPrefix: saved.chassisPrefix, engineCode: saved.engineCode,
+                evidenceSource: saved.evidenceSource, evidenceReference: saved.evidenceReference, transmission: input.transmission },
+              expectedVersion: currentProfile.version, reason: 'Dosya bilgileri üzerinden vites güncellendi',
+            }, client)
+          }
+        }
         const serviceProfile = updatedRow.service_center_id === null ? null : await loadServiceProfile(client, actor.organizationId, {
           serviceId: updatedRow.service_center_id,
           insurerId: updatedRow.insurer_id,

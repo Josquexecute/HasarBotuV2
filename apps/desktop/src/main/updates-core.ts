@@ -22,17 +22,18 @@ export async function downloadVerifiedInstaller(options: {
   // Never reuse an executable merely because its filename matches a digest.
   await rm(temporary, { force: true })
   let handle
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
   try {
     const response = await options.fetch(`${options.origin}/api/v1/desktop-updates/artifacts/${release.sha256}`, {
       redirect: 'error', credentials: 'include', signal: AbortSignal.timeout(300_000), cache: 'no-store',
     })
-    if (!response.ok || !response.body) throw new Error(response.status === 401 ? 'Güncelleme için hesabınıza giriş yapın.' : 'Güncelleme dosyası indirilemedi.')
+    reader = response.body?.getReader()
+    if (!response.ok || !reader) throw new Error(response.status === 401 ? 'Güncelleme için hesabınıza giriş yapın.' : 'Güncelleme dosyası indirilemedi.')
     const length = response.headers.get('content-length')
     if (length !== null && length !== String(release.size)) throw new Error('Güncelleme dosyası boyutu uyuşmuyor.')
     handle = await open(temporary, 'wx')
     const digest = createHash('sha256')
     let bytes = 0, lastReported = 0, signature = Buffer.alloc(0)
-    const reader = response.body.getReader()
     for (;;) {
       const { value, done } = await reader.read()
       if (done) break
@@ -44,12 +45,20 @@ export async function downloadVerifiedInstaller(options: {
       await handle.writeFile(chunk)
       if (bytes - lastReported >= 256 * 1024) { options.progress(bytes); lastReported = bytes }
     }
+    reader.releaseLock()
+    reader = undefined
     if (bytes !== release.size || digest.digest('hex') !== release.sha256 || signature.toString('ascii') !== 'MZ') throw new Error('Güncelleme dosyası bütünlük kontrolünden geçemedi.')
     await handle.sync(); await handle.close(); handle = undefined
     await rename(temporary, target)
     options.progress(bytes)
     return target
   } catch (error) {
+    if (reader) {
+      // Rejecting headers or disk writes must also stop the upstream transfer.
+      // A broken stream can reject cancellation; preserve the original failure.
+      try { await reader.cancel() } catch { /* The download failure is reported below. */ }
+      finally { reader.releaseLock() }
+    }
     await handle?.close()
     await rm(temporary, { force: true })
     throw error

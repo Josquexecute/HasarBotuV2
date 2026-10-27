@@ -30,6 +30,17 @@ const planned: LifecycleOperationRecord = {
 }
 
 describe('CaseLifecycleModal', () => {
+  it('shows actual lock application names and safe save instructions without closing applications', async () => {
+    const operation = { ...planned, status: 'failed' as const, failureReasonCode: 'file_locked', canApprove: true,
+      linkedFileOperation: { id: 'file-1', status: 'failed', fileLock: { applications: [{ pid: 1234, name: 'WINWORD' }], truncated: false } } }
+    const port: CaseLifecycleCommandPort = { readLatestOperation: vi.fn().mockResolvedValue(operation), readLocationVersion: vi.fn(), planClose: vi.fn(), planReopen: vi.fn(), approve: vi.fn(), readOperation: vi.fn(), readCase: vi.fn() }
+    render(<CaseLifecycleModal item={item} port={port} onClose={vi.fn()} onUpdated={vi.fn()} onUnauthorized={vi.fn()} onReload={vi.fn()} />)
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('WINWORD (PID 1234)')
+    expect(alert).toHaveTextContent('belgelerinizi kaydedip kapatın')
+    expect(alert).toHaveTextContent('hiçbir uygulama zorla kapatılmaz')
+    expect(port.approve).not.toHaveBeenCalled()
+  })
   it.each([
     ['source_evidence_missing', 'taşıma kanıtı yok veya uyuşmuyor'],
     ['source_missing', 'Kaynak klasör bulunamadı'],
@@ -60,7 +71,7 @@ describe('CaseLifecycleModal', () => {
       return <CaseLifecycleModal item={current} port={port} onClose={vi.fn()} onUpdated={vi.fn()} onUnauthorized={vi.fn()} onReload={setCurrent} />
     }
     render(<View />)
-    expect(await screen.findByRole('alert')).toHaveTextContent('Klasöre erişilemedi')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Klasöre erişim izni yok')
     await userEvent.click(screen.getByRole('button',{ name: 'Güncel Verilerle Yeniden Önizle' }))
     await userEvent.click(await screen.findByRole('button',{ name: 'Önizleme Oluştur' }))
     expect(port.planClose).toHaveBeenCalledWith(item.caseId,{ expectedCaseVersion: 2,expectedLocationVersion: 2,closeMode: 'normal',replaceFailedOperationId: failure.id })
