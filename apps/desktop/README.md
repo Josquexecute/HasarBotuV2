@@ -1,5 +1,10 @@
 # `@hasarbotu/desktop`
 
+28 Ekim 2026 bekleyen güncellemeler: [kalıcı sonuç raporu](./PENDING-UPDATES-20261028.md).
+86 hedefli test geçti; API düzeltmeleri bağımsız Git dalında korundu. OCR/PDF 48 saatlik
+kabulü sürüyor (beklenen bitiş: 29 Ekim 19:49 Türkiye saati); yeni ofis yayını yapılmadı,
+doğrulanan feed/paket **0.1.80** olarak korundu. Ticari dağıtım yapılmadı.
+
 HasarBotu V2'nin **ince Electron kabuğu** (ADR-Q06, Paket 21 / D2).
 
 Kabuk aşağıdaki görevleri ve dar masaüstü yardımcılarını yürütür:
