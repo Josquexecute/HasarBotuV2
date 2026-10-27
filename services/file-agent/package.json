@@ -10,7 +10,8 @@
   },
   "files": [
     "dist",
-    "THIRD-PARTY-NOTICES.txt"
+    "THIRD-PARTY-NOTICES.txt",
+    "codec-license-evidence.json"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

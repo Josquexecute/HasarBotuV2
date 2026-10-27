@@ -498,6 +498,44 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     }
   })
 
+  it('preserves committed Gmail results across a mid-batch outage and resumes without duplicate effects',async () => {
+    await pool.query("UPDATE mail_connections SET status='disconnected'")
+    const caseId = await createCase(), number = '000980123'
+    await submit(caseId,number)
+    const c = await connection('mid-batch-recovery@office.example')
+    const lastSuccess = new Date('2026-01-01T00:00:00.000Z')
+    await pool.query('UPDATE mail_connections SET last_success_at=$2 WHERE id=$1',[c,lastSuccess])
+    let offline = true
+    const gmail = vi.fn<GoogleProvider['gmail']>().mockImplementation(async (_token,path) => {
+      if (path.startsWith('messages?')) return { messages: [{ id: 'committed-before-outage' },{ id: 'unread-at-outage' }] }
+      if (offline && path.startsWith('messages/unread-at-outage')) throw new TypeError('synthetic socket reset')
+      const messageId = path.startsWith('messages/committed-before-outage') ? 'committed-before-outage' : 'unread-at-outage'
+      return { id: messageId,internalDate: '1790774585000',payload: { mimeType: 'text/plain',headers: [
+        { name: 'From',value: 'results@sbm.example' },
+        { name: 'Authentication-Results',value: 'mx.google.com; dmarc=pass header.from=sbm.example' },
+      ],body: { data: Buffer.from(`Başvuru no: ${number}\nSonuç: Tamamlandı`).toString('base64url') } } }
+    })
+    const config = { ...google,automaticSbmEnabled: true }
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    const row = (await pool.query('SELECT status,last_success_at,last_error FROM mail_connections WHERE id=$1',[c])).rows[0]
+    expect(row).toMatchObject({ status: 'error',last_success_at: lastSuccess })
+    expect(row.last_error).not.toContain('synthetic')
+    const committed = (await pool.query('SELECT status,version FROM tramer_requests WHERE case_id=$1',[caseId])).rows[0]
+    expect(committed.status).toBe('completed')
+    expect((await pool.query('SELECT provider_message_id,status FROM sbm_messages WHERE connection_id=$1',[c])).rows)
+      .toEqual([{ provider_message_id: 'committed-before-outage',status: 'applied' }])
+    offline = false
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    expect((await pool.query('SELECT provider_message_id,status FROM sbm_messages WHERE connection_id=$1 ORDER BY provider_message_id',[c])).rows)
+      .toEqual([{ provider_message_id: 'committed-before-outage',status: 'applied' },{ provider_message_id: 'unread-at-outage',status: 'duplicate' }])
+    expect((await pool.query('SELECT status,version FROM tramer_requests WHERE case_id=$1',[caseId])).rows[0]).toEqual(committed)
+    expect(Number((await pool.query("SELECT count(*) n FROM tracking_notifications WHERE case_id=$1 AND kind='tramer'",[caseId])).rows[0].n)).toBe(1)
+    expect(gmail.mock.calls.filter(([,path]) => path.startsWith('messages/committed-before-outage'))).toHaveLength(1)
+    expect((await pool.query('SELECT status,last_error FROM mail_connections WHERE id=$1',[c])).rows[0]).toEqual({ status: 'connected',last_error: null })
+    expect((await pool.query("SELECT error_code FROM tracking_health WHERE source_id=$1 AND kind='mail'",[c])).rows[0]).toEqual({ error_code: null })
+  })
+
   it('records permission loss; catches up after recovery; processes messages only once',async () => {
     await pool.query("UPDATE mail_connections SET status='disconnected'")
     const c = await connection('recovery@office.example')

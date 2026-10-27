@@ -391,4 +391,26 @@ describeDb('sidecarless physical folder registration', () => {
     const results = await Promise.all([1, 2].map(() => applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})))
     expect(results.map(r => r.relocated).sort()).toEqual([0, 1])
   })
+  it.each(['before_plan', 'after_approval'] as const)('preserves competing folder identities when a managed archive destination is occupied (%s)', async stage => {
+    const input = await relocation(), binding = input.bindings[0]!, peer = await relocation()
+    const peerId = peer.bindings[0]!.caseId
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [binding.caseId])
+    await createAuditService().record(pool, { ...actor(), action: 'case.office_inventory_reconciled', entityType: 'case',
+      entityId: binding.caseId, details: { managedArchive: true } })
+    const plan = stage === 'after_approval' ? await planSourceFolderRelocation(pool, org, input) : undefined
+    // A distinct live record owns the same-plate destination; plate equality cannot authorize a merge.
+    const plate = (await pool.query('SELECT plate,plate_normalized FROM cases WHERE id=$1', [binding.caseId])).rows[0]
+    await pool.query('UPDATE cases SET plate=$1,plate_normalized=$2 WHERE id=$3', [plate.plate, plate.plate_normalized, peerId])
+    await pool.query('UPDATE case_locations SET relative_path=$1 WHERE case_id=$2', [binding.relativePath, peerId])
+    const snapshot = async () => ({
+      counts: await counts(),
+      cases: (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=ANY($1::uuid[]) ORDER BY id', [[binding.caseId, peerId]])).rows,
+      locations: (await pool.query('SELECT to_jsonb(l) snapshot FROM case_locations l WHERE case_id=ANY($1::uuid[]) ORDER BY id', [[binding.caseId, peerId]])).rows,
+      registrations: (await pool.query('SELECT to_jsonb(r) snapshot FROM case_folder_registrations r WHERE case_id=ANY($1::uuid[]) ORDER BY id', [[binding.caseId, peerId]])).rows,
+    })
+    const before = await snapshot()
+    if (plan) await expect(applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})).rejects.toThrow('folder_relocation_location_in_use')
+    else await expect(planSourceFolderRelocation(pool, org, input)).rejects.toThrow('folder_relocation_location_in_use')
+    expect(await snapshot()).toEqual(before)
+  })
 })

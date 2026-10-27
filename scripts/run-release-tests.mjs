@@ -6,7 +6,8 @@ const output = join(process.env.RUNNER_TEMP ?? '.local', 'hasarbotu-release-chec
 await mkdir(output, { recursive: true })
 const commands = [
   ['workspace-tests', process.env.ComSpec ?? 'cmd.exe', ['/d', '/c', 'npm test']],
-  ['release-and-discovery-tests', process.execPath, ['--test', 'scripts/text-encoding.test.mjs', 'scripts/release-notes.test.mjs', 'scripts/release-artifacts.test.mjs', 'scripts/published-release.test.mjs', 'scripts/office-release-sync.test.mjs', 'scripts/electron-download-proxy.test.mjs', 'scripts/frontend-license-notices.test.mjs', 'deploy/windows-service/automatic-folder-discovery.test.mjs']],
+  // Discovery files reset the same disposable database schema and must not run concurrently.
+  ['release-and-discovery-tests', process.execPath, ['--test', '--test-concurrency=1', 'scripts/text-encoding.test.mjs', 'scripts/release-notes.test.mjs', 'scripts/release-artifacts.test.mjs', 'scripts/published-release.test.mjs', 'scripts/office-release-sync.test.mjs', 'scripts/electron-download-proxy.test.mjs', 'scripts/frontend-license-notices.test.mjs', 'scripts/file-agent-codec-notices.test.mjs', 'scripts/plan-folder-identity-repair.test.mjs', 'scripts/soak-metrics.test.mjs', 'scripts/soak-memory-budget.test.mjs', 'scripts/worker-memory-preload.test.mjs', 'scripts/ocr-pdf-soak.test.mjs', 'scripts/desktop-signing.test.mjs', 'scripts/review-codec-evidence.test.mjs', 'scripts/complete-native-license-evidence.test.mjs', 'deploy/windows-service/automatic-folder-discovery.test.mjs', 'deploy/windows-service/automatic-folder-outage.test.mjs']],
 ]
 let passed = 0, skipped = 0
 for (const [name, executable, args] of commands) {

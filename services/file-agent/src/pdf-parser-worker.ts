@@ -60,13 +60,15 @@ function canonicalError(error: unknown): string {
 }
 
 async function run(): Promise<void> {
+  let task: ReturnType<typeof getDocument> | undefined
+  let terminal: Extract<PdfParserWorkerMessage, { kind: 'complete' | 'error' }> = { kind: 'error', errorCode: 'parser_failed' }
   try {
     if (version !== PDF_TEXT_PARSER_VERSION) {
-      send({ kind: 'error', errorCode: 'parser_version_mismatch' })
+      terminal = { kind: 'error', errorCode: 'parser_version_mismatch' }
       return
     }
     const data = new Uint8Array(await readFile(input.filePath))
-    const task = getDocument({ data, useSystemFonts: false, verbosity: 0 })
+    task = getDocument({ data, useSystemFonts: false, verbosity: 0 })
     const pdf = await task.promise
     if (pdf.numPages < 1 || pdf.numPages > input.maxPages) throw Object.assign(new Error('page limit'), { name: 'PageLimitError' })
 
@@ -88,8 +90,9 @@ async function run(): Promise<void> {
 
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       let pageChunk: PdfExtractedPageChunk
+      let page: Awaited<ReturnType<typeof pdf.getPage>> | undefined
       try {
-        const page = await pdf.getPage(pageNumber)
+        page = await pdf.getPage(pageNumber)
         const [content, operators] = await Promise.all([page.getTextContent(), page.getOperatorList()])
         const rawText = sanitizeExtractedPageText(readingOrderText(content.items))
         const normalizedText = normalizeExtractedPageText(rawText)
@@ -124,6 +127,8 @@ async function run(): Promise<void> {
           normalizedTextHash: sha256Text(''),
           segments: [],
         }
+      } finally {
+        page?.cleanup()
       }
       if (pageChunk.status === 'text') textPageCount += 1
       else if (pageChunk.status === 'image_only') imageOnlyPageCount += 1
@@ -136,7 +141,7 @@ async function run(): Promise<void> {
       send({ kind: 'page', page: pageChunk })
     }
     const status = derivePdfExtractionStatus({ pageCount: pdf.numPages, textPageCount, imageOnlyPageCount, emptyPageCount, failedPageCount })
-    send({ kind: 'complete', summary: {
+    terminal = { kind: 'complete', summary: {
       extractionId: input.extractionId,
       extractionVersion: input.extractionVersion,
       status,
@@ -153,14 +158,22 @@ async function run(): Promise<void> {
       rawCharacterCount,
       normalizedCharacterCount,
       outputHash: buildPdfExtractionOutputHash(pageSummaries),
-    } })
-    await task.destroy()
+    } }
   } catch (error) {
     const name = (error as { name?: unknown }).name
     const errorCode = name === 'PageLimitError' ? 'page_limit_exceeded'
       : name === 'OutputLimitError' ? 'output_limit_exceeded'
         : canonicalError(error)
-    send({ kind: 'error', errorCode })
+    terminal = { kind: 'error', errorCode }
+  } finally {
+    try {
+      await task?.destroy()
+    } catch {
+      // Preserve the primary extraction error, but never report success after failed cleanup.
+      if (terminal.kind === 'complete') terminal = { kind: 'error', errorCode: 'parser_failed' }
+    }
+    // The parent terminates this Worker immediately after a terminal message.
+    send(terminal)
   }
 }
 

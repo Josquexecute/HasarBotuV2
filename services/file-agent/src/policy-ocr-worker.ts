@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
-import { parentPort, workerData } from 'node:worker_threads'
-import { createCanvas } from '@napi-rs/canvas'
+import { parentPort, workerData, Worker } from 'node:worker_threads'
+import { createCanvas, type Canvas } from '@napi-rs/canvas'
 import { createWorker, OEM } from 'tesseract.js'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import {
@@ -34,9 +34,19 @@ function preprocess(context:ReturnType<ReturnType<typeof createCanvas>['getConte
 function box(value:{readonly x0:number;readonly y0:number;readonly x1:number;readonly y1:number}):PolicyOcrBoundingBox{return{x:Math.max(0,Math.round(value.x0)),y:Math.max(0,Math.round(value.y0)),width:Math.max(0,Math.round(value.x1-value.x0)),height:Math.max(0,Math.round(value.y1-value.y0))}}
 function rotation(value:number|null):{rotationDegrees:0|90|180|270;deskewDegrees:number}{const degrees=(value??0)*180/Math.PI,quarter=Math.round(degrees/90)*90,residual=degrees-quarter;const normalized=((quarter%360)+360)%360;const rotationDegrees=(normalized===90||normalized===180||normalized===270?normalized:0) as 0|90|180|270;return{rotationDegrees,deskewDegrees:Math.round(Math.max(-15,Math.min(15,residual))*1000)/1000}}
 
+async function terminateOcrWorker(ocrWorker:Awaited<ReturnType<typeof createWorker>>):Promise<void>{
+  // Tesseract 7's facade discards Node Worker.terminate()'s promise. Capture and join it ourselves.
+  const nativeWorker=(ocrWorker as unknown as {worker:unknown}).worker
+  if(!(nativeWorker instanceof Worker))throw new Error('ocr_worker_cleanup_failed')
+  const stopped=nativeWorker.terminate()
+  const results=await Promise.allSettled([stopped,ocrWorker.terminate()])
+  if(results.some(result=>result.status==='rejected'))throw new Error('ocr_worker_cleanup_failed')
+}
+
 async function run():Promise<void>{
   let ocrWorker:Awaited<ReturnType<typeof createWorker>>|undefined
   let task:ReturnType<typeof getDocument>|undefined
+  let terminal:Extract<PolicyOcrWorkerMessage,{kind:'complete'|'error'}>={kind:'error',errorCode:'ocr_worker_failed'}
   try{
     if(!isAbsolute(input.filePath)||!isAbsolute(input.languageAssetDirectory)||/:\/\//u.test(input.filePath)||/:\/\//u.test(input.languageAssetDirectory))throw new Error('network_access_blocked')
     const data=new Uint8Array(await readFile(input.filePath))
@@ -50,13 +60,16 @@ async function run():Promise<void>{
     for(const eligible of input.eligiblePages){
       const startedAt=Date.now()
       let chunk:PolicyOcrPageChunk
+      let pdfPage:Awaited<ReturnType<typeof pdf.getPage>>|undefined
+      let canvas:Canvas|undefined
       try{
         send({kind:'phase',phase:'rendering'})
-        const pdfPage=await pdf.getPage(eligible.pageNumber)
+        pdfPage=await pdf.getPage(eligible.pageNumber)
         const viewport=pdfPage.getViewport({scale:input.renderDpi/72})
         const width=Math.ceil(viewport.width),height=Math.ceil(viewport.height)
         if(width*height>input.maxImagePixels)throw new Error('image_pixel_limit_exceeded')
-        const canvas=createCanvas(width,height),context=canvas.getContext('2d')
+        canvas=createCanvas(width,height)
+        const context=canvas.getContext('2d')
         context.fillStyle='#ffffff';context.fillRect(0,0,width,height)
         const renderInput={canvas:null,canvasContext:context,viewport,background:'#ffffff'} as unknown as Parameters<typeof pdfPage.render>[0]
         await pdfPage.render(renderInput).promise
@@ -81,6 +94,8 @@ async function run():Promise<void>{
         const code=canonicalError(error)
         if(['image_pixel_limit_exceeded','output_limit_exceeded'].includes(code))throw error
         chunk={textPageId:eligible.textPageId,pageNumber:eligible.pageNumber,status:'failed',languageMode:input.languageMode,imageWidth:1,imageHeight:1,renderDpi:input.renderDpi,rotationDegrees:0,deskewDegrees:0,threshold:0,rawOcrText:'',rawTextHash:sha256Text(''),normalizedText:'',normalizedTextHash:sha256Text(''),meanConfidence:0,minimumConfidence:0,qualityStatus:'control_required',readingOrderQuality:'control_required',compositeStatus:'control_required',qualityReasonCode:'ocr_failed',requiresHumanReview:true,lowConfidenceWordCount:0,unreadableRegionCount:1,processingDurationMs:Math.min(600_000,Date.now()-startedAt),elements:[]}
+      }finally{
+        try{if(canvas){canvas.width=1;canvas.height=1}}finally{pdfPage?.cleanup()}
       }
       const count=(type:string)=>chunk.elements.filter(item=>item.type===type).length
       if(chunk.status==='accepted_candidate')readyPageCount+=1
@@ -93,9 +108,15 @@ async function run():Promise<void>{
     }
     send({kind:'phase',phase:'validating'})
     const processed=input.eligiblePages.length,status=derivePolicyOcrRunStatus({eligiblePageCount:processed,readyPageCount,lowQualityPageCount,emptyPageCount,failedPageCount}),meanConfidence=processed===0?null:Math.round(confidenceTotal/processed*1000)/1000
-    send({kind:'complete',summary:{ocrRunId:input.ocrRunId,ocrRunVersion:input.ocrRunVersion,status,engineVersion:POLICY_OCR_ENGINE_VERSION,languageDataVersion:POLICY_OCR_LANGUAGE_DATA_VERSION,languageDataHash:input.languageDataHash,renderProfileVersion:input.renderProfileVersion,preprocessingVersion:POLICY_OCR_PREPROCESSING_VERSION,qualityVersion:input.qualityVersion,normalizationVersion:POLICY_OCR_NORMALIZATION_VERSION,locatorVersion:input.locatorVersion,sourceHash:input.sourceHash,sourceSize:input.sourceSize,eligiblePageCount:processed,processedPageCount:processed,readyPageCount,lowQualityPageCount,emptyPageCount,failedPageCount,blockCount,lineCount,wordCount,normalizedCharacterCount:totalCharacters,meanConfidence,outputHash:buildPolicyOcrOutputHash(summaries)}})
-  }catch(error){send({kind:'error',errorCode:canonicalError(error)})}
-  finally{await ocrWorker?.terminate().catch(()=>undefined);await task?.destroy().catch(()=>undefined)}
+    terminal={kind:'complete',summary:{ocrRunId:input.ocrRunId,ocrRunVersion:input.ocrRunVersion,status,engineVersion:POLICY_OCR_ENGINE_VERSION,languageDataVersion:POLICY_OCR_LANGUAGE_DATA_VERSION,languageDataHash:input.languageDataHash,renderProfileVersion:input.renderProfileVersion,preprocessingVersion:POLICY_OCR_PREPROCESSING_VERSION,qualityVersion:input.qualityVersion,normalizationVersion:POLICY_OCR_NORMALIZATION_VERSION,locatorVersion:input.locatorVersion,sourceHash:input.sourceHash,sourceSize:input.sourceSize,eligiblePageCount:processed,processedPageCount:processed,readyPageCount,lowQualityPageCount,emptyPageCount,failedPageCount,blockCount,lineCount,wordCount,normalizedCharacterCount:totalCharacters,meanConfidence,outputHash:buildPolicyOcrOutputHash(summaries)}}
+  }catch(error){terminal={kind:'error',errorCode:canonicalError(error)}}
+  finally{
+    // Both resources must be attempted. Keep an existing extraction error instead of masking it with cleanup failure.
+    try{if(ocrWorker)await terminateOcrWorker(ocrWorker)}catch{if(terminal.kind==='complete')terminal={kind:'error',errorCode:'ocr_worker_cleanup_failed'}}
+    try{await task?.destroy()}catch{if(terminal.kind==='complete')terminal={kind:'error',errorCode:'ocr_worker_cleanup_failed'}}
+    // Completion is an ownership handoff: the parent may terminate us as soon as this is posted.
+    send(terminal)
+  }
 }
 
 void run()

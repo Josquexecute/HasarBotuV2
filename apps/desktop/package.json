@@ -15,7 +15,8 @@
     "lint": "eslint .",
     "test": "npm run build && vitest run --config vitest.config.ts",
     "start": "electron .",
-    "package:win": "node ../../scripts/prepare-desktop-distribution.mjs && electron-builder --win nsis --x64"
+    "package:win": "node ../../scripts/prepare-desktop-distribution.mjs && electron-builder --win nsis --x64",
+    "package:win:signed": "node ../../scripts/package-desktop-signed.mjs"
   },
   "dependencies": {
     "@hasarbotu/contracts": "*",

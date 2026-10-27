@@ -131,6 +131,24 @@ describe('güvenli PDF metin çıkarıcı', () => {
     expect(exited.chunks).toEqual([])
   })
 
+  it.each(['chunk', 'heartbeat'] as const)('%s beklerken zaman aşımından sonra sayfa yüklemelerini başlatmaz', async (blockedHook) => {
+    const pdf = syntheticPdf([{ kind: 'text', text: 'POLICE' }])
+    await writeFile(join(root, 'EVRAK', 'policy.pdf'), pdf)
+    const chunks: PdfExtractionChunkRequest[] = []
+    let releaseUpload!: () => void
+    const upload = new Promise<void>((resolve) => { releaseUpload = resolve })
+    const result = await extractPdfText(root, payload(pdf, { timeoutMs: 500 }), {
+      workerUrl: new URL('./fixtures/queued-pages-worker.mjs', import.meta.url),
+      onHeartbeat: async () => { if (blockedHook === 'heartbeat') await upload },
+      onChunk: async (chunk) => { chunks.push(chunk); if (blockedHook === 'chunk') await upload },
+    })
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'parser_timeout' })
+    expect(chunks).toHaveLength(blockedHook === 'chunk' ? 1 : 0)
+    releaseUpload()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(chunks).toHaveLength(blockedHook === 'chunk' ? 1 : 0)
+  })
+
   it('symlink/reparse kaynak bileşenini root içinde olsa bile reddeder', async () => {
     const pdf = syntheticPdf([{ kind: 'text', text: 'POLICE' }])
     const targetDirectory = join(base, 'junction-target')

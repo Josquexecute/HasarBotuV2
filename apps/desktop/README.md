@@ -239,6 +239,211 @@ birleştirilmedi. Müşteriye özel dağıtım kabulü, canlı dış servis kesi
 Authenticode imzası yok. Mochi, kullanıcının yazılı ticari izin beyanıyla korundu.
 Kanıtlar yerel `.local/presale-audit-20261026/` altında saklandı.
 
+**2026-10-27 satış engelleri ek kontrolü — yeni yayın yapılmadı.** AI yanıt
+okuyucularının hata/başarı sonunda kilit bırakmaması ve OCR/PDF zaman aşımından
+sonra sıradaki yüklemelerin başlaması düzeltildi. Libde265 1.0.15 LGPL3+ bildirimi
+ve kesin kaynak/build bağlantıları eklendi; gerçek `npm pack` içeriği doğrulandı.
+62 hedefli test geçti (34 kesinti/toparlanma, 24 extractor, iki kimlik çakışması,
+iki lisans/paket testi); API/File Agent build ve typecheck, değişen dosyalarda
+lint geçti. Yeni testler yayın kapısına alındı; ortak test şemasını sıfırlayan
+Node test dosyaları sırayla çalışır. Tam eski denetim yeniden çalıştırılmadı.
+
+İki üretim çakışmasında kayıtlı pCloud kimliği aktif eş kaydın konumunda, eski
+konum ise yok. Kayıtlarda not ve belge inceleme geçmişi bulunduğundan
+silme/birleştirme/eşleme yapılmadı; resmî hasar kimliği ve korunacak kayıt için
+operatör onayı gerekiyor. Salt okunur PostgreSQL işlemi ve pCloud metadata
+snapshot kullanıldı; müşteri belge içerikleri okunmadı, üretim kaydı değiştirilmedi.
+
+Müşteriye ait temiz Windows makinesi/profili sağlanmadı; mevcut paket özel ofis
+profiliyle eşleşiyor. Önceki yerel kurulum kanıtı müşteri kabulü sayılmadı.
+Yerel HTTP/Gmail/PostgreSQL/pCloud kesinti ve mükerrer etki testleri geçti;
+gerçek müşteri sandbox/WAN kabulü açık. 364 saniyelik gerçek PDF/Tesseract
+yükünde 492 iş, 7.732 sayfa ve 11 beklenen arıza/toparlanma doğrulandı;
+sonda MessagePort/geçici dosya kalıntısı sıfır, handle sayısı 224 kaldı.
+GC sonrası RSS tabanı 128→139 MiB arttı; boş Worker/native karşılaştırmalarında
+da başlangıç artışı görüldü. Çok günlük kabul veya sızıntı yokluğu kanıtlanmadı.
+
+Codec kaynak/relink dağıtımı, native MPL kaynak bildirimleri/belirsiz SBOM
+lisansları ve kullanıma özgü patent kapsamı açık; notice düzeltmesi tam uyum
+onayı değildir ([FFmpeg](https://www.ffmpeg.org/legal.html),
+[LGPL3](https://www.gnu.org/licenses/lgpl-3.0.html)). Kurulum ve uygulama
+`NotSigned`; erişilebilir kullanılabilir kod imzalama sertifikası/uzak imzalayıcı
+yok. Güvenilir imza ve timestamp doğrulaması yapılamadı. Mevcut 0.1.80 feed'i,
+paket boyutu ve SHA-256 sunucuda korundu; sürüm artırılmadı, backend dağıtılmadı,
+zorla kurulum veya tekrar tam indirme yapılmadı. **HENÜZ HAZIR DEĞİL.**
+Ek kanıtlar: `.local/presale-audit-20261026/blockers-*.json`,
+`external-resilience-result.json`, `ocr-pdf-soak-result.json` ve
+`.local/presale-followup-20261027/codecs-signing-result.json`.
+
+**2026-10-27 kalan işler — kaynaklar korundu, sürüm 0.1.80.** Üç önceki
+kaynak düzeltmesi izole HEAD kopyalarında 16 başarısız regresyonla yeniden
+üretildi; güncel kaynakta 39 ilgili ve 17 komşu test geçti. Yeni araçlar ve
+notice/paket testleri 10/10 geçti. API/File Agent typecheck, API/File Agent/desktop
+build ve değişen TypeScript dosyalarında lint geçti. Tam sistem denetimi,
+tam yayın kapısı ve yeni NSIS kabulü tekrarlanmadı; yeni ofis yayını yapılmadı.
+
+- Klasör planı: `node scripts/plan-folder-identity-repair.mjs <salt-okunur-kanit.json> <yeni-plan.json>`.
+  İki çakışma için yerel `folder-identity-dry-run.json` üretildi. Araç DB/cloud
+  istemcisi ve apply modu içermez; iki vaka kimliği, notlar, belge sürümleri,
+  audit ve fiziksel dosyalar korunur. Plan, snapshot ve kendi SHA-256'sını taşır.
+  Operatör her iki vakanın resmî hasar numarası/sigortacısı/olay tarihini ve
+  kanıt referanslarını doğrulamalı; ayrı hasar/aynı hasar/belirsiz kararını ve
+  yetkili klasör sahibini seçmelidir. Onay alınmış değildir. Uygulamadan önce
+  yeni salt okunur kanıt, sürüm/kimlik kontrolü, doğrulanmış geri yükleme yedeği,
+  dar bakım penceresi ve ayrıca incelenmiş atomik/auditli uygulama gerekir.
+  Dolu hedefi mevcut relocation akışıyla zorlamak veya kayıt silmek çözüm değildir.
+- Temiz Windows: `powershell -NoProfile -File scripts/check-clean-windows-acceptance.ps1 -CustomerProfile <ozel-profil>`.
+  VirtualBox mevcut; tek kayıtlı VM'nin yapılandırma dosyası/dizini yok,
+  `showvminfo` erişim hatası veriyor; çalışan VM ve kullanılabilir Hyper-V yok.
+  Temiz lisanslı Windows VM/snapshot, müşteri sandbox profili ve sentetik hesap
+  gerekiyor. VM kabulü bile gerçek müşteri onayından ayrıca raporlanmalıdır.
+- Yük testi: Node 24.x ile önce `npm run build --workspace @hasarbotu/file-agent`, sonra
+  `node --expose-gc scripts/ocr-pdf-soak.mjs --duration-ms=172800000 --concurrency=2 --output=<yeni-sonuc.json>`.
+  48 saatlik koşu **çalıştırılmadı**. Tekrarlanabilir araç 1–8 eşzamanlı akış,
+  çıktı/hash/sayfa bütünlüğü, 11 hata/toparlanma, geçici dosya/MessagePort ve
+  Windows handle/private bytes ölçer; 4 GiB tepe RSS, 128 MiB ısınma sonrası
+  RSS artışı ve 64 handle artışı sınırını aşarsa başarısız olur.
+  `--max-rss-mib` / `--max-growth-mib` ile açık kabul bütçesi seçilebilir;
+  kesinti PASS sayılmaz, kontrol noktaları JSON'a yazılır. API iş kuyruğu/WAN
+  veya müşteri kabulünü kapsamaz. Yeni kısa çift akış koşusu 123 sn, 316 iş,
+  4.960 sayfa ve 11 hata/toparlanma içerdi; handle 221, temp/MessagePort kalıntısı
+  sıfır. RSS 145→249 MiB; çok günlük kararlılık/sızıntı yokluğu kanıtlanmadı.
+  `node --expose-gc scripts/worker-memory-probe.mjs <plain|native|pdf> 1200 <yeni-sonuc.json>`
+  karşılaştırmalarında ayrı süreçlerde RSS sırasıyla yaklaşık 49→66, 49→92,
+  49→123 MiB oldu; ana heap yaklaşık 6–8 MiB, external büyük ölçüde sabit kaldı.
+  Boş Worker'da da artış bulunması Worker yaşam döngüsü/native allocator
+  katkısını gösterir; fragmentation/retained native allocation ile gerçek native
+  sızıntı kesin ayrıştırılmadı. Üretime worker havuzu/restart yaması eklenmedi.
+- Codec kanıtları: `node scripts/review-codec-evidence.mjs <yeni-rapor.json>`.
+  `codec-dependency-review.json`, dokuz npm bağımlılığını ve gerçek FFmpeg/native
+  binary/notice/SBOM hashlerini, libheif/libde265 kaynak zincirini, AVIF/AOM,
+  JPEG-turbo/PNG/WebP/Zlib ve dört MPL bileşenini ayrı listeler. Dokuz SBOM
+  kaydında lisans metadatası yok (build-only kapsamı da ayrıştırılmalı).
+  Tam karşılık gelen kaynak/build/relink teslimi, MPL kaynak erişim bildirimi,
+  müşteri paketinde notice kanıtı ve kullanım/ülke bazlı codec patent değerlendirmesi
+  açık. Paket MIT etiketi, eksiksiz ticari dağıtım kanıtı sayılmadı.
+- İmzalama: `powershell -NoProfile -File scripts/check-desktop-signing.ps1`.
+  SDK SignTool bulundu; kullanılabilir kod imzalama sertifikası sıfır.
+  `HASARBOTU_SIGNING_CERT_SHA1`, sertifikanın tam Subject değeri olan
+  `HASARBOTU_SIGNING_PUBLISHER` ve HTTPS RFC3161 adresi
+  `HASARBOTU_SIGNING_TIMESTAMP_URL` sağlandıktan sonra
+  `npm run package:win:signed --workspace @hasarbotu/desktop` kullanılabilir.
+  Araç CurrentUser sertifikası/özel anahtar, güven zinciri ve online revocation
+  denetiminden sonra SHA-256 zorunlu imzalamayı seçer; timestamp kapatan ayarları
+  reddeder. Son uygulama ve NSIS, Authenticode/SignTool ve timestamp ile doğrulanır
+  ([Microsoft SignTool](https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool)).
+  Aday `release/signed` altındadır; mevcut adayın üstüne yazılmaz, yayınlanmaz.
+  Sertifika oluşturulmadı, trust store değiştirilmedi; gerçek imzalama henüz
+  yapılmadı. Standart ofis paketleme komutu değiştirilmedi.
+
+Bu ek çalışmanın kanıtları `.local/presale-followup-20261027/` altındadır.
+Üretim kayıtları ve ticari dağıtım kanalı değiştirilmedi. Tam yayın kapısı ve
+paket/kurulu eski istemci doğrulaması olmadan sürüm artırılıp feed değiştirilmedi.
+
+**2026-10-27 son teknik takip — yayın yapılmadı.** Dokuz eksik SBOM alanı
+incelendi: anstyle, clap, clap_builder, clap_lex, cxxbridge-cmd ve strsim için
+gerçek crates.io kaynak arşivleri, lisans metinleri ve yayımlanan SBOM SHA-256
+değerleri eşleşti. İlk beşi MIT/Apache-2.0 seçenekli, strsim MIT. Yerel canvas
+kök MIT lisansıyla; skia-fontations gerçek Skia BSD kaynağı ve macOS/Linux hedef
+koşuluyla eşleştirildi. Birleşik native dosyaya tek başına MIT atanmadı.
+Üst akış SBOM'u değiştirilmedi; `services/file-agent/codec-license-evidence.json`
+yan kanıtı ve ek lisans metinleri gerçek `npm pack` içinde doğrulandı.
+Yeniden üretim: `node scripts/complete-native-license-evidence.mjs <kaynak-dizini> <yeni-json>`.
+
+22 kaynak/build arşivi (12 crate için mevcut SBOM checksum doğrulaması),
+FFmpeg `2b68d2babae73714846961fb0ee47e3b3d2e39a9`, libheif/libde265,
+Emscripten 3.1.61, Electron ve native canvas/Skia kaynakları toplandı.
+Kaynak adayı `.local/presale-tech-20261027/codec-source-delivery-final.zip`
+188.977.878 bayt; SHA-256
+`54cef62ec73a85c0ff0f4954ab0c037b55b45a0ef32a81f3204b1f3a6b56a6a3`.
+ZIP CRC ve notice/manifest hashleri eşleşti. Değişmeyen uygulama modülüne ayrı,
+üst akış JS/WASM paketi yerleştirilince sentetik HEIC aynı 640×480/102.400 bayt
+JPEG'i üretti; WASM yayımlanan paketle birebir eşleşti. Bu, kütüphane değiştirme
+kanıtıdır; C kaynaklarından derleme veya tam relink/uygunluk kanıtı değildir.
+FFmpeg/native DLL yeniden üretimi, eksiksiz toolchain/bağımlı kaynak kapanışı,
+alıcıya kaynak teslimi ve patent/hukuk değerlendirmesi açık tutuldu.
+
+RSS için dört ayrı süreçte 5.000'er iş ölçüldü: boş Worker, yeni canvas Worker,
+tek canvas Worker'ın yeniden kullanımı ve yalnız deney sürecinde purge-delay=0.
+Yeniden kullanılan Worker'da ısınma sonrası private commit yaklaşık 87–100 MiB
+aralığında kaldı; kapanış/boşta beklemede 67 MiB'ye indi. Yeni Worker kontrolü
+188 MiB, purge kontrolü 154 MiB'de kaldı. Yalnız deney sürecinin working set'i
+boşaltılınca RSS yaklaşık 3 MiB'ye indi, commit aynı kaldı: resident sayfa ve
+allocator tutulması gerçek deallocation ile karıştırılmadı. mimalloc çıkış
+istatistiği 32,1 MiB güncel commit/tek arena gösterdi. Kalan native/V8/Windows
+artışının tamamen sınırlı tutulma mı gerçek sızıntı mı olduğu kesinleşmedi.
+Üretim allocator/Worker mimarisi veya sistem bellek ayarları değiştirilmedi.
+
+48 saatlik koşu **başlatıldı ve FAIL ile durdu**: 232 saniyede 618 iş/9.725 sayfa
+sonrasında mevcut 128 MiB ısınma sonrası RSS artışı sınırı aşıldı. Bütçe artırılmadı,
+48 saat tamamlanmış veya sızıntısız sayılmadı. Kaynak drift'i yok; son örnekte
+MessagePort/temp kalıntısı sıfır. PID, loglar, hashler ve terminal durum
+`.local/presale-tech-20261027/soak-48h/` altında; bu koşu artık çalışmıyor.
+`scripts/soak-supervisor.mjs` yeni `.local` çalışma dizininde süre, süreç çıkışı ve
+kaynak hashlerini birlikte kaydeder. RSS ayrıntıları aynı kanıt dizinindeki
+`rss-cause-analysis.json` içindedir. 29 extractor/fotoğraf ve 32 sağlayıcı testi,
+12 araç/lisans testi geçti; API/File Agent typecheck geçti. Tam denetim ve yayın
+kapısı yeniden çalıştırılmadı. Resmî hasar kimliği/onayı ve sertifika engelleri sürer.
+
+Temiz VM oluşturuldu: VirtualBox `HasarBotu-Presale-20261027`, Windows 11
+Enterprise Evaluation 26H2 (26300.9457), Microsoft ISO SHA-256 doğrulaması,
+EFI Secure Boot ve TPM 2.0; 6 GiB RAM/4 CPU/ayrı dinamik disk. Ağ, pano ve
+sürükle-bırak kapalı. `clean-windows-installed` snapshot'ından temiz per-user
+x64 0.1.80 kurulumu, yükseltilmemiş token ile 12 saniyelik çevrimdışı açılış
+(`Sunucu denetimi` penceresi) ve sentetik profil işaretini koruyan kaldırma geçti.
+NSIS kurulum/kaldırma çıkışları 0; Windows sürüm kaynağı `0.1.80.0`.
+Hesap administrators grubundadır; işlem token'ı yükseltilmemiştir. Ayrı standart
+hesap, müşteri oturumu/profili, WAN, imzalı yükseltme veya gerçek müşteri kabulü
+test edilmiş sayılmadı. Paket `NotSigned`; güven zinciri, execution policy veya
+Windows güvenlik kontrolleri gevşetilmedi. Kanıt:
+`.local/presale-tech-20261027/windows-vm/final-results/vm-install-result.json`.
+Kanıt alındıktan sonra temiz snapshot geri yüklendi ve VM kapalı bırakıldı;
+son durum `windows-vm/vm-final-receipt.json` içinde kayıtlıdır. Ofis feed'i ve
+masaüstü sürümü **0.1.80** kaldı; backend/veri müdahalesi ve ticari yayın yapılmadı.
+
+**2026-10-27 OCR/PDF bellek düzeltmesi — uzun kabul RUNNING.** İki yaşam döngüsü
+kusuru doğrulandı: terminal mesajı PDF/Tesseract temizliğinden önce gönderiliyor,
+Tesseract 7.0.0 facade `terminate()` metodu iç Node Worker'ın çıkış promise'ini
+beklemiyordu. Terminal artık temizlikten ve gerçek iç Worker çıkışından sonra
+gönderilir; PDF task hata yollarında da kapatılır, sayfa/canvas kaynakları bırakılır.
+Altı yeni regresyon eski Worker kaynaklarında 6/6 başarısız, düzeltmede 6/6 geçti.
+
+Bu düzeltme tek başına yeterli olmadı: fazı eşleştirilmiş iki kısa thread koşusu
+de FAIL kaldı (loaded RSS 156,7→287,3 ve 151,1→293,4 MiB). Ana heap yaklaşık
+8–10 MiB, Tesseract WASM kapasitesi iş/isolate başına sabit 133,125 MiB;
+mimalloc çıkış commit'i yaklaşık 32 MiB idi. Tam native allocator iç kusuru veya
+sızıntı yokluğu kanıtlanmadı; tekrarlanan isolate ömürleri sonrası süreçte tutulan
+bellek gözlendi. Worker thread'lerinin RSS'i aynı PID'ye aittir; thread RSS'leri
+toplanmadı ([Node.js](https://nodejs.org/docs/latest-v24.x/api/process.html#processmemoryusage)).
+
+PDF/OCR artık iş başına ayrı Node sürecinde mevcut Worker ve aynı V8 kaynak
+sınırlarıyla çalışır. Sonuç/timeout/hook hatası sonrasında child `close` beklenir;
+geçici dosyalar bundan sonra silinir. Parent IPC bağlantısı kaybolursa yalnız
+o işin child süreci kapanır; yeniden deneme veya periyodik servis restart'ı eklenmedi.
+Native/WASM kaynaklarının ömrü OS süreç sınırına bağlandı. Yeni süreç başlatma
+maliyeti vardır; mimari OS/PDF güvenlik sandbox'ı olarak sunulmaz.
+
+RSS 128 MiB artış ve 4 GiB tepe sınırları artırılmadı. Tek seri iş yerine sabit
+bir tam eşzamanlı warm batch kullanılır; loaded→loaded ve idle→idle karşılaştırılır.
+Idle private commit için ayrıca aynı 128 MiB sınırı uygulanır. 4 GiB kontrolü
+parent + eşzamanlı child OS RSS tepe değerlerinin muhafazakâr toplamını içerir;
+sadece düşük parent RSS'ine bakarak geçilmesini engelleyen negatif test geçti.
+
+Yeni iki kısa koşu geçti: 376,6 sn / 610 iş / 9.599 sayfa ve 376,9 sn / 778 iş /
+12.245 sayfa; her koşuda 11 beklenen hata/toparlanma doğrulandı. Parent RSS
+loaded warm→son: 80,3→105,4 ve 87,1→115,8 MiB; idle private commit artışları
+26,1/30,5 MiB. Süreç ağacı muhafazakâr RSS tepeleri 892,9/892,2 MiB; sınır 4 GiB.
+İş sonlarında sahiplenilmiş child ve MessagePort/temp kalıntısı sıfır; handle217
+sabit. 37 extractor/lifecycle/process ve 6 bellek aracı testi geçti; File Agent
+build/typecheck ve ilgili ESLint geçti. Eski FAIL kayıtları korundu.
+
+48 saatlik **sürekli** yük 2026-10-27T16:49:17.451Z'de tekrar başlatıldı;
+beklenen bitiş 2026-10-29T16:49:17.451Z. Henüz PASS değildir.
+Kanıtlar `.local/ocr-memory-20261027/`, canlı durum ve loglar
+`soak-48h-process/receipt.json`, `result.json`, `stdout.log`, `stderr.log` altında.
+Runtime, eşik yardımcıları, native binary ve WASM hashleri supervisor tarafından
+korunur. Üretim verisi/backend servisi değiştirilmedi; sürüm 0.1.80, yayın yok.
+
 Önceki doğrulanan ofis yayını: **0.1.79**, 2026-10-26T15:19:07.321Z; Windows x64,
 112.999.103 bayt, SHA-256 `cf98ad6587a5ab4d6f9bfa4443ba7623666981a768d2f217cc325d7ba506ded5`.
 SBM servis adı silinip yeniden yazılırken telefon ve adres korunur; farklı kayıtlı

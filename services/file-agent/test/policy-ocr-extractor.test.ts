@@ -107,6 +107,23 @@ describe('yerel policy OCR File Agent hattı', () => {
     expect(result).toEqual({ outcome: 'failed', errorCode: 'worker_crashed' })
   })
 
+  it.each(['chunk', 'heartbeat'] as const)('%s beklerken zaman aşımından sonra sayfa yüklemelerini başlatmaz', async (blockedHook) => {
+    const directory = await root(); await scannedPdf(directory); const input = await payload(directory)
+    const chunks: PolicyOcrChunkRequest[] = []
+    let releaseUpload!: () => void
+    const upload = new Promise<void>((resolve) => { releaseUpload = resolve })
+    const result = await extractPolicyOcr(directory, { ...input, timeoutMs: 500 }, {
+      workerUrl: new URL('./fixtures/queued-pages-worker.mjs', import.meta.url),
+      onHeartbeat: async (phase) => { if (blockedHook === 'heartbeat' && phase === 'ocr') await upload },
+      onChunk: async (chunk) => { chunks.push(chunk); if (blockedHook === 'chunk') await upload },
+    })
+    expect(result).toEqual({ outcome: 'failed', errorCode: 'ocr_timeout' })
+    expect(chunks).toHaveLength(blockedHook === 'chunk' ? 1 : 0)
+    releaseUpload()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(chunks).toHaveLength(blockedHook === 'chunk' ? 1 : 0)
+  })
+
   it.each([
     ['tur', 'KASKO POLİÇESİ TEMİNATI', /KASKO/u],
     ['eng', 'CASCO POLICY GLASS COVERAGE', /GLASS COVERAGE/u],

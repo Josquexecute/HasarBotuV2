@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
-import { Worker } from 'node:worker_threads'
+import { createExtractionWorker } from './extraction-process.js'
 import type { JobPayload, PdfExtractionChunkRequest, PdfExtractionResultSummary } from '@hasarbotu/contracts'
 import { PDF_TEXT_PARSER_VERSION } from '@hasarbotu/domain'
 import { assertRealPathUnderRoot, PathSafetyError, resolveUnderRoot } from './path-resolver.js'
@@ -55,7 +55,7 @@ async function runIsolatedParser(
 ): Promise<PdfExtractionResultSummary> {
   const target = hooks.workerUrl === undefined ? await defaultWorkerUrl() : { url: hooks.workerUrl }
   return new Promise((resolvePromise, rejectPromise) => {
-    const worker = new Worker(target.url, {
+    const worker = createExtractionWorker<PdfParserWorkerMessage>(target.url, {
       workerData: input,
       ...(target.execArgv === undefined ? {} : { execArgv: target.execArgv }),
       resourceLimits: { maxOldGenerationSizeMb: payload.workerMemoryMb, maxYoungGenerationSizeMb: 32, stackSizeMb: 4 },
@@ -92,7 +92,12 @@ async function runIsolatedParser(
           pages: [message.page],
         }
         sequence += 1
-        uploads = uploads.then(async () => { await hooks.onHeartbeat?.(); await hooks.onChunk(chunk) })
+        uploads = uploads.then(async () => {
+          if (settled) return
+          await hooks.onHeartbeat?.()
+          if (settled) return
+          await hooks.onChunk(chunk)
+        })
         uploads.catch(() => {
           void stopAndReject(new Error('chunk_upload_failed'))
         })
