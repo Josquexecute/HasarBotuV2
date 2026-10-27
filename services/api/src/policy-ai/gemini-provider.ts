@@ -143,17 +143,21 @@ async function readBoundedBody(response: Response, maximumBytes: number): Promis
   const decoder = new TextDecoder()
   let total = 0
   let result = ''
-  while (true) {
-    const part = await reader.read()
-    if (part.done) break
-    total += part.value.byteLength
-    if (total > maximumBytes) {
-      await reader.cancel().catch(() => undefined)
-      throw new Error('provider_response_too_large')
+  try {
+    while (true) {
+      const part = await reader.read()
+      if (part.done) break
+      total += part.value.byteLength
+      if (total > maximumBytes) {
+        await reader.cancel().catch(() => undefined)
+        throw new Error('provider_response_too_large')
+      }
+      result += decoder.decode(part.value, { stream: true })
     }
-    result += decoder.decode(part.value, { stream: true })
+    return result + decoder.decode()
+  } finally {
+    reader.releaseLock()
   }
-  return result + decoder.decode()
 }
 
 export type GeminiStructuredOutputTextResult =
