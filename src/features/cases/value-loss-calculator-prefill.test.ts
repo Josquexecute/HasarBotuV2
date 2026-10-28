@@ -2,12 +2,34 @@ import { describe, expect, it } from 'vitest'
 import type { CaseRecord } from '../../types/case'
 import { initialCalculatorDraft } from './value-loss-calculator-form'
 import { calculatorCaseDefaults, mergeCalculatorCaseDefaults } from './value-loss-calculator-prefill'
+import type { CalculatorSavedInput } from '../../data/valueLossCalculatorPort'
 
 function item(fields: Record<string, string>): CaseRecord {
   return { lossDate: '2026-10-01', eksist: { vehicleFields: fields } } as CaseRecord
 }
 
 describe('SBM / Eksist calculator defaults', () => {
+  it('never treats mileage as working hours for machinery', () => {
+    expect(initialCalculatorDraft(item({ 'Araç Tarife Grubu': 'İŞ MAKİNESİ', 'Araç Km': '50000' })).usageValue).toBe('')
+    expect(initialCalculatorDraft(item({ 'Araç Tarife Grubu': 'İŞ MAKİNESİ', 'Araç Km': '50000', 'Çalışma Saati': '2.500' })).usageValue).toBe('2500')
+  })
+  it('restores legacy parts, but only trusts their undamaged state with verified, consistent history evidence', () => {
+    const saved: CalculatorSavedInput = { lossDate: '2026-10-01', notificationDate: null, evaluatedOn: '2026-10-01', heavyOrTotalDamage: false, vehicle: { make: 'FORD', model: 'FOCUS', modelYear: 2021, variant: null, mileage: 50000, usageType: null }, faultRateBasisPoints: 10000, preAccidentMarketValueMinor: 100_000_000, postRepairMarketValueMinor: null, damageParts: [{ partCode: 'old-part', partName: 'MOTOR KAPUTU', repairAction: 'repair_paint', priorDamage: 'no' }] }
+    expect(initialCalculatorDraft(item({}), saved).parts[0]).toMatchObject({ label: 'MOTOR KAPUTU', operation: 'repair_paint', priorPartState: 'unknown' })
+    const evidence = { id: 'history', createdAt: '2026-10-01T00:00:00Z', evidenceKey: 'history-1', sourceType: 'sbm_history' as const, documentId: null, documentVersionId: null, externalReference: 'ref:sbm/history-1', sourceHash: 'a'.repeat(64), observedAt: '2026-10-01', supports: ['prior_damage' as const], verificationStatus: 'verified' as const, conflict: false, notes: null }
+    expect(initialCalculatorDraft(item({}), { ...saved, historyEvidence: [evidence] }).parts[0]).toMatchObject({ priorPartState: 'none', priorEvidence: 'Kayıtlı geçmiş: history-1' })
+    expect(initialCalculatorDraft(item({}), { ...saved, historyEvidence: [{ ...evidence, conflict: true }] }).parts[0]?.priorPartState).toBe('unknown')
+    expect(initialCalculatorDraft(item({}), { ...saved, historyEvidence: [{ ...evidence, verificationStatus: 'control_required' }] }).parts[0]?.priorPartState).toBe('unknown')
+  })
+  it('clears automatic usage and history when the source removes those values', () => {
+    const before = item({ Kilometre: '50000', 'Önceki Hasar Sayısı': '2' })
+    expect(mergeCalculatorCaseDefaults(initialCalculatorDraft(before), calculatorCaseDefaults(item({})), calculatorCaseDefaults(before))).toMatchObject({ usageValue: '', previousDamageCount: '' })
+  })
+  it('imports explicit usage, history and commercial fields and never invents a zero history count', () => {
+    expect(initialCalculatorDraft(item({ Kilometre: '51.001', 'Önceki Hasar Sayısı': '2', 'Kullanım Amacı': 'Ticari' }))).toMatchObject({ usageValue: '51001', previousDamageCount: '2', commercialOrRental: true })
+    expect(initialCalculatorDraft(item({})).previousDamageCount).toBe('')
+    expect(initialCalculatorDraft(item({ Kilometre: 'bilinmiyor', 'Önceki Hasar Sayısı': 'yok / 2' }))).toMatchObject({ usageValue: '', previousDamageCount: '' })
+  })
   it('uses the tariff group for vehicle type and Araç Tipi for the complete model description', () => {
     expect(initialCalculatorDraft(item({ Marka: 'FORD', 'Araç Tipi': 'TRANSIT 350 L VAN', 'Araç Tarife Grubu': 'KAMYONET', 'Model Yılı': '2021', 'Kasa Tipi': 'Panelvan' }))).toMatchObject({ accidentDate: '2026-10-01', manufacturer: 'FORD', model: 'TRANSIT 350 L VAN', vehicleType: 'KAMYONET', bodyType: 'panel_van', modelYear: '2021' })
   })

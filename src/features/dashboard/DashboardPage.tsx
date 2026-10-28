@@ -41,12 +41,12 @@ const priorityLabels: Readonly<Record<DashboardPriorityRecord, string>> = {
 }
 
 const attentionLabels: Readonly<Record<DashboardAttentionCodeRecord, string>> = {
-  manual_recovery: 'Manuel kurtarma',
+  manual_recovery: 'Kullanıcı müdahalesi gerekli',
   operation_failed: 'İşlem hatası',
-  operation_blocked: 'İşlem blokajı',
+  operation_blocked: 'İşlem bekliyor',
   overdue_task: 'Geciken görev',
   overdue_follow_up: 'Geciken takip',
-  human_approval: 'İnsan onayı',
+  human_approval: 'Kullanıcı onayı',
   missing_documents: 'Eksik evrak',
   document_control_required: 'Evrak kontrolü',
   task_due_today: 'Bugün görev',
@@ -64,7 +64,7 @@ const attentionFilterLabels: Readonly<Record<AttentionFilter, string>> = {
   upcoming: 'Yaklaşan takip',
   missing: 'Eksik evrak',
   control: 'Kontrol gereken evrak',
-  approval: 'Bekleyen insan onayı',
+  approval: 'Bekleyen kullanıcı onayı',
 }
 
 function formatDashboardDate(value: string): string {
@@ -137,7 +137,7 @@ function WorkflowCard({ item }: { readonly item: DashboardCaseRecord }) {
         <span className="workflow-card__counts">
           {item.missingDocumentCount > 0 && <span title="Eksik evrak"><FileWarning size={12} />{item.missingDocumentCount}</span>}
           {item.controlRequiredDocumentCount > 0 && <span title="Kontrol gereken evrak"><ShieldAlert size={12} />{item.controlRequiredDocumentCount}</span>}
-          {item.pendingHumanApprovalCount > 0 && <span title="Bekleyen insan onayı"><UserRoundCheck size={12} />{item.pendingHumanApprovalCount}</span>}
+          {item.pendingHumanApprovalCount > 0 && <span title="Bekleyen kullanıcı onayı"><UserRoundCheck size={12} />{item.pendingHumanApprovalCount}</span>}
           {item.openTaskCount > 0 && <span title="Açık görev"><ClipboardList size={12} />{item.openTaskCount}</span>}
           {item.type === 'Seçiniz' && <span>Dosya türü seçilmeli</span>}
           {item.type !== 'Seçiniz' && item.missingDocumentCount + item.controlRequiredDocumentCount + item.pendingHumanApprovalCount + item.openTaskCount === 0 && (
@@ -231,14 +231,14 @@ export function DashboardPage({ alertPort }: { alertPort?: OperationalAlertDataP
     {
       label: 'Bekleyen Onay',
       value: dashboard.summary.pendingHumanApprovalCaseCount,
-      detail: 'İnsan kararı',
+      detail: 'Kullanıcı değerlendirmesi bekliyor',
       tone: 'neutral',
       filter: 'approval' as const,
     },
     {
       label: 'İşlem Gereken',
       value: dashboard.summary.actionRequiredCaseCount,
-      detail: dashboard.priorityVersion,
+      detail: 'Öncelikli takip ve kontroller',
       tone: 'success',
       filter: 'action' as const,
     },
@@ -276,6 +276,7 @@ export function DashboardPage({ alertPort }: { alertPort?: OperationalAlertDataP
               type="button"
               key={item.label}
               className={`summary-item summary-item--${item.tone}${attentionFilter === item.filter ? ' is-active' : ''}`}
+              aria-pressed={attentionFilter === item.filter}
               onClick={() => setAttentionFilter(item.filter)}
             >
               <span>{item.label}</span>

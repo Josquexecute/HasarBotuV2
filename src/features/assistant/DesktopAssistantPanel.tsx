@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useId, useMemo, useState, type FormEvent } from 'react'
+import { Files, History, ListChecks, StickyNote } from 'lucide-react'
 import { useSession } from '../../app/sessionContext'
 import { rememberAssistantCase, useAssistantCaseSelection } from '../../app/assistantCaseSelection'
 import { QuickNote } from '../../components/TouchAssistant'
@@ -20,12 +21,19 @@ type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: Menu
 const choose = (action: MenuAction, caseId?: string) => (window as AssistantWindow).hasarbotuAssistantMenu?.choose(action, caseId)
 const dateTime = (value: string | null) => value ? new Date(value).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }) : '—'
 
-function CaseWorkspace({ item, cases, operations }: { item: CaseRecord; cases: CasesDataPort; operations?: CaseOperationsPort }) {
+type AssistantTab = 'files' | 'note' | 'history' | 'process'
+const assistantTabs = [
+  { id: 'files', label: 'Dosyalar', icon: Files },
+  { id: 'note', label: 'Hızlı not', icon: StickyNote },
+  { id: 'history', label: 'Geçmiş notlar', icon: History },
+  { id: 'process', label: 'Süreçler', icon: ListChecks },
+] as const
+
+function CaseWorkspace({ item, cases, operations, tab, tabId }: { item: CaseRecord; cases: CasesDataPort; operations?: CaseOperationsPort; tab: AssistantTab; tabId: string }) {
   const { reportUnauthorized } = useSession()
   const workspace = useCaseOperations(item.caseId, 'api', true, operations)
   const [detail, setDetail] = useState<CaseRecord | null>(null)
   const [detailError, setDetailError] = useState(false)
-  const [tab, setTab] = useState<'note' | 'history' | 'process'>('note')
   const [noteVersion, setNoteVersion] = useState(0)
   const [noteSearch, setNoteSearch] = useState('')
   const [tracking, setTracking] = useState<TrackingSnapshot | null>(null)
@@ -64,18 +72,13 @@ function CaseWorkspace({ item, cases, operations }: { item: CaseRecord; cases: C
     return () => { active = false; window.removeEventListener('focus', refresh) }
   }, [cases, item.caseId, reportUnauthorized])
   const notes = workspace.data?.notes.filter((note) => `${note.subject ?? ''} ${note.body} ${note.legacySource?.authorName ?? note.createdByDisplayName}`.toLocaleLowerCase('tr-TR').includes(noteSearch.toLocaleLowerCase('tr-TR'))) ?? []
-  return <section className="assistant-case" aria-label="Seçili dosya">
-    <OpenCaseFolderButton caseId={item.caseId} />
-    <nav className="assistant-tabs" aria-label="Dosya görünümü">
-      <button aria-pressed={tab === 'note'} onClick={() => setTab('note')}>Hızlı not</button>
-      <button aria-pressed={tab === 'history'} onClick={() => setTab('history')}>Geçmiş notlar</button>
-      <button aria-pressed={tab === 'process'} onClick={() => setTab('process')}>Süreçler</button>
-    </nav>
+  return <section className="assistant-case" aria-label="Seçili dosya" hidden={tab === 'files'}>
+    <div className="assistant-case-heading"><span><strong>{item.plate}</strong><small>{item.officeNumber}</small></span><OpenCaseFolderButton caseId={item.caseId} /></div>
     {/* Keep the draft mounted while viewing history or process information. */}
-    <div hidden={tab !== 'note'}><QuickNote key={noteVersion} standalone target={{ caseId: item.caseId, plate: item.plate, officeNumber: item.officeNumber, source: 'api' }} port={operations} onClose={() => setNoteVersion((value) => value + 1)} /></div>
-    {tab !== 'note' && <p className="assistant-selected"><strong>{item.plate}</strong> · {item.officeNumber}</p>}
-    {tab !== 'note' && workspace.status === 'loading' && <p role="status">Dosya yükleniyor…</p>}
-    {tab !== 'note' && !['ok', 'loading'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button onClick={workspace.reload}>Tekrar dene</button></p>}
+    <div role="tabpanel" id={`${tabId}-note-panel`} aria-labelledby={`${tabId}-note`} hidden={tab !== 'note'}><QuickNote key={noteVersion} standalone target={{ caseId: item.caseId, plate: item.plate, officeNumber: item.officeNumber, source: 'api' }} port={operations} onClose={() => setNoteVersion((value) => value + 1)} /></div>
+    <div role="tabpanel" id={`${tabId}-history-panel`} aria-labelledby={`${tabId}-history`} hidden={tab !== 'history'}>
+    {workspace.status === 'loading' && <p role="status">Dosya yükleniyor…</p>}
+    {!['ok', 'loading'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button onClick={workspace.reload}>Tekrar dene</button></p>}
     {tab === 'history' && workspace.data && <>
       <label className="field"><span>Notlarda ara</span><input value={noteSearch} onChange={(event) => setNoteSearch(event.target.value)} maxLength={120} /></label>
       {notes.length === 0 && <p>{noteSearch ? 'Aramayla eşleşen not yok.' : 'Henüz not yok.'}</p>}
@@ -84,7 +87,11 @@ function CaseWorkspace({ item, cases, operations }: { item: CaseRecord; cases: C
         <small>{note.legacySource?.authorName ?? note.createdByDisplayName} · {dateTime(note.legacySource?.occurredAt ?? note.createdAt)}{note.legacySource && ' · V1 tarihsel not'}</small>
       </article>)}
     </>}
+    </div>
+    <div role="tabpanel" id={`${tabId}-process-panel`} aria-labelledby={`${tabId}-process`} hidden={tab !== 'process'}>
     {tab === 'process' && <>
+      {workspace.status === 'loading' && <p role="status">Dosya yükleniyor…</p>}
+      {!['ok', 'loading'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button onClick={workspace.reload}>Tekrar dene</button></p>}
       {detailError ? <p role="alert">Güncel süreç bilgisi alınamadı. <button onClick={() => window.dispatchEvent(new Event('focus'))}>Tekrar dene</button></p> : !detail ? <p role="status">Güncel süreç kontrol ediliyor…</p> : <dl className="assistant-process">
         <dt>Durum / aşama</dt><dd>{detail.status} · {detail.stage}</dd>
         <dt>Sorumlu</dt><dd>{detail.responsibleUserId ? tracking?.users.find((user) => user.id === detail.responsibleUserId)?.displayName ?? 'Atanmış (ad bilgisi bekleniyor)' : 'Atanmamış'}</dd>
@@ -107,6 +114,7 @@ function CaseWorkspace({ item, cases, operations }: { item: CaseRecord; cases: C
         {workspace.data.followUpHistory.map((event) => <article className="assistant-entry" key={event.id}><p>{event.previousFollowUpDate ?? 'Takip yok'} → {event.newFollowUpDate ?? 'Takip temizlendi'}</p><small>{event.actorDisplayName} · {dateTime(event.changedAt)}</small></article>)}
       </>}
     </>}
+    </div>
   </section>
 }
 
@@ -119,6 +127,9 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations }: { case
   const [result, setResult] = useState<{ key: typeof search; data: CasePageResult | null; error: boolean } | null>(null)
   const userId = session.user?.id ?? 'anonymous'
   const selectedCaseId = useAssistantCaseSelection(userId)
+  const [tab, setTab] = useState<AssistantTab>('note')
+  const activeTab = selectedCaseId ? tab : 'files'
+  const tabId = useId()
   const [selectionReload, setSelectionReload] = useState(0)
   const selectionKey = `${userId}:${selectedCaseId ?? ''}:${selectionReload}`
   const [selection, setSelection] = useState<{ key: string; item: CaseRecord | null; error: boolean } | null>(null)
@@ -155,6 +166,17 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations }: { case
   }
   const current = result?.key === search ? result : null
   return <>
+    <nav className="assistant-tabs" role="tablist" aria-label="Dosya görünümü">
+      {assistantTabs.map(({ id, label, icon: Icon }, index) => <button type="button" role="tab" key={id} id={`${tabId}-${id}`} aria-controls={`${tabId}-${id}-panel`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} disabled={id !== 'files' && !selectedCaseId} onClick={() => setTab(id)} onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        event.preventDefault()
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? assistantTabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + assistantTabs.length) % assistantTabs.length
+        const target = document.getElementById(`${tabId}-${assistantTabs[selectedCaseId ? next : 0].id}`)
+        target?.focus()
+        target?.click()
+      }}><Icon size={16} aria-hidden="true" /><span>{label}</span></button>)}
+    </nav>
+    <div role="tabpanel" id={`${tabId}-files-panel`} aria-labelledby={`${tabId}-files`} hidden={activeTab !== 'files'}>
     <form className="assistant-search" onSubmit={submit}>
       <label className="field"><span>Plaka veya dosya numarası</span><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} maxLength={120} placeholder="Örn. 34 ABC 123" /></label>
       <button className="button button--primary" type="submit" disabled={!query.trim()}>Ara</button>
@@ -167,11 +189,13 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations }: { case
         const saved = rememberAssistantCase(userId, item.caseId)
         setSelectionWriteError(!saved)
         if (saved) setSelection({ key: `${userId}:${item.caseId}:${selectionReload}`, item, error: false })
+        if (saved) setTab('note')
       }}><strong>{item.plate}</strong><span>{item.officeNumber} · {item.status} · {item.stage}</span></button>)}
       {current.data.totalPages > 1 && <nav className="assistant-pagination" aria-label="Arama sayfaları"><button disabled={search!.page <= 1} onClick={() => setSearch({ ...search!, page: search!.page - 1 })}>Önceki</button><span>{search!.page} / {current.data.totalPages}</span><button disabled={search!.page >= current.data.totalPages} onClick={() => setSearch({ ...search!, page: search!.page + 1 })}>Sonraki</button></nav>}
     </section>}
+    </div>
     {selectionError && <p role="alert">Dosya seçimi alınamadı veya bu cihazda saklanamadı. <button onClick={() => { setSelectionWriteError(false); setSelectionReload(value => value + 1) }}>Tekrar dene</button></p>}
-    {selected ? <CaseWorkspace key={selected.caseId} item={selected} cases={cases} operations={operations} /> : selectedCaseId && !selectionError ? <p role="status">Seçili dosya yükleniyor…</p> : <p>Programdan bir dosya seçin veya burada arayın.</p>}
+    {selected ? <CaseWorkspace key={selected.caseId} item={selected} cases={cases} operations={operations} tab={activeTab} tabId={tabId} /> : selectedCaseId && !selectionError ? <p role="status">Seçili dosya yükleniyor…</p> : <p>Programdan bir dosya seçin veya burada arayın.</p>}
   </>
 }
 

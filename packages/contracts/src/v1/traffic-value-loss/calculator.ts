@@ -14,6 +14,7 @@ export const valueLossCalculatorPartSelectionSchema = trafficValueLossRealMarket
   quantity: z.number().int().min(1).max(20),
   material: z.enum(VALUE_LOSS_PART_MATERIALS),
   operation: z.enum(VALUE_LOSS_CALCULATOR_OPERATIONS),
+  priorPartState: z.enum(['unknown', 'none', 'previously_damaged', 'previously_repaired_detachable', 'previously_repaired_welded']),
 }).superRefine((value, context) => {
   if (['paint', 'repair_paint', 'replacement_paint'].includes(value.operation) && value.paintMode === null) context.addIssue({ code: 'custom', path: ['paintMode'], message: 'paint_mode_required' })
   if (value.quantity > 1 && !value.position) context.addIssue({ code: 'custom', path: ['position'], message: 'multiple_part_positions_required' })
@@ -29,7 +30,7 @@ export const valueLossCalculatorRequestSchema = z.strictObject({
   usageValue: z.number().int().min(0).max(10_000_000).nullable(),
   marketValueMinor: trafficValueLossMoneyMinorSchema.min(1),
   damageAmountMinor: trafficValueLossMoneyMinorSchema,
-  previousDamageCount: z.number().int().min(0).max(100),
+  previousDamageCount: z.number().int().min(0).max(100).nullable(),
   commercialOrRental: z.boolean(),
   vehicleCondition: z.enum(['normal', 'prior_heavy_damage', 'current_heavy_damage', 'antique', 'foreign_plate']),
   parts: z.array(trafficValueLossRealMarketPartInputSchema).max(100),

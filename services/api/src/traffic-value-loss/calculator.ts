@@ -9,6 +9,7 @@ export function calculateValueLoss(input: ValueLossCalculatorRequest): ValueLoss
   const selected = selectTrafficValueLossRule(date.value)
   if (selected.status !== 'selected') throw new Error('Calculator rule selection failed')
   const market = selected.kind === 'legacy' || input.calculationBasis === 'market_difference'
+  if (!market && input.previousDamageCount === null) return { amountMinor: null, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: 'real_market_analysis', issues: [{ field: 'previousDamageCount', message: 'Önceki hasar sayısı bilinmiyor. SBM / geçmiş kayıt ile doğrulayın.' }] }
   const conditionIssue = input.vehicleCondition === 'normal' ? null
     : input.vehicleCondition === 'prior_heavy_damage' ? 'Önceki ağır hasar nedeniyle bu araç için değer kaybı hesaplanamaz.'
     : input.vehicleCondition === 'current_heavy_damage' ? 'Mevcut ağır / pert hasar nedeniyle değer kaybı hesaplanamaz.'

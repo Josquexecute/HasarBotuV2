@@ -87,7 +87,13 @@ try {
   nativeContext = () => ({ target: target.getBounds(), competitor: competitor.getBounds(), competitorFullScreen: competitor.isFullScreen(), competitorVisible: competitor.isVisible(), competitorDisplay: screen.getDisplayMatching(competitor.getBounds()).id, expectedDisplay: selectedDisplay.id })
   const competitorId = competitor.getNativeWindowHandle().readBigUInt64LE().toString()
   await competitor.loadURL('data:text/html,<main>Native foreground test</main>')
-  competitor.setFullScreen(true); competitor.show(); competitor.focus()
+  competitor.show(); competitor.focus()
+  // A forced foreground switch from the shell can update GetForegroundWindow
+  // without emitting EVENT_SYSTEM_FOREGROUND. Establish the normal foreground
+  // before requesting fullscreen so its real bounds event exercises the guard.
+  await native(targetId, competitorId, false, 'normal')
+  check('normal foreground is established before the fullscreen transition', true)
+  competitor.setFullScreen(true)
   // Keep one observer alive through each asynchronous WinEvent. Repeatedly
   // creating observers can restore another foreground window between samples.
   await native(targetId, competitorId, false, 'fullscreen')

@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { parseEksist, matchEksistReference } from '../src/eksist.js'
 
 describe('Eksist shared mapping', () => {
+  it('carries explicit usage and history fields through extraction and leaves conflicting data unavailable', () => {
+    const source = 'Kilometre: 51.001\nÇalışma Saati: 5.001\nSBM Önceki Hasar Sayısı: 2\nKullanım Amacı: Ticari'
+    expect(parseEksist(source).vehicleFields).toMatchObject({ Kilometre: '51.001', 'Çalışma Saati': '5.001', 'SBM Önceki Hasar Sayısı': '2', 'Kullanım Amacı': 'Ticari' })
+    expect(parseEksist(source + '\nKilometre: 60.000').vehicleFields).not.toHaveProperty('Kilometre')
+  })
   it('accepts repeated equivalent SBM values and skips empty copies without losing real conflicts', () => {
     const result = parseEksist('Ürün:\nÜrün: Trafik\nÜrün: TRAFİK\nSigorta Şirketi:\nSigorta Şirketi: Örnek Sigorta\nSigorta Şirketi: ÖRNEK SİGORTA')
     expect(result).toMatchObject({ caseType: 'traffic',insurer: 'Örnek Sigorta',conflicts: [] })

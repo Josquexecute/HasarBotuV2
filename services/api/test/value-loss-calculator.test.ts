@@ -8,6 +8,17 @@ const part = snapshot.partRules.find(part => part.vehicleGroupCode === 'A' && pa
 const input = valueLossCalculatorRequestSchema.parse({ accidentDate: '2026-10-01', vehicleType: 'OTOMOBİL', modelYear: 2024, usageValue: 50000, marketValueMinor: 100_000_000, damageAmountMinor: 10_000_000, previousDamageCount: 0, commercialOrRental: false, vehicleCondition: 'normal', postRepairMarketValueMinor: null, faultRateBasisPoints: 10000, parts: [{ stableRuleId: part.stableId, operation: 'replacement', paintMode: null, newPartPriceMinor: null, repairLaborMinor: null, partPriceAvailability: 'unavailable', priorPartState: 'none', treatment: 'standard' }] })
 
 describe('value loss calculator reuses established arithmetic', () => {
+  it('blocks an unknown history count instead of applying a zero modifier', () => {
+    expect(calculateValueLoss({ ...input, previousDamageCount: null })).toMatchObject({ amountMinor: null, issues: [expect.objectContaining({ field: 'previousDamageCount' })] })
+  })
+  it('blocks unknown part history even on the explicit market path', () => {
+    const partSelections = [{ ...input.parts[0]!, entryId: 'one', partName: part.sourceLabel, position: '', quantity: 1, material: 'unspecified' as const, priorPartState: 'unknown' as const }]
+    for (const calculationBasis of ['reference', 'market_difference'] as const) {
+      const result = calculateValueLoss({ ...input, parts: [], partSelections, calculationBasis, postRepairMarketValueMinor: 90_000_000 })
+      expect(result.amountMinor).toBeNull()
+      expect(result.issues[0]?.message).toContain('önceki parça hasarı bilinmiyor')
+    }
+  })
   it.each([0,50000,100000])('matches the existing real market engine at %s km without inventing verified evidence', usageValue => {
     const value = { ...input, usageValue }
     const date = parseLocalDate(value.accidentDate)

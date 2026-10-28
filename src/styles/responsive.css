@@ -1,4 +1,32 @@
 /* Shared sizing keeps form content inside its panel at browser zoom and narrow widths. */
+.dashboard-page .summary-item small { display: block; }
+.dashboard-page .summary-item > span { font-size: 12px; line-height: 1.4; }
+.dashboard-page .summary-item strong { font-size: 28px; }
+@media (max-width: 1023px), (max-height: 760px) {
+  .dashboard-page { overflow-y: auto; }
+  .dashboard-page .workflow-board { flex: 1 0 320px; min-height: 320px; }
+  .dashboard-page > .statusbar, .dashboard-page > .board-toolbar, .dashboard-page > .page-heading { flex-shrink: 0; }
+}
+@media (max-width: 1400px) {
+  .dashboard-page .summary-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .legislation-layout--detail { grid-template-columns: minmax(280px, .85fr) minmax(360px, 1.15fr); }
+  .legislation-page .source-detail { position: absolute; inset: 14px 16px 14px auto; z-index: 5; width: min(430px, calc(100% - 32px)); box-shadow: var(--shadow-dialog); }
+}
+@media (max-width: 1023px) {
+  .legislation-page .legislation-layout { display: flex; flex-direction: column; overflow-y: auto; gap: 12px; padding: 12px; }
+  .legislation-page .source-list-panel, .legislation-page .qa-panel { flex: 0 0 auto; overflow: visible; }
+  .legislation-page .source-list { flex: 0 0 auto; max-height: 300px; overflow-y: auto; }
+  .legislation-page .qa-panel__body { flex: 0 0 auto; overflow: visible; }
+  .legislation-page .source-detail { position: fixed; inset: 60px 12px 12px auto; width: min(430px, calc(100% - 24px)); z-index: 25; }
+}
+@media (max-width: 600px) {
+  .dashboard-page .summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
+  .dashboard-page .summary-item { padding: 10px; }
+  .dashboard-page .summary-item strong { font-size: 25px; }
+  .dashboard-page .summary-item small { font-size: 11px; }
+  .dashboard-page .workflow-board { min-height: 260px; }
+  .legislation-question-context { grid-template-columns: minmax(0, 1fr); }
+}
 .field, .select-field, .info-panel, .module-workspace > *, .overview-grid > * { min-width: 0; }
 .field input, .field textarea, .select-field select { max-width: 100%; }
 .select-field select, .select-field input { min-width: 0; flex: 1; }

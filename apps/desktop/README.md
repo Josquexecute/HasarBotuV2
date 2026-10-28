@@ -1,5 +1,72 @@
 # `@hasarbotu/desktop`
 
+29 Ekim 2026: **0.1.87 ofise yayımlandı.** Durum panosu açıklamaları/okunabilirliği,
+dosya tablosunun adlandırılmış sütunları ve uyarı/sorumlu ayrımı, mevzuat/AI yerleşimi,
+kompakt açılabilir bildirimler ve Touch'ın dört sekmeli paneli yenilendi. İşlemler,
+not taslakları ve ayarlar korundu; Touch'ın 11 çizim/hareket varlığı ile önceki
+yayındaki 11 hesaplama kaynağı hash ile aynı. Üretim iş kayıtlarına müdahale edilmedi.
+**3.475 test geçti / 8 atlandı**; atlamalar başarı sayılmadı. Son masaüstü süiti
+273 geçti/1 atlandı; açık/koyu tema ve %100/%125/%150 gerçek Electron DPI
+koşullarında 213 görsel/işlevsel kontrol geçti. Typecheck, lint, build, x64 NSIS
+içeriği ve kurulumdan çıkarılan gerçek paketin açılışı geçti (76 UI/29 main-preload).
+
+Aynı cihaz, Electron 44.9.1, 1440×900, 1.000 sentetik dosya ve varsayılan hareket
+ayarlarıyla iki beş dakikalık koşunun ortalamaları (0.1.86 → 0.1.87):
+
+| Süreç | CPU % | RAM çalışma kümesi, MiB |
+|---|---:|---:|
+| Electron ana süreç | 0,134 → 0,100 | 127,0 → 126,7 |
+| Ana renderer | 0,248 → 0,266 | 253,0 → 254,0 |
+| Touch karakter penceresi | 0,080 → 0,073 | 102,8 → 102,5 |
+| Touch kontrol paneli | 0,014 → 0,015 | 120,4 → 123,9 |
+
+Ortak GPU yükü %0,177 → %0,185 (20'şer PDH örneği);
+gerçek Touch canvas çizimi yük altında 26,97 → 27,01 FPS.
+Her koşuda 328 geçiş/164 tepki ve sıfır renderer hatası; son kalıcı renderer JS
+belleği 15,66 → 15,70 MiB,
+Touch paneli dinleyici sayısı koşu boyunca sabit. Çöp toplamaya müdahale edilmeyen
+ayrı hızlı gezinme kontrolünde yerleşen renderer RAM'i 291,9 → 281,1 MiB.
+Pano görünür hale gelme medyanı 399 → 333 ms, dosyalar/bildirimler yaklaşık 133 ms;
+izole Electron giriş ekranı açılışı, sıcak disk önbelleğinde 579 → 500 ms.
+Ölçümlerde ana test penceresi Windows odağını almıyordu; FPS bu eş koşullardaki
+canvas çizim sayısıdır. Pencere başına GPU payı ayrıştırılamıyor; soğuk ofis
+açılışı ve saatler süren dayanıklılık bu ölçümlerle doğrulanmış sayılmadı.
+Anlamlı gerileme saptanmadı. Ölçümler, gerçek Electron görüntüleri ve kanıtlar
+`.local/ui-renewal-087/` altında; başlangıç referansı yayımlanmış 0.1.86'nın
+75/75 UI dosyasıyla hash olarak eşleşiyor. Yayın ve indirme sonucu aşağıdadır.
+
+28 Ekim 2026: **0.1.86 ofise yayımlandı.** Değer Kaybı'nda
+marka/model, kasa, konum, adet, malzeme/nitelik, aynı parçaya farklı konum ve
+katsayı arayüz alanları kaldırıldı. EKSİST dosyası ve mevcut kayıtlar kullanılabiliyor;
+kilometre ile çalışma saati ayrılıyor. Doğrulanmamış parça geçmişi ve bilinmeyen
+hasar sayısı hasarsız/0 kabul edilmiyor; eski taslaklar ve kayıtlı parça işlemleri
+korunuyor. Canlı SBM bağlantısı KTT sonucu sağlıyor, parça geçmişi sağlamıyor;
+kayıtlı doğrulanmış geçmiş kanıtı veya inceleme gerekli. Kaynak, tarih ve uygulama
+gerekçeleri `packages/domain/README.md` içinde kayıtlı; yeni katsayı eklenmedi.
+Önceden doğrulanan 75 hedefli test, 192 kaynak Excel formül testi ve gerçek Electron → API → ayrı
+PostgreSQL zincirinde 18 kontrol geçti. LibreOffice Calc `calculateAll` ile 14
+araç türü eşleşti; Excel'in mevcut H1 tam-1.000 TL ve F9 5.001-saat kusurları da
+bağımsız motorda doğrulandı. Kaynak çalışma kitabı değiştirilmedi; Microsoft Excel
+kurulu olmadığından native Excel yeniden hesaplaması yapılmadı. Typecheck, lint,
+build, x64 NSIS içeriği ve çıkarılan gerçek paketin açılış smoke'u geçti.
+Touch yayın engeli test kaynaklıydı: görev çubuğundan zorlanan foreground geçişinde
+Windows pencereyi öne aldığı halde `EVENT_SYSTEM_FOREGROUND` bildirimi gelmiyordu;
+ayrı native gözlemci de bildirim almadı. Test önce normal foreground'u doğrulayıp
+ardından gerçek tam ekran geçişini yapıyor; art arda iki açılış regresyona eklendi.
+Touch üretim kodu, Değer Kaybı kaynakları ve Excel çalışma kitabı değiştirilmedi.
+12 ardışık açılış, 124 hedefli kontrol ve ayrı pencere/görünüm testleri 2/2 geçti;
+tam masaüstü süiti **272 geçti / 0 başarısız / 2 atlandı**. Hedefli koşulardaki
+iki native imleç konumu hatası ayrı yeniden koşuda ve tam süitte geçildi; test
+koşulu gevşetilmedi. Önceki değişmemiş süitler ve 39 yayın kontrolü yeniden kullanılınca
+yayın kapısı 3.468 başarılı, 9 atlanan test içeriyor. Altı isteğe bağlı canlı API,
+Windows WebKit SameSite, isteğe bağlı NSIS derleyicisi ve klasör bakım entegrasyonu
+atlamaları başarılı sayılmadı. Typecheck/lint, yeniden derleme ve gerçek NSIS'ten
+çıkarılan paketin açılışı geçti; 75 UI ve 29 main/preload dosyası kaynakla eşleşti.
+Önceden doğrulanan backend yaması yedeklenerek dağıtıldı: 21 dosya doğrulandı,
+20 dosya değişti; şema ve durdurulmuş işlem aralığında üretim kayıt sayıları korundu,
+yeni işlem hatası yok, beş servis sağlıklı. Kanıtlar `.local/value-loss-20261028/`
+ve `.local/touch-release-086/` altında; kesin paket ve istemci sonucu aşağıdadır.
+
 28 Ekim 2026: **0.1.85 ofise yayımlandı**; Windows klasör adındaki harf büyüklüğü değişiminde yanlış arşivleme düzeltildi; kaynak/yayın karşılaştırması aşağıda kayıtlıdır.
 640 asıl kayıt olarak onaylanıp eşlendi; 650 arşivde, kimliği ve geçmişi korunuyor.
 723/725 ofis listesinden gizli; uzaktaki konum korunuyor, kimlik belirsizliği açık.
@@ -224,7 +291,21 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.85**, 2026-10-28T16:58:10.710Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.87**, 2026-10-28T22:19:56.905Z; Windows x64,
+113.003.577 bayt, SHA-256 `1088cbe51eab96e36de39ad985c7a3f3420a8ab320520643650548837d36acd0`.
+Kurulu **0.1.85**, yeni sürümü `available` gördü; kimlikli manifest ve
+kurulum indirmesi HTTP 200 döndü, tam boyut ve SHA-256 eşleşti. Önceki 0.1.86
+manifesti ve değişmez kurulumu korundu. Beş servis sağlıklı, geçici inspector
+ve doğrulama görevi kapalı/kaldırılmış durumda; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.86**, 2026-10-28T19:07:38.061Z; Windows x64,
+113.001.860 bayt, SHA-256 `5590f077da1aa55916a4d140af7a9ec81b8ae44b76e7d77fdd32d6301c625d2d`.
+Kurulu **0.1.85**, güncellemeyi `available` gördü; kimlikli manifest ve kurulum
+indirmesi HTTP 200 döndü, indirilen tam boyut ve SHA-256 eşleşti. Önceki 0.1.85
+manifesti ve değişmez paketi, önceki 0.1.86 aday paketi korundu. Zorla kurulum
+yapılmadı; doğrulama görevi kaldırıldı, inspector kapandı ve beş servis sağlıklı.
+
+Önceki doğrulanan ofis yayını: **0.1.85**, 2026-10-28T16:58:10.710Z; Windows x64,
 113.001.283 bayt, SHA-256 `e52e6e729fbb64fa9f1ac06be94223f6fcc78e441c8343f135ef7f855b2a217b`.
 Git/uzak dallar, reflog, stash ve iki çalışma alanı karşılaştırıldı: 47 commitlenmemiş dosyadaki
 0.1.82–0.1.84 düzeltmeleri zaten teslim edilmişti; ayrı API dalının dört dosyası kaynakla eşdeğer,

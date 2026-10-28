@@ -44,3 +44,14 @@ npm run build --workspace @hasarbotu/domain
 ```
 
 Build çıktısı `dist/` altında ESM JavaScript ve TypeScript declaration dosyalarıdır.
+
+## Değer kaybı hesap ve kaynak sınırı
+
+28.10.2026 kontrolü: referans tahmin, `01.07.2026 V_1.xlsx` ve kilitli snapshot katsayılarını kullanır; resmî rapor veya piyasa araştırmasının yerine geçmez. Marka/model/kasa dosyadan, parça eşleştirmesi referans tablodan alınır. Malzemesi doğrulanmayan parçaya çelik/plastik niteliği atanmaz. Önceki parça hasarı veya hasar sayısı bilinmiyorsa hesap tamamlanmaz. Mevcut SBM bağlantısının KTT mutabakat sonucu, parça geçmişi kanıtı sayılmaz; kayıtlı, doğrulanmış ve çelişkisiz geçmiş kanıtları kullanılabilir, diğer durumlarda inceleme gerekir.
+
+- [SEDDK 2026/11](https://seddk.gov.tr/UploadContent/Documents/2026-11_Say%C4%B1l%C4%B1_Genelge.pdf), 13.05.2026; yürürlük 01.07.2026, m.4/6 ve Ek-1.1: ortak rapor şablonu ve piyasa araştırması. Sayısal katsayı kaynağı değildir.
+- [SEDDK 2025/25](https://www.seddk.gov.tr/upload/2025-25%20say%C4%B1l%C4%B1%20Genelge%20-%20Copy%201.pdf), [12.11.2025 tarihli resmî açıklama](https://seddk.gov.tr/upload/Bas%C4%B1n%20Duyurusu-12.11.pdf): önceki hasar ve piyasa analizi içeren değer kaybı raporu. Yeni katsayı veya genel bir otomatik parça dışlama kuralı türetilmedi.
+- [RG 12.06.2026, 33278](https://www.resmigazete.gov.tr/eskiler/2026/06/20260612-3.htm), m.2/6/8; yürürlük 01.07.2026: gerçek zarar ve piyasa değer farkı; eski Ek-1/2/3/7 kaldırılmıştır. Mevcut piyasa farkı yöntemi korunur, Excel tahmini yasal tazminat olarak sunulmaz. [SEDDK aynı tarihli açıklaması](https://seddk.gov.tr/UploadContent/Documents/Bas%C4%B1n%20Duyurusu.12.6.pdf) araç hasarı başvurusunun değer kaybını da kapsadığını doğrular; ayrı başvuru koşulu eklenmedi.
+- [Sigorta Tahkim Karar Dergisi 64](https://www.sigortatahkim.org/content/CmsFiles/karardrgs64.pdf), 25.10.2025, K-2025/532676, s.28–30: geçmiş hasarlar ve kaza tarihindeki piyasa farkı somut dosya kapsamında değerlendirilir. Tekil karardan genel katsayı veya tüm araçlar için otomatik ret kuralı üretilmedi.
+
+Excel karşılaştırması `services/file-agent/test/value-loss-workbook-parity.test.ts` içindedir. Önceden belgelenmiş iki kaynak hatası bilinçli olarak kopyalanmaz: `H1` tam 1.000 TL katlarında sıfır döndürürken rehberdeki 500 TL tavan yuvarlaması korunur; `F9` 5.001 saat üzerinde `D` metni döndürürken kaynak tablonun 0,70 değeri kullanılır. Bu sadeleştirmede hesap katsayıları ve yuvarlama değiştirilmedi.
