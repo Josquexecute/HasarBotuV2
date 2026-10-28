@@ -1,5 +1,22 @@
 # Bekleyen güncellemeler — 28 Ekim 2026
 
+## Güncel sonuç — 0.1.81 ofis teslimatı
+
+**0.1.81 yayımlandı:** 28 Ekim 2026 03:48:56 Türkiye saati. Kullanıcının yeni talimatıyla önceki uzun kabul bekleme kararı değişti; mevcut başarılı kontroller ofis kabulüne yeterli sayıldı. Ticari dağıtım yapılmadı.
+
+- **Dahil edilenler:** `21eb944` içindeki 0.1.80 sonrası tüm düzeltmeler korundu. Üç AI yanıt okuyucusu; PDF/OCR timeout/iptal kuyruğu; PDF/page/canvas ve gerçek Tesseract Worker temizliği; child süreç kapanışını bekleyen iş başına süreç yönetimi; bellek ölçümü/supervisor ve tanılama araçları; notice, codec yan kanıtları ve imzalı paketleme hazırlığı. API ve File Agent için 30 sunucu dosyası doğrulandı, değişen 20 dosya yedeklenerek uygulandı. Ortak sözleşme, bağımlılık sürümü ve migration değişmedi.
+- **Uzun test:** mevcut SIGTERM dinleyicisi hedef süreç kimliği doğrulanarak çağrıldı; aktif batch boşaldı, orijinal finally temizliği çalıştı ve supervisor kapandı. Süre yaklaşık 7,77 saat; 64.586 iş, 1.017.221 sayfa, 323.814 bütünlük kontrolü. Orijinal sonuç `INTERRUPTED`, supervisor `FAIL`/çıkış 130 kaydı korundu. Bu kullanıcı kaynaklı durdurma 48 saatlik PASS veya uzun süreli kararlılık kanıtı değildir. Ön durdurma kopyaları, orijinal loglar ve hashli durdurma tutanağı korundu.
+- **Doğrulama:** 109 API + 48 File Agent + 91 masaüstü/Windows + 23 yayın/paket testi = **271 PASS**. İlk masaüstü koşusundaki tek atlama, NSIS derleyicisi belirtilerek ayrı koşuda geçti. Ayrı isim filtresinin dışladığı testler yeniden atlanmış kabul edilmedi. Typecheck, lint, build, Windows x64 paketleme ve gerçek paket smoke geçti; 75 UI dosyası ve ofis profili eşleşti. Önceki kapsamlı denetim tekrarlanmadı.
+- **Kurulum/güncelleme:** temiz Windows VM'de gerçek NSIS 0.1.80 kurulumu, 0.1.81'e yükseltme, gerçek uygulama açılışları, kaldırma ve 0.1.80'e geri dönüş geçti; sentetik profil işareti korundu. Gerçek Electron/Chromium API/login/oturum kalıcılığı ayrı testlerle doğrulandı. Gerçek kullanıcı hesabının NSIS yükseltmesi veya sentetik işaretin gerçek oturum olduğu iddia edilmedi. İlk VM doğrulama aracındaki PowerShell dizi önceliği hatası giderilip temiz test kurulumu yeniden çalıştırıldı; ürün kusuru değildi. İlk test komutu kök yolu ve kapalı yerel test PostgreSQL önkoşulu da giderildi; başarısız deneme kayıtları korundu.
+- **Yayın kanıtı:** paket **113.001.074 bayt**, SHA-256 `f6fbf1bf7e75d48513019686078b7dc7a595e46c2a9a1f482ecef1c55fc4e272`. Kurulu 0.1.80 istemcisi `available` gördü; kimlikli manifest ve tam paket indirmesi HTTP 200, boyut ve hash birebir eşleşti. Ofis sunucusunda beş servis sağlıklı, 30 runtime dosyası eşleşiyor, kuyruklar boş ve yeni operasyon hatası yok. Geçici tanılama görevleri ve inspector temizlendi.
+- **Koruma:** önceki 0.1.80 manifesti SHA-256 `4c8e86d740c79e087ede445a26f1eecd59b3ca8ed20bcc4b23149a081093cb44` ile yedeklendi; 0.1.80 ve 0.1.79 değişmez kurulumları tekrar hash ile doğrulandı. Kaynak dalı `release/office-0.1.81`, yayın etiketi `office/0.1.81`. Önceki koruma etiketi, inceleme dalları ve tam Git yedeği korundu. Ana dalın geniş otomatik taslak yayın akışı tetiklenmedi.
+- **Veri ve ortam:** üretim verisi/migration müdahalesi ve zorla istemci kurulumu yok. Dosya değişimi sırasında salt okunur veri sayımları korundu, servisler/görevler eski çalışma durumuna döndü. VM temiz snapshot'a ve kapalı duruma döndürüldü; yalnız bu doğrulama için açılan ayrı `_test` PostgreSQL kümesi kapatıldı.
+- **Kalanlar:** 48 saatlik kararlılık kanıtı yok. Ticari müşteri kabulü, güvenilir imzalama ve codec kaynak/build/relink teslim kanıtları önceki durumunda; iki üretim klasörü kimlik kararı uygulanmadı. Bunlar tamamlanan ofis teslimatıyla karıştırılmadı. Kullanıcılar güncellemeyi kendi kontrolleriyle kurabilir; zorunlu sabah işlemi yok.
+
+Kanıtlar: `.local/office-0.1.81-20261028/` içinde `validation-proof.json`, `vm-result.json`, `soak-stop-result.json`, `backend-deployment-proof.json`, `publication-proof.json`, `client-final-proof.json`, `final-office-proof.json`, `local-cleanup.json` ve `release-result.json`. Orijinal OCR/PDF sonuçları `.local/ocr-memory-20261027/soak-48h-process/` altında kaldı. Aşağıdaki bölümler önceki incelemenin tarihsel kaydıdır; güncel yayın kararını yukarıdaki sonuç belirler.
+
+## Önceki inceleme — 28 Ekim 00:15
+
 Durum: inceleme ve güvenli ayrıştırma tamamlandı; yeni yayın ertelendi. Ofis sürümü **0.1.80** korundu. OCR/PDF uzun kabulü **RUNNING**; ticari dağıtım yapılmadı.
 
 ## Korunan değişiklikler

@@ -1,9 +1,9 @@
 # `@hasarbotu/desktop`
 
-28 Ekim 2026 bekleyen güncellemeler: [kalıcı sonuç raporu](./PENDING-UPDATES-20261028.md).
-86 hedefli test geçti; API düzeltmeleri bağımsız Git dalında korundu. OCR/PDF 48 saatlik
-kabulü sürüyor (beklenen bitiş: 29 Ekim 19:49 Türkiye saati); yeni ofis yayını yapılmadı,
-doğrulanan feed/paket **0.1.80** olarak korundu. Ticari dağıtım yapılmadı.
+28 Ekim 2026: **0.1.81 ofise yayımlandı**; [kalıcı sonuç raporu](./PENDING-UPDATES-20261028.md).
+271 hedefli test geçti. Kullanıcı talebiyle OCR/PDF uzun koşusu 7,77 saatte güvenle
+sonlandırıldı; sonuç/loglar korundu, 48 saatlik kararlılık kanıtı sayılmadı.
+Önceki paketler ve manifest korundu; ticari dağıtım yapılmadı.
 
 HasarBotu V2'nin **ince Electron kabuğu** (ADR-Q06, Paket 21 / D2).
 
@@ -210,7 +210,30 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.80**, 2026-10-27T11:35:26.446Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.81**, 2026-10-28T00:48:56.221Z; Windows x64,
+113.001.074 bayt, SHA-256 `f6fbf1bf7e75d48513019686078b7dc7a595e46c2a9a1f482ecef1c55fc4e272`.
+0.1.80 sonrası bekleyen üç AI yanıt okuyucusu, PDF/OCR timeout/iptal kuyruğu,
+PDF/Tesseract temizliği ve iş başına süreç yönetimi düzeltmeleri dahil edildi.
+Codec/native notice ve yan kanıtları File Agent paketinde korundu; imzalama ve
+tanılama araçları kaynakta yer alır. 109 API, 48 File Agent, 91 masaüstü/Windows
+ve 23 araç/paket testi geçti; başlangıçta atlanan Unicode NSIS testi ayrıca çalıştırıldı.
+Typecheck, lint, build ve x64 paket smoke geçti; 75 UI dosyası/profil eşleşti.
+Gerçek Electron/Chromium oturum kalıcılığı ve güvenlik kontrolleri, temiz Windows
+VM'de gerçek NSIS 0.1.80 → 0.1.81 yükseltmesi, açılış, kaldırma/geri dönüş ve
+sentetik profil işaretinin korunması doğrulandı. Gerçek kullanıcı hesabının NSIS
+yükseltmesi test edilmiş olarak sunulmadı. Sunucuda 30 dosya doğrulandı, değişen
+20 dosya yedeklenerek dağıtıldı; migration/veri müdahalesi yok, beş servis sağlıklı,
+yeni operasyon hatası sıfır. Kurulu **0.1.80**, **0.1.81** sürümünü `available`
+gördü; kimlikli HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti. Önceki 0.1.80
+manifesti ve 0.1.80/0.1.79 değişmez paketleri korundu; zorla kurulum yapılmadı.
+Uzun koşu kullanıcı isteğiyle 7,77 saatte `INTERRUPTED` olarak kapandı; 64.586 iş,
+1.017.221 sayfa ve 323.814 bütünlük kontrolü kaydedildi. Ofis kabulü için mevcut
+başarılı kontroller kullanıldı; 48 saat tamamlanmış veya sızıntı yokluğu kanıtlanmış
+sayılmadı. Ticari dağıtım yapılmadı. Kanıtlar `.local/office-0.1.81-20261028/`
+altında; tanılama görevi/inspector kapatıldı, test VM'si temiz snapshot'a ve yerel
+test PostgreSQL kümesi başlangıçtaki kapalı durumuna döndürüldü.
+
+Önceki doğrulanan ofis yayını: **0.1.80**, 2026-10-27T11:35:26.446Z; Windows x64,
 113.000.938 bayt, SHA-256 `2652b3d54dde10ca2c69b9f851938cf4809612cb7325c2b0853e4887b15f41e1`.
 0.1.79 temelindeki bağımsız denetimde 19 ürün kusuru düzeltildi: kapalı dosya
 yetkileri, ofis tarihiyle numaralandırma, arşiv filtreleri, servis iletişimlerinin
