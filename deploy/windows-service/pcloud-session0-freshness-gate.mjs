@@ -1,4 +1,4 @@
-import { lstat, readdir, stat } from 'node:fs/promises'
+import { lstat, readdir, stat, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { withConsistentPcloudDatabase } from './pcloud-maintenance-window-gate.mjs'
@@ -110,7 +110,7 @@ function enumerateDbFilesUnderFolder(database, folderId) {
   })).filter((entry) => !entry.relativePath.split(/[\\/]+/).some(isTemporarySourceEntry))
 }
 
-async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath, requireAbsent = false }) {
+async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath, requireAbsent = false, workspaceId }) {
   const parts = caseRelativePath.split(/[\\/]/)
   assert(parts.every(part => part && part !== '.' && part !== '..' && !/[<>:"|?*\x00-\x1f]/.test(part) && !/[. ]$/.test(part)), 'CASE_RELATIVE_PATH_INVALID')
   const nameKey = name => name.normalize('NFC').toUpperCase()
@@ -120,6 +120,7 @@ async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolde
     if (info) assert(info.isDirectory() && !info.isSymbolicLink(), 'WORKSPACE_PATH_CONFLICT')
     if (current === path.dirname(current)) break
   }
+  let ownerVerified = false
   async function hasLocalContent(directory) {
     const entries = await readdir(directory, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error })
     let content = false
@@ -127,6 +128,13 @@ async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolde
     for (const entry of entries) {
       assert(!entry.isSymbolicLink() && !CONFLICT_NAME_PATTERN.test(entry.name) && !names.has(nameKey(entry.name)), 'WORKSPACE_PATH_CONFLICT')
       names.add(nameKey(entry.name))
+      if (directory === targetCaseRoot && entry.name === '.hasarbotu-workspace.json' && workspaceId && entry.isFile()) {
+        const marker = path.join(directory, entry.name)
+        assert((await lstat(marker)).size <= 1024, 'WORKSPACE_IDENTITY_CONFLICT')
+        assert(await readFile(marker, 'utf8') === JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId }), 'WORKSPACE_IDENTITY_CONFLICT')
+        ownerVerified = true
+        continue
+      }
       if (!entry.isDirectory() || await hasLocalContent(path.join(directory, entry.name))) content = true
     }
     return content
@@ -162,7 +170,11 @@ async function checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolde
       const names = database.prepare('SELECT name FROM folder WHERE parentfolderid = ?').all(BigInt(row.id)).map(entry => nameKey(entry.name))
       assert(new Set(names).size === names.length, 'WORKSPACE_PATH_CONFLICT')
     }
-    return enumerateDbFilesUnderFolder(database, folderId).length > 0
+    return enumerateDbFilesUnderFolder(database, folderId).some(file => {
+      if (!ownerVerified || file.relativePath !== '.hasarbotu-workspace.json') return true
+      assert(getTaskReferenceCount(database, file.fileId) === 0, 'WORKSPACE_SYNC_PENDING')
+      return false
+    })
   })
   return !localContent && !remoteContent
 }
@@ -174,6 +186,7 @@ export async function determineSessionSafeCaseStatus({
   caseRelativePath,
   attestationStoreDirectory,
   operation,
+  workspaceId,
 }) {
   assert(typeof targetCaseRoot === 'string' && targetCaseRoot.length > 0, 'TARGET_CASE_ROOT_REQUIRED')
   assert(typeof databasePath === 'string' && databasePath.length > 0, 'DATABASE_PATH_REQUIRED')
@@ -181,6 +194,7 @@ export async function determineSessionSafeCaseStatus({
   assert(typeof caseRelativePath === 'string' && caseRelativePath.length > 0, 'CASE_RELATIVE_PATH_REQUIRED')
   assert(typeof attestationStoreDirectory === 'string' && attestationStoreDirectory.length > 0, 'ATTESTATION_STORE_DIRECTORY_REQUIRED')
   assert(operation === undefined || operation === 'workspace' || operation === 'file_destination', 'OPERATION_INVALID')
+  assert(workspaceId === undefined || (operation === 'workspace' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workspaceId)), 'WORKSPACE_IDENTITY_INVALID')
 
   // Provisioning only adds directories. An absent/empty tree has no content
   // revision to attest. Check both inventories before allowing this limited
@@ -193,7 +207,7 @@ export async function determineSessionSafeCaseStatus({
   // Require absence in both inventories and idle, conflict-free ancestors;
   // existing destinations still pass through the full content gate below.
   if (operation === 'workspace' || absentDestination) {
-    const empty = await checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath, requireAbsent: absentDestination })
+    const empty = await checkEmptyWorkspace({ targetCaseRoot, databasePath, topLevelFolderName, caseRelativePath, requireAbsent: absentDestination, workspaceId })
     if (empty) return {
       SchemaVersion: 'hasarbotu-pcloud-session0-freshness-gate/1.0.0',
       GeneratedAtUtc: new Date().toISOString(), CaseRelativePath: caseRelativePath,
@@ -363,6 +377,7 @@ function parseArguments(argv) {
     '--pcloud-db',
     '--attestation-store',
     '--operation',
+    '--workspace-id',
   ])
   const values = new Map()
   for (let index = 0; index < argv.length; index += 2) {
@@ -372,7 +387,7 @@ function parseArguments(argv) {
     assert(!values.has(key), 'ARGUMENT_DUPLICATE')
     values.set(key, value)
   }
-  for (const key of allowed) if (key !== '--operation') assert(values.has(key), 'ARGUMENT_MISSING')
+  for (const key of allowed) if (key !== '--operation' && key !== '--workspace-id') assert(values.has(key), 'ARGUMENT_MISSING')
   return {
     targetCaseRoot: values.get('--target-root'),
     topLevelFolderName: values.get('--top-level-folder-name'),
@@ -380,6 +395,7 @@ function parseArguments(argv) {
     databasePath: values.get('--pcloud-db'),
     attestationStoreDirectory: values.get('--attestation-store'),
     operation: values.get('--operation'),
+    workspaceId: values.get('--workspace-id'),
   }
 }
 

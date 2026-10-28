@@ -121,6 +121,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
       input: CaseCreateRequest,
       idempotency: { scope: string; key: string; requestHash: string; buildResponse: (item: CaseListItem) => unknown },
       onCreated?: (client: pg.PoolClient, caseId: string) => Promise<void>,
+      workspaceRootKey?: string,
     ): Promise<CaseListItem | null> {
       const plateResult = parsePlateNumber(input.plate)
       if (!plateResult.ok) throw new ReferenceCheckError('plate')
@@ -132,6 +133,8 @@ export function createCasesWriteStore(pool: pg.Pool) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        // Workspace creation and automatic registration acquire root ownership before the shared office counter.
+        if (workspaceRootKey) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`folder-registration:${actor.organizationId}:${workspaceRootKey}`])
         const today = await client.query<{ today: string }>("SELECT to_char(transaction_timestamp() AT TIME ZONE 'Europe/Istanbul','YYYY-MM-DD') AS today")
         const officeDate = localDateSchema.parse(today.rows[0]!.today)
         const year = Number(officeDate.slice(0, 4))

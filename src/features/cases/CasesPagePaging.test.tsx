@@ -112,6 +112,7 @@ it('resolves the current responsible ID in the table and shares one reference re
 
 it('updates already loaded follow-up labels and overdue state when the office day changes', async () => {
   vi.useFakeTimers()
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
   vi.setSystemTime(new Date('2026-10-31T20:59:45Z'))
   try {
     const { port, queries } = stubCasesPort(1)
@@ -126,16 +127,16 @@ it('updates already loaded follow-up labels and overdue state when the office da
     expect(within(screen.getByRole('table')).getByText('Gecikmiş')).toBeInTheDocument()
     expect(within(screen.getByRole('table')).queryByText('Bugün')).not.toBeInTheDocument()
     expect(queries).toHaveLength(1)
-  } finally { vi.useRealTimers() }
+  } finally { visibility.mockRestore(); vi.useRealTimers() }
 })
 
-it.each(['focus', 'interval'])('removes an externally archived case from the open list on %s refresh', async (trigger) => {
+it.each(['focus', 'interval'])('shows a returned office folder and removes an externally archived case on %s refresh', async (trigger) => {
   vi.useFakeTimers()
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
   let present = true
   const { port } = stubCasesPort(2)
   port.listCasePage = vi.fn(async query => {
-    const items = present ? [caseRecord(1), caseRecord(2)] : [caseRecord(2)]
+    const items = present ? [caseRecord(1), caseRecord(2)] : [caseRecord(2), caseRecord(3)]
     return { items, page: 1, pageSize: query.pageSize, totalCount: items.length, totalPages: 1 }
   })
   const view = renderPage(port, stubAlertPort().port)
@@ -145,9 +146,9 @@ it.each(['focus', 'interval'])('removes an externally archived case from the ope
     present = false
     await act(async () => {
       if (trigger === 'focus') window.dispatchEvent(new Event('focus'))
-      else await vi.advanceTimersByTimeAsync(30_000)
+      else await vi.advanceTimersByTimeAsync(5000)
     })
-    expect(rowPlates()).toEqual(['34 PG 2'])
+    expect(rowPlates()).toEqual(['34 PG 2', '34 PG 3'])
     expect(port.listCasePage).toHaveBeenCalledTimes(2)
     view.unmount()
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })

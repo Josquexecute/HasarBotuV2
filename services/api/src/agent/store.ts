@@ -667,6 +667,13 @@ async function applyVerification(
     return applied
   }
   if (job.target_type === 'workspace_provisioning') {
+    const workspacePayload = jobPayloadSchema.parse(job.payload)
+    if (workspacePayload.kind !== 'workspace' || workspacePayload.workspaceId !== job.target_id) {
+      await client.query(`UPDATE case_workspace_provisionings SET status='failed',last_error_code='workspace_identity_required',updated_at=now()
+        WHERE organization_id=$1 AND id=$2 AND status NOT IN ('ready','stale','cancelled')`, [ctx.organizationId, job.target_id])
+      return { metadataResult: 'failed', errorCode: 'workspace_identity_required', auditAction: 'job.verification_failed', jobStatus: 'failed' }
+    }
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`folder-registration:${ctx.organizationId}:${workspacePayload.storageRootKey}`])
     const audit = createAuditService()
     const planResult = await client.query(
       `SELECT case_id, storage_root_key, relative_path, status, approved_by_user_id

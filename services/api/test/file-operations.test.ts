@@ -291,6 +291,19 @@ describeDb('case file operations (gerçek PostgreSQL + sentetik geçici filesyst
     })).statusCode).toBe(409)
   })
 
+  it('workspace creation and file moves cannot reserve one another’s destination', async () => {
+    const first = await seedLocatedCase('34 FNC 251', 'workspaces/FENCE-A')
+    const second = await seedLocatedCase('34 FNC 252', 'workspaces/FENCE-B')
+    const third = await seedLocatedCase('34 FNC 253', 'workspaces/FENCE-C')
+    const workspacePath = 'workspaces/RESERVED-WORKSPACE', movePath = 'workspaces/RESERVED-MOVE'
+    await pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+      VALUES($1,$2,$3,'source-root',$4,'planned')`, [uuidv7(), orgA, second.caseId, workspacePath])
+    expect((await plan(first.caseId, { operationType: 'rename_case_workspace', destinationStorageRootKey: 'source-root', destinationRelativePath: workspacePath })).statusCode).toBe(409)
+    expect((await plan(first.caseId, { operationType: 'rename_case_workspace', destinationStorageRootKey: 'source-root', destinationRelativePath: movePath })).statusCode).toBe(201)
+    await expect(pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+      VALUES($1,$2,$3,'source-root',$4,'planned')`, [uuidv7(), orgA, third.caseId, movePath])).rejects.toMatchObject({ constraint: 'folder_path_owner_unique' })
+  })
+
   it('eşzamanlı approve tek job üretir; same-volume atomik rename doğrulanır, location ve audit atomik sonuçlanır', async () => {
     const source = 'workspaces/ATOMIC-OLD'
     const destination = 'workspaces/ATOMIC-NEW'

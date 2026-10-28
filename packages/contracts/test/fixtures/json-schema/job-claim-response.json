@@ -141,6 +141,12 @@
                       "type": "string",
                       "const": "workspace"
                     },
+                    "workspaceId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^(?!.*[.][.])[A-Za-z0-9._-]{1,128}$"
+                    },
                     "requiredSubdirectories": {
                       "type": "array",
                       "prefixItems": [

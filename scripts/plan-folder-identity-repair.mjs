@@ -49,7 +49,7 @@ export function planFolderIdentityRepair(evidence, evidenceSha256) {
         'Verify all pending/running file, document, OCR, tracking and folder-scan jobs; quiesce only the affected flow in an approved maintenance window.',
         'Take a restorable DB backup and cloud folder metadata/content backup with hashes; verify restore in a disposable database.',
         'Record named operator approval against the refreshed plan digest and official evidence references.',
-        'A separate reviewed implementation must lock both cases/locations and the folder identity, enforce versions/unique constraints and append before/after audit evidence atomically.',
+        'Use deploy/windows-service/repair-folder-identity.mjs to prepare a fresh maintenance plan after the identity decision; its apply locks both cases/locations, checks full history fingerprints and writes an audit-backed rollback receipt before commit.',
         'Revalidate physical folder identity immediately before applying; abort/rollback on any mismatch. Existing relocation cannot resolve an occupied target.',
         'Verify both case details, notes, document hashes, folder verification and two read-only inventory passes; rollback binding changes from captured before-images if verification fails, preserving new history.',
       ],
@@ -58,6 +58,7 @@ export function planFolderIdentityRepair(evidence, evidenceSha256) {
   const plan = { schemaVersion: 'folder-identity-repair-review/1', mode: 'dry-run',
     status: 'AWAITING_OPERATOR_IDENTITY_APPROVAL', evidenceSha256, evidenceCheckedAt: evidence.checkedAt,
     productionMutations: 0, executable: false, approvalAuthenticityVerified: false,
+    maintenanceTool: 'deploy/windows-service/repair-folder-identity.mjs',
     preserves: ['case IDs', 'notes and review history', 'document versions and hashes', 'audit events', 'physical folder contents'], repairs }
   return { ...plan, planSha256: createHash('sha256').update(JSON.stringify(plan)).digest('hex') }
 }

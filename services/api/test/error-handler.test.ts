@@ -13,6 +13,14 @@ afterEach(async () => {
 })
 
 describe('merkezi hata isleyicisi', () => {
+  it('concurrent folder ownership conflicts return 409 without exposing database details', async () => {
+    app = buildApp({ loggerEnabled: false })
+    app.get('/folder-race', () => { throw Object.assign(new Error('PRIVATE SQL DETAILS'), { code: '23505', constraint: 'folder_path_owner_unique' }) })
+    const response = await app.inject({ method: 'GET', url: '/folder-race' })
+    expect(response.statusCode).toBe(409)
+    expect(failureEnvelopeSchema.parse(response.json()).error.code).toBe('conflict')
+    expect(response.payload).not.toContain('PRIVATE SQL DETAILS')
+  })
   it('beklenmeyen hata 500 + internal_error zarfi doner; ham mesaj sizmaz', async () => {
     app = buildApp({ loggerEnabled: false })
     app.get('/patla', () => {

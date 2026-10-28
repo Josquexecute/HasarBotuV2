@@ -11,6 +11,7 @@ const payload = {
   storageRootKey: 'test-root',
   relativePath: '2026/Temmuz 2026/34ABC123',
   kind: 'workspace' as const,
+  workspaceId: '01900000-0000-7000-8000-000000000001',
   requiredSubdirectories: subdirectories,
 }
 
@@ -34,10 +35,26 @@ describe('provisionCaseWorkspace (sentetik geçici filesystem)', () => {
   })
 
   it('tekrar çağrıda mükerrer üretmez ve kısmi yapıyı tamamlar', async () => {
-    await mkdir(join(root, '2026', 'Temmuz 2026', '34ABC123', 'EVRAK'), { recursive: true })
+    await provisionCaseWorkspace(root, payload)
     expect(await provisionCaseWorkspace(root, payload)).toEqual({ outcome: 'verified' })
     expect(await provisionCaseWorkspace(root, payload)).toEqual({ outcome: 'verified' })
     for (const name of subdirectories) await expect(access(join(root, '2026', 'Temmuz 2026', '34ABC123', name))).resolves.toBeUndefined()
+  })
+
+  it('unmarked or differently owned same-name directories are never adopted', async () => {
+    const target = join(root, payload.relativePath)
+    await mkdir(target, { recursive: true })
+    await writeFile(join(target, 'evidence.txt'), 'preserve me')
+    expect(await provisionCaseWorkspace(root, payload)).toEqual({ outcome: 'failed', errorCode: 'workspace_identity_conflict' })
+    await expect(access(join(target, 'HASAR'))).rejects.toThrow()
+    await writeFile(join(target, '.hasarbotu-workspace.json'), JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId: '01900000-0000-7000-8000-000000000002' }))
+    expect(await provisionCaseWorkspace(root, payload)).toEqual({ outcome: 'failed', errorCode: 'workspace_identity_conflict' })
+  })
+
+  it('concurrent distinct workspace identities cannot both claim a physical folder', async () => {
+    const results = await Promise.all([payload, { ...payload, workspaceId: '01900000-0000-7000-8000-000000000002' }].map(p => provisionCaseWorkspace(root, p)))
+    expect(results.filter(r => r.outcome === 'verified')).toHaveLength(1)
+    expect(results.filter(r => r.errorCode === 'workspace_identity_conflict')).toHaveLength(1)
   })
 
   it('kısmi başarısızlıkta oluşan klasörleri silmez; retry eksikleri tamamlar', async () => {

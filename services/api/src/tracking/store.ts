@@ -7,6 +7,7 @@ import type { TrackingFile, TramerCommand } from '@hasarbotu/contracts'
 import { withTransaction, type Queryable } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
 import type { SessionRow } from '../auth/store.js'
+import { resolveFileLocations } from '../storage/file-location.js'
 
 const audit = createAuditService()
 export class TrackingError extends Error {
@@ -97,24 +98,37 @@ export async function observeFile(pool: pg.Pool, organizationId: string, agentId
     const fileName = input.relativePath.split('/').at(-1)!
     if (isTemporaryTrackedFile(fileName)) throw new TrackingError(400,'Geçici dosya işlenemez.')
     let tracked = (await db.query(`SELECT * FROM tracked_files WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 AND relative_path=$4 FOR UPDATE`, [organizationId,input.caseId,input.storageRootKey,input.relativePath])).rows[0]
+    let relocated = false
     if (!tracked) {
-      // Rebinding a workspace must not create a second document for unchanged
-      // bytes. A verification-only update may have followed the actual move.
-      const previousPath = (await db.query(`SELECT previous_relative_path FROM case_location_history
-        WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 AND relative_path=$4
-          AND previous_relative_path IS NOT NULL AND previous_relative_path<>relative_path
-        ORDER BY occurred_at DESC,id DESC LIMIT 1`, [organizationId,input.caseId,input.storageRootKey,location.relative_path])).rows[0]?.previous_relative_path as string | undefined
-      if (previousPath) {
-        const oldPath = `${previousPath}/${input.relativePath.slice(location.relative_path.length+1)}`
-        const relocated = (await db.query(`SELECT * FROM tracked_files
-          WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 AND relative_path=$4 AND current_hash=$5
-          FOR UPDATE`, [organizationId,input.caseId,input.storageRootKey,oldPath,input.contentHash])).rows[0]
-        if (relocated) {
-          tracked = (await db.query('UPDATE tracked_files SET relative_path=$2 WHERE id=$1 RETURNING *', [relocated.id,input.relativePath])).rows[0]
-        }
+      // Several verified moves can occur before this file is hashed again.
+      // Follow the committed chain, retaining the observation/review identity.
+      const previous = (await db.query(`SELECT f.*,o.observed_at AS created_at FROM tracked_files f
+        JOIN document_observations o ON o.file_id=f.id AND o.revision=f.revision
+        WHERE f.organization_id=$1 AND f.case_id=$2 AND f.current_hash=$3 FOR UPDATE OF f`,
+      [organizationId,input.caseId,input.contentHash])).rows
+      const matches = (await resolveFileLocations(db,organizationId,previous)).filter(file =>
+        file.storage_root_key === input.storageRootKey && file.relative_path === input.relativePath)
+      if (!matches.length) {
+        // Preserve the existing single-hop manual rebind contract, but only
+        // after an agent has independently reported matching bytes here.
+        const from = (await db.query(`SELECT previous_relative_path FROM case_location_history
+          WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 AND relative_path=$4
+            AND previous_relative_path IS NOT NULL AND previous_relative_path<>relative_path
+          ORDER BY occurred_at DESC,id DESC LIMIT 1`, [organizationId,input.caseId,input.storageRootKey,location.relative_path])).rows[0]?.previous_relative_path
+        if (from) matches.push(...previous.filter(file => file.storage_root_key === input.storageRootKey
+          && file.relative_path === `${from}/${input.relativePath.slice(location.relative_path.length+1)}`))
+      }
+      if (matches.length > 1) throw new TrackingError(409,'Evrakın taşınma geçmişi belirsiz; yeniden eşleme gerekiyor.')
+      if (matches[0]) {
+        tracked = (await db.query('UPDATE tracked_files SET storage_root_key=$2,relative_path=$3 WHERE id=$1 RETURNING *',
+          [matches[0].id,input.storageRootKey,input.relativePath])).rows[0]
+        relocated = true
       }
     }
-    if (tracked?.current_hash === input.contentHash && tracked.available) return { changed: false }
+    if (tracked?.current_hash === input.contentHash && (tracked.available || relocated)) {
+      if (!tracked.available) await db.query('UPDATE tracked_files SET available=true WHERE id=$1',[tracked.id])
+      return { changed: false }
+    }
     const previous = tracked ? (await db.query('SELECT document_type FROM document_observations WHERE file_id=$1 AND revision=$2', [tracked.id,tracked.revision])).rows[0] : undefined
     if (tracked) {
       tracked = (await db.query('UPDATE tracked_files SET current_hash=$2,revision=revision+1,available=true WHERE id=$1 RETURNING *', [tracked.id,input.contentHash])).rows[0]
@@ -140,7 +154,8 @@ export async function reviewDocument(pool: pg.Pool, session: SessionRow, id: str
     if (!row) throw new TrackingError(404,'Evrak bulunamadı.')
     const location = (await db.query('SELECT storage_root_key,relative_path FROM case_locations WHERE organization_id=$1 AND case_id=$2', [row.organization_id,row.case_id])).rows[0]
     const file = (await db.query('SELECT * FROM tracked_files WHERE id=$1', [row.file_id])).rows[0]
-    if (!file.available || !location || location.storage_root_key !== file.storage_root_key || !file.relative_path.startsWith(`${location.relative_path}/`)) throw new TrackingError(409,'Evrakın güncel konumu değişmiş; yeniden tarama gerekiyor.')
+    const [effective] = await resolveFileLocations(db,row.organization_id,[{ ...file,created_at: row.observed_at }])
+    if (!file.available || !location || location.storage_root_key !== effective!.storage_root_key || !effective!.relative_path.startsWith(`${location.relative_path}/`)) throw new TrackingError(409,'Evrakın güncel konumu değişmiş; yeniden tarama gerekiyor.')
     if (row.responsible_user_id !== session.user.id) throw new TrackingError(403,'Evrakı dosya sorumlusu kontrol etmelidir.')
     if (row.revision !== row.current_revision || row.status !== 'pending') throw new TrackingError(409,'Evrak değişti veya zaten kontrol edildi.')
     await db.query(`UPDATE document_observations SET status=$2,document_type=$3,review_note=$4,reviewed_by=$5,reviewed_at=now() WHERE id=$1`, [id,input.status,input.documentType,input.note,session.user.id])
@@ -153,10 +168,15 @@ export async function reconcileFiles(pool: pg.Pool, organizationId: string, inpu
     const location = (await db.query(`SELECT l.* FROM case_locations l JOIN cases c ON c.organization_id=l.organization_id AND c.id=l.case_id
       WHERE l.organization_id=$1 AND l.case_id=$2 AND NOT c.is_archived FOR UPDATE OF l`, [organizationId,input.caseId])).rows[0]
     if (!location || location.version !== input.locationVersion) throw new TrackingError(409,'Tarama sırasında konum değişti.')
-    const removed = await db.query(`UPDATE tracked_files SET available=false WHERE organization_id=$1 AND case_id=$2 AND available
-      AND (storage_root_key<>$3 OR NOT(relative_path=ANY($4::text[])))
-      AND EXISTS (SELECT 1 FROM document_observations o WHERE o.file_id=tracked_files.id AND o.revision=tracked_files.revision AND o.observed_at <= $5::timestamptz)
-      RETURNING *`, [organizationId,input.caseId,location.storage_root_key,input.paths,input.scanStartedAt])
+    const candidates = (await db.query(`SELECT f.*,o.observed_at AS created_at FROM tracked_files f
+      JOIN document_observations o ON o.file_id=f.id AND o.revision=f.revision
+      WHERE f.organization_id=$1 AND f.case_id=$2 AND f.available AND o.observed_at<=$3::timestamptz FOR UPDATE OF f`,
+    [organizationId,input.caseId,input.scanStartedAt])).rows
+    const present = new Set(input.paths)
+    const missing = (await resolveFileLocations(db,organizationId,candidates)).filter(file =>
+      file.storage_root_key !== location.storage_root_key || !present.has(file.relative_path)).map(file => file.id)
+    const removed = await db.query(`UPDATE tracked_files SET available=false WHERE organization_id=$1 AND case_id=$2 AND id=ANY($3::uuid[]) RETURNING *`,
+      [organizationId,input.caseId,missing])
     for (const file of removed.rows) {
       await notify(db,organizationId,input.caseId,`document:${file.id}:${file.revision}:missing`,'document',`Evrak artık klasörde bulunmuyor: ${file.relative_path.split('/').at(-1)}`)
       await record(db,organizationId,input.caseId,'document_missing',undefined,{ fileName: file.relative_path.split('/').at(-1) })

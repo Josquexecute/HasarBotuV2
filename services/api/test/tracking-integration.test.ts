@@ -337,6 +337,33 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await pool.query('SELECT revision FROM tracked_files WHERE case_id=$1 AND relative_path=$2',[caseId,moved.relativePath])).rows[0].revision).toBe(2)
   })
 
+  it('keeps documents readable through multiple physical moves before rehashing, without false missing flags or duplicate reviews',async () => {
+    const caseId = await createCase(),root='multi-hop-root'
+    await pool.query('INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,$3,$3)',[uuidv7(),org,root])
+    expect((await app.inject({ method:'PUT',url:`/api/v1/cases/${caseId}/location`,headers:{cookie:managerCookie},payload:{storageRootKey:root,relativePath:'pending',source:'manual'} })).statusCode).toBe(200)
+    const input={caseId,locationVersion:1,storageRootKey:root,relativePath:'pending/policy.pdf',contentHash:'d'.repeat(64),byteSize:200}
+    await observeFile(pool,org,'test-agent',input)
+    await observeFile(pool,org,'test-agent',{...input,relativePath:'pending/missing.pdf',contentHash:'e'.repeat(64)})
+    const before=await snapshot(ownerCookie,caseId),original=before.documents.find(d=>d.fileName==='policy.pdf')!
+    for(const [from,to] of [['pending','month'],['month','closed/month']]){
+      await pool.query('UPDATE case_locations SET relative_path=$2,version=version+1 WHERE case_id=$1',[caseId,to])
+      await pool.query(`INSERT INTO case_location_history(id,organization_id,case_id,storage_root_key,relative_path,previous_storage_root_key,previous_relative_path,verification_status,source,changed_by_user_id)
+        VALUES($1,$2,$3,$4,$5,$4,$6,'verified','system',$7)`,[uuidv7(),org,caseId,root,to,from,owner])
+    }
+    expect((await snapshot(ownerCookie,caseId)).documents.find(d=>d.id===original.id)).toMatchObject({relativePath:'closed/month/policy.pdf',canReview:true})
+    await reconcileFiles(pool,org,{caseId,locationVersion:3,scanStartedAt:new Date().toISOString(),paths:['closed/month/policy.pdf']})
+    const after=await snapshot(ownerCookie,caseId)
+    expect(after.documents).toHaveLength(1);expect(after.documents[0]?.id).toBe(original.id)
+    expect((await app.inject({method:'POST',url:`/api/v1/tracking/documents/${original.id}/review`,headers:{cookie:ownerCookie},payload:{status:'approved',documentType:'victim_traffic_policy',note:'Same document after two verified moves'}})).statusCode).toBe(204)
+    // Older clients may already have retired the old prefix before rehashing it.
+    await pool.query('UPDATE tracked_files SET available=false WHERE case_id=$1 AND relative_path=$2',[caseId,input.relativePath])
+    expect(await observeFile(pool,org,'test-agent',{...input,locationVersion:3,relativePath:'closed/month/policy.pdf'})).toEqual({changed:false})
+    expect((await snapshot(ownerCookie,caseId)).documents[0]).toMatchObject({id:original.id,status:'approved'})
+    expect((await pool.query('SELECT count(*)::int n FROM tracked_files WHERE case_id=$1',[caseId])).rows[0].n).toBe(2)
+    expect((await pool.query('SELECT count(*)::int n FROM document_observations o JOIN tracked_files f ON f.id=o.file_id WHERE f.case_id=$1',[caseId])).rows[0].n).toBe(2)
+    expect((await pool.query("SELECT details->>'fileName' name FROM audit_events WHERE resource_id=$1 AND action='tracking.document_missing'",[caseId])).rows.map(r=>r.name)).toEqual(['missing.pdf'])
+  })
+
   it('retires the previous storage root even when its relative filename matches the new root',async () => {
     const caseId = await createCase()
     for (const rootKey of ['previous-source','current-source']) await pool.query('INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,$3,$3)',[uuidv7(),org,rootKey])

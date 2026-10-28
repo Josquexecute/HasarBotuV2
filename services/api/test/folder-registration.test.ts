@@ -7,7 +7,7 @@ import { createCasesWriteStore } from '../src/cases/write-store.js'
 import { casesQuerySchema } from '@hasarbotu/contracts'
 import { evaluateCaseDocumentRequirements } from '../src/document-requirements/evaluation.js'
 import { planFolderLocationReconciliation, applyFolderLocationReconciliation, type FolderLocationReconciliation } from '../src/cases/folder-location-reconciliation.js'
-import { planSourceFolderRelocation, applySourceFolderRelocation, type SourceFolderRelocation } from '../src/cases/source-folder-relocation.js'
+import { planSourceFolderRelocation, applySourceFolderRelocation, readTrackedFolderIdentity, type SourceFolderRelocation } from '../src/cases/source-folder-relocation.js'
 import { registerAutomaticFolders, type AutomaticFolderPolicy, type ObservedPlateFolder } from '../src/cases/automatic-folder-registration.js'
 import { resolveFileLocations } from '../src/storage/file-location.js'
 import { createAuditService } from '../src/audit/service.js'
@@ -65,11 +65,18 @@ describeDb('sidecarless physical folder registration', () => {
     expect(await counts()).toEqual(before)
     expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [row.id])).rows[0].lifecycle_status).toBe('open')
   })
-  it('registers the same plate for different insurers as separate source identities', async () => {
+  it('requires case-specific review for a second folder even when the insurer name differs', async () => {
     const axa = uuidv7(), allianz = uuidv7()
     await pool.query("INSERT INTO insurers(id,organization_id,name) VALUES($1,$3,'AXA Sigorta'),($2,$3,'Allianz Sigorta')", [axa,allianz,org])
     const folders = ['AXA SİGORTA', 'ALLIANZ'].map(name => ({ ...observation(), relativePath: `2026/EKİM 2026/34TST999-${name}` }))
-    expect(await registerAutomaticFolders(pool, automaticPolicy(), folders, async () => {})).toMatchObject({ created: 2, deferred: 0 })
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), folders, async () => {})).toMatchObject({ created: 1, deferred: 1,
+      issues: [{ code: 'folder_existing_plate_requires_reconciliation' }] })
+    const first = (await pool.query("SELECT id::text FROM cases WHERE organization_id=$1 AND plate_normalized='34TST999'", [org])).rows[0]!.id
+    const reviewed = manifest()
+    reviewed.folders = [{ ...reviewed.folders[0]!, sourceFolderId: folders[1]!.sourceFolderId, relativePath: folders[1]!.relativePath, existingPlateCaseIds: [first],
+      evidence: { ...reviewed.folders[0]!.evidence, userIdentityDecision: 'Operator verified two distinct official claims in this pair' } }]
+    const plan = await planFolderRegistration(pool, org, reviewed)
+    await applyFolderRegistration(pool, actor(), plan, plan.planHash, async () => {})
     const rows = (await pool.query("SELECT id::text,insurer_id::text FROM cases WHERE organization_id=$1 AND plate_normalized='34TST999' ORDER BY insurer_id", [org])).rows
     expect(rows).toHaveLength(2)
     expect(new Set(rows.map(row => row.id)).size).toBe(2)
@@ -84,18 +91,62 @@ describeDb('sidecarless physical folder registration', () => {
     policy.baselineSourceFolderIds = []
     await registerAutomaticFolders(pool, policy, [folder], verify)
     const registered = await counts()
-    expect(await registerAutomaticFolders(pool, policy, [{ ...folder, sourceFolderId: '90000' }], verify)).toMatchObject({ created: 0, existing: 1 })
+    expect(await registerAutomaticFolders(pool, policy, [{ ...folder, sourceFolderId: '90000' }], verify)).toMatchObject({ created: 0, existing: 0, deferred: 1,
+      issues: [{ code: 'folder_location_identity_unproven' }] })
     expect(await counts()).toEqual(registered)
   })
   it('uses source identity rather than plate and serializes concurrent automatic retries', async () => {
     const first = observation(), policy = automaticPolicy()
     await registerAutomaticFolders(pool, policy, [first], async () => {})
     const second = { ...first, sourceFolderId: '90001', relativePath: first.relativePath.replace('2026/', '2026 UZAKTAN/') }
-    expect(await registerAutomaticFolders(pool, policy, [second], async () => {})).toMatchObject({ created: 1 })
+    expect(await registerAutomaticFolders(pool, policy, [second], async () => {})).toMatchObject({ created: 0, deferred: 1,
+      issues: [{ code: 'folder_existing_plate_requires_reconciliation' }] })
     const third = observation(), before = await counts()
     const results = await Promise.all([1, 2].map(() => registerAutomaticFolders(pool, policy, [third], async () => {})))
     expect(results.reduce((total, result) => total + result.created, 0)).toBe(1)
     expect((await counts()).cases).toBe(before.cases + 1)
+  })
+  it('binds a proven workspace cloud ID to its original case without creating a duplicate; retries serialize', async () => {
+    const legacy = await legacyBinding(false, true), binding = legacy.bindings[0]!, workspaceId = uuidv7()
+    await pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+      VALUES($1,$2,$3,'test-root',$4,'ready')`, [workspaceId, org, binding.caseId, binding.relativePath])
+    const folder = { ...observation(), workspaceId, sourceFolderId: binding.sourceFolderId, relativePath: binding.relativePath }
+    const before = await counts()
+    const results = await Promise.all([1, 2].map(() => registerAutomaticFolders(pool, automaticPolicy(), [folder], async () => {})))
+    expect(results.every(r => r.existing === 1 && r.created === 0)).toBe(true)
+    expect((await counts()).cases).toBe(before.cases)
+    expect((await pool.query('SELECT case_id FROM case_folder_registrations WHERE source_folder_id=$1', [folder.sourceFolderId])).rows[0].case_id).toBe(binding.caseId)
+    const snapshot = await counts()
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), [{ ...folder, sourceFolderId: '888888' }], async () => {})).toMatchObject({ deferred: 1, issues: [{ code: 'folder_identity_owner_conflict' }] })
+    expect(await counts()).toEqual(snapshot)
+  })
+
+  it('does not register an unmarked workspace observed before its location is committed', async () => {
+    const legacy = await legacyBinding(), binding = legacy.bindings[0]!, workspaceId = uuidv7()
+    await pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+      VALUES($1,$2,$3,'test-root',$4,'applying')`, [workspaceId, org, binding.caseId, binding.relativePath])
+    const folder = { ...observation(), sourceFolderId: binding.sourceFolderId, relativePath: binding.relativePath }, before = await counts()
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), [folder], async () => {})).toMatchObject({ deferred: 1, issues: [{ code: 'folder_workspace_reserved' }] })
+    expect(await registerAutomaticFolders(pool, automaticPolicy(), [{ ...folder, workspaceId }], async () => {})).toMatchObject({ deferred: 1, issues: [{ code: 'folder_workspace_pending' }] })
+    await expect(planFolderRegistration(pool, org, { ...manifest(), folders: [{ ...manifest().folders[0]!, relativePath: folder.relativePath }] })).rejects.toThrow('folder_workspace_reserved')
+    expect(await counts()).toEqual(before)
+  })
+
+  it('database guards reject normalized name collisions across locations and workspace reservations', async () => {
+    const first = await legacyBinding(false, true), second = await legacyBinding(), path = first.bindings[0]!.relativePath
+    await expect(pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+      VALUES($1,$2,$3,'test-root',$4,'planned')`, [uuidv7(), org, second.bindings[0]!.caseId, path.toLowerCase()])).rejects.toMatchObject({ constraint: 'folder_path_owner_unique' })
+  })
+  it('serializes a location insert racing an automatic workspace reservation for the same normalized name', async () => {
+    const first = await legacyBinding(), second = await legacyBinding(), path = first.bindings[0]!.relativePath
+    const results = await Promise.allSettled([
+      pool.query(`INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path,verification_status,source)
+        VALUES($1,$2,$3,'test-root',$4,'pending','system')`, [uuidv7(), org, first.bindings[0]!.caseId, path]),
+      pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+        VALUES($1,$2,$3,'test-root',$4,'planned')`, [uuidv7(), org, second.bindings[0]!.caseId, path.toLowerCase()]),
+    ])
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1)
+    expect(results.find(r => r.status === 'rejected')).toMatchObject({ reason: { constraint: 'folder_path_owner_unique' } })
   })
   it('defers changed sources and revoked assignments without partial writes', async () => {
     const folder = observation(), policy = automaticPolicy(), before = await counts()
@@ -109,6 +160,8 @@ describeDb('sidecarless physical folder registration', () => {
   it('validates the whole inventory before writes and honors cancellation', async () => {
     const folder = observation(), before = await counts()
     await expect(registerAutomaticFolders(pool, automaticPolicy(), [folder, folder], async () => {})).rejects.toThrow('automatic_folder_duplicate_inventory')
+    const workspaceId = uuidv7()
+    await expect(registerAutomaticFolders(pool, automaticPolicy(), [{ ...folder, workspaceId }, { ...observation(), workspaceId }], async () => {})).rejects.toThrow('automatic_folder_duplicate_inventory')
     await expect(registerAutomaticFolders(pool, automaticPolicy(), [folder, { ...observation(), relativePath: '../escape' }], async () => {})).rejects.toThrow()
     const controller = new AbortController(); controller.abort()
     expect(await registerAutomaticFolders(pool, automaticPolicy(), [folder], async () => {}, controller.signal)).toMatchObject({ created: 0 })
@@ -303,6 +356,46 @@ describeDb('sidecarless physical folder registration', () => {
       previousLocation: { id: location.id, storageRootKey: 'test-root', relativePath: location.relative_path, version: location.version },
     }] }
   }
+  async function trackedRelocation() {
+    const input = await relocation(), binding = input.bindings[0]!
+    await pool.query('DELETE FROM case_folder_registrations WHERE case_id=$1', [binding.caseId])
+    await pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+      VALUES($1,$2,$3,'test-root',$4,'ready')`, [uuidv7(), org, binding.caseId, binding.previousLocation.relativePath])
+    for (const [name, digest] of [['claim.pdf', 'a'], ['damage.jpg', 'b']]) await pool.query(`INSERT INTO tracked_files(id,organization_id,case_id,storage_root_key,relative_path,current_hash,revision)
+      VALUES($1,$2,$3,'test-root',$4,$5,1)`, [uuidv7(), org, binding.caseId, binding.previousLocation.relativePath + '/' + name, digest!.repeat(64)])
+    const identity = await readTrackedFolderIdentity(pool, org, binding.caseId, 'test-root', binding.previousLocation.relativePath)
+    binding.identity = { kind: 'tracked_files', manifestHash: identity.manifestHash }
+    return input
+  }
+  it('binds an unmarked moved workspace using the complete recorded file manifest and preserves history', async () => {
+    const input = await trackedRelocation(), binding = input.bindings[0]!
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [binding.caseId])
+    await createAuditService().record(pool, { ...actor(), action: 'case.office_inventory_reconciled', entityType: 'case', entityId: binding.caseId, details: { managedArchive: true } })
+    const before = (await pool.query('SELECT to_jsonb(c) data FROM cases c WHERE id=$1', [binding.caseId])).rows
+    const files = (await pool.query('SELECT to_jsonb(t) data FROM tracked_files t WHERE case_id=$1 ORDER BY id', [binding.caseId])).rows
+    const plan = await planSourceFolderRelocation(pool, org, input)
+    await expect(applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})).resolves.toMatchObject({ relocated: 1 })
+    expect((await pool.query('SELECT to_jsonb(c) data FROM cases c WHERE id=$1', [binding.caseId])).rows).toEqual(before)
+    expect((await pool.query('SELECT to_jsonb(t) data FROM tracked_files t WHERE case_id=$1 ORDER BY id', [binding.caseId])).rows).toEqual(files)
+    expect((await pool.query('SELECT source_folder_id FROM case_folder_registrations WHERE case_id=$1', [binding.caseId])).rows[0].source_folder_id).toBe(binding.sourceFolderId)
+  })
+  it.each(['changed_manifest', 'same_plate_duplicate', 'active_operation', 'manual_archive', 'partial_manifest'] as const)('rejects unproven legacy moves without writes: %s', async reason => {
+    const input = await trackedRelocation(), binding = input.bindings[0]!
+    const plan = await planSourceFolderRelocation(pool, org, input)
+    if (reason === 'changed_manifest') await pool.query("UPDATE tracked_files SET current_hash=$1 WHERE case_id=$2", ['c'.repeat(64), binding.caseId])
+    if (reason === 'partial_manifest') await pool.query('DELETE FROM tracked_files WHERE id=(SELECT id FROM tracked_files WHERE case_id=$1 LIMIT 1)', [binding.caseId])
+    if (reason === 'manual_archive') await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [binding.caseId])
+    if (reason === 'same_plate_duplicate') {
+      const peer = await relocation(), plate = (await pool.query('SELECT plate,plate_normalized FROM cases WHERE id=$1', [binding.caseId])).rows[0]
+      await pool.query('UPDATE cases SET plate=$1,plate_normalized=$2 WHERE id=$3', [plate.plate, plate.plate_normalized, peer.bindings[0]!.caseId])
+    }
+    if (reason === 'active_operation') await pool.query(`INSERT INTO field_photo_uploads(id,organization_id,case_id,uploaded_by_user_id,client_key,kind,original_file_name,byte_size,content_hash,storage_root_key,relative_path,location_version)
+      VALUES($1,$2,$3,$4,$5,'damage','damage.jpg',10,$6,'test-root',$7,1)`, [uuidv7(), org, binding.caseId, admin, uuidv7(), 'd'.repeat(64), binding.previousLocation.relativePath])
+    const before = await counts()
+    await expect(applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})).rejects.toThrow()
+    expect(await counts()).toEqual(before)
+    expect((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [binding.caseId])).rows[0].relative_path).toBe(binding.previousLocation.relativePath)
+  })
   it('relocates only inventory-managed archives while preserving explicit archive decisions', async () => {
     const input = await relocation(), caseId = input.bindings[0]!.caseId
     await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [caseId])

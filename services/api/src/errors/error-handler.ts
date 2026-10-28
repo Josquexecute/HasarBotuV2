@@ -14,6 +14,13 @@ import { CaseTypeRequiredError } from '../cases/classification.js'
  */
 export function errorHandler(error: FastifyError, request: FastifyRequest, reply: FastifyReply): void {
   const requestId = String(request.id)
+  const constraint = (error as { constraint?: string }).constraint
+  if (error.code === '23505' && ['folder_path_owner_unique', 'folder_identity_canonical_unique', 'folder_identity_path_owner'].includes(constraint ?? '')) {
+    void reply.code(409).send(failureEnvelopeSchema.parse({ ok: false,
+      error: { code: 'conflict', message: 'Klasör başka bir dosyaya ait veya bir işlem için ayrılmış. Konumu yeniden denetleyin.', requestId, fieldErrors: [] },
+    }))
+    return
+  }
   if (error instanceof CaseTypeRequiredError) {
     void reply.code(409).send(failureEnvelopeSchema.parse({
       ok: false,

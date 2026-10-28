@@ -108,7 +108,7 @@ describe('checkCaseFreshness (real spawn of pcloud-session0-freshness-gate.mjs)'
 
   it('real gate provisions an absent workspace and resumes a lost result without duplicating folders', async () => {
     await buildCaseFixture('existing', 9001, 111, 'unrelated content')
-    const payload = { kind: 'workspace' as const, storageRootKey: 'main', relativePath: 'new/year/case', requiredSubdirectories: ['EVRAK', 'HASAR', 'OLAY YERİ', 'ONARIM', 'DEĞER KAYBI'] as const }
+    const payload = { kind: 'workspace' as const, workspaceId: '01900000-0000-7000-8000-000000000003', storageRootKey: 'main', relativePath: 'new/year/case', requiredSubdirectories: ['EVRAK', 'HASAR', 'OLAY YERİ', 'ONARIM', 'DEĞER KAYBI'] as const }
     const config = { apiBaseUrl: '', agentId: 'test', agentSecret: 'test', roots: { main: targetRoot }, leaseSeconds: 30, pollIntervalMs: 1, freshnessGate: gateConfig() }
     const reports: unknown[] = []
     let loseResult = true
@@ -121,7 +121,10 @@ describe('checkCaseFreshness (real spawn of pcloud-session0-freshness-gate.mjs)'
     expect(await runOnce(client, config)).toMatchObject({ kind: 'reported', outcome: 'verified' })
     expect(reports).toEqual([{ outcome: 'verified' }, { outcome: 'verified' }])
     const { readdir } = await import('node:fs/promises')
-    expect((await readdir(join(targetRoot, payload.relativePath))).sort()).toEqual([...payload.requiredSubdirectories].sort())
+    expect((await readdir(join(targetRoot, payload.relativePath))).sort()).toEqual(['.hasarbotu-workspace.json', ...payload.requiredSubdirectories].sort())
+    expect((await checkCaseFreshness(gateConfig(), targetRoot, payload.relativePath, { operation: 'workspace', workspaceId: payload.workspaceId })).ready).toBe(true)
+    expect((await checkCaseFreshness(gateConfig(), targetRoot, payload.relativePath, { operation: 'workspace', workspaceId: '01900000-0000-7000-8000-000000000099' })).ready).toBe(false)
+    expect((await checkCaseFreshness(gateConfig(), targetRoot, payload.relativePath, { operation: 'workspace' })).ready).toBe(false)
     // Directory provisioning readiness must never confer content freshness.
     expect((await checkCaseFreshness(gateConfig(), targetRoot, payload.relativePath)).ready).toBe(false)
     await writeFile(join(targetRoot, payload.relativePath, 'unverified.pdf'), 'new content')

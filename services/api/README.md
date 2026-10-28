@@ -2,7 +2,15 @@
 
 HasarBotu V2 merkezi API'si: Fastify, PostgreSQL ve `@hasarbotu/contracts` tabanlı kimlikli ofis servisidir. İş kuralları `@hasarbotu/domain` içindedir; fiziksel dosya işleri File Agent üzerinden yürür.
 
+Klasör adı dosya kimliği değildir. Yeni çalışma klasöründe değişmez workspace UUID'si saklanır; pCloud kimliği bu UUID ve güncel konum doğrulanarak mevcut vakaya bağlanır. Sahipsiz mevcut dizin, başka kaydın kimliği, devam eden klasör rezervasyonu ve aynı plakalı ikinci belirsiz kaynak otomatik sahiplenilmez. `0074_folder_path_ownership` yeni konum/klasör oluşturma/taşıma rezervasyonlarında normalleştirilmiş adın tek sahipliğini ve klasör kaydının kiracı/kök bütünlüğünü zorlar; eski kayıtları düzeltmez. Operatör veri onarımı Windows servis README'sindeki ayrı bakım aracındadır.
+
+Eski, UUID işareti bulunmayan çalışma klasörü taşındığında tekil vaka, tamamlanmış workspace, eski konumun yokluğu ve kayıtlı dosya SHA-256'ları birlikte doğrulanır. Eksik tarihsel belge varsa eski konuma ait iki farklı pCloud dosya kimliği/revizyonunun mevcut attestation kayıtlarıyla kesintisiz devam ettiği ayrıca kanıtlanır; eksik belgelerin geçmişi silinmez. Aynı plakalı birden fazla vaka, içerik farkı, elle arşivleme ve devam eden işlemler otomatik eşlemeyi engeller.
+
 ## Kapsam
+
+Evrak izleme, tamamlanmış fiziksel taşıma zincirini listeleme, kontrol ve tarama uzlaştırmasında izler.
+Birden fazla taşıma yeni hash gözleminden önce gerçekleşse de aynı içerik özgün belge/inceleme kimliğini korur;
+belirsiz geçmiş eşleşmesi 409 ile durur. Elle konum atama tek başına belge erişimini yeniden eşlemez.
 
 - Gercek `GET /health` endpoint'i (contracts health sozlesmesiyle birebir).
 - Guvenli 404 ve merkezi hata zarflari (contracts failure envelope).

@@ -12,6 +12,7 @@ import { createAuditService } from '../audit/service.js'
 import { withTransaction } from '../db/executor.js'
 import { registerTrackingResponseCompression } from './response-compression.js'
 import { DEFAULT_NOTIFICATION_PREFERENCES, notificationPreferencesSchema } from '@hasarbotu/contracts'
+import { resolveFileLocations } from '../storage/file-location.js'
 
 export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg.Pool; googleEnabled: boolean; automaticSbmEnabled: boolean }) {
   const { pool } = options
@@ -45,9 +46,10 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
           AND ($2::uuid IS NOT NULL OR (t.assigned_user_id=$3 AND t.status IN ('entry_pending','result_pending')))
           ORDER BY t.created_at DESC`, [org,query.caseId ?? null,user,manage,canWriteTracking(session)]),
         pool.query(`SELECT o.id,f.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",o.file_name AS "fileName",f.relative_path AS "relativePath",o.status,o.document_type AS "documentType",o.observed_at AS "observedAt",
+          f.case_id,f.storage_root_key,f.relative_path,o.observed_at AS created_at,l.storage_root_key AS "caseStorageRootKey",
           l.relative_path AS "caseRelativePath",(c.responsible_user_id=$3 AND o.status='pending') AS "canReview"
           FROM document_observations o JOIN tracked_files f ON f.id=o.file_id AND f.revision=o.revision JOIN cases c ON c.id=f.case_id
-          JOIN case_locations l ON l.organization_id=f.organization_id AND l.case_id=f.case_id AND l.storage_root_key=f.storage_root_key AND left(f.relative_path,length(l.relative_path)+1)=l.relative_path||'/'
+          JOIN case_locations l ON l.organization_id=f.organization_id AND l.case_id=f.case_id
           WHERE f.organization_id=$1 AND NOT c.is_archived AND f.available AND ($2::uuid IS NULL OR f.case_id=$2)
           AND ($2::uuid IS NOT NULL OR (c.responsible_user_id=$3 AND o.status='pending')) ORDER BY o.observed_at DESC`, [org,query.caseId ?? null,user]),
         pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",n.title,n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
@@ -63,7 +65,9 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
         pool.query(`SELECT kind,CASE WHEN last_attempt_at < now()-interval '3 minutes' THEN 'stale' WHEN error_code IS NOT NULL AND error_code <> 'scan_in_progress' THEN 'error' ELSE 'running' END AS status,
           last_attempt_at AS "lastAttemptAt",last_success_at AS "lastSuccessAt" FROM tracking_health WHERE organization_id=$1 ORDER BY kind,source_id`, [org]),
       ])
-      return trackingSnapshotSchema.parse(JSON.parse(JSON.stringify({ tramer: tramer.rows, documents: documents.rows.map((r) => ({ ...r,documentType: r.documentType ?? inferTrackedDocumentType(r.relativePath.slice(r.caseRelativePath.length + 1)),canReview: r.canReview === true && canWriteTracking(session) })), notifications: notifications.rows, mailConnections: connections.rows, reviews: reviews.rows, users: users.rows, history: history.rows, services: services.rows, canManage: manage, googleEnabled: options.googleEnabled, automaticSbmEnabled: options.automaticSbmEnabled })))
+      const effectiveDocuments = (await resolveFileLocations(pool,org,documents.rows)).filter(r =>
+        r.storage_root_key === r.caseStorageRootKey && r.relative_path.startsWith(r.caseRelativePath + '/'))
+      return trackingSnapshotSchema.parse(JSON.parse(JSON.stringify({ tramer: tramer.rows, documents: effectiveDocuments.map((r) => ({ ...r,relativePath: r.relative_path,documentType: r.documentType ?? inferTrackedDocumentType(r.relative_path.slice(r.caseRelativePath.length + 1)),canReview: r.canReview === true && canWriteTracking(session) })), notifications: notifications.rows, mailConnections: connections.rows, reviews: reviews.rows, users: users.rows, history: history.rows, services: services.rows, canManage: manage, googleEnabled: options.googleEnabled, automaticSbmEnabled: options.automaticSbmEnabled })))
     })
     routes.post('/api/v1/tracking/cases/:caseId/tramer', async (request,reply) => {
       const session = await requireSession(auth,request,reply)

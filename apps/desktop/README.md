@@ -1,6 +1,20 @@
 # `@hasarbotu/desktop`
 
-28 Ekim 2026: **0.1.81 ofise yayımlandı**; [kalıcı sonuç raporu](./PENDING-UPDATES-20261028.md).
+28 Ekim 2026: **0.1.85 ofise yayımlandı**; Windows klasör adındaki harf büyüklüğü değişiminde yanlış arşivleme düzeltildi; kaynak/yayın karşılaştırması aşağıda kayıtlıdır.
+640 asıl kayıt olarak onaylanıp eşlendi; 650 arşivde, kimliği ve geçmişi korunuyor.
+723/725 ofis listesinden gizli; uzaktaki konum korunuyor, kimlik belirsizliği açık.
+
+28 Ekim 2026 12:45 Türkiye saati hedefli son kontrol: 247/247 test geçti, atlanan test yok.
+Üretimde salt okunur doğrulama 640/650 geçmişini ve 54/54 dosya hash'ini,
+723/725'in 263 iş/geçmiş satırını ve önceki 53/53 dosya hash'ini doğruladı.
+pCloud listesi ilk ölçümde 53, son ölçümde 55 dosya gösterdi; ek iki şasi fotoğrafı
+doğrudan okunup hash'lendi, son ölçümde liste farkı kalmadı. Önceki raporda kayıp
+dosyanın adı yanlıştı: `EVRAK/S POLİÇE.jpg` korunmuş, eski `EVRAK/16.jpeg` mevcut
+uzak klasörde yok; kurtarma doğrulanmadı. 723/725'in kanonik kimliği seçilmedi.
+Beş servis sağlıklı, yeni işlem hatası yok; üretim verisi değiştirilmedi.
+Yeni yazılım hatası saptanmadı; kod/paket değişikliği ve yeni yayın yapılmadı, **0.1.82** korunuyor.
+
+Önceki **0.1.81** yayınının [kalıcı sonuç raporu](./PENDING-UPDATES-20261028.md):
 271 hedefli test geçti. Kullanıcı talebiyle OCR/PDF uzun koşusu 7,77 saatte güvenle
 sonlandırıldı; sonuç/loglar korundu, 48 saatlik kararlılık kanıtı sayılmadı.
 Önceki paketler ve manifest korundu; ticari dağıtım yapılmadı.
@@ -210,7 +224,103 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.81**, 2026-10-28T00:48:56.221Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.85**, 2026-10-28T16:58:10.710Z; Windows x64,
+113.001.283 bayt, SHA-256 `e52e6e729fbb64fa9f1ac06be94223f6fcc78e441c8343f135ef7f855b2a217b`.
+Git/uzak dallar, reflog, stash ve iki çalışma alanı karşılaştırıldı: 47 commitlenmemiş dosyadaki
+0.1.82–0.1.84 düzeltmeleri zaten teslim edilmişti; ayrı API dalının dört dosyası kaynakla eşdeğer,
+stash veya ilave kayıp commit yok. Önceden dışlanan çalışmalar geri alınmadı. File Agent'ın eski
+assistant-appearance sözleşme kopyası da güncel paketle eşitlendi; kullanımda eksik bir özellik bulunmadı.
+Windows'ta aynı dizin olan `Ekim`/`EKIM`, Türkçe harf dönüşümü nedeniyle ayrı sayılıp kaydı yanlışlıkla
+arşivliyordu. Envanter ve taşıma karşılaştırması mevcut klasör sahipliği anahtarıyla uyumlu hale getirildi;
+ofis/kapalı yerleşim adlarının Türkçe yorumlanması korundu. Yeni test önce hatayı üretti, düzeltmeyle geçti.
+64 hedefli test geçti: 11 envanter, bir gerçek arka plan tarayıcı, 25 File Agent, iki belge takip,
+yedi kimlik/çakışma, sekiz gerçek Electron/Chromium ve 10 yayın testi. İsim filtresi dışındaki 53 test
+çalıştırılmadı; zorunlu test atlanmadı, önceki kapsamlı denetim tekrarlanmadı. Typecheck, lint, build,
+x64 NSIS, paket ve gerçek kurulumdan çıkarılan içerikle açılış smoke geçti; 75 UI ve 29 main/preload
+dosyası kaynakla eşleşti. Gerçek NSIS kurulum/yükseltme/kaldırma kabulü bu sürümde tekrarlanmadı.
+Sunucuda yedi dosya doğrulandı, altı değişen dosya yedeklenerek dağıtıldı; son kontrolde 660 çalışma
+dosyası kaynakla eşleşti. Migration, elle veri bakımı veya üretim belgesi taşıma/silme/eşleme yok.
+Beş servis sağlıklı, yeni işlem hatası sıfır. Kurulu **0.1.83**, güncellemeyi `available` gördü;
+kimlikli HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti. Önceki 0.1.84 manifesti ve değişmez
+kurulum korundu; zorla kurulum yapılmadı, tanılama görevi/inspector ve yerel test PostgreSQL kapatıldı.
+Kaynak kontrol noktası `release/office-0.1.85`; kanıtlar `.local/final-code-release-20261028/` altında.
+
+Önceki doğrulanan ofis yayını: **0.1.84**, 2026-10-28T13:59:24.390Z; Windows x64,
+113.001.229 bayt, SHA-256 `aadd2c543291d12b882abd6f7cdd86782fb906aa8e5a8f07b2206f0b336cac3d`.
+01AEM674'ün 47 eski yolu sınıflandırıldı: 42 dosyada pCloud kimliği, olay geçmişi ve eski revizyonun
+SHA-256'sı DB ile eşleşti; ad ve içerik revizyonları değişmiş. Beş eski dosya silinmiş; mevcut oturum
+sahipleri olmadığı için asıl hesabın çöp kutusu doğrulanamadı. Erişilebilir çöp kutusunda ve 41 ZIP'in
+40.911 girdisinde doğrulanmış kopya bulunmadı; kalıcı kayıp veya kurtarma iddia edilmez.
+Evrak takibi artık tamamlanmış fiziksel taşıma zincirini izler: hash öncesi yanlış kayıp işaretleme,
+iki taşımada ikinci belge kaydı ve aynı içerikte inceleme kimliğinin kaybı önlenir. Vaka-klasör bağları değişmedi.
+57/57 hedefli test, typecheck, lint, build, NSIS ve paket açılışı geçti; kapsamlı testler tekrarlanmadı.
+Gerçek DB yedeği ayrı ortamda geri yüklendi; gerçek dosya hash'leriyle dört vakada API okuma/senkronizasyon
+doğrulandı. Canlıda normal tarayıcı sonrası 01AEM674/21FP610 için 67/5, iki eski kayıtta 54/70 belge HTTP 200
+ile okundu; görünür yol çakışması yok. Ek üretim taraması, fiziksel taşıma/silme/birleştirme veya vaka eşleme yapılmadı.
+Kurulu **0.1.83** güncellemeyi `available` gördü; kimlikli indirmede tam boyut/SHA-256 eşleşti.
+Önceki manifest/paket korundu; beş servis sağlıklı, yeni işlem hatası yok. Zorla kurulum yapılmadı.
+Kanıtlar ve 47 satırlık sonuç `.local/document-path-083-20261028/` altında.
+
+Önceki doğrulanan ofis yayını: **0.1.83**, 2026-10-28T11:26:16.391Z; Windows x64,
+113.000.974 bayt, SHA-256 `e313473593f0cdb66ddaa389fc7c81a9b81aec2e38ba1513e785f64061af3d0d`.
+Uzaktan/ofis arasında taşınmış eski workspace'ler tekil vaka, kayıtlı içerik ve gerektiğinde
+değişmez pCloud dosya kimliği/revizyonu ile aynı kayda bağlanır; attestation SHA-256 yan kanıtı
+doğrulanır. Klasör bildirimleri taramayı tetikler, ikinci tutarlı gözlem 1 saniye sonra yapılır;
+sürekli eksik envanter normal tarama aralığına döner. Yeni istemcide açık liste/pano 5 saniyede yenilenir.
+3.466 benzersiz test geçti; altı dış canlı API ve Windows'ta desteklenmeyen bir WebKit testi atlandı.
+Typecheck, lint, build, gerçek NSIS Unicode hedefi ve x64 paket açılışı geçti; 75 UI dosyası/profil eşleşti.
+Gerçek DB yedeği ayrı test DB'sinde geri yüklendi. Beş sunucu dosyası doğrulandı; beş servis sağlıklı,
+yeni işlem hatası sıfır. 01AEM674 (2026/727) ve 21FP610 (2026/754) özgün UUID'leriyle görünür;
+72 mevcut dosyanın hash'i ve 117 eski dosya takip kaydı korundu, mükerrer vaka oluşmadı.
+01AEM674'ün önceki kaydındaki 47 dosya yolu mevcut klasörde bulunamadı; eski hash/geçmişleri korunuyor,
+belge kurtarma veya bu dosyaların başka ad/konumda bulunmadığı iddia edilmedi.
+Kurulu **0.1.82**, **0.1.83** sürümünü `available` gördü; aynı kimlikli istemcide iki plakanın araması
+özgün kayıtları döndürdü. HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti. Önceki 0.1.82 manifesti
+ve değişmez kurulumu korundu; zorla kurulum yapılmadı. Temiz VM yükseltmesi bu sürümde tekrarlanmadı.
+Kanıtlar `.local/remote-return-20261028/` altında; tanılama görevi ve inspector kapatıldı.
+
+Önceki doğrulanan ofis yayını: **0.1.82**, 2026-10-28T06:15:20.155Z; Windows x64,
+113.000.911 bayt, SHA-256 `dcaed5727d945006de3306b9976f52dc6af1782f67e3006b2c72d3499eef6b03`.
+Yeni klasörde değişmez workspace UUID'si, mevcut vakaya kanıtlı pCloud kimliği bağlama,
+sahipsiz mevcut dizini sahiplenmeme ve aynı plakalı belirsiz kaynağı incelemeye ayırma eklendi.
+Konum/oluşturma/taşıma rezervasyonları ortak normalleştirilmiş ad korumasıyla seri hale gelir;
+çakışma güvenli 409/erteleme döndürür. Geniş koşular ve son hedefli tekrarlar birlikte
+3.473 benzersiz PASS verdi; altı canlı API ve Windows'ta desteklenmeyen bir WebKit testi atlandı.
+Typecheck, lint, build, gerçek NSIS Unicode hedefi, paket açılışı ve 75 UI dosyası/profil eşleşmesi geçti.
+Gerçek PostgreSQL yedek/geri yükleme, bağımsız klasör kopyası/hash, tekrar uygulama ve geri alma sınandı;
+manuel klasörün gerçek tarayıcıyla aynı vakaya bağlanması ve yeniden adlandırılması doğrulandı.
+67 sunucu dosyası doğrulandı; değişen 50 dosya yedeklenerek dağıtıldı. `0074_folder_path_ownership`
+yalnız ileriye dönük şema korumasıdır; migration sırasında ilgili iş tablolarının içerik özetleri değişmedi.
+Beş servis sağlıklı, yeni işlem hatası sıfır. Kurulu **0.1.81**, **0.1.82** sürümünü `available` gördü;
+kimlikli HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti. Önceki 0.1.81 manifesti ve 0.1.81/0.1.80/0.1.79
+değişmez paketleri korundu; zorla kurulum yapılmadı, tanılama görevi/inspector kapatıldı.
+Temiz VM yükseltme/kaldırma kabulü bu sürüm için tekrarlanmadı. Kanıtlar `.local/folder-identity-20261028/` altında.
+
+**Veri onayı bekliyor:** 650–640 çiftinde SBM/föy/resmî numara ve 54 güncel dosya hash'i 640'ı;
+725–723 çiftinde resmî hasar PDF'i ve 49 güncel dosya hash'i 723'ü destekler. İkinci çiftin SBM görselinin
+OCR numaraları DB ile birebir örtüşmedi; özgün belge kontrolü olmadan iş kimliği eşitliği kesinleştirilmedi.
+Son salt okunur kontrolde dört eşleme, iki pCloud kimliği ve 103 dosyanın SHA-256'sı korundu.
+İki çift için aynı/ayrı hasar kararı, resmî kanıt referansları, yetkili kayıt/klasör ve taze plan özeti
+operatörce onaylanmalıdır. `deploy/windows-service/repair-folder-identity.mjs` bakım aracı hazırdır;
+üretimde apply/rollback çalıştırılmadı. Mevcut `identity-review.json` yürütülemez ve onaysızdır.
+
+28 Ekim 2026 ek veri bakımı: kullanıcı onayıyla 72AAB878 / 2026/781 mevcut pCloud
+kimliği `27325142235` ile bağlandı; otomatik tarayıcı Ekim konumunu doğrulayıp görünürlüğü
+geri getirdi. Gerçek DB yedek/geri yükleme, ayrı test DB'sinde sonraki konum takibi,
+70 fiziksel dosyanın değişmediği ve kurulu 0.1.82 istemcisinin kimlikli aramasında
+tek kayıt döndüğü doğrulandı. Kaynak kod/sürüm değişmedi; yeni paket yayını gerekmedi.
+Çakışma raporunun güncel salt okunur kontrolünde 34SH935 klasörü `2026 UZAKTAN` altında,
+53 dosyalı ve yeni föyde 2026/725 numaralı bulundu; önceki 723 önerisi kesin değildir.
+Kullanıcı 34SH935'in uzaktan dosyası olarak mevcut konumunda ve ofis listesi dışında
+kalacağını doğruladı; bu iki kayda müdahale edilmedi. Sonraki açık onayla **640 asıl kayıt**
+seçildi; pCloud `27180552212` bağı 650'den 640'a düzeltildi. İki iş kaydı ve tüm geçmiş,
+640'ın 4 notu, 650'nin 4 belge incelemesi ve 54 fiziksel dosya korundu; taşıma/silme yok.
+Gerçek DB geri yükleme, ayrı test DB'sinde uygulama/tekrar/geri alma ve otomatik tarayıcı
+kontrolü geçti. Kurulu 0.1.82'nin kimlikli aramalarında 640 ve 72AAB878 görünür;
+650 ve 34SH935 görünmüyor. Beş servis sağlıklı; kaynak kod/sürüm değişmedi.
+Yerel karşılaştırma: `.local/folder-identity-20261028/operator-comparison-report.md`.
+
+Önceki doğrulanan ofis yayını: **0.1.81**, 2026-10-28T00:48:56.221Z; Windows x64,
 113.001.074 bayt, SHA-256 `f6fbf1bf7e75d48513019686078b7dc7a595e46c2a9a1f482ecef1c55fc4e272`.
 0.1.80 sonrası bekleyen üç AI yanıt okuyucusu, PDF/OCR timeout/iptal kuyruğu,
 PDF/Tesseract temizliği ve iş başına süreç yönetimi düzeltmeleri dahil edildi.

@@ -73,6 +73,7 @@ export const workspaceJobPayloadSchema = z.strictObject({
   storageRootKey: storageRootKeySchema,
   relativePath: relativePathSchema,
   kind: z.literal('workspace'),
+  workspaceId: idSchema.optional(),
   requiredSubdirectories: z.tuple([
     z.literal('EVRAK'),
     z.literal('HASAR'),

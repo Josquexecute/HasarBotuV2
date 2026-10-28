@@ -8,7 +8,8 @@ export interface OfficeFolderObservation {
   relativePath: string
   sourceFolderId: string
 }
-const key = (path: string) => path.normalize('NFC').toLocaleUpperCase('tr')
+// Match the folder ownership guard; Turkish casing splits Windows paths such as Ekim/EKIM.
+const key = (path: string) => path.normalize('NFC').toUpperCase().normalize('NFC')
 
 /** Explicit office-only policy: reconcile observed placement, retain every business/child record. */
 export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: AutomaticFolderPolicy,
@@ -19,7 +20,7 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
   const identities = new Set<string>()
   for (const folder of folders) {
     relativePathSchema.parse(folder.relativePath)
-    if (!/^\d{4} OFİS\//u.test(key(folder.relativePath)) || !/^\d+$/u.test(folder.sourceFolderId)
+    if (!/^\d{4} OFİS\//u.test(folder.relativePath.normalize('NFC').toLocaleUpperCase('tr')) || !/^\d+$/u.test(folder.sourceFolderId)
       || !parseSourcePlateFolderName(folder.relativePath.split('/').at(-1)!)
       || byPath.has(key(folder.relativePath)) || identities.has(folder.sourceFolderId)) throw new Error('office_inventory_invalid')
     byPath.set(key(folder.relativePath), folder)
@@ -51,15 +52,21 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
       WHERE c.organization_id=$1 AND c.created_at<$3::timestamptz
         AND (l.storage_root_key=$2 OR l.id IS NULL) FOR UPDATE OF c`, [policy.organizationId, policy.storageRootKey, scanStartedAt])).rows
     const result = { archived: 0, restored: 0, statusUpdated: 0, inventoryDeferred: 0 }
+    const registeredOwners = new Map((await client.query(`SELECT source_folder_id,case_id FROM case_folder_registrations
+      WHERE organization_id=$1 AND storage_root_key=$2`, [policy.organizationId, policy.storageRootKey])).rows.map(r => [r.source_folder_id, r.case_id]))
     const audit = createAuditService()
     for (const row of rows) {
       // Only this reconciler's archives may be automatically restored.
       if (row.is_archived && !row.previous_inventory?.managedArchive) continue
       const observed = row.relative_path ? byPath.get(key(row.relative_path)) : undefined
+      if (observed && registeredOwners.has(observed.sourceFolderId) && registeredOwners.get(observed.sourceFolderId) !== row.id) {
+        result.inventoryDeferred++
+        continue
+      }
       const present = observed && (!row.source_folder_id || row.source_folder_id === observed.sourceFolderId)
         && plateSearchKey(parseSourcePlateFolderName(observed.relativePath.split('/').at(-1)!)!.plate) === row.plate_normalized
       const archived = !present
-      const closed = present && observed.relativePath.split('/').slice(0, -1).some(p => key(p).startsWith('KAPALI'))
+      const closed = present && observed.relativePath.split('/').slice(0, -1).some(p => p.toLocaleUpperCase('tr').startsWith('KAPALI'))
       const status = present ? (closed ? 'closed' : 'open') : row.lifecycle_status
       const changedStatus = status !== row.lifecycle_status
       if (archived === row.is_archived && !changedStatus) continue

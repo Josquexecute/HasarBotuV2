@@ -4,9 +4,11 @@ import { mkdtemp, mkdir, cp, symlink, readFile, rename, rmdir } from 'node:fs/pr
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { createHash } from 'node:crypto'
 import pg from 'pg'
 import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/database'
 import { startAutomaticFolderDiscovery } from './automatic-folder-discovery.mjs'
+import { attestationFileNameFor, writeAttestationRecord } from './pcloud-source-attestation.mjs'
 import { writeFile } from 'node:fs/promises'
 
 test('real background scans discover folders, follow stable identity moves and reconcile the office-only inventory', { skip: !process.env.TEST_DATABASE_URL, timeout: 180_000 }, async () => {
@@ -46,7 +48,7 @@ test('real background scans discover folders, follow stable identity moves and r
   `)
   await mkdir(join(source, '2026/EKİM 2026'), { recursive: true })
   const sqlitePath = join(directory, 'pcloud-test.db'), sqlite = new DatabaseSync(sqlitePath)
-  sqlite.exec("CREATE TABLE folder(id INTEGER PRIMARY KEY,parentfolderid INTEGER,name TEXT); INSERT INTO folder VALUES(100,0,'SyntheticCompany'),(101,100,'2026'),(102,101,'EKİM 2026')")
+  sqlite.exec("CREATE TABLE folder(id INTEGER PRIMARY KEY,parentfolderid INTEGER,name TEXT); CREATE TABLE file(id INTEGER PRIMARY KEY,parentfolderid INTEGER,name TEXT,hash INTEGER); INSERT INTO folder VALUES(100,0,'SyntheticCompany'),(101,100,'2026'),(102,101,'EKİM 2026')")
   const org = uuidv7(), admin = uuidv7(), owner = uuidv7(), expert = uuidv7()
   await pool.query("INSERT INTO organizations(id,code,name) VALUES($1,'auto-folder-test','Synthetic')", [org])
   for (const [id, role] of [[admin, 'admin'], [owner, 'case_manager'], [expert, 'expert']]) {
@@ -64,6 +66,7 @@ test('real background scans discover folders, follow stable identity moves and r
   const abort = new AbortController()
   const deadline = setTimeout(() => abort.abort(), 45_000)
   let first = true, setup, created = false
+  const discoveryStarted = Date.now()
   try {
     await startAutomaticFolderDiscovery(configFile, { signal: abort.signal, onStatus: text => {
       const status = JSON.parse(text)
@@ -75,6 +78,7 @@ test('real background scans discover folders, follow stable identity moves and r
     } })
     await setup
     assert.equal(created, true)
+    assert.ok(Date.now() - discoveryStarted < 10_000, 'Folder events and the confirming scan must not wait for two polling intervals')
     const status = JSON.parse(await readFile(statusFile, 'utf8'))
     assert.equal(status.status, 'PASS'); assert.equal(status.created, 1)
     const rows = (await pool.query('SELECT c.*,r.source_folder_id,l.relative_path FROM cases c JOIN case_folder_registrations r ON r.case_id=c.id JOIN case_locations l ON l.case_id=c.id')).rows
@@ -139,7 +143,7 @@ test('real background scans discover folders, follow stable identity moves and r
     await writeFile(configFile, JSON.stringify(officeConfig))
     await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,plate,plate_normalized,workflow_stage)
       VALUES($1,$2,2026,900,'2026/900','34 AUT 123','34AUT123','reporting')`, [uuidv7(), org])
-    async function officeCycle() {
+    async function officeCycle(expectedStatus = 'PASS') {
       const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 25_000)
       try {
         await startAutomaticFolderDiscovery(configFile, { signal: stop.signal, onStatus: text => {
@@ -147,7 +151,7 @@ test('real background scans discover folders, follow stable identity moves and r
         } })
       } finally { clearTimeout(timer); stop.abort() }
       const status = JSON.parse(await readFile(statusFile, 'utf8'))
-      assert.equal(status.status, 'PASS')
+      assert.equal(status.status, expectedStatus)
       assert.notEqual(status.archived, undefined, 'Two consistent live inventories must be reconciled')
       return status
     }
@@ -158,6 +162,19 @@ test('real background scans discover folders, follow stable identity moves and r
       [{ plate_normalized: '06NEW123', lifecycle_status: 'open' }, { plate_normalized: '34AUT123', lifecycle_status: 'closed' }])
     assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [rows[0].id])).rows[0].relative_path,
       '2026 OFİS/EKİM 2026/KAPALI DOSYALAR/34AUT123')
+    // Windows preserves this directory's identity after an ASCII case-only rename.
+    await rename(join(source, '2026 OFİS/EKİM 2026'), join(source, '2026 OFİS/Ekim 2026'))
+    await pool.query("UPDATE case_locations SET relative_path=replace(relative_path,'EKİM 2026','Ekim 2026') WHERE case_id=$1", [rows[0].id])
+    await rename(join(source, '2026 OFİS/Ekim 2026'), join(source, '2026 OFİS/EKIM 2026'))
+    sqlite.prepare('UPDATE folder SET name=? WHERE id=111').run('EKIM 2026')
+    const caseOnly = await officeCycle()
+    assert.equal(caseOnly.archived, 0)
+    assert.equal(caseOnly.relocationDeferred, 0)
+    assert.equal(caseOnly.relocated, 0)
+    assert.equal((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [rows[0].id])).rows[0].is_archived, false)
+    await rename(join(source, '2026 OFİS/EKIM 2026'), join(source, '2026 OFİS/EKİM 2026'))
+    sqlite.prepare('UPDATE folder SET name=? WHERE id=111').run('EKİM 2026')
+    await pool.query("UPDATE case_locations SET relative_path=replace(relative_path,'Ekim 2026','EKİM 2026') WHERE case_id=$1", [rows[0].id])
     await rmdir(join(source, '2026 OFİS/EKİM 2026/KAPALI DOSYALAR/34AUT123'))
     sqlite.exec('DELETE FROM folder WHERE id=103')
     assert.equal((await officeCycle()).archived, 1)
@@ -201,6 +218,96 @@ test('real background scans discover folders, follow stable identity moves and r
     assert.notEqual(changedRecoveredAt, undefined, 'The same background discovery loop must resume after a source change')
     assert.ok(changedRecoveredAt - changedBlockedAt >= 14_000, 'Recovery must retain the configured polling interval')
     assert.deepEqual((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c ORDER BY id')).rows, beforeUnstableSnapshot)
+    // A manually provisioned folder becomes visible in pCloud after creation.
+    // The actual scanner must read its marker and bind the original case, without forking a second case.
+    const manualCaseId = uuidv7(), workspaceId = uuidv7(), manualPath = '2026 OFİS/_EKSİK DOSYALAR/34OWN123'
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,plate,plate_normalized,workflow_stage)
+      VALUES($1,$2,2026,9000,'2026/9000','34 OWN 123','34OWN123','new_notification')`, [manualCaseId, org])
+    await pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+      VALUES($1,$2,$3,'test-root',$4,'ready')`, [workspaceId, org, manualCaseId, manualPath])
+    await pool.query(`INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path,verification_status,source)
+      VALUES($1,$2,$3,'test-root',$4,'verified','system')`, [uuidv7(), org, manualCaseId, manualPath])
+    await mkdir(join(source, manualPath))
+    await writeFile(join(source, manualPath, '.hasarbotu-workspace.json'), JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId }))
+    sqlite.exec("INSERT INTO folder VALUES(200,116,'34OWN123')")
+    const caseCount = (await pool.query('SELECT count(*)::int n FROM cases')).rows[0].n
+    assert.equal((await officeCycle()).created, 0)
+    assert.equal((await pool.query("SELECT case_id FROM case_folder_registrations WHERE source_folder_id='200'")).rows[0].case_id, manualCaseId)
+    assert.equal((await pool.query('SELECT count(*)::int n FROM cases')).rows[0].n, caseCount)
+    const renamedManualPath = manualPath + ' - 2'
+    await rename(join(source, manualPath), join(source, renamedManualPath))
+    sqlite.exec("UPDATE folder SET name='34OWN123 - 2' WHERE id=200")
+    assert.equal((await officeCycle()).relocated, 1)
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [manualCaseId])).rows[0].relative_path, renamedManualPath)
+    assert.equal((await pool.query('SELECT count(*)::int n FROM cases')).rows[0].n, caseCount)
+    // Legacy workspaces had no UUID marker or cloud registration before being moved.
+    // Restore the original case only after every recorded file agrees at the new location.
+    async function legacyWorkspace(sequence, plate, cloudId, mismatch = false, attested = false) {
+      const caseId = uuidv7(), previousPath = `2026 OFİS/_EKSİK DOSYALAR/${plate}`, currentPath = `2026 OFİS/EKİM 2026/${plate}`
+      await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,plate,plate_normalized,workflow_stage,is_archived)
+        VALUES($1,$2,2026,$3,$4,$5,$5,'reporting',true)`, [caseId, org, sequence, `2026/${sequence}`, plate])
+      await pool.query(`INSERT INTO case_workspace_provisionings(id,organization_id,case_id,storage_root_key,relative_path,status)
+        VALUES($1,$2,$3,'test-root',$4,'ready')`, [uuidv7(), org, caseId, previousPath])
+      await pool.query(`INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path,verification_status,source)
+        VALUES($1,$2,$3,'test-root',$4,'verified','system')`, [uuidv7(), org, caseId, previousPath])
+      const { createAuditService } = await import('../../services/api/dist/audit/service.js')
+      await createAuditService().record(pool, { organizationId: org, actorUserId: admin, requestId: 'legacy-test',
+        action: 'case.office_inventory_reconciled', entityType: 'case', entityId: caseId, details: { managedArchive: true } })
+      await mkdir(join(source, currentPath, 'EVRAK'), { recursive: true })
+      const attestations = join(directory, 'attestations')
+      if (attested) {
+        await mkdir(attestations, { recursive: true })
+        const config = JSON.parse(await readFile(configFile, 'utf8'))
+        await writeFile(configFile, JSON.stringify({ ...config, attestationStoreDirectory: attestations }))
+        sqlite.prepare('INSERT INTO folder VALUES(?,?,?)').run(cloudId + 1000, cloudId, 'EVRAK')
+      }
+      let fileId = cloudId * 10
+      for (const name of ['claim.txt', 'damage.txt']) {
+        const bytes = `${plate}: retained ${name}`, hash = createHash('sha256').update(bytes).digest('hex')
+        await writeFile(join(source, currentPath, 'EVRAK', name), mismatch && name === 'damage.txt' ? 'different claim' : bytes)
+        await pool.query(`INSERT INTO tracked_files(id,organization_id,case_id,storage_root_key,relative_path,current_hash,revision)
+          VALUES($1,$2,$3,'test-root',$4,$5,1)`, [uuidv7(), org, caseId, previousPath + '/EVRAK/' + name, hash])
+        if (attested) {
+          fileId++
+          sqlite.prepare('INSERT INTO file VALUES(?,?,?,7)').run(fileId, cloudId + 1000, name)
+          await writeAttestationRecord(attestations, {
+            SchemaVersion: 'hasarbotu-pcloud-source-attestation-record/1.0.0', FileId: String(fileId), PCloudHash: '7',
+            RelativePath: previousPath + '/EVRAK/' + name, Sha256: hash,
+          })
+        }
+      }
+      if (attested) await pool.query(`INSERT INTO tracked_files(id,organization_id,case_id,storage_root_key,relative_path,current_hash,revision)
+        VALUES($1,$2,$3,'test-root',$4,$5,1)`, [uuidv7(), org, caseId, previousPath + '/EVRAK/missing-old.txt', 'a'.repeat(64)])
+      sqlite.prepare('INSERT INTO folder VALUES(?,111,?)').run(cloudId, plate)
+      return { caseId, previousPath, currentPath }
+    }
+    const legacy = await legacyWorkspace(9001, '06LEG123', 201)
+    const legacyCount = (await pool.query('SELECT count(*)::int n FROM cases')).rows[0].n
+    const legacyStatus = await officeCycle()
+    assert.equal(legacyStatus.relocated, 1); assert.equal(legacyStatus.restored, 1)
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [legacy.caseId])).rows[0].relative_path, legacy.currentPath)
+    assert.equal((await pool.query('SELECT source_folder_id FROM case_folder_registrations WHERE case_id=$1', [legacy.caseId])).rows[0].source_folder_id, '201')
+    assert.equal((await pool.query('SELECT count(*)::int n FROM cases')).rows[0].n, legacyCount)
+    const attested = await legacyWorkspace(9003, '06ATT123', 203, false, true)
+    const attestedStatus = await officeCycle()
+    assert.equal(attestedStatus.relocated, 1); assert.equal(attestedStatus.restored, 1)
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [attested.caseId])).rows[0].relative_path, attested.currentPath)
+    assert.equal((await pool.query('SELECT count(*)::int n FROM tracked_files WHERE case_id=$1', [attested.caseId])).rows[0].n, 3, 'Missing historical file evidence must be retained')
+    const copied = await legacyWorkspace(9004, '06CPY123', 204, false, true)
+    sqlite.exec('UPDATE file SET id=id+100000 WHERE id=2041')
+    await officeCycle('ATTENTION')
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [copied.caseId])).rows[0].relative_path, copied.previousPath)
+    assert.equal((await pool.query('SELECT 1 FROM case_folder_registrations WHERE case_id=$1', [copied.caseId])).rowCount, 0, 'Copied file contents must not inherit an old pCloud file identity')
+    const tampered = await legacyWorkspace(9005, '06SIG123', 205, false, true)
+    await writeFile(join(directory, 'attestations', attestationFileNameFor('2051', '7') + '.sha256'), '0'.repeat(64))
+    const tamperedStatus = await officeCycle('ATTENTION')
+    assert.ok(tamperedStatus.relocationIssues.some(i => i.sourceFolderId === '205' && i.code === 'folder_relocation_content_changed'))
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [tampered.caseId])).rows[0].relative_path, tampered.previousPath)
+    const mismatch = await legacyWorkspace(9002, '06BAD123', 202, true)
+    const failedStatus = await officeCycle('ATTENTION')
+    assert.ok(failedStatus.relocationIssues.some(i => i.sourceFolderId === '202' && i.code === 'folder_relocation_content_changed'))
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [mismatch.caseId])).rows[0].relative_path, mismatch.previousPath)
+    assert.equal((await pool.query('SELECT 1 FROM case_folder_registrations WHERE case_id=$1', [mismatch.caseId])).rowCount, 0)
   } finally {
     clearTimeout(deadline); abort.abort(); sqlite.close(); await pool.end()
     if (originalUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalUrl

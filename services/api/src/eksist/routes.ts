@@ -115,7 +115,7 @@ export function registerEksistRoutes(app: FastifyInstance, { pool }: { pool: pg.
           if (plan.kind !== 'ok') throw new ReferenceCheckError(plan.kind === 'notification_date_required' ? 'case.notificationDate' : 'storageRootKey', plan.kind)
           const approved = await workspace.approvePlan(actor, createdId, plan.provisioning.id, { key: uuidv7(), requestHash }, client)
           if (approved.kind !== 'ok') throw new Error('workspace_queue_failed')
-        })
+        }, input.storageRootKey)
         if (item) caseId = item.id
         else {
           const raced = await cases.findIdempotent(organizationId, SCOPE, key.data)
