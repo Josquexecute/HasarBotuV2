@@ -1,5 +1,48 @@
 # `@hasarbotu/desktop`
 
+29 Ekim 2026: **0.1.88 ofise yayımlandı** (2026-10-29T06:39:18.736Z).
+İşlem kayıtlarında teknik kodlar yerine Türkçe açıklamalar, tarih/kullanıcı/dosya/
+sonuç sütunları, güvenli eski → yeni değerler, arama/filtre/sıralama ve sayfa içi
+görüntüleme grupları sunulur. Örneğin `case.updated` → “Dosya bilgileri güncellendi”,
+`request.rejected` → “İşlem isteği reddedildi”; bulunamayan belge silinmiş sayılmaz.
+Üretimdeki 97 farklı kod ve 290.275 mevcut olay karşılandı. Geçmiş değerler
+uydurulmadı; dosya/kullanıcı düzenlemeleri ve tamamlanan klasör taşımaları için
+güvenli alanlar transaction içinde kaydedilir. Ham görünüm yöneticiye açıktır.
+Eski istemci yanıtı korunur; yeni ad/plaka alanları `presentation=readable` ister.
+471 benzersiz hedefli test geçti; önce atlanan native NSIS testi sonraki 4/4
+koşuda tamamlandı. İlk paralel UI koşusundaki kullanıcı-adı testi hatası, koşul
+gevşetilmeden son sıralı 40/40 koşuda geçti. Typecheck, lint ve build geçti.
+Gerçek NSIS'ten çıkarılan x64 pakette %100/%125/%150 DPI, açık/koyu tema,
+üç pencere boyutu ve işlevlerde **54 Electron kontrolü** geçti; ekran görüntüsü yok.
+100.018 sentetik olayda sekizer ölçümün medyanı: yeni liste 6,1 ms (önceki sorgu
+4,7 ms), Türkçe arama 35,7 ms, sonuç filtresi 143,7 ms, 1.000. sayfa 11,6 ms.
+Sayfa 50 olayla sınırlı; gruplama/ayrıntı ve beş saniye boşta bekleme ek sorgu
+üretmedi. On aç/kapat döngüsü ardından beş bir-saniyelik örnekte ana süreç
+CPU ortalaması %0,008–0,011, çalışma kümesi 144–146 MiB; renderer JS belleği
+18–20 MiB. Bunlar kısa ölçümlerdir; uzun süreli dayanıklılık iddiası değildir.
+Sunucuda 42 dosya doğrulandı, değişen 36 dosya yedeklenerek uygulandı; migration
+yok, durdurulmuş servis aralığında audit dahil kayıt sayıları korundu. Son kontrol
+290.275 → 290.275 olay, sıfır yeni işlem hatası ve beş sağlıklı servis gösterdi.
+Paket **113.018.010 bayt**, SHA-256
+`46160368882a217c08d57a88aa36becfb4d8563523a6188c4c246fc804295d06`.
+Gerçek kurulu **0.1.87** sürümü `available` gördü; kimlikli manifest/indirme
+HTTP 200, 22,3 saniyede tam boyut ve SHA-256 eşleşti. Önceki 0.1.87 manifesti
+ve değişmez paketi korundu; çalışan istemcilere kurulum zorlanmadı. Kaynak/test/
+paket/teslimat kanıtları `.local/audit-professional-088/` altında.
+
+29 Ekim 2026, geliştirme bilgisayarı güncelleme incelemesi: 0.1.86 ve 0.1.87
+kurulum sonuçları çıkış 0/yeniden başlatma başarılı; kurulu dosya ve açılış kaydı
+0.1.87. Önbellekteki 113.003.577 baytlık paket yayımlanan SHA-256 ile eşleşti.
+Gerçek kurulu Electron oturumunda manifest/paket HTTP 200, tam boyut/SHA-256
+eşleşmesi ve sağlıklı renderer doğrulandı (indirme 22,6 sn). Yeniden kurulum veya
+profil temizliği yapılmadı. Eski takılmanın aşama logu bulunmadığından kesin geçmiş
+kök neden kanıtlanamadı; VPN/proxy neden olarak ilan edilmedi. Kurulum sonrası
+görev temizliğindeki erişim reddi kurulum sonucundan ayrıdır. Yeni kodda 30 sn veri
+gelmeme sınırı, ayrı doğrulama/hazırlama durumları, yeniden deneme ve kimlik bilgisi
+içermeyen `userData/update-status.json` tanı kaydı eklendi. Gerçek Electron'da
+kesilen transfer → kısmi dosya temizliği → başarılı yeniden deneme regresyonu geçti.
+Bu inceleme için ayrı sürüm yayımlanmadı; değişiklik sonraki doğrulanmış pakete dahildir.
+
 29 Ekim 2026: **0.1.87 ofise yayımlandı.** Durum panosu açıklamaları/okunabilirliği,
 dosya tablosunun adlandırılmış sütunları ve uyarı/sorumlu ayrımı, mevzuat/AI yerleşimi,
 kompakt açılabilir bildirimler ve Touch'ın dört sekmeli paneli yenilendi. İşlemler,

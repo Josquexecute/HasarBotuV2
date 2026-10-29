@@ -20,6 +20,11 @@ describe('desktop update controls', () => {
     act(() => listener?.({ ...available, phase: 'downloading', downloadedBytes: 50 }))
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '50')
     expect(screen.getByText('Güncellemeleri kontrol et')).toBeDisabled()
+    act(() => listener?.({ ...available, phase: 'verifying' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Kurulum paketinin sürümü doğrulanıyor')
+    expect(screen.getByText('Güncellemeleri kontrol et')).toBeDisabled()
+    act(() => listener?.({ ...available, phase: 'preparing' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Windows güncelleme görevi hazırlanıyor')
     view.unmount(); expect(unsubscribe).toHaveBeenCalledOnce()
   })
   it('shows server failures without presenting an install action', async () => {
@@ -27,5 +32,6 @@ describe('desktop update controls', () => {
     fireEvent.click(screen.getByText('Güncellemeleri kontrol et'))
     expect(await screen.findByText('Sunucuya ulaşılamadı.')).toBeInTheDocument()
     expect(screen.queryByText('Güncelle ve yeniden başlat')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Yeniden dene' })).toBeEnabled()
   })
 })

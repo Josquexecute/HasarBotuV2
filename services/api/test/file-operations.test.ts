@@ -338,6 +338,10 @@ describeDb('case file operations (gerçek PostgreSQL + sentetik geçici filesyst
     if (applied.kind === 'reported') expect(applied.reported.status).toBe('succeeded')
     const ready = fileOperationResponseSchema.parse((await readOperation(caseId, planned.id)).json()).operation
     expect(ready).toMatchObject({ status: 'ready', strategy: 'atomic_rename', cleanupState: 'not_required' })
+    const completedAudit = (await pool.query("SELECT actor_user_id,occurred_at,details FROM audit_events WHERE resource_id=$1 AND action='file_operation.finalized'", [planned.id])).rows[0]
+    expect(completedAudit.actor_user_id).not.toBeNull()
+    expect(completedAudit.occurred_at).toBeInstanceOf(Date)
+    expect(completedAudit.details).toMatchObject({ before: { folderPath: source, storageRootKey: 'source-root' }, after: { folderPath: destination, storageRootKey: 'source-root' } })
     await expect(access(join(sourceRoot, ...source.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
     expect(await readFile(join(sourceRoot, ...destination.split('/'), 'EVRAK', 'belge.txt'), 'utf8')).toBe('atomik-icerik')
     const location = await pool.query('SELECT storage_root_key,relative_path,verification_status,version FROM case_locations WHERE case_id=$1', [caseId])
@@ -393,6 +397,8 @@ describeDb('case file operations (gerçek PostgreSQL + sentetik geçici filesyst
     expect(cleaned.kind).toBe('reported')
     const ready = fileOperationResponseSchema.parse((await readOperation(caseId, operation.id)).json()).operation
     expect(ready).toMatchObject({ status: 'ready', cleanupState: 'completed' })
+    const completedAudit = (await pool.query("SELECT details FROM audit_events WHERE resource_id=$1 AND action='file_operation.finalized'", [operation.id])).rows[0]
+    expect(completedAudit.details).toMatchObject({ before: { folderPath: source, storageRootKey: 'source-root' }, after: { folderPath: destination, storageRootKey: 'archive-root' } })
     await expect(access(join(sourceRoot, ...source.split('/')))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(access(join(archiveRoot, ...destination.split('/')))).resolves.toBeUndefined()
   })

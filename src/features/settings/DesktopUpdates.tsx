@@ -13,7 +13,7 @@ export function DesktopUpdates({ suppliedSurface }: { suppliedSurface?: DesktopU
     try { setState(await surface[action]()) }
     catch { setError('Güncelleme işlemi başlatılamadı. Uygulamayı yeniden açıp deneyin.') }
   }
-  const busy = state && ['checking', 'downloading', 'installing'].includes(state.phase)
+  const busy = state && ['checking', 'downloading', 'verifying', 'preparing', 'installing'].includes(state.phase)
   const phase = state?.phase ?? 'idle'
   const messages = {
     idle: 'Yeni sürüm olup olmadığını kontrol edin.',
@@ -21,6 +21,8 @@ export function DesktopUpdates({ suppliedSurface }: { suppliedSurface?: DesktopU
     current: 'Bu bilgisayarda güncel sürüm kurulu.',
     available: `${state?.release?.version ?? ''} sürümü hazır.`,
     downloading: 'Güncelleme indiriliyor ve doğrulanıyor…',
+    verifying: 'İndirme tamamlandı. Kurulum paketinin sürümü doğrulanıyor…',
+    preparing: 'Windows güncelleme görevi hazırlanıyor…',
     installing: 'Güncelleme kuruluyor. Uygulama yeniden açılacak.',
     disabled: state?.supported ? 'Henüz paylaşılan bir güncelleme yok.' : 'Güncelleme kurulu Windows uygulamasında kullanılabilir.',
     error: state?.message ?? 'Güncelleme kontrol edilemedi.',
@@ -32,7 +34,7 @@ export function DesktopUpdates({ suppliedSurface }: { suppliedSurface?: DesktopU
     {phase === 'downloading' && state?.release && <progress aria-label="Güncelleme indirme" value={state.downloadedBytes} max={state.release.size} />}
     {error && <p role="alert">{error}</p>}
     </div>
-    <div className="tracking-actions"><button type="button" className="button button--secondary" disabled={!!busy} onClick={() => { void run('check') }}>Güncellemeleri kontrol et</button>
+    <div className="tracking-actions"><button type="button" className="button button--secondary" disabled={!!busy} onClick={() => { void run('check') }}>{phase === 'error' ? 'Yeniden dene' : 'Güncellemeleri kontrol et'}</button>
     {phase === 'available' && <button type="button" className="button button--primary" onClick={() => { void run('install') }}>Güncelle ve yeniden başlat</button>}</div>
     {phase === 'available' && <p className="form-hint">Kurulumdan sonra uygulama yeniden açılır. Hesabınız ve ayarlarınız korunur.</p>}
   </section>

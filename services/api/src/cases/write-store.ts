@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { summarizeChange } from '../audit/redact.js'
 import type pg from 'pg'
 import type { CaseCreateRequest, CaseUpdateRequest, CaseListItem } from '@hasarbotu/contracts'
 import { parsePlateNumber, plateSearchKey, matchEksistReference, eksistKey } from '@hasarbotu/domain'
@@ -269,19 +270,11 @@ export function createCasesWriteStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const current = await client.query(
-          `SELECT version, follow_up_date, loss_date, notification_date, lifecycle_status, case_type, service_center_id
+          `SELECT ${SELECT_FIELDS}
            FROM cases WHERE id::text = $1 AND organization_id = $2 AND is_archived = false FOR UPDATE`,
           [caseId, actor.organizationId],
         )
-        const existing = current.rows[0] as {
-          version: number
-          follow_up_date: Date | null
-          loss_date: Date | null
-          notification_date: Date | null
-          lifecycle_status: 'open' | 'closed'
-          case_type: 'traffic' | 'casco' | null
-          service_center_id: string | null
-        } | undefined
+        const existing = current.rows[0] as CaseRow | undefined
         if (existing === undefined) {
           await client.query('ROLLBACK')
           return { kind: 'not_found' }
@@ -398,6 +391,20 @@ export function createCasesWriteStore(pool: pg.Pool) {
           entityId: item.id,
           details: {
             changedFields,
+            ...(() => {
+              // Only operational metadata is retained; contact details, notes and document content stay out of audit.
+              const safeFields = ['caseType', 'workflowStage', 'followUpDate', 'responsibleUserId', 'expertUserId', 'serviceId', 'insurerId', 'lossDate', 'notificationDate', 'transmission']
+              const before: Record<string, unknown> = {}, after: Record<string, unknown> = {}
+              for (const field of safeFields) {
+                const column = columnByField[field] as keyof CaseRow | undefined
+                if (!column || !changedFields.includes(field)) continue
+                const oldValue = existing[column], newValue = updatedRow[column]
+                before[field] = oldValue instanceof Date ? toLocalDateString(oldValue) : oldValue
+                after[field] = newValue instanceof Date ? toLocalDateString(newValue) : newValue
+              }
+              const summary = summarizeChange(before, after)
+              return { before: summary.before, after: summary.after }
+            })(),
             ...(input.caseType === undefined ? {} : { previousCaseType: existing.case_type, caseType: input.caseType, assignmentKind: existing.case_type === null ? 'user_classification' : 'user_correction' }),
             fromVersion: input.expectedVersion,
             toVersion: item.version,

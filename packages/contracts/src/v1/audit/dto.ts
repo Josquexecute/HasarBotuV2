@@ -19,6 +19,9 @@ export const auditEventSchema = z.strictObject({
   requestId: z.string().min(1).max(256).nullable(),
   occurredAt: utcDateTimeSchema,
   details: z.record(z.string(), z.unknown()),
+  actorName: z.string().nullable().optional(),
+  targetLabel: z.string().nullable().optional(),
+  caseId: idSchema.nullable().optional(),
 })
 export type AuditEvent = z.infer<typeof auditEventSchema>
 

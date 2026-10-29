@@ -148,6 +148,10 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect(updated.statusCode).toBe(200)
     expect(caseDetailResponseSchema.parse(updated.json()).case).toMatchObject({ version: 2, lossDate: '2026-07-12', notificationDate: '2026-07-13' })
     const audits = await pool.query("SELECT action,details FROM audit_events WHERE resource_id=$1 ORDER BY occurred_at", [createdCase.id])
+    expect(audits.rows.find(row => row.action === 'case.updated')?.details).toMatchObject({
+      before: { lossDate: '2026-07-10', notificationDate: '2026-07-11' },
+      after: { lossDate: '2026-07-12', notificationDate: '2026-07-13' },
+    })
     expect(audits.rows).toEqual([
       expect.objectContaining({ action: 'case.created', details: expect.objectContaining({ assignedReferenceFields: ['responsibleUserId', 'expertUserId', 'serviceId', 'insurerId'], dateFieldsPresent: ['followUpDate', 'lossDate', 'notificationDate'], serviceEligibility: expect.objectContaining({ status: 'eligible', agreementStatus: 'agreed' }) }) }),
       expect.objectContaining({ action: 'case.updated', details: expect.objectContaining({ changedFields: ['lossDate', 'notificationDate'], fromVersion: 1, toVersion: 2, serviceEligibility: expect.objectContaining({ status: 'eligible', agreementStatus: 'agreed' }) }) }),

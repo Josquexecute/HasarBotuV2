@@ -76,8 +76,10 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('shared self-service account nam
       .toMatchObject({ id: target.id, displayName: payload.displayName, roles: ['expert'] })
     expect((await app.inject({ method: 'PATCH', url: `/api/v1/users/${users.at(-1)!.id}/profile`, headers: { cookie: users[0]!.cookie }, payload })).statusCode).toBe(404)
     expect((await app.inject({ method: 'PATCH', url, headers: { cookie: users[0]!.cookie }, payload })).statusCode).toBe(409)
-    const event = (await pool.query("SELECT actor_user_id,resource_id FROM audit_events WHERE action='user.profile_updated' AND resource_id=$1 ORDER BY occurred_at DESC,id DESC LIMIT 1", [target.id])).rows[0]
+    const event = (await pool.query("SELECT actor_user_id,resource_id,occurred_at,details FROM audit_events WHERE action='user.profile_updated' AND resource_id=$1 ORDER BY occurred_at DESC,id DESC LIMIT 1", [target.id])).rows[0]
     expect(event).toMatchObject({ actor_user_id: users[0]!.id, resource_id: target.id })
+    expect(event.occurred_at).toBeInstanceOf(Date)
+    expect(event.details).toMatchObject({ before: { displayName: current.displayName }, after: { displayName: payload.displayName } })
     await pool.query("UPDATE users SET status='disabled' WHERE id=$1", [target.id])
     const disabled = await app.inject({ method: 'PATCH', url, headers: { cookie: users[0]!.cookie }, payload: { ...payload, expectedVersion: result.json().version, displayName: 'Pasif Kullanıcının Adı' } })
     expect(disabled.statusCode).toBe(200)

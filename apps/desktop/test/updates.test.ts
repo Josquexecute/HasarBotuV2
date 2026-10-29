@@ -64,6 +64,10 @@ it('does not install a corrupt download or close the running application', async
   expect((await invoke('install')).phase).toBe('error')
   expect(scheduledCommands()).toHaveLength(0)
   expect(mocks.app.quit).not.toHaveBeenCalled()
+  expect(JSON.parse(await readFile(join(directory, 'update-status.json'), 'utf8'))).toMatchObject({ phase: 'error', failureStage: 'response', httpStatus: 200 })
+  fetchMock.mockImplementation(async (url: string) => url.endsWith('/latest') ? Response.json({ release }) : new Response(bytes))
+  expect((await invoke('check')).phase).toBe('available')
+  expect((await invoke('install')).phase).toBe('installing')
 })
 it('rejects a release that changed after the user checked it', async () => {
   await invoke('check')

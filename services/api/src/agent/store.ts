@@ -1069,7 +1069,7 @@ async function applyFileOperationResult(
       action: 'file_operation.failed',
       entityType: 'case_file_operation',
       entityId: operation.id,
-      details: { caseId: operation.case_id, jobId: job.id, agentId: ctx.agentId, errorCode },
+      details: { caseId: operation.case_id, jobId: job.id, agentId: ctx.agentId, errorCode, operationType: operation.operation_type },
     })
     return { metadataResult: 'failed', errorCode, auditAction: 'job.verification_failed', jobStatus: 'failed' }
   }
@@ -1130,6 +1130,9 @@ async function applyFileOperationResult(
         jobId: job.id,
         agentId: ctx.agentId,
         strategy: 'staged_copy',
+        operationType: operation.operation_type,
+        before: { folderPath: operation.source_relative_path, storageRootKey: operation.source_storage_root_key },
+        after: { folderPath: operation.destination_relative_path, storageRootKey: operation.destination_storage_root_key },
         cleanupState: 'completed',
         safeOutcomeCode: fileResult.safeOutcomeCode,
         manifestHash: fileResult.manifestHash,
@@ -1329,6 +1332,9 @@ async function applyFileOperationResult(
       jobId: job.id,
       agentId: ctx.agentId,
       strategy: 'atomic_rename',
+      operationType: operation.operation_type,
+      before: { folderPath: operation.source_relative_path, storageRootKey: operation.source_storage_root_key },
+      after: { folderPath: operation.destination_relative_path, storageRootKey: operation.destination_storage_root_key },
       cleanupState: 'not_required',
       manifestHash: fileResult.manifestHash,
       fileCount: fileResult.fileCount,
