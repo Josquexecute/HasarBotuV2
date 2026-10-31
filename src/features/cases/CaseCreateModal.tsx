@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router'
 import type { SessionUser } from '../../data/authPort'
 import { CaseCommandError, createHttpCaseCommandAdapter, type CaseCommandPort, type CaseCreateInput } from '../../data/commandPort'
 import type { CaseReferenceDataPort } from '../../data/ports'
-import { useCaseReferences } from '../../data/useCaseReferences'
+import { notifyServiceDirectoryChanged, useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseStageCode } from '../../types/case'
 import type { QuickCaseCreate } from '@hasarbotu/contracts'
 import { eksistKey, getEksistFieldValues, matchEksistReference } from '@hasarbotu/domain'
@@ -208,7 +208,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
       }
       submittingRef.current = true; setSubmitting(true); setLocked(true); setGeneralError(''); setFieldErrors({})
       const attempt = quickAttempt.current!
-      try { setCreation(await eksist.create(attempt.input, attempt.key)) }
+      try { setCreation(await eksist.create(attempt.input, attempt.key)); notifyServiceDirectoryChanged() }
       catch (error) {
         const safe = error instanceof CaseCommandError ? error : new CaseCommandError('unavailable', 'Unknown failure')
         setGeneralError(commandErrorMessage(safe)); setFieldErrors(commandFieldMessages(safe))
@@ -233,6 +233,7 @@ export function CaseCreateModal({ currentUser, onClose, onUnauthorized, commandP
     setFieldErrors({})
     try {
       const created = await commands.createCase(input, attemptRef.current.key)
+      notifyServiceDirectoryChanged()
       navigate(`/dosyalar/${created.caseId}`, {
         replace: true,
         state: {

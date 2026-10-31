@@ -502,7 +502,8 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     const edited = await app.inject({ method: 'PATCH', url: `${CASES_ROUTE}/${seeded.caseId}`, headers: { cookie: adminCookie },
       payload: { expectedVersion: 1, serviceDetails: { name: 'Manual Repair', phone: '0212 555 01 01' } } })
     expect(edited.statusCode, edited.payload).toBe(200)
-    expect(edited.json().case.serviceId).toBeNull()
+    expect(edited.json().case.serviceId).toEqual(expect.any(String))
+    expect(edited.json().case.serviceProfile.agreement.requiresHumanReview).toBe(true)
     const result = await planClose(seeded.caseId, { expectedCaseVersion: 2, expectedLocationVersion: 1, closeMode: 'normal' })
     expect(result.statusCode, result.payload).toBe(201)
     const plan = caseLifecycleOperationResponseSchema.parse(result.json()).operation

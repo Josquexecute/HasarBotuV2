@@ -52,7 +52,10 @@ export async function planFolderLocationReconciliation(db: Queryable, organizati
     const current = (await db.query('SELECT id,storage_root_key,relative_path,version FROM case_locations WHERE organization_id=$1 AND case_id=$2 FOR SHARE', [organizationId, binding.caseId])).rows[0]
     const location = current ? { id: current.id, storageRootKey: current.storage_root_key, relativePath: current.relative_path, version: current.version } : null
     if (JSON.stringify(location) !== JSON.stringify(binding.previousLocation)) fail('folder_binding_location_changed')
-    if ((await db.query('SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2 AND lower(relative_path)=lower($3) AND case_id<>$4', [organizationId, manifest.storageRootKey, binding.relativePath, binding.caseId])).rowCount) fail('folder_binding_location_in_use')
+    if ((await db.query(`SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2 AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>$4
+      UNION ALL SELECT 1 FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2 AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>$4
+      UNION ALL SELECT 1 FROM case_file_operations WHERE organization_id=$1 AND destination_storage_root_key=$2 AND hb_folder_path_key(destination_relative_path)=hb_folder_path_key($3)
+        AND case_id<>$4 AND status NOT IN ('ready','stale','cancelled')`, [organizationId, manifest.storageRootKey, binding.relativePath, binding.caseId])).rowCount) fail('folder_binding_location_in_use')
     if ((await db.query('SELECT 1 FROM case_folder_registrations WHERE organization_id=$1 AND (case_id=$2 OR (storage_root_key=$3 AND source_folder_id=$4))', [organizationId, binding.caseId, manifest.storageRootKey, binding.sourceFolderId])).rowCount) fail('folder_binding_already_registered')
   }
   const payload = { organizationId, manifest }

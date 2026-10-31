@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const OFFICE_INVENTORY_REFRESH_MS = 30_000
+const OFFICE_INVENTORY_REFRESH_MS = 5000
 
 /** Office folders can move outside the app; refresh visible read models after discovery. */
 export function useVisibleRefresh(refresh: () => void, enabled: boolean): void {

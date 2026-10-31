@@ -8,7 +8,7 @@ import { ModalFrame } from '../../components/ModalFrame'
 import { enableNotificationSound, playNotificationSound } from '../notifications/notification-sound'
 import './tracking.css'
 
-interface Notice { id: string;caseId: string;plate: string;title: string;isResult: boolean }
+interface Notice { id: string;caseId: string;plate: string;title: string;isResult: boolean;requiresReview?: boolean }
 export function TrackingPopup() {
   const [items,setItems] = useState<Notice[]>([])
   const [error,setError] = useState('')
@@ -69,7 +69,7 @@ export function TrackingPopup() {
   }
   const results = items.filter(item => item.isResult)
   if (results.length) return <ModalFrame role="alertdialog" labelledBy="tramer-result-popup-title" className="tramer-result-popup" busy={dismissing} onClose={() => { void dismiss() }}>
-    <header className="modal__header"><h2 id="tramer-result-popup-title"><BellRing size={30} /> Tramer sonucu geldi</h2><button className="icon-button" type="button" aria-label="Uyarıyı kapat" disabled={dismissing} onClick={() => { void dismiss() }}><X size={22} /></button></header>
+    <header className="modal__header"><h2 id="tramer-result-popup-title"><BellRing size={30} /> {results.every(item => item.requiresReview) ? 'SBM sonucu kontrol bekliyor' : 'Tramer sonucu geldi'}</h2><button className="icon-button" type="button" aria-label="Uyarıyı kapat" disabled={dismissing} onClick={() => { void dismiss() }}><X size={22} /></button></header>
     <div className="modal__body"><p className="tramer-result-popup__count">{results.length} dosyada yeni sonuç</p>{results.map(item => <article key={item.id}><strong>{item.plate}</strong><p>{item.title}</p><Link className="button button--primary" to={`/dosyalar/${item.caseId}`} onClick={() => { void dismiss() }}>Dosyayı aç</Link></article>)}{error && <p role="alert">{error}</p>}</div>
     <footer className="modal__footer"><Link to="/bildirimler">Tüm bildirimler</Link><button className="button button--primary" type="button" disabled={dismissing} onClick={() => { void dismiss() }}>{dismissing ? 'Kapatılıyor…' : 'Sonuçları gördüm'}</button></footer>
   </ModalFrame>

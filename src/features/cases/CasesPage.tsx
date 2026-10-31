@@ -198,7 +198,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
 } = {}) {
   // API modunda bütün liste ÇEKİLMEZ; yalnız mock prototipi bu hook'u kullanır.
   const { cases, source } = useCases({ enabled: getConfiguredDataSource() !== 'api' })
-  const referenceData = useCaseReferences(referencePort, {}, source === 'api')
+  const referenceData = useCaseReferences(referencePort, { includeUnlinkedNames: true }, source === 'api')
   const session = useSession()
   const location = useLocation()
   const navigate = useNavigate()
@@ -405,7 +405,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
           {source === 'api' && pageStatus === 'loading' && <p role="status" className="page-subtitle">Dosyalar yükleniyor…</p>}
         </div>
         <div className="heading-actions">
-          {source === 'api' && <button className="button button--secondary" type="button" onClick={() => { reload(); reloadAlerts() }} disabled={pageStatus === 'loading'}><RefreshCw size={15} />Listeyi Yenile</button>}
+          {source === 'api' && <button className="button button--secondary" type="button" onClick={() => { reload(); reloadAlerts(); referenceData.reload() }} disabled={pageStatus === 'loading'}><RefreshCw size={15} />Listeyi Yenile</button>}
           <button className={`button button--secondary${filtersOpen ? ' button--active' : ''}`} type="button" onClick={() => setFiltersOpen((value) => !value)}>
             <Filter size={15} /> Filtreler {hasFilters && <i className="button__indicator" />}
           </button>
@@ -460,6 +460,21 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
           }}>
             {visibleCases.length === 0 ? (source !== 'api' || pageStatus === 'ok' ? <EmptyState onReset={resetFilters} /> : null) : (
               <table className="case-table case-table--windowed" aria-rowcount={visibleCases.length + 1}>
+                <colgroup>
+                  <col className="case-col-identity" />
+                  <col className="case-col-reference" />
+                  <col className="case-col-reference" />
+                  <col className="case-col-company" />
+                  <col className="case-col-status" />
+                  <col className="case-col-stage" />
+                  <col className="case-col-documents" />
+                  {source === 'api' && <col className="case-col-alert" />}
+                  <col className="case-col-assignee" />
+                  <col className="case-col-service" />
+                  <col className="case-col-actions" />
+                  <col className="case-col-follow-up" />
+                  <col className="case-col-updated" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th><button type="button" onClick={() => handleSort('plate')}>Plaka / Dosya No <SortIcon column="plate" sortKey={sortKey} direction={direction} /></button></th>
@@ -493,11 +508,11 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                       }}
                     >
                       <td><span className="plate plate--table">{item.plate}</span><small>{item.officeNumber}</small></td>
-                      <td className="mono">{item.noticeNumber}</td>
-                      <td className="mono">{item.claimNumber}</td>
-                      <td><strong>{item.company}</strong><small>{item.type}</small></td>
+                      <td className="mono case-reference" title={item.noticeNumber}>{item.noticeNumber}</td>
+                      <td className="mono case-reference" title={item.claimNumber}>{item.claimNumber}</td>
+                      <td><strong title={item.company}>{item.company}</strong><small>{item.type}</small></td>
                       <td><span className={`status-pill ${statusClass[item.status]}`}>{item.status}</span></td>
-                      <td><span className="stage-text">{item.stage}</span></td>
+                      <td><span className="stage-text" title={item.stage}>{item.stage}</span></td>
                       <td>{source === 'api'
                         ? <span title="Gerçek evrak özeti detay sekmesinde yüklenir">—</span>
                         : item.missingDocuments > 0
@@ -512,7 +527,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
                           />
                         </td>
                       )}
-                      <td>{item.assignee}</td>
+                      <td className="case-assignee" title={item.assignee}>{item.assignee}</td>
                       <td className="truncate-cell" title={item.service}>{item.service}</td>
                       <td><div className="case-table-actions"><OpenCaseFolderButton compact caseId={item.caseId} /><NoticeSheetButton compact caseId={item.caseId} plate={item.plate} source={source} onOpenChange={onDialogChange} /></div></td>
                       <td><span className={`follow-up follow-up--${item.followUpTone}`}>{item.followUp}</span></td>

@@ -107,8 +107,10 @@ function LegalWorkspace({ account }: { account: string }) {
           <div className="qa-panel__body">
             <label className="qa-input"><span>Sorunuz</span><textarea maxLength={2000} value={question} onChange={e => setQuestion(e.target.value)} placeholder="Örnek: Kasko teminatı dışında kalan haller nelerdir?" /></label>
             <p className="form-hint">AI seçeneği soruyu ve resmî kaynak alıntılarını Google Gemini’ye gönderir. Kimlik, plaka ve kişisel evrak bilgisi yazmayın.</p>
+            <div className="legislation-question-context">
             <label className="qa-input"><span>Olay tarihi</span><input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} /></label>
             <label className="qa-input"><span>Aranacak kaynak</span><select value={sourceId} onChange={e => setSourceId(e.target.value)}><option value="">Tüm kaynaklar</option>{library.sources.map(s => <option value={s.id} key={s.id}>{s.title}</option>)}</select></label>
+            </div>
             <div className="legislation-actions"><button className="button button--primary" type="button" disabled={busy || saving || question.trim().length < 3} onClick={() => void ask('sources')}><Search size={15} />Kaynaklarda ara</button><button className="button button--secondary" type="button" disabled={busy || saving || !library.aiEnabled || question.trim().length < 3} onClick={() => void ask('ai')}><Send size={15} />AI ile kaynaklı yanıt</button></div>
             {busy && <p role="status">Kaynaklar inceleniyor…</p>}
             {answer && <article className="qa-answer" aria-live="polite"><span className="eyebrow">{answer.provider ? `Gemini (${answer.provider.model}) · Kaynaklı tespit` : 'Kaynak taraması · Birebir metin'} · Kullanıcı incelemesi gerekir</span><h3>{answer.question}</h3>

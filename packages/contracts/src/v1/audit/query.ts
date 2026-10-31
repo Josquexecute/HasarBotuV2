@@ -30,6 +30,11 @@ const auditEventsQueryObject = z.strictObject({
   entityId: idSchema.optional(),
   occurredFrom: utcDateTimeSchema.optional(),
   occurredTo: utcDateTimeSchema.optional(),
+  search: z.string().trim().min(1).max(128).optional(),
+  category: z.enum(['cases', 'files', 'users', 'permissions', 'auth', 'access', 'other']).optional(),
+  result: z.enum(['success', 'failed', 'rejected', 'pending', 'cancelled', 'recorded']).optional(),
+  sort: z.enum(['asc', 'desc']).optional(),
+  presentation: z.literal('readable').optional(),
   page: pageWithDefaultSchema,
   pageSize: pageSizeWithDefaultSchema,
 })

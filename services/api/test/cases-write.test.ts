@@ -148,6 +148,10 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect(updated.statusCode).toBe(200)
     expect(caseDetailResponseSchema.parse(updated.json()).case).toMatchObject({ version: 2, lossDate: '2026-07-12', notificationDate: '2026-07-13' })
     const audits = await pool.query("SELECT action,details FROM audit_events WHERE resource_id=$1 ORDER BY occurred_at", [createdCase.id])
+    expect(audits.rows.find(row => row.action === 'case.updated')?.details).toMatchObject({
+      before: { lossDate: '2026-07-10', notificationDate: '2026-07-11' },
+      after: { lossDate: '2026-07-12', notificationDate: '2026-07-13' },
+    })
     expect(audits.rows).toEqual([
       expect.objectContaining({ action: 'case.created', details: expect.objectContaining({ assignedReferenceFields: ['responsibleUserId', 'expertUserId', 'serviceId', 'insurerId'], dateFieldsPresent: ['followUpDate', 'lossDate', 'notificationDate'], serviceEligibility: expect.objectContaining({ status: 'eligible', agreementStatus: 'agreed' }) }) }),
       expect.objectContaining({ action: 'case.updated', details: expect.objectContaining({ changedFields: ['lossDate', 'notificationDate'], fromVersion: 1, toVersion: 2, serviceEligibility: expect.objectContaining({ status: 'eligible', agreementStatus: 'agreed' }) }) }),
@@ -397,7 +401,11 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     const created = await app.inject({ method: 'POST', url: CASES_ROUTE, headers: { cookie, 'idempotency-key': uuidv7() }, payload: { caseType, plate: '34 TST 432', serviceDetails: contact } })
     expect(created.statusCode, created.payload).toBe(201)
     const item = created.json().case
-    expect(item.serviceId).toBeNull()
+    expect(item.serviceId).toEqual(expect.any(String))
+    const directory = await app.inject({ url: '/api/v1/references/services?includeContacts=true', headers: { cookie } })
+    expect(directory.json().items).toContainEqual(expect.objectContaining({ id: item.serviceId, name: contact.name, phone: contact.phone }))
+    const filtered = await app.inject({ url: `${CASES_ROUTE}?serviceId=${item.serviceId}`, headers: { cookie } })
+    expect(filtered.json().items).toContainEqual(expect.objectContaining({ id: item.id }))
     expect(item.serviceDetails).toEqual(contact)
     const searchContacts = (name: string) => app.inject({ url: `${CASES_ROUTE}?search=${encodeURIComponent(name)}&includeServiceDetails=true`, headers: { cookie } })
     const found = await searchContacts('Manual Repair')
@@ -427,6 +435,29 @@ describeDb('Cases yazma uclari (gercek veritabani)', () => {
     expect(changedSheet.version).toBeGreaterThan(saved.json().version)
   })
 
+  it('creates one directory identity under concurrent normalized-name submissions and preserves promoted legacy contacts', async () => {
+    const name = `Yeni Servis ${uuidv7()}`
+    const created = await Promise.all([name, name.toLocaleUpperCase('tr')].map(serviceName => app.inject({ method: 'POST', url: CASES_ROUTE, headers: { cookie, 'idempotency-key': uuidv7() }, payload: { caseType: 'traffic', plate: '34 TST 435', serviceDetails: { name: serviceName, phone: '0212 111 22 33', address: 'Kalıcı adres' } } })))
+    expect(created.map(r => r.statusCode)).toEqual([201, 201])
+    expect(new Set(created.map(r => r.json().case.serviceId)).size).toBe(1)
+    const item = created[0]!.json().case
+    const addresses = () => app.inject({ url: '/api/v1/references/services?includeContacts=true&includeAddresses=true', headers: { cookie } })
+    expect((await addresses()).json().items).toContainEqual(expect.objectContaining({ id: item.serviceId, address: 'Kalıcı adres' }))
+    await pool.query('UPDATE case_service_contacts SET address=$2 WHERE case_id=$1', [created[1]!.json().case.id, 'Çelişen adres'])
+    expect((await addresses()).json().items).toContainEqual(expect.objectContaining({ id: item.serviceId, address: null }))
+    await pool.query('UPDATE case_service_contacts SET address=$2 WHERE case_id=$1', [created[1]!.json().case.id, 'Kalıcı adres'])
+    // Simulate an older office client's contact that predates directory linking.
+    await pool.query('UPDATE cases SET service_center_id=NULL WHERE id=$1', [item.id])
+    await pool.query('UPDATE case_service_contacts SET service_center_id=NULL WHERE case_id=$1', [item.id])
+    const names = await app.inject({ url: '/api/v1/references/service-contact-names', headers: { cookie } })
+    expect(names.json().items).toContainEqual({ name })
+    const filtered = await app.inject({ url: `${CASES_ROUTE}?serviceName=${encodeURIComponent(name)}`, headers: { cookie } })
+    expect(filtered.json().items).toContainEqual(expect.objectContaining({ id: item.id }))
+    const updated = await app.inject({ method: 'PATCH', url: `${CASES_ROUTE}/${item.id}`, headers: { cookie }, payload: { expectedVersion: 1, serviceDetails: { name } } })
+    expect(updated.statusCode, updated.payload).toBe(200)
+    expect(updated.json().case.serviceId).toBe(item.serviceId)
+    expect(updated.json().case.serviceDetails).toEqual({ name, phone: '0212 111 22 33', address: 'Kalıcı adres' })
+  })
   it('copies registered phone, permits corrections, and rejects a mismatched service identity', async () => {
     await pool.query('UPDATE service_centers SET phone=$2 WHERE id=$1', [serviceId, '0216 555 22 22'])
     const references = await app.inject({ url: '/api/v1/references/services?includeContacts=true', headers: { cookie } })

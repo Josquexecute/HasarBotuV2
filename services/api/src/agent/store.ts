@@ -667,6 +667,13 @@ async function applyVerification(
     return applied
   }
   if (job.target_type === 'workspace_provisioning') {
+    const workspacePayload = jobPayloadSchema.parse(job.payload)
+    if (workspacePayload.kind !== 'workspace' || workspacePayload.workspaceId !== job.target_id) {
+      await client.query(`UPDATE case_workspace_provisionings SET status='failed',last_error_code='workspace_identity_required',updated_at=now()
+        WHERE organization_id=$1 AND id=$2 AND status NOT IN ('ready','stale','cancelled')`, [ctx.organizationId, job.target_id])
+      return { metadataResult: 'failed', errorCode: 'workspace_identity_required', auditAction: 'job.verification_failed', jobStatus: 'failed' }
+    }
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`folder-registration:${ctx.organizationId}:${workspacePayload.storageRootKey}`])
     const audit = createAuditService()
     const planResult = await client.query(
       `SELECT case_id, storage_root_key, relative_path, status, approved_by_user_id
@@ -1062,7 +1069,7 @@ async function applyFileOperationResult(
       action: 'file_operation.failed',
       entityType: 'case_file_operation',
       entityId: operation.id,
-      details: { caseId: operation.case_id, jobId: job.id, agentId: ctx.agentId, errorCode },
+      details: { caseId: operation.case_id, jobId: job.id, agentId: ctx.agentId, errorCode, operationType: operation.operation_type },
     })
     return { metadataResult: 'failed', errorCode, auditAction: 'job.verification_failed', jobStatus: 'failed' }
   }
@@ -1123,6 +1130,9 @@ async function applyFileOperationResult(
         jobId: job.id,
         agentId: ctx.agentId,
         strategy: 'staged_copy',
+        operationType: operation.operation_type,
+        before: { folderPath: operation.source_relative_path, storageRootKey: operation.source_storage_root_key },
+        after: { folderPath: operation.destination_relative_path, storageRootKey: operation.destination_storage_root_key },
         cleanupState: 'completed',
         safeOutcomeCode: fileResult.safeOutcomeCode,
         manifestHash: fileResult.manifestHash,
@@ -1322,6 +1332,9 @@ async function applyFileOperationResult(
       jobId: job.id,
       agentId: ctx.agentId,
       strategy: 'atomic_rename',
+      operationType: operation.operation_type,
+      before: { folderPath: operation.source_relative_path, storageRootKey: operation.source_storage_root_key },
+      after: { folderPath: operation.destination_relative_path, storageRootKey: operation.destination_storage_root_key },
       cleanupState: 'not_required',
       manifestHash: fileResult.manifestHash,
       fileCount: fileResult.fileCount,

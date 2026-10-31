@@ -1,5 +1,189 @@
 # `@hasarbotu/desktop`
 
+31 Ekim 2026: **0.1.90 ofise yayımlandı** (2026-10-31T12:39:33.423Z).
+72ACR013, 07BMH571 ve 34CNK333, kurulu 0.1.89'un gerçek dosya listesinde görünür.
+Kök neden eski konum/pCloud kimliği nedeniyle yönetilen arşivlemedir; 115 canlı dosya
+SHA-256'sıyla yalnız üç bağ onarıldı. 239 izlenen kayıt, belgeler ve eski 34CNK333 geçmişi
+korundu; fiziksel taşıma/silme ve dosya birleştirme yapılmadı.
+Föye araç tescil tarihleri ve trafik mağduru/kasko sigortalısı için geçmiş hasar metni
+eklendi. Kaskoda mağdur alanları ve tüm föylerde çalışma bölümü gizlendi; eski veriler korunur.
+Yeni servisler kesin ad eşleşmesiyle rehbere bağlanır; mevcut 38 bağlantısız servis adı
+toplu veri değişikliği olmadan filtrelenir. Tek ve tutarlı servis adresi yeniden seçimde korunur.
+**3.524 test geçti / 7 atlandı** (6 yapılandırılmamış canlı API, 1 Windows WebKit).
+Değişmeyen süitler korundu; etkilenen/başarısız dosyalar yeniden doğrulandı. Typecheck,
+lint, build, NSIS içeriği/smoke, gerçek Electron servis akışı ve iki gerçek tek sayfalık
+A4 PDF geçti. Değişmemiş yardımcı odak/animasyon kontrolleri ikinci monitörde ayrıca geçti.
+1.000 sentetik dosya, aynı 1440×900 pencere, ısınmış önbellek ve JS çöp toplama sonrası
+15 kısa örnek: CPU %0,122→%0,132; süreç çalışma kümeleri 524,0→535,8 MiB (+%2,2);
+JS heap 11,64→11,57 MiB; GPU %0,1230→%0,1233. Uzun süreli soak yapılmadı.
+Paket **113.021.946 bayt**, SHA-256 `dbf6203772959cf4da77ba3adf5496f3b3732255b8e623a753859dc74c7cf460`.
+Kurulu **0.1.89**, **0.1.90** sürümünü `available` gördü; standart Electron oturumunda
+kimlikli HTTP 200 indirmesi, tam boyut/SHA-256 ve kurulum sürümü doğrulandı.
+Önceki manifest/değişmez kurulum korundu; çalışan istemcilere kurulum zorlanmadı.
+
+29 Ekim 2026: **0.1.89 ofise yayımlandı** (2026-10-29T09:08:08.930Z).
+Tramer/SBM otomatik takibi kullanıcı yetkisiyle etkinleştirildi. Doğrulanmış mutabakat
+ve komisyon oybirliği sonuçları tam başvuru numarasıyla eşleşir; dosya sorumlusuna
+sessiz ayarından bağımsız sonuç pop-up'ı açılır. Kontrol gereken sonuç ayrı başlıkla
+bildirilir; KTT ihbarı tamamlandı sayılmaz. Konu, ek, alıntı, ret/iptal çelişkileri,
+eski mesajlar ve arşivlenmiş dosyalar için korumalar eklendi. Eksik mesaj taramanın
+kalanını engellemez. Bildirimler tam genişlikte, 25 kayıtlık liste ve seçili ayrıntı
+paneliyle gösterilir; ham metin kapalıdır, taslaklar korunur. Gereksiz bildirim yükü
+ve çift yenileme sorgusu kaldırıldı.
+Bağlı Gmail'deki 82 gerçek ileti salt okunur doğrulandı: 34 ihbar, 32 doğrulanmış
+sonuç, 16 belirsiz ileti. Mevcut başvurularla yalnız bir ihbar eşleşiyor; numarası
+kayıtlı olmayan sonuçlar tahminle dosyaya bağlanmadı. Önceki 8 Tramer işi, 82 mesaj
+ve 68.681 evrak onayı korundu; geçmiş mesajlar yeniden işlenmedi. 18 sunucu dosyası
+doğrulandı, 15 değişiklik yedeklenerek uygulandı; migration yok, beş servis sağlıklı.
+**3.513 test PASS / 7 atlama**: altı yapılandırılmamış canlı API testi ve Windows'ta
+desteklenmeyen bir WebKit kontrolü. Yedekleme/geri yükleme testi ayrıca tamamlandı.
+Typecheck, lint, build ve gerçek x64 NSIS açılışı geçti. Kurulumdan çıkarılan pakette
+ikinci monitör, dört pencere boyutu, iki tema ve %100/%125/%150 DPI ile **54 Electron
+kontrolü** geçti; ekran görüntüleri `.local/tramer-089/` altında, veriler sentetiktir.
+Aynı cihaz ve 120 sentetik iş/82 e-posta ile 0.1.88 → 0.1.89: rendererların toplam
+RAM'i 331,8 → 258,1 MiB, CPU ortalaması %0,048 → %0,051, ortak GPU motoru
+%0,488 → %0,564. Sekiz bölüm geçişinde medyan 174 → 67 ms; ilk açılış 728 → 643 ms.
+Altı beş-saniyelik kaydırmada iki sürümün p95 aralığı yaklaşık 33,5–66,9 ms; medyan
+33,3 ms. Bunlar kısa örneklerdir; uzun süreli dayanıklılık iddiası değildir.
+Paket **113.021.395 bayt**, SHA-256
+`42d8ca0b27811e73fe6f6166e485f433f33d45dc45c147f6548ce83f36563ec3`.
+Gerçek kurulu **0.1.88**, 0.1.89'u `available` gördü; standart Electron oturumuyla
+kimlikli indirme, boyut/SHA-256 ve kurulum sürümü 110,5 saniyede doğrulandı.
+İlk transferlerde kesintiler gözlendi; kesin kök neden kanıtlanamadı. Aynı paket
+kontrollü yerel köprüden 456 ms, doğrudan kimlikli ofis HTTPS üzerinden 117,3 saniyede
+eşleşti. Başarısız denemeler başarılı sayılmadı; kesintiler için kalıcı çözüm iddiası
+yoktur. Önceki 0.1.88 manifesti, değişmez paket ve bağlantı yapılandırması korundu;
+istemcilere kurulum zorlanmadı. Kaynak/test/paket/teslimat kanıtları `.local/tramer-089/` altında.
+
+29 Ekim 2026: **0.1.88 ofise yayımlandı** (2026-10-29T06:39:18.736Z).
+İşlem kayıtlarında teknik kodlar yerine Türkçe açıklamalar, tarih/kullanıcı/dosya/
+sonuç sütunları, güvenli eski → yeni değerler, arama/filtre/sıralama ve sayfa içi
+görüntüleme grupları sunulur. Örneğin `case.updated` → “Dosya bilgileri güncellendi”,
+`request.rejected` → “İşlem isteği reddedildi”; bulunamayan belge silinmiş sayılmaz.
+Üretimdeki 97 farklı kod ve 290.275 mevcut olay karşılandı. Geçmiş değerler
+uydurulmadı; dosya/kullanıcı düzenlemeleri ve tamamlanan klasör taşımaları için
+güvenli alanlar transaction içinde kaydedilir. Ham görünüm yöneticiye açıktır.
+Eski istemci yanıtı korunur; yeni ad/plaka alanları `presentation=readable` ister.
+471 benzersiz hedefli test geçti; önce atlanan native NSIS testi sonraki 4/4
+koşuda tamamlandı. İlk paralel UI koşusundaki kullanıcı-adı testi hatası, koşul
+gevşetilmeden son sıralı 40/40 koşuda geçti. Typecheck, lint ve build geçti.
+Gerçek NSIS'ten çıkarılan x64 pakette %100/%125/%150 DPI, açık/koyu tema,
+üç pencere boyutu ve işlevlerde **54 Electron kontrolü** geçti; ekran görüntüsü yok.
+100.018 sentetik olayda sekizer ölçümün medyanı: yeni liste 6,1 ms (önceki sorgu
+4,7 ms), Türkçe arama 35,7 ms, sonuç filtresi 143,7 ms, 1.000. sayfa 11,6 ms.
+Sayfa 50 olayla sınırlı; gruplama/ayrıntı ve beş saniye boşta bekleme ek sorgu
+üretmedi. On aç/kapat döngüsü ardından beş bir-saniyelik örnekte ana süreç
+CPU ortalaması %0,008–0,011, çalışma kümesi 144–146 MiB; renderer JS belleği
+18–20 MiB. Bunlar kısa ölçümlerdir; uzun süreli dayanıklılık iddiası değildir.
+Sunucuda 42 dosya doğrulandı, değişen 36 dosya yedeklenerek uygulandı; migration
+yok, durdurulmuş servis aralığında audit dahil kayıt sayıları korundu. Son kontrol
+290.275 → 290.275 olay, sıfır yeni işlem hatası ve beş sağlıklı servis gösterdi.
+Paket **113.018.010 bayt**, SHA-256
+`46160368882a217c08d57a88aa36becfb4d8563523a6188c4c246fc804295d06`.
+Gerçek kurulu **0.1.87** sürümü `available` gördü; kimlikli manifest/indirme
+HTTP 200, 22,3 saniyede tam boyut ve SHA-256 eşleşti. Önceki 0.1.87 manifesti
+ve değişmez paketi korundu; çalışan istemcilere kurulum zorlanmadı. Kaynak/test/
+paket/teslimat kanıtları `.local/audit-professional-088/` altında.
+
+29 Ekim 2026, geliştirme bilgisayarı güncelleme incelemesi: 0.1.86 ve 0.1.87
+kurulum sonuçları çıkış 0/yeniden başlatma başarılı; kurulu dosya ve açılış kaydı
+0.1.87. Önbellekteki 113.003.577 baytlık paket yayımlanan SHA-256 ile eşleşti.
+Gerçek kurulu Electron oturumunda manifest/paket HTTP 200, tam boyut/SHA-256
+eşleşmesi ve sağlıklı renderer doğrulandı (indirme 22,6 sn). Yeniden kurulum veya
+profil temizliği yapılmadı. Eski takılmanın aşama logu bulunmadığından kesin geçmiş
+kök neden kanıtlanamadı; VPN/proxy neden olarak ilan edilmedi. Kurulum sonrası
+görev temizliğindeki erişim reddi kurulum sonucundan ayrıdır. Yeni kodda 30 sn veri
+gelmeme sınırı, ayrı doğrulama/hazırlama durumları, yeniden deneme ve kimlik bilgisi
+içermeyen `userData/update-status.json` tanı kaydı eklendi. Gerçek Electron'da
+kesilen transfer → kısmi dosya temizliği → başarılı yeniden deneme regresyonu geçti.
+Bu inceleme için ayrı sürüm yayımlanmadı; değişiklik sonraki doğrulanmış pakete dahildir.
+
+29 Ekim 2026: **0.1.87 ofise yayımlandı.** Durum panosu açıklamaları/okunabilirliği,
+dosya tablosunun adlandırılmış sütunları ve uyarı/sorumlu ayrımı, mevzuat/AI yerleşimi,
+kompakt açılabilir bildirimler ve Touch'ın dört sekmeli paneli yenilendi. İşlemler,
+not taslakları ve ayarlar korundu; Touch'ın 11 çizim/hareket varlığı ile önceki
+yayındaki 11 hesaplama kaynağı hash ile aynı. Üretim iş kayıtlarına müdahale edilmedi.
+**3.475 test geçti / 8 atlandı**; atlamalar başarı sayılmadı. Son masaüstü süiti
+273 geçti/1 atlandı; açık/koyu tema ve %100/%125/%150 gerçek Electron DPI
+koşullarında 213 görsel/işlevsel kontrol geçti. Typecheck, lint, build, x64 NSIS
+içeriği ve kurulumdan çıkarılan gerçek paketin açılışı geçti (76 UI/29 main-preload).
+
+Aynı cihaz, Electron 44.9.1, 1440×900, 1.000 sentetik dosya ve varsayılan hareket
+ayarlarıyla iki beş dakikalık koşunun ortalamaları (0.1.86 → 0.1.87):
+
+| Süreç | CPU % | RAM çalışma kümesi, MiB |
+|---|---:|---:|
+| Electron ana süreç | 0,134 → 0,100 | 127,0 → 126,7 |
+| Ana renderer | 0,248 → 0,266 | 253,0 → 254,0 |
+| Touch karakter penceresi | 0,080 → 0,073 | 102,8 → 102,5 |
+| Touch kontrol paneli | 0,014 → 0,015 | 120,4 → 123,9 |
+
+Ortak GPU yükü %0,177 → %0,185 (20'şer PDH örneği);
+gerçek Touch canvas çizimi yük altında 26,97 → 27,01 FPS.
+Her koşuda 328 geçiş/164 tepki ve sıfır renderer hatası; son kalıcı renderer JS
+belleği 15,66 → 15,70 MiB,
+Touch paneli dinleyici sayısı koşu boyunca sabit. Çöp toplamaya müdahale edilmeyen
+ayrı hızlı gezinme kontrolünde yerleşen renderer RAM'i 291,9 → 281,1 MiB.
+Pano görünür hale gelme medyanı 399 → 333 ms, dosyalar/bildirimler yaklaşık 133 ms;
+izole Electron giriş ekranı açılışı, sıcak disk önbelleğinde 579 → 500 ms.
+Ölçümlerde ana test penceresi Windows odağını almıyordu; FPS bu eş koşullardaki
+canvas çizim sayısıdır. Pencere başına GPU payı ayrıştırılamıyor; soğuk ofis
+açılışı ve saatler süren dayanıklılık bu ölçümlerle doğrulanmış sayılmadı.
+Anlamlı gerileme saptanmadı. Ölçümler, gerçek Electron görüntüleri ve kanıtlar
+`.local/ui-renewal-087/` altında; başlangıç referansı yayımlanmış 0.1.86'nın
+75/75 UI dosyasıyla hash olarak eşleşiyor. Yayın ve indirme sonucu aşağıdadır.
+
+28 Ekim 2026: **0.1.86 ofise yayımlandı.** Değer Kaybı'nda
+marka/model, kasa, konum, adet, malzeme/nitelik, aynı parçaya farklı konum ve
+katsayı arayüz alanları kaldırıldı. EKSİST dosyası ve mevcut kayıtlar kullanılabiliyor;
+kilometre ile çalışma saati ayrılıyor. Doğrulanmamış parça geçmişi ve bilinmeyen
+hasar sayısı hasarsız/0 kabul edilmiyor; eski taslaklar ve kayıtlı parça işlemleri
+korunuyor. Canlı SBM bağlantısı KTT sonucu sağlıyor, parça geçmişi sağlamıyor;
+kayıtlı doğrulanmış geçmiş kanıtı veya inceleme gerekli. Kaynak, tarih ve uygulama
+gerekçeleri `packages/domain/README.md` içinde kayıtlı; yeni katsayı eklenmedi.
+Önceden doğrulanan 75 hedefli test, 192 kaynak Excel formül testi ve gerçek Electron → API → ayrı
+PostgreSQL zincirinde 18 kontrol geçti. LibreOffice Calc `calculateAll` ile 14
+araç türü eşleşti; Excel'in mevcut H1 tam-1.000 TL ve F9 5.001-saat kusurları da
+bağımsız motorda doğrulandı. Kaynak çalışma kitabı değiştirilmedi; Microsoft Excel
+kurulu olmadığından native Excel yeniden hesaplaması yapılmadı. Typecheck, lint,
+build, x64 NSIS içeriği ve çıkarılan gerçek paketin açılış smoke'u geçti.
+Touch yayın engeli test kaynaklıydı: görev çubuğundan zorlanan foreground geçişinde
+Windows pencereyi öne aldığı halde `EVENT_SYSTEM_FOREGROUND` bildirimi gelmiyordu;
+ayrı native gözlemci de bildirim almadı. Test önce normal foreground'u doğrulayıp
+ardından gerçek tam ekran geçişini yapıyor; art arda iki açılış regresyona eklendi.
+Touch üretim kodu, Değer Kaybı kaynakları ve Excel çalışma kitabı değiştirilmedi.
+12 ardışık açılış, 124 hedefli kontrol ve ayrı pencere/görünüm testleri 2/2 geçti;
+tam masaüstü süiti **272 geçti / 0 başarısız / 2 atlandı**. Hedefli koşulardaki
+iki native imleç konumu hatası ayrı yeniden koşuda ve tam süitte geçildi; test
+koşulu gevşetilmedi. Önceki değişmemiş süitler ve 39 yayın kontrolü yeniden kullanılınca
+yayın kapısı 3.468 başarılı, 9 atlanan test içeriyor. Altı isteğe bağlı canlı API,
+Windows WebKit SameSite, isteğe bağlı NSIS derleyicisi ve klasör bakım entegrasyonu
+atlamaları başarılı sayılmadı. Typecheck/lint, yeniden derleme ve gerçek NSIS'ten
+çıkarılan paketin açılışı geçti; 75 UI ve 29 main/preload dosyası kaynakla eşleşti.
+Önceden doğrulanan backend yaması yedeklenerek dağıtıldı: 21 dosya doğrulandı,
+20 dosya değişti; şema ve durdurulmuş işlem aralığında üretim kayıt sayıları korundu,
+yeni işlem hatası yok, beş servis sağlıklı. Kanıtlar `.local/value-loss-20261028/`
+ve `.local/touch-release-086/` altında; kesin paket ve istemci sonucu aşağıdadır.
+
+28 Ekim 2026: **0.1.85 ofise yayımlandı**; Windows klasör adındaki harf büyüklüğü değişiminde yanlış arşivleme düzeltildi; kaynak/yayın karşılaştırması aşağıda kayıtlıdır.
+640 asıl kayıt olarak onaylanıp eşlendi; 650 arşivde, kimliği ve geçmişi korunuyor.
+723/725 ofis listesinden gizli; uzaktaki konum korunuyor, kimlik belirsizliği açık.
+
+28 Ekim 2026 12:45 Türkiye saati hedefli son kontrol: 247/247 test geçti, atlanan test yok.
+Üretimde salt okunur doğrulama 640/650 geçmişini ve 54/54 dosya hash'ini,
+723/725'in 263 iş/geçmiş satırını ve önceki 53/53 dosya hash'ini doğruladı.
+pCloud listesi ilk ölçümde 53, son ölçümde 55 dosya gösterdi; ek iki şasi fotoğrafı
+doğrudan okunup hash'lendi, son ölçümde liste farkı kalmadı. Önceki raporda kayıp
+dosyanın adı yanlıştı: `EVRAK/S POLİÇE.jpg` korunmuş, eski `EVRAK/16.jpeg` mevcut
+uzak klasörde yok; kurtarma doğrulanmadı. 723/725'in kanonik kimliği seçilmedi.
+Beş servis sağlıklı, yeni işlem hatası yok; üretim verisi değiştirilmedi.
+Yeni yazılım hatası saptanmadı; kod/paket değişikliği ve yeni yayın yapılmadı, **0.1.82** korunuyor.
+
+Önceki **0.1.81** yayınının [kalıcı sonuç raporu](./PENDING-UPDATES-20261028.md):
+271 hedefli test geçti. Kullanıcı talebiyle OCR/PDF uzun koşusu 7,77 saatte güvenle
+sonlandırıldı; sonuç/loglar korundu, 48 saatlik kararlılık kanıtı sayılmadı.
+Önceki paketler ve manifest korundu; ticari dağıtım yapılmadı.
+
 HasarBotu V2'nin **ince Electron kabuğu** (ADR-Q06, Paket 21 / D2).
 
 Kabuk aşağıdaki görevleri ve dar masaüstü yardımcılarını yürütür:
@@ -205,7 +389,152 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.80**, 2026-10-27T11:35:26.446Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.90**, 2026-10-31T12:39:33.423Z; Windows x64,
+113.021.946 bayt, SHA-256 `dbf6203772959cf4da77ba3adf5496f3b3732255b8e623a753859dc74c7cf460`.
+Kurulu 0.1.89 `available` gördü; kimlikli standart Electron indirmesinde HTTP 200,
+tam boyut/SHA-256 ve kurulum sürümü doğrulandı. Üç plaka gerçek listede görünür;
+239 izlenen kayıt ve önceki manifest/değişmez paket korundu. Zorunlu kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.89**, 2026-10-29T09:08:08.930Z; Windows x64,
+113.021.395 bayt, SHA-256 `42d8ca0b27811e73fe6f6166e485f433f33d45dc45c147f6548ce83f36563ec3`.
+Kurulu 0.1.88 istemcisi `available` gördü; kimlikli standart Electron indirmesinde
+HTTP 200, tam boyut/SHA-256 ve paket sürümü doğrulandı. Önceki manifest/paket korundu.
+İlk transferlerdeki aralıklı kesintilerin kök nedeni açık; ayrıntı ve kapsam yukarıdadır.
+
+Önceki doğrulanan ofis yayını: **0.1.87**, 2026-10-28T22:19:56.905Z; Windows x64,
+113.003.577 bayt, SHA-256 `1088cbe51eab96e36de39ad985c7a3f3420a8ab320520643650548837d36acd0`.
+Kurulu **0.1.85**, yeni sürümü `available` gördü; kimlikli manifest ve
+kurulum indirmesi HTTP 200 döndü, tam boyut ve SHA-256 eşleşti. Önceki 0.1.86
+manifesti ve değişmez kurulumu korundu. Beş servis sağlıklı, geçici inspector
+ve doğrulama görevi kapalı/kaldırılmış durumda; zorla kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.86**, 2026-10-28T19:07:38.061Z; Windows x64,
+113.001.860 bayt, SHA-256 `5590f077da1aa55916a4d140af7a9ec81b8ae44b76e7d77fdd32d6301c625d2d`.
+Kurulu **0.1.85**, güncellemeyi `available` gördü; kimlikli manifest ve kurulum
+indirmesi HTTP 200 döndü, indirilen tam boyut ve SHA-256 eşleşti. Önceki 0.1.85
+manifesti ve değişmez paketi, önceki 0.1.86 aday paketi korundu. Zorla kurulum
+yapılmadı; doğrulama görevi kaldırıldı, inspector kapandı ve beş servis sağlıklı.
+
+Önceki doğrulanan ofis yayını: **0.1.85**, 2026-10-28T16:58:10.710Z; Windows x64,
+113.001.283 bayt, SHA-256 `e52e6e729fbb64fa9f1ac06be94223f6fcc78e441c8343f135ef7f855b2a217b`.
+Git/uzak dallar, reflog, stash ve iki çalışma alanı karşılaştırıldı: 47 commitlenmemiş dosyadaki
+0.1.82–0.1.84 düzeltmeleri zaten teslim edilmişti; ayrı API dalının dört dosyası kaynakla eşdeğer,
+stash veya ilave kayıp commit yok. Önceden dışlanan çalışmalar geri alınmadı. File Agent'ın eski
+assistant-appearance sözleşme kopyası da güncel paketle eşitlendi; kullanımda eksik bir özellik bulunmadı.
+Windows'ta aynı dizin olan `Ekim`/`EKIM`, Türkçe harf dönüşümü nedeniyle ayrı sayılıp kaydı yanlışlıkla
+arşivliyordu. Envanter ve taşıma karşılaştırması mevcut klasör sahipliği anahtarıyla uyumlu hale getirildi;
+ofis/kapalı yerleşim adlarının Türkçe yorumlanması korundu. Yeni test önce hatayı üretti, düzeltmeyle geçti.
+64 hedefli test geçti: 11 envanter, bir gerçek arka plan tarayıcı, 25 File Agent, iki belge takip,
+yedi kimlik/çakışma, sekiz gerçek Electron/Chromium ve 10 yayın testi. İsim filtresi dışındaki 53 test
+çalıştırılmadı; zorunlu test atlanmadı, önceki kapsamlı denetim tekrarlanmadı. Typecheck, lint, build,
+x64 NSIS, paket ve gerçek kurulumdan çıkarılan içerikle açılış smoke geçti; 75 UI ve 29 main/preload
+dosyası kaynakla eşleşti. Gerçek NSIS kurulum/yükseltme/kaldırma kabulü bu sürümde tekrarlanmadı.
+Sunucuda yedi dosya doğrulandı, altı değişen dosya yedeklenerek dağıtıldı; son kontrolde 660 çalışma
+dosyası kaynakla eşleşti. Migration, elle veri bakımı veya üretim belgesi taşıma/silme/eşleme yok.
+Beş servis sağlıklı, yeni işlem hatası sıfır. Kurulu **0.1.83**, güncellemeyi `available` gördü;
+kimlikli HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti. Önceki 0.1.84 manifesti ve değişmez
+kurulum korundu; zorla kurulum yapılmadı, tanılama görevi/inspector ve yerel test PostgreSQL kapatıldı.
+Kaynak kontrol noktası `release/office-0.1.85`; kanıtlar `.local/final-code-release-20261028/` altında.
+
+Önceki doğrulanan ofis yayını: **0.1.84**, 2026-10-28T13:59:24.390Z; Windows x64,
+113.001.229 bayt, SHA-256 `aadd2c543291d12b882abd6f7cdd86782fb906aa8e5a8f07b2206f0b336cac3d`.
+01AEM674'ün 47 eski yolu sınıflandırıldı: 42 dosyada pCloud kimliği, olay geçmişi ve eski revizyonun
+SHA-256'sı DB ile eşleşti; ad ve içerik revizyonları değişmiş. Beş eski dosya silinmiş; mevcut oturum
+sahipleri olmadığı için asıl hesabın çöp kutusu doğrulanamadı. Erişilebilir çöp kutusunda ve 41 ZIP'in
+40.911 girdisinde doğrulanmış kopya bulunmadı; kalıcı kayıp veya kurtarma iddia edilmez.
+Evrak takibi artık tamamlanmış fiziksel taşıma zincirini izler: hash öncesi yanlış kayıp işaretleme,
+iki taşımada ikinci belge kaydı ve aynı içerikte inceleme kimliğinin kaybı önlenir. Vaka-klasör bağları değişmedi.
+57/57 hedefli test, typecheck, lint, build, NSIS ve paket açılışı geçti; kapsamlı testler tekrarlanmadı.
+Gerçek DB yedeği ayrı ortamda geri yüklendi; gerçek dosya hash'leriyle dört vakada API okuma/senkronizasyon
+doğrulandı. Canlıda normal tarayıcı sonrası 01AEM674/21FP610 için 67/5, iki eski kayıtta 54/70 belge HTTP 200
+ile okundu; görünür yol çakışması yok. Ek üretim taraması, fiziksel taşıma/silme/birleştirme veya vaka eşleme yapılmadı.
+Kurulu **0.1.83** güncellemeyi `available` gördü; kimlikli indirmede tam boyut/SHA-256 eşleşti.
+Önceki manifest/paket korundu; beş servis sağlıklı, yeni işlem hatası yok. Zorla kurulum yapılmadı.
+Kanıtlar ve 47 satırlık sonuç `.local/document-path-083-20261028/` altında.
+
+Önceki doğrulanan ofis yayını: **0.1.83**, 2026-10-28T11:26:16.391Z; Windows x64,
+113.000.974 bayt, SHA-256 `e313473593f0cdb66ddaa389fc7c81a9b81aec2e38ba1513e785f64061af3d0d`.
+Uzaktan/ofis arasında taşınmış eski workspace'ler tekil vaka, kayıtlı içerik ve gerektiğinde
+değişmez pCloud dosya kimliği/revizyonu ile aynı kayda bağlanır; attestation SHA-256 yan kanıtı
+doğrulanır. Klasör bildirimleri taramayı tetikler, ikinci tutarlı gözlem 1 saniye sonra yapılır;
+sürekli eksik envanter normal tarama aralığına döner. Yeni istemcide açık liste/pano 5 saniyede yenilenir.
+3.466 benzersiz test geçti; altı dış canlı API ve Windows'ta desteklenmeyen bir WebKit testi atlandı.
+Typecheck, lint, build, gerçek NSIS Unicode hedefi ve x64 paket açılışı geçti; 75 UI dosyası/profil eşleşti.
+Gerçek DB yedeği ayrı test DB'sinde geri yüklendi. Beş sunucu dosyası doğrulandı; beş servis sağlıklı,
+yeni işlem hatası sıfır. 01AEM674 (2026/727) ve 21FP610 (2026/754) özgün UUID'leriyle görünür;
+72 mevcut dosyanın hash'i ve 117 eski dosya takip kaydı korundu, mükerrer vaka oluşmadı.
+01AEM674'ün önceki kaydındaki 47 dosya yolu mevcut klasörde bulunamadı; eski hash/geçmişleri korunuyor,
+belge kurtarma veya bu dosyaların başka ad/konumda bulunmadığı iddia edilmedi.
+Kurulu **0.1.82**, **0.1.83** sürümünü `available` gördü; aynı kimlikli istemcide iki plakanın araması
+özgün kayıtları döndürdü. HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti. Önceki 0.1.82 manifesti
+ve değişmez kurulumu korundu; zorla kurulum yapılmadı. Temiz VM yükseltmesi bu sürümde tekrarlanmadı.
+Kanıtlar `.local/remote-return-20261028/` altında; tanılama görevi ve inspector kapatıldı.
+
+Önceki doğrulanan ofis yayını: **0.1.82**, 2026-10-28T06:15:20.155Z; Windows x64,
+113.000.911 bayt, SHA-256 `dcaed5727d945006de3306b9976f52dc6af1782f67e3006b2c72d3499eef6b03`.
+Yeni klasörde değişmez workspace UUID'si, mevcut vakaya kanıtlı pCloud kimliği bağlama,
+sahipsiz mevcut dizini sahiplenmeme ve aynı plakalı belirsiz kaynağı incelemeye ayırma eklendi.
+Konum/oluşturma/taşıma rezervasyonları ortak normalleştirilmiş ad korumasıyla seri hale gelir;
+çakışma güvenli 409/erteleme döndürür. Geniş koşular ve son hedefli tekrarlar birlikte
+3.473 benzersiz PASS verdi; altı canlı API ve Windows'ta desteklenmeyen bir WebKit testi atlandı.
+Typecheck, lint, build, gerçek NSIS Unicode hedefi, paket açılışı ve 75 UI dosyası/profil eşleşmesi geçti.
+Gerçek PostgreSQL yedek/geri yükleme, bağımsız klasör kopyası/hash, tekrar uygulama ve geri alma sınandı;
+manuel klasörün gerçek tarayıcıyla aynı vakaya bağlanması ve yeniden adlandırılması doğrulandı.
+67 sunucu dosyası doğrulandı; değişen 50 dosya yedeklenerek dağıtıldı. `0074_folder_path_ownership`
+yalnız ileriye dönük şema korumasıdır; migration sırasında ilgili iş tablolarının içerik özetleri değişmedi.
+Beş servis sağlıklı, yeni işlem hatası sıfır. Kurulu **0.1.81**, **0.1.82** sürümünü `available` gördü;
+kimlikli HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti. Önceki 0.1.81 manifesti ve 0.1.81/0.1.80/0.1.79
+değişmez paketleri korundu; zorla kurulum yapılmadı, tanılama görevi/inspector kapatıldı.
+Temiz VM yükseltme/kaldırma kabulü bu sürüm için tekrarlanmadı. Kanıtlar `.local/folder-identity-20261028/` altında.
+
+**Veri onayı bekliyor:** 650–640 çiftinde SBM/föy/resmî numara ve 54 güncel dosya hash'i 640'ı;
+725–723 çiftinde resmî hasar PDF'i ve 49 güncel dosya hash'i 723'ü destekler. İkinci çiftin SBM görselinin
+OCR numaraları DB ile birebir örtüşmedi; özgün belge kontrolü olmadan iş kimliği eşitliği kesinleştirilmedi.
+Son salt okunur kontrolde dört eşleme, iki pCloud kimliği ve 103 dosyanın SHA-256'sı korundu.
+İki çift için aynı/ayrı hasar kararı, resmî kanıt referansları, yetkili kayıt/klasör ve taze plan özeti
+operatörce onaylanmalıdır. `deploy/windows-service/repair-folder-identity.mjs` bakım aracı hazırdır;
+üretimde apply/rollback çalıştırılmadı. Mevcut `identity-review.json` yürütülemez ve onaysızdır.
+
+28 Ekim 2026 ek veri bakımı: kullanıcı onayıyla 72AAB878 / 2026/781 mevcut pCloud
+kimliği `27325142235` ile bağlandı; otomatik tarayıcı Ekim konumunu doğrulayıp görünürlüğü
+geri getirdi. Gerçek DB yedek/geri yükleme, ayrı test DB'sinde sonraki konum takibi,
+70 fiziksel dosyanın değişmediği ve kurulu 0.1.82 istemcisinin kimlikli aramasında
+tek kayıt döndüğü doğrulandı. Kaynak kod/sürüm değişmedi; yeni paket yayını gerekmedi.
+Çakışma raporunun güncel salt okunur kontrolünde 34SH935 klasörü `2026 UZAKTAN` altında,
+53 dosyalı ve yeni föyde 2026/725 numaralı bulundu; önceki 723 önerisi kesin değildir.
+Kullanıcı 34SH935'in uzaktan dosyası olarak mevcut konumunda ve ofis listesi dışında
+kalacağını doğruladı; bu iki kayda müdahale edilmedi. Sonraki açık onayla **640 asıl kayıt**
+seçildi; pCloud `27180552212` bağı 650'den 640'a düzeltildi. İki iş kaydı ve tüm geçmiş,
+640'ın 4 notu, 650'nin 4 belge incelemesi ve 54 fiziksel dosya korundu; taşıma/silme yok.
+Gerçek DB geri yükleme, ayrı test DB'sinde uygulama/tekrar/geri alma ve otomatik tarayıcı
+kontrolü geçti. Kurulu 0.1.82'nin kimlikli aramalarında 640 ve 72AAB878 görünür;
+650 ve 34SH935 görünmüyor. Beş servis sağlıklı; kaynak kod/sürüm değişmedi.
+Yerel karşılaştırma: `.local/folder-identity-20261028/operator-comparison-report.md`.
+
+Önceki doğrulanan ofis yayını: **0.1.81**, 2026-10-28T00:48:56.221Z; Windows x64,
+113.001.074 bayt, SHA-256 `f6fbf1bf7e75d48513019686078b7dc7a595e46c2a9a1f482ecef1c55fc4e272`.
+0.1.80 sonrası bekleyen üç AI yanıt okuyucusu, PDF/OCR timeout/iptal kuyruğu,
+PDF/Tesseract temizliği ve iş başına süreç yönetimi düzeltmeleri dahil edildi.
+Codec/native notice ve yan kanıtları File Agent paketinde korundu; imzalama ve
+tanılama araçları kaynakta yer alır. 109 API, 48 File Agent, 91 masaüstü/Windows
+ve 23 araç/paket testi geçti; başlangıçta atlanan Unicode NSIS testi ayrıca çalıştırıldı.
+Typecheck, lint, build ve x64 paket smoke geçti; 75 UI dosyası/profil eşleşti.
+Gerçek Electron/Chromium oturum kalıcılığı ve güvenlik kontrolleri, temiz Windows
+VM'de gerçek NSIS 0.1.80 → 0.1.81 yükseltmesi, açılış, kaldırma/geri dönüş ve
+sentetik profil işaretinin korunması doğrulandı. Gerçek kullanıcı hesabının NSIS
+yükseltmesi test edilmiş olarak sunulmadı. Sunucuda 30 dosya doğrulandı, değişen
+20 dosya yedeklenerek dağıtıldı; migration/veri müdahalesi yok, beş servis sağlıklı,
+yeni operasyon hatası sıfır. Kurulu **0.1.80**, **0.1.81** sürümünü `available`
+gördü; kimlikli HTTP 200 indirmesinde tam boyut/SHA-256 eşleşti. Önceki 0.1.80
+manifesti ve 0.1.80/0.1.79 değişmez paketleri korundu; zorla kurulum yapılmadı.
+Uzun koşu kullanıcı isteğiyle 7,77 saatte `INTERRUPTED` olarak kapandı; 64.586 iş,
+1.017.221 sayfa ve 323.814 bütünlük kontrolü kaydedildi. Ofis kabulü için mevcut
+başarılı kontroller kullanıldı; 48 saat tamamlanmış veya sızıntı yokluğu kanıtlanmış
+sayılmadı. Ticari dağıtım yapılmadı. Kanıtlar `.local/office-0.1.81-20261028/`
+altında; tanılama görevi/inspector kapatıldı, test VM'si temiz snapshot'a ve yerel
+test PostgreSQL kümesi başlangıçtaki kapalı durumuna döndürüldü.
+
+Önceki doğrulanan ofis yayını: **0.1.80**, 2026-10-27T11:35:26.446Z; Windows x64,
 113.000.938 bayt, SHA-256 `2652b3d54dde10ca2c69b9f851938cf4809612cb7325c2b0853e4887b15f41e1`.
 0.1.79 temelindeki bağımsız denetimde 19 ürün kusuru düzeltildi: kapalı dosya
 yetkileri, ofis tarihiyle numaralandırma, arşiv filtreleri, servis iletişimlerinin

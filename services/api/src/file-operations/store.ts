@@ -164,7 +164,9 @@ export async function enqueueLifecycleFileOperation(
   if (root.rowCount === 0) throw new Error('lifecycle_destination_root_inactive')
   const collision = await client.query(
     `SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2
-     AND lower(relative_path)=lower($3) AND id<>$4`,
+     AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND id<>$4
+       UNION ALL SELECT 1 FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2
+         AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>(SELECT case_id FROM case_locations WHERE id=$4)`,
     [input.organizationId, input.destination.storageRootKey, input.destination.relativePath, input.source.locationId],
   )
   if (collision.rowCount !== 0) throw new Error('lifecycle_destination_conflict')
@@ -335,7 +337,9 @@ export function createFileOperationStore(pool: pg.Pool) {
         ])
         const occupiedLocation = await client.query(
           `SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2
-           AND lower(relative_path)=lower($3) AND id<>$4`,
+           AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND id<>$4
+       UNION ALL SELECT 1 FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2
+         AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>(SELECT case_id FROM case_locations WHERE id=$4)`,
           [actor.organizationId, input.destinationStorageRootKey, input.destinationRelativePath, location.id],
         )
         const occupiedReservation = await client.query(
@@ -483,7 +487,9 @@ export function createFileOperationStore(pool: pg.Pool) {
 
         const destinationConflict = await client.query(
           `SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2
-           AND lower(relative_path)=lower($3) AND id<>$4`,
+           AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND id<>$4
+       UNION ALL SELECT 1 FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2
+         AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>(SELECT case_id FROM case_locations WHERE id=$4)`,
           [actor.organizationId, row.destination_storage_root_key, row.destination_relative_path, location.id],
         )
         if (destinationConflict.rowCount !== 0) return { kind: 'conflict' }

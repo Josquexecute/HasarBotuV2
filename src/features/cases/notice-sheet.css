@@ -58,10 +58,9 @@
 .notice-sheet__checkbox.is-checked::after { content: ''; position: absolute; width: 1mm; height: 1.8mm; border-right: 0.45mm solid #162637; border-bottom: 0.45mm solid #162637; transform: rotate(42deg); left: 0.65mm; top: 0.1mm; }
 .notice-sheet__missing { padding: 2mm; border-left: 0.25mm solid #bcc7d0; min-width: 0; }
 .notice-sheet__missing h3 { font-size: 8pt; color: #4a5968; }
-.notice-sheet__missing p, .notice-sheet__notes p { margin: 1.5mm 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
-.notice-sheet__notes { flex: 1 0 auto; min-height: 37mm; border: 0.25mm solid #bcc7d0; border-radius: 1mm; background: repeating-linear-gradient(to bottom, transparent, transparent 5.9mm, #e9edf1 6mm, transparent 6.1mm); }
-.notice-sheet__notes p { padding: 0 2mm 2mm; font-size: 9pt; line-height: 1.45; }
-.notice-sheet__footer { display: flex; justify-content: space-between; gap: 4mm; border-top: 0.25mm solid #8093a4; padding-top: 1.5mm; font-size: 7.5pt; }
+.notice-sheet__missing p, .notice-sheet__history p { margin: 1.5mm 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
+.notice-sheet__history p { padding: 0 2mm 2mm; font-size: 9pt; line-height: 1.45; min-height: 6mm; }
+.notice-sheet__footer { display: flex; justify-content: space-between; gap: 4mm; margin-top: auto; border-top: 0.25mm solid #8093a4; padding-top: 1.5mm; font-size: 7.5pt; }
 
 @media (max-width: 900px) {
   .notice-sheet-workspace { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); }

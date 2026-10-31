@@ -203,6 +203,8 @@ export function createCasesStore(pool: pg.Pool) {
         query.stage === 'under_repair' ? ['under_repair', ...LEGACY_CASE_STAGES] : [query.stage])
       if (query.responsibleUserId !== undefined) add('responsible_user_id = ?', query.responsibleUserId)
       if (query.serviceId !== undefined) add('service_center_id = ?', query.serviceId)
+      if (query.serviceName !== undefined) add(`service_center_id IS NULL AND EXISTS(SELECT 1 FROM case_service_contacts sc
+        WHERE sc.organization_id=cases.organization_id AND sc.case_id=cases.id AND sc.service_center_id IS NULL AND sc.name=?)`, query.serviceName)
       if (query.followUpFrom !== undefined) add('follow_up_date >= ?', query.followUpFrom)
       if (query.followUpTo !== undefined) add('follow_up_date <= ?', query.followUpTo)
 

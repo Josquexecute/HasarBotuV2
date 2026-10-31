@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
+import { summarizeChange } from '../audit/redact.js'
 import type pg from 'pg'
 import type { CaseCreateRequest, CaseUpdateRequest, CaseListItem } from '@hasarbotu/contracts'
-import { parsePlateNumber, plateSearchKey, matchEksistReference, eksistKey } from '@hasarbotu/domain'
+import { parsePlateNumber, plateSearchKey, eksistKey } from '@hasarbotu/domain'
 import { eksistCaseDataSchema, localDateSchema } from '@hasarbotu/contracts'
 import { uuidv7 } from '@hasarbotu/database'
 import { rowToDto, SELECT_FIELDS, toLocalDateString, type CaseRow } from './store.js'
@@ -121,6 +122,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
       input: CaseCreateRequest,
       idempotency: { scope: string; key: string; requestHash: string; buildResponse: (item: CaseListItem) => unknown },
       onCreated?: (client: pg.PoolClient, caseId: string) => Promise<void>,
+      workspaceRootKey?: string,
     ): Promise<CaseListItem | null> {
       const plateResult = parsePlateNumber(input.plate)
       if (!plateResult.ok) throw new ReferenceCheckError('plate')
@@ -132,6 +134,8 @@ export function createCasesWriteStore(pool: pg.Pool) {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        // Workspace creation and automatic registration acquire root ownership before the shared office counter.
+        if (workspaceRootKey) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`folder-registration:${actor.organizationId}:${workspaceRootKey}`])
         const today = await client.query<{ today: string }>("SELECT to_char(transaction_timestamp() AT TIME ZONE 'Europe/Istanbul','YYYY-MM-DD') AS today")
         const officeDate = localDateSchema.parse(today.rows[0]!.today)
         const year = Number(officeDate.slice(0, 4))
@@ -266,19 +270,11 @@ export function createCasesWriteStore(pool: pg.Pool) {
       try {
         await client.query('BEGIN')
         const current = await client.query(
-          `SELECT version, follow_up_date, loss_date, notification_date, lifecycle_status, case_type, service_center_id
+          `SELECT ${SELECT_FIELDS}
            FROM cases WHERE id::text = $1 AND organization_id = $2 AND is_archived = false FOR UPDATE`,
           [caseId, actor.organizationId],
         )
-        const existing = current.rows[0] as {
-          version: number
-          follow_up_date: Date | null
-          loss_date: Date | null
-          notification_date: Date | null
-          lifecycle_status: 'open' | 'closed'
-          case_type: 'traffic' | 'casco' | null
-          service_center_id: string | null
-        } | undefined
+        const existing = current.rows[0] as CaseRow | undefined
         if (existing === undefined) {
           await client.query('ROLLBACK')
           return { kind: 'not_found' }
@@ -307,8 +303,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         }
         if (input.serviceRevision) {
           if (!eksist) throw new ReferenceCheckError('serviceRevision', 'eksist_source_required')
-          const services = await client.query<{ id: string; name: string }>('SELECT id,name FROM service_centers WHERE organization_id=$1 AND is_active', [actor.organizationId])
-          input = { ...input, serviceId: matchEksistReference(input.serviceRevision.name, services.rows) }
+          input = { ...input, serviceId: await selectServiceContact(client, actor.organizationId, { name: input.serviceRevision.name }) }
           eksist = { ...eksist, serviceName: input.serviceRevision!.name, serviceRevised: true }
           await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND id=$4", [actor.organizationId, caseId, JSON.stringify(eksist), imported.rows[0].id])
         }
@@ -395,6 +390,20 @@ export function createCasesWriteStore(pool: pg.Pool) {
           entityId: item.id,
           details: {
             changedFields,
+            ...(() => {
+              // Only operational metadata is retained; contact details, notes and document content stay out of audit.
+              const safeFields = ['caseType', 'workflowStage', 'followUpDate', 'responsibleUserId', 'expertUserId', 'serviceId', 'insurerId', 'lossDate', 'notificationDate', 'transmission']
+              const before: Record<string, unknown> = {}, after: Record<string, unknown> = {}
+              for (const field of safeFields) {
+                const column = columnByField[field] as keyof CaseRow | undefined
+                if (!column || !changedFields.includes(field)) continue
+                const oldValue = existing[column], newValue = updatedRow[column]
+                before[field] = oldValue instanceof Date ? toLocalDateString(oldValue) : oldValue
+                after[field] = newValue instanceof Date ? toLocalDateString(newValue) : newValue
+              }
+              const summary = summarizeChange(before, after)
+              return { before: summary.before, after: summary.after }
+            })(),
             ...(input.caseType === undefined ? {} : { previousCaseType: existing.case_type, caseType: input.caseType, assignmentKind: existing.case_type === null ? 'user_classification' : 'user_correction' }),
             fromVersion: input.expectedVersion,
             toVersion: item.version,

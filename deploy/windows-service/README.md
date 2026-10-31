@@ -5,7 +5,29 @@ ve salt-okunur/planlı PowerShell araçları içerir. Tam prosedür için:
 
 **→ [`docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`](../../docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md)**
 
+`automatic-folder-discovery.mjs` klasör taşıma/yeniden adlandırma bildirimleriyle taramayı
+başlatır; iki tutarlı gözlem arasındaki doğrulama beklemesi 1 saniyedir. Bildirim desteği
+yoksa yapılandırılmış periyodik tarama sürer; `status.json` içindeki `watching` ve
+`watchErrorCode` durumu gösterir. Eski, işaretsiz workspace'lerin kaybolan konumları
+tekil vaka ve kayıtlı içerikle doğrulanır. İsteğe bağlı mutlak `attestationStoreDirectory`
+ayarında eski konuma ait değişmez pCloud dosya kimliği/revizyonu kanıtı bulunursa eksik
+tarihsel belgeler kimlik devamlılığını engellemez; geçmiş ve dosya kayıtları korunur.
+
 ## Kapanış sonrası kaynak kurtarma
+
+Klasör kimliği düzeltmesi `repair-folder-identity.mjs` ile ayrı operatör bakım akışıdır:
+`node repair-folder-identity.mjs <config.json> plan <decision.json> <plan.json>` yalnız okur;
+`apply <plan.json> <approval.json> <receipt.json>` ve `rollback <receipt.json> <approval.json>` açık onay ister.
+Karar iki vaka UUID'sini, `duplicate_claim`/`distinct_claims` ilişkisini, her vaka için resmî kanıt referansını ve hedef pCloud kimliği/yolunu içerir;
+belirsiz ilişki uygulanmaz. Mükerrer kaydın eşlemesi kaldırılacaksa kayıt önceden arşivli olmalıdır; kayıt/not/evrak/geçmiş silinmez, fiziksel taşıma yapılmaz.
+Yapılandırma `runtimeDirectory`, `sourceRoot`, `pcloudDatabasePath`, `topLevelFolderName`, `organizationId`, `actorUserId`,
+`evidenceFile`, özel ACL'li `backupDirectory`, `pgDumpPath`, `pgRestorePath` ve `maintenanceWindowConfirmed` alanlarını taşır.
+`DATABASE_URL` yerel DB'yi, `RESTORE_TEST_DATABASE_URL` boş ve adı `_test` ile biten ayrı geri yükleme DB'sini göstermelidir.
+Kanıt `folder-identity-evidence/1` biçiminde hedeflerin `sourceFolderId`, `relativePath`, sıralı `directories` ve `files[{path,size,sha256}]` listeleriyle `absentPaths` listesini içerir.
+Onay `operatorId`, `approvedAt`, `approvedPlanHash`; geri alma onayı `approvedReceiptHash` kullanır.
+Araç gerçek DB yedeğini geri yükleyip planı karşılaştırır, klasörleri bağımsız kopyalayıp hash'ler, geri alma makbuzunu commit öncesinde diske kalıcı yazar.
+Sürüm/içerik/iş kuyruğu/kimlik değişirse durur; çalışan ilgili akışlar operatör bakım penceresinde durdurulmalıdır.
+Test: `TEST_DATABASE_URL` ve `TEST_PG_BIN` ile `node --test deploy/windows-service/repair-folder-identity.test.mjs`.
 
 File Agent, doğrulanmış klasör taşımasından sonra kaynak içeriği silmek yerine kaynak ebeveynindeki `_HASARBOTU_OFFICE/cleanup/<operationId>-<operationVersion>` dizinine atomik taşır. Bu alan tarama dışında tutulur ve otomatik silinmez. Taşıma sırasında içerik değişirse veya kaynak yeniden oluşursa işlem manuel kurtarma ister; audit kaydındaki `safeOutcomeCode` ve saklanan içerik birlikte incelenmelidir. Saklanan kaynaklar, hedef bütünlüğü ve ofis saklama politikası doğrulandıktan sonra yetkili operatör tarafından yönetilir.
 

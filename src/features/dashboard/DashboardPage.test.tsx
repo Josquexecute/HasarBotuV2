@@ -37,6 +37,16 @@ beforeEach(() => {
 })
 
 describe('DashboardPage gerçek veri görünüm davranışları', () => {
+  it('keeps descriptions for all six statistics and hides the internal priority version', () => {
+    const snapshot = buildMockDashboard()
+    renderDashboard()
+    const statistics = document.querySelectorAll('.summary-item')
+    expect(statistics).toHaveLength(6)
+    expect([...statistics].every(item => Boolean(item.querySelector('small')?.textContent?.trim()))).toBe(true)
+    expect(screen.queryByText(snapshot.priorityVersion)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /İşlem Gereken/ }))
+    expect(screen.getByRole('button', { name: /İşlem Gereken/ })).toHaveAttribute('aria-pressed', 'true')
+  })
   it('shows all seven stages including ready to close and opens the closed case list', () => {
     renderDashboard()
     expect([...document.querySelectorAll('.workflow-column__head > span')].map(item => item.textContent)).toEqual([

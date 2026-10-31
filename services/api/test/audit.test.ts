@@ -236,6 +236,32 @@ describeDb('Merkezi audit altyapisi (gercek veritabani)', () => {
     expect((future.json() as { items: unknown[] }).items).toEqual([])
   })
 
+  it('searches Turkish action labels and current targets, filters outcomes and sorts stable pages without changing logs', async () => {
+    const caseId = await createCaseAsAdmin('34 AUD 210')
+    const audit = createAuditService()
+    await audit.record(pool, { organizationId: orgA, actorUserId: adminId, action: 'case.updated', entityType: 'case', entityId: caseId,
+      details: { before: { caseType: 'traffic' }, after: { caseType: 'casco' } } })
+    await audit.record(pool, { organizationId: orgA, actorUserId: adminId, action: 'request.rejected', entityType: 'case', entityId: caseId, details: { statusCode: 403 } })
+    const before = (await pool.query('SELECT count(*)::int AS n FROM audit_events')).rows[0].n
+    const query = async (suffix: string) => {
+      const res = await app.inject({ method: 'GET', url: `${AUDIT_EVENTS_ROUTE}?presentation=readable&entityId=${caseId}&${suffix}`, headers: { cookie: adminCookie } })
+      expect(res.statusCode).toBe(200)
+      return auditEventsResponseSchema.parse(res.json())
+    }
+    const changes = await query(`search=${encodeURIComponent('Dosya bilgileri')}&category=cases&result=success&sort=asc`)
+    expect(changes.items).toHaveLength(1)
+    expect(changes.items[0]).toMatchObject({ action: 'case.updated', actorUserId: adminId, actorName: 'admin', caseId, details: { before: { caseType: 'traffic' }, after: { caseType: 'casco' } } })
+    expect(changes.items[0]?.targetLabel).toContain('34 AUD 210')
+    expect((await query('search=34%20AUD%20210')).items).toHaveLength(3)
+    expect((await query('result=rejected')).items.map(item => item.action)).toEqual(['request.rejected'])
+    expect((await query('search=%25')).items).toEqual([])
+    const asc = await query('sort=asc'), desc = await query('sort=desc')
+    expect(asc.items.map(item => item.id)).toEqual(desc.items.map(item => item.id).reverse())
+    expect((await pool.query('SELECT count(*)::int AS n FROM audit_events')).rows[0].n).toBe(before)
+    const legacy = await app.inject({ method: 'GET', url: `${AUDIT_EVENTS_ROUTE}?entityId=${caseId}`, headers: { cookie: adminCookie } })
+    expect(Object.keys(legacy.json().items[0]).sort()).toEqual(['id', 'organizationId', 'actorUserId', 'action', 'entityType', 'entityId', 'requestId', 'occurredAt', 'details'].sort())
+  })
+
   it('kiracı izolasyonu: A yoneticisi B organizasyonunun olaylarini goremez', async () => {
     const res = await app.inject({
       method: 'GET',

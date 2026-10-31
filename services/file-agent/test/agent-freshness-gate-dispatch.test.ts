@@ -95,6 +95,7 @@ describe('agent.ts kritik islem freshness gate dispatch', () => {
       id: 'job-2',
       payload: {
         kind: 'workspace',
+        workspaceId: '01900000-0000-7000-8000-000000000002',
         storageRootKey: 'test-root',
         relativePath: '00BBB000',
         requiredSubdirectories: ['EVRAK', 'HASAR', 'OLAY YERİ', 'ONARIM', 'DEĞER KAYBI'],

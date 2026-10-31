@@ -8,6 +8,7 @@ import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/databas
 import { reconcileOfficeFolderInventory } from '../src/cases/office-folder-inventory.js'
 import { applyFolderRegistration, planFolderRegistration } from '../src/cases/folder-registration.js'
 import type { AutomaticFolderPolicy } from '../src/cases/automatic-folder-registration.js'
+import { createAuditService } from '../src/audit/service.js'
 
 const describeDb = process.env.TEST_DATABASE_URL ? describe : describe.skip
 describeDb('verified office folder inventory', () => {
@@ -159,5 +160,25 @@ describeDb('verified office folder inventory', () => {
       expect(await reconcile([{ ...folder, relativePath: destination }])).toMatchObject({ inventoryDeferred: 1 })
       expect(await snapshot()).toEqual(before)
     }
+  })
+  it('never restores or changes a same-plate occupant using another case cloud identity', async () => {
+    const registered = await register('2026 OFİS/Ekim 2026/34CFN123')
+    const peer = uuidv7()
+    await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,plate,plate_normalized,workflow_stage,is_archived)
+      VALUES($1,$2,2026,899,'2026/899','34 CFN 123','34CFN123','reporting',true)`, [peer, policy.organizationId])
+    await createAuditService().record(pool, { organizationId: policy.organizationId, actorUserId: policy.actorUserId,
+      action: 'case.office_inventory_reconciled', entityType: 'case', entityId: peer, details: { managedArchive: true } })
+    const path = '2026 OFİS/Ekim 2026/34CFN123 - 2'
+    await pool.query(`INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path,verification_status,source)
+      VALUES($1,$2,$3,$4,$5,'verified','system')`, [uuidv7(), policy.organizationId, peer, policy.storageRootKey, path])
+    const before = (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=$1', [peer])).rows
+    expect((await reconcile([{ ...registered, relativePath: path }])).inventoryDeferred).toBeGreaterThanOrEqual(1)
+    expect((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=$1', [peer])).rows).toEqual(before)
+  })
+  it.each([['2026 OFİS', '34CSE123'], ['2026 Ofis', '34CSE124']])('keeps a registered folder under %s visible after an ASCII case-only Windows directory rename', async (year, plate) => {
+    const folder = await register(`${year}/Ekim 2026/${plate}`)
+    const id = (await pool.query('SELECT case_id FROM case_folder_registrations WHERE source_folder_id=$1', [folder.sourceFolderId])).rows[0].case_id
+    await reconcile([{ ...folder, relativePath: folder.relativePath.replace('Ekim', 'EKIM') }])
+    expect((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [id])).rows[0].is_archived).toBe(false)
   })
 })

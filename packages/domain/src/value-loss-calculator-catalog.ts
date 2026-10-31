@@ -51,7 +51,7 @@ export interface ValueLossPartSuggestion {
   readonly stableRuleId: string | null
   readonly supportedOperations: readonly string[]
 }
-export interface ValueLossCalculatorPartSelection extends Omit<RealMarketValueLossPartInput, 'stableRuleId' | 'operation'> {
+export interface ValueLossCalculatorPartSelection extends Omit<RealMarketValueLossPartInput, 'stableRuleId' | 'operation' | 'priorPartState'> {
   readonly entryId: string
   readonly stableRuleId: string | null
   readonly partName: string
@@ -59,6 +59,7 @@ export interface ValueLossCalculatorPartSelection extends Omit<RealMarketValueLo
   readonly quantity: number
   readonly material: ValueLossPartMaterial
   readonly operation: ValueLossCalculatorOperation
+  readonly priorPartState: RealMarketValueLossPartInput['priorPartState'] | 'unknown'
 }
 
 const normalized = (value: string) => value.trim().replaceAll(/\s+/g, ' ').toLocaleUpperCase('tr-TR')
@@ -171,6 +172,10 @@ export function resolveValueLossCalculatorParts(vehicleType: string, body: Value
   const seenPhysical = new Set<string>(), seenRules = new Set<string>()
   let requiresMarketDifference = false
   for (const entry of selections) {
+    if (entry.priorPartState === 'unknown') {
+      issues.push({ field: 'partSelections', message: `${entry.partName}: önceki parça hasarı bilinmiyor. SBM / geçmiş kayıt veya inceleme ile doğrulayın.` })
+      continue
+    }
     const physical = `${normalized(entry.partName)}:${normalized(entry.position)}`
     if (seenPhysical.has(physical)) issues.push({ field: 'partSelections', message: 'Aynı parça ve konum bir kez girilmelidir. Birden çok eş parça için adet veya farklı konum belirtin.' })
     seenPhysical.add(physical)

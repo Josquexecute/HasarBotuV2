@@ -4,7 +4,7 @@ import { serviceContactDraft, type ServiceContactDraft } from './service-contact
 
 export function ServiceContactFields({ value, options, sourceText, onChange, nameReadOnly = false, autoFocus = false }: {
   value: ServiceContactDraft
-  options: readonly { name: string; phone?: string | null }[]
+  options: readonly { name: string; phone?: string | null; address?: string | null }[]
   sourceText?: string
   onChange: (value: ServiceContactDraft) => void
   nameReadOnly?: boolean

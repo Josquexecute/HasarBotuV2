@@ -7,7 +7,7 @@ describe('Notice sheet HTTP adapter', () => {
     const fetchImpl = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(noticeSheetFixture))))
     const port = createHttpNoticeSheetAdapter({ fetchImpl })
     expect(await port.read(noticeSheetFixture.caseId)).toEqual(noticeSheetFixture)
-    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/notice-case-1/notice-sheet', expect.objectContaining({ credentials: 'include',headers: expect.objectContaining({ 'x-hasarbotu-notice-sheet-fields': '2' }) }))
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/notice-case-1/notice-sheet', expect.objectContaining({ credentials: 'include',headers: expect.objectContaining({ 'x-hasarbotu-notice-sheet-fields': '3' }) }))
     await expect(port.read('different-case')).rejects.toMatchObject({ kind: 'unavailable' })
   })
   it('sends only the versioned overrides and explicit confirmation', async () => {

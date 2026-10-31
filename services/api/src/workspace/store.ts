@@ -124,6 +124,9 @@ export function createWorkspaceStore(pool: pg.Pool) {
       transaction?: pg.PoolClient,
     ): Promise<PlanOutcome> {
       return withTransaction(pool, async (client): Promise<PlanOutcome> => {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+          `folder-registration:${actor.organizationId}:${input.storageRootKey}`,
+        ])
         const caseResult = await client.query(
           `SELECT plate, notification_date::text AS notification_date
            FROM cases WHERE organization_id=$1 AND id::text=$2 FOR UPDATE`,
@@ -161,7 +164,9 @@ export function createWorkspaceStore(pool: pg.Pool) {
         const occupied = await client.query(
           `SELECT relative_path FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2
            UNION ALL
-           SELECT relative_path FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2`,
+           SELECT relative_path FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2
+           UNION ALL SELECT destination_relative_path AS relative_path FROM case_file_operations WHERE organization_id=$1
+             AND destination_storage_root_key=$2 AND status NOT IN ('ready','stale','cancelled')`,
           [actor.organizationId, input.storageRootKey],
         )
         const selected = selectAvailableCaseWorkspacePath(
@@ -243,6 +248,7 @@ export function createWorkspaceStore(pool: pg.Pool) {
                   storageRootKey: row.storage_root_key,
                   relativePath: row.relative_path,
                   kind: 'workspace',
+                  workspaceId: planId,
                   requiredSubdirectories: CASE_WORKSPACE_SUBDIRECTORIES,
                 }),
               ],

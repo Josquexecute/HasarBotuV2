@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type pg from 'pg'
 import type { FastifyInstance } from 'fastify'
 import { assertTestDatabaseUrl, createDatabasePool, closeDatabasePool, runMigrations, uuidv7 } from '@hasarbotu/database'
 import { buildApp, hashPassword } from '../src/index.js'
 import { decryptToken } from '../src/tracking/google.js'
 import type { LegalProvider } from '../src/legislation/provider.js'
+import { catalog } from '../src/legislation/library.js'
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)('legislation live database routes', () => {
   let pool: pg.Pool, app: FastifyInstance, failCitation = false
@@ -12,6 +13,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('legislation live database route
   const root = '/api/v1/legislation', key = 'AQ.synthetic-test-only.' + 'do-not-use_'.repeat(40), claim = uuidv7()
   const provider: LegalProvider = async (_input, evidence) => ({ statements: [{ text: 'Kaynak hükmü incelenmelidir.', citations: [{ id: failCitation ? 'made-up' : evidence[0]!.id, quote: evidence[0]!.excerpt.slice(0, 100) }] }], missingInformation: [] })
   beforeAll(async () => {
+    // Route behavior needs fresh fixture sources; wall-clock expiry is tested separately.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(catalog.sources.find(source => source.id === 'casco-conditions')!.verifiedAt))
     const config = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL!)
     pool = createDatabasePool({ config })
     await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public')
@@ -31,7 +35,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('legislation live database route
     await pool.query(`INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,plate,plate_normalized,workflow_stage)
       VALUES($1,$2,2026,1,'2026/1',NULL,'34 TEST 12','34TEST12','new_notification')`, [claim, org])
   }, 60_000)
-  afterAll(async () => { if (app) await app.close();if (pool) await closeDatabasePool(pool) })
+  afterAll(async () => { vi.useRealTimers();if (app) await app.close();if (pool) await closeDatabasePool(pool) })
   const req = (user: number, method: 'GET' | 'PUT' | 'POST', path: string, payload?: object) => app.inject({ method, url: root + path, headers: { cookie: users[user]!.cookie }, ...(payload ? { payload } : {}) })
   const question = { question: 'kasko sigortası teminat dışında kalan haller', mode: 'sources', eventDate: null, sourceIds: ['casco-conditions'], caseId: claim }
   it('requires authentication and serves actual PDF/annex sources without AI configuration', async () => {

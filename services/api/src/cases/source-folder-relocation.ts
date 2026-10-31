@@ -21,7 +21,18 @@ export const sourceFolderRelocationSchema = z.strictObject({
     previousLocation: z.strictObject({ id: idSchema, storageRootKey: storageRootKeySchema, relativePath: relativePathSchema, version: z.number().int().positive() }),
     identity: z.discriminatedUnion('kind', [
       z.strictObject({ kind: z.literal('registered') }),
+      // Maintenance-only reviewed recovery for cloud copy/delete moves that recreate IDs.
+      // Automatic discovery never manufactures an operator decision from a plate match.
+      z.strictObject({ kind: z.literal('reviewed_recreation'), reviewedByUserId: idSchema,
+        previousSourceFolderId: z.string().regex(/^\d+$/).nullable(), evidenceSha256: digest,
+        files: z.array(z.strictObject({ recordedPath: relativePathSchema, relativePath: relativePathSchema, sha256: digest })).min(2).max(1000),
+        candidates: z.array(z.strictObject({ caseId: idSchema, version: z.number().int().positive() })).min(1).max(100),
+      }),
       z.strictObject({ kind: z.literal('v1'), stableSourceIdentity: digest, sourceFileHash: digest }),
+      z.strictObject({ kind: z.literal('tracked_files'), manifestHash: digest,
+        continuity: z.array(z.strictObject({ relativePath: relativePathSchema, sha256: digest,
+          fileId: z.string().regex(/^\d+$/), pcloudHash: z.string().regex(/^-?\d+$/), attestationHash: digest })).length(2).optional(),
+      }),
     ]),
   })).min(1).max(10_000),
 })
@@ -30,6 +41,17 @@ interface Queryable { query: pg.Pool['query'] }
 interface Actor { organizationId: string; actorUserId: string; requestId: string }
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const fail = (code: string): never => { throw new Error(code) }
+
+/** Legacy workspaces predate UUID markers. Require their complete, distinct recorded contents. */
+export async function readTrackedFolderIdentity(db: Queryable, organizationId: string, caseId: string, storageRootKey: string, previousPath: string) {
+  const rows = (await db.query(`SELECT relative_path,current_hash FROM tracked_files
+    WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 ORDER BY relative_path FOR SHARE`, [organizationId, caseId, storageRootKey])).rows
+  const prefix = previousPath + '/'
+  if (rows.length < 2 || new Set(rows.map(r => r.current_hash)).size < 2
+    || rows.some(r => !r.relative_path.startsWith(prefix) || !digest.safeParse(r.current_hash).success)) fail('folder_relocation_content_identity_required')
+  const files = rows.map(row => ({ relativePath: relativePathSchema.parse(row.relative_path.slice(prefix.length)), sha256: row.current_hash as string }))
+  return { files, manifestHash: hash(files) }
+}
 
 /** Source moves update locations only. Physical closed placement cannot authorize a business closure. */
 export async function planSourceFolderRelocation(db: Queryable, organizationId: string, input: SourceFolderRelocation) {
@@ -47,7 +69,7 @@ export async function planSourceFolderRelocation(db: Queryable, organizationId: 
       // The office inventory can restore its own archives after the same source ID reappears at a new path.
       const previous = (await db.query(`SELECT details FROM audit_events WHERE organization_id=$1 AND resource_id=$2
         AND action='case.office_inventory_reconciled' ORDER BY occurred_at DESC,id DESC LIMIT 1`, [organizationId, binding.caseId])).rows[0]
-      if (binding.identity.kind !== 'registered' || previous?.details?.managedArchive !== true) fail('folder_relocation_case_not_found')
+      if (binding.identity.kind === 'v1' || previous?.details?.managedArchive !== true) fail('folder_relocation_case_not_found')
     }
     const plate = parseSourcePlateFolderName(binding.relativePath.split('/').at(-1)!)?.plate
     if (!plate || plateSearchKey(plate) !== row.plate_normalized) fail('folder_relocation_plate_mismatch')
@@ -57,30 +79,67 @@ export async function planSourceFolderRelocation(db: Queryable, organizationId: 
     const current = (await db.query('SELECT id,storage_root_key,relative_path,version FROM case_locations WHERE organization_id=$1 AND case_id=$2 FOR SHARE', [organizationId, binding.caseId])).rows[0]
     const previous = binding.previousLocation
     if (!current || current.id !== previous.id || current.storage_root_key !== previous.storageRootKey || current.relative_path !== previous.relativePath || current.version !== previous.version) fail('folder_relocation_location_changed')
-    if (previous.storageRootKey !== manifest.storageRootKey || previous.relativePath.toLowerCase() === binding.relativePath.toLowerCase()) fail('folder_relocation_move_required')
-    if ((await db.query('SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2 AND lower(relative_path)=lower($3) AND case_id<>$4', [organizationId, manifest.storageRootKey, binding.relativePath, binding.caseId])).rowCount) fail('folder_relocation_location_in_use')
+    if (previous.storageRootKey !== manifest.storageRootKey
+      || previous.relativePath.toLowerCase() === binding.relativePath.toLowerCase()
+        && (binding.identity.kind !== 'reviewed_recreation' || binding.identity.previousSourceFolderId === binding.sourceFolderId)) fail('folder_relocation_move_required')
+    if ((await db.query(`SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2 AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>$4
+      UNION ALL SELECT 1 FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2 AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>$4
+      UNION ALL SELECT 1 FROM case_file_operations WHERE organization_id=$1 AND destination_storage_root_key=$2 AND hb_folder_path_key(destination_relative_path)=hb_folder_path_key($3)
+        AND case_id<>$4 AND status NOT IN ('ready','stale','cancelled')`, [organizationId, manifest.storageRootKey, binding.relativePath, binding.caseId])).rowCount) fail('folder_relocation_location_in_use')
     const registrations = (await db.query('SELECT case_id,storage_root_key,source_folder_id FROM case_folder_registrations WHERE organization_id=$1 AND (case_id=$2 OR (storage_root_key=$3 AND source_folder_id=$4)) FOR SHARE', [organizationId, binding.caseId, manifest.storageRootKey, binding.sourceFolderId])).rows
     if (binding.identity.kind === 'registered') {
       if (registrations.length !== 1 || registrations[0].case_id !== binding.caseId || registrations[0].storage_root_key !== manifest.storageRootKey || registrations[0].source_folder_id !== binding.sourceFolderId) fail('folder_relocation_registered_identity_required')
-    } else {
+    } else if (binding.identity.kind === 'reviewed_recreation') {
+      const identity = binding.identity
+      const own = registrations.find(r => r.case_id === binding.caseId)
+      if ((own?.source_folder_id ?? null) !== identity.previousSourceFolderId
+        || registrations.some(r => r.case_id !== binding.caseId)
+        || (own && own.storage_root_key !== manifest.storageRootKey)) fail('folder_relocation_registered_identity_required')
+      const candidates = (await db.query('SELECT id AS "caseId",version FROM cases WHERE organization_id=$1 AND plate_normalized=$2 ORDER BY id', [organizationId, row.plate_normalized])).rows
+      if (JSON.stringify(candidates) !== JSON.stringify([...identity.candidates].sort((a, b) => a.caseId.localeCompare(b.caseId)))) fail('folder_relocation_candidates_changed')
+      const tracked = (await db.query('SELECT relative_path,current_hash FROM tracked_files WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 FOR SHARE', [organizationId, binding.caseId, manifest.storageRootKey])).rows
+      const paths = [previous.relativePath, ...(await db.query(`SELECT relative_path FROM case_location_history WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3
+        UNION SELECT previous_relative_path FROM case_location_history WHERE organization_id=$1 AND case_id=$2 AND previous_storage_root_key=$3 AND previous_relative_path IS NOT NULL`, [organizationId, binding.caseId, manifest.storageRootKey])).rows.map(r => r.relative_path)]
+      if (new Set(identity.files.map(f => f.sha256)).size < 2 || new Set(identity.files.map(f => f.relativePath.toUpperCase())).size !== identity.files.length
+        || identity.files.some(f => !paths.some(path => f.recordedPath === path + '/' + f.relativePath)
+          || !tracked.some(t => t.relative_path === f.recordedPath && t.current_hash === f.sha256))) fail('folder_relocation_content_identity_required')
+      if ((await db.query(`SELECT 1 FROM case_file_operations WHERE organization_id=$1 AND case_id=$2 AND status NOT IN ('ready','failed','stale','cancelled')
+        UNION ALL SELECT 1 FROM case_lifecycle_operations WHERE organization_id=$1 AND case_id=$2 AND status NOT IN ('blocked','closed','reopened','failed','stale','cancelled')
+        UNION ALL SELECT 1 FROM field_photo_uploads WHERE organization_id=$1 AND case_id=$2 AND status IN ('receiving','queued','processing')`, [organizationId, binding.caseId])).rowCount) fail('folder_relocation_operation_active')
+    } else if (binding.identity.kind === 'v1') {
       if (registrations.length) fail('folder_relocation_already_registered')
       const origin = await db.query(`SELECT 1 FROM v1_import_records r
         LEFT JOIN v1_import_record_reconciliations x ON x.legacy_import_record_id=r.id AND x.organization_id=r.organization_id
         WHERE r.organization_id=$1 AND r.case_id=$2 AND r.item_type='case' AND r.target_type='case' AND r.target_id=$2
           AND r.status IN ('created','backfilled','skipped_existing') AND coalesce(r.stable_source_identity,x.stable_source_identity)=$3`, [organizationId, binding.caseId, binding.identity.stableSourceIdentity])
       if (!origin.rowCount) fail('folder_relocation_v1_identity_required')
+    } else {
+      if (registrations.length) fail('folder_relocation_already_registered')
+      // A same-plate duplicate still needs a separate operator decision, even with matching documents.
+      if ((await db.query('SELECT id FROM cases WHERE organization_id=$1 AND plate_normalized=$2', [organizationId, row.plate_normalized])).rowCount !== 1) fail('folder_relocation_content_identity_required')
+      if (!(await db.query(`SELECT 1 FROM case_workspace_provisionings WHERE organization_id=$1 AND case_id=$2
+        AND storage_root_key=$3 AND relative_path=$4 AND status='ready'`, [organizationId, binding.caseId, manifest.storageRootKey, previous.relativePath])).rowCount) fail('folder_relocation_content_identity_required')
+      const content = await readTrackedFolderIdentity(db, organizationId, binding.caseId, manifest.storageRootKey, previous.relativePath)
+      if (content.manifestHash !== binding.identity.manifestHash) fail('folder_relocation_content_changed')
+      const continuity = binding.identity.continuity
+      if (continuity && (new Set(continuity.map(f => f.fileId)).size !== 2 || new Set(continuity.map(f => f.sha256)).size !== 2
+        || continuity.some(f => !content.files.some(recorded => recorded.relativePath === f.relativePath && recorded.sha256 === f.sha256)))) fail('folder_relocation_content_identity_required')
+      if ((await db.query(`SELECT 1 FROM case_file_operations WHERE organization_id=$1 AND case_id=$2 AND status NOT IN ('ready','failed','stale','cancelled')
+        UNION ALL SELECT 1 FROM case_lifecycle_operations WHERE organization_id=$1 AND case_id=$2 AND status NOT IN ('blocked','closed','reopened','failed','stale','cancelled')
+        UNION ALL SELECT 1 FROM field_photo_uploads WHERE organization_id=$1 AND case_id=$2 AND status IN ('receiving','queued','processing')`, [organizationId, binding.caseId])).rowCount) fail('folder_relocation_operation_active')
     }
   }
   const payload = { organizationId, manifest }
   return { ...payload, planHash: hash(payload) }
 }
 
-/** The verifier must attest the live folder ID, absent old path and, for V1, current sidecar hash/identity. */
+/** The verifier attests the live cloud ID, absent old path, and every hash required by the identity. */
 export async function applySourceFolderRelocation(pool: pg.Pool, actor: Actor,
   plan: Awaited<ReturnType<typeof planSourceFolderRelocation>>, approvedHash: string,
   verifySource: (binding: SourceFolderRelocation['bindings'][number], storageRootKey: string) => Promise<void>) {
   const { planHash, ...payload } = plan
   if (actor.organizationId !== plan.organizationId || approvedHash !== planHash || hash(payload) !== approvedHash) fail('folder_relocation_approval_mismatch')
+  if (plan.manifest.bindings.some(b => b.identity.kind === 'reviewed_recreation' && b.identity.reviewedByUserId !== actor.actorUserId)) fail('folder_relocation_approval_mismatch')
   for (const binding of plan.manifest.bindings) await verifySource(binding, plan.manifest.storageRootKey)
   const client = await pool.connect()
   try {
@@ -95,6 +154,7 @@ export async function applySourceFolderRelocation(pool: pg.Pool, actor: Actor,
     if ((await planSourceFolderRelocation(client, actor.organizationId, plan.manifest)).planHash !== approvedHash) fail('folder_relocation_plan_stale')
     const audit = createAuditService()
     for (const binding of plan.manifest.bindings) {
+      if (binding.identity.kind === 'reviewed_recreation') await verifySource(binding, plan.manifest.storageRootKey)
       const previous = binding.previousLocation, version = previous.version + 1
       await client.query(`UPDATE case_locations SET relative_path=$1,source='imported',verification_status='pending',version=version+1,updated_at=now()
         WHERE organization_id=$2 AND id=$3`, [binding.relativePath, actor.organizationId, previous.id])
@@ -103,9 +163,9 @@ export async function applySourceFolderRelocation(pool: pg.Pool, actor: Actor,
       await client.query(`INSERT INTO case_location_history(id,organization_id,case_id,storage_root_key,relative_path,previous_storage_root_key,previous_relative_path,verification_status,source,changed_by_user_id,request_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,'pending','system',$8,$9)`, [uuidv7(), actor.organizationId, binding.caseId, plan.manifest.storageRootKey, binding.relativePath, previous.storageRootKey, previous.relativePath, actor.actorUserId, actor.requestId])
       const evidence = { identity: binding.identity, previousLocation: previous, decision: plan.manifest.decision, planDigest: approvedHash, physicallyClosed: binding.physicallyClosed, preservedLifecycleStatus: binding.expectedLifecycleStatus }
-      if (binding.identity.kind === 'registered') {
-        await client.query(`UPDATE case_folder_registrations SET source_relative_path=$1,evidence=evidence||jsonb_build_object('lastRelocation',$2::jsonb)
-          WHERE organization_id=$3 AND case_id=$4`, [binding.relativePath, JSON.stringify(evidence), actor.organizationId, binding.caseId])
+      if (binding.identity.kind === 'registered' || binding.identity.kind === 'reviewed_recreation' && binding.identity.previousSourceFolderId !== null) {
+        await client.query(`UPDATE case_folder_registrations SET source_relative_path=$1,evidence=evidence||jsonb_build_object('lastRelocation',$2::jsonb),source_folder_id=$5
+          WHERE organization_id=$3 AND case_id=$4`, [binding.relativePath, JSON.stringify(evidence), actor.organizationId, binding.caseId, binding.sourceFolderId])
       } else {
         await client.query(`INSERT INTO case_folder_registrations(id,organization_id,case_id,storage_root_key,source_folder_id,source_relative_path,evidence,plan_hash,created_by_user_id)
           VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)`, [uuidv7(), actor.organizationId, binding.caseId, plan.manifest.storageRootKey, binding.sourceFolderId, binding.relativePath, JSON.stringify(evidence), approvedHash, actor.actorUserId])

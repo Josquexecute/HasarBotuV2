@@ -1,19 +1,33 @@
 import type pg from 'pg'
 import type { CaseListItem, CaseServiceContact, CaseServiceContactInput } from '@hasarbotu/contracts'
-import { eksistKey, matchEksistReference, resolveServiceContact } from '@hasarbotu/domain'
+import { matchEksistReference, resolveServiceContact } from '@hasarbotu/domain'
 import { ReferenceCheckError } from './write-store.js'
+import { uuidv7 } from '@hasarbotu/database'
 
 type Queryable = Pick<pg.Pool, 'query'> | Pick<pg.PoolClient, 'query'>
 type Source = { text: string; name: string; revised: boolean }
 
 export async function selectServiceContact(exec: Queryable, organizationId: string, details: CaseServiceContactInput, serviceId?: string | null, currentServiceId?: string | null) {
+  // Serialize directory creation within the surrounding case-write transaction.
+  await exec.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`service-directory:${organizationId}`])
   const services = await exec.query<{ id: string; name: string }>('SELECT id,name FROM service_centers WHERE organization_id=$1 AND (is_active OR id=$2)', [organizationId, currentServiceId ?? null])
   if (serviceId) {
     const selected = services.rows.find(row => row.id === serviceId)
-    if (!selected || eksistKey(selected.name) !== eksistKey(details.name)) throw new ReferenceCheckError('serviceDetails.name', 'service_identity_mismatch')
+    if (!selected || !matchEksistReference(details.name, [selected])) throw new ReferenceCheckError('serviceDetails.name', 'service_identity_mismatch')
     return serviceId
   }
-  return matchEksistReference(details.name, services.rows)
+  const matches = services.rows.filter(row => matchEksistReference(details.name, [row]))
+  if (matches.length > 1) throw new ReferenceCheckError('serviceDetails.name', 'service_identity_ambiguous')
+  if (matches.length === 1) return matches[0]!.id
+  // An inactive/ambiguous identity needs an explicit selection, never a duplicate.
+  const inactive = await exec.query<{ id: string; name: string }>('SELECT id,name FROM service_centers WHERE organization_id=$1 AND NOT is_active', [organizationId])
+  if (inactive.rows.some(row => matchEksistReference(details.name, [row]))) throw new ReferenceCheckError('serviceDetails.name', 'service_identity_inactive')
+  // Older directory clients cap names at 200; longer case contacts use the name filter.
+  if (details.name.trim().length > 200) return null
+  const id = uuidv7()
+  await exec.query(`INSERT INTO service_centers(id,organization_id,name,center_type,service_type,phone) VALUES($1,$2,$3,'ozel','other',$4)`,
+    [id, organizationId, details.name.trim(), details.phone?.trim() || null])
+  return id
 }
 
 /** Contacts belong to a case/service identity, never to an unrelated previous selection. */
@@ -36,7 +50,9 @@ export async function saveServiceContact(exec: Queryable, organizationId: string
     return
   }
   const fallback = resolveServiceContact({ serviceName: name, servicePhone: row.directory_phone, eksistText: source?.text ?? row.raw_text, eksistServiceRevised: source?.revised ?? row.automatic?.serviceRevised ?? false })
-  const same = row.name !== null && row.contact_service_id === row.service_center_id && eksistKey(row.name) === eksistKey(name)
+  const sameName = row.name !== null && matchEksistReference(name, [{ id: 'same', name: row.name }]) !== null
+  const same = sameName && (row.contact_service_id === row.service_center_id
+    || row.contact_service_id === null && row.directory_name !== null && matchEksistReference(name, [{ id: 'same', name: row.directory_name }]) !== null)
   const phone = details?.phone !== undefined ? details.phone?.trim() || null : same ? row.phone : fallback.servicePhone || null
   const address = details?.address !== undefined ? details.address?.trim() || null : same ? row.address : fallback.serviceAddress || null
   await exec.query(`INSERT INTO case_service_contacts(organization_id,case_id,service_center_id,name,phone,address,updated_by_user_id)

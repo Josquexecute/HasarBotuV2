@@ -74,10 +74,10 @@ export function selectAvailableCaseWorkspacePath(
   occupiedPaths: readonly string[],
   maxSuffix = 10_000,
 ): CaseWorkspacePathResult {
-  const occupied = new Set(occupiedPaths.map((path) => path.toLocaleUpperCase('tr-TR')))
+  const occupied = new Set(occupiedPaths.map((path) => path.normalize('NFC').toUpperCase().normalize('NFC')))
   for (let suffix = 1; suffix <= maxSuffix; suffix += 1) {
     const candidate = suffix === 1 ? basePath : `${basePath} - ${suffix}`
-    if (occupied.has(candidate.toLocaleUpperCase('tr-TR'))) continue
+    if (occupied.has(candidate.normalize('NFC').toUpperCase().normalize('NFC'))) continue
     const parsed = parseRelativePath(candidate)
     if (parsed.ok) return { ok: true, relativePath: parsed.value }
   }

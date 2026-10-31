@@ -598,25 +598,25 @@ button {
 
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(6, minmax(130px, 1fr));
-  gap: 0;
-  min-height: 82px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 16px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg-canvas);
 }
 
 .summary-item {
   display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto 1fr;
-  gap: 1px 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
   min-width: 0;
-  padding: 11px 14px;
+  padding: 14px;
   text-align: left;
   cursor: pointer;
-  border: 0;
-  border-right: 1px solid var(--border);
-  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
 }
 
 .summary-item:hover {
@@ -629,21 +629,22 @@ button {
 }
 
 .summary-item > span {
-  align-self: end;
+  align-self: start;
   color: var(--text-secondary);
   font-size: 12px;
 }
 
 .summary-item strong {
-  grid-row: 1 / 3;
-  align-self: center;
-  font-size: 27px;
-  line-height: 30px;
+  font-size: 28px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
 
 .summary-item small {
-  color: var(--text-tertiary);
-  font-size: 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .summary-item--info strong { color: var(--info); }
@@ -1203,11 +1204,11 @@ button {
 
 .type-badge--kasko { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
 
-.workflow-card__numbers { margin-top: 8px; color: var(--text-secondary); font-size: 10px; }
-.workflow-card__meta { display: grid; gap: 3px; margin: 7px 0; padding: 7px 0; color: var(--text-secondary); font-size: 11px; border-block: 1px solid var(--border); }
+.workflow-card__numbers { margin-top: 8px; color: var(--text-secondary); font-size: 12px; flex-wrap: wrap; }
+.workflow-card__meta { display: grid; gap: 5px; margin: 9px 0; padding: 9px 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; border-block: 1px solid var(--border); }
 .workflow-card__signals { display:flex; min-width:0; flex-wrap:wrap; gap:4px; margin:0 0 7px; }
 .workflow-card__signals span { max-width:100%; padding:2px 5px; overflow:hidden; color:var(--text-secondary); font-size: 11px; text-overflow:ellipsis; white-space:nowrap; border:1px solid var(--border); border-radius:999px; background:var(--surface-muted); }
-.workflow-card__footer { font-size: 10px; }
+.workflow-card__footer { font-size: 11px; flex-wrap: wrap; row-gap: 8px; }
 .workflow-card__counts { display:flex; min-width:0; align-items:center; gap:7px; }
 .workflow-card__counts > span { display:inline-flex; align-items:center; gap:3px; color:var(--warning); }
 .inline-status { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; }
@@ -1296,7 +1297,7 @@ button {
 
 .case-table {
   width: 100%;
-  min-width: 1490px;
+  min-width: 1788px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -1305,8 +1306,8 @@ button {
 
 .case-table th,
 .case-table td {
-  height: var(--row-height);
-  padding: 5px 9px;
+  height: max(56px, var(--row-height));
+  padding: 7px 12px;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid var(--border);
@@ -1316,12 +1317,11 @@ button {
   position: sticky;
   z-index: 2;
   top: 0;
-  height: 36px;
+  height: 42px;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.25px;
+  line-height: 1.4;
   background: var(--surface-muted);
 }
 
@@ -1338,17 +1338,23 @@ button {
   background: transparent;
 }
 
-.case-table th:nth-child(1) { width: 160px; }
-.case-table th:nth-child(2) { width: 130px; }
-.case-table th:nth-child(3) { width: 135px; }
-.case-table th:nth-child(4) { width: 148px; }
-.case-table th:nth-child(5) { width: 130px; }
-.case-table th:nth-child(6) { width: 170px; }
-.case-table th:nth-child(7) { width: 65px; }
-.case-table th:nth-child(8) { width: 125px; }
-.case-table th:nth-child(9) { width: 155px; }
-.case-table th:nth-child(10) { width: 125px; }
-.case-table th:nth-child(11) { width: 105px; }
+.case-col-identity { width: 160px; }
+.case-col-reference { width: 135px; }
+.case-col-company { width: 170px; }
+.case-col-status { width: 115px; }
+.case-col-stage { width: 165px; }
+.case-col-documents { width: 68px; }
+.case-col-alert { width: 160px; }
+.case-col-assignee { width: 140px; }
+.case-col-service { width: 180px; }
+.case-col-actions { width: 105px; }
+.case-col-follow-up { width: 110px; }
+.case-col-updated { width: 145px; }
+.case-table .case-reference, .case-table .case-assignee { overflow-wrap: anywhere; line-height: 1.5; }
+.case-table .row-alert { max-width: 100%; min-width: 0; }
+.case-table .row-alert svg, .case-table .row-alert strong { flex-shrink: 0; }
+.case-table .row-alert small { min-width: 0; }
+.case-table .case-table-actions { flex-wrap: wrap; }
 
 .case-table tbody tr {
   cursor: pointer;
@@ -1362,8 +1368,8 @@ button {
 .case-table .case-table-spacer { pointer-events: none; overflow-anchor: none; }
 .case-table .case-table-spacer td { padding: 0; border: 0; }
 
-.case-table td > small { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: 10px; }
-.case-table td > strong { display: block; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.case-table td > small { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 11px; }
+.case-table td > strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .mono { font-family: Consolas, "Courier New", monospace; font-size: 11px; }
 .truncate-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stage-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1947,17 +1953,31 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; b
 .report-table { height: 360px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .report-table .data-table { min-width: 1100px; }
 
-.legislation-layout { display: grid; grid-template-columns: minmax(430px, .9fr) minmax(420px, 1.1fr); min-height: 0; flex: 1; overflow: hidden; }
-.legislation-layout--detail { grid-template-columns: minmax(380px, .8fr) minmax(400px, 1fr) 330px; }
-.source-list-panel, .qa-panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface); }
+.legislation-layout { position: relative; display: grid; grid-template-columns: minmax(280px, .85fr) minmax(360px, 1.15fr); min-height: 0; flex: 1; gap: 14px; padding: 14px 16px; overflow: hidden; background: var(--bg-canvas); }
+.legislation-layout--detail { grid-template-columns: minmax(250px, .8fr) minmax(320px, 1fr) minmax(280px, .9fr); }
+.source-list-panel, .qa-panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
 .source-list { min-height: 0; flex: 1; overflow-y: auto; }
-.source-row { display: grid; width: 100%; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 10px; color: var(--text-primary); text-align: left; cursor: pointer; border: 0; border-bottom: 1px solid var(--border); background: var(--surface); }
+.source-row { display: grid; width: 100%; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px 10px; padding: 12px 14px; color: var(--text-primary); text-align: left; cursor: pointer; border: 0; border-bottom: 1px solid var(--border); background: var(--surface); }
+.source-row > svg { margin-top: 2px; color: var(--accent); }
+.source-row > .status-pill { justify-self: end; }
 .source-row:hover, .source-row.is-selected { background: var(--surface-hover); }
 .source-row.is-selected { box-shadow: inset 3px 0 0 var(--accent); }
 .source-row > span:nth-child(2) { display: grid; gap: 3px; min-width: 0; }
-.source-row strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.source-row small { color: var(--text-tertiary); font-size: 11px; }
-.qa-panel__body { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: flex-start; gap: 9px; padding: 11px; overflow-y: auto; }
+.source-row strong { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.source-row small { color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.qa-panel__body { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; overflow-y: auto; }
+.legislation-page .panel-heading { min-height: 60px; padding: 14px 16px; }
+.legislation-page .panel-heading h2 { font-size: 15px; }
+.legislation-page .panel-heading span { display: block; margin-top: 4px; line-height: 1.5; }
+.legislation-page .form-hint { margin: 0; line-height: 1.6; }
+.legislation-question-context { display: grid; width: 100%; grid-template-columns: minmax(130px, .65fr) minmax(0, 1.35fr); gap: 12px; }
+.legislation-page .qa-input { min-width: 0; }
+.legislation-page .qa-input > span { font-size: 12px; }
+.legislation-page .qa-input input, .legislation-page .qa-input select { min-width: 0; min-height: 38px; font: inherit; font-size: 12px; }
+.legislation-page .qa-input textarea { font: inherit; font-size: 13px; line-height: 1.6; min-height: 100px; max-height: 240px; }
+.legislation-page .source-detail { width: auto; min-width: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.legislation-page .legislation-settings { width: 100%; }
+.legislation-page details > summary { cursor: pointer; line-height: 1.5; }
 .qa-input { display: grid; width: 100%; gap: 5px; }
 .qa-input > span, .settings-field > span { color: var(--text-secondary); font-size: 10px; font-weight: 700; }
 .qa-input textarea { width: 100%; min-height: 88px; resize: vertical; padding: 8px; color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); outline: 0; background: var(--surface-muted); }
@@ -1970,7 +1990,7 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; b
 .qa-answer blockquote { margin: 8px 0; padding: 8px; white-space: pre-wrap; border-left: 3px solid var(--accent); }
 .qa-answer small, .source-detail small { overflow-wrap: anywhere; }
 .qa-answer { width: 100%; padding: 11px; border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--accent-soft); }
-.qa-answer p { margin: 6px 0; font-size: 11px; line-height: 18px; }
+.qa-answer p { margin: 8px 0; font-size: 13px; line-height: 1.7; }
 .reference-list { display: grid; gap: 4px; margin-top: 10px; }
 .reference-list strong { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; }
 .reference-list button { padding: 5px; color: var(--accent); font-size: 10px; text-align: left; cursor: pointer; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); background: var(--surface); }

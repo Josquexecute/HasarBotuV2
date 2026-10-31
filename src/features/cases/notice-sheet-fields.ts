@@ -25,16 +25,20 @@ export const noticeSheetFieldGroups: readonly { title: string; fields: readonly 
   { title: 'Sigortalı araç', fields: [
     { key: 'insuredName', label: 'Sigortalı adı / unvanı' },
     { key: 'insuredPlate', label: 'Sigortalı plaka' },
+    { key: 'insuredRegistrationDate', label: 'Sigortalı tescil tarihi', date: true },
     { key: 'insuredMileage', label: 'Sigortalı kilometre' },
     { key: 'insuredHeavyDamage', label: 'Sigortalı ağır hasar kaydı' },
     { key: 'insuredPreviousClaims', label: 'Sigortalı geçmiş hasar sayısı' },
+    { key: 'insuredDamageHistory', label: 'Sigortalı geçmiş hasarları', multiline: true },
   ] },
   { title: 'Mağdur / karşı araç', fields: [
     { key: 'victimName', label: 'Mağdur adı / unvanı' },
     { key: 'victimPlate', label: 'Mağdur plaka' },
+    { key: 'victimRegistrationDate', label: 'Mağdur tescil tarihi', date: true },
     { key: 'victimMileage', label: 'Mağdur kilometre' },
     { key: 'victimHeavyDamage', label: 'Mağdur ağır hasar kaydı' },
     { key: 'victimPreviousClaims', label: 'Mağdur geçmiş hasar sayısı' },
+    { key: 'victimDamageHistory', label: 'Mağdur geçmiş hasarları', multiline: true },
   ] },
   { title: 'Servis ve araç', fields: [
     { key: 'serviceName', label: 'Servis adı' },
@@ -49,7 +53,6 @@ export const noticeSheetFieldGroups: readonly { title: string; fields: readonly 
     { key: 'tramer', label: 'Tramer' },
     { key: 'iban', label: 'IBAN' },
     { key: 'missingDocuments', label: 'Eksikler', multiline: true },
-    { key: 'inspectionNotes', label: 'Ekspertiz çalışması', multiline: true },
   ] },
 ]
 

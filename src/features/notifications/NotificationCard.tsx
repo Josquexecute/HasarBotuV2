@@ -23,10 +23,11 @@ export function NotificationCard({ icon: Icon, label, plate, officeNumber, title
       <span className="notification-card__content">
         <span className="notification-card__meta"><span>{label}</span>{timestamp && <time dateTime={timestamp} title={new Date(timestamp).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}>{notificationTime(timestamp)}</time>}</span>
         <span className="notification-card__identity"><strong>{plate}</strong><small>{officeNumber}</small>{read === false && <i className="notification-card__unread" aria-label="Okunmamış" />}</span>
-        <span className="notification-card__message">{title}</span>
+        <span className={`notification-card__message${title.length > 180 ? ' is-truncated' : ''}`} title={title}>{title}</span>
       </span>
       <ChevronRight className="notification-card__arrow" size={17} aria-hidden="true" />
     </button>
+    {title.length > 180 && <details className="notification-card__detail"><summary>Bildirimin tamamı</summary><p>{title}</p></details>}
     {action && <div className="notification-card__action">{action}</div>}
   </article>
 }

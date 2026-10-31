@@ -32,6 +32,7 @@ export const serviceAgreementEvaluationSchema = z.strictObject({
 export type ServiceAgreementEvaluation = z.infer<typeof serviceAgreementEvaluationSchema>
 
 export const serviceReferenceSchema = z.strictObject({
+  address: z.string().max(500).nullable().optional(),
   phone: z.string().nullable().optional(),
   id: serviceIdSchema,
   name: referenceNameSchema,

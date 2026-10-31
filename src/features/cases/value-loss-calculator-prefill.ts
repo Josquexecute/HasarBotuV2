@@ -2,7 +2,7 @@ import { VALUE_LOSS_BODY_LABELS, VALUE_LOSS_VEHICLE_GROUPS, valueLossBodyOptions
 import type { CaseRecord } from '../../types/case'
 import type { CalculatorDraft } from './value-loss-calculator-form'
 
-export type CalculatorCaseDefaults = Partial<Pick<CalculatorDraft, 'accidentDate' | 'vehicleType' | 'bodyType' | 'manufacturer' | 'model' | 'modelYear'>>
+export type CalculatorCaseDefaults = Partial<Pick<CalculatorDraft, 'accidentDate' | 'vehicleType' | 'bodyType' | 'manufacturer' | 'model' | 'modelYear' | 'usageValue' | 'previousDamageCount' | 'commercialOrRental' | 'vehicleCondition' | 'damageAmount'>>
 const plain = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '').replace(/ı/g, 'i').toLowerCase()
 const key = (value: string) => plain(value).replace(/[^a-z0-9]/g, '')
 const vehicleTypes = new Map(Object.keys(VALUE_LOSS_VEHICLE_GROUPS).map(type => [key(type), type as CalculatorDraft['vehicleType']]))
@@ -41,6 +41,16 @@ export function calculatorCaseDefaults(item: CaseRecord): CalculatorCaseDefaults
     ...(vehicleType ? { vehicleType } : {}), ...(manufacturer ? { manufacturer } : {}),
     ...(model ? { model } : {}), ...(modelYear ? { modelYear } : {}),
   }
+  const usage = vehicleType && VALUE_LOSS_VEHICLE_GROUPS[vehicleType] === 'D' ? get('Çalışma Saati') : get('Kilometre', 'Araç Km')
+  const count = get('SBM Önceki Hasar Sayısı', 'Önceki Hasar Sayısı')
+  const numberText = (value: string) => /^(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(value) ? value.replaceAll('.', '') : ''
+  if (numberText(usage) && Number(numberText(usage)) <= 10_000_000) defaults.usageValue = numberText(usage)
+  if (/^\d+$/.test(count) && Number(count) <= 100) defaults.previousDamageCount = String(Number(count))
+  const purpose = plain(get('Kullanım Amacı', 'Kullanım Şekli'))
+  if (['hususi', 'ozel'].includes(purpose)) defaults.commercialOrRental = false
+  if (['ticari', 'kiralik', 'taksi'].includes(purpose) || vehicleType === 'TAKSİ') defaults.commercialOrRental = true
+  if (item.estimatedDamage > 0) defaults.damageAmount = String(item.estimatedDamage).replace('.', ',')
+  if (item.stage === 'Ağır Hasar/Pert') defaults.vehicleCondition = 'current_heavy_damage'
   if (bodyType && valueLossBodyOptions(vehicleType ?? 'OTOMOBİL').includes(bodyType)) defaults.bodyType = bodyType
   return defaults
 }
@@ -51,11 +61,14 @@ export function mergeCalculatorCaseDefaults(draft: CalculatorDraft, defaults: Ca
   for (const field of Object.keys(defaults) as (keyof CalculatorCaseDefaults)[]) {
     if (draft[field] === previous[field]) Object.assign(next, { [field]: defaults[field] })
   }
+  for (const field of ['usageValue', 'previousDamageCount'] as const) {
+    if (previous[field] !== undefined && defaults[field] === undefined && draft[field] === previous[field]) next[field] = ''
+  }
   if (!valueLossBodyOptions(next.vehicleType).includes(next.bodyType)) next.bodyType = 'unspecified'
   if (next.vehicleType !== draft.vehicleType || next.bodyType !== draft.bodyType) {
     // Physical observations remain useful even when their old reference IDs no longer apply.
     next.parts = draft.parts.map(part => ({ ...part, stableRuleId: '' }))
-    if ((VALUE_LOSS_VEHICLE_GROUPS[next.vehicleType] === 'D') !== (VALUE_LOSS_VEHICLE_GROUPS[draft.vehicleType] === 'D')) next.usageValue = ''
+    if ((VALUE_LOSS_VEHICLE_GROUPS[next.vehicleType] === 'D') !== (VALUE_LOSS_VEHICLE_GROUPS[draft.vehicleType] === 'D') && defaults.usageValue === undefined) next.usageValue = ''
   }
   return next
 }

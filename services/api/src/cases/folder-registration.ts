@@ -75,13 +75,17 @@ export async function planFolderRegistration(db: Queryable, organizationId: stri
     const registered = await db.query(`SELECT r.case_id,c.plate_normalized FROM case_folder_registrations r
       JOIN cases c ON c.id=r.case_id AND c.organization_id=r.organization_id
       WHERE r.organization_id=$1 AND r.storage_root_key=$2 AND r.source_folder_id=$3`, [organizationId, manifest.storageRootKey, folder.sourceFolderId])
+    const bound = await db.query('SELECT case_id FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2 AND hb_folder_path_key(relative_path)=hb_folder_path_key($3)', [organizationId, manifest.storageRootKey, folder.relativePath])
+    if (bound.rowCount && bound.rows[0]?.case_id !== registered.rows[0]?.case_id) fail('folder_location_already_bound')
+    const reserved = await db.query(`SELECT case_id FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2 AND hb_folder_path_key(relative_path)=hb_folder_path_key($3)
+      UNION ALL SELECT case_id FROM case_file_operations WHERE organization_id=$1 AND destination_storage_root_key=$2
+        AND hb_folder_path_key(destination_relative_path)=hb_folder_path_key($3) AND status NOT IN ('ready','stale','cancelled')`, [organizationId, manifest.storageRootKey, folder.relativePath])
+    if (reserved.rows.some(r => r.case_id !== registered.rows[0]?.case_id)) fail('folder_workspace_reserved')
     if (registered.rows[0]) {
       if (registered.rows[0].plate_normalized !== plateSearchKey(parsedName!.plate)) fail('folder_registered_plate_changed')
       entries.push({ sourceFolderId: folder.sourceFolderId, plate: parsedName!.plate, caseId: registered.rows[0].case_id, insurerId: null })
       continue
     }
-    const bound = await db.query('SELECT case_id FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2 AND lower(relative_path)=lower($3)', [organizationId, manifest.storageRootKey, folder.relativePath])
-    if (bound.rowCount) fail('folder_location_already_bound')
     // A plate is not a case identity. Existing cases require explicit reconciliation;
     // distinct source folders within this new batch may legitimately share a plate.
     const candidate = await db.query('SELECT id::text FROM cases WHERE organization_id=$1 AND plate_normalized=$2', [organizationId, plateSearchKey(parsedName!.plate)])

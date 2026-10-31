@@ -49,6 +49,10 @@ describe('CasesPage api modu durumlari', () => {
     renderPage()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getAllByText('34 MPA 764').length).toBeGreaterThan(0)
+    const table = screen.getByRole('table')
+    expect(table.querySelectorAll('col')).toHaveLength(table.querySelectorAll('thead th').length)
+    expect(table.querySelector('.case-col-alert')).toBeNull()
+    expect(table.querySelector('.case-col-assignee')).toBeInTheDocument()
   })
 
   it('gercek API liste ozetinde evrak tam veya 0 TL gibi sahte kesin sonuc gostermez', async () => {
@@ -91,5 +95,11 @@ describe('CasesPage api modu durumlari', () => {
     expect(screen.getByRole('button', { name: 'Evrakları aç' })).toBeInTheDocument()
     expect(screen.queryByText('Zorunlu evraklar tam')).not.toBeInTheDocument()
     expect(screen.queryByText('₺0')).not.toBeInTheDocument()
+    const table = screen.getByRole('table')
+    expect(table.querySelectorAll('col')).toHaveLength(13)
+    expect(table.querySelectorAll('thead th')).toHaveLength(13)
+    expect(table.querySelectorAll('col')[7]).toHaveClass('case-col-alert')
+    expect(table.querySelectorAll('col')[8]).toHaveClass('case-col-assignee')
+    expect(table.querySelector('[data-case-row]')?.querySelectorAll('td')).toHaveLength(13)
   })
 })

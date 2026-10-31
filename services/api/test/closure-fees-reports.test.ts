@@ -525,7 +525,7 @@ describeDb('Paket 39 kapanma ücreti ve dönem raporu gerçek API', () => {
     const edited = await app.inject({ method: 'PATCH', url: `/api/v1/cases/${caseId}`, headers: { cookie: managerCookie },
       payload: { expectedVersion: 1, serviceDetails: { name: 'Manual Fee Repair', phone: '0212 555 66 77' } } })
     expect(edited.statusCode, edited.payload).toBe(200)
-    expect(edited.json().case.serviceId).toBeNull()
+    expect(edited.json().case.serviceId).toEqual(expect.any(String))
     await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed',closed_at='2026-07-20T10:00:00Z' WHERE id=$1", [caseId])
     const sourceDocumentVersionId = await seedExpertReport(caseId, 'ready')
     const created = await app.inject({ method: 'POST', url: candidateUrl(caseId), headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },

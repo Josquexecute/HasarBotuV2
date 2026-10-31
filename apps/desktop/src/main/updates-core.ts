@@ -15,6 +15,8 @@ export function isNewerVersion(candidate: string, current: string): boolean {
 export async function downloadVerifiedInstaller(options: {
   release: DesktopRelease; origin: string; directory: string; fetch: typeof fetch
   progress(bytes: number): void
+  diagnostic?(status: { stage: string; bytes: number; httpStatus?: number }): void
+  idleTimeoutMs?: number
 }): Promise<string> {
   const { release } = options
   await mkdir(options.directory, { recursive: true })
@@ -23,19 +25,33 @@ export async function downloadVerifiedInstaller(options: {
   await rm(temporary, { force: true })
   let handle
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  const controller = new AbortController()
+  const abort = () => controller.abort(new Error('Güncelleme indirme süresi doldu. Bağlantınızı kontrol edip yeniden deneyin.'))
+  const totalTimer = setTimeout(abort, 300_000)
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  let bytes = 0
+  const armIdleTimer = () => {
+    clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => controller.abort(new Error('Güncelleme sunucusundan veri gelmiyor. Bağlantınızı, VPN veya proxy ayarlarınızı kontrol edip yeniden deneyin.')), options.idleTimeoutMs ?? 30_000)
+  }
   try {
+    armIdleTimer()
+    options.diagnostic?.({ stage: 'request', bytes })
     const response = await options.fetch(`${options.origin}/api/v1/desktop-updates/artifacts/${release.sha256}`, {
-      redirect: 'error', credentials: 'include', signal: AbortSignal.timeout(300_000), cache: 'no-store',
+      redirect: 'error', credentials: 'include', signal: controller.signal, cache: 'no-store',
     })
+    options.diagnostic?.({ stage: 'response', bytes, httpStatus: response.status })
     reader = response.body?.getReader()
-    if (!response.ok || !reader) throw new Error(response.status === 401 ? 'Güncelleme için hesabınıza giriş yapın.' : 'Güncelleme dosyası indirilemedi.')
+    if (!response.ok || !reader) throw new Error(response.status === 401 ? 'Güncelleme için hesabınıza giriş yapın.' : `Güncelleme dosyası indirilemedi (HTTP ${response.status}). Yeniden deneyin.`)
     const length = response.headers.get('content-length')
     if (length !== null && length !== String(release.size)) throw new Error('Güncelleme dosyası boyutu uyuşmuyor.')
     handle = await open(temporary, 'wx')
     const digest = createHash('sha256')
-    let bytes = 0, lastReported = 0, signature = Buffer.alloc(0)
+    let lastReported = 0, signature = Buffer.alloc(0)
     for (;;) {
+      armIdleTimer()
       const { value, done } = await reader.read()
+      clearTimeout(idleTimer)
       if (done) break
       const chunk = Buffer.from(value)
       bytes += chunk.length
@@ -48,8 +64,10 @@ export async function downloadVerifiedInstaller(options: {
     reader.releaseLock()
     reader = undefined
     if (bytes !== release.size || digest.digest('hex') !== release.sha256 || signature.toString('ascii') !== 'MZ') throw new Error('Güncelleme dosyası bütünlük kontrolünden geçemedi.')
+    options.diagnostic?.({ stage: 'flush', bytes })
     await handle.sync(); await handle.close(); handle = undefined
     await rename(temporary, target)
+    options.diagnostic?.({ stage: 'verified', bytes })
     options.progress(bytes)
     return target
   } catch (error) {
@@ -61,7 +79,14 @@ export async function downloadVerifiedInstaller(options: {
     }
     await handle?.close()
     await rm(temporary, { force: true })
+    if (controller.signal.aborted) throw controller.signal.reason
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOSPC') throw new Error('Güncelleme için yeterli disk alanı yok. Yer açıp yeniden deneyin.', { cause: error })
+    if (code === 'EACCES' || code === 'EPERM' || code === 'EBUSY') throw new Error('Güncelleme dosyasına erişilemiyor. Dosyayı kullanan işlemleri ve klasör erişimini kontrol edip yeniden deneyin.', { cause: error })
     throw error
+  } finally {
+    clearTimeout(idleTimer)
+    clearTimeout(totalTimer)
   }
 }
 

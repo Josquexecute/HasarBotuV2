@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculatorOperations, calculatorRequest, consolidateCalculatorParts, initialCalculatorDraft, moneyMinor, type CalculatorPartDraft } from './value-loss-calculator-form'
+import { calculatorOperations, calculatorRequest, consolidateCalculatorParts, initialCalculatorDraft, mergeCalculatorHistory, moneyMinor, type CalculatorPartDraft } from './value-loss-calculator-form'
 import type { CaseRecord } from '../../types/case'
 
 describe('calculator TL input', () => {
@@ -9,14 +9,28 @@ describe('calculator TL input', () => {
 
 const part: CalculatorPartDraft = { id: '1', stableRuleId: 'part-1', label: 'SOL ÇAMURLUK', operation: 'repair', paintMode: 'full', price: '10.000', labor: '2.000', priceUnknown: false, priorPartState: 'none', treatment: 'standard', position: '', quantity: '1', material: 'unspecified' }
 function request(parts: CalculatorPartDraft[]) {
-  return calculatorRequest({ ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), modelYear: '2024', usageValue: '50000', marketValue: '1.000.000', damageAmount: '100.000', parts })
+  return calculatorRequest({ ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), previousDamageCount: '0', modelYear: '2024', usageValue: '50000', marketValue: '1.000.000', damageAmount: '100.000', parts })
 }
 
 describe('calculator combined operations', () => {
+  it('refreshes stored history without replacing current operations, and revokes obsolete verification', () => {
+    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), parts: [{ ...part, priorPartState: 'unknown' as const }], marketValue: '1.000.000' }
+    const saved = { ...draft, previousDamageCount: '2', parts: [{ ...part, operation: 'replacement' as const, priorPartState: 'none' as const, priorEvidence: 'Kayıtlı geçmiş: history-1' }] }
+    const refreshed = mergeCalculatorHistory(draft, saved)
+    expect(refreshed).toMatchObject({ previousDamageCount: '2', marketValue: '1.000.000', parts: [{ operation: 'repair', priorPartState: 'none', priorEvidence: 'Kayıtlı geçmiş: history-1' }] })
+    expect(mergeCalculatorHistory(refreshed, draft).parts[0]?.priorPartState).toBe('unknown')
+    expect(mergeCalculatorHistory({ ...refreshed, parts: [{ ...part, priorEvidence: 'Kullanıcı doğrulaması' }] }, draft).parts[0]?.priorPartState).toBe('none')
+  })
+  it('automatically matches an imported legacy part only to an exact, unique source label', () => {
+    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), previousDamageCount: '0', modelYear: '2024', usageValue: '50000', marketValue: '1.000.000', damageAmount: '100.000', parts: [{ ...part, stableRuleId: '' }] }
+    const source = { stableRuleId: 'source-part', label: part.label, supportedOperations: ['repair'], coefficients: { replacement: null, repair: { light: '1', medium: '2', heavy: '3' }, paint: null } }
+    expect(calculatorRequest(draft, [source]).partSelections?.[0]?.stableRuleId).toBe('source-part')
+    expect(() => calculatorRequest(draft, [source, { ...source, stableRuleId: 'duplicate' }])).toThrow('referans katsayısı bulunamadı')
+  })
   it('keeps manufacturer information without requiring the unknown post-repair value for a reference estimate', () => {
-    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), manufacturer: 'Tesla', model: 'Model 3', modelYear: '2023', usageValue: '50000', damageAmount: '100.000', marketValue: '1.000.000', faultPercent: '75', parts: [part] }
+    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), previousDamageCount: '0', manufacturer: 'Tesla', model: 'Model 3', modelYear: '2023', usageValue: '50000', damageAmount: '100.000', marketValue: '1.000.000', faultPercent: '75', parts: [part] }
     expect(calculatorRequest(draft)).toMatchObject({ vehicleIdentity: { manufacturer: 'Tesla', model: 'Model 3' }, calculationBasis: 'reference', postRepairMarketValueMinor: null, faultRateBasisPoints: 7500 })
-    expect(() => calculatorRequest({ ...draft, model: '' })).toThrow('marka ve modeli')
+    expect(calculatorRequest({ ...draft, model: '' }).vehicleIdentity).toBeUndefined()
   })
   it.each(['repair_paint', 'replacement_paint'] as const)('sends %s as one physical part without duplicating its descriptive metadata', operation => {
     const value = request([{ ...part, operation, paintMode: 'local' }])

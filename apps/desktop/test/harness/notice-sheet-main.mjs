@@ -47,7 +47,7 @@ void app.whenReady().then(async () => {
       await createNoticeSheetStore(pool).save({ organizationId, userId, requestId: 'native-print-test' }, id, {
         expectedVersion: null, confirmed: true,
         overrides: { documents: { accidentReport: true, insuredRegistration: true }, fields: {
-          inspectionDate: '2026-10-16', reportNumber: 'R-2026-12345', insuredPolicyPeriod: '01.01.2026 - 01.01.2027', victimPolicyPeriod: '01.02.2026 - 01.02.2027',
+          insuredRegistrationDate: '2020-02-29', victimRegistrationDate: '2021-10-17', insuredDamageHistory: 'Sentetik geçmiş hasar: 2022 kapı değişimi', victimDamageHistory: 'Sentetik geçmiş hasar: 2024 tampon onarımı', inspectionDate: '2026-10-16', reportNumber: 'R-2026-12345', insuredPolicyPeriod: '01.01.2026 - 01.01.2027', victimPolicyPeriod: '01.02.2026 - 01.02.2027',
           recourse: 'İnceleniyor', deductible: 'Poliçe koşullarına göre kontrol edilecek', insuredFault: '%100', victimFault: '%0',
           insuredName: 'Sigortalı Örnek', insuredMileage: '82.150', insuredHeavyDamage: 'Kontrol edilecek', insuredPreviousClaims: '2',
           ...(type === 'traffic' ? { insuredPlate: '06 ORN 789', victimName: 'Mağdur Örnek', victimMileage: '42.750', victimHeavyDamage: 'Yok', victimPreviousClaims: '0' } : {}),
@@ -85,10 +85,11 @@ void app.whenReady().then(async () => {
       await until(`document.querySelector('tr '+${JSON.stringify(selector)})`)
       await evaluate(`document.querySelector('tr '+${JSON.stringify(selector)}).click()`)
       await until(`document.querySelector('.notice-sheet-save-state')?.textContent.includes('Sürüm 1')`)
-      check(`${item.type}: row reopens saved sheet without navigating`, await evaluate(`location.pathname==='/dosyalar' && document.querySelectorAll('[role=dialog]').length===1 && document.querySelector('.notice-sheet-preview .notice-sheet__notes').textContent.includes('Sentetik ekspertiz çalışması')`))
+      check(`${item.type}: row reopens saved sheet without navigating`, await evaluate(`location.pathname==='/dosyalar' && document.querySelectorAll('[role=dialog]').length===1 && document.querySelector('.notice-sheet-preview .notice-sheet__history').textContent.includes('Sentetik geçmiş hasar')`))
       const overflowingNotes = JSON.stringify('Satır\n'.repeat(100))
-      await evaluate(`(()=>{const area=[...document.querySelectorAll('.notice-sheet-editor textarea')].at(-1);Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(area,${overflowingNotes});area.dispatchEvent(new Event('input',{bubbles:true}));window.__noticePrintCalls=0})()`)
-      await until(`document.querySelector('.notice-sheet-preview .notice-sheet__notes').textContent.includes('Satır')`)
+      const historySelector = JSON.stringify(`textarea[aria-label="${item.type === 'traffic' ? 'Mağdur geçmiş hasarları' : 'Sigortalı geçmiş hasarları'}"]`)
+      await evaluate(`(()=>{const area=document.querySelector(${historySelector});Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(area,${overflowingNotes});area.dispatchEvent(new Event('input',{bubbles:true}));window.__noticePrintCalls=0})()`)
+      await until(`document.querySelector('.notice-sheet-preview .notice-sheet__history').textContent.includes('Satır')`)
       await evaluate(`[...document.querySelectorAll('.notice-sheet-modal button')].find(b=>b.textContent.trim()==='Kaydet ve Yazdır').click()`)
       await until(`document.querySelector('.notice-sheet-message[role=alert]')`)
       check(`${item.type}: actual overflow cannot print or save`, await evaluate(`window.__noticePrintCalls===0 && document.querySelector('.notice-sheet-message[role=alert]').textContent.includes('tek A4') && document.querySelector('.notice-sheet-save-state').textContent.includes('Kaydedilmemiş')`))

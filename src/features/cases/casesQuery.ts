@@ -107,7 +107,7 @@ export function buildCasesPageQuery(
     ...(state.typeFilter === 'Tümü' ? {} : { caseType: CASE_TYPE_CODES[state.typeFilter] }),
     ...(state.stageFilter === 'Tümü' ? {} : { stage: STAGE_CODES[state.stageFilter] }),
     ...(state.responsibleUserId === 'Tümü' ? {} : { responsibleUserId: state.responsibleUserId }),
-    ...(state.serviceId === 'Tümü' ? {} : { serviceId: state.serviceId }),
+    ...(state.serviceId === 'Tümü' ? {} : state.serviceId.startsWith('name:') ? { serviceName: state.serviceId.slice(5) } : { serviceId: state.serviceId }),
     ...(from === undefined ? {} : { followUpFrom: from }),
     ...(to === undefined ? {} : { followUpTo: to }),
     sortBy: SORT_FIELDS[state.sortKey],

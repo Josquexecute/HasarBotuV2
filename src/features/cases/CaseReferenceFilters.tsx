@@ -24,7 +24,7 @@ export function CaseReferenceFilters({
   readonly port?: CaseReferenceDataPort
   readonly referenceData?: ReturnType<typeof useCaseReferences>
 }) {
-  const loaded = useCaseReferences(port, {}, referenceData === undefined)
+  const loaded = useCaseReferences(port, { includeUnlinkedNames: true }, referenceData === undefined)
   const { references, status, reload } = referenceData ?? loaded
   const users = (references?.users ?? []).filter((user) => user.roles?.includes('case_manager'))
   const services = references?.services ?? []
@@ -35,7 +35,8 @@ export function CaseReferenceFilters({
       <SearchableSelect label="Dosya sorumlusu" value={responsibleUserId} disabled={disabled} onChange={onResponsibleChange}
         options={[{ value: 'Tümü', label: 'Tüm sorumlular' }, ...users.map(user => ({ value: user.id, label: user.displayName }))]} />
       <SearchableSelect label="Dosya servisi" value={serviceId} disabled={disabled} onChange={onServiceChange}
-        options={[{ value: 'Tümü', label: 'Tüm servisler' }, ...services.map(service => ({ value: service.id, label: service.name }))]} />
+        options={[{ value: 'Tümü', label: 'Tüm servisler' }, ...services.map(service => ({ value: service.id, label: service.name })),
+          ...(references?.serviceContactNames ?? []).map(name => ({ value: `name:${name}`, label: `${name} (eski kayıtlar)` }))]} />
       {status === 'loading' && <span className="filterbar__status" role="status">Filtreler yükleniyor…</span>}
       {status === 'unavailable' && <span className="filterbar__status" role="status">Filtreler yüklenemedi. <button type="button" className="filterbar__clear" onClick={reload}>Yeniden dene</button></span>}
       {status === 'unauthorized' && <span className="filterbar__status" role="status">Filtreleri kullanmak için yeniden giriş yapın.</span>}

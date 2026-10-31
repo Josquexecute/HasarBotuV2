@@ -8,7 +8,7 @@ export function ServiceRevisionDialog({ name, details, sourceText, options, onSa
   name: string
   details?: ServiceContactDraft
   sourceText?: string
-  options: readonly { name: string; phone?: string | null }[]
+  options: readonly { name: string; phone?: string | null; address?: string | null }[]
   onSave: (name: string, details: ServiceContactDraft) => void
   onClose: () => void
 }) {

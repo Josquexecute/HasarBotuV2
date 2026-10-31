@@ -1,4 +1,4 @@
-import { lstat, mkdir, realpath } from 'node:fs/promises'
+import { lstat, mkdir, realpath, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { JobPayload } from '@hasarbotu/contracts'
 import { isUnderRoot, PathSafetyError, resolveUnderRoot } from './path-resolver.js'
@@ -31,6 +31,17 @@ async function assertOrdinaryDirectory(rootReal: string, candidate: string): Pro
   if (!metadata.isDirectory()) throw new PathSafetyError('not_a_directory', 'path component is not a directory')
   const resolved = await realpath(candidate)
   if (!isUnderRoot(rootReal, resolved)) throw new PathSafetyError('root_escape', 'real path escapes storage root')
+}
+
+async function assertWorkspaceOwner(marker: string, identity: string): Promise<void> {
+  try {
+    const metadata = await lstat(marker)
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1024
+      || await readFile(marker, 'utf8') !== identity) throw new PathSafetyError('workspace_identity_conflict', 'workspace owner does not match')
+  } catch (error) {
+    if (errno(error) === 'ENOENT') throw new PathSafetyError('workspace_identity_conflict', 'workspace owner is missing')
+    throw error
+  }
 }
 
 async function ensureDirectoryChain(
@@ -84,14 +95,27 @@ export async function provisionCaseWorkspace(
   try {
     const rootReal = await realpath(rootAbsolute)
     resolveUnderRoot(rootAbsolute, payload.relativePath)
-
-    await ensureDirectoryChain(rootAbsolute, rootReal, payload.relativePath, hooks)
+    // A display name cannot attest ownership. Never adopt an existing unmarked directory.
+    if (!payload.workspaceId) return { outcome: 'failed', errorCode: 'workspace_identity_required' }
+    const parent = payload.relativePath.split('/').slice(0, -1).join('/')
+    if (parent) await ensureDirectoryChain(rootAbsolute, rootReal, parent, hooks)
+    const target = resolveUnderRoot(rootAbsolute, payload.relativePath)
+    const marker = join(target, '.hasarbotu-workspace.json')
+    const identity = JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId: payload.workspaceId })
+    let created = false
+    await hooks.beforeCreate?.(payload.relativePath)
+    try { await mkdir(target); created = true }
+    catch (error) { if (errno(error) !== 'EEXIST') throw error }
+    await assertOrdinaryDirectory(rootReal, target)
+    if (created) await writeFile(marker, identity, { flag: 'wx' })
+    else await assertWorkspaceOwner(marker, identity)
     for (const subdirectory of payload.requiredSubdirectories) {
       await ensureDirectoryChain(rootAbsolute, rootReal, `${payload.relativePath}/${subdirectory}`, hooks)
     }
 
     await hooks.onVerifying?.()
     await assertOrdinaryDirectory(rootReal, resolveUnderRoot(rootAbsolute, payload.relativePath))
+    await assertWorkspaceOwner(marker, identity)
     for (const subdirectory of payload.requiredSubdirectories) {
       await assertOrdinaryDirectory(rootReal, resolveUnderRoot(rootAbsolute, `${payload.relativePath}/${subdirectory}`))
     }

@@ -61,6 +61,14 @@ describe('owned notification popup',() => {
     expect(notificationReceived).not.toHaveBeenCalled()
     expect(playNotificationSound).not.toHaveBeenCalled()
   })
+  it('announces a matched review result without presenting it as completed',async () => {
+    vi.mocked(trackingRequest).mockResolvedValue({ notifications: [{ ...notice,id: 'review-result',isResult: true,requiresReview: true,title: 'SBM bildirimi alındı; kontrol bekliyor' }],preferences: { showPopups: false,playSound: false,assistantReaction: false } })
+    render(<MemoryRouter><TrackingPopup /></MemoryRouter>)
+    expect(await screen.findByRole('alertdialog',{ name: 'SBM sonucu kontrol bekliyor' })).toBeInTheDocument()
+    expect(screen.queryByText('Tramer sonucu geldi')).not.toBeInTheDocument()
+    expect(screen.getByText('SBM bildirimi alındı; kontrol bekliyor')).toBeInTheDocument()
+    expect(playNotificationSound).toHaveBeenCalledWith(true)
+  })
   it('hides ordinary popup notifications without acknowledging them',async () => {
     vi.mocked(trackingRequest).mockResolvedValue({ notifications: [notice],preferences: { showPopups: false,playSound: false,assistantReaction: false } })
     render(<MemoryRouter><TrackingPopup /></MemoryRouter>)

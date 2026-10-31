@@ -133,7 +133,7 @@ export function createStorageStore(pool: pg.Pool) {
       caseId: string,
       input: CaseLocationAssignRequest,
     ): Promise<AssignOutcome> {
-      return withTransaction(pool, async (client) => {
+      return withTransaction(pool, async (client): Promise<AssignOutcome> => {
         const caseRes = await client.query(
           'SELECT 1 FROM cases WHERE id::text = $1 AND organization_id = $2 FOR UPDATE',
           [caseId, actor.organizationId],
@@ -241,6 +241,10 @@ export function createStorageStore(pool: pg.Pool) {
         })
 
         return { kind: 'ok', location: locationToDto(row) }
+      }).catch((error: unknown): AssignOutcome => {
+        const conflict = error as { code?: string; constraint?: string }
+        if (conflict.code === '23505' && ['folder_path_owner_unique', 'case_locations_path_unique'].includes(conflict.constraint ?? '')) return { kind: 'version_conflict' }
+        throw error
       })
     },
 

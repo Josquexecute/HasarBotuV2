@@ -1,5 +1,6 @@
 import { app, ipcMain } from 'electron'
 import { dirname, join } from 'node:path'
+import { writeFile } from 'node:fs/promises'
 import { desktopReleaseResponseSchema } from '@hasarbotu/contracts'
 import type { DesktopUpdateState } from '@hasarbotu/contracts'
 import type { DesktopShell } from './shell.js'
@@ -9,8 +10,17 @@ export function startDesktopUpdates(shell: DesktopShell, apiOrigin: string): () 
   const supported = app.isPackaged && process.platform === 'win32' && process.arch === 'x64'
   let state: DesktopUpdateState = { currentVersion: app.getVersion(), supported, phase: supported ? 'idle' : 'disabled', downloadedBytes: 0 }
   let busy = false, disposed = false
+  let diagnosticWrite = Promise.resolve(), lastProgressAt = 0
+  const diagnostic: { stage: string; bytes: number; httpStatus?: number | undefined; failureStage?: string | undefined } = { stage: 'idle', bytes: 0 }
+  const record = (status: Partial<typeof diagnostic>) => {
+    Object.assign(diagnostic, status)
+    const snapshot = JSON.stringify({ ...diagnostic, currentVersion: state.currentVersion, version: state.release?.version, sha256: state.release?.sha256, phase: state.phase, checkedAt: new Date().toISOString() })
+    diagnosticWrite = diagnosticWrite.then(() => writeFile(join(app.getPath('userData'), 'update-status.json'), snapshot)).catch(() => { console.error('desktop update status could not be recorded') })
+  }
   const publish = (next: DesktopUpdateState) => {
+    const changed = state.phase !== next.phase
     state = next
+    if (changed) record({ stage: next.phase, bytes: next.downloadedBytes, failureStage: next.phase === 'error' ? diagnostic.stage : undefined, ...(next.phase === 'checking' ? { httpStatus: undefined } : {}) })
     if (!disposed && !shell.window.isDestroyed()) shell.window.webContents.send('hasarbotu:update-state', state)
   }
   const trusted = (event: Electron.IpcMainInvokeEvent) => event.sender === shell.window.webContents
@@ -29,7 +39,7 @@ export function startDesktopUpdates(shell: DesktopShell, apiOrigin: string): () 
       const release = await latest()
       publish({ ...state, phase: !release ? 'disabled' : isNewerVersion(release.version, state.currentVersion) ? 'available' : 'current', ...(release ? { release } : {}) })
     } catch (error) { publish({ ...state, phase: 'error', message: error instanceof Error ? error.message : 'Güncelleme kontrol edilemedi.' }) }
-    finally { busy = false }
+    finally { await diagnosticWrite; busy = false }
     return state
   }
   const install = async () => {
@@ -42,15 +52,23 @@ export function startDesktopUpdates(shell: DesktopShell, apiOrigin: string): () 
       if (!release || release.sha256 !== selectedRelease.sha256 || !isNewerVersion(release.version, state.currentVersion)) throw new Error('Yayımlanan sürüm değişti. Güncellemeleri yeniden kontrol edin.')
       publish({ ...state, phase: 'downloading', downloadedBytes: 0 })
       const directory = join(app.getPath('userData'), 'updates', release.sha256)
-      const installer = await downloadVerifiedInstaller({ release, origin: shell.origin, directory, fetch: fetchAuthenticated, progress: bytes => publish({ ...state, downloadedBytes: bytes }) })
+      const installer = await downloadVerifiedInstaller({ release, origin: shell.origin, directory, fetch: fetchAuthenticated, diagnostic: record, progress: bytes => {
+        const now = Date.now()
+        if (bytes !== release.size && now - lastProgressAt < 250) return
+        lastProgressAt = now
+        publish({ ...state, downloadedBytes: bytes })
+        record({ stage: 'downloading', bytes })
+      } })
+      publish({ ...state, phase: 'verifying' })
       await verifyInstallerVersion(installer, release.version)
+      publish({ ...state, phase: 'preparing' })
       const taskName = `HasarBotu-Update-${process.pid}-${release.sha256.slice(0, 12)}`
       const helper = await writeUpdateHelper({ directory, installer, executable: process.execPath, installDirectory: dirname(process.execPath), pid: process.pid, taskName, apiOrigin, userDataPath: app.getPath('userData') })
       await scheduleUpdateHelper(helper, taskName)
       publish({ ...state, phase: 'installing' })
       app.quit()
     } catch (error) { publish({ ...state, phase: 'error', message: error instanceof Error ? error.message : 'Güncelleme kurulamadı.' }) }
-    finally { busy = false }
+    finally { await diagnosticWrite; busy = false }
     return state
   }
   ipcMain.handle('hasarbotu:update-check', event => { if (!trusted(event)) throw new Error('Untrusted update caller'); return check() })

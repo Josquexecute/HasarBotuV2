@@ -378,7 +378,7 @@ describeDb('Durum Panosu gerçek API verileri', () => {
       for (const name of ['Manual Dashboard Repair', 'Revised Dashboard Repair']) {
         const edited = await app.inject({ method: 'PATCH', url: `/api/v1/cases/${id}`, headers: { cookie }, payload: { expectedVersion: version, serviceDetails: { name } } })
         expect(edited.statusCode, edited.payload).toBe(200)
-        expect(edited.json().case.serviceId).toBeNull()
+        expect(edited.json().case.serviceId).toEqual(expect.any(String))
         version = edited.json().case.version as number
         expect(await readService()).toBe(name)
       }

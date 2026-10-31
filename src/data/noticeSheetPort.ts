@@ -19,7 +19,7 @@ export function createHttpNoticeSheetAdapter(options: { baseUrl?: string; fetchI
     try {
       response = await fetchImpl(`${options.baseUrl ?? ''}/api/v1/cases/${encodeURIComponent(caseId)}/notice-sheet`, {
         credentials: 'include',
-        headers: { accept: 'application/json', 'x-hasarbotu-notice-sheet-fields': '2', ...(input ? { 'content-type': 'application/json' } : {}) },
+        headers: { accept: 'application/json', 'x-hasarbotu-notice-sheet-fields': '3', ...(input ? { 'content-type': 'application/json' } : {}) },
         ...(input ? { method: 'PUT', body: JSON.stringify({ ...input, confirmed: true }) } : {}),
       })
     } catch { throw new NoticeSheetClientError('unavailable') }

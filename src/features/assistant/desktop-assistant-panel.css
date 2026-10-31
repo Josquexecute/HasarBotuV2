@@ -1,11 +1,11 @@
-.desktop-assistant-panel { height: 100dvh; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); color: var(--text-primary); font-size: var(--assistant-font-size, 13px); border: 1px solid var(--border); }
+.desktop-assistant-panel { height: 100dvh; min-width: 0; padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; background: var(--surface); color: var(--text-primary); font-size: var(--assistant-font-size, 13px); border: 1px solid var(--border); border-radius: 12px; }
 .desktop-assistant-panel header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.desktop-assistant-panel header small { display: block; color: var(--text-secondary); }
+.desktop-assistant-panel header small { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 12px; }
 .desktop-assistant-panel button { min-height: 44px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; cursor: pointer; font: inherit; }
 .desktop-assistant-panel button:disabled { opacity: .5; cursor: default; }
-.desktop-assistant-panel button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
+.desktop-assistant-panel button[aria-pressed=true], .desktop-assistant-panel button[aria-selected=true] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .desktop-assistant-panel button:focus-visible { outline: 2px solid var(--assistant-focus, var(--accent)); outline-offset: 2px; }
-.assistant-content { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 2px; }
+.assistant-content { flex: 1; min-height: 80px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 2px; overflow-wrap: anywhere; }
 .assistant-search { display: flex; align-items: end; gap: 8px; }
 .assistant-search .field { flex: 1; min-width: 0; }
 .desktop-assistant-panel input, .desktop-assistant-panel textarea { width: 100%; min-width: 0; min-height: 44px; padding: 8px; font: inherit; color: var(--text-primary); background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; }
@@ -13,19 +13,35 @@
 .assistant-results { margin: 12px 0; display: grid; gap: 6px; }
 .assistant-result { display: grid; gap: 4px; text-align: left; width: 100%; overflow-wrap: anywhere; }
 .assistant-result span, .assistant-entry small { color: var(--text-secondary); font-size: 12px; }
-.assistant-tabs, .assistant-native-actions, .desktop-assistant-panel footer, .assistant-pagination { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.assistant-tabs button, .assistant-native-actions button { flex: 1; }
-.assistant-case { border-top: 1px solid var(--border); padding-top: 10px; }
+.assistant-tabs { position: sticky; top: -2px; z-index: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.assistant-tabs button { display: grid; justify-items: center; align-content: center; gap: 5px; min-width: 0; padding: 8px 2px; border-color: transparent; background: transparent; font-size: .85em; line-height: 1.3; }
+.assistant-tabs button span { overflow-wrap: normal; }
+.assistant-native-actions, .desktop-assistant-panel footer, .assistant-pagination { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+.assistant-native-actions button { flex: 1; }
+.assistant-case { min-width: 0; }
+.assistant-case-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 0 12px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.assistant-case-heading > span { display: grid; min-width: 0; gap: 4px; }
+.assistant-case-heading small { color: var(--text-secondary); }
 .assistant-selected, .desktop-assistant-panel .touch-assistant__target { padding: 10px 0; }
-.assistant-entry { border-bottom: 1px solid var(--border); padding: 10px 0; overflow-wrap: anywhere; }
-.assistant-entry p { white-space: pre-wrap; margin: 6px 0; }
-.assistant-process { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
+.assistant-entry { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 8px; overflow-wrap: anywhere; background: var(--surface-muted); }
+.assistant-entry p { white-space: pre-wrap; margin: 6px 0; line-height: 1.6; }
+.assistant-process { display: grid; grid-template-columns: minmax(70px, .7fr) minmax(0, 1.3fr); gap: 10px; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); line-height: 1.5; }
 .assistant-process dt { color: var(--text-secondary); }
 .assistant-process dd { margin: 0; overflow-wrap: anywhere; }
 .desktop-assistant-panel h3 { font-size: 14px; margin: 16px 0 8px; }
 .desktop-assistant-panel footer { border-top: 1px solid var(--border); padding-top: 8px; }
 .desktop-assistant-panel footer button:last-child { margin-left: auto; }
 .desktop-assistant-panel [hidden] { display: none; }
+.assistant-case form { display: grid; gap: 12px; }
+.assistant-case textarea { min-height: 110px; max-height: 35dvh; resize: vertical; line-height: 1.6; }
+.desktop-assistant-panel .touch-assistant__target { display: none; }
+.desktop-assistant-panel > header > div { min-width: 0; overflow-wrap: anywhere; }
+.desktop-assistant-panel > .touch-play-controls { max-height: 30dvh; overflow: auto; padding: 8px 2px; }
+@media (max-height: 540px) {
+  .desktop-assistant-panel { gap: 6px; padding: 8px; }
+  .desktop-assistant-panel > header small { display: none; }
+  .desktop-assistant-panel > footer button { min-height: 32px; padding-block: 4px; }
+}
 .assistant-appearance-editor { display: grid; min-width: 0; gap: 20px; }
 .assistant-appearance-layout { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) 230px; gap: 24px; align-items: start; }
 .assistant-appearance-controls { display: grid; min-width: 0; gap: 18px; }

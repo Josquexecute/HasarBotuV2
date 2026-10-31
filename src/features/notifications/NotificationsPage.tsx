@@ -173,6 +173,7 @@ export function NotificationsPage({ port }: { port?: OperationalAlertDataPort } 
   }, [caseId, source, scopeReload])
   const scopeReady = caseId === undefined || scope?.item !== null && scope?.item !== undefined
   const [section,setSection] = useState<'inbox' | 'alerts' | 'tracking'>(port ? 'alerts' : 'inbox')
+  const [trackingVisited,setTrackingVisited] = useState(false)
 
   return (
     <main className="page office-page notifications-page">
@@ -185,10 +186,10 @@ export function NotificationsPage({ port }: { port?: OperationalAlertDataPort } 
           </div>}
           {caseId !== undefined && !scopeReady && (scope?.error || !caseId ? <p role="alert">Seçili dosya alınamadı. Bağlantınızı ve dosya erişiminizi kontrol edin. {caseId && <button type="button" onClick={() => { setSelection(null); setScopeReload(value => value + 1) }}>Tekrar dene</button>}</p> : <LoadingState label="Seçili dosya yükleniyor" />)}
           {scopeReady && <div key={caseId ?? 'all'}>
-          <nav className="notification-center__tabs" aria-label="Bildirim bölümleri">{([['inbox','Gelen kutusu'],['alerts','Uyarılar'],['tracking','Tramer ve e-posta']] as const).map(([key,title]) => <button type="button" key={key} aria-pressed={section === key} onClick={() => setSection(key)}>{title}</button>)}</nav>
+          <nav className="notification-center__tabs" aria-label="Bildirim bölümleri">{([['inbox','Gelen kutusu'],['alerts','Uyarılar'],['tracking','Tramer ve e-posta']] as const).map(([key,title]) => <button type="button" key={key} aria-pressed={section === key} onClick={() => { setSection(key);if (key === 'tracking') setTrackingVisited(true) }}>{title}</button>)}</nav>
           {section === 'inbox' && <Suspense fallback={<LoadingState label="Bildirimler yükleniyor" />}><TrackingInbox caseId={caseId} /></Suspense>}
           {section === 'alerts' && <section className="notification-feed" aria-label="Dosya uyarıları"><OperationalAlertContent port={port} caseId={caseId} /></section>}
-          {section === 'tracking' && <Suspense fallback={<LoadingState label="Takip yükleniyor" />}><TrackingWorkspace caseId={caseId} /></Suspense>}
+          {(section === 'tracking' || trackingVisited) && <div hidden={section !== 'tracking'}><Suspense fallback={<LoadingState label="Takip yükleniyor" />}><TrackingWorkspace caseId={caseId} view="center" /></Suspense></div>}
           </div>}
         </div>
       </>}

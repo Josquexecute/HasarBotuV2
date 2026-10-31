@@ -105,7 +105,7 @@ describe('dashboard data port', () => {
       visibility.mockReturnValue('visible')
       await act(async () => {
         if (trigger === 'focus') window.dispatchEvent(new Event('focus'))
-        else await vi.advanceTimersByTimeAsync(30_000)
+        else await vi.advanceTimersByTimeAsync(5000)
       })
       expect(view.result.current.dashboard?.items).toEqual([])
       expect(view.result.current.status).toBe('ok')
