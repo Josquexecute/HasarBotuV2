@@ -4,7 +4,7 @@ import { AlertTriangle, LoaderCircle, RefreshCw, Save, Pencil, X } from 'lucide-
 import type { SessionUser } from '../../data/authPort'
 import { CaseCommandError, createHttpCaseCommandAdapter, type CaseCommandPort, type CaseUpdateInput } from '../../data/commandPort'
 import type { CaseReferenceDataPort } from '../../data/ports'
-import { useCaseReferences } from '../../data/useCaseReferences'
+import { notifyServiceDirectoryChanged, useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseRecord, CaseStageCode } from '../../types/case'
 import { eksistKey, matchEksistReference } from '@hasarbotu/domain'
 import { ServiceRevisionDialog } from './ServiceRevisionDialog'
@@ -119,6 +119,7 @@ export function CaseEditModal({ item, onClose, onUpdated, onReload, onUnauthoriz
     setFieldErrors({})
     try {
       const updated = await commands.updateCase(item.caseId, input)
+      notifyServiceDirectoryChanged()
       onUpdated(updated)
     } catch (error) {
       const safeError = error instanceof CaseCommandError

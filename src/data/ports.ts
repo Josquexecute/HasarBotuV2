@@ -14,6 +14,7 @@ export interface CasePageQuery {
   readonly stage?: string
   readonly responsibleUserId?: string
   readonly serviceId?: string
+  readonly serviceName?: string
   readonly followUpFrom?: string
   readonly followUpTo?: string
   readonly sortBy?: 'updatedAt' | 'followUpDate' | 'officeCaseNumber' | 'plate'
@@ -51,6 +52,7 @@ export interface UserReferenceRecord {
 }
 
 export interface ServiceReferenceRecord extends NamedReferenceRecord {
+  readonly address?: string | null
   readonly phone?: string | null
   readonly serviceType: 'authorized' | 'private' | 'glass' | 'mobile' | 'other'
   readonly isActive: boolean
@@ -73,6 +75,7 @@ export interface ServiceAgreementEvaluationRecord {
 }
 
 export interface CaseReferenceWorkspace {
+  readonly serviceContactNames?: readonly string[]
   readonly insurers: readonly NamedReferenceRecord[]
   readonly services: readonly ServiceReferenceRecord[]
   readonly users: readonly UserReferenceRecord[]
@@ -84,6 +87,7 @@ export interface CaseReferenceDataPort {
 }
 
 export interface ServiceReferenceQuery {
+  readonly includeUnlinkedNames?: boolean
   readonly insurerId?: string
   readonly evaluationDate?: string
   readonly dateSource?: 'loss_date' | 'policy_date'

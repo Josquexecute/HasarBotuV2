@@ -30,7 +30,7 @@ describe('HasarBotu V2 UI prototipi', () => {
     await user.type(globalSearch, '   ')
     await user.keyboard('{Enter}')
 
-    expect(screen.getByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/ayarlar')
     expect(window.location.search).toBe('')
   })

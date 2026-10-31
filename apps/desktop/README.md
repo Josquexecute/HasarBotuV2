@@ -1,5 +1,60 @@
 # `@hasarbotu/desktop`
 
+31 Ekim 2026: **0.1.90 ofise yayımlandı** (2026-10-31T12:39:33.423Z).
+72ACR013, 07BMH571 ve 34CNK333, kurulu 0.1.89'un gerçek dosya listesinde görünür.
+Kök neden eski konum/pCloud kimliği nedeniyle yönetilen arşivlemedir; 115 canlı dosya
+SHA-256'sıyla yalnız üç bağ onarıldı. 239 izlenen kayıt, belgeler ve eski 34CNK333 geçmişi
+korundu; fiziksel taşıma/silme ve dosya birleştirme yapılmadı.
+Föye araç tescil tarihleri ve trafik mağduru/kasko sigortalısı için geçmiş hasar metni
+eklendi. Kaskoda mağdur alanları ve tüm föylerde çalışma bölümü gizlendi; eski veriler korunur.
+Yeni servisler kesin ad eşleşmesiyle rehbere bağlanır; mevcut 38 bağlantısız servis adı
+toplu veri değişikliği olmadan filtrelenir. Tek ve tutarlı servis adresi yeniden seçimde korunur.
+**3.524 test geçti / 7 atlandı** (6 yapılandırılmamış canlı API, 1 Windows WebKit).
+Değişmeyen süitler korundu; etkilenen/başarısız dosyalar yeniden doğrulandı. Typecheck,
+lint, build, NSIS içeriği/smoke, gerçek Electron servis akışı ve iki gerçek tek sayfalık
+A4 PDF geçti. Değişmemiş yardımcı odak/animasyon kontrolleri ikinci monitörde ayrıca geçti.
+1.000 sentetik dosya, aynı 1440×900 pencere, ısınmış önbellek ve JS çöp toplama sonrası
+15 kısa örnek: CPU %0,122→%0,132; süreç çalışma kümeleri 524,0→535,8 MiB (+%2,2);
+JS heap 11,64→11,57 MiB; GPU %0,1230→%0,1233. Uzun süreli soak yapılmadı.
+Paket **113.021.946 bayt**, SHA-256 `dbf6203772959cf4da77ba3adf5496f3b3732255b8e623a753859dc74c7cf460`.
+Kurulu **0.1.89**, **0.1.90** sürümünü `available` gördü; standart Electron oturumunda
+kimlikli HTTP 200 indirmesi, tam boyut/SHA-256 ve kurulum sürümü doğrulandı.
+Önceki manifest/değişmez kurulum korundu; çalışan istemcilere kurulum zorlanmadı.
+
+29 Ekim 2026: **0.1.89 ofise yayımlandı** (2026-10-29T09:08:08.930Z).
+Tramer/SBM otomatik takibi kullanıcı yetkisiyle etkinleştirildi. Doğrulanmış mutabakat
+ve komisyon oybirliği sonuçları tam başvuru numarasıyla eşleşir; dosya sorumlusuna
+sessiz ayarından bağımsız sonuç pop-up'ı açılır. Kontrol gereken sonuç ayrı başlıkla
+bildirilir; KTT ihbarı tamamlandı sayılmaz. Konu, ek, alıntı, ret/iptal çelişkileri,
+eski mesajlar ve arşivlenmiş dosyalar için korumalar eklendi. Eksik mesaj taramanın
+kalanını engellemez. Bildirimler tam genişlikte, 25 kayıtlık liste ve seçili ayrıntı
+paneliyle gösterilir; ham metin kapalıdır, taslaklar korunur. Gereksiz bildirim yükü
+ve çift yenileme sorgusu kaldırıldı.
+Bağlı Gmail'deki 82 gerçek ileti salt okunur doğrulandı: 34 ihbar, 32 doğrulanmış
+sonuç, 16 belirsiz ileti. Mevcut başvurularla yalnız bir ihbar eşleşiyor; numarası
+kayıtlı olmayan sonuçlar tahminle dosyaya bağlanmadı. Önceki 8 Tramer işi, 82 mesaj
+ve 68.681 evrak onayı korundu; geçmiş mesajlar yeniden işlenmedi. 18 sunucu dosyası
+doğrulandı, 15 değişiklik yedeklenerek uygulandı; migration yok, beş servis sağlıklı.
+**3.513 test PASS / 7 atlama**: altı yapılandırılmamış canlı API testi ve Windows'ta
+desteklenmeyen bir WebKit kontrolü. Yedekleme/geri yükleme testi ayrıca tamamlandı.
+Typecheck, lint, build ve gerçek x64 NSIS açılışı geçti. Kurulumdan çıkarılan pakette
+ikinci monitör, dört pencere boyutu, iki tema ve %100/%125/%150 DPI ile **54 Electron
+kontrolü** geçti; ekran görüntüleri `.local/tramer-089/` altında, veriler sentetiktir.
+Aynı cihaz ve 120 sentetik iş/82 e-posta ile 0.1.88 → 0.1.89: rendererların toplam
+RAM'i 331,8 → 258,1 MiB, CPU ortalaması %0,048 → %0,051, ortak GPU motoru
+%0,488 → %0,564. Sekiz bölüm geçişinde medyan 174 → 67 ms; ilk açılış 728 → 643 ms.
+Altı beş-saniyelik kaydırmada iki sürümün p95 aralığı yaklaşık 33,5–66,9 ms; medyan
+33,3 ms. Bunlar kısa örneklerdir; uzun süreli dayanıklılık iddiası değildir.
+Paket **113.021.395 bayt**, SHA-256
+`42d8ca0b27811e73fe6f6166e485f433f33d45dc45c147f6548ce83f36563ec3`.
+Gerçek kurulu **0.1.88**, 0.1.89'u `available` gördü; standart Electron oturumuyla
+kimlikli indirme, boyut/SHA-256 ve kurulum sürümü 110,5 saniyede doğrulandı.
+İlk transferlerde kesintiler gözlendi; kesin kök neden kanıtlanamadı. Aynı paket
+kontrollü yerel köprüden 456 ms, doğrudan kimlikli ofis HTTPS üzerinden 117,3 saniyede
+eşleşti. Başarısız denemeler başarılı sayılmadı; kesintiler için kalıcı çözüm iddiası
+yoktur. Önceki 0.1.88 manifesti, değişmez paket ve bağlantı yapılandırması korundu;
+istemcilere kurulum zorlanmadı. Kaynak/test/paket/teslimat kanıtları `.local/tramer-089/` altında.
+
 29 Ekim 2026: **0.1.88 ofise yayımlandı** (2026-10-29T06:39:18.736Z).
 İşlem kayıtlarında teknik kodlar yerine Türkçe açıklamalar, tarih/kullanıcı/dosya/
 sonuç sütunları, güvenli eski → yeni değerler, arama/filtre/sıralama ve sayfa içi
@@ -334,7 +389,19 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.87**, 2026-10-28T22:19:56.905Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.90**, 2026-10-31T12:39:33.423Z; Windows x64,
+113.021.946 bayt, SHA-256 `dbf6203772959cf4da77ba3adf5496f3b3732255b8e623a753859dc74c7cf460`.
+Kurulu 0.1.89 `available` gördü; kimlikli standart Electron indirmesinde HTTP 200,
+tam boyut/SHA-256 ve kurulum sürümü doğrulandı. Üç plaka gerçek listede görünür;
+239 izlenen kayıt ve önceki manifest/değişmez paket korundu. Zorunlu kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.89**, 2026-10-29T09:08:08.930Z; Windows x64,
+113.021.395 bayt, SHA-256 `42d8ca0b27811e73fe6f6166e485f433f33d45dc45c147f6548ce83f36563ec3`.
+Kurulu 0.1.88 istemcisi `available` gördü; kimlikli standart Electron indirmesinde
+HTTP 200, tam boyut/SHA-256 ve paket sürümü doğrulandı. Önceki manifest/paket korundu.
+İlk transferlerdeki aralıklı kesintilerin kök nedeni açık; ayrıntı ve kapsam yukarıdadır.
+
+Önceki doğrulanan ofis yayını: **0.1.87**, 2026-10-28T22:19:56.905Z; Windows x64,
 113.003.577 bayt, SHA-256 `1088cbe51eab96e36de39ad985c7a3f3420a8ab320520643650548837d36acd0`.
 Kurulu **0.1.85**, yeni sürümü `available` gördü; kimlikli manifest ve
 kurulum indirmesi HTTP 200 döndü, tam boyut ve SHA-256 eşleşti. Önceki 0.1.86

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { NoticeSheetDataPort } from '../../data/noticeSheetPort'
@@ -20,6 +20,29 @@ function setup(overrides: Partial<NoticeSheetDataPort> = {}, fixture = noticeShe
 }
 
 describe('İhbar föyü düzenleme ve yazdırma', () => {
+  it.each(['traffic', 'casco'] as const)('edits %s registration dates and the affected vehicle history while retaining hidden legacy fields', async caseType => {
+    const fixture = { ...noticeSheetFixture, caseType, overrides: { fields: { inspectionNotes: 'Korunacak eski çalışma', victimName: 'Korunacak karşı taraf' }, documents: { victimLicense: true } } }
+    const { dialog, user, port } = setup({}, fixture)
+    await dialog.findByRole('article')
+    const insured = dialog.getByLabelText('Sigortalı tescil tarihi')
+    fireEvent.change(insured, { target: { value: '2020-02-29' } })
+    const victim = dialog.queryByLabelText('Mağdur tescil tarihi')
+    expect(Boolean(victim)).toBe(caseType === 'traffic')
+    if (victim) fireEvent.change(victim, { target: { value: '2021-10-17' } })
+    const key = caseType === 'traffic' ? 'victimDamageHistory' : 'insuredDamageHistory'
+    const label = caseType === 'traffic' ? 'Mağdur geçmiş hasarları' : 'Sigortalı geçmiş hasarları'
+    await user.type(dialog.getByLabelText(label), '2022 sol kapı değişimi\n2024 tampon onarımı')
+    expect(dialog.queryByLabelText('Ekspertiz çalışması')).not.toBeInTheDocument()
+    expect(dialog.queryByLabelText(caseType === 'traffic' ? 'Sigortalı geçmiş hasarları' : 'Mağdur adı / unvanı')).not.toBeInTheDocument()
+    expect(dialog.getByRole('article')).not.toHaveTextContent('Korunacak eski çalışma')
+    if (caseType === 'casco') expect(dialog.getByRole('article')).not.toHaveTextContent('Korunacak karşı taraf')
+    await user.click(dialog.getByRole('button', { name: 'Kaydet' }))
+    expect(port.save).toHaveBeenCalledWith(fixture.caseId, expect.objectContaining({ overrides: {
+      fields: { ...fixture.overrides.fields, insuredRegistrationDate: '2020-02-29', ...(victim ? { victimRegistrationDate: '2021-10-17' } : {}), [key]: '2022 sol kapı değişimi\n2024 tampon onarımı' }, documents: fixture.overrides.documents,
+    } }))
+    expect(dialog.getByRole('article')).toHaveTextContent('29.02.2020')
+    expect(dialog.getByRole('article')).toHaveTextContent('2024 tampon onarımı')
+  })
   it('clears previous service contacts on a sheet-only service change and saves the new explicit contacts', async () => {
     const fixture = { ...noticeSheetFixture, overrides: { fields: { servicePhone: '0111 111 11 11', serviceAddress: 'Önceki elle girilmiş adres' }, documents: {} } }
     const { dialog, user, port } = setup({}, fixture)

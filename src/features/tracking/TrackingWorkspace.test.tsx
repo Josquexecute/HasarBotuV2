@@ -151,10 +151,10 @@ describe('tracking screens',() => {
     data.tramer = [{ id: 'job',caseId: 'case',plate: '34 TEST 123',officeNumber: '1',assignedUserId: 'operator',assignedName: 'Tramer çalışanı',applicationNumber: '000310',status: 'result_pending',resultText: null,version: 2,canEdit: true }]
     install(data)
     render(<MemoryRouter><TrackingWorkspace caseId="case" /></MemoryRouter>)
-    await screen.findByText('Sonuç bekleniyor')
+    await screen.findByText('Sonuç bekleniyor',{ selector: '.tracking-status' })
     data.tramer[0] = { ...data.tramer[0]!,status: 'completed',resultText: 'Sonuç: Tamamlandı',version: 3 }
     fireEvent(window,new Event('tracking-received'))
-    expect(await screen.findByText('Tamamlandı',{ selector: 'strong' })).toBeInTheDocument()
+    expect(await screen.findByText('Tamamlandı',{ selector: '.tracking-status' })).toBeInTheDocument()
     expect(screen.getByText('Sonuç: Tamamlandı')).toBeInTheDocument()
   })
   it('loads large lists in batches without losing an existing review draft',async () => {
@@ -233,7 +233,7 @@ describe('tracking screens',() => {
     data.tramer = [{ id: 'job',caseId: 'case',plate: '34 TEST 123',officeNumber: '1',assignedUserId: 'operator',assignedName: 'Diğer çalışan',applicationNumber: null,status: 'entry_pending',resultText: null,version: 1,canEdit: false }]
     install(data)
     render(<MemoryRouter><TrackingWorkspace caseId="case" /></MemoryRouter>)
-    await screen.findByText('Giriş bekleniyor')
+    await screen.findByText('Giriş bekleniyor',{ selector: '.tracking-status' })
     expect(screen.queryByRole('button',{ name: 'Numarayı kaydet' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button',{ name: 'Tramer sorumlusunu ata' })).not.toBeInTheDocument()
   })

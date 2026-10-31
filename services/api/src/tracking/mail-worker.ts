@@ -19,6 +19,7 @@ export async function syncMailboxes(pool: pg.Pool, config: GoogleConfig, provide
       const token = decryptToken(c.encrypted_refresh_token,config.encryptionKey,`${c.organization_id}:${c.subject}`)
       const refreshed = await provider.refresh(token)
       let page: string | undefined
+      let unavailableMessage = false
       const seenPages = new Set<string>()
       do {
         if (signal?.aborted) return
@@ -31,7 +32,16 @@ export async function syncMailboxes(pool: pg.Pool, config: GoogleConfig, provide
         for (const id of ids) {
           if (signal?.aborted) return
           if (known.has(id)) continue
-          const message = gmailMessageSchema.parse(await provider.gmail(refreshed.access_token,`messages/${encodeURIComponent(id)}?format=full`))
+          let raw: unknown
+          try { raw = await provider.gmail(refreshed.access_token,`messages/${encodeURIComponent(id)}?format=full`) }
+          catch (error) {
+            // A message can disappear between listing and fetching. Continue the
+            // page so that one removed message cannot hide other results.
+            if (error instanceof GoogleProviderError && error.status === 404) { unavailableMessage = true;continue }
+            throw error
+          }
+          const message = gmailMessageSchema.parse(raw)
+          if (message.id !== id) throw new Error('Gmail message identity mismatch')
           const receivedAt = new Date(Number(message.internalDate))
           if (!Number.isFinite(receivedAt.getTime())) throw new Error('Invalid message date')
           await ingestSbmResult(pool,{ connectionId: c.id,messageId: message.id,receivedAt,result: parseSbmMessage(message,config.sbmSenders),automatic: config.automaticSbmEnabled })
@@ -40,13 +50,16 @@ export async function syncMailboxes(pool: pg.Pool, config: GoogleConfig, provide
         if (page && seenPages.has(page)) throw new Error('Repeated Gmail page')
         if (page) seenPages.add(page)
       } while (page)
-      await pool.query("UPDATE mail_connections SET status='connected',last_success_at=now(),last_error=NULL WHERE id=$1 AND encrypted_refresh_token=$2 AND status <> 'disconnected'", [c.id,c.encrypted_refresh_token])
+      if (unavailableMessage) throw new GoogleProviderError('temporary',404)
+      const updated = await pool.query("UPDATE mail_connections SET status='connected',last_success_at=now(),last_error=NULL WHERE id=$1 AND encrypted_refresh_token=$2 AND status <> 'disconnected'", [c.id,c.encrypted_refresh_token])
+      if (!updated.rowCount) continue
       await pool.query(`INSERT INTO tracking_health(organization_id,kind,source_id,last_success_at) VALUES($1,'mail',$2,now())
         ON CONFLICT(organization_id,kind,source_id) DO UPDATE SET last_attempt_at=now(),last_success_at=now(),error_code=NULL`, [c.organization_id,c.id])
     } catch (error) {
       const status = error instanceof GoogleProviderError && error.kind === 'permission_required' ? 'permission_required' : 'error'
       // Preserve the last successful scan and never overwrite a concurrent reconnect/disconnect.
-      await pool.query('UPDATE mail_connections SET status=$2,last_error=$3 WHERE id=$1 AND encrypted_refresh_token=$4 AND status <> \'disconnected\'', [c.id,status,status === 'permission_required' ? 'Google izni yenilenmeli.' : 'E-posta takibi tamamlanamadı; yeniden denenecek.',c.encrypted_refresh_token])
+      const updated = await pool.query('UPDATE mail_connections SET status=$2,last_error=$3 WHERE id=$1 AND encrypted_refresh_token=$4 AND status <> \'disconnected\'', [c.id,status,status === 'permission_required' ? 'Google izni yenilenmeli.' : 'E-posta takibi tamamlanamadı; yeniden denenecek.',c.encrypted_refresh_token])
+      if (!updated.rowCount) continue
       await pool.query(`INSERT INTO tracking_health(organization_id,kind,source_id,error_code) VALUES($1,'mail',$2,$3)
         ON CONFLICT(organization_id,kind,source_id) DO UPDATE SET last_attempt_at=now(),error_code=excluded.error_code`, [c.organization_id,c.id,status])
     } finally {

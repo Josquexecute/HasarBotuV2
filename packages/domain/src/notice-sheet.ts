@@ -1,5 +1,7 @@
 import { eksistKey, parseEksist } from './eksist.js'
 
+export const NOTICE_SHEET_V3_FIELDS = ['insuredRegistrationDate', 'victimRegistrationDate', 'insuredDamageHistory', 'victimDamageHistory'] as const
+
 export const NOTICE_SHEET_HEADER_LIMITS = {
   organizationName: 300,
   officeNumber: 120,
@@ -25,11 +27,15 @@ export const NOTICE_SHEET_FIELD_LIMITS = {
   victimFault: 120,
   insuredName: 300,
   insuredPlate: 30,
+  insuredRegistrationDate: 10,
+  insuredDamageHistory: 2000,
   insuredMileage: 40,
   insuredHeavyDamage: 120,
   insuredPreviousClaims: 40,
   victimName: 300,
   victimPlate: 30,
+  victimRegistrationDate: 10,
+  victimDamageHistory: 2000,
   victimMileage: 40,
   victimHeavyDamage: 120,
   victimPreviousClaims: 40,

@@ -7,6 +7,17 @@
       "items": {
         "type": "object",
         "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "phone": {
             "type": [
               "string",

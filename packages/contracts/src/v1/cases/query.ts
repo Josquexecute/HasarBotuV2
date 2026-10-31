@@ -37,6 +37,7 @@ const casesQueryObject = z.strictObject({
   stage: caseStageSchema.optional(),
   responsibleUserId: userIdSchema.optional(),
   serviceId: serviceIdSchema.optional(),
+  serviceName: z.string().trim().min(1).max(500).optional(),
   followUpFrom: localDateSchema.optional(),
   followUpTo: localDateSchema.optional(),
   sortBy: sortFieldSchema.default('updatedAt'),

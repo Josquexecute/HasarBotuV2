@@ -40,7 +40,7 @@ describe('Paket 18 referans HttpApiAdapter', () => {
     })
     expect(fetchImpl).toHaveBeenCalledTimes(4)
     expect(fetchImpl).toHaveBeenCalledWith(
-      'http://api.test/api/v1/references/services?includeContacts=true&insurerId=ins-1&evaluationDate=2026-07-14&dateSource=loss_date&operation=closure_documents',
+      'http://api.test/api/v1/references/services?includeContacts=true&includeAddresses=true&insurerId=ins-1&evaluationDate=2026-07-14&dateSource=loss_date&operation=closure_documents',
       expect.any(Object),
     )
   })

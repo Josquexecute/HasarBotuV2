@@ -13,8 +13,9 @@ const templates = {
   }
 } as const
 
-export function sbmFixture(kind: keyof typeof templates): GmailMessage {
-  const template = templates[kind]
+export function sbmFixture(kind: keyof typeof templates | 'commission'): GmailMessage {
+  // Commission wording also verified in six authenticated office messages on 2026-10-29.
+  const template = kind === 'commission' ? { ...templates.agreement,html: templates.agreement.html.replace('MUTABAKAT - ŞİRKETLER ARASI MUTABAKAT (SON DURUM)','KOMİSYON OYBİRLİĞİ ONAYI  (SON DURUM)') } : templates[kind]
   return { id: kind,internalDate: '1790774585000',payload: {
     headers: [
       { name: 'From',value: 'sbm@sbm.org.tr' },

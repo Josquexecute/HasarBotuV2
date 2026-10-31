@@ -10,6 +10,11 @@ import {
 
 const TODAY = '2026-07-18'
 
+it('filters orphaned historical contacts by explicit name without rewriting assignments', () => {
+  expect(buildCasesPageQuery(state({ serviceId: 'name:Eski Servis' }), TODAY)).toMatchObject({ serviceName: 'Eski Servis' })
+  expect(buildCasesPageQuery(state({ serviceId: 'name:Eski Servis' }), TODAY)).not.toHaveProperty('serviceId')
+})
+
 function state(overrides: Partial<CasesFilterState> = {}): CasesFilterState {
   return {
     query: '',

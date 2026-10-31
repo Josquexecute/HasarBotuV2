@@ -367,6 +367,43 @@ describeDb('sidecarless physical folder registration', () => {
     binding.identity = { kind: 'tracked_files', manifestHash: identity.manifestHash }
     return input
   }
+  it.each([true, false])('recovers a reviewed recreated cloud folder while preserving archived records and content (registered=%s)', async registered => {
+    const input = await trackedRelocation(), binding = input.bindings[0]!
+    const previousId = registered ? String(next + 90000) : null
+    if (registered) await pool.query(`INSERT INTO case_folder_registrations(id,organization_id,case_id,storage_root_key,source_folder_id,source_relative_path,evidence,plan_hash,created_by_user_id)
+      VALUES($1,$2,$3,'test-root',$4,$5,'{}',$6,$7)`, [uuidv7(), org, binding.caseId, previousId, binding.previousLocation.relativePath, 'a'.repeat(64), admin])
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [binding.caseId])
+    await createAuditService().record(pool, { ...actor(), action: 'case.office_inventory_reconciled', entityType: 'case', entityId: binding.caseId, details: { managedArchive: true } })
+    // Copy/delete can recreate a folder ID without changing its Windows path.
+    binding.relativePath = binding.previousLocation.relativePath
+    binding.physicallyClosed = false
+    binding.identity = { kind: 'reviewed_recreation', reviewedByUserId: admin, previousSourceFolderId: previousId,
+      evidenceSha256: 'e'.repeat(64), candidates: [{ caseId: binding.caseId, version: 1 }], files: [
+        { recordedPath: binding.previousLocation.relativePath + '/claim.pdf', relativePath: 'claim.pdf', sha256: 'a'.repeat(64) },
+        { recordedPath: binding.previousLocation.relativePath + '/damage.jpg', relativePath: 'damage.jpg', sha256: 'b'.repeat(64) },
+      ] }
+    const before = (await pool.query('SELECT to_jsonb(t) data FROM tracked_files t WHERE case_id=$1 ORDER BY id', [binding.caseId])).rows
+    const plan = await planSourceFolderRelocation(pool, org, input)
+    const verify = vi.fn(async () => {})
+    expect(await applySourceFolderRelocation(pool, actor(), plan, plan.planHash, verify)).toMatchObject({ relocated: 1 })
+    expect((await pool.query('SELECT source_folder_id FROM case_folder_registrations WHERE case_id=$1', [binding.caseId])).rows[0].source_folder_id).toBe(binding.sourceFolderId)
+    expect((await pool.query('SELECT to_jsonb(t) data FROM tracked_files t WHERE case_id=$1 ORDER BY id', [binding.caseId])).rows).toEqual(before)
+    expect((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [binding.caseId])).rows[0].is_archived).toBe(true)
+    expect(verify).toHaveBeenCalledTimes(2)
+  })
+  it('rejects recreated folder evidence with changed hashes or a new same-plate candidate', async () => {
+    const input = await trackedRelocation(), b = input.bindings[0]!
+    b.identity = { kind: 'reviewed_recreation', reviewedByUserId: admin, previousSourceFolderId: null, evidenceSha256: 'a'.repeat(64),
+      candidates: [{ caseId: b.caseId, version: 1 }], files: [
+        { recordedPath: b.previousLocation.relativePath + '/claim.pdf', relativePath: 'claim.pdf', sha256: 'a'.repeat(64) },
+        { recordedPath: b.previousLocation.relativePath + '/damage.jpg', relativePath: 'damage.jpg', sha256: 'c'.repeat(64) },
+      ] }
+    await expect(planSourceFolderRelocation(pool, org, input)).rejects.toThrow('folder_relocation_content_identity_required')
+    b.identity.files[1]!.sha256 = 'b'.repeat(64)
+    const plan = await planSourceFolderRelocation(pool, org, input)
+    await pool.query('UPDATE cases SET version=version+1 WHERE id=$1', [b.caseId])
+    await expect(applySourceFolderRelocation(pool, actor(), plan, plan.planHash, async () => {})).rejects.toThrow('folder_relocation_case_changed')
+  })
   it('binds an unmarked moved workspace using the complete recorded file manifest and preserves history', async () => {
     const input = await trackedRelocation(), binding = input.bindings[0]!
     await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [binding.caseId])

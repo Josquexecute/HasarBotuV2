@@ -164,11 +164,11 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
             <p>Tüm föy alanlarını düzenleyebilirsiniz. Değişiklikler yalnız bu föye kaydedilir; dosya kaydı değişmez.</p>
             {!canEdit && <p role="status">Bu föy salt okunur; güncel hali yazdırılabilir.</p>}
             <fieldset disabled={!canEdit || busy}>
-              {noticeSheetFieldGroups.map((group, index) => <details key={group.title} open={index === 0}>
+              {noticeSheetFieldGroups.filter(group => sheet.caseType === 'traffic' || group.title !== 'Mağdur / karşı araç').map((group, index) => <details key={group.title} open={index === 0}>
                 <summary>{group.title}</summary>
-                <div className="notice-sheet-editor__fields">{group.fields.map(field => {
+                <div className="notice-sheet-editor__fields">{group.fields.filter(field => (sheet.caseType === 'traffic' || !field.key.startsWith('victim')) && (field.key !== 'insuredDamageHistory' || sheet.caseType === 'casco')).map(field => {
                   return <label key={field.key}><span>{field.label}{Object.hasOwn(draft.fields, field.key) && <small> · Düzenlendi</small>}</span>
-                    {field.multiline ? <textarea aria-label={field.label} value={fields[field.key]} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} rows={field.key === 'inspectionNotes' ? 6 : 3} onChange={event => changeField(field.key, event.target.value)} />
+                    {field.multiline ? <textarea aria-label={field.label} value={fields[field.key]} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} rows={3} onChange={event => changeField(field.key, event.target.value)} />
                       : <input aria-label={field.label} value={fields[field.key]} type={field.date ? 'date' : 'text'} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} onChange={event => changeField(field.key, event.target.value)} />}
                     {Object.hasOwn(draft.fields, field.key) && <button type="button" className="notice-sheet-reset" onClick={() => setDraft(current => {
                       const next = { ...current.fields }
@@ -181,7 +181,7 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
                   </label>
                 })}</div>
               </details>)}
-              <details><summary>Evrak kontrolü</summary><p>Hazır evraklar otomatik işaretlenir. Elle yapılan işaretler yalnız bu föye uygulanır.</p><div className="notice-sheet-editor__checks">{noticeSheetDocumentLabels.map(([code, label]) => <label key={code}><input type="checkbox" checked={documents[code]} onChange={event => changeDocument(code, event.target.checked)} /><span>{label}</span></label>)}</div></details>
+              <details><summary>Evrak kontrolü</summary><p>Hazır evraklar otomatik işaretlenir. Elle yapılan işaretler yalnız bu föye uygulanır.</p><div className="notice-sheet-editor__checks">{noticeSheetDocumentLabels.filter(([code]) => sheet.caseType === 'traffic' || !code.startsWith('victim')).map(([code, label]) => <label key={code}><input type="checkbox" checked={documents[code]} onChange={event => changeDocument(code, event.target.checked)} /><span>{label}</span></label>)}</div></details>
             </fieldset>
             <button className="button button--secondary" type="button" disabled={!canEdit || busy || (!dirty && Object.keys(sheet.overrides.fields).length === 0 && Object.keys(sheet.overrides.documents).length === 0)} onClick={() => { setDraft({ fields: {}, documents: {} }); setNotice('Otomatik bilgiler getirildi. Uygulamak için kaydedin.'); setError('') }}><RotateCcw size={14} /> Otomatik bilgilere dön</button>
           </aside>

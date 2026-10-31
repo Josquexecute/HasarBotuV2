@@ -198,7 +198,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
 } = {}) {
   // API modunda bütün liste ÇEKİLMEZ; yalnız mock prototipi bu hook'u kullanır.
   const { cases, source } = useCases({ enabled: getConfiguredDataSource() !== 'api' })
-  const referenceData = useCaseReferences(referencePort, {}, source === 'api')
+  const referenceData = useCaseReferences(referencePort, { includeUnlinkedNames: true }, source === 'api')
   const session = useSession()
   const location = useLocation()
   const navigate = useNavigate()
@@ -405,7 +405,7 @@ export function CasesPage({ alertPort, casesPort, referencePort }: {
           {source === 'api' && pageStatus === 'loading' && <p role="status" className="page-subtitle">Dosyalar yükleniyor…</p>}
         </div>
         <div className="heading-actions">
-          {source === 'api' && <button className="button button--secondary" type="button" onClick={() => { reload(); reloadAlerts() }} disabled={pageStatus === 'loading'}><RefreshCw size={15} />Listeyi Yenile</button>}
+          {source === 'api' && <button className="button button--secondary" type="button" onClick={() => { reload(); reloadAlerts(); referenceData.reload() }} disabled={pageStatus === 'loading'}><RefreshCw size={15} />Listeyi Yenile</button>}
           <button className={`button button--secondary${filtersOpen ? ' button--active' : ''}`} type="button" onClick={() => setFiltersOpen((value) => !value)}>
             <Filter size={15} /> Filtreler {hasFilters && <i className="button__indicator" />}
           </button>

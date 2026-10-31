@@ -6,6 +6,10 @@ import { serviceContactDraft } from './service-contact'
 import { suggestEmailService } from './service-email'
 
 describe('service identity and conservative email suggestions', () => {
+  it('keeps verified address defaults when a newly registered service is selected again', () => {
+    expect(serviceContactDraft('Registered Repair', [{ name: 'Registered Repair', phone: '0212 111 22 33', address: 'Kaynak Adres' }])).toEqual({ name: 'Registered Repair', phone: '0212 111 22 33', address: 'Kaynak Adres' })
+    expect(serviceContactDraft('Unknown Repair', [{ name: 'Registered Repair', address: 'Kaynak Adres' }])).toEqual({ name: 'Unknown Repair', phone: '', address: '' })
+  })
   it('clears old contacts on a different service and fills the exact directory match', () => {
     const onChange = vi.fn()
     render(<ServiceContactFields value={{ name: 'Old Repair', phone: 'old phone', address: 'old address' }} options={[{ name: 'New Repair', phone: '0212 555 10 10' }]} onChange={onChange} />)

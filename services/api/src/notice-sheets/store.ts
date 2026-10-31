@@ -1,5 +1,5 @@
 import type pg from 'pg'
-import { buildNoticeSheetDefaults, eksistKey, NOTICE_SHEET_HEADER_LIMITS } from '@hasarbotu/domain'
+import { buildNoticeSheetDefaults, eksistKey, NOTICE_SHEET_HEADER_LIMITS, NOTICE_SHEET_V3_FIELDS } from '@hasarbotu/domain'
 import { noticeSheetResponseSchema, noticeSheetOverridesSchema, type NoticeSheetResponse, type NoticeSheetSaveRequest } from '@hasarbotu/contracts'
 import { withTransaction, type Queryable } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
@@ -111,7 +111,7 @@ export function createNoticeSheetStore(pool: pg.Pool) {
         return read(client, actor, caseId, canEdit)
       })
     },
-    save(actor: Actor, caseId: string, input: NoticeSheetSaveRequest, includeHeaderFields = true): Promise<NoticeSheetResponse> {
+    save(actor: Actor, caseId: string, input: NoticeSheetSaveRequest, includeHeaderFields = true, includeVehicleFields = true): Promise<NoticeSheetResponse> {
       return withTransaction(pool, async client => {
         const row = await loadCase(client, actor.organizationId, caseId, true)
         if (row.lifecycle_status === 'closed' || row.case_type === null) throw new NoticeSheetError('conflict', 409)
@@ -119,8 +119,18 @@ export function createNoticeSheetStore(pool: pg.Pool) {
         const version = existing.rows[0]?.version ?? null
         if (version !== input.expectedVersion) throw new NoticeSheetError('version_conflict', 409)
         const overrides = noticeSheetOverridesSchema.parse(input.overrides)
+        const previous = noticeSheetOverridesSchema.parse(existing.rows[0]?.overrides ?? { fields: {}, documents: {} })
+        // Older clients cannot see new fields; hiding retired notes must not erase them.
+        const hiddenFields = Object.keys(previous.fields).filter(key => row.case_type === 'casco' ? key.startsWith('victim') : key === 'insuredDamageHistory') as (keyof typeof previous.fields)[]
+        for (const key of ['inspectionNotes', ...hiddenFields, ...(!includeVehicleFields ? NOTICE_SHEET_V3_FIELDS : [])] as const) {
+          if (!Object.hasOwn(overrides.fields, key) && Object.hasOwn(previous.fields, key)) overrides.fields[key] = previous.fields[key]!
+        }
+        if (row.case_type === 'casco') {
+          for (const key of ['victimLicense', 'victimRegistration'] as const) {
+            if (!Object.hasOwn(overrides.documents, key) && Object.hasOwn(previous.documents, key)) overrides.documents[key] = previous.documents[key]!
+          }
+        }
         if (!includeHeaderFields) {
-          const previous = noticeSheetOverridesSchema.parse(existing.rows[0]?.overrides ?? { fields: {},documents: {} })
           overrides.fields = { ...Object.fromEntries(Object.entries(previous.fields).filter(([key]) => Object.hasOwn(NOTICE_SHEET_HEADER_LIMITS,key))), ...overrides.fields }
         }
         const current = await read(client, actor, caseId, true)

@@ -90,6 +90,10 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     const pending = (as: string) => app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/pending',headers: { cookie: as } })
     expect((await pending(ownerCookie)).json().notifications).toHaveLength(20)
     expect((await pending(managerCookie)).json().notifications).toHaveLength(0)
+    const compact = await app.inject({ method: 'GET',url: '/api/v1/tracking?includeNotifications=false&includeCompleted=true',headers: { cookie: ownerCookie } })
+    expect(compact.statusCode,compact.payload).toBe(200)
+    expect(compact.json().notifications).toEqual([])
+    expect((await snapshot(ownerCookie,ownedCase)).notifications).toHaveLength(45)
     const inbox = await app.inject({ method: 'GET',url: '/api/v1/tracking/notifications/inbox',headers: { cookie: ownerCookie } })
     expect(inbox.statusCode,inbox.payload).toBe(200)
     expect(inbox.json()).toMatchObject({ total: 45,unread: 45,page: 1 })
@@ -110,10 +114,42 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await pool.query("SELECT details FROM audit_events WHERE action='tracking.notifications_dismissed' AND actor_user_id=$1",[owner])).rows[0].details.count).toBe(45)
   })
 
+  it('requires human approval of a historical mailbox result discovered after registering a new request',async () => {
+    const caseId = await createCase(), number = '000089001'
+    await submit(caseId,number)
+    const c = await connection('historical-result@office.example')
+    await ingestSbmResult(pool,{ connectionId: c,messageId: 'historical-result',receivedAt: new Date('2020-01-01'),automatic: true,
+      result: { applicationNumber: number,status: 'completed',text: 'Sonuç: Tamamlandı',evidenceHash: 'a'.repeat(64),reason: null } })
+    expect((await snapshot(ownerCookie,caseId)).tramer[0]?.status).toBe('result_pending')
+    expect((await pool.query('SELECT status,reason FROM sbm_messages WHERE connection_id=$1',[c])).rows[0]).toEqual({ status: 'review',reason: 'message_predates_request' })
+    const notifications = (await snapshot(ownerCookie,caseId)).notifications
+    expect(notifications).toHaveLength(1)
+    expect(notifications[0]?.title).toContain('kontrol bekliyor')
+    await pool.query("UPDATE mail_connections SET status='disconnected' WHERE id=$1",[c])
+  })
+
+  it('does not apply mail results to archived cases and scopes reviews to their linked case',async () => {
+    const first = await createCase(), second = await createCase()
+    await submit(first,'000089002');await submit(second,'000089003')
+    const c = await connection('archived-result@office.example')
+    for (const number of ['000089002','000089003']) await ingestSbmResult(pool,{ connectionId: c,messageId: number,receivedAt: new Date(),automatic: false,
+      result: { applicationNumber: number,status: 'completed',text: 'Sonuç: Tamamlandı',evidenceHash: 'b'.repeat(64),reason: null } })
+    const scoped = await snapshot(managerCookie,first)
+    expect(scoped.reviews.map(item => item.applicationNumber)).toEqual(['000089002'])
+    const review = (await pool.query('SELECT id FROM sbm_messages WHERE connection_id=$1 AND application_number=$2',[c,'000089002'])).rows[0].id
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=$1',[first])
+    const applied = await app.inject({ method: 'POST',url: `/api/v1/tracking/sbm/${review}/review`,headers: { cookie: managerCookie },payload: { action: 'apply',applicationNumber: '000089002',resultStatus: 'completed',note: 'Explicit review must respect archive state' } })
+    expect(applied.statusCode).toBe(409)
+    await ingestSbmResult(pool,{ connectionId: c,messageId: 'archived-automatic',receivedAt: new Date(),automatic: true,
+      result: { applicationNumber: '000089002',status: 'completed',text: 'Sonuç: Tamamlandı',evidenceHash: 'b'.repeat(64),reason: null } })
+    expect((await pool.query('SELECT status FROM tramer_requests WHERE case_id=$1',[first])).rows[0].status).toBe('result_pending')
+    await pool.query("UPDATE mail_connections SET status='disconnected' WHERE id=$1",[c])
+  })
+
   it('processes the supplied KTT templates through mailbox sync, matching by text number and notifying only the owner once',async () => {
     const id = await createCase();await submit(id,sbmNumber)
     const connections = [await connection('template-one@office.example'),await connection('template-two@office.example')]
-    let messages = [sbmFixture('entry')]
+    let messages = [{ ...sbmFixture('entry'),internalDate: String(Date.now()) }]
     const gmail = vi.fn<GoogleProvider['gmail']>().mockImplementation(async (_token,path) => {
       if (path.startsWith('messages?')) return { messages: messages.map(({ id }) => ({ id })) }
       const message = messages.find((m) => path === `messages/${m.id}?format=full`)
@@ -127,7 +163,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await pool.query('SELECT reason FROM sbm_messages WHERE connection_id=ANY($1::uuid[])', [connections])).rows)
       .toEqual([{ reason: 'non_result_notification' },{ reason: 'non_result_notification' }])
 
-    messages = [...messages,sbmFixture('agreement')]
+    messages = [...messages,{ ...sbmFixture('agreement'),internalDate: String(Date.now()) }]
     await syncMailboxes(pool,config,{ ...provider,gmail })
     await syncMailboxes(pool,config,{ ...provider,gmail })
     const done = await snapshot(ownerCookie,id)
@@ -537,7 +573,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
       if (path.startsWith('messages?')) return { messages: [{ id: 'committed-before-outage' },{ id: 'unread-at-outage' }] }
       if (offline && path.startsWith('messages/unread-at-outage')) throw new TypeError('synthetic socket reset')
       const messageId = path.startsWith('messages/committed-before-outage') ? 'committed-before-outage' : 'unread-at-outage'
-      return { id: messageId,internalDate: '1790774585000',payload: { mimeType: 'text/plain',headers: [
+      return { id: messageId,internalDate: String(Date.now()),payload: { mimeType: 'text/plain',headers: [
         { name: 'From',value: 'results@sbm.example' },
         { name: 'Authentication-Results',value: 'mx.google.com; dmarc=pass header.from=sbm.example' },
       ],body: { data: Buffer.from(`Başvuru no: ${number}\nSonuç: Tamamlandı`).toString('base64url') } } }
@@ -561,6 +597,75 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect(gmail.mock.calls.filter(([,path]) => path.startsWith('messages/committed-before-outage'))).toHaveLength(1)
     expect((await pool.query('SELECT status,last_error FROM mail_connections WHERE id=$1',[c])).rows[0]).toEqual({ status: 'connected',last_error: null })
     expect((await pool.query("SELECT error_code FROM tracking_health WHERE source_id=$1 AND kind='mail'",[c])).rows[0]).toEqual({ error_code: null })
+  })
+
+  it('continues past a missing email, retries safely and never trusts a mismatched provider message ID',async () => {
+    await pool.query("UPDATE mail_connections SET status='disconnected'")
+    const caseId = await createCase(), number = '000089404'
+    await submit(caseId,number)
+    const c = await connection('missing-mail@office.example')
+    let missing = true,mismatch = false
+    const gmail: GoogleProvider['gmail'] = async (_token,path) => {
+      if (path.startsWith('messages?')) return { messages: [{ id: 'missing' },{ id: 'available' }] }
+      if (path.startsWith('messages/missing') && missing) throw new GoogleProviderError('temporary',404)
+      const id = path.startsWith('messages/missing') ? 'missing' : 'available'
+      return { id: mismatch ? 'unexpected-id' : id,internalDate: String(Date.now()),payload: { mimeType: 'text/plain',headers: [
+        { name: 'From',value: 'results@sbm.example' },{ name: 'Authentication-Results',value: 'mx.google.com; dmarc=pass header.from=sbm.example' },
+      ],body: { data: Buffer.from(`Başvuru no: ${number}\nSonuç: Tamamlandı`).toString('base64url') } } }
+    }
+    const config = { ...google,automaticSbmEnabled: true }
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    expect((await snapshot(ownerCookie,caseId)).tramer[0]?.status).toBe('completed')
+    expect((await pool.query('SELECT status FROM mail_connections WHERE id=$1',[c])).rows[0].status).toBe('error')
+    missing = false;mismatch = true
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    expect((await pool.query('SELECT count(*)::int AS n FROM sbm_messages WHERE connection_id=$1',[c])).rows[0].n).toBe(1)
+    mismatch = false
+    await syncMailboxes(pool,config,{ ...provider,gmail })
+    expect((await pool.query('SELECT status FROM mail_connections WHERE id=$1',[c])).rows[0].status).toBe('connected')
+    expect((await snapshot(ownerCookie,caseId)).notifications).toHaveLength(1)
+    expect((await pool.query('SELECT status FROM sbm_messages WHERE connection_id=$1 ORDER BY provider_message_id',[c])).rows).toEqual([{ status: 'applied' },{ status: 'duplicate' }])
+  })
+
+  it('delivers matched result mail requiring review as a mandatory owner popup without completing the request',async () => {
+    const caseId = await createCase(),number = '000089900'
+    await submit(caseId,number)
+    const c = await connection('review-result@office.example')
+    await pool.query(`INSERT INTO user_notification_preferences(organization_id,user_id,preferences) VALUES($1,$2,$3)
+      ON CONFLICT(user_id) DO UPDATE SET preferences=excluded.preferences`,[org,owner,JSON.stringify({ showPopups: false,playSound: false,assistantReaction: false })])
+    const result = { applicationNumber: number,status: null,text: 'Yeni bir SBM sonuç biçimi; insan kontrolü gerekiyor',evidenceHash: 'e'.repeat(64),reason: 'unsupported_result' } as const
+    for (const messageId of ['review-one','review-two']) await ingestSbmResult(pool,{ connectionId: c,messageId,receivedAt: new Date(),automatic: true,result })
+    const pending = (await app.inject({ url: '/api/v1/tracking/notifications/pending',headers: { cookie: ownerCookie } })).json().notifications
+    expect(pending.filter((item: { caseId: string }) => item.caseId===caseId)).toEqual([expect.objectContaining({ isResult: true,requiresReview: true,title: expect.stringContaining('kontrol bekliyor') })])
+    expect((await snapshot(ownerCookie,caseId)).tramer[0]?.status).toBe('result_pending')
+    const other = (await app.inject({ url: '/api/v1/tracking/notifications/pending',headers: { cookie: operatorCookie } })).json().notifications
+    expect(other.some((item: { caseId: string }) => item.caseId===caseId)).toBe(false)
+    await app.inject({ method: 'POST',url: '/api/v1/tracking/notifications/dismiss',headers: { cookie: ownerCookie },payload: { ordinary: true } })
+    const remaining = (await app.inject({ url: '/api/v1/tracking/notifications/pending',headers: { cookie: ownerCookie } })).json().notifications
+    expect(remaining.some((item: { caseId: string }) => item.caseId===caseId)).toBe(true)
+  })
+
+  it.each(['agreement','commission'] as const)('completes and alerts only the owner for authenticated %s mail over the complete workflow',async kind => {
+    await pool.query("UPDATE mail_connections SET status='disconnected'")
+    const caseId = await createCase(),number = kind==='agreement' ? '0000898001' : '0000898002'
+    await submit(caseId,number)
+    const c = await connection('complete-'+kind+'@office.example'),message = sbmFixture(kind)
+    message.internalDate = String(Date.now())
+    message.payload.headers[1]!.value = message.payload.headers[1]!.value.replaceAll(sbmNumber,number)
+    const part = message.payload.parts![0] as { body: { data: string } }
+    part.body.data = Buffer.from(Buffer.from(part.body.data,'base64url').toString('utf8').replaceAll(sbmNumber,number)).toString('base64url')
+    const config = { ...google,sbmSenders: ['sbm@sbm.org.tr'],automaticSbmEnabled: true }
+    const gmail: GoogleProvider['gmail'] = async (_token,path) => path.startsWith('messages?') ? { messages: [{ id: message.id }] } : message
+    for (let n=0;n<2;n++) await syncMailboxes(pool,config,{ ...provider,gmail })
+    const snap = await snapshot(ownerCookie,caseId)
+    expect(snap.tramer[0]?.status).toBe('completed')
+    expect(snap.notifications).toHaveLength(1)
+    const pending = (await app.inject({ url: '/api/v1/tracking/notifications/pending',headers: { cookie: ownerCookie } })).json().notifications
+    expect(pending.filter((item: { caseId: string }) => item.caseId===caseId)).toEqual([expect.objectContaining({ isResult: true,requiresReview: false,title: 'Tramer sonuçlandı — '+number })])
+    const fullList = await app.inject({ url: '/api/v1/tracking?includeCompleted=true&includeNotifications=false',headers: { cookie: operatorCookie } })
+    expect(fullList.json().tramer.some((item: { caseId: string }) => item.caseId===caseId)).toBe(true)
+    expect((await pool.query('SELECT count(*)::int AS n FROM sbm_messages WHERE connection_id=$1',[c])).rows[0].n).toBe(1)
+    expect((await snapshot(operatorCookie,caseId)).notifications).toHaveLength(0)
   })
 
   it('records permission loss; catches up after recovery; processes messages only once',async () => {

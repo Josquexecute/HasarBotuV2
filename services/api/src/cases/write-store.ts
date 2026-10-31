@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { summarizeChange } from '../audit/redact.js'
 import type pg from 'pg'
 import type { CaseCreateRequest, CaseUpdateRequest, CaseListItem } from '@hasarbotu/contracts'
-import { parsePlateNumber, plateSearchKey, matchEksistReference, eksistKey } from '@hasarbotu/domain'
+import { parsePlateNumber, plateSearchKey, eksistKey } from '@hasarbotu/domain'
 import { eksistCaseDataSchema, localDateSchema } from '@hasarbotu/contracts'
 import { uuidv7 } from '@hasarbotu/database'
 import { rowToDto, SELECT_FIELDS, toLocalDateString, type CaseRow } from './store.js'
@@ -303,8 +303,7 @@ export function createCasesWriteStore(pool: pg.Pool) {
         }
         if (input.serviceRevision) {
           if (!eksist) throw new ReferenceCheckError('serviceRevision', 'eksist_source_required')
-          const services = await client.query<{ id: string; name: string }>('SELECT id,name FROM service_centers WHERE organization_id=$1 AND is_active', [actor.organizationId])
-          input = { ...input, serviceId: matchEksistReference(input.serviceRevision.name, services.rows) }
+          input = { ...input, serviceId: await selectServiceContact(client, actor.organizationId, { name: input.serviceRevision.name }) }
           eksist = { ...eksist, serviceName: input.serviceRevision!.name, serviceRevised: true }
           await client.query("UPDATE eksist_sources SET reviewed_fields=jsonb_set(reviewed_fields,'{automatic}',$3::jsonb) WHERE organization_id=$1 AND case_id=$2 AND id=$4", [actor.organizationId, caseId, JSON.stringify(eksist), imported.rows[0].id])
         }

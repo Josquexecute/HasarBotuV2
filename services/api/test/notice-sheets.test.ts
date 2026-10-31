@@ -123,6 +123,32 @@ describeDb('İhbar föyü gerçek API / PostgreSQL', () => {
     expect(responses.map(response => response.statusCode).sort()).toEqual([200, 409])
     expect((await pool.query('SELECT version FROM case_notice_sheets WHERE case_id=$1', [id])).rows).toEqual([{ version: 1 }])
   })
+  it.each(['traffic', 'casco'] as const)('persists %s registration and history across edits, old clients and case reopening', async type => {
+    const id = await newCase(type)
+    const headers = { cookie, 'x-hasarbotu-notice-sheet-fields': '3' }
+    const fields = { insuredRegistrationDate: '2020-02-29', victimRegistrationDate: '2021-10-17', insuredDamageHistory: '2022 kapı değişimi', victimDamageHistory: '2024 tampon onarımı', inspectionNotes: 'Eski çalışma', victimName: 'Eski mağdur' }
+    const save = (data: object, version: number | null, requestHeaders = headers) => app.inject({ method: 'PUT', url: endpoint(id), headers: requestHeaders, payload: { expectedVersion: version, confirmed: true, overrides: { fields: data, documents: {} } } })
+    expect((await save(fields, null)).statusCode).toBe(200)
+    expect((await app.inject({ url: endpoint(id), headers })).json().overrides.fields).toEqual(fields)
+    const legacyHeaders = { cookie, 'x-hasarbotu-notice-sheet-fields': '2' }
+    const legacy = (await app.inject({ url: endpoint(id), headers: legacyHeaders })).json()
+    expect(legacy.defaults.fields).not.toHaveProperty('insuredRegistrationDate')
+    expect(legacy.overrides.fields).not.toHaveProperty('victimDamageHistory')
+    expect((await save({ recourse: 'İncelendi' }, 1, legacyHeaders)).statusCode).toBe(200)
+    const current = (await app.inject({ url: endpoint(id), headers })).json()
+    if (type === 'casco') expect(current.overrides.fields.victimName).toBe('Eski mağdur')
+    expect(current.overrides.fields).toMatchObject({ insuredRegistrationDate: fields.insuredRegistrationDate, victimRegistrationDate: fields.victimRegistrationDate, insuredDamageHistory: fields.insuredDamageHistory, victimDamageHistory: fields.victimDamageHistory, inspectionNotes: fields.inspectionNotes })
+    const historyKey = type === 'traffic' ? 'victimDamageHistory' : 'insuredDamageHistory'
+    const edited = { ...current.overrides.fields, [historyKey]: 'Düzenlenmiş geçmiş' }
+    delete edited.inspectionNotes
+    expect((await save(edited, 2)).statusCode).toBe(200)
+    await pool.query("UPDATE cases SET lifecycle_status='closed',workflow_stage='closed' WHERE id=$1", [id])
+    expect((await app.inject({ url: endpoint(id), headers })).json().overrides.fields[historyKey]).toBe('Düzenlenmiş geçmiş')
+    await pool.query("UPDATE cases SET lifecycle_status='open',workflow_stage='new_notification' WHERE id=$1", [id])
+    const reopened = noticeSheetResponseSchema.parse((await app.inject({ url: endpoint(id), headers })).json())
+    expect(reopened.overrides.fields).toMatchObject({ [historyKey]: 'Düzenlenmiş geçmiş', inspectionNotes: fields.inspectionNotes })
+    expect((await save({ insuredRegistrationDate: '2025-02-29' }, 3)).statusCode).toBe(400)
+  })
   it.each(['first save', 'revision'])('rolls back a notice sheet %s if audit persistence fails and allows the unchanged command to recover', async kind => {
     const id = await newCase()
     const save = (payload: object) => app.inject({ method: 'PUT', url: endpoint(id), headers: { cookie, 'x-hasarbotu-notice-sheet-fields': '2' }, payload })

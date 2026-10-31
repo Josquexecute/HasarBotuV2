@@ -169,6 +169,7 @@ export function createHttpCasesAdapter(options: HttpCasesAdapterOptions = {}): C
       if (query.stage !== undefined) search.set('stage', query.stage)
       if (query.responsibleUserId !== undefined) search.set('responsibleUserId', query.responsibleUserId)
       if (query.serviceId !== undefined) search.set('serviceId', query.serviceId)
+      if (query.serviceName !== undefined) search.set('serviceName', query.serviceName)
       if (query.followUpFrom !== undefined) search.set('followUpFrom', query.followUpFrom)
       if (query.followUpTo !== undefined) search.set('followUpTo', query.followUpTo)
       if (query.sortBy !== undefined) search.set('sortBy', query.sortBy)

@@ -74,7 +74,7 @@ void app.whenReady().then(async () => {
     await until(() => evaluate(`document.querySelector('.tramer-result-popup')?.textContent.includes(${JSON.stringify(`Tramer sonuçlandı — ${number}`)})`),'scheduled result popup')
     check('the normal polling timer displays the matching result popup without a manual refresh',await evaluate('document.querySelector(".tramer-result-popup").textContent.includes("34 TEST 310")'))
     check('the popup links to the exact matched case',await evaluate(`document.querySelector('.tramer-result-popup a').getAttribute('href') === ${JSON.stringify(`/dosyalar/${caseId}`)}`))
-    await until(() => evaluate('Array.from(document.querySelectorAll(".tracking-row strong")).some(element=>element.textContent === "Tamamlandı")'),'updated Tramer status in the open case')
+    await until(() => evaluate('Array.from(document.querySelectorAll(".tracking-status")).some(element=>element.textContent === "Tamamlandı")'),'updated Tramer status in the open case')
     check('the open case updates to completed without a manual refresh',true)
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))')
     if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_TRAMER_EVIDENCE,'tramer-result-popup.png'),(await shell.window.webContents.capturePage()).toPNG()) }

@@ -61,11 +61,12 @@ function parseUsers(items: readonly unknown[]): CaseReferenceWorkspace['users'] 
 
 function parseServices(items: readonly unknown[]): CaseReferenceWorkspace['services'] {
   return items.map((item) => {
-    if (!objectWithKeys(item, ['id', 'name', 'serviceType', 'isActive', 'agreement', ...(typeof (item as Record<string, unknown>)?.phone === 'undefined' ? [] : ['phone'])]) || !nonEmpty(item.id) || !nonEmpty(item.name) ||
+    if (!objectWithKeys(item, ['id', 'name', 'serviceType', 'isActive', 'agreement', ...(typeof (item as Record<string, unknown>)?.phone === 'undefined' ? [] : ['phone']), ...(typeof (item as Record<string, unknown>)?.address === 'undefined' ? [] : ['address'])]) || !nonEmpty(item.id) || !nonEmpty(item.name) ||
       (item.phone !== undefined && item.phone !== null && typeof item.phone !== 'string') || !isServiceType(item.serviceType) || typeof item.isActive !== 'boolean') {
       throw new ReferenceDataError('unavailable', 'invalid service reference response')
     }
-    return { id: item.id, name: item.name, ...(item.phone === undefined ? {} : { phone: item.phone as string | null }), serviceType: item.serviceType, isActive: item.isActive, agreement: parseAgreement(item.agreement) }
+    if (item.address !== undefined && item.address !== null && (typeof item.address !== 'string' || item.address.length > 500)) throw new ReferenceDataError('unavailable', 'invalid service address')
+    return { id: item.id, name: item.name, ...(item.phone === undefined ? {} : { phone: item.phone as string | null }), ...(item.address === undefined ? {} : { address: item.address as string | null }), serviceType: item.serviceType, isActive: item.isActive, agreement: parseAgreement(item.agreement) }
   })
 }
 
@@ -98,18 +99,23 @@ export function createHttpReferenceDataAdapter(options: ReferenceAdapterOptions 
   const headers = options.headers ?? {}
   return {
     async getCaseReferences(query: ServiceReferenceQuery = {}): Promise<CaseReferenceWorkspace> {
-      const serviceQuery = new URLSearchParams({ includeContacts: 'true' })
+      const serviceQuery = new URLSearchParams({ includeContacts: 'true', includeAddresses: 'true' })
       if (query.insurerId !== undefined) serviceQuery.set('insurerId', query.insurerId)
       if (query.evaluationDate !== undefined) serviceQuery.set('evaluationDate', query.evaluationDate)
       serviceQuery.set('dateSource', query.dateSource ?? 'loss_date')
       serviceQuery.set('operation', query.operation ?? 'closure_documents')
-      const [insurers, services, users, experts] = await Promise.all([
+      const [insurers, services, users, experts, contactNames] = await Promise.all([
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/insurers`, headers),
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/services?${serviceQuery.toString()}`, headers),
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/users?includeRoles=true`, headers),
         fetchList(fetchImpl, `${baseUrl}/api/v1/references/experts`, headers),
+        query.includeUnlinkedNames ? fetchList(fetchImpl, `${baseUrl}/api/v1/references/service-contact-names`, headers) : Promise.resolve(undefined),
       ])
       return {
+        ...(contactNames === undefined ? {} : { serviceContactNames: contactNames.map(item => {
+          if (!objectWithKeys(item, ['name']) || !nonEmpty(item.name) || item.name.length > 500) throw new ReferenceDataError('unavailable', 'invalid service contact name')
+          return item.name
+        }) }),
         insurers: parseNamed(insurers),
         services: parseServices(services),
         users: parseUsers(users),

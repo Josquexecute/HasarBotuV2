@@ -33,9 +33,10 @@ async function lockApplicationNumber(db: Queryable, organizationId: string, numb
 }
 
 async function notifySbmReview(db: Queryable, request: { id: string; organization_id: string; case_id: string }, result: SbmResult) {
-  if (['untrusted_sender','ambiguous_number','non_result_notification'].includes(result.reason ?? '')) return
+  if (['untrusted_sender','ambiguous_number','non_result_notification','application_notification','information_notification','archived_case'].includes(result.reason ?? '')) return
   const fingerprint = createHash('sha256').update(JSON.stringify([result.status,result.text.normalize('NFC').replace(/\s+/g,' ').trim()])).digest('hex')
-  await notify(db,request.organization_id,request.case_id,`tramer:${request.id}:review:${fingerprint}`,'tramer',`Tramer için SBM bildirimi alındı; kontrol bekliyor — ${result.applicationNumber}`)
+  const resultMail = result.status !== null || ['unsupported_result','rejection_notification','cancellation_requires_review'].includes(result.reason ?? '')
+  await notify(db,request.organization_id,request.case_id,`tramer:${request.id}:${resultMail ? 'result-review' : 'review'}:${fingerprint}`,'tramer',`Tramer için SBM bildirimi alındı; kontrol bekliyor — ${result.applicationNumber}`)
 }
 
 export async function tramerCommand(pool: pg.Pool, session: SessionRow, caseId: string, input: TramerCommand) {
@@ -203,8 +204,12 @@ export async function ingestSbmResult(pool: pg.Pool, input: { connectionId: stri
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,'review',$9,$10) ON CONFLICT(connection_id,provider_message_id) DO NOTHING RETURNING id`,
     [id,connection.organization_id,connection.id,input.messageId,r.applicationNumber,r.status,r.text,r.evidenceHash,r.reason ?? 'pending_match',input.receivedAt])
     if (!inserted.rowCount) return
-    const request = r.applicationNumber === null ? undefined : (await db.query('SELECT * FROM tramer_requests WHERE organization_id=$1 AND application_number=$2 FOR UPDATE', [connection.organization_id,r.applicationNumber])).rows[0]
-    let reason = r.reason ?? (!request ? 'unmatched_number' : !input.automatic ? 'parser_not_validated' : null)
+    const candidate = r.applicationNumber === null ? undefined : (await db.query('SELECT case_id FROM tramer_requests WHERE organization_id=$1 AND application_number=$2', [connection.organization_id,r.applicationNumber])).rows[0]
+    // Match the command lock order: case, then request. Archive/cancel races
+    // must neither apply to an archived case nor deadlock on the opposite order.
+    const caseRow = candidate ? (await db.query('SELECT is_archived FROM cases WHERE id=$1 FOR SHARE',[candidate.case_id])).rows[0] : undefined
+    const request = candidate ? (await db.query('SELECT * FROM tramer_requests WHERE organization_id=$1 AND application_number=$2 FOR UPDATE', [connection.organization_id,r.applicationNumber])).rows[0] : undefined
+    let reason = r.reason ?? (!request ? 'unmatched_number' : caseRow?.is_archived ? 'archived_case' : !input.automatic ? 'parser_not_validated' : null)
     if (request && !reason) {
       if (request.status === r.status && request.result_text === r.text) {
         await db.query("UPDATE sbm_messages SET status='duplicate',reason='duplicate_result',tramer_id=$2 WHERE id=$1", [id,request.id])
@@ -212,6 +217,9 @@ export async function ingestSbmResult(pool: pg.Pool, input: { connectionId: stri
         return
       }
       if (request.status !== 'result_pending') reason = 'conflicting_or_terminal_result'
+      // A full mailbox reconciliation may discover years-old results for a number
+      // entered today. Preserve the receipt but require explicit human approval.
+      else if (input.receivedAt.getTime() < new Date(request.created_at).getTime()) reason = 'message_predates_request'
     }
     if (reason || !request || !r.status) {
       await db.query('UPDATE sbm_messages SET reason=$2,tramer_id=$3 WHERE id=$1', [id,reason ?? 'ambiguous_result',request?.id ?? null])
@@ -232,6 +240,7 @@ async function applyResult(db: Queryable, request: { id: string; organization_id
 export async function reviewSbm(pool: pg.Pool, session: SessionRow, id: string, input: { action: 'apply'; applicationNumber: string; resultStatus: 'completed' | 'cancelled'; note: string } | { action: 'dismiss'; note: string }) {
   if (!canManageTracking(session)) throw new TrackingError(403,'Sonuç kontrol yetkiniz yok.')
   await withTransaction(pool, async (db) => {
+    if (input.action === 'apply') await lockApplicationNumber(db,session.user.organizationId,input.applicationNumber)
     const message = (await db.query(`SELECT m.*,c.email FROM sbm_messages m JOIN mail_connections c ON c.id=m.connection_id
       WHERE m.id::text=$1 AND m.organization_id=$2 FOR UPDATE OF m`, [id,session.user.organizationId])).rows[0]
     if (!message) throw new TrackingError(404,'Sonuç bulunamadı.')
@@ -241,7 +250,9 @@ export async function reviewSbm(pool: pg.Pool, session: SessionRow, id: string, 
       await audit.record(db,{ organizationId: session.user.organizationId, actorUserId: session.user.id, action: 'tracking.sbm_dismissed', entityType: 'sbm_message', entityId: id, details: { note: input.note, sourceAccount: message.email } })
       return
     }
-    const request = (await db.query("SELECT * FROM tramer_requests WHERE organization_id=$1 AND application_number=$2 FOR UPDATE", [session.user.organizationId,input.applicationNumber])).rows[0]
+    const candidate = (await db.query('SELECT case_id FROM tramer_requests WHERE organization_id=$1 AND application_number=$2',[session.user.organizationId,input.applicationNumber])).rows[0]
+    const caseRow = candidate ? (await db.query('SELECT is_archived FROM cases WHERE id=$1 FOR SHARE',[candidate.case_id])).rows[0] : undefined
+    const request = caseRow && !caseRow.is_archived ? (await db.query('SELECT * FROM tramer_requests WHERE organization_id=$1 AND application_number=$2 FOR UPDATE',[session.user.organizationId,input.applicationNumber])).rows[0] : undefined
     if (!request || request.status !== 'result_pending') throw new TrackingError(409,'Bu numara için sonuç bekleyen işlem yok; terminal durum değiştirilemez.')
     await db.query('UPDATE sbm_messages SET application_number=$2,result_status=$3 WHERE id=$1', [id,input.applicationNumber,input.resultStatus])
     await applyResult(db,request,message.email,id,{ applicationNumber: input.applicationNumber, status: input.resultStatus, text: input.note, evidenceHash: message.evidence_hash, reason: null },session.user.id)

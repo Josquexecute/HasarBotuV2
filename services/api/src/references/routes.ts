@@ -26,6 +26,13 @@ export function registerReferenceRoutes(app: FastifyInstance, options: { readonl
     }
 
   app.get(INSURERS_REFERENCE_ROUTE, withSession((organizationId) => references.insurers(organizationId)))
+  // Legacy case contacts stay filterable without rewriting production assignments.
+  app.get('/api/v1/references/service-contact-names', withSession(async organizationId => {
+    const result = await options.pool.query(`SELECT DISTINCT sc.name FROM case_service_contacts sc JOIN cases c
+      ON c.organization_id=sc.organization_id AND c.id=sc.case_id WHERE c.organization_id=$1 AND NOT c.is_archived
+      AND c.service_center_id IS NULL AND sc.service_center_id IS NULL ORDER BY sc.name`, [organizationId])
+    return { items: result.rows }
+  }))
   app.get(SERVICES_REFERENCE_ROUTE, async (request, reply) => {
     const session = await requireSession(authStore, request, reply)
     if (session === undefined) return

@@ -3,7 +3,7 @@ import { eksistCaseDataSchema, type CaseListItem, type EksistCaseData } from '@h
 import { eksistKey, getEksistFieldValues, matchEksistReference, parseEksist } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { ReferenceCheckError } from '../cases/write-store.js'
-import { saveServiceContact } from '../cases/service-contact.js'
+import { saveServiceContact, selectServiceContact } from '../cases/service-contact.js'
 
 /** Reparse the stored original, never trust browser-supplied names or vehicle fields. */
 export async function applyEksistSource(client: pg.PoolClient, organizationId: string, caseId: string, sourceId: string, text: string, actorUserId: string, serviceRevision?: { name: string }, review?: { method: string; expertReview?: { name: string; confirmed: true }; insurerReview?: { name: string; confirmed: true } }): Promise<EksistCaseData> {
@@ -43,10 +43,9 @@ export async function applyEksistSource(client: pg.PoolClient, organizationId: s
     insurerId = result.rows[0]!.id
   }
   const experts = await client.query<{ id: string; name: string }>(`SELECT u.id,u.display_name AS name FROM users u WHERE u.organization_id=$1 AND u.status='active' AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id AND r.code='expert')`, [organizationId])
-  const services = await client.query<{ id: string; name: string }>('SELECT id,name FROM service_centers WHERE organization_id=$1 AND is_active', [organizationId])
   const nameKey = (name: string) => name.normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR')
   const matchedExperts = experts.rows.filter(expert => nameKey(expert.name) === nameKey(data.expert))
-  await client.query('UPDATE cases SET notification_form_number=$3,insurer_id=$4,expert_user_id=$5,service_center_id=$6 WHERE organization_id=$1 AND id=$2', [organizationId, caseId, snapshot.assignmentDateText, insurerId, matchedExperts.length === 1 ? matchedExperts[0]!.id : null, matchEksistReference(snapshot.serviceName, services.rows)])
+  await client.query('UPDATE cases SET notification_form_number=$3,insurer_id=$4,expert_user_id=$5,service_center_id=$6 WHERE organization_id=$1 AND id=$2', [organizationId, caseId, snapshot.assignmentDateText, insurerId, matchedExperts.length === 1 ? matchedExperts[0]!.id : null, snapshot.serviceName ? await selectServiceContact(client, organizationId, { name: snapshot.serviceName }) : null])
   await saveServiceContact(client, organizationId, caseId, actorUserId, undefined, { text, name: snapshot.serviceName, revised: snapshot.serviceRevised })
   return snapshot
 }

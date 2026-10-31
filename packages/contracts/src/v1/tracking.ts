@@ -23,11 +23,11 @@ export const trackingLocationsSchema = z.object({ locations: z.array(z.object({
   caseId: z.string().uuid(), storageRootKey: z.string(), relativePath: z.string(), version: z.number().int(), scanStartedAt: z.string().datetime(),
 })), nextCursor: z.string().nullable() })
 export const trackingSnapshotSchema = z.object({
-  tramer: z.array(z.object({ id: z.string(), caseId: z.string(), plate: z.string(), officeNumber: z.string(), assignedUserId: z.string(), assignedName: z.string(), applicationNumber: z.string().nullable(), status: tramerStatusSchema, resultText: z.string().nullable(), version: z.number(), canEdit: z.boolean() })),
+  tramer: z.array(z.object({ id: z.string(), caseId: z.string(), plate: z.string(), officeNumber: z.string(), assignedUserId: z.string(), assignedName: z.string(), applicationNumber: z.string().nullable(), status: tramerStatusSchema, resultText: z.string().nullable(), version: z.number(), updatedAt: z.string().optional(),canEdit: z.boolean() })),
   documents: z.array(z.object({ id: z.string(), caseId: z.string(), plate: z.string(), officeNumber: z.string(), fileName: z.string(), relativePath: z.string(), status: z.enum(['pending','approved','rejected']), documentType: z.string().nullable(), observedAt: z.string(), canReview: z.boolean() })),
   notifications: z.array(z.object({ id: z.string(), caseId: z.string(), plate: z.string(), officeNumber: z.string(), title: z.string(), kind: z.enum(['document','tramer']), readAt: z.string().nullable(), presentedAt: z.string().nullable(), createdAt: z.string() })),
   mailConnections: z.array(z.object({ id: z.string(), email: z.string(), status: z.enum(['connected','disconnected','permission_required','error']), lastSuccessAt: z.string().nullable(), lastError: z.string().nullable() })),
-  reviews: z.array(z.object({ id: z.string(), applicationNumber: z.string().nullable(), resultText: z.string().nullable(), reason: z.string(), email: z.string(), receivedAt: z.string() })),
+  reviews: z.array(z.object({ id: z.string(), applicationNumber: z.string().nullable(), resultText: z.string().nullable(), reason: z.string(), email: z.string(), receivedAt: z.string(),caseId: z.string().nullable().optional(),plate: z.string().nullable().optional(),officeNumber: z.string().nullable().optional(),assignedName: z.string().nullable().optional(),resultStatus: z.enum(['completed','cancelled']).nullable().optional() })),
   users: z.array(z.object({ id: z.string(), displayName: z.string() })),
   history: z.array(z.object({ id: z.string(), action: z.string(), actor: z.string().nullable(), occurredAt: z.string(), details: z.record(z.string(), z.unknown()) })),
   canManage: z.boolean(), googleEnabled: z.boolean(), automaticSbmEnabled: z.boolean(),
@@ -35,7 +35,7 @@ export const trackingSnapshotSchema = z.object({
 })
 export type TrackingSnapshot = z.infer<typeof trackingSnapshotSchema>
 export const trackingPendingNotificationsSchema = z.object({
-  notifications: z.array(z.object({ id: z.string(),caseId: z.string(),plate: z.string(),title: z.string(),isResult: z.boolean().default(false) })),
+  notifications: z.array(z.object({ id: z.string(),caseId: z.string(),plate: z.string(),title: z.string(),isResult: z.boolean().default(false),requiresReview: z.boolean().default(false) })),
   preferences: notificationPreferencesSchema.default(DEFAULT_NOTIFICATION_PREFERENCES),
 })
 export const trackingInboxSchema = z.strictObject({

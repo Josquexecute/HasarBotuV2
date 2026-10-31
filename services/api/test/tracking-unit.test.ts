@@ -87,6 +87,9 @@ describe('SBM real-template regressions (anonymized)',() => {
   it('extracts the KTT number from the entry notice, ignoring insurer code 906 without completing it',() => {
     expect(parseSbmMessage(sbmFixture('entry'),senders)).toMatchObject({ applicationNumber: sbmNumber,status: null,reason: 'non_result_notification' })
   })
+  it('recognizes the authenticated commission unanimity template without generalizing to unknown commission decisions',() => {
+    expect(parseSbmMessage(sbmFixture('commission'),senders)).toMatchObject({ applicationNumber: sbmNumber,status: 'completed',reason: null,text: 'Sonuç: KOMİSYON OYBİRLİĞİ ONAYI (SON DURUM)' })
+  })
   it('rejects different numbers in subject and body',() => {
     expect(parseSbmMessage(changeHtml((html) => html.replace(sbmNumber,'000987654321')),senders)).toMatchObject({ applicationNumber: null,reason: 'ambiguous_number' })
   })

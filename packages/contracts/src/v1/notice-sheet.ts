@@ -7,7 +7,7 @@ export const noticeSheetParamsSchema = z.strictObject({ caseId: caseIdSchema })
 
 const fieldShapes = Object.fromEntries(Object.entries(NOTICE_SHEET_FIELD_LIMITS).map(([key, limit]) => [
   key, z.string().trim().max(limit).refine(value =>
-    !['inspectionDate', 'preliminaryReportDate', 'notificationDate', 'lossDate', 'closureDate'].includes(key) || value === '' || localDateSchema.safeParse(value).success,
+    !['inspectionDate', 'preliminaryReportDate', 'notificationDate', 'lossDate', 'closureDate', 'insuredRegistrationDate', 'victimRegistrationDate'].includes(key) || value === '' || localDateSchema.safeParse(value).success,
   { message: 'invalid_local_date' }),
 ])) as Record<NoticeSheetField, z.ZodString>
 const documentShapes = Object.fromEntries(NOTICE_SHEET_DOCUMENT_CODES.map(code => [code, z.boolean()])) as Record<NoticeSheetDocument, z.ZodBoolean>
@@ -16,7 +16,8 @@ export const noticeSheetFieldsSchema = z.strictObject(fieldShapes)
 // Source facts remain complete even when they exceed the manual entry limits.
 // The preview can then ask the user to shorten a field without losing its source.
 const defaultFieldsSchema = z.strictObject(Object.fromEntries(
-  Object.keys(NOTICE_SHEET_FIELD_LIMITS).map(key => [key, z.string()]),
+  Object.keys(NOTICE_SHEET_FIELD_LIMITS).map(key => [key,
+    ['insuredRegistrationDate', 'victimRegistrationDate', 'insuredDamageHistory', 'victimDamageHistory'].includes(key) ? z.string().default('') : z.string()]),
 ) as Record<NoticeSheetField, z.ZodString>)
 export const noticeSheetDocumentsSchema = z.strictObject(documentShapes)
 export const noticeSheetOverridesSchema = z.strictObject({

@@ -13,5 +13,8 @@ export async function trackingRequest(path: string, body?: unknown, signal?: Abo
   }
   return response.status === 204 ? undefined : response.json()
 }
-export const loadTracking = async (caseId?: string, signal?: AbortSignal) => trackingSnapshotSchema.parse(await trackingRequest(`tracking${caseId ? `?caseId=${encodeURIComponent(caseId)}` : ''}`,undefined,signal))
+export const loadTracking = async (caseId?: string, signal?: AbortSignal,includeCompleted = false) => {
+  const query = new URLSearchParams({ ...(caseId ? { caseId } : {}),...(includeCompleted ? { includeCompleted: 'true',includeNotifications: 'false' } : {}) })
+  return trackingSnapshotSchema.parse(await trackingRequest(`tracking${query.size ? `?${query}` : ''}`,undefined,signal))
+}
 export const commandTramer = (caseId: string,body: TramerCommand) => trackingRequest(`tracking/cases/${encodeURIComponent(caseId)}/tramer`,body)
