@@ -17,7 +17,7 @@ const assets = fileURLToPath(new URL('../../../dist/', import.meta.url))
 describe.skipIf(!process.env.TEST_DATABASE_URL)('production Google OAuth in browsers and Electron (synthetic provider)', () => {
   let app: FastifyInstance, pool: pg.Pool, bridge: DesktopBridge, apiOrigin: string, work: string, userId: string
   const config: GoogleConfig = { clientId: 'synthetic-browser-client', clientSecret: 'synthetic-only', redirectUri: 'http://127.0.0.1/api/v1/google/callback', encryptionKey: 'a'.repeat(64), loginDomain: 'office.example', sbmSenders: ['sbm@sbm.org.tr'], automaticSbmEnabled: false }
-  const flows = new Map<string, { nonce: string; verifier: string }>()
+  const flows = new Map<string, { nonce: string; verifier: string; redirect?: string }>()
   beforeAll(async () => {
     const db = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL!)
     pool = new pg.Pool({ connectionString: db.url })
@@ -30,12 +30,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('production Google OAuth in brow
     await pool.query("INSERT INTO user_roles(user_id,role_id) SELECT $1,id FROM roles WHERE code='admin'", [userId])
     const real = createGoogleProvider(config)
     app = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false }, google: config, googleProvider: { ...real,
-      authorizeUrl: (purpose, state, nonce, verifier) => { flows.set(state, { nonce, verifier }); return real.authorizeUrl(purpose, state, nonce, verifier) },
-      exchange: async (code, verifier) => {
-        if (!flows.has(code) || flows.get(code)?.verifier !== verifier) throw new Error('Synthetic provider rejected code or PKCE verifier')
+      authorizeUrl: (purpose, state, nonce, verifier, redirect) => { flows.set(state, { nonce, verifier, ...(redirect ? { redirect } : {}) }); return real.authorizeUrl(purpose, state, nonce, verifier, redirect) },
+      exchange: async (code, verifier, redirect) => {
+        if (!flows.has(code) || flows.get(code)?.verifier !== verifier || flows.get(code)?.redirect !== redirect) throw new Error('Synthetic provider rejected code, redirect or PKCE verifier')
         return { access_token: 'synthetic-only', refresh_token: 'synthetic-only', id_token: code, scope: GMAIL_SCOPE }
       },
-      identity: async (code, nonce, corporate) => validateGoogleClaims({ iss: 'https://accounts.google.com', aud: config.clientId, exp: Date.now() / 1000 + 600, iat: Date.now() / 1000, nonce: flows.get(code)?.nonce, email_verified: true, email: 'browser@office.example', sub: 'synthetic-browser-subject', hd: config.loginDomain }, config.clientId, nonce, corporate ? config.loginDomain : undefined),
+      identity: async (code, nonce, corporate, redirect) => validateGoogleClaims({ iss: 'https://accounts.google.com', aud: redirect ? config.desktopClientId : config.clientId, exp: Date.now() / 1000 + 600, iat: Date.now() / 1000, nonce: flows.get(code)?.nonce, email_verified: true, email: 'browser@office.example', sub: 'synthetic-browser-subject', hd: config.loginDomain }, redirect ? config.desktopClientId! : config.clientId, nonce, corporate ? config.loginDomain : undefined),
       gmail: async () => ({ emailAddress: 'browser@office.example' }) } })
     // Independent synthetic browser clients must not share the loopback IP's production login quota.
     let clientNumber = 0
@@ -194,6 +194,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('production Google OAuth in brow
   })
 
   it('uses the real Electron external-browser gate, automatically focuses/reloads, persists the session and shows cancellation', async () => {
+    config.desktopClientId = 'synthetic-native.apps.googleusercontent.com'
     const launch = () => _electron.launch({ executablePath: require('electron') as string,
       args: [fileURLToPath(new URL('./harness/google-oauth-main.mjs', import.meta.url)), `--user-data-dir=${join(work, 'electron-profile')}`],
       env: { ...process.env, HB_OAUTH_API: apiOrigin, HB_OAUTH_ASSETS: assets } })
@@ -205,8 +206,14 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('production Google OAuth in brow
       await expect.poll(async () => (await opened()).length, { timeout: 5000 }).toBe(1)
       const url = new URL((await opened())[0]!), state = url.searchParams.get('state')!
       expect(url.hostname).toBe('accounts.google.com')
+      expect(url.searchParams.get('client_id')).toBe(config.desktopClientId)
+      const redirect = url.searchParams.get('redirect_uri')!
+      expect(redirect).toBe(`${new URL(page.url()).origin}/api/v1/google/desktop/callback`)
+      await page.reload()
+      await page.getByText('Google bağlantısı kontrol ediliyor…').waitFor()
       expect(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1)
-      const result = await fetch(`${apiOrigin}/api/v1/google/callback?state=${state}&code=${state}`, { redirect: 'manual' })
+      // System browser returns to the actual local bridge; the public web callback is unused.
+      const result = await fetch(`${redirect}?state=${state}&code=${state}`, { redirect: 'manual' })
       expect(result.headers.get('location')).toBe('/api/v1/google/result/desktop/login/success')
       expect(result.headers.get('set-cookie')).toBeNull()
       await page.waitForFunction(() => !document.querySelector('.login-screen'))
@@ -220,10 +227,10 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('production Google OAuth in brow
       await restored.evaluate(async () => { await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }); location.reload() })
       await restored.getByRole('button', { name: 'Kurumsal Google hesabıyla giriş' }).click()
       await expect.poll(async () => (await opened()).length, { timeout: 5000 }).toBe(1)
-      const deniedState = new URL((await opened())[0]!).searchParams.get('state')!
-      expect((await fetch(`${apiOrigin}/api/v1/google/callback?state=${deniedState}&error=access_denied`, { redirect: 'manual' })).headers.get('location')).toBe('/api/v1/google/result/desktop/login/denied')
+      const deniedUrl = new URL((await opened())[0]!), deniedState = deniedUrl.searchParams.get('state')!
+      expect((await fetch(`${deniedUrl.searchParams.get('redirect_uri')}?state=${deniedState}&error=access_denied`, { redirect: 'manual' })).headers.get('location')).toBe('/api/v1/google/result/desktop/login/denied')
       await restored.getByRole('alert').filter({ hasText: 'Google bağlantısına izin verilmedi' }).waitFor()
       expect((await session(restored)).status).toBe(401)
-    } finally { await electron.close() }
+    } finally { delete config.desktopClientId; await electron.close() }
   })
 })

@@ -1,6 +1,231 @@
 # HasarBotu V2 — Windows servis ve depolama geçiş araçları (D5–D9)
 
-Bu dizin **kod değildir**; Faz A ofis dağıtımı için WinSW servis şablonları
+## IP bağımsız ofis bağlantısı (2 Kasım 2026)
+
+Yeni bağlantı yolu: masaüstü → doğrulanmış LAN HTTPS (`8443/TCP`) →
+`127.0.0.1:3100`. `hasarbotu-office-gateway` Caddy'yi `0.0.0.0` üzerinde
+dinletir; DHCP adresine bağlanmaz. `hasarbotu-network-discovery` ayrı
+`43110/UDP` portunda nonce ile eşleşen keşif yanıtı verir. Bu yanıt yalnız
+adres ipucudur. İstemci, dağıtıma eklenen ofise özel CA ve sabit HTTPS sunucu
+adıyla sertifikayı, ardından `/health` servis kimliğini doğrular. Keşif kullanıcı
+yetkisi vermez; API'nin oturum, Google, rol ve dosya erişim kontrolleri korunur.
+CA özel anahtarı istemciye veya Windows kök sertifika deposuna aktarılmaz.
+
+| Yöntem | Değerlendirme |
+| --- | --- |
+| Yönetilen DNS + güvenli dinamik kayıt | VLAN'lar için uygun; DNS/DHCP yöneticisi ve dinamik kayıt altyapısı gerekir. Mevcut sunucu adı çözümlemesi hızlı aday yoludur. |
+| DNS-SD/mDNS | Standart ve aynı bağlantıda kullanışlı; multicast geçişi ve Windows sağlayıcısı her ağda garanti değil. Yeni Bonjour bağımlılığı eklenmedi. |
+| Uygulama içi UDP keşfi + TLS | Aynı IPv4 LAN'da ek DNS, IP veya istemci yönetici izni gerektirmez. Multicast yerine alt ağ broadcast'i ve mevcut DNS birlikte kullanılır. Kimlik yalnız TLS ile doğrulanır. |
+
+Referanslar: [RFC 6763](https://www.rfc-editor.org/rfc/rfc6763),
+[Caddy dinleme adresleri](https://caddyserver.com/docs/caddyfile/concepts).
+Eski adrese takılan TCP/TLS el sıkışması ayrıca 5 saniyede sonlandırılır;
+[Node HTTP soket zaman aşımı](https://nodejs.org/docs/latest-v24.x/api/http.html#requestsettimeouttimeout-callback)
+tek başına bağlantı kurulmasını sınırlandırmaz. Yazma isteği yeniden oynatılmaz.
+Desteklenen ağda RFC1918 IPv4 erişimi, sunucuda Domain/Private güvenlik duvarı
+profili ve DNS **veya** UDP broadcast erişimi gerekir. Misafir ağı/istemci
+yalıtımı, farklı VLAN ve IPv6-only ağlar otomatik keşif kapsamı dışındadır;
+bu ağlar için yönetilen DNS ve yönetici tarafından sağlanmış erişim gerekir.
+
+### Bir defalık sunucu kurulumu ve geçiş
+
+Sunucuda Node.js 24, WinSW, Caddy ve OpenSSL gerekir. Yönetici aşağıdaki
+betiği önce `-Apply` olmadan önizler, sonra `-Apply` ile çalıştırır. Yollar,
+sunucudaki gerçek mevcut ikililere verilmelidir:
+
+```powershell
+.\install-office-network.ps1 -ApiOrigin https://desktop-efn2g33.tail276cda.ts.net `
+  -WinSwExe C:\Tools\WinSW-x64.exe -CaddyExe C:\Tools\caddy.exe `
+  -OpenSslExe 'C:\Program Files\Git\usr\bin\openssl.exe' -Apply
+```
+
+Varsayılan hedef `C:\ProgramData\HasarBotu\office-network` yalnız
+Administrators/SYSTEM tarafından yönetilir. API servisi ön koşuldur. İki yeni
+servis gecikmeli otomatik başlar; gateway API'ye, keşif gateway'e bağımlıdır.
+WinSW 10/30/60 saniyelik kurtarma ve dönen günlükler sağlar. API zaten
+PostgreSQL'e, file-agent API'ye bağımlıdır; mevcut hizmet hesapları, Disabled
+başlangıç tercihleri, pCloud ve iş kuyrukları değiştirilmez. Gateway sağlık
+doğrulaması sertifika hatasını tekrar deneyerek gizlemez; henüz hazır olmayan
+dinleyici/API için en çok 30 saniye bekler. Sonuç `INSTALLED` üretim kabulü
+anlamına gelmez.
+
+Oluşan **yalnız** `client-profile.json` dosyasını özel dağıtım profili olarak
+`HASARBOTU_DISTRIBUTION_PROFILE` ile paketlemeye ver. Paket sürüm 2 profili
+zorunlu kılar; IP içeren eski profil yeniden yayımlanamaz. Mantıksal
+`apiOrigin` mevcut değerle aynı kalmalıdır; böylece Chromium bölümü, sabit
+loopback portu, çerezler ve yerel taslaklar korunur. CA/servis özel anahtarları
+korumalı sunucu yedeğine dahildir; kayıp CA sessizce yeniden oluşturulmaz.
+
+Eski istemcileri korumak için mevcut 443 hizmetini ve Serve/Funnel'ı bırak.
+`-RepairLegacyCaddy` yalnız incelenen mevcut WinSW XML'i `--config` ile
+mutlak dosya yolu kullanarak Caddy çalıştırıyorsa desteklenir; farklı biçim açıkça reddedilir.
+Eski XML yedeklenir, özel Caddy şablonu korunur; supervisor mevcut RFC1918
+adreslerini 5 saniyede gözler, yapılandırmayı Caddy ile doğrulayıp yalnız IP
+değişiminde eski dinleyiciyi yeniden başlatır. Yeni 8443 listener bu sırada
+bağımsızdır. Boş ağda eski IP'ye bind edilmez. Başka servislere veya 443'teki
+Tailscale/IIS dinleyicisine wildcard bind eklenmez.
+
+Yeni CA 10 yıl, sunucu sertifikası 397 gün geçerlidir. SYSTEM zamanlanmış
+görevi başlangıçta ve her gün kalan süreyi kontrol eder, 30 gün kala aynı CA
+ile yeniler. Değişmez sertifika/anahtar çiftleri ve atomik Caddyfile geçişi
+yarım güncellemeyi önler; önceki Caddyfile/sertifika işaretçisi tutulur.
+Yenileme sonrası sağlık başarısızsa önceki çifte geri dönülür. CA bitimine
+90 gün kala otomatik kök değiştirilmez; önce istemcilere yeni güven kökünün
+dağıtıldığı planlı bir geçiş gerekir.
+
+Tanı: `office-network.mjs wait client-profile.json` TLS/API'yi doğrular;
+WinSW `logs/`, `certificate-status.json` ve istemcinin `connection-status.json`
+dosyaları kimlik bilgisi içermeyen sonuçları kaydeder. Eski hosts, portproxy
+ve güvenlik duvarı kuralları üretim geçişi doğrulanmadan silinmez. Yeni
+istemci bunları kullanmaz. Geri alma için yeni servisleri/görevi durdur,
+korunan eski XML/Caddyfile'ı geri yükle ve eski hizmeti başlat; veritabanı
+migrasyonu veya hasar dosyası değişimi yapılmaz.
+
+### Ofis dışı erişim ve Google dönüş adresi
+
+Kaynakta mevcut fotoğraf Worker'ı Serve/Funnel üzerinden 3200'e gider ve
+masaüstü API'sini kasten sunmaz. Bu adres `remoteOrigin` olarak kullanılamaz.
+Mevcut uzaktan erişim kuralları değiştirilmedi. LAN gateway ana API'yi 3100'e
+iletir, fotoğraf sayfalarını 404 ile ayırır. Field portalın kendi yetkileri
+ve mevcut genel adresi korunur.
+
+İlk kurulumda eski mantıksal adres `.ts.net` ise mevcut aynı HTTPS origin'i
+profile isteğe bağlı `remoteOrigin` olarak taşınır; LAN önce seçilir ve
+Tailscale gerekmez. Bu yedek yol yalnız eski, çalışan tailnet erişimini korur;
+Funnel'ın fotoğraf yanıtı ana API kabul edilmez. Bağımsız alan adı hazır
+olunca yönetici `-RemoteOrigin` ile günceller; sonraki kurulum/yenileme bu
+değeri korur ve eski Tailscale yoluna geri dönmez.
+
+Tailscale'siz dış erişim için yönetilen bir HTTPS alan adı ve erişilebilir
+gateway gerekir. CGNAT altında [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/)
+mevcut API'ye `http://127.0.0.1:3100` üzerinden giden, dışarı doğru şifreli
+tünel sağlayabilir; alan adı/Cloudflare hesabı, sunucuda connector hizmeti ve
+dışarı bağlantı izni gerekir. Ayrı API hostname'i kullan; fotoğraf Worker'ının
+allowlist'ini genişletme. API son kullanıcı yetkilerini doğrulamaya devam
+eder. API hostname'i profilin `remoteOrigin` alanına eklenir; dış TLS standart
+genel CA ile doğrulanır. Loopback dışındaki origin TLS denetimi kapatılmaz.
+
+**3 Kasım 2026 — masaüstü girişinde public callback artık zorunlu değil.**
+Google Console'da aynı kurumsal projede ayrı **Desktop app** OAuth istemcisi
+oluştur. Web istemcisini Desktop app gibi kullanma veya LAN IP'sini web
+redirect listesine ekleme. Sunucunun mevcut güvenli ortamına
+`GOOGLE_DESKTOP_CLIENT_ID` ve Google bu istemci için sağlıyorsa
+`GOOGLE_DESKTOP_CLIENT_SECRET` ekle; bunlar istemci paketine girmez. Workspace
+uygulama erişim politikası ve kurumsal onay operatör tarafından tamamlanır.
+Mevcut web/Gmail istemcisi, `GOOGLE_REDIRECT_URI`, alan adı, şifreleme anahtarı
+ve kullanıcı yetkileri korunur. Migration `0075_google_desktop_loopback`
+önce API veritabanına uygulanmalıdır; eklenen nullable sütun 0.1.90 ile uyumludur.
+
+API `HOST=127.0.0.1` üzerinde kalır. Aynı sunucu ortamına
+`TRUST_LOOPBACK_PROXY=true` ekle: yalnız ilk loopback proxy atlamasının istemci
+adresi kabul edilir; doğrudan ağ istemcisinin sahte `X-Forwarded-For` başlığına
+güvenilmez. Yeni gateway bu başlığı kendi gördüğü adresle değiştirir, sahte
+forwarded host/protocol başlıklarını kaldırır. Böylece on farklı personel
+tek proxy IP'sinin Google/parola giriş kotasını paylaşmaz; IP başına sınır
+korunur. Varsayılan ayar kapalıdır; `After` kontrolü ofis için açık olmasını
+ister. Public API bind üzerinde bu ayar yapılandırma hatasıyla reddedilir.
+
+0.1.91 giriş ekranı `/google/status` yanıtında `desktopEnabled=true` görünce
+sistem tarayıcısını Desktop app istemcisiyle açar. Google dönüşü
+`http://127.0.0.1:<mevcut-köprü-portu>/api/v1/google/desktop/callback` olur.
+Köprü yalnız aynı yerel alıcıda başlatılmış, son 10 dakikalık state'i kabul
+eder; başka istemcinin akışını ve tamamlanmış callback'in tekrarını API'ye
+iletmez. Sayfa yenileme bu bağı korur; uygulama tamamen kapandıysa bekleyen
+native giriş yeniden başlatılır. Açılmış oturumun kalıcılığı bundan ayrıdır.
+Kodu doğrulanmış LAN TLS üzerinden API'ye iletir. Kod değişimi, PKCE,
+tek kullanımlık state, nonce, Google imzası ve **masaüstü istemci audience**
+doğrulaması sunucuda kalır. Sonuç ekranı oturum açmaz; `/google/complete`
+yalnız ilk uygulamanın HttpOnly çereziyle oturum açar. Kullanıcı hâlâ etkin
+olmalı ve ofis yetkisi taşımalıdır. Native yol yalnız giriş içindir; Gmail/SBM
+bağlama ve web/saha girişleri mevcut web callback'ini kullanır. Eski API veya
+Desktop app ayarı yoksa eski web yolu korunur; bu durum Tailscale'siz yeni
+giriş kabulü sayılmaz ve `After` ön kontrolü bunu engeller.
+
+Desteklenen LAN'da masaüstü giriş dönüşü için public DNS, tünel, tarayıcıya özel
+CA yükleme veya Tailscale gerekmez. İstemci tarayıcısı Google'a, sunucu Google
+token/JWKS uçlarına internet üzerinden erişebilmelidir; API'ye LAN erişimi de
+ayrıca gereklidir. Gerçek Workspace hesabı/Console kaydı bu ortamda sınanmadı.
+Google'ın [masaüstü PKCE/loopback rehberi](https://developers.google.com/identity/protocols/oauth2/native-app)
+ve [kimlik doğrulama kuralları](https://developers.google.com/identity/openid-connect/openid-connect)
+bu istemci türünü ve doğrulama gereksinimlerini açıklar.
+
+### 0.1.91 kontrollü ofis geçişi ve geri dönüş
+
+1. Çalışan 0.1.90 yükleyicisini, feed manifestini, API dağıtımını ve veritabanı
+   yedeğini koru; ilk geçiş boyunca feed'i değiştirme. Aşağıdaki `Before`
+   kontrolünü sunucuda çalıştır. `/` yanıtının 404 olması arıza değildir.
+2. Google Desktop app kaydını ve sunucudaki ortam ayarlarını tamamla. Mevcut
+   servis dağıtım aracıyla API/ortak paket adayını ayrı hedefte hazırla; bakım
+   sırasında `npm run migrate:up --workspace @hasarbotu/database` ile yalnız
+   mevcut operatör DB ortamını kullanarak migration'ları uygula. Önce migration,
+   sonra yeni API; 0.1.90 istemcileri çalışmayı sürdürür. Bu işlem burada yapılmadı.
+3. Yukarıdaki `install-office-network.ps1` komutunu önce önizle, sonra
+   `-Apply -RepairLegacyCaddy` ile uygula. Üretilen `rollbackReceipt` yolunu
+   koru. Eski 443/Serve/Funnel/IIS yollarını ve hosts kayıtlarını kaldırma.
+4. Aynı dizindeki `set-office-service-recovery.ps1` betiğini önce önizle,
+   sonra `-Apply` ile çalıştır. PostgreSQL dahil sekiz mevcut hizmetin SCM
+   kurtarması 10/30/60 saniye + **none** olur. WinSW XML'leri de güncellenir;
+   SCM son eylemi tekrarladığı için yalnız üç restart yeterli değildir.
+   Eksik/farklı isim varsa envantere göre açık `-Services` listesi ver; araç
+   eksikleri atlamaz. Çalışan süreç, hesap, bağımlılık, Manual/Disabled tercihi
+   değiştirilmez. Ayrı kurtarma receipt'i oluşur.
+5. Sunucudan **yalnız** gerçek `client-profile.json` dosyasını güvenli biçimde
+   al; `HASARBOTU_DISTRIBUTION_PROFILE` ile gerçek ofis adayını yeniden paketle
+   ve imzala; mevcut `HASARBOTU_DISTRIBUTION_ROOTS`/paket klasör köklerini de
+   0.1.90 ile koru. Buradaki `.test` CA'lı yerel yükleyiciyi personele dağıtma.
+   Mantıksal `apiOrigin` 0.1.90 ile aynı kalır; NSIS kaynak profili yeniler,
+   kullanıcı profili, sabit köprü portu, çerez ve taslaklar korunur. İstemcide
+   JSON düzenleme/UAC/hosts işlemi gerekmez. İlk normal açılış Windows oturum
+   başlangıcını kaydeder; sonraki Windows kapatma tercihi korunur.
+6. `After` kontrolünü gerçek adayın hash'i ve güvenilen yayıncı thumbprint'iyle
+   çalıştır. Ön kontrol gerçek Google onayını ve istemci kabulünü **PENDING**
+   bırakır. Tek pilot bilgisayarda aşağıdaki kabulü tamamla; sonra mevcut
+   kimlikli ofis yayın prosedürünü uygula. Kullanıcılara zorla kurulum yapma.
+
+```powershell
+# $origin mevcut mantıksal origin; $node gerçek Node 24 yolu.
+.\test-office-network-readiness.ps1 -Stage Before -ApiOrigin $origin -NodeExe $node
+.\set-office-service-recovery.ps1                 # önizleme
+.\set-office-service-recovery.ps1 -Apply          # ayrı rollbackReceipt kaydet
+.\test-office-network-readiness.ps1 -Stage After -ApiOrigin $origin -NodeExe $node `
+  -Installer $installer -ExpectedSha256 $sha256 -ExpectedSignerThumbprint $publisherThumbprint
+```
+
+Geri dönüş sırası: feed'i değiştirmediysen 0.1.90 aynen kalır. Önce hizmet
+kurtarmasını `set-office-service-recovery.ps1 -RollbackReceipt $recoveryReceipt`
+ile önizle, `-Apply` ile geri al; sonra
+`rollback-office-network.ps1 -Receipt $networkReceipt` ve `-Apply` kullan.
+İkinci araç eski Caddy XML/aktif yapılandırmasını, önceki ağ dosyalarını,
+zamanlanmış görevi ve çalışma durumlarını geri getirir; yalnız yeni ağ
+hizmetlerini/kurallarını kaldırır. Hatalı ilk kurulumdan sonra tekrar kurulum
+desteklenir. Hash/ACL/makine uyuşmazlığı reddedilir; servis kurtarma aracı
+sonraki operatör XML/politika değişikliğini ezmez. API dosyalarını mevcut
+dağıtım receipt'iyle geri al; **0075 sütununu ve iş verisini silme**. İstemci
+pilotu gerekiyorsa korunan 0.1.90 NSIS ile aynı dizine geri kur, `userData`yı
+silme. Feed'e sürüm düşürme manifesti yayınlama. NSIS geri kurma kabulü gerçek
+pilot Windows profilinde ayrıca yapılmalıdır.
+
+**Ofis kabul listesi:** Tailscale kurulu olmayan temiz Türkçe Windows profili;
+ilk kurumsal giriş + yetkisiz/kapalı hesap reddi; 0.1.90 üstüne yükseltmede
+oturum/taslak/pCloud/SBM/rapor/dosya işlemleri; istemci oturum açılışında otomatik
+başlama; LAN kablosu/internet kesilip gelmesi; DHCP'de `.100 → .108` ve yeni
+adres; çok adaptör/VLAN/güvenlik duvarı; sunucu ve istemci reboot; Caddy/API/PG
+çökmesi ve kurtarma bütçesinin dolması; sertifika yenileme/yanlış CA reddi;
+3100 ana API / 3200 fotoğraf ayrımı; pilot rollback. Son aşamada eski kurulu
+istemcinin kimlikli feed'de yeni sürümü görmesini ve indirdiği gerçek paketin
+boyut/SHA-256/imzasını doğrula. Yerel sentetik testler bu kabulün yerine geçmez.
+
+Dış gereksinimler: gerçek ofis CA profili ve sunucu yöneticisi, Google Console /
+Workspace onayı, güvenilen kod imzalama sertifikası ve zaman damgası hizmeti,
+gerçek pilot Windows bilgisayarı. Ofis dışı Tailscale'siz **API erişimi** için
+ayrıca operatörün alan adı/tünel hesabı gerekir; native OAuth bunu sağlamaz.
+
+Üretim geçişi şu an **PENDING**: 2 Kasım 2026'da kayıtlı yönetim SSH adresi ve
+bildirilen iki LAN adresinde 22/443 erişimi sağlanamadı. Gerçek sunucu DHCP
+değişimi, Windows yeniden başlatma, gerçek kurumsal Google girişi, eski
+kurulu istemcinin feed/indirme doğrulaması ve ofis yayını yapılmış sayılmaz.
+
+Bu dizin Faz A ofis dağıtımı için WinSW servis şablonları
 ve salt-okunur/planlı PowerShell araçları içerir. Tam prosedür için:
 
 **→ [`docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md`](../../docs/RUNBOOK_FAZ_A_WINDOWS_SERVICE_DEPLOYMENT.md)**

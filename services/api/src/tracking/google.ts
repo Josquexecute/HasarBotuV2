@@ -10,11 +10,13 @@ export interface GoogleConfig {
   automaticSbmEnabled: boolean
   loginDomain: string
   signupOrganizationId?: string
+  desktopClientId?: string
+  desktopClientSecret?: string
 }
 
 export function parseGoogleConfig(env: Readonly<Record<string,string | undefined>>): GoogleConfig | undefined {
   const keys = ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REDIRECT_URI','GOOGLE_TOKEN_ENCRYPTION_KEY','GOOGLE_LOGIN_DOMAIN'] as const
-  if (keys.every((key) => !env[key])) return undefined
+  if (keys.every((key) => !env[key]) && !env.GOOGLE_DESKTOP_CLIENT_ID && !env.GOOGLE_DESKTOP_CLIENT_SECRET) return undefined
   for (const key of keys) if (!env[key]?.trim()) throw new Error(`Missing ${key}`)
   const loginDomain = loginDomainSchema.parse(env.GOOGLE_LOGIN_DOMAIN!.trim().toLowerCase())
   if (!/^[a-f0-9]{64}$/i.test(env.GOOGLE_TOKEN_ENCRYPTION_KEY!)) throw new Error('Invalid GOOGLE_TOKEN_ENCRYPTION_KEY: 32-byte hexadecimal key required')
@@ -27,7 +29,22 @@ export function parseGoogleConfig(env: Readonly<Record<string,string | undefined
   if (env.SBM_AUTOMATIC_ENABLED && !['true','false'].includes(env.SBM_AUTOMATIC_ENABLED)) throw new Error('Invalid SBM_AUTOMATIC_ENABLED')
   if (env.SBM_AUTOMATIC_ENABLED === 'true' && !sbmSenders.length) throw new Error('SBM_SENDER_ADDRESSES required for automatic processing')
   const signupOrganizationId = env.GOOGLE_SIGNUP_ORGANIZATION_ID ? z.string().uuid().parse(env.GOOGLE_SIGNUP_ORGANIZATION_ID) : undefined
-  return { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET!, redirectUri: redirect.href, encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY!, loginDomain, sbmSenders, automaticSbmEnabled: env.SBM_AUTOMATIC_ENABLED === 'true',...(signupOrganizationId ? { signupOrganizationId } : {}) }
+  const desktopClientId = env.GOOGLE_DESKTOP_CLIENT_ID?.trim()
+  const desktopClientSecret = env.GOOGLE_DESKTOP_CLIENT_SECRET?.trim()
+  if ((env.GOOGLE_DESKTOP_CLIENT_ID !== undefined && (!desktopClientId || !/^[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(desktopClientId)
+    || desktopClientId === env.GOOGLE_CLIENT_ID)) || (env.GOOGLE_DESKTOP_CLIENT_SECRET !== undefined && (!desktopClientSecret || !desktopClientId))) throw new Error('Invalid Google desktop client configuration')
+  return { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET!, redirectUri: redirect.href, encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY!, loginDomain, sbmSenders, automaticSbmEnabled: env.SBM_AUTOMATIC_ENABLED === 'true',...(signupOrganizationId ? { signupOrganizationId } : {}),
+    ...(desktopClientId ? { desktopClientId } : {}), ...(desktopClientSecret ? { desktopClientSecret } : {}) }
+}
+
+/** Native OAuth returns only to the desktop bridge, never a caller-supplied host/path. */
+export function isDesktopGoogleRedirect(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.href === value && url.protocol === 'http:' && url.hostname === '127.0.0.1'
+      && Number(url.port) >= 1024 && Number(url.port) <= 65535 && !url.username && !url.password
+      && url.pathname === '/api/v1/google/desktop/callback' && !url.search && !url.hash
+  } catch { return false }
 }
 
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -86,19 +103,26 @@ export function createGoogleProvider(config: GoogleConfig, fetchImpl: typeof fet
     }
     return response.json() as Promise<unknown>
   }
-  async function token(params: Record<string,string>) {
+  function nativeClient(redirectUri: string) {
+    if (!config.desktopClientId || !isDesktopGoogleRedirect(redirectUri)) throw new Error('Google desktop client unavailable')
+    return { client_id: config.desktopClientId, ...(config.desktopClientSecret ? { client_secret: config.desktopClientSecret } : {}) }
+  }
+  async function token(params: Record<string,string>, redirectUri?: string) {
     return z.object({ access_token: z.string().min(1), refresh_token: z.string().optional(), id_token: z.string().optional(), scope: z.string().optional() }).parse(await json('https://oauth2.googleapis.com/token',{
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: config.clientId,client_secret: config.clientSecret,...params }),
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ ...(redirectUri ? nativeClient(redirectUri) : { client_id: config.clientId,client_secret: config.clientSecret }),...params }),
     }))
   }
   return {
-    authorizeUrl(purpose: 'login' | 'mail', state: string, nonce: string, verifier: string) {
+    authorizeUrl(purpose: 'login' | 'mail', state: string, nonce: string, verifier: string, desktopRedirectUri?: string) {
+      if (desktopRedirectUri && purpose !== 'login') throw new Error('Native mail authorization is unavailable')
+      const clientId = desktopRedirectUri ? nativeClient(desktopRedirectUri).client_id : config.clientId
       const params = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri, response_type: 'code', scope: `openid email profile${purpose === 'mail' ? ` ${GMAIL_SCOPE}` : ''}`, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', include_granted_scopes: 'false', prompt: purpose === 'mail' ? 'consent select_account' : 'select_account', ...(purpose === 'mail' ? { access_type: 'offline' } : { hd: loginDomain }) })
+      if (desktopRedirectUri) { params.set('client_id', clientId); params.set('redirect_uri', desktopRedirectUri); params.delete('include_granted_scopes') }
       return `https://accounts.google.com/o/oauth2/v2/auth?${params}`
     },
-    exchange: (code: string, verifier: string) => token({ code,code_verifier: verifier,redirect_uri: config.redirectUri,grant_type: 'authorization_code' }),
+    exchange: (code: string, verifier: string, desktopRedirectUri?: string) => token({ code,code_verifier: verifier,redirect_uri: desktopRedirectUri ?? config.redirectUri,grant_type: 'authorization_code' }, desktopRedirectUri),
     refresh: (refreshToken: string) => token({ refresh_token: refreshToken,grant_type: 'refresh_token' }),
-    async identity(jwt: string, nonce: string, corporate: boolean) {
+    async identity(jwt: string, nonce: string, corporate: boolean, desktopRedirectUri?: string) {
       const parts = jwt.split('.')
       if (parts.length !== 3) throw new Error('Invalid identity token')
       const header = z.object({ alg: z.literal('RS256'),kid: z.string() }).parse(JSON.parse(Buffer.from(parts[0]!,'base64url').toString('utf8')))
@@ -109,7 +133,7 @@ export function createGoogleProvider(config: GoogleConfig, fetchImpl: typeof fet
       }
       const jwk = keys.find((k) => k.kid === header.kid)
       if (!jwk || !verify('RSA-SHA256',Buffer.from(`${parts[0]}.${parts[1]}`),createPublicKey({ key: jwk,format: 'jwk' }),Buffer.from(parts[2]!,'base64url'))) throw new Error('Invalid identity signature')
-      return validateGoogleClaims(JSON.parse(Buffer.from(parts[1]!,'base64url').toString('utf8')),config.clientId,nonce,corporate ? loginDomain : undefined)
+      return validateGoogleClaims(JSON.parse(Buffer.from(parts[1]!,'base64url').toString('utf8')),desktopRedirectUri ? nativeClient(desktopRedirectUri).client_id : config.clientId,nonce,corporate ? loginDomain : undefined)
     },
     gmail: (accessToken: string, path: string) => json(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`,{ headers: { authorization: `Bearer ${accessToken}` } }),
   }

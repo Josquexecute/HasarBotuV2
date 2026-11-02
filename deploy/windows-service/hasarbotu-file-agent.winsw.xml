@@ -39,6 +39,7 @@
   <onfailure action="restart" delay="10 sec"/>
   <onfailure action="restart" delay="30 sec"/>
   <onfailure action="restart" delay="60 sec"/>
+  <onfailure action="none"/>
   <resetfailure>1 hour</resetfailure>
 
   <logpath>%BASE%\logs</logpath>

@@ -1,5 +1,7 @@
 import { HEALTH_ROUTE, healthResponseSchema } from '@hasarbotu/contracts'
 import { checkApiCompatibility, type CompatibilityOutcome } from './compatibility.js'
+import type { ApiConnection } from '@hasarbotu/desktop-bridge'
+import { classifyNetworkFailure, officeHealth, type NetworkFailure } from './office-network.js'
 
 /**
  * API hazırlık kapısı (D3).
@@ -27,6 +29,7 @@ export type ReadinessOutcome =
   | Exclude<CompatibilityOutcome, 'compatible'>
 
 export interface ReadinessResult {
+  readonly failure?: NetworkFailure
   readonly outcome: ReadinessOutcome
   readonly ready: boolean
   /** Yalnız yanıt çözümlenebildiyse doldurulur; tanı ve rapor içindir. */
@@ -34,6 +37,7 @@ export interface ReadinessResult {
 }
 
 export interface ReadinessProbeOptions {
+  readonly connection?: ApiConnection
   readonly apiOrigin: string
   /** Tek denemenin üst süre sınırı. */
   readonly timeoutMs?: number
@@ -57,17 +61,23 @@ export async function probeApiReadiness(options: ReadinessProbeOptions): Promise
 
   let payload: unknown
   try {
-    const response = await fetchImpl(`${options.apiOrigin}${HEALTH_ROUTE}`, {
-      method: 'GET',
-      redirect: 'error',
-      signal: AbortSignal.timeout(timeoutMs),
-    })
-    if (!response.ok) return { outcome: 'unreachable', ready: false }
-    payload = await response.json()
-  } catch {
+    if (options.connection) {
+      const endpoint = await options.connection.resolve()
+      try { payload = await officeHealth(endpoint, options.apiOrigin, timeoutMs) }
+      catch (error) { options.connection.invalidate(endpoint); throw error }
+    } else {
+      const response = await fetchImpl(`${options.apiOrigin}${HEALTH_ROUTE}`, {
+        method: 'GET',
+        redirect: 'error',
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      if (!response.ok) return { outcome: 'unreachable', ready: false }
+      payload = await response.json()
+    }
+  } catch (error) {
     // Ağ hatası, DNS, bağlantı reddi, zaman aşımı ve JSON çözümleme hatası
     // aynı kullanıcı gerçeğine karşılık gelir: API'ye ulaşılamıyor.
-    return { outcome: 'unreachable', ready: false }
+    return { outcome: 'unreachable', ready: false, ...(options.connection ? { failure: classifyNetworkFailure(error) } : {}) }
   }
 
   const parsed = healthResponseSchema.safeParse(payload)

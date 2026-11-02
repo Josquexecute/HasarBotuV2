@@ -12,6 +12,11 @@ import {
 } from '../src/index.js'
 
 describe('parseConfig', () => {
+  it('allows proxy trust only explicitly and with a loopback API listener', () => {
+    expect(parseConfig({ TRUST_LOOPBACK_PROXY: 'true' }).trustLoopbackProxy).toBe(true)
+    expect(parseConfig({ TRUST_LOOPBACK_PROXY: 'false' }).trustLoopbackProxy).toBeUndefined()
+    for (const env of [{ TRUST_LOOPBACK_PROXY: 'yes' }, { TRUST_LOOPBACK_PROXY: 'true', HOST: '0.0.0.0' }]) expect(() => parseConfig(env)).toThrow(ConfigError)
+  })
   it('requires an absolute desktop release directory when configured', () => {
     expect(parseConfig({ DESKTOP_RELEASES_DIR: process.cwd() }).desktopReleasesDirectory).toBe(process.cwd())
     expect(() => parseConfig({ DESKTOP_RELEASES_DIR: 'relative/releases' })).toThrow(ConfigError)

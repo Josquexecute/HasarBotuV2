@@ -34,7 +34,17 @@ export function describeReadiness(result: ReadinessResult): GateMessage {
     case 'unreachable':
       return {
         title: 'Sunucuya ulaşılamıyor',
-        detail: 'HasarBotu sunucusuna bağlanılamadı. Sunucunun çalıştığını ve ağ bağlantınızı kontrol edip tekrar deneyin.',
+        detail: result.failure === 'tls'
+          ? 'Sunucunun güvenlik sertifikası doğrulanamadı. Bağlantı güvenlik için durduruldu. Bilgisayarın tarihini kontrol edin; sorun sürerse sunucu sertifikasının yönetici tarafından yenilenmesi gerekir.'
+          : result.failure === 'wrong_server'
+            ? 'Bulunan adres beklenen HasarBotu API yanıtını vermiyor. Sunucu yöneticisi API ve fotoğraf portalı yönlendirmelerini kontrol etmelidir.'
+            : result.failure === 'dns'
+              ? 'Ofis sunucusu ağda bulunamadı. Ofis ağına bağlanın; misafir ağı veya cihaz yalıtımı sunucu keşfini engelleyebilir. Ağ geldiğinde yeniden deneyin.'
+              : result.failure === 'refused'
+                ? 'Sunucu HTTPS bağlantısını kabul etmiyor. Sunucudaki HTTPS hizmeti ve port çakışmaları kontrol edilmelidir.'
+                : result.failure === 'service'
+                  ? 'Güvenli HTTPS hizmetine ulaşıldı ancak ana API henüz yanıt vermiyor. Sunucudaki API ve veritabanı hizmetleri kontrol edilmelidir.'
+                  : 'HasarBotu sunucusuna bağlanılamadı. Sunucunun çalıştığını ve ağ bağlantınızı kontrol edip tekrar deneyin.',
       }
     case 'api_degraded':
       return {
@@ -66,6 +76,8 @@ export function describeReadiness(result: ReadinessResult): GateMessage {
 }
 
 export interface StartupGateDeps {
+  readonly automaticRetryDelaysMs?: readonly number[]
+  readonly wait?: (ms: number) => Promise<void>
   readonly probe: () => Promise<ReadinessResult>
   readonly prompt: (message: GateMessage, result: ReadinessResult) => Promise<GateChoice>
   /** Sonsuz döngüye karşı üst sınır; kullanıcı her denemede karar verir. */
@@ -82,9 +94,16 @@ export const DEFAULT_MAXIMUM_GATE_ATTEMPTS = 50
  */
 export async function runStartupGate(deps: StartupGateDeps): Promise<'proceed' | 'abort'> {
   const limit = deps.maximumAttempts ?? DEFAULT_MAXIMUM_GATE_ATTEMPTS
+  let automaticAttempt = 0
   for (let attempt = 0; attempt < limit; attempt += 1) {
     const result = await deps.probe()
     if (result.ready) return 'proceed'
+    const delay = deps.automaticRetryDelaysMs?.[automaticAttempt]
+    if (delay !== undefined && ['unreachable', 'api_degraded'].includes(result.outcome) && !['tls', 'wrong_server'].includes(result.failure ?? '')) {
+      automaticAttempt++
+      await (deps.wait ?? (ms => new Promise(resolve => setTimeout(resolve, ms))))(delay)
+      continue
+    }
     const choice = await deps.prompt(describeReadiness(result), result)
     if (choice === 'close') return 'abort'
   }

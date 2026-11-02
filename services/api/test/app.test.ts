@@ -12,6 +12,17 @@ afterEach(async () => {
 })
 
 describe('buildApp', () => {
+  it('ignores forged proxy addresses by default and trusts only one explicitly enabled loopback hop', async () => {
+    for (const enabled of [false, true]) {
+      app = buildApp({ loggerEnabled: false, trustLoopbackProxy: enabled })
+      app.get('/proxy-test', async request => ({ ip: request.ip }))
+      for (const remoteAddress of ['127.0.0.1','::1','::ffff:127.0.0.1','192.168.1.108']) {
+        const result = await app.inject({ url: '/proxy-test', remoteAddress, headers: { 'x-forwarded-for': '198.51.100.99, 10.20.0.5' } })
+        expect(result.json().ip).toBe(enabled && remoteAddress !== '192.168.1.108' ? '10.20.0.5' : remoteAddress)
+      }
+      await app.close(); app = undefined
+    }
+  })
   it('port acmadan instance uretir', async () => {
     app = buildApp({ loggerEnabled: false })
     await app.ready()

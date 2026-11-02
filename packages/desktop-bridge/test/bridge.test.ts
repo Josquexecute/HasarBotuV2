@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http'
+import { createServer, globalAgent as httpAgent, type Server } from 'node:http'
 import { createServer as createHttpsServer, globalAgent } from 'node:https'
 import { createReadStream } from 'node:fs'
 import { mkdtemp, writeFile, rm, mkdir, symlink } from 'node:fs/promises'
@@ -24,6 +24,48 @@ async function close(server: Server) {
   server.closeAllConnections()
   await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
 }
+
+it('does not accumulate connect listeners on a reused upstream HTTP socket', async () => {
+  const upstream = createServer((_req, res) => res.end('ok'))
+  const port = await listen(upstream), bridge = await startDesktopBridge({ apiOrigin: `http://127.0.0.1:${port}` })
+  try {
+    await (await fetch(bridge.origin + '/api/test')).text()
+    await new Promise<void>(done => setImmediate(done))
+    const socket = Object.values(httpAgent.freeSockets).flat().find(value => value?.remotePort === port)!
+    expect(socket).toBeDefined()
+    const before = socket.listenerCount('connect')
+    for (let index = 0; index < 20; index++) expect(await (await fetch(bridge.origin + '/api/test')).text()).toBe('ok')
+    expect(socket.listenerCount('connect')).toBe(before)
+  } finally { await bridge.close(); await close(upstream) }
+})
+
+it('forwards a native callback only through the bridge that initiated it and rejects foreign flows and replays', async () => {
+  const flowId = 'synthetic-native-local-flow-123456'
+  let origin = '', callbacks = 0
+  const upstream = createServer((request, response) => {
+    request.resume()
+    if (request.url === '/api/v1/google/start') {
+      expect(request.headers['accept-encoding']).toBe('identity')
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify({ flowId, url: 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({ state: flowId, redirect_uri: origin + '/api/v1/google/desktop/callback' }) }))
+    } else { callbacks++; response.writeHead(303, { location: '/api/v1/google/result/desktop/login/success' }); response.end() }
+  })
+  const port = await listen(upstream)
+  const first = await startDesktopBridge({ apiOrigin: `http://127.0.0.1:${port}` }), second = await startDesktopBridge({ apiOrigin: `http://127.0.0.1:${port}` })
+  origin = first.origin
+  const callback = '/api/v1/google/desktop/callback?state=' + flowId + '&code=synthetic-code'
+  try {
+    expect((await fetch(first.origin + callback, { redirect: 'manual' })).headers.get('location')).toMatch(/expired$/)
+    expect(callbacks).toBe(0)
+    await (await fetch(first.origin + '/api/v1/google/start', { method: 'POST', body: '{}' })).json()
+    expect((await fetch(second.origin + callback, { redirect: 'manual' })).headers.get('location')).toMatch(/expired$/)
+    expect(callbacks).toBe(0)
+    expect((await fetch(first.origin + callback, { redirect: 'manual' })).headers.get('location')).toMatch(/success$/)
+    expect(callbacks).toBe(1)
+    expect((await fetch(first.origin + callback, { redirect: 'manual' })).headers.get('location')).toMatch(/expired$/)
+    expect(callbacks).toBe(1)
+  } finally { await first.close(); await second.close(); await close(upstream) }
+})
 
 it('proxies trusted HTTPS and rejects an untrusted certificate', async () => {
   const { cert, key } = createTestTlsCertificate()

@@ -1,9 +1,11 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { request as httpsRequest } from 'node:https'
+import type { ConnectionOptions } from 'node:tls'
 import { createReadStream } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { join, relative, resolve, sep, extname, isAbsolute } from 'node:path'
 import { once } from 'node:events'
+import { createNativeOAuthGuard } from './native-oauth.js'
 import {
   buildDownstreamHeaders,
   buildUpstreamHeaders,
@@ -39,6 +41,21 @@ export interface DesktopBridgeOptions {
   readonly port?: number
   /** Upstream isteği için üst süre sınırı (ms). */
   readonly upstreamTimeoutMs?: number
+  readonly connection?: ApiConnection
+}
+
+/** Routing is separate from the logical API origin, cookies and Chromium storage. */
+export interface ApiEndpoint {
+  readonly hostname: string
+  readonly port: number
+  readonly servername: string
+  readonly httpHost?: string
+  readonly ca?: ConnectionOptions['ca']
+}
+
+export interface ApiConnection {
+  resolve(): Promise<ApiEndpoint>
+  invalidate(endpoint: ApiEndpoint): void
 }
 
 export interface DesktopBridge {
@@ -49,6 +66,7 @@ export interface DesktopBridge {
 }
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 30_000
+const UPSTREAM_CONNECT_TIMEOUT_MS = 5000
 export const EKSIST_UPSTREAM_TIMEOUT_MS = 120_000
 // Legal generation allows 60 seconds; include time for authorization and result persistence.
 const AI_UPSTREAM_TIMEOUT_MS = 75_000
@@ -135,7 +153,11 @@ function forwardToApi(
   clientRequest: IncomingMessage,
   response: ServerResponse,
   timeoutMs: number,
+  connection?: ApiConnection,
+  endpoint?: ApiEndpoint,
+  oauth?: { remember(bytes: Buffer): void; complete(): void },
 ): void {
+  const startingOAuth = clientRequest.url === '/api/v1/google/start' && clientRequest.method === 'POST'
   const upstream = (apiUrl.protocol === 'https:' ? httpsRequest : httpRequest)(
     {
       protocol: apiUrl.protocol,
@@ -143,13 +165,32 @@ function forwardToApi(
       port: apiUrl.port,
       method: clientRequest.method ?? 'GET',
       path: clientRequest.url ?? '/',
-      headers: buildUpstreamHeaders(clientRequest.headers, upstreamHost),
+      headers: buildUpstreamHeaders(clientRequest.headers, endpoint?.httpHost ?? upstreamHost),
+      ...(endpoint ? { hostname: endpoint.hostname, port: endpoint.port, servername: endpoint.servername, ...(endpoint.ca ? { ca: endpoint.ca } : {}), agent: false } : {}),
     },
     (upstreamResponse) => {
       upstreamResponse.on('error', () => sendStatus(response, 502))
       upstreamResponse.on('aborted', () => sendStatus(response, 502))
       response.once('close', () => upstreamResponse.destroy())
       if (response.destroyed) { upstreamResponse.destroy(); return }
+      if (startingOAuth && upstreamResponse.statusCode === 200 && oauth) {
+        const chunks: Buffer[] = []
+        let size = 0
+        upstreamResponse.on('data', (chunk: Buffer) => {
+          size += chunk.length
+          if (size > 16384) { upstream.destroy(); sendStatus(response, 502); return }
+          chunks.push(chunk)
+        })
+        upstreamResponse.on('end', () => {
+          if (response.destroyed || response.writableEnded) return
+          const bytes = Buffer.concat(chunks)
+          oauth.remember(bytes)
+          response.writeHead(200, buildDownstreamHeaders(upstreamResponse.headers))
+          response.end(bytes)
+        })
+        return
+      }
+      if (upstreamResponse.statusCode === 303) oauth?.complete()
       // `set-cookie` dizi olarak, HİÇ dokunulmadan aktarılır.
       response.writeHead(
         upstreamResponse.statusCode ?? 502,
@@ -158,14 +199,29 @@ function forwardToApi(
       upstreamResponse.pipe(response)
     },
   )
+  // The bounded start response is inspected before forwarding; never negotiate compressed OAuth JSON.
+  if (startingOAuth) upstream.setHeader('accept-encoding', 'identity')
+
+  // request.setTimeout starts after TCP connect; a departed DHCP address also needs a connect/TLS deadline.
+  const connectTimer = endpoint ? setTimeout(() => {
+    connection?.invalidate(endpoint)
+    sendStatus(response, 504)
+    upstream.destroy()
+  }, UPSTREAM_CONNECT_TIMEOUT_MS) : undefined
+  if (connectTimer !== undefined) upstream.once('socket', socket => {
+    socket.once(apiUrl.protocol === 'https:' ? 'secureConnect' : 'connect', () => clearTimeout(connectTimer))
+  })
+  upstream.once('close', () => clearTimeout(connectTimer))
 
   upstream.setTimeout(timeoutMs, () => {
+    if (connection && endpoint) connection.invalidate(endpoint)
     upstream.destroy()
     if (!response.headersSent) sendStatus(response, 504)
     else response.destroy()
   })
 
   upstream.on('error', () => {
+    if (connection && endpoint) connection.invalidate(endpoint)
     // API kapalı/erişilemez. Ham hata metni istemciye taşınmaz; UI
     // adapter'ları bunu zaten `unavailable` olarak ele alır.
     if (!response.headersSent) sendStatus(response, 502)
@@ -204,9 +260,22 @@ export async function startDesktopBridge(options: DesktopBridgeOptions): Promise
         return
       }
 
-      const pathname = new URL(clientRequest.url ?? '/', 'http://127.0.0.1').pathname
+      const requestUrl = new URL(clientRequest.url ?? '/', 'http://127.0.0.1')
+      const pathname = requestUrl.pathname
+      if (pathname === '/api/v1/google/desktop/callback' && (clientRequest.method !== 'GET' || !nativeOAuth.accepts(requestUrl))) {
+        clientRequest.resume()
+        response.writeHead(303, { location: '/api/v1/google/result/desktop/login/expired', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' })
+        response.end()
+        return
+      }
       if (isApiPath(pathname)) {
-        forwardToApi(apiUrl, upstreamHost, clientRequest, response, upstreamTimeoutFor(pathname, timeoutMs))
+        let endpoint: ApiEndpoint | undefined
+        try { endpoint = await options.connection?.resolve() }
+        catch { sendStatus(response, 503); clientRequest.resume(); return }
+        if (response.destroyed || clientRequest.destroyed) return
+        // Requests, particularly writes, are never replayed after a network failure.
+        forwardToApi(apiUrl, upstreamHost, clientRequest, response, upstreamTimeoutFor(pathname, timeoutMs), options.connection, endpoint,
+          { remember: bytes => nativeOAuth.remember(bytes), complete: () => { if (pathname === '/api/v1/google/desktop/callback') nativeOAuth.complete(requestUrl) } })
         return
       }
 
@@ -248,6 +317,7 @@ export async function startDesktopBridge(options: DesktopBridgeOptions): Promise
     server.close()
     throw new Error('desktop bridge failed to bind a loopback port')
   }
+  const nativeOAuth = createNativeOAuthGuard(`http://127.0.0.1:${address.port}`)
 
   return {
     origin: `http://127.0.0.1:${address.port}`,

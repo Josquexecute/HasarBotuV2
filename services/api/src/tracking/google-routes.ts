@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import type pg from 'pg'
 import { z } from 'zod'
 import { uuidv7 } from '@hasarbotu/database'
@@ -12,24 +12,32 @@ import { withTransaction } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
 import { rememberAuthenticatedRequest } from '../audit/request-events.js'
 import { canManageTracking } from './store.js'
-import { createGoogleProvider, digest, encryptToken, GMAIL_SCOPE, randomToken, type GoogleConfig, type GoogleProvider } from './google.js'
+import { createGoogleProvider, digest, encryptToken, GMAIL_SCOPE, isDesktopGoogleRedirect, randomToken, type GoogleConfig, type GoogleProvider } from './google.js'
 import { redirectGoogleResult, registerGoogleResultRoutes, type GoogleClient, type GoogleOutcome } from './google-result.js'
 
 const COOKIE = 'hb_google_flow'
 class GoogleAccessDenied extends Error {}
-export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.Pool; cookieSecure: boolean; config?: GoogleConfig; provider?: GoogleProvider }) {
+export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.Pool; cookieSecure: boolean; config?: GoogleConfig; provider?: GoogleProvider; trustLoopbackProxy?: boolean }) {
   const { pool,config } = options
   const auth = createAuthStore(pool)
   const provider = options.provider ?? (config ? createGoogleProvider(config) : undefined)
   const limiter = createFixedWindowLimiter({ limit: 10,windowMs: 60_000 })
   const audit = createAuditService()
   registerGoogleResultRoutes(app)
-  app.get('/api/v1/google/status',async () => ({ enabled: config !== undefined }))
+  app.get('/api/v1/google/status',async (_request,reply) => {
+    void reply.header('cache-control','no-store')
+    return { enabled: config !== undefined, desktopEnabled: !!config?.desktopClientId, proxyAwareRateLimit: options.trustLoopbackProxy === true }
+  })
   app.post('/api/v1/google/start',async (request,reply) => {
     if (!config || !provider) return reply.code(503).send({ error: 'Google bağlantısı yapılandırılmamış.' })
     if (!limiter.consume(request.ip).allowed) return reply.code(429).send({ error: 'Çok fazla giriş denemesi.' })
-    const parsed = z.object({ purpose: z.enum(['login','mail']), client: z.enum(['web','field','desktop']).default('web') }).strict().safeParse(request.body)
+    const parsed = z.object({ purpose: z.enum(['login','mail']), client: z.enum(['web','field','desktop']).default('web'), desktopRedirectUri: z.string().max(200).optional() }).strict().safeParse(request.body)
     if (!parsed.success) return reply.code(400).send({ error: 'Geçersiz giriş amacı.' })
+    const desktopRedirectUri = parsed.data.desktopRedirectUri
+    if (desktopRedirectUri !== undefined) {
+      if (parsed.data.client !== 'desktop' || parsed.data.purpose !== 'login' || !isDesktopGoogleRedirect(desktopRedirectUri)) return reply.code(400).send({ error: 'Geçersiz masaüstü dönüş adresi.' })
+      if (!config.desktopClientId) return reply.code(503).send({ error: 'Google masaüstü girişi sunucuda yapılandırılmamış.' })
+    }
     let userId: string | null = null
     if (parsed.data.purpose === 'mail') {
       const session = await requireSession(auth,request,reply)
@@ -41,15 +49,15 @@ export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.P
     const state = randomToken(), browser = randomToken(), nonce = randomToken(), verifier = randomToken()
     await withTransaction(pool,async (db) => {
       await db.query('DELETE FROM google_oauth_states WHERE expires_at < now()')
-      await db.query(`INSERT INTO google_oauth_states(state_hash,browser_hash,purpose,user_id,nonce,verifier,expires_at,client)
-        VALUES($1,$2,$3,$4,$5,$6,now()+interval '10 minutes',$7)`, [digest(state),digest(browser),parsed.data.purpose,userId,nonce,verifier,parsed.data.client])
+      await db.query(`INSERT INTO google_oauth_states(state_hash,browser_hash,purpose,user_id,nonce,verifier,expires_at,client,desktop_redirect_uri)
+        VALUES($1,$2,$3,$4,$5,$6,now()+interval '10 minutes',$7,$8)`, [digest(state),digest(browser),parsed.data.purpose,userId,nonce,verifier,parsed.data.client,desktopRedirectUri ?? null])
     })
     void reply.header('cache-control','no-store')
     void reply.header('set-cookie',`${COOKIE}=${browser}; HttpOnly; SameSite=Strict; Path=/; Max-Age=600${options.cookieSecure ? '; Secure' : ''}`)
-    return { flowId: state, url: provider.authorizeUrl(parsed.data.purpose,state,nonce,verifier) }
+    return { flowId: state, url: provider.authorizeUrl(parsed.data.purpose,state,nonce,verifier,desktopRedirectUri) }
   })
   // OAuth codes never enter access logs. The external browser receives no application session.
-  app.get('/api/v1/google/callback',{ logLevel: 'silent' },async (request,reply) => {
+  const callback = async (request: FastifyRequest,reply: FastifyReply) => {
     void reply.header('cache-control','no-store').header('referrer-policy','no-referrer').header('content-security-policy',"default-src 'none'; frame-ancestors 'none'")
     if (!config || !provider) return redirectGoogleResult(reply,'web','login','failed')
     const query = z.object({ state: z.string().min(20).max(200),code: z.string().max(4000).optional(),error: z.string().max(200).optional() }).safeParse(request.query)
@@ -58,7 +66,9 @@ export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.P
     let purpose: 'login' | 'mail' = 'login'
     let claimedHash: string | undefined
     try {
-      const row = (await pool.query(`UPDATE google_oauth_states SET claimed_at=now() WHERE state_hash=$1 AND claimed_at IS NULL AND expires_at>now() RETURNING *`, [digest(query.data.state)])).rows[0]
+      const native = request.routeOptions.url === '/api/v1/google/desktop/callback'
+      const row = (await pool.query(`UPDATE google_oauth_states SET claimed_at=now() WHERE state_hash=$1 AND claimed_at IS NULL AND expires_at>now()
+        AND (desktop_redirect_uri IS NOT NULL)=$2 RETURNING *`, [digest(query.data.state),native])).rows[0]
       if (!row) {
         const previous = (await pool.query('SELECT client,purpose FROM google_oauth_states WHERE state_hash=$1', [digest(query.data.state)])).rows[0]
         return redirectGoogleResult(reply,previous?.client ?? client,previous?.purpose ?? purpose,'expired')
@@ -68,9 +78,10 @@ export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.P
       purpose = row.purpose
       if (query.data.error === 'access_denied') throw new GoogleAccessDenied()
       if (query.data.error || !query.data.code) throw new Error('Invalid authorization response')
-      const tokens = await provider.exchange(query.data.code,row.verifier)
+      const desktopRedirectUri: string | undefined = row.desktop_redirect_uri ?? undefined
+      const tokens = await provider.exchange(query.data.code,row.verifier,desktopRedirectUri)
       if (!tokens.id_token) throw new Error('Missing identity token')
-      const identity = await provider.identity(tokens.id_token,row.nonce,row.purpose === 'login')
+      const identity = await provider.identity(tokens.id_token,row.nonce,row.purpose === 'login',desktopRedirectUri)
       const outcome: GoogleOutcome = await withTransaction(pool,async (db) => {
         if (row.purpose === 'login') {
           let user = (await db.query('SELECT * FROM users WHERE lower(email)=lower($1) FOR UPDATE', [identity.email])).rows[0]
@@ -116,7 +127,9 @@ export function registerGoogleRoutes(app: FastifyInstance, options: { pool: pg.P
       }
       return redirectGoogleResult(reply,client,purpose,denied ? 'denied' : 'failed')
     }
-  })
+  }
+  app.get('/api/v1/google/callback',{ logLevel: 'silent' },callback)
+  app.get('/api/v1/google/desktop/callback',{ logLevel: 'silent' },callback)
   app.post('/api/v1/google/complete',async (request,reply) => {
     void reply.header('cache-control','no-store')
     const body = z.object({ flowId: z.string().min(20).max(200), rememberMe: z.boolean().optional() }).safeParse(request.body)

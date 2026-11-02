@@ -1,5 +1,100 @@
 # `@hasarbotu/desktop`
 
+3 Kasım 2026: **0.1.91 son kararlılık adayı — PARTIAL; ofise yayımlanmadı.**
+Önceki DNS/UDP + CA doğrulamalı LAN mimarisi kaynakta doğrulandı. Masaüstü
+Google girişi için desteklenen Desktop app + Authorization Code/PKCE +
+loopback dönüşü eklendi; public callback masaüstü girişinin zorunlu parçası
+olmaktan çıkarıldı. Ayrı Google Console istemcisi ve gerçek Workspace kabulü
+gerekiyor. Web/saha/Gmail akışları önceki web istemcisini kullanmayı sürdürür.
+Native audience, imza, state, nonce, kurumsal alan adı, kullanıcı onayı ve ilk
+uygulamanın HttpOnly çerezi zorunludur. Token/oturum dış tarayıcıya verilmez.
+Yerel alıcı ayrıca yalnız kendi başlattığı native state'i kabul eder;
+başka istemcinin akışı ve callback tekrarı iletilmez. Sayfa yenileme desteklenir.
+
+Geçici API 502/503/504 yanıtları artık yanlış sunucudan ayrılır; API/veritabanı
+başlangıcı sınırlı otomatik beklemeyi kullanır. Yeniden kullanılan köprü
+soketinde `connect` dinleyicisi birikimi düzeltildi. İlk normal kurulu profil
+Windows oturum başlangıcına kaydolur; sonraki kullanıcı tercihi korunur.
+Sunucu geçişinde kalıcı hashli/korumalı yedek, tam geri alma, port sahipliği
+kontrolü ve PostgreSQL/WinSW için üç restart + dur kurtarma aracı eklendi.
+Yerel proxy arkasında personelin Google giriş kotasını paylaşması, açık ve
+yalnız ilk loopback atlamasına güvenen sunucu ayarıyla giderildi; gateway
+istemci kaynaklı forwarded başlıklarını temizler. Güven varsayılanı kapalıdır.
+Sertifika yenilemede yeniden başlatmadan önceki doğrulama hatası da eski
+etkin yapılandırmayı geri getirir; eski `.previous` dosyasına güvenilmez.
+
+Yerel x64 NSIS: **113.025.530 bayt**;
+SHA-256 `2b726e036084cecf4eb2210e956a150d27e8df5253666ded7977063be6b48e34`.
+Bu paket **izole test CA profilli ve Authenticode imzasızdır**. NSIS içeriği,
+sürüm/x64, 78 UI dosyası ve gerçek paket açılışı doğrulandı. IP/origin override
+olmadan gerçek UDP + CA TLS ile LAN bağlantısı, gateway kesintisinden kurtarma
+ve aynı köprü origin'iyle yeniden açılma geçti; hosts değişmedi. Gerçek Google
+yerine sentetik sağlayıcılı Electron testi ve imzalı JWT birim testi kullanıldı.
+Üretim CA profili/kod imzalama sertifikası olmadan bu paket personele verilmez.
+
+Son doğrulama: tam sürüm kapısı **3.632 başarılı, 0 başarısız, 1 WebKit
+atlanan**; başlangıçta atlanan altı HTTP testi gerçek izole API/PG üzerinde
+ayrıca 6/6 çalıştı. Son native alıcı koruması için köprü **28/28**, Google
+tarayıcı/Electron **11 başarılı + 1 WebKit atlanan** kontrol tekrar geçti.
+49 Node araç test dosyasındaki **270** test tamamlandı; eksik varsayılan
+yükleyiciye takılan yayın entegrasyonu üretilen adayla yeniden geçti. 19 ek
+PowerShell süiti hata vermedi; eksik WinSW yolu sağlanınca gerçek geçici servis
+testi tamamlandı. Dört üretim koşulu ayrıca atlandı: kayıtlı PostgreSQL SCM
+preview'i, gerçek File Agent idempotency'si, File Agent var/API yok senaryosu
+ve gerçek pCloud servis hesabının DB erişimi. Bunlar geçilmiş sayılmadı.
+Typecheck, lint, tam build ve `check:deploy` geçti. Ağ/TLS/Caddy/WinSW/geçiş/SCM
+regresyonları **13/13**, başlangıç/yenileme/rollback PowerShell kontrolleri
+**52/52** geçti. Kaynak sabitlendikten sonraki tam kapı kaydı esas alındı.
+
+Kesin geçiş sırası, ön kontrol/geri alma komutları, dış gereksinimler ve ofis
+kabul listesi [servis README'sindedir](../../deploy/windows-service/README.md#0191-kontrollü-ofis-geçişi-ve-geri-dönüş).
+Gerçek 0.1.90 kurulumu, ofis feed'i, veri, sertifika ve gizli anahtarlar
+değiştirilmedi. Gerçek DHCP/reboot, temiz Türkçe Windows profili, Workspace
+girişi ve eski ofis istemcisinin indirmesi hâlâ ofis kabulü gerektirir.
+
+2 Kasım 2026: **0.1.91 bağlantı mimarisi adayı; ofise yayımlanmadı.**
+Yeni istemci hosts/UAC/IP veya Tailscale hazırlığı çalıştırmaz. Sürüm 2
+profili sabit mantıksal HTTPS origin'i, ofis CA'sı ve ağ keşif parametrelerini
+taşır; paketlemede IP içeren sürüm 1 profili reddedilir. Eski profil okuma
+uyumluluğu korunur, eski IP yönlendirme adayı olarak kullanılmaz. DNS ve
+nonce ile eşleşen yerel UDP adayları yalnız TLS adı/zinciri ve API servis
+kimliği doğrulandıktan sonra seçilir. Ağ değişimi/istek hatası önbelleği
+geçersiz kılar; pozitif kayıt 15 saniye, başarısız keşif beklemesi 2 saniyedir.
+Eşzamanlı istekler tek keşfi paylaşır; başarısız yazma otomatik tekrarlanmaz.
+Başlangıçta geçici erişim için 1/2/4/8 saniye beklenir; sertifika/yanlış
+sunucu hatası Türkçe açıklanır. Köprü portu, Chromium bölümü ve oturum anahtarı
+IP'den bağımsız aynı origin üzerinden korunur; ağın `online` olayı mevcut
+oturumu yeniden doğrular.
+
+Yerel doğrulama (Node 24.22.0, Caddy 2.11.7): geniş sürüm kapısında **3.547
+başarılı, 7 atlanan** test; atlananlar altı isteğe bağlı canlı API testi ve
+Windows'ta desteklenmeyen WebKit senaryosudur. Son değişiklikler için ağ/TLS/
+gerçek WinSW kurtarma **9/9**, başlangıç/sertifika PowerShell fikstürleri
+**33/33**, oturum/UI **32/32**, köprü **24/24**, gerçek Chromium oturum
+kalıcılığı ve sentetik Google sağlayıcısı dahil hedefli masaüstü **38 başarılı,
+1 WebKit atlanan** kontrol geçti. Mevcut olmayan IP'ye Caddy bind arızası gerçek
+ikiliyle yeniden üretildi; wildcard dinleyici aynı testte doğrulandı.
+Typecheck, lint, tam build ve `check:deploy` geçti.
+
+**Yalıtılmış test profilli** 0.1.91 Windows x64 NSIS adayı: 113.023.161 bayt,
+SHA-256 `6181d726c0129f4b247eefef11070eedfbff5c56e7e00c038903d0b281e618d9`.
+NSIS içeriği, paket sürümü ve 78 UI dosyası doğrulandı. Gerçek paket temiz
+profille API origin override/IP/hosts değişikliği olmadan UDP + özel CA TLS
+üzerinden açıldı; HTTPS kesintisinden ve uygulama yeniden başlatmasından sonra
+aynı köprü origin'iyle devam etti. Başlangıç oturum isteği geçici olarak
+başarısız olursa 5 saniyede kontrollü yeniden kontrol edilir; geçerli veya
+gerçekten anonim yanıt alınca sorgulama durur. Bu adayın test sertifikası ofis
+dağıtımında kullanılamaz. Gerçek ofis DHCP/reboot, yeni Windows bilgisayar,
+kurumsal Google hesabı ve eski kurulu istemcinin kimlikli feed/indirmesi
+**doğrulanmadı**; üretim kabulü ve yayın bekliyor.
+
+Bir defalık sunucu kurulumu, sertifika yenileme, DNS/mDNS karşılaştırması,
+güvenlik duvarı, geri alma ve Tailscale'siz uzaktan erişim/Google callback
+ön koşulları [mevcut servis README'sindedir](../../deploy/windows-service/README.md#ip-bağımsız-ofis-bağlantısı-2-kasım-2026).
+Gerçek sunucuya erişilemediğinden üretim CA profili alınmadı ve mevcut
+**0.1.90** manifesti/değişmez paketi değiştirilmedi. Yerel fikstür veya paket
+smoke testi gerçek ofis/Google kabulü yerine geçmez.
+
 31 Ekim 2026: **0.1.90 ofise yayımlandı** (2026-10-31T12:39:33.423Z).
 72ACR013, 07BMH571 ve 34CNK333, kurulu 0.1.89'un gerçek dosya listesinde görünür.
 Kök neden eski konum/pCloud kimliği nedeniyle yönetilen arşivlemedir; 115 canlı dosya
@@ -333,7 +428,7 @@ ayrı animasyon zamanlayıcıları oluşturmaz ve dosya/not işlemlerini değiş
 
 ## Ofis güncellemesi yayınlama
 
-Başlangıçta bağlantı kontrolü ve Windows izin hazırlığı ayrı, scriptsiz bir durum penceresinde gösterilir; bağlantı hazırlığı hataları ve zaman aşımı kullanıcıya açıklanır. Yardımcı konumu 200 ms içinde birleştirilerek asenkron ve atomik kaydedilir; çıkış son kaydı bekler. İmleç karakterden dört karakter genişliğinden uzaktaysa göz takibi 320 ms, yakındaysa 80 ms aralıkla çalışır; gizleme ve azaltılmış hareket sorgulamayı durdurur. API uyumu masaüstü paket sürümünden bağımsız olarak desteklenen `0.0.x` sözleşmesini korur.
+Başlangıçta bağlantı ve TLS kimliği denetimi ayrı, scriptsiz bir durum penceresinde gösterilir; bağlantı hataları ve zaman aşımı kullanıcıya açıklanır. Yardımcı konumu 200 ms içinde birleştirilerek asenkron ve atomik kaydedilir; çıkış son kaydı bekler. İmleç karakterden dört karakter genişliğinden uzaktaysa göz takibi 320 ms, yakındaysa 80 ms aralıkla çalışır; gizleme ve azaltılmış hareket sorgulamayı durdurur. API uyumu masaüstü paket sürümünden bağımsız olarak desteklenen `0.0.x` sözleşmesini korur.
 
 Kullanıcıya yansıyan tamamlanmış değişiklikler doğrulandıktan sonra masaüstü sürümünü artır,
 Windows x64 NSIS kurulumunu üret ve gerçek paketin açılışını doğrula. Yerel derleme veya

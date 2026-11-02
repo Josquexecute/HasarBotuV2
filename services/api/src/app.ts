@@ -72,6 +72,7 @@ export const DEFAULT_BODY_LIMIT_BYTES = 1_048_576
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 
 export interface BuildAppOptions {
+  readonly trustLoopbackProxy?: boolean
   readonly fieldPhotoDirectory?: string
   readonly legislationProvider?: LegalProvider
   readonly desktopReleasesDirectory?: string
@@ -118,8 +119,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   const app = Fastify({
     logger,
-    // Proxy basliklarina guvenilmez; LAN/proxy senaryosu ayri pakettir.
-    trustProxy: false,
+    // Only an explicitly configured local reverse proxy may supply the immediate client address.
+    trustProxy: options.trustLoopbackProxy === true
+      ? (address, hop) => hop === 0 && ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(address)
+      : false,
     bodyLimit: DEFAULT_BODY_LIMIT_BYTES,
     requestTimeout: DEFAULT_REQUEST_TIMEOUT_MS,
     // Istemcinin gonderdigi request-id basligina guvenilmez; Fastify uretir.
@@ -141,7 +144,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerRequestAudit(app,options.auth.pool)
     registerAdministrationRoutes(app,{ pool: options.auth.pool })
     registerTrackingRoutes(app, { pool: options.auth.pool, googleEnabled: options.google !== undefined, automaticSbmEnabled: options.google?.automaticSbmEnabled ?? false })
-    registerGoogleRoutes(app, { pool: options.auth.pool, cookieSecure: options.auth.cookieSecure, ...(options.google ? { config: options.google } : {}), ...(options.googleProvider ? { provider: options.googleProvider } : {}) })
+    registerGoogleRoutes(app, { pool: options.auth.pool, cookieSecure: options.auth.cookieSecure, trustLoopbackProxy: options.trustLoopbackProxy === true, ...(options.google ? { config: options.google } : {}), ...(options.googleProvider ? { provider: options.googleProvider } : {}) })
     registerAuthRoutes(app, options.auth)
     registerAssistantAppearanceRoutes(app, options.auth)
     registerLegislationRoutes(app, { pool: options.auth.pool, ...(options.google ? { encryptionKey: options.google.encryptionKey } : {}), ...(options.legislationProvider ? { provider: options.legislationProvider } : {}) })
