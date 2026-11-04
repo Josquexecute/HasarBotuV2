@@ -49,7 +49,7 @@ async function sampleGestures(withSkin = false) {
       bot.nextBlink = Infinity
       const motion = new AssistantMotion(bot, () => time, () => .5)
       if (kind === 'curious') motion.curious()
-      if (kind === 'stretch') { time = 60000; motion.tick() }
+      if (kind === 'stretch') motion.stretch()
       if (kind === 'drag' || kind === 'release') { motion.press(); motion.drag(-1) }
       if (kind === 'release') {
         for (let i = 0; i < 10; i++) { time += 1000 / 60; bot.update(1 / 60) }

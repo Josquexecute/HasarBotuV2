@@ -1,5 +1,495 @@
 # HasarBotu V2 — Windows servis ve depolama geçiş araçları (D5–D9)
 
+## 4 Kasım 2026 22:38 TRT — günlük istemci yükseldi, genel feed korundu
+
+Kullanıcının Google Desktop, Web/Gmail, Touch, Trafik/Kasko-belge ve sağlıklı
+0.1.90 için verdiği **5/5 PASS** kaydedildi. Korumalı tam profil/kurulum yedeği,
+hash ile geri kopyalama ve aynı kullanıcıyla gerçek profil kopyasında ileri/geri
+runtime kontrolünden sonra günlük kurulum gerçek all-users NSIS ile **0.1.91** oldu.
+Özgün profil ve oturum, 12 yerel ayar/not, Gmail, Touch ve dosya erişimi korundu;
+normal kullanıcı/LAN açılışı ve son yerel kontroller **26/26 PASS**. Sekiz servis
+PID'si, üretim API ve 0075 korundu; DB restore yapılmadı. İstemci rollback gerekmedi.
+Diğer gerçek ofis kurulumlarında imza güveni/sürüm uyumu yönetim erişimi yokluğunda
+doğrulanamadığından **genel 0.1.91 yayın BLOCKED; feed 0.1.90** kaldı. Kimlikli
+manifest/paket boyut/hash kontrolü geçti. Tam kanıt ve geri dönüş sınırları
+[masaüstü README'sinin güncel kaydındadır](../../apps/desktop/README.md).
+
+## 4 Kasım 2026 21:38 TRT — normal kullanıcı kabul kısayolu düzeltildi
+
+**PASS:** masaüstü kısayolu Administrators/SYSTEM-only kabul kanıtı dizinindeki
+EXE'ye bağlıydı; önceki yükseltilmiş testler normal Explorer erişimini ölçmemişti.
+Kaynak/yedek ACL'leri genişletilmedi. İmzalı payload'ın **154 dosyası /
+395.475.590 baytı** birebir hash doğrulamasıyla
+`C:\Users\user\AppData\Local\HasarBotuPilot\app-0.1.91-8ec51bd19e972d9d`
+altına kopyalandı; bu uygulama ağacına yalnız ilgili kullanıcı için Read/Execute,
+SYSTEM/Administrators için FullControl verildi. Aynı masaüstü kısayolu yeni
+EXE'ye yönlendirildi, mevcut ayrı profil korundu. `RunLevel Limited` etkileşimli
+oturumdan gerçek `.lnk`/Windows kabuğu açılışı PASS: hem başlatıcı hem uygulama
+token'ı yükseltilmemiş, **0.1.91 / ready / connected / lan**, imza Valid.
+Pilot açık bırakıldı. Eski kısayol yedeklendi; üretim API/DB/günlük kurulum ve
+0.1.90 feed değiştirilmedi. Korumalı kayıtlar
+`C:\ProgramData\HasarBotu\transition-manager-0191\shortcut-repair-20261104`
+altında; gerçek Google/Touch/belge kabulü ve genel yayın hâlâ bekliyor.
+
+## 4 Kasım 2026 — üretim API geçişi, pilot ve bekleyen kullanıcı kabulü
+
+**PARTIAL:** açık üretim onayıyla görünürlük hotfix'li **0.1.91 API adayı**
+gerçek `DESKTOP-EFN2G33` bilgisayarına dağıtıldı. Üretimde **75 migration**;
+tek yeni migration `0075_google_desktop_loopback`. Günlük **0.1.90 PID 15120**
+ve oturumu korundu. İmzalı **0.1.91 PID 24256**, ayrı profilde
+`ready=true / connected / lan` açık bırakıldı. **Genel feed hâlâ 0.1.90**;
+kurulu günlük uygulama yükseltilmedi. Aşağıdaki eski hazırlık/onay bekleme
+kayıtları kendi tarihlerindeki durumu anlatır.
+
+- **Yedek ve gerçek restore:** önceki korumalı yedeğin **180.427 dosyası /
+  53.325.694.893 baytı** tamamen SHA-256 ile yeniden okundu ve eşleşti.
+  API ve diğer DB bağlantıları durmuşken alınan son dump **36.225.905 bayt**,
+  SHA-256 `c6b45e7e287f3bbdf90a576042438ee78c210c71f52f3ca1be7f614112cd4362`.
+  Bu dump bağımsız **PostgreSQL 17.11** kümesinde gerçekten restore edildi:
+  **134 tablo / 621.770 kayıt**. Veri parmak izi, kanonik 0075 constraint'i,
+  down/reapply, asgari restore rolü ve tüm geçici kaynakların temizliği
+  **7/7 PASS**; makbuz 19:33:18 TRT'de üretildi. Ancak bundan sonra üretimde
+  0075/OAuth/API adımları uygulandı; işçiler açılmadan veri korunması doğrulandı.
+- **Canlı kontroller:** **13/13 üretim**, **9/9 son güvenli durum**,
+  3100/443/3200 sağlık **3/3**, 8443 TLS/401/hostname/CA ve UDP 43110
+  unicast/broadcast **8/8 PASS**. Sekiz servis önceki hesapları ve Auto
+  ayarlarıyla çalışıyor; görev ayarları geri getirildi. İlk `Stop-Service`
+  girişimi çalışan ağ bağımlılıkları nedeniyle değişiklik yapmadan durdu;
+  gerçek sıra file-agent/folder-discovery/network-discovery/office-gateway
+  durdurma → API geçişi → API → gateway/discovery/işçiler olarak düzeltildi.
+  PostgreSQL ve uzak yönetim bağlantısı korundu; ağ yapılandırması değiştirilmedi.
+- **Gerçek 0.1.90 oturumu:** Trafik/Kasko listeleri, üç farklı 34KNC257
+  araması, ayrıntı, sorumlu/şirket/servis referansları, tracking, belge metadata
+  ve konum uçları **13/13 HTTP 200**. 695 dosya / 22 kapsam / 120 sayfalık
+  görünürlük kontrolünde eksik, fazla ve yinelenen kayıt sıfır.
+  `HB0191-KABUL-20261104-*` işaretli iki kontrollü kayıtta oluşturma,
+  idempotent tekrar, kaydetme, yeniden okuma ve eski sürümle yazma reddi
+  **10/10 PASS**; audit kayıtları doğrulandı. Fiziksel klasör atanmayan bu
+  iki kayıt mevcut envanter politikasıyla arşivlendi; silinmedi.
+- **Dosya erişimi:** gerçek ofis uygulaması hesabıyla mevcut pCloud dosyasının
+  **431.097 baytı** okundu, yalnız korumalı kabul kopyası değiştirilip yeniden
+  okundu; kaynak hash'i korundu. Bu teknik dosya I/O kanıtıdır; UI belge
+  açma/indirme/yükleme kullanıcı kabulü **PENDING**.
+- **Google/Gmail:** ayrı gerçek Desktop JSON uygulandı; Web client ID/secret,
+  callback ve token şifreleme anahtarı korundu. Web/Desktop durumları açık,
+  mevcut Gmail bağlantısı connected ve son işçi başarısı **19:52:06 TRT**.
+  Gerçek Desktop/Web girişi ve Gmail yeniden yetkilendirmesi **PENDING**;
+  test e-postası gönderilmedi.
+- **Pilot/paket:** installer ve uygulama imzaları/timestamp/mevcut özel ofis
+  güveni geçerli. Paket **113.055.064 bayt**, SHA-256
+  `8ec51bd19e972d9d9917470c37d391a35ed9373870efede05ba5af985b1788f6`;
+  11 Touch kaynak dosyası ve üç paketlenmiş ana süreç dosyası eşleşti.
+  İlk hata ayıklayıcılı çıkış probu tamamlanmadı; yalnız o tanılama pilotu
+  temizlendi, profili ve günlük uygulama korundu. Probun hata ayıklama kanalını
+  `app.quit()` öncesinde kapatması düzeltildi. **19:59 TRT gerçek ofis normal
+  çıkış/aynı profilden yeniden açılış PASS**: son döngüde zorla sonlandırma yok,
+  Touch konumu korundu, bağlantı yeniden `connected / lan`; ardından **8/8**
+  son kontrol geçti. Bu otomatik teknik kabul, kullanıcı kabulü sayılmadı.
+  Ofis masaüstünde **HasarBotu 0.1.91 Kabul - 4 Kasim**
+  kısayolu aynı ayrı profili açar. Touch plaka/tür/yedi alan/süreç/animasyon
+  kullanıcı kabulü, gerçek profil NSIS yükseltme/geri dönüş ve oturum korunması
+  bekliyor. Önceki otomatik testler korunmuştur; tam suite yeniden çalıştırılmadı.
+- **Rollback/yayın:** bu geçişin en yeni runtime/XML/ACL yedeğiyle salt okunur
+  `would_rollback` önizlemesi PASS. Üretim rollback'i veya DB restore/down
+  uygulanmadı; 0075 yerinde. Önceki feed ve değişmez 0.1.90 installer hash/boyutu
+  korundu. Kullanıcı kabulü ve yükseltme/geri dönüş güvenliği tamamlanmadan
+  **0.1.91 genel feed yayını ve feed üzerinden paket kabulü yapılmayacak**.
+  Önceden mevcut üç `folder_location_identity_unproven` ve altı dead-letter
+  iş korunuyor; geçişin yeni hatası olarak gösterilmedi.
+
+Korumalı kanıt kökü
+`C:\ProgramData\HasarBotu\transition-manager-0191\production-operation-20261104`;
+İlk 28 dosyalı mühür korunmuştur. Güncel **36 dosyalı**
+`final-evidence-manifest.json` SHA-256
+`a768c18359b1dc6ca543ca0700ff814dd69c4340a6bd3c1908d42863e626001e`.
+Son DB/runtime yedeği `run-277dea7485eb4ce3be427dcdce481d07` altındadır.
+İş dosyası yedeği aynı disktedir; bağımsız disk felaket yedeği veya ortak
+atomik DB/dosya kesiti olarak sunulmaz. Gerçek kullanıcı kabulü alınmadı.
+
+## 4 Kasım 2026 — bağımsız restore kabulü v6: teknik GO
+
+**GO: kontrollü geçişin teknik ön kontrolü PASS; uygulama ve gerçek kullanıcı
+kabulü için açık onay bekleniyor.** V6'da açıkça seçilen bağımsız yöntem,
+üretimde ayrı CREATEDB hesabı gerektirmeden aynı restore güvencesini sağlar.
+Varsayılan aynı-küme yolu ve yetki kontrolleri korunur; otomatik fallback yoktur.
+
+`api-transition-restore-evidence.mjs` makbuzu dışarıdan verilen SHA-256 ile
+doğrular. Dump'ın gerçek byte/hash'i, tüm public veri parmak izi, aday API ve
+migration dosyaları, doğrulayıcı/PG araçları, kaynak DB kimliği, tam PostgreSQL
+sürümü, 0075'in kanonik constraint'i ve başarılı temizlik birbirine bağlanır.
+Eksik/bozuk/uyumsuz, 6 saatten eski veya ileri tarihli makbuz reddedilir.
+Eski mühürlü 620.274 kayıtlık kanıt yalnız dump'ı yeniden gerçek restore ile
+doğrulamak için içe alınır; eski PASS etiketi yeni geçişi yetkilendirmez.
+
+Geçici küme aynı **17.11** araçlarıyla yalnız loopback'te, yeni veri dizini ve
+SCRAM kimliğiyle kurulur. Asıl restore, ilk küme superuser'ı yerine ayrı
+**LOGIN CREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS** rolüyle
+çalışır. Üretim rolüne grant/CREATEDB verilmez. Windows initdb'nin daraltılmış
+token'ı korumalı yedek üst dizinlerini okuyamadığından yalnız geçici PGDATA,
+operatörün Temp dizinindeki özel ACL'li klasörde tutulur; yedek/makbuz ACL'leri
+genişletilmez. Test DB, süreç ve bu klasör temizlenmeden PASS üretilmez.
+
+Gerçek ofiste eski dump'ın yeniden doğrulanması ve yeni çevrimiçi, tekrar
+okunabilir **READ ONLY / pg_export_snapshot** yedeği geçti: **134 tablo /
+621.760 kayıt**. 0075, geçerli/geçersiz constraint, down/reapply ve veri
+korunması yalnız klonda doğrulandı. Tam ofis preflight **PASS**; üretim
+**74 migration**, API rolü hâlâ NOSUPERUSER/NOCREATEDB. Hazırlık makbuzu
+gelecekteki dump için PASS sayılmaz: `-Apply` sırasında durmuş API/sıfır diğer
+DB bağlantısı altında alınan **SON dump yeniden gerçek restore edilir**, yeni
+makbuzu/hash'i geçiş kaydına yazılır ve migration öncesi tekrar doğrulanır.
+
+Doğrulama: **52/52 Node testi, 201 PowerShell assertion**, paket/parametre
+iletimi ve modül bozma reddi PASS; ofiste yanlış pin, eksik/eski/eksik sonuçlu
+ve farklı adaylı kanıt **5/5 reddedildi**. Son korunma **13/13**, 8443/43110
+**8/8**, mevcut hotfix'li rollback `would_rollback` PASS. Sekiz servis ve
+0.1.90 PID **15120** korundu; masaüstü `ready=true`. OAuth JSON/staged XML,
+Web/Gmail, mevcut imzalı installer, CA/yayıncı güveni ve yedekler doğrulandı.
+Gerçek kullanıcı oturumu teyidi ve Desktop/Web/Gmail/Touch/dosya kabulü PENDING.
+
+Korumalı kanıt kökü:
+`C:\ProgramData\HasarBotu\transition-manager-0191\restore-evidence-20261104`.
+`evidence-manifest.json`, iki sürümlü restore makbuzu, negatif test sonuçları,
+ön kontrol ve son korunma kaydı buradadır. Güncel operatör ZIP SHA-256:
+`78723a01077a5cbda5e5155460d2281c44db39ca6c221da779979d58e4e614ec`.
+Eski paket/kanıtlar korunur. **Üretim API/migration/feed değiştirilmedi.**
+
+Hazır `C:\HB0191\ready-0191-evidence-plan.ps1` varsayılan salt okunur ön
+kontroldür. Açık bakım onayından sonra, mevcut aşağıdaki işçi/görev durdurma ve
+rollback sırasıyla `-Apply` ve işlem kimlikli `ONAY` kullanılır. Script güncel
+`-RestoreEvidencePath`/`-RestoreEvidenceSha256` çiftini doğrulanmış v6 başlatıcıya
+iletir. Süresi dolarsa açık `-Refresh`, üretimi durdurmadan yeni tutarlı online
+backup/restore yapar; dönen yeni yol/pin doğrulanmış başlatıcıya açıkça verilir.
+Refresh, Apply çalıştırmaz ve eski makbuzu kendiliğinden kabul ettirmez.
+Normal rollback 0075'i yerinde bırakır; iş verisi/profil/dosyalar geri sarılmaz.
+
+**16:47 TRT güncel durum:** 16:35'teki 12/12 korunma kaydından sonra ofis
+Windows'u **16:40:17'de haricen yeniden başladı**. Sistem olayı 1074,
+16:39:50'de `msiexec.exe`/SYSTEM tarafından **Adobe Acrobat (64-bit)** kurulumunu
+tamamlamak için başlatılan yeniden başlatmayı kaydediyor; bu görev başlatmadı.
+16:46 kontrolünde sekiz servis Running, hesapları aynı; API runtime/XML,
+0.1.90 feed/installer, imzalı 0.1.91, CA profili ve yedek hash'leri değişmemiş:
+**12/12 teknik bütünlük PASS**, sağlık **3/3**, yeniden başlatma sonrası
+8443/43110 **8/8 PASS**. 0.1.90 yeni PID **15120** ile yeniden açılmış;
+eski PID 29296 ve kesintisiz oturum artık güncel sonuç olarak sunulmaz.
+Gerçek kullanıcı oturumu kabulü **PENDING**. `postboot.json` ve ayrı
+`postboot-evidence-manifest.json` önceki mühürlü kanıtı korur.
+Geçiş hâlâ **NO-GO: ayrı restore kimliği/onay bekliyor**; üretim geçişi yok.
+
+## 4 Kasım 2026 16:36 TRT — son güvenli hazırlık
+
+**NO-GO: mevcut otomatik geçişin tek teknik engeli ayrı restore kimliği.**
+0075 için API rolünün nesne/migration/yedek okuma yetkileri yeterli;
+SUPERUSER/CREATEDB gerekmiyor. Araç restore bağlantısının host/portunu üretimden
+türettiği için aynı kümede `_test` DB oluşturacak ayrı `LOGIN CREATEDB
+NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS` ve `postgres` CONNECT
+kimliği bekliyor. Bu, PostgreSQL migration şartı veya tespit edilmiş kurum
+politikası değil, mevcut aracın kabul kapısıdır; kaldırılmadı.
+
+Desktop JSON ofiste `C:\Users\user\Desktop\HasarBotu-0191` içinde bulundu.
+Doğrulanan public client ID
+`381755684519-cmpanoe12km90gbi7kk7ciu7pg45cds7.apps.googleusercontent.com`,
+tür `installed`/Desktop app; Web istemcisinden ayrı, Google uçları geçerli,
+secret mevcut. Korumalı `api-0191-staged.xml` import/config/DB salt okunur
+kontrolünden geçti; Web ID/secret/callback ve token şifreleme anahtarı korundu.
+Üretimde Desktop ayarı henüz etkinleştirilmedi.
+
+19 atlanan Google DB testi Node **24.22.0**, izole PostgreSQL **18.4** ile
+**19/19 PASS**; test kümesi kapalı. Önceki 17.11 restore/rollback kanıtı
+**22/22** hash/boyut eşleşti. Ayrıca **16:10 TRT yeni gerçek yedek** bağımsız
+17.11/127.0.0.1:55591 kümesinde restore edildi: **134 tablo / 620.274 kayıt**,
+tüm tablo SHA-256'ları, 0075/constraint, eski-yeni API health/401 ve klonda
+down/reapply **8/8 PASS**; küme kapatıldı. Bu, canlı aynı-küme yetkisi değildir.
+Provanın toplamı **78,6 saniye**; üretim kesinti taahhüdü değildir.
+
+Eski API adayı bugünkü görünürlük hotfix'ini içermiyordu. Güncel kaynaklardan
+ayrı paket üretildi: runtime ZIP SHA-256
+`9e62d8946d4615d3739f9b3fc15f23539225404463e7ebfdb43d5a0dab0f7c08`;
+6.967 dosya doğrulandı, iki hotfix JS dosyası üretimle birebir aynı.
+Yeni operatör paketinde yalnız runtime manifest hash'i ve iki aday dizin
+sabiti güncellendi; restore/onay/yol sınırı kontrolleri korundu. Paket bozma
+reddi ve başlatıcı kontrolleri PASS; tam ofis preflight yalnız
+`RESTORE_ADMIN_CREDENTIAL_REQUIRED` ile durdu. Eski paketler korundu.
+
+İmzalı 0.1.91 aynı **113.055.064 bayt / 8ec51bd1…1788f6** paketidir;
+installer/uygulama imzası, timestamp, mevcut yerel yayıncı güveni ve ofis CA
+profili eşleşti. 8443/43110 **8/8**, son üretim korunması **12/12 PASS**:
+sekiz servis PID/hesabı, API runtime/XML, gerçek 0.1.90 PID 29296,
+74 migration, feed ve 0.1.90 installer korundu. Sağlık **3/3 HTTP 200**.
+
+Korumalı hazırlık/yedek kökü:
+`C:\ProgramData\HasarBotu\transition-manager-0191\production-ready-20261104`.
+**180.427 dosya / 53.325.694.893 bayt** içerik hash'iyle kopyalandı; manifest,
+tekillik, kapsam, sayım/boyut tekrar doğrulandı. API'nin **5.923 dosyalı** güncel
+runtime/XML/ACL snapshot'ı, servis/görev/OAuth/CA yapılandırmaları, iş dosyaları,
+masaüstü profili ve 0.1.90 kurulum/feed kopyası mevcut. DB dump ve tablo
+kanıtları ayrıca `database-snapshot` altında sabitlendi. Erişim yalnız
+Administrators/SYSTEM. Dosyalar VSS anlık görüntüsüdür; çalışan profil uygulama
+kapalıyken alınmış sayılmaz, DB/dosya yedeği ortak atomik kesit değildir ve
+aynı diskteki bu kopya disk kaybına karşı bağımsız yedek değildir.
+Normal API rollback'i iş verisini/dosyaları geri sarmaz. Önceki VSS korundu;
+yalnız bu kopyalama için oluşturulan geçici gölge kaldırıldı.
+
+**Onay sonrası kesin sıra:** ayrı restore kimliğiyle
+`C:\HB0191\ready-plan-20261104.ps1 -RestoreAdmin` ön kontrolünü tamamla.
+Kullanıcının açık bakım onayından sonra yeni iş alımını durdur; çalışan dosya
+işleri tamamlanmadan ilerleme. Kaynak yenileme/yedek/görsel işçi görevlerinin
+durumlarını koruyup bakımda yeniden başlamalarını önle; dosya işçisini ve
+`hasarbotu-folder-discovery` servisini durdur. API bu aşamada çalışır kalmalı:
+başlatıcının son preflight'ı çalışan servisi gerektirir. PostgreSQL, mevcut
+443/8443/43110 ve gerçek 0.1.90 süreci çalışır kalır. `Quiescent` sıfır diğer
+DB bağlantısını doğrulamalı. Aynı başlatıcının `-RestoreAdmin -Apply` ve işlem
+kimlikli `ONAY` kapısından; yöneticinin API'yi durdurması → `Quiescent` →
+güncel API/XML/ACL + DB yedeği → son dump'ın
+aynı kümede restore/0075 provası ve temizliği → Desktop OAuth → yalnız 0075 →
+veri parmak izi/şema doğrulaması → güncel API atomik dağıtımı → API başlatma/
+health/OAuth kontrolü sırasını uygula. Görev/işçileri eski durumlarında aç.
+Yazıcıları sakinleştirme ve API stop zamanını, sağlıkla yeniden açılma zamanını
+kaydet; kesinti bu işlemler arasındadır. Ortak DB/dosya kesiti gereken felaket
+kurtarma için ayrıca tüm dosya/senkronizasyon yazıcıları durdurularak son dosya
+snapshot'ı alınmalı; yönetici bunu otomatik yapmaz. Build/53 GB ilk kopyalama bakım
+dışında bitti; kalan işlemler ölçülmeden sabit dakika sözü verilmez.
+
+**Rollback:** yeni iş alımını yeniden durdur, API'yi durdur; geçiş makbuzundaki
+en yeni doğrulanmış API runtime/XML/ACL yedeğini geri alıp API'yi başlat,
+health/Web/Gmail/0.1.90 oturumunu doğrula, işçileri/görevleri eski durumuna
+getir. Şimdiki hotfix'li fallback için yukarıdaki kökte
+`rollback-current-api.ps1` varsayılan hash kontrollü `would_rollback`
+önizlemesidir; durmuş API ve açık `-Apply` gerekir. 0075 yerinde kalır;
+normal rollback'te DB restore/down veya kullanıcı profili/dosyası üzerine
+kopyalama yapılmaz. DB/dosya kurtarması ayrıca yetkili felaket kurtarma işidir.
+
+**Aynı bilgisayarda üç kullanıcı kabulü:** geçişten sonra
+`C:\HB0191\ready-acceptance-20261104.ps1 -Start` ayrı profili açar; mevcut
+0.1.90 profili/çerezleri kullanılmaz. (1) Kurumsal Desktop + ayrı tarayıcı Web
+girişi ve yetkili Gmail yeniden bağlama/işçi başarısı. (2) Gerçek Trafik/Kasko,
+34KNC257 görünürlüğü, Touch plaka/tür/yedi alan/etkileşim. (3) Yetkili bir
+belgeyi aç/indir; kullanıcıca seçilmiş kabul kopyasında dosya işlemi ve audit/
+disk içerik doğrulaması. Gerçek profil NSIS yükseltmesi/oturum korunması bu
+yan yana pilotla tamamlanmış sayılmaz; yayından önce ayrı kabul gerekir.
+Feed **0.1.90**; üretim değişimi, kurulum ve yayın uygulanmadı.
+
+## 4 Kasım 2026 15:37 TRT — tek bilgisayarlı ofis kabulü
+
+**Geçerli mimari:** API ve günlük kullanılan 0.1.90, aynı
+`DESKTOP-EFN2G33` Windows bilgisayarındadır. Codex ev bilgisayarından SSH ile
+bu makineye bağlanır. `INDEPENDENT_OFFICE_PILOT_REQUIRED`, bağımsız bilgisayar
+isteyen tanının ön koşul reddidir; ağ testi çalışmamıştır, ağ arızası değildir.
+Önceki ayrı istemci erişim engelleri bu tek bilgisayarlı LOCAL pilotun engeli değildir.
+
+| Kabul | Güncel sonuç |
+| --- | --- |
+| 34KNC257, gerçek 0.1.90 kullanıcı ekranı | **USER ACCEPTANCE PASS** — kullanıcının bu oturumdaki teyidi; önceki PENDING kaydını günceller |
+| LOCAL API/443/saha sağlığı | **3/3 PASS**, HTTP 200 |
+| LOCAL 8443 TLS ve UDP 43110 | **8/8 PASS**: loopback/Ethernet TLS, servis kimliği, 401, yanlış hostname/CA reddi, nonce/origin/port eşleşen unicast/broadcast, geçersiz discovery reddi |
+| LOCAL 0.1.91, ayrı boş profil | **PASS teknik açılış**: `ready=true`, `outcome=connected`, `route=lan`; gerçek 0.1.90 PID 29296 korundu, yalnız pilot kapatıldı |
+| LOCAL imza güveni | **PASS**: yükleyici ve çıkarılmış uygulama Valid/zaman damgalı; aynı makinenin mevcut Root/TrustedPublisher güveni, yeni güven kurulmadı |
+| PostgreSQL 17.11 / 0075 | Salt okunur: **74 migration, 0075 yok**; API rolü ilgili nesnenin sahibi ve migration geçmişine INSERT yetkili, SUPERUSER/CREATEDB gerekmiyor |
+| Google Desktop / Web | Desktop **BLOCKED: yapılandırılmamış**; Web yapılandırması açık, gerçek yeni Desktop/Web girişi **PENDING** |
+| Gmail | Mevcut bağlantı connected, son işçi başarısı 15:36:35 TRT; yeniden yetkilendirme/kullanıcı kabulü **PENDING** |
+| Touch | **40 React + 78 animasyon/tarayıcı testi PASS**; tarayıcı testi ayrıca 6 Trafik/Kasko-pencere/DPI düzeninde yeniden geçti; gerçek kullanıcı iş akışı **PENDING** |
+| Bağımsız istemci / Tailscale kapalı dış LAN | **NOT RUN / PENDING**, LOCAL sonuçlar yerine kullanılamaz |
+
+Ek 20 masaüstü bağlantı/profil/OAuth ve 20 Google sözleşme testi geçti:
+toplam **158 ayrı test PASS**. `TEST_DATABASE_URL` bulunmadığından 19 Google
+DB entegrasyon testi **SKIPPED**; gerçek Workspace kabulü sayılmadı.
+Başlangıç/son karşılaştırması **11/11 PASS**: sekiz servis ve API PID/runtime/XML,
+hosts, gerçek 0.1.90 ana süreci, 74 migration, feed ve değişmez installer korundu.
+Sabahki baseline'a göre runtime farkı önceki dosya görünürlüğü hotfix'inden gelir;
+bu turun başlangıç/son runtime hash'i aynıdır. Üretim/DB/feed/ağ ayarı değiştirilmedi;
+kurulum, yeniden build, yayın veya gerçek oturum kopyalama yapılmadı.
+Önceki izole PostgreSQL 17.11 restore'un 22 kanıtı korundu; prova tekrarlanmadı.
+Kanıtlar `.local/single-host-acceptance-20261104/` altındadır.
+
+## 4 Kasım 2026 — 0.1.90 dosya görünürlüğü hotfix'i
+
+34KNC257 (Kasko, 2026/740) fiziksel olarak `_EKSİK DOSYALAR` → `Ekim 2026`
+taşınmıştı. İşaretsiz eski workspace'in 46 izlenen belgesinden 30'u eksik,
+ikisi farklı olduğundan otomatik içerik doğrulaması taşımayı reddetmiş; eski
+konuma bakan envanter 11:06 TRT'de `is_archived=true` yapmıştı. Aynı tekil vaka,
+güncel pCloud klasör kimliği ve 14 ayrı belge SHA-256 eşleşmesiyle mevcut
+`reviewed_recreation` mekanizmasından onarıldı. Sorumlu/eksper ve iş verisi korundu.
+Yalnız keşif servisi yeniden başlatılarak belirsiz taşımalarda görünürlüğü koruyan
+denetim ve beş dakikalık salt okunur liste bütünlüğü kontrolü devreye alındı.
+
+14:33 TRT kimlikli gerçek API: üç plaka biçiminde tek sonuç ve detay 200;
+698 görünür vaka, 22 kapsam, 122 sayfa; kayıp/mükerrer/sayım/normalizasyon farkı 0.
+863 kayıt ve fiziksel envanter kontrolünde diğer 165 arşiv açılmadı: 131'inin ofis
+adayı yok, 34 aday başka vakanın kayıtlı kimliğine ait. Görünür üç eski workspace'in
+bulut kimliği bağlama uyarısı sürüyor; bunlar gizlenmedi veya otomatik birleştirilmedi.
+236 ilgili API/içe aktarma/izleme/UI/arka plan testi geçti; API build/typecheck,
+değişen kaynakların lint'i ve metin kontrolü geçti. Gerçek 0.1.90 istemci kabulü
+**USER ACCEPTANCE PASS**: kullanıcı 34KNC257'nin gerçek uygulamada göründüğünü
+teyit etti. Önceki inspector erişim engeli bu kullanıcı teyidini geçersiz kılmaz;
+API bakım oturumu tek başına istemci kabulü sayılmadı. Feed/installer hash'leri ve
+0.1.90 korundu; 0.1.91 yayımlanmadı.
+
+Korumalı yedek ve hash doğrulamalı rollback önizlemesi:
+`C:\ProgramData\HasarBotu\office-management\case-visibility-20261104`.
+`rollback-hotfix.ps1` varsayılan salt okunur önizleme, `-Apply` yalnız keşif kodunu
+geri alır; onarılan vaka verisini geri bozmaz. Canlı rollback uygulanmadı.
+
+## 4 Kasım 2026 gerçek ofis incelemesi
+
+13:17 TRT: **PARTIAL; ayrı istemci FAIL (erişim BLOCKED), üretim/feed 0.1.90**.
+Mevcut anahtar ve doğrulanmış host kimliğiyle SSH yalnız sunucuda çalışıyor.
+Üç kayıtlı çevrimiçi istemcide 22/5985/5986 uçlarına tek deneme: **9/9 TIMEOUT**;
+uzak kimlik doğrulama denenmedi. Yerel `sky.list_windows()` çağrısı
+`Computer Use native pipe is unavailable ... os error 2` verdi. RustDesk
+Running, kendi `query`/`query_service` pipe'ları mevcut; hata yerel otomasyon
+köprüsünde, RustDesk bağlantı başarısının kanıtı değil. Önceki RustDesk
+günlüklerinde `Connection secured` ardından `before login` mesajları var;
+başarılı uzak giriş yok. Yerel native köprünün sağlanamama nedeni kesinleşmedi;
+helper elle başlatılmadı, aktif oturum/servisler kesilmedi ve başarısız bağlantı
+döngüsü yapılmadı. Sunucunun mevcut boot'u 10:57:11 TRT, console oturumu
+10:57'den beri Active; bu işlemde reboot/DHCP testi yapılmadı.
+Son kontrolde `.102 → .108:443` oturumu ve yeni iki servis Running;
+bu kayıt 8443/UDP ayrı istemci kabulü değildir. Aynı tur boyunca üretim
+PID'leri, hesapları ve başlangıçları; hosts hash'i
+`ee73b0a307549025d72a9161f5659dcf018cca14d53863921ba2f750a77a3188`,
+eski `.100` eşlemesi, API runtime/XML ve 0.1.90 feed/paket korundu.
+Sağlık **3/3 HTTP 200**. Salt okunur DB: **74 migration**, 0075 yok;
+API rolü ilgili nesnenin sahibi ve migration geçmişine INSERT yetkili,
+SUPERUSER/CREATEDB değil. Web OAuth açık, Desktop OAuth kapalı.
+Mevcut Gmail işçisinin 13:16 TRT başarısı yeni kullanıcı/Gmail kabulü sayılmaz.
+0.1.91 adayının 113.055.064 bayt/SHA-256/imzası ve zaman damgası geçerli;
+güven yalnız mevcut yönetilen makinelerde, ayrı istemcide henüz doğrulanmadı.
+Canlı restore kimliği engeli açık; önceki izole restore tekrarlanmadı.
+Touch kaynakları, ağ kurulumu ve feed değiştirilmedi. Yeni kanıtlar
+`.local/client-acceptance-20261104/` altında.
+
+### Gerçek istemci için kısa pilot prosedürü
+
+1. **Tamamlandı — LOCAL:** aynı ofis bilgisayarında API/8443/UDP ve imzalı
+   0.1.91 teknik açılışı doğrulandı. Mevcut 0.1.90'ı kapatma/yeniden kurma;
+   `C:\Users\user\AppData\Roaming\@hasarbotu\desktop` profilini ve çerezlerini
+   pilot profiline kopyalama. SSH/Tailscale yönetim bağlantısını açık tut.
+2. **Eksik insan/operasyon ön koşulu:** ayrı Google **Desktop app** istemcisinin
+   korumalı JSON'unu sağla. Üretim değişikliği için ayrıca yetkilendirilmiş bakım
+   penceresinde mevcut yedek/geri dönüş kapılarıyla 0075 + aday API + Desktop OAuth
+   yapılandırmasını uygula; mevcut Web/Gmail ayarlarını koru. Bu görev üretim
+   değişikliğini yasakladığından bu adım uygulanmadı. Mevcut geçiş yöneticisinin
+   aynı-küme restore provası ayrı restore yetkili kimlik ister; API rolüne
+   SUPERUSER/CREATEDB verme. Önceki izole prova bu araç kapısını otomatik kapatmaz.
+3. **Hazır pilot:** aynı bilgisayardaki
+   `C:\HB0191\single-host-acceptance-20261104\launch-pilot.ps1` varsayılan
+   salt okunur ön kontroldür; çalıştırıldı ve tam iki engel verdi:
+   `MIGRATION_0075_NOT_APPLIED`, `DESKTOP_OAUTH_DISABLED`.
+   Koşullar sağlanınca ofisin etkileşimli oturumunda aynı betiği `-Start` ile
+   çalıştır; aday NSIS'ten çıkarılmış uygulamayı ayrı
+   `C:\HB0191\single-host-acceptance-20261104\pilot-profile-20261104T123508Z`
+   profiliyle açar. Gerçek 0.1.90 kurulumu/profili ve feed kullanılmaz/değiştirilmez;
+   bu yan yana pilot NSIS yükseltme/rollback kabulü değildir.
+4. **Gerçek kullanıcı kabulü PENDING:** ayrı profilde kurumsal Google Desktop
+   girişi; Web dönüşü ve Gmail yeniden yetkilendirme; Trafik/Kasko, yedi süreç
+   alanı ve Touch etkileşimleri. Gmail yeniden bağlama ortak ofis bağlantısını
+   etkileyebileceğinden yetkili operatörün kontrollü kabulünde yapılmalıdır.
+   Gerçek oturumla yükseltme/rollback ayrıca planlanır; çalışan 0.1.90 üzerinde
+   denenmedi. Bu oturumda feed ve üretim değişmez; genel dağıtım yapılmaz.
+5. **Ayrı test — bağımsız/Tailscale'siz LAN: NOT RUN/PENDING.** İleride başka
+   fiziksel ofis Ethernet istemcisi sağlandığında mevcut
+   `.local/client-acceptance-20261104/pilot-tools.zip` içindeki tanıyı orada
+   `--computer <ad> --source <Ethernet-IPv4>` ile çalıştır. Gateway MAC'i
+   `B4-7C-A6-34-6D-57`, güncel sunucu IP'si `.108`, Tailscale yalnız ayrı
+   test istemcisinde kapalı olmalı. Ev LAN'ı aynı `/24` olsa da ofis LAN'ı değildir.
+   Araçtaki aynı-makine engelini kaldırma; yedi kontrol ve o istemcide imza güveni
+   geçmeden bu teste PASS yazma. Bu test LOCAL pilotun ön koşulu değildir.
+
+10:47 TRT güncellemesi: **PARTIAL; kalıcı 8443/43110 kuruldu, gerçek 0.1.91
+istemci kabulü ve yayın BLOCKED**. Sunucuda WireGuard yok; varsayılan rota
+Ethernet `192.168.1.108/24 → 192.168.1.1`. WireSock rotası geliştirme
+bilgisayarındadır. İki Ethernet 1 Gbps; kendi gateway ARP'leri başarılı,
+gateway'ler farklı: ofis ZTE `B4-7C-A6-34-6D-57`, geliştirme Keenetic
+`50-FF-20-9D-0D-C6`. Aynı `/24`, ortak yayın alanı değildir; karşı uç için
+kaynak Ethernet IP'siyle `SendARP` iki yönde `ERROR_67` verir. Sunucu kendi
+`.102/.104/.150` komşularını çözer. Gerçek `.150 ↔ .108:443` trafiği yalnız
+Realtek Ethernet sayaçlarında 35 saniyede **28 Rx / 30 Tx** olarak doğrulandı;
+paket içeriği yakalanmadı. Son kontrolde `.102` ve `.150` için 443 oturumları
+da vardı. Geliştirme→ofis ARP başarısızlığı ayrı yerel ağlar/adres çakışmasıdır;
+genel sunucu kablo arızası, sunucuda VPN rotası veya firewall engeli değildir.
+Switch portu/VLAN yönetim yapılandırmasına erişilmedi; kesin fiziksel topoloji
+ve istemciye özgü izolasyon doğrulanmış sayılmaz.
+
+`hasarbotu-office-gateway` ve `hasarbotu-network-discovery` **Running,
+LocalSystem, gecikmeli Automatic**; mevcut CA/profil korundu, eski 443/API
+yeniden başlatılmadı. Public Ethernet için yalnız `192.168.1.0/24`, ilgili
+program ve 8443/TCP veya 43110/UDP kapsamlı iki ek kural oluşturuldu. Önceden
+kapalı üç firewall profili ve Public ağ profili değiştirilmedi; kapalı
+firewall üzerinde bu kurallar etkin filtreleme sağlıyor diye kabul edilmedi.
+TLS sağlık, 401 reddi, yanlış hostname reddi, nonce/origin keşfi ve geçersiz
+keşif reddi **6/6**; bunlar **aynı sunucu** kontrolleridir. Ayrı geliştirme
+istemcisinden 8443 TLS/200 ve 401 **2/2**, yalnız Tailscale üzerinden geçti.
+Gerçek ağ rollback'i yeni servis/port/kural/görevi kaldırdı, altı üretim PID'si
+korundu; yeniden kurulum ve yalnız iki yeni servisin stop/start kontrolü geçti.
+SCM politikası yalnız bu ikisi için doğrudan API'den **10/30/60 → none**
+olarak doğrulandı; ayrı recovery receipt'i ve birleşik rollback önizlemesi var.
+
+İki kayıtlı RustDesk istemcisinde güvenli taşıma kurulsa da giriş tamamlandığı
+doğrulanamadı; bilgisayar kullanım köprüsü reset sonrası da `native pipe
+unavailable`. Ayrı istemcide komut çalıştırma, 8443/43110 LAN kabulü,
+Tailscale'siz Google/Gmail/Touch ve gerçek yükseltme/geri alma **BLOCKED**.
+Sunucunun hosts dosyasında eski `.100` eşlemesi bulundu; değiştirilmedi.
+Bağımsız geri dönüş yolu olmadığından reboot/DHCP değişikliği yapılmadı;
+servis stop/start, reboot kabulü değildir. 0.1.90 feed/paket, API runtime/XML,
+altı üretim PID/hesabı ve **3/3 HTTP 200** korundu. DB **74 migration**;
+0075 ve canlı DB yazımı yok, ayrı yönetici engeli açık, izole restore'un
+**22/22** mühürlü kanıtı korundu. Touch kaynakları ve feed değiştirilmedi.
+Kanıtlar `.local/lan-investigation-20261104` ile sunucuda korumalı
+`transition-manager-0191\lan-investigation-20261104` altında; sonuncudaki
+`rollback-final-network.ps1` varsayılan olarak yalnız önizler. Özel anahtar
+ve anahtar içeren rollback receipt'leri istemciye indirilmedi.
+
+Önceki 10:07 TRT kaydı: **PARTIAL; kalıcı ağ kurulumu ve 0.1.91 yayını BLOCKED**.
+`hasarbotu-office-gateway`/`hasarbotu-network-discovery` mevcut değil;
+8443/43110 boşluğu önceki geçici süreçlerin temizlenmesiyle uyumlu, servis çökmesi değil.
+Mevcut araçla kurulum dry-run'ı, gerçek ofis CA/sertifika/hostname ve Caddy
+doğrulaması geçti. Hazırlık dizininin gerçek korumalı yedeğiyle rollback
+**önizlemesi** geçti; kalıcı kurulum/servis rollback'i uygulanmadı.
+Üç hazırlık `.key` dosyasının sahibi kullanıcıydı ve koruma denetimi
+`NETWORK_BACKUP_OWNER_UNTRUSTED` veriyordu; yalnız bu dosyaların sahiplik/ACL'si
+mevcut koruma aracıyla Administrators/SYSTEM olarak düzeltildi. Önceki ACL'ler
+kaydedildi, içerik/hash ve CA değişmedi. Planlanan yeni servisler WinSW'nin
+LocalSystem hesabını kullanır; çalışma anındaki hesap kabulü kuruluma bağlıdır.
+
+Sunucunun Ethernet'i `192.168.1.108/24`, **Public**; Windows firewall Domain,
+Private ve Public profilleri önceden **kapalı**. Kurulumun Domain/Private,
+LocalSubnet kuralları bu aktif Public ağ için yeterli koruma sağlamaz.
+Mevcut 443/3100/3200/SSH erişimini etkileyebilecek genel firewall/profil değişikliği yapılmadı.
+Geliştirme bilgisayarında `192.168.1.108` için seçilen rota WireGuard'dır;
+`192.168.1.123` kaynak adresi zorlandığında Ethernet rotası seçilse de ARP
+çözülmüyor ve çalışan **443** bile 4 saniyede zaman aşımına uğruyor.
+Aynı üretim HTTPS'i Tailscale adresinde doğrulanmış TLS ile **HTTP 200**.
+İki `192.168.1.1` ağ geçidinin MAC'leri farklı; aynı adres öneki ortak LAN
+kanıtı değildir. Bu bulgular geliştirme→ofis yolundaki problemi yeni portlardan
+ayırır; farklı ağ/izolasyonun kesin topolojisi doğrulanamadı. Gerçek ayrı
+istemci LAN yolu ve uygulanabilir firewall politikası doğrulanmadan kalıcı kurulum yapılmadı.
+
+SSH'de doğrulanmış tek host sunucudur. RustDesk kayıtlarında çevrimiçi Tailscale
+ofis istemcileriyle eşleşen adlar bulundu; ancak bilgisayar kullanımı bağlantısı
+iki deneme ve yeniden başlatma sonrasında `native pipe unavailable` verdi.
+Ayrı istemci oturumu doğrulanmadı; kayıtlı bağlantı yetkisi yok sayılmadı,
+kimlik doğrulama atlatılmadı. Tailscale'siz LAN, gerçek Desktop/Web/Gmail onayı,
+Trafik/Kasko/Touch/animasyon ve gerçek 0.1.90→0.1.91→rollback **BLOCKED**.
+Mevcut Gmail işçisinin 07:04:35 UTC başarısı yeniden bağlama kabulü değildir.
+
+Canlı PostgreSQL 17.11 salt okunur kontrolde **74 migration**; 0075 uygulanmadı.
+API rolü ilgili nesnenin sahibi ve migration geçmişine INSERT yetkili,
+SUPERUSER/CREATEDB değil. Ayrı CREATEDB hesabı, `api-transition-database.mjs`
+`ValidateBackup` adımının **aynı canlı kümede** `hb0191_restore_*_test` oluşturup
+dump restore/0075/şema doğrulamasından sonra DROP yapabilmesi için gereklidir;
+0075'in üretimde ALTER yetkisi veya ayrı bir kurumsal DBA politikası değildir.
+Bu hesap sağlanmadığından aynı-küme araç kabulü BLOCKED; kapı atlanmadı.
+Önceki izole 17.11 restore/0075 kanıtlarının **22/22** hash/boyutu korundu
+(134 tablo/615.008 kayıt); bunlar canlı DBA erişimi veya yeni restore sayılmaz.
+
+Altı üretim servisi, PID/hesap/başlangıçları, API runtime/XML, 0.1.90 manifesti
+ve değişmez paket hash/boyutu korundu; 3100/443/3200 **3/3 HTTP 200**.
+İmzalı 0.1.91, 113.055.064 bayt ve `8ec51bd19e972d9d9917470c37d391a35ed9373870efede05ba5af985b1788f6`,
+yalnız mevcut özel güven verilmiş makinelerde Valid; genel Windows/SmartScreen/SAC
+kabulü değildir. Feed ve güven kapsamı değişmedi. İşlem kaynaklı üretim DB/kullanıcı
+dosyası yazımı yok. Kanıtlar `.local/office-acceptance-0191` ve sunucuda korumalı
+`C:\ProgramData\HasarBotu\transition-manager-0191\office-acceptance-20261104` altında;
+özel anahtar içeren sunucu yedeği istemciye indirilmedi.
+
 ## IP bağımsız ofis bağlantısı (2 Kasım 2026)
 
 Yeni bağlantı yolu: masaüstü → doğrulanmış LAN HTTPS (`8443/TCP`) →
@@ -148,6 +638,339 @@ ayrıca gereklidir. Gerçek Workspace hesabı/Console kaydı bu ortamda sınanma
 Google'ın [masaüstü PKCE/loopback rehberi](https://developers.google.com/identity/protocols/oauth2/native-app)
 ve [kimlik doğrulama kuralları](https://developers.google.com/identity/openid-connect/openid-connect)
 bu istemci türünü ve doğrulama gereksinimlerini açıklar.
+
+### 0.1.91 otomatik operatör yöneticisi
+
+4 Kasım son kabulde canlı PostgreSQL 17.11 **salt okunur** incelendi:
+`hasarbotu_app` DB/0075 hedef nesnesinin sahibi, migration geçmişine INSERT
+yetkili; SUPERUSER/CREATEDB/CREATEROLE değil. **0075 için canlı superuser
+gerekmiyor.** Ayrı restore kimliği, mevcut kabul aracının aynı kümede rastgele
+`hb0191_restore_*_test` DB oluşturması için teknik koşuldur; ayrıca bir
+kurumsal DBA zorunluluğunu gösteren politika bulunmadı. Önceki bağımsız
+17.11 restore başarısı canlı yönetici erişimi olarak sunulmaz; araç kapısı
+kaldırılmadı. Mevcut yetkili bağlantılarla ayrı kimlik doğrulanamadı:
+`LOCAL_ADMIN_AUTH_UNAVAILABLE`; SCRAM/HBA/parolalar ve roller değişmedi.
+
+Bu araç için gereken asgari ayrı DBA tarafından sağlanan rol:
+`LOGIN CREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS`, mevcut
+SCRAM kuralıyla loopback bağlantısı ve `postgres` bakım DB'sine CONNECT.
+Oluşturduğu test DB/nesnelerinin sahibi olarak restore/migration/drop yapar;
+`--no-owner --no-privileges` kullanılır, üretim nesnelerine ek yetki gerekmez.
+CREATEDB küme genelindedir; isim önekiyle sınırlandırılmış bir PostgreSQL
+yetkisi değildir. API rolüne verilmez. Bu ayrım [PostgreSQL 17 rol
+kurallarıyla](https://www.postgresql.org/docs/17/sql-createrole.html) uyumludur.
+Son kontrolde canlı DB 74 migration'da, üretim 0.1.90; hiçbir migration,
+restore, kullanıcı dosyası/hesabı değişikliği veya feed yayını yapılmadı.
+Yeni imzalı aday, LAN başarısızlığı, pilot erişim engeli ve üretim korunması
+[masaüstü README'sinde](../../apps/desktop/README.md) kayıtlıdır.
+
+4 Kasım sıfır maliyetli takipte üretim korunuyor: altı servis Running, üç sağlık
+kontrolü HTTP 200; API PID/runtime/XML ve 0.1.90 feed/paket hash'leri değişmedi.
+17.11 yalnız SCRAM kullanıyor, servis hesabı NetworkService. API DB/ilgili nesne
+sahibi ve 0075 nesne yetkilerine sahip; ek SUPERUSER/CREATEDB verilmedi.
+Ayrı yetkili yönetici bağlantısı bulunamadı. 4 Kasım 00:00 UTC günlük yedeğinin
+134 tablo, 35.778.654 bayt, hash/tam arşiv çözümlemesi geçti; önceki başarılı
+restore/rollback kanıtları korundu, yeni dump restore edilmiş sayılmadı.
+Canlı DB 74 migration'da. İmzalı 0.1.91 adayının ofiste ayrı profilli teknik
+açılışı geçti; rota remote, gerçek kullanıcı ve ayrı LAN kabulü bekliyor.
+Geçici 8443/43110 süreç/kuralları kaldırıldı. İmza, yenileme/geri alma ve tam
+kabul sınırları [masaüstü README'sinde](../../apps/desktop/README.md);
+kanıtlar sunucuda `transition-manager-0191\zero-cost-20261104` altında.
+
+4 Kasım 2026 gece operasyonu: gerçek sunucu PostgreSQL **17.11** ile ayrı
+veri dizini, **127.0.0.1:55491**, SCRAM ve bağımsız test kimliği kullanılarak
+mevcut `2026-11-03T204217851Z` yedeği restore edildi. **134 tablo / 615.008
+kayıt** için özgün `tables.json` snapshot'ındaki kayıt sayıları/SHA-256
+eşleşti. 0075 ve constraint olumlu/olumsuz durumları, idempotency,
+yalnız klonda down/reapply ve gerçek eski/yeni API entrypoint sağlıkları
+geçti. 1.078 constraint geri yüklendi; üretimde zaten `NOT VALID` olan iki
+FK korunuyor, bunların tarihsel veri doğrulaması yapılmış sayılmadı.
+Örnek `C:\HB0191\pg17-night-20261104-e\pg17-isolated-CLOSED` altında
+**kapalı ve işaretli** bırakıldı; üretim PostgreSQL yetkisi/HBA/parolası
+değiştirilmedi. Canlı DB 74 migration'da; ayrı üretim yönetici kimliği engeli
+devam ediyor. Prova, yöneticinin mevcut üretim kabul kapısını atlatmaz.
+
+API'nin 5.922 dosyalık gerçek runtime/XML/ACL snapshot'ı ve mevcut Web/Gmail
+ortamını koruyan Desktop OAuth XML adayı admin/SYSTEM dizininde hazırlandı.
+Dağıtım/geri alma ayrı runtime kopyasında gerçek araçla doğrulandı.
+Özgün snapshot kopyasıyla ikinci restore da geçti; üretim hedefindeki salt
+okunur rollback önizlemesi `would_rollback`, dosya hash'leri ve XML ACL'si
+eşleşti. Değişmez asıl snapshot korunur. Hazır komut
+`night-20261104\rollback-production-api.ps1` altında; üretimde çalıştırılmadı.
+22 kanıtın manifest SHA-256'sı
+`b8baec9a07727f16bcb3339ca2329efe73e00869247649eac37955d31595b4b4`;
+`evidence-manifest.json` ve `SHA256SUMS.txt` aynı korumalı dizindedir.
+Gerçek ofis CA'sı yalnız sunucuda üretildi; özel anahtarlar sunucuda kaldı.
+8443/TLS ve 43110/UDP aynı sunucunun Ethernet arayüzünde gerçek soketlerle
+geçti; DNS adayı ve uzak fallback olmadan masaüstü çözücüsü LAN'ı seçti.
+Yanlış CA/ad reddedildi. Geçici ağ süreçleri ve LocalSubnet kuralları
+kaldırıldı; kalıcı ağ hizmetleri kurulmadı. Ayrı istemci/DHCP/reboot ve
+gerçek kullanıcı Desktop/Web kabulü **PENDING**; Gmail işçisinin güncel
+başarısı canlı salt okunur kontrolde görüldü. Kod imzası yok; gerçek CA
+profilli **113.025.581 bayt** adayın SHA-256'sı
+`e32f42131fa2f3a38b26ce920b007e8aa7bb87692b9c85975430853e2ea7c707`.
+Yalnız korumalı dizine aktarıldı; pilot, feed ve üretim geçişi uygulanmadı.
+Kanıt/snapshot/komutlar:
+`C:\ProgramData\HasarBotu\transition-manager-0191\night-20261104`;
+yerel kanıtlar `.local/night-operation-0191-20261104` altında.
+
+3 Kasım 2026 gerçek ofis kontrolü: SSH erişimi yeniden kuruldu; eski, yalnız
+`-RestoreAdmin` girdisi bekleyen ön kontrolün kilidi güvenle serbest bırakıldı.
+V5 başlatıcı hash'i doğrulandı. Tam sunucu ön kontrolü **22 PASS, 1 BLOCKED**;
+son kapı `RESTORE_ADMIN_CREDENTIAL_REQUIRED`. `-InspectPostgres -Rehearse`
+PostgreSQL **17.11** üzerinde `LOCAL_ADMIN_AUTH_UNAVAILABLE` döndürdü:
+yalnız SCRAM, API rolünde CREATEDB/ayrı yönetici üyeliği yok, mevcut yetkili
+pgpass/servis profili bulunamadı. Mevcut `_test` DB 113 tablo içeriyor ve API
+rolünde CREATE yok; değiştirilmedi. 0075 uygulanmadı; 74 migration korundu.
+Yeni canlı yedek `C:\ProgramData\HasarBotu\backups\daily-20261011\2026-11-03T204217851Z`:
+35.778.657 bayt, SHA-256 `8984ada3a586d7aaad620efa2b720e5540812bd2605c97bc5341c9b666128924`;
+hash ve tam arşiv çözümlemesi geçti, **gerçek restore kabulü BLOCKED**.
+Önceki yedek korundu. API/portal/mevcut HTTPS sağlık kontrolleri 3/3 geçti;
+API süreci, runtime/XML hash'leri ve 0.1.90 feed/paketi korundu. Ayrı Desktop
+OAuth JSON geçerli, fakat üretime eklenmedi. İki makinede de kullanılabilir
+kod imzalama sertifikası yok. Ağ kurulumu, migration ve yayın yapılmadı.
+Admin/SYSTEM erişimli kanıtlar:
+`C:\ProgramData\HasarBotu\transition-manager-0191\autonomous-20261103`.
+
+`scripts/package-api-transition-manager.mjs`, mevcut doğrulanmış 0.1.91 runtime
+paketini değiştirmeyen ZIP ve kendisini açan `Baslat-HasarBotu-0191.ps1` üretir.
+Bu tek PS1 dosyasını `C:\HB0191` altına kaydet; yönetici PowerShell'de çalıştır:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\HB0191\Baslat-HasarBotu-0191.ps1
+```
+
+Başlatıcı gömülü ZIP hash'ini doğrular; araçları hash ile adlandırılan ayrı,
+admin/SYSTEM erişimli klasöre açar; ağdan hiçbir şey indirmez. İlk başarılı
+çalıştırma yalnız üretimde salt okunur kontroller ve izole aday
+hazırlama/import/config/DB sağlık testleri yapar, sonra durur. Parametresiz her
+çalıştırma ön kontrolde durur; önceki plan bulunması üretim modunu açmaz. Üretim
+için sonraki çalıştırmaya açıkça `-Apply` eklenmeli; işlem ancak ekranda verilen
+sunucu/sürüm/işlem kimlikli `ONAY` metni aynen girilince başlar. OAuth girdileri
+gizlidir. API durdurulur; runtime/XML yedeği, tam dump çözümlemesi, ayrı rastgele
+`_test` DB'ye gerçek restore ve 0075 provası tamamlanmadan üretim migration'ı
+çalışmaz. PostgreSQL 17 araçları, migration nesneleri/yedek okuma yetkileri,
+ayrı restore kimliği ve diğer DB bağlantılarının kapanması zorunludur; araç
+API hesabına CREATEDB veya başka bir yetki vermez.
+
+`C:\ProgramData\HasarBotu\transition-manager-0191` admin/SYSTEM erişimli plan,
+kilit, durum ve değiştirilmeyen yedekleri tutar. Hata ilerlemeyi durdurur; değişiklik
+başlamışsa eski runtime/XML ve XML ACL geri alınır. Kesinti sonrası aynı giriş
+noktası kayıtlı işlemde durur; geri dönüş için `-Rollback` ve ayrı `GERI` onayı
+gerekir. Normal rollback 0075'i bırakır;
+üretim DB restore/down migration, dosya/Gmail silme, installer/feed yayını yapmaz.
+Servis hesabı altında gerçek çalışma SCM/listener/health ile doğrulanır; gerçek
+Web/Desktop Google girişi, Gmail ve ofis ağı pilot kabulü her zaman ayrıca PENDING
+kalır. Yerel test PostgreSQL sürümü ofisin PostgreSQL 17 kabulü yerine geçmez.
+
+Bakım hataları artık yalnız güvenli `stage`/izinli `code` üretir. Eski `%[^%]+%`
+kontrolünün URL'deki yüzde kodlu parolaları yanlış reddetmesi kaldırıldı; WinSW
+değişkenleri eski operatör süreç ortamı yerine makine/XML ortamından çözülür.
+Sunucudaki kesin hata nedeni, yeni salt okunur Check sonucuyla belirlenir.
+
+`discovery-preflight-v2` revizyonu SCM komutu, XML, ortam, çalışma dizini, Node,
+servis hesabı, paket, PostgreSQL araçları ve canlı sağlık için ayrı `CHECK stage`
+çıktısı verir. Hatalar yalnız izinli kod, aşama, hata sınıfı ve kaynak satırıyla
+raporlanır; XML/ortam değerleri ve ham hata metni yazdırılmaz. Windows'un makine
+ortamı sorgusunda bulunmayan `ProgramData`/`SystemRoot` gibi sistem değişkenleri
+işletim sisteminden türetilir. Göreli XML yolları WinSW dizinine göre çözülür;
+desteklenmeyen servis komutu/yapılandırması otomatik değiştirilmez. Birden fazla
+runtime bulunursa açık `-RuntimeDirectory` gerekir. Yerel testler sunucu kabulü
+değildir: DESKTOP-EFN2G33 servis/DB/Google/Gmail doğrulaması **PENDING**.
+
+`winsw-xml-preflight-v3`, PowerShell 5.1 XML uyarlayıcısında `<name>` alanının
+`DocumentElement.Name` özelliğini gölgelemesi nedeniyle geçerli XML'in
+`SERVICE_XML_REQUIRED` ile reddedilmesini CLR kök/namespace erişimiyle düzeltir.
+SCM ImagePath'teki yerel EXE, çalışan wrapper süreci ve aynı dizin/ad kökündeki
+XML ayrı doğrulanır; eksik dosya, klasör, bozuk XML ve farklı servis kimliği
+reddedilir. XML, API çalışma dizininde aranmaz. İsteğe bağlı açık yol da aynı
+eşleşmeye tabidir; farklı dosyayı seçerek kontrol atlatamaz:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\HB0191\Baslat-HasarBotu-0191.ps1 -WinSwXml C:\ProgramData\HasarBotu\runtime-20261011\wrappers\api\hasarbotu-api.xml
+```
+
+Gerçek servis şablonu ve `runtime-20261011\wrappers\api` / `services\api`
+ayrımıyla keşif ve tüm preflight aşamalarının sırası/hata kapıları sınanır.
+İzole ofis dizininde gerçek deploy/referans araçlarının önizlemesi dosya
+hash'lerini korumalıdır. SCM/HTTP ve PostgreSQL 17 sürüm kapıları fikstürde
+sentetiktir; ayrı gerçek restore/0075/adaya ait DB testleri yerel PostgreSQL 18
+kullanır. Sunucuya mevcut SSH erişimi zaman aşımına uğradığından bu revizyonun
+gerçek ofis preflight kabulü **PENDING**; parametresiz mod ve `-Apply` sınırı
+değişmez. Bu yalnız operatör PS1 düzeltmesidir; desktop installer/feed yayını
+yapmaz.
+
+`database-privileges-preflight-v4`, eski `databaseOwner AND CREATEDB` kapısını
+işleme özgü kontrollerle değiştirir. `DB_PERMISSION` satırları doğrudan/etkin DB
+sahipliğini, API'nin CREATEDB/superuser durumunu, 0075 hedefi ile migration
+geçmişi üzerindeki yetkileri ve yedek okuma izinlerini ayrı boolean değerlerle
+gösterir; kullanıcı/DB adı, bağlantı URL'si veya parola yazdırılmaz. DB sahibi
+olmayan ve CREATEDB taşımayan API rolü gerekli nesne/okuma yetkileri varsa
+uygundur. Sahiplik ile CREATEDB bağımsızdır; [PostgreSQL 17 CREATE DATABASE
+kuralları](https://www.postgresql.org/docs/17/sql-createdatabase.html) yalnız
+yeni DB oluşturacak ayrı kimliğe uygulanır.
+
+Parametresiz çalışma yalnız salt okunur DB kontrolleri yapar; restore kimliği
+yoksa aday, üretim önizlemesi, sağlık ve değişmezlik kontrollerini de tamamlayıp
+son `database_authorization` kapısında `RESTORE_ADMIN_CREDENTIAL_REQUIRED` ile
+durur. Bu sonuç geçişe hazır PASS veya başarılı restore sayılmaz. Kimlik
+doğrulamalı ön kontrol için aynı başlatıcıyı `-RestoreAdmin` ile çalıştır;
+ayrı PostgreSQL kullanıcısı/parolası gizli girdiden alınır. Bağlantı hedefi ve
+portu üretim URL'sinden türetilir, yönetim DB'si `postgres` olur. Ön kontrolde
+bu bağlantı da sunucu tarafından salt okunur tutulur; hiçbir test DB oluşturulmaz.
+
+Geçiş ancak sonraki açık `-RestoreAdmin -Apply` çalıştırması ve ayrı `ONAY`
+metniyle başlar. Restore kimliği üretim migration'ında kullanılmaz. API durup
+doğrulanmış dump alındıktan sonra ayrı kimlik rastgele `hb0191_restore_*_test`
+DB'sini `template0` ile oluşturur, PUBLIC bağlantı iznini kaldırır, dump'ı
+restore eder, içerik/migration/0075 provası ve constraint tanımını doğrular;
+DB başarı/hata yollarında kaldırılır. Temizlik başarısızsa PASS verilmez ve
+korunan yedek kaydı geçici DB adını içerir. API rolünün migration yetkisi
+yetersizse ayrı kodla durur; otomatik grant/owner değişimi yapılmaz.
+
+Yönetici bilgileri PowerShell/Node arasında UTF-8 stdin ile taşınır; argv,
+plan veya XML'e yazılmaz. Native libpq'nin Windows ANSI parola sorununa karşı
+yalnız dump/restore süresince admin/SYSTEM ACL'li geçici UTF-8 pgpass dosyası
+kullanılır ve `finally` içinde silinir; temizlenememesi de hatadır. PostgreSQL
+17.11 üzerinde SCRAM, yetkisiz API rolü, ayrı NOSUPERUSER/CREATEDB restore rolü,
+bağımsız sahiplik/yetki kombinasyonları, gerçek restore/0075, veri korunması ve
+parola/DB temizliği sınanır. Gerçek ofise SSH erişimi zaman aşımına uğradığından
+ofisteki hangi yetkinin eksik olduğu henüz doğrulanmadı; yeni boolean tanıları
+bu ayrımı yapar. Çalışan 0.1.90'a müdahale edilmedi; ofis kabulü **PENDING**.
+
+`local-postgres-auth-v5` paketinde parola istemeyen yerel keşif yolu vardır:
+
+```powershell
+.\Baslat-HasarBotu-0191.ps1 -InspectPostgres
+# Yalnız ayrı, rastgele _test DB'de restore/0075 provası da yap:
+.\Baslat-HasarBotu-0191.ps1 -InspectPostgres -Rehearse
+```
+
+İlk komut salt okunurdur. Kurulum kayıtları, gerçek `pg_roles` yetkileri ve
+erişilebilen HBA yöntemi metadatası okunur; yalnız katalogdan doğrulanan
+CREATEDB/superuser rolleri mevcut Windows/SSPI veya mevcut libpq
+`PGPASSFILE`/`PGSERVICEFILE` tanımlarıyla, `--no-password` kullanılarak sınanır.
+Bağlantı adresi API'nin gerçek loopback adresi/portuna sabitlenir. Windows
+yönetici olmak PostgreSQL yönetici parolası sağlamaz; [SSPI için mevcut sunucu
+eşlemesi gerekir](https://www.postgresql.org/docs/17/sspi-auth.html).
+Parola tahmini/sıfırlama, LSA veya genel parola kasası çözme, grant, HBA değişikliği
+ve servis durdurma yapılmaz. Repo PostgreSQL yöneticisini oluşturmuyor:
+`install-services.ps1` mevcut `postgresql-x64-17` servisini bekler; bulunan DPAPI
+mekanizması yalnız GitHub yayın token'ına aittir. Eski installer parolasının
+geri alınabilir biçimde saklandığına dair proje mekanizması bulunmadı.
+API rolü zaten CREATEDB/superuser ise mevcut ASCII bağlantı parolası yalnız
+native alt sürecin bellekteki ortamında yeniden kullanılabilir; API rolüne yeni
+yetki verilmez. Diğer parolalar için mevcut dosya/Windows kimliği kullanılır;
+Windows libpq ANSI kısıtı nedeniyle Unicode parola yeni bir dosyaya kopyalanmaz.
+
+`-Rehearse` kullanılabilir yerel kimlik bulursa çalışan üretime yalnız tekrar
+okunabilir salt okunur snapshot açar; native dump doğrudan restore stdin'ine
+akar. Dump/parola dosyası oluşturulmaz; mevcut kimlik dosyaları değiştirilmez.
+Geçici DB'de içerik hash'i, migration geçmişi, gerçek 0075 SQL'i ve constraint
+tanımı doğrulanır; kendi oluşturduğu DB başarı/hata yollarında silinir.
+Bu bağımsız prova eski geçiş onayını tüketmez ve üretim geçişini başlatmaz;
+`-Apply`/`-Rollback` ile birleştirmek reddedilir. Kimlik yoksa
+`LOCAL_ADMIN_AUTH_UNAVAILABLE` ile **BLOCKED** döner; SCRAM parolası/uygun mevcut
+yerel eşleme dışarıdan sağlanmadan bu engel güvenle kaldırılamaz. PostgreSQL
+17.11'de gerçek SSPI, SCRAM/Unicode mevcut dosyalar ve restore hata temizliği
+sınanır. Ofis VPN erişimi bu oturumda etkin olmadığından gerçek ofis kabulü
+**PENDING** kalır.
+
+### 0.1.91 API aktarım paketi (2a4f600; elle işlem referansı)
+
+Aşağıdaki elle işlem notları önceki operatör paketine aittir. Yeni yönetici
+betikleriyle karıştırma; yeni geçişte yukarıdaki tek giriş noktasını kullan.
+
+`scripts/prepare-api-transition.mjs` Windows x64 / Node 24 ile iki ZIP üretir:
+`api-runtime` (API, contracts/database/domain, 0001–0075 migration'ları, kilitli
+harici bağımlılıklar, referans verisi ve taşınabilir Node) ve `api-operator-tools`.
+Her ZIP'te dosya boyutu/SHA-256 manifesti ve `SHA256SUMS.txt` bulunur. Kaynak API
+2a4f600'dür; dağıtım aracı database `migrations/` klasörünü de taşıyacak şekilde
+düzeltilmiştir. Eski dağıtım aracıyla geçiş yapma. ZIP'ler credential içermez;
+WinSW, PostgreSQL ve ofis gateway'ini kurmaz; feed'e dokunmaz.
+
+Ofiste ZIP'leri kısa bir yerel dizine aç (ör. `C:\HB0191`). Yönetici Windows
+PowerShell 5.1 kullan. Aşağıdaki yolları **mevcut servise göre** doldur;
+secret değerlerini komut satırına, sohbete veya transcript'e yazma:
+
+```powershell
+$R = 'C:\HB0191\api-runtime'
+$T = 'C:\HB0191\api-operator-tools'
+$N = Join-Path $R 'node\node.exe'
+$Api = 'C:\MEVCUT-KURULUM\services\api'
+$Xml = Join-Path $Api 'hasarbotu-api.xml' # Kurulu WinSW exe ile aynı ad/konum
+$Candidate = 'C:\HB0191\candidate\services\api'
+$B = 'C:\ProgramData\HasarBotu\transition-0191-YENI-ZAMAN-DAMGASI'
+$PgDump = 'C:\Program Files\PostgreSQL\17\bin\pg_dump.exe'
+& "$T\verify-api-transition-package.ps1" -Directory $R
+if ($LASTEXITCODE) { throw 'RUNTIME_PACKAGE_INVALID' }
+& "$T\verify-api-transition-package.ps1" -Directory $T
+if ($LASTEXITCODE) { throw 'TOOLS_PACKAGE_INVALID' }
+```
+
+1. Dış `SHA256SUMS.txt` ile **iki ZIP'in** hash'ini karşılaştır. İki iç manifest
+   kontrolü PASS olmadan ilerleme. Önceki 0.1.90 installer/feed'i koru. Mevcut
+   Before PASS kanıtını sakla; bu paket sunucuda çalıştırılmış kabul edilmez.
+2. **Servisi durdurmadan aday hazırla.** `$Candidate` ebeveynini oluştur.
+   `provision-extra-data-references.ps1 -RepoRoot $R -DataLabel api0191candidate
+   -DependencyClosureManifestPath "$R\dependency-closure.json"
+   -ServiceTargetDir $Candidate` komutunu önce önizle, sonra `-Apply` ile çalıştır.
+   Ardından `deploy-service-artifacts.ps1 -SourceDir "$R\services\api"
+   -TargetDir $Candidate -ServiceLabel api0191candidate
+   -DependencyClosureManifestPath "$R\dependency-closure.json" -RepoRoot $R`
+   komutunu önizle ve `-Apply` ile uygula. Her komutta sıfır çıkış kodu ve
+   `applied`/`already_up_to_date` bekle. `& $N
+   "$T\smoke-test-deployed-service.mjs" $Candidate` sonucu `status:ok` olmalı.
+3. `invoke-api-database-maintenance.ps1 -Action Check -WinSwXml $Xml
+   -CandidateDirectory $Candidate -NodeExe $N` çalıştır. Yalnız tam 0001–0074
+   tabanı veya zaten uygulanmış 0075 kabul edilir; farklı geçmişte dur.
+   DB URL XML'den veya mevcut makine ortamından okunur; ekrana yazılmaz.
+4. Bakım penceresinde yeni oturum/iş başlatılmasını durdur; mevcut DB yedekleme
+   politikasına göre diğer yazıcıları da sakinleştir. `Stop-Service hasarbotu-api`.
+   `backup-api-transition.ps1 -ApiDirectory $Api -WinSwXml $Xml
+   -BackupDirectory "$B\api"` ile mevcut API ve XML'in hash doğrulamalı,
+   admin/SYSTEM erişimli kopyasını al. `invoke-api-database-maintenance.ps1
+   -Action Backup -WinSwXml $Xml -CandidateDirectory $Candidate -NodeExe $N
+   -PgDumpExe $PgDump -BackupDirectory "$B\database"` ile custom-format dump al.
+   Araç dump kataloğunu da doğrular; gerçek geri yükleme kabulünün yerini tutmaz.
+   Kurumun geri yükleme provası/yedek kabulü tamamlanmadan migration'a geçme.
+5. `set-api-desktop-oauth.ps1 -WinSwXml $Xml -BackupDirectory "$B\oauth"`
+   çalıştır. Desktop istemcisinde secret varsa `-WithDesktopSecret` ekle.
+   Her iki giriş de gizlidir. Secret seçeneği verilmezse mevcut Desktop secret
+   korunur; kaldırmak için açık `-RemoveDesktopSecret` gerekir. Web OAuth ve
+   diğer ortam ayarları korunur. Araç yalnız durmuş, XML yolu eşleşen API'yi
+   kabul eder; loopback bind zorunludur; `TRUST_LOOPBACK_PROXY=true` yazar.
+   Mevcut Google token şifreleme anahtarı/kurumsal alan adı da geçerli kalmalıdır.
+6. `invoke-api-database-maintenance.ps1 -Action Migrate -WinSwXml $Xml
+   -CandidateDirectory $Candidate -NodeExe $N` çalıştır; tek olası yeni adım
+   `0075_google_desktop_loopback` olmalıdır. Aynı komutu `-Action Verify` ile
+   çalıştır; migration kaydı, text sütunu ve etkin constraint doğrulanır.
+7. 2. adımdaki veri sağlama ve deploy önizleme/uygulamasını bu kez
+   `-ServiceTargetDir $Api -DataLabel api0191` / `-TargetDir $Api -ServiceLabel api0191` ile yap.
+   Deploy çıktısındaki `BackupPath` ve `BackupManifestPath` yollarını sakla.
+   Bu yedek runtime rollback kaynağıdır. WinSW XML/exe ve loglar yerinde kalır.
+   Kurulu servisin Node'u 24.x (en az 24.15), hizmet hesabının runtime okuma ve
+   log yazma erişimi geçerli olmalı. `Start-Service hasarbotu-api`.
+8. `/health` veritabanıyla birlikte `ok`; `/api/v1/google/status` üzerinde
+   `enabled`, `desktopEnabled`, `proxyAwareRateLimit` true olmalı. Mevcut
+   server-transition paketiyle ağ geçişi tamamlandığında mevcut
+   `test-office-network-readiness.ps1 -Stage After` kontrolünü gerçek ApiOrigin
+   ile çalıştır. Web/saha Google girişi, Desktop kurumsal Google girişi ve
+   Gmail bağlantısını pilotta dene. After/pilot kabulü tamamlanmadan yayma.
+
+**Rollback:** API'yi durdur. Saklanan runtime `BackupPath` ile
+`deploy-service-artifacts.ps1 -TargetDir $Api -ServiceLabel api0191 -Rollback
+-RollbackBackupPath '<BackupPath>'` önizle; sonra `-Apply` ile uygula. Önce
+`$B\api\SHA256SUMS.txt` içindeki XML hash'ini kontrol et; yedek
+`$B\api\api.winsw.xml` dosyasını `$Xml` üzerine kopyala, hash eşitliğini yeniden
+kontrol et. Mevcut XML'in kısıtlı ACL'sini ve hizmet hesabı okuma hakkını koru.
+Deploy swap'i tamamlanmamışsa aynı rollback komutunda `-RollbackBackupPath
+"$B\api\runtime"` kullan; ön yedek de mevcut aracın formatındadır. API'yi başlatıp 0.1.90
+health/Web/saha/Gmail kabulünü tekrarla. 0075 yalnız nullable sütun + constraint
+ekler; normal API rollback'inde **yerinde bırak**, otomatik `migrate:down` veya
+üretim DB restore yapma. DB geri yükleme, ancak ayrıca planlanmış felaket
+kurtarma işlemi olarak değerlendirilir. Referans verisi aracı değişiklik
+yaptıysa onun kendi hash doğrulamalı yedeğini de aynı araçla geri al.
 
 ### 0.1.91 kontrollü ofis geçişi ve geri dönüş
 

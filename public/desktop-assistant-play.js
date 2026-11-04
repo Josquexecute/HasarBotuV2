@@ -68,7 +68,7 @@ const rows = [
   ['accordion', 'Akordeon konseri', 'rare', 3500],
 ]
 export const TOUCH_REACTIONS = Object.freeze(rows.map(([id, name, group, duration]) => Object.freeze({
-  id, name, group, groupName: groups[group], duration, weight: group === 'rare' ? .3 : group === 'idle' ? 5 : 2,
+  id, name, group, groupName: groups[group], duration,
 })))
 const byId = new Map(TOUCH_REACTIONS.map(scene => [scene.id, scene]))
 const tapStages = rows.filter(row => row[2] === 'tap').map(row => row[0])
@@ -82,6 +82,35 @@ const ease = t => t * t * (3 - 2 * t)
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 const outline = '#28344a'
 
+// A bag belongs to a selection context. Explicit interaction stories never
+// consume the ambient bag, and interruptions do not reset a partially used bag.
+export class ShuffleBag {
+  constructor(choices, random = Math.random) {
+    this.choices = [...choices]
+    this.random = random
+    this.queue = []
+    this.previous = undefined
+  }
+
+  take() {
+    if (!this.queue.length) {
+      this.queue.push(...this.choices)
+      for (let i = this.queue.length - 1; i > 0; i--) {
+        const j = Math.floor(this.random() * (i + 1))
+        const item = this.queue[i]
+        this.queue[i] = this.queue[j]
+        this.queue[j] = item
+      }
+      if (this.queue.length > 1 && this.queue.at(-1) === this.previous) {
+        [this.queue[0], this.queue[this.queue.length - 1]] = [this.queue.at(-1), this.queue[0]]
+      }
+    }
+    const next = this.queue.pop()
+    this.previous = next
+    return next
+  }
+}
+
 export class AssistantPlay {
   constructor(bot, clock = () => performance.now(), random = Math.random) {
     this.bot = bot
@@ -93,6 +122,7 @@ export class AssistantPlay {
     this.streak = 0
     this.taps = []
     this.history = []
+    this.bags = new Map()
     this.scene = this.sequence = null
     this.paused = this.reducedMotion = false
     this.sleeping = false
@@ -129,14 +159,15 @@ export class AssistantPlay {
   }
 
   pick(group) {
-    const recent = this.history.slice(-4)
-    let candidates = TOUCH_REACTIONS.filter(item => (group ? item.group === group : item.group === 'idle' || item.group === 'rare')
-      && !(group === 'tap' && this.mood === 'angry' && (item.id === 'grin' || item.id === 'double-take')) && !recent.includes(item.id))
-    if (!candidates.length) candidates = TOUCH_REACTIONS.filter(item => item.group === group && item.id !== this.history.at(-1))
-    const total = candidates.reduce((sum, item) => sum + item.weight, 0)
-    let ticket = this.random() * total
-    for (const item of candidates) { ticket -= item.weight; if (ticket <= 0) return item.id }
-    return candidates.at(-1)?.id ?? 'grin'
+    const angry = group === 'tap' && this.mood === 'angry'
+    const key = `${group ?? 'ambient'}:${angry}`
+    if (!this.bags.has(key)) {
+      const choices = TOUCH_REACTIONS.filter(item => (group ? item.group === group : item.group === 'idle' || item.group === 'rare')
+        && !(angry && (item.id === 'grin' || item.id === 'double-take'))).map(item => item.id)
+      this.bags.set(key, new ShuffleBag(choices, this.random))
+      this.bags.get(key).previous = this.history.at(-1)
+    }
+    return this.bags.get(key).take()
   }
 
   start(id, manual = false) {
@@ -177,8 +208,8 @@ export class AssistantPlay {
 
   control(command) {
     if (command.type === 'play') {
+      if (this.reducedMotion || command.id !== 'random' && !byId.has(command.id)) return false
       const id = command.id === 'random' ? this.pick() : command.id
-      if (!byId.has(id) || this.reducedMotion) return false
       this.paused = false
       return this.start(id, true)
     }
@@ -209,7 +240,7 @@ export class AssistantPlay {
     if (this.taps.length >= 5 && now >= this.rapidUntil) {
       this.rapidUntil = now + 8500
       this.runSequence(rapidStages)
-    } else if (!this.sequence) this.start(this.streak > tapStages.length ? this.pick('tap') : tapStages[this.streak - 1])
+    } else if (!this.sequence && !this.paused && !this.reducedMotion) this.start(this.streak > tapStages.length ? this.pick('tap') : tapStages[this.streak - 1])
     this.publish()
   }
 
@@ -223,6 +254,7 @@ export class AssistantPlay {
   }
 
   drag() {
+    if (this.paused || this.reducedMotion) return
     const now = this.clock()
     if (now < this.nextDrag) return
     this.nextDrag = now + 1800
@@ -230,10 +262,10 @@ export class AssistantPlay {
     this.start(this.pick('drag'))
   }
 
-  drop() { this.nextDrag = 0; this.start(this.pick('land')) }
+  drop() { this.nextDrag = 0; if (!this.paused && !this.reducedMotion) this.start(this.pick('land')) }
   shake() { this.agitate(25); this.runSequence(shakeStart) }
   recover() { this.runSequence(shakeEnd) }
-  idle() { this.start(this.pick()) }
+  idle() { if (!this.paused && !this.reducedMotion && !this.animating) this.start(this.pick()) }
 
   tick(sleeping = false) {
     const now = this.clock()

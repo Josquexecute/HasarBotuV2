@@ -304,10 +304,16 @@ test('real background scans discover folders, follow stable identity moves and r
     assert.ok(tamperedStatus.relocationIssues.some(i => i.sourceFolderId === '205' && i.code === 'folder_relocation_content_changed'))
     assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [tampered.caseId])).rows[0].relative_path, tampered.previousPath)
     const mismatch = await legacyWorkspace(9002, '06BAD123', 202, true)
+    await pool.query('UPDATE cases SET is_archived=false WHERE id=$1', [mismatch.caseId])
     const failedStatus = await officeCycle('ATTENTION')
     assert.ok(failedStatus.relocationIssues.some(i => i.sourceFolderId === '202' && i.code === 'folder_relocation_content_changed'))
     assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [mismatch.caseId])).rows[0].relative_path, mismatch.previousPath)
     assert.equal((await pool.query('SELECT 1 FROM case_folder_registrations WHERE case_id=$1', [mismatch.caseId])).rowCount, 0)
+    assert.equal((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [mismatch.caseId])).rows[0].is_archived, false,
+      'A failed content identity check during a physical move must not hide the working case')
+    assert.ok(failedStatus.inventoryDeferred > 0)
+    assert.equal(failedStatus.visibilityIntegrity.status, 'PASS')
+    assert.equal((await pool.query("SELECT count(*)::int n FROM audit_events WHERE resource_id=$1 AND action='case.office_inventory_deferred'", [mismatch.caseId])).rows[0].n, 1)
   } finally {
     clearTimeout(deadline); abort.abort(); sqlite.close(); await pool.end()
     if (originalUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalUrl

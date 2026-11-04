@@ -518,6 +518,15 @@ function Get-SourceDeploymentManifest {
             }
             $targetPrefix = Join-Path 'node_modules' ($workspacePackageName -replace '/', '\')
             Add-DistAndPackageJsonEntries $entries $workspaceSourceRoot $targetPrefix
+            # The migration runner resolves ../migrations next to database/dist.
+            # Keep this allowlist specific to the database workspace.
+            if ($workspacePackageName -eq '@hasarbotu/database') {
+                $migrationsRoot = Join-Path $workspaceSourceRoot 'migrations'
+                if (-not [IO.Directory]::Exists($migrationsRoot) -or [IO.Directory]::GetFiles($migrationsRoot, '*.js').Count -eq 0) {
+                    Throw-SafeError 'DATABASE_MIGRATIONS_MISSING'
+                }
+                Add-FullSubtreeEntries $entries $migrationsRoot (Join-Path $targetPrefix 'migrations')
+            }
         }
 
         foreach ($externalEntry in @($ClosureManifest.External)) {
@@ -582,7 +591,8 @@ try {
 
         $recordedManifest = $null
         if ($issues.Count -eq 0) {
-            $recordedManifest = (Get-Content -LiteralPath $backupManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json).Entries
+            $backupMetadata = Get-Content -LiteralPath $backupManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $recordedManifest = $backupMetadata.Entries
             $currentBackupManifest = Get-FullTreeManifest $backupPath
             if (-not (Test-ManifestsIdentical @($recordedManifest | ForEach-Object { [pscustomobject]@{ RelativePath = $_.RelativePath; Sha256 = $_.Sha256 } }) @($currentBackupManifest | ForEach-Object { [pscustomobject]@{ RelativePath = $_.RelativePath; Sha256 = $_.Sha256 } }))) {
                 $issues.Add('Yedek dizininin içeriği kayıtlı manifest ile eşleşmiyor (bütünlük hatası) — rollback GÜVENLİ DEĞİL.')
@@ -627,7 +637,14 @@ try {
         # yüklenecek olanlar) taşınır -- $target'ta yan yana yaşayan
         # yabancı içerik (WinSW ikili/XML, canlı `logs\`) rollback
         # boyunca da HİÇ dokunulmadan yerinde kalır.
-        $rollbackSegments = Get-TopLevelSegments $recordedManifest
+        $restoreSegments = Get-TopLevelSegments $recordedManifest
+        $rollbackSegments = @($restoreSegments)
+        if ($backupMetadata.PSObject.Properties['ManagedSegments']) {
+            foreach ($segment in @($backupMetadata.ManagedSegments)) {
+                if ([string]$segment -notin @('dist','node_modules','package.json','THIRD-PARTY-NOTICES.txt')) { Throw-SafeError 'ROLLBACK_MANAGED_SEGMENT_INVALID' }
+                if ($segment -notin $rollbackSegments) { $rollbackSegments += [string]$segment }
+            }
+        }
         $preRollbackBackupPath = $null
         if ([System.IO.Directory]::Exists($target)) {
             $timestamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')
@@ -643,16 +660,18 @@ try {
             [System.IO.File]::WriteAllText($preRollbackManifestPath, $preRollbackManifestJson, [System.Text.UTF8Encoding]::new($false))
             Set-AdminOnlySecurityOn $preRollbackManifestPath $false
         }
-        Move-TopLevelSegments -FromDir $backupPath -ToDir $target -Segments $rollbackSegments
+        Move-TopLevelSegments -FromDir $backupPath -ToDir $target -Segments $restoreSegments
         if ([System.IO.Directory]::Exists($backupPath)) { [System.IO.Directory]::Delete($backupPath, $true) }
         [System.IO.File]::Delete($backupManifestPath)
 
         $finalManifest = Get-ScopedTreeManifest -Root $target -Segments $rollbackSegments
         $verifyMismatches = @()
+        $finalByPath = @{}
+        foreach ($entry in $finalManifest) { $finalByPath[$entry.RelativePath] = $entry.Sha256 }
         foreach ($entry in $recordedManifest) {
-            $match = $finalManifest | Where-Object { $_.RelativePath -eq $entry.RelativePath }
-            if ($null -eq $match -or $match.Sha256 -ne $entry.Sha256) { $verifyMismatches += $entry.RelativePath }
+            if (-not $finalByPath.ContainsKey($entry.RelativePath) -or $finalByPath[$entry.RelativePath] -ne $entry.Sha256) { $verifyMismatches += $entry.RelativePath }
         }
+        if ($finalManifest.Count -ne @($recordedManifest).Count) { $verifyMismatches += 'ROLLBACK_FILE_COUNT_MISMATCH' }
 
         $result = [ordered]@{
             SchemaVersion = 'hasarbotu-deploy-service-artifacts/1.0.0'
@@ -1002,9 +1021,12 @@ try {
     #     hiç okunmaya çalışılmaz, sayıma hiç dahil edilmez) ---
     $finalManifest = Get-ScopedTreeManifest -Root $target -Segments $managedSegments
     $verifyMismatches = [System.Collections.Generic.List[string]]::new()
+    # A complete API closure has thousands of files. Index once rather than
+    # scanning the entire target manifest again for every source entry.
+    $finalByPath = @{}
+    foreach ($entry in $finalManifest) { $finalByPath[$entry.RelativePath] = $entry.Sha256 }
     foreach ($entry in $sourceManifest) {
-        $match = $finalManifest | Where-Object { $_.RelativePath -eq $entry.RelativePath }
-        if ($null -eq $match -or $match.Sha256 -ne $entry.Sha256) { $verifyMismatches.Add($entry.RelativePath) }
+        if (-not $finalByPath.ContainsKey($entry.RelativePath) -or $finalByPath[$entry.RelativePath] -ne $entry.Sha256) { $verifyMismatches.Add($entry.RelativePath) }
     }
     if ($finalManifest.Count -ne $sourceManifest.Count) {
         $verifyMismatches.Add("FILE_COUNT_MISMATCH_expected_$($sourceManifest.Count)_actual_$($finalManifest.Count)")

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type pg from 'pg'
 import { relativePathSchema } from '@hasarbotu/contracts'
 import { normalizeCaseStage, parseSourcePlateFolderName, plateSearchKey } from '@hasarbotu/domain'
@@ -17,6 +18,7 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
   const policy = automaticFolderPolicySchema.parse(input)
   if (!Number.isFinite(Date.parse(scanStartedAt)) || !folders.length) throw new Error('office_inventory_incomplete')
   const byPath = new Map<string, OfficeFolderObservation>()
+  const byPlate = new Map<string, OfficeFolderObservation[]>()
   const identities = new Set<string>()
   for (const folder of folders) {
     relativePathSchema.parse(folder.relativePath)
@@ -24,6 +26,8 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
       || !parseSourcePlateFolderName(folder.relativePath.split('/').at(-1)!)
       || byPath.has(key(folder.relativePath)) || identities.has(folder.sourceFolderId)) throw new Error('office_inventory_invalid')
     byPath.set(key(folder.relativePath), folder)
+    const plate = plateSearchKey(parseSourcePlateFolderName(folder.relativePath.split('/').at(-1)!)!.plate)
+    byPlate.set(plate, [...(byPlate.get(plate) ?? []), folder])
     identities.add(folder.sourceFolderId)
   }
   await verifyInventory()
@@ -40,6 +44,8 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
       l.relative_path,r.source_folder_id,
       (SELECT a.details FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
         AND a.action='case.office_inventory_reconciled' ORDER BY a.occurred_at DESC,a.id DESC LIMIT 1) previous_inventory,
+      (SELECT a.details FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
+        AND a.action='case.office_inventory_deferred' ORDER BY a.occurred_at DESC,a.id DESC LIMIT 1) previous_deferred,
       (EXISTS(SELECT 1 FROM case_file_operations o WHERE o.organization_id=c.organization_id AND o.case_id=c.id
         AND o.status NOT IN ('ready','failed','stale','cancelled')) OR
        EXISTS(SELECT 1 FROM case_lifecycle_operations o WHERE o.organization_id=c.organization_id AND o.case_id=c.id
@@ -65,6 +71,25 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
       }
       const present = observed && (!row.source_folder_id || row.source_folder_id === observed.sourceFolderId)
         && plateSearchKey(parseSourcePlateFolderName(observed.relativePath.split('/').at(-1)!)!.plate) === row.plate_normalized
+      // A failed identity check during a move is not evidence that the case was
+      // deleted. Keep its visibility until relocation can be independently proved.
+      // Never bind, restore or expose another case using a plate match alone.
+      const relocationCandidates = present ? [] : (byPlate.get(row.plate_normalized) ?? []).filter(folder =>
+        key(folder.relativePath) !== key(row.relative_path ?? '')
+        && (!registeredOwners.has(folder.sourceFolderId) || registeredOwners.get(folder.sourceFolderId) === row.id))
+      if (relocationCandidates.length > 0) {
+        result.inventoryDeferred++
+        if (row.operation_active) continue
+        const evidenceDigest = createHash('sha256').update(JSON.stringify(relocationCandidates
+          .map(folder => [key(folder.relativePath), folder.sourceFolderId]).sort((a, b) => a[0]!.localeCompare(b[0]!)))).digest('hex')
+        if (row.previous_deferred?.evidenceDigest !== evidenceDigest || row.previous_deferred?.caseVersion !== row.version) {
+          await audit.record(client, { organizationId: policy.organizationId, actorUserId: policy.actorUserId,
+            requestId: 'office-inventory-' + scanStartedAt, action: 'case.office_inventory_deferred', entityType: 'case', entityId: row.id,
+            details: { reason: 'relocation_identity_unresolved', candidateCount: relocationCandidates.length,
+              evidenceDigest, caseVersion: row.version, previousArchived: row.is_archived, visibilityPreserved: true } })
+        }
+        continue
+      }
       const archived = !present
       const closed = present && observed.relativePath.split('/').slice(0, -1).some(p => p.toLocaleUpperCase('tr').startsWith('KAPALI'))
       const status = present ? (closed ? 'closed' : 'open') : row.lifecycle_status

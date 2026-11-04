@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -6,7 +6,7 @@ import { AssistantCaseSearch, DesktopAssistantPanel } from './DesktopAssistantPa
 import { AssistantAppearanceProvider } from './AssistantAppearanceProvider'
 import { mockCases } from '../../mocks/cases'
 import { HttpCasesError } from '../../data/httpAdapter'
-import type { CasePageResult, CasesDataPort } from '../../data/ports'
+import type { CasePageResult, CasesDataPort, CaseReferenceDataPort } from '../../data/ports'
 import type { CaseRecord } from '../../types/case'
 import type { CaseOperationsPort, CaseOperationsRecord, CaseNoteRecord } from '../../data/caseOperationsPort'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
@@ -14,20 +14,21 @@ import { assistantCaseSelectionKey, rememberAssistantCase } from '../../app/assi
 import { loadTracking } from '../tracking/trackingApi'
 
 vi.mock('../tracking/trackingApi', () => ({ loadTracking: vi.fn(async () => ({ tramer: [], documents: [], users: [], history: [] })) }))
-const first = { ...mockCases[0]!, caseId: 'case-a', plate: '34 TEST 01', officeNumber: '2026/1', responsibleUserId: null }
-const second = { ...first, caseId: 'case-b', plate: '34 TEST 02', officeNumber: '2026/2' }
-const page = (items = [first, second], number = 1): CasePageResult => ({ items, page: number, pageSize: 10, totalCount: items.length, totalPages: 1 })
+const first = { ...mockCases[0]!, caseId: 'case-a', plate: '34 TEST 01', type: 'Trafik' as const, officeNumber: '2026/1', responsibleUserId: null }
+const second = { ...first, caseId: 'case-b', plate: '34 TEST 02', type: 'Kasko' as const, officeNumber: '2026/2' }
+const page = (items: CaseRecord[] = [first, second], number = 1): CasePageResult => ({ items, page: number, pageSize: 10, totalCount: items.length, totalPages: 1 })
 const note: CaseNoteRecord = { id: 'note-a', noteType: 'internal', subject: null, body: 'Servis ile görüşüldü.', createdAt: '2026-10-13T09:00:00Z', createdByUserId: 'user-a', createdByDisplayName: 'Test', legacySource: null }
 function ports(canWrite = true) {
   let notes = [note]
   const cases: CasesDataPort = { listCases: vi.fn(), listCasePage: vi.fn(async () => page()), getCase: vi.fn(async (id) => id === first.caseId ? first : second) }
+  const references: CaseReferenceDataPort = { getCaseReferences: vi.fn(async () => ({ users: [], insurers: [], services: [], experts: [] })) }
   const operations: CaseOperationsPort = {
     deleteNote: vi.fn(),
     load: vi.fn(async (caseId): Promise<CaseOperationsRecord> => ({ caseId, asOfDate: '2026-10-13', notes, tasks: [], followUpHistory: [], permissions: { canWrite, canCompleteTasks: canWrite } })),
     createNote: vi.fn(async (_caseId, input) => { const saved = { ...note, ...input, id: 'new-note' }; notes = [...notes, saved]; return saved }),
     createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn(),
   }
-  return { cases, operations }
+  return { cases, operations, references }
 }
 function setup(canWrite = true) {
   const api = ports(canWrite)
@@ -46,6 +47,42 @@ async function select() {
   await screen.findByRole('textbox', { name: 'Hızlı not' })
 }
 describe('standalone Touch case workspace', () => {
+  it('pairs each plate with its own real type, including identical plates and an unknown type', async () => {
+    const api = setup()
+    vi.mocked(api.cases.listCasePage).mockResolvedValue(page([first, { ...second, plate: first.plate }, { ...second, caseId: 'unknown', type: 'Seçiniz' }]))
+    await search()
+    const results = await screen.findByRole('region', { name: 'Arama sonuçları' })
+    const buttons = within(results).getAllByRole('button')
+    expect(buttons.map(button => button.querySelector('.assistant-plate')?.textContent)).toEqual(['34 TEST 01TRAFİK', '34 TEST 01KASKO', '34 TEST 02'])
+    await userEvent.click(buttons[1]!)
+    await screen.findByRole('textbox', { name: 'Hızlı not' })
+    expect(document.querySelector('.assistant-case-heading .assistant-plate__type')).toHaveTextContent('KASKO')
+    expect(document.querySelector('.touch-assistant__target .assistant-plate__type')).toHaveTextContent('KASKO')
+  })
+  it.each(['Trafik', 'Kasko'] as const)('orders the seven live %s fields before all existing process information', async type => {
+    const api = setup()
+    const detail: CaseRecord = { ...first, type, company: '—', insurerId: 'insurer-a', responsibleUserId: 'owner', claimNumber: 'HASAR-123', notificationDate: '2026-11-04', service: 'Uzun Servis Adı '.repeat(12), serviceDetails: { name: 'Uzun Servis Adı '.repeat(12), phone: '+90 (532) 123 45 67', address: null } }
+    vi.mocked(api.cases.getCase).mockResolvedValue(detail)
+    vi.mocked(api.references.getCaseReferences).mockResolvedValue({ users: [{ id: 'owner', displayName: 'Uzun Personel Adı '.repeat(12) }], insurers: [{ id: 'insurer-a', name: 'Uzun Sigorta Şirketi '.repeat(12) }], services: [], experts: [] })
+    await select()
+    await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
+    await screen.findByText('0532 123 45 67')
+    const list = document.querySelector('.assistant-process')!
+    expect([...list.querySelectorAll('dt')].map(node => node.textContent)).toEqual(['Dosya sorumlusu', 'Sigorta şirketi', 'Dosya türü', 'Dosya numarası', 'İhbar tarihi', 'Servis adı', 'Servis cep', 'Durum / aşama', 'Takip', 'Son işlem'])
+    expect([...list.querySelectorAll('dd')].slice(0, 7).map(node => node.textContent)).toEqual(['Uzun Personel Adı '.repeat(12), 'Uzun Sigorta Şirketi '.repeat(12), type, 'HASAR-123', '04.11.2026', detail.service, '0532 123 45 67'])
+    expect(screen.getByRole('heading', { name: 'Tramer / evrak' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Görevler' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Takip geçmişi' })).toBeVisible()
+    expect(screen.getByText('Tramer talebi yok.')).toBeVisible()
+    expect(screen.getByText(/evrak inceleme bekliyor/)).toBeVisible()
+    expect(screen.getByText('Görev yok.')).toBeVisible()
+    expect(screen.getByText('Takip değişikliği yok.')).toBeVisible()
+    vi.mocked(api.cases.getCase).mockResolvedValue({ ...detail, type: 'Seçiniz', claimNumber: 'HASAR-456', notificationDate: null, service: '', serviceDetails: null, responsibleUserId: null, insurerId: null, company: '' })
+    fireEvent(window, new Event('focus'))
+    await screen.findByText('HASAR-456')
+    expect([...list.querySelectorAll('dd')].slice(0, 7).map(node => node.textContent)).toEqual(['Atanmamış', '—', '—', 'HASAR-456', '—', '—', '—'])
+    expect(document.querySelector('.assistant-case-heading .assistant-plate__type')).toBeNull()
+  })
   it('separates four panels, supports keyboard tabs and preserves drafts without repeating searches', async () => {
     const api = setup()
     expect(screen.getAllByRole('tab')).toHaveLength(4)

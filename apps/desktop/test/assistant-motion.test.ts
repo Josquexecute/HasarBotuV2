@@ -5,8 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest'
 const read = (path: string) => readFileSync(new URL('../../../public/' + path, import.meta.url), 'utf8')
 const helpers = new Function(read('vendor/coucou/core/anim.js').replace(/export /g, '') + '; return { Ease, lerp }')()
 const Engine = new Function('Ease', 'lerp', read('vendor/coucou/mochi/engine.js').replace(/^import .*\r?\n/gm, '').replace(/export /g, '') + '; return BotEngine')(helpers.Ease, helpers.lerp)
-const Play = new Function(read('desktop-assistant-play.js').replace(/export /g, '') + '; return AssistantPlay')()
-const Motion = new Function('AssistantPlay', read('desktop-assistant-motion.js').replace(/^import .*\r?\n/gm, '').replace('export class', 'class') + '; return AssistantMotion')(Play)
+const { Play, ShuffleBag, TOUCH_REACTIONS } = new Function(read('desktop-assistant-play.js').replace(/export /g, '') + '; return { Play: AssistantPlay, ShuffleBag, TOUCH_REACTIONS }')()
+const Motion = new Function('AssistantPlay', 'ShuffleBag', 'TOUCH_REACTIONS', read('desktop-assistant-motion.js').replace(/^import .*\r?\n/gm, '').replace('export class', 'class') + '; return AssistantMotion')(Play, ShuffleBag, TOUCH_REACTIONS)
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 function setup() {
@@ -70,11 +70,10 @@ it('does not release gaze between queued reactions or before recovery finishes',
   finishSequence()
 })
 
-it('stretches only after quiet time, returns to rest and leaves no gesture timers or permanent frame work', () => {
+it('preserves the full stretch choreography without gesture timers or permanent frame work', () => {
   const { bot, motion, advance } = setup()
-  advance(59000)
-  expect(bot.sy).toBe(1)
-  advance(1500)
+  motion.stretch()
+  advance(1000)
   expect(bot.sy).toBeGreaterThan(1.02)
   advance(4500)
   expect(bot.sy).toBe(1)
@@ -83,7 +82,6 @@ it('stretches only after quiet time, returns to rest and leaves no gesture timer
   expect(bot.open).toBe(1)
   expect(bot.busy).toBe(false)
   expect(vi.getTimerCount()).toBe(0)
-  expect(motion.nextStretch).toBeGreaterThan(performance.now())
 })
 
 it('hover and pointer activity suppress the idle stretch', () => {
@@ -116,7 +114,8 @@ it('curiosity tilts toward the gaze and cannot repeatedly interrupt itself', () 
 
 it('dragging interrupts a stretch continuously and releasing softly settles every body transform', () => {
   const { bot, motion, advance } = setup()
-  advance(60500)
+  motion.stretch()
+  advance(500)
   expect(bot.sy).toBeGreaterThan(1)
   const before = { sy: bot.sy, sx: bot.sx, tilt: bot.tilt }
   motion.drag(-1)
@@ -290,7 +289,10 @@ it('edge peeking waits for a soft landing, then returns to rest and clears on re
   motion.press(); motion.drag(-1); advance(200); motion.release(); motion.edge(-1)
   advance(100)
   expect(bot.sy).toBeLessThan(.96)
-  advance(1000)
+  const landingDuration = motion.play.scene.definition.duration
+  advance(landingDuration - 100)
+  expect(motion.pendingEdge).toBe(-1)
+  advance(500)
   expect(bot.ox).toBeLessThan(-.03)
   advance(3000)
   expect(bot.ox).toBe(0)
@@ -489,23 +491,26 @@ it('reset cancels a held shake, recovery, queued feedback and every cosmetic twe
 
 it('quiet gestures use a non-repeating bag, do not postpone sleep and yield to real work', () => {
   const { bot, motion, advance } = setup()
-  motion.nextStretch = Infinity
-  const seen = new Set<string>()
-  const poses = new Set<string>()
+  motion.sleepAt = Infinity
+  const expected = new Set([...['dance', 'laugh', 'wink', 'blush', 'surprised', 'doze', 'yawn', 'stretch', 'wave', 'excited', 'play', 'full-stretch'], ...TOUCH_REACTIONS.filter((item: { group: string }) => item.group === 'idle' || item.group === 'rare').map((item: { id: string }) => item.id)])
   let previous
-  for (let i = 0; i < 22; i++) {
-    motion.nextIdle = performance.now()
-    motion.tick()
-    expect(motion.lastIdle).not.toBe(previous)
-    seen.add(motion.lastIdle)
-    previous = motion.lastIdle
-    advance(400)
-    poses.add(JSON.stringify([bot.tilt, bot.sy, bot.oy, bot.ox, bot.es, bot.hands, bot.blush, bot.open, bot.eyeOverride]))
-    advance(2600)
-    expect(bot.busy).toBe(false)
-    if (i === 10) { expect(seen.size).toBe(11); expect(poses.size).toBe(11); seen.clear() }
+  for (let cycle = 0; cycle < 3; cycle++) {
+    const seen = new Set<string>()
+    for (let i = 0; i < expected.size; i++) {
+      motion.nextIdle = performance.now()
+      motion.tick()
+      expect(motion.lastIdle).not.toBe(previous)
+      expect(seen.has(motion.lastIdle)).toBe(false)
+      seen.add(motion.lastIdle)
+      previous = motion.lastIdle
+      // Exactly one owner: scene animations do not run on top of legacy gestures.
+      if (motion.play.animating) expect([...bot.tweens.keys()].every(key => key === 'open' || bot[key] === ({ tilt: 0, sx: 1, sy: 1, oy: 0, ox: 0, es: 1, blush: 0, hands: 0, nausea: 0 } as Record<string, number>)[key])).toBe(true)
+      advance(5000)
+      expect(motion.play.animating).toBe(false)
+      expect(bot.busy).toBe(false)
+    }
+    expect(seen).toEqual(expected)
   }
-  expect(seen.size).toBe(11)
   motion.work(true)
   const lastIdle = motion.lastIdle
   advance(40000)
@@ -514,6 +519,40 @@ it('quiet gestures use a non-repeating bag, do not postpone sleep and yield to r
   advance(124000)
   expect(motion.sleeping).toBe(true)
   expect(vi.getTimerCount()).toBe(0)
+})
+
+it('does not consume ambient turns while blocked, and interaction interruptions retain the bag', () => {
+  const { motion, advance } = setup()
+  motion.nextIdle = 0
+  motion.control({ type: 'play', id: 'magic' })
+  advance(1000)
+  motion.nextIdle = 0
+  motion.tick()
+  expect(motion.play.scene.definition.id).toBe('magic')
+  expect(motion.lastIdle).toBeUndefined()
+  motion.control({ type: 'pause' })
+  advance(5000)
+  motion.nextIdle = 0; motion.tick()
+  expect(motion.idleBag.queue).toHaveLength(0)
+  motion.play.setReduced(true)
+  motion.control({ type: 'resume' })
+  expect(motion.control({ type: 'play', id: 'random' })).toBe(false)
+  expect(motion.idleBag.queue).toHaveLength(0)
+  motion.play.setReduced(false)
+  const seen = new Set()
+  for (let i = 0; i < 34; i++) {
+    expect(motion.control({ type: 'play', id: 'random' })).toBe(true)
+    expect(seen.has(motion.lastIdle)).toBe(false)
+    seen.add(motion.lastIdle)
+    const remaining = motion.idleBag.queue.length
+    motion.press(); motion.release()
+    motion.react('error')
+    motion.success()
+    expect(motion.idleBag.queue).toHaveLength(remaining)
+    motion.reset()
+    expect(motion.idleBag.queue).toHaveLength(remaining)
+  }
+  expect(seen.size).toBe(34)
 })
 
 it('nausea drawing temporarily tints the chosen body color and restores it even on drawing failure', () => {

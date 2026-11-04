@@ -3,10 +3,12 @@ import { Files, History, ListChecks, StickyNote } from 'lucide-react'
 import { useSession } from '../../app/sessionContext'
 import { rememberAssistantCase, useAssistantCaseSelection } from '../../app/assistantCaseSelection'
 import { QuickNote } from '../../components/TouchAssistant'
+import { AssistantPlate } from '../../components/AssistantPlate'
 import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
 import { createHttpCasesAdapter, HttpCasesError } from '../../data/httpAdapter'
 import { useCaseOperations } from '../../data/useCaseOperations'
-import type { CasesDataPort, CasePageResult } from '../../data/ports'
+import type { CasesDataPort, CasePageResult, CaseReferenceDataPort } from '../../data/ports'
+import { useCaseReferences } from '../../data/useCaseReferences'
 import type { CaseOperationsPort } from '../../data/caseOperationsPort'
 import type { CaseRecord } from '../../types/case'
 import type { TrackingSnapshot } from '@hasarbotu/contracts'
@@ -15,6 +17,7 @@ import './desktop-assistant-panel.css'
 import { useAssistantAppearance } from './assistantAppearanceContext'
 import { appearanceStyle } from './appearance'
 import { TouchPlayControls } from './TouchPlayControls'
+import { notificationDate, serviceMobile } from './caseSummary'
 
 type MenuAction = 'open' | 'notifications' | 'settings' | 'hide' | 'reset' | 'close'
 type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: MenuAction, caseId?: string): void } }
@@ -29,7 +32,7 @@ const assistantTabs = [
   { id: 'process', label: 'Süreçler', icon: ListChecks },
 ] as const
 
-function CaseWorkspace({ item, cases, operations, tab, tabId }: { item: CaseRecord; cases: CasesDataPort; operations?: CaseOperationsPort; tab: AssistantTab; tabId: string }) {
+function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { item: CaseRecord; cases: CasesDataPort; operations?: CaseOperationsPort; references?: CaseReferenceDataPort; tab: AssistantTab; tabId: string }) {
   const { reportUnauthorized } = useSession()
   const workspace = useCaseOperations(item.caseId, 'api', true, operations)
   const [detail, setDetail] = useState<CaseRecord | null>(null)
@@ -39,6 +42,15 @@ function CaseWorkspace({ item, cases, operations, tab, tabId }: { item: CaseReco
   const [tracking, setTracking] = useState<TrackingSnapshot | null>(null)
   const [trackingError, setTrackingError] = useState(false)
   const [trackingVersion, setTrackingVersion] = useState(0)
+  const referenceData = useCaseReferences(references, {}, tab === 'process')
+  useEffect(() => {
+    if (referenceData.status === 'unauthorized') reportUnauthorized()
+  }, [referenceData.status, reportUnauthorized])
+  useEffect(() => {
+    if (tab !== 'process') return
+    window.addEventListener('focus', referenceData.reload)
+    return () => window.removeEventListener('focus', referenceData.reload)
+  }, [tab, referenceData.reload])
   useEffect(() => {
     if (tab !== 'process') return
     const refresh = () => setTrackingVersion((value) => value + 1)
@@ -70,12 +82,13 @@ function CaseWorkspace({ item, cases, operations, tab, tabId }: { item: CaseReco
     refresh()
     window.addEventListener('focus', refresh)
     return () => { active = false; window.removeEventListener('focus', refresh) }
-  }, [cases, item.caseId, reportUnauthorized])
+  }, [cases, item.caseId, reportUnauthorized, tab])
+  const currentItem = detail ?? item
   const notes = workspace.data?.notes.filter((note) => `${note.subject ?? ''} ${note.body} ${note.legacySource?.authorName ?? note.createdByDisplayName}`.toLocaleLowerCase('tr-TR').includes(noteSearch.toLocaleLowerCase('tr-TR'))) ?? []
   return <section className="assistant-case" aria-label="Seçili dosya" hidden={tab === 'files'}>
-    <div className="assistant-case-heading"><span><strong>{item.plate}</strong><small>{item.officeNumber}</small></span><OpenCaseFolderButton caseId={item.caseId} /></div>
+    <div className="assistant-case-heading"><div><AssistantPlate plate={currentItem.plate} type={currentItem.type} /><small>{currentItem.officeNumber}</small></div><OpenCaseFolderButton caseId={item.caseId} /></div>
     {/* Keep the draft mounted while viewing history or process information. */}
-    <div role="tabpanel" id={`${tabId}-note-panel`} aria-labelledby={`${tabId}-note`} hidden={tab !== 'note'}><QuickNote key={noteVersion} standalone target={{ caseId: item.caseId, plate: item.plate, officeNumber: item.officeNumber, source: 'api' }} port={operations} onClose={() => setNoteVersion((value) => value + 1)} /></div>
+    <div role="tabpanel" id={`${tabId}-note-panel`} aria-labelledby={`${tabId}-note`} hidden={tab !== 'note'}><QuickNote key={noteVersion} standalone target={{ caseId: item.caseId, plate: currentItem.plate, type: currentItem.type, officeNumber: currentItem.officeNumber, source: 'api' }} port={operations} onClose={() => setNoteVersion((value) => value + 1)} /></div>
     <div role="tabpanel" id={`${tabId}-history-panel`} aria-labelledby={`${tabId}-history`} hidden={tab !== 'history'}>
     {workspace.status === 'loading' && <p role="status">Dosya yükleniyor…</p>}
     {!['ok', 'loading'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button onClick={workspace.reload}>Tekrar dene</button></p>}
@@ -93,12 +106,18 @@ function CaseWorkspace({ item, cases, operations, tab, tabId }: { item: CaseReco
       {workspace.status === 'loading' && <p role="status">Dosya yükleniyor…</p>}
       {!['ok', 'loading'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button onClick={workspace.reload}>Tekrar dene</button></p>}
       {detailError ? <p role="alert">Güncel süreç bilgisi alınamadı. <button onClick={() => window.dispatchEvent(new Event('focus'))}>Tekrar dene</button></p> : !detail ? <p role="status">Güncel süreç kontrol ediliyor…</p> : <dl className="assistant-process">
+        <dt>Dosya sorumlusu</dt><dd>{detail.responsibleUserId ? referenceData.references?.users.find((user) => user.id === detail.responsibleUserId)?.displayName ?? tracking?.users.find((user) => user.id === detail.responsibleUserId)?.displayName ?? 'Atanmış (ad bilgisi alınamadı)' : 'Atanmamış'}</dd>
+        <dt>Sigorta şirketi</dt><dd>{referenceData.references?.insurers.find((insurer) => insurer.id === detail.insurerId)?.name ?? (detail.company || '—')}</dd>
+        <dt>Dosya türü</dt><dd>{detail.type === 'Trafik' || detail.type === 'Kasko' ? detail.type : '—'}</dd>
+        <dt>Dosya numarası</dt><dd>{detail.claimNumber || '—'}</dd>
+        <dt>İhbar tarihi</dt><dd>{notificationDate(detail.notificationDate)}</dd>
+        <dt>Servis adı</dt><dd>{detail.service || '—'}</dd>
+        <dt>Servis cep</dt><dd>{serviceMobile(detail) ?? '—'}</dd>
         <dt>Durum / aşama</dt><dd>{detail.status} · {detail.stage}</dd>
-        <dt>Sorumlu</dt><dd>{detail.responsibleUserId ? tracking?.users.find((user) => user.id === detail.responsibleUserId)?.displayName ?? 'Atanmış (ad bilgisi bekleniyor)' : 'Atanmamış'}</dd>
-        <dt>Servis</dt><dd>{detail.service || '—'}</dd>
         <dt>Takip</dt><dd>{detail.followUp}</dd>
         <dt>Son işlem</dt><dd>{detail.lastAction === '—' ? '—' : dateTime(detail.lastAction)}</dd>
       </dl>}
+      {referenceData.status === 'unavailable' && <p role="alert">Şirket ve personel bilgileri alınamadı. <button onClick={referenceData.reload}>Bilgileri yenile</button></p>}
       {trackingError ? <p role="alert">Tramer ve evrak takibi alınamadı. <button onClick={() => setTrackingVersion((value) => value + 1)}>Tekrar dene</button></p> : !tracking ? <p role="status">Tramer ve evrak takibi yükleniyor…</p> : <>
         <h3>Tramer / evrak</h3>
         {tracking.tramer.length === 0 && <p>Tramer talebi yok.</p>}
@@ -118,7 +137,7 @@ function CaseWorkspace({ item, cases, operations, tab, tabId }: { item: CaseReco
   </section>
 }
 
-export function AssistantCaseSearch({ cases: suppliedCases, operations }: { cases?: CasesDataPort; operations?: CaseOperationsPort }) {
+export function AssistantCaseSearch({ cases: suppliedCases, operations, references }: { cases?: CasesDataPort; operations?: CaseOperationsPort; references?: CaseReferenceDataPort }) {
   const session = useSession()
   const { reportUnauthorized } = session
   const cases = useMemo(() => suppliedCases ?? createHttpCasesAdapter(), [suppliedCases])
@@ -190,12 +209,12 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations }: { case
         setSelectionWriteError(!saved)
         if (saved) setSelection({ key: `${userId}:${item.caseId}:${selectionReload}`, item, error: false })
         if (saved) setTab('note')
-      }}><strong>{item.plate}</strong><span>{item.officeNumber} · {item.status} · {item.stage}</span></button>)}
+      }}><AssistantPlate plate={item.plate} type={item.type} /><span>{item.officeNumber} · {item.status} · {item.stage}</span></button>)}
       {current.data.totalPages > 1 && <nav className="assistant-pagination" aria-label="Arama sayfaları"><button disabled={search!.page <= 1} onClick={() => setSearch({ ...search!, page: search!.page - 1 })}>Önceki</button><span>{search!.page} / {current.data.totalPages}</span><button disabled={search!.page >= current.data.totalPages} onClick={() => setSearch({ ...search!, page: search!.page + 1 })}>Sonraki</button></nav>}
     </section>}
     </div>
     {selectionError && <p role="alert">Dosya seçimi alınamadı veya bu cihazda saklanamadı. <button onClick={() => { setSelectionWriteError(false); setSelectionReload(value => value + 1) }}>Tekrar dene</button></p>}
-    {selected ? <CaseWorkspace key={selected.caseId} item={selected} cases={cases} operations={operations} tab={activeTab} tabId={tabId} /> : selectedCaseId && !selectionError ? <p role="status">Seçili dosya yükleniyor…</p> : <p>Programdan bir dosya seçin veya burada arayın.</p>}
+    {selected ? <CaseWorkspace key={selected.caseId} item={selected} cases={cases} operations={operations} references={references} tab={activeTab} tabId={tabId} /> : selectedCaseId && !selectionError ? <p role="status">Seçili dosya yükleniyor…</p> : <p>Programdan bir dosya seçin veya burada arayın.</p>}
   </>
 }
 

@@ -181,4 +181,31 @@ describeDb('verified office folder inventory', () => {
     await reconcile([{ ...folder, relativePath: folder.relativePath.replace('Ekim', 'EKIM') }])
     expect((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [id])).rows[0].is_archived).toBe(false)
   })
+  it.each(['traffic', 'casco'] as const)('preserves an unregistered moved %s workspace and audits unresolved identity once', async caseType => {
+    const plate = caseType === 'casco' ? '34MOV257' : '06MOV258'
+    const old = await register(`2026 OFİS/_EKSİK DOSYALAR/${plate}`)
+    const id = (await pool.query('SELECT case_id FROM case_folder_registrations WHERE source_folder_id=$1', [old.sourceFolderId])).rows[0].case_id
+    await pool.query('DELETE FROM case_folder_registrations WHERE case_id=$1', [id])
+    const owner = uuidv7()
+    await pool.query('INSERT INTO users(id,organization_id,email,display_name) VALUES($1,$2,$3,$4)', [owner, policy.organizationId, `${owner}@example.test`, 'Synthetic owner'])
+    await pool.query("UPDATE cases SET case_type=$2,responsible_user_id=$3,created_at=now()-interval '1 year' WHERE id=$1", [id, caseType, owner])
+    const before = (await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=$1', [id])).rows
+    const moved = { ...old, relativePath: `2026 OFİS/Ekim 2026/${plate}` }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect((await reconcile([moved])).inventoryDeferred).toBeGreaterThanOrEqual(1)
+      expect((await pool.query('SELECT to_jsonb(c) snapshot FROM cases c WHERE id=$1', [id])).rows).toEqual(before)
+    }
+    const events = (await pool.query("SELECT actor_user_id,details FROM audit_events WHERE resource_id=$1 AND action='case.office_inventory_deferred'", [id])).rows
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ actor_user_id: policy.actorUserId, details: { reason: 'relocation_identity_unresolved', candidateCount: 1, visibilityPreserved: true } })
+    expect(JSON.stringify(events)).not.toContain(plate)
+    expect(JSON.stringify(events)).not.toContain('_EKSİK')
+    // A plate match alone must not restore an already hidden case or relocate it.
+    await pool.query('UPDATE cases SET is_archived=true,version=version+1 WHERE id=$1', [id])
+    await createAuditService().record(pool, { organizationId: policy.organizationId, actorUserId: policy.actorUserId,
+      action: 'case.office_inventory_reconciled', entityType: 'case', entityId: id, details: { managedArchive: true } })
+    expect((await reconcile([moved])).inventoryDeferred).toBeGreaterThanOrEqual(1)
+    expect((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [id])).rows[0].is_archived).toBe(true)
+    expect((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [id])).rows[0].relative_path).toBe(old.relativePath)
+  })
 })

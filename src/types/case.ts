@@ -51,6 +51,8 @@ export interface CaseRecord {
   serviceDetails?: { name: string; phone: string | null; address: string | null } | null
   serviceId?: string | null
   serviceProfile?: {
+    readonly phone?: string | null
+    readonly address?: string | null
     readonly id: string
     readonly name: string
     readonly serviceType: 'authorized' | 'private' | 'glass' | 'mobile' | 'other'

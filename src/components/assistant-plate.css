@@ -1,0 +1,3 @@
+.assistant-plate { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; max-width: 100%; }
+.assistant-plate strong { min-width: 0; overflow-wrap: anywhere; }
+.assistant-plate .assistant-plate__type { flex: 0 0 auto; padding: 2px 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); font-size: .75em; font-weight: 600; line-height: 1.3; white-space: nowrap; }

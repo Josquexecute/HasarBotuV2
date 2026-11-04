@@ -11,5 +11,6 @@ module.exports = {
   forceCodeSigning: true,
   directories: { ...base.directories, output: 'release/signed' },
   win: { ...base.win, signtoolOptions: { certificateSha1: thumbprint, certificateSubjectName: publisher,
+    sign: '../../scripts/sign-desktop.cjs',
     signingHashAlgorithms: ['sha256'], rfc3161TimeStampServer: timestamp } },
 }

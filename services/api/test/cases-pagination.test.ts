@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
-import type pg from 'pg'
+import pg from 'pg'
 import { AUTH_LOGIN_ROUTE, caseListResponseSchema, type CaseListResponse } from '@hasarbotu/contracts'
 import {
   assertTestDatabaseUrl,
@@ -11,6 +11,8 @@ import {
   type DatabaseConfig,
 } from '@hasarbotu/database'
 import { buildApp, fixedClock, hashPassword } from '../src/index.js'
+import { inspectCaseListIntegrity } from '../src/cases/visibility-integrity.js'
+import { createCasesStore } from '../src/cases/store.js'
 
 /**
  * Paket 53 — dosya listesinde sunucu tarafı sayfalama.
@@ -246,5 +248,37 @@ describeDb('Paket 53 dosya listesi sunucu tarafı sayfalama', () => {
   it('oturumsuz erişim reddedilir', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/cases?status=open' })
     expect(response.statusCode).toBe(401)
+  })
+  it('checks every HTTP page across types, statuses and responsible users against a tenant-scoped database snapshot', async () => {
+    expect(await inspectCaseListIntegrity(pool, organizationId)).toMatchObject({ status: 'PASS', checkedCases: MAIN_CASE_COUNT + 1 })
+    const singleConnection = new pg.Pool({ connectionString: config.url, max: 1 })
+    const report = await inspectCaseListIntegrity(singleConnection, organizationId, async query => {
+      const result = await list(cookie, new URLSearchParams(Object.entries(query).map(([key, value]): [string, string] => [key, String(value)])).toString())
+      return { items: result.items, totalItems: result.pageInfo.totalItems }
+    }).finally(() => singleConnection.end())
+    expect(report).toMatchObject({ status: 'PASS', checkedCases: MAIN_CASE_COUNT + 1,
+      missingItems: 0, unexpectedItems: 0, duplicateItems: 0, countMismatches: 0, concurrentChanges: false })
+    expect(report.checkedPages).toBeGreaterThan(20)
+    expect(JSON.stringify(report)).not.toContain(organizationId)
+  })
+  it('detects silently repeated pages and missing records even when the reported total is correct', async () => {
+    const store = createCasesStore(pool)
+    const report = await inspectCaseListIntegrity(pool, organizationId, query => store.list(organizationId, { ...query, page: 1 }))
+    expect(report.status).toBe('FAIL')
+    expect(report.duplicateItems).toBeGreaterThan(0)
+    expect(report.missingItems).toBeGreaterThan(0)
+    expect(report.countMismatches).toBe(0)
+  })
+  it('reports concurrent HTTP enumeration as inconclusive instead of claiming complete visibility', async () => {
+    const store = createCasesStore(pool)
+    let changed = false
+    const report = await inspectCaseListIntegrity(pool, organizationId, async query => {
+      if (!changed) {
+        changed = true
+        await pool.query('UPDATE cases SET version=version+1 WHERE organization_id=$1', [organizationId])
+      }
+      return store.list(organizationId, query)
+    })
+    expect(report).toMatchObject({ status: 'INCONCLUSIVE', concurrentChanges: true })
   })
 })

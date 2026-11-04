@@ -7,6 +7,7 @@ import { useSession } from '../app/sessionContext'
 import { canUsePermission } from '../app/permissions'
 import { CaseOperationsError, type CaseOperationsPort } from '../data/caseOperationsPort'
 import { useCaseOperations } from '../data/useCaseOperations'
+import { AssistantPlate } from './AssistantPlate'
 
 interface Draft { body: string; key: string; attempted: boolean }
 
@@ -71,7 +72,7 @@ export function QuickNote({ target, port, onClose, standalone = false }: { targe
   }
 
   return <>
-    <p className="touch-assistant__target"><strong>{target.plate}</strong><span>{target.officeNumber}</span></p>
+    <p className="touch-assistant__target"><AssistantPlate plate={target.plate} type={target.type} /><span>{target.officeNumber}</span></p>
     {saved ? <div role="status"><p>Not dosyaya kaydedildi.</p>{standalone ? <button className="button button--primary" onClick={onClose}>Yeni not</button> : <Link className="button button--primary" to={`/dosyalar/${target.caseId}?tab=operations`} onClick={onClose}>Dosyada göster</Link>}</div> : <form onSubmit={(event) => void save(event)}>
       <label className="field"><span className="sr-only">Hızlı not</span><textarea autoFocus rows={5} maxLength={5000} value={draft.body} readOnly={busy || draft.attempted} onChange={(event) => {
         const next = { ...draft, body: event.target.value }

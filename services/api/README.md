@@ -6,6 +6,8 @@ Klasör adı dosya kimliği değildir. Yeni çalışma klasöründe değişmez w
 
 Eski, UUID işareti bulunmayan çalışma klasörü taşındığında tekil vaka, tamamlanmış workspace, eski konumun yokluğu ve kayıtlı dosya SHA-256'ları birlikte doğrulanır. Eksik tarihsel belge varsa eski konuma ait iki farklı pCloud dosya kimliği/revizyonunun mevcut attestation kayıtlarıyla kesintisiz devam ettiği ayrıca kanıtlanır; eksik belgelerin geçmişi silinmez. Aynı plakalı birden fazla vaka, içerik farkı, elle arşivleme ve devam eden işlemler otomatik eşlemeyi engeller.
 
+Ofis envanteri eski konumu bulamazken aynı plaka başka bir sahipsiz ofis konumunda görülürse görünürlüğü korur; plaka eşleşmesi tek başına taşıma veya arşivden çıkarma yetkisi vermez. Kimlik kanıtı bekleyen durum `case.office_inventory_deferred` denetimine aktör, zaman, neden ve vaka sürümüyle, plaka/yol/belge içeriği olmadan yazılır; aynı kanıt ve sürüm tekrar loglanmaz. Keşif servisi beş dakikada bir salt okunur snapshot üzerinde bağımsız DB sayımını tür/durum/sorumlu ve iki sıralamada tüm liste sayfalarıyla karşılaştırır. `visibilityIntegrity` yalnız sayıları raporlar; kimlikli HTTP okuyucuyla denetimde eşzamanlı değişiklik varsa sonuç `INCONCLUSIVE` olur.
+
 ## Kapsam
 
 Evrak izleme, tamamlanmış fiziksel taşıma zincirini listeleme, kontrol ve tarama uzlaştırmasında izler.
