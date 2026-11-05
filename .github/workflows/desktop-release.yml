@@ -46,8 +46,14 @@ jobs:
         run: node --test scripts/write-ci-distribution-profile.test.mjs
       - name: Ofis bağlantısını doğrula
         run: node scripts/write-ci-distribution-profile.mjs
-      - name: Ofis başlatma testlerini erken doğrula
-        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File deploy/windows-service/start-office-server.tests.ps1
+      - name: Ofis PowerShell kontrollerini erken doğrula
+        run: |
+          foreach ($fixture in @('start-office-server', 'renew-office-network', 'office-network-state')) {
+            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "deploy/windows-service/$fixture.tests.ps1"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Gerçek Windows pencere sırasını erken doğrula
+        run: npm test --workspace @hasarbotu/desktop -- test/assistant-topmost-e2e.test.ts
       - name: Tarayıcı testleri için Playwright motorlarını kur
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Ayrı PostgreSQL test veritabanını aç
