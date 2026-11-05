@@ -28,6 +28,10 @@ pnpm-debug.log*
 .local/
 secrets/
 credentials/
+# Private office host inventory and diagnostics
+/ag-ofis-kontrol-sonucu.json
+/ofis-kontrol-sonucu.json
+/ofis-yonetim-sonucu.json
 # Private SBM email samples; only anonymized fixtures belong in git.
 /sbm/
 *.pem

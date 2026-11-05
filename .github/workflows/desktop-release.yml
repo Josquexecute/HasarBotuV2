@@ -38,6 +38,8 @@ jobs:
           cache: npm
       - name: Kilitli bağımlılıkları kur
         run: npm ci
+      - name: Tarayıcı testleri için Playwright motorlarını kur
+        run: npx playwright install --with-deps chromium firefox webkit
       - name: Sürümün ve main kaydının uygunluğunu kontrol et
         run: node scripts/create-release-draft.mjs --preflight
         env:
