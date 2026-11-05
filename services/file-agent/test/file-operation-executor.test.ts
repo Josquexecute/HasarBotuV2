@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JobPayload } from '@hasarbotu/contracts'
-import { diagnoseWindowsLocks } from '../src/windows-lock-diagnostics.js'
+import * as windowsLockDiagnostics from '../src/windows-lock-diagnostics.js'
 import {
   buildWorkspaceManifest,
   executeFileOperation,
@@ -35,6 +35,7 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
   })
 
   afterEach(async () => {
+    vi.restoreAllMocks()
     await rm(base, { recursive: true, force: true })
   })
 
@@ -62,7 +63,7 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
     const holder = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, env: { ...process.env, HB_LOCK_TEST: path } })
     try {
       await once(holder.stdout, 'data')
-      expect(await diagnoseWindowsLocks(join(sourceRoot, sourceRelative))).toMatchObject({ applications: expect.arrayContaining([{ pid: holder.pid, name: 'powershell' }]) })
+      expect(await windowsLockDiagnostics.diagnoseWindowsLocks(join(sourceRoot, sourceRelative))).toMatchObject({ applications: expect.arrayContaining([{ pid: holder.pid, name: 'powershell' }]) })
       const result = await executeFileOperation(roots(), applyPayload())
       expect(result).toMatchObject({ outcome: 'failed', errorCode: 'file_locked', fileLock: { applications: expect.arrayContaining([{ pid: holder.pid, name: 'powershell' }]) } })
       expect(await readFile(join(sourceRoot, sourceRelative, 'not.txt'), 'utf8')).toBe('sentetik-not')
@@ -74,6 +75,7 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
   }, 35_000)
 
   it('rechecks the source manifest after a transient sharing violation before retrying', async () => {
+    vi.spyOn(windowsLockDiagnostics, 'diagnoseWindowsLocks').mockResolvedValue(undefined)
     let attempts = 0
     const adapter = { ...nodeFileSystemAdapter, async rename(source: string, destination: string) {
       if (++attempts === 1) { await writeFile(join(source, 'not.txt'), 'changed during lock'); throw errno('EBUSY') }
@@ -85,6 +87,7 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
   })
 
   it('completes a transient sharing violation without another user approval', async () => {
+    vi.spyOn(windowsLockDiagnostics, 'diagnoseWindowsLocks').mockResolvedValue(undefined)
     let attempts = 0
     const adapter = { ...nodeFileSystemAdapter, async rename(source: string, destination: string) {
       if (++attempts === 1) throw errno('EBUSY')
@@ -306,12 +309,19 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
   })
 
   it('kilitli rename güvenli retry hatası üretir ve kaynağı korur', async () => {
+    // Injected EBUSY has no OS lock; real PowerShell probes are covered above.
+    const diagnostics = vi.spyOn(windowsLockDiagnostics, 'diagnoseWindowsLocks').mockResolvedValue(undefined)
+    const originalManifest = await buildWorkspaceManifest(nodeFileSystemAdapter, sourceRoot, sourceRelative)
     const adapter: FileSystemAdapter = {
       ...nodeFileSystemAdapter,
-      rename: async () => { throw errno('EBUSY') },
+      rename: vi.fn(async () => { throw errno('EBUSY') }),
     }
     expect(await executeFileOperation(roots(), applyPayload(), adapter)).toEqual({ outcome: 'failed', errorCode: 'file_locked' })
-    await expect(access(join(sourceRoot, ...sourceRelative.split('/')))).resolves.toBeUndefined()
+    expect(adapter.rename).toHaveBeenCalledTimes(4)
+    expect(diagnostics).toHaveBeenCalledTimes(4)
+    expect(diagnostics).toHaveBeenCalledWith(join(sourceRoot, sourceRelative))
+    expect((await buildWorkspaceManifest(nodeFileSystemAdapter, sourceRoot, sourceRelative)).manifestHash).toBe(originalManifest.manifestHash)
+    await expect(access(join(sourceRoot, '2026', 'Temmuz 2026', '34ABC123-YENI'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('publish edilmiş doğru hedefi restart/retry sırasında idempotent recovery ile kabul eder', async () => {
@@ -355,6 +365,7 @@ describe('File Agent case workspace move/rename (sentetik filesystem)', () => {
   })
 
   it('retries a locked cleanup rename while preserving both trees', async () => {
+    vi.spyOn(windowsLockDiagnostics, 'diagnoseWindowsLocks').mockResolvedValue(undefined)
     const payload = applyPayload({
       destination: { storageRootKey: 'destination-root', relativePath: '2026/KAPALI TEMMUZ 2026/34ABC123' },
       strategy: 'staged_copy',
