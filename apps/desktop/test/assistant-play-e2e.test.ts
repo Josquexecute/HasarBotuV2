@@ -6,13 +6,13 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 
-it('real Electron: reaction controls, reduced motion, 61 distinct scenes and appearance preservation', async () => {
+it.each([false, true])('real Electron: reaction controls, reduced motion, 61 distinct scenes and appearance preservation (system reduced motion: %s)', async (systemReducedMotion) => {
   const workspace = await mkdtemp(join(tmpdir(), 'hb-touch-play-'))
   const output = process.env.HB_PLAY_EVIDENCE ?? workspace
   await mkdir(output, { recursive: true })
   try {
     const code = await new Promise<number | null>((done, reject) => {
-      const child = spawn(createRequire(import.meta.url)('electron') as string, [fileURLToPath(new URL('./harness/assistant-play-main.mjs', import.meta.url)), `--user-data-dir=${join(workspace, 'profile')}`], {
+      const child = spawn(createRequire(import.meta.url)('electron') as string, [...(systemReducedMotion ? ['--force-prefers-reduced-motion'] : []), fileURLToPath(new URL('./harness/assistant-play-main.mjs', import.meta.url)), `--user-data-dir=${join(workspace, 'profile')}`], {
         windowsHide: true, stdio: 'ignore', env: { ...process.env, HB_PLAY_OUTPUT: output, HB_PLAY_ASSETS: fileURLToPath(new URL('../../../dist/', import.meta.url)) },
       })
       const timer = setTimeout(() => { child.kill(); reject(new Error('Native reaction checks timed out')) }, 90_000)

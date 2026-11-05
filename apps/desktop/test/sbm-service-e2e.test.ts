@@ -8,12 +8,17 @@ import { expect, it } from 'vitest'
 import { assertTestDatabaseUrl, createDatabasePool, runMigrations, uuidv7 } from '@hasarbotu/database'
 import { buildApp, hashPassword } from '@hasarbotu/api'
 
-it.skipIf(!process.env.TEST_DATABASE_URL)('real Electron → API → PostgreSQL: SBM contact editing, both saves, revision, cancellation and service replacement', async () => {
+it.skipIf(!process.env.TEST_DATABASE_URL).each([0, 100])('real Electron → API → PostgreSQL: SBM contact editing, both saves, revision, cancellation and service replacement (reference delay: %i ms)', async (referenceDelayMs) => {
   const config = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL!)
   const pool = createDatabasePool({ config })
   const output = await mkdtemp(join(tmpdir(), 'hb-sbm-service-'))
   const organization = uuidv7(), user = uuidv7(), email = `${user}@example.test`, password = 'synthetic-sbm-service-test-2026'
   const api = buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false } })
+  api.addHook('onRequest', async request => {
+    if (referenceDelayMs && request.url.startsWith('/api/v1/references/')) {
+      await new Promise(done => setTimeout(done, referenceDelayMs))
+    }
+  })
   try {
     await runMigrations({ databaseUrl: config.url, quiet: true })
     await pool.query("INSERT INTO organizations(id,code,name) VALUES($1,$2,'SBM Electron Test')", [organization, organization])

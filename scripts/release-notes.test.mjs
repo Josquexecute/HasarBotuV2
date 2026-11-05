@@ -36,3 +36,44 @@ test('broken Turkish summaries, commit titles and existing notes cannot enter a 
   assert.throws(() => renderReleaseNotes([{ sha, subject: 'fix: ' + broken }], options), /garbled text/)
   assert.throws(() => mergeReleaseNotes(broken, 'Kapanış'), /garbled text/)
 })
+
+test('large initial releases fit the update limit and link every omitted change to the exact comparison', () => {
+  const previousSha = 'b'.repeat(40)
+  const commits = Object.freeze(Array.from({ length: 47 }, (_, index) => Object.freeze({ sha,
+    subject: `fix: ${index + 1}. dosya işlemi, oturum koruması ve ofis bağlantısı için doğrulanmış düzeltmeler` })))
+  const summary = 'Ofiste kullanılan bağlantı ve dosya işlemleri güncellendi.'
+  const notes = renderReleaseNotes(commits, { ...options, previousSha, summary })
+  const visible = (notes.match(/^- /gm) ?? []).length
+  const omitted = Number(/(\d+) ek değişiklik/.exec(notes)?.[1])
+  assert.ok(notes.length <= 3500)
+  assert.ok(visible > 0 && omitted > 0)
+  assert.equal(visible + omitted, commits.length)
+  assert.ok(notes.includes(`https://github.com/example/source/compare/${previousSha}...${sha}`))
+  assert.ok(notes.includes(summary))
+  assert.ok(notes.includes('42 test geçti; 8 test atlandı'))
+  assert.ok(notes.includes('hasarbotu-source:' + sha))
+  assert.ok(mergeReleaseNotes('', notes + `\n<!-- hasarbotu-artifact:${'f'.repeat(64)}:113055064 -->`).length <= 4000)
+  assert.equal(notes, renderReleaseNotes(commits, { ...options, previousSha, summary }))
+})
+
+test('an oversized automatic title uses the source history without falsely claiming there are no changes', () => {
+  const notes = renderReleaseNotes([{ sha, subject: 'fix: ' + 'Başlık '.repeat(600) }], options)
+  assert.ok(notes.length <= 3500)
+  assert.match(notes, /1 ek değişiklik/)
+  assert.ok(notes.includes(`https://github.com/example/source/commits/${sha}`))
+  assert.ok(!notes.includes('yeni kaynak değişikliği yok'))
+})
+
+test('user summaries exceeding the update limit are rejected instead of being silently shortened', () => {
+  assert.throws(() => renderReleaseNotes([], { ...options, summary: 'A'.repeat(3500) }), /Release notes exceed/)
+})
+
+test('omitted commit titles are still checked for broken encoding', () => {
+  const commits = Array.from({ length: 47 }, () => ({ sha, subject: 'fix: ' + 'Dosya işlemleri '.repeat(10) }))
+  commits.push({ sha, subject: 'fix: Kapan\u00c4\u00b1\u00c5\u0178' })
+  assert.throws(() => renderReleaseNotes(commits, options), /garbled text/)
+})
+
+test('comparison links reject unresolved or unsafe baseline commits', () => {
+  assert.throws(() => renderReleaseNotes([], { ...options, previousSha: 'main' }), /provenance/)
+})

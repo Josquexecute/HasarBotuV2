@@ -147,6 +147,11 @@ void app.whenReady().then(async () => {
     assistant = await startDesktopAssistant(options)
     check('shortcut React workspace is not loaded before the first menu request', assistant.menuWindow.webContents.getURL() === '')
     const win = assistant.window
+    if (app.commandLine.hasSwitch('force-prefers-reduced-motion')) check('system reduced-motion fixture reaches the real renderer', await win.webContents.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches'))
+    // Animation cases must set their media preference before the first pixel or gaze sample.
+    win.webContents.debugger.attach('1.3')
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
+    await until(() => win.webContents.executeJavaScript('!matchMedia("(prefers-reduced-motion: reduce)").matches'))
     await win.webContents.executeJavaScript(`window.canvasSignature = () => {
       const canvas = document.querySelector('canvas')
       const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
@@ -225,7 +230,8 @@ void app.whenReady().then(async () => {
       }
     }
     } finally {
-      const restored = await positionNativeTestCursor(colorCursor)
+      // Restoring the user's pointer must not mask a pixel assertion if physical input resumes.
+      const restored = await positionNativeTestCursor(colorCursor, { verify: false })
       await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'color-pointer-proof.json'), JSON.stringify({ positioned: colorPointer, restored }, null, 2))
     }
     check('character cannot publish appearance', await win.webContents.executeJavaScript('typeof window.hasarbotuAppearance === "undefined"'))
@@ -274,10 +280,6 @@ void app.whenReady().then(async () => {
     if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-custom-appearance.png'), (await win.webContents.capturePage()).toPNG()) }
     await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: '#635bff', characterColor: '#eff2fa', reduceMotion: false })})`)
     await win.webContents.executeJavaScript('window.rendererErrors = []; window.addEventListener("error", event => window.rendererErrors.push(event.message)); undefined')
-    // Gaze animation must not depend on the host's accessibility preference.
-    win.webContents.debugger.attach('1.3')
-    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
-    await until(() => win.webContents.executeJavaScript('!matchMedia("(prefers-reduced-motion: reduce)").matches'))
     // The policy deliberately yields to an unrelated foreground fullscreen app.
     // Establish this harness's normal host before checking the topmost band.
     shell.window.show(); shell.window.focus()

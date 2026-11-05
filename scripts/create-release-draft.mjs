@@ -26,7 +26,7 @@ const previousSha = previous ? execFileSync('git', ['rev-parse', `${previous.tag
 let summary = ''
 try { summary = await readFile(`.github/release-notes/${version}.md`, 'utf8') } catch (error) { if (error.code !== 'ENOENT') throw error }
 const testSummary = JSON.parse(await readFile(join(process.env.RUNNER_TEMP, 'hasarbotu-release-checks/summary.json'), 'utf8'))
-const generated = renderReleaseNotes(readReleaseCommits(previousSha, sha), { version, sourceSha: sha, summary, testSummary,
+const generated = renderReleaseNotes(readReleaseCommits(previousSha, sha), { version, sourceSha: sha, previousSha, summary, testSummary,
   runUrl: `https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}` })
 let existing = releases.find(r => r.tag_name === 'v' + version)
 const tag = validateDraftUpdate(existing, { version, sourceSha: sha })

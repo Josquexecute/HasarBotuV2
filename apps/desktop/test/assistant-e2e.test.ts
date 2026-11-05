@@ -26,12 +26,13 @@ it('actual app quit flushes the last movement before Electron exits', async () =
   } finally { await rm(workspace, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }) }
 })
 
-it('Windows assistant: real Electron window, security, menu, navigation, persistence and cleanup', async () => {
+it.each([false, true])('Windows assistant: real Electron window, security, menu, navigation, persistence and cleanup (system reduced motion: %s)', async (systemReducedMotion) => {
   const workspace = await mkdtemp(join(tmpdir(), 'hb-assistant-test-'))
   const resultPath = join(workspace, 'result.json')
   try {
     const code = await new Promise<number | null>((resolve, reject) => {
       const child = spawn(require('electron') as string, [
+        ...(systemReducedMotion ? ['--force-prefers-reduced-motion'] : []),
         fileURLToPath(new URL('./harness/assistant-main.mjs', import.meta.url)), `--user-data-dir=${join(workspace, 'user-data')}`,
       ], { env: { ...process.env, HB_ASSISTANT_ASSETS: fileURLToPath(new URL('../../../dist/', import.meta.url)), HB_ASSISTANT_RESULT: resultPath, HB_ASSISTANT_OUTPUT: process.env.HB_ASSISTANT_EVIDENCE ?? workspace }, stdio: 'ignore' })
       let timedOut = false

@@ -878,6 +878,18 @@ Sürüm testleri ayrı bir `_test` veritabanına ait `TEST_DATABASE_URL` ister.
 Paketleme ve smoke testi için mevcut özel ofis bağlantı profilini kullan;
 `HASARBOTU_DISTRIBUTION_PROFILE` bu profili göstermelidir. Özel yapılandırmayı Git'e ekleme.
 
+GitHub Actions için `Settings → Secrets and variables → Actions → Variables` altında
+`HASARBOTU_OFFICE_API_ORIGIN`, `HASARBOTU_OFFICE_LAN_HOSTNAME` ve
+`HASARBOTU_OFFICE_CA_CERTIFICATE` zorunludur; değerleri aynı v2 `client-profile.json` dosyasından al.
+`HASARBOTU_OFFICE_HTTPS_PORT` ve `HASARBOTU_OFFICE_DISCOVERY_PORT` varsayılanları 8443 ve 43110'dur;
+özel portları ve varsa `HASARBOTU_OFFICE_REMOTE_ORIGIN` değerini aynı profille eşleştir.
+Eski `HASARBOTU_OFFICE_LAN_IPV4` değişkeni v2 profilinin yerini tutmaz.
+Uzun otomatik sürüm notları sınır içinde tutulur; listelenemeyen değişikliklerin sayısı
+ve tam commit karşılaştırmasına bağlantı korunur. Elle yazılan özet sessizce kısaltılmaz.
+Masaüstü E2E süiti sistemde azaltılmış hareket açıkken, geciken referans yanıtlarında ve
+soğuk Chromium ağ başlangıcında da çalışır. Animasyon örnekleri medya tercihlerini açıkça
+ayarlar; form ve yerel pencere testleri ilgili hazır olma durumunu bekler.
+
 API'nin `DESKTOP_RELEASES_DIR` ayarı mutlak, yalnız dağıtım yöneticileri ve servis hesabınca
 yazılabilir bir dizin olmalıdır. Ayar eksikse yayın devre dışıdır; bozuk manifest veya
 paket 503 döndürür. Servis ayarını değiştirmek gerekirse API'den önce bağımlı file-agent'ı

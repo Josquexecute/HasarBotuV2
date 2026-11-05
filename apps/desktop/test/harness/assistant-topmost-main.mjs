@@ -33,9 +33,7 @@ async function native(target, competitor, taskbar = false, expectation = 'observ
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string cls,string title);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern void keybd_event(byte key,byte scan,uint flags,UIntPtr extra);
-    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
-    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a,uint b,bool attach);
-    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll",SetLastError=true)] public static extern IntPtr SendMessageTimeout(IntPtr h,uint message,UIntPtr wParam,IntPtr lParam,uint flags,uint timeout,out UIntPtr result);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int command);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr order,int x,int y,int w,int height,uint flags);
@@ -51,10 +49,10 @@ $target=[IntPtr]${target}; $other=[IntPtr]${competitor}; $bar=[InspectTouch]::Fi
 ${taskbar === 'foreground' ? 'if($bar -ne [IntPtr]::Zero) { [void][InspectTouch]::SetWindowPos($bar,[IntPtr](-1),0,0,0,0,0x13) }' : ''}
 $focus=${taskbar === 'foreground' ? '$bar' : '$other'}
 [InspectTouch]::keybd_event(0x12,0,0,[UIntPtr]::Zero); [InspectTouch]::keybd_event(0x12,0,2,[UIntPtr]::Zero)
-$owner=[uint32]0; $foregroundThread=[InspectTouch]::GetWindowThreadProcessId([InspectTouch]::GetForegroundWindow(),[ref]$owner); $observerThread=[InspectTouch]::GetCurrentThreadId()
-$attached=[InspectTouch]::AttachThreadInput($observerThread,$foregroundThread,$true)
-try { if(-not [InspectTouch]::SetForegroundWindow($focus)){throw 'Cannot activate the native test surface'} }
-finally { if($attached){[void][InspectTouch]::AttachThreadInput($observerThread,$foregroundThread,$false)} }
+if(-not [InspectTouch]::SetForegroundWindow($focus)){throw 'Cannot activate the native test surface'}
+# Cross-thread activation is asynchronous; acknowledge its message queue before observing z-order.
+$reply=[UIntPtr]::Zero
+if([InspectTouch]::SendMessageTimeout($focus,0,[UIntPtr]::Zero,[IntPtr]::Zero,2,5000,[ref]$reply) -eq [IntPtr]::Zero){throw 'Native test surface did not process foreground activation'}
 ${taskbar === 'show' ? 'if($bar -ne [IntPtr]::Zero) { [void][InspectTouch]::ShowWindow($bar,0); [void][InspectTouch]::SetWindowPos($bar,[IntPtr](-1),0,0,0,0,0x13); [void][InspectTouch]::ShowWindow($bar,4) }' : ''}
 function Read-NativeFacts {
 $order=@(); $h=[InspectTouch]::GetTopWindow([IntPtr]::Zero)

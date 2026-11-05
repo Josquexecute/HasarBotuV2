@@ -38,14 +38,16 @@ jobs:
           cache: npm
       - name: Kilitli bağımlılıkları kur
         run: npm ci
-      - name: Tarayıcı testleri için Playwright motorlarını kur
-        run: npx playwright install --with-deps chromium firefox webkit
       - name: Sürümün ve main kaydının uygunluğunu kontrol et
         run: node scripts/create-release-draft.mjs --preflight
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: CI ofis profilinin regresyonlarını doğrula
+        run: node --test scripts/write-ci-distribution-profile.test.mjs
       - name: Ofis bağlantısını doğrula
         run: node scripts/write-ci-distribution-profile.mjs
+      - name: Tarayıcı testleri için Playwright motorlarını kur
+        run: npx playwright install --with-deps chromium firefox webkit
       - name: Ayrı PostgreSQL test veritabanını aç
         run: node scripts/ci-postgres.mjs start
       - name: API worker kapanışını ve operasyonel uyarı ölçeklenmesini erken doğrula

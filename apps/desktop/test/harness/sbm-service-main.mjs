@@ -21,7 +21,11 @@ const until = async code => {
     await new Promise(done => setTimeout(done, 40))
   }
 }
-const button = text => evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)} && !b.disabled); if (!b) throw Error('Missing button'); b.click() })()`)
+const button = async text => {
+  const query = `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)} && !b.disabled)`
+  await until(`Boolean(${query})`)
+  await evaluate(`${query}.click()`)
+}
 const field = (label, value, nested = false) => evaluate(`(() => {
   const scope = ${nested ? "document.querySelector('form:has(#service-revision-title)')" : 'document'}
   const el = [...scope.querySelectorAll('label')].find(l => l.querySelector('span')?.textContent.trim() === ${JSON.stringify(label)})?.querySelector('input,textarea,select') || scope.querySelector('[aria-label=' + CSS.escape(${JSON.stringify(label)}) + ']')
@@ -34,13 +38,19 @@ const contacts = async (phone, address, nested = false) => evaluate(`(() => {
   const value = text => [...scope.querySelectorAll('label')].find(l => l.querySelector('span')?.textContent === text)?.querySelector('input,textarea').value
   return value('Servis telefonu') === ${JSON.stringify(phone)} && value('Servis adresi') === ${JSON.stringify(address)}
 })()`)
-const revision = async name => {
+const directoryService = async name => {
+  // A directory selection requires loaded options; a manual name edit preserves existing contacts.
+  await until(`[...document.querySelectorAll('form:has(#service-revision-title) datalist option')].some(option => option.value === ${JSON.stringify(name)})`)
+  await field('Servis adı', name, true)
+}
+const revision = async (name, fromDirectory = false) => {
   await until(`!!document.querySelector('button[aria-label="Servisi revize et"]:not(:disabled)')`)
   await evaluate(`document.querySelector('[aria-label="Servisi revize et"]').click()`)
   await until('!!document.querySelector("#service-revision-title")')
   await field('Servis adı', '', true)
   check('deleting a service name preserves saved contacts', await contacts('0212 555 10 10', 'Kaynak Adres', true))
-  await field('Servis adı', name, true)
+  if (fromDirectory) await directoryService(name)
+  else await field('Servis adı', name, true)
   await button('Revizyonu uygula')
 }
 const detail = async id => {
@@ -83,7 +93,7 @@ void app.whenReady().then(async () => {
     await evaluate(`document.querySelector('[aria-label="Pencereyi kapat"]').click()`)
     await detail(ids[0])
     check('cancelling the outer edit preserves the stored revision', await evaluate('document.querySelector("input[aria-label=Servis]").value === "Kaynak Servis Düzeltildi"') && await contacts('0212 555 10 10', 'Kaynak Adres'))
-    await revision('Yeni Servis')
+    await revision('Yeni Servis', true)
     check('selecting another service uses its own directory phone and matching SBM address', await contacts('0216 555 20 20', 'Yeni Adres'))
     await button('Değişiklikleri Kaydet')
     await until(`!document.querySelector('[aria-label="Servisi revize et"]')`)
@@ -92,7 +102,7 @@ void app.whenReady().then(async () => {
     await until(`!!document.querySelector('button[aria-label="Servisi revize et"]:not(:disabled)')`)
     await evaluate(`document.querySelector('[aria-label="Servisi revize et"]').click()`)
     await until('!!document.querySelector("#service-revision-title")')
-    await field('Servis adı', 'İletişimsiz Servis', true)
+    await directoryService('İletişimsiz Servis')
     check('a new service without verified contacts never inherits the former contacts', await contacts('', '', true))
     await button('Revizyonu uygula'); await button('Değişiklikleri Kaydet')
     await until(`!document.querySelector('[aria-label="Servisi revize et"]')`)

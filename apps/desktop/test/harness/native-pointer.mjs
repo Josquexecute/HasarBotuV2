@@ -5,7 +5,7 @@ import { screen } from 'electron'
 const run = promisify(execFile)
 
 /** Physical test input, with the real desktop gaze sampler left intact. */
-export async function positionNativeTestCursor(point) {
+export async function positionNativeTestCursor(point, { verify = true } = {}) {
   if (process.platform !== 'win32') return null
   const physical = screen.dipToScreenPoint(point)
   // Capture the result in the same native call sequence. PowerShell object
@@ -17,6 +17,6 @@ if(-not [TestPointer]::GetClipCursor([ref]$clip)){throw 'Cannot observe native p
 @{x=$p.X;y=$p.Y;clip=$clip} | ConvertTo-Json -Compress`
   const result = await run('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, timeout: 10000 })
   const observed = JSON.parse(result.stdout.trim())
-  if (observed.x !== physical.x || observed.y !== physical.y) throw new Error(`Native test pointer did not reach its requested position: ${JSON.stringify({ requestedDip: point, physical, observed })}`)
+  if (verify && (observed.x !== physical.x || observed.y !== physical.y)) throw new Error(`Native test pointer did not reach its requested position: ${JSON.stringify({ requestedDip: point, physical, observed })}`)
   return { requestedDip: point, physical, observed }
 }

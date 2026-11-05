@@ -21,9 +21,10 @@ export function readReleaseCommits(previousSha, currentSha, cwd = process.cwd())
   return commits
 }
 
-export function renderReleaseNotes(commits, { version, sourceSha, runUrl, testSummary, summary = '' }) {
+export function renderReleaseNotes(commits, { version, sourceSha, previousSha, runUrl, testSummary, summary = '' }) {
   parseReleaseVersion(version)
-  if (!/^[a-f0-9]{40}$/.test(sourceSha) || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+$/.test(runUrl)) throw new Error('Invalid validated release provenance.')
+  if (!/^[a-f0-9]{40}$/.test(sourceSha) || previousSha !== undefined && !/^[a-f0-9]{40}$/.test(previousSha)
+    || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+$/.test(runUrl)) throw new Error('Invalid validated release provenance.')
   if (!testSummary || testSummary.status !== 'PASS' || !Number.isInteger(testSummary.passed) || testSummary.passed < 1
     || !Number.isInteger(testSummary.skipped) || testSummary.skipped < 0) throw new Error('Actual test results are required for release notes.')
   const groups = new Map([['Yeni özellikler', []], ['Düzeltmeler', []], ['Diğer değişiklikler', []]])
@@ -32,21 +33,35 @@ export function renderReleaseNotes(commits, { version, sourceSha, runUrl, testSu
     const match = /^(\w+)(?:\([^)]+\))?!?:\s*(.+)$/u.exec(commit.subject)
     const title = (match?.[2] ?? commit.subject).replace(/[\r\n]/g, ' ').trim()
     if (!title) continue
+    assertReadableText(title, 'Release commit subject')
     const group = match?.[1] === 'feat' ? 'Yeni özellikler' : match?.[1] === 'fix' ? 'Düzeltmeler' : 'Diğer değişiklikler'
     groups.get(group).push('- ' + title)
   }
-  const lines = [`## HasarBotu ${version}`, '']
-  if (summary.trim()) lines.push(summary.trim(), '')
-  for (const [title, entries] of groups) if (entries.length) lines.push(`### ${title}`, '', ...entries, '')
-  if (![...groups.values()].some(entries => entries.length)) lines.push('Bu sürüm için önceki sürümden sonra yeni kaynak değişikliği yok.', '')
-  lines.push('### Doğrulama', '',
-    'Windows x64 kurulum paketi; TypeScript, testler, build ve paket bütünlüğü kontrolleri geçti.',
-    `${testSummary.passed} test geçti; ${testSummary.skipped} test atlandı. Atlanan kontroller başarılı sayılmadı.`,
-    'Canlı Google hesabı veya ofis sunucusunun yeni sürüm kabulü bu CI kontrolüyle doğrulanmış sayılmaz.',
-    '', `[Kontrol çalışması](${runUrl})`, '',
-    `<!-- hasarbotu-source:${sourceSha} -->`)
-  const body = lines.join('\n')
-  if (body.length > 3500) throw new Error('Release notes exceed the desktop update limit; shorten the version summary or commit subjects.')
+  const changeCount = [...groups.values()].reduce((total, entries) => total + entries.length, 0)
+  const repositoryUrl = runUrl.split('/actions/runs/')[0]
+  const changesUrl = previousSha ? `${repositoryUrl}/compare/${previousSha}...${sourceSha}` : `${repositoryUrl}/commits/${sourceSha}`
+  const render = omitted => {
+    const lines = [`## HasarBotu ${version}`, '']
+    if (summary.trim()) lines.push(summary.trim(), '')
+    for (const [title, entries] of groups) if (entries.length) lines.push(`### ${title}`, '', ...entries, '')
+    if (!changeCount) lines.push('Bu sürüm için önceki sürümden sonra yeni kaynak değişikliği yok.', '')
+    if (omitted) lines.push(`${omitted} ek değişiklik: [Tüm değişiklikler (${changeCount})](${changesUrl}).`, '')
+    lines.push('### Doğrulama', '',
+      'Windows x64 kurulum paketi; TypeScript, testler, build ve paket bütünlüğü kontrolleri geçti.',
+      `${testSummary.passed} test geçti; ${testSummary.skipped} test atlandı. Atlanan kontroller başarılı sayılmadı.`,
+      'Canlı Google hesabı veya ofis sunucusunun yeni sürüm kabulü bu CI kontrolüyle doğrulanmış sayılmaz.',
+      '', `[Kontrol çalışması](${runUrl})`, '',
+      `<!-- hasarbotu-source:${sourceSha} -->`)
+    return lines.join('\n')
+  }
+  let omitted = 0, body = render(omitted)
+  // Reserve space for draft markers and artifact provenance within the 4000-character update limit.
+  while (body.length > 3500) {
+    const entries = [...groups.values()].reverse().find(group => group.length)
+    if (!entries) throw new Error('Release notes exceed the desktop update limit; shorten the version summary or commit subjects.')
+    entries.pop()
+    body = render(++omitted)
+  }
   return assertReadableText(body, 'Generated release notes')
 }
 
