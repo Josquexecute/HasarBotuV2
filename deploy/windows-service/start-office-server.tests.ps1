@@ -73,13 +73,13 @@ function Confirm-HasarBotuOfficeGateway {
     Assert-True ($script:services['hasarbotu-office-gateway'].Status -eq 'Running' -and $script:services['hasarbotu-network-discovery'].Status -eq 'Running') 'v2 gateway verification follows both service starts'
     $script:events.Add('gateway:verified')
 }
-$profileFixture = New-TemporaryFile
+$profileFixture = [IO.Path]::GetTempFileName()
 try {
-    $result = Start-HasarBotuOfficeServer -NetworkProfile $profileFixture.FullName
+    $result = Start-HasarBotuOfficeServer -NetworkProfile $profileFixture
     Assert-True ($result.status -eq 'PASS' -and $result.services.Count -eq 8) 'v2 starts and verifies all core services without Tailscale'
     Assert-True (@($script:events | Where-Object { $_ -like 'http:https:*tail*' }).Count -eq 0) 'v2 health never depends on Tailscale DNS or Serve'
     Assert-True ($script:events.IndexOf('start:hasarbotu-office-gateway') -lt $script:events.IndexOf('start:hasarbotu-lan-https')) 'independent LAN listener starts before legacy compatibility services'
-} finally { Remove-Item -LiteralPath $profileFixture.FullName }
+} finally { Remove-Item -LiteralPath $profileFixture }
 
 Reset-Fixture
 $script:services['hasarbotu-api'].FailStart = $true

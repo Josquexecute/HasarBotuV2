@@ -46,6 +46,8 @@ jobs:
         run: node --test scripts/write-ci-distribution-profile.test.mjs
       - name: Ofis bağlantısını doğrula
         run: node scripts/write-ci-distribution-profile.mjs
+      - name: Ofis başlatma testlerini erken doğrula
+        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File deploy/windows-service/start-office-server.tests.ps1
       - name: Tarayıcı testleri için Playwright motorlarını kur
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Ayrı PostgreSQL test veritabanını aç
