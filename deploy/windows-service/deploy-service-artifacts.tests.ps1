@@ -605,5 +605,45 @@ foreach ($fixtureRoot in @($f30.Root, $cf30.RepoRoot)) {
     Remove-Item -LiteralPath $resolvedFixtureRoot -Recurse -Force
 }
 
+Write-Output "`n=== TEST 31: database migration assets survive deployment and rollback ==="
+$f31 = New-SourceFixture
+$cf31 = New-ClosureFixture
+[IO.File]::WriteAllText((Join-Path $cf31.WorkspaceInternalRoot 'package.json'), '{"name":"@hasarbotu/database","type":"module"}')
+$migrationDir = Join-Path $cf31.WorkspaceInternalRoot 'migrations'
+$missing31 = Invoke-DeployJson -Params @{ SourceDir=$f31.SourceDir; TargetDir=$f31.TargetDir; ServiceLabel='test31'; DependencyClosureManifestPath=$cf31.ClosureManifestPath; RepoRoot=$cf31.RepoRoot }
+Assert-True ($missing31.ExitCode -eq 2) 'Missing database migrations block deployment'
+[IO.Directory]::CreateDirectory($migrationDir) | Out-Null
+$migrationFile = Join-Path $migrationDir '0075_google_desktop_loopback.js'
+[IO.File]::WriteAllText($migrationFile, 'export function up() {}')
+$params31 = @{ SourceDir=$f31.SourceDir; TargetDir=$f31.TargetDir; ServiceLabel='test31'; DependencyClosureManifestPath=$cf31.ClosureManifestPath; RepoRoot=$cf31.RepoRoot; Apply=$true }
+$first31 = Invoke-DeployJson -Params $params31
+Assert-True ($first31.ExitCode -eq 0) 'Database migration deployment succeeds'
+$deployed31 = Join-Path $f31.TargetDir 'node_modules\@hasarbotu\database\migrations\0075_google_desktop_loopback.js'
+Assert-True ((Get-FileHash $migrationFile).Hash -eq (Get-FileHash $deployed31).Hash) 'Migration copied beside database/dist with identical hash'
+[IO.File]::WriteAllText($migrationFile, 'export function up() { return 1 }')
+$update31 = Invoke-DeployJson -Params $params31
+$rollback31 = Invoke-DeployJson -Params @{ Rollback=$true; RollbackBackupPath=$update31.Json.BackupPath; TargetDir=$f31.TargetDir; ServiceLabel='test31'; Apply=$true }
+Assert-True ($rollback31.ExitCode -eq 0 -and [IO.File]::ReadAllText($deployed31) -eq 'export function up() {}') 'Rollback restores the prior migration assets'
+foreach ($fixtureRoot31 in @($f31.Root, $cf31.RepoRoot)) {
+    $resolved31 = [IO.Path]::GetFullPath($fixtureRoot31)
+    if (-not $resolved31.StartsWith([IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'TEST_CLEANUP_OUTSIDE_TEMP' }
+    Remove-Item -LiteralPath $resolved31 -Recurse -Force
+}
+
+Write-Output "`n=== TEST 32: rollback removes newly introduced runtime segments ==="
+$f32 = New-SourceFixture
+$cf32 = New-ClosureFixture
+$old32 = Invoke-DeployJson -Params @{ SourceDir=$f32.SourceDir; TargetDir=$f32.TargetDir; ServiceLabel='test32'; Apply=$true }
+Assert-True ($old32.ExitCode -eq 0 -and -not (Test-Path (Join-Path $f32.TargetDir 'node_modules'))) 'Old tree has no local node_modules'
+$new32 = Invoke-DeployJson -Params @{ SourceDir=$f32.SourceDir; TargetDir=$f32.TargetDir; ServiceLabel='test32'; DependencyClosureManifestPath=$cf32.ClosureManifestPath; RepoRoot=$cf32.RepoRoot; Apply=$true }
+Assert-True (Test-Path (Join-Path $f32.TargetDir 'node_modules')) 'New closure adds local node_modules'
+$restore32 = Invoke-DeployJson -Params @{ Rollback=$true; RollbackBackupPath=$new32.Json.BackupPath; TargetDir=$f32.TargetDir; ServiceLabel='test32'; Apply=$true }
+Assert-True ($restore32.ExitCode -eq 0 -and -not (Test-Path (Join-Path $f32.TargetDir 'node_modules'))) 'Rollback removes added node_modules rather than shadowing old parent dependencies'
+foreach ($fixtureRoot32 in @($f32.Root, $cf32.RepoRoot)) {
+    $resolved32 = [IO.Path]::GetFullPath($fixtureRoot32)
+    if (-not $resolved32.StartsWith([IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'TEST_CLEANUP_OUTSIDE_TEMP' }
+    Remove-Item -LiteralPath $resolved32 -Recurse -Force
+}
+
 Write-Output "`n=== SUMMARY: $($script:failures) failure(s) ==="
 if ($script:failures -gt 0) { exit 1 } else { exit 0 }

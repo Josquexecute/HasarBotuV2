@@ -47,7 +47,7 @@ void app.whenReady().then(async () => {
       const { BotEngine } = await import('/vendor/coucou/mochi/engine.js')
       const original = BotEngine.prototype.update
       window.gazeProof = { frames: [], original }
-      BotEngine.prototype.update = function(dt) { original.call(this, dt); window.gazeProof.frames.push({ x: this.lookX, y: this.lookY, yaw: this.yaw, pitch: this.pitch }); if (window.gazeProof.frames.length > 600) window.gazeProof.frames.shift() }
+      BotEngine.prototype.update = function(dt) { original.call(this, dt); window.gazeProof.frames.push({ dt, x: this.lookX, y: this.lookY, yaw: this.yaw, pitch: this.pitch }); if (window.gazeProof.frames.length > 600) window.gazeProof.frames.shift() }
     })()`)
     const send = assistant.window.webContents.send.bind(assistant.window.webContents)
     assistant.window.webContents.send = (channel, ...args) => { if (channel !== 'hasarbotu:assistant-gaze') send(channel, ...args) }
@@ -116,7 +116,8 @@ void app.whenReady().then(async () => {
     if (shell && assistant) {
       const state = await shell.window.webContents.executeJavaScript('window.hasarbotuTouch.getState()')
       const dataset = await assistant.window.webContents.executeJavaScript('({...document.querySelector("button").dataset})')
-      await writeFile(join(output, 'play-diagnostics.json'), JSON.stringify({ state, dataset }))
+      const frames = await assistant.window.webContents.executeJavaScript('window.gazeProof?.frames')
+      await writeFile(join(output, 'play-diagnostics.json'), JSON.stringify({ state, dataset, frames }))
     }
   }
   finally {

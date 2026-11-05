@@ -23,6 +23,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
   const load = file => import(pathToFileURL(join(runtime, file)))
   const { automaticFolderPolicySchema, registerAutomaticFolders } = await load('services/api/dist/cases/automatic-folder-registration.js')
   const { discoverPlateFolders } = await load('services/api/dist/cases/folder-discovery.js')
+  const { inspectCaseListIntegrity } = await load('services/api/dist/cases/visibility-integrity.js')
   const reconcileOfficeFolderInventory = config.officeInventoryOnly
     ? (await load('services/api/dist/cases/office-folder-inventory.js')).reconcileOfficeFolderInventory : undefined
   const { planSourceFolderRelocation, applySourceFolderRelocation, readTrackedFolderIdentity } = await load('services/api/dist/cases/source-folder-relocation.js')
@@ -39,6 +40,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
   const previousMoves = new Map()
   let lastLogStatus
   let previousInventoryHash
+  let lastIntegrityCheck = 0, visibilityIntegrity
   const SETTLE_MS = 1000
   const pathKey = path => path.normalize('NFC').toUpperCase().normalize('NFC')
   let watcher, watchErrorCode, changed = false, confirming = false, wake
@@ -51,6 +53,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
     await rename(temporary, config.statusFile)
     // Paths, names and credentials stay in the administrator-owned configuration.
     const log = JSON.stringify({ status: status.status, ...(status.code === undefined ? {} : { code: status.code }), created: status.created ?? 0, deferred: status.deferred ?? 0, relocated: status.relocated ?? 0, relocationDeferred: status.relocationDeferred ?? 0,
+      ...(status.visibilityIntegrity ? { visibilityIntegrity: status.visibilityIntegrity } : {}),
       ...(status.archived === undefined ? {} : { archived: status.archived, restored: status.restored, statusUpdated: status.statusUpdated, inventoryDeferred: status.inventoryDeferred }) })
     if (log !== lastLogStatus || status.created) { onStatus?.(log); lastLogStatus = log }
   }
@@ -314,7 +317,11 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           previousInventoryHash = currentHash
         }
         settlingPending = !!(settling || moves.relocationSettling || inventory.inventorySettling)
-        await saveStatus({ status: summary.deferred || moves.relocationDeferred || waitingForCloudIdentity || inventory.inventoryDeferred ? 'ATTENTION' : 'PASS', ...summary, ...moves, ...inventory,
+        if (Date.now() - lastIntegrityCheck >= 300_000) {
+          visibilityIntegrity = await inspectCaseListIntegrity(pool, policy.organizationId)
+          lastIntegrityCheck = Date.now()
+        }
+        await saveStatus({ status: summary.deferred || moves.relocationDeferred || waitingForCloudIdentity || inventory.inventoryDeferred || visibilityIntegrity?.status !== 'PASS' ? 'ATTENTION' : 'PASS', ...summary, ...moves, ...inventory, visibilityIntegrity,
           discovered: discovered.length, registeredMoveScanFolders: config.trackRegisteredMoves ? moveInventory.length : 0,
           waitingForCloudIdentity, settling, watching: !!watcher, ...(watchErrorCode ? { watchErrorCode } : {}), sourceReadOnly: true, defaultCaseType: null })
       } catch (error) {

@@ -32,7 +32,7 @@ function Reset-Fixture {
 # These overrides keep all service and network operations inside the fixture.
 function Get-Service { param([string[]]$Name, $ErrorAction) foreach ($item in $Name) { $script:services[$item] } }
 function Invoke-RestMethod {
-    param($Uri, $TimeoutSec, $ErrorAction)
+    param($Uri, $TimeoutSec, $ErrorAction, $Headers)
     $script:events.Add("http:$Uri")
     if ($Uri -like 'https:*') {
         if ($script:services['hasarbotu-field-portal'].Status -ne 'Running') { throw 'HTTPS requires the field portal' }
@@ -46,8 +46,8 @@ function Start-Sleep { param($Milliseconds) $script:events.Add('wait') }
 
 Reset-Fixture
 $result = Start-HasarBotuOfficeServer
-Assert-True ($result.status -eq 'PASS' -and $result.services.Count -eq 7 -and $result.fieldPortalHealthy) 'all seven services and field portal readiness are verified'
-Assert-True (($script:events -join '|') -eq 'start:postgresql-x64-17|start:Tailscale|start:hasarbotu-api|http:http://127.0.0.1:3100/health|start:hasarbotu-field-portal|start:hasarbotu-lan-https|start:hasarbotu-file-agent|start:hasarbotu-folder-discovery|http:https://desktop-efn2g33.tail276cda.ts.net/health|http:https://desktop-efn2g33.tail276cda.ts.net/field-health') 'API readiness precedes workers and the portal starts before HTTPS checks'
+Assert-True ($result.status -eq 'PASS' -and $result.services.Count -eq 6 -and $result.fieldPortalHealthy) 'all six core services and field portal readiness are verified'
+Assert-True (($script:events -join '|') -eq 'start:postgresql-x64-17|start:hasarbotu-api|http:http://127.0.0.1:3100/health|start:hasarbotu-field-portal|start:hasarbotu-lan-https|start:hasarbotu-file-agent|start:hasarbotu-folder-discovery|http:https://desktop-efn2g33.tail276cda.ts.net/health|http:https://desktop-efn2g33.tail276cda.ts.net/field-health') 'API readiness precedes workers and Tailscale is not a startup dependency'
 $script:events.Clear()
 $script:responses.Enqueue(@{ status = 'ok' }); $script:responses.Enqueue(@{ status = 'ok' })
 $script:responses.Enqueue(@{ status = 'ok' })
@@ -57,6 +57,29 @@ Assert-True (@($script:events | Where-Object { $_ -like 'start:*' }).Count -eq 0
 Reset-Fixture
 $script:services['hasarbotu-api'].Race = $true
 Assert-True ((Start-HasarBotuOfficeServer).status -eq 'PASS') 'an observed automatic-start race succeeds'
+
+Reset-Fixture
+$script:services.Remove('Tailscale')
+Assert-True ((Start-HasarBotuOfficeServer).status -eq 'PASS') 'Tailscale need not be installed to start core services'
+
+Reset-Fixture
+$script:services['hasarbotu-office-gateway'] = $script:services['hasarbotu-api'].PSObject.Copy()
+$script:services['hasarbotu-office-gateway'].Name = 'hasarbotu-office-gateway'
+$script:services['hasarbotu-network-discovery'] = $script:services['hasarbotu-api'].PSObject.Copy()
+$script:services['hasarbotu-network-discovery'].Name = 'hasarbotu-network-discovery'
+$script:services.Remove('Tailscale')
+function Confirm-HasarBotuOfficeGateway {
+    param($ProfileFile)
+    Assert-True ($script:services['hasarbotu-office-gateway'].Status -eq 'Running' -and $script:services['hasarbotu-network-discovery'].Status -eq 'Running') 'v2 gateway verification follows both service starts'
+    $script:events.Add('gateway:verified')
+}
+$profileFixture = New-TemporaryFile
+try {
+    $result = Start-HasarBotuOfficeServer -NetworkProfile $profileFixture.FullName
+    Assert-True ($result.status -eq 'PASS' -and $result.services.Count -eq 8) 'v2 starts and verifies all core services without Tailscale'
+    Assert-True (@($script:events | Where-Object { $_ -like 'http:https:*tail*' }).Count -eq 0) 'v2 health never depends on Tailscale DNS or Serve'
+    Assert-True ($script:events.IndexOf('start:hasarbotu-office-gateway') -lt $script:events.IndexOf('start:hasarbotu-lan-https')) 'independent LAN listener starts before legacy compatibility services'
+} finally { Remove-Item -LiteralPath $profileFixture.FullName }
 
 Reset-Fixture
 $script:services['hasarbotu-api'].FailStart = $true

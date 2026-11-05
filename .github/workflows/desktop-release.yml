@@ -22,7 +22,10 @@ jobs:
     env:
       NODE_NO_WARNINGS: '1'
       HASARBOTU_OFFICE_API_ORIGIN: ${{ vars.HASARBOTU_OFFICE_API_ORIGIN }}
-      HASARBOTU_OFFICE_LAN_IPV4: ${{ vars.HASARBOTU_OFFICE_LAN_IPV4 }}
+      HASARBOTU_OFFICE_CA_CERTIFICATE: ${{ vars.HASARBOTU_OFFICE_CA_CERTIFICATE }}
+      HASARBOTU_OFFICE_HTTPS_PORT: ${{ vars.HASARBOTU_OFFICE_HTTPS_PORT }}
+      HASARBOTU_OFFICE_DISCOVERY_PORT: ${{ vars.HASARBOTU_OFFICE_DISCOVERY_PORT }}
+      HASARBOTU_OFFICE_REMOTE_ORIGIN: ${{ vars.HASARBOTU_OFFICE_REMOTE_ORIGIN }}
       HASARBOTU_OFFICE_LAN_HOSTNAME: ${{ vars.HASARBOTU_OFFICE_LAN_HOSTNAME }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,6 +38,8 @@ jobs:
           cache: npm
       - name: Kilitli bağımlılıkları kur
         run: npm ci
+      - name: Tarayıcı testleri için Playwright motorlarını kur
+        run: npx playwright install --with-deps chromium firefox webkit
       - name: Sürümün ve main kaydının uygunluğunu kontrol et
         run: node scripts/create-release-draft.mjs --preflight
         env:

@@ -27,13 +27,14 @@ function Start-HasarBotuWindowsService {
 function Wait-HasarBotuHttpReady {
     param(
         [Parameter(Mandatory=$true)][string]$Uri,
-        [int]$TimeoutSeconds = 60
+        [int]$TimeoutSeconds = 60,
+        [hashtable]$Headers = @{}
     )
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $lastError = $null
     do {
         try {
-            $health = Invoke-RestMethod -Uri $Uri -TimeoutSec 3 -ErrorAction Stop
+            $health = Invoke-RestMethod -Uri $Uri -Headers $Headers -TimeoutSec 3 -ErrorAction Stop
             if ($health.status -eq 'ok') { return }
             $lastError = [InvalidOperationException]::new('Sunucu henüz hazır yanıtı vermiyor.')
         }
@@ -45,16 +46,36 @@ function Wait-HasarBotuHttpReady {
     throw [TimeoutException]::new("Sunucu kontrolü zaman aşımına uğradı: $Uri", $lastError)
 }
 
+function Confirm-HasarBotuOfficeGateway {
+    param([Parameter(Mandatory=$true)][string]$ProfileFile)
+    $networkRoot = Split-Path -Parent $ProfileFile
+    [xml]$gateway = [IO.File]::ReadAllText((Join-Path $networkRoot 'hasarbotu-network-discovery.xml'))
+    & $gateway.service.executable (Join-Path $networkRoot 'office-network.mjs') wait $ProfileFile
+    if ($LASTEXITCODE -ne 0) { throw 'Ofis HTTPS kimliği veya API sağlık kontrolü başarısız. office-network hizmet günlüklerini kontrol edin.' }
+    $profile = Get-Content -LiteralPath $ProfileFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    Wait-HasarBotuHttpReady -Uri 'http://127.0.0.1:3200/field-health' -Headers @{ Host=([Uri]$profile.apiOrigin).Host }
+}
+
 function Start-HasarBotuOfficeServer {
-    $names = @('postgresql-x64-17', 'Tailscale', 'hasarbotu-api', 'hasarbotu-field-portal', 'hasarbotu-lan-https', 'hasarbotu-file-agent', 'hasarbotu-folder-discovery')
-    foreach ($name in $names[0..2]) { Start-HasarBotuWindowsService -Name $name }
+    param([string]$NetworkProfile = (Join-Path $env:ProgramData 'HasarBotu\office-network\client-profile.json'))
+    $names = @('postgresql-x64-17', 'hasarbotu-api', 'hasarbotu-field-portal', 'hasarbotu-lan-https', 'hasarbotu-file-agent', 'hasarbotu-folder-discovery')
+    foreach ($name in $names[0..1]) { Start-HasarBotuWindowsService -Name $name }
     Write-Host 'Merkezi sunucu yanıtı bekleniyor...'
     Wait-HasarBotuHttpReady -Uri 'http://127.0.0.1:3100/health'
-    # Tailscale HTTPS proxies through the field portal before reaching the API.
-    foreach ($name in $names[3..6]) { Start-HasarBotuWindowsService -Name $name }
+    $hasGateway = Test-Path -LiteralPath $NetworkProfile
+    if ($hasGateway) {
+        $names += @('hasarbotu-office-gateway', 'hasarbotu-network-discovery')
+        foreach ($name in $names[6..7]) { Start-HasarBotuWindowsService -Name $name }
+    }
+    foreach ($name in $names[2..5]) { Start-HasarBotuWindowsService -Name $name }
     Write-Host 'Ofis HTTPS bağlantısı kontrol ediliyor...'
-    Wait-HasarBotuHttpReady -Uri 'https://desktop-efn2g33.tail276cda.ts.net/health'
-    Wait-HasarBotuHttpReady -Uri 'https://desktop-efn2g33.tail276cda.ts.net/field-health'
+    if ($hasGateway) {
+        Confirm-HasarBotuOfficeGateway -ProfileFile $NetworkProfile
+    } else {
+        # Legacy path is retained only until the v2 server gateway is provisioned.
+        Wait-HasarBotuHttpReady -Uri 'https://desktop-efn2g33.tail276cda.ts.net/health'
+        Wait-HasarBotuHttpReady -Uri 'https://desktop-efn2g33.tail276cda.ts.net/field-health'
+    }
     $services = @(Get-Service -Name $names -ErrorAction Stop)
     $stopped = @($services | Where-Object { $_.Status -ne 'Running' })
     if ($stopped.Count) { throw "Kontrol sırasında hizmet durdu: $(($stopped.Name) -join ', ')" }

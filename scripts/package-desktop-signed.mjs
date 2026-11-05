@@ -13,6 +13,11 @@ function run(executable, args, cwd = root) {
   if (result.error || result.status !== 0) throw new Error('Signed packaging stopped: ' + (result.error?.code ?? result.status))
 }
 const check = join(root, 'scripts/check-desktop-signing.ps1')
+if (!process.env.HASARBOTU_SIGNTOOL_PATH) {
+  const detected = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-ChildItem -Path "${env:ProgramFiles(x86)}/Windows Kits/10/bin/*/x64/signtool.exe" -File | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName'], { encoding: 'utf8', windowsHide: true })
+  if (detected.status !== 0 || !detected.stdout.trim()) throw new Error('Windows SDK SignTool required')
+  process.env.HASARBOTU_SIGNTOOL_PATH = detected.stdout.trim()
+}
 run('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', check])
 // Loading the config before preparing resources rejects conflicting signing settings.
 createRequire(import.meta.url)(join(desktop, 'electron-builder.signed.cjs'))

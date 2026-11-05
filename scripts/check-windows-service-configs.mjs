@@ -101,6 +101,8 @@ for (const check of checks) {
     assertContains(withoutComments, new RegExp(`<depend>${check.dependsOn}</depend>`), check.file, `<depend>${check.dependsOn}</depend>`)
     assertContains(withoutComments, /<startmode>Automatic<\/startmode>/, check.file, '<startmode>Automatic</startmode>')
     assertContains(withoutComments, /<onfailure action="restart"/, check.file, 'en az bir <onfailure action="restart" .../> girişi')
+    const failureActions = [...withoutComments.matchAll(/<onfailure action="([^"]+)"/g)].map(match => match[1])
+    if (failureActions.at(-1) !== 'none') throw new Error(`${check.file}: son kurtarma eylemi none olmalıdır; SCM son eylemi tekrarlar`)
     assertContains(withoutComments, /<resetfailure>/, check.file, '<resetfailure> eşiği')
     assertContains(withoutComments, /<logpath>%BASE%\\logs<\/logpath>/, check.file, "göreli <logpath>%BASE%\\logs</logpath> (mutlak yol DEĞİL)")
     assertContains(withoutComments, /<log mode="roll-by-size">/, check.file, 'boyuta göre log döndürme (<log mode="roll-by-size">)')

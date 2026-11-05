@@ -35,6 +35,7 @@ export const MIN_PORT = 1
 export const MAX_PORT = 65_535
 
 export interface ApiConfig {
+  readonly trustLoopbackProxy?: boolean
   readonly fieldPhotoDirectory?: string
   readonly desktopReleasesDirectory?: string
   readonly google?: GoogleConfig
@@ -235,7 +236,10 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
   const openAiPolicyProvider = parseOpenAiPolicyProvider(env)
   const geminiPolicyProvider = parseGeminiPolicyProvider(env)
   const host = parseHost(env.HOST)
+  if (env.TRUST_LOOPBACK_PROXY !== undefined && !['true','false'].includes(env.TRUST_LOOPBACK_PROXY)) throw new ConfigError('TRUST_LOOPBACK_PROXY', 'expected true or false.')
+  if (env.TRUST_LOOPBACK_PROXY === 'true' && !LOOPBACK_HOSTS.has(host)) throw new ConfigError('TRUST_LOOPBACK_PROXY', 'requires a loopback API bind.')
   return {
+    ...(env.TRUST_LOOPBACK_PROXY === 'true' ? { trustLoopbackProxy: true } : {}),
     ...(desktopReleasesDirectory ? { desktopReleasesDirectory } : {}),
     ...(fieldPhotoDirectory ? { fieldPhotoDirectory } : {}),
     host,

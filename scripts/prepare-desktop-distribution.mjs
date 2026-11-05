@@ -7,8 +7,9 @@ import { parseDistributionFolders } from './distribution-folders.mjs'
 const profile = process.env.HASARBOTU_DISTRIBUTION_PROFILE
 if (!profile || !path.isAbsolute(profile)) throw new Error('HASARBOTU_DISTRIBUTION_PROFILE must identify the private office distribution configuration.')
 const source = fs.readFileSync(profile)
-if (source.length > 4096) throw new Error('Distribution profile exceeds size limit.')
+if (source.length > 16384) throw new Error('Distribution profile exceeds size limit.')
 const configuration = parseOfficeConnection(JSON.parse(source.toString('utf8')))
+if (configuration.schemaVersion !== 2) throw new Error('Office releases require a v2 IP-free connection profile provisioned on the office server.')
 const foldersFile = process.env.HASARBOTU_DISTRIBUTION_ROOTS
 if (foldersFile && !path.isAbsolute(foldersFile)) throw new Error('HASARBOTU_DISTRIBUTION_ROOTS must identify a private absolute configuration file.')
 const folderSource = foldersFile ? fs.readFileSync(foldersFile) : Buffer.from('{}')

@@ -12,6 +12,7 @@ const notices: Record<Exclude<GoogleStatus, 'pending' | 'complete'>, string> = {
 
 export function GoogleConnectButton({ purpose, onComplete, rememberMe }: { purpose: GooglePurpose; onComplete?: () => void; rememberMe?: boolean }) {
   const [enabled, setEnabled] = useState(false)
+  const [desktopEnabled, setDesktopEnabled] = useState(false)
   const [flow, setFlow] = useState<GoogleFlow | null>(() => restoreGoogleFlow(purpose))
   const [notice, setNotice] = useState('')
   const [outcome, setOutcome] = useState<GoogleStatus | null>(null)
@@ -25,7 +26,10 @@ export function GoogleConnectButton({ purpose, onComplete, rememberMe }: { purpo
     mounted.current = true
     const controller = new AbortController()
     void trackingRequest('google/status', undefined, controller.signal).then((r) => {
-      if (!controller.signal.aborted) setEnabled((r as { enabled: boolean }).enabled)
+      if (!controller.signal.aborted) {
+        setEnabled((r as { enabled: boolean }).enabled)
+        setDesktopEnabled((r as { desktopEnabled?: boolean }).desktopEnabled === true)
+      }
     }).catch(() => { if (!controller.signal.aborted) setEnabled(false) })
     return () => { mounted.current = false; controller.abort() }
   }, [])
@@ -92,7 +96,10 @@ export function GoogleConnectButton({ purpose, onComplete, rememberMe }: { purpo
     if (reserved) reserved.opener = null
     popup.current = reserved
     try {
-      const result = await trackingRequest('google/start', { purpose, client }) as { flowId: string; url: string }
+      const native = desktop && desktopEnabled && purpose === 'login'
+      if (native && (window.location.hostname !== '127.0.0.1' || window.location.protocol !== 'http:' || Number(window.location.port) < 1024)) throw new Error('Güvenli masaüstü köprüsü bulunamadı')
+      const result = await trackingRequest('google/start', { purpose, client,
+        ...(native ? { desktopRedirectUri: `${window.location.origin}/api/v1/google/desktop/callback` } : {}) }) as { flowId: string; url: string }
       const url = new URL(result.url)
       if (url.protocol !== 'https:' || url.hostname !== 'accounts.google.com' || url.port || url.username || url.password || url.pathname !== '/o/oauth2/v2/auth'
         || typeof result.flowId !== 'string' || result.flowId.length < 20 || result.flowId.length > 200) throw new Error('Google bağlantısı başlatılamadı. Yeniden deneyin.')

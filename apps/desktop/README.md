@@ -1,5 +1,531 @@
 # `@hasarbotu/desktop`
 
+4 Kasım 2026 **23:20 TRT — merkezi 0.1.91 yayını PASS; kullanıcı başlatmalı geçişler bekleniyor**.
+Mevcut kimlikli ofis feed'i **22:56:08 TRT / 2026-11-04T19:56:08.511Z** tarihinde,
+önceki 0.1.90 yayıncısıyla aynı hash'e sahip araçla atomik olarak yükseltildi.
+Önceden kabul edilmiş imzalı x64 NSIS paketi yeniden üretilmeden kullanıldı:
+**113.055.064 bayt**, SHA-256
+`8ec51bd19e972d9d9917470c37d391a35ed9373870efede05ba5af985b1788f6`.
+İmza/zaman damgası **Valid**; kabul edilmiş 11 kaynak dosyası değişmemiştir.
+
+Gerçek 0.1.90 kurulumundan çıkarılan iki updater modülü, 0.1.91 paketindekilerle
+byte düzeyinde aynıdır. Eski updater yayıncı sertifikasını sabitlemez veya
+Authenticode güveni aramaz; kimlikli indirme, boyut/SHA-256/MZ ve Windows paket
+sürümü denetimler; çalıştırmayı Windows güvenlik politikaları belirler.
+Ayrı fiziksel bilgisayardaki gerçek **0.1.90**, **0.1.91 / available** gördü:
+kimlikli indirme **HTTP 200**, tam boyut/hash eşleşti; anonim manifest ve paket
+**401**. Bu bilgisayarda yalnız mevcut akışla 0.1.89 → 0.1.90 pilotu uygulanmış,
+aynı oturum/profil ve sekiz yerel ayar korunmuştur; **0.1.91 kurulumu başlatılmadı**.
+Ana ofis istemcisinde de yeni feed **current**, kimlikli tam indirme/hash PASS.
+
+Yeni imzaya ait Root/TrustedPublisher güveni hem kullanıcıda hem makinede
+**bulunmayan**, normal kullanıcılı Windows 11 VM'de aynı paketle gerçek
+**0.1.90 → 0.1.91 → 0.1.90** NSIS ve uygulama açılışı **8/8 PASS**.
+VM'de Authenticode durumu **UnknownError** kaldı; sertifika yüklenmedi, UAC ve
+Secure Boot açık, güvenlik yapılandırması değişmedi, VM eski snapshot'a döndü.
+Bu özel imza genel Windows güveni değildir; erişilemeyen cihazlarda zorunlu
+SAC/WDAC/AppLocker politikaları doğrulanmış sayılmaz. Bu test onların kabulü değildir.
+Mevcut API origin'i korunur; paketli TLS CA, yanlış CA/hostname reddi ve keşif
+**8/8**, updater **25**, yayın araçları **5**, son üretim kontrolü **16/16 PASS**.
+API runtime hash'i, sekiz servis/PID, üç sağlık ucu ve migration 0075 korundu.
+
+**Gerçek sayım:** doğrulanmış ofis **0.1.91 = 1** (önceden yükseltilmiş ana bilgisayar);
+bu çalışmada yeni doğrulanmış ofis 0.1.91 geçişi **0**. Diğer **5–6** kurulumun
+son bilinen sürümü 0.1.90; mevcut sürümleri **UNKNOWN**, güncellendi sayılmadılar.
+Üç kayıtlı cihazın dokuz SSH/WinRM ucu zaman aşımına uğradı; merkezi kurulu sürüm
+envanteri yok. Kullanıcılar **Ayarlar → Uygulama güncellemeleri → Güncelle ve
+yeniden başlat** yoluyla yükselir; zorunlu kurulum başlatılmadı. Gerçek kullanıcı
+kabulü **5/5 PASS** olarak korunur; VM testi veya indirme yeni kullanıcı kabulü sayılmaz.
+
+Önceki manifest/değişmez 0.1.90 installer ve mevcut gerçek profil rollback'i
+korundu. Feed geri alma ön kontrolü PASS; geri alma uygulanmadı, profil silinmedi,
+üretim verisine yazılmadı. Korumalı yayın/kanıt dizini:
+`C:\ProgramData\HasarBotu\transition-manager-0191\central-update-20261104`;
+yerel sonuç `.local/central-update-0191-20261104/result.json`.
+Aşağıdaki önceki BLOCKED kayıtları, bu yayından önceki tarihsel durumlardır.
+
+4 Kasım 2026 **22:38 TRT — günlük 0.1.91 PASS; genel yayın BLOCKED**.
+Gerçek ofis bilgisayarındaki all-users NSIS yükseltmesi **exit 0** ile tamamlandı.
+Günlük **0.1.91 / PID 9632 / normal kullanıcı / ready / connected / lan**,
+özgün `Roaming\@hasarbotu\desktop` profili ve aynı kimlikli oturumla açık.
+Profilin **998 dosya / 5.863.259.295 bayt** ve eski kurulumun **157 dosyası**,
+Administrators/SYSTEM-only yedekte hash ile yeniden doğrulandı; ayrı tam geri
+kopyalama geçti. NSIS ilk açılıştan önce profilin 998 dosyasını aynen korudu.
+Aynı Windows kullanıcısındaki gerçek profil kopyasında **0.1.90 → 0.1.91 → 0.1.90**
+oturumu, 12 yerel ayar/not kaydı, Touch konumu ve klasör ayarları korundu.
+Bu runtime kanıtı, aynı paketle önceden mühürlenmiş **8/8 gerçek NSIS VM**
+yükseltme/geri dönüş kanıtından ayrıdır; VM sentetik profil/current-user kapsamındadır.
+Gerçek günlük istemcide rollback gerekmedi ve uygulanmadı; doğrulanmış eski
+installer/profil ve `C:\HB0191\client-final-rollback.ps1` hazırdır. Üretim DB restore edilmedi.
+
+Google oturumu korundu; Gmail connected/güncel, Touch sağlıklı, Trafik/Kasko
+listeleri erişilebilir. Kaydedilmiş klasör çözümleyicisiyle gerçek **431.097 bayt**
+belge normal kullanıcı yetkisiyle salt okunur okundu. Yeni OAuth veya insanla
+belge/Touch etkileşim testi yapılmadı; aşağıdaki **5/5 kullanıcı kabulü** korunur.
+Önceden var olan yalnız bu exe yoluna ait `~ RUNASADMIN` uyumluluk değeri
+geri alınabilir biçimde yedeklenip kaldırıldı; uygulama normal kullanıcıyla açıldı.
+Yerel kabul **26/26**, üç sağlık ucu ve sekiz servisin PID korunması PASS;
+0075 ve 0.1.91 API paketi korundu, API sözleşme sürümü **0.0.0** kaldı.
+
+Installer/uygulama/kaldırıcı/elevate imza ve timestamp **Valid**; mevcut özel
+güven ana ofis bilgisayarında doğrulandı. Evdeki kurulu **0.1.89** bilgisayarında
+da mevcut Root/TrustedPublisher ve paket imzası geçti. Kullanıcı diğer ofis
+bilgisayarlarında da eski kurulumlar bulunduğunu doğruladı; onların sertifika
+güveni/sürüm uyumu **UNVERIFIED**. Üç kayıtlı Windows cihazının SSH/WinRM
+uçları **9/9 timeout**; bu ağ kayıtları tam uygulama envanteri sayılmadı.
+Bu nedenle **0.1.91 genel feed'e yayımlanmadı; feed 0.1.90** byte olarak korundu.
+Kimlikli manifest/paket **200**, anonim manifest **401**; **113.021.946 bayt** ve
+önceki SHA-256 eşleşti. Günlük 0.1.91 eski feed'i `current` görür, downgrade sunmaz.
+Kanıt/yedek: ofiste `C:\ProgramData\HasarBotu\transition-manager-0191\client-final-20261104`;
+özetin yerel kopyası `.local/client-final-0191-20261104/final-result.json`.
+Son kanıt manifesti SHA-256:
+`f0fa88f71095e8a90fad08634f083d535d3756b706e69c8a5d0097a65e0f79a5`.
+
+4 Kasım 2026 **son istemci kabulü — gerçek kullanıcı bildirimi: 5/5 PASS**.
+Kullanıcı bu görevde Google Desktop girişini, Web girişini ve Gmail bağlantısını,
+Touch'un plaka türleri/yedi alan/animasyonlarını, Trafik-Kasko dosyalarını ve belge
+görüntülemeyi, günlük 0.1.90 istemcisinin sağlıklı çalışmasını açıkça doğruladı.
+Bunlar kullanıcı kabul kanıtıdır; otomatik test sonucu değildir. Kabul yeniden
+istenmeyecek. Yükseltme sonrası oturum/profil korunması ve yayın kapısı ayrıca
+doğrulanır; bu beş sonuç tek başına yükseltme sonrası PASS sayılmaz.
+
+4 Kasım 2026 **21:38 TRT — kabul kısayolu izin düzeltmesi PASS**.
+Kısayol yöneticiye özel kanıt dizinine bağlıydı; yükseltilmiş pilot testleri
+normal Explorer erişimini kapsamamıştı. İmzalı paketin 154 dosyası hash ile
+doğrulanarak kullanıcının `LocalAppData\HasarBotuPilot\app-0.1.91-8ec51bd19e972d9d`
+dizinine kopyalandı; aynı kısayol ve aynı ayrı profil kullanılıyor.
+Windows kabuğundan **Limited** kullanıcıyla gerçek açılış PASS: başlatıcı ve
+uygulama yükseltilmemiş token, `0.1.91 / ready / connected / lan`, imza Valid.
+Korumalı kanıt/yedek ACL'leri, günlük kurulum, API ve 0.1.90 feed korundu.
+Genel kullanıcı kabulü ve yayın bekleme durumu devam ediyor.
+
+4 Kasım 2026 **20:00 TRT — PARTIAL: üretim API geçişi tamamlandı, genel yayın bekliyor**.
+Hotfix'li 0.1.91 API ve yalnız 0075 gerçek ofise uygulandı; son üretim dump'ı
+önce bağımsız PostgreSQL 17.11'de **134 tablo / 621.770 kayıt** ile restore edildi.
+Üretim **13/13**, son güvenli durum **9/9**, ağ **8/8**, sağlık **3/3 PASS**.
+Gerçek 0.1.90 oturumu yeni API ile çalışıyor; günlük PID **15120** korundu.
+İmzalı 0.1.91, ayrı profilde PID **24256**, `ready / connected / lan` açık.
+Paket **113.055.064 bayt / 8ec51bd19e972d9d9917470c37d391a35ed9373870efede05ba5af985b1788f6**;
+imza/timestamp ve mevcut özel ofis güveni geçerli, paket değişmedi.
+Ofis masaüstündeki **HasarBotu 0.1.91 Kabul - 4 Kasim** kısayolu ayrı profili açar.
+İki kontrollü kabul kaydında yazma/yeniden okuma/409 ve gerçek dosyada salt
+okuma + yalnız kabul kopyasında disk yazma geçti; kaynak iş dosyası korundu.
+Google Desktop yapılandırıldı, Web/Gmail ayarları korundu ve mevcut Gmail
+işçisi başarılı. **Gerçek Google/Web/Gmail, Touch, UI belge işlemleri
+ve gerçek profil NSIS yükseltme/geri dönüş kullanıcı kabulü PENDING**.
+İlk hata ayıklayıcılı kapanış denemesi sonrasında probun kanal temizliği
+düzeltildi: gerçek ofiste **normal çıkış ve aynı profilden yeniden açılış PASS**;
+son döngüde zorla sonlandırma yok, Touch konumu ve LAN bağlantısı korundu.
+Kullanıcı kabulü olarak işaretlenmedi. Günlük istemci
+yükseltilmedi. **Feed 0.1.90; genel 0.1.91 dağıtımı ertelendi.**
+[Üretim geçişi, rollback ve mühürlü kanıtlar](../../deploy/windows-service/README.md#4-kasım-2026--üretim-api-geçişi-pilot-ve-bekleyen-kullanıcı-kabulü).
+
+4 Kasım 2026 **v6 restore kapısı çözüldü — teknik GO, üretim onayı/kabul PENDING**.
+Açıkça seçilen bağımsız 17.11 yolu aynı byte/veri/şema/provenance kontrollerini
+ve asgari NOSUPERUSER restore rolünü korur; üretim CREATEDB hesabı gerektirmez.
+Geçişte alınacak son dump tekrar restore edilmeden migration yapılamaz.
+Eski 620.274 kayıtlık dump ve yeni **134 tablo / 621.760 kayıtlık** online
+snapshot gerçek restore/0075/rollback ile doğrulandı. **52 Node / 201 PS kontrolü**,
+ofiste beş geçersiz kanıt reddi ve tam ön kontrol PASS. Sekiz servis ve gerçek
+0.1.90 PID 15120, API/installer/OAuth/CA/yedekler korundu; görünürlük hotfix'i
+adayda mevcut. **Feed 0.1.90; üretim migration/API/kurulum/yayın uygulanmadı.**
+Gerçek kullanıcı oturumu ve Google/Web/Gmail/Touch/dosya kabulü bekliyor.
+[Kabul modeli ve hazır komutlar](../../deploy/windows-service/README.md#4-kasım-2026--bağımsız-restore-kabulü-v6-teknik-go).
+
+**16:47 TRT ek gözlem:** ofis Windows'u 16:40'ta bu görevin dışında,
+1074 olayına göre Adobe Acrobat/MSI tarafından yeniden başlatıldı. Sonrasında
+sekiz servis, API/CA/paket/yedek bütünlüğü **12/12**, sağlık **3/3**, ağ **8/8**
+geçti. Gerçek **0.1.90 PID 15120** ile yeniden açılmıştır; kullanıcı oturumu
+kabulü bekliyor. Önceki PID korunma sonucu 16:35'e aittir. Feed **0.1.90**,
+0075 ve API geçişi uygulanmadı; ayrıntı ve mühürlü postboot kanıtı servis README'sinde.
+
+4 Kasım 2026 **16:36 TRT son hazırlık: NO-GO (restore kimliği kapısı)**.
+Desktop JSON bulundu ve korumalı API XML adayı doğrulandı; Web/Gmail ayarları
+korundu. Atlanan Google DB testleri izole PostgreSQL 18.4'te **19/19 PASS**.
+Yeni gerçek yedeğin bağımsız 17.11 restore/0075/eski-yeni API açılış provası
+**8/8 PASS**; **134 tablo / 620.274 kayıt** eşleşti. Eski API adayında eksik
+olan güncel görünürlük hotfix'i yeni ayrı API paketine alındı. Mevcut imzalı
+0.1.91 installer, CA profili ve yerel güven korundu; yeniden paketlenmedi.
+53,3 GB korumalı yedek, rollback önizlemesi ve son üretim korunması **12/12**
+geçti. **Feed 0.1.90; migration/API/kurulu istemci/yayın değiştirilmedi.**
+Aynı-küme restore kimliği, açık bakım onayı ve sonrasındaki gerçek kullanıcı
+kabulü bekliyor. [Kesin geçiş/rollback sırası ve kanıt sınırları](../../deploy/windows-service/README.md#4-kasım-2026-1636-trt--son-güvenli-hazırlık).
+
+4 Kasım 2026 **15:37 TRT mimari düzeltmesi — LOCAL PASS, genel kabul PARTIAL**:
+API ve günlük 0.1.90 aynı `DESKTOP-EFN2G33` bilgisayarında; Codex evden SSH ile
+bağlanır. `INDEPENDENT_OFFICE_PILOT_REQUIRED` bağımsız istemci tanısının ön koşul
+reddidir, ağ arızası değildir. Aşağıdaki eski ayrı istemci erişim kayıtları bu
+LOCAL pilot için engel sayılmaz. **34KNC257 gerçek 0.1.90 kullanıcı kabulü PASS**:
+kullanıcının uygulamada görünürlük teyidi kaydedildi.
+
+LOCAL sağlık **3/3**, 8443 TLS/401/yanlış hostname/CA ve UDP unicast/broadcast
+keşif **8/8 PASS**. İmzalı 0.1.91 ayrı boş profilde `ready=true`,
+`outcome=connected`, `route=lan` ile açıldı, ardından yalnız pilot kapatıldı;
+gerçek 0.1.90 PID 29296 ve oturumu korundu. Çerez/oturum kopyalanmadı.
+Aynı bilgisayarda yükleyici/uygulama imzası ve mevcut özel yayıncı güveni **PASS**.
+Üretim PID/runtime/XML, sekiz servis, hosts, 74 migration ve 0.1.90 feed/değişmez
+installer başlangıç/son karşılaştırması **11/11 PASS**; üretime yazılmadı,
+kurulum/yayın/güven dağıtımı yapılmadı.
+
+**Eksik:** 0075 uygulanmamış, Desktop OAuth yapılandırılmamış. Web OAuth açık;
+mevcut Gmail işçisi başarılı, gerçek yeniden giriş/yetkilendirme **PENDING**.
+Touch dahil **158 ayrı otomatik test PASS**; `TEST_DATABASE_URL` yokluğunda
+19 Google DB testi **SKIPPED**. Gerçek Google Desktop/Web/Gmail/Touch kabulü,
+gerçek profil yükseltme/rollback ve **bağımsız istemci/Tailscale kapalı dış LAN
+NOT RUN/PENDING**. LOCAL ağ sonucu bu ayrı kabul yerine geçmez.
+
+Hazır ayrı profil ve salt okunur ön kontrol/sonradan `-Start` başlatıcısı
+`C:\HB0191\single-host-acceptance-20261104\launch-pilot.ps1` altında;
+şimdiki engeller yalnız `MIGRATION_0075_NOT_APPLIED`, `DESKTOP_OAUTH_DISABLED`.
+Üretim bakım yetkisi/korumalı Desktop app JSON'u ve kullanıcı onayıyla yapılacak
+minimum adımlar [güncellenmiş pilot prosedüründedir](../../deploy/windows-service/README.md#gerçek-istemci-için-kısa-pilot-prosedürü).
+Kanıtlar `.local/single-host-acceptance-20261104/` altında; yeni build gerekmedi,
+doğrulanan mevcut 113.055.064 baytlık 0.1.91 adayı kullanıldı. Feed **0.1.90**.
+
+4 Kasım 2026 13:17 TRT gerçek istemci kabulü: **PARTIAL; ayrı istemci
+FAIL (yetkili oturum kurulamadı), yayın BLOCKED; üretim/feed 0.1.90**.
+`native pipe unavailable / os error 2`, yerel Computer Use native köprü
+uç noktasına erişim hatasıdır; RustDesk servisi/süreçleri ve kendi IPC pipe'ları
+mevcut. Önceki RustDesk günlüklerinde güvenli taşıma kurulmuş, giriş öncesi
+mesajlar görülmüş; başarılı uzak giriş/kontrol kanıtlanmadı. Köprünün neden
+sağlanmadığı doğrulanamadı; servis/oturum yeniden başlatılmadı. Üç çevrimiçi
+kayıtlı istemcinin SSH/WinRM uçları tek denemede 9/9 zaman aşımı verdi;
+kimlik bilgisi gönderilmedi ve aynı başarısız bağlantılar tekrarlanmadı.
+Sunucunun 10:57'de başlayan aktif console oturumu korundu. Son kontrolde
+altı üretim ve iki ağ servisi Running; hosts `.100`, API runtime/XML,
+0.1.90 feed/yükleyici hash ve boyutu değişmedi; sağlık **3/3 HTTP 200**.
+Web OAuth açık, Desktop OAuth kapalı; DB **74 migration**, 0075 uygulanmadı.
+Gmail işçisinin 13:16 TRT başarısı gerçek kullanıcı yeniden bağlama kabulü
+değildir. Touch'un tamamlanan üç özelliğine dokunulmadı; gerçek Google/Gmail/
+Touch, Tailscale kapalı LAN ve gerçek kullanıcı yükseltme/rollback kabulü
+**PENDING/BLOCKED**. Canlı ayrı restore kimliği engeli açık; izole restore
+tekrarlanmadı. İmzalı adayın hash/boyutu ve sunucudaki özel güveni doğrulandı;
+ayrı istemci yayıncı güveni doğrulanmadı. Feed/güven dağıtımı yapılmadı.
+Kanıtlar ve yalnız genel CA içeren taşınabilir tanı paketi
+`.local/client-acceptance-20261104/` altında. Tanı aracının **4/4** sözdizimi/
+engelleme kontrolü geçti; bu sonuç istemci ağ kabulü değildir. Uygulanabilir
+adımlar [mevcut servis README'sindedir](../../deploy/windows-service/README.md#gerçek-istemci-için-kısa-pilot-prosedürü).
+
+4 Kasım 2026 10:47 TRT: **PARTIAL; üretim/feed 0.1.90, 0.1.91 yayını BLOCKED**.
+Gerçek `.150 ↔ .108:443` Ethernet trafiği paket içeriği kaydetmeden doğrulandı.
+Sunucu Ethernet rotası doğru; WireSock ve ayrı, aynı adres aralıklı LAN
+geliştirme bilgisayarındadır. 8443 HTTPS/43110 discovery kalıcı servisleri
+mevcut CA ile kuruldu; gerçek servis rollback'i, yeniden kurulum ve stop/start
+geçti. Aynı sunucuda 6/6 runtime, geliştirmeden Tailscale üzerinden 2/2 kontrol
+geçti; **ayrı ofis istemcisinde yeni LAN yolu/kullanıcı kabulü değildir**.
+RustDesk girişi/kontrol köprüsü, reboot/DHCP, eski hosts `.100` kaydı ve ayrı
+PostgreSQL yönetici erişimi açık engeller. Altı üretim servisi/runtime/feed,
+Touch kaynakları ve 22 izole restore kanıtı korundu; sağlık 3/3 HTTP 200.
+Yeni kanıtlar `.local/lan-investigation-20261104` altında; ayrıntı ve
+korumalı rollback yolu [servis README'sinde](../../deploy/windows-service/README.md#4-kasım-2026-gerçek-ofis-incelemesi).
+
+4 Kasım 2026 10:07 TRT gerçek ofis incelemesi: **PARTIAL; yayın BLOCKED**.
+Kurulu istemci/feed **0.1.90**; altı servisin PID/hesap/başlangıcı,
+API runtime/XML, manifest ve değişmez yükleyici hash/boyutu korundu;
+3100/443/3200 sağlıkları **3/3 HTTP 200**. İmzalı 0.1.91'in aşağıdaki
+113.055.064 bayt/hash/imza/zaman damgası yeniden doğrulandı; yayın/güven dağıtımı yapılmadı.
+8443/43110 kalıcı servisleri hiç kurulmamış; kaldırılan geçici dinleyiciler
+servis arızası değildir. Dry-run, CA/TLS ve hazırlık yedeğinin rollback önizlemesi
+geçti; üç hazırlık anahtarının sahiplik/ACL'si içerikleri değişmeden düzeltildi.
+Gerçek LAN yolu ve uygun firewall politikası doğrulanamadığından kurulum yapılmadı.
+Kayıtlı RustDesk ofis istemcileri bulundu; bilgisayar kullanım bağlantısı
+`native pipe unavailable` olduğundan ayrı istemci oturumu ve gerçek kullanıcı
+kabulü **BLOCKED**. İzole restore/0075'in 22 mühürlü kanıtı değişmedi;
+canlı DB **74 migration**, Desktop OAuth kapalı. Ayrıntı
+[servis README'sinde](../../deploy/windows-service/README.md#4-kasım-2026-gerçek-ofis-incelemesi);
+kanıtlar `.local/office-acceptance-0191` ve sunucuda korumalı
+`transition-manager-0191\office-acceptance-20261104` altında. Touch kodu korunmuştur.
+
+4 Kasım 2026 son kabul: **PARTIAL; çalışan üretim ve feed 0.1.90**.
+Touch'un plaka/Trafik-Kasko eşleştirmesi, süreçlerin başındaki yedi alan ve
+bağlamsal etkileşimleri koruyan tekrarsız animasyon havuzları **PASS**.
+129 ayrı hedef test geçti: 47 React/veri, 78 tarayıcı/animasyon, 3 gerçek
+Electron ve 1 gerçek Electron/API/izole PostgreSQL 17.11 senaryosu. Sonuncuda
+100 alt kontrol geçti; sentetik veri kullanıldı, gerçek ofis kabulü sayılmadı.
+Son build'in UI testi ayrıca 6 tür/pencere/DPI düzenini geçti; typecheck,
+lint ve tam build başarılı. Ekran görüntüsü alınmadı.
+
+Güncel, yeniden imzalanmış x64 NSIS `release/signed/HasarBotu-Setup-0.1.91.exe`:
+**113.055.064 bayt**, SHA-256
+`8ec51bd19e972d9d9917470c37d391a35ed9373870efede05ba5af985b1788f6`.
+İmza/zaman damgası ve SignTool doğrulaması geçti; gerçek NSIS'ten çıkarılan
+78 UI / 28 main-preload dosyası, ofis profili ve paket açılışı doğrulandı.
+Yeni hash'li paketin ağsız Windows Evaluation VM'sinde standart kullanıcıyla
+temiz kurulum, 0.1.90 → 0.1.91 → 0.1.90 ve sentetik profil koruması da
+8/8 geçti. UAC/Secure Boot açık kaldı; VM eski snapshot'ına döndü ve kapatıldı.
+VM'de şirket sertifikası güvenilir değil (`UnknownError`); bu prova genel
+yayıncı güveni, gerçek oturum koruması veya ofis pilotu sayılmaz.
+Önceki imzalı aday `.local/final-acceptance-0191/previous-signed` altında korundu.
+Ofis sunucusuna aktarılan yeni paketin boyut/hash/imzası ve ayrı profilli
+açılışı geçti; rota `remote`, kurulu 0.1.90 süreçleri korundu. **Bu bir ayrı
+ofis istemcisi veya kullanıcı kabulü değildir.** Sertifika yalnız önceden
+güven verilmiş makinelerde geçerlidir; genel Windows/SmartScreen/SAC güveni
+kazanılmış sayılmaz, ofis geneline güven dağıtımı yapılmadı.
+
+Geçici sunucu 8443/TLS ve 43110/UDP dinleyicileri açıkken geliştirme
+istemcisinden HTTPS zaman aşımı ve boş UDP keşfi tekrarlandı; LAN komşusu
+`Unreachable`. Ayrı ofis istemcisi için doğrulanmış uzak çalıştırma kimliği ve
+host anahtarı bulunamadı. Desktop OAuth üretimde kapalı; gerçek Desktop/Web
+girişi, Gmail yeniden bağlama, kullanıcı dosya işlemleri ve Touch pilotu
+**PENDING/BLOCKED**. Mevcut Gmail işçisinin 05:51:50 UTC başarısı yalnız çalışan
+üretim bağlantısını doğrular. Geçici ağ süreçleri/kuralları kaldırıldı.
+Altı servis Running, üç sağlık kontrolü HTTP 200; API PID/runtime/XML,
+0.1.90 manifesti ve değişmez yükleyicisinin boyut/SHA-256'sı korundu.
+Canlı PostgreSQL 74 migration'da, 0075 uygulanmadı; restore rolü gereksiniminin
+[kesin kapsamı servis README'sindedir](../../deploy/windows-service/README.md#0191-otomatik-operatör-yöneticisi).
+Kanıtlar `.local/final-acceptance-0191` ve sunucudaki korumalı
+`transition-manager-0191\final-acceptance-20261104` altında; **yayın yapılmadı**.
+
+4 Kasım 2026 sıfır maliyetli hazırlık: **PARTIAL; üretim ve feed 0.1.90**.
+Ek ücret **0 TL**; sertifika/lisans/abonelik satın alınmadı. Son Touch Asistan
+kaynakları ve gerçek ofis CA profiliyle yeni **imzalı** 0.1.91 üretildi:
+`.local/final-acceptance-0191/previous-signed/HasarBotu-Setup-0.1.91.exe`, **113.055.072 bayt**, SHA-256
+`3c2f2fb16336d025d20e28b107aa6174275135a0b9cf214d4ba29fda13d5527e`.
+Aşağıdaki eski imzasız 0.1.91 adaylarıyla aynı paket değildir; yayımlanmadı.
+
+AD/kurumsal kod imzalama altyapısı bulunmadı. Windows CNG üzerinde RSA-3072,
+SHA-256, yalnız Code Signing EKU'lu, bir yıl geçerli şirket içi sertifika
+oluşturuldu. Subject `CN=HasarBotu Office Code Signing, O=HasarBotu Internal`,
+thumbprint `3A7E1AD05603F5870DB74ED835A05D38D3112B31`.
+Anahtar yalnız `51793-22893` imzalama kullanıcısının CurrentUser/My deposunda;
+dışarı aktarılamaz, dosya ACL'si yalnız imzalayan kullanıcı/Administrators/SYSTEM.
+Özel anahtar Git'e, pakete veya sunucuya aktarılmadı. Yalnız açık `.cer`, hash ve
+thumbprint eşleştirmesiyle, yönetici olarak geliştirme bilgisayarı ve
+`DESKTOP-EFN2G33` pilotunun LocalMachine Root/TrustedPublisher depolarına alındı.
+Genel amaçlı CA oluşturulmadı. **Bu özel güven, genel Windows yayıncı güveni,
+SmartScreen itibarı veya Smart App Control kabulüyle eşdeğer değildir.**
+[Microsoft'un güvenilen yayıncı koşulları](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control)
+geçerlidir; hiçbir Windows/TLS güvenlik kontrolü kapatılmadı.
+
+Electron, elevate.exe, NSIS kaldırıcı ve yükleyici imzalandı. Ücretsiz Sectigo
+RFC3161 zaman damgasına doğrulanmış HTTPS kullanıldı. SignTool HTTPS URL'sini
+doğrudan kabul etmediğinden `sign-desktop.cjs` yalnız loopback HTTP isteğini
+sabit HTTPS hedefine iletir; yönlendirme kabul etmez ve TLS doğrulamasını korur.
+Uygulama/yükleyici için Authenticode **Valid**, timestamp ve SignTool `/pa /all /tw`
+geçti. Ofis pilotunda yükleyici ve NSIS'ten çıkarılan uygulama **Valid**;
+özel anahtar yok. Ayrı profilli gerçek sunucu açılışı **ready, 0.1.91**,
+`route=remote`; kurulu 0.1.90 süreçleri korundu. Bu LAN veya kullanıcı kabulü değildir.
+
+Doğrulama: typecheck/lint/build, **3 Node + 10 PowerShell** imzalama kontrolü;
+imza bütünlüğü, bozulmuş içerik reddi, özel anahtar export reddi ve geri alma
+geçti. Yeni NSIS içeriği, **78 UI / 28 main-preload** dosyası ve gerçek paket
+açılışı doğrulandı; yerel smoke API'si sentetiktir. Mevcut izole Windows
+Evaluation VM'de temiz kurulum, **0.1.90 → 0.1.91 → 0.1.90** ve sentetik
+profil işareti koruması geçti; UAC/Secure Boot açık kaldı ve VM eski snapshot'ına
+döndürüldü. VM'ye güven sertifikası kurulmadı: imza durumu **UnknownError**;
+bu prova güven, gerçek kullanıcı oturumu veya SmartScreen kabulü sayılmaz.
+
+4 Kasım 00:00 UTC günlük DB yedeği **134 tablo / 35.778.654 bayt**,
+SHA-256 `e565cb65c57b3196a5a415c4094be3bb9706e9900f961fea97755e2da65d1916`:
+hash/boyut/tam arşiv çözümlemesi geçti. Önceki 134 tablo/615.008 kayıt restore,
+0075 down/reapply ve eski/yeni API kanıtları korundu; tekrarlanmadı. Yeni günlük
+dump ayrıca restore edilmiş sayılmaz. API rolü DB/ilgili nesne sahibi; 0075
+nesne yetkileri mevcut, SUPERUSER/CREATEDB verilmedi. Ayrı yetkili PostgreSQL
+yönetici bağlantısı yine bulunamadı; SCRAM/HBA/parolalar değiştirilmedi.
+Canlı DB **74 migration** ile korundu; 0075 uygulanmadı.
+
+Sunucuda canlı geçici 8443/TLS ve 43110/UDP açıkken ayrı geliştirme bilgisayarının
+LAN HTTPS isteği zaman aşımına uğradı, UDP keşfi yanıt alamadı. Tailscale
+yönetim erişimi LAN başarısı sayılmadı. Geçici süreçler/kurallar kaldırıldı.
+Son kontrolde altı üretim servisi Running, üç sağlık kontrolü HTTP 200;
+API PID/runtime/XML ve 0.1.90 manifest/değişmez paket boyut/hash'i korundu.
+Web OAuth açık, Desktop OAuth üretimde kapalı; Gmail işçisi 05:32 UTC'de başarılı.
+Gerçek Desktop/Web kurumsal giriş, Gmail yeniden bağlama, Trafik/Kasko temel
+işlemleri/Touch kabulü, ayrı ofis istemcisi LAN/DHCP/kopma-dönüş, gerçek 0.1.90
+oturum koruması ve kimlikli güncelleme kabulü **PENDING**. Bu kapılar kapanmadan
+üretim geçişi veya ofis geneline güven/paket dağıtımı yapılmaz.
+Kanıtlar `.local/zero-cost-0191`; sunucuda admin/SYSTEM erişimli
+`C:\ProgramData\HasarBotu\transition-manager-0191\zero-cost-20261104`.
+
+### Şirket içi imzalama yenileme ve geri alma
+
+- İmzalama ortamında yönetici olarak `scripts/initialize-office-signing.ps1`
+  çalıştırılır: `-ExpectedComputerName <imzalama-hostu> -PublicCertificate <yeni.cer>`.
+  Mevcut kimlikte yenileme için ayrıca `-Renew` ve yeni dosya adı gerekir.
+  Son kullanımdan 90 gün önce yeni anahtar/sertifika oluştur; eski paketi,
+  sertifikayı ve manifesti koru. Kaybolan dışarı aktarılamaz anahtar yenilenir;
+  istemcilere PFX/özel anahtar dağıtılmaz.
+- Yalnız yönetilen, adı doğrulanan pilotta yönetici olarak
+  `scripts/set-office-signing-trust.ps1 -ExpectedComputerName <pilot> -PublicCertificate <yeni.cer> -Thumbprint <kimlik> -CertificateSha256 <cer-SHA256>`
+  kullanılır. Hash/kimlik mevcut yetkili kanaldan doğrulanır. Pilot kabulünden
+  sonra aynı açık sertifika yetkili bilgisayarlara dağıtılır; eski güven ancak
+  tüm geçiş ve geri dönüş kabulü tamamlandıktan sonra kaldırılır.
+- İmzalama için `HASARBOTU_SIGNING_CERT_SHA1`, tam Subject değerli
+  `HASARBOTU_SIGNING_PUBLISHER`, `HASARBOTU_SIGNING_TIMESTAMP_URL=https://timestamp.sectigo.com`
+  seçilir; `npm run package:win:signed --workspace @hasarbotu/desktop` çalıştırılır.
+  Önceki `release/signed` korunarak ayrı konuma taşınmalıdır. Araç doğrulanmış
+  SDK SignTool'u seçer, zorunlu imza/zaman damgası denetler; kendiliğinden yayınlamaz.
+- Anahtar şüphesinde imzalama/yayın durdurulur. Aynı açık sertifika/hash/kimlikle
+  **tüm yetkili makinelerde yönetici olarak** trust aracına `-Action Revoke`
+  eklenir: LocalMachine Disallowed'a alınır, Root/TrustedPublisher güveni kaldırılır.
+  Bu doğrudan güvenilen özel sertifikada genel CA/CRL servisi yoktur; geri alma
+  her yönetilen bilgisayara ulaşmadan tamamlanmış sayılmaz. Araç geri alınan
+  kimliği yeniden güvenilir yapmayı reddeder. Yeni anahtar ve pilot gerekir;
+  önceki doğrulanmış paket/profil yedeğiyle kontrollü rollback uygulanır.
+- `powershell -NoProfile -File scripts/office-signing.tests.ps1` yönetici ortamında
+  gerçek geçici kimlikle export, güven, içerik bozma ve Disallowed reddini sınar;
+  test anahtarı/depoları temizler. Kabul kapıları sağlanmadan canlı migration,
+  kullanıcı oturumu devri veya feed değişikliği yapılmaz.
+
+4 Kasım 2026: **Touch Asistan 0.1.91 geliştirme adayı; yayımlanmadı.**
+Plaka yanında kaydın Trafik/Kasko türü gösterilir; bilinmeyen tür etiketlenmez.
+Süreçlerde sorumlu, şirket, tür, hasar dosya numarası, ihbar tarihi, servis ve
+doğrulanabilir cep numarası mevcut süreç içeriğinin önündedir. Şirket/personel
+adları kimlikli referans kaynağından çözülür; sabit hat cep olarak gösterilmez.
+Alanlar sekme/fokus yenilemesinde güncellenir. Uzun metin, büyük yazı ve üç
+pencere/DPI senaryosu sentetik kayıtlarla gerçek tarayıcıda doğrulandı.
+Önceki ağırlıklı seçim (sürpriz 0,3; gündelik 5), yalnız son dört hareketi
+dışlıyordu; aynı tetikte iki boşta hareketi başlayabiliyordu. Artık eski
+hareketler ve 22 sahne tek **34 öğelik Fisher–Yates döngüsündedir**; esneme
+de sıraya dahildir. Bağlamsal etkileşim dizileri ayrıdır. Kesilme, duraklatma,
+uyku/uyanma ve azaltılmış hareket döngüyü sıfırlamaz veya engelliyken tüketmez.
+Boşta kontrolden dönen ilk karenin zamanı da düzeltilerek bakış sıçraması giderildi.
+Gerçek Electron'da 61 sahnenin çizimi, gözler/skin ve bakış geçişleri doğrulandı.
+Doğrulama: TypeScript, lint ve tam build geçti. Paketlerin son sonuçlarında
+**2.796 test geçti, 763 test atlandı**; veritabanlı/canlı entegrasyon koşulları
+çalıştırılmadı. İlk tam turdaki üç native pencere sıralaması hatası ayrı
+tekrarda geçti (133 Electron kontrolü); ardından masaüstü paketinin tamamı
+**274 geçti / 28 atlandı / 0 hata** verdi. Bu ilk tur kararsızlığı kayıtta tutulur.
+Yerel Windows x64 NSIS: `.local/touch-0191/candidate/HasarBotu-Setup-0.1.91.exe`,
+**113.026.651 bayt**, SHA-256
+`66873870705a14548e1f06dc76d23398bdadfa29addeca0eb4adfddccc5abf10`.
+NSIS'ten çıkarılan paketin açılışı, 78 UI ve 28 main/preload dosyası geçti;
+API yalnız sentetik loopback fikstürüdür. Paket **NotSigned**. Çalışan 0.1.90,
+üretim veritabanı ve güncelleme feed'i değiştirilmedi. **Kod imzalama,
+PostgreSQL yönetici erişimi ve gerçek kullanıcı/pilot kabulü açık engellerdir.**
+
+4 Kasım 2026 gece operasyonu **PARTIAL; 0.1.91 yayımlanmadı**. Gerçek ofis
+PostgreSQL **17.11** ikilileriyle üretimden bağımsız, yalnız loopback/SCRAM
+kullanan örneğe doğrulanmış yedek geri yüklendi. **134 tablo / 615.008 kayıt**:
+tablo bazında kayıt sayıları ve SHA-256 özgün backup snapshot'ıyla eşleşti.
+0075, tekrar çalıştırma ve yalnız izole ortamda down/reapply geçti; veri özeti
+korundu. Gerçek 0.1.91 adayı ve mevcut 0.1.90 API kodu migration sonrası
+klonla sağlık kontrolünden geçti. Canlı DB 74 migration ile bırakıldı.
+
+Sunucuda oluşturulan gerçek ofis CA profilli Windows x64 NSIS adayı
+**113.025.581 bayt**, SHA-256
+`e32f42131fa2f3a38b26ce920b007e8aa7bb87692b9c85975430853e2ea7c707`.
+NSIS'ten çıkarılan gerçek paketin açılışı, 78 UI ve 28 main/preload dosyası
+doğrulandı; açılışın API'si sentetik yerel fikstürdür. Paket **NotSigned**;
+iki makinede kullanılabilir yayıncı sertifikası/izinli uzak imzalayıcı
+bulunmadı. Paket yalnız korumalı aday dizinine aktarıldı; pilot/feed yok.
+Ofis sunucusunda geçici 8443/TLS ve 43110/UDP, DNS adayı/uzak fallback
+olmadan gerçek LAN çözümlemesi ve yanlış CA/ad reddi geçti. Bu aynı makine
+provasıdır; ayrı istemci, DHCP değişimi ve gerçek Desktop/Web kullanıcı
+kabulü sayılmaz. Geçici süreçler/kurallar kaldırıldı, PG örneği kapatıldı.
+17 Vitest + 11 Node + 42 PowerShell kontrolü ve tam build geçti.
+0.1.90 feed/paketi, API süreci/runtime/XML ve altı çalışan servis korundu;
+443 ve 3200 sağlıkları geçti, canlı Gmail işçisinin güncel başarısı görüldü.
+Kanıtlar: `.local/night-operation-0191-20261104`; sunucuda
+`C:\ProgramData\HasarBotu\transition-manager-0191\night-20261104`.
+İzole restore başarısı canlı yönetici erişimi, imza ve pilot kabul kapılarını
+ortadan kaldırmaz; üretim API/ağ geçişi uygulanmadı.
+
+3 Kasım 2026 gerçek ofis geçişi **BLOCKED**: kurulu masaüstü ve feed **0.1.90**;
+mevcut paketin boyut/SHA-256 doğrulaması geçti. Gerçek PostgreSQL 17.11 restore
+kimliği bulunamadı; 0075 uygulanmadı. Geçerli ayrı Desktop OAuth JSON bulundu,
+ancak üretime eklenmedi. Sunucuda ve geliştirme bilgisayarında kullanılabilir
+kod imzalama sertifikası yok. Gerçek Workspace/Web/Gmail/pilot kabulü yapılmadı;
+8443/UDP keşfi kurulmadı, yeni paket yayımlanmadı. API/portal/mevcut HTTPS
+sağlığı 3/3; runtime/XML ve çalışan süreç korundu. Yeni canlı DB yedeğinin
+hash/tam çözümlemesi geçti; gerçek restore kabulü sayılmadı. Sunucu kanıtları
+`C:\ProgramData\HasarBotu\transition-manager-0191\autonomous-20261103` altında.
+
+3 Kasım 2026: **0.1.91 son kararlılık adayı — PARTIAL; ofise yayımlanmadı.**
+Önceki DNS/UDP + CA doğrulamalı LAN mimarisi kaynakta doğrulandı. Masaüstü
+Google girişi için desteklenen Desktop app + Authorization Code/PKCE +
+loopback dönüşü eklendi; public callback masaüstü girişinin zorunlu parçası
+olmaktan çıkarıldı. Ayrı Google Console istemcisi ve gerçek Workspace kabulü
+gerekiyor. Web/saha/Gmail akışları önceki web istemcisini kullanmayı sürdürür.
+Native audience, imza, state, nonce, kurumsal alan adı, kullanıcı onayı ve ilk
+uygulamanın HttpOnly çerezi zorunludur. Token/oturum dış tarayıcıya verilmez.
+Yerel alıcı ayrıca yalnız kendi başlattığı native state'i kabul eder;
+başka istemcinin akışı ve callback tekrarı iletilmez. Sayfa yenileme desteklenir.
+
+Geçici API 502/503/504 yanıtları artık yanlış sunucudan ayrılır; API/veritabanı
+başlangıcı sınırlı otomatik beklemeyi kullanır. Yeniden kullanılan köprü
+soketinde `connect` dinleyicisi birikimi düzeltildi. İlk normal kurulu profil
+Windows oturum başlangıcına kaydolur; sonraki kullanıcı tercihi korunur.
+Sunucu geçişinde kalıcı hashli/korumalı yedek, tam geri alma, port sahipliği
+kontrolü ve PostgreSQL/WinSW için üç restart + dur kurtarma aracı eklendi.
+Yerel proxy arkasında personelin Google giriş kotasını paylaşması, açık ve
+yalnız ilk loopback atlamasına güvenen sunucu ayarıyla giderildi; gateway
+istemci kaynaklı forwarded başlıklarını temizler. Güven varsayılanı kapalıdır.
+Sertifika yenilemede yeniden başlatmadan önceki doğrulama hatası da eski
+etkin yapılandırmayı geri getirir; eski `.previous` dosyasına güvenilmez.
+
+Yerel x64 NSIS: **113.025.530 bayt**;
+SHA-256 `2b726e036084cecf4eb2210e956a150d27e8df5253666ded7977063be6b48e34`.
+Bu paket **izole test CA profilli ve Authenticode imzasızdır**. NSIS içeriği,
+sürüm/x64, 78 UI dosyası ve gerçek paket açılışı doğrulandı. IP/origin override
+olmadan gerçek UDP + CA TLS ile LAN bağlantısı, gateway kesintisinden kurtarma
+ve aynı köprü origin'iyle yeniden açılma geçti; hosts değişmedi. Gerçek Google
+yerine sentetik sağlayıcılı Electron testi ve imzalı JWT birim testi kullanıldı.
+Üretim CA profili/kod imzalama sertifikası olmadan bu paket personele verilmez.
+
+Son doğrulama: tam sürüm kapısı **3.632 başarılı, 0 başarısız, 1 WebKit
+atlanan**; başlangıçta atlanan altı HTTP testi gerçek izole API/PG üzerinde
+ayrıca 6/6 çalıştı. Son native alıcı koruması için köprü **28/28**, Google
+tarayıcı/Electron **11 başarılı + 1 WebKit atlanan** kontrol tekrar geçti.
+49 Node araç test dosyasındaki **270** test tamamlandı; eksik varsayılan
+yükleyiciye takılan yayın entegrasyonu üretilen adayla yeniden geçti. 19 ek
+PowerShell süiti hata vermedi; eksik WinSW yolu sağlanınca gerçek geçici servis
+testi tamamlandı. Dört üretim koşulu ayrıca atlandı: kayıtlı PostgreSQL SCM
+preview'i, gerçek File Agent idempotency'si, File Agent var/API yok senaryosu
+ve gerçek pCloud servis hesabının DB erişimi. Bunlar geçilmiş sayılmadı.
+Typecheck, lint, tam build ve `check:deploy` geçti. Ağ/TLS/Caddy/WinSW/geçiş/SCM
+regresyonları **13/13**, başlangıç/yenileme/rollback PowerShell kontrolleri
+**52/52** geçti. Kaynak sabitlendikten sonraki tam kapı kaydı esas alındı.
+
+Kesin geçiş sırası, ön kontrol/geri alma komutları, dış gereksinimler ve ofis
+kabul listesi [servis README'sindedir](../../deploy/windows-service/README.md#0191-kontrollü-ofis-geçişi-ve-geri-dönüş).
+Gerçek 0.1.90 kurulumu, ofis feed'i, veri, sertifika ve gizli anahtarlar
+değiştirilmedi. Gerçek DHCP/reboot, temiz Türkçe Windows profili, Workspace
+girişi ve eski ofis istemcisinin indirmesi hâlâ ofis kabulü gerektirir.
+
+2 Kasım 2026: **0.1.91 bağlantı mimarisi adayı; ofise yayımlanmadı.**
+Yeni istemci hosts/UAC/IP veya Tailscale hazırlığı çalıştırmaz. Sürüm 2
+profili sabit mantıksal HTTPS origin'i, ofis CA'sı ve ağ keşif parametrelerini
+taşır; paketlemede IP içeren sürüm 1 profili reddedilir. Eski profil okuma
+uyumluluğu korunur, eski IP yönlendirme adayı olarak kullanılmaz. DNS ve
+nonce ile eşleşen yerel UDP adayları yalnız TLS adı/zinciri ve API servis
+kimliği doğrulandıktan sonra seçilir. Ağ değişimi/istek hatası önbelleği
+geçersiz kılar; pozitif kayıt 15 saniye, başarısız keşif beklemesi 2 saniyedir.
+Eşzamanlı istekler tek keşfi paylaşır; başarısız yazma otomatik tekrarlanmaz.
+Başlangıçta geçici erişim için 1/2/4/8 saniye beklenir; sertifika/yanlış
+sunucu hatası Türkçe açıklanır. Köprü portu, Chromium bölümü ve oturum anahtarı
+IP'den bağımsız aynı origin üzerinden korunur; ağın `online` olayı mevcut
+oturumu yeniden doğrular.
+
+Yerel doğrulama (Node 24.22.0, Caddy 2.11.7): geniş sürüm kapısında **3.547
+başarılı, 7 atlanan** test; atlananlar altı isteğe bağlı canlı API testi ve
+Windows'ta desteklenmeyen WebKit senaryosudur. Son değişiklikler için ağ/TLS/
+gerçek WinSW kurtarma **9/9**, başlangıç/sertifika PowerShell fikstürleri
+**33/33**, oturum/UI **32/32**, köprü **24/24**, gerçek Chromium oturum
+kalıcılığı ve sentetik Google sağlayıcısı dahil hedefli masaüstü **38 başarılı,
+1 WebKit atlanan** kontrol geçti. Mevcut olmayan IP'ye Caddy bind arızası gerçek
+ikiliyle yeniden üretildi; wildcard dinleyici aynı testte doğrulandı.
+Typecheck, lint, tam build ve `check:deploy` geçti.
+
+**Yalıtılmış test profilli** 0.1.91 Windows x64 NSIS adayı: 113.023.161 bayt,
+SHA-256 `6181d726c0129f4b247eefef11070eedfbff5c56e7e00c038903d0b281e618d9`.
+NSIS içeriği, paket sürümü ve 78 UI dosyası doğrulandı. Gerçek paket temiz
+profille API origin override/IP/hosts değişikliği olmadan UDP + özel CA TLS
+üzerinden açıldı; HTTPS kesintisinden ve uygulama yeniden başlatmasından sonra
+aynı köprü origin'iyle devam etti. Başlangıç oturum isteği geçici olarak
+başarısız olursa 5 saniyede kontrollü yeniden kontrol edilir; geçerli veya
+gerçekten anonim yanıt alınca sorgulama durur. Bu adayın test sertifikası ofis
+dağıtımında kullanılamaz. Gerçek ofis DHCP/reboot, yeni Windows bilgisayar,
+kurumsal Google hesabı ve eski kurulu istemcinin kimlikli feed/indirmesi
+**doğrulanmadı**; üretim kabulü ve yayın bekliyor.
+
+Bir defalık sunucu kurulumu, sertifika yenileme, DNS/mDNS karşılaştırması,
+güvenlik duvarı, geri alma ve Tailscale'siz uzaktan erişim/Google callback
+ön koşulları [mevcut servis README'sindedir](../../deploy/windows-service/README.md#ip-bağımsız-ofis-bağlantısı-2-kasım-2026).
+Gerçek sunucuya erişilemediğinden üretim CA profili alınmadı ve mevcut
+**0.1.90** manifesti/değişmez paketi değiştirilmedi. Yerel fikstür veya paket
+smoke testi gerçek ofis/Google kabulü yerine geçmez.
+
 31 Ekim 2026: **0.1.90 ofise yayımlandı** (2026-10-31T12:39:33.423Z).
 72ACR013, 07BMH571 ve 34CNK333, kurulu 0.1.89'un gerçek dosya listesinde görünür.
 Kök neden eski konum/pCloud kimliği nedeniyle yönetilen arşivlemedir; 115 canlı dosya
@@ -333,7 +859,7 @@ ayrı animasyon zamanlayıcıları oluşturmaz ve dosya/not işlemlerini değiş
 
 ## Ofis güncellemesi yayınlama
 
-Başlangıçta bağlantı kontrolü ve Windows izin hazırlığı ayrı, scriptsiz bir durum penceresinde gösterilir; bağlantı hazırlığı hataları ve zaman aşımı kullanıcıya açıklanır. Yardımcı konumu 200 ms içinde birleştirilerek asenkron ve atomik kaydedilir; çıkış son kaydı bekler. İmleç karakterden dört karakter genişliğinden uzaktaysa göz takibi 320 ms, yakındaysa 80 ms aralıkla çalışır; gizleme ve azaltılmış hareket sorgulamayı durdurur. API uyumu masaüstü paket sürümünden bağımsız olarak desteklenen `0.0.x` sözleşmesini korur.
+Başlangıçta bağlantı ve TLS kimliği denetimi ayrı, scriptsiz bir durum penceresinde gösterilir; bağlantı hataları ve zaman aşımı kullanıcıya açıklanır. Yardımcı konumu 200 ms içinde birleştirilerek asenkron ve atomik kaydedilir; çıkış son kaydı bekler. İmleç karakterden dört karakter genişliğinden uzaktaysa göz takibi 320 ms, yakındaysa 80 ms aralıkla çalışır; gizleme ve azaltılmış hareket sorgulamayı durdurur. API uyumu masaüstü paket sürümünden bağımsız olarak desteklenen `0.0.x` sözleşmesini korur.
 
 Kullanıcıya yansıyan tamamlanmış değişiklikler doğrulandıktan sonra masaüstü sürümünü artır,
 Windows x64 NSIS kurulumunu üret ve gerçek paketin açılışını doğrula. Yerel derleme veya
@@ -389,7 +915,13 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.90**, 2026-10-31T12:39:33.423Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.91**, 2026-11-04T19:56:08.511Z; Windows x64,
+113.055.064 bayt, SHA-256 `8ec51bd19e972d9d9917470c37d391a35ed9373870efede05ba5af985b1788f6`.
+Gerçek 0.1.90 `available`; kimlikli tam indirme/hash ve anonim 401 doğrulandı.
+Ana ofis 0.1.91 `current`; diğer kurulumların geçişi UNKNOWN. Önceki manifest,
+değişmez installer ve profil rollback'i korundu; zorunlu kurulum yapılmadı.
+
+Önceki doğrulanan ofis yayını: **0.1.90**, 2026-10-31T12:39:33.423Z; Windows x64,
 113.021.946 bayt, SHA-256 `dbf6203772959cf4da77ba3adf5496f3b3732255b8e623a753859dc74c7cf460`.
 Kurulu 0.1.89 `available` gördü; kimlikli standart Electron indirmesinde HTTP 200,
 tam boyut/SHA-256 ve kurulum sürümü doğrulandı. Üç plaka gerçek listede görünür;

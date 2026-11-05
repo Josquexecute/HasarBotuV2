@@ -15,6 +15,34 @@ function scriptedProbe(results: readonly ReadinessResult[]): () => Promise<Readi
 }
 
 describe('runStartupGate', () => {
+  it('recovers a temporary startup outage automatically with bounded delays', async () => {
+    const waits: number[] = []
+    let prompted = 0
+    expect(await runStartupGate({ probe: scriptedProbe([unreachable, unreachable, ready]),
+      automaticRetryDelaysMs: [1000, 2000], wait: async ms => { waits.push(ms) },
+      prompt: async () => { prompted++; return 'close' },
+    })).toBe('proceed')
+    expect(waits).toEqual([1000, 2000]); expect(prompted).toBe(0)
+  })
+  it('does not automatically retry a certificate or server identity failure', async () => {
+    for (const failure of ['tls', 'wrong_server'] as const) {
+      const waits: number[] = []
+      expect(await runStartupGate({ probe: scriptedProbe([{ ...unreachable, failure }]),
+        automaticRetryDelaysMs: [1000], wait: async ms => { waits.push(ms) }, prompt: async () => 'close',
+      })).toBe('abort')
+      expect(waits).toEqual([])
+    }
+  })
+  it('waits within the startup budget for the API and database to recover behind valid HTTPS', async () => {
+    const waits: number[] = []
+    let prompted = false
+    expect(await runStartupGate({ probe: scriptedProbe([{ ...unreachable, failure: 'service' }, { outcome: 'api_degraded', ready: false }, ready]),
+      automaticRetryDelaysMs: [1000, 2000], wait: async ms => { waits.push(ms) }, prompt: async () => { prompted = true; return 'close' },
+    })).toBe('proceed')
+    expect(waits).toEqual([1000, 2000])
+    expect(prompted).toBe(false)
+    expect(describeReadiness({ ...unreachable, failure: 'service' }).detail).toContain('ana API')
+  })
   it('API hazır ve uyumluysa hiç soru sormadan devam eder', async () => {
     let prompted = 0
     const outcome = await runStartupGate({

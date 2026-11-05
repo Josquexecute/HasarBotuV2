@@ -334,10 +334,19 @@ test('yanlis parola: login 401 ile reddedilir, hicbir agent olusturulmaz', async
 
 test('gecersiz AgentName parametre dogrulamasinda ps1 seviyesinde reddedilir (ValidatePattern)', () => {
   const encoded = Buffer.from(
-    `& ${JSON.stringify(scriptPath)} -ApiBaseUrl 'http://127.0.0.1:1' -AgentName '-invalid-name' -EnvScope Process -Credential (New-Object System.Management.Automation.PSCredential('a@b.c', (ConvertTo-SecureString 'x' -AsPlainText -Force)))`,
+    `try {
+      & ${JSON.stringify(scriptPath)} -ApiBaseUrl 'http://127.0.0.1:1' -AgentName '-invalid-name' -EnvScope Process -Credential (New-Object System.Management.Automation.PSCredential('a@b.c', (ConvertTo-SecureString 'x' -AsPlainText -Force)))
+      exit 0
+    } catch {
+      [pscustomobject]@{ ErrorId = $_.FullyQualifiedErrorId; ParameterName = $_.Exception.ParameterName } | ConvertTo-Json -Compress
+      exit 1
+    }`,
     'utf16le',
   ).toString('base64')
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { encoding: 'utf8', timeout: 15000 })
-  assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /ValidatePattern|does not match|eslesmiyor/i)
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { encoding: 'utf8', timeout: 15000, windowsHide: true })
+  assert.equal(result.status, 1, result.stderr)
+  // Structured error fields survive localization and CLIXML line wrapping.
+  const error = JSON.parse(result.stdout.trim())
+  assert.equal(error.ErrorId, 'ParameterArgumentValidationError,register-file-agent-interactive.ps1')
+  assert.equal(error.ParameterName, 'AgentName')
 })

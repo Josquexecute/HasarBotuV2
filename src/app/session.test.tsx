@@ -69,6 +69,21 @@ describe('SessionProvider mock mod (varsayilan)', () => {
 })
 
 describe('SessionProvider api mod bootstrap', () => {
+  it('recovers an existing session automatically after an initial connection failure', async () => {
+    vi.useFakeTimers()
+    try {
+      window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+      const bootstrap = vi.fn().mockRejectedValueOnce(new HttpAuthError('unavailable', 'offline')).mockResolvedValue(USER)
+      renderProvider(fakeAuth({ bootstrap }))
+      await act(async () => {})
+      expect(screen.getByTestId('status')).toHaveTextContent('anonymous')
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+      expect(screen.getByTestId('status')).toHaveTextContent('authenticated')
+      expect(screen.getByTestId('user')).toHaveTextContent(USER.displayName)
+      await act(async () => { await vi.advanceTimersByTimeAsync(15000) })
+      expect(bootstrap).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
   it('gecerli oturum -> authenticated + kullanici', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     renderProvider(fakeAuth({ bootstrap: () => Promise.resolve(USER) }))
@@ -92,6 +107,19 @@ describe('SessionProvider api mod bootstrap', () => {
 })
 
 describe('SessionProvider login/logout/expiry', () => {
+  it('keeps the current user during an outage and revalidates the session when the network returns', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const bootstrap = vi.fn().mockResolvedValueOnce(USER)
+      .mockRejectedValueOnce(new HttpAuthError('unavailable', 'offline')).mockResolvedValue(USER)
+    renderProvider(fakeAuth({ bootstrap }))
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'))
+    fireEvent(window, new Event('focus'))
+    await waitFor(() => expect(bootstrap).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('user')).toHaveTextContent(USER.displayName)
+    fireEvent(window, new Event('online'))
+    await waitFor(() => expect(bootstrap).toHaveBeenCalledTimes(3))
+    expect(screen.getByTestId('status')).toHaveTextContent('authenticated')
+  })
   it('ignores an older focus response after newer permissions have arrived', async () => {
     window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
     let resolveOld!: (user: SessionUser | null) => void

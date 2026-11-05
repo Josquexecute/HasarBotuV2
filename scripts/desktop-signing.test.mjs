@@ -21,6 +21,7 @@ test('signed configuration preserves distribution settings and rejects unsafe ov
     assert.deepEqual(config.extraResources, base.extraResources)
     assert.deepEqual(config.nsis, base.nsis)
     assert.deepEqual(config.win.signtoolOptions.signingHashAlgorithms, ['sha256'])
+    assert.equal(config.win.signtoolOptions.sign, '../../scripts/sign-desktop.cjs')
     assert.equal(config.directories.output, 'release/signed')
     const { validateConfiguration } = require('app-builder-lib/out/util/config/config.js')
     await validateConfiguration(config, { isEnabled: false })
@@ -45,4 +46,18 @@ test('Windows preflight fails closed without a selected identity and creates no 
   assert.equal(report.status, 'BLOCKED')
   assert.equal(report.signaturesCreated, 0)
   assert.equal(report.trustStoreModified, false)
+})
+
+test('timestamp signing hook rejects non-HTTPS and credential-bearing endpoints before signing', async () => {
+  const sign = require('./sign-desktop.cjs')
+  const saved = process.env.HASARBOTU_SIGNING_TIMESTAMP_URL
+  try {
+    for (const url of ['http://timestamp.example.invalid', 'https://secret@timestamp.example.invalid', 'https://timestamp.example.invalid/?secret=1']) {
+      process.env.HASARBOTU_SIGNING_TIMESTAMP_URL = url
+      await assert.rejects(sign({}), /HTTPS timestamp required/)
+    }
+  } finally {
+    if (saved === undefined) delete process.env.HASARBOTU_SIGNING_TIMESTAMP_URL
+    else process.env.HASARBOTU_SIGNING_TIMESTAMP_URL = saved
+  }
 })

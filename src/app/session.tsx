@@ -50,7 +50,7 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
         setStatus('anonymous')
         setNotice(
           error instanceof HttpAuthError && error.kind === 'unavailable'
-            ? 'Sunucuya şu anda ulaşılamıyor. Bağlantıyı kontrol edip tekrar giriş yapın.'
+            ? 'Sunucuya şu anda ulaşılamıyor. Bağlantı geri geldiğinde mevcut oturumunuz otomatik kontrol edilir.'
             : null,
         )
       })
@@ -82,19 +82,26 @@ export function SessionProvider({ children, authPort }: SessionProviderProps) {
     const refresh = () => {
       if (pendingMutation.current !== null) return
       const version = ++requestVersion.current
-      void auth.bootstrap().then((current) => {
+      return auth.bootstrap().then((current) => {
         if (cancelled || requestVersion.current !== version) return
         setUser(current)
         setStatus((previous) => current ? 'authenticated' : previous === 'anonymous' ? 'anonymous' : 'expired')
-        if (current) setNotice(null)
-      }).catch(() => { /* A focus refresh leaves the current session intact during a network outage; API checks remain authoritative. */ })
+        setNotice(null)
+      }).catch(() => { /* A refresh leaves the current session intact during a network outage; API checks remain authoritative. */ })
     }
+    let recoveryPending = false
+    const recoveryTimer = status === 'anonymous' && notice !== null ? window.setInterval(() => {
+      if (recoveryPending) return
+      recoveryPending = true
+      void Promise.resolve(refresh()).finally(() => { recoveryPending = false })
+    }, 5000) : undefined
     window.addEventListener('focus',refresh)
+    window.addEventListener('online',refresh)
     window.addEventListener('permissions-updated',refresh)
     window.addEventListener(PROFILE_UPDATED_EVENT,refresh)
     window.addEventListener(USER_DIRECTORY_UPDATED_EVENT,refresh)
-    return () => { cancelled = true;window.removeEventListener('focus',refresh);window.removeEventListener('permissions-updated',refresh);window.removeEventListener(PROFILE_UPDATED_EVENT,refresh);window.removeEventListener(USER_DIRECTORY_UPDATED_EVENT,refresh) }
-  },[auth,mode,status])
+    return () => { cancelled = true;window.clearInterval(recoveryTimer);window.removeEventListener('focus',refresh);window.removeEventListener('online',refresh);window.removeEventListener('permissions-updated',refresh);window.removeEventListener(PROFILE_UPDATED_EVENT,refresh);window.removeEventListener(USER_DIRECTORY_UPDATED_EVENT,refresh) }
+  },[auth,mode,status,notice])
 
   const logout = useCallback(async () => {
     const version = ++requestVersion.current

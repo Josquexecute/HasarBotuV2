@@ -15,7 +15,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('Google browser-bound OAuth and 
     if (!verifier) throw new Error('Missing verifier')
     return { access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', id_token: 'synthetic-id', scope }
   })
-  const start = (purpose = 'login', client = 'web', authCookie = '') => app.inject({ method: 'POST', url: '/api/v1/google/start', headers: { cookie: authCookie }, payload: { purpose, client }, remoteAddress: `127.1.${Math.floor(requests / 250)}.${++requests % 250 + 1}` })
+  const start = (purpose = 'login', client = 'web', authCookie = '', desktopRedirectUri?: string) => app.inject({ method: 'POST', url: '/api/v1/google/start', headers: { cookie: authCookie }, payload: { purpose, client, ...(desktopRedirectUri === undefined ? {} : { desktopRedirectUri }) }, remoteAddress: `127.1.${Math.floor(requests / 250)}.${++requests % 250 + 1}` })
   let requests = 0
   const callback = (flowId: string, code = 'synthetic-code', error?: string) => app.inject({ url: `/api/v1/google/callback?state=${flowId}&${error ? `error=${error}` : `code=${code}`}` })
   const complete = (flowId: string, browser: string, authCookie = '', rememberMe = false) => app.inject({ method: 'POST', url: '/api/v1/google/complete', headers: { cookie: [browser, authCookie].filter(Boolean).join('; ') }, payload: { flowId, rememberMe } })
@@ -29,15 +29,26 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('Google browser-bound OAuth and 
     await pool.query("INSERT INTO organizations(id,code,name) VALUES($1,'oauth','Synthetic OAuth')", [org])
     await pool.query('INSERT INTO users(id,organization_id,email,display_name,password_hash) VALUES($1,$2,$3,$4,$5)', [operator, org, email, 'Synthetic Operator', await hashPassword('synthetic-password-42')])
     await pool.query("INSERT INTO user_roles(user_id,role_id) SELECT $1,id FROM roles WHERE code='admin'", [operator])
-    app = buildApp({ logLevel: 'trace', loggerStream: { write: text => logs.push(text) }, auth: { pool, cookieSecure: false }, google: config,
+    app = buildApp({ trustLoopbackProxy: true, logLevel: 'trace', loggerStream: { write: text => logs.push(text) }, auth: { pool, cookieSecure: false }, google: config,
       googleProvider: { ...createGoogleProvider(config), exchange,
-        identity: async (_jwt, nonce, corporate) => validateGoogleClaims({ iss: 'https://accounts.google.com', aud: config.clientId, exp: Date.now() / 1000 + 600, iat: Date.now() / 1000, nonce: wrongNonce ? 'wrong' : nonce, email_verified: true, email, sub: subject, hd: 'office.example' }, config.clientId, nonce, corporate ? config.loginDomain : undefined),
+        identity: async (_jwt, nonce, corporate, redirect) => validateGoogleClaims({ iss: 'https://accounts.google.com', aud: redirect ? config.desktopClientId : config.clientId, exp: Date.now() / 1000 + 600, iat: Date.now() / 1000, nonce: wrongNonce ? 'wrong' : nonce, email_verified: true, email, sub: subject, hd: 'office.example' }, redirect ? config.desktopClientId! : config.clientId, nonce, corporate ? config.loginDomain : undefined),
         gmail: async () => ({ emailAddress: email }) } })
     const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: 'synthetic-password-42' } })
     expect(login.statusCode).toBe(200)
     cookie = browserCookie(login)
   }, 60_000)
   afterAll(async () => { await app?.close(); await pool?.end() })
+
+  it('keeps concurrent office clients separate without letting a direct peer forge its login quota', async () => {
+    for (let index = 0; index < 12; index++) {
+      const response = await app.inject({ method: 'POST', url: '/api/v1/google/start', remoteAddress: '127.0.0.1', headers: { 'x-forwarded-for': `10.201.0.${index + 1}` }, payload: { purpose: 'login', client: 'desktop' } })
+      expect(response.statusCode).toBe(200)
+    }
+    for (let index = 0; index < 11; index++) {
+      const response = await app.inject({ method: 'POST', url: '/api/v1/google/start', remoteAddress: '192.168.2.99', headers: { 'x-forwarded-for': `10.202.0.${index + 1}` }, payload: { purpose: 'login' } })
+      expect(response.statusCode).toBe(index < 10 ? 200 : 429)
+    }
+  })
 
   it.each(['web', 'field', 'desktop'])('redirects %s login to a parameter-free result and issues a session only to the initiating browser', async client => {
     const response = await start('login', client), { flowId, url } = response.json()
@@ -61,6 +72,33 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('Google browser-bound OAuth and 
     const session = await app.inject({ url: '/api/v1/auth/session', headers: { cookie: browserCookie(login) } })
     expect(session.json().user).toMatchObject({ id: operator, roles: ['admin'] })
     expect((await complete(flowId, browser)).json().status).toBe('expired')
+  })
+  it('requires explicit desktop provisioning and never consumes a flow through the other callback transport', async () => {
+    const redirect = 'http://127.0.0.1:54321/api/v1/google/desktop/callback'
+    expect((await start('login', 'desktop', '', redirect)).statusCode).toBe(503)
+    config.desktopClientId = 'synthetic-native.apps.googleusercontent.com'
+    try {
+      expect((await app.inject({ url: '/api/v1/google/status' })).json()).toMatchObject({ desktopEnabled: true })
+      for (const [purpose, client] of [['mail', 'desktop'], ['login', 'web'], ['login', 'field']]) {
+        expect((await start(purpose, client, '', redirect)).statusCode).toBe(400)
+      }
+      const response = await start('login', 'desktop', '', redirect), flow = response.json().flowId
+      const url = new URL(response.json().url)
+      expect(url.searchParams.get('client_id')).toBe(config.desktopClientId)
+      expect(url.searchParams.get('redirect_uri')).toBe(redirect)
+      expect(url.searchParams.get('code_challenge_method')).toBe('S256')
+      const before = exchange.mock.calls.length
+      expect((await callback(flow)).headers.location).toBe('/api/v1/google/result/desktop/login/expired')
+      expect(exchange).toHaveBeenCalledTimes(before)
+      const nativeCallback = `/api/v1/google/desktop/callback?state=${flow}&code=synthetic-native-code`
+      expect((await app.inject({ url: nativeCallback })).headers.location).toBe('/api/v1/google/result/desktop/login/success')
+      expect(exchange).toHaveBeenLastCalledWith('synthetic-native-code', expect.any(String), redirect)
+      expect((await complete(flow, 'hb_google_flow=other-browser')).statusCode).toBe(400)
+      expect((await complete(flow, browserCookie(response))).json().status).toBe('complete')
+      expect((await app.inject({ url: nativeCallback })).headers.location).toBe('/api/v1/google/result/web/login/expired')
+      expect(logs.join('')).not.toContain('synthetic-native-code')
+      expect(logs.join('')).not.toContain(flow)
+    } finally { delete config.desktopClientId }
   })
   it.each(['success', 'pending', 'approval', 'denied', 'expired', 'failed'])('serves the branded accessible %s page with a nonce CSP and no authorization data', async outcome => {
     const result = await app.inject({ url: `/api/v1/google/result/desktop/mail/${outcome}` })

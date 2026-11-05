@@ -14,4 +14,6 @@ export {
   startDesktopBridge,
   type DesktopBridge,
   type DesktopBridgeOptions,
+  type ApiConnection,
+  type ApiEndpoint,
 } from './bridge.js'

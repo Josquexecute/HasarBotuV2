@@ -1,7 +1,7 @@
 import { BrowserWindow, shell as electronShell, type Session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
-import { startDesktopBridge, type DesktopBridge } from '@hasarbotu/desktop-bridge'
+import { startDesktopBridge, type DesktopBridge, type ApiConnection } from '@hasarbotu/desktop-bridge'
 import {
   CONTENT_SECURITY_POLICY,
   SECURE_WEB_PREFERENCES,
@@ -40,6 +40,7 @@ import { startPersistentBridge } from './persistent-bridge.js'
 export type OpenExternalFn = (url: string) => Promise<void>
 
 export interface DesktopShellOptions {
+  readonly connection?: ApiConnection
   /** Köprünün `/api/*` isteklerini ileteceği API kökü. */
   readonly apiOrigin: string
   /** Renderer'a sunulacak UI build çıktısı dizini. */
@@ -192,6 +193,7 @@ export async function startDesktopShell(options: DesktopShellOptions): Promise<D
     ?? ((url) => electronShell.openExternal(url))
 
   const bridgeOptions = {
+    ...(options.connection ? { connection: options.connection } : {}),
     apiOrigin: options.apiOrigin,
     assetRoot: options.assetRoot,
     ...(options.bridgePort === undefined ? {} : { port: options.bridgePort }),

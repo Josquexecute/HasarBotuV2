@@ -11,9 +11,11 @@ import { startDesktopUpdates } from './updates.js'
 import { startCaseFolders } from './case-folder.js'
 import { startOAuthReturn } from './oauth.js'
 import { hideToTrayOnClose } from './window-lifecycle.js'
-import { initializeOfficeConnection, readOfficeConnection } from './office-connection.js'
+import { readOfficeConnection } from './office-connection.js'
+import { createOfficeNetwork } from './office-network.js'
 import { createStartupProgress } from './startup-progress.js'
 import { describeStartupFailure } from './startup-feedback.js'
+import { configureLoginStartup } from './login-startup.js'
 
 /**
  * Masaüstü kabuğunun giriş noktası (D2, D3).
@@ -83,23 +85,27 @@ async function bootstrap(): Promise<void> {
     const office = app.isPackaged ? readOfficeConnection(join(process.resourcesPath, 'office-connection.json')) : undefined
     const restartOrigin = app.commandLine.getSwitchValue('hasarbotu-api-origin')
     const config = parseDesktopConfig({ ...process.env, ...(restartOrigin ? { HASARBOTU_API_ORIGIN: restartOrigin } : {}) }, { assetRoot: defaultAssetRoot(), ...(office ? { apiOrigin: office.apiOrigin } : {}) })
-    let connectionSetup: string | undefined
-    if (office && config.apiOrigin === office.apiOrigin && !(await probeApiReadiness({ apiOrigin: config.apiOrigin })).ready) {
-      await progress.update('configuring')
-      const result = await initializeOfficeConnection(join(process.resourcesPath, 'initialize-office-connection.ps1'))
-      connectionSetup = result.status
-      await mkdir(app.getPath('userData'), { recursive: true })
-      await writeFile(join(app.getPath('userData'), 'connection-setup-status.json'), JSON.stringify({ version: app.getVersion(), status: result.status, checkedAt: new Date().toISOString() }))
-    }
+    await mkdir(app.getPath('userData'), { recursive: true })
+    await configureLoginStartup({ packaged: app.isPackaged, platform: process.platform,
+      customProfile: app.commandLine.hasSwitch('user-data-dir'), userDataPath: app.getPath('userData'),
+      executable: process.execPath, loginItems: app }).catch(() => { console.error('desktop login startup registration failed') })
+    let connectionLog = Promise.resolve()
+    const connection = office && config.apiOrigin === office.apiOrigin ? createOfficeNetwork(office, { report: state => {
+      connectionLog = connectionLog.then(() => writeFile(join(app.getPath('userData'), 'connection-status.json'), JSON.stringify({
+        version: app.getVersion(), ...state, checkedAt: new Date().toISOString(),
+      }))).catch(() => { console.error('desktop network status could not be recorded') })
+    } }) : undefined
     await progress.update('loading')
     const shell = await startDesktopShell({
       ...config,
+      ...(connection ? { connection } : {}),
       userDataPath: app.getPath('userData'),
       // Kapı köprü origin'ini alır ama API'yi DOĞRUDAN sorgular: `/health`
       // sürümlü `/api/v1` tabanının dışındadır ve köprü yalnız `/api/*` iletir.
       startupGate: () => runStartupGate({
+        automaticRetryDelaysMs: [1000, 2000, 4000, 8000],
         probe: async () => {
-          const result = await probeApiReadiness({ apiOrigin: config.apiOrigin })
+          const result = await probeApiReadiness({ apiOrigin: config.apiOrigin, ...(connection ? { connection } : {}) })
           // Record only credential-free configuration and the classified outcome.
           // This makes startup/restart failures diagnosable without reading sessions.
           await writeFile(join(app.getPath('userData'), 'startup-status.json'), JSON.stringify({
@@ -107,16 +113,9 @@ async function bootstrap(): Promise<void> {
           })).catch(() => { console.error('desktop startup status could not be recorded') })
           return result
         },
-        prompt: (message, result) => {
+        prompt: (message) => {
           progress?.hide()
-          return promptGate(connectionSetup && result.outcome === 'unreachable' ? {
-          ...message,
-          detail: connectionSetup === 'approval_declined'
-            ? 'Ofis bağlantısını tanımlamak için Windows izin ekranı onaylanmalı. Uygulamayı yeniden açıp izni onaylayın.'
-            : connectionSetup === 'existing_dns_conflict'
-              ? 'Bilgisayarda ofis bağlantısıyla çakışan bir adres kaydı var. Ağ yöneticinizin kontrol etmesi gerekiyor.'
-              : 'Ofis ağına bağlanın. Ofis dışındaysanız Tailscale bağlantısını açıp yeniden deneyin.',
-          } : message)
+          return promptGate(message)
         },
       }),
       openExternal: (url) => electronShell.openExternal(url),

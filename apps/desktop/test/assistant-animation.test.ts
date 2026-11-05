@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 const source = readFileSync(new NodeURL('../../../public/desktop-assistant-character.js', import.meta.url), 'utf8').replace(/^import .*\r?\n/gm, '')
 const motionSource = readFileSync(new NodeURL('../../../public/desktop-assistant-motion.js', import.meta.url), 'utf8').replace(/^import .*\r?\n/gm, '').replace('export class', 'class')
-const Play = new Function(readFileSync(new NodeURL('../../../public/desktop-assistant-play.js', import.meta.url), 'utf8').replace(/export /g, '') + '; return AssistantPlay')()
+const { Play, ShuffleBag, TOUCH_REACTIONS } = new Function(readFileSync(new NodeURL('../../../public/desktop-assistant-play.js', import.meta.url), 'utf8').replace(/export /g, '') + '; return { Play: AssistantPlay, ShuffleBag, TOUCH_REACTIONS }')()
 const appearanceSource = readFileSync(new NodeURL('../../../public/desktop-assistant-appearance.js', import.meta.url), 'utf8').replace(/^import .*\r?\n/gm, '').replace(/export /g, '')
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
@@ -79,7 +79,7 @@ function setup() {
     constructor(callback: ResizeObserverCallback) { resize = callback }
   }
   const timing = { now: () => now }
-  const Motion = new Function('performance', 'AssistantPlay', motionSource + '; return AssistantMotion')(timing, Play)
+  const Motion = new Function('performance', 'AssistantPlay', 'ShuffleBag', 'TOUCH_REACTIONS', motionSource + '; return AssistantMotion')(timing, Play, ShuffleBag, TOUCH_REACTIONS)
   const drawAppearance = new Function('BotEngine', appearanceSource + '; return drawAssistantAppearance')(Engine)
   const eyeColor = new Function('BotEngine', appearanceSource + '; return assistantEyeColor')(Engine)
   new Function('BotEngine', 'AssistantMotion', 'drawAssistantAppearance', 'assistantEyeColor', 'window', 'document', 'ResizeObserver', 'performance', source)(Engine, Motion, drawAppearance, eyeColor, target, doc, Observer, timing)
@@ -109,6 +109,19 @@ it('holds cursor gaze through an entire scene and resumes from the latest point 
   expect(bot.lookX).toBe(0)
   ui.step(4000); ui.step()
   expect(bot.lookX).toBe(-.9); expect(bot.lookY).toBe(-.7)
+  ui.target.dispatchEvent(new Event('pagehide'))
+})
+
+it('excludes the idle probe gap from the first resumed interpolation frame', () => {
+  const ui = setup()
+  ui.step()
+  expect(ui.frames.size).toBe(0)
+  ui.step(125)
+  vi.advanceTimersByTime(125)
+  expect(ui.frames.size).toBe(1)
+  ui.gaze(-.9, .7)
+  ui.step(20)
+  expect(ui.engines[0].update).toHaveBeenLastCalledWith(.02)
   ui.target.dispatchEvent(new Event('pagehide'))
 })
 

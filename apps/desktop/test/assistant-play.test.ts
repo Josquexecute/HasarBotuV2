@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TouchReaction } from '../../../public/desktop-assistant-play.js'
 import { parseTouchPlayCommand, parseTouchPlayState } from '../src/main/assistant-play.js'
 
-const { Play, catalog: runtimeCatalog } = new Function(readFileSync(new URL('../../../public/desktop-assistant-play.js', import.meta.url), 'utf8').replace(/export /g, '') + '; return { Play: AssistantPlay, catalog: TOUCH_REACTIONS }')()
+const { Play, ShuffleBag, catalog: runtimeCatalog } = new Function(readFileSync(new URL('../../../public/desktop-assistant-play.js', import.meta.url), 'utf8').replace(/export /g, '') + '; return { Play: AssistantPlay, ShuffleBag, catalog: TOUCH_REACTIONS }')()
 const catalog = runtimeCatalog as TouchReaction[]
 afterEach(() => vi.restoreAllMocks())
 function setup() {
@@ -55,13 +55,13 @@ describe('Touch personality and finite cosmetic scenes', () => {
     expect(events.length).toBeLessThan(30)
     expect(timeout).not.toHaveBeenCalled(); expect(interval).not.toHaveBeenCalled()
   })
-  it('continues varying angry reactions after the nine-step escalation instead of repeating sulking forever', () => {
+  it('cycles every eligible angry reaction without repeats after the nine-step escalation', () => {
     const { play, advance } = setup(), previous: string[] = [], seen = new Set()
     for (let i = 0; i < 60; i++) {
       play.tap()
       const id = play.scene.definition.id
       if (i >= 9) {
-        expect(previous.slice(-4)).not.toContain(id)
+        expect(id).not.toBe(previous.at(-1))
         expect(id).not.toBe('grin'); expect(id).not.toBe('double-take')
         seen.add(id)
       }
@@ -103,19 +103,68 @@ describe('Touch personality and finite cosmetic scenes', () => {
     while (play.scene) { seen.push(play.scene.definition.id); advance(play.scene.definition.duration + 1) }
     expect(seen).toEqual(['dizzy-spin', 'spiral-stare', 'orbit-stars', 'queasy', 'wobble', 'trip', 'faint', 'revive', 'glare'])
   })
-  it('weights rare surprises below everyday activities and avoids the last four automatic choices', () => {
-    const { play } = setup()
-    const seen = new Set(), previous: string[] = []
-    let rare = 0
-    for (let i = 0; i < 3000; i++) {
-      const id = play.pick(), definition = catalog.find(item => item.id === id)!
-      expect(previous.slice(-4)).not.toContain(id)
-      if (definition.group === 'rare') rare++
-      seen.add(id); previous.push(id); play.start(id)
+  it('gives all 22 ambient scenes exactly one turn per cycle across 100 cycles', () => {
+    const { play, advance } = setup()
+    const eligible = catalog.filter(scene => scene.group === 'idle' || scene.group === 'rare').map(scene => scene.id)
+    let previous: string | undefined
+    const orders = new Set()
+    for (let cycle = 0; cycle < 100; cycle++) {
+      const seen = []
+      for (let i = 0; i < eligible.length; i++) {
+        play.idle()
+        const id = play.scene.definition.id
+        expect(id).not.toBe(previous)
+        seen.push(id); previous = id
+        advance(play.scene.definition.duration + 1)
+      }
+      expect(new Set(seen)).toEqual(new Set(eligible))
+      orders.add(seen.join(','))
     }
-    expect(seen.size).toBe(22)
-    expect(rare / 3000).toBeGreaterThan(.03); expect(rare / 3000).toBeLessThan(.2)
-    expect(play.history.length).toBeLessThanOrEqual(8)
+    expect(orders.size).toBe(100)
+  })
+  it('does not consume a choice when blocked and preserves the cycle across interruptions', () => {
+    const { play, advance } = setup()
+    const seen = []
+    for (let i = 0; i < 22; i++) {
+      play.idle(); seen.push(play.scene.definition.id)
+      const count = play.bags.get('ambient:false').queue.length
+      play.idle()
+      expect(play.bags.get('ambient:false').queue).toHaveLength(count)
+      play.tap(); play.clear()
+      play.control({ type: 'pause' }); play.idle()
+      play.setReduced(true)
+      expect(play.control({ type: 'play', id: 'random' })).toBe(false)
+      play.idle(); play.drop(); play.drag()
+      expect(play.bags.get('ambient:false').queue).toHaveLength(count)
+      play.setReduced(false); play.control({ type: 'resume' })
+      advance(10)
+    }
+    expect(new Set(seen).size).toBe(22)
+  })
+  it.each(['tap', 'drag', 'land'])('cycles the random %s context independently', group => {
+    const { play } = setup()
+    const expected = catalog.filter(scene => scene.group === group).map(scene => scene.id)
+    for (let cycle = 0; cycle < 5; cycle++) {
+      expect(new Set(expected.map(() => play.pick(group)))).toEqual(new Set(expected))
+    }
+  })
+  it('handles empty and single-entry bags and avoids boundary repeats even with fixed randomness', () => {
+    expect(new ShuffleBag([]).take()).toBeUndefined()
+    const single = new ShuffleBag(['only'], () => 0)
+    expect([single.take(), single.take()]).toEqual(['only', 'only'])
+    for (const random of [() => 0, () => .999999]) {
+      const bag = new ShuffleBag(['a', 'b', 'c'], random)
+      let previous
+      for (let cycle = 0; cycle < 100; cycle++) {
+        const seen = []
+        for (let i = 0; i < 3; i++) {
+          const next = bag.take()
+          expect(next).not.toBe(previous)
+          seen.push(next); previous = next
+        }
+        expect(new Set(seen)).toEqual(new Set(['a', 'b', 'c']))
+      }
+    }
   })
   it('supports calm, stop, pause and explicit resume, and reduced motion overrides manual play', () => {
     const { play } = setup()

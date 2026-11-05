@@ -1,11 +1,11 @@
-import { AssistantPlay } from './desktop-assistant-play.js'
+import { AssistantPlay, ShuffleBag, TOUCH_REACTIONS } from './desktop-assistant-play.js'
 
 // Cosmetic gestures share the engine's tweens, so interruptions start at the
 // current pose and use the existing frame loop. No gesture owns a timer.
 const smooth = t => t * t * (3 - 2 * t)
 const resting = { tilt: 0, sx: 1, sy: 1, oy: 0, ox: 0, es: 1, open: 1, blush: 0, hands: 0, nausea: 0 }
 const tapReactions = ['squash', 'hop', 'wiggle', 'wink', 'blush', 'surprised']
-const idleReactions = ['dance', 'laugh', 'wink', 'blush', 'surprised', 'doze', 'yawn', 'stretch', 'wave', 'excited', 'play']
+const idleReactions = ['dance', 'laugh', 'wink', 'blush', 'surprised', 'doze', 'yawn', 'stretch', 'wave', 'excited', 'play', 'full-stretch']
 // Distances are Electron DIPs, not the saturated cosmetic tilt or CSS pixels.
 const shake = { window: 1100, leg: 40, speed: 650, reversals: 4, cooldown: 14000 }
 
@@ -31,7 +31,7 @@ export class AssistantMotion {
     this.lastTap = undefined
     this.nextWork = 0
     this.bot.nausea = 0
-    this.idleQueue = []
+    this.idleBag = new ShuffleBag([...idleReactions, ...TOUCH_REACTIONS.filter(item => item.group === 'idle' || item.group === 'rare').map(item => item.id)], random)
     this.lastDizzy = -Infinity
     this.dizzy = false
     this.recoverUntil = 0
@@ -61,7 +61,6 @@ export class AssistantMotion {
   activity(wake = false) {
     if (this.sleeping && !wake) return
     const now = this.clock()
-    this.nextStretch = now + 45000 + this.random() * 30000
     this.nextIdle = now + 16000 + this.random() * 12000
     this.sleepAt = now + 120000
     if (this.sleeping) {
@@ -125,6 +124,7 @@ export class AssistantMotion {
     if (this.pressed || this.hovered || now < this.activeUntil || this.bot.tweens.size || this.sleeping) return
     if (this.pendingSuccess) { this.pendingSuccess = false; this.success(); return }
     if (this.pendingReaction) { const reaction = this.pendingReaction; this.pendingReaction = undefined; this.react(reaction); return }
+    if (this.play.animating) return
     if (this.pendingEdge && !this.working) {
       const direction = this.pendingEdge
       this.pendingEdge = 0
@@ -146,17 +146,29 @@ export class AssistantMotion {
       this.pose({ tilt: [[.07, 650], [0, 650]], sy: [[.96, 650], [1, 650]] })
       return
     }
-    if (now < this.nextStretch) {
-      if (now >= this.nextIdle) {
-        this.nextIdle = now + 16000 + this.random() * 12000
-        this.lastIdle = this.take(this.idleQueue, idleReactions, this.lastIdle)
-        this.idle(this.lastIdle)
-        this.play.idle()
-      }
-      return
+    if (now >= this.nextIdle) {
+      this.nextIdle = now + 16000 + this.random() * 12000
+      this.randomIdle()
     }
-    // A stretch is cosmetic, so it must not postpone falling asleep indefinitely.
-    this.nextStretch = now + 45000 + this.random() * 30000
+  }
+
+  randomIdle() {
+    if (this.play.paused || this.play.reducedMotion) return false
+    this.lastIdle = this.idleBag.take()
+    this.play.clear()
+    if (this.lastIdle === 'full-stretch') this.stretch()
+    else if (idleReactions.includes(this.lastIdle)) this.idle(this.lastIdle)
+    else {
+      this.settle()
+      this.activeUntil = this.clock() + 220
+      this.play.start(this.lastIdle)
+    }
+    return true
+  }
+
+  stretch() {
+    this.settle()
+    const now = this.clock()
     this.activeUntil = now + 2100
     this.pose({
       sy: [[1.1, 650], [1.1, 350], [.98, 450], [1, 500]],
@@ -392,6 +404,12 @@ export class AssistantMotion {
     if (command.type === 'play') {
       if (this.play.reducedMotion) return false
       this.activity(true)
+      if (command.id === 'random') {
+        this.play.paused = false
+        this.dizzy = false
+        this.recoverUntil = 0
+        return this.randomIdle()
+      }
     }
     const accepted = this.play.control(command)
     if (accepted && ['play', 'calm', 'stop', 'pause'].includes(command.type)) {

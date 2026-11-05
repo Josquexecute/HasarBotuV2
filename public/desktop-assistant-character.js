@@ -68,6 +68,9 @@ if (assistant && context) {
     window.clearTimeout(idleTimer)
     idleTimer = undefined
     if (!disposed && !document.hidden && !still() && frame === undefined) {
+      // The idle probe is not an animation frame. Resume interpolation from
+      // now so its 125 ms gap cannot become a visible jump on gaze handoff.
+      previousTime = performance.now()
       lastDraw = -Infinity
       frame = window.requestAnimationFrame(animate)
     }

@@ -40,6 +40,14 @@ it('keeps mock selections out of the authenticated Touch selection', () => {
   render(<SessionContext.Provider value={session}><ActiveCaseContext.Provider value={vi.fn()}><CaseScreen item={first} source="mock" /></ActiveCaseContext.Provider></SessionContext.Provider>)
   expect(localStorage.getItem(assistantCaseSelectionKey('user-a'))).toBeNull()
 })
+it('refreshes the quick-note type when the current case changes without navigation', () => {
+  const publish = vi.fn()
+  const content = (type: CaseRecord['type']) => <ActiveCaseContext.Provider value={publish}><CaseScreen item={{ ...first, type }} source="mock" /></ActiveCaseContext.Provider>
+  const view = render(content('Trafik'))
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ caseId: first.caseId, type: 'Trafik' }))
+  view.rerender(content('Kasko'))
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ caseId: first.caseId, type: 'Kasko' }))
+})
 it('preserves the main target and records a diagnostic when local selection storage fails', () => {
   const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
   const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
