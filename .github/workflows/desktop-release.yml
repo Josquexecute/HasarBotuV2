@@ -17,6 +17,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: windows-2025
     timeout-minutes: 45
+    defaults:
+      run:
+        # Node's powershell.exe children must inherit Windows PowerShell module paths.
+        shell: powershell
     permissions:
       contents: write
     env:
@@ -47,11 +51,7 @@ jobs:
       - name: Ofis bağlantısını doğrula
         run: node scripts/write-ci-distribution-profile.mjs
       - name: Ofis PowerShell kontrollerini erken doğrula
-        run: |
-          foreach ($fixture in @('start-office-server', 'renew-office-network', 'office-network-state')) {
-            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "deploy/windows-service/$fixture.tests.ps1"
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+        run: node scripts/run-release-tests.mjs --powershell-only
       - name: Gerçek Windows pencere sırasını erken doğrula
         run: npm test --workspace @hasarbotu/desktop -- test/assistant-topmost-e2e.test.ts
       - name: Tarayıcı testleri için Playwright motorlarını kur

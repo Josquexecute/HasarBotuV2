@@ -1,8 +1,10 @@
 import { spawnSync } from 'node:child_process'
 import { mkdir, open, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-if (!process.env.TEST_DATABASE_URL || !new URL(process.env.TEST_DATABASE_URL).pathname.endsWith('_test')) throw new Error('A disposable test database is required.')
-const output = join(process.env.RUNNER_TEMP ?? '.local', 'hasarbotu-release-checks')
+const powerShellOnly = process.argv.includes('--powershell-only')
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+if (!powerShellOnly && (!testDatabaseUrl || !new URL(testDatabaseUrl).pathname.endsWith('_test'))) throw new Error('A disposable test database is required.')
+const output = join(process.env.RUNNER_TEMP ?? '.local', powerShellOnly ? 'hasarbotu-powershell-checks' : 'hasarbotu-release-checks')
 await mkdir(output, { recursive: true })
 await rm(join(output, 'summary.json'), { force: true })
 const commands = [
@@ -17,14 +19,14 @@ const commands = [
   ['release-and-discovery-tests', process.execPath, ['--test', '--test-concurrency=1', 'scripts/text-encoding.test.mjs', 'scripts/release-notes.test.mjs', 'scripts/release-artifacts.test.mjs', 'scripts/published-release.test.mjs', 'scripts/office-release-sync.test.mjs', 'scripts/electron-download-proxy.test.mjs', 'scripts/frontend-license-notices.test.mjs', 'scripts/file-agent-codec-notices.test.mjs', 'scripts/plan-folder-identity-repair.test.mjs', 'scripts/soak-metrics.test.mjs', 'scripts/soak-memory-budget.test.mjs', 'scripts/worker-memory-preload.test.mjs', 'scripts/ocr-pdf-soak.test.mjs', 'scripts/desktop-signing.test.mjs', 'scripts/review-codec-evidence.test.mjs', 'scripts/complete-native-license-evidence.test.mjs', 'deploy/windows-service/automatic-folder-discovery.test.mjs', 'deploy/windows-service/automatic-folder-outage.test.mjs']],
 ]
 let passed = 0, skipped = 0, resolvedSkips = 0
-for (const [name, executable, args] of commands) {
+for (const [name, executable, args] of commands.filter(([, executable]) => !powerShellOnly || executable === 'powershell.exe')) {
   const path = join(output, name + '.log'), file = await open(path, 'w')
   let result
   try { result = spawnSync(executable, args, { windowsHide: true, stdio: ['ignore', file.fd, file.fd], timeout: 20 * 60_000 }) }
   finally { await file.close() }
   let text = (await readFile(path, 'utf8')).replace(/\u001b\[[0-9;]*m/g, '')
   if (result.status !== 0) {
-    for (const secret of [process.env.TEST_DATABASE_URL, decodeURIComponent(new URL(process.env.TEST_DATABASE_URL).password)]) if (secret) text = text.replaceAll(secret, '[REDACTED]')
+    for (const secret of [testDatabaseUrl, testDatabaseUrl ? decodeURIComponent(new URL(testDatabaseUrl).password) : undefined]) if (secret) text = text.replaceAll(secret, '[REDACTED]')
     console.error(text.slice(-12_000))
     throw new Error(name + ' failed; no release draft will be prepared.')
   }
