@@ -30,6 +30,7 @@ import { useSession } from '../../app/sessionContext'
 import { LoadingState } from '../../components/StateViews'
 import type { CaseRecord } from '../../types/case'
 import { CaseEditModal } from './CaseEditModal'
+import { CaseFaultModule } from './CaseFaultModule'
 import { WorkspaceProvisioningPanel } from './WorkspaceProvisioningPanel'
 import { WorkspaceMonthMovePanel } from './WorkspaceMonthMovePanel'
 import { EksistSources } from './EksistSources'
@@ -364,6 +365,7 @@ function CaseDetail() {
                 <button className="text-button" type="button" onClick={() => setActiveTab('Evrak ve Fotoğraf')}>Evraklara git <ChevronRight size={14} /></button>
               </section>
               {/* Paket 56: araç profili yalnız API modunda gerçek uçtan gelir. */}
+              {source === 'api' && <div className="overview-grid__wide"><CaseFaultModule caseId={item.caseId} /></div>}
               {source === 'api' && (
                 <section className="info-panel overview-grid__wide">
                   <CaseVehicleProfileModule caseId={item.caseId} onSaved={reloadCase} />

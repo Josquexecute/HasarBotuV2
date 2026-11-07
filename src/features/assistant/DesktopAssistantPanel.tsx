@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Files, History, ListChecks, StickyNote } from 'lucide-react'
 import { useSession } from '../../app/sessionContext'
 import { rememberAssistantCase, useAssistantCaseSelection } from '../../app/assistantCaseSelection'
-import { QuickNote } from '../../components/TouchAssistant'
+import { NOTE_SAVED_EVENT } from '../../app/activeCase'
+import { QuickNoteEditor } from '../../components/TouchAssistant'
 import { AssistantPlate } from '../../components/AssistantPlate'
 import { OpenCaseFolderButton } from '../../components/OpenCaseFolderButton'
 import { createHttpCasesAdapter, HttpCasesError } from '../../data/httpAdapter'
@@ -18,6 +19,7 @@ import { useAssistantAppearance } from './assistantAppearanceContext'
 import { appearanceStyle } from './appearance'
 import { TouchPlayControls } from './TouchPlayControls'
 import { notificationDate, serviceMobile } from './caseSummary'
+import { CaseFaultModule } from '../cases/CaseFaultModule'
 
 type MenuAction = 'open' | 'notifications' | 'settings' | 'hide' | 'reset' | 'close'
 type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: MenuAction, caseId?: string): void } }
@@ -37,12 +39,17 @@ function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { it
   const workspace = useCaseOperations(item.caseId, 'api', true, operations)
   const [detail, setDetail] = useState<CaseRecord | null>(null)
   const [detailError, setDetailError] = useState(false)
+  const detailLoaded = useRef(false)
   const [noteVersion, setNoteVersion] = useState(0)
   const [noteSearch, setNoteSearch] = useState('')
+  const [faultOpened, setFaultOpened] = useState(tab === 'process')
+  // Mount once on first use, then retain the editor inside the hidden panel.
+  // Reopening tabs must not discard drafts or fetch the same fault again.
+  if (tab === 'process' && !faultOpened) setFaultOpened(true)
   const [tracking, setTracking] = useState<TrackingSnapshot | null>(null)
   const [trackingError, setTrackingError] = useState(false)
   const [trackingVersion, setTrackingVersion] = useState(0)
-  const referenceData = useCaseReferences(references, {}, tab === 'process')
+  const referenceData = useCaseReferences(references, {}, faultOpened)
   useEffect(() => {
     if (referenceData.status === 'unauthorized') reportUnauthorized()
   }, [referenceData.status, reportUnauthorized])
@@ -71,7 +78,7 @@ function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { it
     const refresh = () => {
       const request = ++generation
       void cases.getCase(item.caseId).then((result) => {
-        if (active && request === generation) { setDetail(result); setDetailError(false) }
+        if (active && request === generation) { detailLoaded.current = true; setDetail(result); setDetailError(false) }
       }).catch((error: unknown) => {
         if (!active || request !== generation) return
         setDetail(null)
@@ -79,16 +86,29 @@ function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { it
         if (error instanceof HttpCasesError && error.kind === 'unauthorized') reportUnauthorized()
       })
     }
-    refresh()
+    // Entering Processes still checks current case state. Leaving it for a
+    // note must not start another request alongside the first keystroke.
+    if (tab === 'process' || !detailLoaded.current) refresh()
     window.addEventListener('focus', refresh)
-    return () => { active = false; window.removeEventListener('focus', refresh) }
+    const noteSaved = (event: Event) => {
+      if ((event as CustomEvent<{ caseId: string }>).detail?.caseId === item.caseId) refresh()
+    }
+    window.addEventListener(NOTE_SAVED_EVENT, noteSaved)
+    return () => { active = false; window.removeEventListener('focus', refresh); window.removeEventListener(NOTE_SAVED_EVENT, noteSaved) }
   }, [cases, item.caseId, reportUnauthorized, tab])
   const currentItem = detail ?? item
-  const notes = workspace.data?.notes.filter((note) => `${note.subject ?? ''} ${note.body} ${note.legacySource?.authorName ?? note.createdByDisplayName}`.toLocaleLowerCase('tr-TR').includes(noteSearch.toLocaleLowerCase('tr-TR'))) ?? []
+  const noteWorkspace = useMemo(() => ({ data: workspace.data, status: workspace.status, port: workspace.port, reload: workspace.reload }), [workspace.data, workspace.status, workspace.port, workspace.reload])
+  const noteTarget = useMemo(() => ({ caseId: item.caseId, plate: currentItem.plate, type: currentItem.type, officeNumber: currentItem.officeNumber, source: 'api' as const }), [item.caseId, currentItem.plate, currentItem.type, currentItem.officeNumber])
+  const newNote = useCallback(() => setNoteVersion(value => value + 1), [])
+  const notes = useMemo(() => {
+    if (tab !== 'history') return []
+    const search = noteSearch.toLocaleLowerCase('tr-TR')
+    return workspace.data?.notes.filter(note => `${note.subject ?? ''} ${note.body} ${note.legacySource?.authorName ?? note.createdByDisplayName}`.toLocaleLowerCase('tr-TR').includes(search)) ?? []
+  }, [workspace.data, noteSearch, tab])
   return <section className="assistant-case" aria-label="Seçili dosya" hidden={tab === 'files'}>
     <div className="assistant-case-heading"><div><AssistantPlate plate={currentItem.plate} type={currentItem.type} /><small>{currentItem.officeNumber}</small></div><OpenCaseFolderButton caseId={item.caseId} /></div>
     {/* Keep the draft mounted while viewing history or process information. */}
-    <div role="tabpanel" id={`${tabId}-note-panel`} aria-labelledby={`${tabId}-note`} hidden={tab !== 'note'}><QuickNote key={noteVersion} standalone target={{ caseId: item.caseId, plate: currentItem.plate, type: currentItem.type, officeNumber: currentItem.officeNumber, source: 'api' }} port={operations} onClose={() => setNoteVersion((value) => value + 1)} /></div>
+    <div role="tabpanel" id={`${tabId}-note-panel`} aria-labelledby={`${tabId}-note`} hidden={tab !== 'note'}><QuickNoteEditor key={noteVersion} standalone target={noteTarget} workspace={noteWorkspace} onClose={newNote} /></div>
     <div role="tabpanel" id={`${tabId}-history-panel`} aria-labelledby={`${tabId}-history`} hidden={tab !== 'history'}>
     {workspace.status === 'loading' && <p role="status">Dosya yükleniyor…</p>}
     {!['ok', 'loading'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button onClick={workspace.reload}>Tekrar dene</button></p>}
@@ -102,6 +122,7 @@ function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { it
     </>}
     </div>
     <div role="tabpanel" id={`${tabId}-process-panel`} aria-labelledby={`${tabId}-process`} hidden={tab !== 'process'}>
+    {faultOpened && <CaseFaultModule caseId={item.caseId} />}
     {tab === 'process' && <>
       {workspace.status === 'loading' && <p role="status">Dosya yükleniyor…</p>}
       {!['ok', 'loading'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button onClick={workspace.reload}>Tekrar dene</button></p>}

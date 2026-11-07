@@ -716,3 +716,4 @@ export { parseSourcePlateFolderName, matchSourceFolderInsurer } from './source-p
 export * from './notice-sheet.js'
 export * from './value-loss-calculator-catalog.js'
 export * from './value-loss-manufacturer-catalog.js'
+export { CASE_FAULT_PERCENTAGES, complementaryFault, potentialRecourse, type CaseFaultPercentage } from './case-fault.js'

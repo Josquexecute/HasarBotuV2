@@ -12,6 +12,7 @@ import type { CaseOperationsPort, CaseOperationsRecord, CaseNoteRecord } from '.
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
 import { assistantCaseSelectionKey, rememberAssistantCase } from '../../app/assistantCaseSelection'
 import { loadTracking } from '../tracking/trackingApi'
+import { SERVICE_DIRECTORY_UPDATED_EVENT } from '../../data/useCaseReferences'
 
 vi.mock('../tracking/trackingApi', () => ({ loadTracking: vi.fn(async () => ({ tramer: [], documents: [], users: [], history: [] })) }))
 const first = { ...mockCases[0]!, caseId: 'case-a', plate: '34 TEST 01', type: 'Trafik' as const, officeNumber: '2026/1', responsibleUserId: null }
@@ -47,6 +48,24 @@ async function select() {
   await screen.findByRole('textbox', { name: 'Hızlı not' })
 }
 describe('standalone Touch case workspace', () => {
+  it('loads fault only on first use and retains the edit draft across tabs', async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({ caseId: first.caseId, caseType: 'traffic', insuredPercent: null, version: 0, updatedAt: null, permissions: { canEdit: true } })))
+    vi.stubGlobal('fetch', request)
+    const api = setup()
+    try {
+      await select()
+      expect(request).not.toHaveBeenCalled()
+      await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
+      await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Sigortalı kusur oranı' }), '25')
+      const reads = request.mock.calls.length
+      expect(reads).toBe(1)
+      await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+      await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
+      expect(screen.getByRole('combobox', { name: 'Sigortalı kusur oranı' })).toHaveValue('25')
+      expect(screen.getByRole('combobox', { name: 'Mağdur kusur oranı' })).toHaveValue('75')
+      expect(request).toHaveBeenCalledTimes(reads)
+    } finally { api.view.unmount(); vi.unstubAllGlobals() }
+  })
   it('pairs each plate with its own real type, including identical plates and an unknown type', async () => {
     const api = setup()
     vi.mocked(api.cases.listCasePage).mockResolvedValue(page([first, { ...second, plate: first.plate }, { ...second, caseId: 'unknown', type: 'Seçiniz' }]))
@@ -239,7 +258,53 @@ describe('standalone Touch case workspace', () => {
     await screen.findByText(note.body)
     const count = vi.mocked(api.operations.load).mock.calls.length
     fireEvent(window, new Event('focus'))
-    await waitFor(() => expect(api.operations.load).toHaveBeenCalledTimes(count + 2))
+    await waitFor(() => expect(api.operations.load).toHaveBeenCalledTimes(count + 1))
+    await screen.findByText(note.body)
+  })
+  it('shares one operations snapshot with the note editor and history across tab changes', async () => {
+    const api = setup()
+    await select()
+    await waitFor(() => expect(api.operations.load).toHaveBeenCalledTimes(1))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Hızlı not' }), 'Ortak veriyle kaydedilen not')
+    await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
+    await screen.findByText('Tramer talebi yok.')
+    await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+    expect(screen.getByRole('textbox', { name: 'Hızlı not' })).toHaveValue('Ortak veriyle kaydedilen not')
+    expect(api.operations.load).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Notu kaydet' }))
+    await screen.findByText('Not dosyaya kaydedildi.')
+    await userEvent.click(screen.getByRole('tab', { name: 'Geçmiş notlar' }))
+    await screen.findByText('Ortak veriyle kaydedilen not')
+    expect(api.operations.load).toHaveBeenCalledTimes(2)
+    api.view.unmount()
+    const count = vi.mocked(api.operations.load).mock.calls.length
+    fireEvent(window, new Event('focus'))
+    expect(api.operations.load).toHaveBeenCalledTimes(count)
+  })
+  it('retains case and directory data across tabs and still refreshes on invalidation and focus', async () => {
+    const api = setup()
+    await select()
+    await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
+    await screen.findByText('Tramer talebi yok.')
+    await waitFor(() => expect(api.references.getCaseReferences).toHaveBeenCalledTimes(1))
+    const reads = vi.mocked(api.cases.getCase).mock.calls.length
+    for (let n = 0; n < 3; n++) {
+      await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+      await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
+    }
+    expect(api.cases.getCase).toHaveBeenCalledTimes(reads + 3)
+    expect(api.references.getCaseReferences).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+    expect(api.cases.getCase).toHaveBeenCalledTimes(reads + 3)
+    fireEvent(window, new Event(SERVICE_DIRECTORY_UPDATED_EVENT))
+    await waitFor(() => expect(api.references.getCaseReferences).toHaveBeenCalledTimes(2))
+    vi.mocked(api.cases.getCase).mockResolvedValue({ ...first, service: 'Güncellenen servis' })
+    await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
+    await screen.findByText('Güncellenen servis')
+    vi.mocked(api.cases.getCase).mockResolvedValue({ ...first, service: 'Odakta güncellenen servis' })
+    fireEvent(window, new Event('focus'))
+    await screen.findByText('Odakta güncellenen servis')
+    await waitFor(() => expect(api.references.getCaseReferences).toHaveBeenCalledTimes(3))
   })
   it('makes denied writing unavailable while keeping read access to notes', async () => {
     const api = setup(false)

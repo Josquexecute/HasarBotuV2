@@ -43,6 +43,12 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     ...position, width: ASSISTANT_SIZE, height: ASSISTANT_SIZE,
     title: 'HasarBotu Yardımcı', frame: false, transparent: true, backgroundColor: '#00000000',
     show: false, alwaysOnTop: true, skipTaskbar: true, resizable: false,
+    // WS_EX_NOACTIVATE: pointer interaction must not activate the app/taskbar.
+    // Keyboard focus is available only through the explicit tray action below.
+    focusable: process.platform !== 'win32',
+    // Set WS_EX_TOOLWINDOW before the first show, so the passive character is
+    // never offered as an Alt+Tab destination. DeleteTab alone only hides its icon.
+    ...(process.platform === 'win32' ? { type: 'toolbar' } : {}),
     minimizable: false, maximizable: false, fullscreenable: false, hasShadow: false,
     webPreferences: {
       ...SECURE_WEB_PREFERENCES,
@@ -106,6 +112,10 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   window.on('hide', stopGaze)
   let drag: { cursor: Point; origin: Point; moved: boolean; startedAt: number } | undefined
   let menuOpen = false
+  const leaveKeyboardMode = () => {
+    if (process.platform === 'win32' && !window.isDestroyed() && window.isFocusable()) window.setFocusable(false)
+  }
+  window.on('blur', leaveKeyboardMode)
   let menuReady: Promise<void> | undefined
   const positionStore = createAssistantPositionStore(statePath, () => console.warn('desktop assistant could not save position'))
   const persist = () => positionStore.save(position)
@@ -131,8 +141,6 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   const show = () => {
     move(position)
     window.showInactive()
-    // Restore initial order; the native foreground hook maintains it thereafter.
-    window.setAlwaysOnTop(true, 'pop-up-menu')
     sendMotion({ type: 'working', active: feedback.working })
     sendMotion({ type: 'error', active: Boolean(feedback.error) })
     sendMotion({ type: 'edge', x: assistantEdge(position, screen.getDisplayNearestPoint(position).workArea) })
@@ -141,7 +149,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     open: () => showMain(),
     note: () => openMenu(),
     cases: () => openMenu(),notifications: () => showMain('/bildirimler'),settings: () => showMain('/ayarlar'),
-    hide: () => { drag = undefined;window.hide() },
+    hide: () => { drag = undefined;leaveKeyboardMode();window.hide() },
     reset: () => {
       const area = screen.getPrimaryDisplay().workArea
       move({ x: area.x + area.width - ASSISTANT_SIZE - 16, y: area.y + Math.round(area.height / 2) })
@@ -155,6 +163,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
     { label: 'Hızlı not',click: actions.note },{ label: 'Dosyalar',click: actions.cases },
     { label: 'Bildirimler',click: actions.notifications },{ label: 'Ayarlar',click: actions.settings },
     { type: 'separator' },{ label: 'Yardımcıyı göster',click: show },
+    { label: 'Yardımcıyı klavyeyle taşı',click: () => { show();window.setFocusable(true);window.setSkipTaskbar(true);window.focus() } },
     { label: 'Yardımcıyı gizle',click: actions.hide },{ label: 'Konumu sıfırla',click: actions.reset },
     { type: 'separator' },
     { label: 'HasarBotu’dan çık', click: actions.quit },
@@ -301,6 +310,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
       if (drag?.moved) persist()
       drag = undefined
       sendMotion({ type: 'release' })
+      leaveKeyboardMode()
     } else if (command === 'menu') openMenu()
     else if (command === 'activate') activate()
     else {
@@ -353,7 +363,7 @@ export async function startDesktopAssistant(options: AssistantOptions) {
   window.on('closed', dispose)
   menuWindow.on('closed',dispose)
   // Alt+F4 hides only the helper; the tray remains available to recover it.
-  window.on('close', (event) => { event.preventDefault(); drag = undefined; window.hide() })
+  window.on('close', (event) => { event.preventDefault(); actions.hide() })
   options.shell.window.once('closed', dispose)
   // Hide-on-close helper windows must not cancel an explicit app quit/update.
   app.on('before-quit', beforeQuit)

@@ -12,6 +12,7 @@ import { registerAssistantAppearanceRoutes } from './assistant-appearance/routes
 import { registerLegacyDesktopResponses } from './legacy-desktop-responses.js'
 import { registerDesktopUpdateRoutes } from './desktop-updates/routes.js'
 import { registerCasesWriteRoutes } from './cases/write-routes.js'
+import { registerCaseFaultRoutes } from './case-fault/routes.js'
 import { registerEksistRoutes } from './eksist/routes.js'
 import { registerAuditRoutes } from './audit/index.js'
 import { registerStorageRoutes } from './storage/index.js'
@@ -151,6 +152,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerDesktopUpdateRoutes(app, { pool: options.auth.pool, ...(options.desktopReleasesDirectory ? { directory: options.desktopReleasesDirectory } : {}) })
     registerCasesRoutes(app, { pool: options.auth.pool })
     registerCasesWriteRoutes(app, { pool: options.auth.pool })
+    registerCaseFaultRoutes(app, { pool: options.auth.pool })
     registerEksistRoutes(app, { pool: options.auth.pool })
     registerAuditRoutes(app, { pool: options.auth.pool })
     registerStorageRoutes(app, { pool: options.auth.pool })

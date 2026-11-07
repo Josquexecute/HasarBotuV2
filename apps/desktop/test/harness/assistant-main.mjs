@@ -280,12 +280,27 @@ void app.whenReady().then(async () => {
     if (process.env.HB_CAPTURE_SCREENSHOTS === '1') { await writeFile(join(process.env.HB_ASSISTANT_OUTPUT, 'assistant-custom-appearance.png'), (await win.webContents.capturePage()).toPNG()) }
     await shell.window.webContents.executeJavaScript(`window.hasarbotuAppearance.set(${JSON.stringify({ ...appearance, accentColor: '#635bff', characterColor: '#eff2fa', reduceMotion: false })})`)
     await win.webContents.executeJavaScript('window.rendererErrors = []; window.addEventListener("error", event => window.rendererErrors.push(event.message)); undefined')
-    // The policy deliberately yields to an unrelated foreground fullscreen app.
-    // Establish this harness's normal host before checking the topmost band.
+    // Establish actual Windows foreground before inspecting the helper policy.
     shell.window.show(); shell.window.focus()
     await until(() => shell.window.isFocused() && win.isAlwaysOnTop(), 'normal host foreground and assistant topmost band')
     check(`native always-on-top window (actual: ${win.isAlwaysOnTop()})`, win.isAlwaysOnTop())
     check('independent window', !win.getParentWindow())
+    check('pointer helper cannot activate Windows foreground', process.platform !== 'win32' || !win.isFocusable())
+    if (process.platform === 'win32') {
+      assistant.menu.items.find(item => item.label === 'Yardımcıyı klavyeyle taşı').click()
+      await until(() => win.isFocusable() && win.isFocused(), 'explicit keyboard movement focus')
+      const before = win.getBounds()
+      await win.webContents.executeJavaScript('document.querySelector("button").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }))')
+      await until(() => win.getBounds().x === before.x - 16, 'keyboard movement reaches native window')
+      await win.webContents.executeJavaScript('document.querySelector("button").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))')
+      await until(() => !win.isFocusable(), 'Escape returns to nonactivating pointer mode')
+      check('explicit keyboard mode preserves native movement and exits on Escape', true)
+      assistant.menu.items.find(item => item.label === 'Yardımcıyı klavyeyle taşı').click()
+      await until(() => win.isFocused(), 'keyboard mode reentry')
+      shell.window.focus()
+      await until(() => !win.isFocusable() && shell.window.isFocused(), 'external focus exits keyboard mode')
+      check('focus leaving keyboard mode stays with the selected application', true)
+    }
     check('fixed 120 DIP character', win.getBounds().width === 120 && win.getBounds().height === 120 && !win.isResizable())
     const surface = await win.webContents.executeJavaScript('({ node: typeof require, process: typeof process, ready: !document.querySelector("button").disabled, keys: Object.keys(window.hasarbotuAssistant) })')
     check('sandbox renderer and bounded preload', surface.node === 'undefined' && surface.process === 'undefined' && surface.ready && surface.keys.sort().join(',') === 'activate,cancel,drag,menu,move,onAppearance,onGaze,onMotion,onPlay,playState,press,release')

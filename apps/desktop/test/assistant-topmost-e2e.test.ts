@@ -6,8 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 
-// The previous run leaves the shell foreground; cover that startup state too.
-it.skipIf(process.platform !== 'win32').each([1, 2])('Windows native foreground, taskbar and full-screen ordering without focus theft (launch %i)', async () => {
+it.skipIf(process.platform !== 'win32')('Windows native foreground, taskbar and video fullscreen ordering without focus theft', async () => {
   const workspace = await mkdtemp(join(tmpdir(), 'hb-touch-order-')), resultPath = join(workspace, 'result.json')
   try {
     const code = await new Promise<number | null>((resolve, reject) => {

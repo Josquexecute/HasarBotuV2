@@ -80,6 +80,12 @@ void app.whenReady().then(async () => {
       await revision('Kaynak Servis Düzeltildi')
       await field('İhbar tarihi', '2026-10-26')
       if (index === 1) await field('Servis telefonu', '0212 555 11 11')
+      // Root loading is independent of the source import; do not submit before
+      // the required fixture root is available and selected.
+      const root = `[...document.querySelectorAll('label')].find(l => l.querySelector('span')?.textContent === 'Çalışma klasörü konumu *')?.querySelector('select')`
+      await until(`Array.from((${root})?.options ?? []).some(option => option.value === 'sbm-test')`)
+      await field('Çalışma klasörü konumu *', 'sbm-test')
+      await until(`(${root})?.value === 'sbm-test'`)
       await button(index === 0 ? 'Kaydet ve detayını aç' : 'Kaydet ve kapat')
       await until('document.querySelector(".case-form-note")?.textContent.includes("kaydedildi")')
       const rows = await evaluate('(async () => (await (await fetch("/api/v1/cases?includeServiceDetails=true")).json()).items)()')

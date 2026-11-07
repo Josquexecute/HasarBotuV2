@@ -17,6 +17,7 @@ const subjects: Record<string, string> = {
   v1_registered_notes: 'Eski sistem kayıtlı notları', v1_remediation: 'Eski sistem düzeltmesi',
 }
 const verbs: Record<string, string> = {
+  fault_updated: 'kusur oranı güncellendi',
   viewed: 'görüntülendi', created: 'oluşturuldu', updated: 'güncellendi', deleted: 'silindi',
   registered: 'kaydedildi', version_registered: 'yeni sürümü kaydedildi', saved: 'kaydedildi',
   completed: 'tamamlandı', failed: 'başarısız oldu', rejected: 'reddedildi', approved: 'onaylandı',
@@ -96,6 +97,7 @@ export const AUDIT_ACTION_CODES = [
   'auth.login_succeeded',
   'auth.logout',
   'case.created',
+  'case.fault_updated',
   'case.folder_identity_repaired',
   'case.location_assigned',
   'case.location_updated',

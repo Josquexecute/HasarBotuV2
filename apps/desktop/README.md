@@ -1,5 +1,239 @@
 # `@hasarbotu/desktop`
 
+7 Kasım 2026 **0.1.93 merkezi yayında — 14:18:09 TRT**. Kritik yayın kontrolleri PASS.
+Fiziksel ofis `DESKTOP-EFN2G33`, MSI MS-7D48, Windows 11 Pro **26300.9711**,
+oturum 1, 2560×1440 / %100 / 96 DPI / 170 Hz. Ev ekranına/oyuna/odağına müdahale edilmedi.
+
+**Kök neden / çözüm:** pasif Touch sürüklemede foreground alabiliyordu; `WS_EX_NOACTIVATE`
+ve ilk gösterimden önce `WS_EX_TOOLWINDOW` kullanılır. 0.1.92 tam ekranda Touch'ı
+`HWND_NOTOPMOST` yapıyordu; tek değişkenli fiziksel kontrolde taskbar/video z-order
+**9/24 → 343/23** oldu. Demotasyon kaldırıldı; gerçek örtülme olayında
+`NOACTIVATE | NOOWNERZORDER` ile onarım yapılır, shell geçiş yüzeyleri süzülür.
+Kalan Alt+Tab belirsizliği özel test başlatıcısının seçilebilir Terminal pencereleri,
+CDP/native foreground farkı ve geçici shell MRU hazırlığından ayrıştırıldı.
+Penceresiz test başlatıcısı ve kesintisiz gerçek SendInput ile **8 çift yönlü geçiş PASS**.
+Touch kapalıyken de başarısız olan 0 ms stres kontrolü korunmuştur; tüm Windows geçişleri
+için sınırsız başarı iddia edilmez. Ürüne yeni polling, render/focus döngüsü veya bekleme eklenmedi.
+
+**Fiziksel Windows 11:** Explorer↔Brave 12 gerçek tek tık, görev çubuğu tek tık,
+Alt+Tab, üç ardışık sürükleme/36 foreground örneği, Touch tıklaması ve kısayol paneli PASS.
+Gerçek Brave tam ekran videoda Touch görünür, Brave foreground, görev çubuğu arkada;
+Touch açık/kapalı ve tam ekrandan çıkış PASS. Çoklu monitör ve farklı DPI geçişleri **PENDING**;
+yalnız bir fiziksel monitör mevcut, genel Windows ayarları değiştirilmedi.
+
+Aynı fiziksel ofis Win11 ortamında **0.1.92 → aday**, üç eşli açılış, senaryo başına 9×8 saniye.
+CPU/RAM Electron süreçleri ve native işçiyi içerir. Kaynak ölçümü RC2 kohortundan korunmuştur;
+son sürümün 31 main/preload ve 80 UI dosyası işlevsel eşdeğerlik denetiminden geçti
+(yalnız iki C# yorum satırı ve sürüm metadatası farklı). Son native input kohortu ayrıca ölçüldü.
+
+| Ölçüm | 0.1.92 → 0.1.93 |
+|---|---|
+| Touch FPS boşta / yükte | 60,66 → 60,63 / 60,56 → 60,55 |
+| CPU boşta / yükte | %1,106 → 1,033 / %2,004 → 1,979 |
+| RAM boşta / yükte | 781,45 → 778,87 / 767,85 → 769,10 MiB |
+| Native input p95 / p99, 360 gerçek girdi/sürüm | 7,60 → 6,81 / 14,69 → 11,05 ms |
+| CDP input p95 / p99, 1.080 girdi/sürüm | 6,92 → 6,86 / 8,10 → 8,23 ms |
+
+Input sürücü/IPC ve React doğrulamasını içerir; saf donanım gecikmesi değildir.
+Yükte RAM +1,25 MiB ve CDP p99 +0,13 ms ölçüldü; sıfır gerileme iddia edilmez.
+Windows 10 veya VM sonucu bu kabule katılmadı.
+
+**Doğrulamalar:** 3.584 kaynak regresyon testi PASS (önceki altı atlama ayrı gerçek HTTP
+API testinde tamamlandı); typecheck, lint, UI/workspace build PASS. İmzalı paket gerçek
+ofis Win11'de açıldı. Ayrı geçici standart kullanıcı hesabında gerçek imzalı NSIS
+**0.1.92 → 0.1.93 → 0.1.92 → 0.1.93** kurulumları, sürüm/imza/hash ve iki sentetik
+tercih dosyasının korunması PASS. Üretim profiline kurulum veya veri tabanı geri dönüşü yapılmadı.
+
+**Yayın:** x64 NSIS **113.060.032 bayt**, SHA-256
+`7a66088e0cb5d62500c8ccbed2831b2b085032a843617a76cc5786b25d6ad86a`.
+Authenticode/timestamp Valid; sertifika `3A7E1AD05603F5870DB74ED835A05D38D3112B31`.
+Mevcut merkezi yayıncı kullanıldı; ayrı feed'de atomik yayın/geri alma PASS.
+Gerçek kurulu **0.1.92 PID 27744**, kendi updater işleviyle **0.1.93 available**, kimlikli
+tam indirme/size/SHA-256/Valid imza ve anonim manifest/paket **401** doğruladı.
+Aynı kimlikli oturum, profil, localStorage ve ayar hash'leri korundu. Günlük istemci
+**0.1.92** olarak açık bırakıldı; kullanıcı **Güncelle ve yeniden başlat** ile geçer.
+Diğer istemcilerin kurulu sürümleri UNKNOWN; zorunlu kurulum yapılmadı.
+
+Önceki 0.1.92 manifest/immutable paket korundu. Son kontrolde **8/8 üretim servisi ve PID**
+aynı, günlük Touch görünür; izole PostgreSQL durmuş, dokuz test görevi ve geçici hesap/profil temizlenmiş.
+Kanıt: `.local/touch-window-0193/physical-win11-acceptance.json`,
+`final193-release-evidence.zip`, `final193-native-accepted.json`,
+`final193-rc2-functional-parity.json`, `office-rc2-performance-summary.json`.
+
+6 Kasım 2026 **0.1.93-rc.1 Touch / Windows pencere adayı — yayımlanmadı; kabul PARTIAL**.
+0.1.92 üretimi, kurulu istemciler ve merkezi feed değiştirilmedi.
+
+Windows karakteri artık `WS_EX_NOACTIVATE` ile çalışır. Klavye taşıması tepsi
+menüsünden açıkça başlatılır; Escape/odak kaybı pasif moda döndürür. Odaklanabilir
+karakter ve koşulsuz foreground/show sıralaması kaldırıldı; kullanıcının aralıklı
+Explorer/görev çubuğu tek-tık sorununun birebir kök nedeni henüz doğrulanmadı.
+Doğrulanan görünürlük hataları: tam ekranda `HWND_NOTOPMOST` ile bilerek demotasyon
+ve mevcut foreground penceresinin yalnız z-order değiştirmesini kaçıran olay takibi.
+Demotasyon kaldırıldı; gerçek masaüstü `EVENT_OBJECT_REORDER` olayı izleniyor.
+Yalnız gerçekten örtülen Touch `NOACTIVATE | NOOWNERZORDER` ile yükseltilir;
+kendi olayları/panelleri süzülür. Yeni polling/render/focus döngüsü eklenmedi;
+Explorer pencereleri veya görev çubuğu ayarları değiştirilmez.
+
+Gerçek native HWND odağı, görünürlük, `NOACTIVATE`/topmost bayrakları ve z-order:
+Windows 10 22H2/19045 (iki fiziksel monitör) ve Brave 157.1.99.55'te normal/tam
+ekran video, Touch açık/kapalı, gizle/göster ve görev çubuğunun video arkasında
+kalması geçti. Ağsız Windows 11 VM/build 26300'de native pencere/video kontrolleri
+geçti; VM test öncesi snapshot'a döndürüldü ve kapatıldı. Skin/animasyon, menü,
+klavye, sürükleme yolları ve temizlik dahil son hedefli koşu **47/47 PASS**.
+Geniş regresyonda 3.627 PASS / 8 SKIP / 1 FAIL; eşzamanlı masaüstü testlerinin
+çakıştırdığı tek native test sonrasında tek başına geçti (**3.628 benzersiz PASS**).
+Atlamalar: altı canlı API opt-in testi, Windows WebKit SameSite ve NSIS opt-in.
+Kusur, 52 süreç, Google/Gmail regresyonları korundu; gerçek hesapta Google/Gmail
+işlemi yapılmadı. Typecheck/lint/build ve çıkarılmış installer smoke geçti.
+
+| Windows 10 ölçümü; Windows 11 kabulü değildir | 0.1.92 → 0.1.93-rc.1 |
+|---|---|
+| Touch FPS, boşta / girdi-sekme yükünde | 30,46 / 24,48 → 30,46 / 24,33 |
+| CPU, boşta / yükte (Electron + native yardımcı) | %0,623 / %1,139 → %0,608 / %1,154 |
+| Özel commit bellek, boşta / yükte | 458,50 / 456,06 → 459,81 / 451,02 MiB |
+| Chromium tuş gönderimi p95 / p99, otomasyon turu dahil | 3,03 / 3,88 → 3,08 / 3,63 ms |
+| Input → sonraki rAF p95 / p99 | 41,50 / 52,30 → 40,80 / 51,10 ms |
+
+Aynı Windows 10, Node 24.22 / Electron 44.9.1, aynı üretim UI/API, izole PostgreSQL17
+ve 1.000 sentetik dosya. CPU/bellek/input sürüm başına üç eşli açılış × üç 8 saniye;
+1.080 tuş/sürüm. FPS ayrı bir eşli açılış × üç 8 saniye; kare sayısı ve süre aynı
+renderer saat sınırlarından alınır. Native probun şişirdiği ilk FPS sayaçları dışlandı.
+Kısa ölçümde yük FPS −%0,64, yük CPU +0,015 yüzde puan ve boşta bellek +1,30 MiB;
+sıfır kaynak artışı/FPS kaybı veya uzun süreli dayanıklılık kanıtı değildir.
+Fiziksel Explorer/görev çubuğu tek tık, gerçek Touch mouse sürükleme/tıklama ve
+Windows native input p95/p99 **doğrulanmadı**: Computer Use native pipe açılamadı.
+Bu kabul koşulları PASS sayılmadı; ekran görüntüsü üretilmedi.
+
+İmzalı x64 NSIS: `.local/touch-window-0193/rc-final/HasarBotu-Setup-0.1.93-rc.1.exe`,
+**113.059.288 bayt**, SHA-256
+`50cc96a8475d00cb27a24fc1386ce1960c416486bc14aabe1e593b5346e246fa`.
+İmza/timestamp Valid; 80 UI + 31 main/preload dosyası ve izole paket açılışı doğrulandı.
+Kanıt: `.local/touch-window-0193/performance-summary.json`, `windows11-native.json`,
+`native-verified/`, `brave-verified/`, `targeted-final.log`, `installer-verified.json`.
+Pencere davranışı ayrıca [Electron 44.9.1 kaynağı](https://github.com/electron/electron/blob/v44.9.1/shell/browser/native_window_views.cc)
+ve [Win32 olay sözleşmesi](https://learn.microsoft.com/en-us/windows/win32/winauto/event-constants)
+üzerinden incelendi.
+
+6 Kasım 2026 **0.1.92 üretimde — merkezi yayın 14:53:27 TRT**.
+Touch hızlı not/geçmiş görünümü tek operasyon verisini ve dinleyicilerini kullanır.
+Referans dizinleri sekmeler arasında korunur; süreçlere girişte dosya, odakta ve
+değişiklik bildirimlerinde ilgili veriler yenilenir. Not yazmaya geçerken gereksiz
+istek başlatılmaz; gizli geçmiş notlar tekrar filtrelenmez. Kusur/Potansiyel Rücu,
+taslaklar, pencereler arası eşitleme ve mevcut iş akışı testleri korundu.
+
+Aynı cihaz, Node 24.22.0 / Electron 44.9.1, üretim UI derlemeleri, 1.000 sentetik dosya:
+sürüm başına üç ayrı açılış × senaryo başına üç 8 saniyelik örnek; 108 fill ve
+1.080 gerçek tuş gönderimi. Önceki 12 örnekli 4,68 → 5,59 ms farkı tekrar
+üretilemedi; otomasyon turu ve gerçek input işleyicisi ayrı ölçüldü.
+
+| Ölçüm, yeniden ölçülen 0.1.91 → son 0.1.92 | Sonuç |
+|---|---|
+| Touch FPS, boşta / girdi-sekme yükünde | 30,46 → 30,49 / 24,47 → 24,48 |
+| Kare aralığı p95, yükte | 66,70 → 66,70 ms |
+| Otomasyon turu dahil input p95 / p99 | 4,92 / 5,85 → 4,13 / 5,17 ms |
+| Gerçek tuş gönderimi p95 / p99 | 3,28 / 3,97 → 2,93 / 3,14 ms |
+| Input → sonraki animasyon karesi (rAF) p95 / p99 | 52,50 / 58,40 → 40,70 / 47,90 ms |
+| Electron toplam CPU, yükte / boşta | %1,242 → %1,172 / %0,563 → %0,586 |
+| Toplam özel bellek, yükte | 381,02 → 390,20 MiB (+9,18 MiB) |
+| Kalıcı ana + panel JS heap | 20,255 → 20,388 MiB (+0,133 MiB) |
+| Sekme turu API isteği | 86 → 26 |
+
+Boşta CPU farkı açılışlar arası varyans içinde; eşli ortalama fark +0,0042 yüzde
+puan, bootstrap aralığı −0,0205…+0,0247. Sıfır artış kanıtı olarak gösterilmedi.
+RAM farkının +8,56 MiB'ı GPU sürecinde; önceki +16,84 MiB tek başına sızıntı
+kanıtı değildi. Tekrarlı gezinmede kalıcı dinleyici artışı yok; 13 Touch varlığı
+byte düzeyinde aynı. Bu kısa yerel ölçüm uzun süreli üretim dayanıklılığı iddiası değildir.
+
+**3.747 test PASS / 1 SKIP**; atlanan Windows WebKit çapraz-site SameSite testi.
+Altı canlı API testi izole gerçek API'de, altı isteğe bağlı native ağ/servis/restore
+testi ve gerçek NSIS Unicode testi ayrıca geçti. Son kaynakla 40 ilgili regresyon,
+23 gerçek Electron özellik kontrolü, Touch özeti, typecheck/lint/build ve çıkarılmış
+installer smoke PASS; 80 UI / 31 main-preload dosyası doğrulandı.
+
+Bakımda alınan son **134 tablo / 635.377 kayıt** yedeği bağımsız PostgreSQL 17.11'e
+gerçekten restore edildi; her tablo sayısı/SHA-256 eşleşti. 0076'nın up/idempotence/
+izole down-reapply ve eski/yeni API okuma-yazması geçti. Üretim 0076 uygulandı;
+133 mevcut veri tablosunun hash'i korundu. API runtime **0.1.92**, gerçek health/
+paket sözleşme sürümü **0.0.0**; sekiz servis ve üç sağlık ucu PASS. Google/Web/
+Desktop/Gmail yapılandırması byte düzeyinde aynı; Gmail son başarı kaydı yenilendi.
+
+İmzalı x64 NSIS **113.059.232 bayt**, SHA-256
+`d070e7bd4a4993be93d5c13c30fc7e64fe7ef514356a419dc1ad14c9f2b34873`;
+imza/zaman damgası Valid. Ofis ve ayrı ev bilgisayarındaki gerçek **0.1.91**
+`available` gördü; kurulu eski updater'ın indirme/sürüm doğrulama işlevleriyle
+kimlikli tam indirme, boyut/hash/imza geçti; anonim manifest/paket **401**.
+Evde gerçek mevcut profilde **0.1.91 → 0.1.92 → 0.1.91** NSIS, aynı oturum,
+sekiz yerel ayar, iki profil ayarı ve normal çıkış geçti; 499 dosyalı soğuk
+profil yedeğinin restore kopyası hash ile doğrulandı. Ofis günlük **0.1.91 PID 11112**
+korundu. Diğer ofis kurulumlarının sürümleri UNKNOWN; zorunlu kurulum yapılmadı.
+Önceki 0.1.91 manifest/immutable installer ve API rollback yedeği korundu; gerçek
+runtime kopyasında deploy/rollback ve ayrı feed'de atomik 0.1.92 → 0.1.91 restore PASS.
+Üretimde DB down veya runtime rollback uygulanmadı; geri dönüş yeni kusur tablosunu korur.
+Kanıt: `.local/perf-0192/final-performance/performance-summary.json`,
+`.local/perf-0192/office-verification.json`; ofiste
+`C:\ProgramData\HasarBotu\transition-0192-20261106`.
+
+Önceki adayın tarihsel hazırlık/ölçüm kaydı:
+
+6 Kasım 2026 **0.1.92 kusur oranı sürüm adayı — yayımlanmadı**.
+Dosya Özeti ve Touch → Süreçler aynı kompakt düzenleyiciyi kullanır. Trafikte
+sol Sigortalı / sağ Mağdur; kaskoda sol Kaskolu Sigortalı / sağ Karşı Taraf.
+Yalnız %0/%25/%50/%75/%100 veya Belirlenmemiş seçilir; tek oran saklanıp diğer
+taraf tamamlanır. Kaskodaki **Potansiyel Rücu: %X** yalnız uyarıdır;
+`recourse_status` veya kesinleşmiş rücu kararını değiştirmez.
+`GET/PUT /api/v1/cases/:caseId/fault`, additive **0076_case_fault_ratios**,
+firma/yetki sınırı, kapalı dosya kilidi, optimistic version ve atomik audit
+ile kalıcı kayıt sağlar. Eski case DTO'ları değişmedi; eski API'nin migration
+sonrası okuma/yazması gerçek fixture üzerinde geçti. Üretim DB/API/0.1.91
+kurulumu ve merkezi feed için yazma yapılmadı; önceki paketler korundu.
+Pencereler kimlik bildirimiyle API'den yeniden okur; oran tarayıcı depolamasına
+yazılmaz. Kusur için polling/animasyon zamanlayıcısı eklenmedi. Touch editörü
+ilk kullanımda açılır, sekme geçişinde taslak korunur ve yeniden istek atılmaz.
+
+Ölçüm: aynı cihaz, Node 24.22.0, Electron 44.9.1, üretim derlemeleri,
+1.000 sentetik dosya, izole PostgreSQL 17; senaryo başına **3 × 8 saniye**,
+medyanlar. Aynı gerçek Touch hareketi test harness'iyle iki koşuda da tetiklendi;
+GC yalnız zamanlanan ölçüm dışında çalıştı. İlk karşılaştırmadaki farklı gezinme
+geçmişi ayrıldı; sekme başına 12 ek istek saptanıp kaldırıldı.
+
+| Ölçüm (önce → aday) | Sonuç |
+|---|---|
+| Touch FPS, boşta / sekme-girdi yükü | 30,47 → 30,45 / 26,72 → 26,73 |
+| Kare aralığı p95, yük altında | 66,70 → 66,70 ms |
+| Electron süreçleri toplam CPU, yük altında | %0,981 → %0,976 |
+| Toplam özel bellek, yük altında | 376,23 → 393,08 MiB (**+16,84 MiB**) |
+| Ana + panel kalıcı JS heap | 20,00 → 20,27 MiB |
+| Otomasyon turu dahil input p95 | 4,68 → 5,59 ms |
+| Sekme koşusu API isteği / boşta istek | 86 → 86 / 0 → 0 |
+| Gerçek loopback HTTP p95, detay / liste | 2,11 → 2,13 / 3,31 → 3,04 ms |
+
+Yeni kusur GET/PUT p95 **1,56 / 2,22 ms** (uç başına 100 sıcak, kimlikli örnek).
+Kusur düzenleyicisinde değişmeyen odak okuması/ilgisiz bildirim sıfır render
+commit'i üretir. Tekrarlı gezinmede kalıcı dinleyici artışı yok; 13 Touch statik
+varlığı byte olarak aynı. Yerel karşılaştırma eşikleri **17/17 PASS**:
+FPS en çok %5 düşüş, CPU +1 yüzde puan, özel bellek +25 MiB, heap +8 MiB,
+input p95 %25 veya +15 ms, mevcut HTTP p95 %25 veya +3 ms; polling/sızıntı yok.
+Bellek/input farkları sıfır değildir; bu kısa yerel ölçüm LAN/üretim veya saatler
+süren dayanıklılık kabulü değildir. Kanıt: `.local/fault-0192/performance-comparison.json`.
+
+İmzalı x64 NSIS aday: `.local/fault-0192/rc/HasarBotu-Setup-0.1.92.exe`,
+**113.059.032 bayt**, SHA-256
+`cf7a2baf2139b32e239026ea2831cfb952875a3738ec55ce6b8aae6060821a80`.
+İmza/timestamp Valid; gerçek ofis bağlantı/kök profili, 80 UI ve 31 main/preload
+dosyası doğrulandı; installer'dan çıkarılan uygulamanın açılış/tray smoke'u PASS.
+API + 0076 adayı: `.local/fault-0192/HasarBotu-0.1.92-api-runtime-final-win-x64.zip`,
+**99.467.415 bayt**, SHA-256
+`7706f490b894a9b06e1e9a95b20f2fc74a4beee4f36d45f26a796815e43a8b54`.
+6.979 dosyanın boyut/hash kontrolü ve depo dışına yerel dağıtım sonrası kendi
+Node/bağımlılıklarıyla açılış PASS. Paketler ofise yüklenmedi; migration üretime uygulanmadı.
+Son doğrulama **3.627 PASS / 8 SKIP / 0 FAIL**: UI 812, domain 719,
+contracts 347, database 87, desktop-bridge 28, API 979, file-agent 351,
+desktop 304. Altı dış canlı API testi, Windows WebKit SameSite testi ve ayrıca
+etkinleştirilen NSIS Unicode kurulum testi atlandı; başarı sayılmadı. SBM testinin
+asenkron kök seçimi bekleme koşulu düzeltildi; tam masaüstü süiti yeniden geçti.
+Gerçek Electron özellik kabulü **23/23**, performans **17/17**,
+typecheck/lint/build/text/bundle ve çıkarılan installer smoke PASS.
+
 4 Kasım 2026 **23:20 TRT — merkezi 0.1.91 yayını PASS; kullanıcı başlatmalı geçişler bekleniyor**.
 Mevcut kimlikli ofis feed'i **22:56:08 TRT / 2026-11-04T19:56:08.511Z** tarihinde,
 önceki 0.1.90 yayıncısıyla aynı hash'e sahip araçla atomik olarak yükseltildi.
@@ -927,7 +1161,23 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.91**, 2026-11-04T19:56:08.511Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.93**, 2026-11-07T11:18:09.388Z; Windows x64,
+113.060.032 bayt, SHA-256 `7a66088e0cb5d62500c8ccbed2831b2b085032a843617a76cc5786b25d6ad86a`.
+Gerçek ofis 0.1.92 istemcisinin `available`, kimlikli tam indirme/size/hash/Valid imza,
+anonim 401 ve aynı oturum/profil/ayar hash'leri PASS. Ayrı standart kullanıcı profilinde
+gerçek NSIS yükseltme/geri dönüş PASS; günlük istemci 0.1.92 açık bırakıldı.
+Önceki manifest/paket korundu, atomik feed rollback prova edildi; zorunlu kurulum yok.
+Çoklu monitör/farklı DPI PENDING. Kanıt `.local/touch-window-0193/final193-release-evidence.zip`.
+
+Önceki doğrulanan ofis yayını: **0.1.92**, 2026-11-06T11:53:27.187Z; Windows x64,
+113.059.232 bayt, SHA-256 `d070e7bd4a4993be93d5c13c30fc7e64fe7ef514356a419dc1ad14c9f2b34873`.
+Ofis ve evdeki gerçek 0.1.91 eski updater işlevleriyle `available`, kimlikli tam
+indirme/hash/Valid imza ve anonim 401 doğrulandı. Gerçek profil NSIS yükseltme/geri
+dönüş PASS; günlük ofis 0.1.91 açık tutuldu. Diğer istemci sürümleri UNKNOWN.
+Önceki 0.1.91 manifest/immutable installer ve API runtime yedeği korundu;
+zorunlu kurulum yapılmadı. Kanıt `.local/perf-0192/office-verification.json`.
+
+Önceki doğrulanan ofis yayını: **0.1.91**, 2026-11-04T19:56:08.511Z; Windows x64,
 113.055.064 bayt, SHA-256 `8ec51bd19e972d9d9917470c37d391a35ed9373870efede05ba5af985b1788f6`.
 Gerçek 0.1.90 `available`; kimlikli tam indirme/hash ve anonim 401 doğrulandı.
 Ana ofis 0.1.91 `current`; diğer kurulumların geçişi UNKNOWN. Önceki manifest,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { memo, useEffect, useRef, useState, type FormEvent } from 'react'
 import { withAssistantActivity } from '../app/assistantFeedback'
 import { Link } from 'react-router'
 import { Bell, Files, NotebookPen, X } from 'lucide-react'
@@ -12,8 +12,19 @@ import { AssistantPlate } from './AssistantPlate'
 interface Draft { body: string; key: string; attempted: boolean }
 
 export function QuickNote({ target, port, onClose, standalone = false }: { target: ActiveCase; port?: CaseOperationsPort; onClose(): void; standalone?: boolean }) {
-  const session = useSession()
   const workspace = useCaseOperations(target.caseId, target.source, true, port)
+  return <QuickNoteEditor target={target} workspace={workspace} onClose={onClose} standalone={standalone} />
+}
+
+// Touch already owns this snapshot for history; reuse it instead of loading the
+// same notes twice and registering a second set of refresh listeners.
+export const QuickNoteEditor = memo(function QuickNoteEditor({ target, workspace, onClose, standalone = false }: {
+  target: ActiveCase
+  workspace: ReturnType<typeof useCaseOperations>
+  onClose(): void
+  standalone?: boolean
+}) {
+  const session = useSession()
   const canWrite = workspace.data?.permissions.canWrite === true && (session.mode !== 'api' || canUsePermission(session.user,'operations_write',['admin','expert','case_manager','secretary']))
   const storageKey = `hasarbotu-quick-note:${session.user?.id ?? 'mock'}:${target.caseId}`
   const [draft, setDraft] = useState<Draft>(() => {
@@ -87,7 +98,7 @@ export function QuickNote({ target, port, onClose, standalone = false }: { targe
       <button className="button button--primary" type="submit" disabled={busy || !draft.body.trim() || !canWrite}>{busy ? 'Kaydediliyor…' : draft.attempted ? 'Kaydı tekrar dene' : 'Notu kaydet'}</button>
     </form>}
   </>
-}
+})
 
 export function TouchAssistant({ target, port, showTrigger = true }: { target: ActiveCase | null; port?: CaseOperationsPort; showTrigger?: boolean }) {
   const [open, setOpen] = useState(false)
