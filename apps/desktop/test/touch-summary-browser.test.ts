@@ -50,6 +50,7 @@ it.skipIf(process.platform !== 'win32')('built Touch UI: real HTTP adapters, bot
         else if (path === '/api/v1/me/assistant-appearance') body = { userId: user.id, version: 0, appearance: { ...DEFAULT_ASSISTANT_APPEARANCE, textSize: 'large' } }
         else if (path === '/api/v1/cases') body = { items: records, pageInfo: { page: 1, pageSize: 10, totalItems: 2, totalPages: 1 } }
         else if (path.endsWith('/operations')) body = operations(path.split('/').at(-2)!)
+        else if (path.endsWith('/traffic-value-loss/calculate')) body = { calculation: null }
         else if (path.startsWith('/api/v1/cases/')) body = { case: { ...records.find(item => path.endsWith(item.id)), legacyReferences: { responsibleNames: [], expertNames: [], serviceNames: [] } } }
         else if (path === '/api/v1/tracking') body = tracking
         else if (path === '/api/v1/references/insurers') body = { items: [insurer] }

@@ -13,7 +13,19 @@
 .assistant-results { margin: 12px 0; display: grid; gap: 6px; }
 .assistant-result { display: grid; min-width: 0; gap: 4px; text-align: left; width: 100%; overflow-wrap: anywhere; }
 .assistant-result > span:not(.assistant-plate), .assistant-entry small { color: var(--text-secondary); font-size: 12px; }
-.assistant-tabs { position: sticky; top: -2px; z-index: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.assistant-toolbar { position: sticky; top: -2px; z-index: 2; display: flex; align-items: stretch; gap: 5px; margin-bottom: 12px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.assistant-tabs { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.assistant-toolbar > .case-folder-action { display: flex; flex: 0 0 auto; align-items: center; max-width: 30%; }
+.assistant-toolbar > .case-folder-action button { padding: 8px 6px; font-size: .8em; white-space: normal; gap: 4px; }
+.assistant-toolbar > .case-folder-action .text-warning { position: absolute; top: 100%; right: 0; max-width: 100%; background: var(--surface); padding: 8px; }
+.assistant-value-loss { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--accent-soft); }
+.assistant-value-loss > span, .assistant-value-loss > div { display: grid; gap: 3px; }
+.assistant-value-loss > div { text-align: right; }
+.assistant-value-loss strong { font-size: 19px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.assistant-value-loss small { font-size: 10px; color: var(--text-secondary); }
+.assistant-note-history { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 2px; }
+.assistant-note-history h3 { display: flex; align-items: center; justify-content: space-between; }
+.assistant-note-history h3 small { font-size: 11px; font-weight: 400; color: var(--text-secondary); }
 .assistant-tabs button { display: grid; justify-items: center; align-content: center; gap: 5px; min-width: 0; padding: 8px 2px; border-color: transparent; background: transparent; font-size: .85em; line-height: 1.3; }
 .assistant-tabs button span { overflow-wrap: anywhere; }
 .assistant-native-actions, .desktop-assistant-panel footer, .assistant-pagination { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }

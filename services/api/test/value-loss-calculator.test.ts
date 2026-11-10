@@ -44,7 +44,7 @@ describe('calculator physical parts and market difference', () => {
   it.each([{ manufacturer: 'Unknown', model: 'Unknown' }, { manufacturer: 'Tesla', model: 'Model 3' }])('calculates a generic reference estimate for %j without asking for the answer as input', vehicleIdentity => {
     const value = physical({ vehicleIdentity, postRepairMarketValueMinor: null })
     const estimate = calculateValueLoss(value)
-    expect(estimate).toMatchObject({ amountMinor: calculateValueLoss(physical()).amountMinor, calculationMethod: 'real_market_analysis', ruleVersion: 'calculator-reference/2026-07-01/1.1.0', issues: [] })
+    expect(estimate).toMatchObject({ amountMinor: calculateValueLoss(physical()).amountMinor, calculationMethod: 'real_market_analysis', ruleVersion: 'calculator-reference/2026-07-01/1.2.0', issues: [] })
     expect(estimate.amountMinor).toBeGreaterThan(0)
     expect(calculateValueLoss({ ...value, postRepairMarketValueMinor: 90_000_000 })).toEqual(estimate)
   })
@@ -86,7 +86,7 @@ describe('calculator physical parts and market difference', () => {
     const rule = valueLossCalculatorAdditionalRules('OTOMOBİL', 'cabriolet')[0]!
     const selection = { ...physicalPart, stableRuleId: rule.stableId, partName: rule.sourceLabel, operation: 'repair_paint', paintMode: 'local', newPartPriceMinor: 100_000, repairLaborMinor: 20_000, partPriceAvailability: 'available' }
     const result = calculateValueLoss(physical({ bodyType: 'cabriolet', partSelections: [selection] }))
-    expect(result).toMatchObject({ ruleVersion: 'calculator-reference/2026-07-01/1.1.0', issues: [] })
+    expect(result).toMatchObject({ ruleVersion: 'calculator-reference/2026-07-01/1.2.0', issues: [] })
     expect(result.amountMinor).toBeGreaterThan(0)
     expect(calculateValueLoss(physical({ bodyType: 'sedan', partSelections: [selection] })).amountMinor).toBeNull()
   })

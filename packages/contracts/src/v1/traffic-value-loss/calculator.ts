@@ -3,7 +3,7 @@ import { REAL_MARKET_VALUE_LOSS_VEHICLE_TYPES, VALUE_LOSS_BODY_TYPES, VALUE_LOSS
 import { localDateSchema } from '../../common/primitives.js'
 import { trafficValueLossBasisPointsSchema, trafficValueLossMoneyMinorSchema, trafficValueLossRealMarketPartInputSchema } from './commands.js'
 
-export { VALUE_LOSS_BODY_LABELS, VALUE_LOSS_BODY_TYPES, VALUE_LOSS_CALCULATOR_OPERATIONS, VALUE_LOSS_PART_MATERIALS, VALUE_LOSS_VEHICLE_GROUPS, VALUE_LOSS_PART_COVERAGE_LABELS, buildValueLossPartSuggestions, resolveValueLossCalculatorParts, valueLossBaseOnlyPrinciple, valueLossBodyOptions, valueLossCalculatorSourceParts, valueLossCalculatorVehicleContext } from '@hasarbotu/domain'
+export { VALUE_LOSS_BODY_LABELS, VALUE_LOSS_BODY_TYPES, VALUE_LOSS_CALCULATOR_OPERATIONS, VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, VALUE_LOSS_PART_MATERIALS, VALUE_LOSS_VEHICLE_GROUPS, VALUE_LOSS_PART_COVERAGE_LABELS, buildValueLossPartSuggestions, resolveValueLossCalculatorParts, valueLossBaseOnlyPrinciple, valueLossBodyOptions, valueLossCalculatorSourceParts, valueLossCalculatorVehicleContext } from '@hasarbotu/domain'
 export type { ValueLossBodyType, ValueLossCalculatorPartSelection, ValueLossPartMaterial, ValueLossPartSuggestion, ValueLossPartCoverage } from '@hasarbotu/domain'
 
 export const valueLossCalculatorPartSelectionSchema = trafficValueLossRealMarketPartInputSchema.extend({
@@ -60,3 +60,11 @@ export const valueLossCalculatorResponseSchema = z.strictObject({
 
 export type ValueLossCalculatorRequest = z.infer<typeof valueLossCalculatorRequestSchema>
 export type ValueLossCalculatorResponse = z.infer<typeof valueLossCalculatorResponseSchema>
+
+export const valueLossCalculatorSavedSchema = z.strictObject({
+  input: valueLossCalculatorRequestSchema,
+  result: valueLossCalculatorResponseSchema,
+  savedAt: z.iso.datetime(),
+})
+export const valueLossCalculatorSavedResponseSchema = z.strictObject({ calculation: valueLossCalculatorSavedSchema.nullable() })
+export type ValueLossCalculatorSaved = z.infer<typeof valueLossCalculatorSavedSchema>

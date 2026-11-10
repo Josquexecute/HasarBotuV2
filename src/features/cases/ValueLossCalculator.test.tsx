@@ -5,9 +5,10 @@ import { SessionContext, type SessionContextValue } from '../../app/sessionConte
 import type { ValueLossCalculatorPort } from '../../data/valueLossCalculatorPort'
 import type { CaseRecord } from '../../types/case'
 import { ValueLossCalculator } from './ValueLossCalculator'
+import { VALUE_LOSS_SAVED_EVENT } from '../../app/valueLossSaved'
 
 const session = { user: { id: 'user-1', organizationId: 'org-1', roles: ['expert'] }, reportUnauthorized: vi.fn() } as unknown as SessionContextValue
-const result = { amountMinor: 5_500_000, ruleVersion: 'calculator-reference/2026-07-01/1.1.0', calculationMethod: 'real_market_analysis' as const, issues: [] }
+const result = { amountMinor: 5_500_000, ruleVersion: 'calculator-reference/2026-07-01/1.2.0', calculationMethod: 'real_market_analysis' as const, issues: [] }
 function sourceCase(fields: Record<string, string> = {}): CaseRecord {
   return { caseId: 'case-1', type: 'Trafik', lossDate: '2026-10-01', estimatedDamage: 100_000, eksist: { vehicleFields: { Marka: 'Toyota', 'Araç Tipi': 'Corolla Sedan', 'Model Yılı': '2024', 'Araç Tarife Grubu': 'OTOMOBİL', Kilometre: '50.000', 'Önceki Hasar Sayısı': '0', ...fields } } } as unknown as CaseRecord
 }
@@ -30,10 +31,41 @@ async function fill() {
 const calculate = () => userEvent.click(screen.getByRole('button', { name: 'Hesapla' }))
 
 describe('automatic value loss calculator', () => {
+  it('restores the saved amount and full inputs after clearing the window session', async () => {
+    const port = fixture()
+    const view1 = render(view(port))
+    await fill(); await calculate(); await screen.findByText(/55\.000,00/)
+    const request = vi.mocked(port.calculate).mock.calls[0]![1]
+    view1.unmount()
+    sessionStorage.clear()
+    port.loadCalculation = vi.fn().mockResolvedValue({ input: request, result, savedAt: '2026-11-10T12:00:00Z' })
+    render(view(port))
+    await screen.findByText(/55\.000,00/)
+    expect(screen.getByLabelText('Rayiç bedeli (TL)')).toHaveValue('1000000')
+    expect(screen.getByLabelText('SOL ÇAMURLUK önceki durumu')).toHaveValue('none')
+    expect(screen.queryByLabelText('Hesap yöntemi')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Araç durumu')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Onarım sonrası piyasa değeri (TL)')).not.toBeInTheDocument()
+  })
   it('calculates using imported vehicle, usage, damage amount and history count', async () => {
     const port = fixture()
     render(view(port)); await fill(); await calculate(); await screen.findByText(/55\.000,00/)
     expect(port.calculate).toHaveBeenCalledWith('case-1', expect.objectContaining({ vehicleIdentity: { manufacturer: 'Toyota', model: 'Corolla Sedan' }, bodyType: 'sedan', modelYear: 2024, usageValue: 50000, damageAmountMinor: 10_000_000, previousDamageCount: 0, partSelections: [expect.objectContaining({ stableRuleId: 'part-1', quantity: 1, material: 'unspecified', priorPartState: 'none' })] }))
+  })
+  it('normalizes old window choices and discards their amount before recalculating', async () => {
+    const port = fixture()
+    const first = render(view(port))
+    await fill(); await calculate(); await screen.findByText(/55\.000,00/)
+    const key = `hasarbotu-value-loss-calculator-v1:org-1:user-1:case-1`
+    const stored = JSON.parse(sessionStorage.getItem(key)!)
+    first.unmount()
+    sessionStorage.setItem(key, JSON.stringify({ ...stored, draft: { ...stored.draft, calculationBasis: 'market_difference', vehicleCondition: 'prior_heavy_damage', postRepairMarketValue: '900000' } }))
+    render(view(port))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Hasarlı parça' })).toBeEnabled())
+    expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
+    await calculate()
+    await screen.findByText(/55\.000,00/)
+    expect(vi.mocked(port.calculate).mock.calls.at(-1)![1]).toMatchObject({ calculationBasis: 'reference', vehicleCondition: 'normal' })
   })
   it('removes identity, position, quantity, material and coefficient controls', async () => {
     render(view(fixture())); await addPart()
@@ -89,7 +121,10 @@ describe('automatic value loss calculator', () => {
     let resolve!: (value: typeof result) => void
     vi.mocked(port.calculate).mockImplementationOnce(() => new Promise(done => { resolve = done })); await calculate()
     fireEvent.change(screen.getByLabelText('Rayiç bedeli (TL)'), { target: { value: '1.200.000' } })
+    const saved = vi.fn()
+    window.addEventListener(VALUE_LOSS_SAVED_EVENT, saved, { once: true })
     await act(async () => resolve(result)); expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
+    expect(saved).toHaveBeenCalledWith(expect.objectContaining({ detail: { caseId: 'case-1' } }))
   })
   it('retains inputs and result across navigation and isolates another case', async () => {
     const port = fixture(), mounted = render(view(port))

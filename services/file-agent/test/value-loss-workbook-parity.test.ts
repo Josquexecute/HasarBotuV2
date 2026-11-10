@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   VALUE_LOSS_SOURCE_WORKBOOK_FILE_NAME,
+  VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME,
+  VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256,
   VALUE_LOSS_SOURCE_WORKBOOK_SHA256,
   buildValueLossRuleSnapshot,
   evaluateRealMarketValueLoss,
@@ -17,14 +19,14 @@ import decisionsJson from '../../../reference-data/value-loss/real-market-analys
 import { assertWorkbookSha256, extractOoxmlWorkbook } from '../src/ooxml-readonly-extractor.js'
 import { workbookFormulas } from './helpers/value-loss-workbook-formulas.js'
 
-const bytes = readFileSync(new URL(`../../../${VALUE_LOSS_SOURCE_WORKBOOK_FILE_NAME}`, import.meta.url))
+const bytes = readFileSync(new URL('./fixtures/value-loss-v1.xlsx', import.meta.url))
 const workbook = extractOoxmlWorkbook(bytes)
 const snapshot = snapshotJson as unknown as ValueLossRuleSnapshot
 const lossDate = parseLocalDate('2026-07-01')
 if (!lossDate.ok) throw new Error('TEST_DATE')
 const date = lossDate.value
 
-function scenario(mapping: ValueLossRuleSnapshot['vehicleMappings'][number], usageValue: number, age = 5) {
+function sourceScenario(workbook: ReturnType<typeof extractOoxmlWorkbook>, mapping: ValueLossRuleSnapshot['vehicleMappings'][number], usageValue: number, age = 5) {
   const rule = snapshot.partRules.find((part) => part.vehicleGroupCode === mapping.vehicleGroupCode && part.coefficients.replacement !== null)!
   const source = workbookFormulas(workbook, {})
   const coefficient = Number(source(`Tablolar!C${rule.sourceRow}`))
@@ -76,6 +78,13 @@ describe('Kaynak Excel formülleri ile hesap motoru karşılaştırması', () =>
     })).toEqual(snapshot)
   })
 
+})
+
+describe.each([
+  { version: 'V1 arşiv', workbook },
+  { version: 'V5 güncel', workbook: extractOoxmlWorkbook(readFileSync(new URL('../../../' + VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME, import.meta.url))) },
+])('$version Excel hesap motoru paritesi', ({ workbook }) => {
+  const scenario = (...args: Parameters<typeof sourceScenario> extends [unknown, ...infer Rest] ? Rest : never) => sourceScenario(workbook, ...args)
   it.each(snapshot.vehicleMappings)('$vehicleType: kaynak F9/J9/J3 ve ham/nihai tutarları eşleştirir', (mapping) => {
     const points = mapping.vehicleGroupCode === 'D'
       ? [0, 500, 501, 1_000, 1_001, 2_000, 2_001, 3_000, 3_001, 4_000, 4_001, 5_000]
@@ -146,5 +155,28 @@ describe('Kaynak Excel formülleri ile hesap motoru karşılaştırması', () =>
     const { input, excel } = scenario(mapping, 5_001)
     expect(excel('F9')).toBe('D')
     expect(evaluateRealMarketValueLoss(snapshot, input).usageCoefficient?.decimal).toBe('0.7')
+  })
+})
+
+describe('V5 kaynak kimliği ve değişmeyen katsayılar', () => {
+  it('güncel dosyanın hash, tüm hesap formülleri ve tablo değerlerini doğrular', () => {
+    const bytes = readFileSync(new URL('../../../' + VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME, import.meta.url))
+    assertWorkbookSha256(bytes, VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256)
+    const current = extractOoxmlWorkbook(bytes)
+    const normalized = (formula: string | null) => formula?.replaceAll(/\s/g, '') ?? null
+    for (const name of ['Hesaplama', 'Tablolar']) {
+      const source = current.sheets.find(sheet => sheet.name === name)!
+      const cells = new Map(source.cells.map(cell => [cell.address, cell]))
+      for (const cell of workbook.sheets.find(sheet => sheet.name === name)!.cells) {
+        // V5 makes the accident-date input manual instead of defaulting to TODAY().
+        if (name === 'Hesaplama' && cell.address === 'F11') {
+          expect(cells.get(cell.address)).toMatchObject({ formula: null, value: null })
+          continue
+        }
+        if (cell.formula) expect(normalized(cells.get(cell.address)?.formula ?? null), name + '!' + cell.address).toBe(normalized(cell.formula))
+        else if (name === 'Tablolar' && cell.value !== null) expect(cells.get(cell.address)?.value, name + '!' + cell.address).toBe(cell.value)
+      }
+    }
+    expect(current.sheets.map(sheet => sheet.name)).toEqual(['Kapak Bilgileri', 'Hesaplama', 'Sheet1', 'Tablolar', 'GÜNCELLEMELER'])
   })
 })

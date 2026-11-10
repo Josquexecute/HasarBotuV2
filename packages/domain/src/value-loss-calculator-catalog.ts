@@ -5,7 +5,9 @@ import { findValueLossManufacturerPart, type ValueLossVehicleIdentity } from './
 export const VALUE_LOSS_CALCULATOR_OPERATIONS = ['replacement', 'replacement_paint', 'repair', 'repair_paint', 'paint', 'paintless_repair'] as const
 export const VALUE_LOSS_PART_MATERIALS = ['unspecified', 'steel', 'aluminium', 'plastic', 'plastic_bodywork', 'composite', 'glass', 'mechanical', 'electrical', 'accessory', 'superstructure', 'other'] as const
 export const VALUE_LOSS_BODY_TYPES = ['unspecified', 'sedan', 'hatchback', 'station_wagon', 'suv', 'coupe', 'cabriolet', 'van_minibus', 'coach_minibus', 'city_bus', 'coach', 'midibus', 'panel_van', 'passenger_van', 'pickup', 'double_cab_pickup', 'truck', 'tractor_unit', 'excavator', 'loader', 'backhoe_loader', 'cab_tractor', 'open_tractor', 'combine', 'special_body', 'box_trailer', 'flatbed_trailer', 'tanker_trailer', 'scooter', 'naked', 'sport', 'touring', 'off_road', 'tanker_truck', 'other'] as const
-export const VALUE_LOSS_CALCULATOR_REFERENCE_VERSION = 'calculator-reference/2026-07-01/1.1.0' as const
+export const VALUE_LOSS_CALCULATOR_REFERENCE_VERSION = 'calculator-reference/2026-07-01/1.2.0' as const
+export const VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME = 'Yeni Dönem Değer Kaybı Hesaplama Modülü 01.07.2026 V_5.xlsx' as const
+export const VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256 = '34a3452bf8e93a67ce20b85ca042ba894d7d1786908555e81a41306d5a67bef9' as const
 export const VALUE_LOSS_VEHICLE_GROUPS = { 'OTOMOBİL': 'A', 'TAKSİ': 'A', 'MİNİBÜS': 'B', 'OTOBÜS': 'B', 'KAMYONET': 'C', 'KAMYON': 'C', 'ÇEKİCİ': 'C', 'İŞ MAKİNESİ': 'D', 'TRAKTÖR': 'D', 'TARIM MAKİNESİ': 'D', 'ÖZEL AMAÇLI ARAÇ': 'Ç', 'RÖMORK': 'E', 'MOTORSİKLET': 'F', 'TANKER': 'Ç' } as const
 export type ValueLossBodyType = typeof VALUE_LOSS_BODY_TYPES[number]
 export type ValueLossPartMaterial = typeof VALUE_LOSS_PART_MATERIALS[number]

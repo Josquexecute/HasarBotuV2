@@ -1,4 +1,4 @@
-import { valueLossCalculatorResponseSchema, type ValueLossCalculatorRequest, type ValueLossCalculatorResponse } from '@hasarbotu/contracts'
+import { valueLossCalculatorResponseSchema, valueLossCalculatorSavedResponseSchema, type ValueLossCalculatorSaved, type ValueLossCalculatorRequest, type ValueLossCalculatorResponse } from '@hasarbotu/contracts'
 import { createHttpTrafficValueLossAdapter, TrafficValueLossError, type TrafficValueLossVersionRecord, type TrafficValueLossPartCatalogRecord, type TrafficValueLossEvidenceRecord } from './trafficValueLossPort'
 
 export type CalculatorSavedInput = TrafficValueLossVersionRecord['input'] & {
@@ -8,6 +8,7 @@ export type CalculatorSavedInput = TrafficValueLossVersionRecord['input'] & {
 
 export interface ValueLossCalculatorPort {
   load(caseId: string): Promise<CalculatorSavedInput | null>
+  loadCalculation?(caseId: string): Promise<ValueLossCalculatorSaved | null>
   catalog(caseId: string, group: TrafficValueLossPartCatalogRecord['vehicleGroupCode']): Promise<TrafficValueLossPartCatalogRecord>
   calculate(caseId: string, input: ValueLossCalculatorRequest): Promise<ValueLossCalculatorResponse>
 }
@@ -15,6 +16,15 @@ export interface ValueLossCalculatorPort {
 export function createHttpValueLossCalculatorAdapter(options: { readonly fetchImpl?: typeof fetch; readonly baseUrl?: string } = {}): ValueLossCalculatorPort {
   const legacy = createHttpTrafficValueLossAdapter(options)
   return {
+    async loadCalculation(caseId) {
+      let response: Response
+      try {
+        response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? ''}/api/v1/cases/${encodeURIComponent(caseId)}/traffic-value-loss/calculate`, { credentials: 'include', headers: { accept: 'application/json' } })
+      } catch { throw new TrafficValueLossError('unavailable', 'Saved calculator unavailable') }
+      if (!response.ok) throw new TrafficValueLossError(response.status === 401 ? 'unauthorized' : response.status === 403 ? 'forbidden' : response.status === 404 ? 'not_found' : 'unavailable', 'Saved calculator request failed')
+      try { return valueLossCalculatorSavedResponseSchema.parse(await response.json()).calculation }
+      catch { throw new TrafficValueLossError('unavailable', 'Invalid saved calculator response') }
+    },
     async load(caseId) {
       const { assessment } = await legacy.load(caseId)
       if (!assessment) return null

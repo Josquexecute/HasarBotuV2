@@ -1,5 +1,13 @@
 # `@hasarbotu/desktop`
 
+10 Kasım 2026 **0.1.94 merkezi yayında — 20:37:14 TRT; teslimat PASS.**
+V5 Excel kaynağı ve hesap/parça katsayıları doğrulandı. Hesaplayıcı referans tahmin ve normal araç durumuyla sabitlendi; parça satırları sadeleştirildi. Başarılı tutar ve girdiler dosyaya/kuruma özel, audit ile atomik kaydedilir. Touch son kaydı gösterir; hızlı not ve geçmiş Notlar sekmesinde birleşir, klasör düğmesi Süreçler’in sağındadır.
+Doğrulama: 3.937 test PASS, 8 SKIP; hedefli 19/19 ve gerçek Electron/API/PostgreSQL akışında 24/24 kontrol PASS. Typecheck, lint, UI/workspace build ve imzalı paket açılışı PASS. Atlamalar: Windows WebKit SameSite, opt-in NSIS yardımcı testi, beş canlı ofis ağ/servis entegrasyonu ve klasör kimliği yedek/geri yükleme entegrasyonu.
+Windows x64 NSIS: 113.061.832 bayt; SHA-256 `f699235f3fc6299122eef49538f97a941163ea84c7eed64a22d349389f4222e8`; Authenticode/timestamp Valid. Önceki 0.1.93 manifesti ve değişmez kurulum paketi korundu.
+Ofis Tailscale bağdaştırıcısındaki APIPA adresi giderildi; `100.79.207.106` Preferred ve SSH erişimi doğrulandı. Üretim API’sinin 6.974 dosyası hash kontrolünden geçti; `0077_case_value_loss_calculations` uygulandı. 936 dosyanın mevcut verileri değişmedi; sekiz üretim servisi Running, API sağlıklı ve kimlikli son hesap GET yanıtı 200.
+Gerçek kurulu 0.1.93 istemcisi 0.1.94 sürümünü `available` gördü; kimlikli manifest 200, tam indirme/boyut/hash/Valid imza ve oturumsuz manifest/paket 401 doğrulandı. Aynı kullanıcı oturumu, profil ve ayar hash’leri korundu. Güncel veritabanı yedeğinin hash’i ve tam arşiv çözümü doğrulandı; API/WinSW geri dönüş yedeği korundu. Çalışan istemcilere zorla kurulum yapılmadı.
+Paket: `.local/value-loss-v5-20261110/candidate-final/HasarBotu-Setup-0.1.94.exe`; kanıt: `.local/value-loss-v5-20261110/release-evidence.json`.
+
 7 Kasım 2026 **0.1.93 merkezi yayında — 14:18:09 TRT**. Kritik yayın kontrolleri PASS.
 Fiziksel ofis `DESKTOP-EFN2G33`, MSI MS-7D48, Windows 11 Pro **26300.9711**,
 oturum 1, 2560×1440 / %100 / 96 DPI / 170 Hz. Ev ekranına/oyuna/odağına müdahale edilmedi.
@@ -1161,7 +1169,15 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.93**, 2026-11-07T11:18:09.388Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.94**, 2026-11-10T17:37:14.319Z; Windows x64,
+113.061.832 bayt, SHA-256 `f699235f3fc6299122eef49538f97a941163ea84c7eed64a22d349389f4222e8`.
+Üretim API/0077 migration ve 936 mevcut dosyanın korunması PASS. Gerçek ofis 0.1.93
+istemcisinde `available`, kimlikli manifest/tam indirme/boyut/hash/Valid imza, anonim 401
+ve aynı oturum/profil/ayar hash’leri PASS. Sekiz üretim servisi Running; önceki manifest,
+değişmez paket ve doğrulanmış veritabanı/API yedekleri korundu; zorunlu kurulum yok.
+Kanıt `.local/value-loss-v5-20261110/release-evidence.json`.
+
+Önceki doğrulanan ofis yayını: **0.1.93**, 2026-11-07T11:18:09.388Z; Windows x64,
 113.060.032 bayt, SHA-256 `7a66088e0cb5d62500c8ccbed2831b2b085032a843617a76cc5786b25d6ad86a`.
 Gerçek ofis 0.1.92 istemcisinin `available`, kimlikli tam indirme/size/hash/Valid imza,
 anonim 401 ve aynı oturum/profil/ayar hash'leri PASS. Ayrı standart kullanıcı profilinde

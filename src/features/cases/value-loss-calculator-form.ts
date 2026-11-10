@@ -103,6 +103,27 @@ export function calculatorSelections(draft: CalculatorDraft, sourceParts?: Param
   })
 }
 
+export function calculatorDraftFromRequest(item: CaseRecord, input: ValueLossCalculatorRequest): CalculatorDraft {
+  const base = initialCalculatorDraft(item)
+  return {
+    ...base, calculationBasis: 'reference', vehicleCondition: 'normal',
+    accidentDate: input.accidentDate, vehicleType: input.vehicleType, bodyType: input.bodyType ?? 'unspecified',
+    manufacturer: input.vehicleIdentity?.manufacturer ?? base.manufacturer, model: input.vehicleIdentity?.model ?? base.model,
+    modelYear: input.modelYear?.toString() ?? '', usageValue: input.usageValue?.toString() ?? '',
+    marketValue: moneyText(input.marketValueMinor), damageAmount: moneyText(input.damageAmountMinor),
+    previousDamageCount: input.previousDamageCount?.toString() ?? '', commercialOrRental: input.commercialOrRental,
+    parts: (input.partSelections ?? input.parts).map((part, index) => calculatorPartDraftSchema.parse({
+      id: 'entryId' in part ? part.entryId : String(index), stableRuleId: part.stableRuleId ?? '',
+      label: 'partName' in part ? part.partName : 'Kayıtlı parça', operation: part.operation,
+      paintMode: part.paintMode ?? 'full', price: moneyText(part.newPartPriceMinor), labor: moneyText(part.repairLaborMinor),
+      priceUnknown: part.partPriceAvailability === 'unavailable', priorPartState: part.priorPartState,
+      priorEvidence: part.priorPartState === 'unknown' ? '' : 'Kullanıcı doğrulaması', treatment: part.treatment,
+      position: 'position' in part ? part.position : '', quantity: 'quantity' in part ? String(part.quantity) : '1',
+      material: 'material' in part ? part.material : 'unspecified',
+    })),
+  }
+}
+
 /** Refresh verified history without replacing the user's current repair observations. */
 export function mergeCalculatorHistory(draft: CalculatorDraft, saved: CalculatorDraft): CalculatorDraft {
   const normalize = (value: string) => value.trim().replaceAll(/\s+/g, ' ').toLocaleUpperCase('tr-TR')

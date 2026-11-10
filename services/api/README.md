@@ -10,6 +10,8 @@ Ofis envanteri eski konumu bulamazken aynı plaka başka bir sahipsiz ofis konum
 
 ## Kapsam
 
+0.1.94 için `0077_case_value_loss_calculations` migration'ı gerekir. Başarılı `POST /api/v1/cases/:caseId/traffic-value-loss/calculate`, sunucuda hesaplanan tutarı ve girdileri kuruma/dosyaya özel kaydeder; aynı adrese `GET` son başarılı hesabı döndürür. Eksik veya hatalı hesap önceki kaydı değiştirmez. Kayıt ve audit atomiktir; resmî değerlendirme/onay/rapor oluşturulmaz. Touch tutarı bu kayıttan okur. API ve migration, yeni masaüstü paketi ofis feed'ine yayımlanmadan önce dağıtılmalıdır.
+
 Evrak izleme, tamamlanmış fiziksel taşıma zincirini listeleme, kontrol ve tarama uzlaştırmasında izler.
 Birden fazla taşıma yeni hash gözleminden önce gerçekleşse de aynı içerik özgün belge/inceleme kimliğini korur;
 belirsiz geçmiş eşleşmesi 409 ile durur. Elle konum atama tek başına belge erişimini yeniden eşlemez.

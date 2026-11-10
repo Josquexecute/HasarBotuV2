@@ -5,6 +5,7 @@ import {
   VALUE_LOSS_CALCULATOR_ROUTE,
   valueLossCalculatorRequestSchema,
   valueLossCalculatorResponseSchema,
+  valueLossCalculatorSavedResponseSchema,
   TRAFFIC_VALUE_LOSS_APPROVE_ROUTE,
   TRAFFIC_VALUE_LOSS_CURRENT_APPROVED_ROUTE,
   TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE,
@@ -61,6 +62,7 @@ import {
 import { trafficValueLossReportFilename } from './report-pdf.js'
 import { createTrafficValueLossClosureStore } from './closure-store.js'
 import { calculateValueLoss } from './calculator.js'
+import { createValueLossCalculatorStore } from './calculator-store.js'
 
 export interface TrafficValueLossRoutesOptions { readonly pool: pg.Pool }
 const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const
@@ -102,6 +104,7 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
   const store = createTrafficValueLossStore(options.pool)
   const reports = createTrafficValueLossReportStore(options.pool)
   const closure = createTrafficValueLossClosureStore(options.pool)
+  const calculator = createValueLossCalculatorStore(options.pool)
   const actor = (session: { user: { organizationId: string; id: string } }, request: FastifyRequest) => ({
     organizationId: session.user.organizationId,
     actorUserId: session.user.id,
@@ -119,7 +122,20 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
     const result = await options.pool.query('SELECT case_type FROM cases WHERE organization_id=$1 AND id=$2', [session.user.organizationId, params.data.caseId])
     if (!result.rowCount) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
     if (result.rows[0].case_type !== 'traffic') return reply.code(400).send(failureBody('traffic_value_loss_source_invalid', 'Traffic case required.', requestId))
-    return valueLossCalculatorResponseSchema.parse(calculateValueLoss(body.data))
+    const calculation = valueLossCalculatorResponseSchema.parse(calculateValueLoss(body.data))
+    if (calculation.amountMinor !== null && calculation.issues.length === 0) await calculator.save(actor(session, request), params.data.caseId, body.data, calculation)
+    return calculation
+  })
+
+  app.get(VALUE_LOSS_CALCULATOR_ROUTE, async (request, reply) => {
+    const session = await requireSession(auth, request, reply)
+    if (session === undefined) return
+    const requestId = String(request.id)
+    const params = trafficValueLossParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
+    const found = await options.pool.query('SELECT id FROM cases WHERE organization_id=$1 AND id=$2', [session.user.organizationId, params.data.caseId])
+    if (!found.rowCount) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
+    return valueLossCalculatorSavedResponseSchema.parse({ calculation: await calculator.load(session.user.organizationId, params.data.caseId) })
   })
 
   app.get(TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE, async (request, reply) => {

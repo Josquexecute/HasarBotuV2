@@ -13,6 +13,7 @@ import { SessionContext, type SessionContextValue } from '../../app/sessionConte
 import { assistantCaseSelectionKey, rememberAssistantCase } from '../../app/assistantCaseSelection'
 import { loadTracking } from '../tracking/trackingApi'
 import { SERVICE_DIRECTORY_UPDATED_EVENT } from '../../data/useCaseReferences'
+import type { ValueLossCalculatorPort } from '../../data/valueLossCalculatorPort'
 
 vi.mock('../tracking/trackingApi', () => ({ loadTracking: vi.fn(async () => ({ tramer: [], documents: [], users: [], history: [] })) }))
 const first = { ...mockCases[0]!, caseId: 'case-a', plate: '34 TEST 01', type: 'Trafik' as const, officeNumber: '2026/1', responsibleUserId: null }
@@ -29,7 +30,8 @@ function ports(canWrite = true) {
     createNote: vi.fn(async (_caseId, input) => { const saved = { ...note, ...input, id: 'new-note' }; notes = [...notes, saved]; return saved }),
     createTask: vi.fn(), completeTask: vi.fn(), cancelTask: vi.fn(),
   }
-  return { cases, operations, references }
+  const calculator: ValueLossCalculatorPort = { load: vi.fn().mockResolvedValue(null), loadCalculation: vi.fn().mockResolvedValue(null), catalog: vi.fn(), calculate: vi.fn() }
+  return { cases, operations, references, calculator }
 }
 function setup(canWrite = true) {
   const api = ports(canWrite)
@@ -59,7 +61,7 @@ describe('standalone Touch case workspace', () => {
       await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Sigortalı kusur oranı' }), '25')
       const reads = request.mock.calls.length
       expect(reads).toBe(1)
-      await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+      await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
       await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
       expect(screen.getByRole('combobox', { name: 'Sigortalı kusur oranı' })).toHaveValue('25')
       expect(screen.getByRole('combobox', { name: 'Mağdur kusur oranı' })).toHaveValue('75')
@@ -102,14 +104,14 @@ describe('standalone Touch case workspace', () => {
     expect([...list.querySelectorAll('dd')].slice(0, 7).map(node => node.textContent)).toEqual(['Atanmamış', '—', '—', 'HASAR-456', '—', '—', '—'])
     expect(document.querySelector('.assistant-case-heading .assistant-plate__type')).toBeNull()
   })
-  it('separates four panels, supports keyboard tabs and preserves drafts without repeating searches', async () => {
+  it('merges notes into three panels, supports keyboard tabs and preserves drafts without repeating searches', async () => {
     const api = setup()
-    expect(screen.getAllByRole('tab')).toHaveLength(4)
-    expect(screen.getByRole('tab', { name: 'Hızlı not' })).toBeDisabled()
+    expect(screen.getAllByRole('tab')).toHaveLength(3)
+    expect(screen.getByRole('tab', { name: 'Notlar' })).toBeDisabled()
     await select()
     await userEvent.type(screen.getByRole('textbox', { name: 'Hızlı not' }), 'Sekmelerde korunan taslak')
     const loads = vi.mocked(api.cases.listCasePage).mock.calls.length
-    screen.getByRole('tab', { name: 'Hızlı not' }).focus()
+    screen.getByRole('tab', { name: 'Notlar' }).focus()
     await userEvent.keyboard('{Home}')
     expect(screen.getByRole('tabpanel', { name: 'Dosyalar' })).toBeVisible()
     expect(screen.queryByRole('textbox', { name: 'Hızlı not' })).not.toBeInTheDocument()
@@ -206,7 +208,7 @@ describe('standalone Touch case workspace', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Notu kaydet' }))
     await screen.findByText('Not dosyaya kaydedildi.')
     expect(api.operations.createNote).toHaveBeenCalledWith(first.caseId, { noteType: 'internal', subject: null, body: 'Yeni hızlı not' }, expect.any(String))
-    await userEvent.click(screen.getByRole('tab', { name: 'Geçmiş notlar' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
     await screen.findByText('Yeni hızlı not')
     await userEvent.type(screen.getByRole('textbox', { name: 'Notlarda ara' }), 'görüşüldü')
     expect(screen.getByText(note.body)).toBeInTheDocument()
@@ -219,7 +221,7 @@ describe('standalone Touch case workspace', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
     await screen.findByText(new RegExp(first.stage), { selector: 'dd' })
     expect(screen.getByText('Atanmamış')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
     expect(screen.getByRole('textbox', { name: 'Hızlı not' })).toHaveValue('İlk taslak')
     await userEvent.click(screen.getByRole('tab', { name: 'Dosyalar' }))
     await userEvent.click(screen.getByRole('button', { name: /34 TEST 02/ }))
@@ -254,7 +256,7 @@ describe('standalone Touch case workspace', () => {
     render(<MemoryRouter><AssistantCaseSearch cases={api.cases} operations={api.operations} /></MemoryRouter>)
     await screen.findByRole('textbox', { name: 'Hızlı not' })
     expect(api.cases.getCase).toHaveBeenCalledWith(first.caseId)
-    await userEvent.click(screen.getByRole('tab', { name: 'Geçmiş notlar' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
     await screen.findByText(note.body)
     const count = vi.mocked(api.operations.load).mock.calls.length
     fireEvent(window, new Event('focus'))
@@ -268,12 +270,12 @@ describe('standalone Touch case workspace', () => {
     await userEvent.type(screen.getByRole('textbox', { name: 'Hızlı not' }), 'Ortak veriyle kaydedilen not')
     await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
     await screen.findByText('Tramer talebi yok.')
-    await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
     expect(screen.getByRole('textbox', { name: 'Hızlı not' })).toHaveValue('Ortak veriyle kaydedilen not')
     expect(api.operations.load).toHaveBeenCalledTimes(1)
     await userEvent.click(screen.getByRole('button', { name: 'Notu kaydet' }))
     await screen.findByText('Not dosyaya kaydedildi.')
-    await userEvent.click(screen.getByRole('tab', { name: 'Geçmiş notlar' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
     await screen.findByText('Ortak veriyle kaydedilen not')
     expect(api.operations.load).toHaveBeenCalledTimes(2)
     api.view.unmount()
@@ -289,12 +291,12 @@ describe('standalone Touch case workspace', () => {
     await waitFor(() => expect(api.references.getCaseReferences).toHaveBeenCalledTimes(1))
     const reads = vi.mocked(api.cases.getCase).mock.calls.length
     for (let n = 0; n < 3; n++) {
-      await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+      await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
       await userEvent.click(screen.getByRole('tab', { name: 'Süreçler' }))
     }
     expect(api.cases.getCase).toHaveBeenCalledTimes(reads + 3)
     expect(api.references.getCaseReferences).toHaveBeenCalledTimes(1)
-    await userEvent.click(screen.getByRole('tab', { name: 'Hızlı not' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
     expect(api.cases.getCase).toHaveBeenCalledTimes(reads + 3)
     fireEvent(window, new Event(SERVICE_DIRECTORY_UPDATED_EVENT))
     await waitFor(() => expect(api.references.getCaseReferences).toHaveBeenCalledTimes(2))
@@ -313,7 +315,7 @@ describe('standalone Touch case workspace', () => {
     await userEvent.type(screen.getByRole('textbox', { name: 'Hızlı not' }), 'Yetkisiz')
     expect(screen.getByRole('button', { name: 'Notu kaydet' })).toBeDisabled()
     expect(api.operations.createNote).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('tab', { name: 'Geçmiş notlar' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Notlar' }))
     await screen.findByText(note.body)
   })
   it('refreshes process tracking on focus after the panel was hidden during an outage', async () => {

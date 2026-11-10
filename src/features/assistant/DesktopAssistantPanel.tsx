@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Files, History, ListChecks, StickyNote } from 'lucide-react'
+import { Files, ListChecks, StickyNote } from 'lucide-react'
 import { useSession } from '../../app/sessionContext'
 import { rememberAssistantCase, useAssistantCaseSelection } from '../../app/assistantCaseSelection'
 import { NOTE_SAVED_EVENT } from '../../app/activeCase'
@@ -19,6 +19,8 @@ import { useAssistantAppearance } from './assistantAppearanceContext'
 import { appearanceStyle } from './appearance'
 import { TouchPlayControls } from './TouchPlayControls'
 import { notificationDate, serviceMobile } from './caseSummary'
+import { AssistantValueLoss } from './AssistantValueLoss'
+import type { ValueLossCalculatorPort } from '../../data/valueLossCalculatorPort'
 import { CaseFaultModule } from '../cases/CaseFaultModule'
 
 type MenuAction = 'open' | 'notifications' | 'settings' | 'hide' | 'reset' | 'close'
@@ -26,15 +28,14 @@ type AssistantWindow = Window & { hasarbotuAssistantMenu?: { choose(action: Menu
 const choose = (action: MenuAction, caseId?: string) => (window as AssistantWindow).hasarbotuAssistantMenu?.choose(action, caseId)
 const dateTime = (value: string | null) => value ? new Date(value).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }) : '—'
 
-type AssistantTab = 'files' | 'note' | 'history' | 'process'
+type AssistantTab = 'files' | 'note' | 'process'
 const assistantTabs = [
   { id: 'files', label: 'Dosyalar', icon: Files },
-  { id: 'note', label: 'Hızlı not', icon: StickyNote },
-  { id: 'history', label: 'Geçmiş notlar', icon: History },
+  { id: 'note', label: 'Notlar', icon: StickyNote },
   { id: 'process', label: 'Süreçler', icon: ListChecks },
 ] as const
 
-function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { item: CaseRecord; cases: CasesDataPort; operations?: CaseOperationsPort; references?: CaseReferenceDataPort; tab: AssistantTab; tabId: string }) {
+function CaseWorkspace({ item, cases, operations, references, calculator, tab, tabId }: { item: CaseRecord; cases: CasesDataPort; operations?: CaseOperationsPort; references?: CaseReferenceDataPort; calculator?: ValueLossCalculatorPort; tab: AssistantTab; tabId: string }) {
   const { reportUnauthorized } = useSession()
   const workspace = useCaseOperations(item.caseId, 'api', true, operations)
   const [detail, setDetail] = useState<CaseRecord | null>(null)
@@ -101,18 +102,20 @@ function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { it
   const noteTarget = useMemo(() => ({ caseId: item.caseId, plate: currentItem.plate, type: currentItem.type, officeNumber: currentItem.officeNumber, source: 'api' as const }), [item.caseId, currentItem.plate, currentItem.type, currentItem.officeNumber])
   const newNote = useCallback(() => setNoteVersion(value => value + 1), [])
   const notes = useMemo(() => {
-    if (tab !== 'history') return []
+    if (tab !== 'note') return []
     const search = noteSearch.toLocaleLowerCase('tr-TR')
     return workspace.data?.notes.filter(note => `${note.subject ?? ''} ${note.body} ${note.legacySource?.authorName ?? note.createdByDisplayName}`.toLocaleLowerCase('tr-TR').includes(search)) ?? []
   }, [workspace.data, noteSearch, tab])
   return <section className="assistant-case" aria-label="Seçili dosya" hidden={tab === 'files'}>
-    <div className="assistant-case-heading"><div><AssistantPlate plate={currentItem.plate} type={currentItem.type} /><small>{currentItem.officeNumber}</small></div><OpenCaseFolderButton caseId={item.caseId} /></div>
+    <div className="assistant-case-heading"><div><AssistantPlate plate={currentItem.plate} type={currentItem.type} /><small>{currentItem.officeNumber}</small></div></div>
+    {currentItem.type === 'Trafik' && <AssistantValueLoss key={item.caseId} caseId={item.caseId} port={calculator} />}
     {/* Keep the draft mounted while viewing history or process information. */}
-    <div role="tabpanel" id={`${tabId}-note-panel`} aria-labelledby={`${tabId}-note`} hidden={tab !== 'note'}><QuickNoteEditor key={noteVersion} standalone target={noteTarget} workspace={noteWorkspace} onClose={newNote} /></div>
-    <div role="tabpanel" id={`${tabId}-history-panel`} aria-labelledby={`${tabId}-history`} hidden={tab !== 'history'}>
+    <div role="tabpanel" id={`${tabId}-note-panel`} aria-labelledby={`${tabId}-note`} hidden={tab !== 'note'}><QuickNoteEditor key={noteVersion} standalone target={noteTarget} workspace={noteWorkspace} onClose={newNote} />
+    <section className="assistant-note-history" aria-label="Geçmiş notlar">
+    <h3>Geçmiş notlar <small>{workspace.data?.notes.length ?? 0} not</small></h3>
     {workspace.status === 'loading' && <p role="status">Dosya yükleniyor…</p>}
     {!['ok', 'loading'].includes(workspace.status) && <p role="alert">Dosya yüklenemedi. <button onClick={workspace.reload}>Tekrar dene</button></p>}
-    {tab === 'history' && workspace.data && <>
+    {tab === 'note' && workspace.data && <>
       <label className="field"><span>Notlarda ara</span><input value={noteSearch} onChange={(event) => setNoteSearch(event.target.value)} maxLength={120} /></label>
       {notes.length === 0 && <p>{noteSearch ? 'Aramayla eşleşen not yok.' : 'Henüz not yok.'}</p>}
       {notes.map((note) => <article className="assistant-entry" key={note.id}>
@@ -120,6 +123,7 @@ function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { it
         <small>{note.legacySource?.authorName ?? note.createdByDisplayName} · {dateTime(note.legacySource?.occurredAt ?? note.createdAt)}{note.legacySource && ' · V1 tarihsel not'}</small>
       </article>)}
     </>}
+    </section>
     </div>
     <div role="tabpanel" id={`${tabId}-process-panel`} aria-labelledby={`${tabId}-process`} hidden={tab !== 'process'}>
     {faultOpened && <CaseFaultModule caseId={item.caseId} />}
@@ -158,7 +162,7 @@ function CaseWorkspace({ item, cases, operations, references, tab, tabId }: { it
   </section>
 }
 
-export function AssistantCaseSearch({ cases: suppliedCases, operations, references }: { cases?: CasesDataPort; operations?: CaseOperationsPort; references?: CaseReferenceDataPort }) {
+export function AssistantCaseSearch({ cases: suppliedCases, operations, references, calculator }: { cases?: CasesDataPort; operations?: CaseOperationsPort; references?: CaseReferenceDataPort; calculator?: ValueLossCalculatorPort }) {
   const session = useSession()
   const { reportUnauthorized } = session
   const cases = useMemo(() => suppliedCases ?? createHttpCasesAdapter(), [suppliedCases])
@@ -206,6 +210,7 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations, referenc
   }
   const current = result?.key === search ? result : null
   return <>
+    <div className="assistant-toolbar">
     <nav className="assistant-tabs" role="tablist" aria-label="Dosya görünümü">
       {assistantTabs.map(({ id, label, icon: Icon }, index) => <button type="button" role="tab" key={id} id={`${tabId}-${id}`} aria-controls={`${tabId}-${id}-panel`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} disabled={id !== 'files' && !selectedCaseId} onClick={() => setTab(id)} onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
@@ -216,6 +221,8 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations, referenc
         target?.click()
       }}><Icon size={16} aria-hidden="true" /><span>{label}</span></button>)}
     </nav>
+    {selected && <OpenCaseFolderButton caseId={selected.caseId} />}
+    </div>
     <div role="tabpanel" id={`${tabId}-files-panel`} aria-labelledby={`${tabId}-files`} hidden={activeTab !== 'files'}>
     <form className="assistant-search" onSubmit={submit}>
       <label className="field"><span>Plaka veya dosya numarası</span><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} maxLength={120} placeholder="Örn. 34 ABC 123" /></label>
@@ -235,7 +242,7 @@ export function AssistantCaseSearch({ cases: suppliedCases, operations, referenc
     </section>}
     </div>
     {selectionError && <p role="alert">Dosya seçimi alınamadı veya bu cihazda saklanamadı. <button onClick={() => { setSelectionWriteError(false); setSelectionReload(value => value + 1) }}>Tekrar dene</button></p>}
-    {selected ? <CaseWorkspace key={selected.caseId} item={selected} cases={cases} operations={operations} references={references} tab={activeTab} tabId={tabId} /> : selectedCaseId && !selectionError ? <p role="status">Seçili dosya yükleniyor…</p> : <p>Programdan bir dosya seçin veya burada arayın.</p>}
+    {selected ? <CaseWorkspace key={selected.caseId} item={selected} cases={cases} operations={operations} references={references} calculator={calculator} tab={activeTab} tabId={tabId} /> : selectedCaseId && !selectionError ? <p role="status">Seçili dosya yükleniyor…</p> : <p>Programdan bir dosya seçin veya burada arayın.</p>}
   </>
 }
 
