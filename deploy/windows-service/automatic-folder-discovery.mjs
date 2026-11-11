@@ -26,7 +26,8 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
   const { inspectCaseListIntegrity } = await load('services/api/dist/cases/visibility-integrity.js')
   const reconcileOfficeFolderInventory = config.officeInventoryOnly
     ? (await load('services/api/dist/cases/office-folder-inventory.js')).reconcileOfficeFolderInventory : undefined
-  const { planSourceFolderRelocation, applySourceFolderRelocation, readTrackedFolderIdentity } = await load('services/api/dist/cases/source-folder-relocation.js')
+  const { planSourceFolderRelocation, applySourceFolderRelocation, readTrackedFolderIdentity, readWorkspaceFolderIdentity } = await load('services/api/dist/cases/source-folder-relocation.js')
+  const { completeFolderChecks } = await load('services/api/dist/cases/folder-recovery-store.js')
   const { readV1Sidecar } = await load('services/api/dist/v1-import/store.js')
   const { buildV1SourceIdentityMaterial, parseSourcePlateFolderName, plateSearchKey } = await load('services/api/node_modules/@hasarbotu/domain/dist/index.js')
   const { withConsistentPcloudDatabase } = await load('tools/pcloud-maintenance-window-gate.mjs')
@@ -132,7 +133,19 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
     if (identity.continuity && (continuityVerified !== 2
       || JSON.stringify(await trackedContinuity(folder, identity, previousPath)) !== JSON.stringify(identity.continuity))) throw new Error('source_changed')
   }
-  async function reconcileMoves(discovered, ids, registered) {
+  async function readWorkspaceMarker(folder) {
+    await safeDirectory(folder.relativePath)
+    const markerPath = join(config.sourceRoot, folder.relativePath, '.hasarbotu-workspace.json')
+    try {
+      const metadata = await lstat(markerPath)
+      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1024) throw new Error('source_changed')
+      const marker = JSON.parse(await readFile(markerPath, 'utf8'))
+      if (marker.schemaVersion !== 'hasarbotu-workspace/1' || typeof marker.workspaceId !== 'string'
+        || !/^[0-9a-f-]{36}$/i.test(marker.workspaceId) || Object.keys(marker).length !== 2) throw new Error('source_changed')
+      return marker.workspaceId.toLowerCase()
+    } catch (error) { if (error.code !== 'ENOENT') throw error }
+  }
+  async function reconcileMoves(discovered, ids, registered, markers, duplicateMarkers) {
     const result = { relocated: 0, relocationDeferred: 0, relocationSettling: 0, relocationIssues: [] }
     if (!config.trackRegisteredMoves) return result
     const seen = new Set()
@@ -140,15 +153,31 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
       'folder_relocation_case_changed', 'folder_relocation_case_not_found', 'folder_relocation_location_changed', 'folder_relocation_plan_stale',
       'folder_relocation_location_in_use', 'folder_relocation_registered_identity_required', 'folder_relocation_plate_mismatch',
       'folder_relocation_content_identity_required', 'folder_relocation_content_changed', 'folder_relocation_already_registered',
-      'folder_admin_required', 'folder_active_root_required'])
+      'folder_admin_required', 'folder_active_root_required', 'folder_relocation_workspace_identity_required'])
     for (const folder of discovered) {
       if (signal?.aborted) break
       const id = ids.get(folder.relativePath)
       if (id === undefined || id === null) continue
-      let row = registered.get(String(id)), contentIdentity
+      let row = registered.get(String(id)), contentIdentity, workspaceIdentity
+      const workspaceId = markers.get(folder.relativePath)
+      if (workspaceId && duplicateMarkers.has(workspaceId)) {
+        result.relocationDeferred++
+        result.relocationIssues.push({ sourceFolderId: String(id), code: 'folder_workspace_identity_ambiguous' })
+        continue
+      }
+      if (!row && workspaceId) {
+        row = (await pool.query(`SELECT c.id AS case_id,c.version AS case_version,c.lifecycle_status,
+          l.id AS location_id,l.relative_path,l.version AS location_version,r.source_folder_id
+          FROM case_workspace_provisionings w JOIN cases c ON c.organization_id=w.organization_id AND c.id=w.case_id
+          JOIN case_locations l ON l.organization_id=c.organization_id AND l.case_id=c.id AND l.storage_root_key=w.storage_root_key
+          JOIN case_folder_registrations r ON r.organization_id=c.organization_id AND r.case_id=c.id AND r.storage_root_key=w.storage_root_key
+          WHERE w.organization_id=$1 AND w.id=$2 AND w.storage_root_key=$3 AND w.status='ready'`,
+        [policy.organizationId, workspaceId, policy.storageRootKey])).rows[0]
+        if (row) workspaceIdentity = { kind: 'workspace', workspaceId, previousSourceFolderId: row.source_folder_id }
+      }
       // Pre-marker manual workspaces have no cloud binding. A unique case plus its
       // complete recorded file contents can prove continuity; its name alone cannot.
-      if (!row && config.officeInventoryOnly) {
+      if (!row && !workspaceId && config.officeInventoryOnly) {
         const candidates = (await pool.query(`SELECT c.id AS case_id,c.version AS case_version,c.lifecycle_status,c.is_archived,
           l.id AS location_id,l.relative_path,l.version AS location_version,
           (SELECT a.details->>'managedArchive' FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
@@ -162,32 +191,44 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
         if (candidates.length === 1 && !candidates[0].registered && candidates[0].workspace_ready
           && (!candidates[0].is_archived || candidates[0].managed_archive === 'true')) row = candidates[0]
       }
-      if (!row || pathKey(row.relative_path) === pathKey(folder.relativePath)) continue
+      if (!row || pathKey(row.relative_path) === pathKey(folder.relativePath) && !workspaceIdentity) continue
       try {
         if (row.operation_active) throw new Error('folder_relocation_operation_active')
-        if (!await oldPathAbsent(row.relative_path)) throw new Error('source_previous_path_exists')
+        if (pathKey(row.relative_path) !== pathKey(folder.relativePath) && !await oldPathAbsent(row.relative_path)) throw new Error('source_previous_path_exists')
         const sourceFolderId = String(id)
-        if (!registered.has(sourceFolderId)) {
+        if (workspaceIdentity) {
+          contentIdentity = await readWorkspaceFolderIdentity(pool, policy.organizationId, row.case_id, policy.storageRootKey, row.relative_path)
+        } else if (!registered.has(sourceFolderId)) {
           contentIdentity = await readTrackedFolderIdentity(pool, policy.organizationId, row.case_id, policy.storageRootKey, row.relative_path)
           contentIdentity.continuity = await trackedContinuity(folder, contentIdentity, row.relative_path)
         }
         seen.add(sourceFolderId)
-        const observation = createHash('sha256').update(JSON.stringify([sourceFolderId, folder.relativePath, row.relative_path, row.location_version, contentIdentity?.manifestHash, contentIdentity?.continuity])).digest('hex')
+        const observation = createHash('sha256').update(JSON.stringify([sourceFolderId, folder.relativePath, row.relative_path, row.location_version, contentIdentity?.manifestHash, contentIdentity?.continuity, workspaceIdentity])).digest('hex')
         if (previousMoves.get(sourceFolderId) !== observation) { previousMoves.set(sourceFolderId, observation); result.relocationSettling++; continue }
         const plan = await planSourceFolderRelocation(pool, policy.organizationId, {
           storageRootKey: policy.storageRootKey, decision: `${policy.decision} Track verified source continuity and preserve all business records.`,
           bindings: [{ caseId: row.case_id, sourceFolderId, relativePath: folder.relativePath,
             expectedCaseVersion: row.case_version, expectedLifecycleStatus: row.lifecycle_status, physicallyClosed: folder.physicallyUnderKapali,
             previousLocation: { id: row.location_id, storageRootKey: policy.storageRootKey, relativePath: row.relative_path, version: row.location_version },
-            identity: contentIdentity ? { kind: 'tracked_files', manifestHash: contentIdentity.manifestHash,
+            identity: workspaceIdentity ? { ...workspaceIdentity, manifestHash: contentIdentity.manifestHash } : contentIdentity ? { kind: 'tracked_files', manifestHash: contentIdentity.manifestHash,
               ...(contentIdentity.continuity ? { continuity: contentIdentity.continuity } : {}) } : { kind: 'registered' } }],
         })
         const applied = await applySourceFolderRelocation(pool, { organizationId: policy.organizationId, actorUserId: policy.actorUserId,
           requestId: 'automatic-relocation-' + observation.slice(0, 24) }, plan, plan.planHash, async () => {
           await safeDirectory(folder.relativePath)
-          if (!await oldPathAbsent(row.relative_path)) throw new Error('source_previous_path_exists')
+          if (pathKey(row.relative_path) !== pathKey(folder.relativePath) && !await oldPathAbsent(row.relative_path)) throw new Error('source_previous_path_exists')
           const currentIds = await resolveIds([folder])
           if (String(currentIds.get(folder.relativePath)) !== sourceFolderId) throw new Error('source_changed')
+          if (workspaceIdentity) {
+            if (await readWorkspaceMarker(folder) !== workspaceId) throw new Error('source_changed')
+            await withConsistentPcloudDatabase(config.pcloudDatabasePath, cloud => {
+              if (cloud.prepare('SELECT count(*) n FROM folder WHERE id=?').get(BigInt(workspaceIdentity.previousSourceFolderId)).n !== 0) throw new Error('source_previous_path_exists')
+            })
+            const current = await discoverPlateFolders(config.sourceRoot, discoveryOptions)
+            let owners = 0
+            for (const candidate of current) if (await readWorkspaceMarker(candidate) === workspaceId) owners++
+            if (owners !== 1) throw new Error('source_changed')
+          }
           if (contentIdentity) await verifyTrackedContents(folder, contentIdentity, row.relative_path)
           const active = await pool.query("SELECT 1 FROM case_file_operations WHERE organization_id=$1 AND case_id=$2 AND status NOT IN ('ready','failed','stale','cancelled') LIMIT 1", [policy.organizationId, row.case_id])
           if (active.rowCount) throw new Error('folder_relocation_operation_active')
@@ -206,17 +247,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
     return result
   }
   async function observe(folder, sourceFolderId) {
-    await safeDirectory(folder.relativePath)
-    let workspaceId
-    const markerPath = join(config.sourceRoot, folder.relativePath, '.hasarbotu-workspace.json')
-    try {
-      const metadata = await lstat(markerPath)
-      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1024) throw new Error('source_changed')
-      const marker = JSON.parse(await readFile(markerPath, 'utf8'))
-      if (marker.schemaVersion !== 'hasarbotu-workspace/1' || typeof marker.workspaceId !== 'string'
-        || !/^[0-9a-f-]{36}$/i.test(marker.workspaceId) || Object.keys(marker).length !== 2) throw new Error('source_changed')
-      workspaceId = marker.workspaceId
-    } catch (error) { if (error.code !== 'ENOENT') throw error }
+    const workspaceId = await readWorkspaceMarker(folder)
     let stableV1Identity, historicalFileHash
     if (folder.hasJson) {
       const sidecar = await readV1Sidecar(folder)
@@ -276,7 +307,16 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
             SELECT 1 FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
               AND a.action='case.office_inventory_reconciled' AND a.details->>'managedArchive'='true')))`,
           [policy.organizationId, policy.storageRootKey, !!config.officeInventoryOnly])).rows.map(row => [row.source_folder_id, row]))
-        const moves = await reconcileMoves(moveInventory, ids, registered)
+        const markers = new Map(), markerCounts = new Map()
+        if (config.trackRegisteredMoves) for (const folder of moveInventory) {
+          // A live registered cloud ID already proves ownership. Read markers only
+          // for recreated/new identities; full uniqueness is rechecked before repair.
+          if (registered.has(String(ids.get(folder.relativePath)))) continue
+          const marker = await readWorkspaceMarker(folder)
+          if (marker) { markers.set(folder.relativePath, marker); markerCounts.set(marker, (markerCounts.get(marker) ?? 0) + 1) }
+        }
+        const duplicateMarkers = new Set([...markerCounts].filter(([, count]) => count > 1).map(([marker]) => marker))
+        const moves = await reconcileMoves(moveInventory, ids, registered, markers, duplicateMarkers)
         const observations = [], seen = new Set()
         let waitingForCloudIdentity = 0, settling = 0
         for (const folder of discovered) {
@@ -284,6 +324,7 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           const id = ids.get(folder.relativePath)
           if (id === null || id === undefined) { waitingForCloudIdentity++; continue }
           const sourceFolderId = String(id)
+          if (duplicateMarkers.has(markers.get(folder.relativePath))) continue
           if (baseline.has(sourceFolderId) || registered.has(sourceFolderId)) continue
           const observed = await observe(folder, sourceFolderId)
           seen.add(sourceFolderId)
@@ -321,7 +362,12 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           visibilityIntegrity = await inspectCaseListIntegrity(pool, policy.organizationId)
           lastIntegrityCheck = Date.now()
         }
+        if (!settlingPending) await completeFolderChecks(pool, policy, scanStartedAt, {
+          repaired: moves.relocated + (inventory.restored ?? 0),
+          remaining: summary.deferred + moves.relocationDeferred + waitingForCloudIdentity + (inventory.inventoryDeferred ?? 0),
+        })
         await saveStatus({ status: summary.deferred || moves.relocationDeferred || waitingForCloudIdentity || inventory.inventoryDeferred || visibilityIntegrity?.status !== 'PASS' ? 'ATTENTION' : 'PASS', ...summary, ...moves, ...inventory, visibilityIntegrity,
+          scanDurationMs: Date.now() - Date.parse(scanStartedAt),
           discovered: discovered.length, registeredMoveScanFolders: config.trackRegisteredMoves ? moveInventory.length : 0,
           waitingForCloudIdentity, settling, watching: !!watcher, ...(watchErrorCode ? { watchErrorCode } : {}), sourceReadOnly: true, defaultCaseType: null })
       } catch (error) {

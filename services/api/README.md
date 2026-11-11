@@ -2,7 +2,15 @@
 
 HasarBotu V2 merkezi API'si: Fastify, PostgreSQL ve `@hasarbotu/contracts` tabanlı kimlikli ofis servisidir. İş kuralları `@hasarbotu/domain` içindedir; fiziksel dosya işleri File Agent üzerinden yürür.
 
+0.1.97: SBM işlemede tekil From/Subject başlıkları ve tek, çelişkisiz Google DMARC kanıtı aranır. Belirsiz ileti sonucu otomatik uygulanmaz; `ambiguous_headers` insan kontrolü olarak gösterilir. Ara sunucu doğrulama başlıkları Google kanıtını gizlemez. Yedi başarısız/eski kod regresyonu, gerçek PostgreSQL işçisi ve imzalı paket arayüzündeki açık onay/audit/bildirim akışı doğrulandı.
+
 Klasör adı dosya kimliği değildir. Yeni çalışma klasöründe değişmez workspace UUID'si saklanır; pCloud kimliği bu UUID ve güncel konum doğrulanarak mevcut vakaya bağlanır. Sahipsiz mevcut dizin, başka kaydın kimliği, devam eden klasör rezervasyonu ve aynı plakalı ikinci belirsiz kaynak otomatik sahiplenilmez. `0074_folder_path_ownership` yeni konum/klasör oluşturma/taşıma rezervasyonlarında normalleştirilmiş adın tek sahipliğini ve klasör kaydının kiracı/kök bütünlüğünü zorlar; eski kayıtları düzeltmez. Operatör veri onarımı Windows servis README'sindeki ayrı bakım aracındadır.
+
+0.1.95 ile kopyala/sil taşımasında pCloud kimliği değişse de tekil workspace UUID'si ve en az bir kayıtlı belgenin bütün SHA-256 kanıtı mevcut kaydı otomatik onarabilir. Eski yolun/kimliğin yokluğu, bütün kayıtlı belgeler, önceki taşımalar ve işlem kilitleri tekrar doğrulanır; kopyalanmış UUID, içerik farkı ve elle arşivleme otomatik onarımı engeller. Kayıt, belge ve geçmiş korunur.
+
+Yönetici **Yönetim → Klasör Bağlantıları → plaka → Kontrol et ve düzelt** yolunu kullanır. `GET /api/v1/administration/folder-recovery?search=...` gizli kayıtları da kurum kapsamında gösterir; `POST .../check` yalnız boş gövdeyle denetimli tarama ister. Başarı ancak sonraki tutarlı tarama tamamlanınca kaydedilir; durmuş servis başarı göstermez. Belirsiz eşleşmeler “Kontrol gerekiyor” olarak kalır. Yeni migration gerekmez; API, contracts ve `automatic-folder-discovery.mjs` birlikte dağıtılır.
+
+0.1.96 normal taramada mevcut pCloud eşleşmelerinin UUID dosyalarını yeniden okumaz; yalnız yeni/yeniden oluşmuş kimlikler incelenir. Onarım öncesindeki bütünlük ve tekil UUID denetimleri korunur. Canlı 738 klasörlü ofiste bir tarama 4.650 ms ölçüldü; durum dosyasındaki `scanDurationMs` güncel süreyi gösterir.
 
 Eski, UUID işareti bulunmayan çalışma klasörü taşındığında tekil vaka, tamamlanmış workspace, eski konumun yokluğu ve kayıtlı dosya SHA-256'ları birlikte doğrulanır. Eksik tarihsel belge varsa eski konuma ait iki farklı pCloud dosya kimliği/revizyonunun mevcut attestation kayıtlarıyla kesintisiz devam ettiği ayrıca kanıtlanır; eksik belgelerin geçmişi silinmez. Aynı plakalı birden fazla vaka, içerik farkı, elle arşivleme ve devam eden işlemler otomatik eşlemeyi engeller.
 

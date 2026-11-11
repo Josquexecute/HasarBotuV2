@@ -15,6 +15,17 @@ function pendingDocument(id: string,overrides: Partial<TrackingSnapshot['documen
   return { id,caseId: 'case',plate: '34 TEST 123',officeNumber: '1',fileName: `${id}.pdf`,relativePath: `case/${id}.pdf`,status: 'pending',documentType: null,observedAt: new Date().toISOString(),canReview: true,...overrides }
 }
 describe('tracking screens',() => {
+  it('explains conflicting email headers and requires an explicit reviewed result',async () => {
+    const data = structuredClone(base)
+    data.canManage = true
+    data.reviews = [{ id: 'header-review',applicationNumber: '001',resultText: 'Sentetik SBM sonucu',reason: 'ambiguous_headers',email: 'sbm@example.test',receivedAt: new Date().toISOString(),resultStatus: null }]
+    const fetch = install(data)
+    render(<MemoryRouter><TrackingWorkspace /></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button',{ name: /E-posta kontrolü/ }))
+    expect((await screen.findAllByText('E-posta başlıkları çelişkili; kontrol gerekiyor')).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button',{ name: 'Doğruladığım sonucu uygula' })).toBeDisabled()
+    expect(fetch.mock.calls.some(([,options]) => options?.method === 'POST')).toBe(false)
+  })
   it('approves every authorized pending document beyond the visible batch, preserving types and edited notes',async () => {
     const data = structuredClone(base)
     data.documents = [...Array.from({ length: 201 },(_,index) => pendingDocument(`doc-${index}`,{ documentType: index === 200 ? 'odometer_photo' : null })),pendingDocument('foreign',{ canReview: false }),pendingDocument('approved',{ status: 'approved' }),pendingDocument('rejected',{ status: 'rejected' })]

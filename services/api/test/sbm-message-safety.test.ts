@@ -11,6 +11,40 @@ function message(body: string,subject = ''): GmailMessage {
   ],...part(body) } }
 }
 describe('SBM message evidence boundaries',() => {
+  it.each([
+    { name: 'From',value: 'Other <other@example.test>' },
+    { name: 'Subject',value: 'Başvuru no: 002' },
+  ])('requires review when the singleton $name header is repeated',header => {
+    const m = message('Başvuru no: 001\nSonuç: Tamamlandı')
+    m.payload.headers.push(header)
+    expect(parseSbmMessage(m,senders)).toMatchObject({ status: null,reason: 'ambiguous_headers' })
+    m.payload.headers.reverse()
+    expect(parseSbmMessage(m,senders)).toMatchObject({ status: null,reason: 'ambiguous_headers' })
+  })
+  it.each([
+    'mx.google.com; dmarc=fail header.from=sbm.org.tr',
+    'mx.google.com; dmarc=pass header.from=other.example',
+    'mx.google.com; dmarc=pass header.from=sbm.org.tr',
+  ])('never chooses one of multiple Google DMARC results: %s',value => {
+    const m = message('Başvuru no: 001\nSonuç: Tamamlandı')
+    m.payload.headers.push({ name: 'Authentication-Results',value })
+    expect(parseSbmMessage(m,senders)).toMatchObject({ status: null,reason: 'untrusted_sender' })
+    m.payload.headers.reverse()
+    expect(parseSbmMessage(m,senders)).toMatchObject({ status: null,reason: 'untrusted_sender' })
+  })
+  it('does not accept contradictory DMARC entries in the same authentication header',() => {
+    const m = message('Başvuru no: 001\nSonuç: Tamamlandı')
+    m.payload.headers[2]!.value += '; dmarc=fail header.from=sbm.org.tr'
+    expect(parseSbmMessage(m,senders)).toMatchObject({ status: null,reason: 'untrusted_sender' })
+  })
+  it('uses the Google DMARC result independently of relay headers and separate SPF results',() => {
+    const m = message('Başvuru no: 001\nSonuç: Tamamlandı')
+    m.payload.headers.unshift(
+      { name: 'Authentication-Results',value: 'relay.example; dmarc=pass header.from=other.example' },
+      { name: 'Authentication-Results',value: 'mx.google.com; spf=pass smtp.mailfrom=sbm.org.tr' },
+    )
+    expect(parseSbmMessage(m,senders)).toMatchObject({ status: 'completed',reason: null })
+  })
   it('never completes from a subject status without a body result',() => {
     expect(parseSbmMessage(message('Başvuru no: 001\nİnceleme devam ediyor.','Sonuç: Tamamlandı'),senders)).toMatchObject({ status: null,reason: 'ambiguous_result' })
   })

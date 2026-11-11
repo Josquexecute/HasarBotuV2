@@ -668,6 +668,41 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await snapshot(operatorCookie,caseId)).notifications).toHaveLength(0)
   })
 
+  it.each(['from','subject','authentication'] as const)('keeps a %s header conflict in review without applying a result, then processes clean evidence once',async conflict => {
+    await pool.query("UPDATE mail_connections SET status='disconnected'")
+    const caseId = await createCase(),number = `00008991${['from','subject','authentication'].indexOf(conflict)}`
+    await submit(caseId,number)
+    const c = await connection(`headers-${conflict}@office.example`)
+    const message = { id: `conflict-${conflict}`,internalDate: String(Date.now()),payload: {
+      mimeType: 'text/plain',headers: [
+        { name: 'From',value: 'results@sbm.example' },
+        { name: 'Subject',value: 'SBM sonucu' },
+        { name: 'Authentication-Results',value: 'mx.google.com; dmarc=pass header.from=sbm.example' },
+      ],body: { data: Buffer.from(`Başvuru no: ${number}\nSonuç: Tamamlandı`).toString('base64url') },
+    } }
+    const clean = structuredClone(message)
+    clean.id = `clean-${conflict}`
+    message.payload.headers.push(conflict === 'from' ? { name: 'From',value: 'other@example.test' }
+      : conflict === 'subject' ? { name: 'Subject',value: 'Başvuru no: 999' }
+        : { name: 'Authentication-Results',value: 'mx.google.com; dmarc=fail header.from=sbm.example' })
+    const messages = [message]
+    const automatic = { ...google,automaticSbmEnabled: true }
+    const gmail: GoogleProvider['gmail'] = async (_token,path) => path.startsWith('messages?')
+      ? { messages: messages.map(({ id }) => ({ id })) } : messages.find(m => path === `messages/${m.id}?format=full`)
+    await syncMailboxes(pool,automatic,{ ...provider,gmail })
+    expect((await snapshot(ownerCookie,caseId)).tramer[0]?.status).toBe('result_pending')
+    expect((await pool.query('SELECT status,reason FROM sbm_messages WHERE connection_id=$1',[c])).rows)
+      .toEqual([{ status: 'review',reason: conflict === 'authentication' ? 'untrusted_sender' : 'ambiguous_headers' }])
+    expect((await snapshot(ownerCookie,caseId)).history.filter(h => h.action === 'tracking.sbm_result')).toHaveLength(0)
+    messages.push(clean)
+    await syncMailboxes(pool,automatic,{ ...provider,gmail })
+    await syncMailboxes(pool,automatic,{ ...provider,gmail })
+    const current = await snapshot(ownerCookie,caseId)
+    expect(current.tramer[0]?.status).toBe('completed')
+    expect(current.history.filter(h => h.action === 'tracking.sbm_result')).toHaveLength(1)
+    expect((await pool.query('SELECT count(*)::int AS count FROM sbm_messages WHERE connection_id=$1',[c])).rows[0].count).toBe(2)
+  })
+
   it('records permission loss; catches up after recovery; processes messages only once',async () => {
     await pool.query("UPDATE mail_connections SET status='disconnected'")
     const c = await connection('recovery@office.example')

@@ -1,6 +1,6 @@
 import pg from 'pg'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createCanvas } from '@napi-rs/canvas'
 import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/database'
@@ -9,12 +9,15 @@ import { hashAgentSecret } from '../dist/agent/auth.js'
 import { runFieldPhotoOnce } from '../../file-agent/dist/field-photo-worker.js'
 import { createFieldPortal } from '../../../scripts/field-portal-server.mjs'
 
-export async function startFieldBrowserFixture(databaseUrl) {
+export async function startFieldBrowserFixture(databaseUrl, options = {}) {
   const config = assertTestDatabaseUrl(databaseUrl), pool = new pg.Pool({ connectionString: config.url })
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   await runMigrations({ databaseUrl: config.url, quiet: true })
-  const work = await mkdtemp(join(tmpdir(),'hb-field-browser-')), root = join(work,'office'), originals = join(work,'originals'), gate = join(work,'gate.mjs')
-  await mkdir(root); await writeFile(gate,"console.log(JSON.stringify({CaseStatus:'ready'}))\n")
+  const work = await mkdtemp(join(tmpdir(),'hb-field-browser-')), originals = join(work,'originals')
+  // Live pCloud checks always allocate their own top-level folder, outside the office tree.
+  const root = options.pcloud ? await mkdtemp(join(resolve(options.pcloud.storageParent),'HasarBotu-Audit-')) : join(work,'office')
+  const gate = options.pcloud ? resolve('deploy/windows-service/pcloud-session0-freshness-gate.mjs') : join(work,'gate.mjs')
+  if (!options.pcloud) { await mkdir(root); await writeFile(gate,"console.log(JSON.stringify({CaseStatus:'ready'}))\n") }
   const org = uuidv7(), userId = uuidv7(), agentId = uuidv7(), email = 'field-browser@example.test', password = 'Synthetic-Browser-Field-42!', agentSecret = 'Synthetic-Browser-Agent-Only'
   await pool.query("INSERT INTO organizations(id,code,name) VALUES($1,'field-browser','Synthetic browser office')",[org])
   await pool.query('INSERT INTO users(id,organization_id,email,display_name,password_hash) VALUES($1,$2,$3,$4,$5)',[userId,org,email,'Saha Eksperi',await hashPassword(password)])
@@ -36,10 +39,10 @@ export async function startFieldBrowserFixture(databaseUrl) {
   await new Promise(done=>gateway.listen(0,'127.0.0.1',done));const origin=`http://127.0.0.1:${gateway.address().port}`
   let stopping=false
   const errors=[]
-  const agentConfig={apiBaseUrl:upstream,agentId,agentSecret,roots:{office:root},leaseSeconds:120,pollIntervalMs:200,freshnessGate:{toolPath:gate,pcloudLocalDatabasePath:join(work,'fixture.db'),topLevelFolderName:'Synthetic',attestationStoreDirectory:work}}
+  const agentConfig={apiBaseUrl:upstream,agentId,agentSecret,roots:{office:root},leaseSeconds:120,pollIntervalMs:200,freshnessGate:{toolPath:gate,pcloudLocalDatabasePath:options.pcloud?.databasePath ?? join(work,'fixture.db'),topLevelFolderName:options.pcloud ? basename(root) : 'Synthetic',attestationStoreDirectory:work}}
   const loop=async()=>{while(!stopping){try{await runFieldPhotoOnce(agentConfig)}catch{errors.push('worker_failed')}if(!stopping)await new Promise(done=>setTimeout(done,200))}}
   const worker=loop()
   const canvas=createCanvas(640,480),ctx=canvas.getContext('2d');ctx.fillStyle='#5782d4';ctx.fillRect(0,0,640,480);ctx.fillStyle='white';ctx.font='28px sans-serif';ctx.fillText('SYNTHETIC KM 123456',100,200)
   const jpeg=await canvas.encode('jpeg',95)
-  return {origin,email,password,cases,pool,root,originals,jpeg,errors,async close(){stopping=true;await worker;await new Promise(done=>gateway.close(done));await app.close();await pool.end();await rm(work,{recursive:true,force:true})}}
+  return {origin,email,password,cases,pool,root,originals,jpeg,errors,async close(){stopping=true;await worker;await new Promise(done=>gateway.close(done));await app.close();await pool.end();await rm(work,{recursive:true,force:true});if(options.pcloud)await rm(root,{recursive:true,force:true})}}
 }

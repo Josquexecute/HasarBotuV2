@@ -54,13 +54,20 @@ const fold = (text: string) => text.toLocaleLowerCase('tr-TR').replaceAll('ı','
 
 /** Exact outcomes verified against real, authenticated KTT templates; others need review. */
 export function parseSbmMessage(message: GmailMessage, allowedSenders: readonly string[]): SbmResult {
-  const header = (name: string) => message.payload.headers.find((h) => h.name.toLowerCase() === name)?.value ?? ''
+  const headerValues = (name: string) => message.payload.headers.filter((h) => h.name.toLowerCase() === name).map(h => h.value)
+  const header = (name: string) => headerValues(name)[0] ?? ''
+  // From/Subject are singletons (RFC 5322). Authentication-Results may repeat
+  // across relays (RFC 8601); only one unambiguous Google DMARC result is evidence.
+  const ambiguousHeaders = headerValues('from').length !== 1 || headerValues('subject').length > 1
   const from = header('from').trim().toLowerCase()
   const sender = from.match(/^[^<>]*<([^<>\s]+)>$/)?.[1] ?? from
-  const authentication = header('authentication-results').toLowerCase()
+  const dmarc = headerValues('authentication-results').flatMap(value => {
+    const [service,...results] = value.trim().toLowerCase().split(';')
+    return service?.trim() === 'mx.google.com' ? results.filter(result => /^\s*dmarc=/.test(result)) : []
+  })
   const domain = sender.split('@')[1] ?? ''
-  const trusted = allowedSenders.includes(sender) && /^mx\.google\.com\s*;/.test(authentication)
-    && authentication.split(';').some((entry) => /\bdmarc=pass\b/.test(entry) && entry.match(/\bheader\.from=([^\s;]+)/)?.[1] === domain)
+  const trusted = allowedSenders.includes(sender) && dmarc.length === 1
+    && /^\s*dmarc=pass\b/.test(dmarc[0]!) && dmarc[0]!.match(/\bheader\.from=([^\s;]+)/)?.[1] === domain
   const content = messageContent(message.payload as MimePart)
   const body = content.body.normalize('NFC').replace(/\r/g,'')
   const text = `${header('subject')}\n${body}\n${content.attachments}`.normalize('NFC').replace(/\r/g,'')
@@ -80,7 +87,7 @@ export function parseSbmMessage(message: GmailMessage, allowedSenders: readonly 
   const statuses = resultFields.filter(value => ['tamamlandi','iptal edildi'].includes(value)).map(value => value === 'iptal edildi' ? 'cancelled' as const : 'completed' as const)
   if (verifiedOutcomes.length) statuses.push('completed')
   const uniqueStatuses = [...new Set(statuses)]
-  const reason = !trusted ? 'untrusted_sender' : unique.length !== 1 ? 'ambiguous_number'
+  const reason = ambiguousHeaders ? 'ambiguous_headers' : !trusted ? 'untrusted_sender' : unique.length !== 1 ? 'ambiguous_number'
     : content.incomplete ? 'incomplete_message' : content.hasAttachments ? 'attachment_requires_review' : content.quoted ? 'quoted_result_requires_review'
     : entryNotice ? (uniqueStatuses.length ? 'ambiguous_result' : 'non_result_notification')
       : /\b(?:reddedilmiştir|reddedildi|başvuru reddi)\b/u.test(foldedBody) ? 'rejection_notification'

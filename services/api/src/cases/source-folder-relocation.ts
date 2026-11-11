@@ -6,6 +6,7 @@ import { parseSourcePlateFolderName, plateSearchKey } from '@hasarbotu/domain'
 import { uuidv7 } from '@hasarbotu/database'
 import { createAuditService } from '../audit/service.js'
 import { enqueueVerifyJob } from '../agent/enqueue.js'
+import { resolveFileLocations } from '../storage/file-location.js'
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 export const sourceFolderRelocationSchema = z.strictObject({
@@ -21,6 +22,8 @@ export const sourceFolderRelocationSchema = z.strictObject({
     previousLocation: z.strictObject({ id: idSchema, storageRootKey: storageRootKeySchema, relativePath: relativePathSchema, version: z.number().int().positive() }),
     identity: z.discriminatedUnion('kind', [
       z.strictObject({ kind: z.literal('registered') }),
+      z.strictObject({ kind: z.literal('workspace'), workspaceId: idSchema,
+        previousSourceFolderId: z.string().regex(/^\d+$/), manifestHash: digest }),
       // Maintenance-only reviewed recovery for cloud copy/delete moves that recreate IDs.
       // Automatic discovery never manufactures an operator decision from a plate match.
       z.strictObject({ kind: z.literal('reviewed_recreation'), reviewedByUserId: idSchema,
@@ -53,8 +56,23 @@ export async function readTrackedFolderIdentity(db: Queryable, organizationId: s
   return { files, manifestHash: hash(files) }
 }
 
+/** UUID-marked workspaces also prove ownership; verify every recorded file, including after earlier moves. */
+export async function readWorkspaceFolderIdentity(db: pg.Pool | pg.PoolClient, organizationId: string, caseId: string, storageRootKey: string, previousPath: string) {
+  const recorded = (await db.query<{ case_id: string; storage_root_key: string; relative_path: string; current_hash: string; created_at: Date }>(`SELECT f.case_id,f.storage_root_key,f.relative_path,f.current_hash,o.observed_at AS created_at
+    FROM tracked_files f LEFT JOIN document_observations o ON o.file_id=f.id AND o.revision=f.revision
+    WHERE f.organization_id=$1 AND f.case_id=$2 ORDER BY f.relative_path FOR SHARE OF f`, [organizationId, caseId])).rows
+  if (recorded.some(row => !(row.created_at instanceof Date))) fail('folder_relocation_content_identity_required')
+  const rows = await resolveFileLocations(db, organizationId, recorded)
+  const prefix = previousPath + '/'
+  if (!rows.length || rows.some(row => row.storage_root_key !== storageRootKey || !row.relative_path.startsWith(prefix)
+    || !digest.safeParse(row.current_hash).success)) fail('folder_relocation_content_identity_required')
+  const files = rows.map(row => ({ relativePath: relativePathSchema.parse(row.relative_path.slice(prefix.length)), sha256: row.current_hash as string }))
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+  return { files, manifestHash: hash(files) }
+}
+
 /** Source moves update locations only. Physical closed placement cannot authorize a business closure. */
-export async function planSourceFolderRelocation(db: Queryable, organizationId: string, input: SourceFolderRelocation) {
+export async function planSourceFolderRelocation(db: pg.Pool | pg.PoolClient, organizationId: string, input: SourceFolderRelocation) {
   idSchema.parse(organizationId)
   const parsed = sourceFolderRelocationSchema.parse(input)
   const manifest = { ...parsed, bindings: [...parsed.bindings].sort((a, b) => a.caseId.localeCompare(b.caseId)) }
@@ -81,7 +99,8 @@ export async function planSourceFolderRelocation(db: Queryable, organizationId: 
     if (!current || current.id !== previous.id || current.storage_root_key !== previous.storageRootKey || current.relative_path !== previous.relativePath || current.version !== previous.version) fail('folder_relocation_location_changed')
     if (previous.storageRootKey !== manifest.storageRootKey
       || previous.relativePath.toLowerCase() === binding.relativePath.toLowerCase()
-        && (binding.identity.kind !== 'reviewed_recreation' || binding.identity.previousSourceFolderId === binding.sourceFolderId)) fail('folder_relocation_move_required')
+        && (!['reviewed_recreation', 'workspace'].includes(binding.identity.kind)
+          || !('previousSourceFolderId' in binding.identity) || binding.identity.previousSourceFolderId === binding.sourceFolderId)) fail('folder_relocation_move_required')
     if ((await db.query(`SELECT 1 FROM case_locations WHERE organization_id=$1 AND storage_root_key=$2 AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>$4
       UNION ALL SELECT 1 FROM case_workspace_provisionings WHERE organization_id=$1 AND storage_root_key=$2 AND hb_folder_path_key(relative_path)=hb_folder_path_key($3) AND case_id<>$4
       UNION ALL SELECT 1 FROM case_file_operations WHERE organization_id=$1 AND destination_storage_root_key=$2 AND hb_folder_path_key(destination_relative_path)=hb_folder_path_key($3)
@@ -89,6 +108,18 @@ export async function planSourceFolderRelocation(db: Queryable, organizationId: 
     const registrations = (await db.query('SELECT case_id,storage_root_key,source_folder_id FROM case_folder_registrations WHERE organization_id=$1 AND (case_id=$2 OR (storage_root_key=$3 AND source_folder_id=$4)) FOR SHARE', [organizationId, binding.caseId, manifest.storageRootKey, binding.sourceFolderId])).rows
     if (binding.identity.kind === 'registered') {
       if (registrations.length !== 1 || registrations[0].case_id !== binding.caseId || registrations[0].storage_root_key !== manifest.storageRootKey || registrations[0].source_folder_id !== binding.sourceFolderId) fail('folder_relocation_registered_identity_required')
+    } else if (binding.identity.kind === 'workspace') {
+      const identity = binding.identity
+      if (registrations.length !== 1 || registrations[0].case_id !== binding.caseId
+        || registrations[0].storage_root_key !== manifest.storageRootKey
+        || registrations[0].source_folder_id !== identity.previousSourceFolderId) fail('folder_relocation_registered_identity_required')
+      if (!(await db.query(`SELECT 1 FROM case_workspace_provisionings WHERE organization_id=$1 AND case_id=$2
+        AND id=$3 AND storage_root_key=$4 AND status='ready'`, [organizationId, binding.caseId, identity.workspaceId, manifest.storageRootKey])).rowCount) fail('folder_relocation_workspace_identity_required')
+      const content = await readWorkspaceFolderIdentity(db, organizationId, binding.caseId, manifest.storageRootKey, previous.relativePath)
+      if (content.manifestHash !== identity.manifestHash) fail('folder_relocation_content_changed')
+      if ((await db.query(`SELECT 1 FROM case_file_operations WHERE organization_id=$1 AND case_id=$2 AND status NOT IN ('ready','failed','stale','cancelled')
+        UNION ALL SELECT 1 FROM case_lifecycle_operations WHERE organization_id=$1 AND case_id=$2 AND status NOT IN ('blocked','closed','reopened','failed','stale','cancelled')
+        UNION ALL SELECT 1 FROM field_photo_uploads WHERE organization_id=$1 AND case_id=$2 AND status IN ('receiving','queued','processing')`, [organizationId, binding.caseId])).rowCount) fail('folder_relocation_operation_active')
     } else if (binding.identity.kind === 'reviewed_recreation') {
       const identity = binding.identity
       const own = registrations.find(r => r.case_id === binding.caseId)
@@ -154,7 +185,7 @@ export async function applySourceFolderRelocation(pool: pg.Pool, actor: Actor,
     if ((await planSourceFolderRelocation(client, actor.organizationId, plan.manifest)).planHash !== approvedHash) fail('folder_relocation_plan_stale')
     const audit = createAuditService()
     for (const binding of plan.manifest.bindings) {
-      if (binding.identity.kind === 'reviewed_recreation') await verifySource(binding, plan.manifest.storageRootKey)
+      if (binding.identity.kind === 'reviewed_recreation' || binding.identity.kind === 'workspace') await verifySource(binding, plan.manifest.storageRootKey)
       const previous = binding.previousLocation, version = previous.version + 1
       await client.query(`UPDATE case_locations SET relative_path=$1,source='imported',verification_status='pending',version=version+1,updated_at=now()
         WHERE organization_id=$2 AND id=$3`, [binding.relativePath, actor.organizationId, previous.id])
@@ -163,7 +194,7 @@ export async function applySourceFolderRelocation(pool: pg.Pool, actor: Actor,
       await client.query(`INSERT INTO case_location_history(id,organization_id,case_id,storage_root_key,relative_path,previous_storage_root_key,previous_relative_path,verification_status,source,changed_by_user_id,request_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,'pending','system',$8,$9)`, [uuidv7(), actor.organizationId, binding.caseId, plan.manifest.storageRootKey, binding.relativePath, previous.storageRootKey, previous.relativePath, actor.actorUserId, actor.requestId])
       const evidence = { identity: binding.identity, previousLocation: previous, decision: plan.manifest.decision, planDigest: approvedHash, physicallyClosed: binding.physicallyClosed, preservedLifecycleStatus: binding.expectedLifecycleStatus }
-      if (binding.identity.kind === 'registered' || binding.identity.kind === 'reviewed_recreation' && binding.identity.previousSourceFolderId !== null) {
+      if (binding.identity.kind === 'registered' || binding.identity.kind === 'workspace' || binding.identity.kind === 'reviewed_recreation' && binding.identity.previousSourceFolderId !== null) {
         await client.query(`UPDATE case_folder_registrations SET source_relative_path=$1,evidence=evidence||jsonb_build_object('lastRelocation',$2::jsonb),source_folder_id=$5
           WHERE organization_id=$3 AND case_id=$4`, [binding.relativePath, JSON.stringify(evidence), actor.organizationId, binding.caseId, binding.sourceFolderId])
       } else {

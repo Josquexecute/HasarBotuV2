@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './errors/index.js'
 import { registerHealthRoute } from './routes/index.js'
 import { registerAuthRoutes, type AuthRoutesOptions } from './auth/routes.js'
 import { registerCasesRoutes } from './cases/routes.js'
+import { registerFolderRecoveryRoutes } from './cases/folder-recovery-routes.js'
 import { registerAssistantAppearanceRoutes } from './assistant-appearance/routes.js'
 import { registerLegacyDesktopResponses } from './legacy-desktop-responses.js'
 import { registerDesktopUpdateRoutes } from './desktop-updates/routes.js'
@@ -151,6 +152,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     registerLegislationRoutes(app, { pool: options.auth.pool, ...(options.google ? { encryptionKey: options.google.encryptionKey } : {}), ...(options.legislationProvider ? { provider: options.legislationProvider } : {}) })
     registerDesktopUpdateRoutes(app, { pool: options.auth.pool, ...(options.desktopReleasesDirectory ? { directory: options.desktopReleasesDirectory } : {}) })
     registerCasesRoutes(app, { pool: options.auth.pool })
+    registerFolderRecoveryRoutes(app, { pool: options.auth.pool })
     registerCasesWriteRoutes(app, { pool: options.auth.pool })
     registerCaseFaultRoutes(app, { pool: options.auth.pool })
     registerEksistRoutes(app, { pool: options.auth.pool })

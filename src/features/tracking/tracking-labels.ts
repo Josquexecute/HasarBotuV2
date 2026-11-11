@@ -1,6 +1,6 @@
 export const tramerStatuses = { entry_pending: 'Giriş bekleniyor',result_pending: 'Sonuç bekleniyor',completed: 'Tamamlandı',cancelled: 'İptal edildi' }
 export const sbmReasons: Record<string,string> = {
-  untrusted_sender: 'Gönderen doğrulanamadı',ambiguous_number: 'Başvuru numarası belirsiz',ambiguous_result: 'Sonuç belirsiz',
+  untrusted_sender: 'Gönderen doğrulanamadı',ambiguous_headers: 'E-posta başlıkları çelişkili; kontrol gerekiyor',ambiguous_number: 'Başvuru numarası belirsiz',ambiguous_result: 'Sonuç belirsiz',
   unmatched_number: 'Numara eşleşmedi',number_registered_after_message: 'Numara kaydedilmeden önce gelmiş; kontrol gerekiyor',
   parser_not_validated: 'Otomatik sonuç işleme kapalı',conflicting_or_terminal_result: 'Sonuç mevcut durumla çelişiyor',
   non_result_notification: 'KTT giriş ihbarı',unsupported_result: 'Sonuç biçimi kontrol gerektiriyor',

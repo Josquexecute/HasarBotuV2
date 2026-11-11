@@ -288,6 +288,47 @@ test('real background scans discover folders, follow stable identity moves and r
     assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [legacy.caseId])).rows[0].relative_path, legacy.currentPath)
     assert.equal((await pool.query('SELECT source_folder_id FROM case_folder_registrations WHERE case_id=$1', [legacy.caseId])).rows[0].source_folder_id, '201')
     assert.equal((await pool.query('SELECT count(*)::int n FROM cases')).rows[0].n, legacyCount)
+    // The reported failure: copy/delete changes the cloud ID, but the UUID and a
+    // single recorded notice still identify the previously archived workspace.
+    const marked = await legacyWorkspace(9010, '34WKS123', 210)
+    const markedWorkspaceId = (await pool.query('SELECT id FROM case_workspace_provisionings WHERE case_id=$1', [marked.caseId])).rows[0].id
+    const extraFile = (await pool.query('SELECT id FROM tracked_files WHERE case_id=$1 ORDER BY relative_path DESC LIMIT 1', [marked.caseId])).rows[0].id
+    await pool.query('DELETE FROM tracked_files WHERE id=$1', [extraFile])
+    const recordedFile = (await pool.query('SELECT id,current_hash FROM tracked_files WHERE case_id=$1', [marked.caseId])).rows[0]
+    await pool.query(`INSERT INTO document_observations(id,file_id,revision,content_hash,byte_size,file_name)
+      VALUES($1,$2,1,$3,10,'notice.txt')`, [uuidv7(), recordedFile.id, recordedFile.current_hash])
+    await pool.query(`INSERT INTO case_folder_registrations(id,organization_id,case_id,storage_root_key,source_folder_id,source_relative_path,evidence,plan_hash,created_by_user_id)
+      VALUES($1,$2,$3,'test-root','999210',$4,'{}',$5,$6)`, [uuidv7(), org, marked.caseId, marked.previousPath, 'a'.repeat(64), admin])
+    await writeFile(join(source, marked.currentPath, '.hasarbotu-workspace.json'), JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId: markedWorkspaceId }))
+    const { requestFolderCheck } = await import('../../services/api/dist/cases/folder-recovery-store.js')
+    const requestedCheck = await requestFolderCheck(pool, { organizationId: org, actorUserId: admin, requestId: 'operator-check-regression' })
+    const markedStatus = await officeCycle()
+    assert.equal(markedStatus.relocated, 1)
+    assert.equal(markedStatus.restored, 1)
+    assert.equal((await pool.query('SELECT is_archived FROM cases WHERE id=$1', [marked.caseId])).rows[0].is_archived, false)
+    assert.equal((await pool.query('SELECT source_folder_id FROM case_folder_registrations WHERE case_id=$1', [marked.caseId])).rows[0].source_folder_id, '210')
+    assert.equal((await pool.query("SELECT count(*)::int n FROM audit_events WHERE action='cases.folder_check_completed' AND details->>'checkId'=$1", [requestedCheck.id])).rows[0].n, 1)
+    // Once bound, ordinary scans must use the live cloud identity instead of
+    // repeatedly reading every historical marker (expensive on pCloud drives).
+    await writeFile(join(source, marked.currentPath, '.hasarbotu-workspace.json'), 'obsolete marker; live cloud binding is authoritative')
+    assert.equal((await officeCycle()).relocationDeferred, 0)
+    await writeFile(join(source, marked.currentPath, '.hasarbotu-workspace.json'), JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId: markedWorkspaceId }))
+    // A copied marker is ambiguous even when both copies contain the same files.
+    const duplicate = await legacyWorkspace(9011, '34DUP123', 211)
+    const duplicateWorkspace = (await pool.query('SELECT id FROM case_workspace_provisionings WHERE case_id=$1', [duplicate.caseId])).rows[0].id
+    await writeFile(join(source, duplicate.currentPath, '.hasarbotu-workspace.json'), JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId: duplicateWorkspace }))
+    await mkdir(join(source, duplicate.currentPath + ' - 2'))
+    await writeFile(join(source, duplicate.currentPath + ' - 2', '.hasarbotu-workspace.json'), JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId: duplicateWorkspace }))
+    sqlite.prepare('INSERT INTO folder VALUES(?,111,?)').run(212, '34DUP123 - 2')
+    const duplicateStatus = await officeCycle('ATTENTION')
+    assert.ok(duplicateStatus.relocationIssues.some(issue => issue.code === 'folder_workspace_identity_ambiguous'))
+    assert.equal((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [duplicate.caseId])).rows[0].relative_path, duplicate.previousPath)
+    // Remove only this synthetic duplicate before neighboring legacy cases.
+    await pool.query('UPDATE cases SET is_archived=true WHERE id=$1', [duplicate.caseId])
+    await writeFile(join(source, duplicate.currentPath + ' - 2', '.hasarbotu-workspace.json'), JSON.stringify({ schemaVersion: 'hasarbotu-workspace/1', workspaceId: uuidv7() }))
+    sqlite.exec('DELETE FROM folder WHERE id IN (211,212)')
+    await rename(join(source, duplicate.currentPath), join(directory, 'duplicate-workspace-removed'))
+    await rename(join(source, duplicate.currentPath + ' - 2'), join(directory, 'duplicate-workspace-copy-removed'))
     const attested = await legacyWorkspace(9003, '06ATT123', 203, false, true)
     const attestedStatus = await officeCycle()
     assert.equal(attestedStatus.relocated, 1); assert.equal(attestedStatus.restored, 1)
