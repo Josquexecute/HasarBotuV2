@@ -87,7 +87,11 @@ export async function planSourceFolderRelocation(db: pg.Pool | pg.PoolClient, or
       // The office inventory can restore its own archives after the same source ID reappears at a new path.
       const previous = (await db.query(`SELECT details FROM audit_events WHERE organization_id=$1 AND resource_id=$2
         AND action='case.office_inventory_reconciled' ORDER BY occurred_at DESC,id DESC LIMIT 1`, [organizationId, binding.caseId])).rows[0]
-      if (binding.identity.kind === 'v1' || previous?.details?.managedArchive !== true) fail('folder_relocation_case_not_found')
+      const management = (await db.query(`SELECT details->>'disposition' disposition FROM audit_events
+        WHERE organization_id=$1 AND resource_id=$2 AND action='case.folder_management_changed'
+        ORDER BY occurred_at DESC,id DESC LIMIT 1`, [organizationId, binding.caseId])).rows[0]?.disposition
+      if (binding.identity.kind === 'v1' || management === 'removed'
+        || previous?.details?.managedArchive !== true && management !== 'recovery_requested') fail('folder_relocation_case_not_found')
     }
     const plate = parseSourcePlateFolderName(binding.relativePath.split('/').at(-1)!)?.plate
     if (!plate || plateSearchKey(plate) !== row.plate_normalized) fail('folder_relocation_plate_mismatch')

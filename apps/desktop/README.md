@@ -1,5 +1,14 @@
 # `@hasarbotu/desktop`
 
+12 Kasım 2026 **0.1.98 merkezi yayında — 10:49:14 TRT; teslimat PASS.**
+Yönetim → Klasör Bağlantıları satırlarında **Ayrıntılar ve işlemler** eklendi: kayıt/klasör kimliği, hasar numarası/tarihi, belge/not sayısı, dosyayı açma, yol kopyalama, kayıtlı klasörü yeniden doğrulama, **Bottan kaldır** ve kaldırılan/arşivlenen kaydı doğrulayarak geri getirme. Kaldırılan kayıt normal listelerden çıkar, otomatik tarama geri getirmez; fiziksel klasörler ve geçmiş korunur. Geri alma ayrı izin ve kanıtlı tarama gerektirir. Açıklama/onay, dosya ve konum sürümü ile etkin/kuyruktaki klasör/fotoğraf işleri denetlenir. Uzun kontrolde beklemeyi bırakma eklendi; eski kurtarma sözleşmesi korundu.
+
+Genel sürüm doğrulaması **3969 PASS / 8 SKIP**; altı canlı HTTP testi ayrıca geçti. Son güvenlik denetimi gerçek PostgreSQL ile **13/13**, UI regresyonları **8/8**, son imzalı pakette UI → API → gerçek tarama → File Agent → disk akışı **12/12 PASS**. Kaldırma sonrası taramada/taşımada geri dönmeme, tek kaydın etkilenmesi, açık izinle geri alma ve özgün belge içeriği doğrulandı. Typecheck, lint, build, servis yapılandırması ve paket açılışı geçti. NSIS içinden çıkarılan gerçek uygulama açıldı; **82 UI dosyası ve 28 ana süreç modülü** derlemeyle eşleşti. Sekiz atlama opt-in/platform/altyapı kontrolleridir; atlanan testler geçmiş sayılmaz.
+
+Ofis aktarımında **136 tablo / 662.239 kayıt** parmak izleri ve servis ayarları korundu; migration gerekmedi. 25 dosyalık API/contracts/tarama paketi hash ile doğrulandı. Sekiz servis Running, API sağlıklı; canlı yönetici ucu HTTP 200, oturumsuz liste/karar uçları 401. Üretim kayıtları test için değiştirilmedi. Güncel klasör taraması **ATTENTION**: belirsiz mevcut eşleşmeler kontrol için korunuyor; tüm klasörlerin sorunsuz olduğu iddia edilmez.
+
+Windows x64 NSIS **113.067.008 bayt**, SHA-256 `67a7c79674a263b7451252ccf8f9784843ae33a8130c29e15bbc3e0afb4a1450`; Authenticode/timestamp Valid. Gerçek kurulu **0.1.97**, **0.1.98 available** gördü; mevcut updater ile kimlikli tam indirme/boyut/hash/imza/sürüm denetimi geçti. Aynı PID, oturum, profil ve yerel ayar hashleri korundu; anonim manifest/paket 401. Önceki 0.1.97 manifesti/değişmez paketi ve runtime geri dönüş dosyaları korundu; zorla kurulum yapılmadı. Kanıt: `.local/folder-management-0198/release-evidence.json`; ofiste `C:\ProgramData\HasarBotu\office-management\folder-management-0198`.
+
 11 Kasım 2026 **0.1.97 merkezi yayında — 19:37:21 TRT; yayın/kimlikli indirme PASS, genel denetim PARTIAL.**
 SBM ayrıştırıcısının ilk başlığı seçip diğerlerini yok sayması düzeltildi. Eksik/çoklu gönderen, çoklu konu ve belirsiz Google DMARC sonuçları otomatik sonuçlandırılmaz; insan kontrolüne ayrılır. Ara sunucu başlıkları geçerli Google kanıtını gizlemez. Yedi yeni test eski kodda başarısız oldu; 11 regresyon eklendi. Native foreground testi diğer Electron testlerinden ayrı süreçte çalışır; iddiaları korunur.
 

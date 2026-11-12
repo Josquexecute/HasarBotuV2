@@ -9,7 +9,7 @@ const requestedAction = 'cases.folder_check_requested'
 const completedAction = 'cases.folder_check_completed'
 const audit = createAuditService()
 
-async function latestCheck(pool: pg.Pool, organizationId: string) {
+export async function latestCheck(pool: pg.Pool, organizationId: string) {
   const row = (await pool.query(`SELECT r.details->>'checkId' id,r.occurred_at AS "requestedAt",c.occurred_at AS "completedAt",
     (c.details->>'repaired')::int repaired,(c.details->>'remaining')::int remaining
     FROM audit_events r LEFT JOIN LATERAL (SELECT details,occurred_at FROM audit_events

@@ -4,6 +4,7 @@ import { relativePathSchema } from '@hasarbotu/contracts'
 import { normalizeCaseStage, parseSourcePlateFolderName, plateSearchKey } from '@hasarbotu/domain'
 import { createAuditService } from '../audit/service.js'
 import { automaticFolderPolicySchema, type AutomaticFolderPolicy } from './automatic-folder-registration.js'
+import { folderManagementJoin } from './folder-management-store.js'
 
 export interface OfficeFolderObservation {
   relativePath: string
@@ -41,7 +42,7 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
     if (!(await client.query('SELECT 1 FROM storage_roots WHERE organization_id=$1 AND root_key=$2 AND is_active',
       [policy.organizationId, policy.storageRootKey])).rowCount) throw new Error('folder_active_root_required')
     const rows = (await client.query(`SELECT c.id,c.plate_normalized,c.is_archived,c.lifecycle_status,c.workflow_stage,c.version,
-      l.relative_path,r.source_folder_id,
+      l.relative_path,r.source_folder_id,m.details->>'disposition' management_disposition,
       (SELECT a.details FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
         AND a.action='case.office_inventory_reconciled' ORDER BY a.occurred_at DESC,a.id DESC LIMIT 1) previous_inventory,
       (SELECT a.details FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
@@ -55,6 +56,7 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
         AND o.status NOT IN ('ready','failed','stale','cancelled'))) operation_active
       FROM cases c LEFT JOIN case_locations l ON l.organization_id=c.organization_id AND l.case_id=c.id
       LEFT JOIN case_folder_registrations r ON r.organization_id=c.organization_id AND r.case_id=c.id
+      ${folderManagementJoin}
       WHERE c.organization_id=$1 AND c.created_at<$3::timestamptz
         AND (l.storage_root_key=$2 OR l.id IS NULL) FOR UPDATE OF c`, [policy.organizationId, policy.storageRootKey, scanStartedAt])).rows
     const result = { archived: 0, restored: 0, statusUpdated: 0, inventoryDeferred: 0 }
@@ -63,7 +65,8 @@ export async function reconcileOfficeFolderInventory(pool: pg.Pool, input: Autom
     const audit = createAuditService()
     for (const row of rows) {
       // Only this reconciler's archives may be automatically restored.
-      if (row.is_archived && !row.previous_inventory?.managedArchive) continue
+      if (row.management_disposition === 'removed'
+        || row.is_archived && !row.previous_inventory?.managedArchive && row.management_disposition !== 'recovery_requested') continue
       const observed = row.relative_path ? byPath.get(key(row.relative_path)) : undefined
       if (observed && registeredOwners.has(observed.sourceFolderId) && registeredOwners.get(observed.sourceFolderId) !== row.id) {
         result.inventoryDeferred++

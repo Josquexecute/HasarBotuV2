@@ -182,6 +182,8 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           l.id AS location_id,l.relative_path,l.version AS location_version,
           (SELECT a.details->>'managedArchive' FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
             AND a.action='case.office_inventory_reconciled' ORDER BY a.occurred_at DESC,a.id DESC LIMIT 1) managed_archive,
+          (SELECT a.details->>'disposition' FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
+            AND a.action='case.folder_management_changed' ORDER BY a.occurred_at DESC,a.id DESC LIMIT 1) management_disposition,
           EXISTS(SELECT 1 FROM case_folder_registrations r WHERE r.organization_id=c.organization_id AND r.case_id=c.id) registered,
           EXISTS(SELECT 1 FROM case_workspace_provisionings w WHERE w.organization_id=c.organization_id AND w.case_id=c.id
             AND w.storage_root_key=$2 AND w.relative_path=l.relative_path AND w.status='ready') workspace_ready
@@ -189,7 +191,8 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           WHERE c.organization_id=$1 AND c.plate_normalized=$3`,
         [policy.organizationId, policy.storageRootKey, plateSearchKey(parseSourcePlateFolderName(folder.folderName).plate)])).rows
         if (candidates.length === 1 && !candidates[0].registered && candidates[0].workspace_ready
-          && (!candidates[0].is_archived || candidates[0].managed_archive === 'true')) row = candidates[0]
+          && candidates[0].management_disposition !== 'removed'
+          && (!candidates[0].is_archived || candidates[0].managed_archive === 'true' || candidates[0].management_disposition === 'recovery_requested')) row = candidates[0]
       }
       if (!row || pathKey(row.relative_path) === pathKey(folder.relativePath) && !workspaceIdentity) continue
       try {
@@ -303,9 +306,13 @@ export async function startAutomaticFolderDiscovery(configFile, { once = false, 
           EXISTS(SELECT 1 FROM case_file_operations o WHERE o.organization_id=c.organization_id AND o.case_id=c.id AND o.status NOT IN ('ready','failed','stale','cancelled')) AS operation_active
           FROM case_folder_registrations r JOIN cases c ON c.organization_id=r.organization_id AND c.id=r.case_id
           JOIN case_locations l ON l.organization_id=c.organization_id AND l.case_id=c.id AND l.storage_root_key=r.storage_root_key
-          WHERE r.organization_id=$1 AND r.storage_root_key=$2 AND (NOT c.is_archived OR ($3 AND EXISTS(
-            SELECT 1 FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
-              AND a.action='case.office_inventory_reconciled' AND a.details->>'managedArchive'='true')))`,
+          LEFT JOIN LATERAL (SELECT a.details->>'disposition' disposition FROM audit_events a
+            WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text AND a.action='case.folder_management_changed'
+            ORDER BY a.occurred_at DESC,a.id DESC LIMIT 1) m ON true
+          WHERE r.organization_id=$1 AND r.storage_root_key=$2 AND coalesce(m.disposition,'')<>'removed'
+            AND (NOT c.is_archived OR ($3 AND (m.disposition='recovery_requested' OR coalesce((
+              SELECT a.details->>'managedArchive' FROM audit_events a WHERE a.organization_id=c.organization_id AND a.resource_id=c.id::text
+                AND a.action='case.office_inventory_reconciled' ORDER BY a.occurred_at DESC,a.id DESC LIMIT 1),'false')='true')))`,
           [policy.organizationId, policy.storageRootKey, !!config.officeInventoryOnly])).rows.map(row => [row.source_folder_id, row]))
         const markers = new Map(), markerCounts = new Map()
         if (config.trackRegisteredMoves) for (const folder of moveInventory) {

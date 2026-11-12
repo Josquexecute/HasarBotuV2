@@ -1,11 +1,13 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FolderRecovery } from './FolderRecovery'
 
 const id = '019fe084-1ec1-7797-835a-777eb0cc59c2'
 const check = { id, requestedAt: '2026-11-11T10:00:00.000Z', completedAt: null, repaired: null, remaining: null }
-const row = { caseId: id, plate: '72 ACJ 327', officeNumber: '2026/863', relativePath: '2026 OFİS/Kasım 2026/72ACJ327', status: 'needs_check' }
-const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+const row = { caseId: id, plate: '72 ACJ 327', officeNumber: '2026/863', relativePath: '2026 OFİS/Kasım 2026/72ACJ327', status: 'needs_check',
+  version: 2, locationVersion: 1, archived: false, lifecycleStatus: 'open', caseType: 'casco', insurerClaimNumber: null, lossDate: null, storageRootKey: 'office', sourceFolderId: '123', locationUpdatedAt: '2026-11-11T10:00:00.000Z',
+  disposition: null, explanation: null, hasActiveOperations: false, documentCount: 2, noteCount: 1 }
+const response = (body: unknown, status = 200) => new Response(JSON.stringify(typeof body === 'object' && body && 'items' in body ? { truncated: false, ...body } : body), { status, headers: { 'content-type': 'application/json' } })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe('operator folder recovery', () => {
@@ -49,5 +51,92 @@ describe('operator folder recovery', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kontrol et ve düzelt' }))
     view.unmount()
     expect(signal?.aborted).toBe(true)
+  })
+  it('removes only the selected duplicate after a reason and explicit confirmation; cancellation does not write', async () => {
+    const other = { ...row, caseId: '019fe084-1ec1-7797-835a-777eb0cc59c3', officeNumber: '2026/864', status: 'verified' }
+    const fetcher = vi.fn().mockResolvedValueOnce(response({ items: [row, other], latestCheck: null }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(response({ items: [other], latestCheck: null }))
+    vi.stubGlobal('fetch', fetcher)
+    render(<FolderRecovery />)
+    fireEvent.change(screen.getByLabelText('Plaka'), { target: { value: '09FC215' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Bul' })) })
+    const selected = screen.getByText('2026/863', { selector: 'td' }).closest('tr')!
+    fireEvent.click(within(selected).getByText('Ayrıntılar ve işlemler · 2026/863'))
+    fireEvent.click(within(selected).getByRole('button', { name: 'Bottan kaldır' }))
+    expect(screen.getByRole('button', { name: 'İşlemi onayla' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Vazgeç' }))
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(selected).getByRole('button', { name: 'Bottan kaldır' }))
+    fireEvent.change(screen.getByLabelText('Neden'), { target: { value: 'duplicate' } })
+    fireEvent.change(screen.getByLabelText('Açıklama'), { target: { value: 'Olmayan klasöre ait mükerrer kayıt' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /karşılaştırdım/ }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'İşlemi onayla' })) })
+    expect(fetcher.mock.calls[1]?.[0]).toBe(`/api/v1/administration/folder-management/${id}/decision`)
+    expect(JSON.parse(fetcher.mock.calls[1]?.[1].body)).toEqual({ action: 'remove', expectedVersion: 2, expectedLocationVersion: 1, reason: 'duplicate', explanation: 'Olmayan klasöre ait mükerrer kayıt' })
+    expect(screen.queryByText('2026/863', { selector: 'td' })).not.toBeInTheDocument()
+    expect(screen.getByText('2026/864', { selector: 'td' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Otomatik tarama geri getirmez')
+  })
+  it('shows removed records on request and never claims they have been restored before verification', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({ items: [{ ...row, archived: true, disposition: 'removed' }], latestCheck: null }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(response({ items: [{ ...row, archived: true, disposition: 'recovery_requested' }], latestCheck: null }))
+    vi.stubGlobal('fetch', fetcher)
+    render(<FolderRecovery />)
+    fireEvent.change(screen.getByLabelText('Plaka'), { target: { value: '72ACJ327' } })
+    fireEvent.click(screen.getByLabelText('Kaldırılanları da göster'))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Bul' })) })
+    expect(fetcher.mock.calls[0]?.[0]).toContain('includeRemoved=true')
+    expect(screen.getByText('Bottan kaldırılmış')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Ayrıntılar ve işlemler · 2026/863'))
+    fireEvent.click(screen.getByRole('button', { name: 'Kaldırmayı geri al' }))
+    fireEvent.change(screen.getByLabelText('Açıklama'), { target: { value: 'Klasör tekrar bulundu' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /karşılaştırdım/ }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'İşlemi onayla' })) })
+    expect(screen.getByText('Geri getirme doğrulaması bekleniyor')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Dosyayı aç' })).not.toBeInTheDocument()
+  })
+  it('preserves the selected record and shows a stale-version error when another user changes it', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({ items: [row], latestCheck: null }))
+      .mockResolvedValueOnce(response({ error: { message: 'Kayıt değişti. Bul ile güncelleyin.' } }, 409))
+    vi.stubGlobal('fetch', fetcher)
+    render(<FolderRecovery />)
+    fireEvent.change(screen.getByLabelText('Plaka'), { target: { value: '72ACJ327' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Bul' })) })
+    fireEvent.click(screen.getByText('Ayrıntılar ve işlemler · 2026/863'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bottan kaldır' }))
+    fireEvent.change(screen.getByLabelText('Açıklama'), { target: { value: 'Klasör bulunamadı' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /karşılaştırdım/ }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'İşlemi onayla' })) })
+    expect(screen.getByRole('alert')).toHaveTextContent('Kayıt değişti')
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    expect(screen.getByText('2026/863', { selector: 'td' })).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+  it('disables mutations while file work is active and hides stale rows when changing the search', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [{ ...row, hasActiveOperations: true }], latestCheck: null })))
+    render(<FolderRecovery />)
+    fireEvent.change(screen.getByLabelText('Plaka'), { target: { value: '72ACJ327' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Bul' })) })
+    fireEvent.click(screen.getByText('Ayrıntılar ve işlemler · 2026/863'))
+    expect(screen.getByRole('button', { name: 'Bottan kaldır' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Kayıtlı klasörü yeniden doğrula' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Plaka'), { target: { value: '34ABC123' } })
+    expect(screen.queryByText('2026/863', { selector: 'td' })).not.toBeInTheDocument()
+  })
+  it('can stop waiting without claiming the server scan was cancelled and can search again', async () => {
+    vi.useFakeTimers()
+    const fetcher = vi.fn().mockResolvedValueOnce(response(check, 202))
+      .mockResolvedValueOnce(response({ items: [row], latestCheck: check }))
+      .mockResolvedValueOnce(response({ items: [row], latestCheck: check }))
+    vi.stubGlobal('fetch', fetcher)
+    render(<FolderRecovery />)
+    fireEvent.change(screen.getByLabelText('Plaka'), { target: { value: '72ACJ327' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Kontrol et ve düzelt' })) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Kontrol sonucunu beklemeyi bırak' })) })
+    expect(screen.getByRole('status')).toHaveTextContent('tarama devam edebilir')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Bul' })) })
+    expect(fetcher).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('2026/863', { selector: 'td' })).toBeInTheDocument()
   })
 })
