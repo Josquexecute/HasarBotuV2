@@ -10,6 +10,7 @@ await rm(join(output, 'summary.json'), { force: true })
 const commands = [
   ['workspace-tests', process.env.ComSpec ?? 'cmd.exe', ['/d', '/c', 'npm test']],
   ['live-api-tests', process.execPath, ['scripts/run-live-api-tests.mjs']],
+  ['desktop-remote-tests', process.execPath, ['--test', 'deploy/cloudflare/desktop-api-worker.test.mjs']],
   ['identity-maintenance-tests', process.execPath, ['--test', 'deploy/windows-service/repair-folder-identity.test.mjs']],
   ['office-network-tests', process.execPath, ['--test', '--test-concurrency=1', 'deploy/windows-service/office-network.test.mjs', 'deploy/windows-service/office-network-service.test.mjs', 'deploy/windows-service/office-network-installer.test.mjs', 'deploy/windows-service/office-network-readiness.test.mjs', 'deploy/windows-service/office-service-recovery.test.mjs']],
   ['office-startup-tests', 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'deploy/windows-service/start-office-server.tests.ps1']],

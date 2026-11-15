@@ -586,7 +586,7 @@ Funnel'ın fotoğraf yanıtı ana API kabul edilmez. Bağımsız alan adı hazı
 olunca yönetici `-RemoteOrigin` ile günceller; sonraki kurulum/yenileme bu
 değeri korur ve eski Tailscale yoluna geri dönmez.
 
-Tailscale'siz dış erişim için yönetilen bir HTTPS alan adı ve erişilebilir
+Standart public Tunnel ile Tailscale'siz dış erişim için yönetilen bir HTTPS alan adı ve erişilebilir
 gateway gerekir. CGNAT altında [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/)
 mevcut API'ye `http://127.0.0.1:3100` üzerinden giden, dışarı doğru şifreli
 tünel sağlayabilir; alan adı/Cloudflare hesabı, sunucuda connector hizmeti ve
@@ -594,6 +594,32 @@ dışarı bağlantı izni gerekir. Ayrı API hostname'i kullan; fotoğraf Worker
 allowlist'ini genişletme. API son kullanıcı yetkilerini doğrulamaya devam
 eder. API hostname'i profilin `remoteOrigin` alanına eklenir; dış TLS standart
 genel CA ile doğrulanır. Loopback dışındaki origin TLS denetimi kapatılmaz.
+
+**15 Kasım 2026 — alan adı almadan masaüstü dış erişimi.**
+`https://hasarbotu-api.hasarbotu-baran.workers.dev` ayrı masaüstü API Worker'ıdır.
+`OFFICE_API` VPC Service binding'i yalnız sunucudaki `localhost:3100` API'sine
+gider; public upstream veya Tailscale fallback'i yoktur. `PUBLIC_ORIGIN` tam
+Worker origin'iyle eşleşmelidir. Kullanıcı oturumu/yetkileri API'de korunur;
+agent iş uçları ve yabancı browser yazma origin'leri edge'de engellenir.
+Saha Worker'ının allowlist'i genişletilmez; eski `/saha` hesabı ve rotası bu
+geçişe dahil değildir. Yeni masaüstü paketi v2 profilinin `remoteOrigin`
+alanını kullanır. Mantıksal `apiOrigin`, LAN TLS kimliği ve mevcut oturum/ayar
+anahtarlarını korumak için değişmez; bu isim dış bağlantıda çözümlenmez.
+
+Sunucuda imzası ve resmî SHA-256'sı doğrulanan cloudflared 2026.11.0,
+`hasarbotu-office-remote` hizmetinde otomatik başlar. Başlatıcı bu hizmet
+kuruluysa API sağlığından sonra başlatır. QUIC çıkışı UDP 7844 kullanır;
+modemde/inbound güvenlik duvarında port açılmaz. Dosyalar
+`C:\ProgramData\HasarBotu\office-remote` altında Administrators/SYSTEM
+ACL/owner ile korunur; token yalnız `--token-file` üzerinden okunur.
+Geri alma için bu yeni hizmeti durdurup korunan eski bağlantı profilini ve
+başlatıcıyı geri yükle; mevcut ofis servislerini veya hasar verisini silme.
+
+Alan adı veya ücretli plan satın alınmadı. [Workers VPC beta süresince ücretsizdir](https://developers.cloudflare.com/workers-vpc/platform/pricing/);
+normal Workers kotaları ayrıca geçerlidir. Workers Free günlük 100.000 istek
+sınırına sahiptir; sınırsız veya kalıcı ücretsiz hizmet garantisi verilmez.
+Ücretli plana kendiliğinden geçiş yapılmaz. Yerel kontrol:
+`node --test deploy/cloudflare/desktop-api-worker.test.mjs`.
 
 **3 Kasım 2026 — masaüstü girişinde public callback artık zorunlu değil.**
 Google Console'da aynı kurumsal projede ayrı **Desktop app** OAuth istemcisi

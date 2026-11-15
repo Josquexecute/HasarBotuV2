@@ -67,6 +67,10 @@ function Start-HasarBotuOfficeServer {
         $names += @('hasarbotu-office-gateway', 'hasarbotu-network-discovery')
         foreach ($name in $names[6..7]) { Start-HasarBotuWindowsService -Name $name }
     }
+    if (Get-Service -Name 'hasarbotu-office-remote' -ErrorAction SilentlyContinue) {
+        Start-HasarBotuWindowsService -Name 'hasarbotu-office-remote'
+        $names += 'hasarbotu-office-remote'
+    }
     foreach ($name in $names[2..5]) { Start-HasarBotuWindowsService -Name $name }
     Write-Host 'Ofis HTTPS bağlantısı kontrol ediliyor...'
     if ($hasGateway) {

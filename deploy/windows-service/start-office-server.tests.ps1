@@ -79,6 +79,17 @@ try {
     Assert-True ($result.status -eq 'PASS' -and $result.services.Count -eq 8) 'v2 starts and verifies all core services without Tailscale'
     Assert-True (@($script:events | Where-Object { $_ -like 'http:https:*tail*' }).Count -eq 0) 'v2 health never depends on Tailscale DNS or Serve'
     Assert-True ($script:events.IndexOf('start:hasarbotu-office-gateway') -lt $script:events.IndexOf('start:hasarbotu-lan-https')) 'independent LAN listener starts before legacy compatibility services'
+
+    Reset-Fixture
+    foreach ($name in @('hasarbotu-office-gateway', 'hasarbotu-network-discovery', 'hasarbotu-office-remote')) {
+        $script:services[$name] = $script:services['hasarbotu-api'].PSObject.Copy()
+        $script:services[$name].Name = $name
+    }
+    $script:services.Remove('Tailscale')
+    $result = Start-HasarBotuOfficeServer -NetworkProfile $profileFixture
+    Assert-True ($result.status -eq 'PASS' -and $result.services.Count -eq 9) 'an installed remote tunnel is started and included in the final service check'
+    Assert-True ($script:events.IndexOf('http:http://127.0.0.1:3100/health') -lt $script:events.IndexOf('start:hasarbotu-office-remote')) 'remote access starts only after the API is healthy'
+    Assert-True (@($script:events | Where-Object { $_ -like 'http:https:*tail*' }).Count -eq 0) 'remote access does not introduce a Tailscale health dependency'
 } finally { Remove-Item -LiteralPath $profileFixture }
 
 Reset-Fixture
