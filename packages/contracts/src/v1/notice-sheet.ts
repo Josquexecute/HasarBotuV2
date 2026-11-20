@@ -3,7 +3,9 @@ import { NOTICE_SHEET_FIELD_LIMITS, NOTICE_SHEET_DOCUMENT_CODES, type NoticeShee
 import { caseIdSchema, entityVersionSchema, localDateSchema, utcDateTimeSchema } from '../common/primitives.js'
 
 export const NOTICE_SHEET_ROUTE = '/api/v1/cases/:caseId/notice-sheet' as const
+export const NOTICE_SHEET_DOCX_ROUTE = '/api/v1/cases/:caseId/notice-sheet.docx' as const
 export const noticeSheetParamsSchema = z.strictObject({ caseId: caseIdSchema })
+export const noticeSheetDocxParamsSchema = z.strictObject({ caseId: z.uuid() })
 
 const fieldShapes = Object.fromEntries(Object.entries(NOTICE_SHEET_FIELD_LIMITS).map(([key, limit]) => [
   key, z.string().trim().max(limit).refine(value =>
@@ -51,4 +53,4 @@ export const noticeSheetResponseSchema = z.strictObject({
 export type NoticeSheetResponse = z.infer<typeof noticeSheetResponseSchema>
 export type NoticeSheetSaveRequest = z.infer<typeof noticeSheetSaveRequestSchema>
 export type { NoticeSheetField, NoticeSheetFields, NoticeSheetDocument, NoticeSheetDocuments, NoticeSheetOverrides } from '@hasarbotu/domain'
-export { NOTICE_SHEET_FIELD_LIMITS, applyNoticeSheetOverrides } from '@hasarbotu/domain'
+export { NOTICE_SHEET_FIELD_LIMITS, applyNoticeSheetOverrides, isNoticeSheetFieldVisible } from '@hasarbotu/domain'

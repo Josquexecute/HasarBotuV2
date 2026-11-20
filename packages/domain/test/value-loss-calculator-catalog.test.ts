@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import snapshotJson from '../../../reference-data/value-loss/real-market-analysis/2026-07-01/1.0.0/snapshot.json' with { type: 'json' }
-import { VALUE_LOSS_VEHICLE_GROUPS, buildValueLossPartSuggestions, resolveValueLossCalculatorParts, valueLossBodyOptions, valueLossCalculatorAdditionalRules, type ValueLossCalculatorPartSelection, type ValueLossSourcePart } from '../src/value-loss-calculator-catalog.js'
+import { VALUE_LOSS_VEHICLE_GROUPS, buildValueLossPartSuggestions, resolveValueLossCalculatorParts, valueLossBodyOptions, valueLossCalculatorAdditionalRules, valueLossCalculatorVehicleContext, type ValueLossCalculatorPartSelection, type ValueLossSourcePart } from '../src/value-loss-calculator-catalog.js'
 import { calculateTrafficValueLossMarketDifference } from '../src/traffic-value-loss.js'
 
 function source(group: string): ValueLossSourcePart[] { return snapshotJson.partRules.filter(rule => rule.vehicleGroupCode === group).map(rule => ({ stableRuleId: rule.stableId, label: rule.sourceLabel, supportedOperations: rule.operationCapabilities, coefficients: rule.coefficients })) }
@@ -9,6 +9,19 @@ function selection(rule: ValueLossSourcePart | null, patch: Partial<ValueLossCal
 }
 
 describe('vehicle-specific calculator suggestions and complete calculation coverage', () => {
+  it('requires the guide 3.6 commercial modifier for taxis without assuming other vehicle use', () => {
+    expect(valueLossCalculatorVehicleContext('TAKSİ', 'sedan')).toEqual({ vehicleType: 'TAKSİ', group: 'A', commercialRequired: true })
+    expect(valueLossCalculatorVehicleContext('OTOMOBİL', 'sedan').commercialRequired).toBe(false)
+    expect(valueLossCalculatorVehicleContext('MİNİBÜS', 'van_minibus').commercialRequired).toBe(false)
+    expect(valueLossCalculatorVehicleContext('OTOBÜS', 'city_bus').commercialRequired).toBe(false)
+    expect(valueLossCalculatorVehicleContext('KAMYONET', 'passenger_van')).toEqual({ vehicleType: 'OTOMOBİL', group: 'A', commercialRequired: true })
+  })
+  it('uses guide 3.9 for explicitly unpainted metal panels without inventing a coefficient', () => {
+    const parts = source('A')
+    const resolved = resolveValueLossCalculatorParts('OTOMOBİL', 'sedan', parts, [selection(parts[0]!, { material: 'aluminium', treatment: 'plastic_or_unpainted' })])
+    expect(resolved.baseOnlyParts).toEqual([{ entryId: 'one', principle: '3.9' }])
+    expect(resolved.requiresMarketDifference).toBe(false)
+  })
   it.each(snapshotJson.vehicleMappings)('$vehicleType has distinct named suggestions and supports an unspecified body', mapping => {
     expect(VALUE_LOSS_VEHICLE_GROUPS[mapping.vehicleType as keyof typeof VALUE_LOSS_VEHICLE_GROUPS]).toBe(mapping.vehicleGroupCode)
     const parts = source(mapping.vehicleGroupCode)

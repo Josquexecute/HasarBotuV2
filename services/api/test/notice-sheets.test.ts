@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
+import { strFromU8, unzipSync } from 'fflate'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
+import { NOTICE_SHEET_DOCUMENT_CODES } from '@hasarbotu/domain'
 import { noticeSheetResponseSchema } from '@hasarbotu/contracts'
 import { assertTestDatabaseUrl, closeDatabasePool, createDatabasePool, runMigrations, uuidv7 } from '@hasarbotu/database'
 import { buildApp, hashPassword } from '../src/index.js'
@@ -34,6 +36,7 @@ describeDb('İhbar föyü gerçek API / PostgreSQL', () => {
     return id
   }
   const endpoint = (id: string) => `/api/v1/cases/${id}/notice-sheet`
+  const wordEndpoint = (id: string) => `/api/v1/cases/${id}/notice-sheet.docx`
   const input = (fields = {}) => ({ expectedVersion: null, overrides: { fields, documents: {} }, confirmed: true })
   const sheetHeaders = () => ({ cookie, 'x-hasarbotu-notice-sheet-fields': '2' })
   async function addSource(id: string, rawText: string, serviceName: string, revised = false) {
@@ -116,6 +119,73 @@ describeDb('İhbar föyü gerçek API / PostgreSQL', () => {
     const events = await pool.query("SELECT details FROM audit_events WHERE action='notice_sheet.saved' AND resource_id=$1", [id])
     expect(events.rows).toHaveLength(1)
     expect(JSON.stringify(events.rows)).not.toContain('Kayıtlı Örnek')
+  })
+  it.each(['traffic', 'casco'] as const)('preserves retired %s fields and every document flag when visible edits are saved or reset', async type => {
+    const id = await newCase(type)
+    const headers = { cookie, 'x-hasarbotu-notice-sheet-fields': '3' }
+    const common = { iban: 'TR00000000000000000000000000', missingDocuments: 'Korunacak eski eksikler', inspectionNotes: 'Korunacak eski çalışma' }
+    const hidden = type === 'traffic'
+      ? { ...common, insuredMileage: '126000', insuredHeavyDamage: 'Eski ağır hasar notu', insuredPreviousClaims: '3', insuredDamageHistory: 'Eski sigortalı geçmişi' }
+      : { ...common, victimName: 'Eski mağdur', victimPlate: '06 OLD 99', victimRegistrationDate: '2020-02-29', victimMileage: '94000', victimHeavyDamage: 'Eski karşı araç kaydı', victimPreviousClaims: '2', victimDamageHistory: 'Eski mağdur geçmişi', victimFault: '50', victimPolicyPeriod: 'Eski poliçe' }
+    const documents = Object.fromEntries(NOTICE_SHEET_DOCUMENT_CODES.map((code, index) => [code, index % 2 === 0]))
+    const save = (fields: object, expectedVersion: number | null, documentEdits = {}) => app.inject({ method: 'PUT', url: endpoint(id), headers, payload: { ...input(fields), expectedVersion, overrides: { fields, documents: documentEdits } } })
+    const visibleMileage = type === 'traffic' ? { victimMileage: '45000' } : { insuredMileage: '45000' }
+    expect((await save({ ...hidden, ...visibleMileage, recourse: 'İlk karar' }, null, documents)).statusCode).toBe(200)
+    const revised = await save({ recourse: 'Güncel karar' }, 1)
+    expect(revised.statusCode).toBe(200)
+    expect(revised.json().overrides).toEqual({ fields: { ...hidden, recourse: 'Güncel karar' }, documents })
+    const reset = await save({}, 2)
+    expect(reset.statusCode).toBe(200)
+    expect(reset.json().overrides).toEqual({ fields: hidden, documents })
+    expect((await pool.query('SELECT overrides FROM case_notice_sheets WHERE case_id=$1', [id])).rows[0].overrides).toEqual({ fields: hidden, documents })
+    const legacyRevision = await save({ ...hidden, iban: 'TR11111111111111111111111111' }, 3, { statement: false })
+    expect(legacyRevision.statusCode).toBe(200)
+    expect(legacyRevision.json().overrides.fields.iban).toBe('TR11111111111111111111111111')
+    expect(legacyRevision.json().overrides.documents).toEqual({ ...documents, statement: false })
+  })
+  it.each(['traffic', 'casco'] as const)('exports the saved effective %s sheet as an authenticated native Word document', async type => {
+    const id = await newCase(type)
+    const headers = { cookie, 'x-hasarbotu-notice-sheet-fields': '3' }
+    const fields = { organizationName: 'Föye özel ofis', plate: '06 WORD 99', insuredName: 'Sigortalı Word', victimName: 'Mağdur Word', iban: 'PRIVATE_OLD_IBAN', missingDocuments: 'PRIVATE_OLD_MISSING', insuredMileage: 'PRIVATE_TRAFFIC_MILEAGE', insuredDamageHistory: 'Kasko geçmişi', victimDamageHistory: 'Trafik geçmişi' }
+    expect((await app.inject({ method: 'PUT', url: endpoint(id), headers, payload: input(fields) })).statusCode).toBe(200)
+    const before = (await app.inject({ url: endpoint(id), headers })).json()
+    const response = await app.inject({ url: wordEndpoint(id), headers: { cookie } })
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    expect(response.headers['content-disposition']).toMatch(/^attachment; filename="[A-Za-z0-9-]+\.docx"; filename\*=UTF-8''/)
+    expect(response.headers['cache-control']).toBe('private, no-store')
+    expect(response.headers['x-content-type-options']).toBe('nosniff')
+    const parts = unzipSync(response.rawPayload)
+    const xml = strFromU8(parts['word/document.xml']!)
+    expect(xml).toContain('Föye özel ofis')
+    expect(xml).toContain('06 WORD 99')
+    expect(xml).toContain('Sigortalı Word')
+    expect(xml).not.toContain('PRIVATE_OLD_IBAN')
+    expect(xml).not.toContain('PRIVATE_OLD_MISSING')
+    if (type === 'traffic') {
+      expect(xml).toContain('Mağdur Word')
+      expect(xml).toContain('Trafik geçmişi')
+      expect(xml).not.toContain('PRIVATE_TRAFFIC_MILEAGE')
+    } else {
+      expect(xml).toContain('PRIVATE_TRAFFIC_MILEAGE')
+      expect(xml).toContain('Kasko geçmişi')
+      expect(xml).not.toContain('Mağdur Word')
+    }
+    expect((await app.inject({ url: endpoint(id), headers })).json()).toEqual(before)
+  })
+  it('requires authentication and enforces tenant and classification boundaries on Word downloads', async () => {
+    expect((await app.inject({ url: wordEndpoint(trafficCase) })).statusCode).toBe(401)
+    for (const id of [await newCase('traffic', { foreign: true }), await newCase('traffic', { archived: true })]) {
+      expect((await app.inject({ url: wordEndpoint(id), headers: { cookie } })).statusCode).toBe(404)
+    }
+    expect((await app.inject({ url: wordEndpoint(await newCase(null)), headers: { cookie } })).statusCode).toBe(409)
+    expect((await app.inject({ url: wordEndpoint('not-a-case-id'), headers: { cookie } })).statusCode).toBe(400)
+    expect((await app.inject({ url: wordEndpoint(trafficCase), headers: { cookie: readerCookie } })).statusCode).toBe(200)
+    expect((await app.inject({ url: wordEndpoint(await newCase('casco', { closed: true })), headers: { cookie } })).statusCode).toBe(200)
+    const deniedEmail = 'notice-without-permission@example.test'
+    await pool.query(`INSERT INTO users(id,organization_id,email,display_name,password_hash)
+      SELECT $1,organization_id,$2,'Yetkisiz kullanıcı',password_hash FROM users WHERE id=$3`, [uuidv7(), deniedEmail, userId])
+    expect((await app.inject({ url: wordEndpoint(trafficCase), headers: { cookie: await login(deniedEmail) } })).statusCode).toBe(403)
   })
   it('serializes concurrent first saves and rejects a stale version', async () => {
     const id = await newCase()

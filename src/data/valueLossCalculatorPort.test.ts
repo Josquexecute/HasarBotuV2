@@ -8,7 +8,7 @@ describe('calculator HTTP adapter', () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(result), { status: 200 }))
     const input = { marketValueMinor: 10_000 } as ValueLossCalculatorRequest
     expect(await createHttpValueLossCalculatorAdapter({ fetchImpl }).calculate('case/1',input)).toEqual(result)
-    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case%2F1/traffic-value-loss/calculate', expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify(input) }))
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/cases/case%2F1/traffic-value-loss/calculate?details=1', expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify(input) }))
   })
   it.each([[401,'unauthorized'],[403,'forbidden'],[400,'validation'],[404,'not_found'],[503,'unavailable']])('maps HTTP %s without exposing raw server content', async (status,kind) => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response('Private diagnostic detail', { status: Number(status) }))

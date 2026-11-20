@@ -1,5 +1,51 @@
 # `@hasarbotu/desktop`
 
+20 Kasım 2026 **0.1.100 yerel sürüm adayı — yayımlanmadı; kabul PARTIAL.** Önceki sürüm 0.1.99; üretim, kullanıcı verileri ve merkezi güncelleme feed'i değiştirilmedi. Aşağıdaki revizyon önceki V5/normal araç varsayımı açıklamalarının yerine geçer. Yeni hesaplama için API adayı da gereklidir; yeni istemci eski hesap motorundan gelen sonucu göstermeyi reddeder. Migration veya yeni çalışma zamanı bağımlılığı gerekmez.
+
+| İncelenen kaynak | Tespit ve uygulama |
+| --- | --- |
+| Reel Piyasa Analiz Yöntemi Esasıyla Hesaplama Rehberi Uygulama Esasları, Word | Tüm metin ve tablolar karşılaştırıldı. 3.4'teki tam %15/%30 sınırları Excel ile çelişiyor: otomatik tutar engellenir. 3.6 taksi, 3.8 yolcu kamyoneti, 3.9 plastik/boyasız panel, 3.10 boyasız onarım ve 3.15 geçmiş sabit parça istisnaları doğrulandı. |
+| Hesaplama Modülünde Yapılan Güncellemeler Kılavuzu, Word | Metin ve 30 gömülü görsel incelendi. Yaşa dayalı R tablosu kullanılır; eski fiyat tablosu etkin değildir. Eksper Kanaati eklenmiş denmesine rağmen V1 Hesaplama!J11 tanımsız: ek katsayı üretilmedi; bu eksik ekran/dökümde belirtilir. |
+| Değer Kaybı Hesaplamalarında Reel Piyasa Analiz Yönteminin Kullanımına İlişkin Duyuru, PDF | Yöntem/raporlama duyurusu sayısal katsayı tarifesi olarak uygulanmadı. Belgelerde yeniden üretilebilir, tamamlanmış sayısal vaka örneği yok; sıfır ekranları sayısal doğrulama örneği diye sunulmadı. |
+| Yeni Dönem Değer Kaybı Hesaplama Modülü 01.07.2026 V_1, Excel | Dört sayfa, 313 formül, 158 parça kuralı, 8 yaş bandı, 7 kullanım tablosu ve 14 araç eşlemesi incelendi. SHA-256 `81d3ae870cd5569b13371ec8b4de081a9a4e3e15098f7454f5d0cdcd3708c424`; arşivlenmiş V1 test girdisiyle birebir aynı. Tam 1.000 TL katlarını sıfıra düşüren H1 hatası yerine rehberin 500 TL yukarı yuvarlaması; D grubunda 5.000 saat üstü hatalı F9 başvurusu yerine tablonun 0,70 değeri korunur. |
+
+Resmî kontrol 20 Kasım 2026: [SEDDK 2026/11](https://seddk.gov.tr/UploadContent/Documents/2026-11_Say%C4%B1l%C4%B1_Genelge.pdf) rapor şablonlarını ve 1 Temmuz yürürlüğünü; [12 Haziran duyurusu](https://www.seddk.gov.tr/UploadContent/Documents/Bas%C4%B1n%20Duyurusu.12.6.pdf) gerçek zarar ve birlikte değerlendirmeyi destekler. Excel'in %30 tavanı yasal tazminat sınırı olarak gösterilmez. Resmî Gazete 12 Haziran doğrudan erişimi zaman aşımına uğradı; bu sayfa okunmuş kabul edilmedi.
+
+Değer Kaybı: araç durumu artık açıkça doğrulanır; mevcut ağır hasar bilgisi eski kaydı geçersiz kılar. Girdiler korunur, eski doğrulanmamış sonuç temizlenir. Hariç parçanın hasar payı ayrıştırılmadan toplam hasardan pozitif tutar üretilmez. Brüt yuvarlama sonrası karşı taraf kusuru kuruşa uygulanır. Katsayı/parça/kaynak/hash dökümü ve yazdırılabilir güvenli HTML raporu eklendi. Kural sürümü `calculator-reference/2026-07-01/1.3.0`; `?details=1` eski katı API yanıtlarıyla uyumluluğu korur.
+
+İhbar Föyü: iki türde IBAN ve Evrak Kontrolü/Eksikler tamamen kaldırıldı. Trafik sigortalı KM/ağır hasar/geçmiş hasar alanlarını gizler; iki araç korunur. Kasko mağdur alanlarını tamamen gizler; sigortalı geçmişi korunur. Ortak görünürlük kuralı form, önizleme, yazdırma/PDF ve yeni kimlikli native DOCX çıktısında kullanılır. Eski alanlar/evrak işaretleri veritabanından silinmez; görünür alanları sıfırlamak gizli verileri değiştirmez. Yeni Word ucu tenant/yetki/arşiv sınırlarını korur.
+
+Ajan görevleri: `value_loss_review` kaynak/formül, geriye uyumluluk ve performans incelemesini; `notice_backend` ortak kural, veri koruma ve DOCX/API'yi; `notice_frontend` form/önizleme/tasarım ve istemci testlerini tamamladı. Ana koordinatör kod incelemesi, entegrasyon, gerçek Electron/PostgreSQL, Word ve paket doğrulamasını yürüttü; ajan PASS ifadeleri tek başına kabul edilmedi.
+
+Performans: aynı izole Chromium/Vite geliştirme senaryosunda 100 parçada render p95 **95,4 → 5,1 ms**, input→frame p95 **102,7 → 15,3 ms**, gözlenen FPS **34,1 → 60,0**, uzun görev **120 → 0**, renderer CPU **8.921 → 857 ms**. Bu üretim FPS garantisi değildir. Ham JS heap **47,4 → 67,2 MiB**; bu ölçüm RAM azalması veya uzun süreli sızıntı kanıtı sayılmaz. Yazarken hesap API çağrısı sıfır; yeni polling yok. Kanıt: `tmp/value-loss-review/performance.json`.
+
+Gerçek Electron 44.9.1/Chromium 152, 1584×861 pencere, %100 ölçek, 180 Hz ekran; 0.1.99 ve 0.1.100 üretim UI derlemeleri. 100 sentetik parçada 240 güvenilir browser girdisi sabit 16 ms aralıkla gönderildi; iki çalıştırma sırası da ölçüldü. Gönderim→frame p95 **5.044–5.110 → 33,6–33,9 ms**, p99 **5.200–5.282 → 34,6–35,0 ms**; renderer CPU **5.242–5.319 → 640–647 ms**, uzun görev **11 → 0**, gözlenen rAF hızı **0,56–0,57 → 31,8–32,8/s**. Boşta rAF yaklaşık 180/s. Bu 62,5 girdi/s stres ölçümüdür; fiziksel klavye/oyun FPS garantisi değildir. GC sonrası heap **12,7 → 13,1–13,2 MiB**; RAM azalması iddia edilmez. Yazarken hesap isteği sıfır. Seri Playwright klavye koşusu da saklandı: eski 240 tuşu 11,3 s, aday 7,5 s'de işler; seri koşunun farklı girdi hızındaki frame sayısı ürün FPS kabulü olarak kullanılmadı. Kanıt: `tmp/value-loss-review/electron-comparison/run-5OQ0q7/results.json`, `run-vZu9Hb/results.json`; ilk seri koşular `run-8BW5Wg` ve `run-ENc8zf`.
+
+Kimlikli HTTP + PostgreSQL yazma/audit, 100 ardışık hesap: p95/p99 **3,6/4,5 ms**. API mikro testi HTTP yerine geçmez. Gerçek Electron kabulü **28/28 PASS**; Trafik/Kasko çıktıları ayrı ayrı birer A4 PDF ve indirilen native DOCX olarak doğrulandı. Microsoft Word 16.0'da dört sentetik DOCX: normal örnekler bir, uzun geçmiş örnekleri iki sayfa; tablo taşması, sabit satır yüksekliği, dış/embedded nesne ve kaldırılmış içerik yok. Ekran görüntüsü üretilmedi. Kanıt: `tmp/value-loss-review/electron-final/latest-results.json`, `tmp/notice-sheet-docx-smoke-20261120/word-evidence.json`.
+
+Son dosya bazlı birleşik regresyon **3.724 PASS / 1 FAIL / 8 SKIP**:
+
+| Paket | PASS | FAIL | SKIP |
+| --- | ---: | ---: | ---: |
+| Frontend | 855 | 0 | 6 |
+| Domain | 727 | 0 | 0 |
+| Contracts | 349 | 0 | 0 |
+| Database | 87 | 0 | 0 |
+| Desktop bridge | 28 | 0 | 0 |
+| API | 1.024 | 0 | 0 |
+| File Agent | 352 | 0 | 0 |
+| Electron | 302 | 1 | 2 |
+
+İlk `npm test`, API'de eski tam %15 onarım oranını onaylanabilir kabul eden beklentide durdu. İlk 1.000 km/onay senaryosu iki kaynağın da aynı sınıfı verdiği %14'e ayrıldı; %15/%30 için önizleme, kayıt ve onaya gönderimin 409 ile engellenmesi eklendi. Güncel dosya **8/8 PASS**; diğer 110 API dosyası ilk toplu koşuda geçti. Toplam son dosya sonuçlarından hesaplanır; tek bir kesintisiz `npm test` PASS iddiası değildir. Kanıt: `test-final.log`, `hardening-final.log`, `file-agent-final.log`, `desktop-final.log`, `desktop-remaining-final.log` (`tmp/value-loss-review/` altında).
+
+Tek FAIL: `assistant-topmost-e2e` normal senaryosunda aktif **UnityWndClass** ön planı korudu; beklenen test PID'si ön plana gelemedi. Touch/shell sıralama kodu değiştirilmedi, odak zorlanmadı, beklenti gevşetilmedi. Bu yerel ön plan kabulü tamamlanmış sayılmaz. Altı SKIP dört canlı API/hesap opt-in frontend dosyası; iki SKIP Windows WebKit SameSite ve opt-in NSIS helper kontrolüdür. Son typecheck, lint, metin denetimi ve UI/tüm workspace build geçti; V1 Excel parite testleri **193/193**, File Agent toplamına dahildir.
+
+Windows x64 aday: `.local/value-loss-notice-0.1.100-candidate/HasarBotu-Setup-0.1.100.exe`, **113.071.752 bayt**, SHA-256 `239880a27000a84061f20a795ef8427d42687a76ad035e0791cb57a8837724ae`; uygulama/installer Authenticode ve zaman damgası **Valid**. Kurulum çalıştırılıp mevcut istemcinin üzerine yüklenmedi: NSIS payload'ındaki **159 dosya** paketleme çıktısıyla hash eşleşti; çıkarılan gerçek uygulama açıldı, **83 UI dosyası**, özel profil, UI bridge ve kapatınca tepsiye gizlenme doğrulandı. 7-Zip'in SFX sonundaki veri uyarısı kaydedildi; çıkarılan dosyalar eksiksiz/hash eşleşmiş durumda.
+
+API adayı: aynı klasörde `HasarBotu-API-0.1.100-candidate.zip`, **1.987.687 bayt**, SHA-256 `87ff4b7df9b10372a23285d5bf3c86388933992d14282226a1789aac3883e5f6`; **1.256 dosya** yeniden açılıp boyut/hash ile doğrulandı. Mevcut Node 24/dependency kurulumu için derlenmiş overlay'dir; tek başına API kurucusu değildir. Üretime kopyalanmadı. Paket/başlatma kanıtları aday klasöründe ve `tmp/value-loss-review/installer-smoke-final.log` içindedir.
+
+Ortam sınırı: bu revizyon Windows 10 Pro 19045 üzerinde test edildi; Windows 11 fiziksel kabulü ve gerçek yazıcı testi yapılmadı. Uzun süreli bellek dayanıklılığı ve üretim eşzamanlı yük testi yapılmadı. Tam %15/%30 ve Eksper Kanaati katsayısı için açıklayıcı güncel kaynak hâlâ gerekir; varsayımla tamamlanmaz. Kaynak dört belgenin son SHA-256 denetimi aynı: `tmp/value-loss-review/source-integrity-final.json`. Yerel aday hazır; ön plan/Windows 11 kabulü tamamlanmadan sıfır kritik regresyon veya yayın kabulü iddia edilmez.
+
 15 Kasım 2026 **0.1.99 merkezi yayında — 11:15:53 TRT; masaüstü dış erişimi PASS.**
 Ofis dışındaki masaüstü istemcileri artık Tailscale istemcisi olmadan ayrı HTTPS API bağlantısını kullanır. Cloudflare Workers VPC → sunucunun loopback API hattı kuruldu; ücretli plan veya alan adı alınmadı. Mevcut LAN kimliği, oturum/profil anahtarı ve yetkiler korundu. Yeni tünel hizmeti API sağlığından sonra otomatik başlar; gerçek yeniden başlatma ve bağlantı kontrolü geçti. GitHub CI değişkeni ve mevcut özel dağıtım profili yeni remoteOrigin ile eşlendi. Saha portalının eski adresi/hesabı bu geçişe dahil değildir. VPC beta süresince ücretsizdir; Workers kotaları ve ileride değişebilecek beta koşulları geçerlidir, ücretli geçiş açılmadı.
 

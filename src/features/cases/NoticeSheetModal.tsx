@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
-import { Printer, RotateCcw, Save, X } from 'lucide-react'
-import { applyNoticeSheetOverrides, NOTICE_SHEET_FIELD_LIMITS, type NoticeSheetDocument, type NoticeSheetField, type NoticeSheetOverrides, type NoticeSheetResponse } from '@hasarbotu/contracts'
+import { FileDown, Printer, RotateCcw, Save, X } from 'lucide-react'
+import { applyNoticeSheetOverrides, isNoticeSheetFieldVisible, NOTICE_SHEET_FIELD_LIMITS, type NoticeSheetField, type NoticeSheetOverrides, type NoticeSheetResponse } from '@hasarbotu/contracts'
 import { useSession } from '../../app/sessionContext'
 import { ModalFrame } from '../../components/ModalFrame'
 import { createHttpNoticeSheetAdapter, NoticeSheetClientError, type NoticeSheetDataPort } from '../../data/noticeSheetPort'
 import { NoticeSheet } from './NoticeSheet'
-import { noticeSheetDocumentLabels, noticeSheetFieldGroups } from './notice-sheet-fields'
+import { noticeSheetFieldGroups } from './notice-sheet-fields'
 import './notice-sheet.css'
 
 const errorMessages = {
@@ -39,6 +39,10 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
   const originalTitle = useRef<string | null>(null)
   const dirty = sheet !== null && JSON.stringify(draft) !== JSON.stringify(sheet.overrides)
   const canEdit = sheet?.permissions.canEdit === true
+  const visibleFieldGroups = sheet ? noticeSheetFieldGroups.map(group => ({
+    ...group, fields: group.fields.filter(field => isNoticeSheetFieldVisible(sheet.caseType, field.key)),
+  })).filter(group => group.fields.length > 0) : []
+  const hasVisibleOverrides = sheet !== null && Object.keys(draft.fields).some(key => isNoticeSheetFieldVisible(sheet.caseType, key as NoticeSheetField))
 
   useEffect(() => {
     mounted.current = true
@@ -89,16 +93,6 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
     })
     setNotice('')
   }
-  const changeDocument = (key: NoticeSheetDocument, value: boolean) => {
-    if (!sheet || !canEdit) return
-    setDraft(current => {
-      const next = { ...current.documents }
-      if (value === sheet.defaults.documents[key]) delete next[key]
-      else next[key] = value
-      return { ...current, documents: next }
-    })
-    setNotice('')
-  }
   const fitsPage = () => {
     const paper = preview.current?.querySelector<HTMLElement>('.notice-sheet-paper')
     const content = paper?.querySelector<HTMLElement>('.notice-sheet')
@@ -142,6 +136,34 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
       if (kind === 'unauthorized') reportUnauthorized()
     } finally { if (mounted.current) setBusy(false) }
   }
+  const exportWord = async () => {
+    if (!sheet || sheet.caseType === null || busy || dirty) return
+    setError('')
+    setNotice('')
+    setBusy(true)
+    try {
+      const { blob, filename } = await port.exportWord(caseId)
+      if (!mounted.current) return
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      try {
+        anchor.href = url
+        anchor.download = filename
+        anchor.rel = 'noopener'
+        document.body.append(anchor)
+        anchor.click()
+        setNotice('Word indirme başlatıldı.')
+      } finally {
+        anchor.remove()
+        URL.revokeObjectURL(url)
+      }
+    } catch (reason) {
+      if (!mounted.current) return
+      const kind = reason instanceof NoticeSheetClientError ? reason.kind : 'unavailable'
+      setError(kind === 'unavailable' ? 'Word dosyası indirilemedi. Bağlantıyı kontrol edip yeniden deneyin.' : errorMessages[kind])
+      if (kind === 'unauthorized') reportUnauthorized()
+    } finally { if (mounted.current) setBusy(false) }
+  }
 
   return <>
     <ModalFrame className="notice-sheet-modal" labelledBy="notice-sheet-title" onClose={close} busy={busy}>
@@ -164,9 +186,9 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
             <p>Tüm föy alanlarını düzenleyebilirsiniz. Değişiklikler yalnız bu föye kaydedilir; dosya kaydı değişmez.</p>
             {!canEdit && <p role="status">Bu föy salt okunur; güncel hali yazdırılabilir.</p>}
             <fieldset disabled={!canEdit || busy}>
-              {noticeSheetFieldGroups.filter(group => sheet.caseType === 'traffic' || group.title !== 'Mağdur / karşı araç').map((group, index) => <details key={group.title} open={index === 0}>
+              {visibleFieldGroups.map((group, index) => <details key={group.title} open={index === 0}>
                 <summary>{group.title}</summary>
-                <div className="notice-sheet-editor__fields">{group.fields.filter(field => (sheet.caseType === 'traffic' || !field.key.startsWith('victim')) && (field.key !== 'insuredDamageHistory' || sheet.caseType === 'casco')).map(field => {
+                <div className="notice-sheet-editor__fields">{group.fields.map(field => {
                   return <label key={field.key}><span>{field.label}{Object.hasOwn(draft.fields, field.key) && <small> · Düzenlendi</small>}</span>
                     {field.multiline ? <textarea aria-label={field.label} value={fields[field.key]} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} rows={3} onChange={event => changeField(field.key, event.target.value)} />
                       : <input aria-label={field.label} value={fields[field.key]} type={field.date ? 'date' : 'text'} maxLength={NOTICE_SHEET_FIELD_LIMITS[field.key]} onChange={event => changeField(field.key, event.target.value)} />}
@@ -181,17 +203,21 @@ export function NoticeSheetModal({ caseId, onClose, port: suppliedPort }: {
                   </label>
                 })}</div>
               </details>)}
-              <details><summary>Evrak kontrolü</summary><p>Hazır evraklar otomatik işaretlenir. Elle yapılan işaretler yalnız bu föye uygulanır.</p><div className="notice-sheet-editor__checks">{noticeSheetDocumentLabels.filter(([code]) => sheet.caseType === 'traffic' || !code.startsWith('victim')).map(([code, label]) => <label key={code}><input type="checkbox" checked={documents[code]} onChange={event => changeDocument(code, event.target.checked)} /><span>{label}</span></label>)}</div></details>
             </fieldset>
-            <button className="button button--secondary" type="button" disabled={!canEdit || busy || (!dirty && Object.keys(sheet.overrides.fields).length === 0 && Object.keys(sheet.overrides.documents).length === 0)} onClick={() => { setDraft({ fields: {}, documents: {} }); setNotice('Otomatik bilgiler getirildi. Uygulamak için kaydedin.'); setError('') }}><RotateCcw size={14} /> Otomatik bilgilere dön</button>
+            <button className="button button--secondary" type="button" disabled={!canEdit || busy || !hasVisibleOverrides} onClick={() => {
+              setDraft(current => ({ ...current, fields: Object.fromEntries(Object.entries(current.fields).filter(([key]) => !isNoticeSheetFieldVisible(sheet.caseType, key as NoticeSheetField))) }))
+              setNotice('Görünen alanların otomatik bilgileri getirildi. Uygulamak için kaydedin.')
+              setError('')
+            }}><RotateCcw size={14} /> Otomatik bilgilere dön</button>
           </aside>
           <div className="notice-sheet-preview" ref={preview}><NoticeSheet sheet={sheet} fields={fields} documents={documents} /></div>
         </div>}
         <footer className="modal__footer">
-          <span className="notice-sheet-save-state">{dirty ? 'Kaydedilmemiş değişiklikler' : sheet?.version ? `Kayıtlı föy · Sürüm ${sheet.version}` : 'Otomatik föy'} · A4 / 1 sayfa</span>
+          <span className="notice-sheet-save-state">{dirty ? 'Kaydedilmemiş değişiklikler' : sheet?.version ? `Kayıtlı föy · Sürüm ${sheet.version}` : 'Otomatik föy'} · A4 / 1 sayfa{dirty && <small id="notice-sheet-word-hint">Word indirmek için değişiklikleri kaydedin.</small>}</span>
           <button className="button button--secondary" type="button" onClick={close} disabled={busy}>Kapat</button>
           {previewing && <button className="button button--secondary" type="button" disabled={busy} onClick={() => setPreviewing(false)}>Düzenlemeye dön</button>}
           {canEdit && <button className="button button--secondary" type="button" disabled={busy || !dirty} onClick={() => void save(false)}><Save size={15} /> Kaydet</button>}
+          <button className="button button--secondary" type="button" disabled={busy || dirty || status !== 'ok' || !sheet?.caseType} aria-describedby={dirty ? 'notice-sheet-word-hint' : undefined} onClick={() => void exportWord()}><FileDown size={15} /> Word indir</button>
           <button className="button button--primary" type="button" disabled={busy || status !== 'ok' || !sheet?.caseType} onClick={() => void save(true)}><Printer size={15} />{busy ? 'Hazırlanıyor…' : previewing ? 'Yazıcıya gönder' : dirty ? 'Kaydet ve Yazdır' : 'Yazdır'}</button>
         </footer>
       </>}

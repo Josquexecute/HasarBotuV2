@@ -67,6 +67,14 @@ export interface NoticeSheetOverrides {
   readonly documents: Partial<NoticeSheetDocuments>
 }
 
+/** Presentation only: persisted keys and older client edits remain supported. */
+export function isNoticeSheetFieldVisible(caseType: 'traffic' | 'casco' | null, field: NoticeSheetField): boolean {
+  if (caseType === null || field === 'iban' || field === 'missingDocuments' || field === 'inspectionNotes') return false
+  if (caseType === 'casco') return !field.startsWith('victim')
+  return field !== 'insuredMileage' && field !== 'insuredHeavyDamage'
+    && field !== 'insuredPreviousClaims' && field !== 'insuredDamageHistory'
+}
+
 export interface NoticeSheetSource {
   readonly caseType: 'traffic' | 'casco' | null
   readonly plate: string

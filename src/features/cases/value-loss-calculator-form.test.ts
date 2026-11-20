@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculatorOperations, calculatorRequest, consolidateCalculatorParts, initialCalculatorDraft, mergeCalculatorHistory, moneyMinor, type CalculatorPartDraft } from './value-loss-calculator-form'
+import { calculatorDraftFromRequest, calculatorOperations, calculatorRequest, consolidateCalculatorParts, initialCalculatorDraft, mergeCalculatorHistory, moneyMinor, type CalculatorPartDraft } from './value-loss-calculator-form'
 import type { CaseRecord } from '../../types/case'
 
 describe('calculator TL input', () => {
@@ -9,10 +9,17 @@ describe('calculator TL input', () => {
 
 const part: CalculatorPartDraft = { id: '1', stableRuleId: 'part-1', label: 'SOL ÇAMURLUK', operation: 'repair', paintMode: 'full', price: '10.000', labor: '2.000', priceUnknown: false, priorPartState: 'none', treatment: 'standard', position: '', quantity: '1', material: 'unspecified' }
 function request(parts: CalculatorPartDraft[]) {
-  return calculatorRequest({ ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), previousDamageCount: '0', modelYear: '2024', usageValue: '50000', marketValue: '1.000.000', damageAmount: '100.000', parts })
+  return calculatorRequest({ ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), vehicleCondition: 'normal', previousDamageCount: '0', modelYear: '2024', usageValue: '50000', marketValue: '1.000.000', damageAmount: '100.000', parts })
 }
 
 describe('calculator combined operations', () => {
+  it('preserves condition and counterparty fault when restoring saved inputs', () => {
+    const input = { ...request([part]), vehicleCondition: 'prior_heavy_damage' as const, faultRateBasisPoints: 7500 }
+    const restored = calculatorDraftFromRequest({ lossDate: input.accidentDate } as unknown as CaseRecord, input)
+    expect(restored.vehicleCondition).toBe('prior_heavy_damage')
+    expect(restored.faultPercent).toBe('75')
+    expect(() => calculatorRequest(restored)).toThrow('ağır hasar')
+  })
   it('refreshes stored history without replacing current operations, and revokes obsolete verification', () => {
     const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), parts: [{ ...part, priorPartState: 'unknown' as const }], marketValue: '1.000.000' }
     const saved = { ...draft, previousDamageCount: '2', parts: [{ ...part, operation: 'replacement' as const, priorPartState: 'none' as const, priorEvidence: 'Kayıtlı geçmiş: history-1' }] }
@@ -22,13 +29,13 @@ describe('calculator combined operations', () => {
     expect(mergeCalculatorHistory({ ...refreshed, parts: [{ ...part, priorEvidence: 'Kullanıcı doğrulaması' }] }, draft).parts[0]?.priorPartState).toBe('none')
   })
   it('automatically matches an imported legacy part only to an exact, unique source label', () => {
-    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), previousDamageCount: '0', modelYear: '2024', usageValue: '50000', marketValue: '1.000.000', damageAmount: '100.000', parts: [{ ...part, stableRuleId: '' }] }
+    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), vehicleCondition: 'normal' as const, previousDamageCount: '0', modelYear: '2024', usageValue: '50000', marketValue: '1.000.000', damageAmount: '100.000', parts: [{ ...part, stableRuleId: '' }] }
     const source = { stableRuleId: 'source-part', label: part.label, supportedOperations: ['repair'], coefficients: { replacement: null, repair: { light: '1', medium: '2', heavy: '3' }, paint: null } }
     expect(calculatorRequest(draft, [source]).partSelections?.[0]?.stableRuleId).toBe('source-part')
     expect(() => calculatorRequest(draft, [source, { ...source, stableRuleId: 'duplicate' }])).toThrow('referans katsayısı bulunamadı')
   })
   it('keeps manufacturer information without requiring the unknown post-repair value for a reference estimate', () => {
-    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), previousDamageCount: '0', manufacturer: 'Tesla', model: 'Model 3', modelYear: '2023', usageValue: '50000', damageAmount: '100.000', marketValue: '1.000.000', faultPercent: '75', parts: [part] }
+    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), vehicleCondition: 'normal' as const, previousDamageCount: '0', manufacturer: 'Tesla', model: 'Model 3', modelYear: '2023', usageValue: '50000', damageAmount: '100.000', marketValue: '1.000.000', faultPercent: '75', parts: [part] }
     expect(calculatorRequest(draft)).toMatchObject({ vehicleIdentity: { manufacturer: 'Tesla', model: 'Model 3' }, calculationBasis: 'reference', postRepairMarketValueMinor: null, faultRateBasisPoints: 7500 })
     expect(calculatorRequest({ ...draft, model: '' }).vehicleIdentity).toBeUndefined()
   })
@@ -64,7 +71,7 @@ describe('calculator combined operations', () => {
     expect(consolidateCalculatorParts([{ ...part, treatment: 'paintless_repair' }])[0]?.operation).toBe('paintless_repair')
   })
   it('requires market values for custom metal parts and does not drop them from the request', () => {
-    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), calculationBasis: 'market_difference' as const, marketValue: '1.000.000', postRepairMarketValue: '900.000', faultPercent: '75', parts: [{ ...part, stableRuleId: '', label: 'Ön amortisör', material: 'mechanical' as const, position: 'sol ön', quantity: '2' }] }
+    const draft = { ...initialCalculatorDraft({ lossDate: '2026-10-01' } as CaseRecord), vehicleCondition: 'normal' as const, calculationBasis: 'market_difference' as const, marketValue: '1.000.000', postRepairMarketValue: '900.000', faultPercent: '75', parts: [{ ...part, stableRuleId: '', label: 'Ön amortisör', material: 'mechanical' as const, position: 'sol ön', quantity: '2' }] }
     const input = calculatorRequest(draft)
     expect(input).toMatchObject({ calculationBasis: 'market_difference', postRepairMarketValueMinor: 90_000_000, faultRateBasisPoints: 7500, partSelections: [expect.objectContaining({ partName: 'Ön amortisör', stableRuleId: null, quantity: 2, position: 'sol ön' })] })
     expect(() => calculatorRequest({ ...draft, postRepairMarketValue: '' })).toThrow('Onarım sonrası piyasa değerini')

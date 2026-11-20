@@ -433,7 +433,8 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
       comparables: base.comparables.map((item) => ({ ...item, mileage: 0 })),
       realMarket: { ...base.realMarket, usageValue: 0, parts: base.realMarket.parts.map((part) => ({
         ...part, operation: 'repair', partPriceAvailability: 'available',
-        newPartPriceMinor: 100_000, repairLaborMinor: 15_000,
+        // Keep this mileage/approval scenario below the disputed 15% endpoint.
+        newPartPriceMinor: 100_000, repairLaborMinor: 14_000,
       })) },
     }
     const calculated = trafficValueLossPreviewResponseSchema.parse((await preview(seeded, 0, overrides)).json())
@@ -449,6 +450,33 @@ describeDb('Paket 66 Değer Kaybı sertleştirme (gerçek PostgreSQL)', () => {
     const reportId = await generateReport(seeded, approved)
     const report = await pool.query('SELECT content_snapshot FROM traffic_value_loss_reports WHERE id=$1', [reportId])
     expect(report.rows[0].content_snapshot.damageParts[0].repairAction).toBe('repair')
+  })
+
+  it.each([15_000, 30_000])('blocks an unresolved repair threshold (%i / 100000) through preview, persistence and submission', async repairLaborMinor => {
+    const seeded = await seedCase()
+    const base = request(seeded, 0)
+    if (base.realMarket === null) throw new Error('TEST_REAL_MARKET_REQUIRED')
+    const overrides: Partial<TrafficValueLossPreviewRequest> = {
+      realMarket: { ...base.realMarket, parts: base.realMarket.parts.map(part => ({
+        ...part, operation: 'repair', partPriceAvailability: 'available',
+        newPartPriceMinor: 100_000, repairLaborMinor,
+      })) },
+    }
+    const response = await preview(seeded, 0, overrides)
+    expect(response.statusCode, response.payload).toBe(200)
+    const calculated = trafficValueLossPreviewResponseSchema.parse(response.json())
+    expect(calculated.evaluation).toMatchObject({ finalResultMinor: null, canSubmitForApproval: false })
+    if (!('reasons' in calculated.evaluation)) throw new Error('TEST_REAL_MARKET_EVALUATION_REQUIRED')
+    expect(calculated.evaluation.reasons).toContainEqual(expect.objectContaining({ code: 'SOURCE_CONFLICT', field: 'parts.repairLaborMinor' }))
+    const created = await createDraft(seeded, 0, overrides)
+    expect(created.currentVersion.evaluation).toEqual(calculated.evaluation)
+    const submitted = await app.inject({
+      method: 'POST', url: `/api/v1/cases/${seeded.caseId}/traffic-value-loss/versions/${created.currentVersion.id}/submit`,
+      headers: { cookie: managerCookie, [IDEMPOTENCY_KEY_HEADER]: uuidv7() },
+      payload: { expectedVersion: created.version },
+    })
+    expect(submitted.statusCode, submitted.payload).toBe(409)
+    expect(submitted.json()).toMatchObject({ error: { code: 'traffic_value_loss_approval_blocked' } })
   })
 
   it('preview hash canonical, tenant/case bağlı ve stale/missing hash için fail-closed çalışır', async () => {

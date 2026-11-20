@@ -124,7 +124,8 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
     if (result.rows[0].case_type !== 'traffic') return reply.code(400).send(failureBody('traffic_value_loss_source_invalid', 'Traffic case required.', requestId))
     const calculation = valueLossCalculatorResponseSchema.parse(calculateValueLoss(body.data))
     if (calculation.amountMinor !== null && calculation.issues.length === 0) await calculator.save(actor(session, request), params.data.caseId, body.data, calculation)
-    return calculation
+    // Opt-in query keeps previous desktop clients' strict response schema compatible.
+    return (request.query as { details?: string }).details === '1' ? calculation : { amountMinor: calculation.amountMinor, ruleVersion: calculation.ruleVersion, calculationMethod: calculation.calculationMethod, issues: calculation.issues }
   })
 
   app.get(VALUE_LOSS_CALCULATOR_ROUTE, async (request, reply) => {
@@ -135,7 +136,11 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
     if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
     const found = await options.pool.query('SELECT id FROM cases WHERE organization_id=$1 AND id=$2', [session.user.organizationId, params.data.caseId])
     if (!found.rowCount) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
-    return valueLossCalculatorSavedResponseSchema.parse({ calculation: await calculator.load(session.user.organizationId, params.data.caseId) })
+    const calculation = await calculator.load(session.user.organizationId, params.data.caseId)
+    const response = calculation && (request.query as { details?: string }).details !== '1'
+      ? { ...calculation, result: { amountMinor: calculation.result.amountMinor, ruleVersion: calculation.result.ruleVersion, calculationMethod: calculation.result.calculationMethod, issues: calculation.result.issues } }
+      : calculation
+    return valueLossCalculatorSavedResponseSchema.parse({ calculation: response })
   })
 
   app.get(TRAFFIC_VALUE_LOSS_CLOSURE_SUMMARIES_ROUTE, async (request, reply) => {

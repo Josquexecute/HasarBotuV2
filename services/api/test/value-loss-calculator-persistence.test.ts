@@ -39,6 +39,18 @@ describe.skipIf(!testUrl)('case estimate PostgreSQL persistence', () => {
     }
   }, 90000)
   afterAll(async () => { await app?.close(); await pool?.end() })
+  it('keeps legacy strict response shapes and returns details only to clients opting in', async () => {
+    const compatibilityCaseId = uuidv7()
+    await pool.query("INSERT INTO cases(id,organization_id,office_year,office_sequence,office_number,case_type,lifecycle_status,workflow_stage,plate,plate_normalized) VALUES($1,$2,2026,99,'2026/99','traffic','open','new_notification','34 TEST 99','34TEST99')", [compatibilityCaseId, organizationId])
+    const legacy = await app.inject({ method: 'POST', url: url(compatibilityCaseId), headers: { cookie }, payload: input })
+    expect(Object.keys(legacy.json()).sort()).toEqual(['amountMinor', 'calculationMethod', 'issues', 'ruleVersion'])
+    const detailed = await app.inject({ method: 'POST', url: url(compatibilityCaseId) + '?details=1', headers: { cookie }, payload: input })
+    expect(detailed.json().breakdown.grossAmountMinor).toBe(legacy.json().amountMinor)
+    const oldRead = await app.inject({ url: url(compatibilityCaseId), headers: { cookie } })
+    expect(oldRead.json().calculation.result.breakdown).toBeUndefined()
+    const newRead = await app.inject({ url: url(compatibilityCaseId) + '?details=1', headers: { cookie } })
+    expect(newRead.json().calculation.result.breakdown).toEqual(detailed.json().breakdown)
+  })
   it('saves the server-computed amount and inputs, survives a new app instance, and isolates cases', async () => {
     const saved = await app.inject({ method: 'POST', url: url(), headers: { cookie }, payload: input })
     expect(saved.statusCode).toBe(200)

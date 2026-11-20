@@ -51,11 +51,24 @@ export const valueLossCalculatorRequestSchema = z.strictObject({
   if (market && value.calculationBasis !== undefined && value.postRepairMarketValueMinor !== null && value.postRepairMarketValueMinor > value.marketValueMinor) context.addIssue({ code: 'custom', path: ['postRepairMarketValueMinor'], message: 'post_repair_value_above_pre_accident' })
 })
 
+export const valueLossCalculatorBreakdownSchema = z.strictObject({
+  sourceFileName: z.string(), sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  vehicleAge: z.number().int().nonnegative(), vehicleGroup: z.string(),
+  ageCoefficient: z.string(), usageCoefficient: z.string(),
+  commercialModifier: z.string(), previousDamageModifier: z.string(), mileageModifier: z.string(), generalMultiplier: z.string(),
+  partCoefficient: z.string(), damageContribution: z.string(), damageCoefficient: z.string(), vehicleMultiplier: z.string(),
+  rawAmountMinor: z.string(), capMinor: z.string(), cappedAmountMinor: z.string(), capApplied: z.boolean(),
+  roundingUnitMinor: trafficValueLossMoneyMinorSchema, grossAmountMinor: trafficValueLossMoneyMinorSchema,
+  faultRateBasisPoints: trafficValueLossBasisPointsSchema,
+  parts: z.array(z.strictObject({ label: z.string(), operation: z.enum(['replacement', 'repair', 'paint']), repairClass: z.enum(['light', 'medium', 'heavy']).nullable(), coefficient: z.string(), included: z.boolean(), exclusionReason: z.string().nullable(), sourceRow: z.number().int() })).max(100),
+  baseOnlyParts: z.array(z.strictObject({ label: z.string(), principle: z.enum(['3.9', '3.10']) })).max(100),
+})
 export const valueLossCalculatorResponseSchema = z.strictObject({
   amountMinor: trafficValueLossMoneyMinorSchema.nullable(),
   ruleVersion: z.string().min(1),
   calculationMethod: z.enum(['real_market_analysis', 'market_value_difference']),
   issues: z.array(z.strictObject({ field: z.string(), message: z.string() })),
+  breakdown: valueLossCalculatorBreakdownSchema.optional(),
 })
 
 export type ValueLossCalculatorRequest = z.infer<typeof valueLossCalculatorRequestSchema>

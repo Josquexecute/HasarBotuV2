@@ -654,7 +654,14 @@ export function evaluateRealMarketValueLoss(
         reasons.push(reason('PART_OPERATION_UNSUPPORTED', 'parts.operation', `${rule.sourceLabel} için işlem desteklenmiyor.`))
         continue
       }
-      const classification = item.operation === 'repair' ? repairClass(item) : null
+      // Guide 3.4 includes the 15/30% endpoints differently from the workbook's strict < tests.
+      // Do not choose one source silently when that difference changes the applied coefficient.
+      const thresholdConflict = item.operation === 'repair' && item.treatment === 'standard'
+        && item.priorPartState === 'none' && item.partPriceAvailability === 'available'
+        && safeMinor(item.newPartPriceMinor) && item.newPartPriceMinor > 0 && safeMinor(item.repairLaborMinor)
+        && [15n, 30n].some(percent => BigInt(item.repairLaborMinor!) * 100n === BigInt(item.newPartPriceMinor!) * percent)
+      const classification = item.operation === 'repair' && !thresholdConflict ? repairClass(item) : null
+      if (thresholdConflict) reasons.push(reason('SOURCE_CONFLICT', 'parts.repairLaborMinor', `${rule.sourceLabel}: tam %15 / %30 onarım sınırında rehber 3.4 ile Excel formülü çelişiyor. Kaynak açıklaması olmadan tutar hesaplanamaz.`))
       if (item.operation === 'repair' && item.partPriceAvailability === 'available'
         && (!safeMinor(item.newPartPriceMinor) || item.newPartPriceMinor === 0)) {
         reasons.push(reason('REPAIR_PART_PRICE_INVALID', 'parts.newPartPriceMinor', `${rule.sourceLabel} için parça bedeli pozitif olmalıdır.`))
@@ -671,8 +678,14 @@ export function evaluateRealMarketValueLoss(
       const priorExcluded = item.priorPartState === 'previously_damaged'
         || item.priorPartState === 'previously_repaired_detachable'
         || (item.priorPartState === 'previously_repaired_welded' && item.operation !== 'replacement')
+      const weldedReplacement = item.priorPartState === 'previously_repaired_welded'
+        && operationsByRule.get(item.stableRuleId)?.has('replacement')
+      if (input.damageAmountMinor !== null && input.damageAmountMinor > 0
+        && ((priorExcluded && !weldedReplacement) || ['accessory', 'superstructure'].includes(item.treatment))) {
+        reasons.push(reason('REQUIRED_EVIDENCE_MISSING', 'damageAmountMinor', `${rule.sourceLabel}: hariç tutulan parçanın payı toplam hasar tutarından ayrıştırılmalıdır. Yalnız uygun parçaları ve bunların hasar tutarını girin.`))
+      }
       const coefficient = selectedPartCoefficient(rule, item, classification)
-      if (coefficient === null && !specialExcluded && !priorExcluded) {
+      if (coefficient === null && !specialExcluded && !priorExcluded && !thresholdConflict) {
         reasons.push(reason('PART_OPERATION_UNSUPPORTED', 'parts.operation', `${rule.sourceLabel} için katsayı bulunmuyor.`))
       }
       const included = coefficient !== null && !specialExcluded && !priorExcluded
@@ -806,6 +819,7 @@ export function evaluateRealMarketValueLoss(
       ? 'not_applicable'
       : 'control_required'
   const canSubmitForApproval = eligibility === 'eligible' && finalResultMinor !== null
+  if (reasons.some(item => item.code === 'SOURCE_CONFLICT' || item.code === 'REQUIRED_EVIDENCE_MISSING' && item.field === 'damageAmountMinor')) finalResultMinor = null
   const ruleSources: readonly (TrafficValueLossRuleSource | RealMarketValueLossSource)[] = [source()]
 
   return {

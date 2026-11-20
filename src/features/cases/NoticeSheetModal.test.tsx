@@ -6,12 +6,13 @@ import { NoticeSheetClientError } from '../../data/noticeSheetPort'
 import { noticeSheetFixture } from '../../test/fixtures/notice-sheet'
 import { NoticeSheetModal } from './NoticeSheetModal'
 
-afterEach(() => { vi.restoreAllMocks() })
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 function setup(overrides: Partial<NoticeSheetDataPort> = {}, fixture = noticeSheetFixture) {
   const port: NoticeSheetDataPort = {
     read: vi.fn().mockResolvedValue(structuredClone(fixture)),
     save: vi.fn(async (_id, input) => ({ ...structuredClone(fixture), overrides: input.overrides, version: 1 })),
+    exportWord: vi.fn().mockResolvedValue({ blob: new Blob(['document']), filename: 'İhbar Föyü.docx' }),
     ...overrides,
   }
   const onClose = vi.fn()
@@ -58,13 +59,76 @@ describe('İhbar föyü düzenleme ve yazdırma', () => {
     expect(port.save).toHaveBeenCalledWith(fixture.caseId, expect.objectContaining({ overrides: { fields: { serviceName: 'Föye özel yeni servis', servicePhone: '0222 222 22 22', serviceAddress: 'Yeni elle girilmiş adres' }, documents: {} } }))
     expect(dialog.getByRole('article')).toHaveTextContent('Yeni elle girilmiş adres')
   })
-  it('previews the correct traffic parties, dates and verified document checks', async () => {
+  it('previews the correct traffic parties and dates without document controls', async () => {
     const { dialog } = setup()
     expect(await dialog.findByRole('article')).toHaveAccessibleName('Trafik ihbar föyü A4')
     expect(dialog.getByText('16.10.2026')).toBeInTheDocument()
     expect(dialog.getByText('Sigortalı Örnek')).toBeInTheDocument()
     expect(dialog.getByText('Mağdur Örnek')).toBeInTheDocument()
-    expect(dialog.getAllByLabelText('Var')).toHaveLength(2)
+    expect(dialog.queryByLabelText('Var')).not.toBeInTheDocument()
+    expect(dialog.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+  it.each(['traffic', 'casco'] as const)('shows only relevant %s inputs and retains hidden overrides when resetting visible fields', async caseType => {
+    const hiddenFields = {
+      iban: 'TR00 korunacak', missingDocuments: 'Korunacak eksikler', inspectionNotes: 'Korunacak eski not',
+      ...(caseType === 'traffic'
+        ? { insuredMileage: '150000', insuredHeavyDamage: 'Var', insuredPreviousClaims: '3', insuredDamageHistory: 'Korunacak sigortalı geçmişi' }
+        : { victimName: 'Korunacak mağdur', victimPlate: '34 SAK 001', victimMileage: '75000', victimHeavyDamage: 'Yok', victimPreviousClaims: '1', victimRegistrationDate: '2020-01-15', victimDamageHistory: 'Korunacak mağdur geçmişi', victimPolicyPeriod: '2026-2027', victimFault: '25' }),
+    }
+    const documents = { statement: true, victimLicense: true, partsList: false }
+    const fixture = { ...noticeSheetFixture, caseType, overrides: { fields: { ...hiddenFields, recourse: 'Elle girilmiş rücu' }, documents } }
+    const { dialog, user, port } = setup({}, fixture)
+    await dialog.findByRole('article')
+    for (const label of ['IBAN', 'Eksikler', ...(caseType === 'traffic'
+      ? ['Sigortalı kilometre', 'Sigortalı ağır hasar kaydı', 'Sigortalı geçmiş hasar sayısı', 'Sigortalı geçmiş hasarları']
+      : ['Mağdur adı / unvanı', 'Mağdur plaka', 'Mağdur kilometre', 'Mağdur ağır hasar kaydı', 'Mağdur geçmiş hasar sayısı', 'Mağdur geçmiş hasarları'])]) expect(dialog.queryByLabelText(label)).not.toBeInTheDocument()
+    expect(dialog.queryByText('Evrak kontrolü', { selector: 'summary' })).not.toBeInTheDocument()
+    if (caseType === 'casco') expect(dialog.queryByText('Mağdur / karşı araç', { selector: 'summary' })).not.toBeInTheDocument()
+    expect(dialog.getByLabelText(caseType === 'traffic' ? 'Mağdur kilometre' : 'Sigortalı kilometre')).toBeInTheDocument()
+    await user.click(dialog.getByRole('button', { name: 'Otomatik bilgilere dön' }))
+    expect(dialog.getByLabelText('Rücu durumu')).toHaveValue('')
+    await user.click(dialog.getByRole('button', { name: 'Kaydet' }))
+    expect(port.save).toHaveBeenCalledWith(fixture.caseId, { expectedVersion: null, overrides: { fields: hiddenFields, documents } })
+    expect(dialog.getByRole('button', { name: 'Otomatik bilgilere dön' })).toBeDisabled()
+    for (const root of [dialog.getByRole('article'), document.querySelector('.notice-sheet-print-root')!]) {
+      expect(root).not.toHaveTextContent('TR00 korunacak')
+      expect(root).not.toHaveTextContent('Korunacak eksikler')
+      expect(root).not.toHaveTextContent('Evrak kontrolü')
+    }
+  })
+  it('downloads Word only after pending changes have been saved', async () => {
+    const createObjectURL = vi.fn().mockReturnValue('blob:notice-sheet')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL, revokeObjectURL }))
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      expect(this.download).toBe('İhbar Föyü.docx')
+      expect(this.href).toBe('blob:notice-sheet')
+      expect(this).toBeInTheDocument()
+    })
+    const { dialog, user, port } = setup()
+    await dialog.findByRole('article')
+    const word = dialog.getByRole('button', { name: 'Word indir' })
+    expect(word).toBeEnabled()
+    await user.type(dialog.getByLabelText('Rücu durumu'), 'Yeni rücu')
+    expect(word).toBeDisabled()
+    await user.click(word)
+    expect(port.exportWord).not.toHaveBeenCalled()
+    await user.click(dialog.getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(word).toBeEnabled())
+    await user.click(word)
+    expect(port.exportWord).toHaveBeenCalledWith(noticeSheetFixture.caseId)
+    expect(click).toHaveBeenCalledOnce()
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:notice-sheet'))
+    expect(document.querySelector('a[download]')).toBeNull()
+  })
+  it('allows read-only Word downloads and reports export failures without a write', async () => {
+    const { dialog, user, port } = setup({ exportWord: vi.fn().mockRejectedValue(new NoticeSheetClientError('forbidden')) }, { ...noticeSheetFixture, permissions: { canEdit: false } })
+    await dialog.findByRole('article')
+    await user.click(dialog.getByRole('button', { name: 'Word indir' }))
+    expect(await dialog.findByRole('alert')).toHaveTextContent('Bu işlem için yetkiniz yok.')
+    expect(port.save).not.toHaveBeenCalled()
+    expect(dialog.getByRole('button', { name: 'Word indir' })).toBeEnabled()
   })
   it('saves edits before printing only the chosen case and restores print state', async () => {
     const { dialog, user, port } = setup()
@@ -151,7 +215,7 @@ describe('İhbar föyü düzenleme ve yazdırma', () => {
   it('cleans print portals and print styling when closed', async () => {
     let resolveRead!: (value: typeof noticeSheetFixture) => void
     const pending = new Promise<typeof noticeSheetFixture>(resolve => { resolveRead = resolve })
-    const port: NoticeSheetDataPort = { read: () => pending, save: vi.fn() }
+    const port: NoticeSheetDataPort = { read: () => pending, save: vi.fn(), exportWord: vi.fn() }
     const view = render(<NoticeSheetModal caseId="notice-case-1" port={port} onClose={vi.fn()} />)
     await act(async () => resolveRead(noticeSheetFixture))
     expect(document.querySelector('.notice-sheet-print-root')).toBeInTheDocument()

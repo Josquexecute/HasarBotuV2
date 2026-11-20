@@ -1,4 +1,4 @@
-import type { NoticeSheetDocument, NoticeSheetField } from '@hasarbotu/contracts'
+import type { NoticeSheetField } from '@hasarbotu/contracts'
 
 interface FieldDefinition { key: NoticeSheetField; label: string; multiline?: boolean; date?: boolean }
 export const noticeSheetFieldGroups: readonly { title: string; fields: readonly FieldDefinition[] }[] = [
@@ -51,18 +51,7 @@ export const noticeSheetFieldGroups: readonly { title: string; fields: readonly 
     { key: 'procurement', label: 'Tedarik' },
     { key: 'preliminaryReportDate', label: 'Ön rapor tarihi', date: true },
     { key: 'tramer', label: 'Tramer' },
-    { key: 'iban', label: 'IBAN' },
-    { key: 'missingDocuments', label: 'Eksikler', multiline: true },
   ] },
-]
-
-export const noticeSheetDocumentLabels: readonly [NoticeSheetDocument, string][] = [
-  ['statement', 'Beyan'], ['officialReport', 'Zabıt'],
-  ['accidentReport', 'Tutanak (anlaşmalı, ifade, görgü)'], ['alcoholReport', 'Alkol raporu'],
-  ['damagePhotos', 'Hasar fotoğrafları (KM, şase)'], ['scenePhotos', 'Olay yeri fotoğrafları'],
-  ['insuredLicense', 'S. ehliyet'], ['insuredRegistration', 'S. ruhsat'],
-  ['victimLicense', 'M. ehliyet'], ['victimRegistration', 'M. ruhsat'],
-  ['tramerEntry', 'Tramer girişi'], ['partsList', 'Liste'],
 ]
 
 export function formatNoticeSheetDate(value: string | null): string {

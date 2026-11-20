@@ -1,13 +1,13 @@
 import type { RealMarketValueLossPartInput } from './traffic-value-loss-real-market.js'
-import { buildValueLossPartStableId, type ValueLossPartRule } from './value-loss-rule-snapshot.js'
+import { buildValueLossPartStableId, VALUE_LOSS_SOURCE_WORKBOOK_FILE_NAME, VALUE_LOSS_SOURCE_WORKBOOK_SHA256, type ValueLossPartRule } from './value-loss-rule-snapshot.js'
 import { findValueLossManufacturerPart, type ValueLossVehicleIdentity } from './value-loss-manufacturer-catalog.js'
 
 export const VALUE_LOSS_CALCULATOR_OPERATIONS = ['replacement', 'replacement_paint', 'repair', 'repair_paint', 'paint', 'paintless_repair'] as const
 export const VALUE_LOSS_PART_MATERIALS = ['unspecified', 'steel', 'aluminium', 'plastic', 'plastic_bodywork', 'composite', 'glass', 'mechanical', 'electrical', 'accessory', 'superstructure', 'other'] as const
 export const VALUE_LOSS_BODY_TYPES = ['unspecified', 'sedan', 'hatchback', 'station_wagon', 'suv', 'coupe', 'cabriolet', 'van_minibus', 'coach_minibus', 'city_bus', 'coach', 'midibus', 'panel_van', 'passenger_van', 'pickup', 'double_cab_pickup', 'truck', 'tractor_unit', 'excavator', 'loader', 'backhoe_loader', 'cab_tractor', 'open_tractor', 'combine', 'special_body', 'box_trailer', 'flatbed_trailer', 'tanker_trailer', 'scooter', 'naked', 'sport', 'touring', 'off_road', 'tanker_truck', 'other'] as const
-export const VALUE_LOSS_CALCULATOR_REFERENCE_VERSION = 'calculator-reference/2026-07-01/1.2.0' as const
-export const VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME = 'Yeni Dönem Değer Kaybı Hesaplama Modülü 01.07.2026 V_5.xlsx' as const
-export const VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256 = '34a3452bf8e93a67ce20b85ca042ba894d7d1786908555e81a41306d5a67bef9' as const
+export const VALUE_LOSS_CALCULATOR_REFERENCE_VERSION = 'calculator-reference/2026-07-01/1.3.0' as const
+export const VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME = VALUE_LOSS_SOURCE_WORKBOOK_FILE_NAME
+export const VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256 = VALUE_LOSS_SOURCE_WORKBOOK_SHA256
 export const VALUE_LOSS_VEHICLE_GROUPS = { 'OTOMOBİL': 'A', 'TAKSİ': 'A', 'MİNİBÜS': 'B', 'OTOBÜS': 'B', 'KAMYONET': 'C', 'KAMYON': 'C', 'ÇEKİCİ': 'C', 'İŞ MAKİNESİ': 'D', 'TRAKTÖR': 'D', 'TARIM MAKİNESİ': 'D', 'ÖZEL AMAÇLI ARAÇ': 'Ç', 'RÖMORK': 'E', 'MOTORSİKLET': 'F', 'TANKER': 'Ç' } as const
 export type ValueLossBodyType = typeof VALUE_LOSS_BODY_TYPES[number]
 export type ValueLossPartMaterial = typeof VALUE_LOSS_PART_MATERIALS[number]
@@ -36,9 +36,9 @@ export function valueLossBodyOptions(vehicleType: string): readonly ValueLossBod
 }
 
 export function valueLossCalculatorVehicleContext(vehicleType: keyof typeof VALUE_LOSS_VEHICLE_GROUPS, body: ValueLossBodyType) {
-  // Source application principle 3.8, Uygulama Esasları!B54.
+  // Source application principles 3.6 (taxi use) and 3.8 (passenger van).
   const passengerVan = vehicleType === 'KAMYONET' && body === 'passenger_van'
-  return { vehicleType: passengerVan ? 'OTOMOBİL' as const : vehicleType, group: passengerVan ? 'A' as const : VALUE_LOSS_VEHICLE_GROUPS[vehicleType], commercialRequired: passengerVan }
+  return { vehicleType: passengerVan ? 'OTOMOBİL' as const : vehicleType, group: passengerVan ? 'A' as const : VALUE_LOSS_VEHICLE_GROUPS[vehicleType], commercialRequired: passengerVan || vehicleType === 'TAKSİ' }
 }
 
 export interface ValueLossSourcePart {
@@ -84,8 +84,9 @@ export function valueLossCalculatorSourceParts(vehicleType: string, body: ValueL
 
 /** Zero additional part coefficient is explicit here; it is not zero total value loss. */
 export function valueLossBaseOnlyPrinciple(entry: Pick<ValueLossCalculatorPartSelection, 'material' | 'operation'> & Partial<Pick<ValueLossCalculatorPartSelection, 'treatment'>>): '3.9' | '3.10' | null {
-  if (entry.treatment && !['standard', 'paintless_repair'].includes(entry.treatment)) return null
+  if (entry.treatment && !['standard', 'paintless_repair', 'plastic_or_unpainted'].includes(entry.treatment)) return null
   if (entry.material === 'plastic_bodywork') return '3.9'
+  if (entry.treatment === 'plastic_or_unpainted' && ['steel', 'aluminium'].includes(entry.material)) return '3.9'
   if (entry.material === 'steel' && entry.operation === 'paintless_repair') return '3.10'
   return null
 }
@@ -187,7 +188,13 @@ export function resolveValueLossCalculatorParts(vehicleType: string, body: Value
     const manufacturerSource = vehicle === undefined ? null : findValueLossManufacturerPart(vehicle.identity, vehicle.modelYear, vehicleType, body, entry.partName)
     const referenceReason = vehicle === undefined ? 'reference_match' : manufacturerSource ? 'manufacturer_documented' : 'manufacturer_unverified'
     const principle = valueLossBaseOnlyPrinciple(entry)
-    if (principle !== null) { baseOnlyParts.push({ entryId: entry.entryId, principle }); coverage.push({ entryId: entry.entryId, reason: 'documented_base_only', manufacturerSource }); continue }
+    if (principle !== null) {
+      if (entry.priorPartState !== 'none') {
+        issues.push({ field: 'partSelections', message: `${entry.partName}: geçmiş hasarlı parçanın payı toplam hasar tutarından ayrıştırılmalıdır. Yalnız uygun parçaları ve bunların hasar tutarını girin.` })
+        continue
+      }
+      baseOnlyParts.push({ entryId: entry.entryId, principle }); coverage.push({ entryId: entry.entryId, reason: 'documented_base_only', manufacturerSource }); continue
+    }
     const operation = entry.operation === 'replacement_paint' ? 'replacement' : entry.operation === 'repair_paint' || entry.operation === 'paintless_repair' ? 'repair' : entry.operation
     const hasPaint = entry.operation === 'replacement_paint' || entry.operation === 'repair_paint'
     const repeated = entry.stableRuleId !== null && seenRules.has(entry.stableRuleId)

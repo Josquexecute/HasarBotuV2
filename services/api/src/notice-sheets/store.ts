@@ -1,5 +1,5 @@
 import type pg from 'pg'
-import { buildNoticeSheetDefaults, eksistKey, NOTICE_SHEET_HEADER_LIMITS, NOTICE_SHEET_V3_FIELDS } from '@hasarbotu/domain'
+import { buildNoticeSheetDefaults, eksistKey, isNoticeSheetFieldVisible, NOTICE_SHEET_HEADER_LIMITS, NOTICE_SHEET_V3_FIELDS } from '@hasarbotu/domain'
 import { noticeSheetResponseSchema, noticeSheetOverridesSchema, type NoticeSheetResponse, type NoticeSheetSaveRequest } from '@hasarbotu/contracts'
 import { withTransaction, type Queryable } from '../db/executor.js'
 import { createAuditService } from '../audit/service.js'
@@ -120,16 +120,13 @@ export function createNoticeSheetStore(pool: pg.Pool) {
         if (version !== input.expectedVersion) throw new NoticeSheetError('version_conflict', 409)
         const overrides = noticeSheetOverridesSchema.parse(input.overrides)
         const previous = noticeSheetOverridesSchema.parse(existing.rows[0]?.overrides ?? { fields: {}, documents: {} })
-        // Older clients cannot see new fields; hiding retired notes must not erase them.
-        const hiddenFields = Object.keys(previous.fields).filter(key => row.case_type === 'casco' ? key.startsWith('victim') : key === 'insuredDamageHistory') as (keyof typeof previous.fields)[]
-        for (const key of ['inspectionNotes', ...hiddenFields, ...(!includeVehicleFields ? NOTICE_SHEET_V3_FIELDS : [])] as const) {
+        // Omitted hidden fields are preserved; explicit edits from older clients still apply.
+        const hiddenFields = (Object.keys(previous.fields) as (keyof typeof previous.fields)[])
+          .filter(key => !isNoticeSheetFieldVisible(row.case_type, key))
+        for (const key of [...hiddenFields, ...(!includeVehicleFields ? NOTICE_SHEET_V3_FIELDS : [])]) {
           if (!Object.hasOwn(overrides.fields, key) && Object.hasOwn(previous.fields, key)) overrides.fields[key] = previous.fields[key]!
         }
-        if (row.case_type === 'casco') {
-          for (const key of ['victimLicense', 'victimRegistration'] as const) {
-            if (!Object.hasOwn(overrides.documents, key) && Object.hasOwn(previous.documents, key)) overrides.documents[key] = previous.documents[key]!
-          }
-        }
+        overrides.documents = { ...previous.documents, ...overrides.documents }
         if (!includeHeaderFields) {
           overrides.fields = { ...Object.fromEntries(Object.entries(previous.fields).filter(([key]) => Object.hasOwn(NOTICE_SHEET_HEADER_LIMITS,key))), ...overrides.fields }
         }

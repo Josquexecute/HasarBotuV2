@@ -19,7 +19,7 @@ export function createHttpValueLossCalculatorAdapter(options: { readonly fetchIm
     async loadCalculation(caseId) {
       let response: Response
       try {
-        response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? ''}/api/v1/cases/${encodeURIComponent(caseId)}/traffic-value-loss/calculate`, { credentials: 'include', headers: { accept: 'application/json' } })
+        response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? ''}/api/v1/cases/${encodeURIComponent(caseId)}/traffic-value-loss/calculate?details=1`, { credentials: 'include', headers: { accept: 'application/json' } })
       } catch { throw new TrafficValueLossError('unavailable', 'Saved calculator unavailable') }
       if (!response.ok) throw new TrafficValueLossError(response.status === 401 ? 'unauthorized' : response.status === 403 ? 'forbidden' : response.status === 404 ? 'not_found' : 'unavailable', 'Saved calculator request failed')
       try { return valueLossCalculatorSavedResponseSchema.parse(await response.json()).calculation }
@@ -35,7 +35,7 @@ export function createHttpValueLossCalculatorAdapter(options: { readonly fetchIm
     async calculate(caseId, input) {
       let response: Response
       try {
-        response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? ''}/api/v1/cases/${encodeURIComponent(caseId)}/traffic-value-loss/calculate`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(input) })
+        response = await (options.fetchImpl ?? fetch)(`${options.baseUrl ?? ''}/api/v1/cases/${encodeURIComponent(caseId)}/traffic-value-loss/calculate?details=1`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(input) })
       } catch { throw new TrafficValueLossError('unavailable', 'Calculator unavailable') }
       if (!response.ok) throw new TrafficValueLossError(response.status === 401 ? 'unauthorized' : response.status === 403 ? 'forbidden' : response.status === 400 ? 'validation' : response.status === 404 ? 'not_found' : 'unavailable', 'Calculator request failed')
       try { return valueLossCalculatorResponseSchema.parse(await response.json()) }

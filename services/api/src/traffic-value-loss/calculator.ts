@@ -1,4 +1,4 @@
-import { calculateTrafficValueLossMarketDifference, evaluateRealMarketValueLoss, evaluateTrafficValueLoss, parseLocalDate, resolveValueLossCalculatorParts, selectTrafficValueLossRule, TRAFFIC_VALUE_LOSS_RULE_VERSION, VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, valueLossCalculatorAdditionalRules, valueLossCalculatorVehicleContext } from '@hasarbotu/domain'
+import { calculateTrafficValueLossMarketDifference, evaluateRealMarketValueLoss, evaluateTrafficValueLoss, parseLocalDate, resolveValueLossCalculatorParts, selectTrafficValueLossRule, TRAFFIC_VALUE_LOSS_RULE_VERSION, VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME, VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256, valueLossCalculatorAdditionalRules, valueLossCalculatorVehicleContext } from '@hasarbotu/domain'
 import type { ValueLossCalculatorRequest, ValueLossCalculatorResponse } from '@hasarbotu/contracts'
 import { realMarketValueLossRuleSnapshot as snapshot } from './rule-source.js'
 
@@ -55,6 +55,22 @@ export function calculateValueLoss(input: ValueLossCalculatorRequest): ValueLoss
     comparables: [], evidence: [],
   }, { documentedBaseOnlyPartCount: resolved?.baseOnlyParts.length ?? 0 })
   // Documentary checks belong to formal reporting, not arithmetic. Input and part errors still block a result.
-  const issues = result.reasons.filter(item => item.code !== 'REQUIRED_EVIDENCE_MISSING' && item.code !== 'INSUFFICIENT_COMPARABLES').map(item => ({ field: item.field, message: item.message }))
-  return { amountMinor: issues.length ? null : result.finalResultMinor, ruleVersion: input.partSelections === undefined ? result.ruleVersion : VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: result.calculationMethod, issues }
+  const issues = result.reasons.filter(item => (item.code !== 'REQUIRED_EVIDENCE_MISSING' || item.field === 'damageAmountMinor') && item.code !== 'INSUFFICIENT_COMPARABLES').map(item => ({ field: item.field, message: item.message }))
+  const gross = issues.length ? null : result.finalResultMinor
+  const amountMinor = gross === null ? null : calculateTrafficValueLossMarketDifference(gross, 0, input.faultRateBasisPoints).faultAdjustedValueLossMinor
+  return { amountMinor, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: result.calculationMethod, issues,
+    ...(gross === null ? {} : { breakdown: {
+      sourceFileName: VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME, sourceSha256: VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256,
+      vehicleAge: Number(input.accidentDate.slice(0, 4)) - input.modelYear!, vehicleGroup: group,
+      ageCoefficient: result.ageCoefficient!.decimal, usageCoefficient: result.usageCoefficient!.decimal,
+      commercialModifier: result.generalModifiers.commercialOrRental.decimal, previousDamageModifier: result.generalModifiers.previousDamage.decimal,
+      mileageModifier: result.generalModifiers.lowerBandProximity.decimal, generalMultiplier: result.generalModifiers.multiplier.decimal,
+      partCoefficient: result.partCoefficientPercentagePoints!.decimal, damageContribution: result.damageAmountContribution!.decimal,
+      damageCoefficient: result.damageCoefficient!.decimal, vehicleMultiplier: result.vehicleMultiplier!.decimal,
+      rawAmountMinor: result.rawResultMinor!.decimal, capMinor: result.capMinor!.decimal, cappedAmountMinor: result.cappedResultMinor!.decimal, capApplied: result.capApplied,
+      roundingUnitMinor: result.roundingUnitMinor, grossAmountMinor: gross, faultRateBasisPoints: input.faultRateBasisPoints,
+      parts: result.partBreakdown.map(part => ({ label: part.sourceLabel, operation: part.operation, repairClass: part.repairClass, coefficient: part.coefficient.decimal, included: part.included, exclusionReason: part.exclusionReason, sourceRow: part.sourceRow })),
+      baseOnlyParts: (resolved?.baseOnlyParts ?? []).map(part => ({ label: input.partSelections!.find(entry => entry.entryId === part.entryId)!.partName, principle: part.principle })),
+    } }),
+  }
 }

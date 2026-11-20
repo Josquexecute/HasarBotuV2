@@ -8,6 +8,19 @@ const part = snapshot.partRules.find(part => part.vehicleGroupCode === 'A' && pa
 const input = valueLossCalculatorRequestSchema.parse({ accidentDate: '2026-10-01', vehicleType: 'OTOMOBİL', modelYear: 2024, usageValue: 50000, marketValueMinor: 100_000_000, damageAmountMinor: 10_000_000, previousDamageCount: 0, commercialOrRental: false, vehicleCondition: 'normal', postRepairMarketValueMinor: null, faultRateBasisPoints: 10000, parts: [{ stableRuleId: part.stableId, operation: 'replacement', paintMode: null, newPartPriceMinor: null, repairLaborMinor: null, partPriceAvailability: 'unavailable', priorPartState: 'none', treatment: 'standard' }] })
 
 describe('value loss calculator reuses established arithmetic', () => {
+  it('applies counterparty fault after reference rounding and exposes the gross amount', () => {
+    const gross = calculateValueLoss(input).amountMinor!
+    for (const rate of [0, 3333, 7500, 10000]) {
+      const result = calculateValueLoss({ ...input, faultRateBasisPoints: rate })
+      expect(result.amountMinor).toBe(Number((BigInt(gross) * BigInt(rate) + 5000n) / 10000n))
+      expect(result).toHaveProperty('breakdown.grossAmountMinor', gross)
+    }
+  })
+  it.each([15000, 30000])('blocks conflicting repair threshold %s with no partial amount', repairLaborMinor => {
+    const result = calculateValueLoss({ ...input, parts: [{ ...input.parts[0]!, operation: 'repair', partPriceAvailability: 'available', newPartPriceMinor: 100000, repairLaborMinor }] })
+    expect(result.amountMinor).toBeNull()
+    expect(result.issues.some(issue => issue.message.includes('çeliş'))).toBe(true)
+  })
   it('blocks an unknown history count instead of applying a zero modifier', () => {
     expect(calculateValueLoss({ ...input, previousDamageCount: null })).toMatchObject({ amountMinor: null, issues: [expect.objectContaining({ field: 'previousDamageCount' })] })
   })
@@ -36,6 +49,11 @@ const physicalPart = { entryId: 'physical-1', stableRuleId: part.stableId, partN
 function physical(patch: Record<string, unknown> = {}) { return valueLossCalculatorRequestSchema.parse({ ...input, bodyType: 'unspecified', calculationBasis: 'reference', parts: [], partSelections: [physicalPart], ...patch }) }
 
 describe('calculator physical parts and market difference', () => {
+  it.each(['previously_damaged', 'previously_repaired_detachable', 'previously_repaired_welded'] as const)('does not include %s in a base-only damage total without allocation', priorPartState => {
+    const result = calculateValueLoss(physical({ partSelections: [{ ...physicalPart, material: 'plastic_bodywork', priorPartState }] }))
+    expect(result.amountMinor).toBeNull()
+    expect(result.issues[0]?.message).toContain('ayrıştır')
+  })
   it('applies whole-vehicle market difference only when explicitly selected', () => {
     const value = physical({ calculationBasis: 'market_difference', partSelections: [physicalPart, { ...physicalPart, entryId: 'unlisted', stableRuleId: null, partName: 'Ön amortisör' }], postRepairMarketValueMinor: 90_000_000, faultRateBasisPoints: 7500 })
     expect(calculateValueLoss(value)).toMatchObject({ amountMinor: 7_500_000, calculationMethod: 'market_value_difference', issues: [] })
@@ -44,7 +62,7 @@ describe('calculator physical parts and market difference', () => {
   it.each([{ manufacturer: 'Unknown', model: 'Unknown' }, { manufacturer: 'Tesla', model: 'Model 3' }])('calculates a generic reference estimate for %j without asking for the answer as input', vehicleIdentity => {
     const value = physical({ vehicleIdentity, postRepairMarketValueMinor: null })
     const estimate = calculateValueLoss(value)
-    expect(estimate).toMatchObject({ amountMinor: calculateValueLoss(physical()).amountMinor, calculationMethod: 'real_market_analysis', ruleVersion: 'calculator-reference/2026-07-01/1.2.0', issues: [] })
+    expect(estimate).toMatchObject({ amountMinor: calculateValueLoss(physical()).amountMinor, calculationMethod: 'real_market_analysis', ruleVersion: 'calculator-reference/2026-07-01/1.3.0', issues: [] })
     expect(estimate.amountMinor).toBeGreaterThan(0)
     expect(calculateValueLoss({ ...value, postRepairMarketValueMinor: 90_000_000 })).toEqual(estimate)
   })
@@ -53,6 +71,13 @@ describe('calculator physical parts and market difference', () => {
     expect(van).toMatchObject({ amountMinor: calculateValueLoss(physical({ commercialOrRental: true })).amountMinor, issues: [] })
     expect(van.amountMinor).not.toBe(calculateValueLoss(physical()).amountMinor)
     expect(calculateValueLoss(physical({ vehicleType: 'KAMYONET', bodyType: 'panel_van' })).amountMinor).toBeNull()
+  })
+  it('enforces taxi commercial usage even when the request flag is false', () => {
+    const taxi = calculateValueLoss(physical({ vehicleType: 'TAKSİ', commercialOrRental: false }))
+    const commercialAutomobile = calculateValueLoss(physical({ commercialOrRental: true }))
+    expect(taxi).toMatchObject({ amountMinor: commercialAutomobile.amountMinor, issues: [], breakdown: { commercialModifier: '-0.05' } })
+    expect(taxi.amountMinor).not.toBe(calculateValueLoss(physical({ commercialOrRental: false })).amountMinor)
+    expect(calculateValueLoss(physical({ vehicleType: 'TAKSİ', commercialOrRental: true }))).toEqual(taxi)
   })
   it('preserves the old amount for an exactly matched physical part', () => expect(calculateValueLoss(physical()).amountMinor).toBe(calculateValueLoss(input).amountMinor))
   it('does not emit a partial amount for mixed mapped and unlisted physical parts', () => {
@@ -86,7 +111,7 @@ describe('calculator physical parts and market difference', () => {
     const rule = valueLossCalculatorAdditionalRules('OTOMOBİL', 'cabriolet')[0]!
     const selection = { ...physicalPart, stableRuleId: rule.stableId, partName: rule.sourceLabel, operation: 'repair_paint', paintMode: 'local', newPartPriceMinor: 100_000, repairLaborMinor: 20_000, partPriceAvailability: 'available' }
     const result = calculateValueLoss(physical({ bodyType: 'cabriolet', partSelections: [selection] }))
-    expect(result).toMatchObject({ ruleVersion: 'calculator-reference/2026-07-01/1.2.0', issues: [] })
+    expect(result).toMatchObject({ ruleVersion: 'calculator-reference/2026-07-01/1.3.0', issues: [] })
     expect(result.amountMinor).toBeGreaterThan(0)
     expect(calculateValueLoss(physical({ bodyType: 'sedan', partSelections: [selection] })).amountMinor).toBeNull()
   })

@@ -141,7 +141,7 @@ describe('Paket 66 gerçek piyasa değer kaybı motoru', () => {
     expect(result.canSubmitForApproval).toBe(true)
   })
 
-  it('%15 sınırını medium, %30 sınırını heavy onarım sınıfı yapar', () => {
+  it('açık onarım aralıklarını hesaplar, rehber ile Excel çelişen tam sınırları durdurur', () => {
     const evaluateLabor = (repairLaborMinor: number) => evaluateRealMarketValueLoss(snapshot, {
       ...valid,
       parts: [part({
@@ -150,13 +150,15 @@ describe('Paket 66 gerçek piyasa değer kaybı motoru', () => {
         newPartPriceMinor: 10_000,
         repairLaborMinor,
       })],
-    }).partBreakdown[0]?.repairClass
-    expect(evaluateLabor(1_499)).toBe('light')
-    expect(evaluateLabor(1_500)).toBe('medium')
-    expect(evaluateLabor(1_501)).toBe('medium')
-    expect(evaluateLabor(2_999)).toBe('medium')
-    expect(evaluateLabor(3_000)).toBe('heavy')
-    expect(evaluateLabor(3_001)).toBe('heavy')
+    })
+    expect(evaluateLabor(1_499).partBreakdown[0]?.repairClass).toBe('light')
+    expect(evaluateLabor(1_501).partBreakdown[0]?.repairClass).toBe('medium')
+    expect(evaluateLabor(2_999).partBreakdown[0]?.repairClass).toBe('medium')
+    expect(evaluateLabor(3_001).partBreakdown[0]?.repairClass).toBe('heavy')
+    for (const labor of [1_500, 3_000]) {
+      expect(evaluateLabor(labor)).toMatchObject({ finalResultMinor: null, canSubmitForApproval: false })
+      expect(evaluateLabor(labor).reasons).toContainEqual(expect.objectContaining({ code: 'SOURCE_CONFLICT', field: 'parts.repairLaborMinor' }))
+    }
   })
 
   it('%30 tavanının hemen altı, kendisi ve üstünü exact rational olarak ayırır', () => {
@@ -292,6 +294,22 @@ describe('Paket 66 gerçek piyasa değer kaybı motoru', () => {
     expect(result.finalResultMinor).not.toBeNull()
     expect(Number.isSafeInteger(result.finalResultMinor)).toBe(true)
     expect(result.capApplied).toBe(false)
+  })
+
+  it.each(['previously_damaged', 'previously_repaired_detachable'] as const)('%s parçanın toplam hasar katkısından da sessiz tazminat üretmez', priorPartState => {
+    const result = evaluateRealMarketValueLoss(snapshot, { ...valid, parts: [part({ priorPartState })] })
+    expect(result).toMatchObject({ finalResultMinor: null, canSubmitForApproval: false })
+    expect(result.reasons).toContainEqual(expect.objectContaining({ code: 'REQUIRED_EVIDENCE_MISSING', field: 'damageAmountMinor' }))
+  })
+
+  it('rehber 3.15 kaynaklı parçanın yeni değişim istisnasını ve boya dışlamasını korur', () => {
+    const result = evaluateRealMarketValueLoss(snapshot, { ...valid, parts: [
+      part({ priorPartState: 'previously_repaired_welded' }),
+      part({ priorPartState: 'previously_repaired_welded', operation: 'paint', paintMode: 'full' }),
+    ] })
+    expect(result.finalResultMinor).toBeGreaterThan(0)
+    expect(result.reasons).not.toContainEqual(expect.objectContaining({ code: 'REQUIRED_EVIDENCE_MISSING', field: 'damageAmountMinor' }))
+    expect(result.partBreakdown.find(part => part.operation === 'paint')?.included).toBe(false)
   })
 
   it('kanıt eksikliğinde eligible veya onaylanabilir sonuç üretmez', () => {

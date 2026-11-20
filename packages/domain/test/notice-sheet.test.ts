@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyNoticeSheetOverrides, buildNoticeSheetDefaults, type NoticeSheetSource } from '../src/notice-sheet.js'
+import { applyNoticeSheetOverrides, buildNoticeSheetDefaults, isNoticeSheetFieldVisible, NOTICE_SHEET_FIELD_LIMITS, type NoticeSheetField, type NoticeSheetSource } from '../src/notice-sheet.js'
 
 const source: NoticeSheetSource = {
   caseType: 'traffic', plate: '34 TEST 123', serviceName: 'Yeni Servis', servicePhone: null,
@@ -9,6 +9,20 @@ const source: NoticeSheetSource = {
 }
 
 describe('İhbar föyü kaynak eşlemesi', () => {
+  it.each([
+    { caseType: 'traffic', hidden: ['iban', 'missingDocuments', 'inspectionNotes', 'insuredMileage', 'insuredHeavyDamage', 'insuredPreviousClaims', 'insuredDamageHistory'] },
+    { caseType: 'casco', hidden: ['iban', 'missingDocuments', 'inspectionNotes', 'victimName', 'victimPlate', 'victimPolicyPeriod', 'victimRegistrationDate', 'victimMileage', 'victimHeavyDamage', 'victimPreviousClaims', 'victimDamageHistory', 'victimFault'] },
+  ] as const)('keeps only the applicable $caseType fields visible without changing stored keys', ({ caseType, hidden }) => {
+    const actual = (Object.keys(NOTICE_SHEET_FIELD_LIMITS) as NoticeSheetField[])
+      .filter(field => !isNoticeSheetFieldVisible(caseType, field))
+    expect(actual.sort()).toEqual([...hidden].sort())
+    expect(Object.hasOwn(NOTICE_SHEET_FIELD_LIMITS, 'iban')).toBe(true)
+  })
+  it('does not choose a printable field set for an unclassified case', () => {
+    for (const field of Object.keys(NOTICE_SHEET_FIELD_LIMITS) as NoticeSheetField[]) {
+      expect(isNoticeSheetFieldVisible(null, field)).toBe(false)
+    }
+  })
   it('keeps the traffic insured identity separate from the victim and primary plate', () => {
     expect(buildNoticeSheetDefaults(source).fields).toMatchObject({
       insuredName: 'Sigortalı Örnek', insuredPlate: '', victimName: 'Mağdur Örnek', victimPlate: source.plate,

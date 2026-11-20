@@ -64,6 +64,8 @@ export function mergeCalculatorCaseDefaults(draft: CalculatorDraft, defaults: Ca
   for (const field of ['usageValue', 'previousDamageCount'] as const) {
     if (previous[field] !== undefined && defaults[field] === undefined && draft[field] === previous[field]) next[field] = ''
   }
+  // A newly imported disqualifying fact must override even a manually confirmed old draft.
+  if (defaults.vehicleCondition && !['unknown', 'normal'].includes(defaults.vehicleCondition)) next.vehicleCondition = defaults.vehicleCondition
   if (!valueLossBodyOptions(next.vehicleType).includes(next.bodyType)) next.bodyType = 'unspecified'
   if (next.vehicleType !== draft.vehicleType || next.bodyType !== draft.bodyType) {
     // Physical observations remain useful even when their old reference IDs no longer apply.

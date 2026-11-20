@@ -1,18 +1,22 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { _electron } from '@playwright/test'
 import pg from 'pg'
 import { assertTestDatabaseUrl, runMigrations, uuidv7 } from '@hasarbotu/database'
 import { buildApp, hashPassword } from '../services/api/dist/index.js'
+import { measureValueLossElectronTyping } from './value-loss-electron-performance.mjs'
+import { verifyNoticeSheetDelivery } from './verify-notice-sheet-delivery.mjs'
+import { downloadElectronFixture } from './electron-fixture-download.mjs'
 
-const output = resolve(process.env.VALUE_LOSS_EVIDENCE ?? '.local/value-loss-calculator-electron')
-await mkdir(output, { recursive: true })
+const evidenceRoot = resolve(process.env.VALUE_LOSS_EVIDENCE ?? '.local/value-loss-calculator-electron')
+await mkdir(evidenceRoot, { recursive: true })
+const output = await mkdtemp(evidenceRoot + '/run-')
 const config = assertTestDatabaseUrl(process.env.TEST_DATABASE_URL)
 const pool = new pg.Pool({ connectionString: config.url })
 const checks = []
-const check = (name, pass) => { assert.ok(pass, name); checks.push(name) }
+const check = (name, pass) => { assert.ok(pass, name); checks.push(name); console.log(JSON.stringify({ check: checks.length, name })) }
 let api, electron
 try {
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public')
@@ -50,25 +54,26 @@ try {
   await page.getByRole('button', { name: 'Değer Kaybı', exact: true }).click()
   await page.getByRole('heading', { name: 'Değer Kaybı Hesapla', exact: true }).waitFor()
   check('source extraction reaches the actual calculator without manual vehicle entry', await page.getByLabel('Model yılı').inputValue() === '2021' && await page.getByLabel('Kilometre').inputValue() === '51001' && await page.getByLabel('Önceki hasar sayısı').inputValue() === '2' && (await page.getByLabel('Dosyadan alınan araç bilgileri').textContent()).includes('FORD · FOCUS SEDAN · Sedan'))
-  check('removed fields have no editable controls', await page.getByLabel('Marka', { exact: true }).count() === 0 && await page.getByLabel('Kasa / araç yapısı').count() === 0)
+  check('imported identity is concise and body classification is editable', await page.getByLabel('Marka', { exact: true }).count() === 0 && await page.getByLabel('Kasa / araç yapısı').inputValue() === 'sedan')
   // This source has no repair assessment; only the missing amount is entered.
   const details = page.locator('.value-loss-calculator details').first()
   if (await details.getAttribute('open') === null) await details.locator('summary').click()
   await page.getByLabel('Hasar tutarı (TL)', { exact: true }).fill('100.000')
   await page.getByLabel('Rayiç bedeli (TL)', { exact: true }).fill('1.000.000')
+  await page.getByLabel('Araç durumu', { exact: true }).selectOption('normal')
   const partInput = page.getByRole('combobox', { name: 'Hasarlı parça', exact: true })
   await partInput.click()
   const part = await page.getByRole('listbox', { name: 'Hasarlı parça' }).getByRole('option').first().textContent()
   await page.getByRole('option', { name: part, exact: true }).click()
   await page.getByRole('button', { name: 'Ekle', exact: true }).click()
   const requests = []
-  page.on('request', request => { if (request.url().endsWith('/traffic-value-loss/calculate') && request.method() === 'POST') requests.push(request.postDataJSON()) })
+  page.on('request', request => { if (new URL(request.url()).pathname.endsWith('/traffic-value-loss/calculate') && request.method() === 'POST') requests.push(request.postDataJSON()) })
   await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
   await page.getByRole('alert').filter({ hasText: 'Önceki parça hasarı bilinmiyor' }).waitFor()
   check('unknown history blocks the request and any amount', requests.length === 0 && await page.locator('.value-loss-calculator__footer strong').count() === 0)
   await page.getByLabel(part + ' önceki durumu', { exact: true }).selectOption('none')
   const calculate = async () => {
-    const responsePromise = page.waitForResponse(response => response.url().endsWith('/traffic-value-loss/calculate') && response.request().method() === 'POST')
+    const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/traffic-value-loss/calculate') && response.request().method() === 'POST')
     await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
     const response = await responsePromise
     assert.equal(response.status(), 200)
@@ -113,7 +118,7 @@ try {
   await page.getByRole('button', { name: 'Değer Kaybı', exact: true }).click()
   await page.locator('.value-loss-calculator__footer strong').waitFor()
   check('saved estimate survives clearing the renderer session and reloading', await page.locator('.value-loss-calculator__footer strong').textContent() === amount && await page.getByLabel('Rayiç bedeli (TL)').inputValue() === '1000000')
-  check('reference estimate and normal condition have no alternative selectors', await page.getByLabel('Hesap yöntemi').count() === 0 && await page.getByLabel('Araç durumu').count() === 0 && saved.input.calculationBasis === 'reference' && saved.input.vehicleCondition === 'normal')
+  check('reference estimate preserves explicit vehicle condition', await page.getByLabel('Hesap yöntemi').count() === 0 && await page.getByLabel('Araç durumu').inputValue() === 'normal' && saved.input.calculationBasis === 'reference' && saved.input.vehicleCondition === 'normal')
   await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(480, 760))
   await page.goto(origin + '/touch-assistant')
   await page.getByRole('tab', { name: 'Dosyalar', exact: true }).click()
@@ -126,10 +131,63 @@ try {
   const processBounds = await page.getByRole('tab', { name: 'Süreçler' }).boundingBox()
   const folderBounds = await page.getByRole('button', { name: 'Klasörü Aç', exact: true }).boundingBox()
   check('open folder action is placed to the right of Processes', folderBounds.x >= processBounds.x + processBounds.width)
+  await page.goto(origin + '/dosyalar/' + caseId)
+  await page.getByRole('button', { name: 'Değer Kaybı', exact: true }).click()
+  await page.locator('.value-loss-calculator__footer strong').waitFor()
+  const currentDetails = page.locator('.value-loss-calculator details').first()
+  if (await currentDetails.getAttribute('open') === null) await currentDetails.locator('summary').click()
+  await page.getByLabel('Karşı taraf kusuru (%)').fill('75')
+  const adjusted = await calculate()
+  check('counterparty fault is applied after gross rounding and persisted with the detailed source', adjusted.amountMinor === combined.amountMinor * 0.75 && adjusted.breakdown.grossAmountMinor === combined.amountMinor && adjusted.breakdown.sourceSha256.length === 64)
+  await page.getByText('Hesap dökümü ve kaynaklar', { exact: true }).click()
+  const reportPath = output + '/calculation-report.html'
+  await downloadElectronFixture(electron, reportPath, () => page.getByRole('button', { name: 'Hesap dökümünü indir' }).click())
+  const html = await readFile(reportPath, 'utf8')
+  check('actual downloaded report has source provenance, part rows and a printable layout', html.includes(adjusted.breakdown.sourceSha256) && html.includes('@media print') && html.includes('Kusur uygulanmış tahmin') && !html.includes('<script'))
+  const requestCount = requests.length
+  await page.getByLabel('Araç durumu', { exact: true }).selectOption('current_heavy_damage')
+  await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
+  await page.getByRole('alert').filter({ hasText: 'ağır hasar' }).waitFor()
+  check('heavy damage stops the UI without an API call or obsolete amount', requests.length === requestCount && await page.locator('.value-loss-calculator__footer strong').count() === 0)
   check('no formal assessment or production data is written', (await pool.query('SELECT count(*)::int AS n FROM traffic_value_loss_assessments')).rows[0].n === 0)
   check('no renderer JavaScript errors', errors.length === 0)
+  if (process.env.VALUE_LOSS_VERIFY_NOTICE === '1') {
+    await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 1000))
+    const noticeTraffic = await verifyNoticeSheetDelivery({ page, electron, caseId, caseType: 'traffic', output })
+    const cascoSourceText = sourceText.replaceAll('calculator-automatic', 'calculator-casco').replace('Ürün: Trafik', 'Ürün: Kasko').replaceAll('TST5050', 'TST6060')
+    const cascoSource = await post('/api/v1/eksist/sources', { kind: 'text', text: cascoSourceText })
+    assert.equal(cascoSource.status, 201)
+    const casco = await post('/api/v1/cases/quick-create', { case: { caseType: 'casco', plate: '34 TST 6060', lossDate: '2026-10-01', notificationDate: '2026-10-02' }, storageRootKey: 'calculator-source', source: { id: cascoSource.body.id, reference: 'calculator-casco' } }, { 'idempotency-key': uuidv7() })
+    assert.equal(casco.status, 202)
+    const noticeCasco = await verifyNoticeSheetDelivery({ page, electron, caseId: casco.body.case.id, caseType: 'casco', output })
+    check('traffic and casco editor, preview, actual PDF and Word outputs preserve hidden data', noticeTraffic.hiddenDataPreserved && noticeCasco.hiddenDataPreserved)
+    await page.goto(origin + '/dosyalar/' + caseId)
+    await page.getByRole('button', { name: 'Değer Kaybı', exact: true }).click()
+  }
+  if (process.env.VALUE_LOSS_MEASURE_PERFORMANCE === '1') {
+    const cpuBefore = process.cpuUsage(), memoryBefore = process.memoryUsage()
+    const httpStarted = performance.now()
+    const samples = await page.evaluate(async ({ url, input }) => {
+      const times = []
+      for (let index = 0; index < 100; index++) {
+        const start = performance.now()
+        const response = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) })
+        const result = await response.json()
+        if (response.status !== 200 || result.amountMinor === null || result.issues.length) throw new Error('Synthetic API performance calculation failed')
+        times.push(performance.now() - start)
+      }
+      return times.sort((left, right) => left - right)
+    }, { url: `/api/v1/cases/${caseId}/traffic-value-loss/calculate?details=1`, input: { ...requests[0], faultRateBasisPoints: 7500 } })
+    const cpu = process.cpuUsage(cpuBefore), wallMs = performance.now() - httpStarted, memoryAfter = process.memoryUsage()
+    await writeFile(output + '/api-http-performance.json', JSON.stringify({ runtime: 'real authenticated Electron HTTP + API + disposable PostgreSQL writes/audit; 100 sequential calculations; no production data', requests: samples.length, p95Ms: samples[94], p99Ms: samples[98], minMs: samples[0], maxMs: samples.at(-1), wallMs, apiProcessCpuMs: (cpu.user + cpu.system) / 1000, apiProcessCpuPercent: (cpu.user + cpu.system) / (wallMs * 10), memoryBefore, memoryAfter }, null, 2))
+    const storageKey = `hasarbotu-value-loss-calculator-v1:${org}:${user}:${caseId}`
+    await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 900))
+    const current = await measureValueLossElectronTyping({ page, electron, storageKey, caseUrl: origin + '/dosyalar/' + caseId, mode: 'candidate' })
+    await writeFile(output + '/electron-performance.json', JSON.stringify(current, null, 2))
+  }
   const summary = { status: 'PASS', runtime: 'real Electron shell + API + disposable PostgreSQL', checks: checks.length, screenshots: false, productionDataTouched: false }
   await writeFile(output + '/results.json', JSON.stringify({ ...summary, checks }, null, 2))
+  await writeFile(evidenceRoot + '/latest-results.json', JSON.stringify({ ...summary, output, checks }, null, 2))
   console.log(JSON.stringify(summary))
 } finally {
   await electron?.close()

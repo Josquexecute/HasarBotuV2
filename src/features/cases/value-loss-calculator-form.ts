@@ -19,7 +19,7 @@ export const calculatorDraftSchema = z.object({
   manufacturer: z.string().max(120).default(''), model: z.string().max(160).default(''),
   modelYear: z.string(), usageValue: z.string(), marketValue: z.string(), damageAmount: z.string(),
   previousDamageCount: z.string(), commercialOrRental: z.boolean(),
-  vehicleCondition: z.enum(['normal', 'prior_heavy_damage', 'current_heavy_damage', 'antique', 'foreign_plate']),
+  vehicleCondition: z.enum(['unknown', 'normal', 'prior_heavy_damage', 'current_heavy_damage', 'antique', 'foreign_plate']),
   postRepairMarketValue: z.string(), faultPercent: z.string(), parts: z.array(calculatorPartDraftSchema).max(100),
 })
 export type CalculatorDraft = z.infer<typeof calculatorDraftSchema>
@@ -81,7 +81,7 @@ export function initialCalculatorDraft(item: CaseRecord, saved?: CalculatorSaved
     marketValue: moneyText(real?.marketValueMinor ?? saved?.preAccidentMarketValueMinor),
     damageAmount: moneyText(real?.damageAmountMinor ?? (item.estimatedDamage > 0 ? Math.round(item.estimatedDamage * 100) : null)),
     previousDamageCount: defaults.previousDamageCount ?? (verified ? real?.previousDamageCount?.toString() : '') ?? '', commercialOrRental: defaults.commercialOrRental ?? real?.commercialOrRental ?? false,
-    vehicleCondition: defaults.vehicleCondition ?? (real?.eligibilityFacts.currentHeavyOrTotalDamage || saved?.heavyOrTotalDamage ? 'current_heavy_damage' : real?.eligibilityFacts.priorHeavyDamage ? 'prior_heavy_damage' : real?.eligibilityFacts.antiqueOrCollector ? 'antique' : real?.eligibilityFacts.foreignPlate ? 'foreign_plate' : 'normal'),
+    vehicleCondition: defaults.vehicleCondition ?? (real?.eligibilityFacts.currentHeavyOrTotalDamage || saved?.heavyOrTotalDamage ? 'current_heavy_damage' : real?.eligibilityFacts.priorHeavyDamage ? 'prior_heavy_damage' : real?.eligibilityFacts.antiqueOrCollector ? 'antique' : real?.eligibilityFacts.foreignPlate ? 'foreign_plate' : 'unknown'),
     postRepairMarketValue: moneyText(saved?.postRepairMarketValueMinor), faultPercent: String((saved?.faultRateBasisPoints ?? 10_000) / 100),
     parts: consolidateCalculatorParts(real ? real.parts.map((part, index) => {
       const matches = saved?.damageParts.filter(row => row.partCode === part.stableRuleId) ?? []
@@ -96,7 +96,7 @@ export function initialCalculatorDraft(item: CaseRecord, saved?: CalculatorSaved
   }
 }
 
-export function calculatorSelections(draft: CalculatorDraft, sourceParts?: Parameters<typeof resolveValueLossCalculatorParts>[2]): ValueLossCalculatorPartSelection[] {
+export function calculatorSelections(draft: Pick<CalculatorDraft, 'parts'>, sourceParts?: Parameters<typeof resolveValueLossCalculatorParts>[2]): ValueLossCalculatorPartSelection[] {
   return consolidateCalculatorParts(draft.parts).map(part => {
     const matches = sourceParts?.filter(source => source.label.trim().toLocaleUpperCase('tr-TR') === part.label.trim().toLocaleUpperCase('tr-TR')) ?? []
     return { entryId: part.id, stableRuleId: part.stableRuleId || (matches.length === 1 ? matches[0]!.stableRuleId : null), partName: part.label, position: part.position, quantity: integer(part.quantity) ?? 0, material: part.material, operation: part.operation, paintMode: ['paint', 'repair_paint', 'replacement_paint'].includes(part.operation) ? part.paintMode : null, newPartPriceMinor: moneyMinor(part.price), repairLaborMinor: moneyMinor(part.labor), partPriceAvailability: part.priceUnknown ? 'unavailable' : 'available', priorPartState: part.priorPartState, treatment: part.operation === 'paintless_repair' ? 'paintless_repair' : part.treatment }
@@ -106,7 +106,8 @@ export function calculatorSelections(draft: CalculatorDraft, sourceParts?: Param
 export function calculatorDraftFromRequest(item: CaseRecord, input: ValueLossCalculatorRequest): CalculatorDraft {
   const base = initialCalculatorDraft(item)
   return {
-    ...base, calculationBasis: 'reference', vehicleCondition: 'normal',
+    ...base, calculationBasis: 'reference', vehicleCondition: !['normal', 'unknown'].includes(base.vehicleCondition) ? base.vehicleCondition : input.vehicleCondition,
+    postRepairMarketValue: moneyText(input.postRepairMarketValueMinor), faultPercent: String(input.faultRateBasisPoints / 100),
     accidentDate: input.accidentDate, vehicleType: input.vehicleType, bodyType: input.bodyType ?? 'unspecified',
     manufacturer: input.vehicleIdentity?.manufacturer ?? base.manufacturer, model: input.vehicleIdentity?.model ?? base.model,
     modelYear: input.modelYear?.toString() ?? '', usageValue: input.usageValue?.toString() ?? '',
@@ -144,7 +145,7 @@ export function calculatorRequiresMarket(draft: CalculatorDraft, sourceParts?: P
   return selections.some(part => valueLossBaseOnlyPrinciple(part) === null && (part.stableRuleId === null || part.quantity !== 1 || !['unspecified', 'steel'].includes(part.material) || part.treatment !== 'standard' || part.operation === 'paintless_repair'))
 }
 
-export function calculatorPartResolution(draft: CalculatorDraft, sourceParts: Parameters<typeof resolveValueLossCalculatorParts>[2]) {
+export function calculatorPartResolution(draft: Pick<CalculatorDraft, 'vehicleType' | 'bodyType' | 'manufacturer' | 'model' | 'modelYear' | 'parts'>, sourceParts: Parameters<typeof resolveValueLossCalculatorParts>[2]) {
   const identity = draft.manufacturer.trim() || draft.model.trim() ? { identity: { manufacturer: draft.manufacturer, model: draft.model }, modelYear: integer(draft.modelYear) } : undefined
   return resolveValueLossCalculatorParts(draft.vehicleType, draft.bodyType, sourceParts, calculatorSelections(draft, sourceParts), identity)
 }
@@ -154,6 +155,7 @@ export function calculatorRequest(draft: CalculatorDraft, sourceParts?: Paramete
   const selections = calculatorSelections(draft, sourceParts)
   if (selections.some(part => part.priorPartState === 'unknown')) throw new Error('Önceki parça hasarı bilinmiyor. SBM / geçmiş kayıt veya inceleme ile doğrulayın.')
   if (!market && integer(draft.previousDamageCount) === null) throw new Error('Önceki hasar sayısı bilinmiyor. SBM / geçmiş kayıt ile doğrulayın.')
+  if (draft.vehicleCondition !== 'normal') throw new Error(draft.vehicleCondition === 'unknown' ? 'Araç durumunu doğrulayın: ağır hasar, antika / koleksiyon ve yabancı plaka durumları kontrol edilmelidir.' : draft.vehicleCondition === 'foreign_plate' ? 'Yabancı plakalı araç için kendi ülkesindeki rayiç ve piyasa araştırması gerekir.' : draft.vehicleCondition === 'antique' ? 'Antika / koleksiyon araç referans modülle hesaplanamaz.' : 'Önceki veya mevcut ağır hasar / tam hasar nedeniyle referans hesaplama yapılamaz.')
   for (const part of selections) {
     if (!part.partName.trim()) throw new Error('Eklediğiniz parçanın adını girin.')
     if (part.quantity < 1 || part.quantity > 20) throw new Error('Parça adedini 1 ile 20 arasında girin.')
