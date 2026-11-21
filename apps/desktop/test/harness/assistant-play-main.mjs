@@ -2,8 +2,6 @@ import { seedTestAssistantPosition } from './test-display.mjs'
 import { app, ipcMain } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { startDesktopShell } from '../../dist/main/shell.js'
-import { startDesktopAssistant } from '../../dist/main/assistant.js'
 import { checkPlayRendering, checkGazeRendering } from './assistant-play-checks.mjs'
 
 app.enableSandbox()
@@ -17,6 +15,10 @@ const wait = async (predicate, label = 'reaction') => {
 void app.whenReady().then(async () => {
   let shell, assistant, pixels, gaze
   try {
+    // Staged acceptance fixtures must report missing transitive dependencies
+    // instead of leaving Electron's startup error dialog until the outer timeout.
+    const { startDesktopShell } = await import('../../dist/main/shell.js')
+    const { startDesktopAssistant } = await import('../../dist/main/assistant.js')
     const assetRoot = process.env.HB_PLAY_ASSETS
     shell = await startDesktopShell({ apiOrigin: 'http://127.0.0.1:1', assetRoot, userDataPath: app.getPath('userData'), show: false })
     seedTestAssistantPosition()
