@@ -1,5 +1,14 @@
 # `@hasarbotu/desktop`
 
+22 Kasım 2026 **Son engel/yayın kararı — NO-GO; merkezi 0.1.99 korundu.** `9870149` üzerindeki rollback uyumluluğu kabul edildi; önceki genel testler tekrarlanmadı. İki hedefli düzeltme döngüsü sonunda yayın yapılmadı.
+
+- Registry kabul yardımcısı `scripts/nsis-upgrade-acceptance.ps1` içine alındı. Windows PowerShell 5.1'de registry `Get-Acl -LiteralPath` yol çözümleme hatası yerel olarak yeniden üretildi; ACL aynı açık .NET anahtarından okunur/uygulanır. JSON yazımındaki `{ value, Count }` sarmalı ve `@(… | ConvertFrom-Json)` kaynaklı iç içe dizi düzeltildi. Yetkiler gevşetilmedi; kapsam ve tam eşitlik kontrolleri korundu. Hedefli snapshot/ACL/doğrulama regresyonu **7/7 PASS** (Windows 10 / PowerShell 5.1); gerçek restore/kurulum zinciri için PASS sayılmaz.
+- Windows 11 build **26300**, ayrı geçici standart kullanıcıda gerçek imzalı **0.1.99 NSIS exit 0**; kurulu sürüm **0.1.99.0**, Authenticode/zaman damgası Valid. Kabul runner'ındaki parantezsiz sürüm dizisi `['0.1.99', '0.1.99', '.0']` üreterek kontrolü durdurdu. **0.1.100 yükseltmesi, 0.1.99 rollback'i ve zincir boyunca profil/registry ACL kabulü PENDING**; üçüncü düzeltme döngüsü yapılmadı.
+- Hazırlanmış Touch animasyon fixture'ının **1.459 dosyası** hash ile eşleşti; normal hareket koşusu **90 saniyede sonuç üretmedi**. Yalnız fixture süreci kapatıldı; doğrulanmış ürün assertionı yok, azaltılmış hareket koşusu çalışmadı. **Touch animasyon kabulü PENDING**; ekran görüntüsü veya fiziksel girdi üretilmedi.
+- Geçici hesap/profil ve görevler kaldırıldı; teste ait süreç/görev kalmadı. Son kontrolde **0.1.99** manifesti/değişmez paketi, mevcut istemci PID'leri, dokuz servis durum/PID'si ve izlenen üç kullanıcı ayarının hash'i aynı; API `/health` sağlıklı. Aday installer **113.071.752 bayt**, SHA-256 `239880a27000a84061f20a795ef8427d42687a76ad035e0791cb57a8837724ae`, imza/zaman damgası Valid. **Üretim migration 0078/API/feed değiştirilmedi; zorunlu kurulum yapılmadı.** Güncel yedek ve yayın ön koşulları eksik kabul kapılarının yerine geçirilmedi.
+
+Kanıtlar: `tmp/value-loss-review/registry-gate-red.log`, `registry-gate-green.log`, `final-failure-detail.json`, `final-no-go.json`, `final-gates-decision.json`. Ofiste yalıtılmış kurulum kanıtı: `C:\HB0193-Touch-Win11-20261106\acceptance-0100-nsis-20261122\final-no-go.json`.
+
 21 Kasım 2026 **Kritik engel düzeltmesi — NO-GO; merkezi sürüm 0.1.99 korundu.** Aşağıdaki önceki kabul kaydının rollback/Windows 11 durumunu günceller.
 
 - Kök neden: HTTP ayrıntı filtresi depolamaya uygulanmıyordu; eski API strict `result` şemasında `breakdown` nedeniyle gerçek HTTP 500 üretti. Migration `0078_value_loss_calculation_breakdown`, ayrıntıyı ayrı sütuna kayıpsız taşır; yeni API eski `result` biçimini yazar. Ayrıntının zaman damgası eski API'nin sonradan yazdığı sonuca karışmasını önler; eski ayrıntı depoda korunur. API rollback'inde **0078 uygulanmış kalır**; veri kayıplı `down` engellenir.
