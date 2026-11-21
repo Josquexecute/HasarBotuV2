@@ -1,5 +1,24 @@
 # `@hasarbotu/desktop`
 
+21 Kasım 2026 **Son kabul kararı — BLOCKED; 0.1.100 yayımlanmadı.** Bu kayıt aşağıdaki 20 Kasım aday notlarının güncel durumunu belirler.
+
+- Uygulama düzeltmesi `658dbe1`: engellenmiş referans hesapların hata yanıtı artık güncel hesap sürümünü korur; gerçek düzeltme mesajı eski API uyarısıyla gizlenmez. Yedi regresyon kontrolü önce başarısız oldu, düzeltme sonrası 29 hedefli test geçti.
+- Son kesintisiz `npm test`: **3.725 PASS / 0 FAIL / 8 SKIP**. Altı opt-in HTTP testi ve gerçek NSIS yardımcı kontrolü ayrıca geçti; benzersiz sonuç **3.732 PASS / 0 FAIL / 1 SKIP**. Kalan atlama Windows WebKit çapraz-site SameSite dalıdır. Typecheck, lint, build ve metin denetimi geçti.
+- Dört kaynak belge ve **193/193 Excel paritesi** doğrulandı; kabul referans tahmini kapsamındadır. Tam %15/%30 kaynak çelişkilerinde tutar engellenir; tanımsız Eksper Kanaati/J11 katsayısı uydurulmadı.
+- Gerçek Electron/API/PostgreSQL kabulü **29/29 PASS**; Trafik/Kasko görünürlük, gizli geçmiş veri, gerçek PDF/DOCX ve hata mesajı doğrulandı. Word 16'da dört sentetik DOCX yeniden açıldı: normal örnekler bir, uzun örnekler iki sayfa; tablo taşması, sabit satır yüksekliği veya dış/embedded nesne saptanmadı. Ekran görüntüsü üretilmedi.
+- 15 dakika/sürüm, aynı belge açıkken bellek gözlemi tamamlandı: aday **54.240 girdi / 0 hata / 0 uzun görev**, p95/p99 **32,8/33,9 ms**, tutulan heap **13,34 → 13,42 MiB**, DOM/listener sayıları sabit. Bu sınırlı süre gözlemidir. 40.000 gerçek HTTP isteğinde hata yok; seri API p95 **2,263 → 2,364 ms**, CPU **1,064 → 1,122 ms/istek** olduğundan sıfır backend ek maliyeti iddia edilmez.
+- Günlük üretim yedeği ayrı, private ACL/SCRAM ile PostgreSQL **17.11** üzerinde gerçekten geri yüklendi: **136/136 tablo, 727.453 kayıt ve tüm hashler** eşleşti; 77 migration doğrulandı, aday migration kontrolü no-op kaldı. Test cluster'ları kapatıldı.
+
+**Kritik engel:** Adayın sakladığı `result.breakdown`, eski API'nin strict kayıt şemasında reddediliyor. 26 dosyanın byte/ACL geri dönüş provası bu veri uyumsuzluğunu çözmez. Güvenli eski API rollback'i tamamlanmadığından üretim geçişi yapılmadı; yeni migration uygulanmadı.
+
+**PENDING:** Windows 11 native/Touch kabulü için 20 dakika/24 örnekte gerekli 120 saniyelik idle penceresi oluşmadı (en yüksek 42,7 saniye); ürün assertionları çalıştırılmadı, owned task/process temizlendi. Gerçek NSIS yükseltme/rollback/profil zinciri hazırlanmış fakat çalıştırılmamıştır. İmzalı adayın açılış testi bu iki kapının yerine geçmez.
+
+**Aday/üretim:** 0.1.100 NSIS **113.071.752 bayt**, SHA-256 `239880a27000a84061f20a795ef8427d42687a76ad035e0791cb57a8837724ae`; son imza/zaman damgası Valid. Aday ve yerel API paketleri korundu, hiçbiri merkezi yayıma alınmadı. Son salt-okunur canlı kontrolde istemci/feed **0.1.99**, API sözleşmesi **0.0.0**, hesap kuralı **1.2.0**, sağlık iyi ve dokuz servis Running; feed paketinin boyut/hash'i eşleşti. Üretim, feed, kullanıcı verileri ve Google/Gmail değiştirilmedi.
+
+Kanıtlar: `tmp/value-loss-review/final-acceptance-decision.json`, `acceptance-final-full.log`, `api-production-preparation/rollback-data-compatibility.json`, `windows11-native-acceptance.json`, `final-production-readonly.json`. İlk repo-layout API ZIP'i önceki adaydır; 658dbe1 için hazırlanan installed-layout patch de rollback engeli nedeniyle yayına uygun kabul edilmemiştir.
+
+---
+
 20 Kasım 2026 **0.1.100 yerel sürüm adayı — yayımlanmadı; kabul PARTIAL.** Önceki sürüm 0.1.99; üretim, kullanıcı verileri ve merkezi güncelleme feed'i değiştirilmedi. Aşağıdaki revizyon önceki V5/normal araç varsayımı açıklamalarının yerine geçer. Yeni hesaplama için API adayı da gereklidir; yeni istemci eski hesap motorundan gelen sonucu göstermeyi reddeder. Migration veya yeni çalışma zamanı bağımlılığı gerekmez.
 
 | İncelenen kaynak | Tespit ve uygulama |
@@ -36,7 +55,7 @@ Son dosya bazlı birleşik regresyon **3.724 PASS / 1 FAIL / 8 SKIP**:
 | File Agent | 352 | 0 | 0 |
 | Electron | 302 | 1 | 2 |
 
-İlk `npm test`, API'de eski tam %15 onarım oranını onaylanabilir kabul eden beklentide durdu. İlk 1.000 km/onay senaryosu iki kaynağın da aynı sınıfı verdiği %14'e ayrıldı; %15/%30 için önizleme, kayıt ve onaya gönderimin 409 ile engellenmesi eklendi. Güncel dosya **8/8 PASS**; diğer 110 API dosyası ilk toplu koşuda geçti. Toplam son dosya sonuçlarından hesaplanır; tek bir kesintisiz `npm test` PASS iddiası değildir. Kanıt: `test-final.log`, `hardening-final.log`, `file-agent-final.log`, `desktop-final.log`, `desktop-remaining-final.log` (`tmp/value-loss-review/` altında).
+İlk `npm test`, API'de eski tam %15 onarım oranını onaylanabilir kabul eden beklentide durdu. İlk 1.000 km/onay senaryosu iki kaynağın da aynı sınıfı verdiği %14'e ayrıldı; %15/%30 için önizleme ve taslakta tutar üretilmemesi, onaya gönderimin 409 ile engellenmesi eklendi. Güncel dosya **8/8 PASS**; diğer 110 API dosyası ilk toplu koşuda geçti. Toplam son dosya sonuçlarından hesaplanır; tek bir kesintisiz `npm test` PASS iddiası değildir. Kanıt: `test-final.log`, `hardening-final.log`, `file-agent-final.log`, `desktop-final.log`, `desktop-remaining-final.log` (`tmp/value-loss-review/` altında).
 
 Tek FAIL: `assistant-topmost-e2e` normal senaryosunda aktif **UnityWndClass** ön planı korudu; beklenen test PID'si ön plana gelemedi. Touch/shell sıralama kodu değiştirilmedi, odak zorlanmadı, beklenti gevşetilmedi. Bu yerel ön plan kabulü tamamlanmış sayılmaz. Altı SKIP dört canlı API/hesap opt-in frontend dosyası; iki SKIP Windows WebKit SameSite ve opt-in NSIS helper kontrolüdür. Son typecheck, lint, metin denetimi ve UI/tüm workspace build geçti; V1 Excel parite testleri **193/193**, File Agent toplamına dahildir.
 
