@@ -1,5 +1,15 @@
 # `@hasarbotu/desktop`
 
+22 Kasım 2026 **0.1.100 merkezi yayında — 01:14:03 TRT; COMPLETE.** Aşağıdaki önceki NO-GO kayıtlarının açık kabul kapıları kapatıldı; genel test paketi tekrarlanmadı.
+
+- Windows 11 build 26300, ayrı standart kullanıcıda gerçek imzalı **0.1.99 → 0.1.100 → 0.1.99**, **79/79 PASS**. Sürüm dizisinin PowerShell ayrıştırması düzeltildi; dört sentetik profil dosyasının içerik/metadata/ACL'si ve registry geri dönüş eşitliği korundu. Geçici hesap/profil/görev kaldırıldı.
+- Touch **33 normal + 34 azaltılmış hareket PASS**. 90 saniyelik beklemenin nedeni fixture'daki eksik `@hasarbotu/domain` bağımlılığıydı; ürün assertionları başlamıyordu. Fixture tamamlandı, başlangıç import hatası terminal JSON ile görünür kılındı. Vitest regresyonu **1/1**, desktop typecheck/hedefli lint PASS. Ayrı native desktop kullanıldı; aktif ekran/odak/girdi değişmedi, ekran görüntüsü yok. Fiziksel FPS/çoklu monitör kabulü değildir.
+- API'nin **28 dosyası** hash ile doğrulandı; **0078**, **136 tablo / 728.607 mevcut kayıt korunarak** uygulandı ve tekrar çağrı no-op geçti. Sözleşme **0.0.0**, hesap kuralı **1.3.0**; dokuz servis Running. Yayın sonrası Gmail işlemi ve dosya taraması başarılı. Önceki Değer Kaybı/193 Excel paritesi, PDF/DOCX ve eski API rollback kanıtları korundu.
+- EXE **113.071.752 bayt**, SHA-256 `239880a27000a84061f20a795ef8427d42687a76ad035e0791cb57a8837724ae`; imza/zaman damgası Valid. Gerçek **0.1.99 PID 19752**, **0.1.100 available** gördü; eski updater ile kimlikli tam indirme/boyut/hash/sürüm/imza PASS, dört anonim istek 401. Oturum/profil/cookie/storage/beş ayar hash'i korundu; zorunlu kurulum yapılmadı.
+- Taze **43.397.869 bayt** yedek, SHA-256 `83799947c954f08d59f4b9a4c541be82dc2cc0590eabe5f5cc8096e3c46d3dc9`; PostgreSQL 17.11 izole restore ve 77→78 geçişi PASS. Tam API/config/ACL yedeği, dosya rollback manifesti, önceki feed ve değişmez installer korundu. API rollback'inde **0078 yerinde kalır**; üretim dump ile geri sarılmadı. Owned süreç/görev/inspector listener kalmadı.
+
+Kanıt: `tmp/value-loss-review/night-delivery-complete.json`, `night-nsis-final.json`, `touch-private-results.json`, `night-fresh-restore-migration.json`, `night-client-complete.json`, `night-post-api-final.json`. Ofiste korumalı kurtarma/teslimat: `C:\HB0193-Touch-Win11-20261106\release-0100-night-20261122`. Güncel API paketi: `.local/value-loss-notice-0.1.100-installed-api-patch-81e219e/HasarBotu-API-0.1.100-installed-layout-patch-81e219e.zip`, **70.194 bayt**, SHA-256 `7ec8fa75ce9e6d066f163d7886b9635977a0aa194292bafffe65d474c20eceae`; 0078 korunacak ayrı migration olarak dahildir. Eski 658dbe1 overlay'i kullanılmaz.
+
 22 Kasım 2026 **Son engel/yayın kararı — NO-GO; merkezi 0.1.99 korundu.** `9870149` üzerindeki rollback uyumluluğu kabul edildi; önceki genel testler tekrarlanmadı. İki hedefli düzeltme döngüsü sonunda yayın yapılmadı.
 
 - Registry kabul yardımcısı `scripts/nsis-upgrade-acceptance.ps1` içine alındı. Windows PowerShell 5.1'de registry `Get-Acl -LiteralPath` yol çözümleme hatası yerel olarak yeniden üretildi; ACL aynı açık .NET anahtarından okunur/uygulanır. JSON yazımındaki `{ value, Count }` sarmalı ve `@(… | ConvertFrom-Json)` kaynaklı iç içe dizi düzeltildi. Yetkiler gevşetilmedi; kapsam ve tam eşitlik kontrolleri korundu. Hedefli snapshot/ACL/doğrulama regresyonu **7/7 PASS** (Windows 10 / PowerShell 5.1); gerçek restore/kurulum zinciri için PASS sayılmaz.
@@ -1291,7 +1301,13 @@ açık bırakır ve kısmi indirmeyi kaldırır. Kurulum sonucu
 `userData/updates/<sha256>/install-result.json` içinde tutulur. Mevcut akış Authenticode
 imzası eklemez.
 
-Son doğrulanan ofis yayını: **0.1.94**, 2026-11-10T17:37:14.319Z; Windows x64,
+Son doğrulanan ofis yayını: **0.1.100**, 2026-11-21T22:14:03.500Z; Windows x64,
+113.071.752 bayt, SHA-256 `239880a27000a84061f20a795ef8427d42687a76ad035e0791cb57a8837724ae`.
+Gerçek 0.1.99 istemcisinde available/kimlikli indirme/imza/sürüm/hash ve profil koruması PASS.
+Üretim API/0078, taze yedek/restore ve dokuz servis PASS; önceki manifest/installer ve API
+rollback dosyaları korunur. Kanıt: `tmp/value-loss-review/night-delivery-complete.json`.
+
+Önceki doğrulanan ofis yayını: **0.1.94**, 2026-11-10T17:37:14.319Z; Windows x64,
 113.061.832 bayt, SHA-256 `f699235f3fc6299122eef49538f97a941163ea84c7eed64a22d349389f4222e8`.
 Üretim API/0077 migration ve 936 mevcut dosyanın korunması PASS. Gerçek ofis 0.1.93
 istemcisinde `available`, kimlikli manifest/tam indirme/boyut/hash/Valid imza, anonim 401
