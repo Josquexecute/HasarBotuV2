@@ -1,5 +1,15 @@
 # `@hasarbotu/desktop`
 
+21 Kasım 2026 **Kritik engel düzeltmesi — NO-GO; merkezi sürüm 0.1.99 korundu.** Aşağıdaki önceki kabul kaydının rollback/Windows 11 durumunu günceller.
+
+- Kök neden: HTTP ayrıntı filtresi depolamaya uygulanmıyordu; eski API strict `result` şemasında `breakdown` nedeniyle gerçek HTTP 500 üretti. Migration `0078_value_loss_calculation_breakdown`, ayrıntıyı ayrı sütuna kayıpsız taşır; yeni API eski `result` biçimini yazar. Ayrıntının zaman damgası eski API'nin sonradan yazdığı sonuca karışmasını önler; eski ayrıntı depoda korunur. API rollback'inde **0078 uygulanmış kalır**; veri kayıplı `down` engellenir.
+- Gerçek `68cdc0d` eski API paketi ve güncel API, PostgreSQL 17.11 üretim yedeği klonunda HTTP üzerinden ileri geçiş → yeni kayıt → eski API okuma/yazma → tekrar ileri geçiş zincirini geçti. Eski kayıt, önceden yazılmış aday ayrıntısı, yeni ayrıntı ve audit doğrulandı; özgün **136 tablo / 727.453 kayıt** korundu. Rollback testi **1/1**, ilgili hesap/persistence testleri **33/33**; API build/typecheck ve hedefli lint geçti. Önceki toplu PASS kontrolleri tekrarlanmadı.
+- Windows 11 build 26300, sınırlı kullanıcı oturumunda native/Touch pencere sırası/odak testleri **10/10 PASS**. Fiziksel girdi/odak zorlama ve ekran görüntüsü yok; görev/süreç temizlendi, mevcut istemciler/servisler/feed korundu. Tek monitör kapsamıdır; ayrıca hazırlanmış animasyon fixture'ı çalıştırılmadı.
+- **NSIS PENDING:** gerçek 0.1.97 kurulumunda kabul betiği registry ACL yedekleme/doğrulama önkoşulunda durdu; sıfır installer ve sıfır yükseltme/rollback adımı çalıştı. Yedekleme kontrolü atlanmadı; özgün kurulum/profiller değiştirilmedi. Geçici betik tanısı bu kabul kapısını tamamlamaz.
+- **Yayın yok:** canlı feed **0.1.99**; üretim API/veritabanı değiştirilmedi. Önceki 658dbe1 API overlay'i bu düzeltmeyi/0078'i içermez ve dağıtıma uygun değildir. Mevcut 0.1.100 imzalı istemci adayı korunur; tüm kapılar geçmeden merkezi yayıma alınmaz.
+
+Kanıtlar: `tmp/value-loss-review/rollback-red.log`, `rollback-final-clone.log`, `rollback-focused.log`, `rollback-final-clone-preservation.json`, `rollback-windows11-final.json`, `rollback-nsis.log`, `rollback-final-acceptance.json`.
+
 21 Kasım 2026 **Son kabul kararı — BLOCKED; 0.1.100 yayımlanmadı.** Bu kayıt aşağıdaki 20 Kasım aday notlarının güncel durumunu belirler.
 
 - Uygulama düzeltmesi `658dbe1`: engellenmiş referans hesapların hata yanıtı artık güncel hesap sürümünü korur; gerçek düzeltme mesajı eski API uyarısıyla gizlenmez. Yedi regresyon kontrolü önce başarısız oldu, düzeltme sonrası 29 hedefli test geçti.
