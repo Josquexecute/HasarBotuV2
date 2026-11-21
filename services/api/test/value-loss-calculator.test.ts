@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { valueLossCalculatorRequestSchema } from '@hasarbotu/contracts'
-import { evaluateRealMarketValueLoss, parseLocalDate, valueLossCalculatorAdditionalRules } from '@hasarbotu/domain'
+import { evaluateRealMarketValueLoss, parseLocalDate, VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, valueLossCalculatorAdditionalRules } from '@hasarbotu/domain'
 import { calculateValueLoss } from '../src/traffic-value-loss/calculator.js'
 import { realMarketValueLossRuleSnapshot as snapshot } from '../src/traffic-value-loss/rule-source.js'
 
@@ -40,7 +40,7 @@ describe('value loss calculator reuses established arithmetic', () => {
     expect(calculateValueLoss(value)).toMatchObject({ amountMinor: original.finalResultMinor, issues: [] })
     expect(original.canSubmitForApproval).toBe(false)
   })
-  it.each(['prior_heavy_damage','current_heavy_damage','antique','foreign_plate'] as const)('blocks %s instead of displaying a misleading number', vehicleCondition => expect(calculateValueLoss({ ...input, vehicleCondition })).toMatchObject({ amountMinor: null, issues: [expect.objectContaining({ field: 'vehicleCondition' })] }))
+  it.each(['prior_heavy_damage','current_heavy_damage','antique','foreign_plate'] as const)('blocks %s instead of displaying a misleading number', vehicleCondition => expect(calculateValueLoss({ ...input, vehicleCondition })).toMatchObject({ amountMinor: null, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, issues: [expect.objectContaining({ field: 'vehicleCondition' })] }))
   it('rejects a forged part even when the engine could produce a partial amount', () => expect(calculateValueLoss({ ...input, parts: [{ ...input.parts[0]!, stableRuleId: 'forged' }] })).toMatchObject({ amountMinor: null, issues: [expect.objectContaining({ field: 'parts.stableRuleId' })] }))
   it('keeps the previous period market difference and counterparty fault calculation', () => expect(calculateValueLoss(valueLossCalculatorRequestSchema.parse({ ...input, accidentDate: '2026-06-01', postRepairMarketValueMinor: 90_000_000, faultRateBasisPoints: 7500, parts: [] }))).toMatchObject({ amountMinor: 7_500_000, calculationMethod: 'market_value_difference' }))
 })
@@ -52,6 +52,7 @@ describe('calculator physical parts and market difference', () => {
   it.each(['previously_damaged', 'previously_repaired_detachable', 'previously_repaired_welded'] as const)('does not include %s in a base-only damage total without allocation', priorPartState => {
     const result = calculateValueLoss(physical({ partSelections: [{ ...physicalPart, material: 'plastic_bodywork', priorPartState }] }))
     expect(result.amountMinor).toBeNull()
+    expect(result.ruleVersion).toBe(VALUE_LOSS_CALCULATOR_REFERENCE_VERSION)
     expect(result.issues[0]?.message).toContain('ayrıştır')
   })
   it('applies whole-vehicle market difference only when explicitly selected', () => {

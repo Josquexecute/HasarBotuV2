@@ -9,19 +9,20 @@ export function calculateValueLoss(input: ValueLossCalculatorRequest): ValueLoss
   const selected = selectTrafficValueLossRule(date.value)
   if (selected.status !== 'selected') throw new Error('Calculator rule selection failed')
   const market = selected.kind === 'legacy' || input.calculationBasis === 'market_difference'
+  const ruleVersion = market ? selected.ruleVersion : VALUE_LOSS_CALCULATOR_REFERENCE_VERSION
   if (!market && input.previousDamageCount === null) return { amountMinor: null, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: 'real_market_analysis', issues: [{ field: 'previousDamageCount', message: 'Önceki hasar sayısı bilinmiyor. SBM / geçmiş kayıt ile doğrulayın.' }] }
   const conditionIssue = input.vehicleCondition === 'normal' ? null
     : input.vehicleCondition === 'prior_heavy_damage' ? 'Önceki ağır hasar nedeniyle bu araç için değer kaybı hesaplanamaz.'
     : input.vehicleCondition === 'current_heavy_damage' ? 'Mevcut ağır / pert hasar nedeniyle değer kaybı hesaplanamaz.'
     : input.vehicleCondition === 'antique' ? 'Antika / koleksiyon araç için bu hesap yöntemi uygulanmaz.'
     : 'Yabancı plakalı araç için ilgili ülkenin piyasa değerlendirmesi gerekir.'
-  if (conditionIssue !== null) return { amountMinor: null, ruleVersion: selected.ruleVersion, calculationMethod: market ? 'market_value_difference' : 'real_market_analysis', issues: [{ field: 'vehicleCondition', message: conditionIssue }] }
+  if (conditionIssue !== null) return { amountMinor: null, ruleVersion, calculationMethod: market ? 'market_value_difference' : 'real_market_analysis', issues: [{ field: 'vehicleCondition', message: conditionIssue }] }
 
   const context = valueLossCalculatorVehicleContext(input.vehicleType, input.bodyType ?? 'unspecified')
   const group = context.group
   const sourceParts = snapshot.partRules.filter(rule => rule.vehicleGroupCode === group).map(rule => ({ stableRuleId: rule.stableId, label: rule.sourceLabel, supportedOperations: rule.operationCapabilities, coefficients: rule.coefficients }))
   const resolved = input.partSelections === undefined ? null : resolveValueLossCalculatorParts(input.vehicleType, input.bodyType ?? 'unspecified', sourceParts, input.partSelections, input.vehicleIdentity === undefined ? undefined : { identity: input.vehicleIdentity, modelYear: input.modelYear })
-  if (resolved?.issues.length) return { amountMinor: null, ruleVersion: selected.ruleVersion, calculationMethod: market ? 'market_value_difference' : 'real_market_analysis', issues: resolved.issues }
+  if (resolved?.issues.length) return { amountMinor: null, ruleVersion, calculationMethod: market ? 'market_value_difference' : 'real_market_analysis', issues: resolved.issues }
   if (resolved?.requiresMarketDifference) {
     if (!market) return { amountMinor: null, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: 'real_market_analysis', issues: [{ field: 'partSelections', message: 'Seçilen parça veya işlem için referans katsayısı bulunamadı. Parça, işlem, adet ve malzeme bilgilerini kontrol edin; bu seçimle tahmini tutar hesaplanamaz.' }] }
     if (input.postRepairMarketValueMinor === null) return { amountMinor: null, ruleVersion: TRAFFIC_VALUE_LOSS_RULE_VERSION, calculationMethod: 'market_value_difference', issues: [{ field: 'postRepairMarketValueMinor', message: 'Piyasa değer farkı için onarım sonrası piyasa değerini girin.' }] }

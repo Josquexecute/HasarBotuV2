@@ -144,6 +144,16 @@ try {
   await downloadElectronFixture(electron, reportPath, () => page.getByRole('button', { name: 'Hesap dökümünü indir' }).click())
   const html = await readFile(reportPath, 'utf8')
   check('actual downloaded report has source provenance, part rows and a printable layout', html.includes(adjusted.breakdown.sourceSha256) && html.includes('@media print') && html.includes('Kusur uygulanmış tahmin') && !html.includes('<script'))
+  await page.getByLabel(part + ' malzemesi', { exact: true }).selectOption('plastic_bodywork')
+  await page.getByLabel(part + ' önceki durumu', { exact: true }).selectOption('previously_damaged')
+  const allocationResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/traffic-value-loss/calculate') && response.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
+  const allocation = await allocationResponse
+  assert.equal(allocation.status(), 200)
+  const allocationIssue = await allocation.json()
+  const allocationAlert = page.getByRole('alert').filter({ hasText: 'ayrıştır' })
+  await allocationAlert.waitFor()
+  check('current API allocation issues remain actionable without an obsolete-service warning or amount', allocationIssue.amountMinor === null && allocationIssue.ruleVersion === adjusted.ruleVersion && !(await allocationAlert.textContent()).includes('Hesaplama servisi güncel değil') && await page.locator('.value-loss-calculator__footer strong').count() === 0)
   const requestCount = requests.length
   await page.getByLabel('Araç durumu', { exact: true }).selectOption('current_heavy_damage')
   await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
