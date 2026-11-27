@@ -82,7 +82,7 @@ export function initialCalculatorDraft(item: CaseRecord, saved?: CalculatorSaved
     damageAmount: moneyText(real?.damageAmountMinor ?? (item.estimatedDamage > 0 ? Math.round(item.estimatedDamage * 100) : null)),
     previousDamageCount: defaults.previousDamageCount ?? (verified ? real?.previousDamageCount?.toString() : '') ?? '', commercialOrRental: defaults.commercialOrRental ?? real?.commercialOrRental ?? false,
     vehicleCondition: defaults.vehicleCondition ?? (real?.eligibilityFacts.currentHeavyOrTotalDamage || saved?.heavyOrTotalDamage ? 'current_heavy_damage' : real?.eligibilityFacts.priorHeavyDamage ? 'prior_heavy_damage' : real?.eligibilityFacts.antiqueOrCollector ? 'antique' : real?.eligibilityFacts.foreignPlate ? 'foreign_plate' : 'unknown'),
-    postRepairMarketValue: moneyText(saved?.postRepairMarketValueMinor), faultPercent: String((saved?.faultRateBasisPoints ?? 10_000) / 100),
+    postRepairMarketValue: moneyText(saved?.postRepairMarketValueMinor), faultPercent: saved?.faultRateBasisPoints == null ? '' : String(saved.faultRateBasisPoints / 100),
     parts: consolidateCalculatorParts(real ? real.parts.map((part, index) => {
       const matches = saved?.damageParts.filter(row => row.partCode === part.stableRuleId) ?? []
       return calculatorPartDraftSchema.parse({ id: String(index), stableRuleId: part.stableRuleId, label: saved?.partLabels?.[part.stableRuleId] ?? (matches.length === 1 ? matches[0]!.partName : 'Kayıtlı parça'), operation: part.operation, paintMode: part.paintMode ?? 'full', price: moneyText(part.newPartPriceMinor), labor: moneyText(part.repairLaborMinor), priceUnknown: part.partPriceAvailability === 'unavailable', priorPartState: verified ? part.priorPartState : 'unknown', priorEvidence: verified ? `Kayıtlı geçmiş: ${evidence.map(row => row.evidenceKey).join(', ')}` : '', treatment: part.treatment })
@@ -107,7 +107,7 @@ export function calculatorDraftFromRequest(item: CaseRecord, input: ValueLossCal
   const base = initialCalculatorDraft(item)
   return {
     ...base, calculationBasis: 'reference', vehicleCondition: !['normal', 'unknown'].includes(base.vehicleCondition) ? base.vehicleCondition : input.vehicleCondition,
-    postRepairMarketValue: moneyText(input.postRepairMarketValueMinor), faultPercent: String(input.faultRateBasisPoints / 100),
+    postRepairMarketValue: moneyText(input.postRepairMarketValueMinor), faultPercent: input.faultRateBasisPoints === null ? '' : String(input.faultRateBasisPoints / 100),
     accidentDate: input.accidentDate, vehicleType: input.vehicleType, bodyType: input.bodyType ?? 'unspecified',
     manufacturer: input.vehicleIdentity?.manufacturer ?? base.manufacturer, model: input.vehicleIdentity?.model ?? base.model,
     modelYear: input.modelYear?.toString() ?? '', usageValue: input.usageValue?.toString() ?? '',
@@ -145,40 +145,54 @@ export function calculatorRequiresMarket(draft: CalculatorDraft, sourceParts?: P
   return selections.some(part => valueLossBaseOnlyPrinciple(part) === null && (part.stableRuleId === null || part.quantity !== 1 || !['unspecified', 'steel'].includes(part.material) || part.treatment !== 'standard' || part.operation === 'paintless_repair'))
 }
 
-export function calculatorPartResolution(draft: Pick<CalculatorDraft, 'vehicleType' | 'bodyType' | 'manufacturer' | 'model' | 'modelYear' | 'parts'>, sourceParts: Parameters<typeof resolveValueLossCalculatorParts>[2]) {
+export function calculatorPartResolution(draft: Pick<CalculatorDraft, 'vehicleType' | 'bodyType' | 'manufacturer' | 'model' | 'modelYear' | 'parts'>, sourceParts: Parameters<typeof resolveValueLossCalculatorParts>[2], workbookVersion?: 2) {
   const identity = draft.manufacturer.trim() || draft.model.trim() ? { identity: { manufacturer: draft.manufacturer, model: draft.model }, modelYear: integer(draft.modelYear) } : undefined
-  return resolveValueLossCalculatorParts(draft.vehicleType, draft.bodyType, sourceParts, calculatorSelections(draft, sourceParts), identity)
+  return resolveValueLossCalculatorParts(draft.vehicleType, draft.bodyType, sourceParts, calculatorSelections(draft, sourceParts), identity, workbookVersion)
 }
 
-export function calculatorRequest(draft: CalculatorDraft, sourceParts?: Parameters<typeof resolveValueLossCalculatorParts>[2]): ValueLossCalculatorRequest {
+export function calculatorRequest(draft: CalculatorDraft, sourceParts?: Parameters<typeof resolveValueLossCalculatorParts>[2], workbookVersion?: 2): ValueLossCalculatorRequest {
+  const v2 = workbookVersion === 2
   const market = draft.accidentDate < '2026-07-01' || draft.calculationBasis === 'market_difference'
-  const selections = calculatorSelections(draft, sourceParts)
+  const cleanDraft = v2 ? { ...draft, parts: draft.parts.map(part => part.priorPartState === 'unknown' ? { ...part, priorPartState: 'none' as const } : part) } : draft
+  const selections = calculatorSelections(cleanDraft, sourceParts)
+  if (v2 && selections.some(part => part.priorPartState !== 'none')) throw new Error('Geçmiş hasarlı parçaları ve bu parçalara düşen bedeli hasar tutarından çıkarın.')
   if (selections.some(part => part.priorPartState === 'unknown')) throw new Error('Önceki parça hasarı bilinmiyor. SBM / geçmiş kayıt veya inceleme ile doğrulayın.')
   if (!market && integer(draft.previousDamageCount) === null) throw new Error('Önceki hasar sayısı bilinmiyor. SBM / geçmiş kayıt ile doğrulayın.')
-  if (draft.vehicleCondition !== 'normal') throw new Error(draft.vehicleCondition === 'unknown' ? 'Araç durumunu doğrulayın: ağır hasar, antika / koleksiyon ve yabancı plaka durumları kontrol edilmelidir.' : draft.vehicleCondition === 'foreign_plate' ? 'Yabancı plakalı araç için kendi ülkesindeki rayiç ve piyasa araştırması gerekir.' : draft.vehicleCondition === 'antique' ? 'Antika / koleksiyon araç referans modülle hesaplanamaz.' : 'Önceki veya mevcut ağır hasar / tam hasar nedeniyle referans hesaplama yapılamaz.')
+  const condition = v2 && draft.vehicleCondition === 'unknown' ? 'normal' : draft.vehicleCondition
+  if (condition !== 'normal') throw new Error(calculatorVehicleBlockReason(condition) ?? 'Araç durumunu doğrulayın.')
   for (const part of selections) {
     if (!part.partName.trim()) throw new Error('Eklediğiniz parçanın adını girin.')
     if (part.quantity < 1 || part.quantity > 20) throw new Error('Parça adedini 1 ile 20 arasında girin.')
     if (part.quantity > 1 && !part.position.trim()) throw new Error('Birden çok parçanın konumlarını belirtin.')
   }
-  if (!market && sourceParts !== undefined && calculatorRequiresMarket(draft, sourceParts)) throw new Error('Seçilen parça veya işlem için referans katsayısı bulunamadı. Parça, işlem, adet ve malzeme bilgilerini kontrol edin; bu seçimle tahmini tutar hesaplanamaz.')
+  if (!market && sourceParts !== undefined && calculatorPartResolution(cleanDraft, sourceParts, workbookVersion).requiresMarketDifference) throw new Error('Seçilen parça veya işlem için referans katsayısı bulunamadı.')
   if (market && moneyMinor(draft.postRepairMarketValue) !== null && moneyMinor(draft.marketValue) !== null && moneyMinor(draft.postRepairMarketValue)! > moneyMinor(draft.marketValue)!) throw new Error('Onarım sonrası değer kaza öncesi piyasa değerini aşamaz.')
   const input = valueLossCalculatorRequestSchema.safeParse({
+    ...(v2 ? { workbookVersion } : {}),
     ...(draft.manufacturer.trim() && draft.model.trim() ? { vehicleIdentity: { manufacturer: draft.manufacturer, model: draft.model } } : {}),
     bodyType: draft.bodyType, calculationBasis: market ? 'market_difference' : 'reference',
     accidentDate: draft.accidentDate, vehicleType: draft.vehicleType, modelYear: draft.accidentDate < '2026-07-01' ? null : integer(draft.modelYear), usageValue: draft.accidentDate < '2026-07-01' ? null : integer(draft.usageValue),
     marketValueMinor: moneyMinor(draft.marketValue), damageAmountMinor: market ? moneyMinor(draft.damageAmount) ?? 0 : moneyMinor(draft.damageAmount),
-    previousDamageCount: integer(draft.previousDamageCount), commercialOrRental: draft.commercialOrRental || valueLossCalculatorVehicleContext(draft.vehicleType, draft.bodyType).commercialRequired, vehicleCondition: draft.vehicleCondition,
-    postRepairMarketValueMinor: moneyMinor(draft.postRepairMarketValue), faultRateBasisPoints: moneyMinor(draft.faultPercent),
+    previousDamageCount: integer(draft.previousDamageCount), commercialOrRental: draft.commercialOrRental || valueLossCalculatorVehicleContext(draft.vehicleType, draft.bodyType).commercialRequired, vehicleCondition: condition,
+    postRepairMarketValueMinor: moneyMinor(draft.postRepairMarketValue),
+    faultRateBasisPoints: !v2 && draft.faultPercent === '' ? 10_000 : moneyMinor(draft.faultPercent),
     parts: [], partSelections: selections,
   })
-  if (!input.success) {
+  if (!input.success || (v2 && draft.faultPercent.trim() !== '' && moneyMinor(draft.faultPercent) === null)) {
+    if (input.success) throw new Error('Karşı taraf kusurunu 0 ile 100 arasında girin.')
     const field = input.error.issues[0]?.path[0]
-    const messages: Record<string, string> = { vehicleIdentity: 'Üretici eşleştirmesi için marka ve modeli birlikte girin.', accidentDate: 'Kaza tarihini girin.', modelYear: 'Geçerli bir model yılı girin; kaza yılından büyük olamaz.', usageValue: 'Geçerli kilometre / çalışma saati girin.', marketValueMinor: 'Rayiç bedelini sıfırdan büyük bir TL tutarı olarak girin.', damageAmountMinor: 'Hasar tutarını TL olarak girin.', previousDamageCount: 'Önceki hasar sayısını 0 ile 100 arasında girin.', parts: 'En az bir hasarlı parça ekleyin.', postRepairMarketValueMinor: 'Onarım sonrası piyasa değerini girin.', faultRateBasisPoints: 'Karşı taraf kusurunu 0 ile 100 arasında girin.' }
+    const messages: Record<string, string> = { vehicleIdentity: 'Üretici eşleştirmesi için marka ve modeli birlikte girin.', accidentDate: 'Kaza tarihini girin.', modelYear: 'Geçerli bir model yılı girin; kaza yılından büyük olamaz.', usageValue: 'Geçerli kilometre / çalışma saati girin.', marketValueMinor: 'Rayiç bedelini sıfırdan büyük bir TL tutarı olarak girin.', damageAmountMinor: 'Hasar tutarını TL olarak girin.', previousDamageCount: 'Geçerli bir önceki hasar sayısı girin.', parts: 'En az bir hasarlı parça ekleyin.', postRepairMarketValueMinor: 'Onarım sonrası piyasa değerini girin.', faultRateBasisPoints: 'Karşı taraf kusurunu 0 ile 100 arasında girin.' }
     throw new Error(messages[String(field)] ?? 'Hesap bilgilerini kontrol edin.')
   }
   if (!market) {
     for (const part of selections) if (valueLossBaseOnlyPrinciple(part) === null && ['repair', 'repair_paint'].includes(part.operation) && part.partPriceAvailability === 'available' && (part.newPartPriceMinor === null || part.newPartPriceMinor === 0 || part.repairLaborMinor === null)) throw new Error('Onarılan parça için yeni parça bedelini ve onarım işçiliğini girin.')
   }
   return input.data
+}
+
+export function calculatorVehicleBlockReason(condition: CalculatorDraft['vehicleCondition']): string | null {
+  if (condition === 'foreign_plate') return 'Yabancı plakalı araç için değer kaybı hesaplanmaz.'
+  if (condition === 'antique') return 'Antika / koleksiyon araç için değer kaybı hesaplanmaz.'
+  if (condition === 'prior_heavy_damage' || condition === 'current_heavy_damage') return 'Önceki veya mevcut ağır hasar / tam hasar nedeniyle değer kaybı hesaplanmaz.'
+  return null
 }

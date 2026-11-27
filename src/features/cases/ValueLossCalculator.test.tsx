@@ -6,9 +6,10 @@ import type { ValueLossCalculatorPort } from '../../data/valueLossCalculatorPort
 import type { CaseRecord } from '../../types/case'
 import { ValueLossCalculator } from './ValueLossCalculator'
 import { VALUE_LOSS_SAVED_EVENT } from '../../app/valueLossSaved'
+import { VALUE_LOSS_CALCULATOR_V2_VERSION } from '@hasarbotu/contracts'
 
 const session = { user: { id: 'user-1', organizationId: 'org-1', roles: ['expert'] }, reportUnauthorized: vi.fn() } as unknown as SessionContextValue
-const result = { amountMinor: 5_500_000, ruleVersion: 'calculator-reference/2026-07-01/1.3.0', calculationMethod: 'real_market_analysis' as const, issues: [] }
+const result = { amountMinor: 5_500_000, ruleVersion: VALUE_LOSS_CALCULATOR_V2_VERSION, calculationMethod: 'real_market_analysis' as const, issues: [] }
 function sourceCase(fields: Record<string, string> = {}): CaseRecord {
   return { caseId: 'case-1', type: 'Trafik', lossDate: '2026-10-01', estimatedDamage: 100_000, eksist: { vehicleFields: { Marka: 'Toyota', 'Araç Tipi': 'Corolla Sedan', 'Model Yılı': '2024', 'Araç Tarife Grubu': 'OTOMOBİL', Kilometre: '50.000', 'Önceki Hasar Sayısı': '0', ...fields } } } as unknown as CaseRecord
 }
@@ -24,10 +25,8 @@ async function addPart() {
   await userEvent.click(screen.getByRole('button', { name: 'Ekle' }))
 }
 async function fill() {
-  await userEvent.selectOptions(screen.getByLabelText('Araç durumu'), 'normal')
   fireEvent.change(screen.getByLabelText('Rayiç bedeli (TL)'), { target: { value: '1.000.000' } })
   await addPart()
-  await userEvent.selectOptions(screen.getByLabelText('SOL ÇAMURLUK önceki durumu'), 'none')
 }
 const calculate = () => userEvent.click(screen.getByRole('button', { name: 'Hesapla' }))
 
@@ -37,19 +36,19 @@ describe('automatic value loss calculator', () => {
     await fill(); await calculate(); await screen.findByText(/55\.000,00/)
     mounted.rerender(view(port, { ...item, stage: 'Ağır Hasar/Pert' }))
     expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Araç durumu')).toHaveValue('current_heavy_damage')
-    expect(screen.getByLabelText('Araç durumu')).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('ağır hasar')
+    expect(screen.getByRole('button', { name: 'Hesapla' })).toBeDisabled()
     await calculate()
     expect(port.calculate).toHaveBeenCalledTimes(1)
   })
-  it('requires explicit vehicle condition confirmation when the file has no verified condition', async () => {
+  it('keeps the file inputs visible after the last missing field is filled', async () => {
     const port = fixture()
-    render(view(port)); await addPart()
-    await userEvent.selectOptions(screen.getByLabelText('SOL ÇAMURLUK önceki durumu'), 'none')
-    await calculate()
-    expect(screen.getByLabelText('Araç durumu')).toHaveValue('unknown')
-    expect(screen.getByRole('alert')).toHaveTextContent('Araç durumunu doğrulayın')
-    expect(port.calculate).not.toHaveBeenCalled()
+    render(view(port, { ...item, estimatedDamage: 0 }))
+    fireEvent.change(screen.getByLabelText('Hasar tutarı (TL)'), { target: { value: '100.000' } })
+    await fill(); await calculate(); await screen.findByText(/55\.000,00/)
+    expect(screen.getByRole('region', { name: 'Dosya bilgileri ve eksik hesap girdileri' })).toBeVisible()
+    expect(screen.getByLabelText('Hasar tutarı (TL)')).toBeVisible()
+    expect(screen.queryByLabelText('Araç durumu')).not.toBeInTheDocument()
   })
   it('restores the saved amount and full inputs after clearing the window session', async () => {
     const port = fixture()
@@ -62,10 +61,33 @@ describe('automatic value loss calculator', () => {
     render(view(port))
     await screen.findByText(/55\.000,00/)
     expect(screen.getByLabelText('Rayiç bedeli (TL)')).toHaveValue('1000000')
-    expect(screen.getByLabelText('SOL ÇAMURLUK önceki durumu')).toHaveValue('none')
+    expect(screen.queryByLabelText('SOL ÇAMURLUK önceki durumu')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Hesap yöntemi')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Araç durumu')).toHaveValue('normal')
     expect(screen.queryByLabelText('Onarım sonrası piyasa değeri (TL)')).not.toBeInTheDocument()
+  })
+  it('shows the saved V1 amount with its own label until the user requests a V2 calculation', async () => {
+    const port = fixture()
+    const first = render(view(port))
+    await fill(); await calculate(); await screen.findByText(/55\.000,00/)
+    const { workbookVersion, ...input } = vi.mocked(port.calculate).mock.calls[0]![1]
+    expect(workbookVersion).toBe(2)
+    first.unmount()
+    sessionStorage.clear()
+    port.loadCalculation = vi.fn().mockResolvedValue({ input: { ...input, faultRateBasisPoints: 10000 }, result: { ...result, ruleVersion: 'calculator-reference/2026-07-01/1.3.0' }, savedAt: '2026-11-10T12:00:00Z' })
+    render(view(port))
+    expect(await screen.findByText('Kayıtlı önceki hesap')).toBeVisible()
+    expect(screen.getByText(/55\.000,00/)).toBeVisible()
+    expect(port.calculate).toHaveBeenCalledTimes(1)
+  })
+  it.each([
+    [{ 'Önceki Ağır Hasar': 'Evet' }, 'ağır hasar'],
+    [{ 'Araç Niteliği': 'Antika' }, 'Antika'],
+    [{ 'Plaka Tipi': 'Yabancı' }, 'Yabancı plakalı'],
+  ])('blocks cases with imported exclusions %j', (fields, message) => {
+    const port = fixture()
+    render(view(port, sourceCase(fields)))
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
+    expect(screen.getByRole('button', { name: 'Hesapla' })).toBeDisabled()
   })
   it('calculates using imported vehicle, usage, damage amount and history count', async () => {
     const port = fixture()
@@ -84,7 +106,6 @@ describe('automatic value loss calculator', () => {
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Hasarlı parça' })).toBeEnabled())
     expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
     await calculate()
-    expect(screen.getByLabelText('Araç durumu')).toHaveValue('prior_heavy_damage')
     expect(screen.getByRole('alert')).toHaveTextContent('ağır hasar')
     expect(port.calculate).toHaveBeenCalledTimes(1)
   })
@@ -92,17 +113,16 @@ describe('automatic value loss calculator', () => {
     render(view(fixture())); await addPart()
     for (const label of ['Marka', 'Model', 'SOL ÇAMURLUK konumu', 'SOL ÇAMURLUK adedi']) expect(screen.queryByLabelText(label, { exact: true })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Kasa / araç yapısı')).toHaveValue('sedan')
-    expect(screen.getByLabelText('SOL ÇAMURLUK malzemesi')).toHaveValue('unspecified')
+    expect(screen.queryByLabelText('SOL ÇAMURLUK malzemesi')).not.toBeInTheDocument()
     expect(screen.queryByText('Aynı parçaya farklı konum ekle')).not.toBeInTheDocument()
     expect(screen.queryByText('Kaynakla doğrulanmış referans katsayıları')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Dosyadan alınan araç bilgileri')).toHaveTextContent('Toyota · Corolla Sedan · Sedan')
   })
-  it('blocks an unknown part history without treating it as undamaged', async () => {
-    const port = fixture()
-    render(view(port)); await addPart(); await calculate()
-    expect(screen.getByLabelText('SOL ÇAMURLUK önceki durumu')).toHaveValue('unknown')
-    expect(screen.getByRole('alert')).toHaveTextContent('Önceki parça hasarı bilinmiyor')
-    expect(port.calculate).not.toHaveBeenCalled()
+  it('offers only replacement, repair and paint', async () => {
+    render(view(fixture())); await addPart()
+    expect(Array.from((screen.getByLabelText('SOL ÇAMURLUK işlemi') as HTMLSelectElement).options, option => option.text))
+      .toEqual(['Değişim', 'Onarım', 'Boya'])
+    expect(screen.queryByLabelText('SOL ÇAMURLUK önceki durumu')).not.toBeInTheDocument()
   })
   it('does not default a missing previous damage count to zero', async () => {
     const port = fixture()
@@ -112,9 +132,10 @@ describe('automatic value loss calculator', () => {
   })
   it.each(['repair_paint', 'replacement_paint'] as const)('keeps %s on one physical row', async operation => {
     const port = fixture()
-    render(view(port)); await fill(); await userEvent.selectOptions(screen.getByLabelText('SOL ÇAMURLUK işlemi'), operation)
+    render(view(port)); await fill(); await userEvent.selectOptions(screen.getByLabelText('SOL ÇAMURLUK işlemi'), operation.replace('_paint', ''))
+    await userEvent.click(screen.getByLabelText('SOL ÇAMURLUK boya da uygulandı'))
     await userEvent.selectOptions(screen.getByLabelText('SOL ÇAMURLUK boya türü'), 'local')
-    if (operation === 'repair_paint') await userEvent.click(screen.getByLabelText('Parça bedeli bilinmiyor'))
+    if (operation === 'repair_paint') await userEvent.click(screen.getByLabelText('Parça bedeli veya işçilik bilinmiyor'))
     await calculate(); await screen.findByText(/55\.000,00/)
     expect(screen.getAllByText('SOL ÇAMURLUK', { selector: 'strong' })).toHaveLength(1)
     expect(port.calculate).toHaveBeenCalledWith('case-1', expect.objectContaining({ partSelections: [expect.objectContaining({ operation, paintMode: 'local' })] }))
@@ -124,13 +145,14 @@ describe('automatic value loss calculator', () => {
     render(view(port)); await fill(); await userEvent.selectOptions(screen.getByLabelText('SOL ÇAMURLUK işlemi'), 'repair'); await calculate()
     expect(screen.getByRole('alert')).toHaveTextContent('yeni parça bedelini')
     expect(port.calculate).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByLabelText('Parça bedeli bilinmiyor')); await calculate(); await screen.findByText(/55\.000,00/)
+    await userEvent.click(screen.getByLabelText('Parça bedeli veya işçilik bilinmiyor')); await calculate(); await screen.findByText(/55\.000,00/)
   })
-  it('does not infer steel for paintless repair from an unverified name', async () => {
+  it('allows an Excel base calculation with no coefficient-bearing part and unknown fault', async () => {
     const port = fixture()
-    render(view(port)); await fill(); await userEvent.selectOptions(screen.getByLabelText('SOL ÇAMURLUK işlemi'), 'paintless_repair'); await calculate()
-    expect(screen.getByRole('alert')).toHaveTextContent('referans katsayısı bulunamadı')
-    expect(port.calculate).not.toHaveBeenCalled()
+    render(view(port))
+    fireEvent.change(screen.getByLabelText('Rayiç bedeli (TL)'), { target: { value: '1.000.000' } })
+    await calculate(); await screen.findByText(/55\.000,00/)
+    expect(port.calculate).toHaveBeenCalledWith('case-1', expect.objectContaining({ workbookVersion: 2, faultRateBasisPoints: null, partSelections: [] }))
   })
   it('rejects duplicate physical parts', async () => {
     render(view(fixture())); await fill(); await addPart()
@@ -156,13 +178,14 @@ describe('automatic value loss calculator', () => {
     expect(screen.getByLabelText('Rayiç bedeli (TL)')).toHaveValue('1.000.000'); expect(screen.getByText(/55\.000,00/)).toBeInTheDocument()
     reopened.rerender(view(port, { ...item, caseId: 'case-2' })); expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
   })
-  it.each([2, undefined])('migrates draft format %s without trusting a default undamaged state', async formatVersion => {
+  it.each([2, undefined])('restores inputs from draft format %s', async formatVersion => {
     const port = fixture(), mounted = render(view(port))
     await fill(); await calculate(); await screen.findByText(/55\.000,00/); mounted.unmount()
     const key = 'hasarbotu-value-loss-calculator-v1:org-1:user-1:case-1', stored = JSON.parse(sessionStorage.getItem(key)!)
     sessionStorage.setItem(key, JSON.stringify({ ...stored, verificationVersion: 2, draft: { ...stored.draft, formatVersion } }))
     render(view(port))
-    expect(screen.getByLabelText('Rayiç bedeli (TL)')).toHaveValue('1.000.000'); expect(screen.getByLabelText('SOL ÇAMURLUK önceki durumu')).toHaveValue('unknown')
+    expect(screen.getByLabelText('Rayiç bedeli (TL)')).toHaveValue('1.000.000')
+    expect(screen.getByLabelText('SOL ÇAMURLUK işlemi')).toHaveValue('replacement')
     expect(screen.queryByText(/55\.000,00/)).not.toBeInTheDocument()
   })
   it('updates automatic source fields while retaining the entered market value', async () => {

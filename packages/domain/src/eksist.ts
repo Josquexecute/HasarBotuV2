@@ -3,6 +3,11 @@ export function eksistKey(value: string): string {
   return value.normalize('NFKD').replace(/\p{M}/gu, '').replace(/ı/g, 'i').toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
+const VALUE_LOSS_VEHICLE_LABELS = [
+  'Araç Durumu', 'Araç Niteliği', 'Önceki Ağır Hasar', 'Geçmiş Ağır Hasar', 'Ağır Hasar Kaydı',
+  'Mevcut Ağır Hasar', 'Tam Hasar', 'Geçmişte Pert', 'Antika', 'Koleksiyon Aracı', 'Plaka Tipi', 'Yabancı Plaka',
+] as const
+
 const LABELS = [
   'Talep İşlem Ref No', 'Atama Tipi', 'Atama Şekli', 'Hasar Tipi', 'İtiraz Tipi',
   'Ürün', 'Sigortalı TC Kimlik No', 'Sigortalı Ad/Ünvan', 'Sigortalı Soyad', 'Sigorta Şirketi',
@@ -18,6 +23,7 @@ const LABELS = [
   'Tamirhane Kimlik Türü', 'Tamirhane Kimlik No', 'Levha No', 'Eksper Ad-Soyad', 'Atayan Tip', 'Atama Durumu',
   'Tüzel Eksper Levha No', 'Red Nedeni', 'Eksper Atama Tarihi', 'SBM Eksper Rapor No',
   'Sigorta Şirketi İtiraz Mı', 'Sigortalı İtiraz Mı', 'Yeni Durum',
+  ...VALUE_LOSS_VEHICLE_LABELS,
 ] as const
 const HEADINGS = /(?:Hatmer Eksist Uygulaması|Talep Detayı|Sigortalı Poliçe Bilgileri|Hasar Detay Bilgileri|Eksper Atanacak Araç Bilgileri|Atama Yapan İletişim Bilgileri|Ekspertiz Yeri Bilgileri|Tamirhane Yeri Bilgileri|Eksper Bilgileri|Ağır Hasar bilgileri|İşlemler)/giu
 const labelPattern = LABELS.slice().sort((a, b) => b.length - a.length).map(label => label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*').replace(/\//g, '\\s*/\\s*')).join('|')
@@ -47,7 +53,7 @@ export interface EksistExtraction {
   vehicleClass: 'passenger_car' | 'light_commercial' | 'heavy_commercial' | 'motorcycle' | 'trailer' | 'other' | ''
 }
 
-export const EKSIST_VEHICLE_LABELS = ['Plaka', 'Marka', 'Araç Tipi', 'Model Yılı', 'Araç Tarife Grubu', 'Araç Cinsi', 'Kasa Tipi', 'Kasa Cinsi', 'Gövde Tipi', 'Araç Gövde Tipi', 'Kasa / Araç Yapısı', 'Motor No', 'Şasi No', 'Renk', 'Yakıt Tipi', 'Vites Tipi', 'Kullanım Şekli', 'Kullanım Amacı', 'Silindir Hacmi', 'Motor Gücü', 'Koltuk Sayısı', 'İlk Tescil Tarihi', 'Tescil Tarihi', 'Tip / Varyant / Versiyon', 'Kilometre', 'Araç Km', 'Çalışma Saati', 'SBM Önceki Hasar Sayısı', 'Önceki Hasar Sayısı'] as const
+export const EKSIST_VEHICLE_LABELS = ['Plaka', 'Marka', 'Araç Tipi', 'Model Yılı', 'Araç Tarife Grubu', 'Araç Cinsi', 'Kasa Tipi', 'Kasa Cinsi', 'Gövde Tipi', 'Araç Gövde Tipi', 'Kasa / Araç Yapısı', 'Motor No', 'Şasi No', 'Renk', 'Yakıt Tipi', 'Vites Tipi', 'Kullanım Şekli', 'Kullanım Amacı', 'Silindir Hacmi', 'Motor Gücü', 'Koltuk Sayısı', 'İlk Tescil Tarihi', 'Tescil Tarihi', 'Tip / Varyant / Versiyon', 'Kilometre', 'Araç Km', 'Çalışma Saati', 'SBM Önceki Hasar Sayısı', 'Önceki Hasar Sayısı', ...VALUE_LOSS_VEHICLE_LABELS] as const
 
 function sourceDate(value: string): string {
   const local = /^(\d{2})[/.](\d{2})[/.](\d{4})(?:\s|$)/.exec(value)

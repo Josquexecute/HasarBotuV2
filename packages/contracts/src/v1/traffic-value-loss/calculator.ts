@@ -3,7 +3,7 @@ import { REAL_MARKET_VALUE_LOSS_VEHICLE_TYPES, VALUE_LOSS_BODY_TYPES, VALUE_LOSS
 import { localDateSchema } from '../../common/primitives.js'
 import { trafficValueLossBasisPointsSchema, trafficValueLossMoneyMinorSchema, trafficValueLossRealMarketPartInputSchema } from './commands.js'
 
-export { VALUE_LOSS_BODY_LABELS, VALUE_LOSS_BODY_TYPES, VALUE_LOSS_CALCULATOR_OPERATIONS, VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, VALUE_LOSS_PART_MATERIALS, VALUE_LOSS_VEHICLE_GROUPS, VALUE_LOSS_PART_COVERAGE_LABELS, buildValueLossPartSuggestions, resolveValueLossCalculatorParts, valueLossBaseOnlyPrinciple, valueLossBodyOptions, valueLossCalculatorSourceParts, valueLossCalculatorVehicleContext } from '@hasarbotu/domain'
+export { VALUE_LOSS_BODY_LABELS, VALUE_LOSS_BODY_TYPES, VALUE_LOSS_CALCULATOR_OPERATIONS, VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, VALUE_LOSS_CALCULATOR_V2_VERSION, VALUE_LOSS_PART_MATERIALS, VALUE_LOSS_VEHICLE_GROUPS, VALUE_LOSS_PART_COVERAGE_LABELS, buildValueLossPartSuggestions, resolveValueLossCalculatorParts, valueLossBaseOnlyPrinciple, valueLossBodyOptions, valueLossCalculatorExcludedVehicle, valueLossCalculatorSourceParts, valueLossCalculatorVehicleContext } from '@hasarbotu/domain'
 export type { ValueLossBodyType, ValueLossCalculatorPartSelection, ValueLossPartMaterial, ValueLossPartSuggestion, ValueLossPartCoverage } from '@hasarbotu/domain'
 
 export const valueLossCalculatorPartSelectionSchema = trafficValueLossRealMarketPartInputSchema.extend({
@@ -21,6 +21,7 @@ export const valueLossCalculatorPartSelectionSchema = trafficValueLossRealMarket
 })
 
 export const valueLossCalculatorRequestSchema = z.strictObject({
+  workbookVersion: z.literal(2).optional(),
   accidentDate: localDateSchema,
   vehicleType: z.enum(REAL_MARKET_VALUE_LOSS_VEHICLE_TYPES),
   vehicleIdentity: z.strictObject({ manufacturer: z.string().trim().min(1).max(120), model: z.string().trim().min(1).max(160) }).optional(),
@@ -30,15 +31,17 @@ export const valueLossCalculatorRequestSchema = z.strictObject({
   usageValue: z.number().int().min(0).max(10_000_000).nullable(),
   marketValueMinor: trafficValueLossMoneyMinorSchema.min(1),
   damageAmountMinor: trafficValueLossMoneyMinorSchema,
-  previousDamageCount: z.number().int().min(0).max(100).nullable(),
+  previousDamageCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
   commercialOrRental: z.boolean(),
   vehicleCondition: z.enum(['normal', 'prior_heavy_damage', 'current_heavy_damage', 'antique', 'foreign_plate']),
   parts: z.array(trafficValueLossRealMarketPartInputSchema).max(100),
   partSelections: z.array(valueLossCalculatorPartSelectionSchema).max(100).optional(),
   postRepairMarketValueMinor: trafficValueLossMoneyMinorSchema.nullable(),
-  faultRateBasisPoints: trafficValueLossBasisPointsSchema,
+  faultRateBasisPoints: trafficValueLossBasisPointsSchema.nullable(),
 }).superRefine((value, context) => {
+  const v2 = value.workbookVersion === 2
   const market = value.calculationBasis === 'market_difference' || value.accidentDate < '2026-07-01'
+  if (v2 && market) context.addIssue({ code: 'custom', path: ['workbookVersion'], message: 'excel_v2_reference_period_required' })
   if (value.bodyType !== undefined && !valueLossBodyOptions(value.vehicleType).includes(value.bodyType)) context.addIssue({ code: 'custom', path: ['bodyType'], message: 'body_type_mismatch' })
   if (value.partSelections !== undefined && value.parts.length > 0) context.addIssue({ code: 'custom', path: ['parts'], message: 'mixed_part_representations' })
   if (value.vehicleIdentity !== undefined && value.partSelections === undefined) context.addIssue({ code: 'custom', path: ['partSelections'], message: 'physical_parts_required_for_manufacturer_matching' })
@@ -46,7 +49,9 @@ export const valueLossCalculatorRequestSchema = z.strictObject({
   if (value.modelYear !== null && value.modelYear > Number(value.accidentDate.slice(0, 4))) context.addIssue({ code: 'custom', path: ['modelYear'], message: 'model_year_after_accident' })
   if (!market && value.modelYear === null) context.addIssue({ code: 'custom', path: ['modelYear'], message: 'model_year_required' })
   if (!market && value.usageValue === null) context.addIssue({ code: 'custom', path: ['usageValue'], message: 'usage_value_required' })
-  if (value.accidentDate >= '2026-07-01' && (value.partSelections ?? value.parts).length === 0) context.addIssue({ code: 'custom', path: ['parts'], message: 'parts_required' })
+  if (!v2 && value.accidentDate >= '2026-07-01' && (value.partSelections ?? value.parts).length === 0) context.addIssue({ code: 'custom', path: ['parts'], message: 'parts_required' })
+  if (!v2 && (value.previousDamageCount ?? 0) > 100) context.addIssue({ code: 'custom', path: ['previousDamageCount'], message: 'previous_damage_count_out_of_range' })
+  if ((!v2 || market) && value.faultRateBasisPoints === null) context.addIssue({ code: 'custom', path: ['faultRateBasisPoints'], message: 'fault_rate_required' })
   if (market && value.postRepairMarketValueMinor === null) context.addIssue({ code: 'custom', path: ['postRepairMarketValueMinor'], message: 'post_repair_value_required' })
   if (market && value.calculationBasis !== undefined && value.postRepairMarketValueMinor !== null && value.postRepairMarketValueMinor > value.marketValueMinor) context.addIssue({ code: 'custom', path: ['postRepairMarketValueMinor'], message: 'post_repair_value_above_pre_accident' })
 })
@@ -59,7 +64,7 @@ export const valueLossCalculatorBreakdownSchema = z.strictObject({
   partCoefficient: z.string(), damageContribution: z.string(), damageCoefficient: z.string(), vehicleMultiplier: z.string(),
   rawAmountMinor: z.string(), capMinor: z.string(), cappedAmountMinor: z.string(), capApplied: z.boolean(),
   roundingUnitMinor: trafficValueLossMoneyMinorSchema, grossAmountMinor: trafficValueLossMoneyMinorSchema,
-  faultRateBasisPoints: trafficValueLossBasisPointsSchema,
+  faultRateBasisPoints: trafficValueLossBasisPointsSchema.nullable(),
   parts: z.array(z.strictObject({ label: z.string(), operation: z.enum(['replacement', 'repair', 'paint']), repairClass: z.enum(['light', 'medium', 'heavy']).nullable(), coefficient: z.string(), included: z.boolean(), exclusionReason: z.string().nullable(), sourceRow: z.number().int() })).max(100),
   baseOnlyParts: z.array(z.strictObject({ label: z.string(), principle: z.enum(['3.9', '3.10']) })).max(100),
 })

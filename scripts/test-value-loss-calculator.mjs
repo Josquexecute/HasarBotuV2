@@ -56,11 +56,9 @@ try {
   check('source extraction reaches the actual calculator without manual vehicle entry', await page.getByLabel('Model yılı').inputValue() === '2021' && await page.getByLabel('Kilometre').inputValue() === '51001' && await page.getByLabel('Önceki hasar sayısı').inputValue() === '2' && (await page.getByLabel('Dosyadan alınan araç bilgileri').textContent()).includes('FORD · FOCUS SEDAN · Sedan'))
   check('imported identity is concise and body classification is editable', await page.getByLabel('Marka', { exact: true }).count() === 0 && await page.getByLabel('Kasa / araç yapısı').inputValue() === 'sedan')
   // This source has no repair assessment; only the missing amount is entered.
-  const details = page.locator('.value-loss-calculator details').first()
-  if (await details.getAttribute('open') === null) await details.locator('summary').click()
   await page.getByLabel('Hasar tutarı (TL)', { exact: true }).fill('100.000')
   await page.getByLabel('Rayiç bedeli (TL)', { exact: true }).fill('1.000.000')
-  await page.getByLabel('Araç durumu', { exact: true }).selectOption('normal')
+  check('file inputs stay visible after completing the amount', await page.getByRole('region', { name: 'Dosya bilgileri ve eksik hesap girdileri' }).isVisible() && await page.getByLabel('Hasar tutarı (TL)').isVisible())
   const partInput = page.getByRole('combobox', { name: 'Hasarlı parça', exact: true })
   await partInput.click()
   const part = await page.getByRole('listbox', { name: 'Hasarlı parça' }).getByRole('option').first().textContent()
@@ -68,10 +66,7 @@ try {
   await page.getByRole('button', { name: 'Ekle', exact: true }).click()
   const requests = []
   page.on('request', request => { if (new URL(request.url()).pathname.endsWith('/traffic-value-loss/calculate') && request.method() === 'POST') requests.push(request.postDataJSON()) })
-  await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
-  await page.getByRole('alert').filter({ hasText: 'Önceki parça hasarı bilinmiyor' }).waitFor()
-  check('unknown history blocks the request and any amount', requests.length === 0 && await page.locator('.value-loss-calculator__footer strong').count() === 0)
-  await page.getByLabel(part + ' önceki durumu', { exact: true }).selectOption('none')
+  check('only the three workbook operations and their inputs are offered', await page.getByLabel(part + ' işlemi', { exact: true }).locator('option').allTextContents().then(labels => labels.join(',') === 'Değişim,Onarım,Boya') && await page.getByLabel(part + ' önceki durumu', { exact: true }).count() === 0 && await page.getByLabel(part + ' malzemesi', { exact: true }).count() === 0)
   const calculate = async () => {
     const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/traffic-value-loss/calculate') && response.request().method() === 'POST')
     await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
@@ -85,9 +80,9 @@ try {
   const replacement = await calculate()
   check('automatic values reach the authenticated API', requests.at(-1).modelYear === 2021 && requests.at(-1).usageValue === 51001 && requests.at(-1).previousDamageCount === 2 && requests.at(-1).bodyType === 'sedan' && requests.at(-1).vehicleIdentity.manufacturer === 'FORD' && Number.isSafeInteger(replacement.amountMinor))
   await page.getByLabel(part + ' işlemi', { exact: true }).selectOption('repair')
-  await page.getByLabel('Parça bedeli bilinmiyor', { exact: true }).check()
+  await page.getByLabel('Parça bedeli veya işçilik bilinmiyor', { exact: true }).check()
   const repair = await calculate()
-  await page.getByLabel(part + ' işlemi', { exact: true }).selectOption('repair_paint')
+  await page.getByLabel(part + ' boya da uygulandı', { exact: true }).check()
   await page.getByLabel(part + ' boya türü', { exact: true }).selectOption('local')
   const combined = await calculate(), amount = await page.locator('.value-loss-calculator__footer strong').textContent()
   check('combined operation uses one physical row and changes the actual result', await page.locator('.value-loss-calculator__part').count() === 1 && requests.at(-1).partSelections.length === 1 && requests.at(-1).partSelections[0].operation === 'repair_paint' && combined.amountMinor !== repair.amountMinor)
@@ -100,6 +95,7 @@ try {
   for (const [width, height] of [[1440, 900], [1024, 700], [768, 700], [390, 600]]) {
     await electron.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(...size), [width, height])
     check('calculator fits ' + width + 'px', await page.locator('.value-loss-calculator').evaluate(element => element.scrollWidth <= element.clientWidth + 1))
+    if (process.env.VALUE_LOSS_SCREENSHOTS === '1' && width >= 768) await page.screenshot({ path: output + '/calculator-' + width + '.png' })
     await partInput.click()
     const popup = page.locator('.searchable-select__popup')
     await popup.waitFor()
@@ -111,14 +107,14 @@ try {
   }
   await page.getByLabel('Rayiç bedeli (TL)', { exact: true }).fill('1.100.000')
   check('changed input immediately removes the old amount', await page.locator('.value-loss-calculator__footer strong').count() === 0)
-  const saved = (await pool.query('SELECT input,result FROM case_value_loss_calculations WHERE case_id=$1', [caseId])).rows[0]
+  const saved = (await pool.query("SELECT input,result FROM case_value_loss_calculation_history WHERE case_id=$1 AND input ? 'workbookVersion' ORDER BY history_id DESC LIMIT 1", [caseId])).rows[0]
   check('successful estimate and physical part inputs are stored on their own case', saved.result.amountMinor === combined.amountMinor && saved.input.partSelections[0].operation === 'repair_paint' && saved.input.marketValueMinor === 100_000_000)
   await page.evaluate(() => sessionStorage.clear())
   await page.reload()
   await page.getByRole('button', { name: 'Değer Kaybı', exact: true }).click()
   await page.locator('.value-loss-calculator__footer strong').waitFor()
   check('saved estimate survives clearing the renderer session and reloading', await page.locator('.value-loss-calculator__footer strong').textContent() === amount && await page.getByLabel('Rayiç bedeli (TL)').inputValue() === '1000000')
-  check('reference estimate preserves explicit vehicle condition', await page.getByLabel('Hesap yöntemi').count() === 0 && await page.getByLabel('Araç durumu').inputValue() === 'normal' && saved.input.calculationBasis === 'reference' && saved.input.vehicleCondition === 'normal')
+  check('reference estimate uses Excel V2 and retains unknown fault', await page.getByLabel('Araç durumu').count() === 0 && saved.input.workbookVersion === 2 && saved.input.faultRateBasisPoints === null && saved.input.calculationBasis === 'reference')
   await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(480, 760))
   await page.goto(origin + '/touch-assistant')
   await page.getByRole('tab', { name: 'Dosyalar', exact: true }).click()
@@ -134,8 +130,6 @@ try {
   await page.goto(origin + '/dosyalar/' + caseId)
   await page.getByRole('button', { name: 'Değer Kaybı', exact: true }).click()
   await page.locator('.value-loss-calculator__footer strong').waitFor()
-  const currentDetails = page.locator('.value-loss-calculator details').first()
-  if (await currentDetails.getAttribute('open') === null) await currentDetails.locator('summary').click()
   await page.getByLabel('Karşı taraf kusuru (%)').fill('75')
   const adjusted = await calculate()
   check('counterparty fault is applied after gross rounding and persisted with the detailed source', adjusted.amountMinor === combined.amountMinor * 0.75 && adjusted.breakdown.grossAmountMinor === combined.amountMinor && adjusted.breakdown.sourceSha256.length === 64)
@@ -144,21 +138,13 @@ try {
   await downloadElectronFixture(electron, reportPath, () => page.getByRole('button', { name: 'Hesap dökümünü indir' }).click())
   const html = await readFile(reportPath, 'utf8')
   check('actual downloaded report has source provenance, part rows and a printable layout', html.includes(adjusted.breakdown.sourceSha256) && html.includes('@media print') && html.includes('Kusur uygulanmış tahmin') && !html.includes('<script'))
-  await page.getByLabel(part + ' malzemesi', { exact: true }).selectOption('plastic_bodywork')
-  await page.getByLabel(part + ' önceki durumu', { exact: true }).selectOption('previously_damaged')
-  const allocationResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/traffic-value-loss/calculate') && response.request().method() === 'POST')
-  await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
-  const allocation = await allocationResponse
-  assert.equal(allocation.status(), 200)
-  const allocationIssue = await allocation.json()
-  const allocationAlert = page.getByRole('alert').filter({ hasText: 'ayrıştır' })
-  await allocationAlert.waitFor()
-  check('current API allocation issues remain actionable without an obsolete-service warning or amount', allocationIssue.amountMinor === null && allocationIssue.ruleVersion === adjusted.ruleVersion && !(await allocationAlert.textContent()).includes('Hesaplama servisi güncel değil') && await page.locator('.value-loss-calculator__footer strong').count() === 0)
   const requestCount = requests.length
-  await page.getByLabel('Araç durumu', { exact: true }).selectOption('current_heavy_damage')
-  await page.getByRole('button', { name: 'Hesapla', exact: true }).click()
+  await pool.query("UPDATE cases SET workflow_stage='total_loss' WHERE id=$1", [caseId])
+  await page.reload()
+  await page.getByRole('button', { name: 'Değer Kaybı', exact: true }).click()
   await page.getByRole('alert').filter({ hasText: 'ağır hasar' }).waitFor()
-  check('heavy damage stops the UI without an API call or obsolete amount', requests.length === requestCount && await page.locator('.value-loss-calculator__footer strong').count() === 0)
+  check('heavy damage stops the UI without an API call or obsolete amount', (await page.getByRole('button', { name: 'Hesapla', exact: true }).isDisabled()) && requests.length === requestCount && await page.locator('.value-loss-calculator__footer strong').count() === 0)
+  await pool.query("UPDATE cases SET workflow_stage='new_notification' WHERE id=$1", [caseId])
   check('no formal assessment or production data is written', (await pool.query('SELECT count(*)::int AS n FROM traffic_value_loss_assessments')).rows[0].n === 0)
   check('no renderer JavaScript errors', errors.length === 0)
   if (process.env.VALUE_LOSS_VERIFY_NOTICE === '1') {
@@ -195,7 +181,7 @@ try {
     const current = await measureValueLossElectronTyping({ page, electron, storageKey, caseUrl: origin + '/dosyalar/' + caseId, mode: 'candidate' })
     await writeFile(output + '/electron-performance.json', JSON.stringify(current, null, 2))
   }
-  const summary = { status: 'PASS', runtime: 'real Electron shell + API + disposable PostgreSQL', checks: checks.length, screenshots: false, productionDataTouched: false }
+  const summary = { status: 'PASS', runtime: 'real Electron shell + API + disposable PostgreSQL', checks: checks.length, screenshots: process.env.VALUE_LOSS_SCREENSHOTS === '1', productionDataTouched: false }
   await writeFile(output + '/results.json', JSON.stringify({ ...summary, checks }, null, 2))
   await writeFile(evidenceRoot + '/latest-results.json', JSON.stringify({ ...summary, output, checks }, null, 2))
   console.log(JSON.stringify(summary))

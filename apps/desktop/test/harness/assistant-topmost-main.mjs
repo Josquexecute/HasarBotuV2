@@ -44,6 +44,9 @@ async function startNativeObserver() {
   const source = `using System; using System.Runtime.InteropServices; public static class InspectTouch {
     [StructLayout(LayoutKind.Sequential)] public struct Rect { public int L,T,R,B; }
     [StructLayout(LayoutKind.Sequential)] public struct Monitor { public int Size; public Rect Bounds,Work; public uint Flags; }
+    [StructLayout(LayoutKind.Sequential)] struct Point { public int X,Y; }
+    [StructLayout(LayoutKind.Sequential)] struct MouseInput { public int X,Y; public uint Data,Flags,Time; public UIntPtr ExtraInfo; }
+    [StructLayout(LayoutKind.Sequential)] struct Input { public uint Type; public MouseInput Mouse; }
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern IntPtr GetTopWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h,uint cmd);
@@ -66,6 +69,80 @@ async function startNativeObserver() {
     [DllImport("user32.dll")] public static extern IntPtr GetThreadDpiAwarenessContext();
     [DllImport("user32.dll")] public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr h,int i);
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point point);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h,uint flags);
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x,int y);
+    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h,out Rect r);
+    [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr h,ref Point point);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int width,int height,uint flags);
+    [DllImport("user32.dll")] static extern uint SendInput(uint count,Input[] inputs,int size);
+    const uint NoSize=0x0001, NoMove=0x0002, NoActivate=0x0010, NoOwnerZOrder=0x0200;
+    const uint LeftDown=0x0002, LeftUp=0x0004, RootAncestor=2;
+
+    public static void ClickFixture(IntPtr fixture,uint expectedPid) {
+      if (GetForegroundWindow() == fixture) return;
+      uint pid;
+      GetWindowThreadProcessId(fixture,out pid);
+      if (expectedPid != pid || !IsWindowVisible(fixture))
+        throw new Exception("Foreground setup requires a visible window owned by the test fixture");
+      const uint positionFlags=NoSize|NoMove|NoActivate|NoOwnerZOrder;
+      bool wasTopmost=(GetWindowLongPtr(fixture,-20).ToInt64() & 8) != 0;
+      // An unrelated topmost window can cover the normal fixture. Expose the
+      // fixture for the setup click, then restore its band before any assertion.
+      if (!SetWindowPos(fixture,new IntPtr(-1),0,0,0,0,positionFlags))
+        throw new Exception("Could not raise the test fixture for its initial click");
+      try {
+        ClickExposedFixture(fixture);
+      } finally {
+        if (!wasTopmost && !SetWindowPos(fixture,new IntPtr(-2),0,0,0,0,positionFlags))
+          throw new Exception("Could not restore the normal window band of the test fixture");
+      }
+    }
+
+    static void ClickExposedFixture(IntPtr fixture) {
+      Rect client;
+      Point saved, current, origin = new Point();
+      if (!GetClientRect(fixture,out client) || !ClientToScreen(fixture,ref origin) || !GetCursorPos(out saved))
+        throw new Exception("Could not locate the test fixture for its initial click");
+      Point point = FindFixturePoint(fixture,client,origin);
+      if (!SetCursorPos(point.X,point.Y)) throw new Exception("Could not point to the test fixture");
+      try {
+        if (!GetCursorPos(out current) || current.X != point.X || current.Y != point.Y || RootAt(current) != fixture)
+          throw new Exception("The click would miss the test fixture");
+        var inputs = new Input[] {
+          new Input { Mouse=new MouseInput { Flags=LeftDown } },
+          new Input { Mouse=new MouseInput { Flags=LeftUp } }
+        };
+        int inputSize = Marshal.SizeOf(typeof(Input));
+        uint sent = SendInput((uint)inputs.Length,inputs,inputSize);
+        if (sent != inputs.Length) {
+          if (sent == 1) SendInput(1,new[] { inputs[1] },inputSize);
+          throw new Exception("Windows rejected the input for the test fixture");
+        }
+        var wait = System.Diagnostics.Stopwatch.StartNew();
+        while (GetForegroundWindow() != fixture && wait.ElapsedMilliseconds < 2000)
+          System.Threading.Thread.Sleep(10);
+        if (GetForegroundWindow() != fixture) throw new Exception("Windows did not activate the test fixture after the initial click");
+      } finally {
+        if (GetCursorPos(out current) && current.X == point.X && current.Y == point.Y)
+          SetCursorPos(saved.X,saved.Y);
+      }
+    }
+
+    static IntPtr RootAt(Point point) { return GetAncestor(WindowFromPoint(point),RootAncestor); }
+    static Point FindFixturePoint(IntPtr fixture,Rect client,Point origin) {
+      foreach (int row in new[] {4,3,2,1}) {
+        foreach (int column in new[] {4,3,2,1}) {
+          var point = new Point { X=origin.X+client.R*column/5, Y=origin.Y+client.B*row/5 };
+          if (RootAt(point) == fixture) return point;
+        }
+      }
+      var center = new Point { X=origin.X+client.R/2, Y=origin.Y+client.B/2 };
+      var obstacle = new System.Text.StringBuilder(128);
+      GetClassName(RootAt(center),obstacle,obstacle.Capacity);
+      throw new Exception("The test fixture is obstructed at " + center.X + "," + center.Y + " by " + obstacle);
+    }
   }`
   const script = `[Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
@@ -89,6 +166,7 @@ while($null -ne ($line=[Console]::ReadLine())) {
     $request=ConvertFrom-Json -InputObject $line
     $target=[IntPtr]([long]$request.target)
     $other=if($request.competitor.StartsWith('title:')){[InspectTouch]::FindTitle($request.competitor.Substring(6))}else{[IntPtr]([long]$request.competitor)}
+    if($request.establishForeground){[InspectTouch]::ClickFixture($other,[uint32]$request.competitorPid)}
     $bar=[InspectTouch]::FindWindow($request.taskbarClass,$null)
     $expected=$conditions[$request.expectation]
     if($null -eq $expected){throw 'Unknown native observation expectation'}
@@ -111,9 +189,9 @@ while($null -ne ($line=[Console]::ReadLine())) {
   })
   if ((await readNativeMessage()).ready !== true) throw new Error('Native observer did not acknowledge readiness')
 }
-async function native(target, competitor, taskbar = false, expectation = 'observe') {
+async function native(target, competitor, taskbar = false, expectation = 'observe', establishForeground = false) {
   if (!Object.hasOwn(nativeExpectations, expectation)) throw new Error('Unknown native observation expectation')
-  observer.stdin.write(JSON.stringify({ target, competitor, competitorPid: foregroundProcess?.pid, taskbar: taskbar || '', expectation, taskbarClass }) + '\n')
+  observer.stdin.write(JSON.stringify({ target, competitor, competitorPid: foregroundProcess?.pid, taskbar: taskbar || '', expectation, taskbarClass, establishForeground }) + '\n')
   lastNativeFacts = { expectation, taskbarClass, ...await readNativeMessage(), targetHandle: target, competitorHandle: competitor, fixture: nativeContext() }
   observations.push({ expectation, taskbarClass, ...lastNativeFacts })
   if (!lastNativeFacts.settled) throw new Error(`Native Touch ordering did not settle: ${JSON.stringify(lastNativeFacts)}`)
@@ -160,8 +238,9 @@ try {
   await foregroundCommand()
   nativeContext = () => ({ target: target.getBounds(), competitor: foregroundState, expectedDisplay: selectedDisplay.id })
   const competitorId = foregroundState.handle
-  // Observation never activates or reorders Explorer, the taskbar, or the fixture.
-  await native(targetId, competitorId, false, 'normal')
+  // On Windows, showing an Electron window need not grant it foreground rights.
+  // Establish the synthetic competitor once, then observe without acquiring focus again.
+  await native(targetId, competitorId, false, 'normal', !brave)
   check('normal foreground is established before the fullscreen transition', true)
   if (!brave) {
     await foregroundCommand('cover', true)

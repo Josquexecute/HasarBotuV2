@@ -534,8 +534,9 @@ export function listRealMarketPartRules(
 export function evaluateRealMarketValueLoss(
   snapshot: ValueLossRuleSnapshot,
   input: RealMarketValueLossInput,
-  options?: { readonly documentedBaseOnlyPartCount: number },
+  options?: { readonly documentedBaseOnlyPartCount: number; readonly workbookVersion?: 2 },
 ): RealMarketValueLossEvaluation {
+  const v2 = options?.workbookVersion === 2
   if (snapshot.identity !== VALUE_LOSS_SNAPSHOT_IDENTITY
     || snapshot.source.workbookSha256 !== VALUE_LOSS_SOURCE_WORKBOOK_SHA256) {
     throw new Error('REAL_MARKET_RULE_SNAPSHOT_IDENTITY_INVALID')
@@ -581,7 +582,7 @@ export function evaluateRealMarketValueLoss(
   // Calculator-only entries can follow source principles 3.9/3.10, contributing through damage amount.
   const baseOnlyCount = options?.documentedBaseOnlyPartCount ?? 0
   if (!Number.isSafeInteger(baseOnlyCount) || baseOnlyCount < 0 || baseOnlyCount > 100) throw new Error('REAL_MARKET_BASE_ONLY_PART_COUNT_INVALID')
-  if (input.parts.length === 0 && baseOnlyCount === 0) {
+  if (!v2 && input.parts.length === 0 && baseOnlyCount === 0) {
     reasons.push(reason('PARTS_MISSING', 'parts', 'En az bir desteklenen parça işlemi gereklidir.'))
   }
   if (!safeNonNegativeInteger(input.previousDamageCount)) {
@@ -684,7 +685,10 @@ export function evaluateRealMarketValueLoss(
         && ((priorExcluded && !weldedReplacement) || ['accessory', 'superstructure'].includes(item.treatment))) {
         reasons.push(reason('REQUIRED_EVIDENCE_MISSING', 'damageAmountMinor', `${rule.sourceLabel}: hariç tutulan parçanın payı toplam hasar tutarından ayrıştırılmalıdır. Yalnız uygun parçaları ve bunların hasar tutarını girin.`))
       }
-      const coefficient = selectedPartCoefficient(rule, item, classification)
+      // V2 Tablolar!F36:H37 changes both front fenders.
+      const coefficient = v2 && rule.vehicleGroupCode === 'A' && [36, 37].includes(rule.sourceRow) && classification !== null
+        ? decimal({ light: '0.4', medium: '0.6', heavy: '0.8' }[classification])
+        : selectedPartCoefficient(rule, item, classification)
       if (coefficient === null && !specialExcluded && !priorExcluded && !thresholdConflict) {
         reasons.push(reason('PART_OPERATION_UNSUPPORTED', 'parts.operation', `${rule.sourceLabel} için katsayı bulunmuyor.`))
       }
@@ -729,7 +733,9 @@ export function evaluateRealMarketValueLoss(
   const usageCoefficient = usageBand === null ? null : decimal(usageBand.coefficient)
   const commercialModifier = input.commercialOrRental ? generalModifier(snapshot, 'G1') : ZERO
   const previousModifier = safeNonNegativeInteger(input.previousDamageCount)
-    ? multiply(generalModifier(snapshot, 'G2'), rational(BigInt(Math.min(input.previousDamageCount, 5))))
+    ? v2
+      ? rational(BigInt(-3 * Math.min(input.previousDamageCount, 7) - 5 * Math.max(0, Math.min(input.previousDamageCount, 10) - 7)), 100n)
+      : multiply(generalModifier(snapshot, 'G2'), rational(BigInt(Math.min(input.previousDamageCount, 5))))
     : ZERO
   // J9: yalnız kilometre katsayısının değiştiği alt sınırlar ve ilk 1.000 km.
   // Tablo başlıkları aynı katsayıyı birden fazla sütunda tekrar edebilir.
@@ -774,20 +780,31 @@ export function evaluateRealMarketValueLoss(
   if (safeMinor(input.marketValueMinor) && input.marketValueMinor > 0
     && ageCoefficient !== null && usageCoefficient !== null
     && damageCoefficient !== null && multiplier !== null) {
-    raw = ([
-      rational(BigInt(input.marketValueMinor)),
-      ageCoefficient,
-      usageCoefficient,
-      generalMultiplier,
-      damageCoefficient,
-      multiplier,
-    ] as readonly Rational[]).reduce<Rational>(
+    const marketValue = rational(BigInt(input.marketValueMinor))
+    const base = ([marketValue, ageCoefficient, usageCoefficient, generalMultiplier, multiplier] as readonly Rational[]).reduce<Rational>(
       (total, coefficient) => multiply(total, coefficient),
       ONE,
     )
-    cap = multiply(rational(BigInt(input.marketValueMinor)), decimal('0.30'))
-    capApplied = compare(raw, cap) > 0
+    const uncapped = multiply(base, damageCoefficient)
+    raw = uncapped
+    cap = multiply(marketValue, decimal('0.30'))
+    capApplied = compare(uncapped, cap) > 0
+    // H1 checks the J3-based amount before it selects Tablolar!U2/U6/U10 or W2.
+    // U2 and W2 read the local Tablolar!C64 (2), while U6/U10 read the calculation sheet.
+    if (v2 && !capApplied && partCoefficient.numerator === 0n && input.vehicleGroupCode !== 'F' && damageContribution !== null) {
+      // W57 mentions five past damages, U6/U10 test F7 < 110, and guide 3.27
+      // requires a case-specific assessment. Below five, neither Excel condition cuts off the base.
+      if ((input.previousDamageCount ?? 0) >= 5) {
+        reasons.push(reason('SOURCE_CONFLICT', 'previousDamageCount', 'Baz değer kaybında Excel V2’nin 5 hasar notu ile 110 sınırı çelişiyor. Rehber 3.27 uyarınca dosyaya özgü değerlendirme ve kaynak açıklaması gerekir.'))
+      } else {
+        const minimumPoints = { A: '0.75', B: '0.2', C: '0.4', Ç: '0.4', D: '0.25', E: '0.25' }
+        const minimum = input.vehicleGroupCode === null ? ZERO : decimal(minimumPoints[input.vehicleGroupCode])
+        raw = multiply(multiply(base, divide(add(minimum, damageContribution), rational(100n))), decimal('0.85'))
+      }
+    }
     capped = capApplied ? cap : raw
+    // Guide 3.21 preserves exact multiples of 500 TL. Rational arithmetic
+    // avoids Excel H1 adding 500 TL to a binary floating-point remainder.
     if (capped.numerator === 0n) {
       finalResultMinor = 0
     } else {

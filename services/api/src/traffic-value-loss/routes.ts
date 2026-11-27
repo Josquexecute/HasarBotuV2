@@ -26,6 +26,7 @@ import {
   TRAFFIC_VALUE_LOSS_VERSIONS_ROUTE,
   TRAFFIC_VALUE_LOSS_VERSION_REPORTS_ROUTE,
   failureEnvelopeSchema,
+  eksistCaseDataSchema,
   idempotencyKeySchema,
   trafficValueLossApproveRequestSchema,
   trafficValueLossClosureListResponseSchema,
@@ -63,6 +64,7 @@ import { trafficValueLossReportFilename } from './report-pdf.js'
 import { createTrafficValueLossClosureStore } from './closure-store.js'
 import { calculateValueLoss } from './calculator.js'
 import { createValueLossCalculatorStore } from './calculator-store.js'
+import { VALUE_LOSS_CALCULATOR_V2_VERSION, valueLossCalculatorExcludedVehicle } from '@hasarbotu/domain'
 
 export interface TrafficValueLossRoutesOptions { readonly pool: pg.Pool }
 const WRITE_ROLES = ['admin', 'expert', 'case_manager'] as const
@@ -119,11 +121,40 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
     const body = valueLossCalculatorRequestSchema.safeParse(request.body)
     if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
     if (!body.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(body.error, requestId) }))
-    const result = await options.pool.query('SELECT case_type FROM cases WHERE organization_id=$1 AND id=$2', [session.user.organizationId, params.data.caseId])
+    const organizationId = session.user.organizationId
+    const caseId = params.data.caseId
+    const result = await options.pool.query(`SELECT c.case_type,c.workflow_stage,c.plate,
+      EXISTS (
+        SELECT 1 FROM pert_assessments a JOIN pert_assessment_versions v ON v.id=a.current_version_id
+        WHERE a.organization_id=c.organization_id AND a.case_id=c.id AND v.center_decision='pert'
+      ) AS pert_decision,
+      (SELECT e.reviewed_fields->'automatic' FROM eksist_sources e
+       WHERE e.organization_id=c.organization_id AND e.case_id=c.id AND e.reviewed_fields ? 'automatic'
+       ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS automatic
+      FROM cases c WHERE c.organization_id=$1 AND c.id=$2`, [organizationId, caseId])
     if (!result.rowCount) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
     if (result.rows[0].case_type !== 'traffic') return reply.code(400).send(failureBody('traffic_value_loss_source_invalid', 'Traffic case required.', requestId))
-    const calculation = valueLossCalculatorResponseSchema.parse(calculateValueLoss(body.data))
-    if (calculation.amountMinor !== null && calculation.issues.length === 0) await calculator.save(actor(session, request), params.data.caseId, body.data, calculation)
+    const record = result.rows[0]
+    const automatic = eksistCaseDataSchema.safeParse(record.automatic)
+    const assessed = (await store.find(organizationId, caseId))?.currentVersion.input
+    const facts = assessed?.realMarket?.eligibilityFacts
+    const condition = valueLossCalculatorExcludedVehicle({ totalLoss: record.workflow_stage === 'total_loss' || record.pert_decision, plate: record.plate, fields: automatic.data?.vehicleFields })
+      ?? (assessed?.heavyOrTotalDamage || facts?.currentHeavyOrTotalDamage ? 'current_heavy_damage'
+        : facts?.priorHeavyDamage ? 'prior_heavy_damage'
+        : facts?.antiqueOrCollector ? 'antique'
+        : facts?.foreignPlate ? 'foreign_plate' : undefined)
+    const input = condition ? { ...body.data, vehicleCondition: condition } : body.data
+    if (input.vehicleCondition === 'normal' && input.workbookVersion === 2) {
+      const priorIds = new Set(assessed?.realMarket?.parts.filter(part => part.priorPartState !== 'none').map(part => part.stableRuleId))
+      const partName = (name: string) => name.trim().toLocaleUpperCase('tr-TR').replace(/\s+\(SATIR \d+\)$/, '').replace(/\s+/g, ' ')
+      const priorNames = new Set(assessed?.damageParts.filter(part => part.priorDamage === 'yes').map(part => partName(part.partName)))
+      if ((input.partSelections ?? input.parts).some(part => (part.stableRuleId !== null && priorIds.has(part.stableRuleId))
+        || ('partName' in part && priorNames.has(partName(part.partName))))) {
+        return valueLossCalculatorResponseSchema.parse({ amountMinor: null, ruleVersion: VALUE_LOSS_CALCULATOR_V2_VERSION, calculationMethod: 'real_market_analysis', issues: [{ field: 'partSelections', message: 'Dosyada geçmiş hasarlı olarak kayıtlı parçaları ve bu parçalara düşen bedeli hasar tutarından çıkarın.' }] })
+      }
+    }
+    const calculation = valueLossCalculatorResponseSchema.parse(calculateValueLoss(input))
+    if (calculation.amountMinor !== null && calculation.issues.length === 0) await calculator.save(actor(session, request), caseId, input, calculation)
     // Opt-in query keeps previous desktop clients' strict response schema compatible.
     return (request.query as { details?: string }).details === '1' ? calculation : { amountMinor: calculation.amountMinor, ruleVersion: calculation.ruleVersion, calculationMethod: calculation.calculationMethod, issues: calculation.issues }
   })
@@ -136,8 +167,9 @@ export function registerTrafficValueLossRoutes(app: FastifyInstance, options: Tr
     if (!params.success) return reply.code(400).send(failureEnvelopeSchema.parse({ ok: false, error: zodErrorToApiError(params.error, requestId) }))
     const found = await options.pool.query('SELECT id FROM cases WHERE organization_id=$1 AND id=$2', [session.user.organizationId, params.data.caseId])
     if (!found.rowCount) return reply.code(404).send(failureBody('not_found', 'Case not found.', requestId))
-    const calculation = await calculator.load(session.user.organizationId, params.data.caseId)
-    const response = calculation && (request.query as { details?: string }).details !== '1'
+    const legacy = (request.query as { details?: string }).details !== '1'
+    const calculation = await calculator.load(session.user.organizationId, params.data.caseId, legacy)
+    const response = calculation && legacy
       ? { ...calculation, result: { amountMinor: calculation.result.amountMinor, ruleVersion: calculation.result.ruleVersion, calculationMethod: calculation.result.calculationMethod, issues: calculation.result.issues } }
       : calculation
     return valueLossCalculatorSavedResponseSchema.parse({ calculation: response })

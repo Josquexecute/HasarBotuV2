@@ -1,6 +1,7 @@
 import type { RealMarketValueLossPartInput } from './traffic-value-loss-real-market.js'
 import { buildValueLossPartStableId, VALUE_LOSS_SOURCE_WORKBOOK_FILE_NAME, VALUE_LOSS_SOURCE_WORKBOOK_SHA256, type ValueLossPartRule } from './value-loss-rule-snapshot.js'
 import { findValueLossManufacturerPart, type ValueLossVehicleIdentity } from './value-loss-manufacturer-catalog.js'
+import { eksistKey } from './eksist.js'
 
 export const VALUE_LOSS_CALCULATOR_OPERATIONS = ['replacement', 'replacement_paint', 'repair', 'repair_paint', 'paint', 'paintless_repair'] as const
 export const VALUE_LOSS_PART_MATERIALS = ['unspecified', 'steel', 'aluminium', 'plastic', 'plastic_bodywork', 'composite', 'glass', 'mechanical', 'electrical', 'accessory', 'superstructure', 'other'] as const
@@ -8,10 +9,30 @@ export const VALUE_LOSS_BODY_TYPES = ['unspecified', 'sedan', 'hatchback', 'stat
 export const VALUE_LOSS_CALCULATOR_REFERENCE_VERSION = 'calculator-reference/2026-07-01/1.3.0' as const
 export const VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME = VALUE_LOSS_SOURCE_WORKBOOK_FILE_NAME
 export const VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256 = VALUE_LOSS_SOURCE_WORKBOOK_SHA256
+export const VALUE_LOSS_CALCULATOR_V2_VERSION = 'calculator-reference/2026-10-20/2.0.1' as const
+export const VALUE_LOSS_CALCULATOR_V2_WORKBOOK = 'Yeni Dönem Değer Kaybı Hesaplama Modülü Versiyon-2.xlsx'
+export const VALUE_LOSS_CALCULATOR_V2_SHA256 = '80880fda0a06aac5d998a4646a51e13bed9bc65e17ef3c29b207808ea3aef969'
 export const VALUE_LOSS_VEHICLE_GROUPS = { 'OTOMOBİL': 'A', 'TAKSİ': 'A', 'MİNİBÜS': 'B', 'OTOBÜS': 'B', 'KAMYONET': 'C', 'KAMYON': 'C', 'ÇEKİCİ': 'C', 'İŞ MAKİNESİ': 'D', 'TRAKTÖR': 'D', 'TARIM MAKİNESİ': 'D', 'ÖZEL AMAÇLI ARAÇ': 'Ç', 'RÖMORK': 'E', 'MOTORSİKLET': 'F', 'TANKER': 'Ç' } as const
 export type ValueLossBodyType = typeof VALUE_LOSS_BODY_TYPES[number]
 export type ValueLossPartMaterial = typeof VALUE_LOSS_PART_MATERIALS[number]
 export type ValueLossCalculatorOperation = typeof VALUE_LOSS_CALCULATOR_OPERATIONS[number]
+
+export function valueLossCalculatorExcludedVehicle(input: {
+  readonly totalLoss: boolean
+  readonly plate?: string | undefined
+  readonly fields?: Readonly<Record<string, string>> | undefined
+}): 'current_heavy_damage' | 'prior_heavy_damage' | 'antique' | 'foreign_plate' | undefined {
+  if (input.totalLoss) return 'current_heavy_damage'
+  const fields = Object.entries(input.fields ?? {}).map(([label, value]) => [eksistKey(label), eksistKey(value)] as const)
+  const yes = (labels: string[]) => fields.some(([label, value]) => labels.includes(label) && ['evet', 'var', 'true', '1'].includes(value))
+  if (yes(['mevcutagirhasar', 'tamhasar', 'pert'])) return 'current_heavy_damage'
+  if (yes(['oncekiagirhasar', 'gecmisagirhasar', 'gecmistepert', 'agirhasarkaydi'])) return 'prior_heavy_damage'
+  if (yes(['antika', 'koleksiyonaraci']) || fields.some(([label, value]) => ['aracdurumu', 'aracniteligi'].includes(label) && ['antika', 'klasik', 'koleksiyon', 'koleksiyonaraci'].includes(value))) return 'antique'
+  if (yes(['yabanciplaka', 'yabanciplakali']) || fields.some(([label, value]) => label === 'plakatipi' && ['yabanci', 'yabanciplakali'].includes(value))) return 'foreign_plate'
+  const plate = input.plate?.normalize('NFKC').toUpperCase().replace(/[^\p{L}\p{N}]/gu, '')
+  if (plate && !/^(?:0[1-9]|[1-7]\d|8[01])[A-Z]{0,4}\d{1,5}$/.test(plate)) return 'foreign_plate'
+  return undefined
+}
 
 export const VALUE_LOSS_BODY_LABELS: Record<ValueLossBodyType, string> = {
   unspecified: 'Belirtilmedi', sedan: 'Sedan', hatchback: 'Hatchback', station_wagon: 'Station wagon', suv: 'SUV', coupe: 'Coupe', cabriolet: 'Cabrio',
@@ -104,9 +125,22 @@ function fitsBody(vehicleType: string, body: ValueLossBodyType, label: string): 
 }
 
 /** These are editable category suggestions, not a manufacturer or VIN parts catalogue. */
-export function buildValueLossPartSuggestions(vehicleType: string, body: ValueLossBodyType, sourceParts: readonly ValueLossSourcePart[]): ValueLossPartSuggestion[] {
+export function buildValueLossPartSuggestions(vehicleType: string, body: ValueLossBodyType, sourceParts: readonly ValueLossSourcePart[], workbookVersion?: 2): ValueLossPartSuggestion[] {
+  const sources = valueLossCalculatorSourceParts(vehicleType, body, sourceParts)
+  if (workbookVersion === 2) {
+    const eligible = sources.filter(part => !/\|source-row=11[45]\|/.test(part.stableRuleId)
+      && !(body === 'cabriolet' && /TAVAN SACI|ARKA ÇAMURLUK/.test(normalized(part.label))))
+    const counts = new Map<string, number>()
+    for (const part of eligible) counts.set(normalized(part.label), (counts.get(normalized(part.label)) ?? 0) + 1)
+    return eligible.map(part => {
+      const name = normalized(part.label)
+      const row = /\|source-row=(\d+)\|/.exec(part.stableRuleId)?.[1]
+      const label = row && counts.get(name)! > 1 ? `${name} (SATIR ${row})` : name
+      return { id: part.stableRuleId, stableRuleId: part.stableRuleId, label, supportedOperations: part.supportedOperations }
+    })
+  }
   const categories = new Map<string, ValueLossSourcePart[]>()
-  for (const part of valueLossCalculatorSourceParts(vehicleType, body, sourceParts)) {
+  for (const part of sources) {
     const label = categoryLabel(part.label)
     if (!fitsBody(vehicleType, body, label)) continue
     categories.set(label, [...(categories.get(label) ?? []), part])
@@ -165,8 +199,8 @@ function hasVerifiedCoefficients(source: ValueLossSourcePart, entry: ValueLossCa
   return true
 }
 
-export function resolveValueLossCalculatorParts(vehicleType: string, body: ValueLossBodyType, sourceParts: readonly ValueLossSourcePart[], selections: readonly ValueLossCalculatorPartSelection[], vehicle?: { readonly identity: ValueLossVehicleIdentity; readonly modelYear: number | null }) {
-  const suggestions = buildValueLossPartSuggestions(vehicleType, body, sourceParts)
+export function resolveValueLossCalculatorParts(vehicleType: string, body: ValueLossBodyType, sourceParts: readonly ValueLossSourcePart[], selections: readonly ValueLossCalculatorPartSelection[], vehicle?: { readonly identity: ValueLossVehicleIdentity; readonly modelYear: number | null }, workbookVersion?: 2) {
+  const suggestions = buildValueLossPartSuggestions(vehicleType, body, sourceParts, workbookVersion)
   const issues: { field: string; message: string }[] = []
   const referenceParts: RealMarketValueLossPartInput[] = []
   const baseOnlyParts: { entryId: string; principle: '3.9' | '3.10' }[] = []
@@ -179,7 +213,7 @@ export function resolveValueLossCalculatorParts(vehicleType: string, body: Value
       issues.push({ field: 'partSelections', message: `${entry.partName}: önceki parça hasarı bilinmiyor. SBM / geçmiş kayıt veya inceleme ile doğrulayın.` })
       continue
     }
-    const physical = `${normalized(entry.partName)}:${normalized(entry.position)}`
+    const physical = workbookVersion === 2 && entry.stableRuleId !== null ? entry.stableRuleId : `${normalized(entry.partName)}:${normalized(entry.position)}`
     if (seenPhysical.has(physical)) issues.push({ field: 'partSelections', message: 'Aynı parça ve konum bir kez girilmelidir. Birden çok eş parça için adet veya farklı konum belirtin.' })
     seenPhysical.add(physical)
     const source = sources.find(part => part.stableRuleId === entry.stableRuleId)
@@ -199,8 +233,8 @@ export function resolveValueLossCalculatorParts(vehicleType: string, body: Value
     const hasPaint = entry.operation === 'replacement_paint' || entry.operation === 'repair_paint'
     const repeated = entry.stableRuleId !== null && seenRules.has(entry.stableRuleId)
     if (entry.stableRuleId !== null) seenRules.add(entry.stableRuleId)
-    if (!source || !suggestions.some(item => item.stableRuleId === entry.stableRuleId && item.label === normalized(entry.partName))
-      || entry.quantity !== 1 || repeated || !['unspecified', 'steel'].includes(entry.material) || entry.treatment !== 'standard' || entry.operation === 'paintless_repair'
+    if (!source || !suggestions.some(item => item.stableRuleId === entry.stableRuleId && (item.label === normalized(entry.partName) || (workbookVersion === 2 && normalized(source.label) === normalized(entry.partName))))
+      || entry.quantity !== 1 || repeated || (workbookVersion !== 2 && !['unspecified', 'steel'].includes(entry.material)) || entry.treatment !== 'standard' || entry.operation === 'paintless_repair'
       || !source.supportedOperations.includes(operation) || hasPaint && !source.supportedOperations.includes('paint')) {
       requiresMarketDifference = true
       coverage.push({ entryId: entry.entryId, reason: 'part_mismatch', manufacturerSource: null })

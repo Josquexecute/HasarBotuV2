@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { pathToFileURL } from 'node:url'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
 import { assertTestDatabaseUrl, createDatabasePool, runMigrations, uuidv7 } from '@hasarbotu/database'
@@ -70,6 +71,69 @@ describe.skipIf(!testUrl)('case estimate PostgreSQL persistence', () => {
     expect(response.statusCode).toBe(200)
     expect(response.json().amountMinor).toBeNull()
     expect((await app.inject({ url: url(), headers: { cookie } })).json()).toEqual(prior)
+  })
+  it('keeps the saved estimate when the V2 base threshold requires review', async () => {
+    const prior = (await app.inject({ url: url() + '?details=1', headers: { cookie } })).json()
+    for (const previousDamageCount of [5, 109, 110]) {
+      const pending = await app.inject({
+        method: 'POST', url: url() + '?details=1', headers: { cookie },
+        payload: { ...input, workbookVersion: 2, previousDamageCount, partSelections: [] },
+      })
+      expect(pending.statusCode).toBe(200)
+      expect(pending.json()).toMatchObject({ amountMinor: null, issues: [{ field: 'previousDamageCount', message: expect.stringContaining('3.27') }] })
+      expect((await app.inject({ url: url() + '?details=1', headers: { cookie } })).json()).toEqual(prior)
+    }
+  })
+  it('keeps the full V2 input and result without exposing the new schema to the rollback API', async () => {
+    const original = (await app.inject({ url: url() + '?details=1', headers: { cookie } })).json().calculation
+    const post = (payload: typeof input) => app.inject({ method: 'POST', url: url() + '?details=1', headers: { cookie }, payload })
+    const v2 = { ...input, workbookVersion: 2 as const, faultRateBasisPoints: null }
+    const excluded = await post({ ...v2, partSelections: [{ ...input.partSelections![0], priorPartState: 'previously_repaired_welded' }] })
+    expect(excluded.json()).toMatchObject({ amountMinor: null, issues: [expect.objectContaining({ field: 'partSelections' })] })
+    const newResult = await post(v2)
+    expect(newResult.statusCode).toBe(200)
+    expect(newResult.json()).toMatchObject({ amountMinor: 5_700_000, breakdown: { faultRateBasisPoints: null } })
+    const stored = async (table: 'case_value_loss_calculations' | 'case_value_loss_calculation_history') =>
+      (await pool.query(`SELECT input,result,result_breakdown,updated_at FROM ${table} WHERE organization_id=$1 AND case_id=$2 ORDER BY updated_at`, [organizationId, caseId])).rows
+    const legacyRows = await stored('case_value_loss_calculations')
+    expect(legacyRows).toHaveLength(1)
+    expect(legacyRows[0].input).toEqual(original.input)
+    expect({ ...legacyRows[0].result, breakdown: legacyRows[0].result_breakdown }).toEqual(original.result)
+    expect(legacyRows[0].updated_at.toISOString()).toBe(original.savedAt)
+    expect(await stored('case_value_loss_calculation_history')).toMatchObject([{ input: v2, result_breakdown: newResult.json().breakdown }])
+    expect((await app.inject({ url: url() + '?details=1', headers: { cookie } })).json().calculation.result).toEqual(newResult.json())
+    const legacyRead = (await app.inject({ url: url(), headers: { cookie } })).json().calculation
+    expect(legacyRead.input).toEqual(original.input)
+    expect(legacyRead.result.ruleVersion).toBe(original.result.ruleVersion)
+    const legacyUpdate = { ...input, marketValueMinor: 120_000_000 }
+    const baselinePath = process.env.VALUE_LOSS_V2_ROLLBACK_BASELINE_API
+    let oldSave
+    if (baselinePath) {
+      const previous = await import(pathToFileURL(baselinePath).href) as { buildApp: typeof buildApp }
+      const baseline = previous.buildApp({ loggerEnabled: false, auth: { pool, cookieSecure: false } })
+      try {
+        const restoredLegacy = await baseline.inject({ url: url() + '?details=1', headers: { cookie } })
+        expect(restoredLegacy.statusCode).toBe(200)
+        expect(restoredLegacy.json()).toEqual({ calculation: original })
+        oldSave = await baseline.inject({ method: 'POST', url: url() + '?details=1', headers: { cookie }, payload: legacyUpdate })
+      } finally {
+        await baseline.close()
+      }
+    } else {
+      oldSave = await post(legacyUpdate)
+    }
+    expect(oldSave.statusCode).toBe(200)
+    const archive = await stored('case_value_loss_calculation_history')
+    expect(archive.map(row => row.input)).toEqual([original.input, v2])
+    expect((await app.inject({ url: url() + '?details=1', headers: { cookie } })).json().calculation.result).toEqual(oldSave.json())
+  })
+  it('blocks current heavy damage and foreign plates from stored case facts', async () => {
+    const post = () => app.inject({ method: 'POST', url: url(otherCaseId), headers: { cookie }, payload: { ...input, workbookVersion: 2 } })
+    await pool.query("UPDATE cases SET workflow_stage='total_loss' WHERE id=$1", [otherCaseId])
+    expect((await post()).json()).toMatchObject({ amountMinor: null, issues: [{ field: 'vehicleCondition', message: expect.stringContaining('ağır') }] })
+    await pool.query("UPDATE cases SET workflow_stage='new_notification',plate='B AB 1234',plate_normalized='BAB1234' WHERE id=$1", [otherCaseId])
+    expect((await post()).json()).toMatchObject({ amountMinor: null, issues: [{ field: 'vehicleCondition', message: expect.stringContaining('Yabancı') }] })
+    expect((await app.inject({ url: url(otherCaseId), headers: { cookie } })).json()).toEqual({ calculation: null })
   })
   it('requires authentication, prevents cross-tenant reads/writes and permits readers to view only', async () => {
     expect((await app.inject({ url: url() })).statusCode).toBe(401)

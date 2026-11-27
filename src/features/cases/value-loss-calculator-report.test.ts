@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { valueLossCalculatorRequestSchema, type ValueLossCalculatorResponse } from '@hasarbotu/contracts'
+import { VALUE_LOSS_CALCULATOR_V2_VERSION, valueLossCalculatorRequestSchema, type ValueLossCalculatorResponse } from '@hasarbotu/contracts'
 import { calculatorReportHtml } from './value-loss-calculator-report'
 
 const input = valueLossCalculatorRequestSchema.parse({ accidentDate: '2026-10-01', vehicleType: 'OTOMOBİL', modelYear: 2024, usageValue: 50000, marketValueMinor: 100000000, damageAmountMinor: 10000000, previousDamageCount: 0, commercialOrRental: false, vehicleCondition: 'normal', parts: [{ stableRuleId: 'part-1', operation: 'replacement', paintMode: null, newPartPriceMinor: null, repairLaborMinor: null, partPriceAvailability: 'unavailable', priorPartState: 'none', treatment: 'standard' }], postRepairMarketValueMinor: null, faultRateBasisPoints: 7500 })
@@ -23,5 +23,20 @@ describe('reference calculation report', () => {
     expect(() => calculatorReportHtml('Dosya', input, { ...result, amountMinor: null })).toThrow()
     expect(() => calculatorReportHtml('Dosya', input, { ...result, breakdown: undefined })).toThrow()
     expect(() => calculatorReportHtml('Dosya', input, { ...result, issues: [{ field: 'parts', message: 'Kontrol' }] })).toThrow()
+  })
+  it('reports gross loss and unknown fault without an adjusted amount in V2', () => {
+    const html = calculatorReportHtml('Dosya', { ...input, workbookVersion: 2, faultRateBasisPoints: null }, {
+      ...result, amountMinor: 5700000, ruleVersion: VALUE_LOSS_CALCULATOR_V2_VERSION,
+      breakdown: { ...result.breakdown!, faultRateBasisPoints: null },
+    })
+    expect(html).toContain('Henüz belirlenmedi')
+    expect(html).not.toContain('Kusur uygulanmış tahmin')
+    expect(html).toContain('Rehber 3.21 uyarınca tam 500 TL katları korunur')
+  })
+  it('describes the original rounding when exporting an archived V2 result', () => {
+    const html = calculatorReportHtml('Dosya', { ...input, workbookVersion: 2 }, {
+      ...result, ruleVersion: 'calculator-reference/2026-10-20/2.0.0',
+    })
+    expect(html).toContain('Excel V2 H1 hücresinin yuvarlama davranışını izler')
   })
 })

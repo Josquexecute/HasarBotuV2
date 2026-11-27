@@ -1,4 +1,4 @@
-import { calculateTrafficValueLossMarketDifference, evaluateRealMarketValueLoss, evaluateTrafficValueLoss, parseLocalDate, resolveValueLossCalculatorParts, selectTrafficValueLossRule, TRAFFIC_VALUE_LOSS_RULE_VERSION, VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME, VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256, valueLossCalculatorAdditionalRules, valueLossCalculatorVehicleContext } from '@hasarbotu/domain'
+import { calculateTrafficValueLossMarketDifference, evaluateRealMarketValueLoss, evaluateTrafficValueLoss, parseLocalDate, resolveValueLossCalculatorParts, selectTrafficValueLossRule, TRAFFIC_VALUE_LOSS_RULE_VERSION, VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, VALUE_LOSS_CALCULATOR_V2_SHA256, VALUE_LOSS_CALCULATOR_V2_VERSION, VALUE_LOSS_CALCULATOR_V2_WORKBOOK, VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME, VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256, valueLossCalculatorAdditionalRules, valueLossCalculatorVehicleContext } from '@hasarbotu/domain'
 import type { ValueLossCalculatorRequest, ValueLossCalculatorResponse } from '@hasarbotu/contracts'
 import { realMarketValueLossRuleSnapshot as snapshot } from './rule-source.js'
 
@@ -9,22 +9,26 @@ export function calculateValueLoss(input: ValueLossCalculatorRequest): ValueLoss
   const selected = selectTrafficValueLossRule(date.value)
   if (selected.status !== 'selected') throw new Error('Calculator rule selection failed')
   const market = selected.kind === 'legacy' || input.calculationBasis === 'market_difference'
-  const ruleVersion = market ? selected.ruleVersion : VALUE_LOSS_CALCULATOR_REFERENCE_VERSION
-  if (!market && input.previousDamageCount === null) return { amountMinor: null, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: 'real_market_analysis', issues: [{ field: 'previousDamageCount', message: 'Önceki hasar sayısı bilinmiyor. SBM / geçmiş kayıt ile doğrulayın.' }] }
+  const v2 = !market && input.workbookVersion === 2
+  const ruleVersion = market ? selected.ruleVersion : v2 ? VALUE_LOSS_CALCULATOR_V2_VERSION : VALUE_LOSS_CALCULATOR_REFERENCE_VERSION
   const conditionIssue = input.vehicleCondition === 'normal' ? null
     : input.vehicleCondition === 'prior_heavy_damage' ? 'Önceki ağır hasar nedeniyle bu araç için değer kaybı hesaplanamaz.'
     : input.vehicleCondition === 'current_heavy_damage' ? 'Mevcut ağır / pert hasar nedeniyle değer kaybı hesaplanamaz.'
     : input.vehicleCondition === 'antique' ? 'Antika / koleksiyon araç için bu hesap yöntemi uygulanmaz.'
     : 'Yabancı plakalı araç için ilgili ülkenin piyasa değerlendirmesi gerekir.'
   if (conditionIssue !== null) return { amountMinor: null, ruleVersion, calculationMethod: market ? 'market_value_difference' : 'real_market_analysis', issues: [{ field: 'vehicleCondition', message: conditionIssue }] }
+  if (!market && input.previousDamageCount === null) return { amountMinor: null, ruleVersion, calculationMethod: 'real_market_analysis', issues: [{ field: 'previousDamageCount', message: 'Önceki hasar sayısı bilinmiyor. SBM / geçmiş kayıt ile doğrulayın.' }] }
+  if (v2 && (input.partSelections ?? input.parts).some(part => part.priorPartState !== 'none')) {
+    return { amountMinor: null, ruleVersion, calculationMethod: 'real_market_analysis', issues: [{ field: 'partSelections', message: 'Geçmiş hasarlı parçaları ve bu parçalara düşen bedeli hasar tutarından çıkarın.' }] }
+  }
 
   const context = valueLossCalculatorVehicleContext(input.vehicleType, input.bodyType ?? 'unspecified')
   const group = context.group
   const sourceParts = snapshot.partRules.filter(rule => rule.vehicleGroupCode === group).map(rule => ({ stableRuleId: rule.stableId, label: rule.sourceLabel, supportedOperations: rule.operationCapabilities, coefficients: rule.coefficients }))
-  const resolved = input.partSelections === undefined ? null : resolveValueLossCalculatorParts(input.vehicleType, input.bodyType ?? 'unspecified', sourceParts, input.partSelections, input.vehicleIdentity === undefined ? undefined : { identity: input.vehicleIdentity, modelYear: input.modelYear })
+  const resolved = input.partSelections === undefined ? null : resolveValueLossCalculatorParts(input.vehicleType, input.bodyType ?? 'unspecified', sourceParts, input.partSelections, input.vehicleIdentity === undefined ? undefined : { identity: input.vehicleIdentity, modelYear: input.modelYear }, v2 ? 2 : undefined)
   if (resolved?.issues.length) return { amountMinor: null, ruleVersion, calculationMethod: market ? 'market_value_difference' : 'real_market_analysis', issues: resolved.issues }
   if (resolved?.requiresMarketDifference) {
-    if (!market) return { amountMinor: null, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: 'real_market_analysis', issues: [{ field: 'partSelections', message: 'Seçilen parça veya işlem için referans katsayısı bulunamadı. Parça, işlem, adet ve malzeme bilgilerini kontrol edin; bu seçimle tahmini tutar hesaplanamaz.' }] }
+    if (!market) return { amountMinor: null, ruleVersion, calculationMethod: 'real_market_analysis', issues: [{ field: 'partSelections', message: 'Seçilen parça veya işlem için Excel katsayısı bulunamadı.' }] }
     if (input.postRepairMarketValueMinor === null) return { amountMinor: null, ruleVersion: TRAFFIC_VALUE_LOSS_RULE_VERSION, calculationMethod: 'market_value_difference', issues: [{ field: 'postRepairMarketValueMinor', message: 'Piyasa değer farkı için onarım sonrası piyasa değerini girin.' }] }
     if (input.postRepairMarketValueMinor > input.marketValueMinor) return { amountMinor: null, ruleVersion: TRAFFIC_VALUE_LOSS_RULE_VERSION, calculationMethod: 'market_value_difference', issues: [{ field: 'postRepairMarketValueMinor', message: 'Onarım sonrası piyasa değeri kaza öncesi değeri aşamaz.' }] }
   }
@@ -54,14 +58,15 @@ export function calculateValueLoss(input: ValueLossCalculatorRequest): ValueLoss
     previousDamageCount: input.previousDamageCount, commercialOrRental: input.commercialOrRental || context.commercialRequired,
     parts: resolved?.referenceParts ?? input.parts, eligibilityFacts: { antiqueOrCollector: false, priorHeavyDamage: false, currentHeavyOrTotalDamage: false, foreignPlate: false, foreignMarketEvidenceVerified: false },
     comparables: [], evidence: [],
-  }, { documentedBaseOnlyPartCount: resolved?.baseOnlyParts.length ?? 0 })
+  }, { documentedBaseOnlyPartCount: resolved?.baseOnlyParts.length ?? 0, ...(v2 ? { workbookVersion: 2 as const } : {}) })
   // Documentary checks belong to formal reporting, not arithmetic. Input and part errors still block a result.
   const issues = result.reasons.filter(item => (item.code !== 'REQUIRED_EVIDENCE_MISSING' || item.field === 'damageAmountMinor') && item.code !== 'INSUFFICIENT_COMPARABLES').map(item => ({ field: item.field, message: item.message }))
   const gross = issues.length ? null : result.finalResultMinor
-  const amountMinor = gross === null ? null : calculateTrafficValueLossMarketDifference(gross, 0, input.faultRateBasisPoints).faultAdjustedValueLossMinor
-  return { amountMinor, ruleVersion: VALUE_LOSS_CALCULATOR_REFERENCE_VERSION, calculationMethod: result.calculationMethod, issues,
+  const amountMinor = gross === null || input.faultRateBasisPoints === null ? gross : calculateTrafficValueLossMarketDifference(gross, 0, input.faultRateBasisPoints).faultAdjustedValueLossMinor
+  return { amountMinor, ruleVersion, calculationMethod: result.calculationMethod, issues,
     ...(gross === null ? {} : { breakdown: {
-      sourceFileName: VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME, sourceSha256: VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256,
+      sourceFileName: v2 ? VALUE_LOSS_CALCULATOR_V2_WORKBOOK : VALUE_LOSS_CALCULATOR_WORKBOOK_FILE_NAME,
+      sourceSha256: v2 ? VALUE_LOSS_CALCULATOR_V2_SHA256 : VALUE_LOSS_CALCULATOR_WORKBOOK_SHA256,
       vehicleAge: Number(input.accidentDate.slice(0, 4)) - input.modelYear!, vehicleGroup: group,
       ageCoefficient: result.ageCoefficient!.decimal, usageCoefficient: result.usageCoefficient!.decimal,
       commercialModifier: result.generalModifiers.commercialOrRental.decimal, previousDamageModifier: result.generalModifiers.previousDamage.decimal,

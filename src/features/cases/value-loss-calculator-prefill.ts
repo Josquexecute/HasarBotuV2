@@ -1,4 +1,4 @@
-import { VALUE_LOSS_BODY_LABELS, VALUE_LOSS_VEHICLE_GROUPS, valueLossBodyOptions } from '@hasarbotu/contracts'
+import { VALUE_LOSS_BODY_LABELS, VALUE_LOSS_VEHICLE_GROUPS, valueLossBodyOptions, valueLossCalculatorExcludedVehicle } from '@hasarbotu/contracts'
 import type { CaseRecord } from '../../types/case'
 import type { CalculatorDraft } from './value-loss-calculator-form'
 
@@ -45,12 +45,13 @@ export function calculatorCaseDefaults(item: CaseRecord): CalculatorCaseDefaults
   const count = get('SBM Önceki Hasar Sayısı', 'Önceki Hasar Sayısı')
   const numberText = (value: string) => /^(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(value) ? value.replaceAll('.', '') : ''
   if (numberText(usage) && Number(numberText(usage)) <= 10_000_000) defaults.usageValue = numberText(usage)
-  if (/^\d+$/.test(count) && Number(count) <= 100) defaults.previousDamageCount = String(Number(count))
+  if (/^\d+$/.test(count) && Number.isSafeInteger(Number(count))) defaults.previousDamageCount = String(Number(count))
   const purpose = plain(get('Kullanım Amacı', 'Kullanım Şekli'))
   if (['hususi', 'ozel'].includes(purpose)) defaults.commercialOrRental = false
   if (['ticari', 'kiralik', 'taksi'].includes(purpose) || vehicleType === 'TAKSİ') defaults.commercialOrRental = true
   if (item.estimatedDamage > 0) defaults.damageAmount = String(item.estimatedDamage).replace('.', ',')
-  if (item.stage === 'Ağır Hasar/Pert') defaults.vehicleCondition = 'current_heavy_damage'
+  const excluded = valueLossCalculatorExcludedVehicle({ totalLoss: item.stage === 'Ağır Hasar/Pert', plate: item.plate, fields: item.eksist?.vehicleFields })
+  if (excluded) defaults.vehicleCondition = excluded
   if (bodyType && valueLossBodyOptions(vehicleType ?? 'OTOMOBİL').includes(bodyType)) defaults.bodyType = bodyType
   return defaults
 }
