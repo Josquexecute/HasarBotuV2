@@ -7,6 +7,7 @@ import {
   ClipboardList,
   LoaderCircle,
   NotebookPen,
+  Plus,
   RefreshCw,
   Save,
   Trash2,
@@ -26,6 +27,7 @@ interface Props {
   readonly operationsPort?: CaseOperationsPort
   readonly referencePort?: CaseReferenceDataPort
   readonly currentUserId?: string
+  readonly historyOnly?: boolean
 }
 
 const noteTypeLabels = {
@@ -79,6 +81,7 @@ function safeErrorMessage(error: unknown): string {
 }
 
 export function CaseOperationsApiModule({
+  historyOnly = false,
   item,
   source,
   onUnauthorized,
@@ -88,7 +91,7 @@ export function CaseOperationsApiModule({
   currentUserId,
 }: Props) {
   const workspace = useCaseOperations(item.caseId, source, true, operationsPort)
-  const references = useCaseReferences(referencePort)
+  const references = useCaseReferences(referencePort, {}, !historyOnly && item.lifecycleStatus !== 'closed' && workspace.data?.permissions.canWrite === true)
   const busyRef = useRef(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -199,9 +202,13 @@ export function CaseOperationsApiModule({
     )
   }
 
-  const canWrite = workspace.data.permissions.canWrite && item.lifecycleStatus !== 'closed'
+  const canWrite = workspace.data.permissions.canWrite && item.lifecycleStatus !== 'closed' && !historyOnly
   const openTasks = workspace.data.tasks.filter((task) => task.status === 'open')
   const resolvedTasks = workspace.data.tasks.filter((task) => task.status !== 'open')
+  const followUpHistory = [...new Map(workspace.data.followUpHistory
+    .filter(history => history.previousFollowUpDate !== history.newFollowUpDate)
+    .map(history => [JSON.stringify([history.changedAt, history.previousFollowUpDate, history.newFollowUpDate, history.actorUserId, history.actorDisplayName]), history])).values()]
+    .sort((left, right) => right.changedAt.localeCompare(left.changedAt))
 
   return (
     <div className="case-operations">
@@ -215,7 +222,7 @@ export function CaseOperationsApiModule({
           }}><RefreshCw size={15} /> Güncel Veriyi Yükle</button>}
         </div>
       )}
-      {!canWrite && (
+      {!canWrite && (!historyOnly || item.lifecycleStatus === 'closed') && (
         <div className="case-form-note">
           <span>{item.lifecycleStatus === 'closed' ? 'Kapalı dosya salt okunurdur.' : 'Rolünüz bu alanda yazma izni vermiyor.'}</span>
         </div>
@@ -223,16 +230,19 @@ export function CaseOperationsApiModule({
 
       <div className="case-operations__grid">
         <section className="info-panel">
-          <header><h2>Notlar ve Görüşmeler</h2><NotebookPen size={16} /></header>
+          <header><h2><NotebookPen size={16} /> Notlar ve Görüşmeler</h2><span className="case-operations__count">{workspace.data.notes.length} kayıt</span></header>
           {canWrite && (
+            <details className="case-operations__compose">
+              <summary><Plus size={15} /> Yeni not</summary>
             <form className="case-operations__form" onSubmit={submitNote}>
               <div className="case-operations__form-row">
                 <label><span>Not türü</span><select value={noteType} onChange={(event) => setNoteType(event.target.value as typeof noteType)}><option value="internal">İç not</option><option value="contact">Görüşme notu</option></select></label>
                 <label><span>Konu</span><input value={noteSubject} maxLength={160} onChange={(event) => setNoteSubject(event.target.value)} /></label>
               </div>
-              <label><span>Not</span><textarea value={noteBody} maxLength={5000} rows={4} onChange={(event) => setNoteBody(event.target.value)} /></label>
+              <label><span>Not</span><textarea value={noteBody} maxLength={5000} rows={3} onChange={(event) => setNoteBody(event.target.value)} /></label>
               <button className="button button--primary" type="submit" disabled={busy !== ''}>{busy === 'note' ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} Notu Ekle</button>
             </form>
+            </details>
           )}
           <div className="case-operations__notes">
             {workspace.data.notes.length === 0 && <p className="case-operations__empty">Henüz not veya görüşme kaydı yok.</p>}
@@ -257,8 +267,10 @@ export function CaseOperationsApiModule({
         </section>
 
         <section className="info-panel">
-          <header><h2>Görevler</h2><ClipboardList size={16} /></header>
+          <header><h2><ClipboardList size={16} /> Görevler</h2><span className="case-operations__count">{openTasks.length} açık</span></header>
           {canWrite && (
+            <details className="case-operations__compose">
+              <summary><Plus size={15} /> Yeni görev</summary>
             <form className="case-operations__form" onSubmit={submitTask}>
               <label><span>Görev</span><input value={taskTitle} maxLength={300} onChange={(event) => setTaskTitle(event.target.value)} /></label>
               <div className="case-operations__form-row">
@@ -269,13 +281,14 @@ export function CaseOperationsApiModule({
               {references.status === 'unavailable' && <small className="text-warning">Gerçek kullanıcı listesi alınamadı; sahte seçenek gösterilmedi.</small>}
               <button className="button button--primary" type="submit" disabled={busy !== '' || references.status !== 'ok'}>{busy === 'task' ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} Görev Oluştur</button>
             </form>
+            </details>
           )}
           <div className="case-task-cards">
             {openTasks.length === 0 && <p className="case-operations__empty">Açık görev yok.</p>}
             {openTasks.map((task) => (
               <article className={`case-task-card case-task-card--${task.dueStatus}`} key={task.id}>
                 <div className="case-task-card__head"><strong>{task.title}</strong><span>{dueLabels[task.dueStatus]}</span></div>
-                <div className="case-task-card__meta"><span>{formatDate(task.dueDate)}</span><span>{priorityLabels[task.priority]} öncelik</span><span>{task.legacySource?.assigneeName ?? task.assignedUserDisplayName ?? 'Atanmamış'}</span><span>Sürüm {task.version}</span>{task.legacySource !== null && <span>V1 tarihsel kayıt</span>}</div>
+                <div className="case-task-card__meta"><span>{formatDate(task.dueDate)}</span><span>{priorityLabels[task.priority]} öncelik</span><span>{task.legacySource?.assigneeName ?? task.assignedUserDisplayName ?? 'Atanmamış'}</span>{task.legacySource !== null && <span>V1 tarihsel kayıt</span>}</div>
                 {canWrite && resolution?.taskId !== task.id && <div className="case-task-card__actions"><button className="button button--secondary" type="button" onClick={() => setResolution({ taskId: task.id, action: 'complete', text: '' })}><CheckCircle2 size={14} /> Tamamla</button><button className="button button--secondary" type="button" onClick={() => setResolution({ taskId: task.id, action: 'cancel', text: '' })}><XCircle size={14} /> İptal Et</button></div>}
                 {resolution?.taskId === task.id && (
                   <div className="case-task-card__resolution">
@@ -285,6 +298,9 @@ export function CaseOperationsApiModule({
                 )}
               </article>
             ))}
+          </div>
+          {resolvedTasks.length > 0 && <details className="case-operations__resolved" open={historyOnly || undefined}>
+            <summary>Sonuçlanan görevler ({resolvedTasks.length})</summary>
             {resolvedTasks.map((task) => (
               <article className="case-task-card case-task-card--resolved" key={task.id}>
                 <div className="case-task-card__head"><strong>{task.title}</strong><span>{task.status === 'completed' ? 'Tamamlandı' : 'İptal edildi'}</span></div>
@@ -292,20 +308,19 @@ export function CaseOperationsApiModule({
                 <small>{task.legacySource !== null ? 'V1 tarihsel kayıt' : task.resolvedByDisplayName} · {(task.legacySource?.completedAt ?? task.resolvedAt) === null ? '—' : formatDateTime((task.legacySource?.completedAt ?? task.resolvedAt) as string)}</small>
               </article>
             ))}
-          </div>
+          </details>}
         </section>
       </div>
 
-      <details className="info-panel case-operations__follow-up">
-        <summary><CalendarClock size={16} /> Takip Tarihi Geçmişi ({workspace.data.followUpHistory.length})</summary>
-        <p>Takip tarihi kayıt gününde otomatik atanır; elle değiştirilemez.</p>
+      <details className="info-panel case-operations__follow-up" open={historyOnly || undefined}>
+        <summary><CalendarClock size={16} /> Takip Tarihi Geçmişi ({followUpHistory.length})</summary>
         <div className="case-follow-up-history">
-          {workspace.data.followUpHistory.length === 0 && <p className="case-operations__empty">Takip tarihi değişikliği bulunmuyor.</p>}
-          {workspace.data.followUpHistory.map((history) => (
+          {followUpHistory.length === 0 && <p className="case-operations__empty">Takip tarihi değişikliği bulunmuyor.</p>}
+          {followUpHistory.map((history) => (
             <article key={history.id}>
               <span>{formatDateTime(history.changedAt)}</span>
               <strong>{history.previousFollowUpDate === null ? 'Takip yok' : formatDate(history.previousFollowUpDate)} → {history.newFollowUpDate === null ? 'Takip temizlendi' : formatDate(history.newFollowUpDate)}</strong>
-              <small>{history.source === 'v1_historical_import' ? 'V1 tarihsel aktarım' : history.actorDisplayName} · dosya sürümü {history.caseVersion}</small>
+              <small>{history.source === 'v1_historical_import' ? 'V1 tarihsel aktarım' : history.actorDisplayName}</small>
             </article>
           ))}
         </div>

@@ -1,4 +1,6 @@
 export { trackedDocumentTypeSchema, inferTrackedDocumentType, TRACKED_DOCUMENT_LABELS } from './v1/tracking.js'
+export type { CaseFolderBrowseRequest, CaseFolderBrowseResult, CaseFolderEntry, CaseFolderListing, CaseFolderPreview } from './v1/storage/desktop-folder.js'
+export { CASE_FOLDER_COPY_LIMIT } from './v1/storage/desktop-folder.js'
 export { ACCOUNT_PROFILE_ROUTE, accountDisplayNameSchema, accountProfileSchema, accountProfileUpdateSchema, adminProfileUpdateSchema, type AccountProfile } from './v1/account-profile.js'
 export {
   caseServiceContactInputSchema,

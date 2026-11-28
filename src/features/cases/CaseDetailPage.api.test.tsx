@@ -104,6 +104,7 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
       <Routes><Route path="/dosyalar/:caseId" element={<CaseDetailPage />} /></Routes>
     </MemoryRouter>)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Evrak' })).toHaveClass('is-active'), { timeout: 15_000 })
+    expect(screen.queryByText('Algılanan evraklar')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Özet' }))
     expect(screen.getByRole('button', { name: 'Özet' })).toHaveClass('is-active')
     await user.click(screen.getByRole('link', { name: 'Operasyon bağlantısı' }))
@@ -178,6 +179,21 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('mevcut kapanış ücreti akışını doğrudan açar ve dosya sekmesine eklemez', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = String(input)
+      if (url.endsWith('/fee')) return Response.json({ error: 'forbidden' }, { status: 403 })
+      return Response.json(url.includes('case-closed-38?') ? { case: CLOSED_CASE } : { items: [] })
+    })
+    render(<MemoryRouter initialEntries={['/dosyalar/case-closed-38?tab=fees']}>
+      <Routes><Route path="/dosyalar/:caseId" element={<CaseDetailPage />} /></Routes>
+    </MemoryRouter>)
+    expect(await screen.findByText('Bu işlem için yetkiniz yok.')).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Dosya modülleri' })).queryByRole('button', { name: 'Raporlar ve Ücretler' })).not.toBeInTheDocument()
+    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/cases/case-closed-38/fee', expect.anything())
   })
 
   it('kapali case listede olmasa bile detail endpointinden acilir ve bagli olmayan modullerde mock gostermez', async () => {

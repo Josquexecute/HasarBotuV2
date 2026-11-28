@@ -20,12 +20,17 @@ function CaseLink({ row }: { row: { caseId: string;plate: string;officeNumber: s
   return <Link to={`/dosyalar/${row.caseId}`}>{row.plate} · {row.officeNumber}</Link>
 }
 
-function TramerRow({ item,run,busy,drafts }: { item: TrackingSnapshot['tramer'][number];run: Run;busy: boolean;drafts: Map<string,TramerDraft> }) {
+function TramerRow({ item,run,busy,drafts,showCaseLink }: { item: TrackingSnapshot['tramer'][number];run: Run;busy: boolean;drafts: Map<string,TramerDraft>;showCaseLink: boolean }) {
   const [number,setNumber] = useState(() => drafts.get(item.id)?.number ?? '')
   const [reason,setReason] = useState(() => drafts.get(item.id)?.reason ?? '')
   return <article className="tracking-row">
-    <CaseLink row={item} /><span>Tramer sorumlusu: {item.assignedName}</span><small>Son güncelleme: {trackingTime(item.updatedAt)}</small>
-    {item.applicationNumber && <code>{item.applicationNumber}</code>}{item.resultText && <p>{item.resultText}</p>}
+    {showCaseLink ? <>
+      <CaseLink row={item} /><span>Tramer sorumlusu: {item.assignedName}</span><small>Son güncelleme: {trackingTime(item.updatedAt)}</small>
+      {item.applicationNumber && <code>{item.applicationNumber}</code>}
+    </> : <div className="tracking-tramer-meta">
+      <span>Tramer sorumlusu: {item.assignedName}</span>{item.applicationNumber && <code>{item.applicationNumber}</code>}<time dateTime={item.updatedAt} title="Son güncelleme">{trackingTime(item.updatedAt)}</time>
+    </div>}
+    {item.resultText && <p>{item.resultText}</p>}
     {item.canEdit && item.status === 'entry_pending' && <form onSubmit={(e) => { e.preventDefault();void run(async () => { await commandTramer(item.caseId,{ action: 'number',applicationNumber: number,expectedVersion: item.version });drafts.delete(item.id) }) }}>
       <label>SBM başvuru numarası<input type="text" inputMode="numeric" pattern="[0-9]{1,128}" maxLength={128} value={number} disabled={busy} onChange={(e) => { setNumber(e.target.value);drafts.set(item.id,{ number: e.target.value,reason }) }} required /></label>
       <button className="button button--primary" disabled={busy}>Numarayı kaydet</button>
@@ -125,16 +130,21 @@ export function TrackingWorkspace({ caseId, view = 'all' }: { caseId?: string; v
     finally { busyRef.current = false;setBusy(false) }
   }
   const onConnected = useCallback(() => { void reload().catch(() => setError('Bağlantı listesi yenilenemedi.')) },[reload])
-  return <section className="tracking-workspace" aria-label="Evrak ve Tramer takibi">
+  const caseHistory = view === 'operations' && data
+    ? [...new Map(data.history.filter(item => item.action !== 'tracking.sbm_duplicate')
+      .map(item => [JSON.stringify([item.action, item.actor, item.occurredAt, item.details]), item])).values()]
+      .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
+    : data?.history ?? []
+  return <section className={`tracking-workspace${view === 'operations' ? ' tracking-workspace--case' : ''}`} aria-label="Evrak ve Tramer takibi">
     <div className="tracking-workspace__heading"><h2>{view === 'documents' ? 'Klasör Evrakları' : view === 'operations' ? 'Tramer işlemleri' : 'Tramer ve e-posta takibi'}</h2><button className="button button--secondary" disabled={busy} onClick={() => { void run() }}>{busy ? 'Güncelleniyor…' : 'Yenile'}</button></div>
     {error && <p role="alert">{error}</p>}{!data && !error && <p role="status">Takip yükleniyor…</p>}
     {data && <>
       {view !== 'documents' && <>
-        {caseId && data.canManage && <form onSubmit={(e) => { e.preventDefault();void run(() => commandTramer(caseId,{ action: 'assign',assignedUserId: assignee })) }}>
+        {caseId && data.canManage && <details className="tracking-assign"><summary>Sorumlu ata</summary><form onSubmit={(e) => { e.preventDefault();void run(() => commandTramer(caseId,{ action: 'assign',assignedUserId: assignee })) }}>
           <label>Tramer sorumlusu<select required value={assignee} onChange={(e) => setAssignee(e.target.value)}><option value="">Çalışan seçin</option>{data.users.map((u) => <option key={u.id} value={u.id}>{u.displayName}</option>)}</select></label>
           <button className="button button--primary" disabled={busy}>Tramer sorumlusunu ata</button>
-        </form>}
-        <TrackingOperations data={data} renderTramer={item => <TramerRow key={`${item.id}:${item.version}`} item={item} run={run} busy={busy} drafts={tramerDrafts.current} />} renderReview={item => <ReviewRow key={item.id} item={item} run={run} busy={busy} drafts={reviewDrafts.current} />} />
+        </form></details>}
+        <TrackingOperations data={data} compact={view === 'operations'} renderTramer={item => <TramerRow key={`${item.id}:${item.version}`} item={item} run={run} busy={busy} drafts={tramerDrafts.current} showCaseLink={view !== 'operations'} />} renderReview={item => <ReviewRow key={item.id} item={item} run={run} busy={busy} drafts={reviewDrafts.current} />} />
       </>}
       {view !== 'operations' && <details open={view !== 'center'}><summary>Klasörde algılanan evraklar ({data.documents.length})</summary>
         {data.documents.slice(0,documentLimit).map((item) => <DocumentRow key={item.id} item={item} run={run} busy={busy} showCaseLink={!caseId} />)}
@@ -153,7 +163,15 @@ export function TrackingWorkspace({ caseId, view = 'all' }: { caseId?: string; v
         {data.canManage && <GoogleConnectButton purpose="mail" onComplete={onConnected} />}
         {data.mailConnections.map((c) => <article key={c.id} className="tracking-row"><strong>{c.email}</strong><span>{connectionStatuses[c.status]}</span><small>Son başarılı tarama: {c.lastSuccessAt ? new Date(c.lastSuccessAt).toLocaleString('tr-TR') : 'Henüz yok'}</small>{c.lastError && <p>{c.lastError}</p>}{data.canManage && c.status !== 'disconnected' && <button className="button button--secondary" disabled={busy} onClick={() => { void run(() => trackingRequest(`tracking/mail/${c.id}/disconnect`,{})) }}>Takip bağlantısını kes</button>}</article>)}
       </details>}
-      {caseId && view !== 'documents' && <details><summary>Takip işlem geçmişi ({data.history.length})</summary>{data.history.map((h) => <article className="tracking-row" key={h.id}><strong>{historyLabels[h.action.replace('tracking.','')] ?? 'Takip işlemi'}</strong><span>{h.actor ?? 'Merkezi servis'} · {new Date(h.occurredAt).toLocaleString('tr-TR')}</span><dl>{Object.entries(h.details).filter(([key]) => key in detailLabels).map(([key,value]) => <div key={key}><dt>{detailLabels[key]}</dt><dd>{displayValue(value)}</dd></div>)}</dl></article>)}</details>}
+      {caseId && view !== 'documents' && <details><summary>Takip işlem geçmişi ({caseHistory.length})</summary>{caseHistory.map(h => {
+        const fields = Object.entries(h.details).filter(([key, value]) => Object.hasOwn(detailLabels, key)
+          && (view !== 'operations' || (value != null && value !== '' && !['previousStatus', 'status', 'sourceAccount'].includes(key))))
+        return <article className="tracking-row tracking-history-row" key={h.id}>
+          <strong>{historyLabels[h.action.replace('tracking.','')] ?? 'Takip işlemi'}</strong>
+          <span>{h.actor ?? 'Merkezi servis'} · <time dateTime={h.occurredAt}>{view === 'operations' ? trackingTime(h.occurredAt) : new Date(h.occurredAt).toLocaleString('tr-TR')}</time></span>
+          {fields.length > 0 && <dl>{fields.map(([key, value]) => <div key={key}><dt>{detailLabels[key]}</dt><dd>{displayValue(value)}</dd></div>)}</dl>}
+        </article>
+      })}</details>}
     </>}
   </section>
 }

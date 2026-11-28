@@ -11,12 +11,13 @@ const labels: Record<FileOperation['status'], string> = {
   manual_recovery_required: 'Taşıma kontrol gerektiriyor',
 }
 
-export function WorkspaceMonthMovePanel({ caseId, canWrite, onUnauthorized, onMoved, port }: {
+export function WorkspaceMonthMovePanel({ caseId, canWrite, onUnauthorized, onMoved, port, compact = false }: {
   readonly caseId: string
   readonly canWrite: boolean
   readonly onUnauthorized: () => void
   readonly onMoved: () => void
   readonly port?: WorkspaceMovePort
+  readonly compact?: boolean
 }) {
   const adapter = useMemo(() => port ?? createWorkspaceMovePort(), [port])
   const [state, setState] = useState<WorkspaceMoveState | null>(null)
@@ -78,10 +79,13 @@ export function WorkspaceMonthMovePanel({ caseId, canWrite, onUnauthorized, onMo
   const pending = state?.location?.relativePath.split('/')[1] === '_EKSİK DOSYALAR'
   const canPlan = canWrite && pending && state?.location?.verificationStatus === 'verified'
     && (!operation || TERMINAL.has(operation.status))
-  return <section className="info-panel overview-grid__wide workspace-provisioning" aria-labelledby="month-move-title">
-    <header><h2 id="month-move-title">Dosya Konumu ve Ay Klasörüne Taşıma</h2></header>
-    <p>Yeni ihbarlar _EKSİK DOSYALAR altında hazırlanır. Dosyadaki işlemler tamamlandığında onayınızla ihbar tarihinin ay klasörüne taşınır.</p>
-    {state?.location && <p>Güncel konum: <strong>{state.location.relativePath}</strong></p>}
+  return <section className={`info-panel overview-grid__wide workspace-provisioning${compact ? ' case-overview__folder' : ''}`} aria-labelledby="month-move-title">
+    <header><h2 id="month-move-title">{compact ? 'Dosya klasörü' : 'Dosya Konumu ve Ay Klasörüne Taşıma'}</h2>
+      {compact && <button type="button" className="button button--secondary" disabled={busy} onClick={() => setRefresh(value => value + 1)}>Konumu yenile</button>}
+    </header>
+    {!compact && <p>Yeni ihbarlar _EKSİK DOSYALAR altında hazırlanır. Dosyadaki işlemler tamamlandığında onayınızla ihbar tarihinin ay klasörüne taşınır.</p>}
+    {state?.location && <p className="case-overview__path">{!compact && 'Güncel konum: '}<strong>{state.location.relativePath}</strong></p>}
+    {compact && state && !state.location && <p>Kayıtlı klasör bulunmuyor.</p>}
     {pending && !canWrite && <p>Taşıma için dosya yöneticisi, eksper veya yönetici yetkisi gerekir.</p>}
     {canPlan && <button type="button" className="button button--primary" disabled={busy || !!error} onClick={() => void run(() => adapter.plan(caseId, state!.location!.version))}>Tamamlandı · Ay klasörüne taşı</button>}
     {operation && <div>
@@ -93,6 +97,6 @@ export function WorkspaceMonthMovePanel({ caseId, canWrite, onUnauthorized, onMo
       {operation.failureReasonCode && <p role="alert">Taşıma doğrulanamadı: {operation.failureReasonCode}. Güncel konumu ve hedef klasörü kontrol edin.</p>}
     </div>}
     {error && <p role="alert">{error}</p>}
-    <button type="button" className="button button--secondary" disabled={busy} onClick={() => setRefresh(value => value + 1)}>Konumu yenile</button>
+    {!compact && <button type="button" className="button button--secondary" disabled={busy} onClick={() => setRefresh(value => value + 1)}>Konumu yenile</button>}
   </section>
 }

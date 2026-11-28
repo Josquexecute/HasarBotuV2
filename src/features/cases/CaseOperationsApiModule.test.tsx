@@ -147,10 +147,12 @@ describe('Case Operations gerçek API modülü', () => {
     expect(screen.getByText('Servis formunu al')).toBeInTheDocument()
     expect(screen.getByText('Gecikmiş')).toBeInTheDocument()
 
+    await user.click(screen.getByText('Yeni not', { selector: 'summary' }))
     await user.type(screen.getByLabelText('Not'), 'Yeni sentetik not.')
     await user.click(screen.getByRole('button', { name: /Notu Ekle/ }))
     await waitFor(() => expect(operations.createNote).toHaveBeenCalledWith(CASE_ID, expect.objectContaining({ body: 'Yeni sentetik not.' })))
 
+    await user.click(screen.getByText('Yeni görev', { selector: 'summary' }))
     await user.type(screen.getByLabelText('Görev'), 'Yeni görev')
     await user.click(screen.getByRole('button', { name: /Görev Oluştur/ }))
     await waitFor(() => expect(operations.createTask).toHaveBeenCalledWith(CASE_ID, expect.objectContaining({ title: 'Yeni görev', assignedUserId: USER_ID })))

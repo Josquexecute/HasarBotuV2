@@ -39,14 +39,32 @@ const EMPTY: CaseVehicleProfileFieldsRecord = {
   evidenceReference: null,
 }
 
-export function CaseVehicleProfileModule(props: { readonly caseId: string; readonly port?: CaseVehicleProfileDataPort; readonly onSaved?: () => void }) {
+function editableFields(record: CaseVehicleProfileRecord): CaseVehicleProfileFieldsRecord {
+  const { current } = record
+  if (current === null) return { ...EMPTY, transmission: record.transmission ?? 'unknown' }
+  return {
+    transmission: current.transmission ?? 'unknown',
+    brand: current.brand,
+    model: current.model,
+    modelYear: current.modelYear,
+    variant: current.variant,
+    vehicleClass: current.vehicleClass,
+    chassisPrefix: current.chassisPrefix,
+    engineCode: current.engineCode,
+    evidenceSource: current.evidenceSource,
+    evidenceReference: current.evidenceReference,
+  }
+}
+
+export function CaseVehicleProfileModule(props: { readonly caseId: string; readonly port?: CaseVehicleProfileDataPort; readonly onSaved?: () => void; readonly summaryVehicle?: string }) {
   return <VehicleProfileForm key={props.caseId} {...props} />
 }
 
-function VehicleProfileForm({ caseId, port, onSaved }: {
+function VehicleProfileForm({ caseId, port, onSaved, summaryVehicle }: {
   readonly caseId: string
   readonly port?: CaseVehicleProfileDataPort
   readonly onSaved?: () => void
+  readonly summaryVehicle?: string
 }) {
   const [adapter] = useState<CaseVehicleProfileDataPort>(
     () => port ?? createHttpCaseVehicleProfileAdapter(),
@@ -64,6 +82,7 @@ function VehicleProfileForm({ caseId, port, onSaved }: {
   const [fields, setFields] = useState<CaseVehicleProfileFieldsRecord>(EMPTY)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   // Okuma efekt icinde yapilir ve durum yalniz async geri cagrilarda yazilir.
   // `cancelled` muhafazasi eklendi: case degisiminde ucustaki yanit artik
@@ -73,20 +92,7 @@ function VehicleProfileForm({ caseId, port, onSaved }: {
     adapter.read(caseId).then((result) => {
       if (cancelled) return
       setRecord(result)
-      if (result.current !== null) {
-        setFields({
-          transmission: result.current.transmission ?? 'unknown',
-          brand: result.current.brand,
-          model: result.current.model,
-          modelYear: result.current.modelYear,
-          variant: result.current.variant,
-          vehicleClass: result.current.vehicleClass,
-          chassisPrefix: result.current.chassisPrefix,
-          engineCode: result.current.engineCode,
-          evidenceSource: result.current.evidenceSource,
-          evidenceReference: result.current.evidenceReference,
-        })
-      } else setFields({ ...EMPTY, transmission: result.transmission ?? 'unknown' })
+      setFields(editableFields(result))
       setStatus('ok')
     }).catch((error: unknown) => {
       if (cancelled) return
@@ -107,8 +113,10 @@ function VehicleProfileForm({ caseId, port, onSaved }: {
         reason: record.version === null ? null : reason.trim() || null,
       })
       setRecord(result)
+      setFields(editableFields(result))
       setReason('')
       setErrorKind(null)
+      setDetailsOpen(false)
       onSaved?.()
     } catch (error) {
       setErrorKind(error instanceof CaseVehicleProfileClientError ? error.kind : 'unavailable')
@@ -132,6 +140,22 @@ function VehicleProfileForm({ caseId, port, onSaved }: {
   const fieldsDisabled = busy || !record.permissions.canEdit
   const canSubmit = fields.brand.trim() !== '' && fields.model.trim() !== ''
     && (!isRevision || reason.trim() !== '')
+  if (summaryVehicle !== undefined && !detailsOpen) {
+    const vehicle = record.current
+    return <section className="vehicle-profile" aria-label="Araç profili">
+      <header className="vehicle-profile__head">
+        <h3><Car size={16} aria-hidden="true" /> Araç Profili</h3>
+        {(vehicle || record.permissions.canEdit) && <button className="button button--secondary" type="button" onClick={() => setDetailsOpen(true)}>{record.permissions.canEdit ? 'Profili düzenle' : 'Profil ayrıntıları'}</button>}
+      </header>
+      {vehicle ? <>
+        <p className="case-vehicle-summary__name">{vehicle.brand} {vehicle.model} <span>{vehicle.modelYear}</span></p>
+        <dl className="case-vehicle-summary__facts">
+          <div><dt>Sınıf</dt><dd>{CLASS_LABELS[vehicle.vehicleClass]}</dd></div>
+          <div><dt>Vites</dt><dd>{VEHICLE_TRANSMISSION_OPTIONS.find(option => option.value === vehicle.transmission)?.label ?? '—'}</dd></div>
+        </dl>
+      </> : <p className="case-vehicle-summary__name">{summaryVehicle === '—' ? 'Araç profili bulunmuyor.' : summaryVehicle}</p>}
+    </section>
+  }
 
   return (
     <section className="vehicle-profile" aria-label="Araç profili">
@@ -248,6 +272,12 @@ function VehicleProfileForm({ caseId, port, onSaved }: {
       )}
 
       <div className="vehicle-profile__actions">
+        {summaryVehicle !== undefined && <button className="button button--secondary" type="button" disabled={busy} onClick={() => {
+          setFields(editableFields(record))
+          setReason('')
+          setErrorKind(null)
+          setDetailsOpen(false)
+        }}>{record.permissions.canEdit ? 'Vazgeç' : 'Kapat'}</button>}
         <button
           className="button button--primary"
           type="button"

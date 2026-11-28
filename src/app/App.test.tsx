@@ -194,7 +194,8 @@ describe('HasarBotu V2 UI prototipi', () => {
     expect(screen.getByRole('heading', { name: '06 ABC 123' })).toBeInTheDocument()
 
     fireEvent.doubleClick(row!)
-    expect(await screen.findByText('Dosya Özeti')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Dosya bilgileri' })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Dosya modülleri' })).queryByRole('button', { name: 'Raporlar ve Ücretler' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Operasyon' }))
     expect(screen.getByRole('heading', { name: 'Notlar ve Görüşmeler' })).toBeInTheDocument()
@@ -228,9 +229,9 @@ describe('HasarBotu V2 UI prototipi', () => {
   it('tüm ana navigasyon çalışma alanlarını açar', async () => {
     const user = userEvent.setup()
     render(<App />)
+    expect(within(screen.getByRole('navigation', { name: 'Ana navigasyon' })).queryByRole('link', { name: 'Raporlar ve Ücretler' })).not.toBeInTheDocument()
     const destinations = [
       ['Kapanan Dosyalar', 'Kapanan Dosyalar'],
-      ['Raporlar ve Ücretler', 'Raporlar ve Ücretler'],
       ['Mevzuat ve AI Yardımcısı', 'Mevzuat ve AI Yardımcısı'],
       ['Bildirimler', 'Bildirimler'],
       ['Yönetim', 'Yönetim'],

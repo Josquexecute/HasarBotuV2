@@ -63,6 +63,26 @@ function makePort(initial: CaseVehicleProfileRecord): CaseVehicleProfileDataPort
 }
 
 describe('CaseVehicleProfileModule', () => {
+  it('restores the saved profile on cancel and sends only editable fields when reopened', async () => {
+    const port = makePort(savedRecord)
+    const user = userEvent.setup()
+    render(<CaseVehicleProfileModule caseId={CASE_ID} port={port} summaryVehicle="—" />)
+    await user.click(await screen.findByRole('button', { name: 'Profili düzenle' }))
+    await user.clear(screen.getByLabelText('Model'))
+    await user.type(screen.getByLabelText('Model'), 'Taslak')
+    await user.click(screen.getByRole('button', { name: 'Vazgeç' }))
+    await user.click(screen.getByRole('button', { name: 'Profili düzenle' }))
+    expect(screen.getByLabelText('Model')).toHaveValue('Örnek Model')
+    await user.type(screen.getByLabelText('Değişiklik gerekçesi'), 'Ruhsat doğrulandı')
+    await user.click(screen.getByRole('button', { name: 'Yeni sürüm kaydet' }))
+    const fields = vi.mocked(port.save).mock.calls[0]?.[1].fields
+    expect(fields).toEqual({
+      transmission: 'unknown', brand: 'Sentetik Marka', model: 'Örnek Model', modelYear: 2021,
+      variant: null, vehicleClass: 'passenger_car', chassisPrefix: 'NM4BJ12', engineCode: 'K9K-628',
+      evidenceSource: 'registration_document', evidenceReference: 'Ruhsat s.1',
+    })
+  })
+
   it('keeps pending profile fields fixed and makes read-only profile controls unavailable', async () => {
     const port = makePort(savedRecord)
     vi.mocked(port.save).mockImplementation(() => new Promise(() => {}))

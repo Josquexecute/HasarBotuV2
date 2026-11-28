@@ -12,6 +12,8 @@ import {
   ChevronRight,
   ClipboardList,
   FileCheck2,
+  Files,
+  FolderCog,
   History,
   Mail,
   NotebookPen,
@@ -40,6 +42,9 @@ import { useCaseReferences } from '../../data/useCaseReferences'
 import { resolveCaseReferenceNames } from '../../data/caseReferenceNames'
 import { CaseTypeAssignment } from './CaseTypeAssignment'
 import { TrackingWorkspace } from '../tracking/TrackingWorkspace'
+import { CaseDisclosure } from './CaseDisclosure'
+import { CaseFileExplorer } from './CaseFileExplorer'
+import './case-workspace.css'
 
 const CaseDocumentsModule = lazy(async () => {
   const module = await import('./DocumentPhotoApiModule')
@@ -92,12 +97,18 @@ const tabs = [
   'Operasyon',
   'Evrak',
   'Değer Kaybı',
-  'Raporlar ve Ücretler',
   'E-postalar',
   'Geçmiş',
 ] as const
 
-type Tab = (typeof tabs)[number]
+type Tab = (typeof tabs)[number] | 'Raporlar ve Ücretler'
+
+const tabIcons = { Özet: Files, Operasyon: ClipboardList, Evrak: FileCheck2, 'Değer Kaybı': Scale, 'E-postalar': Mail, Geçmiş: History }
+const formatDay = new Intl.DateTimeFormat('tr-TR', { dateStyle: 'short', timeZone: 'UTC' })
+
+function caseDate(value: string | null | undefined) {
+  return value ? formatDay.format(new Date(value)) : '—'
+}
 
 function CloseCaseModal({ onClose }: { onClose: () => void }) {
   return (
@@ -154,7 +165,7 @@ export function CaseDetailPage({ legacyTab }: { legacyTab?: 'overview' | 'docume
   const location = useLocation()
   const search = new URLSearchParams(location.search)
   const tab = search.get('tab')
-  const removedTab = tab !== null && !['overview', 'operations', 'documents'].includes(tab)
+  const removedTab = tab !== null && !['overview', 'operations', 'documents', 'fees'].includes(tab)
   if (legacyTab || removedTab) {
     const oldDocumentTabs = ['photos', 'document-photo', 'evrak-fotograf', 'evrak-ve-fotograf', 'evrak ve fotoğraf']
     search.set('tab', legacyTab ?? (oldDocumentTabs.includes(tab?.toLocaleLowerCase('tr-TR') ?? '') ? 'documents' : 'overview'))
@@ -177,13 +188,13 @@ function CaseDetail() {
   const location = useLocation()
   const session = useSession()
   const requestedTab = new URLSearchParams(location.search).get('tab')
-  const routeTab: Tab | undefined = requestedTab === 'operations' ? 'Operasyon' : requestedTab === 'documents' ? 'Evrak' : requestedTab === 'overview' ? 'Özet' : undefined
+  const routeTab: Tab | undefined = requestedTab === 'operations' ? 'Operasyon' : requestedTab === 'documents' ? 'Evrak' : requestedTab === 'overview' ? 'Özet' : requestedTab === 'fees' ? 'Raporlar ve Ücretler' : undefined
   const [tabSelection, setTabSelection] = useState<{ key: string;tab: Tab }>(() => {
     let saved: string | null = null
     try { saved = window.sessionStorage.getItem('hasarbotu-active-case-tab') }
     catch { /* A browser storage restriction must not prevent opening a case. */ }
     if (saved === 'Evrak ve Fotoğraf') saved = 'Evrak'
-    return { key: location.key,tab: routeTab ?? (tabs.includes(saved as Tab) ? saved as Tab : 'Özet') }
+    return { key: location.key,tab: routeTab ?? (tabs.find(tab => tab === saved) ?? 'Özet') }
   })
   const activeTab = tabSelection.key === location.key ? tabSelection.tab : routeTab ?? tabSelection.tab
   const setActiveTab = useCallback((tab: Tab) => setTabSelection({ key: location.key,tab }), [location.key])
@@ -212,12 +223,14 @@ function CaseDetail() {
   }, [caseId, setActiveTab])
   const canChangeLifecycle = canUsePermission(session.user,'lifecycle_write',['admin','expert','case_manager'])
   const canEditCase = canUsePermission(session.user, 'case_write', ['admin', 'expert', 'case_manager', 'secretary', 'accounting'])
+  const canWriteDocuments = canUsePermission(session.user, 'documents_write', ['admin', 'expert', 'case_manager', 'secretary'])
   const currentIndex = cases.findIndex((candidate) => candidate.caseId === caseId)
   const creationResult = (location.state as {
     creationResult?: { caseId: string; officeNumber: string; plate: string }
   } | null)?.creationResult
 
   useEffect(() => {
+    if (activeTab === 'Raporlar ve Ücretler') return
     try { window.sessionStorage.setItem('hasarbotu-active-case-tab', activeTab) }
     catch { /* Tab persistence is optional; the current selection stays in React state. */ }
   }, [activeTab])
@@ -272,9 +285,9 @@ function CaseDetail() {
         </div>
         <div className="case-detail-head__identity">
           <span className="plate plate--large">{item.plate}</span>
-          <div><strong>{item.officeNumber}</strong><span>{item.company} · {item.type}</span></div>
+          <div><strong>{item.officeNumber}</strong><span>{item.company !== '—' && `${item.company} · `}{item.type}</span></div>
         </div>
-        <div className="case-detail-head__stage"><span>Aşama</span><strong>{item.stage}</strong></div>
+        <div className="case-detail-head__stage"><span>{item.stage}</span><strong className={`status-pill status-pill--${item.status === 'Açık' ? 'open' : item.status === 'Gecikmiş' ? 'late' : item.status === 'Kontrol Bekliyor' ? 'review' : 'waiting'}`}>{item.status}</strong></div>
         <div className="case-detail-head__actions">
           <NoticeSheetButton caseId={item.caseId} plate={item.plate} source={source} />
           {activeTab !== 'Evrak' && <OpenCaseFolderButton caseId={item.caseId} />}
@@ -283,9 +296,9 @@ function CaseDetail() {
               reloadCase()
               setPrototypeNotice('Güncel dosya verisi sunucudan yükleniyor.')
             } else setPrototypeNotice(`${item.plate} mock verisi yenilendi.`)
-          }}><RefreshCw size={15} /> Tek Dosyayı Yenile</button>
+          }} aria-label="Tek Dosyayı Yenile" title="Tek Dosyayı Yenile"><RefreshCw size={15} /></button>
           {source === 'api' && item.lifecycleStatus !== 'closed' ? (
-            <button className="button button--primary" type="button" disabled={!canEditCase} title={canEditCase ? undefined : 'Dosya düzenleme yetkiniz yok.'} onClick={() => setEditModalOpen(true)}><Save size={15} /> Temel Bilgileri Düzenle</button>
+            <button className="button button--primary" type="button" disabled={!canEditCase} aria-label="Temel Bilgileri Düzenle" title={canEditCase ? undefined : 'Dosya düzenleme yetkiniz yok.'} onClick={() => setEditModalOpen(true)}><Save size={15} /> Düzenle</button>
           ) : source === 'mock' ? (
             <>
               <button className="button button--secondary" type="button" onClick={() => setPrototypeNotice('Mock not düzenleyicisi hazırlandı.')}><NotebookPen size={15} /> Not Ekle</button>
@@ -309,15 +322,16 @@ function CaseDetail() {
       )}
 
       <nav className="case-tabs" aria-label="Dosya modülleri">
-        {tabs.map((tab) => (
-          <button className={activeTab === tab ? 'is-active' : ''} type="button" key={tab} onClick={() => setActiveTab(tab)}>{tab}</button>
-        ))}
+        {tabs.map((tab) => {
+          const Icon = tabIcons[tab]
+          return <button className={activeTab === tab ? 'is-active' : ''} aria-current={activeTab === tab ? 'page' : undefined} type="button" key={tab} onClick={() => setActiveTab(tab)}><Icon size={15} aria-hidden="true" />{tab}</button>
+        })}
       </nav>
 
       <div className="case-detail-content case-detail-content--assistant-closed">
-        <section className="case-module">
+        <section className={`case-module${activeTab === 'Özet' || activeTab === 'Operasyon' || activeTab === 'Evrak' ? ' case-module--workspace' : ''}`}>
           <header className="module-heading">
-            <div><span className="eyebrow">{item.officeNumber}</span><h1>{activeTab}</h1></div>
+            <h1>{activeTab}</h1>
             {source === 'mock' && <span className="mock-label">Mock prototip</span>}
           </header>
 
@@ -325,76 +339,49 @@ function CaseDetail() {
             {source === 'api' && item.type === 'Seçiniz' && ['Değer Kaybı', 'Raporlar ve Ücretler', 'E-postalar'].includes(activeTab)
               ? <p role="status">Bu modülü kullanmak için dosya türünü Trafik veya Kasko olarak seçin.</p>
               : activeTab === 'Özet' ? (
-            <div className="overview-grid">
-              <section className="info-panel overview-grid__main">
-                <header><h2>Dosya Özeti</h2><span className="status-pill status-pill--open">{item.status}</span></header>
+            <div className="case-overview">
+              <section className="info-panel case-overview__facts">
+                <header><h2>Dosya bilgileri</h2></header>
                 <dl className="overview-fields">
-                  <div><dt>Sigortalı</dt><dd>{item.insured}</dd></div>
-                  <div><dt>Araç</dt><dd>{item.vehicle}</dd></div>
-                  <div><dt>Hasar Dosya No</dt><dd>{item.claimNumber}</dd></div>
-                  <div><dt>İhbar Föyü No</dt><dd>{item.noticeNumber}</dd></div>
-                  <div><dt>Tahmini Hasar</dt><dd>{source === 'api' ? 'Henüz bağlı değil' : formatCurrency(item.estimatedDamage)}</dd></div>
+                  <div className="case-overview__priority"><dt>Hasar Dosya No</dt><dd>{item.claimNumber}</dd></div>
+                  <div className="case-overview__priority"><dt>İhbar Föyü No</dt><dd>{item.noticeNumber}</dd></div>
+                  {item.insured !== '—' && <div className="case-overview__priority"><dt>Sigortalı</dt><dd>{item.insured}</dd></div>}
+                  <div className="case-overview__priority"><dt>Takip tarihi</dt><dd><button type="button" className="text-button" onClick={() => setActiveTab('Operasyon')}>{item.followUp}<ChevronRight size={13} /></button></dd></div>
+                  {source === 'mock' && <div><dt>Araç</dt><dd>{item.vehicle}</dd></div>}
+                  {source === 'api' && <><div><dt>Hasar tarihi</dt><dd>{caseDate(item.lossDate)}</dd></div><div><dt>İhbar tarihi</dt><dd>{caseDate(item.notificationDate)}</dd></div></>}
+                  {source === 'mock' && <div><dt>Tahmini Hasar</dt><dd>{formatCurrency(item.estimatedDamage)}</dd></div>}
                   {source === 'api'
                     ? <CaseLegacyReferenceFields item={item} references={referenceData.references} />
                     : <><div><dt>Servis</dt><dd>{item.service}</dd></div><div><dt>Sorumlu</dt><dd>{item.assignee}</dd></div><div><dt>Eksper</dt><dd>{item.expert}</dd></div></>}
                 </dl>
               </section>
-              <section className="info-panel">
-                <header><h2>Bugünkü Takip</h2><CalendarClock size={16} /></header>
-                <strong className={`overview-follow overview-follow--${item.followUpTone}`}>{item.followUp}</strong>
-                <p>{source === 'api' ? 'Takip tarihi gerçek case metadata kaydından gösterilir.' : 'Servisten işlem durumu ve eksik evrak dönüşü alınacak.'}</p>
-                <button className="text-button" type="button" onClick={() => setActiveTab('Operasyon')}>Takip geçmişini gör <ChevronRight size={14} /></button>
-              </section>
-              <section className="info-panel">
-                <header><h2>Evrak Durumu</h2><FileCheck2 size={16} /></header>
-                {source === 'api'
-                  ? <strong>Gerçek değerlendirme sekmede yüklenir</strong>
-                  : <strong className={item.missingDocuments ? 'text-warning' : 'text-success'}>{item.missingDocuments ? `${item.missingDocuments} eksik evrak` : 'Evraklar tam'}</strong>}
-                <p>{source === 'api' ? 'Liste özeti belge tamlığı hakkında varsayım üretmez.' : 'Koşullu evrak kuralları dosya türüne göre gösteriliyor.'}</p>
-                <button className="text-button" type="button" onClick={() => setActiveTab('Evrak')}>Evraklara git <ChevronRight size={14} /></button>
-              </section>
-              {/* Paket 56: araç profili yalnız API modunda gerçek uçtan gelir. */}
-              {source === 'api' && <div className="overview-grid__wide"><CaseFaultModule caseId={item.caseId} /></div>}
-              {source === 'api' && (
-                <section className="info-panel overview-grid__wide">
-                  <CaseVehicleProfileModule caseId={item.caseId} onSaved={reloadCase} />
-                </section>
-              )}
-              {/* Dosya Envanteri: araç sahibi mini-yakalama, yalnız API modunda. */}
-              {source === 'api' && (
-                <section className="info-panel overview-grid__wide">
-                  <CaseVehicleOwnersModule caseId={item.caseId} />
-                </section>
-              )}
-              <section className="info-panel overview-grid__wide">
-                <header><h2>Notlar ve Görevler</h2><History size={16} /></header>
-                {source === 'api'
-                  ? <p>Gerçek not, görev ve takip geçmişi Operasyon sekmesinde gösterilir.</p>
-                  : <div className="note-list">
-                      {item.notes.map((note) => <div key={note}><span>Bugün</span><p>{note}</p></div>)}
-                      <div><span>Görev · 14:30</span><p>Eksik evrak dönüşünü kontrol et · {item.assignee}</p></div>
-                    </div>}
-                <button className="text-button" type="button" onClick={() => setActiveTab('Operasyon')}>Operasyon kayıtlarına git <ChevronRight size={14} /></button>
-              </section>
-              {source === 'api' && (
-                <><EksistSources caseId={item.caseId} />
-                <WorkspaceProvisioningPanel
+              {source === 'api' && <>
+                <div className="case-overview__vehicle">
+                  <CaseVehicleProfileModule caseId={item.caseId} onSaved={reloadCase} summaryVehicle={item.vehicle} />
+                  <CaseVehicleOwnersModule caseId={item.caseId} compact />
+                  <CaseFaultModule caseId={item.caseId} />
+                </div>
+                <WorkspaceMonthMovePanel key={item.caseId} caseId={item.caseId}
+                  canWrite={canChangeLifecycle && item.lifecycleStatus !== 'closed'}
+                  onUnauthorized={session.reportUnauthorized} onMoved={reloadCase} compact />
+                <CaseDisclosure label="Klasör oluşturma ve kaynaklar" icon={<FolderCog size={15} />}>
+                  <WorkspaceProvisioningPanel
                   caseId={item.caseId}
                   notificationDate={item.notificationDate ?? null}
                   onUnauthorized={session.reportUnauthorized}
-                /><WorkspaceMonthMovePanel key={item.caseId} caseId={item.caseId}
-                  canWrite={canChangeLifecycle && item.lifecycleStatus !== 'closed'}
-                  onUnauthorized={session.reportUnauthorized} onMoved={reloadCase} /></>
-              )}
+                  />
+                  <EksistSources caseId={item.caseId} />
+                </CaseDisclosure>
+              </>}
             </div>
           ) : activeTab === 'Operasyon' && source === 'api' ? (
-            <><CaseOperationsApiModule
+            <div className="case-operations-workspace"><CaseOperationsApiModule
               item={item}
               currentUserId={session.user?.id}
               source={source}
               onUnauthorized={session.reportUnauthorized}
               onReloadCase={reloadCase}
-            /><TrackingWorkspace key={item.caseId} caseId={item.caseId} view="operations" /></>
+            /><TrackingWorkspace key={item.caseId} caseId={item.caseId} view="operations" /></div>
           ) : activeTab === 'Operasyon' ? (
             <div className="module-workspace">
               <section className="info-panel module-workspace__main">
@@ -419,18 +406,16 @@ function CaseDetail() {
             </div>
           ) : activeTab === 'Evrak' ? source === 'api' ? (
             <div className="case-document-stack">
-              <section className="info-panel">
-                <header><h2>Genel Evrak</h2><OpenCaseFolderButton caseId={item.caseId} /></header>
-                <p>Evrak eklemek, açmak veya kopyasını almak için dosya klasöründeki EVRAK bölümünü kullanın.</p>
-              </section>
-              <TrackingWorkspace key={item.caseId} caseId={item.caseId} view="documents" />
-              {item.type !== 'Seçiniz' && <CaseDocumentsModule caseId={item.caseId} source={source} />}
-              {item.type === 'Kasko' && <>
+              <CaseFileExplorer key={item.caseId} caseId={item.caseId} plate={item.plate} canWrite={canWriteDocuments && item.lifecycleStatus !== 'closed'} />
+              {item.type !== 'Seçiniz' && <CaseDisclosure label="Evrak kontrolü" icon={<FileCheck2 size={15} />}>
+                <CaseDocumentsModule caseId={item.caseId} source={source} />
+              </CaseDisclosure>}
+              {item.type === 'Kasko' && <CaseDisclosure label="Poliçe ve kasko kontrolleri" icon={<Scale size={15} />}>
                 <PolicyPdfTextApiModule caseId={item.caseId} source={source} />
                 <PolicyOcrApiModule caseId={item.caseId} source={source} />
                 <PolicyAnalysisWorkspace caseId={item.caseId} source={source} />
                 <KascoMandatoryCheckModule caseId={item.caseId} source={source} />
-              </>}
+              </CaseDisclosure>}
             </div>
           ) : (
             <section className="document-checklist">
@@ -452,7 +437,7 @@ function CaseDetail() {
                     ? <EmailDraftApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
                     : <EmailsModule item={item} onNotice={setPrototypeNotice} />
                     : source === 'api'
-                      ? <CaseOperationsApiModule key={item.caseId} item={item} currentUserId={session.user?.id} source={source} onReloadCase={reloadCase} onUnauthorized={session.reportUnauthorized} />
+                      ? <CaseOperationsApiModule key={item.caseId} item={item} source={source} onReloadCase={reloadCase} onUnauthorized={session.reportUnauthorized} historyOnly />
                       : <HistoryModule item={item} />}
           </Suspense>
         </section>

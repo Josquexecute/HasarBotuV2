@@ -1,6 +1,5 @@
 import {
   Bell,
-  ChartNoAxesCombined,
   ChevronsLeft,
   ChevronsRight,
   Files,
@@ -42,7 +41,6 @@ const navigation: readonly {
   { to: '/', label: 'Durum Panosu', icon: LayoutDashboard, end: true },
   { to: '/dosyalar', label: 'Dosyalar', icon: Files },
   { to: '/kapanan-dosyalar', label: 'Kapanan Dosyalar', icon: FolderArchive },
-  { to: '/raporlar-ve-ucretler', label: 'Raporlar ve Ücretler', icon: ChartNoAxesCombined },
   { to: '/mevzuat-ve-ai', label: 'Mevzuat ve AI Yardımcısı', icon: Scale },
   { to: '/bildirimler', label: 'Bildirimler', icon: Bell },
   { to: '/yonetim', label: 'Yönetim', icon: ShieldCheck },

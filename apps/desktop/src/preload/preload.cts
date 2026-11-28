@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('hasarbotuOAuth', Object.freeze({
 }))
 contextBridge.exposeInMainWorld('hasarbotuCaseFolders', Object.freeze({
   open: (caseId: unknown) => ipcRenderer.invoke('hasarbotu:open-case-folder', caseId),
+  browse: (request: unknown) => ipcRenderer.invoke('hasarbotu:browse-case-folder', request),
 }))
 // Only trusted main-frame check/install commands; renderers supply no URLs or paths.
 contextBridge.exposeInMainWorld('hasarbotuUpdates', Object.freeze({

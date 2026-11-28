@@ -12,9 +12,10 @@ import {
 
 const EMPTY_ROW: CaseVehicleOwnerRecord = { name: '', phone: null }
 
-export function CaseVehicleOwnersModule({ caseId, port }: {
+export function CaseVehicleOwnersModule({ caseId, port, compact = false }: {
   readonly caseId: string
   readonly port?: CaseVehicleOwnersDataPort
+  readonly compact?: boolean
 }) {
   const [adapter] = useState<CaseVehicleOwnersDataPort>(() => port ?? createHttpCaseVehicleOwnersAdapter())
   const [record, setRecord] = useState<CaseVehicleOwnersRecord | null>(null)
@@ -98,7 +99,7 @@ export function CaseVehicleOwnersModule({ caseId, port }: {
   if (!editing) {
     return (
       <section className="info-panel" aria-label="Araç sahibi">
-        <header><h3><Users size={16} aria-hidden="true" /> Araç Sahibi veya Sahipleri</h3></header>
+        <header><h3><Users size={16} aria-hidden="true" /> {compact ? 'Araç Sahipleri' : 'Araç Sahibi veya Sahipleri'}</h3></header>
         {record.owners.length === 0
           ? <p>Henüz kayıtlı araç sahibi yok.</p>
           : <ul>{record.owners.map((owner, index) => (
@@ -115,7 +116,7 @@ export function CaseVehicleOwnersModule({ caseId, port }: {
 
   return (
     <section className="info-panel" aria-label="Araç sahibi düzenleme">
-      <header><h3><Users size={16} aria-hidden="true" /> Araç Sahibi veya Sahipleri</h3></header>
+      <header><h3><Users size={16} aria-hidden="true" /> {compact ? 'Araç Sahipleri' : 'Araç Sahibi veya Sahipleri'}</h3></header>
       {saveError !== null && <div className="case-form-alert case-form-alert--error" role="alert"><AlertTriangle size={16} /><span>{saveError}</span></div>}
       {rows.map((row, index) => (
         <div className="case-form-grid" key={index}>

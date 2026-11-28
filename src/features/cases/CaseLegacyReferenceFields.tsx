@@ -47,7 +47,8 @@ export function CaseLegacyReferenceFields({ item, references }: {
   return (
     <>
       <ReferenceField label="Servis" current={service} legacy={legacy.serviceNames} />
-      {item.serviceDetails && <><div><dt>Servis telefonu</dt><dd>{item.serviceDetails.phone || '—'}</dd></div><div><dt>Servis adresi</dt><dd>{item.serviceDetails.address || '—'}</dd></div></>}
+      {item.serviceDetails?.phone && <div><dt>Servis telefonu</dt><dd>{item.serviceDetails.phone}</dd></div>}
+      {item.serviceDetails?.address && <div><dt>Servis adresi</dt><dd>{item.serviceDetails.address}</dd></div>}
       <ReferenceField label="Sorumlu" current={responsible} legacy={legacy.responsibleNames} />
       <ReferenceField label="Eksper" current={expert} legacy={legacy.expertNames} />
     </>

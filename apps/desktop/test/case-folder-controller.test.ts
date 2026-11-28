@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -8,10 +8,10 @@ import type { BrowserWindow } from 'electron'
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, input: unknown) => Promise<unknown>>(),
-  select: vi.fn(), open: vi.fn(async () => ''),
+  select: vi.fn(), open: vi.fn(async () => ''), reveal: vi.fn(),
 }))
 vi.mock('electron', () => ({
-  dialog: { showOpenDialog: mocks.select }, shell: { openPath: mocks.open },
+  dialog: { showOpenDialog: mocks.select }, shell: { openPath: mocks.open, showItemInFolder: mocks.reveal },
   ipcMain: { handle: (name: string, handler: (event: unknown, input: unknown) => Promise<unknown>) => mocks.handlers.set(name, handler), removeHandler: (name: string) => mocks.handlers.delete(name) },
 }))
 const caseId = '019f7000-0000-7000-8000-000000000001'
@@ -42,6 +42,81 @@ it('allows only the designated Touch main frame at its exact menu URL', async ()
 })
 afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
 const invoke = (sender = event, input: unknown = caseId) => mocks.handlers.get('hasarbotu:open-case-folder')!(sender, input)
+const browse = (action: string, path: string[] = [], sender = event) =>
+  mocks.handlers.get('hasarbotu:browse-case-folder')!(sender, { caseId, action, path, ...(path.length ? { locationVersion: 1 } : {}) })
+
+it('lists real folders and files, previews text and reveals a selected file under the current case', async () => {
+  const root = join(localRoot, '2026/34ABC123-AXA')
+  await mkdir(join(root, 'Evrak', 'Arşiv'), { recursive: true })
+  await writeFile(join(root, 'Evrak', 'Not.txt'), 'Servis kaydı', 'utf8')
+  expect(await browse('list')).toMatchObject({ kind: 'listed', rootName: '34ABC123-AXA', entries: [{ name: 'Evrak', kind: 'directory' }] })
+  expect(await browse('list', ['Evrak'])).toMatchObject({ kind: 'listed', entries: [
+    { name: 'Arşiv', kind: 'directory' },
+    { name: 'Not.txt', kind: 'file', size: Buffer.byteLength('Servis kaydı') },
+  ] })
+  expect(await browse('preview', ['Evrak', 'Not.txt'])).toEqual({ kind: 'text', text: 'Servis kaydı' })
+  expect(await browse('reveal', ['Evrak', 'Not.txt'])).toEqual({ kind: 'revealed' })
+  expect(mocks.reveal).toHaveBeenCalledWith(await realpath(join(root, 'Evrak', 'Not.txt')))
+  expect(fetchMock).toHaveBeenCalledTimes(4)
+})
+
+it('keeps traversal, linked folders and denied or unrelated frames outside the file browser', async () => {
+  const root = join(localRoot, '2026/34ABC123-AXA')
+  await symlink(directory, join(root, 'Bağlantı'), 'junction')
+  await expect(browse('list', [], assistantEvent)).rejects.toThrow('Untrusted')
+  expect(await browse('list')).toMatchObject({ kind: 'listed', entries: [] })
+  expect(await browse('list', ['Bağlantı'])).toMatchObject({ kind: 'error' })
+  expect(await browse('list', ['..'])).toMatchObject({ kind: 'error' })
+  fetchMock.mockResolvedValueOnce(new Response(null, { status: 403 }))
+  expect(await browse('list')).toMatchObject({ kind: 'error', reset: true })
+  expect(mocks.select).not.toHaveBeenCalled()
+})
+
+it('requires refreshing before using a path from a previous location version', async () => {
+  const root = join(localRoot, '2026/34ABC123-AXA')
+  await writeFile(join(root, 'Kayıt.txt'), 'Yeni konum', 'utf8')
+  const handler = mocks.handlers.get('hasarbotu:browse-case-folder')!
+  expect(await handler(event, { caseId, action: 'reveal', path: ['Kayıt.txt'], locationVersion: 2 }))
+    .toMatchObject({ kind: 'error', reset: true })
+  expect(mocks.reveal).not.toHaveBeenCalled()
+})
+
+it('adds native-picker files with document permission and leaves existing copies intact', async () => {
+  const root = join(localRoot, '2026/34ABC123-AXA')
+  const source = join(directory, 'Not.txt')
+  await writeFile(source, 'Yeni belge')
+  await writeFile(join(root, 'Not.txt'), 'Mevcut belge')
+  mocks.select.mockResolvedValue({ canceled: false, filePaths: [source] })
+  const session = (permissions: string[]) => Response.json({ user: {
+    id: caseId, organizationId: caseId, email: 'expert@example.test', displayName: 'Uzman', roles: ['expert'], permissions,
+  }, expiresAt: null })
+  const add = () => mocks.handlers.get('hasarbotu:browse-case-folder')!(event, { caseId, action: 'add', path: [], locationVersion: 1 })
+  fetchMock.mockResolvedValueOnce(session(['case_read']))
+  expect(await add()).toMatchObject({ kind: 'error' })
+  expect(mocks.select).not.toHaveBeenCalled()
+  const getLocation = fetchMock.getMockImplementation() as () => Promise<Response>
+  let status = 'open'
+  fetchMock.mockImplementation(async (url: string) => url.endsWith('/auth/session') ? session(['case_read', 'documents_write'])
+    : url.endsWith('/location') ? getLocation() : Response.json({ case: {
+      id: caseId, caseType: 'traffic', officeCaseNumber: '2026/100', notificationFormNumber: null, insurerClaimNumber: null,
+      plate: '34ABC123', status, stage: 'inspection_pending', responsibleUserId: null, expertUserId: null, serviceId: null,
+      serviceProfile: null, insurerId: null, followUpDate: null, lossDate: null, notificationDate: null, lastInterventionAt: null,
+      createdAt: '2026-10-15T00:00:00Z', updatedAt: '2026-10-15T00:00:00Z', version: 1,
+    } }))
+  status = 'closed'
+  expect(await add()).toMatchObject({ kind: 'error' })
+  expect(mocks.select).not.toHaveBeenCalled()
+  status = 'open'
+  expect(await add()).toMatchObject({ kind: 'copied', count: 1, skipped: 0 })
+  expect(await readFile(join(root, 'Not.txt'), 'utf8')).toBe('Mevcut belge')
+  expect(await readFile(join(root, 'Not (2).txt'), 'utf8')).toBe('Yeni belge')
+  await mkdir(join(root, 'Kopyalar'))
+  const paste = (source: string[], names: string[]) => mocks.handlers.get('hasarbotu:browse-case-folder')!(event, { caseId, action: 'paste', path: ['Kopyalar'], locationVersion: 1, source, names })
+  expect(await paste(['..'], ['Not.txt'])).toMatchObject({ kind: 'error' })
+  expect(await paste([], ['Not.txt', 'Not (2).txt'])).toEqual({ kind: 'copied', count: 2, skipped: 0 })
+  expect(await readFile(join(root, 'Kopyalar', 'Not.txt'), 'utf8')).toBe('Mevcut belge')
+  expect(await readFile(join(root, 'Kopyalar', 'Not (2).txt'), 'utf8')).toBe('Yeni belge')
+})
 it('loads the authenticated current location and opens that exact physical folder', async () => {
   expect(await invoke()).toEqual({ opened: true })
   expect(fetchMock).toHaveBeenCalledWith(`http://127.0.0.1:1234/api/v1/cases/${caseId}/location`, expect.objectContaining({ credentials: 'include',redirect: 'error',cache: 'no-store' }))
