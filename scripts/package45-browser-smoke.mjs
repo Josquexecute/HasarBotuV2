@@ -126,18 +126,6 @@ async function clickExact(text) {
   })()`)
 }
 
-async function checkLabel(text) {
-  const encoded = JSON.stringify(text)
-  await waitFor(`(() => {
-    const label=[...document.querySelectorAll('label')].find((node)=>
-      node.textContent?.includes(${encoded}));
-    const input=label?.querySelector('input[type="checkbox"]');
-    if(!input) return false;
-    input.click();
-    return input.checked;
-  })()`)
-}
-
 async function setViewport(width, height) {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false })
 }
@@ -176,6 +164,8 @@ async function seed() {
              $3,'2026-07-10','2026-07-11','2026-07-11T09:00:00Z','2026-07-18T12:00:00Z',1)`,
     [caseId, organizationId, userId],
   )
+  await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'p45-browser','P45 Sentetik')", [uuidv7(), organizationId])
+  await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path) VALUES($1,$2,$3,'p45-browser','case-folder')", [uuidv7(), organizationId, caseId])
   return { organizationId, caseId, email: 'p45-browser@test.local', password }
 }
 
@@ -232,20 +222,27 @@ try {
   await waitFor("document.body.textContent.includes('Operasyon Durumu')")
   await evaluate(`location.href=${JSON.stringify(`http://127.0.0.1:4185/dosyalar/${seeded.caseId}`)}; true`)
   await waitFor("document.body.textContent.includes('34 PT 4501')")
-  await clickExact('Ağır Hasar')
-  await waitFor("document.body.textContent.includes('PERT Değerlendirmesi Oluştur')")
+  await evaluate(`location.href=${JSON.stringify(`/dosyalar/${seeded.caseId}/agir-hasar`)}; true`)
+  await waitFor("location.search==='?tab=overview' && document.querySelector('.case-tabs .is-active')?.textContent==='Özet'")
+  if (await evaluate("Array.from(document.querySelectorAll('.case-tabs button')).some(button=>button.textContent==='Ağır Hasar')")) {
+    throw new Error('PERT_TAB_STILL_VISIBLE')
+  }
 
-  // Oluşturma: ekonomik veriler + türetilmiş oran + açık onay.
-  await clickExact('PERT Değerlendirmesi Oluştur')
-  await fillLabel('Süreç durumu', 'under_review')
-  await fillLabel('Tahmini hasar (₺)', '480000')
-  await fillLabel('Rayiç değer (₺)', '625000')
-  await fillLabel('Yapısal değerlendirme notu', 'Ön panel ölçümü bekleniyor.')
-  await waitFor("document.body.textContent.includes('%77')")
-  await checkLabel('sürümlü olarak kaydedilmesini onaylıyorum')
-  await clickExact('Değerlendirmeyi Kaydet')
-  await waitFor("document.body.textContent.includes('PERT değerlendirmesi kullanıcı onayıyla kaydedildi.')")
-  await waitFor("document.body.textContent.includes('Merkez / sigorta kararı')")
+  const assessmentPath = `/api/v1/cases/${seeded.caseId}/pert-assessment`
+  async function postAssessment(path, payload, expectedStatus) {
+    const response = await evaluate(`fetch(${JSON.stringify(path)}, {
+      method:'POST',
+      headers:{'content-type':'application/json','idempotency-key':${JSON.stringify(uuidv7())}},
+      body:${JSON.stringify(JSON.stringify(payload))}
+    }).then(async result => ({status:result.status,body:await result.json()}))`)
+    if (response.status !== expectedStatus) throw new Error(`PERT_API_STATUS_${response.status}`)
+    return response.body.assessment
+  }
+  const amount = { estimatedDamageMinor: 48_000_000, marketValueMinor: 62_500_000 }
+  const created = await postAssessment(assessmentPath, {
+    ...amount, workflowStatus: 'under_review', structuralNote: 'Ön panel ölçümü bekleniyor.', expectedCaseVersion: 1, confirmed: true,
+  }, 201)
+  if (created.currentVersion.damageRatioPercent !== 77) throw new Error('PERT_RATIO_INVALID')
   await retry(async () => {
     const created = await pool.query(
       `SELECT workflow_status,expert_opinion,center_decision
@@ -261,15 +258,11 @@ try {
     }
   })
 
-  // Kanaat ayrı sürümle verilir; merkez kararı hâlâ ayrıdır.
-  await clickExact('Değerlendirmeyi Düzenle')
-  await fillLabel('Süreç durumu', 'center_decision_pending')
-  await fillLabel('Eksper kanaati', 'pert')
-  await fillLabel('Kanaat gerekçesi', 'Hasar/rayiç oranı yüksek; yapısal hasar mevcut.')
-  await fillLabel('Sürüm gerekçesi', 'Eksper kanaati verildi')
-  await checkLabel('sürümlü olarak kaydedilmesini onaylıyorum')
-  await clickExact('Yeni Sürümü Kaydet')
-  await waitFor("document.body.textContent.includes('PERT değerlendirmesinin yeni sürümü kaydedildi.')")
+  await postAssessment(`${assessmentPath}/versions`, {
+    ...amount, workflowStatus: 'center_decision_pending', expertOpinion: 'pert',
+    expertRationale: 'Hasar/rayiç oranı yüksek; yapısal hasar mevcut.',
+    reason: 'Eksper kanaati verildi', expectedVersion: 1, confirmed: true,
+  }, 200)
   await retry(async () => {
     const revised = await pool.query(
       `SELECT a.version,v.expert_opinion,v.center_decision
@@ -342,8 +335,8 @@ try {
     ok: true,
     scenarios: {
       login: true,
-      emptyAssessmentState: true,
-      userControlledCreate: true,
+      legacyLinkRedirected: true,
+      authenticatedCreate: true,
       derivedRatioNoThreshold: true,
       separateExpertOpinion: true,
       separateCenterDecision: true,

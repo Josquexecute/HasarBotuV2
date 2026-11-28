@@ -23,7 +23,7 @@ function normalize(value: string): string {
     .replace(/[^a-z0-9]+/gu, ' ').trim()
 }
 
-/** Names classify metadata only; they never approve a document or satisfy a requirement. */
+/** Names suggest the document type. Receipt also requires a current, verified file observation. */
 export function inferTrackedDocumentType(relativePath: string): TrackedDocumentType | null {
   // The closest named folder supplies context for camera-generated filenames.
   const segments = relativePath.split(/[\\/]/u).reverse()

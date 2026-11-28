@@ -24,7 +24,7 @@ Uygulama **yalnız iki dosya türünü** yönetir: **Trafik** ve **Kasko**. Değ
 |---|---|
 | **Durum Panosu** | Operasyonel özet ve uyarılar |
 | **Dosyalar** | Kompakt, özelleştirilebilir dosya listesi ve hızlı detay paneli |
-| **Dosya Detayı** | Özet, Operasyon, Evrak/Fotoğraf, Ağır Hasar, Değer Kaybı, Raporlar, E-postalar, Geçmiş sekmeleri |
+| **Dosya Detayı** | Özet, Operasyon, Evrak, Değer Kaybı, Raporlar ve Ücretler, E-postalar, Geçmiş sekmeleri |
 | **İhbar Föyleri** | Kasko ve trafik için otomatik doldurulan, tamamlanıp kaydedilebilen tek A4 yazdırma önizlemesi |
 | **Koşullu Evrak Kontrolü** | Dosya türüne göre otomatik zorunlu/opsiyonel evrak değerlendirmesi |
 | **Zorunlu Kasko Kontrolü** | Kasko dosyalarında 7 zorunlu, kanıt tabanlı kontrol; tamamlanmadan kapanış engellenir |

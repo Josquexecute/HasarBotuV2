@@ -98,8 +98,8 @@ export async function observeFile(pool: pg.Pool, organizationId: string, agentId
       || !input.relativePath.startsWith(`${location.relative_path}/`)) throw new TrackingError(409,'Dosya konumu değişti; yeniden tarayın.')
     const fileName = input.relativePath.split('/').at(-1)!
     if (isTemporaryTrackedFile(fileName)) throw new TrackingError(400,'Geçici dosya işlenemez.')
+    const inferredType = inferTrackedDocumentType(input.relativePath.slice(location.relative_path.length + 1))
     let tracked = (await db.query(`SELECT * FROM tracked_files WHERE organization_id=$1 AND case_id=$2 AND storage_root_key=$3 AND relative_path=$4 FOR UPDATE`, [organizationId,input.caseId,input.storageRootKey,input.relativePath])).rows[0]
-    let relocated = false
     if (!tracked) {
       // Several verified moves can occur before this file is hashed again.
       // Follow the committed chain, retaining the observation/review identity.
@@ -123,14 +123,17 @@ export async function observeFile(pool: pg.Pool, organizationId: string, agentId
       if (matches[0]) {
         tracked = (await db.query('UPDATE tracked_files SET storage_root_key=$2,relative_path=$3 WHERE id=$1 RETURNING *',
           [matches[0].id,input.storageRootKey,input.relativePath])).rows[0]
-        relocated = true
       }
     }
-    if (tracked?.current_hash === input.contentHash && (tracked.available || relocated)) {
+    if (tracked?.current_hash === input.contentHash) {
       if (!tracked.available) await db.query('UPDATE tracked_files SET available=true WHERE id=$1',[tracked.id])
+      if (inferredType !== null) {
+        await db.query(`UPDATE document_observations SET document_type=$3,receipt_classified=true
+          WHERE file_id=$1 AND revision=$2 AND status='pending' AND NOT receipt_classified
+            AND (document_type IS NULL OR document_type=$3)`, [tracked.id,tracked.revision,inferredType])
+      }
       return { changed: false }
     }
-    const previous = tracked ? (await db.query('SELECT document_type FROM document_observations WHERE file_id=$1 AND revision=$2', [tracked.id,tracked.revision])).rows[0] : undefined
     if (tracked) {
       tracked = (await db.query('UPDATE tracked_files SET current_hash=$2,revision=revision+1,available=true WHERE id=$1 RETURNING *', [tracked.id,input.contentHash])).rows[0]
     } else {
@@ -138,15 +141,17 @@ export async function observeFile(pool: pg.Pool, organizationId: string, agentId
         VALUES($1,$2,$3,$4,$5,$6,1) RETURNING *`, [uuidv7(),organizationId,input.caseId,input.storageRootKey,input.relativePath,input.contentHash])).rows[0]
     }
     const id = uuidv7()
-    await db.query(`INSERT INTO document_observations(id,file_id,revision,content_hash,byte_size,file_name,document_type)
-      VALUES($1,$2,$3,$4,$5,$6,$7)`, [id,tracked.id,tracked.revision,input.contentHash,input.byteSize,fileName,previous?.document_type ?? inferTrackedDocumentType(input.relativePath.slice(location.relative_path.length + 1))])
-    await notify(db,organizationId,input.caseId,`document:${id}`,'document',`Evrak ${tracked.revision === 1 ? 'eklendi' : 'değişti'}: ${fileName} — kontrol bekliyor`)
+    await db.query(`INSERT INTO document_observations(id,file_id,revision,content_hash,byte_size,file_name,document_type,receipt_classified)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$7::text IS NOT NULL)`, [id,tracked.id,tracked.revision,input.contentHash,input.byteSize,fileName,inferredType])
+    await notify(db,organizationId,input.caseId,`document:${id}`,'document',`Evrak ${tracked.revision === 1 ? 'eklendi' : 'değişti'}: ${fileName}`)
     await record(db,organizationId,input.caseId,'document_observed',undefined,{ agentId, observationId: id, fileName, revision: tracked.revision, contentHash: input.contentHash })
     return { changed: true }
   })
 }
 
-export async function reviewDocument(pool: pg.Pool, session: SessionRow, id: string, input: { status: 'approved' | 'rejected'; documentType: string; note: string }) {
+type DocumentChange = { documentType: string } | { status: 'approved' | 'rejected'; documentType: string; note: string }
+
+export async function updateTrackedDocument(pool: pg.Pool, session: SessionRow, id: string, input: DocumentChange) {
   if (!canWriteTracking(session)) throw new TrackingError(403,'Kontrol yetkiniz yok.')
   await withTransaction(pool, async (db) => {
     const row = (await db.query(`SELECT o.*,f.organization_id,f.case_id,f.revision AS current_revision,c.responsible_user_id
@@ -159,8 +164,14 @@ export async function reviewDocument(pool: pg.Pool, session: SessionRow, id: str
     if (!file.available || !location || location.storage_root_key !== effective!.storage_root_key || !effective!.relative_path.startsWith(`${location.relative_path}/`)) throw new TrackingError(409,'Evrakın güncel konumu değişmiş; yeniden tarama gerekiyor.')
     if (row.responsible_user_id !== session.user.id) throw new TrackingError(403,'Evrakı dosya sorumlusu kontrol etmelidir.')
     if (row.revision !== row.current_revision || row.status !== 'pending') throw new TrackingError(409,'Evrak değişti veya zaten kontrol edildi.')
-    await db.query(`UPDATE document_observations SET status=$2,document_type=$3,review_note=$4,reviewed_by=$5,reviewed_at=now() WHERE id=$1`, [id,input.status,input.documentType,input.note,session.user.id])
-    await record(db,row.organization_id,row.case_id,'document_reviewed',session.user.id,{ observationId: id, fileName: row.file_name, contentHash: row.content_hash, status: input.status, documentType: input.documentType, note: input.note })
+    const details = { observationId: id, fileName: row.file_name, contentHash: row.content_hash, documentType: input.documentType }
+    if ('status' in input) {
+      await db.query(`UPDATE document_observations SET status=$2,document_type=$3,review_note=$4,reviewed_by=$5,reviewed_at=now() WHERE id=$1`, [id,input.status,input.documentType,input.note,session.user.id])
+      await record(db,row.organization_id,row.case_id,'document_reviewed',session.user.id,{ ...details, status: input.status, note: input.note })
+    } else if (row.document_type !== input.documentType || !row.receipt_classified) {
+      await db.query('UPDATE document_observations SET document_type=$2,receipt_classified=true WHERE id=$1', [id,input.documentType])
+      await record(db,row.organization_id,row.case_id,'document_classified',session.user.id,{ ...details, previousDocumentType: row.document_type })
+    }
   })
 }
 

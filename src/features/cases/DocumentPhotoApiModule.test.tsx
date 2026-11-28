@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { DocumentPhotoApiModule } from './DocumentPhotoApiModule'
+import { CaseDocumentsModule } from './DocumentPhotoApiModule'
 
 const CASE_ID = '019f6000-0000-7000-8000-000000000001'
 const DOCUMENT_ID = '019f6000-0000-7000-8000-000000000002'
@@ -37,10 +37,10 @@ function successFetch(): typeof fetch {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('Evrak ve Fotoğraf gerçek API görünümü', () => {
+describe('Genel Evrak API görünümü', () => {
   it('kural gruplarını, gerekçeyi, sürümü ve güvenli metadata alanlarını gösterir', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(successFetch() as never)
-    render(<DocumentPhotoApiModule caseId={CASE_ID} source="api" />)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(successFetch() as never)
+    render(<CaseDocumentsModule caseId={CASE_ID} source="api" />)
     expect(screen.getByRole('status')).toHaveTextContent('yükleniyor')
     await waitFor(() => expect(screen.getByText('Kasko Temel Evrakları')).toBeInTheDocument())
     expect(screen.getByText('Rüculu Kasko Evrakları')).toBeInTheDocument()
@@ -51,9 +51,9 @@ describe('Evrak ve Fotoğraf gerçek API görünümü', () => {
     expect(screen.getByText('Uygulanmaz')).toBeInTheDocument()
     expect(screen.getAllByText('Fiziksel doğrulandı').length).toBeGreaterThan(0)
     expect(screen.getByText('Doğrulama başarısız')).toBeInTheDocument()
-    expect(screen.getByText('Doğrulama bekliyor')).toBeInTheDocument()
     expect(screen.getByText('EVRAK/kasko-police.pdf')).toBeInTheDocument()
-    expect(screen.getByText('HASAR/hasar.jpg')).toBeInTheDocument()
+    expect(screen.queryByText('HASAR/hasar.jpg')).not.toBeInTheDocument()
+    expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/photos?'))).toBe(false)
     expect(document.body.textContent).not.toContain('P:\\')
   })
 
@@ -62,7 +62,7 @@ describe('Evrak ve Fotoğraf gerçek API görünümü', () => {
     [404, 'Dosya bulunamadı'],
   ] as const)('HTTP %s durumunu mock fallback olmadan gösterir', async (status, label) => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(status, {}))
-    render(<DocumentPhotoApiModule caseId={CASE_ID} source="api" />)
+    render(<CaseDocumentsModule caseId={CASE_ID} source="api" />)
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(label))
     expect(screen.queryByText('12 anonim mock görsel')).not.toBeInTheDocument()
   })
@@ -70,11 +70,11 @@ describe('Evrak ve Fotoğraf gerçek API görünümü', () => {
   it('ağ hatasını ve yeniden deneme eylemini açıkça gösterir', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('network'))
     const user = userEvent.setup()
-    render(<DocumentPhotoApiModule caseId={CASE_ID} source="api" />)
+    render(<CaseDocumentsModule caseId={CASE_ID} source="api" />)
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Bağlantı kurulamadı'))
     expect(screen.queryByText('12 anonim mock görsel')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Yeniden dene/ }))
-    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(6))
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(4))
   })
 
   it('gerçek boş yanıtı ayrı boş durumuyla gösterir', async () => {
@@ -82,7 +82,7 @@ describe('Evrak ve Fotoğraf gerçek API görünümü', () => {
       if (String(input).includes('/document-requirements')) return jsonResponse(200, { caseId: CASE_ID, caseType: 'traffic', ruleSetVersion: '2026.07.14.1', overallStatus: 'present', requirements: [], alternativeGroups: [], missingCount: 0, controlRequiredCount: 0, evaluatedAt: '2026-07-14T08:00:00.000Z' })
       return jsonResponse(200, { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } })
     }) as never)
-    render(<DocumentPhotoApiModule caseId={CASE_ID} source="api" />)
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Evrak veya fotoğraf kaydı yok'))
+    render(<CaseDocumentsModule caseId={CASE_ID} source="api" />)
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Evrak kaydı yok'))
   })
 })

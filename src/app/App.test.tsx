@@ -205,7 +205,7 @@ describe('HasarBotu V2 UI prototipi', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('100+ mock fotoğrafı lazy yükler ve hızlı not panelini açıp kapatır', async () => {
+  it('genel evrakı fotoğraf galerisi olmadan açar ve hızlı not panelini kullanır', async () => {
     window.history.replaceState({}, '', '/dosyalar/case-2026-184')
     const user = userEvent.setup()
     render(<App />)
@@ -218,13 +218,11 @@ describe('HasarBotu V2 UI prototipi', () => {
     await user.click(screen.getByRole('button', { name: 'Hızlı notu kapat' }))
     expect(screen.queryByRole('dialog', { name: 'Touch Assistant' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Evrak ve Fotoğraf' }))
-    expect(screen.getAllByRole('img', { name: /Mock hasar fotoğrafı/ })).toHaveLength(12)
-    await user.click(screen.getByRole('button', { name: 'Yoğun Test (108)' }))
-    const photos = screen.getAllByRole('img', { name: /Mock hasar fotoğrafı/ })
-    expect(photos).toHaveLength(108)
-    expect(photos[0]).toHaveAttribute('loading', 'lazy')
-    expect(screen.getByText('108 anonim mock görsel · lazy loading stres testi')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Evrak' }))
+    expect(screen.getByRole('heading', { name: 'Genel Evrak' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Evrak ve Fotoğraf' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ağır Hasar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /Mock hasar fotoğrafı/ })).not.toBeInTheDocument()
   })
 
   it('tüm ana navigasyon çalışma alanlarını açar', async () => {

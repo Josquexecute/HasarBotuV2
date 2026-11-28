@@ -126,7 +126,7 @@ void app.whenReady().then(async () => {
     check('full case header opens the real close preview dialog', await evaluate('!![...document.querySelectorAll(".modal--case-lifecycle button")].find(button => button.textContent === "Önizleme Oluştur")'))
     await screenshot('case-close-dialog')
     await click('.modal--case-lifecycle [aria-label="Pencereyi kapat"]')
-    for (const tab of ['Özet', 'Operasyon', 'Evrak ve Fotoğraf', 'Ağır Hasar', 'Değer Kaybı', 'Raporlar ve Ücretler', 'E-postalar', 'Geçmiş']) {
+    for (const tab of ['Özet', 'Operasyon', 'Evrak', 'Değer Kaybı', 'Raporlar ve Ücretler', 'E-postalar', 'Geçmiş']) {
       await evaluate(`[...document.querySelectorAll('.case-tabs button')].find(el => el.textContent === ${JSON.stringify(tab)}).click()`)
       await until(`document.querySelector('.module-heading h1')?.textContent === ${JSON.stringify(tab)}`)
       check(`case tab ${tab}: no viewport overflow`, await evaluate('document.documentElement.scrollWidth <= innerWidth'))

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { AlertTriangle, CheckCircle2, CircleSlash2, FileQuestion, RefreshCw, ShieldAlert } from 'lucide-react'
 import { useCaseDocuments } from '../../data/useCaseDocuments'
 import type { CaseDocumentWorkspaceRecord, DataSourceKind, DocumentPhysicalStatus, DocumentRequirementRecord, DocumentRequirementStatus } from '../../data/ports'
@@ -114,56 +115,32 @@ function VerificationBadge({ status }: { status: DocumentPhysicalStatus }) {
 
 function MetadataPanel({ data }: { data: CaseDocumentWorkspaceRecord }) {
   return (
-    <section className="photo-library metadata-library">
-      <header><div><h2>Belge ve Fotoğraf Metadata</h2><span>Yalnız güvenli göreli konum · içerik gösterilmez</span></div><strong>{data.documents.length + data.photos.length}</strong></header>
-      <div className="metadata-sections">
-        <section className="metadata-section" aria-labelledby="document-metadata-heading">
-          <div className="metadata-section__heading"><h3 id="document-metadata-heading">Belge Sürümleri</h3><span>{data.documents.length} sürüm</span></div>
-          {data.documents.length === 0 ? <div className="metadata-empty"><FileQuestion size={18} /><span>Kayıtlı belge metadata’sı yok.</span></div> : (
-            <div className="table-scroll metadata-table-scroll">
-              <table className="data-table metadata-table">
-                <thead><tr><th>Belge / Dosya</th><th>Sürüm</th><th>MIME / Boyut</th><th>Doğrulama</th><th>Göreli Konum</th></tr></thead>
-                <tbody>{data.documents.map((document) => (
-                  <tr key={document.id}>
-                    <td><strong>{DOCUMENT_LABELS[document.documentType] ?? document.documentType}</strong><small>{document.displayName} · {document.originalFileName}</small></td>
-                    <td className="mono">v{document.versionNumber}</td>
-                    <td><span>{document.mimeType}</span><small>{formatBytes(document.byteSize)}</small></td>
-                    <td><VerificationBadge status={document.status} /></td>
-                    <td className="mono metadata-path" title={document.relativePath}>{document.relativePath}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-          )}
-        </section>
-        <section className="metadata-section" aria-labelledby="photo-metadata-heading">
-          <div className="metadata-section__heading"><h3 id="photo-metadata-heading">Fotoğraf Metadata</h3><span>{data.photos.length} fotoğraf</span></div>
-          {data.photos.length === 0 ? <div className="metadata-empty"><FileQuestion size={18} /><span>Kayıtlı fotoğraf metadata’sı yok.</span></div> : (
-            <div className="table-scroll metadata-table-scroll">
-              <table className="data-table metadata-table">
-                <thead><tr><th>Dosya</th><th>Sürüm</th><th>MIME / Boyut</th><th>Doğrulama</th><th>Göreli Konum</th></tr></thead>
-                <tbody>{data.photos.map((photo) => (
-                  <tr key={photo.id}>
-                    <td><strong>{photo.displayName}</strong><small>{photo.originalFileName}</small></td>
-                    <td>—</td>
-                    <td><span>{photo.mimeType}</span><small>{formatBytes(photo.byteSize)}</small></td>
-                    <td><VerificationBadge status={photo.status} /></td>
-                    <td className="mono metadata-path" title={photo.relativePath}>{photo.relativePath}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
+    <section className="metadata-library">
+      <header><h2>Belge Sürümleri</h2><strong>{data.documents.length}</strong></header>
+      {data.documents.length === 0 ? <div className="metadata-empty"><FileQuestion size={18} /><span>Kayıtlı belge sürümü yok.</span></div> : (
+        <div className="table-scroll metadata-table-scroll">
+          <table className="data-table metadata-table">
+            <thead><tr><th>Belge / Dosya</th><th>Sürüm</th><th>MIME / Boyut</th><th>Doğrulama</th><th>Göreli Konum</th></tr></thead>
+            <tbody>{data.documents.map((document) => (
+              <tr key={document.id}>
+                <td><strong>{DOCUMENT_LABELS[document.documentType] ?? document.documentType}</strong><small>{document.displayName} · {document.originalFileName}</small></td>
+                <td className="mono">v{document.versionNumber}</td>
+                <td><span>{document.mimeType}</span><small>{formatBytes(document.byteSize)}</small></td>
+                <td><VerificationBadge status={document.status} /></td>
+                <td className="mono metadata-path" title={document.relativePath}>{document.relativePath}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
     </section>
   )
 }
 
 function ModuleState({ kind, onRetry }: { kind: 'loading' | 'empty' | 'unauthorized' | 'not_found' | 'unavailable'; onRetry: () => void }) {
   const content = {
-    loading: ['Evrak ve fotoğraf verileri yükleniyor…', 'Kural değerlendirmesi ve güvenli metadata okunuyor.'],
-    empty: ['Evrak veya fotoğraf kaydı yok', 'Bu dosyada henüz kural sonucu ya da metadata bulunmuyor.'],
+    loading: ['Evraklar yükleniyor…', ''],
+    empty: ['Evrak kaydı yok', ''],
     unauthorized: ['Oturum gerekli', 'Gerçek evrak verisini görmek için yeniden giriş yapın.'],
     not_found: ['Dosya bulunamadı', 'Dosya yok veya bu organizasyonun erişim alanında değil.'],
     unavailable: ['Bağlantı kurulamadı', 'Evrak servisine erişilemiyor. Bağlantıyı kontrol edip yeniden deneyin.'],
@@ -171,15 +148,23 @@ function ModuleState({ kind, onRetry }: { kind: 'loading' | 'empty' | 'unauthori
   return (
     <div className="document-module-state" role={kind === 'loading' ? 'status' : 'alert'}>
       {kind === 'loading' ? <RefreshCw className="state-view__spinner" aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}
-      <strong>{content[kind][0]}</strong><span>{content[kind][1]}</span>
+      <strong>{content[kind][0]}</strong>{content[kind][1] && <span>{content[kind][1]}</span>}
       {kind === 'unavailable' && <button className="button button--secondary" type="button" onClick={onRetry}><RefreshCw size={14} /> Yeniden dene</button>}
     </div>
   )
 }
 
-export function DocumentPhotoApiModule({ caseId, source }: { caseId: string; source: DataSourceKind }) {
-  const { data, status, retry } = useCaseDocuments(caseId, source, true)
-  if (status === 'ok' && data !== null) return <div className="document-photo-workspace document-photo-workspace--api"><RequirementsPanel data={data} /><MetadataPanel data={data} /></div>
+export function CaseDocumentsModule({ caseId, source }: { caseId: string; source: DataSourceKind }) {
+  const { data, status, retry } = useCaseDocuments(caseId, source, true, undefined, { includePhotos: false })
+  useEffect(() => {
+    window.addEventListener('tracking-updated', retry)
+    window.addEventListener('tracking-received', retry)
+    return () => {
+      window.removeEventListener('tracking-updated', retry)
+      window.removeEventListener('tracking-received', retry)
+    }
+  }, [retry])
+  if (status === 'ok' && data !== null) return <div className="case-document-workspace"><RequirementsPanel data={data} /><MetadataPanel data={data} /></div>
   const state = status === 'idle' || status === 'ok' ? 'loading' : status
   return <ModuleState kind={state} onRetry={retry} />
 }

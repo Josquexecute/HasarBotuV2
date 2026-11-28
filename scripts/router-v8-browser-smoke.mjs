@@ -211,9 +211,8 @@ const NAVIGATION = [
 const DETAIL_TABS = [
   'Özet',
   'Operasyon',
-  'Evrak ve Fotoğraf',
+  'Evrak',
   'İşçilik',
-  'Ağır Hasar',
   'Değer Kaybı',
   'E-postalar',
   'Geçmiş',

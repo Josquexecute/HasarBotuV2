@@ -154,7 +154,7 @@ export function startDocumentTracker(config: AgentConfig, signal?: AbortSignal, 
   }
   const cycle = () => {
     healthy = true
-    // Register the review gate before the first scan; physical verification cannot bypass it.
+    // Register the scanner before the first scan so requirements use current folder observations.
     running = reportHealth(false,'scanning').then(() => tracker.scan(signal)).then(async () => {
       if (signal?.aborted) return
       await reportHealth(healthy)

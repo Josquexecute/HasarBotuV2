@@ -111,7 +111,7 @@ select, input, textarea { accent-color: var(--accent); }
   .case-detail-head { flex-wrap: wrap; }
   .case-detail-head__actions { flex-wrap: wrap; }
   .case-detail-head__identity { min-width: 0; }
-  .overview-grid, .module-workspace, .document-photo-workspace, .management-grid,
+  .overview-grid, .module-workspace, .case-document-workspace, .management-grid,
   .settings-grid, .legislation-layout, .legislation-layout--detail, .value-loss-grid,
   .email-draft-workspace__grid, .case-operations__grid { grid-template-columns: minmax(0, 1fr); }
   .cases-workarea--detail, .office-workarea--detail { grid-template-columns: minmax(0, 1fr); }

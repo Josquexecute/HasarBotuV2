@@ -37,6 +37,7 @@ export interface HttpDocumentWorkspaceAdapterOptions {
   readonly baseUrl?: string
   readonly fetchImpl?: typeof fetch
   readonly headers?: Readonly<Record<string, string>>
+  readonly includePhotos?: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -200,7 +201,7 @@ export function createHttpDocumentWorkspaceAdapter(options: HttpDocumentWorkspac
       const [requirementsValue, documentItems, photoItems] = await Promise.all([
         requestJson(`/api/v1/cases/${encodedCaseId}/document-requirements`),
         requestAllPages(`/api/v1/cases/${encodedCaseId}/documents`, 'documents'),
-        requestAllPages(`/api/v1/cases/${encodedCaseId}/photos`, 'photos'),
+        options.includePhotos === false ? Promise.resolve([]) : requestAllPages(`/api/v1/cases/${encodedCaseId}/photos`, 'photos'),
       ])
       const requirements = ensureRequirements(requirementsValue)
       const details = await Promise.all(documentItems.map(async (candidate) => {

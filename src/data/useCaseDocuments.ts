@@ -24,9 +24,10 @@ export function useCaseDocuments(
   source: DataSourceKind,
   enabled: boolean,
   suppliedPort?: CaseDocumentsDataPort,
+  { includePhotos = true }: { includePhotos?: boolean } = {},
 ): UseCaseDocumentsResult {
   const { reportUnauthorized } = useSession()
-  const port = useMemo(() => suppliedPort ?? createHttpDocumentWorkspaceAdapter(), [suppliedPort])
+  const port = useMemo(() => suppliedPort ?? createHttpDocumentWorkspaceAdapter({ includePhotos }), [suppliedPort, includePhotos])
   const [requestVersion, setRequestVersion] = useState(0)
   const retry = useCallback(() => setRequestVersion((value) => value + 1), [])
   const active = source === 'api' && enabled

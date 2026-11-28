@@ -1,7 +1,7 @@
 import { afterAll,beforeAll,describe,expect,it,vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type pg from 'pg'
-import { mkdtemp,mkdir,writeFile,rm } from 'node:fs/promises'
+import { copyFile,mkdtemp,mkdir,readFile,writeFile,rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createDocumentTracker,createTrackingClient } from '@hasarbotu/file-agent'
@@ -308,7 +308,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect(requirements.statusCode).toBe(200)
     expect(requirements.json().requirements.find((row: { canonicalDocumentType: string }) => row.canonicalDocumentType === 'victim_traffic_policy').status).toBe('missing')
   })
-  it('detects documents without fulfilling requirements; only owner approval fulfils them; changed content needs approval again',async () => {
+  it('preserves a legacy approval and does not reuse a manual classification after content changes',async () => {
     const caseId = await createCase()
     await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'tracking-root','Test root')", [uuidv7(),org])
     await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path) VALUES($1,$2,$3,'tracking-root','case-folder')", [uuidv7(),org,caseId])
@@ -328,8 +328,9 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await requirements()).find((r) => r.canonicalDocumentType === 'victim_traffic_policy')?.status).toBe('present')
     await observeFile(pool,org,'test-agent',{ ...input,contentHash: 'b'.repeat(64) })
     data = await snapshot(ownerCookie,caseId)
-    expect(data.documents[0]?.status).toBe('pending');expect(data.notifications).toHaveLength(2)
-    expect((await requirements()).find((r) => r.canonicalDocumentType === 'victim_traffic_policy')?.status).toBe('control_required')
+    expect(data.documents[0]).toMatchObject({ status: 'pending', documentType: null })
+    expect(data.notifications).toHaveLength(2)
+    expect((await requirements()).find((r) => r.canonicalDocumentType === 'victim_traffic_policy')?.status).toBe('missing')
     expect((await app.inject({ method: 'POST',url: endpoint,headers: { cookie: ownerCookie },payload: body })).statusCode).toBe(409)
     await observeFile(pool,org,'test-agent',input)
     expect((await snapshot(ownerCookie,caseId)).notifications).toHaveLength(3)
@@ -342,6 +343,69 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     expect((await snapshot(ownerCookie,caseId)).documents[0]?.status).toBe('pending')
     await expect(observeFile(pool,org,'test-agent',{ ...input,locationVersion: 999 })).rejects.toMatchObject({ status: 409 })
     await expect(observeFile(pool,otherOrg,'test-agent',input)).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('uses a saved and typed document without creating a human approval', async () => {
+    const caseId = await createCase()
+    await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'received-root','Received documents')", [uuidv7(), org])
+    await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path) VALUES($1,$2,$3,'received-root','case-folder')", [uuidv7(), org, caseId])
+    await observeFile(pool, org, 'test-agent', { caseId, locationVersion: 1, storageRootKey: 'received-root',
+      relativePath: 'case-folder/EVRAK/M POLİÇE.pdf', contentHash: 'c'.repeat(64), byteSize: 200 })
+
+    const data = await snapshot(ownerCookie, caseId)
+    const document = data.documents[0]!
+    const requirement = async () => {
+      const result = await app.inject({ url: `/api/v1/cases/${caseId}/document-requirements`, headers: { cookie: ownerCookie } })
+      expect(result.statusCode, result.payload).toBe(200)
+      return result.json().requirements.find((item: { canonicalDocumentType: string }) => item.canonicalDocumentType === 'victim_traffic_policy')
+    }
+    expect(await requirement()).toMatchObject({ status: 'present', matchedDocumentIds: [document.id] })
+    expect(data.notifications[0]?.title).toBe('Evrak eklendi: M POLİÇE.pdf')
+    expect((await pool.query('SELECT status,reviewed_by,reviewed_at FROM document_observations WHERE id=$1', [document.id])).rows[0])
+      .toEqual({ status: 'pending', reviewed_by: null, reviewed_at: null })
+    const reject = await app.inject({ method: 'POST', url: `/api/v1/tracking/documents/${document.id}/review`, headers: { cookie: ownerCookie },
+      payload: { status: 'rejected', documentType: 'victim_traffic_policy', note: 'Eski istemciden kaydedilen karar' } })
+    expect(reject.statusCode, reject.payload).toBe(204)
+    expect(await requirement()).toMatchObject({ status: 'missing' })
+    const input = { caseId, locationVersion: 1, storageRootKey: 'received-root',
+      relativePath: 'case-folder/EVRAK/M POLİÇE.pdf', contentHash: 'c'.repeat(64), byteSize: 200 }
+    await reconcileFiles(pool, org, { caseId, locationVersion: 1, scanStartedAt: new Date().toISOString(), paths: [] })
+    expect(await observeFile(pool, org, 'test-agent', input)).toEqual({ changed: false })
+    expect((await snapshot(ownerCookie, caseId)).documents[0]).toMatchObject({ id: document.id, status: 'rejected' })
+    await observeFile(pool, org, 'test-agent', { ...input, contentHash: 'e'.repeat(64) })
+    expect(await requirement()).toMatchObject({ status: 'present' })
+    await observeFile(pool, org, 'test-agent', input)
+    expect(await requirement()).toMatchObject({ status: 'missing' })
+  })
+
+  it('allows the case owner to classify an unrecognized file without altering its approval history', async () => {
+    const caseId = await createCase()
+    const storageRootKey = 'classify-root'
+    await pool.query('INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,$3,$3)', [uuidv7(), org, storageRootKey])
+    await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path) VALUES($1,$2,$3,$4,'case-folder')", [uuidv7(), org, caseId, storageRootKey])
+    await observeFile(pool, org, 'test-agent', { caseId, locationVersion: 1, storageRootKey,
+      relativePath: 'case-folder/scan.pdf', contentHash: 'd'.repeat(64), byteSize: 200 })
+    await observeFile(pool, org, 'test-agent', { caseId, locationVersion: 1, storageRootKey,
+      relativePath: 'case-folder/scan.pdf', contentHash: 'f'.repeat(64), byteSize: 200 })
+    const document = (await snapshot(ownerCookie, caseId)).documents[0]!
+    expect(document.documentType).toBeNull()
+    // A pre-upgrade scanner could copy the old type to a replacement with different bytes.
+    await pool.query("UPDATE document_observations SET document_type='victim_traffic_policy' WHERE id=$1", [document.id])
+    const status = async () => (await pool.query('SELECT status FROM tracking_requirement_documents WHERE id=$1', [document.id])).rows[0].status
+    expect(await status()).toBe('pending')
+    const classify = (cookie: string) => app.inject({
+      method: 'POST', url: `/api/v1/tracking/documents/${document.id}/classify`, headers: { cookie },
+      payload: { documentType: 'victim_traffic_policy' },
+    })
+    expect((await classify(operatorCookie)).statusCode).toBe(403)
+    expect((await classify(otherCookie)).statusCode).toBe(404)
+    expect((await classify(ownerCookie)).statusCode).toBe(204)
+    expect((await classify(ownerCookie)).statusCode).toBe(204)
+    expect(await status()).toBe('ready')
+    expect((await pool.query('SELECT status,document_type,reviewed_by,reviewed_at,review_note FROM document_observations WHERE id=$1', [document.id])).rows[0])
+      .toEqual({ status: 'pending', document_type: 'victim_traffic_policy', reviewed_by: null, reviewed_at: null, review_note: null })
+    expect((await pool.query("SELECT action,actor_user_id FROM audit_events WHERE resource_id=$1 AND action IN ('tracking.document_classified','tracking.document_reviewed')", [caseId])).rows)
+      .toEqual([{ action: 'tracking.document_classified', actor_user_id: owner }])
   })
 
   it('preserves document identity and approval across workspace relocation and retires unseen old paths',async () => {
@@ -437,7 +501,7 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
     const caseId = await createCase()
     const root = await mkdtemp(join(tmpdir(),'hb-tracking-http-'))
     try {
-      await mkdir(join(root,'http-case'));await writeFile(join(root,'http-case','report.txt'),'closed desktop evidence')
+      await mkdir(join(root,'http-case'));await writeFile(join(root,'http-case','M POLİÇE.txt'),'closed desktop evidence')
       await pool.query("INSERT INTO storage_roots(id,organization_id,root_key,label) VALUES($1,$2,'http-root','HTTP test root')", [uuidv7(),org])
       await pool.query("INSERT INTO case_locations(id,organization_id,case_id,storage_root_key,relative_path) VALUES($1,$2,$3,'http-root','http-case')", [uuidv7(),org,caseId])
       const registration = await app.inject({ method: 'POST',url: '/api/v1/agents',headers: { cookie: managerCookie },payload: { name: 'Tracking test agent' } })
@@ -449,10 +513,23 @@ describeDb('tracking actual API/database effects (isolated PostgreSQL)',() => {
       const scanner = () => createDocumentTracker(client,{ 'http-root': root },{ now: () => time,settleMs: 100 })
       const first = scanner();await first.scan();time = 200;await first.scan()
       expect((await snapshot(ownerCookie,caseId)).notifications).toHaveLength(1)
+      const old = (await snapshot(ownerCookie, caseId)).documents[0]!
+      const approval = await app.inject({ method: 'POST', url: `/api/v1/tracking/documents/${old.id}/review`, headers: { cookie: ownerCookie },
+        payload: { status: 'approved', documentType: 'victim_traffic_policy', note: 'Tarihsel onay' } })
+      expect(approval.statusCode, approval.payload).toBe(204)
+      expect(await readFile(join(root, old.relativePath), 'utf8')).toBe('closed desktop evidence')
+      await copyFile(join(root, old.relativePath), join(root, 'downloaded.txt'))
+      expect(await readFile(join(root, 'downloaded.txt'), 'utf8')).toBe('closed desktop evidence')
       const restarted = scanner();await restarted.scan();time = 400;await restarted.scan()
       expect((await snapshot(ownerCookie,caseId)).notifications).toHaveLength(1)
-      await writeFile(join(root,'http-case','report.txt'),'changed during desktop absence');await restarted.scan();time = 600;await restarted.scan()
-      expect((await snapshot(ownerCookie,caseId)).notifications).toHaveLength(2)
+      await writeFile(join(root,'http-case','M POLİÇE.txt'),'changed during desktop absence');await restarted.scan();time = 600;await restarted.scan()
+      const updated = await snapshot(ownerCookie, caseId)
+      expect(updated.notifications).toHaveLength(2)
+      expect(updated.documents).toEqual([expect.objectContaining({ fileName: 'M POLİÇE.txt', status: 'pending' })])
+      expect(await readFile(join(root, updated.documents[0]!.relativePath), 'utf8')).toBe('changed during desktop absence')
+      expect((await pool.query('SELECT status FROM tracking_requirement_documents WHERE id=$1', [updated.documents[0]!.id])).rows[0].status).toBe('ready')
+      expect((await pool.query('SELECT status,review_note FROM document_observations WHERE id=$1', [old.id])).rows[0])
+        .toEqual({ status: 'approved', review_note: 'Tarihsel onay' })
       const health = await fetch(`${address}/api/v1/tracking/agent/health`,{ method: 'POST',headers: { 'x-agent-id': agent.id,'x-agent-secret': secret,'content-type': 'application/json' },body: JSON.stringify({ ok: true }) })
       expect(health.status).toBe(204)
       expect((await snapshot(ownerCookie)).services).toContainEqual(expect.objectContaining({ kind: 'folder',status: 'running' }))

@@ -39,6 +39,12 @@ function AppRoutes(props: AppRoutesProps) {
       <Route path="/" element={<DashboardPage />} />
       <Route path="/dosyalar" element={<CasesPage />} />
       <Route path="/dosyalar/:caseId" element={<CaseDetailPage />} />
+      <Route path="/dosyalar/:caseId/agir-hasar" element={<CaseDetailPage legacyTab="overview" />} />
+      <Route path="/dosyalar/:caseId/pert" element={<CaseDetailPage legacyTab="overview" />} />
+      <Route path="/dosyalar/:caseId/heavy-damage" element={<CaseDetailPage legacyTab="overview" />} />
+      <Route path="/dosyalar/:caseId/evrak-fotograf" element={<CaseDetailPage legacyTab="documents" />} />
+      <Route path="/dosyalar/:caseId/evrak-ve-fotograf" element={<CaseDetailPage legacyTab="documents" />} />
+      <Route path="/dosyalar/:caseId/photos" element={<CaseDetailPage legacyTab="documents" />} />
       <Route path="/kapanan-dosyalar" element={<ClosedCasesPage />} />
       <Route path="/raporlar-ve-ucretler" element={<ReportsPage />} />
       <Route path="/mevzuat-ve-ai" element={<LegislationPage />} />

@@ -7,12 +7,14 @@ import { requireSession } from '../auth/guard.js'
 import { requireAgent } from '../agent/auth.js'
 import { createAgentStore } from '../agent/store.js'
 import { failureBody } from '../errors/failure.js'
-import { canManageTracking, canWriteTracking, observeFile, reconcileFiles, reviewDocument, reviewSbm, TrackingError, tramerCommand } from './store.js'
+import { canManageTracking, canWriteTracking, observeFile, reconcileFiles, reviewSbm, TrackingError, tramerCommand, updateTrackedDocument } from './store.js'
 import { createAuditService } from '../audit/service.js'
 import { withTransaction } from '../db/executor.js'
 import { registerTrackingResponseCompression } from './response-compression.js'
 import { DEFAULT_NOTIFICATION_PREFERENCES, notificationPreferencesSchema } from '@hasarbotu/contracts'
 import { resolveFileLocations } from '../storage/file-location.js'
+
+const notificationTitle = "CASE WHEN n.kind='document' THEN regexp_replace(n.title, ' — kontrol bekliyor$', '') ELSE n.title END AS title"
 
 export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg.Pool; googleEnabled: boolean; automaticSbmEnabled: boolean }) {
   const { pool } = options
@@ -52,7 +54,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
           JOIN case_locations l ON l.organization_id=f.organization_id AND l.case_id=f.case_id
           WHERE f.organization_id=$1 AND NOT c.is_archived AND f.available AND ($2::uuid IS NULL OR f.case_id=$2)
           AND ($2::uuid IS NOT NULL OR (c.responsible_user_id=$3 AND o.status='pending')) ORDER BY o.observed_at DESC`, [org,query.caseId ?? null,user]),
-        query.includeNotifications === 'false' ? Promise.resolve({ rows: [] }) : pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",n.title,n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
+        query.includeNotifications === 'false' ? Promise.resolve({ rows: [] }) : pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",${notificationTitle},n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
           FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE n.organization_id=$1 AND NOT c.is_archived AND c.responsible_user_id=$2
           AND ($3::uuid IS NULL OR n.case_id=$3) ORDER BY (n.read_at IS NULL) DESC,n.created_at DESC`, [org,user,query.caseId ?? null]),
         pool.query(`SELECT id,email,status,last_success_at AS "lastSuccessAt",last_error AS "lastError" FROM mail_connections WHERE organization_id=$1 AND ($2 OR connected_by=$3) ORDER BY email`, [org,manage,user]),
@@ -85,7 +87,15 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       if (!session) return
       const { id } = z.object({ id: z.string().uuid() }).parse(request.params)
       const input = z.object({ status: z.enum(['approved','rejected']), documentType: trackedDocumentTypeSchema, note: z.string().trim().max(2000) }).strict().parse(request.body)
-      await reviewDocument(pool,session,id,input)
+      await updateTrackedDocument(pool,session,id,input)
+      return reply.code(204).send()
+    })
+    routes.post('/api/v1/tracking/documents/:id/classify', async (request,reply) => {
+      const session = await requireSession(auth,request,reply)
+      if (!session) return
+      const { id } = z.object({ id: z.string().uuid() }).parse(request.params)
+      const input = z.object({ documentType: trackedDocumentTypeSchema }).strict().parse(request.body)
+      await updateTrackedDocument(pool,session,id,input)
       return reply.code(204).send()
     })
     routes.post('/api/v1/tracking/sbm/:id/review', async (request,reply) => {
@@ -117,7 +127,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       if (!session) return
       const preference = (await pool.query('SELECT preferences FROM user_notification_preferences WHERE organization_id=$1 AND user_id=$2', [session.user.organizationId,session.user.id])).rows[0]
       const preferences = notificationPreferencesSchema.parse(preference?.preferences ?? DEFAULT_NOTIFICATION_PREFERENCES)
-      const rows = (await pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,n.title,
+      const rows = (await pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,${notificationTitle},
         (n.kind='tramer' AND n.event_key ~ '^tramer:[^:]+:((completed|cancelled)$|result-review:)') AS "isResult",
         (n.kind='tramer' AND n.event_key ~ '^tramer:[^:]+:result-review:') AS "requiresReview"
         FROM tracking_notifications n JOIN cases c ON c.id=n.case_id
@@ -137,7 +147,7 @@ export function registerTrackingRoutes(app: FastifyInstance, options: { pool: pg
       const [counts,rows] = await Promise.all([
         pool.query(`SELECT count(*)::int AS total,(SELECT count(*)::int FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${scope} AND n.read_at IS NULL) AS unread
           FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${filter}`,params),
-        pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",n.title,n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
+        pool.query(`SELECT n.id,n.case_id AS "caseId",c.plate,c.office_number AS "officeNumber",${notificationTitle},n.kind,n.read_at AS "readAt",n.presented_at AS "presentedAt",n.created_at AS "createdAt"
           FROM tracking_notifications n JOIN cases c ON c.id=n.case_id WHERE ${filter} ORDER BY n.created_at DESC,n.id DESC LIMIT 50 OFFSET $5`,[...params,(query.page-1)*50]),
       ])
       return trackingInboxSchema.parse(JSON.parse(JSON.stringify({ notifications: rows.rows,...counts.rows[0],page: query.page })))

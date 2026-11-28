@@ -95,7 +95,7 @@ describe('standalone Touch case workspace', () => {
     expect(screen.getByRole('heading', { name: 'Görevler' })).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Takip geçmişi' })).toBeVisible()
     expect(screen.getByText('Tramer talebi yok.')).toBeVisible()
-    expect(screen.getByText(/evrak inceleme bekliyor/)).toBeVisible()
+    expect(screen.getByText(/evrak kaydı/)).toBeVisible()
     expect(screen.getByText('Görev yok.')).toBeVisible()
     expect(screen.getByText('Takip değişikliği yok.')).toBeVisible()
     vi.mocked(api.cases.getCase).mockResolvedValue({ ...detail, type: 'Seçiniz', claimNumber: 'HASAR-456', notificationDate: null, service: '', serviceDetails: null, responsibleUserId: null, insurerId: null, company: '' })

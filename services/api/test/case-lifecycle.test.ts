@@ -552,9 +552,9 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
     expect((await runOnce(agentClient, agentConfig)).kind).toBe('reported')
   }, 60_000)
 
-  it.each(['normal', 'recovered', 'pending_destination', 'unavailable_source'] as const)(
+  it.each(['normal', 'recovered', 'rejected_destination', 'unavailable_source', 'received'] as const)(
     'keeps tracked evidence scoped to the verified move during %s finalization', async mode => {
-      const seeded = await seedCase(`34 TRK ${301 + ['normal', 'recovered', 'pending_destination', 'unavailable_source'].indexOf(mode)}`, true)
+      const seeded = await seedCase(`34 TRK ${301 + ['normal', 'recovered', 'rejected_destination', 'unavailable_source', 'received'].indexOf(mode)}`, true)
       const baseTypes = BASE_TYPES.filter(type => type !== 'expert_report' && type !== 'preliminary_report')
       // The office tracking workflow, rather than registered metadata, supplies the base requirements.
       await pool.query(`UPDATE document_versions SET status='missing',hash_verified=false,size_verified=false,verified_at=now()
@@ -566,10 +566,12 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
         await pool.query(`INSERT INTO tracked_files(id,organization_id,case_id,storage_root_key,relative_path,current_hash,revision)
           VALUES($1,$2,$3,$4,$5,$6,1)`, [id, organizationId, seeded.caseId, ROOT_KEY, `${seeded.openPath}/EVRAK/${fileName}`, hash])
         await pool.query(`INSERT INTO document_observations(id,file_id,revision,content_hash,byte_size,file_name,document_type,status,reviewed_by,reviewed_at)
-          VALUES($1,$2,1,$3,$4,$5,$6,'approved',$7,now())`, [uuidv7(), id, hash, bytes.length, fileName, type, adminUserId])
+          VALUES($1,$2,1,$3,$4,$5,$6,$7,$8,CASE WHEN $8::uuid IS NOT NULL THEN now() END)`, [uuidv7(), id, hash, bytes.length, fileName, type, mode === 'received' ? 'pending' : 'approved', mode === 'received' ? null : adminUserId])
         observed.push({ id, type, hash, fileName })
       }
-      const plannedResponse = await planClose(seeded.caseId, { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' })
+      const closeInput = { expectedCaseVersion: 1, expectedLocationVersion: 1, closeMode: 'normal' as const }
+      expect((await planClose(seeded.caseId, closeInput, secretaryCookie)).statusCode).toBe(403)
+      const plannedResponse = await planClose(seeded.caseId, closeInput)
       expect(plannedResponse.statusCode, plannedResponse.payload).toBe(201)
       const planned = caseLifecycleOperationResponseSchema.parse(plannedResponse.json()).operation
       expect(planned).toMatchObject({ status: 'approval_required', requirementSummary: { missingCount: 0, controlRequiredCount: 0 } })
@@ -581,12 +583,12 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
       if (mode !== 'normal') {
         // Discovery published the exact verified destination before the lost result was replayed.
         await pool.query("UPDATE case_locations SET relative_path=$2,version=2,verification_status='verified' WHERE case_id=$1", [seeded.caseId, planned.destination.relativePath])
-        if (mode === 'pending_destination') {
+        if (mode === 'rejected_destination') {
           const original = observed[0]!, id = uuidv7()
           await pool.query(`INSERT INTO tracked_files(id,organization_id,case_id,storage_root_key,relative_path,current_hash,revision)
             VALUES($1,$2,$3,$4,$5,$6,1)`, [id, organizationId, seeded.caseId, ROOT_KEY, `${planned.destination.relativePath}/EVRAK/${original.fileName}`, original.hash])
           await pool.query(`INSERT INTO document_observations(id,file_id,revision,content_hash,byte_size,file_name,document_type,status)
-            VALUES($1,$2,1,$3,1,$4,$5,'pending')`, [uuidv7(), id, original.hash, original.fileName, original.type])
+            VALUES($1,$2,1,$3,1,$4,$5,'rejected')`, [uuidv7(), id, original.hash, original.fileName, original.type])
         } else if (mode === 'unavailable_source') {
           await pool.query('UPDATE tracked_files SET available=false WHERE id=$1', [observed[0]!.id])
         }
@@ -598,7 +600,7 @@ describeDb('case close/reopen lifecycle (gercek PostgreSQL + sentetik filesystem
       }
       expect(await agentClient.reportResult(job.id, result)).toMatchObject({ status: 'succeeded' })
       const state = (await app.inject({ url: `/api/v1/cases/${seeded.caseId}/lifecycle-operations/${planned.id}`, headers: { cookie: adminCookie } })).json().operation
-      const blocked = mode === 'pending_destination' || mode === 'unavailable_source'
+      const blocked = mode === 'rejected_destination' || mode === 'unavailable_source'
       expect(state).toMatchObject(blocked ? { status: 'manual_recovery_required', failureReasonCode: 'requirements_changed_after_move' } : { status: 'closed', failureReasonCode: null })
       expect((await pool.query('SELECT lifecycle_status FROM cases WHERE id=$1', [seeded.caseId])).rows[0].lifecycle_status).toBe(blocked ? 'open' : 'closed')
       expect((await pool.query('SELECT relative_path FROM case_locations WHERE case_id=$1', [seeded.caseId])).rows[0].relative_path).toBe(planned.destination.relativePath)

@@ -147,7 +147,7 @@ function CaseWorkspace({ item, cases, operations, references, calculator, tab, t
         <h3>Tramer / evrak</h3>
         {tracking.tramer.length === 0 && <p>Tramer talebi yok.</p>}
         {tracking.tramer.map((request) => <article className="assistant-entry" key={request.id}><strong>{request.applicationNumber ?? 'Başvuru numarası bekleniyor'}</strong><p>{({ entry_pending: 'Giriş bekliyor', result_pending: 'Sonuç bekliyor', completed: 'Tamamlandı', cancelled: 'İptal' } as const)[request.status]} · {request.assignedName}</p>{request.resultText && <p>{request.resultText}</p>}</article>)}
-        <p>{tracking.documents.filter((document) => document.status === 'pending').length} evrak inceleme bekliyor · {tracking.documents.filter((document) => document.status === 'approved').length} onaylı · {tracking.documents.filter((document) => document.status === 'rejected').length} reddedildi</p>
+        <p>{tracking.documents.length} evrak kaydı</p>
       </>}
       {workspace.data && <>
         <h3>Görevler</h3>

@@ -84,11 +84,12 @@ const overrides: Record<string, string> = {
   'case.updated': 'Dosya bilgileri güncellendi', 'request.rejected': 'İşlem isteği reddedildi',
   'request.failed': 'İşlem isteği başarısız oldu', 'request.completed': 'İşlem isteği tamamlandı',
   'permissions.updated': 'Ofis yetkileri değiştirildi',
+  'tracking.document_classified': 'Evrak türü kaydedildi',
 }
 export const AUDIT_ACTION_CODES = [
   'case_lifecycle.recovery_source_verified', 'case.archived', 'case.plate_folder_corrected', 'case.source_identity_registered',
   'case.workflow_stage_updated', 'case.workspace_verifying', 'file_operation.recovery_source_verified', 'job.requeued',
-  'organization.created', 'storage_root.created', 'tracking.document_missing', 'tracking.document_observed',
+  'organization.created', 'storage_root.created', 'tracking.document_classified', 'tracking.document_missing', 'tracking.document_observed',
   'tracking.document_reviewed', 'tracking.notification_read', 'tracking.tramer_assigned', 'tracking.tramer_number_saved', 'user.office_transfer',
   'job.dead_letter', 'job.retry_scheduled', 'job.verification_failed', 'job.verification_stale', 'job.verification_missing', 'job.verified',
   'access.viewed',

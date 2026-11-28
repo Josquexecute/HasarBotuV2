@@ -21,7 +21,7 @@ import {
   Scale,
   X,
 } from 'lucide-react'
-import { useLocation, useNavigate, useParams } from 'react-router'
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router'
 import { formatCurrency } from '../../mocks/cases'
 import { useCase } from '../../data/useCase'
 import { useCases } from '../../data/useCases'
@@ -39,10 +39,11 @@ import { CaseLegacyReferenceFields } from './CaseLegacyReferenceFields'
 import { useCaseReferences } from '../../data/useCaseReferences'
 import { resolveCaseReferenceNames } from '../../data/caseReferenceNames'
 import { CaseTypeAssignment } from './CaseTypeAssignment'
+import { TrackingWorkspace } from '../tracking/TrackingWorkspace'
 
-const DocumentPhotoApiModule = lazy(async () => {
+const CaseDocumentsModule = lazy(async () => {
   const module = await import('./DocumentPhotoApiModule')
-  return { default: module.DocumentPhotoApiModule }
+  return { default: module.CaseDocumentsModule }
 })
 const PolicyPdfTextApiModule = lazy(async () => {
   const module = await import('./PolicyPdfTextApiModule')
@@ -86,16 +87,10 @@ const CaseVehicleProfileModule = lazy(async () => {
   return { default: module.CaseVehicleProfileModule }
 })
 
-const PertApiModule = lazy(async () => {
-  const module = await import('./PertApiModule')
-  return { default: module.PertApiModule }
-})
-
 const tabs = [
   'Özet',
   'Operasyon',
-  'Evrak ve Fotoğraf',
-  'Ağır Hasar',
+  'Evrak',
   'Değer Kaybı',
   'Raporlar ve Ücretler',
   'E-postalar',
@@ -103,16 +98,6 @@ const tabs = [
 ] as const
 
 type Tab = (typeof tabs)[number]
-
-const mockPhotoIndexes = Array.from({ length: 108 }, (_, index) => index + 1)
-const mockPhotoSource = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-  <svg xmlns="http://www.w3.org/2000/svg" width="240" height="150" viewBox="0 0 240 150">
-    <rect width="240" height="150" fill="#d8dde6"/>
-    <path d="M32 112l45-46 34 32 29-27 68 41z" fill="#9aa7ba"/>
-    <circle cx="176" cy="44" r="15" fill="#b5c0cf"/>
-    <rect x="1" y="1" width="238" height="148" fill="none" stroke="#8793a5" stroke-width="2"/>
-  </svg>
-`)}`
 
 function CloseCaseModal({ onClose }: { onClose: () => void }) {
   return (
@@ -140,10 +125,6 @@ function CloseCaseModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-function HeavyDamageModule({ item }: { item: CaseRecord }) {
-  return <div className="decision-columns"><section className="decision-card"><span className="eyebrow">AI önerisi</span><h2>PERT adayı değil</h2><p>Tahmini hasar / rayiç oranı mock değerlendirmede sınır altında.</p><strong>Güven: Orta</strong></section><section className="decision-card"><span className="eyebrow">Eksper kanaati</span><h2>İnceleniyor</h2><p>Ön panel ölçümü ve şasi ucu fotoğrafları bekleniyor.</p><strong>{item.expert}</strong></section><section className="decision-card"><span className="eyebrow">Merkez / sigorta kararı</span><h2>Karar beklenmiyor</h2><p>Bu alan AI önerisinden ve eksper kanaatinden ayrı tutulur.</p><strong>Mock durum</strong></section><section className="info-panel decision-columns__wide"><header><h2>Ekonomik Görünüm</h2><AlertTriangle size={16} /></header><dl className="overview-fields"><div><dt>Tahmini Hasar</dt><dd>{formatCurrency(item.estimatedDamage)}</dd></div><div><dt>Sigorta Rayici</dt><dd>{formatCurrency(625000)}</dd></div><div><dt>Mock Oran</dt><dd>%{Math.round(item.estimatedDamage / 625000 * 100)}</dd></div><div><dt>Yapısal Kontrol</dt><dd>Ölçüm bekleniyor</dd></div></dl></section></div>
-}
-
 function ValueLossModule({ item, onNotice }: { item: CaseRecord; onNotice: (message: string) => void }) {
   const traffic = item.type === 'Trafik'
   return <div className="value-loss-layout"><section className="info-panel"><header><h2>Değer Kaybı Süreci</h2><span className={`status-pill ${traffic ? 'status-pill--late' : 'status-pill--waiting'}`}>{traffic ? 'Zorunlu süreç' : 'İsteğe bağlı'}</span></header>{traffic ? <><p>Trafik dosyasında Değer Kaybı modülü zorunludur. Hesap için hazırlık koşulları tamamlanmalıdır.</p><ul className="readiness-list"><li className="is-ready"><CheckCircle2 size={15} />Araç bilgileri doğrulandı</li><li><CalendarClock size={15} />Parça listesi kesinleşmeyi bekliyor</li><li><CalendarClock size={15} />Onarım / boya işlemleri kesinleşmeyi bekliyor</li></ul></> : <><p>Kasko dosyasında Değer Kaybı zorunlu değildir. Kullanıcı isterse dosya içinde isteğe bağlı modül açabilir.</p><button className="button button--secondary" type="button" onClick={() => onNotice(`${item.plate} için isteğe bağlı Değer Kaybı önizlemesi açıldı.`)}>İsteğe Bağlı Önizleme</button></>}</section><section className="info-panel"><header><h2>Reel Piyasa Analizi</h2><Scale size={16} /></header><dl className="detail-list"><div><dt>Kural Sürümü</dt><dd>RPA 1.0 · 01.07.2026</dd></div><div><dt>Hazırlık</dt><dd>{traffic ? 'Veri Eksik' : 'Başlatılmadı'}</dd></div><div><dt>Emsal Kayıt</dt><dd>0 / 3</dd></div><div><dt>Eksper Onayı</dt><dd>Bekliyor</dd></div></dl><div className="assistant-note"><AlertTriangle size={15} /><span>Sonuç kullanıcı onayı olmadan kesinleştirilemez.</span></div></section></div>
@@ -168,9 +149,17 @@ function HistoryModule({ item }: { item: CaseRecord }) {
   return <section className="info-panel history-panel"><header><h2>Dosya Geçmişi</h2><History size={16} /></header><div className="audit-timeline">{events.map(([date, action, actor]) => <article key={`${date}-${action}`}><i /><time>{date}</time><div><strong>{action}</strong><span>{actor}</span></div></article>)}</div></section>
 }
 
-export function CaseDetailPage() {
+export function CaseDetailPage({ legacyTab }: { legacyTab?: 'overview' | 'documents' }) {
   const { caseId } = useParams()
   const location = useLocation()
+  const search = new URLSearchParams(location.search)
+  const tab = search.get('tab')
+  const removedTab = tab !== null && !['overview', 'operations', 'documents'].includes(tab)
+  if (legacyTab || removedTab) {
+    const oldDocumentTabs = ['photos', 'document-photo', 'evrak-fotograf', 'evrak-ve-fotograf', 'evrak ve fotoğraf']
+    search.set('tab', legacyTab ?? (oldDocumentTabs.includes(tab?.toLocaleLowerCase('tr-TR') ?? '') ? 'documents' : 'overview'))
+    return <Navigate replace to={{ pathname: `/dosyalar/${encodeURIComponent(caseId!)}`, search: `?${search}`, hash: location.hash }} state={location.state} />
+  }
   return <CaseDetail key={`${caseId}#${location.search}`} />
 }
 
@@ -188,18 +177,18 @@ function CaseDetail() {
   const location = useLocation()
   const session = useSession()
   const requestedTab = new URLSearchParams(location.search).get('tab')
-  const routeTab: Tab | undefined = requestedTab === 'operations' ? 'Operasyon' : requestedTab === 'documents' ? 'Evrak ve Fotoğraf' : undefined
+  const routeTab: Tab | undefined = requestedTab === 'operations' ? 'Operasyon' : requestedTab === 'documents' ? 'Evrak' : requestedTab === 'overview' ? 'Özet' : undefined
   const [tabSelection, setTabSelection] = useState<{ key: string;tab: Tab }>(() => {
     let saved: string | null = null
     try { saved = window.sessionStorage.getItem('hasarbotu-active-case-tab') }
     catch { /* A browser storage restriction must not prevent opening a case. */ }
+    if (saved === 'Evrak ve Fotoğraf') saved = 'Evrak'
     return { key: location.key,tab: routeTab ?? (tabs.includes(saved as Tab) ? saved as Tab : 'Özet') }
   })
   const activeTab = tabSelection.key === location.key ? tabSelection.tab : routeTab ?? tabSelection.tab
   const setActiveTab = useCallback((tab: Tab) => setTabSelection({ key: location.key,tab }), [location.key])
   const [closeModalOpen, setCloseModalOpen] = useState(false)
   const [prototypeNotice, setPrototypeNotice] = useState('')
-  const [photoMode, setPhotoMode] = useState<'normal' | 'stress'>('normal')
   const [editModalOpen, setEditModalOpen] = useState(false)
   // Yerel override, ait oldugu case ve temel kayit surumuyle birlikte tutulur.
   // Anahtar degisince RENDER sirasinda dusuruluyor; onceden sifirlama efekte
@@ -288,7 +277,7 @@ function CaseDetail() {
         <div className="case-detail-head__stage"><span>Aşama</span><strong>{item.stage}</strong></div>
         <div className="case-detail-head__actions">
           <NoticeSheetButton caseId={item.caseId} plate={item.plate} source={source} />
-          <OpenCaseFolderButton caseId={item.caseId} />
+          {activeTab !== 'Evrak' && <OpenCaseFolderButton caseId={item.caseId} />}
           <button className="button button--secondary" type="button" onClick={() => {
             if (source === 'api') {
               reloadCase()
@@ -333,7 +322,7 @@ function CaseDetail() {
           </header>
 
           <Suspense fallback={<LoadingState label={`${activeTab} modülü hazırlanıyor`} />}>
-            {source === 'api' && item.type === 'Seçiniz' && ['Evrak ve Fotoğraf', 'Ağır Hasar', 'Değer Kaybı', 'Raporlar ve Ücretler', 'E-postalar'].includes(activeTab)
+            {source === 'api' && item.type === 'Seçiniz' && ['Değer Kaybı', 'Raporlar ve Ücretler', 'E-postalar'].includes(activeTab)
               ? <p role="status">Bu modülü kullanmak için dosya türünü Trafik veya Kasko olarak seçin.</p>
               : activeTab === 'Özet' ? (
             <div className="overview-grid">
@@ -362,7 +351,7 @@ function CaseDetail() {
                   ? <strong>Gerçek değerlendirme sekmede yüklenir</strong>
                   : <strong className={item.missingDocuments ? 'text-warning' : 'text-success'}>{item.missingDocuments ? `${item.missingDocuments} eksik evrak` : 'Evraklar tam'}</strong>}
                 <p>{source === 'api' ? 'Liste özeti belge tamlığı hakkında varsayım üretmez.' : 'Koşullu evrak kuralları dosya türüne göre gösteriliyor.'}</p>
-                <button className="text-button" type="button" onClick={() => setActiveTab('Evrak ve Fotoğraf')}>Evraklara git <ChevronRight size={14} /></button>
+                <button className="text-button" type="button" onClick={() => setActiveTab('Evrak')}>Evraklara git <ChevronRight size={14} /></button>
               </section>
               {/* Paket 56: araç profili yalnız API modunda gerçek uçtan gelir. */}
               {source === 'api' && <div className="overview-grid__wide"><CaseFaultModule caseId={item.caseId} /></div>}
@@ -428,35 +417,32 @@ function CaseDetail() {
                 </ul>
               </aside>
             </div>
-          ) : activeTab === 'Evrak ve Fotoğraf' && source === 'mock' ? (
-            <div className="document-photo-workspace">
-              <section className="document-checklist">
-                <header><div><h2>Koşullu Evrak Kontrolü</h2><span>{item.type} dosyası · mock kural görünümü</span></div><span className="status-pill status-pill--review">{item.missingDocuments} eksik</span></header>
-                <ul>
-                  <li className="is-complete"><CheckCircle2 size={15} /><span>Poliçe</span><strong>Mevcut</strong></li>
-                  <li className="is-complete"><CheckCircle2 size={15} /><span>SBM Ağır Hasar</span><strong>Mevcut</strong></li>
-                  <li className="is-missing"><AlertTriangle size={15} /><span>İmzalı KTT</span><strong>Eksik</strong></li>
-                  <li className="is-missing"><AlertTriangle size={15} /><span>Ruhsat görüntüsü</span><strong>Eksik</strong></li>
-                </ul>
+          ) : activeTab === 'Evrak' ? source === 'api' ? (
+            <div className="case-document-stack">
+              <section className="info-panel">
+                <header><h2>Genel Evrak</h2><OpenCaseFolderButton caseId={item.caseId} /></header>
+                <p>Evrak eklemek, açmak veya kopyasını almak için dosya klasöründeki EVRAK bölümünü kullanın.</p>
               </section>
-              <section className="photo-library">
-                <header><div><h2>Hasar Fotoğrafları</h2><span>{photoMode === 'normal' ? '12 anonim mock görsel' : '108 anonim mock görsel · lazy loading stres testi'}</span></div><div className="photo-mode"><button type="button" className={photoMode === 'normal' ? 'is-active' : ''} onClick={() => setPhotoMode('normal')}>Normal (12)</button><button type="button" className={photoMode === 'stress' ? 'is-active' : ''} onClick={() => setPhotoMode('stress')}>Yoğun Test (108)</button></div></header>
-                <div className="photo-grid" aria-label="Mock hasar fotoğrafları">
-                  {mockPhotoIndexes.slice(0, photoMode === 'normal' ? 12 : 108).map((photoNumber) => (
-                    <figure key={photoNumber}>
-                      <img src={mockPhotoSource} loading="lazy" alt={`Mock hasar fotoğrafı ${photoNumber}`} />
-                      <figcaption>HASAR_{String(photoNumber).padStart(3, '0')}.jpg</figcaption>
-                    </figure>
-                  ))}
-                </div>
-              </section>
+              <TrackingWorkspace key={item.caseId} caseId={item.caseId} view="documents" />
+              {item.type !== 'Seçiniz' && <CaseDocumentsModule caseId={item.caseId} source={source} />}
+              {item.type === 'Kasko' && <>
+                <PolicyPdfTextApiModule caseId={item.caseId} source={source} />
+                <PolicyOcrApiModule caseId={item.caseId} source={source} />
+                <PolicyAnalysisWorkspace caseId={item.caseId} source={source} />
+                <KascoMandatoryCheckModule caseId={item.caseId} source={source} />
+              </>}
             </div>
-          ) : activeTab === 'Evrak ve Fotoğraf' ? (
-            <>{source === 'api' && <TrackingWorkspace key={item.caseId} caseId={item.caseId} view="documents" />}{item.type === 'Kasko' ? <div className="casco-document-stack"><DocumentPhotoApiModule caseId={item.caseId} source={source} /><PolicyPdfTextApiModule caseId={item.caseId} source={source} /><PolicyOcrApiModule caseId={item.caseId} source={source}/><PolicyAnalysisWorkspace caseId={item.caseId} source={source}/><KascoMandatoryCheckModule caseId={item.caseId} source={source} /></div> : <DocumentPhotoApiModule caseId={item.caseId} source={source} />}</>
-          ) : activeTab === 'Ağır Hasar' ? source === 'api'
-              ? <PertApiModule item={item} source={source} onUnauthorized={session.reportUnauthorized} />
-              : <HeavyDamageModule item={item} />
-              : activeTab === 'Değer Kaybı' ? source === 'api'
+          ) : (
+            <section className="document-checklist">
+              <header><h2>Genel Evrak</h2><span className="status-pill status-pill--review">{item.missingDocuments} eksik</span></header>
+              <ul>
+                <li className="is-complete"><CheckCircle2 size={15} /><span>Poliçe</span><strong>Mevcut</strong></li>
+                <li className="is-complete"><CheckCircle2 size={15} /><span>SBM Ağır Hasar</span><strong>Mevcut</strong></li>
+                <li className="is-missing"><AlertTriangle size={15} /><span>İmzalı KTT</span><strong>Eksik</strong></li>
+                <li className="is-missing"><AlertTriangle size={15} /><span>Ruhsat görüntüsü</span><strong>Eksik</strong></li>
+              </ul>
+            </section>
+          ) : activeTab === 'Değer Kaybı' ? source === 'api'
                 ? <ValueLossCalculator item={item} source={source} />
                 : <ValueLossModule item={item} onNotice={setPrototypeNotice} />
                 : activeTab === 'Raporlar ve Ücretler' ? source === 'api'
@@ -511,4 +497,3 @@ function CaseDetail() {
     </main>
   )
 }
-import { TrackingWorkspace } from '../tracking/TrackingWorkspace'

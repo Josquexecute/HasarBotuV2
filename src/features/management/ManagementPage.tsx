@@ -43,7 +43,7 @@ const PERMISSION_MATRIX: readonly PermissionMatrixRow[] = [
   { resource: 'Dosya görüntüleme', roles: ALL_ROLES, note: 'Kendi organizasyonu ile sınırlı' },
   { resource: 'Dosya oluşturma ve güncelleme', roles: ['admin', 'expert', 'case_manager', 'secretary', 'accounting'], note: 'Salt Okunur hariç' },
   { resource: 'Not ve görev', roles: ['admin', 'expert', 'case_manager', 'secretary'], note: 'Operasyon kullanıcıları' },
-  { resource: 'Evrak ve fotoğraf kaydı', roles: ['admin', 'expert', 'case_manager', 'secretary'], note: 'Not/görev ile aynı sınıf' },
+  { resource: 'Evrak kaydı', roles: ['admin', 'expert', 'case_manager', 'secretary'], note: 'Not/görev ile aynı sınıf' },
   { resource: 'Dosya kapatma ve yeniden açma', roles: ['admin', 'expert', 'case_manager'], note: 'Kritik işlem · plan → onay' },
   { resource: 'Klasör kurulumu, taşıma ve konum atama', roles: ['admin', 'expert', 'case_manager'], note: 'Kritik işlem · fiziksel yol' },
   { resource: 'Değer Kaybı ve Poliçe Analizi düzenleme', roles: ['admin', 'expert', 'case_manager'], note: 'Sürümlü taslak' },

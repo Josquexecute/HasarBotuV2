@@ -76,7 +76,7 @@ it.skipIf(process.platform !== 'win32')('built Touch UI: real HTTP adapters, bot
         expect(values.slice(0, 7)).toEqual([user.displayName, insurer.name, index === 0 ? 'Trafik' : 'Kasko', `HASAR-${index + 1}`, '03.11.2026', records[index]!.serviceDetails!.name, index === 0 ? '0532 123 45 67' : '—'])
         expect(await page.getByText('Korunan görev', { exact: true }).count()).toBe(1)
         expect(await page.getByRole('heading', { name: 'Takip geçmişi' }).count()).toBe(1)
-        expect(await page.getByText(/1 evrak inceleme bekliyor/).count()).toBe(1)
+        expect(await page.getByText(/1 evrak kaydı/).count()).toBe(1)
         const fit = await page.evaluate(() => {
           const panel = document.querySelector('.desktop-assistant-panel')!.getBoundingClientRect()
           const content = document.querySelector('.assistant-content')!

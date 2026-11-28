@@ -1,10 +1,15 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Link, MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionContext, type SessionContextValue } from '../../app/sessionContext'
 import { DATA_SOURCE_STORAGE_KEY } from '../../data/ports'
 import { CaseDetailPage } from './CaseDetailPage'
+
+function CurrentLocation() {
+  const location = useLocation()
+  return <output aria-label="Geçerli dosya bağlantısı">{location.pathname}{location.search}{location.hash}</output>
+}
 
 const CLOSED_CASE = {
   id: 'case-closed-38',
@@ -98,13 +103,13 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
       <Link to="/dosyalar/case-closed-38?tab=documents">Evrak bağlantısı</Link>
       <Routes><Route path="/dosyalar/:caseId" element={<CaseDetailPage />} /></Routes>
     </MemoryRouter>)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Evrak ve Fotoğraf' })).toHaveClass('is-active'), { timeout: 15_000 })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Evrak' })).toHaveClass('is-active'), { timeout: 15_000 })
     await user.click(screen.getByRole('button', { name: 'Özet' }))
     expect(screen.getByRole('button', { name: 'Özet' })).toHaveClass('is-active')
     await user.click(screen.getByRole('link', { name: 'Operasyon bağlantısı' }))
     expect(screen.getByRole('button', { name: 'Operasyon' })).toHaveClass('is-active')
     await user.click(screen.getByRole('link', { name: 'Evrak bağlantısı' }))
-    expect(screen.getByRole('button', { name: 'Evrak ve Fotoğraf' })).toHaveClass('is-active')
+    expect(screen.getByRole('button', { name: 'Evrak' })).toHaveClass('is-active')
   })
 
   it('kaldırılmış İşçilik sekmesi kaydedilmiş olsa da özeti açar ve işçilik isteği yapmaz', async () => {
@@ -122,9 +127,57 @@ describe('CaseDetailPage gercek API dogruluk siniri', () => {
     await waitFor(() => expect(screen.getByText('34 API 380')).toBeInTheDocument(), { timeout: 15_000 })
     expect(screen.queryByRole('button', { name: 'İşçilik' })).not.toBeInTheDocument()
     expect(window.sessionStorage.getItem('hasarbotu-active-case-tab')).toBe('Özet')
-    expect(screen.getByRole('button', { name: 'Ağır Hasar' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ağır Hasar' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Değer Kaybı' })).toBeInTheDocument()
     expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/labor'))).toBe(false)
+  })
+
+  it.each([
+    ['?tab=pert&ref=old#dosya', 'overview', 'Özet'],
+    ['/agir-hasar?ref=old#dosya', 'overview', 'Özet'],
+    ['?tab=Evrak%20ve%20Foto%C4%9Fraf&ref=old#dosya', 'documents', 'Evrak'],
+    ['/photos?ref=old#dosya', 'documents', 'Evrak'],
+  ])('eski bağlantıyı aynı dosyanın geçerli sekmesine yönlendirir (%s)', async (suffix, tab, label) => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    window.sessionStorage.setItem('hasarbotu-active-case-tab', 'Operasyon')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => Response.json(
+      String(input).includes('case-closed-38?') ? { case: CLOSED_CASE }
+        : { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } },
+    ))
+    render(<MemoryRouter initialEntries={[`/dosyalar/case-closed-38${suffix}`]}>
+      <CurrentLocation />
+      <Routes>
+        <Route path="/dosyalar/:caseId" element={<CaseDetailPage />} />
+        <Route path="/dosyalar/:caseId/agir-hasar" element={<CaseDetailPage legacyTab="overview" />} />
+        <Route path="/dosyalar/:caseId/photos" element={<CaseDetailPage legacyTab="documents" />} />
+      </Routes>
+    </MemoryRouter>)
+    expect(await screen.findByRole('button', { name: label })).toHaveClass('is-active')
+    const url = new URL(screen.getByLabelText('Geçerli dosya bağlantısı').textContent, 'https://example.test')
+    expect(url.pathname).toBe('/dosyalar/case-closed-38')
+    expect(url.searchParams.get('tab')).toBe(tab)
+    expect(url.searchParams.get('ref')).toBe('old')
+    expect(url.hash).toBe('#dosya')
+  })
+
+  it('kapalı eski dosyanın kayıtlı evrak klasörünü Genel Evrak ekranından açar', async () => {
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, 'api')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => Response.json(
+      String(input).includes('case-closed-38?') ? { case: CLOSED_CASE }
+        : { items: [], pageInfo: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 } },
+    ))
+    const open = vi.fn().mockResolvedValue({ opened: true })
+    vi.stubGlobal('hasarbotuCaseFolders', { open })
+    try {
+      render(<MemoryRouter initialEntries={['/dosyalar/case-closed-38?tab=documents']}>
+        <Routes><Route path="/dosyalar/:caseId" element={<CaseDetailPage />} /></Routes>
+      </MemoryRouter>)
+      const heading = await screen.findByRole('heading', { name: 'Genel Evrak' })
+      await userEvent.click(within(heading.closest('section')!).getByRole('button', { name: 'Klasörü Aç' }))
+      expect(open).toHaveBeenCalledExactlyOnceWith('case-closed-38')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('kapali case listede olmasa bile detail endpointinden acilir ve bagli olmayan modullerde mock gostermez', async () => {

@@ -43,7 +43,7 @@ export async function evaluateCaseDocumentRequirements(
     // Keep source observations immutable and let any destination observation take precedence.
     const moved = await exec.query<DocRow>(
       `SELECT o.id,o.document_type,
-         CASE o.status WHEN 'approved' THEN 'ready' WHEN 'rejected' THEN 'missing' ELSE 'pending' END AS status,
+         tracked_document_requirement_status(o, f.current_hash) AS status,
          true AS hash_verified,true AS size_verified,o.observed_at AS verified_at
        FROM tracked_files f JOIN document_observations o ON o.file_id=f.id AND o.revision=f.revision
        JOIN case_locations l ON l.organization_id=f.organization_id AND l.case_id=f.case_id
