@@ -48,11 +48,13 @@ function syntheticPdf(pages: readonly PdfPage[], options: { readonly encrypted?:
 }
 
 const extractionId = '00000000-0000-4000-8000-000000000024'
+const workerTimeoutMs = 20_000
+const extractionTestTimeoutMs = workerTimeoutMs + 5_000
 function payload(pdf: Buffer, overrides: Partial<Extract<JobPayload, { kind: 'pdf_text_extraction' }>> = {}): Extract<JobPayload, { kind: 'pdf_text_extraction' }> {
   return {
     kind: 'pdf_text_extraction', extractionId, extractionVersion: 1, storageRootKey: 'test-root', relativePath: 'EVRAK/policy.pdf',
     declaredHash: createHash('sha256').update(pdf).digest('hex'), declaredSize: pdf.length, parserVersion: PDF_TEXT_PARSER_VERSION, normalizationVersion: 'pdf-text-normalization/1.0.0',
-    maxSourceBytes: 2_000_000, maxPages: 20, maxPageCharacters: 20_000, maxTotalCharacters: 100_000, timeoutMs: 20_000, workerMemoryMb: 192,
+    maxSourceBytes: 2_000_000, maxPages: 20, maxPageCharacters: 20_000, maxTotalCharacters: 100_000, timeoutMs: workerTimeoutMs, workerMemoryMb: 192,
     ...overrides,
   }
 }
@@ -86,13 +88,16 @@ describe('güvenli PDF metin çıkarıcı', () => {
     expect(second.result.pdfExtraction?.outputHash).toBe(first.result.pdfExtraction?.outputHash)
   })
 
-  it('görsel-only ve mixed PDF durumlarını OCR gerekli/kısmi olarak ayırır', async () => {
+  it('yalnız görsel içeren PDF için OCR gerekli sonucunu üretir', async () => {
     const image = await run(syntheticPdf([{ kind: 'image' }]))
     expect(image.result.pdfExtraction).toMatchObject({ status: 'ocr_required', imageOnlyPageCount: 1, textPageCount: 0 })
+  }, extractionTestTimeoutMs)
+
+  it('metin ve görsel içeren PDF için kısmi sonuç ve sıralı sayfalar üretir', async () => {
     const mixed = await run(syntheticPdf([{ kind: 'text', text: 'POLICE' }, { kind: 'image' }]))
     expect(mixed.result.pdfExtraction).toMatchObject({ status: 'partial', imageOnlyPageCount: 1, textPageCount: 1 })
     expect(mixed.chunks.map((chunk) => chunk.sequence)).toEqual([0, 1])
-  })
+  }, extractionTestTimeoutMs)
 
   it('bozuk, PDF olmayan, değişmiş ve limit aşan kaynağı güvenli kodla reddeder', async () => {
     const malformed = await run(Buffer.from('%PDF-not-a-real-document', 'ascii'))
