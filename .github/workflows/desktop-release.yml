@@ -53,7 +53,10 @@ jobs:
       - name: Ofis PowerShell kontrollerini erken doğrula
         run: node scripts/run-release-tests.mjs --powershell-only
       - name: Gerçek Windows pencere sırasını erken doğrula
-        run: npm test --workspace @hasarbotu/desktop -- test/assistant-topmost-e2e.test.ts
+        run: |
+          npm run build --workspace @hasarbotu/desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm exec --workspace @hasarbotu/desktop -- vitest run --config vitest.config.ts test/assistant-topmost-e2e.test.ts
       - name: Tarayıcı testleri için Playwright motorlarını kur
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Ayrı PostgreSQL test veritabanını aç
